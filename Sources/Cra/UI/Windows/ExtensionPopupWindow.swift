@@ -2,8 +2,8 @@ import AppKit
 import CraCEF
 
 /// Arc's BrowserExtensionWindow: an extension's popup in a small titled window under the
-/// toolbar (close button only, transparent title bar) that can be dragged away, after
-/// which Arc keeps its place (`userHasMovedWindow`, `.browserExtensionWindowAutosaveFrame`).
+/// toolbar (close button only, transparent title bar) that can be dragged away for the
+/// current opening. Every new popup starts at its own button.
 ///
 /// Cra keeps Chrome's own popup (its page stays a real extension popup: activeTab, the
 /// tab it fills into) and puts a frame window around it. Chrome's bubble becomes the
@@ -14,10 +14,6 @@ final class ExtensionPopupWindow: NSWindow {
     /// Chrome's bubble draws a transparent margin around the page.
     static let bubbleInset: CGFloat = 7
     static let titleBarHeight: CGFloat = 28
-    /// Where the user dragged a popup to, relative to its anchor. (Cra ≤ 0.1.17 kept an
-    /// absolute screen point under "extensionPopupWindowTopLeft"; that one is dropped.)
-    private static let savedOffsetKey = "extensionPopupWindowOffset"
-
     private static var current: ExtensionPopupWindow?
 
     private weak var bubble: NSWindow?
@@ -58,26 +54,34 @@ final class ExtensionPopupWindow: NSWindow {
     }
 
     /// Wraps Chrome's popup `bubble`; `anchor` is the top-right point (screen) it hangs from
-    /// (its right edge stays there as Chrome resizes the page), moved by the user's last drag.
-    static func present(_ bubble: NSWindow, anchor: NSPoint) {
+    /// (its right edge stays there as Chrome resizes the page).
+    static func present(_ bubble: NSWindow, anchor: ExtensionPopupAnchor) {
         current?.dismiss(closingBubble: false)
         let w = ExtensionPopupWindow()
         w.bubble = bubble
-        w.anchor = anchor
-        UserDefaults.standard.removeObject(forKey: "extensionPopupWindowTopLeft")
-        w.offset = savedOffset ?? .zero
+        w.anchor = anchor.point
         w.appearance = bubble.parent?.effectiveAppearance ?? NSApp.effectiveAppearance
         w.backgroundColor = .windowBackgroundColor
         current = w
 
         // Above the page (and the main window), below the popup.
-        let host = bubble.parent?.parent ?? bubble.parent
+        let host = anchor.owner ?? bubble.parent?.parent ?? bubble.parent
         bubble.parent?.removeChildWindow(bubble)
         bubble.hasShadow = false
         w.layout()
         host?.addChildWindow(w, ordered: .above)
         w.orderFront(nil)
         w.addChildWindow(bubble, ordered: .above)
+
+        // Do not let Chrome's re-anchoring or a child-window move fight the browser's new
+        // geometry. A fresh invocation will resolve the button in its new position.
+        if let owner = anchor.owner {
+            for name in [NSWindow.didMoveNotification, NSWindow.didResizeNotification, NSWindow.willCloseNotification] {
+                w.observers.append(NotificationCenter.default.addObserver(forName: name, object: owner, queue: .main) { [weak w] _ in
+                    MainActor.assumeIsolated { w?.dismiss(closingBubble: true) }
+                })
+            }
+        }
 
         for name in [NSWindow.didResizeNotification, NSWindow.didMoveNotification] {
             w.observers.append(NotificationCenter.default.addObserver(forName: name, object: bubble, queue: .main) { [weak w] _ in
@@ -130,13 +134,9 @@ final class ExtensionPopupWindow: NSWindow {
         defer { placing = false }
         let inset = Self.bubbleInset
         let size = NSSize(width: bubble.frame.width - 2 * inset, height: bubble.frame.height - 2 * inset + Self.titleBarHeight)
-        // Right edge on the anchor whatever width the page reports (Bitwarden grows after it loads).
-        var topLeft = NSPoint(x: anchor.x - size.width + offset.x, y: anchor.y + offset.y)
-        if let screen = (bubble.screen ?? NSScreen.main)?.visibleFrame {
-            topLeft.x = min(max(topLeft.x, screen.minX + 4), screen.maxX - size.width - 4)
-            topLeft.y = min(max(topLeft.y, screen.minY + size.height + 4), screen.maxY)
-        }
-        let frame = NSRect(x: topLeft.x, y: topLeft.y - size.height, width: size.width, height: size.height)
+        // The button's display owns placement, not the hidden Chrome toolbar's display.
+        let screen = NSScreen.screens.first { NSPointInRect(anchor, $0.frame) } ?? bubble.screen ?? NSScreen.main
+        let frame = ExtensionPopupGeometry.frame(size: size, anchor: anchor, offset: offset, visibleFrame: screen?.visibleFrame)
         if self.frame != frame { setFrame(frame, display: true) }
         let origin = NSPoint(x: frame.minX - inset, y: frame.minY - inset)
         if bubble.frame.origin != origin { bubble.setFrameOrigin(origin) }
@@ -148,24 +148,6 @@ final class ExtensionPopupWindow: NSWindow {
         // A click on the title bar that barely moved it is not a new place.
         guard hypot(moved.x - dragStart.x, moved.y - dragStart.y) > 4 else { return }
         offset = NSPoint(x: moved.x - (anchor.x - frame.width), y: moved.y - anchor.y)
-        Self.savedOffset = offset
-    }
-
-    /// Top-left of a popup window `width` wide: hanging from `anchor` (top-right), moved by
-    /// where the user last dragged one to. The drag is kept relative to the anchor, so the
-    /// popup follows its button when the browser window moves or changes screen (GitHub #8:
-    /// an absolute screen point made it open in "random" places).
-    static func placement(anchor: NSPoint, width: CGFloat) -> NSPoint {
-        let offset = savedOffset ?? .zero
-        return NSPoint(x: anchor.x - width + offset.x, y: anchor.y + offset.y)
-    }
-
-    private static var savedOffset: NSPoint? {
-        get {
-            guard let s = UserDefaults.standard.string(forKey: savedOffsetKey) else { return nil }
-            return NSPointFromString(s)
-        }
-        set { UserDefaults.standard.set(newValue.map(NSStringFromPoint), forKey: savedOffsetKey) }
     }
 
     override func performClose(_ sender: Any?) { dismiss(closingBubble: true) }
@@ -255,6 +237,7 @@ final class ExtensionPageWindow: NSWindow, NSWindowDelegate, @preconcurrency Cra
     private var pageSize: NSSize?
     private var measureTimer: Timer?
     private var closing = false
+    private var ownerObservers: [NSObjectProtocol] = []
 
     /// The page's natural size: its max-content width, then its height at that width.
     private static let measureScript = """
@@ -266,17 +249,16 @@ final class ExtensionPageWindow: NSWindow, NSWindowDelegate, @preconcurrency Cra
           return [w, h]; })()
         """
 
-    static func open(url: String, anchor: NSPoint, app: AppDelegate) {
+    static func open(url: String, anchor: ExtensionPopupAnchor, app: AppDelegate) {
         current?.close()
         let w = ExtensionPageWindow(url: url, anchor: anchor, app: app)
         current = w
     }
 
-    private init(url: String, anchor: NSPoint, app: AppDelegate) {
+    private init(url: String, anchor: ExtensionPopupAnchor, app: AppDelegate) {
         self.app = app
         let start = NSSize(width: 360, height: 240)
-        let tl = ExtensionPopupWindow.placement(anchor: anchor, width: start.width)
-        topRight = NSPoint(x: tl.x + start.width, y: tl.y)
+        topRight = anchor.point
         super.init(contentRect: NSRect(origin: .zero, size: start), styleMask: [.titled, .closable, .fullSizeContentView],
                    backing: .buffered, defer: false)
         titlebarAppearsTransparent = true
@@ -304,6 +286,13 @@ final class ExtensionPageWindow: NSWindow, NSWindowDelegate, @preconcurrency Cra
         measureTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.measure() }
         }
+        if let owner = anchor.owner {
+            for name in [NSWindow.didMoveNotification, NSWindow.didResizeNotification, NSWindow.willCloseNotification] {
+                ownerObservers.append(NotificationCenter.default.addObserver(forName: name, object: owner, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.close() }
+                })
+            }
+        }
     }
 
     /// The area under the title bar, in window coordinates.
@@ -312,13 +301,9 @@ final class ExtensionPageWindow: NSWindow, NSWindowDelegate, @preconcurrency Cra
     }
 
     private func frame(for page: NSSize) -> NSRect {
-        let h = page.height + ExtensionPopupWindow.titleBarHeight
-        var tl = NSPoint(x: topRight.x - page.width, y: topRight.y)
-        if let screen = (screen ?? NSScreen.main)?.visibleFrame {
-            tl.x = min(max(tl.x, screen.minX + 4), screen.maxX - page.width - 4)
-            tl.y = min(max(tl.y, screen.minY + h + 4), screen.maxY)
-        }
-        return NSRect(x: tl.x, y: tl.y - h, width: page.width, height: h)
+        let size = NSSize(width: page.width, height: page.height + ExtensionPopupWindow.titleBarHeight)
+        let screen = NSScreen.screens.first { NSPointInRect(topRight, $0.frame) } ?? screen ?? NSScreen.main
+        return ExtensionPopupGeometry.frame(size: size, anchor: topRight, visibleFrame: screen?.visibleFrame)
     }
 
     private func measure() {
@@ -403,6 +388,8 @@ final class ExtensionPageWindow: NSWindow, NSWindowDelegate, @preconcurrency Cra
         guard !closing else { return }
         closing = true
         measureTimer?.invalidate()
+        for observer in ownerObservers { NotificationCenter.default.removeObserver(observer) }
+        ownerObservers = []
         if let host = browser?.hostWindow { removeChildWindow(host); host.orderOut(nil) }
         browser?.close()
         browser = nil

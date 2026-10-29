@@ -231,16 +231,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             if self.selectedTabID != id { self.store.selectTab(id, window: windowID) }
             self.openCommandBar(.editURL)
         }
-        // Toolbar buttons are ~34 pt wide and the click lands near the middle: the popup's
-        // right edge lines up with the button's (Chrome anchors popups that way).
-        sidebarActions.runExtension = { [weak self] id in self?.runExtensionAction(id, buttonRightX: Self.extensionButtonRightX()) }
+        sidebarActions.runExtension = { [weak self] id in self?.runExtensionAction(id) }
         sidebarActions.showExtensionsMenu = { [weak self] in self?.showToolbarExtensionsMenu() }
-        // Popups from an extension's shortcut or chrome.action.openPopup() hang where the
-        // menu bar's do: under the toolbar at the card's right end of the window in use.
-        ExtensionActions.shared.watchPopups { [weak app] in
-            guard let main = app?.main, let window = main.window, let key = NSApp.keyWindow, key === window || key.parent === window,
-                  let bar = main.toolbarBottomOnScreen() else { return nil }
-            return NSPoint(x: bar.cardMaxX - 8, y: bar.y)
+        // The same button anchors toolbar clicks, menu actions and extension shortcuts.
+        ExtensionActions.shared.watchPopups { [weak app] id in
+            guard NSApp.isActive, let main = app?.main else { return nil }
+            return main.extensionPopupAnchor(for: id)
         }
         sidebarActions.performAction = { [weak self] id in
             if id.hasPrefix("muteTab:"), let uuid = UUID(uuidString: String(id.dropFirst(8))) {
@@ -1513,43 +1509,50 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         return rect.maxY - CraMetrics.titleAreaHeight - 2 - 36
     }
 
-    /// Runs an extension's toolbar action on the focused page, like Arc's toolbar buttons and
-    /// Dia's Extensions menu. The popup hangs under the toolbar, its right edge at `buttonRightX`
-    /// (screen x; nil = the card's right end, for the menu bar).
-    func runExtensionAction(_ id: String, buttonRightX: CGFloat? = nil) {
-        guard let bar = toolbarBottomOnScreen() else { openExtensionPopupPage(id, anchor: nil); return }
-        let y = buttonRightX != nil ? (urlBarBottomOnScreen() ?? bar.y) : bar.y
-        let anchor = NSPoint(x: buttonRightX ?? bar.cardMaxX - 8, y: y)
-        guard let browser = currentBrowser else { openExtensionPopupPage(id, anchor: anchor); return }
-        Task {
-            if await !ExtensionActions.shared.run(id, on: browser, anchor: anchor) { self.openExtensionPopupPage(id, anchor: anchor) }
+    /// Resolve at presentation, not at the click: Chromium may take time to create its
+    /// popup while the browser moves or resizes. Hidden/unpinned buttons use a stable edge.
+    private func extensionPopupAnchor(for id: String) -> ExtensionPopupAnchor? {
+        guard let window, window.isVisible else { return nil }
+        shell.layoutSubtreeIfNeeded()
+        if store.settings.showToolbar,
+           let rect = (shell.focusedCard?.toolbarHost as? PaneToolbarView)?.extensionButtonRect(for: id) {
+            return ExtensionPopupAnchor(point: NSPoint(x: rect.maxX, y: rect.minY), owner: window)
         }
+        if !store.settings.showToolbar, (shell.sidebarVisible || shell.floatingSidebar),
+           let rect = (shell.sidebarHost as? SidebarView)?.extensionButtonRect(for: id) {
+            return ExtensionPopupAnchor(point: NSPoint(x: rect.maxX, y: rect.minY), owner: window)
+        }
+        guard let bar = toolbarBottomOnScreen() else { return nil }
+        return ExtensionPopupAnchor(point: NSPoint(x: bar.cardMaxX - 8, y: bar.y), owner: window)
     }
 
-    /// The right edge (screen x) of the pinned-extension button under the pointer, in the
-    /// toolbar or the sidebar's URL pill (also in the floating sidebar's panel), so a popup
-    /// hangs from the same place wherever the button was clicked (GitHub #8).
-    private static func extensionButtonRightX() -> CGFloat {
-        let mouse = NSEvent.mouseLocation
-        let number = NSWindow.windowNumber(at: mouse, belowWindowWithWindowNumber: 0)
-        if let w = NSApp.window(withWindowNumber: number), let content = w.contentView {
-            let p = w.convertPoint(fromScreen: mouse)
-            var v = content.hitTest(content.superview?.convert(p, from: nil) ?? p)
-            while let view = v, !(view is ToolbarGlyphButton) { v = view.superview }
-            if let button = v { return w.convertToScreen(button.convert(button.bounds, to: nil)).maxX }
+    /// Run Chrome's real action (including activeTab), then place its popup at this button.
+    func runExtensionAction(_ id: String) {
+        guard let browser = currentBrowser else { openExtensionPopupPage(id, anchor: extensionPopupAnchor(for: id)); return }
+        let sourceURL = browser.currentURL
+        Task { [weak self, weak browser] in
+            guard let self, let browser else { return }
+            let handled = await ExtensionActions.shared.run(id, on: browser) { [weak self, weak browser] in
+                guard let self, let browser, !browser.isClosed, self.currentBrowser === browser,
+                      browser.currentURL == sourceURL else { return nil }
+                return self.extensionPopupAnchor(for: id)
+            }
+            if !handled, !browser.isClosed, self.currentBrowser === browser, browser.currentURL == sourceURL,
+               let anchor = self.extensionPopupAnchor(for: id) {
+                self.openExtensionPopupPage(id, anchor: anchor)
+            }
         }
-        return mouse.x + 17
     }
 
     /// No page for Chrome's popup to attach to (no tab open, no DevTools pipe, a page it
     /// cannot reach): the popup page in a popup-sized window under the button, else the
     /// options page, else Chrome's details page for the extension.
-    private func openExtensionPopupPage(_ id: String, anchor: NSPoint?) {
+    private func openExtensionPopupPage(_ id: String, anchor: ExtensionPopupAnchor?) {
         guard let e = ExtensionStore.shared.entries.first(where: { $0.extensionID == id }) else { return }
         let base = "chrome-extension://\(id)/"
         if let popup = e.popupPath {
             let fallback = window.map { NSPoint(x: $0.frame.maxX - 16, y: $0.frame.maxY - CraMetrics.toolbarHeight) } ?? .zero
-            ExtensionPageWindow.open(url: base + popup, anchor: anchor ?? fallback, app: app)
+            ExtensionPageWindow.open(url: base + popup, anchor: anchor ?? ExtensionPopupAnchor(point: fallback, owner: window), app: app)
         } else {
             store.createTab(url: e.optionsPath.map { base + $0 } ?? "chrome://extensions/?id=\(id)", select: true, window: windowID)
         }

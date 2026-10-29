@@ -75,6 +75,13 @@ final class PaneToolbarView: NSView {
 
     override var isFlipped: Bool { true }
 
+    /// Find the actual button by identity, independent of the pointer or invocation path.
+    func extensionButtonRect(for id: String) -> NSRect? {
+        layoutSubtreeIfNeeded()
+        guard let button = buttons["ext:" + id], !button.isHiddenOrHasHiddenAncestor, let window else { return nil }
+        return window.convertToScreen(button.convert(button.bounds, to: nil))
+    }
+
     // MARK: Model
 
     private func scheduleSync() {

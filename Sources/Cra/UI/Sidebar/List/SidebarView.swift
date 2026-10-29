@@ -45,6 +45,11 @@ final class SidebarView: NSView {
 
     override var isFlipped: Bool { true }
 
+    func extensionButtonRect(for id: String) -> NSRect? {
+        layoutSubtreeIfNeeded()
+        return topBar.extensionButtonRect(for: id)
+    }
+
     private func observe() {
         var bannerHeight: CGFloat = 0
         let (space, library, trayOpen, recentCount) = withObservationTracking {
@@ -191,6 +196,11 @@ final class SidebarTopBarView: NSView {
     private var syncQueued = false
 
     var preferredHeight: CGFloat { CraMetrics.titleAreaHeight + (compact ? 2 + 36 + 8 : 0) }
+
+    func extensionButtonRect(for id: String) -> NSRect? {
+        guard compact, !pill.isHiddenOrHasHiddenAncestor else { return nil }
+        return pill.extensionButtonRect(for: id)
+    }
 
     init(store: SidebarStore, ui: SidebarUIState, actions: SidebarActions) {
         self.store = store
@@ -464,6 +474,16 @@ final class SidebarURLPill: NSView {
             }
         }
         needsLayout = true
+    }
+
+    /// Hover hides the accessories while Chromium is still opening a popup. Their layout
+    /// remains the anchor, so a delayed popup or a keyboard shortcut lands in the same place.
+    func extensionButtonRect(for id: String) -> NSRect? {
+        guard hasTab, let m = model, let index = m.pinned.firstIndex(where: { $0.0 == id }), let window else { return nil }
+        let trailing = m.pinned.count - index - 1 + 1 + (m.hasExtensions ? 1 : 0)
+        let right = bounds.width - 5 - CGFloat(trailing) * 29
+        let rect = NSRect(x: right - 28, y: (bounds.height - 28) / 2, width: 28, height: 28)
+        return window.convertToScreen(convert(rect, to: nil))
     }
 
     /// The accessories' hover fill is the sidebar's, not the toolbar's.
