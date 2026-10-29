@@ -34,6 +34,7 @@
 #include "include/cef_urlrequest.h"
 #include "include/cef_version.h"
 #include "CraContentBlocker.h"
+#include "CraPipeWriter.h"
 #include "include/wrapper/cef_helpers.h"
 #include "include/wrapper/cef_library_loader.h"
 
@@ -245,12 +246,49 @@ static CefRefPtr<StrayBrowserClient> g_strayClient;
 // With --remote-debugging-pipe Chromium reads protocol messages from fd 3 and
 // writes replies to fd 4, NUL-terminated. CEF runs the browser in this process,
 // so Cra holds the other ends: a trusted client with no port open to anyone else.
-static int g_cdpWriteFD = -1;
+static CraPipeWriter g_cdpWriter;
 static dispatch_source_t g_cdpReadSource;
 static NSMutableData* g_cdpBuffer;
+// Sent requests still await a reply or transport closure. Per-request cancellation
+// is separate from the bounded outbound queue; Swift deadlines do not remove these.
 static NSMutableDictionary<NSNumber*, void (^)(NSString*, NSString*)>* g_cdpPending;
 static int g_cdpNextID;
 static void (^g_cdpEventHandler)(NSString*, NSString*, NSString*);
+static bool g_cdpDrainScheduled = false;
+
+static void CraCDPPipeClose(NSString* error) {
+    // Chromium must see EOF before CefQuitMessageLoop. No async writer owns a dup.
+    g_cdpWriter.close();
+    g_cdpDrainScheduled = false;
+    if (g_cdpReadSource) {
+        dispatch_source_cancel(g_cdpReadSource);
+        g_cdpReadSource = nil;
+    }
+    g_cdpBuffer = nil;
+    NSArray* callbacks = g_cdpPending.allValues;
+    [g_cdpPending removeAllObjects];
+    // Detach before calling clients: a completion may re-enter this transport.
+    for (void (^done)(NSString*, NSString*) in callbacks) done(nil, error);
+}
+
+static void CraCDPPipeDrain(uint64_t generation) {
+    if (generation != g_cdpWriter.generation()) return;
+    g_cdpDrainScheduled = false;
+    auto result = g_cdpWriter.drain(generation);
+    if (result.state == CraPipeWriter::DrainState::Failed) {
+        CraCDPPipeClose([NSString stringWithFormat:@"DevTools pipe write failed (%d)", result.error]);
+        return;
+    }
+    if (result.state != CraPipeWriter::DrainState::WouldBlock &&
+        result.state != CraPipeWriter::DrainState::Yielded) return;
+    g_cdpDrainScheduled = true;
+    // Backpressure yields to Chromium's UI loop. A fairness-budget yield can
+    // continue next turn immediately. Neither path polls an idle/empty pipe.
+    int64_t delay = result.state == CraPipeWriter::DrainState::WouldBlock ? 4 * NSEC_PER_MSEC : 0;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, delay), dispatch_get_main_queue(), ^{
+        CraCDPPipeDrain(generation);
+    });
+}
 
 static NSString* CraJSONString(id object) {
     return [[NSString alloc] initWithData:[NSJSONSerialization dataWithJSONObject:object ?: @{} options:0 error:nil]
@@ -259,6 +297,7 @@ static NSString* CraJSONString(id object) {
 
 static void CraCDPPipeDeliver(NSData* chunk) {
     NSDictionary* msg = [NSJSONSerialization JSONObjectWithData:chunk options:0 error:nil];
+    if (![msg isKindOfClass:NSDictionary.class]) return;
     NSNumber* key = [msg[@"id"] isKindOfClass:NSNumber.class] ? msg[@"id"] : nil;
     if (!key) {
         if (g_cdpEventHandler && [msg[@"method"] isKindOfClass:NSString.class])
@@ -274,7 +313,7 @@ static void CraCDPPipeDeliver(NSData* chunk) {
 
 /// Creates the pipe pair on fds 3/4. NO (and no pipe) when either fd is already in use.
 static bool CraCDPPipeSetUp() {
-    if (g_cdpWriteFD >= 0) return true;
+    if (g_cdpWriter.isOpen()) return true;
     if (fcntl(3, F_GETFD) != -1 || fcntl(4, F_GETFD) != -1) return false;
     int toChrome[2], fromChrome[2];
     if (pipe(toChrome) != 0) return false;
@@ -283,24 +322,53 @@ static bool CraCDPPipeSetUp() {
     int ourWrite = fcntl(toChrome[1], F_DUPFD_CLOEXEC, 10), ourRead = fcntl(fromChrome[0], F_DUPFD_CLOEXEC, 10);
     int chromeRead = fcntl(toChrome[0], F_DUPFD, 10), chromeWrite = fcntl(fromChrome[1], F_DUPFD, 10);
     for (int fd : {toChrome[0], toChrome[1], fromChrome[0], fromChrome[1]}) close(fd);
-    dup2(chromeRead, 3);
-    dup2(chromeWrite, 4);
+    if (ourWrite < 0 || ourRead < 0 || chromeRead < 0 || chromeWrite < 0) {
+        for (int fd : {ourWrite, ourRead, chromeRead, chromeWrite}) if (fd >= 0) close(fd);
+        return false;
+    }
+    if (!g_cdpWriter.open(ourWrite)) {
+        for (int fd : {ourRead, chromeRead, chromeWrite}) close(fd);
+        return false;
+    }
+    int readFlags = fcntl(ourRead, F_GETFL);
+    // Read-source cancellation can close our end while Chromium still writes.
+    // The flag is inherited by dup2, so fd 4 returns EPIPE instead of SIGPIPE.
+    if (readFlags < 0 || fcntl(ourRead, F_SETFL, readFlags | O_NONBLOCK) < 0 ||
+        fcntl(chromeWrite, F_SETNOSIGPIPE, 1) < 0) {
+        g_cdpWriter.close();
+        for (int fd : {ourRead, chromeRead, chromeWrite}) close(fd);
+        return false;
+    }
+    if (dup2(chromeRead, 3) < 0 || dup2(chromeWrite, 4) < 0) {
+        g_cdpWriter.close();
+        for (int fd : {ourRead, chromeRead, chromeWrite, 3, 4}) close(fd);
+        return false;
+    }
     close(chromeRead);
     close(chromeWrite);
-    g_cdpWriteFD = ourWrite;
     g_cdpBuffer = [NSMutableData data];
     g_cdpPending = [NSMutableDictionary dictionary];
+    const uint64_t generation = g_cdpWriter.generation();
     g_cdpReadSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, ourRead, 0, dispatch_get_main_queue());
+    if (!g_cdpReadSource) {
+        g_cdpWriter.close();
+        for (int fd : {ourRead, 3, 4}) close(fd);
+        return false;
+    }
+    dispatch_source_set_cancel_handler(g_cdpReadSource, ^{ close(ourRead); });
     dispatch_source_set_event_handler(g_cdpReadSource, ^{
+        if (generation != g_cdpWriter.generation()) return;
         char buf[65536];
         ssize_t n = read(ourRead, buf, sizeof buf);
-        if (n <= 0) { dispatch_source_cancel(g_cdpReadSource); return; }
+        if (n < 0 && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)) return;
+        if (n <= 0) { CraCDPPipeClose(@"DevTools pipe closed"); return; }
         [g_cdpBuffer appendBytes:buf length:(NSUInteger)n];
-        for (;;) {
+        while (generation == g_cdpWriter.generation()) {
             NSRange nul = [g_cdpBuffer rangeOfData:[NSData dataWithBytes:"" length:1] options:0
                                              range:NSMakeRange(0, g_cdpBuffer.length)];
             if (nul.location == NSNotFound) break;
             CraCDPPipeDeliver([g_cdpBuffer subdataWithRange:NSMakeRange(0, nul.location)]);
+            if (generation != g_cdpWriter.generation()) return;
             [g_cdpBuffer replaceBytesInRange:NSMakeRange(0, nul.location + 1) withBytes:NULL length:0];
         }
     });
@@ -312,10 +380,7 @@ static bool CraCDPPipeSetUp() {
 // CefQuitMessageLoop alone never returns from the run loop (Cmd-Q hung). Hanging
 // up the pipe lets Chrome shut down; it exits cleanly ("exit_type": "Normal").
 static void CraQuitMessageLoop() {
-    if (g_cdpWriteFD >= 0) {
-        close(g_cdpWriteFD);
-        g_cdpWriteFD = -1;
-    }
+    CraCDPPipeClose(@"DevTools pipe shut down");
     CefQuitMessageLoop();
 }
 
@@ -2032,7 +2097,7 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
             CHROME_VERSION_BUILD, CHROME_VERSION_PATCH];
 }
 + (NSString*)cefVersion { return @CEF_VERSION; }
-+ (BOOL)hasBrowserDevTools { return g_cdpWriteFD >= 0; }
++ (BOOL)hasBrowserDevTools { return g_cdpWriter.isOpen(); }
 + (void)setBrowserDevToolsEventHandler:(void (^)(NSString*, NSString*, NSString* _Nullable))handler {
     g_cdpEventHandler = [handler copy];
 }
@@ -2070,20 +2135,26 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 }
 + (void)sendBrowserDevToolsMethod:(NSString*)method params:(NSString*)params sessionID:(NSString*)sessionID
                        completion:(void (^)(NSString* _Nullable, NSString* _Nullable))completion {
-    if (g_cdpWriteFD < 0) { completion(nil, @"no DevTools pipe"); return; }
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self sendBrowserDevToolsMethod:method params:params sessionID:sessionID completion:completion];
+        });
+        return;
+    }
+    if (!g_cdpWriter.isOpen()) { completion(nil, @"no DevTools pipe"); return; }
     int messageID = ++g_cdpNextID;
-    g_cdpPending[@(messageID)] = [completion copy];
     NSString* session = sessionID.length ? [NSString stringWithFormat:@",\"sessionId\":\"%@\"", sessionID] : @"";
     NSString* message = [NSString stringWithFormat:@"{\"id\":%d,\"method\":\"%@\",\"params\":%@%@}", messageID, method,
                          params.length ? params : @"{}", session];
     NSMutableData* data = [[message dataUsingEncoding:NSUTF8StringEncoding] mutableCopy];
     [data appendBytes:"" length:1];
-    const char* bytes = (const char*)data.bytes;
-    for (size_t sent = 0; sent < data.length;) {
-        ssize_t n = write(g_cdpWriteFD, bytes + sent, data.length - sent);
-        if (n <= 0) { [g_cdpPending removeObjectForKey:@(messageID)]; completion(nil, @"pipe write failed"); return; }
-        sent += (size_t)n;
+    auto accepted = g_cdpWriter.enqueue(static_cast<const char*>(data.bytes), data.length);
+    if (accepted != CraPipeWriter::EnqueueResult::Accepted) {
+        completion(nil, @"DevTools write queue is full");
+        return;
     }
+    g_cdpPending[@(messageID)] = [completion copy];
+    if (!g_cdpDrainScheduled) CraCDPPipeDrain(g_cdpWriter.generation());
 }
 
 @end
