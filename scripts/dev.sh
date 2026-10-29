@@ -3,7 +3,7 @@
 # every save under Sources/ or resources/.
 #   scripts/dev.sh           watch and relaunch (Ctrl-C quits the app too)
 #   scripts/dev.sh --once    build and launch once, logs in this terminal
-#   CRA_DATA_DIR=<dir> scripts/dev.sh    use another profile (default Application Support/CraDev)
+#   CRA_DATA_DIR=<dir> scripts/dev.sh    use another profile (default build/dev-data)
 # CraDev is its own app (executable name, bundle id, profile), so it runs next to the
 # installed Cra, `killall Cra` elsewhere leaves it alone, and it never claims cra:// or
 # http links. CEF is copied and signed when its pinned source changes; ordinary rebuilds swap the Cra binaries,
@@ -15,7 +15,7 @@ NAME=CraDev
 APP="$ROOT/build/$NAME.app"
 SCRATCH="$ROOT/.build/dev"
 STAMP="$SCRATCH/.dev-stamp"
-export CRA_DATA_DIR="${CRA_DATA_DIR:-$HOME/Library/Application Support/CraDev}"
+export CRA_DATA_DIR="${CRA_DATA_DIR:-$ROOT/build/dev-data}"
 PB=/usr/libexec/PlistBuddy
 PID=""
 
