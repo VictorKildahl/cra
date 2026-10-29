@@ -422,9 +422,9 @@ final class ShellView: NSView {
         super.mouseMoved(with: event)
         let p = convert(event.locationInWindow, from: nil)
         guard !sidebarVisible, !contentFullscreen else { return }
-        if !floatingSidebar, p.x <= 2 {
+        if !floatingSidebar, FloatingSidebarGeometry.shouldReveal(at: p, in: bounds) {
             onEdgeHover?(true)
-        } else if floatingSidebar, p.x > sidebarWidth + 24 {
+        } else if floatingSidebar, FloatingSidebarGeometry.shouldHide(at: p, in: bounds, sidebarWidth: sidebarWidth) {
             onEdgeHover?(false)
         }
     }
@@ -465,7 +465,7 @@ final class ShellView: NSView {
         }
         if floating {
             // The floating sidebar hovers over the page; the card does not move (Arc).
-            let m: CGFloat = 8
+            let m = FloatingSidebarGeometry.margin
             let inset = CraMetrics.contentInset
             return Frames(sidebar: NSRect(x: m, y: m, width: width, height: b.height - 2 * m),
                           handle: .zero, content: b.insetBy(dx: inset, dy: inset), cornerRadius: CraMetrics.contentCornerRadius, sidebarCorner: 12)

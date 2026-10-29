@@ -19,6 +19,8 @@ final class FloatingSidebarController {
     var didAttachPanel: (() -> Void)?
 
     private(set) var isShown = false
+    /// A completed hide must not take the panel away from a newer reveal or anchor.
+    private var transitionGeneration: UInt64 = 0
     private var panel: FloatingSidebarPanel?
     /// The sidebar's rounded body; it slides inside the panel (see `panelFrame`).
     private let slider = NSView()
@@ -28,10 +30,7 @@ final class FloatingSidebarController {
     private var trafficLights: FloatingTrafficLights?
 
     enum Metrics {
-        static let edge: CGFloat = 2
-        static let leaveSlack: CGFloat = 24
         static let cornerRadius: CGFloat = 12
-        static let margin: CGFloat = 8
         static let duration: TimeInterval = 0.085
     }
 
@@ -62,12 +61,11 @@ final class FloatingSidebarController {
         guard NSApp.isActive, !shell.contentFullscreen, window.isVisible else { return }
         guard isShown || sidebarHidden() else { return }
         let screenPoint = NSEvent.mouseLocation
-        let inWindow = window.frame.contains(screenPoint)
-        let p = window.convertPoint(fromScreen: screenPoint)
+        let p = shell.convert(window.convertPoint(fromScreen: screenPoint), from: nil)
         if !isShown {
-            guard sidebarHidden(), inWindow, p.x <= Metrics.edge else { return }
+            guard sidebarHidden(), FloatingSidebarGeometry.shouldReveal(at: p, in: shell.bounds) else { return }
             show()
-        } else if !inWindow || p.x > shell.sidebarWidth + Metrics.margin + Metrics.leaveSlack {
+        } else if FloatingSidebarGeometry.shouldHide(at: p, in: shell.bounds, sidebarWidth: shell.sidebarWidth) {
             hide(animated: true)
         }
     }
@@ -142,6 +140,8 @@ final class FloatingSidebarController {
     func show() {
         guard !isShown, sidebarHidden() else { return }
         isShown = true
+        transitionGeneration &+= 1
+        let generation = transitionGeneration
         let p = panel ?? makePanel()
         panel = p
         // The window shadow is traced from the panel's pixels once; it comes on when the
@@ -172,18 +172,24 @@ final class FloatingSidebarController {
             ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.15, 0.7, 0.3, 1)
             slider.animator().frame = slideFrame(shown: true)
         } completionHandler: { [weak self] in
-            guard let self, self.isShown else { return }
-            p.hasShadow = true
-            p.invalidateShadow()
+            MainActor.assumeIsolated {
+                guard let self, self.transitionGeneration == generation, self.isShown else { return }
+                p.hasShadow = true
+                p.invalidateShadow()
+            }
         }
     }
 
     func hide(animated: Bool) {
-        guard isShown, let p = panel else { return }
+        // A synchronous hide also finishes a hide already in flight (for example,
+        // before a traffic-light action). Repeated animated exits do not restart it.
+        guard isShown || (!animated && shell.sidebarDetached), let p = panel else { return }
         isShown = false
+        transitionGeneration &+= 1
+        let generation = transitionGeneration
         p.hasShadow = false
         let finish = { [weak self] in
-            guard let self else { return }
+            guard let self, self.transitionGeneration == generation, !self.isShown else { return }
             self.window.removeChildWindow(p)
             p.orderOut(nil)
             self.reattach(floating: false)
@@ -199,7 +205,10 @@ final class FloatingSidebarController {
     /// The sidebar is about to be anchored (⌘S while floating): put it back in the
     /// shell at its floating frame so the anchoring animation starts from there.
     func prepareForAnchoring() {
-        guard isShown, let p = panel else { return }
+        transitionGeneration &+= 1
+        // During the hide animation isShown is already false, but the view still
+        // belongs to the panel and must come home before the anchoring animation.
+        guard shell.sidebarDetached, let p = panel else { return }
         isShown = false
         window.removeChildWindow(p)
         p.orderOut(nil)

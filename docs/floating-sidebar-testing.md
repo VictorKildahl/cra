@@ -1,0 +1,23 @@
+# Hidden sidebar regression checks
+
+Run `bash scripts/test-floating-sidebar.sh` on macOS. The test compiles the production
+floating-sidebar controller with lightweight theme/layout stubs. It uses an offscreen
+disposable AppKit panel, does not install the pointer poll, and does not post input events.
+
+Checks cover the shared 10pt reveal gutter, window bounds, matching leave slack,
+re-entry during a hide animation, repeated reversals, anchoring while a hide is in
+flight, and immediate dismissal while an animated hide is pending. The tests wait
+for real AppKit animation completions; they do not establish physical hover behavior.
+
+In an isolated CraDev profile, verify:
+
+- Hide the sidebar with Command-S and move into the window's 10pt left gutter. It
+  should reveal without needing to hit the outermost two pixels.
+- Move beyond the floating sidebar's right edge and quickly return to the gutter,
+  repeatedly. The latest reveal should stay visible and interactive.
+- Press Command-S while the floating sidebar is entering or leaving. It should
+  anchor correctly, without disappearing after the old animation completes.
+- The sidebar should stay open while the pointer crosses its right margin and
+  should dismiss after leaving the shared 24pt slack or the browser window.
+- Verify both compact and full toolbars. Page clicks outside the gutter and
+  full-screen page behavior should remain unchanged.
