@@ -4,7 +4,7 @@ Run `bash scripts/test-floating-sidebar.sh` on macOS. The test compiles the prod
 floating-sidebar controller with lightweight theme/layout stubs. It uses an offscreen
 disposable AppKit panel, does not install the pointer poll, and does not post input events.
 
-Checks cover the shared 10pt reveal gutter, window bounds, matching leave slack,
+Checks cover the shared reveal strip (Arc's: 5 pt inside the window's left edge, 4 pt outside), window bounds, matching leave slack,
 held-button retention outside those bounds and dismissal after release,
 re-entry during a hide animation, repeated reversals, anchoring while a hide is in
 flight, and immediate dismissal while an animated hide is pending. The tests wait
@@ -12,8 +12,8 @@ for real AppKit animation completions; they do not establish physical hover beha
 
 In an isolated CraDev profile, verify:
 
-- Hide the sidebar with Command-S and move into the window's 10pt left gutter. It
-  should reveal without needing to hit the outermost two pixels.
+- Hide the sidebar with Command-S and move to within 5 pt of the window's left edge,
+  or just outside it. It should reveal there, and not 6 pt or more into the window.
 - Move beyond the floating sidebar's right edge and quickly return to the gutter,
   repeatedly. The latest reveal should stay visible and interactive.
 - Press Command-S while the floating sidebar is entering or leaving. It should

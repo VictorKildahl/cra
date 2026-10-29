@@ -70,24 +70,25 @@ enum FloatingSidebarTests {
     private static func geometry() {
         // Nonzero bounds also check that both paths use shell-local geometry.
         let bounds = CGRect(x: 20, y: 10, width: 1400, height: 880)
-        expect(FloatingSidebarGeometry.revealWidth == 10, "reveal uses the existing 10pt page gutter")
         expect(FloatingSidebarGeometry.shouldReveal(at: CGPoint(x: 20, y: 100), in: bounds), "left edge reveals")
-        expect(FloatingSidebarGeometry.shouldReveal(at: CGPoint(x: 28, y: 100), in: bounds), "the useful gutter reveals")
-        expect(FloatingSidebarGeometry.shouldReveal(at: CGPoint(x: 30, y: 100), in: bounds), "inner gutter boundary reveals")
-        expect(!FloatingSidebarGeometry.shouldReveal(at: CGPoint(x: 30.1, y: 100), in: bounds), "page content is outside the reveal region")
-        expect(!FloatingSidebarGeometry.shouldReveal(at: CGPoint(x: 19.9, y: 100), in: bounds), "outside the window does not reveal")
-        expect(!FloatingSidebarGeometry.shouldReveal(at: CGPoint(x: 25, y: 9.9), in: bounds), "above the window does not reveal")
-        expect(!FloatingSidebarGeometry.shouldReveal(at: CGPoint(x: 25, y: 890), in: bounds), "below the window does not reveal")
+        expect(FloatingSidebarGeometry.shouldReveal(at: CGPoint(x: 25, y: 100), in: bounds), "5 pt in reveals, as in Arc")
+        expect(!FloatingSidebarGeometry.shouldReveal(at: CGPoint(x: 26, y: 100), in: bounds), "6 pt in does not reveal, as in Arc")
+        expect(FloatingSidebarGeometry.shouldReveal(at: CGPoint(x: 16, y: 100), in: bounds), "just outside the window reveals, as in Arc")
+        expect(!FloatingSidebarGeometry.shouldReveal(at: CGPoint(x: 15.9, y: 100), in: bounds), "further outside does not reveal")
+        expect(!FloatingSidebarGeometry.shouldReveal(at: CGPoint(x: 22, y: 9.9), in: bounds), "above the window does not reveal")
+        expect(!FloatingSidebarGeometry.shouldReveal(at: CGPoint(x: 22, y: 890.1), in: bounds), "below the window does not reveal")
+        expect(!FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 17, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: 0),
+               "the outside reveal strip does not hide what it revealed")
         expect(!FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 380, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: 0),
                "panel margin and leave slack are included in the retention boundary")
         expect(FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 380.1, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: 0),
                "leaving the shared retention boundary hides after release")
-        expect(FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 19.9, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: 0),
+        expect(FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 15.9, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: 0),
                "leaving the window hides after release")
         for button in [1, 2, 4] {
             expect(!FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 380.1, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: button),
                    "button mask \(button) preserves the sidebar beyond the leave slack during a gesture")
-            expect(!FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 19.9, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: button),
+            expect(!FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 15.9, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: button),
                    "button mask \(button) preserves the sidebar outside the moving window during a gesture")
         }
     }
