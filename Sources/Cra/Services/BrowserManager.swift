@@ -20,6 +20,8 @@ final class TabRuntime {
     var snapshotWork: DispatchWorkItem?
     /// When the page last went off screen (nil while shown); tab sleeping counts from here.
     var hiddenAt: Date? = Date()
+    /// Invalidates a pending sleep probe even when navigation returns to the same URL.
+    var navigationRevision: UInt = 0
     /// Chrome-style hosting: the page's own window (nil until created, or for Alloy).
     var hostWindow: NSWindow? { browser.hostWindow }
     init(tabID: UUID, browser: CraBrowser) {
@@ -69,6 +71,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// A tab's live page held by another window's manager, handed over (see `release`).
     var takeRuntimeFromOtherWindow: ((UUID) -> TabRuntime?)?
     private var byBrowser: [ObjectIdentifier: UUID] = [:]
+    /// CEF's client holds its owner weakly; keep retired browsers alive until teardown finishes.
+    private var closingBrowsers: [ObjectIdentifier: CraBrowser] = [:]
 
     init(store: SidebarStore, favicons: FaviconCache, container: NSView) {
         self.store = store
@@ -143,6 +147,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     func release(_ tabID: UUID) -> TabRuntime? {
         guard let rt = runtimes.removeValue(forKey: tabID) else { return nil }
         byBrowser[ObjectIdentifier(rt.browser)] = nil
+        rt.snapshotWork?.cancel()
+        rt.snapshotWork = nil
         if rt.browser.hasDevTools { rt.browser.closeDevTools() }
         devToolsViews[tabID] = nil
         devToolsPlaceholders[tabID] = nil
@@ -150,6 +156,11 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         if visibleTabID == tabID { visibleTabID = nil }
         visibleTabIDs.removeAll { $0 == tabID }
         if let host = rt.hostWindow {
+            // Embedded page views live in the pane card, outside their host window.
+            // Detach them now; their cached identity remains available for a handoff.
+            if EmbeddedPages.isHost(host), let views = EmbeddedPages.pageViews(of: host) {
+                for view in views where view.superview !== host.contentView { view.removeFromSuperview() }
+            }
             host.parent?.removeChildWindow(host)
             host.orderOut(nil)
         }
@@ -222,12 +233,12 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// already on screen, and the crop and downscale happen here instead.
     func captureSnapshot(_ id: UUID, completion: (() -> Void)? = nil) {
         guard let rt = runtimes[id], visibleTabIDs.contains(id) else { completion?(); return }
-        rt.browser.sendDevToolsMethod("Page.captureScreenshot", params: #"{"format":"jpeg","quality":80,"optimizeForSpeed":true}"#) { [weak self] shot, _ in
+        rt.browser.sendDevToolsMethod("Page.captureScreenshot", params: #"{"format":"jpeg","quality":80,"optimizeForSpeed":true}"#) { [weak self, weak rt] shot, _ in
             DispatchQueue.global(qos: .utility).async {
                 let image = shot.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
                     .flatMap { $0["data"] as? String }.flatMap { Data(base64Encoded: $0) }.flatMap(Self.thumbnail(fromViewport:))
                 DispatchQueue.main.async {
-                    if let image { self?.runtimes[id]?.snapshot = image }
+                    if let image, let rt, self?.runtimes[id] === rt { rt.snapshot = image }
                     completion?()
                 }
             }
@@ -258,11 +269,14 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     }
 
     func unload(_ tabID: UUID) {
-        guard let rt = runtimes[tabID] else { return }
-        if visibleTabID == tabID { visibleTabID = nil }
-        visibleTabIDs.removeAll { $0 == tabID }
+        // CEF closes asynchronously. Retire ownership first so reopening the tab
+        // creates a new browser, and late callbacks cannot mutate its replacement.
+        guard let rt = release(tabID) else { return }
         rt.browser.containerView.isHidden = true
+        closingBrowsers[ObjectIdentifier(rt.browser)] = rt.browser
         rt.browser.close()
+        delegate?.browserManagerDidUpdate(tabID)
+        delegate?.browserManagerPageWindowsChanged(focus: false)
     }
 
     // MARK: Tab sleeping
@@ -275,16 +289,26 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         let cutoff = Date().addingTimeInterval(-seconds)
         for (id, rt) in runtimes {
             let b = rt.browser
-            guard let hidden = rt.hiddenAt, hidden < cutoff, b.isCreated, !b.isLoading, !b.isInPictureInPicture,
-                  !b.isCapturingMedia, !b.hasDevTools else { continue }
-            b.sendDevToolsMethod("Runtime.evaluate", params: Self.sleepProbe) { [weak self] result, _ in
+            guard canSleep(rt, before: cutoff) else { continue }
+            let url = b.currentURL
+            let navigationRevision = rt.navigationRevision
+            b.sendDevToolsMethod("Runtime.evaluate", params: Self.sleepProbe) { [weak self, weak rt] result, _ in
                 DispatchQueue.main.async {
-                    guard let self, self.runtimes[id]?.browser === b, let h = self.runtimes[id]?.hiddenAt, h < cutoff,
+                    guard let self, let rt, let current = self.runtimes[id], current === rt,
+                          current.navigationRevision == navigationRevision, current.browser.currentURL == url,
+                          self.canSleep(current, before: cutoff),
                           Self.probeSaysIdle(result) else { return }
                     self.unload(id)
                 }
             }
         }
+    }
+
+    private func canSleep(_ rt: TabRuntime, before cutoff: Date) -> Bool {
+        let b = rt.browser
+        return rt.hiddenAt.map { $0 < cutoff } == true && !visibleTabIDs.contains(rt.tabID)
+            && b.isCreated && !b.isClosed && !b.isLoading && !b.isInPictureInPicture
+            && !b.isCapturingMedia && !b.hasDevTools
     }
 
     /// true when the page has nothing to lose: no audible media, no edited fields, no
@@ -337,7 +361,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         }
     }
 
-    private func tabID(of browser: CraBrowser) -> UUID? { byBrowser[ObjectIdentifier(browser)] }
+    private func tabID(of browser: CraBrowser) -> UUID? {
+        guard let id = byBrowser[ObjectIdentifier(browser)], runtimes[id]?.browser === browser else { return nil }
+        return id
+    }
 
     // MARK: Picture in Picture
 
@@ -412,6 +439,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     func browser(_ browser: CraBrowser, didChangeURL url: String) {
         guard let id = tabID(of: browser) else { return }
+        runtimes[id]?.navigationRevision &+= 1
         // Our own error page is a data: URL; keep the real address in the model.
         if url.hasPrefix("data:text/html;base64,") { return }
         store.updateTab(id, url: url)
@@ -421,6 +449,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     func browser(_ browser: CraBrowser, didChangeLoading loading: Bool, canGoBack: Bool, canGoForward: Bool) {
         guard let id = tabID(of: browser) else { return }
+        if loading { runtimes[id]?.navigationRevision &+= 1 }
         if !loading { runtimes[id]?.progress = 0 }
         if !loading { scheduleSnapshot(id) }
         delegate?.browserManagerDidUpdate(id)
@@ -591,13 +620,11 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     }
 
     func browserDidClose(_ browser: CraBrowser) {
+        closingBrowsers[ObjectIdentifier(browser)] = nil
         guard let id = tabID(of: browser) else { return }
-        browser.containerView.removeFromSuperview()
-        byBrowser[ObjectIdentifier(browser)] = nil
-        if runtimes[id]?.browser === browser { runtimes[id] = nil }
-        if visibleTabID == id { visibleTabID = nil }
-        visibleTabIDs.removeAll { $0 == id }
+        _ = release(id)
         delegate?.browserManagerDidUpdate(id)
+        delegate?.browserManagerPageWindowsChanged(focus: false)
         // window.close() (a sign-in or payment popup finishing): the tab goes, like Chrome.
         if browser.closedByPage { delegate?.browserManagerPageClosedTab(id) }
     }
