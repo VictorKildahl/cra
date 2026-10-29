@@ -52,6 +52,8 @@ static std::atomic<int> g_liveBrowsers{0};
 static bool g_quitting = false;
 static bool g_useChromeStyle = false;
 static bool g_useMockKeychain = false;
+/// Resolved by Swift from the chosen profile, including environment-free dev launches.
+static NSString* g_extensionsDirectory = nil;
 static BOOL g_chromeHosting = NO;
 static NSMutableArray<CraBrowser*>* g_pendingCreation = nil;
 static void (^g_relaunchHandler)(NSArray<NSString*>*) = nil;
@@ -454,10 +456,9 @@ public:
         command_line->AppendSwitch("no-first-run");
         // Unpacked Chrome extensions (Chrome-style browsers only): one folder per extension.
         if (process_type.empty()) {
-            // Same folder as ExtensionStore (AppPaths.supportDir/Extensions).
-            NSString* dataDir = NSProcessInfo.processInfo.environment[@"CRA_DATA_DIR"]
-                ?: [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/Cra"];
-            NSString* dir = [dataDir stringByAppendingPathComponent:@"Extensions"];
+            // Use the same resolved data root as AppPaths/ExtensionStore, never an
+            // independent production fallback when CraDev is opened from Finder.
+            NSString* dir = g_extensionsDirectory;
             NSMutableArray<NSString*>* paths = [NSMutableArray array];
             for (NSString* name in [[NSFileManager defaultManager] contentsOfDirectoryAtPath:dir error:nil]) {
                 NSString* p = [dir stringByAppendingPathComponent:name];
@@ -1958,6 +1959,7 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
     if (g_libraryLoader) return YES;
     g_useChromeStyle = useChromeStyle;
     g_useMockKeychain = useMockKeychain;
+    g_extensionsDirectory = [[cachePath stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"Extensions"];
     g_libraryLoader = new CefScopedLibraryLoader();
     if (!g_libraryLoader->LoadInMain()) {
         NSLog(@"CraCEF: failed to load Chromium Embedded Framework");

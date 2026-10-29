@@ -39,6 +39,19 @@ it to start over.
 
 ## Running a test instance
 
+`scripts/dev.sh` builds a separate `CraDev.app`, including Sparkle, without a production
+update feed or URL registrations. Its default profile is `~/Library/Application Support/CraDev`,
+including when the app is opened directly from Finder. Set `CRA_DATA_DIR` for disposable
+test runs. Ad-hoc development builds use a mock encryption key for fresh profiles; use
+test data and do not copy a daily browser profile or real credentials into them.
+
+The dev bundle records the CEF download source and Sparkle version. Changing either
+pin refreshes the bundled frameworks, including an engine rebuild with the same CEF
+version but a new release suffix. The watcher notices changes to both fetch scripts.
+Compilation happens before the running dev instance stops; bundle replacement happens
+only after it has quit. Quit any separately launched CraDev before starting another dev
+script, so it cannot overwrite a framework still in use.
+
 Cra is single-instance and the installed copy receives every `cra://` URL, so test a
 build next to your daily Cra with its own data folder and a command file:
 
