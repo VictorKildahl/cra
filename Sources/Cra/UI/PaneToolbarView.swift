@@ -377,6 +377,7 @@ final class ToolbarGlyphButton: NSView {
     private let imageView = NSImageView()
     private var tip: ArcTooltipAnchorView?
     private var enabled = true
+    private var contextClick = false
     private var hovering = false { didSet { if hovering != oldValue { refreshFill() } } }
     private var shown: (String?, NSImage?, CGFloat, NSColor, Bool)?
 
@@ -435,9 +436,12 @@ final class ToolbarGlyphButton: NSView {
 
     override func mouseEntered(with event: NSEvent) { hovering = true }
     override func mouseExited(with event: NSEvent) { hovering = false }
-    override func mouseDown(with event: NSEvent) {}
+    override func mouseDown(with event: NSEvent) {
+        contextClick = event.modifierFlags.contains(.control) && menuProvider != nil
+        if contextClick, let menu = menuProvider?() { NSMenu.popUpContextMenu(menu, with: event, for: self) }
+    }
     override func mouseUp(with event: NSEvent) {
-        if enabled, bounds.contains(convert(event.locationInWindow, from: nil)) { action() }
+        if !contextClick, enabled, bounds.contains(convert(event.locationInWindow, from: nil)) { action() }
     }
     override func menu(for event: NSEvent) -> NSMenu? { menuProvider?() }
 }

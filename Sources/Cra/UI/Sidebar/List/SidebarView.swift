@@ -273,7 +273,7 @@ final class SidebarTopBarView: NSView {
             let host = URL(string: url)?.host ?? ""
             let text = tab == nil ? "Search or Enter URL…" : (host.isEmpty ? SuggestionEngine.humanURL(url) : host.replacingOccurrences(of: "www.", with: ""))
             let ext = ExtensionStore.shared
-            let pinned = ext.pinnedIDs.compactMap { id in ext.entries.first { $0.extensionID == id }.map { (id, $0.name, $0.icon) } }
+            let pinned = ext.pinnedIDs.compactMap { id in ext.entries.first { $0.extensionID == id }.map { (id, $0.name, ext.toolbarIcon(for: $0)) } }
             pill.show(text: text, url: url, hasTab: tab != nil, status: ui.toolbarStatus, colors: colors, active: active,
                       pinned: pinned, hasExtensions: !ext.entries.isEmpty)
         }
@@ -443,6 +443,7 @@ final class SidebarURLPill: NSView {
             let b = ToolbarGlyphButton()
             b.configure(symbol: nil, image: icon, help: name, enabled: true, width: 28, iconSize: 16, tint: colors.textSecondary)
             b.action = { actions.runExtension(id) }
+            b.menuProvider = { ExtensionStore.shared.entries.first { $0.extensionID == id }.map(ExtensionsMenu.iconMenu) }
             accessories.append(b)
         }
         let copy = SidebarGlyphButton(symbol: "link", size: 28, height: 28, iconSize: 14, weight: .regular, help: "Copy URL (⇧⌘C)", colors: colors) { actions.performAction("copyURL") }
