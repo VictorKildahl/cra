@@ -11,7 +11,11 @@ enum FloatingSidebarGeometry {
         bounds.contains(point) && point.x <= bounds.minX + revealWidth
     }
 
-    static func shouldHide(at point: CGPoint, in bounds: CGRect, sidebarWidth: CGFloat) -> Bool {
-        !bounds.contains(point) || point.x > bounds.minX + sidebarWidth + margin + leaveSlack
+    static func shouldHide(at point: CGPoint, in bounds: CGRect, sidebarWidth: CGFloat,
+                           pressedMouseButtons: Int) -> Bool {
+        // Window movement can put the pointer outside the panel briefly. Preserve
+        // the active drag/context gesture; the next released-pointer check dismisses.
+        guard pressedMouseButtons == 0 else { return false }
+        return !bounds.contains(point) || point.x > bounds.minX + sidebarWidth + margin + leaveSlack
     }
 }

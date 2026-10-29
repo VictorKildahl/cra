@@ -424,7 +424,8 @@ final class ShellView: NSView {
         guard !sidebarVisible, !contentFullscreen else { return }
         if !floatingSidebar, FloatingSidebarGeometry.shouldReveal(at: p, in: bounds) {
             onEdgeHover?(true)
-        } else if floatingSidebar, FloatingSidebarGeometry.shouldHide(at: p, in: bounds, sidebarWidth: sidebarWidth) {
+        } else if floatingSidebar, FloatingSidebarGeometry.shouldHide(at: p, in: bounds, sidebarWidth: sidebarWidth,
+                                                                     pressedMouseButtons: NSEvent.pressedMouseButtons) {
             onEdgeHover?(false)
         }
     }

@@ -5,6 +5,7 @@ floating-sidebar controller with lightweight theme/layout stubs. It uses an offs
 disposable AppKit panel, does not install the pointer poll, and does not post input events.
 
 Checks cover the shared 10pt reveal gutter, window bounds, matching leave slack,
+held-button retention outside those bounds and dismissal after release,
 re-entry during a hide animation, repeated reversals, anchoring while a hide is in
 flight, and immediate dismissal while an animated hide is pending. The tests wait
 for real AppKit animation completions; they do not establish physical hover behavior.
@@ -19,5 +20,8 @@ In an isolated CraDev profile, verify:
   anchor correctly, without disappearing after the old animation completes.
 - The sidebar should stay open while the pointer crosses its right margin and
   should dismiss after leaving the shared 24pt slack or the browser window.
+- While holding a mouse button for a window drag, tab reorder or context gesture,
+  move beyond those bounds. Automatic hover dismissal must wait until release;
+  explicit hide, toggle and window actions must still work.
 - Verify both compact and full toolbars. Page clicks outside the gutter and
   full-screen page behavior should remain unchanged.

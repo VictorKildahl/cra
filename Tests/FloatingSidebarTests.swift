@@ -78,12 +78,18 @@ enum FloatingSidebarTests {
         expect(!FloatingSidebarGeometry.shouldReveal(at: CGPoint(x: 19.9, y: 100), in: bounds), "outside the window does not reveal")
         expect(!FloatingSidebarGeometry.shouldReveal(at: CGPoint(x: 25, y: 9.9), in: bounds), "above the window does not reveal")
         expect(!FloatingSidebarGeometry.shouldReveal(at: CGPoint(x: 25, y: 890), in: bounds), "below the window does not reveal")
-        expect(!FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 380, y: 100), in: bounds, sidebarWidth: 328),
+        expect(!FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 380, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: 0),
                "panel margin and leave slack are included in the retention boundary")
-        expect(FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 380.1, y: 100), in: bounds, sidebarWidth: 328),
-               "leaving the shared retention boundary hides")
-        expect(FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 19.9, y: 100), in: bounds, sidebarWidth: 328),
-               "leaving the window hides")
+        expect(FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 380.1, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: 0),
+               "leaving the shared retention boundary hides after release")
+        expect(FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 19.9, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: 0),
+               "leaving the window hides after release")
+        for button in [1, 2, 4] {
+            expect(!FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 380.1, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: button),
+                   "button mask \(button) preserves the sidebar beyond the leave slack during a gesture")
+            expect(!FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 19.9, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: button),
+                   "button mask \(button) preserves the sidebar outside the moving window during a gesture")
+        }
     }
 
     private static func drainAnimations() {

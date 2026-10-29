@@ -65,7 +65,8 @@ final class FloatingSidebarController {
         if !isShown {
             guard sidebarHidden(), FloatingSidebarGeometry.shouldReveal(at: p, in: shell.bounds) else { return }
             show()
-        } else if FloatingSidebarGeometry.shouldHide(at: p, in: shell.bounds, sidebarWidth: shell.sidebarWidth) {
+        } else if FloatingSidebarGeometry.shouldHide(at: p, in: shell.bounds, sidebarWidth: shell.sidebarWidth,
+                                                    pressedMouseButtons: NSEvent.pressedMouseButtons) {
             hide(animated: true)
         }
     }
