@@ -312,23 +312,15 @@ final class SidebarTopBarView: NSView {
     // A double click on the empty strip does the title bar's double-click action; a drag moves
     // the window.
     override var mouseDownCanMoveWindow: Bool { false }
-    private var press: NSEvent?
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func mouseDown(with event: NSEvent) {
+        guard let window, !window.styleMask.contains(.fullScreen) else { return }
         if event.clickCount == 2, convert(event.locationInWindow, from: nil).y < CraMetrics.titleAreaHeight {
-            press = nil
             actions.titleBarDoubleClick()
             return
         }
-        press = event
+        NativeWindowDrag.start(with: event, in: window)
     }
-    override func mouseDragged(with event: NSEvent) {
-        guard let p = press else { return }
-        if hypot(event.locationInWindow.x - p.locationInWindow.x, event.locationInWindow.y - p.locationInWindow.y) > 3 {
-            press = nil
-            window?.performDrag(with: p)
-        }
-    }
-    override func mouseUp(with event: NSEvent) { press = nil }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -378,6 +370,7 @@ private final class DevMenuChevron: NSView {
 /// The URL pill on the sidebar's second row while the toolbar is hidden.
 final class SidebarURLPill: NSView {
     var actions: SidebarActions?
+    private var windowDrag = WindowDragGesture()
     var showAccessories = false { didSet { if showAccessories != oldValue { refreshAccessories(animated: true) } } }
     private let label = NSTextField.sidebarLabel(size: 13)
     private let statusIcon = NSImageView()
@@ -493,9 +486,14 @@ final class SidebarURLPill: NSView {
     }
     override func mouseEntered(with event: NSEvent) { hovering = true }
     override func mouseExited(with event: NSEvent) { hovering = false }
-    override func mouseDown(with event: NSEvent) {}
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) { windowDrag.begin(with: event) }
+    override func mouseDragged(with event: NSEvent) {
+        guard let press = windowDrag.dragEvent(for: event) else { return }
+        NativeWindowDrag.start(with: press, in: window)
+    }
     override func mouseUp(with event: NSEvent) {
-        guard bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
+        guard windowDrag.finish(), bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
         actions?.openCommandBar(hasTab ? .editURL : .newTab)
     }
 }

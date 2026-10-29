@@ -51,7 +51,7 @@ final class PaneToolbarView: NSView {
     private let placeholderLabel = NSTextField.sidebarLabel(size: 13)
     private let hairline = NSView()
     private let devDivider = NSView()
-    private var press: NSEvent?
+    private var placeholderDrag = WindowDragGesture()
 
     init(paneTabID: UUID?, store: SidebarStore, ui: SidebarUIState, actions: SidebarActions) {
         self.paneTabID = paneTabID
@@ -336,21 +336,28 @@ final class PaneToolbarView: NSView {
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: view.bounds.height + 4), in: view)
     }
 
-    // A click anywhere on the bar edits the URL (a pane's click also focuses it); a drag moves
-    // the window, as on Arc's toolbar.
+    // Empty toolbar space is a title bar. Starting the system drag on mouse-down keeps
+    // this broad area usable even when the pointer moves quickly; the URL has its own
+    // click-versus-drag handling below.
     override var mouseDownCanMoveWindow: Bool { false }
-    override func mouseDown(with event: NSEvent) { press = event }
-    override func mouseDragged(with event: NSEvent) {
-        guard let p = press else { return }
-        if hypot(event.locationInWindow.x - p.locationInWindow.x, event.locationInWindow.y - p.locationInWindow.y) > 3 {
-            press = nil
-            window?.performDrag(with: p)
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) {
+        _ = placeholderDrag.finish()
+        if !placeholderLabel.isHidden,
+           placeholderLabel.frame.contains(convert(event.locationInWindow, from: nil)) {
+            placeholderDrag.begin(with: event)
+            return
         }
+        guard let window = NativeWindowDrag.target(for: window) else { return }
+        if event.clickCount == 2 { (window as? CraWindow)?.performTitleDoubleClickAction() }
+        else { NativeWindowDrag.start(with: event, in: window) }
+    }
+    override func mouseDragged(with event: NSEvent) {
+        guard let press = placeholderDrag.dragEvent(for: event) else { return }
+        NativeWindowDrag.start(with: press, in: window)
     }
     override func mouseUp(with event: NSEvent) {
-        guard press != nil else { return }
-        press = nil
-        editURL()
+        if placeholderDrag.finish(), placeholderLabel.frame.contains(convert(event.locationInWindow, from: nil)) { editURL() }
     }
 }
 
@@ -446,6 +453,7 @@ final class ToolbarGlyphButton: NSView {
 /// monospace after a lock in developer mode), or the nav-bar status in its place.
 final class ToolbarURLButton: NSView {
     var action: () -> Void = {}
+    private var windowDrag = WindowDragGesture()
     private let content = NSView()
     private let icon = NSImageView()
     private let label = NSTextField.sidebarLabel(size: 13)
@@ -537,8 +545,13 @@ final class ToolbarURLButton: NSView {
 
     override func mouseEntered(with event: NSEvent) { hovering = true }
     override func mouseExited(with event: NSEvent) { hovering = false }
-    override func mouseDown(with event: NSEvent) {}
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) { windowDrag.begin(with: event) }
+    override func mouseDragged(with event: NSEvent) {
+        guard let press = windowDrag.dragEvent(for: event) else { return }
+        NativeWindowDrag.start(with: press, in: window)
+    }
     override func mouseUp(with event: NSEvent) {
-        if bounds.contains(convert(event.locationInWindow, from: nil)) { action() }
+        if windowDrag.finish(), bounds.contains(convert(event.locationInWindow, from: nil)) { action() }
     }
 }
