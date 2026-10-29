@@ -47,13 +47,16 @@ final class ExtensionActions {
     func run(_ extensionID: String, on browser: CraBrowser, anchor: NSPoint) async -> Bool {
         guard isAvailable else { return false }
         var triggered = false
+        HitchMonitor.mark("extension request \(extensionID)")
         do {
             let tab = try await tabTarget(for: browser)
             let before = visibleWindows()
             placingOwnPopup = true
             triggered = true
+            HitchMonitor.mark("extension trigger \(extensionID)")
             _ = try await call("Extensions.triggerAction", ["id": extensionID, "targetId": tab])
-            placePopup(appearingAfter: before, anchor: anchor)
+            HitchMonitor.mark("extension trigger-replied \(extensionID)")
+            placePopup(appearingAfter: before, anchor: anchor, sourceHost: browser.hostWindow)
             return true
         } catch {
             placingOwnPopup = false
@@ -75,19 +78,29 @@ final class ExtensionActions {
 
     /// Chrome shows the popup once its page has loaded; watch for the new window and frame it
     /// under the anchor (ExtensionPopupWindow, Arc's BrowserExtensionWindow).
-    private func placePopup(appearingAfter before: Set<ObjectIdentifier>, anchor: NSPoint, attempt: Int = 0) {
-        // Chrome's popup bubble is borderless; an extension's own (titled) window is not one.
-        if let popup = NSApp.windows.first(where: { !before.contains(ObjectIdentifier($0)) && $0.isVisible && $0.frame.width > 1
-                                                    && !$0.styleMask.contains(.titled) && !($0 is NSPanel)
-                                                    && !CraCEFRuntime.isPageWindow($0) }) {
+    private func placePopup(appearingAfter before: Set<ObjectIdentifier>, anchor: NSPoint, sourceHost: NSWindow? = nil, attempt: Int = 0) {
+        // Sharing badges and tooltips can also become visible during startup. A popup
+        // must belong to a Chromium page in the browser containing the resolved anchor.
+        if let popup = NSApp.windows.first(where: { candidate in
+            guard !before.contains(ObjectIdentifier(candidate)),
+                  let owner = sourceHost?.parent ?? candidate.parent?.parent,
+                  owner.frame.contains(anchor) else { return false }
+            return ExtensionPopupCandidate.matches(candidate, owner: owner, sourceHost: sourceHost,
+                                                   isPageHost: CraCEFRuntime.isPageWindow)
+        }) {
+            HitchMonitor.mark("extension present window=\(popup.windowNumber) frame=\(NSStringFromRect(popup.frame)) parent=\(popup.parent?.windowNumber ?? -1)")
             placingOwnPopup = false
             ExtensionPopupWindow.present(popup, anchor: anchor)
             return
         }
         // No popup yet (still loading), or an action without one (onClicked): keep looking for 3 s.
-        guard attempt < 60 else { placingOwnPopup = false; return }
+        guard attempt < 60 else {
+            HitchMonitor.mark("extension placement-expired source=\(sourceHost?.windowNumber ?? -1)")
+            placingOwnPopup = false
+            return
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            MainActor.assumeIsolated { self?.placePopup(appearingAfter: before, anchor: anchor, attempt: attempt + 1) }
+            MainActor.assumeIsolated { self?.placePopup(appearingAfter: before, anchor: anchor, sourceHost: sourceHost, attempt: attempt + 1) }
         }
     }
 

@@ -78,6 +78,7 @@ final class ExtensionPopupWindow: NSWindow {
         host?.addChildWindow(w, ordered: .above)
         w.orderFront(nil)
         w.addChildWindow(bubble, ordered: .above)
+        HitchMonitor.mark("extension framed window=\(w.windowNumber) bubble=\(bubble.windowNumber) anchor=\(NSStringFromPoint(anchor)) frame=\(NSStringFromRect(w.frame))")
 
         for name in [NSWindow.didResizeNotification, NSWindow.didMoveNotification] {
             w.observers.append(NotificationCenter.default.addObserver(forName: name, object: bubble, queue: .main) { [weak w] _ in
@@ -90,7 +91,8 @@ final class ExtensionPopupWindow: NSWindow {
         // Chrome closes its popup when the popup loses focus, but only once it had focus: shown
         // while the page's own window wasn't key (the button is in Cra's sidebar, or Cra was in
         // the background) it never closed. Give it focus, and close it when another Cra window
-        // takes focus or Cra goes to the background, as a focused popup does.
+        // takes focus. Chromium deliberately keeps extension popups open when another
+        // app becomes active, so users can read their contents while working elsewhere.
         bubble.makeKey()
         let shownAt = Date()
         w.observers.append(NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak w] note in
@@ -100,9 +102,6 @@ final class ExtensionPopupWindow: NSWindow {
                       Date().timeIntervalSince(shownAt) > 0.3 else { return }
                 w.dismiss(closingBubble: true)
             }
-        })
-        w.observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak w] _ in
-            MainActor.assumeIsolated { w?.dismiss(closingBubble: true) }
         })
         w.observers.append(NotificationCenter.default.addObserver(forName: NSWindow.willMoveNotification, object: w, queue: .main) { [weak w] _ in
             MainActor.assumeIsolated {
