@@ -460,6 +460,9 @@ struct AppSettings: Codable, Equatable {
     /// Arc's searchSuggestEnabled: the command bar asks the search engine for suggestions
     /// as you type and fills its rows with them.
     var searchSuggestions: Bool = true
+    /// Arc's showSpaceHeaderOnSingleUnnamedSpaces: with only one space, its header (and the
+    /// dock's lone space icon) can be hidden, for people who don't use spaces.
+    var showSpaceHeaderOnSingleSpace: Bool = true
 
     init() {}
 
@@ -564,6 +567,7 @@ extension AppSettings {
         tabSleep = (try? c.decodeIfPresent(TabSleepThreshold.self, forKey: .tabSleep)) ?? .oneHour
         httpsOnly = try c.decodeIfPresent(Bool.self, forKey: .httpsOnly) ?? false
         searchSuggestions = try c.decodeIfPresent(Bool.self, forKey: .searchSuggestions) ?? true
+        showSpaceHeaderOnSingleSpace = try c.decodeIfPresent(Bool.self, forKey: .showSpaceHeaderOnSingleSpace) ?? true
     }
 }
 

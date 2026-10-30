@@ -16,6 +16,13 @@ struct TabsPane: View {
                 SettingsCheckbox(title: "Show toolbar above the page", isOn: $store.settings.showToolbar)
                 SettingsCheckbox(title: "Enable Picture in Picture when you leave a video tab", isOn: $store.settings.autoPictureInPicture)
             }
+            // Arc's single-space mode ("Hide Space Header" on the space's menu), for people who
+            // don't use spaces.
+            SettingsFormRow(label: "Spaces:") {
+                SettingsCheckbox(title: "Show the space header with only one space", isOn: $store.settings.showSpaceHeaderOnSingleSpace)
+                Text("Off hides the space’s name and its icon at the bottom of the sidebar while you have one space.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            }
             // Arc's Links pane: the Little Arc switch and "Choose where links open inside
             // Arc." with an "Air Traffic Control…" button.
             SettingsFormRow(label: "Links:") {

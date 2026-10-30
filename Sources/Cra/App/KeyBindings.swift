@@ -84,6 +84,8 @@ struct KeyAction: Identifiable, Hashable {
     var shortcuts: [Shortcut]
     var triggers: [String] = []
     var inCommandBar: Bool = true
+    /// The command bar row's glyph, where Arc gives the command its own (else ⌘).
+    var symbol: String? = nil
 
     var primary: Shortcut? { shortcuts.first }
 }
@@ -181,6 +183,9 @@ final class KeyBindingRegistry {
             KeyAction(id: "stop", name: "Stop Loading", section: .view, shortcuts: [Shortcut(".", cmd)], inCommandBar: false),
             KeyAction(id: "reload", name: "Refresh the Page", section: .view, shortcuts: [Shortcut("r", cmd)], triggers: ["refresh", "reload"]),
             KeyAction(id: "hardReload", name: "Force Refresh the Page", section: .view, shortcuts: [Shortcut("r", cmdShift)]),
+            // Arc's command bar (1.171): "clear" lists both, cache first, with a trash glyph.
+            KeyAction(id: "clearCache", name: "Clear Cache and Refresh", section: .view, shortcuts: [], symbol: "trash"),
+            KeyAction(id: "clearCookies", name: "Clear Cookies and Refresh", section: .view, shortcuts: [], symbol: "trash"),
             // Arc: View ▸ Developer ▸ "Turn on/off Developer Mode for this site" (⌃D).
             KeyAction(id: "toggleDeveloperMode", name: "Toggle Developer Mode for this Site", section: .view, shortcuts: [Shortcut("d", .control)], triggers: ["developer mode", "dev mode"]),
             KeyAction(id: "resetZoom", name: "Zoom to Actual Size", section: .view, shortcuts: [Shortcut("0", cmd)], triggers: ["reset zoom"]),

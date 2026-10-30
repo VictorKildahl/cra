@@ -2211,4 +2211,9 @@ static id CraTopLevelWindow(id element) {
     [CraCEFRuntime closeAllBrowsersAndQuit];
 }
 
+// Chromium sends this when "Stay" is picked on a "Leave site?" dialog, to stop a quit in
+// progress (chrome_browser_application_mac::CancelTerminate). Cra's quit force-closes pages,
+// which never asks, so there's nothing to cancel; without the method Cra crashed on "Stay".
+- (void)cancelTerminate:(id)sender {}
+
 @end

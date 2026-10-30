@@ -398,10 +398,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// Arc's "Close this Split Pane" (⌃⇧-): the pane's tab closes like any tab;
-    /// the split keeps the other panes.
+    /// the split keeps the other panes. A pinned split's pane leaves it (closing it
+    /// would only unload the whole split).
     func closeSplitPane(_ id: UUID) {
         guard store.splitContaining(id) != nil else { closeTab(id); return }
-        if store.item(id)?.isEmptyTab == true {
+        if store.item(id)?.isEmptyTab == true || store.isPinned(id) {
             store.archiveTab(id, reason: .manual)
         } else {
             closeTab(id)
@@ -1218,15 +1219,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func closeTab(_ id: UUID) {
         guard let item = store.item(id), item.isTab else { return }
         if store.isPinned(id) {
-            let wasSelected = selectedTabID == id
-            _ = store.resetPinnedTab(id)
-            for w in app.mainWindows { w.browsers.unload(id) }
+            // A pinned split closes as one: every pane unloads and goes back to its page.
+            let panes = store.paneTabIDs(for: id)
+            let wasSelected = selectedTabID.map(panes.contains) ?? false
+            for p in panes {
+                _ = store.resetPinnedTab(p)
+                for w in app.mainWindows { w.browsers.unload(p) }
+            }
             if wasSelected {
                 // Arc goes back to the tab used before this one, if it is still open. A pinned
                 // tab that was closed (unloaded) doesn't count: two of them would otherwise hand
                 // the selection back and forth on every ⌘W, reloading each other.
                 let back = store.recentTabs(in: focusedSpaceID, limit: .max)
-                    .first { $0 != id && (!store.isPinned($0) || app.runtime(for: $0) != nil) }
+                    .first { !panes.contains($0) && (!store.isPinned($0) || app.runtime(for: $0) != nil) }
                 store.selectTab(back, window: windowID)
             }
         } else {
@@ -1645,8 +1650,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         actions.runExtension = { [weak self] id in self?.runExtensionAction(id) }
         actions.addExtension = { [weak self] in self?.openTab("https://chromewebstore.google.com/category/extensions") }
         actions.manageExtensions = { [weak self] in self?.openTab("chrome://extensions") }
-        actions.clearCache = { [weak self] in self?.clearSiteData(cookies: false) }
-        actions.clearCookies = { [weak self] in self?.clearSiteData(cookies: true) }
+        actions.clearCache = { [weak self] in self?.currentBrowser?.clearSiteDataAndReload(cookies: false) }
+        actions.clearCookies = { [weak self] in self?.currentBrowser?.clearSiteDataAndReload(cookies: true) }
         actions.siteSettings = { [weak self] in
             guard let origin = URL(string: url).flatMap({ u in u.host.map { "\(u.scheme ?? "https")://\($0)" } }) else { return }
             self?.openTab("chrome://settings/content/siteDetails?site=" + (origin.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? origin))
@@ -1664,23 +1669,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private func shareCurrentPage(from rect: NSRect, in view: NSView) {
         guard let url = selectedTabID.flatMap({ store.item($0)?.tab?.url }).flatMap(URL.init(string:)) else { return }
         NSSharingServicePicker(items: [url]).show(relativeTo: rect, of: view, preferredEdge: .minY)
-    }
-
-    /// Arc's "Clear cookies and refresh the current page" (and the cache variant): this site's
-    /// cookies, or the HTTP cache, then a reload.
-    private func clearSiteData(cookies: Bool) {
-        guard let b = currentBrowser, let u = URL(string: b.currentURL), let host = u.host, let scheme = u.scheme else { return }
-        let done: (String?, String?) -> Void = { _, error in
-            if let error { NSLog("Cra: clearing site data failed: %@", error) }
-            DispatchQueue.main.async { b.reload() }
-        }
-        if cookies {
-            let params = ["origin": "\(scheme)://\(host)\(u.port.map { ":\($0)" } ?? "")", "storageTypes": "cookies"]
-            let json = String(decoding: (try? JSONSerialization.data(withJSONObject: params)) ?? Data("{}".utf8), as: UTF8.self)
-            b.sendDevToolsMethod("Storage.clearDataForOrigin", params: json, completion: done)
-        } else {
-            b.sendDevToolsMethod("Network.clearBrowserCache", params: "{}", completion: done)
-        }
     }
 
     /// Arc's "Capture the full page": the whole document (beyond the viewport) as a PNG in Downloads.
@@ -1796,7 +1784,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let h = CommandBarView.height(forRows: rows)
         let w = commandBar.panelWidth
         let wf = window.frame
-        commandPanel.setFrame(NSRect(x: wf.midX - w / 2, y: wf.midY - h / 2 + 40, width: w, height: h), display: true)
+        // The field stays put and rows hang below it: centred as a full bar would be, so a
+        // shorter list while typing doesn't move what you type into.
+        let top = wf.midY + CommandBarView.height(forRows: SuggestionEngine.maxRows) / 2 + 40
+        commandPanel.setFrame(NSRect(x: wf.midX - w / 2, y: top - h, width: w, height: h), display: true)
     }
 
     private func hideCommandPanel() {

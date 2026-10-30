@@ -12,9 +12,11 @@ final class SearchSuggestions {
     }
 
     private var cache: [String: [Item]] = [:]
-    /// The newest answer, narrowed to the query while the query's own answer loads, so rows
-    /// don't empty and refill on every keystroke.
+    /// The newest answer, kept on screen while the query's own answer loads (Chrome's omnibox
+    /// does the same), so rows don't empty and refill on every keystroke.
     private var last: (query: String, items: [Item])?
+    /// The query whose answer is loading.
+    private var pending: String?
     private var task: Task<Void, Never>?
 
     /// No cookies: the request says nothing about who is typing beyond the text itself.
@@ -33,18 +35,30 @@ final class SearchSuggestions {
     func items(for query: String, engine: SearchEngine) -> [Item] {
         let q = query.lowercased()
         if let hit = cache["\(engine.rawValue)|\(q)"] { return hit }
-        guard let last, q.hasPrefix(last.query) else { return [] }
-        return last.items.filter { $0.url == nil && $0.text.lowercased().hasPrefix(q) && $0.text.lowercased() != q }
+        guard let last, pending == q else { return [] }
+        // What still starts the typed text first; the rest only holds the bar's height, since
+        // the engine often corrects the spelling ("ramayyana mov" → "ramayana movie").
+        let rest = last.items.filter { $0.text.lowercased() != q }
+        let narrowed = rest.filter { $0.url == nil && $0.text.lowercased().hasPrefix(q) }
+        return narrowed + rest.filter { !narrowed.contains($0) }
     }
 
     func fetch(_ query: String, engine: SearchEngine, done: @escaping @MainActor () -> Void) {
         task?.cancel()
+        pending = nil
         let q = query.lowercased()
         let key = "\(engine.rawValue)|\(q)"
         guard cache[key] == nil, let url = engine.suggestURL(query) else { return }
+        pending = q
         task = Task { [session, weak self] in
-            guard let (data, response) = try? await session.data(from: url),
-                  (response as? HTTPURLResponse)?.statusCode == 200, !Task.isCancelled, let self else { return }
+            let answer = try? await session.data(from: url)
+            guard !Task.isCancelled, let self else { return }
+            self.pending = nil
+            guard let (data, response) = answer, (response as? HTTPURLResponse)?.statusCode == 200 else {
+                // No answer: stop holding the previous one on screen.
+                done()
+                return
+            }
             let items = Self.parse(data)
             self.cache[key] = items
             self.last = (q, items)
@@ -56,6 +70,7 @@ final class SearchSuggestions {
     func reset() {
         task?.cancel()
         task = nil
+        pending = nil
         cache = [:]
         last = nil
     }

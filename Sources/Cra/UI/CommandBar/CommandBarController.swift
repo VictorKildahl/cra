@@ -86,15 +86,16 @@ final class CommandBarController {
             previewText = nil
             return
         }
-        result = engine.suggestions(for: newQuery, mode: mode, currentTabID: store.selectedTabID)
-        if !allowCompletion { result.inlineCompletion = nil }
-        selectedIndex = 0
-        previewText = nil
+        // Asked first: while the answer loads, the previous one keeps its rows.
         let typed = newQuery
         engine.fetchSearchSuggestions(for: typed) { [weak self] in
             guard let self, self.isOpen, self.query == typed else { return }
             self.relist()
         }
+        result = engine.suggestions(for: newQuery, mode: mode, currentTabID: store.selectedTabID)
+        if !allowCompletion { result.inlineCompletion = nil }
+        selectedIndex = 0
+        previewText = nil
     }
 
     /// The search engine answered: list again, keeping the selected row where it still is.

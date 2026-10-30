@@ -540,8 +540,10 @@ final class SpaceDockView: NSView {
         withObservationTracking {
             colors = SidebarColors(store.focusedSpace(window: ui.windowID).theme.palette)
             incognito = store.window(ui.windowID).isIncognito
-            spaces = incognito ? [] : store.orderedSpaces
-            focused = store.focusedSpaceID(window: ui.windowID)
+            let f = store.focusedSpaceID(window: ui.windowID)
+            focused = f
+            // Arc's single-space mode drops the lone space icon along with the header.
+            spaces = incognito || store.hidesSpaceHeader(f) ? [] : store.orderedSpaces
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self, !self.syncQueued else { return }

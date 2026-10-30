@@ -757,6 +757,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "toggleDeveloperMode": if let url = store.selectedTab?.tab?.url { store.settings.toggleDeveloperMode(url: url) }
         case "reload": main.currentBrowser?.reload()
         case "hardReload": main.currentBrowser?.reloadIgnoringCache()
+        case "clearCache": main.currentBrowser?.clearSiteDataAndReload(cookies: false)
+        case "clearCookies": main.currentBrowser?.clearSiteDataAndReload(cookies: true)
         case "stop": main.currentBrowser?.stopLoading()
         case "zoomIn": main.zoom(by: 0.5)
         case "zoomOut": main.zoom(by: -0.5)
@@ -923,6 +925,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         view.addItem(item("toggleSidebar")); view.addItem(item("toggleToolbar"))
         view.addItem(.separator())
         view.addItem(item("stop")); view.addItem(item("reload")); view.addItem(item("hardReload"))
+        // Arc's View menu order: cookies, then cache.
+        view.addItem(item("clearCookies")); view.addItem(item("clearCache"))
         view.addItem(.separator())
         view.addItem(item("resetZoom")); view.addItem(item("zoomIn")); view.addItem(item("zoomOut"))
         view.addItem(.separator())

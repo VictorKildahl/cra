@@ -1049,7 +1049,9 @@ final class SplitRowView: SidebarRowView {
 
     func apply(_ m: SplitRowModel) {
         guard m != model else { return }
+        let closeChanged = m.selected != model?.selected || m.today != model?.today
         model = m
+        defer { if closeChanged { for c in cells where c.hovering { c.refreshClose() } } }
         if cells.map(\.cellID) != m.cells.map(\.id) {
             cells.forEach { $0.removeFromSuperview() }
             separators.forEach { $0.removeFromSuperview() }
@@ -1131,16 +1133,18 @@ final class SplitRowView: SidebarRowView {
 
     private func cell(at point: NSPoint) -> SplitCellView? { cells.first { $0.frame.contains(point) } }
 
-    override func dragItemID(at point: NSPoint) -> UUID? { cell(at: point)?.cellID }
+    // The split moves as one (into Pinned, a folder, another space); a pane leaves it through
+    // the menu or ⌥ on its close button, as in Arc.
+    override func dragItemID(at point: NSPoint) -> UUID? { model?.id }
 
     override func click(_ event: NSEvent, at point: NSPoint) {
         guard let c = cell(at: point), let list else { return }
         list.store.selectTab(c.cellID, window: list.ui.windowID)
     }
 
+    // Arc shows the split's menu over any pane; each pane's own items are a submenu in it.
     override func contextMenu(at point: NSPoint) -> NSMenu? {
         guard let m = model, let list else { return nil }
-        if let c = cell(at: point) { return SidebarMenus.splitCell(c.cellID, list: list) }
         return SidebarMenus.split(m, list: list)
     }
 
@@ -1188,15 +1192,20 @@ final class SplitCellView: NSView, ArcTooltipTarget {
         needsLayout = true
     }
 
-    private func refreshClose() {
+    func refreshClose() {
         close?.removeFromSuperview()
         close = nil
         guard hovering, let row, let list = row.list else { needsLayout = true; return }
         let id = cellID
-        let b = SidebarGlyphButton(symbol: "xmark", size: 20, iconSize: 11, help: "Close pane", optionHelp: "Separate from Split View", colors: row.colors) { [weak list] in
+        // Arc 1.171: an open pinned split shows a minus (the whole split closes and stays pinned),
+        // like an open pinned tab; otherwise the ✕ takes this pane out.
+        let keep = row.model.map { !$0.today && $0.selected } ?? false
+        let b = SidebarGlyphButton(symbol: "xmark", size: 20, iconSize: 11, help: keep ? "Close and Keep Pinned (⌘W)" : "Close pane",
+                                   optionHelp: "Separate from Split View", colors: row.colors) { [weak list] in
             // Option-click un-splits instead of closing (Arc flag option-click-split-tab-close-button-to-unsplit).
-            if NSEvent.modifierFlags.contains(.option) { list?.store.separateFromSplit(id) } else { list?.actions.closeTab(id) }
+            if NSEvent.modifierFlags.contains(.option) { list?.store.separateFromSplit(id) } else if keep { list?.actions.closeTab(id) } else { list?.actions.closePane(id) }
         }
+        if keep { b.setCloseMark(minus: true, help: "Close and Keep Pinned (⌘W)") }
         addSubview(b)
         close = b
         needsLayout = true

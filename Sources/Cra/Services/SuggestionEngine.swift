@@ -94,7 +94,11 @@ final class SuggestionEngine {
         }
 
         items = dedupe(items)
-        items.sort { $0.score > $1.score }
+        // Stable: equal scores keep their order (tabs, archive, history, domains, then commands
+        // in menu order), so "clear" lists Clear Cache before Clear Cookies, as Arc does.
+        items = items.enumerated().sorted { a, b in
+            a.element.score != b.element.score ? a.element.score > b.element.score : a.offset < b.offset
+        }.map(\.element)
 
         // Arc's order: the row that supplies the inline completion comes first,
         // then what you typed, then everything else.
@@ -102,6 +106,10 @@ final class SuggestionEngine {
         if let completion, let idx = items.firstIndex(where: { $0.id == completion.candidateID }) {
             let c = items.remove(at: idx)
             items.insert(c, at: 0)
+            items.insert(typed, at: 1)
+        } else if let top = items.first, case .command = top.kind, top.score >= 68 {
+            // Arc 1.171 lists a command the text names above it too: "sett" → Settings,
+            // "clear" → Clear Cache and Refresh, "clear cook" → Clear Cookies and Refresh.
             items.insert(typed, at: 1)
         } else {
             items.insert(typed, at: 0)
@@ -323,7 +331,7 @@ final class SuggestionEngine {
             guard s > 0 else { continue }
             s += Double(min(store.ranking.commandUsage[a.id] ?? 0, 10)) * 2
             out.append(Suggestion(id: "cmd:\(a.id)", kind: .command(a.id), title: a.name, subtitle: "Command",
-                                  url: nil, faviconKey: nil, symbol: "command", trailing: a.primary?.display, score: s))
+                                  url: nil, faviconKey: nil, symbol: a.symbol ?? "command", trailing: a.primary?.display, score: s))
         }
         for space in incognito ? [] : store.orderedSpaces {
             let s = nameScore("Switch to \(space.title)", triggers: [space.title.lowercased()])

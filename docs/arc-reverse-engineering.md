@@ -642,6 +642,38 @@ isolated test instance; composites in docs/screenshots/compare-*.png.
   Option-click to unsplit, drop-on-row-right-half to split. Not yet: the drop-region placeholder over the
   content (CEF page windows receive the drag), the window shrink effect, and a 1:1 divider feel.
 
+### Pinned splits and the split menu (Arc 1.171, 30 Oct)
+Observed live on a throwaway Today split (example.com | example.org), archived afterwards.
+- [O] Tabs ▸ Pin Tab (⌘D) with a pane focused pins the WHOLE split (appended to Pinned); the item then reads
+  "Unpin Tab" (the word stays "Tab"). Pressing a split row and releasing elsewhere drags the whole split:
+  Pinned → Today moved both panes as one item. A pane never leaves by dragging; only through the menu or ⌥✕.
+- [O] File ▸ Close Tab on an open pinned split closes the whole split (both panes stay pinned, nothing selected).
+  The open pinned split's hover button is a minus (like an open pinned tab); a closed one shows ✕. The button
+  sits once at the row's trailing end, not per pane (Cra still draws it per pane).
+- [O] Right-click anywhere on a split row (either pane) shows one menu: Share Split View… | Separate All Tabs,
+  Add Tab… (disabled while the split is closed), Convert to Vertical Split View | "Tab Options" header, one
+  submenu per pane titled with its page (Separate from Split View | Share ▸, Mute, Copy Link, Copy link as
+  Markdown | Archive Item) | Change Icon…, Rename… | Duplicate, Move to ▸ (spaces with a check on the current
+  one, New Space…) | Archive Item, Archive Tabs Below (Today only). No Pin item.
+- Cra (30 Oct): split rows drag as one item, ⌘D pins/unpins the split, ⌘W closes a pinned split as a whole,
+  the menu follows Arc's minus Share/Change Icon/Duplicate, pinning makes each pane's page its home, and a new
+  pane in a pinned split takes its first page as home.
+
+### Clear cookies / cache (Arc 1.171, 30 Oct)
+- [O] Command bar: "clear" lists Clear Cache and Refresh (selected, above the typed row), then "clear", then
+  Clear Cookies and Refresh; "clear cook" puts Clear Cookies and Refresh first; both rows use a trash glyph.
+  "cache"/"cookies" alone don't surface them. View menu: Force Refresh the Page, Clear Cookies and Refresh,
+  Clear Cache and Refresh. Strings: "Clear cookies and refresh the current page." (site-scoped).
+- [O] Arc lists a matching command above the typed row in general: "sett" → Settings, "new" → Add Split View,
+  "clear" in a main window → Clear Unpinned Tabs. Pages/history follow a confidence rule not reproduced.
+
+### One space (Arc 1.171, static)
+- [O strings] Defaults key `showSpaceHeaderOnSingleUnnamedSpaces` (+ `…DidChange` action); the space context
+  menu has "Show Space Header" / "Hide Space Header" ("Menu item to toggle space header visibility").
+  Not observed live: it needs a one-space Arc, and rewriting StorableSidebar.json risks syncing deleted spaces.
+  Cra: Hide Space Header on the header's menu with one space, Show Space Header on the list's menu, and
+  Settings ▸ Tabs ▸ "Show the space header with only one space"; hidden also drops the dock's lone icon.
+
 ### DevTools docking, Arc's way (25 Oct)
 
 Evidence from Arc 1.170.0: the ArcCore framework (REA `inspect-macho`, sha256 0a51a5c7…) carries

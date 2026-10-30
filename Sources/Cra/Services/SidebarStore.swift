@@ -262,6 +262,10 @@ final class SidebarStore {
     // MARK: Lookup
 
     var orderedSpaces: [Space] { spaceOrder.compactMap { spaces[$0] } }
+    /// Arc's single-space mode: one space and the header turned off. Incognito windows keep theirs.
+    func hidesSpaceHeader(_ id: UUID) -> Bool {
+        !settings.showSpaceHeaderOnSingleSpace && spaceOrder.count == 1 && !isIncognito(space: id)
+    }
     func focusedSpaceID(window id: UUID?) -> UUID {
         window(id).focusedSpaceID.flatMap { spaces[$0] != nil ? $0 : nil } ?? spaceOrder.first!
     }
@@ -419,7 +423,8 @@ final class SidebarStore {
         guard var it = items[id], var t = it.tab else { return }
         if let url, !url.isEmpty, url != "about:blank" {
             t.url = url
-            if !isPinned(id) { t.savedURL = url }
+            // A pinned tab that never had a page (a new pane of a pinned split) takes its first one as home.
+            if !isPinned(id) || t.savedURL.isEmpty || t.savedURL == "about:blank" { t.savedURL = url }
             if let key = FaviconCache.key(for: url) { t.faviconKey = key }
         }
         // A live folder's tab keeps the pull request's title (Arc shows that, not the page's).
@@ -602,6 +607,15 @@ final class SidebarStore {
             it.data = .tab(t)
         }
         items[id] = it
+        if it.isSplit, isPinned(newParent) {
+            // A pinned split keeps each pane's page as that pane's home.
+            for c in it.children {
+                guard var pane = items[c], var t = pane.tab else { continue }
+                t.savedURL = t.url
+                pane.data = .tab(t)
+                items[c] = pane
+            }
+        }
         if let from = fromParent, from != newParent { collapseSplitIfNeeded(from) }
         touch()
     }
@@ -836,12 +850,16 @@ final class SidebarStore {
         moveItem(id, to: space.todayContainerID, index: 0)
     }
 
+    /// A pane pins and unpins its whole split.
     func togglePinned(_ id: UUID) {
+        let id = splitContaining(id)?.id ?? id
         if isPinned(id) { unpinTab(id) } else { pinTab(id) }
     }
 
     /// Favorites belong to one space: the tab's own unless another is given.
     func addToFavorites(_ id: UUID, in spaceID: UUID? = nil) {
+        // A favorite is one page's tile; a split can be pinned but not a favorite.
+        guard items[id]?.isSplit != true else { return }
         guard let space = spaces[spaceID ?? self.spaceID(ofItem: id) ?? focusedSpaceID] else { return }
         // A new favorite takes the tile color when every existing one shares it.
         let colors = Set(tabs(under: space.favoritesContainerID).map { $0.tab?.tileColor })

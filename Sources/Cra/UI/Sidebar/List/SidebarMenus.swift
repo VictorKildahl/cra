@@ -224,36 +224,56 @@ enum SidebarMenus {
 
     // MARK: Splits
 
+    /// Arc 1.171's split menu, item for item where Cra has the feature (no Share or Change Icon).
+    /// It is pinned by dragging it into Pinned or with Pin Tab (⌘D), not from here.
     static func split(_ m: SplitRowModel, list: SpaceListView) -> NSMenu {
         let store = list.store, ui = list.ui, actions = list.actions
         let id = m.id
         let menu = menu()
         let children = m.cells.map(\.id)
         add(menu, "Separate All Tabs") { store.separateAll(id) }
-        add(menu, store.item(id)?.split?.orientation == .vertical ? "Convert to Horizontal Split View" : "Convert to Vertical Split View") {
-            store.flipSplitOrientation(id)
-        }
-        add(menu, "Add Pane") {
+        // Arc greys it out while the split is closed (no pane to add next to).
+        add(menu, "Add Tab…", enabled: m.selected && children.count < 4) {
             if let first = children.first {
                 actions.focusPane(first)
                 actions.performAction("addSplitView")
             }
         }
+        add(menu, store.item(id)?.split?.orientation == .vertical ? "Convert to Horizontal Split View" : "Convert to Vertical Split View") {
+            store.flipSplitOrientation(id)
+        }
+        menu.addItem(.separator())
+        note(menu, "Tab Options")
+        for c in m.cells {
+            paneItems(submenu(menu, c.title), c.id, list: list)
+        }
         menu.addItem(.separator())
         add(menu, "Rename…") { ui.renamingID = id }
         menu.addItem(.separator())
-        add(menu, m.today ? "Archive All" : "Close All") { for c in children { actions.closeTab(c) } }
+        let spaces = submenu(menu, "Move to")
+        let current = store.spaceID(ofItem: id)
+        for s in store.orderedSpaces {
+            add(spaces, "\(s.emoji) \(s.title)", on: s.id == current) { if s.id != current { store.moveTab(id, toSpace: s.id) } }
+        }
+        menu.addItem(.separator())
+        add(menu, "Archive Item") { for c in children { store.archiveTab(c, reason: .manual) } }
         return menu
     }
 
-    static func splitCell(_ id: UUID, list: SpaceListView) -> NSMenu {
+    /// One pane's submenu under "Tab Options" (Arc: childItem(id, …)).
+    private static func paneItems(_ menu: NSMenu, _ id: UUID, list: SpaceListView) {
         let store = list.store, actions = list.actions
-        let menu = menu()
-        add(menu, "Separate Tab from Split") { store.separateFromSplit(id) }
-        add(menu, "Copy Link") { copy(store.item(id)?.tab?.url ?? "") }
+        guard let tab = store.item(id)?.tab else { return }
+        add(menu, "Separate from Split View") { store.separateFromSplit(id) }
         menu.addItem(.separator())
-        add(menu, "Close") { actions.closeTab(id) }
-        return menu
+        add(menu, tab.muted ? "Unmute" : "Mute") {
+            store.setMuted(id, !tab.muted)
+            actions.performAction("muteTab:\(id)")
+        }
+        add(menu, "Copy Link") { copy(tab.url) }
+        add(menu, "Copy Link as Markdown") { copy("[\(store.item(id)?.displayTitle ?? tab.savedTitle)](\(tab.url))") }
+        menu.addItem(.separator())
+        add(menu, "Archive Item") { store.archiveTab(id, reason: .manual) }
     }
 
     // MARK: The list
@@ -273,6 +293,10 @@ enum SidebarMenus {
         }
         if let s = store.space(space) {
             add(menu, "Edit Space…") { actions.editSpace(s) }
+        }
+        // With the header hidden (one space), its menu items live here.
+        if store.hidesSpaceHeader(space) {
+            add(menu, "Show Space Header") { store.settings.showSpaceHeaderOnSingleSpace = true }
         }
         return menu
     }

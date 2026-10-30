@@ -26,6 +26,7 @@ final class SpaceColumnView: NSView {
         list = SpaceListView(spaceID: spaceID, store: store, ui: ui, actions: actions, favicons: favicons)
         super.init(frame: .zero)
         favorites.onHeightChange = { [weak self] animated in self?.relayout(animated: animated) }
+        header.onHiddenChange = { [weak self] in self?.relayout(animated: true) }
         addSubview(list)
         addSubview(favorites)
         addSubview(header)
@@ -55,8 +56,9 @@ final class SpaceColumnView: NSView {
         let fh = favorites.height(forWidth: w - 16)
         let set = { (v: NSView, f: NSRect) in if v.frame != f { animated ? (v.animator().frame = f) : (v.frame = f) } }
         set(favorites, NSRect(x: 8, y: 0, width: w - 16, height: fh))
-        set(header, NSRect(x: 10, y: fh, width: w - 20, height: 31))
-        let top = fh + 31 + 3
+        let hh: CGFloat = header.isHidden ? 0 : 31
+        set(header, NSRect(x: 10, y: fh, width: w - 20, height: hh))
+        let top = fh + hh + 3
         set(list, NSRect(x: 0, y: top, width: w, height: max(0, bounds.height - top)))
     }
 }
@@ -76,6 +78,8 @@ final class SpaceHeaderView: NSView {
     private var collapsed = false
     private var colors = SidebarColors()
     private var syncQueued = false
+    /// The column lays out again when Arc's single-space mode hides or shows the header.
+    var onHiddenChange: (() -> Void)?
 
     init(spaceID: UUID, store: SidebarStore, actions: SidebarActions) {
         self.spaceID = spaceID
@@ -98,12 +102,14 @@ final class SpaceHeaderView: NSView {
 
     private func sync() {
         syncQueued = false
+        var hide = false
         withObservationTracking {
             guard let space = store.space(spaceID) else { return }
             emoji.stringValue = space.emoji
             title.stringValue = space.title
             colors = SidebarColors(space.theme.palette)
             collapsed = store.isPinnedCollapsed(spaceID)
+            hide = store.hidesSpaceHeader(spaceID)
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self, !self.syncQueued else { return }
@@ -112,6 +118,10 @@ final class SpaceHeaderView: NSView {
             }
         }
         refresh()
+        if hide != isHidden {
+            isHidden = hide
+            onHiddenChange?()
+        }
     }
 
     private func refresh() {
@@ -159,6 +169,10 @@ final class SpaceHeaderView: NSView {
         let m = NSMenu()
         m.autoenablesItems = false
         MenuItems.add(m, collapsed ? "Expand Pinned Tabs" : "Collapse Pinned Tabs") { store.togglePinnedCollapsed(id) }
+        // Arc offers this only while there is one space; Show Space Header brings it back.
+        if store.orderedSpaces.count == 1 {
+            MenuItems.add(m, "Hide Space Header") { store.settings.showSpaceHeaderOnSingleSpace = false }
+        }
         m.addItem(.separator())
         MenuItems.add(m, "Edit Space…") { actions.editSpace(space) }
         MenuItems.add(m, "New Folder") { actions.performAction("newFolder") }
@@ -333,7 +347,7 @@ final class FavoritesGridView: NSView {
     }
 
     func moveFavorite(_ dragged: UUID, before target: UUID, after: Bool) {
-        guard dragged != target, let space = store.space(spaceID),
+        guard dragged != target, store.item(dragged)?.isSplit != true, let space = store.space(spaceID),
               let idx = store.item(space.favoritesContainerID)?.children.firstIndex(of: target) else { return }
         store.moveItem(dragged, to: space.favoritesContainerID, index: idx + (after ? 1 : 0))
     }

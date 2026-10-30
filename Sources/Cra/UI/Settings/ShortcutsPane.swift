@@ -267,6 +267,8 @@ enum ShortcutDescriptions {
         "stop": "Stop loading the page.",
         "reload": "Reload the page.",
         "hardReload": "Reload the page, ignoring cached content.",
+        "clearCache": "Clear the browser cache and reload the page.",
+        "clearCookies": "Clear this site’s cookies and reload the page.",
         "toggleDeveloperMode": "Show the full URL and developer tools for this site.",
         "resetZoom": "Return the page to its actual size.",
         "zoomIn": "Make the page larger.",

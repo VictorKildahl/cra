@@ -573,6 +573,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         case "goForward": browser?.goForward()
         case "reload": browser?.reload()
         case "hardReload": browser?.reloadIgnoringCache()
+        case "clearCache": browser?.clearSiteDataAndReload(cookies: false)
+        case "clearCookies": browser?.clearSiteDataAndReload(cookies: true)
         case "stop": browser?.stopLoading()
         case "zoomIn": if let b = browser { b.setZoomLevel(b.zoomLevel() + 0.5) }
         case "zoomOut": if let b = browser { b.setZoomLevel(b.zoomLevel() - 0.5) }
