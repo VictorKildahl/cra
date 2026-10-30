@@ -1325,6 +1325,15 @@ final class SidebarStore {
         return AppPaths.chromiumCache.appendingPathComponent(p.directoryName, isDirectory: true).path
     }
 
+    /// The Chromium profile folder ("Default" or "Profile <id>") a space's pages load in;
+    /// incognito spaces count as Default, whose off-the-record profile they use.
+    func profileDirectoryName(space id: UUID) -> String {
+        guard !isIncognito(space: id), let p = profile(spaces[id]?.profileID) else { return "Default" }
+        return p.directoryName
+    }
+
+    func profileDirectoryName(item id: UUID) -> String { spaceID(ofItem: id).map { profileDirectoryName(space: $0) } ?? "Default" }
+
     @discardableResult
     func createProfile(name: String) -> BrowserProfile {
         let p = BrowserProfile(id: UUID(), name: name)

@@ -21,7 +21,7 @@ final class ExtensionsMenu: NSObject, NSMenuDelegate, NSMenuItemValidation {
         menu.removeAllItems()
         let store = ExtensionStore.shared
         store.reload()
-        let entries = store.entries.sorted { $0.name < $1.name }
+        let entries = app.main.extensionEntries.sorted { $0.name < $1.name }
         for e in entries {
             let item = NSMenuItem(title: e.name, action: #selector(runExtension(_:)), keyEquivalent: "")
             item.target = self

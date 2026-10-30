@@ -35,7 +35,7 @@ enum ExtensionImporter {
         return out.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
-    private static func extensions(inProfile dir: URL) -> [ImportableExtension] {
+    static func extensions(inProfile dir: URL) -> [ImportableExtension] {
         var settings: [String: Any] = [:]
         // Newer Chromium keeps extension state in Secure Preferences; older in Preferences.
         for file in ["Preferences", "Secure Preferences"] {

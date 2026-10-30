@@ -279,6 +279,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         guard !isTornDown else { return }
         let space = focusedSpace
         let palette = space.theme.palette
+        // Its extensions belong to the space's profile.
+        if siteControlCenter.isShown, siteControlCenterSpaceID != space.id { siteControlCenter.close() }
         // refresh runs on every store change (each page title, each window move). A new root
         // view rebuilds its whole SwiftUI tree, and a new window appearance or background redraws
         // every view, so all of these follow the theme only when it changes. What the root
@@ -1528,6 +1530,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     // MARK: Extensions
 
     private let siteControlCenter = SiteControlCenterPopover()
+    /// The space the Site Control Center was opened in.
+    private var siteControlCenterSpaceID: UUID?
 
     /// Screen y of the focused card's toolbar bottom (its top edge when the toolbar is hidden),
     /// and the card's right edge.
@@ -1564,6 +1568,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Dia's Extensions menu. The popup hangs under the toolbar, its right edge at `buttonRightX`
     /// (screen x of the clicked button; nil = the extension's toolbar button or the card's right end).
     func runExtensionAction(_ id: String, buttonRightX: CGFloat? = nil) {
+        guard extensionEntries.contains(where: { $0.extensionID == id }) else { return }
         guard let bar = toolbarBottomOnScreen() else { openExtensionPopupPage(id, anchor: nil); return }
         let anchor = buttonRightX.map { NSPoint(x: $0, y: urlBarBottomOnScreen() ?? bar.y) }
             ?? extensionPopupAnchor(id) ?? NSPoint(x: bar.cardMaxX - 8, y: bar.y)
@@ -1572,6 +1577,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             if await !ExtensionActions.shared.run(id, on: browser, anchor: anchor) { self.openExtensionPopupPage(id, anchor: anchor) }
         }
     }
+
+    /// The Chromium profile folder the focused page loads in.
+    var profileDirectoryName: String { selectedTabID.map(store.profileDirectoryName(item:)) ?? store.profileDirectoryName(space: focusedSpaceID) }
+
+    /// The extensions installed in the focused page's profile.
+    var extensionEntries: [ExtensionStore.Entry] { ExtensionStore.shared.entries(inProfile: profileDirectoryName) }
 
     /// The right edge (screen x) of the pinned-extension button under the pointer, in the
     /// toolbar or the sidebar's URL pill (also in the floating sidebar's panel), so a popup
@@ -1640,8 +1651,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             guard let origin = URL(string: url).flatMap({ u in u.host.map { "\(u.scheme ?? "https")://\($0)" } }) else { return }
             self?.openTab("chrome://settings/content/siteDetails?site=" + (origin.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? origin))
         }
+        siteControlCenterSpaceID = focusedSpaceID
         siteControlCenter.show(relativeTo: rect, of: content, url: url, dark: focusedSpace.theme.palette.isDark,
-                               store: store, actions: actions)
+                               profile: profileDirectoryName, store: store, actions: actions)
     }
 
     private func openTab(_ url: String) {

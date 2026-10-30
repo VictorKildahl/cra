@@ -273,9 +273,11 @@ final class SidebarTopBarView: NSView {
             let host = URL(string: url)?.host ?? ""
             let text = tab == nil ? "Search or Enter URL…" : (host.isEmpty ? SuggestionEngine.humanURL(url) : host.replacingOccurrences(of: "www.", with: ""))
             let ext = ExtensionStore.shared
-            let pinned = ext.pinnedIDs.compactMap { id in ext.entries.first { $0.extensionID == id }.map { (id, $0.name, ext.toolbarIcon(for: $0)) } }
+            let entries = ext.entries(inProfile: tab.map { store.profileDirectoryName(item: $0.id) }
+                                      ?? store.profileDirectoryName(space: store.focusedSpaceID(window: ui.windowID)))
+            let pinned = ext.pinnedIDs.compactMap { id in entries.first { $0.extensionID == id }.map { (id, $0.name, ext.toolbarIcon(for: $0)) } }
             pill.show(text: text, url: url, hasTab: tab != nil, status: ui.toolbarStatus, colors: colors, active: active,
-                      pinned: pinned, hasExtensions: !ext.entries.isEmpty)
+                      pinned: pinned, hasExtensions: !entries.isEmpty)
         }
         needsLayout = true
         if wasCompact != compact { superview?.superview?.needsLayout = true }

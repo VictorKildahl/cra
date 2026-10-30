@@ -36,10 +36,13 @@ final class SiteControlCenterView: NSView {
     private let colors: SiteControlCenterColors
     private let actions: SiteControlCenterActions
     private let store: SidebarStore
+    /// The page's Chromium profile folder: only its extensions are offered.
+    private let profile: String
     private var extensions: ExtensionStore { .shared }
 
-    init(url: String, dark: Bool, actions: SiteControlCenterActions, store: SidebarStore) {
+    init(url: String, dark: Bool, profile: String, actions: SiteControlCenterActions, store: SidebarStore) {
         self.url = url
+        self.profile = profile
         colors = SiteControlCenterColors(dark: dark)
         self.actions = actions
         self.store = store
@@ -59,7 +62,7 @@ final class SiteControlCenterView: NSView {
 
     /// Arc: pinned extensions in toolbar order, then the rest by name.
     private var orderedExtensions: [ExtensionStore.Entry] {
-        let entries = extensions.entries
+        let entries = extensions.entries(inProfile: profile)
         let pinned = extensions.pinnedIDs.compactMap { id in entries.first { $0.extensionID == id } }
         let rest = entries.filter { !extensions.isPinned($0.extensionID) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
@@ -536,7 +539,7 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
 
     var isShown: Bool { popover?.isShown == true }
 
-    func show(relativeTo rect: NSRect, of view: NSView, url: String, dark: Bool, store: SidebarStore, actions: SiteControlCenterActions) {
+    func show(relativeTo rect: NSRect, of view: NSView, url: String, dark: Bool, profile: String, store: SidebarStore, actions: SiteControlCenterActions) {
         if let popover, popover.isShown { popover.performClose(nil); return }
         let p = NSPopover()
         p.behavior = .transient
@@ -556,7 +559,7 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
         acts.siteSettings = closing(actions.siteSettings)
         acts.clearCache = closing(actions.clearCache)
         acts.clearCookies = closing(actions.clearCookies)
-        let content = SiteControlCenterView(url: url, dark: dark, actions: acts, store: store)
+        let content = SiteControlCenterView(url: url, dark: dark, profile: profile, actions: acts, store: store)
         let host = NSViewController()
         host.view = content
         host.preferredContentSize = content.frame.size

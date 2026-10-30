@@ -25,6 +25,11 @@ final class ExtensionStore {
         /// Installed by Chrome into the profile (Web Store); Chrome owns the folder and
         /// loads changes at once, so removing goes through chrome://extensions.
         var managedByChrome = false
+        /// Chromium profile folders ("Default", "Profile <id>") it is installed in; nil for the
+        /// --load-extension ones, which Chromium loads into every profile.
+        var profiles: Set<String>?
+
+        func isInstalled(inProfile name: String) -> Bool { profiles?.contains(name) ?? true }
     }
 
     /// The menu bar's Extensions menu and the toolbar read this one.
@@ -66,18 +71,31 @@ final class ExtensionStore {
         let fm = FileManager.default
         try? fm.createDirectory(at: ExtensionStore.directory, withIntermediateDirectories: true)
         let names = (try? fm.contentsOfDirectory(atPath: ExtensionStore.directory.path)) ?? []
-        var list = names.sorted().compactMap { name in
+        let list = names.sorted().compactMap { name in
             Self.entry(id: name, folder: ExtensionStore.directory.appendingPathComponent(name, isDirectory: true), extensionID: nil)
         }
         let loaded = Set(list.map(\.extensionID))
-        for e in ExtensionImporter.extensions(inUserData: AppPaths.chromiumCache) where e.isEnabled && !loaded.contains(e.id) {
-            guard var entry = Self.entry(id: e.id, folder: e.folder, extensionID: e.id) else { continue }
-            entry.managedByChrome = true
-            list.append(entry)
+        // Each profile has its own Web Store extensions: note which profiles hold each one.
+        let root = AppPaths.chromiumCache
+        let profiles = ((try? fm.contentsOfDirectory(atPath: root.path)) ?? []).filter { $0 == "Default" || $0.hasPrefix("Profile ") }.sorted()
+        var managed: [Entry] = []
+        for profile in profiles {
+            for e in ExtensionImporter.extensions(inProfile: root.appendingPathComponent(profile, isDirectory: true))
+            where e.isEnabled && !loaded.contains(e.id) {
+                if let i = managed.firstIndex(where: { $0.extensionID == e.id }) { managed[i].profiles?.insert(profile); continue }
+                guard var entry = Self.entry(id: e.id, folder: e.folder, extensionID: e.id) else { continue }
+                entry.managedByChrome = true
+                entry.profiles = [profile]
+                managed.append(entry)
+            }
         }
-        entries = list
+        entries = list + managed.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         pinnedIDs.removeAll { id in !entries.contains { $0.extensionID == id } }
     }
+
+    /// The extensions a page in this Chromium profile folder can run; running another
+    /// profile's extension there crashes Chromium.
+    func entries(inProfile name: String) -> [Entry] { entries.filter { $0.isInstalled(inProfile: name) } }
 
     private static func entry(id: String, folder dir: URL, extensionID: String?) -> Entry? {
         guard let data = try? Data(contentsOf: dir.appendingPathComponent("manifest.json")),

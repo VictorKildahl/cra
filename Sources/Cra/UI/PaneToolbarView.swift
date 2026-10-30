@@ -117,9 +117,11 @@ final class PaneToolbarView: NSView {
             m.path = human.hasPrefix(m.host) ? String(human.dropFirst(m.host.count)) : ""
         }
         let extensions = ExtensionStore.shared
-        m.hasExtensions = !extensions.entries.isEmpty
+        let entries = extensions.entries(inProfile: item.map { store.profileDirectoryName(item: $0.id) }
+                                         ?? store.profileDirectoryName(space: store.focusedSpaceID(window: ui.windowID)))
+        m.hasExtensions = !entries.isEmpty
         m.pinned = extensions.pinnedIDs.compactMap { id in
-            extensions.entries.first { $0.extensionID == id }.map { Model.Ext(id: id, name: $0.name, icon: extensions.toolbarIcon(for: $0)) }
+            entries.first { $0.extensionID == id }.map { Model.Ext(id: id, name: $0.name, icon: extensions.toolbarIcon(for: $0)) }
         }
         // Arc's toolbar colour: the page's theme-color when it declares one, else white until the
         // page reports one (MainWindowController.browserManagerDidUpdate uses the same rule).
