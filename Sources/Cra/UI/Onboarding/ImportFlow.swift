@@ -436,12 +436,9 @@ final class ImportFlowModel {
         let emptyBefore = firstRun && !selection.spaces.isEmpty
             ? store.orderedSpaces.filter { store.tabs(under: $0.pinnedContainerID).isEmpty && store.tabs(under: $0.todayContainerID).isEmpty }
             : []
-        let result = store.apply(selection, includeArchive: includeArchive, includeSettings: includeSettings)
-        let importedTitles = Set(selection.spaces.map { $0.title.lowercased() })
-        for space in emptyBefore where !importedTitles.contains(space.title.lowercased()) { store.deleteSpace(space.id) }
-        importedSpaceID = selection.spaces.first.flatMap { first in
-            store.orderedSpaces.first { $0.title.caseInsensitiveCompare(first.title) == .orderedSame }?.id
-        }
+        let result = store.apply(selection, includeArchive: includeArchive, includeSettings: includeSettings,
+                                 replacing: emptyBefore.map(\.id))
+        importedSpaceID = result.spaceIDs.first
         favicons.reset()
         let creds = credentials
         Task { @MainActor in
@@ -462,7 +459,7 @@ final class ImportFlowModel {
                     try? await Task.sleep(nanoseconds: 420_000_000)
                     categories[i].state = credentialsStaged ? .done : .failed
                 default:
-                    if categories[i].id == "spaces" { categories[i].detail = count(selection.spaces.count, "space") + (result.spaces < selection.spaces.count ? " (\(result.spaces) new)" : "") }
+                    if categories[i].id == "spaces" { categories[i].detail = count(result.spaces, "space") }
                     if categories[i].id == "tabs" { categories[i].detail = count(result.tabs, "new tab") }
                     try? await Task.sleep(nanoseconds: 420_000_000)
                     categories[i].state = .done

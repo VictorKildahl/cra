@@ -163,9 +163,10 @@ final class PaneToolbarView: NSView {
     }
 
     private func glyph(_ key: String, _ symbol: String, help: String, enabled: Bool = true, width: CGFloat = 26, iconSize: CGFloat = 13,
-                       tint: NSColor? = nil, action: @escaping (PaneToolbarView) -> Void) -> ToolbarGlyphButton {
+                       tint: NSColor? = nil, animated: Bool = false, action: @escaping (PaneToolbarView) -> Void) -> ToolbarGlyphButton {
         let b = button(key) { ToolbarGlyphButton() }
-        b.configure(symbol: symbol, image: nil, help: help, enabled: enabled, width: width, iconSize: iconSize, tint: tint ?? model.fgDim)
+        b.configure(symbol: symbol, image: nil, help: help, enabled: enabled, width: width, iconSize: iconSize, tint: tint ?? model.fgDim,
+                    animated: animated)
         b.action = { [weak self] in if let self { action(self) } }
         return b
     }
@@ -195,7 +196,8 @@ final class PaneToolbarView: NSView {
             l.append(glyph("back", "arrow.left", help: "Go Back (⌘[)", enabled: m.canGoBack, width: 37, iconSize: 15) { $0.navigate("goBack") })
             l.append(glyph("forward", "arrow.right", help: "Go Forward (⌘])", enabled: m.canGoForward, width: 37, iconSize: 15) { $0.navigate("goForward") })
             if !m.inSplit {
-                l.append(glyph("reload", m.isLoading ? "xmark" : "arrow.clockwise", help: "Refresh (⌘R)", width: 37, iconSize: 15) { $0.navigate("reload") })
+                l.append(glyph("reload", m.isLoading ? "xmark" : "arrow.clockwise", help: "Refresh (⌘R)", width: 37, iconSize: 15,
+                               animated: true) { $0.navigate("reload") })
             }
         case .developer:
             if !m.inSplit { l.append(toggle()) }
@@ -378,6 +380,8 @@ final class ToolbarGlyphButton: NSView {
     private var tip: ArcTooltipAnchorView?
     private var enabled = true
     private var contextClick = false
+    /// Arc turns the refresh arrow while it is pressed (NSImageView.pressTurn).
+    private var turnsOnPress = false
     private var hovering = false { didSet { if hovering != oldValue { refreshFill() } } }
     private var shown: (String?, NSImage?, CGFloat, NSColor, Bool)?
 
@@ -392,14 +396,19 @@ final class ToolbarGlyphButton: NSView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func configure(symbol: String?, image: NSImage?, help: String, enabled: Bool, width: CGFloat, iconSize: CGFloat, tint: NSColor) {
+    /// `animated` swaps another symbol in the way Arc swaps refresh and stop.
+    func configure(symbol: String?, image: NSImage?, help: String, enabled: Bool, width: CGFloat, iconSize: CGFloat, tint: NSColor,
+                   animated: Bool = false) {
         self.width = width
         self.enabled = enabled
         if shown == nil || shown!.0 != symbol || shown!.1 !== image || shown!.2 != iconSize || shown!.3 != tint || shown!.4 != enabled {
+            let was = shown?.0
             shown = (symbol, image, iconSize, tint, enabled)
             if let symbol {
                 imageView.imageScaling = .scaleNone
-                imageView.image = SidebarSymbols.image(symbol, size: iconSize)
+                let glyph = SidebarSymbols.image(symbol, size: iconSize)
+                if animated, was != nil, was != symbol { imageView.swapSymbol(glyph) } else { imageView.image = glyph }
+                turnsOnPress = animated && symbol == "arrow.clockwise"
                 imageView.contentTintColor = enabled ? tint : tint.withAlphaComponent(tint.alphaComponent * 0.4)
             } else {
                 imageView.imageScaling = .scaleProportionallyUpOrDown
@@ -439,8 +448,13 @@ final class ToolbarGlyphButton: NSView {
     override func mouseDown(with event: NSEvent) {
         contextClick = event.modifierFlags.contains(.control) && menuProvider != nil
         if contextClick, let menu = menuProvider?() { NSMenu.popUpContextMenu(menu, with: event, for: self) }
+        if !contextClick, turnsOnPress, enabled { imageView.pressTurn(true) }
+    }
+    override func mouseDragged(with event: NSEvent) {
+        if !contextClick, turnsOnPress, enabled { imageView.pressTurn(bounds.contains(convert(event.locationInWindow, from: nil))) }
     }
     override func mouseUp(with event: NSEvent) {
+        if turnsOnPress { imageView.pressTurn(false) }
         if !contextClick, enabled, bounds.contains(convert(event.locationInWindow, from: nil)) { action() }
     }
     override func menu(for event: NSEvent) -> NSMenu? { menuProvider?() }

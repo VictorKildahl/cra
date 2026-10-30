@@ -92,6 +92,8 @@ final class ShellView: NSView {
     var sidebarVisible = true { didSet { needsLayout = true } }
     var floatingSidebar = false { didSet { needsLayout = true } }
     var contentFullscreen = false { didSet { needsLayout = true } }
+    /// Settings ▸ "Pages fill the window edge to edge" (GitHub #24): no margin, square cards.
+    var edgeToEdge = false { didSet { needsLayout = true } }
     var showToolbar = true { didSet { needsLayout = true } }
     var hasTab = false { didSet { needsLayout = true } }
     var onEdgeHover: ((Bool) -> Void)?
@@ -422,10 +424,10 @@ final class ShellView: NSView {
         super.mouseMoved(with: event)
         let p = convert(event.locationInWindow, from: nil)
         guard !sidebarVisible, !contentFullscreen else { return }
-        if !floatingSidebar, FloatingSidebarGeometry.shouldReveal(at: p, in: bounds) {
+        if !floatingSidebar, FloatingSidebarGeometry.shouldReveal(at: p, in: bounds, edgeToEdge: edgeToEdge) {
             onEdgeHover?(true)
         } else if floatingSidebar, FloatingSidebarGeometry.shouldHide(at: p, in: bounds, sidebarWidth: sidebarWidth,
-                                                                     pressedMouseButtons: NSEvent.pressedMouseButtons) {
+                                                                     pressedMouseButtons: NSEvent.pressedMouseButtons, edgeToEdge: edgeToEdge) {
             onEdgeHover?(false)
         }
     }
@@ -457,25 +459,26 @@ final class ShellView: NSView {
             return Frames(sidebar: NSRect(x: -width, y: 0, width: width, height: b.height),
                           handle: .zero, content: b, cornerRadius: 0, sidebarCorner: 0)
         }
+        // Edge to edge the card fills what the sidebar leaves, square; the window's own
+        // corners round it where they meet.
+        let inset = edgeToEdge ? 0 : CraMetrics.contentInset
+        let radius = edgeToEdge ? 0 : CraMetrics.contentCornerRadius
         if sidebarVisible {
-            let inset = CraMetrics.contentInset
             let content = NSRect(x: width, y: inset, width: max(0, b.width - width - inset), height: max(0, b.height - 2 * inset))
             return Frames(sidebar: NSRect(x: 0, y: 0, width: width, height: b.height),
                           handle: NSRect(x: width - 4, y: 0, width: 8, height: b.height),
-                          content: content, cornerRadius: CraMetrics.contentCornerRadius, sidebarCorner: 0)
+                          content: content, cornerRadius: radius, sidebarCorner: 0)
         }
         if floating {
             // The floating sidebar hovers over the page; the card does not move (Arc).
             let m = FloatingSidebarGeometry.margin
-            let inset = CraMetrics.contentInset
             return Frames(sidebar: NSRect(x: m, y: m, width: width, height: b.height - 2 * m),
-                          handle: .zero, content: b.insetBy(dx: inset, dy: inset), cornerRadius: CraMetrics.contentCornerRadius, sidebarCorner: 12)
+                          handle: .zero, content: b.insetBy(dx: inset, dy: inset), cornerRadius: radius, sidebarCorner: 12)
         }
         // Sidebar hidden: Arc keeps the rounded card floating in its inset (measured 25 Oct:
         // card edge 10 pt from the window edge after ⌘S), with a sidebar toggle in the bar.
-        let inset = CraMetrics.contentInset
         return Frames(sidebar: NSRect(x: -width - 20, y: 0, width: width, height: b.height),
-                      handle: .zero, content: b.insetBy(dx: inset, dy: inset), cornerRadius: CraMetrics.contentCornerRadius, sidebarCorner: 0)
+                      handle: .zero, content: b.insetBy(dx: inset, dy: inset), cornerRadius: radius, sidebarCorner: 0)
     }
 
     private var cardCornerRadius: CGFloat = CraMetrics.contentCornerRadius
@@ -521,7 +524,8 @@ final class ShellView: NSView {
         for c in paneCards {
             c.showToolbar = toolbarVisible
             // Several panes: every card is rounded; a single card follows the window state (square in fullscreen).
-            c.cornerRadius = paneCards.count > 1 ? CraMetrics.contentCornerRadius : cardCornerRadius
+            // Edge to edge every card is square.
+            c.cornerRadius = paneCards.count > 1 && !edgeToEdge ? CraMetrics.contentCornerRadius : cardCornerRadius
             if !animatingPanes, let f = layout.frames[c.tabID] {
                 if animated { c.animator().frame = f } else if c.frame != f { c.frame = f }
             }

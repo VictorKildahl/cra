@@ -218,14 +218,15 @@ final class SidebarTopBarView: NSView {
     }
 
     private func button(_ key: String, symbol: String, help: String, size: CGFloat, height: CGFloat, iconSize: CGFloat,
-                        weight: NSFont.Weight = .regular, active: Bool?, enabled: Bool = true, action: @escaping () -> Void) -> SidebarGlyphButton {
+                        weight: NSFont.Weight = .regular, active: Bool?, enabled: Bool = true, animated: Bool = false,
+                        action: @escaping () -> Void) -> SidebarGlyphButton {
         let b = buttons[key] ?? {
             let b = SidebarGlyphButton(symbol: symbol, size: size, height: height, iconSize: iconSize, weight: weight, help: help, colors: colors, action: action)
             buttons[key] = b
             addSubview(b)
             return b
         }()
-        b.setSymbol(symbol, iconSize: iconSize, weight: weight, help: help)
+        b.setSymbol(symbol, iconSize: iconSize, weight: weight, help: help, animated: animated)
         b.colors = colors
         b.active = active
         b.enabled = enabled
@@ -247,11 +248,11 @@ final class SidebarTopBarView: NSView {
             shown.append(button("toggle", symbol: "sidebar.left", help: "Hide Sidebar (⌘S)", size: 32, height: 32, iconSize: 15.5, active: active) { [weak self] in self?.actions.toggleSidebar() })
             shown.append(button("back", symbol: "arrow.left", help: "Go Back (⌘[)", size: 32, height: 32, iconSize: 15, active: active, enabled: ui.canGoBack) { [weak self] in self?.actions.goBack() })
             shown.append(button("forward", symbol: "arrow.right", help: "Go Forward (⌘])", size: 32, height: 32, iconSize: 15, active: active, enabled: ui.canGoForward) { [weak self] in self?.actions.goForward() })
-            shown.append(button("reload", symbol: reloadSymbol, help: "Refresh (⌘R)", size: 32, height: 32, iconSize: 15, active: active) { [weak self] in self?.actions.reload() })
+            shown.append(button("reload", symbol: reloadSymbol, help: "Refresh (⌘R)", size: 32, height: 32, iconSize: 15, active: active, animated: true) { [weak self] in self?.actions.reload() })
         } else if devNav {
             shown.append(button("dback", symbol: "arrow.left", help: "Go Back (⌘[)", size: 34, height: 28, iconSize: 15, active: nil, enabled: ui.canGoBack) { [weak self] in self?.actions.goBack() })
             shown.append(button("dforward", symbol: "arrow.right", help: "Go Forward (⌘])", size: 34, height: 28, iconSize: 15, active: nil, enabled: ui.canGoForward) { [weak self] in self?.actions.goForward() })
-            shown.append(button("dreload", symbol: reloadSymbol, help: "Refresh (⌘R)", size: 24, height: 24, iconSize: 15, active: nil) { [weak self] in self?.actions.reload() })
+            shown.append(button("dreload", symbol: reloadSymbol, help: "Refresh (⌘R)", size: 24, height: 24, iconSize: 15, active: nil, animated: true) { [weak self] in self?.actions.reload() })
         }
         for (k, b) in buttons where !shown.contains(where: { $0 === b }) {
             b.removeFromSuperview()

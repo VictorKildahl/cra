@@ -589,6 +589,18 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// CEF's window for the visible tab's DevTools, if any.
     var visibleDevToolsWindow: NSWindow? { visibleTabID.flatMap { devToolsViews[$0]?.window } }
 
+    /// DevTools windows on screen, by tab: every pane's Chrome-style frontend (it docks
+    /// inside its own pane), and an Alloy frontend only for the focused tab (the shell
+    /// has one dock).
+    var visibleDevToolsWindows: [UUID: NSWindow] {
+        var out: [UUID: NSWindow] = [:]
+        for id in visibleTabIDs {
+            guard let w = devToolsViews[id]?.window else { continue }
+            if id == visibleTabID || runtimes[id]?.hostWindow != nil { out[id] = w }
+        }
+        return out
+    }
+
     private func syncDevToolsVisibility() {
         delegate?.browserManagerDevToolsChanged()
     }

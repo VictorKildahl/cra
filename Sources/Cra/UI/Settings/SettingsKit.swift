@@ -110,12 +110,19 @@ struct SettingsCardPane<Content: View>: View {
 }
 
 /// Form-style pane body (Dia's Tabs and Advanced): right-aligned labels, left-aligned controls.
+/// Scrolls like the card panes: the window has a fixed height, and without a scroll view a
+/// form taller than it squeezed its rows on top of each other.
 struct SettingsFormPane<Content: View>: View {
     @ViewBuilder let content: Content
     var body: some View {
-        VStack(alignment: .leading, spacing: SettingsMetrics.formGroupSpacing) { content }
-            .padding(.top, SettingsMetrics.formTop)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: SettingsMetrics.formGroupSpacing) { content }
+                .padding(.top, SettingsMetrics.formTop)
+                .padding(.trailing, SettingsMetrics.paneInset)
+                .padding(.bottom, SettingsMetrics.paneInset)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .scrollIndicators(.automatic)
     }
 }
 
@@ -143,5 +150,6 @@ struct SettingsCheckbox: View {
     @Binding var isOn: Bool
     var body: some View {
         Toggle(title, isOn: $isOn).toggleStyle(.checkbox).font(.system(size: 13))
+            .fixedSize(horizontal: false, vertical: true)   // long titles wrap instead of truncating
     }
 }

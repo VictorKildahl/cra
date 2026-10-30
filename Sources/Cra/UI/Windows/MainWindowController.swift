@@ -92,6 +92,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         shell.sidebarWidth = CGFloat(store.prefs.sidebarWidth)
         shell.sidebarVisible = sidebarVisible
         shell.showToolbar = store.settings.showToolbar
+        shell.edgeToEdge = store.settings.edgeToEdgeContent
         lastSidebarVisible = sidebarVisible
         window.trafficLightsHidden = !sidebarVisible
         lastSidebarWidth = CGFloat(store.prefs.sidebarWidth)
@@ -172,7 +173,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         installFloatingSidebar()
         observeStore()
         refresh()
-        shell.onDevToolsFrame = { [weak self] rect in self?.positionDevToolsWindow(rect) }
+        shell.onDevToolsFrame = { [weak self] rect in
+            guard let self, let id = self.browsers.visibleTabID else { return }
+            self.positionDevToolsWindow(rect, tab: id)
+        }
         shell.onPaneFrames = { [weak self] frames in self?.positionPageWindows(frames) }
         shell.onAnimatePaneFrames = { [weak self] frames, d, timing in self?.animatePageWindows(to: frames, duration: d, timing: timing) }
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
@@ -311,6 +315,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let factors = SplitPaneLayout.normalizedFactors(ids: panes, stored: split?.split?.widthFactors ?? [:])
         let empty = Set(panes.filter { store.item($0)?.isEmptyTab == true })
         if shell.showToolbar != store.settings.showToolbar { shell.showToolbar = store.settings.showToolbar }
+        if shell.edgeToEdge != store.settings.edgeToEdgeContent { shell.edgeToEdge = store.settings.edgeToEdgeContent }
         shell.setPanes(panes, factors: factors, orientation: split?.split?.orientation ?? .horizontal, focused: selected, empty: empty, animated: true)
         // A page is on screen in one window at a time. Arc keeps the tab selected in every window
         // that has it open: the window in use holds the page, the others show a blurred snapshot
@@ -732,20 +737,20 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             }
         }
         releaseUnfocusedEmbeddedPage()
-        if let dev = browsers.visibleDevToolsWindow, dev.parent === window {
-            raisePageWindows(above: dev)
+        if browsers.visibleDevToolsWindows.values.contains(where: { $0.parent === window }) {
+            raisePageWindows()
         } else {
             raiseOverlayPanels()
         }
     }
 
-    /// Moves the page's view from its Chrome window into its card (EmbeddedPages). With
+    /// Moves the page's view from its Chrome window into its card (EmbeddedPages). With its
     /// DevTools open the page goes back: Chrome's docked frontend lays it out in its window.
     private func embedPage(_ id: UUID, from w: NSWindow) {
         guard EmbeddedPages.isEnabled else { return }
         guard let views = EmbeddedPages.pageViews(of: w) else { return }
         let target: NSView
-        if browsers.visibleDevToolsWindow != nil, let cv = w.contentView {
+        if browsers.devToolsViews[id]?.window != nil, let cv = w.contentView {
             EmbeddedPages.unmarkHost(w)
             target = cv
         } else if let card = shell.paneCards.first(where: { $0.tabID == id }) {
@@ -823,12 +828,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         lastPaneFrames = frames
         let focusRect = (browsers.visibleTabID.flatMap { frames[$0] }) ?? frames.values.first!
         let focusPage = browsers.visibleTabID.map { pageRect(forBody: focusRect, tab: $0) } ?? focusRect
-        let live = pageWindowsFollowLive || shell.devToolsFrontendDocked
+        let devTools = browsers.visibleDevToolsWindows
+        let live = pageWindowsFollowLive || shell.devToolsFrontendDocked || !devTools.isEmpty
         for id in browsers.visibleTabIDs {
             guard let w = browsers.runtime(for: id)?.hostWindow else { continue }
             let body = frames[id] ?? focusRect
             let page = pageRect(forBody: body, tab: id)
             let target = window.convertToScreen(page)
+            // Chrome's docked frontend spans its pane's body, under the page.
+            if devTools[id] != nil, browsers.devToolsDockedState[id] ?? true { positionDevToolsWindow(body, tab: id) }
             if w.frame != target { w.setFrame(target, display: live) }
             updatePageCorners(w, page: page, body: body)
             // A switch can show the page before its card exists; the card is laid out by now.
@@ -874,8 +882,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = duration
             ctx.timingFunction = timing
-            if shell.devToolsFrontendDocked, let dev = browsers.visibleDevToolsWindow, dev.parent === window,
-               let focusID = browsers.visibleTabID, let body = frames[focusID] {
+            for (id, dev) in browsers.visibleDevToolsWindows where dev.parent === window {
+                guard browsers.runtime(for: id)?.hostWindow != nil, let body = frames[id] else { continue }
                 dev.animator().setFrame(window.convertToScreen(body), display: true)
             }
             overlayPanel?.animator().setFrame(window.convertToScreen(focusPage), display: true)
@@ -925,7 +933,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// from the body's edges while the body is still resizing, so the page follows at
     /// once instead of waiting for the frontend's next layout.
     private func pageRect(forBody body: NSRect, tab: UUID) -> NSRect {
-        guard tab == browsers.visibleTabID, shell.devToolsFrontendDocked,
+        guard browsers.devToolsViews[tab] != nil, browsers.runtime(for: tab)?.hostWindow != nil,
               browsers.devToolsDockedState[tab] ?? true,
               let p = browsers.devToolsPlaceholders[tab] else { return body }
         let right = max(0, p.frontendSize.width - p.bounds.maxX)
@@ -947,17 +955,23 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             w.styleMask.remove([.titled, .resizable])
             ChromiumWindowCorners.setSquare(true, for: w)
         }
-        // The whole mask, not only the corner set: a rebuilt layer would otherwise keep
-        // whatever radius and clipping it came with.
-        let radius = shell.contentFullscreen ? 0 : CraMetrics.contentCornerRadius
-        if layer.cornerRadius != radius { layer.cornerRadius = radius }
-        if layer.cornerCurve != .continuous { layer.cornerCurve = .continuous }
-        if !layer.masksToBounds { layer.masksToBounds = true }
         // Chromium's content view is flipped, so its layer's MinY edge is the top.
         let bottomLeft: CACornerMask = cv.isFlipped ? .layerMinXMaxYCorner : .layerMinXMinYCorner
         let bottomRight: CACornerMask = cv.isFlipped ? .layerMaxXMaxYCorner : .layerMaxXMinYCorner
         let topLeft: CACornerMask = cv.isFlipped ? .layerMinXMinYCorner : .layerMinXMaxYCorner
         let topRight: CACornerMask = cv.isFlipped ? .layerMaxXMinYCorner : .layerMaxXMaxYCorner
+        // The whole mask, not only the corner set: a rebuilt layer would otherwise keep
+        // whatever radius and clipping it came with.
+        if layer.cornerCurve != .continuous { layer.cornerCurve = .continuous }
+        if !layer.masksToBounds { layer.masksToBounds = true }
+        // Edge to edge the card is square, but a page window is not clipped by the main
+        // window: where it meets the window's corners it takes their radius.
+        if shell.edgeToEdge {
+            roundAtWindowCorners(layer, rect: page, flipped: cv.isFlipped)
+            return
+        }
+        let radius = shell.contentFullscreen ? 0 : CraMetrics.contentCornerRadius
+        if layer.cornerRadius != radius { layer.cornerRadius = radius }
         var corners: CACornerMask = []
         // A fullscreen card is square.
         if !shell.contentFullscreen, abs(page.minY - body.minY) < 0.5 {
@@ -972,6 +986,25 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if layer.maskedCorners != corners { layer.maskedCorners = corners }
     }
 
+    /// Edge to edge: a child window (page or DevTools) is not clipped by the main window, so
+    /// the corners of `rect` (window coordinates) that sit on the window's corners take its radius.
+    private func roundAtWindowCorners(_ layer: CALayer, rect: NSRect, flipped: Bool) {
+        guard let window else { return }
+        let radius = window.styleMask.contains(.fullScreen) || shell.contentFullscreen ? 0 : LittleWindow.cornerRadius(of: window)
+        let w = shell.bounds
+        var corners: CACornerMask = []
+        if abs(rect.minY - w.minY) < 0.5 {
+            if abs(rect.minX - w.minX) < 0.5 { corners.insert(flipped ? .layerMinXMaxYCorner : .layerMinXMinYCorner) }
+            if abs(rect.maxX - w.maxX) < 0.5 { corners.insert(flipped ? .layerMaxXMaxYCorner : .layerMaxXMinYCorner) }
+        }
+        if abs(rect.maxY - w.maxY) < 0.5 {
+            if abs(rect.minX - w.minX) < 0.5 { corners.insert(flipped ? .layerMinXMinYCorner : .layerMinXMaxYCorner) }
+            if abs(rect.maxX - w.maxX) < 0.5 { corners.insert(flipped ? .layerMaxXMinYCorner : .layerMaxXMaxYCorner) }
+        }
+        if layer.cornerRadius != radius { layer.cornerRadius = radius }
+        if layer.maskedCorners != corners { layer.maskedCorners = corners }
+    }
+
     /// Chromium lays its frameless window's content view out below a 22 pt title bar
     /// that Cra hides, leaving a blank band over the page; make it fill the window.
     private func fillContentView(_ w: NSWindow) {
@@ -980,15 +1013,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if cv.frame != full { cv.frame = full }
     }
 
-    /// Shows the visible tab's DevTools window and hides the other tabs'. Chrome-style
-    /// pages get Chrome's dockable frontend (see CraCEF's DevToolsClient): its window
-    /// spans the card body under the page, which is laid over the placeholder it
-    /// reports. Alloy pages keep the shell's own split with CEF's window on the right.
+    /// Shows the visible tabs' DevTools windows (each split pane keeps its own) and hides
+    /// the other tabs'. Chrome-style pages get Chrome's dockable frontend (see CraCEF's
+    /// DevToolsClient): its window spans the pane's body under the page, which is laid
+    /// over the placeholder it reports. Alloy pages keep the shell's own split with CEF's
+    /// window on the right, for the focused tab only.
     func browserManagerDevToolsChanged() {
         guard let window else { return }
         let visible = browsers.visibleDevToolsWindow
+        let shown = browsers.visibleDevToolsWindows
         for (_, view) in browsers.devToolsViews {
-            if let w = view.window, w !== visible { w.orderOut(nil) }
+            if let w = view.window, !shown.values.contains(where: { $0 === w }) { w.orderOut(nil) }
         }
         let selfDock = visible != nil && browsers.visibleRuntime?.hostWindow != nil
         let docked = browsers.visibleTabID.flatMap { browsers.devToolsDockedState[$0] } ?? true
@@ -1001,20 +1036,23 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             shell.needsLayout = true
             shell.layoutSubtreeIfNeeded()
         }
-        guard let w = visible else {
-            if shell.frontendPageRect != nil { shell.frontendPageRect = nil }
-            positionPageWindows(lastPaneFrames)
-            return
+        if visible == nil, shell.frontendPageRect != nil { shell.frontendPageRect = nil }
+        var attached = false
+        for id in browsers.visibleTabIDs {
+            guard let w = shown[id] else { continue }
+            let chrome = browsers.runtime(for: id)?.hostWindow != nil
+            if chrome, browsers.devToolsDockedState[id] == false {
+                detachDevToolsWindow(w, tab: id)
+                continue
+            }
+            attachDevToolsWindow(w, selfDock: chrome, tab: id)
+            // Chrome's frontend spans its pane's body (positionPageWindows keeps it there);
+            // Alloy's sits in the shell's dock.
+            if !chrome { positionDevToolsWindow((shell.devToolsHost.superview ?? shell.contentContainer).convert(shell.devToolsHost.frame, to: nil), tab: id) }
+            w.orderFront(nil)
+            attached = true
         }
-        if selfDock && !docked {
-            detachDevToolsWindow(w)
-            positionPageWindows(lastPaneFrames)
-            return
-        }
-        attachDevToolsWindow(w, selfDock: selfDock)
-        positionDevToolsWindow((shell.devToolsHost.superview ?? shell.contentContainer).convert(shell.devToolsHost.frame, to: nil))
-        w.orderFront(nil)
-        raisePageWindows(above: w)
+        if attached { raisePageWindows() }
         positionPageWindows(lastPaneFrames)
     }
 
@@ -1040,7 +1078,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         return s
     }
 
-    private func attachDevToolsWindow(_ w: NSWindow, selfDock: Bool) {
+    private func attachDevToolsWindow(_ w: NSWindow, selfDock: Bool, tab: UUID) {
         guard let window else { return }
         if w.parent !== window {
             // CEF made a normal window; strip its chrome so only the DevTools content shows.
@@ -1061,67 +1099,81 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             w.backgroundColor = .clear
             window.addChildWindow(w, ordered: .above)
             fillContentView(w)
-            if selfDock { setDevToolsTitleBarInset(nil) }
+            if selfDock { setDevToolsTitleBarInset(nil, tab: tab) }
         }
-        if let cv = w.contentView {
-            cv.wantsLayer = true
-            cv.layer?.cornerRadius = CraMetrics.contentCornerRadius
-            cv.layer?.cornerCurve = .continuous
-            // Frontend-docked: the window spans the card body, so both bottom corners are
-            // card corners. Shell-docked (Alloy): it sits right of the page.
-            let bottom: CACornerMask = cv.isFlipped ? [.layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMinYCorner, .layerMaxXMinYCorner]
-            cv.layer?.maskedCorners = selfDock ? bottom : [.layerMaxXMaxYCorner, .layerMaxXMinYCorner]
-            cv.layer?.masksToBounds = true
+        updateDevToolsCorners(w, tab: tab)
+    }
+
+    private func updateDevToolsCorners(_ w: NSWindow, tab: UUID) {
+        guard let cv = w.contentView else { return }
+        cv.wantsLayer = true
+        guard let layer = cv.layer else { return }
+        layer.cornerCurve = .continuous
+        layer.masksToBounds = true
+        if shell.edgeToEdge, let window {
+            roundAtWindowCorners(layer, rect: window.convertFromScreen(w.frame), flipped: cv.isFlipped)
+            return
         }
+        layer.cornerRadius = CraMetrics.contentCornerRadius
+        // Frontend-docked: the window spans the card body, so both bottom corners are
+        // card corners, and the top ones too without the toolbar (else they showed past the
+        // page's rounded top corners). Shell-docked (Alloy): it sits right of the page.
+        let selfDock = browsers.runtime(for: tab)?.hostWindow != nil
+        let bottom: CACornerMask = cv.isFlipped ? [.layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        let all: CACornerMask = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+        layer.maskedCorners = selfDock ? (shell.showToolbar ? bottom : all) : [.layerMaxXMaxYCorner, .layerMaxXMinYCorner]
     }
 
     /// "Undock into separate window": the frontend's window becomes a floating window of its own.
-    private func detachDevToolsWindow(_ w: NSWindow) {
+    private func detachDevToolsWindow(_ w: NSWindow, tab: UUID) {
         guard let window else { return }
-        if w.parent === window {
-            window.removeChildWindow(w)
-            // A normal titled window, like Chrome's undocked "DevTools - <url>" (the
-            // frontend draws under a real title bar; attach strips all of this again).
-            w.styleMask.remove(.fullSizeContentView)
-            w.styleMask.insert([.titled, .closable, .miniaturizable, .resizable])
-            ChromiumWindowCorners.setSquare(false, for: w)
-            ChromiumChildHover.setDocked(false, for: w)
-            w.titlebarAppearsTransparent = false
-            w.titleVisibility = .visible
-            if let url = selectedTab?.tab?.url {
-                w.title = "DevTools - " + url.replacingOccurrences(of: "^[a-z]+://", with: "", options: .regularExpression)
-            }
-            for type in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] { w.standardWindowButton(type)?.isHidden = false }
-            w.hasShadow = true
-            w.isMovable = true
-            w.isOpaque = true
-            w.backgroundColor = .windowBackgroundColor
-            if let cv = w.contentView {
-                cv.layer?.cornerRadius = 0
-                cv.layer?.masksToBounds = false
-            }
-            let f = window.frame
-            let size = NSSize(width: min(1100, f.width * 0.8), height: min(760, f.height * 0.8))
-            w.setFrame(NSRect(x: f.midX - size.width / 2 + 40, y: f.midY - size.height / 2 - 20, width: size.width, height: size.height), display: true)
-            setDevToolsTitleBarInset(w)
+        guard w.parent === window else {
+            // Already floating: show it again after a tab switch without taking the keys.
+            if !w.isVisible { w.orderFront(nil) }
+            return
         }
+        window.removeChildWindow(w)
+        // A normal titled window, like Chrome's undocked "DevTools - <url>" (the
+        // frontend draws under a real title bar; attach strips all of this again).
+        w.styleMask.remove(.fullSizeContentView)
+        w.styleMask.insert([.titled, .closable, .miniaturizable, .resizable])
+        ChromiumWindowCorners.setSquare(false, for: w)
+        ChromiumChildHover.setDocked(false, for: w)
+        w.titlebarAppearsTransparent = false
+        w.titleVisibility = .visible
+        if let url = browsers.runtime(for: tab)?.browser.currentURL, !url.isEmpty {
+            w.title = "DevTools - " + url.replacingOccurrences(of: "^[a-z]+://", with: "", options: .regularExpression)
+        }
+        for type in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] { w.standardWindowButton(type)?.isHidden = false }
+        w.hasShadow = true
+        w.isMovable = true
+        w.isOpaque = true
+        w.backgroundColor = .windowBackgroundColor
+        if let cv = w.contentView {
+            cv.layer?.cornerRadius = 0
+            cv.layer?.masksToBounds = false
+        }
+        let f = window.frame
+        let size = NSSize(width: min(1100, f.width * 0.8), height: min(760, f.height * 0.8))
+        w.setFrame(NSRect(x: f.midX - size.width / 2 + 40, y: f.midY - size.height / 2 - 20, width: size.width, height: size.height), display: true)
+        setDevToolsTitleBarInset(w, tab: tab)
         w.makeKeyAndOrderFront(nil)
     }
 
     /// CEF's frame view keeps a frameless window's content view at full window size, so
     /// the undocked window's title bar covers the top of the frontend; move the
     /// frontend's layout down by the title bar's height instead (0 when docked).
-    private func setDevToolsTitleBarInset(_ w: NSWindow?) {
+    private func setDevToolsTitleBarInset(_ w: NSWindow?, tab: UUID) {
         let inset = w.map { max(0, $0.frame.height - $0.contentLayoutRect.height) } ?? 0
         let css = inset > 0 ? "body{margin-top:\(Int(inset))px!important;height:calc(100% - \(Int(inset))px)!important}" : ""
-        currentBrowser?.executeJavaScript("(function(){var s=document.getElementById('cra-titlebar-inset');"
+        browsers.runtime(for: tab)?.browser.executeJavaScript("(function(){var s=document.getElementById('cra-titlebar-inset');"
             + "if(!s){s=document.createElement('style');s.id='cra-titlebar-inset';document.head.appendChild(s);}"
             + "s.textContent='\(css)';})();", inDevTools: true)
     }
 
-    /// Page windows go above the DevTools window (which spans the body when the frontend
-    /// docks), and the overlay panel above everything.
-    private func raisePageWindows(above dev: NSWindow) {
+    /// Page windows go above the DevTools windows (each spans its pane's body when the
+    /// frontend docks), and the overlay panel above everything.
+    private func raisePageWindows() {
         guard let window else { return }
         // Child windows ignore orderWindow:relativeTo:; re-adding a child puts it above its siblings.
         for id in browsers.visibleTabIDs {
@@ -1133,12 +1185,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         raiseOverlayPanels()
     }
 
-    private func positionDevToolsWindow(_ rectInWindow: NSRect) {
-        guard let window, let w = browsers.visibleDevToolsWindow, w.parent === window else { return }
+    private func positionDevToolsWindow(_ rectInWindow: NSRect, tab id: UUID) {
+        guard let window, let v = browsers.devToolsViews[id], let w = v.window, w.parent === window else { return }
         let onScreen = window.convertToScreen(rectInWindow)
         if w.frame != onScreen { w.setFrame(onScreen, display: true) }
         fillContentView(w)
-        if let cv = w.contentView, let id = browsers.visibleTabID, let v = browsers.devToolsViews[id], v.frame != cv.bounds {
+        updateDevToolsCorners(w, tab: id)
+        if let cv = w.contentView, v.frame != cv.bounds {
             v.frame = cv.bounds
         }
     }
@@ -2101,11 +2154,14 @@ final class CraWindow: NSWindow {
     /// press just past the card's edge still counts. Movable-by-background only drags,
     /// and the toolbar takes a click as "edit URL", so the strip's presses are handled
     /// here: a double-click runs the title bar action, anything else drags the window.
-    private static let titleStripHeight = CraMetrics.contentInset + 4
+    /// Edge to edge there is no margin, so only the 4 pt reaching into the toolbar (or the page) is left.
+    private var titleStripHeight: CGFloat {
+        (contentView as? ShellView)?.edgeToEdge == true ? 4 : CraMetrics.contentInset + 4
+    }
 
     override func sendEvent(_ event: NSEvent) {
         if event.type == .leftMouseDown, !styleMask.contains(.fullScreen),
-           let content = contentView, event.locationInWindow.y >= content.bounds.height - Self.titleStripHeight,
+           let content = contentView, event.locationInWindow.y >= content.bounds.height - titleStripHeight,
            isTitleStrip(content.hitTest(content.convert(event.locationInWindow, from: nil))) {
             if event.clickCount == 2 { performTitleDoubleClickAction() } else { performDrag(with: event) }
             return

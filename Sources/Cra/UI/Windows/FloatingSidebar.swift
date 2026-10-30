@@ -63,10 +63,10 @@ final class FloatingSidebarController {
         let screenPoint = NSEvent.mouseLocation
         let p = shell.convert(window.convertPoint(fromScreen: screenPoint), from: nil)
         if !isShown {
-            guard sidebarHidden(), FloatingSidebarGeometry.shouldReveal(at: p, in: shell.bounds) else { return }
+            guard sidebarHidden(), FloatingSidebarGeometry.shouldReveal(at: p, in: shell.bounds, edgeToEdge: shell.edgeToEdge) else { return }
             show()
         } else if FloatingSidebarGeometry.shouldHide(at: p, in: shell.bounds, sidebarWidth: shell.sidebarWidth,
-                                                    pressedMouseButtons: NSEvent.pressedMouseButtons) {
+                                                    pressedMouseButtons: NSEvent.pressedMouseButtons, edgeToEdge: shell.edgeToEdge) {
             hide(animated: true)
         }
     }

@@ -1246,6 +1246,12 @@ the arm64 slice. [O] = observed, [I] = inferred.
 - [O] Arc's preference is `topBarURLEnabled` in company.thebrowser.Browser (View ▸ Show Toolbar).
 - [O] Row 1 (AX): traffic lights 16×16 at x 12/35/58, y 16. Sidebar toggle 32×32 at x 77, y 7. Go back, Go forward
   and Reload are 32×32 at x 241/275/309 (2 pt apart, ending 6 pt from the sidebar edge), y 7. No ⌄ menu.
+- [O] Refresh ⇄ stop (120 fps capture of the toolbar button without the pointer, 30 Oct 2026; click and ⌘R alike):
+  when loading starts the ↻ cross-fades into the ✕ over ~10 frames (~85 ms), and back the same way when it ends.
+  Fitted per frame: the old glyph shrinks 1 → ~0.7 as it fades, the new one grows ~0.7 → 1 as it appears, both on
+  an ease-in-out curve (new opacity 0.02, 0.11, 0.37, 0.48 … 0.96). No rotation. Driven by the load state (Arc's
+  ReloadIcon isReloading), not the press. An AXPress on "Reload this page" showed no swap at all. The system
+  Replace symbol transition is NOT it: for arrow.clockwise it un-draws the arrow over ~0.8 s.
 - [O] Row 2: the URL pill spans x 8…338 (8 pt in from both sides of a 347 pt sidebar), y 46…81 (36 pt), corner
   radius ≈10, fill ≈5% black over the light theme. It shows only the host ("youtube.com", no lock or globe):
   AX static text at x 20, 13 pt regular (ink 77 pt wide, the width of SF 13 regular). Favorites start at y 90.

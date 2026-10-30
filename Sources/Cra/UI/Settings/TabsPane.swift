@@ -14,6 +14,7 @@ struct TabsPane: View {
                 SettingsCheckbox(title: "Show the New Tab button above tabs", isOn: $store.settings.newTabButtonAtTop)
                 SettingsCheckbox(title: "Haptic feedback when reordering tabs", isOn: $store.settings.hapticFeedbackOnReorder)
                 SettingsCheckbox(title: "Show toolbar above the page", isOn: $store.settings.showToolbar)
+                SettingsCheckbox(title: "Pages fill the window edge to edge", isOn: $store.settings.edgeToEdgeContent)
                 SettingsCheckbox(title: "Enable Picture in Picture when you leave a video tab", isOn: $store.settings.autoPictureInPicture)
             }
             // Arc's single-space mode ("Hide Space Header" on the space's menu), for people who

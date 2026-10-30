@@ -481,6 +481,14 @@ public:
         std::string disabled = command_line->GetSwitchValue("disable-features");
         command_line->AppendSwitchWithValue("disable-features",
             (disabled.empty() ? "" : disabled + ",") + "WebRtcHideLocalIpsWithMdns");
+        // --load-extension loads after the restored tabs start loading. The first extension
+        // with webRequest or declarativeNetRequest makes Chromium reset the profile's URL
+        // loader factories (WebRequestAPI::UpdateMayHaveProxies), which strands a navigation
+        // already in flight: the tab stayed blank and "loading" for good. Proxying from the
+        // start leaves nothing to reset (it also covers such an extension installed later).
+        std::string enabled = command_line->GetSwitchValue("enable-features");
+        command_line->AppendSwitchWithValue("enable-features",
+            (enabled.empty() ? "" : enabled + ",") + "ForceWebRequestProxyForTest");
         // Kerberos/NTLM single sign-on (ADFS /adfs/ls/wia and the like). Chromium only sends
         // the OS ticket to allowlisted hosts, and IT sets that list as a Chrome or Edge policy,
         // which CEF never reads. Without it those logins fail with ERR_INVALID_AUTH_CREDENTIALS.

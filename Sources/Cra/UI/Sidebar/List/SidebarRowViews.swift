@@ -58,6 +58,98 @@ enum SidebarSymbols {
     }
 }
 
+extension NSImageView {
+    /// Arc's refresh ⇄ stop swap, fitted frame by frame to a 120 fps capture of Arc 1.170 (30 Oct): over
+    /// ~90 ms the old glyph fades while shrinking to 0.7 and the new one fades in growing from 0.7,
+    /// both easing in and out. (The system's Replace transition un-draws arrow.clockwise over 0.8 s.)
+    func swapSymbol(_ image: NSImage?) {
+        guard let superview, window != nil, let old = self.image, image != nil else { self.image = image; return }
+        let ghost = NSImageView(frame: frame)
+        ghost.wantsLayer = true
+        ghost.imageScaling = imageScaling
+        ghost.image = old
+        ghost.contentTintColor = contentTintColor
+        superview.addSubview(ghost, positioned: .above, relativeTo: self)
+        self.image = image
+        guard let layer, let ghostLayer = ghost.layer else { ghost.removeFromSuperview(); return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        CATransaction.setCompletionBlock { ghost.removeFromSuperview() }
+        // A press turn still settling goes out with the old glyph; the new one starts square.
+        ghostLayer.transform = layer.transform
+        for key in layer.animationKeys() ?? [] where key.hasPrefix("turn") {
+            if let turn = layer.animation(forKey: key) { ghostLayer.add(turn, forKey: key) }
+            layer.removeAnimation(forKey: key)
+        }
+        layer.transform = CATransform3DIdentity
+        layer.setValue(nil, forKey: "turn")
+        ghostLayer.opacity = 0
+        ghostLayer.add(Self.swapAnimation(ghostLayer, fadeIn: false), forKey: "swap")
+        layer.add(Self.swapAnimation(layer, fadeIn: true), forKey: "swap")
+        CATransaction.commit()
+    }
+
+    private static func swapAnimation(_ layer: CALayer, fadeIn: Bool) -> CAAnimationGroup {
+        let c = centre(of: layer)
+        var small = CATransform3DMakeTranslation(c.x, c.y, 0)
+        small = CATransform3DScale(small, 0.7, 0.7, 1)
+        small = CATransform3DTranslate(small, -c.x, -c.y, 0)
+        // Added to whatever turn the glyph has.
+        let scale = CABasicAnimation(keyPath: "transform")
+        scale.isAdditive = true
+        scale.fromValue = NSValue(caTransform3D: fadeIn ? small : CATransform3DIdentity)
+        scale.toValue = NSValue(caTransform3D: fadeIn ? CATransform3DIdentity : small)
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = fadeIn ? 0 : 1
+        fade.toValue = fadeIn ? 1 : 0
+        let group = CAAnimationGroup()
+        group.animations = [scale, fade]
+        group.duration = 0.09
+        group.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        return group
+    }
+
+    /// Arc's press on the refresh arrow (same capture): a quarter turn clockwise about the arrow's
+    /// circle while the button is down, back on release, 0.15 s ease-in-out each way. As in SwiftUI a
+    /// turn is added on top of one still running, so a quick click only nudges the arrow.
+    func pressTurn(_ down: Bool) {
+        guard let layer else { return }
+        let to: CGFloat = down ? .pi / 2 : 0
+        let from = layer.value(forKey: "turn") as? CGFloat ?? 0
+        guard to != from else { return }
+        layer.setValue(to, forKey: "turn")
+        let flipped = layer.contentsAreFlipped()
+        // arrow.clockwise's circle sits 1/16 of the image's height below the image's centre.
+        var c = Self.centre(of: layer)
+        c.y += (flipped ? 1 : -1) * (image?.size.height ?? 0) / 16
+        func turned(_ angle: CGFloat) -> CATransform3D {
+            var t = CATransform3DMakeTranslation(c.x, c.y, 0)
+            t = CATransform3DRotate(t, flipped ? angle : -angle, 0, 0, 1)
+            return CATransform3DTranslate(t, -c.x, -c.y, 0)
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.transform = turned(to)
+        if window != nil {
+            // Even steps of angle, eased as a whole: a single matrix tween would swing the pivot.
+            let steps = 30
+            let turn = CAKeyframeAnimation(keyPath: "transform")
+            turn.values = (0...steps).map { NSValue(caTransform3D: turned((from - to) * CGFloat(steps - $0) / CGFloat(steps))) }
+            turn.isAdditive = true
+            turn.duration = 0.15
+            turn.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            turn.beginTime = layer.convertTime(CACurrentMediaTime(), from: nil)
+            layer.add(turn, forKey: "turn\(turn.beginTime)")
+        }
+        CATransaction.commit()
+    }
+
+    /// The layer's centre relative to its anchor: AppKit keeps a view layer's anchor where it likes.
+    private static func centre(of layer: CALayer) -> CGPoint {
+        CGPoint(x: layer.bounds.width * (0.5 - layer.anchorPoint.x), y: layer.bounds.height * (0.5 - layer.anchorPoint.y))
+    }
+}
+
 enum SidebarText {
     /// NSTextField draws its text this far in from its frame; labels are placed that much
     /// further left so the text lands where SwiftUI's Text put it.
@@ -81,6 +173,9 @@ final class SidebarGlyphButton: NSView {
     var action: () -> Void
     let size: NSSize
     private let glyph = NSImageView()
+    private var shownSymbol: String?
+    /// Arc turns the refresh arrow while it is pressed (NSImageView.pressTurn).
+    private var turnsOnPress = false
     /// Stroked instead of the image (SidebarSymbols.closeMark).
     private var mark: CAShapeLayer?
     private var markMinus = false
@@ -102,6 +197,7 @@ final class SidebarGlyphButton: NSView {
         layer?.cornerRadius = 7
         layer?.cornerCurve = .continuous
         glyph.image = SidebarSymbols.image(symbol, size: iconSize, weight: weight)
+        shownSymbol = symbol
         glyph.imageScaling = .scaleNone
         glyph.frame = bounds
         glyph.autoresizingMask = [.width, .height]
@@ -115,11 +211,21 @@ final class SidebarGlyphButton: NSView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func setSymbol(_ symbol: String, iconSize: CGFloat, weight: NSFont.Weight = .medium, help: String) {
-        setGlyph(SidebarSymbols.image(symbol, size: iconSize, weight: weight), help: help)
+    /// `animated` swaps another symbol in the way Arc swaps refresh and stop.
+    func setSymbol(_ symbol: String, iconSize: CGFloat, weight: NSFont.Weight = .medium, help: String, animated: Bool = false) {
+        let image = SidebarSymbols.image(symbol, size: iconSize, weight: weight)
+        if animated, shownSymbol != nil, shownSymbol != symbol {
+            glyph.swapSymbol(image)
+            setHelp(help)
+        } else {
+            setGlyph(image, help: help)
+        }
+        shownSymbol = symbol
+        turnsOnPress = animated && symbol == "arrow.clockwise"
     }
 
     func setGlyph(_ image: NSImage?, help: String) {
+        shownSymbol = nil
         glyph.image = image
         glyph.isHidden = false
         mark?.isHidden = true
@@ -138,6 +244,7 @@ final class SidebarGlyphButton: NSView {
             mark = m
         }
         markMinus = minus
+        shownSymbol = nil
         glyph.isHidden = true
         mark?.isHidden = false
         needsLayout = true
@@ -210,8 +317,14 @@ final class SidebarGlyphButton: NSView {
 
     override func mouseEntered(with event: NSEvent) { hovering = true }
     override func mouseExited(with event: NSEvent) { hovering = false }
-    override func mouseDown(with event: NSEvent) {}
+    override func mouseDown(with event: NSEvent) {
+        if turnsOnPress, enabled { glyph.pressTurn(true) }
+    }
+    override func mouseDragged(with event: NSEvent) {
+        if turnsOnPress, enabled { glyph.pressTurn(bounds.contains(convert(event.locationInWindow, from: nil))) }
+    }
     override func mouseUp(with event: NSEvent) {
+        if turnsOnPress { glyph.pressTurn(false) }
         if enabled, bounds.contains(convert(event.locationInWindow, from: nil)) { action() }
     }
 }

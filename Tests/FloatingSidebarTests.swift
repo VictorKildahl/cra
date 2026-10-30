@@ -77,6 +77,12 @@ enum FloatingSidebarTests {
         expect(!FloatingSidebarGeometry.shouldReveal(at: CGPoint(x: 15.9, y: 100), in: bounds), "further outside does not reveal")
         expect(!FloatingSidebarGeometry.shouldReveal(at: CGPoint(x: 22, y: 9.9), in: bounds), "above the window does not reveal")
         expect(!FloatingSidebarGeometry.shouldReveal(at: CGPoint(x: 22, y: 890.1), in: bounds), "below the window does not reveal")
+        // Edge to edge (GitHub #24) there is no margin; only Arc's 5 pt strip over the page reveals.
+        expect(FloatingSidebarGeometry.shouldReveal(at: CGPoint(x: 25, y: 100), in: bounds, edgeToEdge: true), "edge to edge: 5 pt reveals")
+        expect(!FloatingSidebarGeometry.shouldReveal(at: CGPoint(x: 25.1, y: 100), in: bounds, edgeToEdge: true), "edge to edge: the page past 5 pt does not reveal")
+        expect(FloatingSidebarGeometry.shouldReveal(at: CGPoint(x: 16, y: 100), in: bounds, edgeToEdge: true), "edge to edge: just outside the window still reveals")
+        expect(!FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 24, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: 0, edgeToEdge: true),
+               "edge to edge: the reveal strip does not hide what it revealed")
         expect(!FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 17, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: 0),
                "the outside reveal strip does not hide what it revealed")
         expect(!FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 380, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: 0),
@@ -133,6 +139,7 @@ final class ShellView: NSView {
     let resizeHandle = NSView()
     var sidebarWidth: CGFloat = 328
     var contentFullscreen = false
+    var edgeToEdge = false
     var sidebarDetached = false
     var floatingSidebar = false
     struct Frames { let sidebar: NSRect }

@@ -463,6 +463,9 @@ struct AppSettings: Codable, Equatable {
     /// Arc's showSpaceHeaderOnSingleUnnamedSpaces: with only one space, its header (and the
     /// dock's lone space icon) can be hidden, for people who don't use spaces.
     var showSpaceHeaderOnSingleSpace: Bool = true
+    /// GitHub #24, not in Arc: the page fills the window with no margin and no rounded
+    /// card, like a traditional browser. Off by default.
+    var edgeToEdgeContent: Bool = false
 
     init() {}
 
@@ -568,6 +571,7 @@ extension AppSettings {
         httpsOnly = try c.decodeIfPresent(Bool.self, forKey: .httpsOnly) ?? false
         searchSuggestions = try c.decodeIfPresent(Bool.self, forKey: .searchSuggestions) ?? true
         showSpaceHeaderOnSingleSpace = try c.decodeIfPresent(Bool.self, forKey: .showSpaceHeaderOnSingleSpace) ?? true
+        edgeToEdgeContent = try c.decodeIfPresent(Bool.self, forKey: .edgeToEdgeContent) ?? false
     }
 }
 

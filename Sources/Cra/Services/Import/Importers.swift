@@ -431,12 +431,14 @@ enum DiaImporter {
 // MARK: - Applying
 
 extension SidebarStore {
-    struct ImportResult { var spaces = 0; var tabs = 0; var folders = 0; var archived = 0 }
+    struct ImportResult { var spaces = 0; var tabs = 0; var folders = 0; var archived = 0; var spaceIDs: [UUID] = [] }
 
-    /// Merge a plan into the sidebar. Spaces with the same title merge; favorites
-    /// and pinned tabs skip URLs that already exist in that section.
+    /// Add a plan to the sidebar. Like Dia, every imported space is a new one (importing
+    /// twice gives two of each), so people pick what to keep; a taken title gets a number
+    /// ("JYSK 2"). Favorites on the current space skip URLs it already has. `replacing`
+    /// spaces (a fresh install's empty one) are deleted afterwards and don't take titles.
     @discardableResult
-    func apply(_ plan: ImportPlan, includeArchive: Bool, includeSettings: Bool) -> ImportResult {
+    func apply(_ plan: ImportPlan, includeArchive: Bool, includeSettings: Bool, replacing: [UUID] = []) -> ImportResult {
         var result = ImportResult()
 
         // A pinned tab that has navigated still counts as present via its home URL.
@@ -488,26 +490,36 @@ extension SidebarStore {
         let current = focusedSpace.favoritesContainerID
         insert(plan.favorites, into: current, skip: existingURLs(under: current), pinned: true)
 
+        // Archive entries and link routes name spaces by title: point them at this import's spaces.
+        var imported: [String: UUID] = [:]
+        func spaceID(titled title: String) -> UUID? {
+            imported[title.lowercased()] ?? orderedSpaces.first { $0.title.caseInsensitiveCompare(title) == .orderedSame }?.id
+        }
+        func freeTitle(_ title: String) -> String {
+            let taken = Set(orderedSpaces.filter { !replacing.contains($0.id) }.map { $0.title.lowercased() })
+            guard taken.contains(title.lowercased()) else { return title }
+            var n = 2
+            while taken.contains("\(title) \(n)".lowercased()) { n += 1 }
+            return "\(title) \(n)"
+        }
+
         for sp in plan.spaces {
-            let space: Space
-            if var existing = orderedSpaces.first(where: { $0.title.caseInsensitiveCompare(sp.title) == .orderedSame }) {
-                if let t = sp.theme, existing.theme != t { existing.theme = t; updateSpace(existing) }
-                space = existing
-            } else {
-                space = createSpace(title: sp.title, emoji: sp.emoji, theme: sp.theme, focus: false)
-                result.spaces += 1
-            }
+            let space = createSpace(title: freeTitle(sp.title), emoji: sp.emoji, theme: sp.theme, focus: false)
+            result.spaces += 1
+            result.spaceIDs.append(space.id)
+            if imported[sp.title.lowercased()] == nil { imported[sp.title.lowercased()] = space.id }
             insert(sp.favorites, into: space.favoritesContainerID, skip: existingURLs(under: space.favoritesContainerID), pinned: true)
             insert(sp.pinned, into: space.pinnedContainerID, skip: existingURLs(under: space.pinnedContainerID), pinned: true)
             insert(sp.today, into: space.todayContainerID, skip: existingURLs(under: space.todayContainerID), pinned: false)
         }
+        for id in replacing { deleteSpace(id) }
 
         if includeArchive {
             let known = Set(archive.compactMap { $0.item.tab?.url })
             for e in plan.archive where !known.contains(e.url) {
                 var item = SidebarItem.tab(e.url, title: e.pageTitle, parent: nil)
                 item.title = e.customTitle
-                let sid = orderedSpaces.first { $0.title == e.spaceTitle }?.id
+                let sid = e.spaceTitle.flatMap(spaceID(titled:))
                 appendArchived(ArchivedItem(archivedAt: e.archivedAt, reason: e.reason, sourceSpaceID: sid, wasPinned: false, item: item))
                 result.archived += 1
             }
@@ -523,7 +535,7 @@ extension SidebarStore {
                 case .mostRecentSpace: return .mostRecentSpace
                 case .littleWindow: return .littleWindow
                 case .space(let title):
-                    return orderedSpaces.first { $0.title.caseInsensitiveCompare(title) == .orderedSame }.map { .space($0.id) } ?? .mostRecentSpace
+                    return spaceID(titled: title).map { .space($0) } ?? .mostRecentSpace
                 }
             }
             if let d = plan.settings.defaultLinkDestination { settings.defaultLinkDestination = destination(d) }
