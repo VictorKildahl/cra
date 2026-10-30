@@ -651,8 +651,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return nil
             }
             guard let self, event.modifierFlags.intersection([.command, .control]).isEmpty == false,
-                  let window = event.window, window.windowController is MainWindowController || window === self.main.window,
-                  let action = self.bindings.action(for: event) else { return event }
+                  let window = event.window, window.windowController is MainWindowController || window === self.main.window else { return event }
+            if self.undoClosedTab(event) { return nil }
+            guard let action = self.bindings.action(for: event) else { return event }
             // Let the menu bar take it first (normal path); only act when it cannot.
             if NSApp.mainMenu?.performKeyEquivalent(with: event) == true { return nil }
             self.perform(action.id)
@@ -670,6 +671,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Keys the page let through (CEF OnKeyEvent). Anything we know runs here;
     /// returning false lets CEF pass the key on to the menu bar (⌘Q, ⌘H…).
     func handleUnhandledKey(_ event: NSEvent) -> Bool {
+        if undoClosedTab(event) { return true }
         if let action = bindings.action(for: event) {
             perform(action.id)
             return true
@@ -682,6 +684,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return NSApp.mainMenu?.performKeyEquivalent(with: event) ?? false
         }
         return false
+    }
+
+    /// Arc: ⌘Z brings back the tab you closed last (closing registers an undo, GitHub #21),
+    /// unless the keyboard is in something with text to undo: a text field, or an editable
+    /// element in a page (Chromium's page view reports its ui::TextInputType, 0 = none).
+    private func undoClosedTab(_ event: NSEvent) -> Bool {
+        guard Shortcut("z", .command).matches(event) else { return false }
+        let responder = (event.window ?? NSApp.keyWindow)?.firstResponder
+        if responder is NSText { return false }
+        if let view = responder as? NSView, NSStringFromClass(type(of: view)) == "RenderWidgetHostViewCocoa",
+           view.responds(to: NSSelectorFromString("textInputType")),
+           (view.value(forKey: "textInputType") as? Int ?? 0) != 0 { return false }
+        perform("reopenClosedTab")
+        return true
     }
 
     func perform(_ id: String) {
