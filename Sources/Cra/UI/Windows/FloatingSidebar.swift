@@ -14,6 +14,8 @@ final class FloatingSidebarController {
     unowned let window: NSWindow
     /// Whether the anchored sidebar is hidden right now (floating only makes sense then).
     var sidebarHidden: () -> Bool = { false }
+    /// Something beside the sidebar still belongs to it (a folder preview): the pointer may leave.
+    var staysShown: () -> Bool = { false }
     var palette: () -> SpacePalette
     /// Called after the panel is attached so the overlay panel can be re-ordered above it.
     var didAttachPanel: (() -> Void)?
@@ -28,10 +30,14 @@ final class FloatingSidebarController {
     private let lift = NSView()
     private var gradientHost: PaletteBackgroundView?
     private var trafficLights: FloatingTrafficLights?
+    /// The floating sidebar's right edge drags its width, like the anchored sidebar's handle.
+    private let resizeHandle = ResizeHandleView()
 
     enum Metrics {
         static let cornerRadius: CGFloat = 12
         static let duration: TimeInterval = 0.085
+        /// Inside the sidebar's edge: the panel ends there, so the strip cannot straddle it.
+        static let resizeHandleWidth: CGFloat = 6
     }
 
     init(shell: ShellView, window: NSWindow, palette: @escaping () -> SpacePalette) {
@@ -65,7 +71,7 @@ final class FloatingSidebarController {
         if !isShown {
             guard sidebarHidden(), FloatingSidebarGeometry.shouldReveal(at: p, in: shell.bounds, edgeToEdge: shell.edgeToEdge) else { return }
             show()
-        } else if FloatingSidebarGeometry.shouldHide(at: p, in: shell.bounds, sidebarWidth: shell.sidebarWidth,
+        } else if !staysShown(), FloatingSidebarGeometry.shouldHide(at: p, in: shell.bounds, sidebarWidth: shell.sidebarWidth,
                                                     pressedMouseButtons: NSEvent.pressedMouseButtons, edgeToEdge: shell.edgeToEdge) {
             hide(animated: true)
         }
@@ -122,6 +128,14 @@ final class FloatingSidebarController {
         let lights = FloatingTrafficLights(browserWindow: window)
         lights.willAct = { [weak self] in self?.hide(animated: false) }
         trafficLights = lights
+        resizeHandle.autoresizingMask = [.minXMargin, .height]
+        // The shell's handle owns the width and saves it; the panel follows.
+        resizeHandle.onDrag = { [weak self] dx in
+            guard let self else { return }
+            shell.resizeHandle.onDrag?(dx)
+            reposition()
+        }
+        resizeHandle.onEnd = { [weak self] in self?.shell.resizeHandle.onEnd?() }
         return p
     }
 
@@ -164,6 +178,10 @@ final class FloatingSidebarController {
             lights.setFrameOrigin(NSPoint(x: 13, y: slider.bounds.height - CraMetrics.titleRowCenter - lights.frame.height / 2))
             slider.addSubview(lights, positioned: .above, relativeTo: host)
         }
+        let w = Metrics.resizeHandleWidth
+        resizeHandle.frame = NSRect(x: slider.bounds.width - w, y: 0, width: w, height: slider.bounds.height)
+        resizeHandle.isHidden = !shell.sidebarResizable
+        slider.addSubview(resizeHandle, positioned: .above, relativeTo: nil)
         shell.sidebarDetached = true
         shell.floatingSidebar = true
         if p.parent !== window { window.addChildWindow(p, ordered: .above) }

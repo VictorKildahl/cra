@@ -10,6 +10,6 @@ xcrun swiftc -swift-version 5 -emit-module -emit-library -module-name CraCEF \
   -emit-module-path "$TEST_DIR/CraCEF.swiftmodule"
 xcrun swiftc -swift-version 5 -parse-as-library -I "$TEST_DIR" -L "$TEST_DIR" -lCraCEF \
   -Xlinker -rpath -Xlinker "$TEST_DIR" \
-  "$MANAGER_SOURCE" Tests/BrowserManagerSupport/AppServices.swift \
+  "$MANAGER_SOURCE" Sources/Cra/Services/NowPlaying.swift Sources/Cra/Services/PageScript.swift Tests/BrowserManagerSupport/AppServices.swift \
   Tests/BrowserManagerLifecycleTests.swift -o "$TEST_DIR/lifecycle-tests"
 "$TEST_DIR/lifecycle-tests"

@@ -30,6 +30,24 @@ enum FloatingSidebarTests {
                "an old hide completion must not remove a newly revealed panel")
         expect(shell.sidebarHost.window === panel, "the revealed sidebar retains its native panel owner")
 
+        // The floating sidebar's edge drags the width through the shell's handle.
+        var saved: CGFloat?
+        shell.resizeHandle.onDrag = { shell.sidebarWidth += $0 }
+        shell.resizeHandle.onEnd = { saved = shell.sidebarWidth }
+        let edge = shell.sidebarHost.superview?.subviews.compactMap { $0 as? ResizeHandleView }.first
+        expect(edge.map { !$0.isHidden && abs($0.frame.maxX - shell.sidebarHost.frame.maxX) < 0.5 } == true,
+               "the floating sidebar has a resize strip on its right edge")
+        let panelWidth = panel.frame.width
+        edge?.onDrag?(40)
+        edge?.onEnd?()
+        expect(shell.sidebarWidth == 368 && saved == 368, "dragging the floating edge resizes and saves the width")
+        expect(panel.frame.width == panelWidth + 40 && shell.sidebarHost.frame.width == 368
+               && abs(edge!.frame.maxX - shell.sidebarHost.frame.maxX) < 0.5,
+               "the panel, sidebar and strip follow the new width")
+        edge?.onDrag?(-40)
+        shell.resizeHandle.onDrag = nil
+        shell.resizeHandle.onEnd = nil
+
         // Multiple animation completions can be queued; only the latest show owns it.
         sidebar.hide(animated: true)
         sidebar.show()
@@ -134,10 +152,16 @@ final class CraTuning {
     let liftActive: CGFloat = 0.1
 }
 
+final class ResizeHandleView: NSView {
+    var onDrag: ((CGFloat) -> Void)?
+    var onEnd: (() -> Void)?
+}
+
 final class ShellView: NSView {
     let sidebarHost = NSView()
-    let resizeHandle = NSView()
+    let resizeHandle = ResizeHandleView()
     var sidebarWidth: CGFloat = 328
+    var sidebarResizable = true
     var contentFullscreen = false
     var edgeToEdge = false
     var sidebarDetached = false

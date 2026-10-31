@@ -103,7 +103,9 @@ final class SpaceListView: NSView, NSDraggingSource {
         wantsLayer = true
         scrollView.drawsBackground = false
         scrollView.contentView.drawsBackground = false
-        scrollView.hasVerticalScroller = false
+        scrollView.verticalScroller = SidebarScroller()
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
         scrollView.hasHorizontalScroller = false
         scrollView.horizontalScrollElasticity = .none
         scrollView.verticalScrollElasticity = .allowed
@@ -190,6 +192,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         let renaming = ui.renamingID
         let focusID = ui.keyboardFocusID
         let capturing = ui.capturingTabIDs
+        let audible = ui.audibleTabIDs
         let refreshing = LiveFolderManager.shared.refreshing
         var out: [Row] = []
 
@@ -249,7 +252,7 @@ final class SpaceListView: NSView, NSDraggingSource {
                     icon: img, flipIcon: flip, githubMark: tab.liveItemURL != nil && tab.customIconKey == nil,
                     editing: renaming == item.id, selected: selected,
                     highlighted: picks.isEmpty ? selected : picks.contains(item.id),
-                    capturing: capturing.contains(item.id), muted: tab.muted, unread: item.isUnread,
+                    capturing: capturing.contains(item.id), audible: audible.contains(item.id), muted: tab.muted, unread: item.isUnread,
                     navigatedAway: navigatedAway,
                     closeGroup: picks.contains(item.id) && picks.count > 1 ? picks.count : 1,
                     focusRing: focusID == item.id))
@@ -275,7 +278,7 @@ final class SpaceListView: NSView, NSDraggingSource {
             add(item, depth: 0, pinned: true, parent: space.pinnedContainerID, index: pinnedKids.firstIndex(of: item.id) ?? 0)
         }
         let section = dropSection(drop)
-        // With nothing pinned the list is 8 pt tall; a drag opens a real target. Not when
+        // With nothing pinned the list takes no room; a drag opens a real target. Not when
         // collapsed: the placeholder would claim an empty list and open under the pointer,
         // taking drops meant for the top of Today.
         if pinnedKids.isEmpty && drop != nil {
@@ -339,6 +342,7 @@ final class SpaceListView: NSView, NSDraggingSource {
 
     private func apply(_ b: Built) {
         palette = b.palette
+        (scrollView.verticalScroller as? SidebarScroller)?.isDarkTheme = b.palette.isDark
         let newColors = SidebarColors(b.palette)
         let recolor = newColors != colors
         colors = newColors
@@ -467,8 +471,9 @@ final class SpaceListView: NSView, NSDraggingSource {
 
     // MARK: Layout
 
-    /// SpaceSectionView's stacks: 3 pt on top, pinned rows (at least 8 pt), the 18 pt divider,
-    /// then Today; rows 1 pt apart and 10 pt in from the sides.
+    /// SpaceSectionView's stacks: 3 pt on top, pinned rows, the 18 pt divider, then Today; rows
+    /// 1 pt apart and 10 pt in from the sides. Arc 1.171 (31 Oct): every pinned row takes 41 pt,
+    /// the first one too, so the first sits 1 pt lower than Today's; nothing pinned takes none.
     private func layoutRows() {
         let width = bounds.width
         let inner = max(0, width - 20)
@@ -478,15 +483,13 @@ final class SpaceListView: NSView, NSDraggingSource {
             let isDivider = rows[i].key == .divider
             if i == pinnedCount {
                 pinnedFrame = NSRect(x: 10, y: pinnedTop, width: inner, height: y - pinnedTop)
-                y = pinnedTop + max(8, y - pinnedTop)
             }
             if isDivider {
                 rows[i].frame = NSRect(x: 0, y: y, width: width, height: 18)
                 y += 18
                 continue
             }
-            let first = i == 0 || i == pinnedCount + 1
-            if !first { y += CraMetrics.rowSpacing }
+            if i != pinnedCount + 1 { y += CraMetrics.rowSpacing }
             let h: CGFloat
             if case .liveStatus(let m) = rows[i].content { h = LiveStatusRowView.height(m, width: inner) } else { h = CraMetrics.rowHeight }
             rows[i].frame = NSRect(x: 10, y: y, width: inner, height: h)
@@ -629,6 +632,14 @@ final class SpaceListView: NSView, NSDraggingSource {
         for l in all.allObjects where l.ui === ui && l.spaceID == space { l.scrollToSelected() }
     }
 
+    /// Tests without the pointer (cra://debug?folderPreview=<id>): the folder's preview as if hovered.
+    static func debugFolderPreview(_ folderID: UUID, ui: SidebarUIState) {
+        for l in all.allObjects where l.ui === ui {
+            guard let row = l.views[.item(folderID)] as? FolderRowView else { continue }
+            FolderPreviewController.shared.debugOpen(folderID, row: row, list: l)
+        }
+    }
+
     /// Scrolls the selected tab to the middle of the list (as far as the list allows).
     private func scrollToSelected() {
         guard let (row, _) = selectedRow() else { return }
@@ -712,6 +723,7 @@ final class SpaceListView: NSView, NSDraggingSource {
             } else if let h = ui.hoveredTabID, views[.item(h)] != nil {
                 ui.hoveredTabID = nil
             }
+            FolderPreviewController.shared.hover(target, in: self)
         }
         target?.hoverMoved(to: local)
         let tip = scrolling ? nil : target?.tooltipTarget(at: local)
@@ -973,9 +985,36 @@ enum SidebarListMetrics {
 final class SpaceListScrollView: NSScrollView {
     override class var isCompatibleWithResponsiveScrolling: Bool { false }
 
+    /// Always overlay, also with "Show scroll bars: Always": rows are laid out over the full width.
+    override var scrollerStyle: NSScroller.Style {
+        get { .overlay }
+        set { super.scrollerStyle = .overlay }
+    }
+
     override func scrollWheel(with event: NSEvent) {
         if event.hasPreciseScrollingDeltas, event.momentumPhase.isEmpty, abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) { return }
         super.scrollWheel(with: event)
+    }
+}
+
+/// Arc 1.171's list scroller (31 Oct 2026, issue #31): AppKit's overlay scroller, shown while
+/// scrolling and faded out after, with no track and a 4 pt knob 3 pt in from the sidebar's
+/// edge, white at 49 % on dark themes. It is only as wide as the 10 pt gutter right of the rows,
+/// so it never covers a row's trailing buttons.
+final class SidebarScroller: NSScroller {
+    var isDarkTheme = true { didSet { if isDarkTheme != oldValue { needsDisplay = true } } }
+
+    override class var isCompatibleWithOverlayScrollers: Bool { true }
+    override class func scrollerWidth(for controlSize: NSControl.ControlSize, scrollerStyle: NSScroller.Style) -> CGFloat { 10 }
+
+    override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {}
+
+    override func drawKnob() {
+        let knob = rect(for: .knob)
+        guard knob.height > 0 else { return }
+        let r = NSRect(x: bounds.maxX - 7, y: knob.minY + 2, width: 4, height: max(0, knob.height - 4))
+        (isDarkTheme ? NSColor.white.withAlphaComponent(0.49) : NSColor.black.withAlphaComponent(0.3)).setFill()
+        NSBezierPath(roundedRect: r, xRadius: 2, yRadius: 2).fill()
     }
 }
 

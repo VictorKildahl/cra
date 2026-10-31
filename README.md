@@ -68,7 +68,7 @@ Embedded Framework, so sites and Chrome extensions work as they do in Chrome.
 | Import from Arc | ✅ |
 | Easels | Not yet |
 | Boosts | Not yet |
-| Peek | Not yet |
+| Peek | ✅ |
 | Notes | Not yet |
 | Arc Max | No, Cra has no built-in AI |
 

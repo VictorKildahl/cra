@@ -22,6 +22,10 @@ final class TabRuntime {
     var hiddenAt: Date? = Date()
     /// Invalidates a pending sleep probe even when navigation returns to the same URL.
     var navigationRevision: UInt = 0
+    /// A page that refused to sleep isn't asked again before this (nil: ask on the next pass).
+    var sleepProbeAfter: Date?
+    /// Why the page last refused to sleep ("" when it didn't), so the log says it once.
+    var sleepRefusal: String?
     /// Chrome-style hosting: the page's own window (nil until created, or for Alloy).
     var hostWindow: NSWindow? { browser.hostWindow }
     init(tabID: UUID, browser: CraBrowser) {
@@ -73,6 +77,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     var windowID: UUID?
     /// A tab's live page held by another window's manager, handed over (see `release`).
     var takeRuntimeFromOtherWindow: ((UUID) -> TabRuntime?)?
+    /// The window's sidebar player (Arc's "now playing"), fed with this manager's pages.
+    var nowPlaying: NowPlaying?
     private var byBrowser: [ObjectIdentifier: UUID] = [:]
     /// CEF's client holds its owner weakly; keep retired browsers alive until teardown finishes.
     private var closingBrowsers: [ObjectIdentifier: CraBrowser] = [:]
@@ -149,6 +155,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// their window belongs to this one.
     func release(_ tabID: UUID) -> TabRuntime? {
         guard let rt = runtimes.removeValue(forKey: tabID) else { return nil }
+        nowPlaying?.remove(tabID)
+        nowPlaying?.pictureInPicture.remove(tabID)
         byBrowser[ObjectIdentifier(rt.browser)] = nil
         rt.snapshotWork?.cancel()
         rt.snapshotWork = nil
@@ -189,6 +197,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
             guard let rt = ensureRuntime(for: id) else { shown.append(id); continue }
             if !wasVisible.contains(id) { returnToTab(rt) }
             rt.hiddenAt = nil
+            rt.sleepProbeAfter = nil
             let v = rt.browser.containerView
             // Alloy hosting only: the Chromium view moves into its pane. Chrome-style
             // pages live in their own windows; re-parenting their view makes Chrome
@@ -209,6 +218,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
             }
         }
         visibleTabIDs = shown
+        if let np = nowPlaying, np.onScreen != Set(shown) { np.onScreen = Set(shown) }
         visibleTabID = focused.flatMap { newSet.contains($0) ? $0 : nil } ?? shown.first
         if wasVisible != Set(shown) { HitchMonitor.mark("page-shown") }
         if focus, let f = visibleTabID, let rt = runtimes[f] { rt.browser.setFocused(true) }
@@ -286,58 +296,99 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     /// Settings ▸ Tabs ▸ "Sleep tabs I haven't looked at in": a page off screen that long
     /// closes, like a closed pinned tab, and loads its URL again when shown. Pages that are
-    /// loading, playing sound, recording, in Picture in Picture or DevTools, holding typed
-    /// text or asking before they close (beforeunload) stay awake.
+    /// loading, playing sound, recording, in Picture in Picture or DevTools, holding text the
+    /// user typed or asking before they close (their own onbeforeunload) stay awake, and are
+    /// asked again only after `refusalBackoff`. The log says once why a page stays awake.
     func sleepIdleTabs(hiddenLongerThan seconds: TimeInterval) {
-        let cutoff = Date().addingTimeInterval(-seconds)
+        let now = Date()
+        let cutoff = now.addingTimeInterval(-seconds)
         for (id, rt) in runtimes {
             let b = rt.browser
-            guard canSleep(rt, before: cutoff) else { continue }
+            guard canSleep(rt, before: cutoff), rt.sleepProbeAfter.map({ $0 <= now }) ?? true else { continue }
             let url = b.currentURL
             let navigationRevision = rt.navigationRevision
-            b.sendDevToolsMethod("Runtime.evaluate", params: Self.sleepProbe) { [weak self, weak rt] result, _ in
+            // Cra's isolated world sees typed text and media; the page's own onbeforeunload is only
+            // visible from the page's world, so that's asked second.
+            b.evaluate(inIsolatedWorld: PageScript.world, params: Self.sleepProbe) { [weak self, weak rt] result, _ in
                 DispatchQueue.main.async {
-                    guard let self, let rt, let current = self.runtimes[id], current === rt,
-                          current.navigationRevision == navigationRevision, current.browser.currentURL == url,
-                          self.canSleep(current, before: cutoff),
-                          Self.probeSaysIdle(result) else { return }
-                    self.unload(id)
+                    guard let self, let rt, self.stillSleepable(id, rt, url, navigationRevision, cutoff) else { return }
+                    let refusal = Self.sleepRefusal(result)
+                    guard refusal.isEmpty else { return self.keepAwake(rt, url, refusal) }
+                    rt.browser.sendDevToolsMethod("Runtime.evaluate", params: Self.beforeUnloadProbe) { [weak self, weak rt] result, _ in
+                        DispatchQueue.main.async {
+                            guard let self, let rt, self.stillSleepable(id, rt, url, navigationRevision, cutoff) else { return }
+                            let refusal = Self.sleepRefusal(result)
+                            guard refusal.isEmpty else { return self.keepAwake(rt, url, refusal) }
+                            if !rt.browser.isIncognito {
+                                NSLog("Cra: tab sleep unloads %@ (hidden %d min)", Self.logHost(url),
+                                      Int(Date().timeIntervalSince(rt.hiddenAt ?? Date()) / 60))
+                            }
+                            self.unload(id)
+                        }
+                    }
                 }
             }
         }
+    }
+
+    private func stillSleepable(_ id: UUID, _ rt: TabRuntime, _ url: String, _ revision: UInt, _ cutoff: Date) -> Bool {
+        runtimes[id] === rt && rt.navigationRevision == revision && rt.browser.currentURL == url && canSleep(rt, before: cutoff)
+    }
+
+    /// Asked again after the back-off; the log names the site once per reason (never an incognito one).
+    private func keepAwake(_ rt: TabRuntime, _ url: String, _ refusal: String) {
+        rt.sleepProbeAfter = Date().addingTimeInterval(Self.refusalBackoff)
+        if rt.sleepRefusal != refusal, !rt.browser.isIncognito { NSLog("Cra: tab sleep keeps %@ awake: %@", Self.logHost(url), refusal) }
+        rt.sleepRefusal = refusal
+    }
+
+    static let refusalBackoff: TimeInterval = 10 * 60
+
+    /// Only the host: logs get shared in bug reports.
+    private static func logHost(_ url: String) -> String {
+        URL(string: url).flatMap { $0.host ?? $0.scheme.map { "\($0):" } } ?? "(no page)"
     }
 
     private func canSleep(_ rt: TabRuntime, before cutoff: Date) -> Bool {
         let b = rt.browser
         return rt.hiddenAt.map { $0 < cutoff } == true && !visibleTabIDs.contains(rt.tabID)
             && b.isCreated && !b.isClosed && !b.isLoading && !b.isInPictureInPicture
-            && !b.isCapturingMedia && !b.hasDevTools
+            && !b.isCapturingMedia && !b.isAudible && !b.hasDevTools
     }
 
-    /// true when the page has nothing to lose: no audible media, no edited fields, no
-    /// beforeunload handler (closing would ask "Leave site?" on a page nobody is looking at).
+    /// In Cra's isolated world: "" when the page has nothing to lose, else why it must stay:
+    /// media playing, or text the user typed that is still there on the same URL (PageScript
+    /// records trusted input; values a framework set, or text submitted by a navigation, don't
+    /// count).
     private static let sleepProbe: String = {
         let js = """
         (() => {
-          const playing = [...document.querySelectorAll('video,audio')].some(m => !m.paused && !m.ended && !m.muted && m.volume > 0);
-          const typed = [...document.querySelectorAll('input,textarea,select')].some(e =>
-            e.type === 'checkbox' || e.type === 'radio' ? e.checked !== e.defaultChecked
+          if ([...document.querySelectorAll('video,audio')].some(m => !m.paused && !m.ended && !m.muted && m.volume > 0)) return 'playing';
+          const edited = e => e.isContentEditable ? e.textContent.trim() !== ''
+            : e.type === 'checkbox' || e.type === 'radio' ? e.checked !== e.defaultChecked
             : e.tagName === 'SELECT' ? [...e.options].some(o => o.selected !== o.defaultSelected)
-            : !['hidden','submit','button','reset','image','file','search'].includes(e.type) && e.value !== e.defaultValue);
-          const editing = document.activeElement?.isContentEditable === true;
-          const guarded = !!window.onbeforeunload || (getEventListeners(window).beforeunload || []).length > 0;
-          return !(playing || typed || editing || guarded);
+            : (e.value ?? '') !== '';
+          for (const [e, href] of window.__cra?.typed ?? []) {
+            if (!e.isConnected || href !== location.href) { window.__cra.typed.delete(e); continue; }
+            if (edited(e)) return 'typed';
+          }
+          return '';
         })()
         """
-        let params: [String: Any] = ["expression": js, "returnByValue": true, "includeCommandLineAPI": true]
-        return String(data: try! JSONSerialization.data(withJSONObject: params), encoding: .utf8)!
+        return evaluateParams(js, userGesture: false)
     }()
 
-    private static func probeSaysIdle(_ result: String?) -> Bool {
+    /// In the page's world (leaves nothing behind): the page's own onbeforeunload. Listeners a
+    /// framework adds with addEventListener don't count: nearly every app registers one, and the
+    /// user never sees most of them fire.
+    private static let beforeUnloadProbe = evaluateParams("typeof window.onbeforeunload === 'function' ? 'beforeunload' : ''", userGesture: false)
+
+    /// The probe's answer; anything but a clean "" (an exception, no reply) refuses.
+    private static func sleepRefusal(_ result: String?) -> String {
         guard let data = result?.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              json["exceptionDetails"] == nil,
-              let value = (json["result"] as? [String: Any])?["value"] as? Bool else { return false }
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return "no reply" }
+        guard json["exceptionDetails"] == nil else { return "probe failed" }
+        guard let value = (json["result"] as? [String: Any])?["value"] as? String else { return "no reply" }
         return value
     }
 
@@ -404,6 +455,9 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     func browser(_ browser: CraBrowser, didChangePictureInPicture active: Bool) {
         guard let id = tabID(of: browser), let rt = runtimes[id] else { return }
+        if let np = nowPlaying, np.pictureInPicture.contains(id) != active {
+            if active { np.pictureInPicture.insert(id) } else { np.pictureInPicture.remove(id) }
+        }
         if active {
             // The floating window's hover controls act on this tab.
             PictureInPictureChrome.shared.actions = PictureInPictureActions(
@@ -440,9 +494,98 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         delegate?.browserManagerDidUpdate(id)
     }
 
+    func browser(_ browser: CraBrowser, didChangeAudible audible: Bool) {
+        guard let id = tabID(of: browser) else { return }
+        if let np = nowPlaying {
+            if np.entries.contains(where: { $0.id == id }) {
+                np.update(id) { $0.playing = audible }
+            } else if audible {
+                np.entries.append(.init(id: id, playing: true))
+            }
+            if audible { refreshMediaControls(id) }
+        }
+        delegate?.browserManagerDidUpdate(id)
+    }
+
+    // MARK: Now playing
+
+    /// Play/pause, previous and next for the sidebar player. The page's own media session
+    /// handlers go first (PageScript keeps them; YouTube, Spotify and SoundCloud skip tracks
+    /// that way), else the page's media elements. Runs as a user gesture so play() is allowed.
+    func performNowPlaying(_ id: UUID, _ action: NowPlaying.Action) {
+        let op: String
+        switch action {
+        case .togglePlayback: op = "toggle"
+        case .previous: op = "previoustrack"
+        case .next: op = "nexttrack"
+        case .dismiss: op = "pause"; nowPlaying?.remove(id)
+        case .pictureInPicture:
+            runtimes[id]?.browser.requestPictureInPicture(automatic: false)
+            return
+        case .setVolume(let v):
+            nowPlaying?.update(id) { $0.volume = v }
+            let js = "(v => { if (window.__cra) window.__cra.volume = v; document.querySelectorAll('video,audio').forEach(m => m.volume = v); })(\(max(0, min(1, v))))"
+            runtimes[id]?.browser.evaluate(inIsolatedWorld: PageScript.world, params: Self.evaluateParams(js, userGesture: false)) { _, _ in }
+            return
+        case .toggleMute, .show: return
+        }
+        guard let rt = runtimes[id] else { nowPlaying?.remove(id); return }
+        let js = """
+        ((op) => {
+          const cra = window.__cra, has = cra ? cra.query() : [];
+          const media = [...document.querySelectorAll('video,audio')];
+          const playing = media.some(m => !m.paused && !m.ended);
+          if (op === 'toggle') op = playing ? 'pause' : 'play';
+          if (has.includes(op)) cra.send(op);
+          else if (op === 'pause') media.forEach(m => m.pause());
+          else if (op === 'play') (media.find(m => m.currentTime > 0 && !m.ended) ?? media[0])?.play();
+          return op === 'pause' ? 'paused' : op === 'play' ? 'playing' : playing ? 'playing' : 'paused';
+        })(\(Self.jsonString(op)))
+        """
+        // No user gesture: the page has been playing, so it already has its activation, and the
+        // page's own handlers shouldn't get a fresh one from Cra (PageScript).
+        rt.browser.evaluate(inIsolatedWorld: PageScript.world, params: Self.evaluateParams(js, userGesture: false)) { [weak self] result, _ in
+            DispatchQueue.main.async {
+                guard let state = Self.stringResult(result) else { return }
+                self?.nowPlaying?.update(id) { $0.playing = state == "playing" }
+            }
+        }
+    }
+
+    /// Which track buttons the page answers (media session handlers).
+    private func refreshMediaControls(_ id: UUID) {
+        let js = """
+        (() => { const has = window.__cra?.query() ?? [];
+          return (has.includes('previoustrack') ? 'p' : '') + (has.includes('nexttrack') ? 'n' : '') + (document.querySelector('video') ? 'v' : ''); })()
+        """
+        runtimes[id]?.browser.evaluate(inIsolatedWorld: PageScript.world, params: Self.evaluateParams(js, userGesture: false)) { [weak self] result, _ in
+            DispatchQueue.main.async {
+                guard let has = Self.stringResult(result) else { return }
+                self?.nowPlaying?.update(id) { $0.hasPrevious = has.contains("p"); $0.hasNext = has.contains("n"); $0.hasVideo = has.contains("v") }
+            }
+        }
+    }
+
+    private static func evaluateParams(_ js: String, userGesture: Bool) -> String {
+        let params: [String: Any] = ["expression": js, "returnByValue": true, "userGesture": userGesture]
+        return String(data: try! JSONSerialization.data(withJSONObject: params), encoding: .utf8)!
+    }
+
+    private static func jsonString(_ s: String) -> String {
+        String(data: try! JSONSerialization.data(withJSONObject: [s]), encoding: .utf8)!.dropFirst().dropLast().description
+    }
+
+    private static func stringResult(_ result: String?) -> String? {
+        guard let data = result?.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], json["exceptionDetails"] == nil else { return nil }
+        return (json["result"] as? [String: Any])?["value"] as? String
+    }
+
     func browser(_ browser: CraBrowser, didChangeURL url: String) {
         guard let id = tabID(of: browser) else { return }
         runtimes[id]?.navigationRevision &+= 1
+        // A quiet page that navigates leaves the player; a playlist moving on keeps its card.
+        if !browser.isAudible { nowPlaying?.remove(id) }
         // Our own error page is a data: URL; keep the real address in the model.
         if url.hasPrefix("data:text/html;base64,") { return }
         store.updateTab(id, url: url)

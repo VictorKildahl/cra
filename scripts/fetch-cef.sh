@@ -9,11 +9,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-CEF_VERSION="${CEF_VERSION:-156.0.14+g4fa4ab5+chromium-156.0.8078.48}"
+CEF_VERSION="${CEF_VERSION:-156.0.15+gcf671c0+chromium-156.0.8078.80}"
 ARCH="${CEF_ARCH:-macosarm64}"
 NAME="cef_binary_${CEF_VERSION}_${ARCH}_minimal"
 # Bump the suffix (codecs2, …) when the build changes but CEF_VERSION does not.
-CEF_RELEASE="${CEF_RELEASE:-cef-${CEF_VERSION%%+*}-codecs4}"
+CEF_RELEASE="${CEF_RELEASE:-cef-${CEF_VERSION%%+*}-codecs1}"
 URL="${CEF_URL:-https://github.com/VictorKildahl/cra/releases/download/${CEF_RELEASE}/cef_binary_${ARCH}_minimal.tar.bz2}"
 
 mkdir -p vendor

@@ -181,7 +181,9 @@ enum ArcImporter {
                     i += 2
                 }
             }
-            var sp = ImportedSpace(title: title, emoji: emoji, theme: theme(from: space))
+            // A space without a theme is Arc's default dark purple, close to Ink. Not the next
+            // preset: that shifted every later space onto another colour (issue #30).
+            var sp = ImportedSpace(title: title, emoji: emoji, theme: theme(from: space) ?? SpaceTheme.presets[0])
             let profile = space["profile"] as? NSDictionary
             sp.favorites = favoritesByProfile.first { $0.profile.isEqual(profile) }?.items ?? allFavorites
             if let p = pinnedID, let c = items[p] { sp.pinned = (c["childrenIds"] as? [String] ?? []).compactMap(convert) }
@@ -273,11 +275,25 @@ enum ArcImporter {
         guard let v = variant else { return nil }
         if let a = v["contentOverBackgroundAppearance"] as? String { appearance = a }
         let vibrant = v["isVibrant"] as? Bool ?? false
-        guard let style = v["style"] as? [String: Any], let color = style["color"] as? [String: Any],
-              let c0 = color["_0"] as? [String: Any], let bg2 = c0["blendedGradient"] as? [String: Any],
-              let g = bg2["_0"] as? [String: Any], let base = g["baseColors"] as? [[String: Any]], !base.isEmpty else { return nil }
-        let overlays = g["overlayColors"] as? [[String: Any]] ?? []
         func comp(_ c: [String: Any], _ k: String) -> Double { max(0, min(1, c[k] as? Double ?? 0)) }
+        func hexOf(_ c: [String: Any]) -> String {
+            String(format: "#%02X%02X%02X", Int((comp(c, "red") * 255).rounded()),
+                   Int((comp(c, "green") * 255).rounded()), Int((comp(c, "blue") * 255).rounded()))
+        }
+        let c0 = ((v["style"] as? [String: Any])?["color"] as? [String: Any])?["_0"] as? [String: Any]
+        // A solid colour (Arc's colour picker with one dot) is `blendedSingleColor`. Themes
+        // Cra can't read still carry Arc's derived palette, whose mid tone keeps the hue.
+        if let s = (c0?["blendedSingleColor"] as? [String: Any])?["_0"] as? [String: Any], let c = s["color"] as? [String: Any] {
+            let mods = s["modifiers"] as? [String: Any]
+            return solidTheme(hexOf(c), intensity: mods?["intensityFactor"] as? Double ?? 1,
+                              noise: mods?["noiseFactor"] as? Double ?? 0, appearance: appearance)
+        }
+        guard let bg2 = c0?["blendedGradient"] as? [String: Any], let g = bg2["_0"] as? [String: Any],
+              let base = g["baseColors"] as? [[String: Any]], !base.isEmpty else {
+            guard let mid = (wt["primaryColorPalette"] as? [String: Any])?["midTone"] as? [String: Any] else { return nil }
+            return solidTheme(hexOf(mid), intensity: 1, noise: 0, appearance: appearance)
+        }
+        let overlays = g["overlayColors"] as? [[String: Any]] ?? []
         // Arc blends an overlay gradient onto the base gradient and the wheel
         // mixes the two base colours; bake both into our two stops (fitted to
         // Arc's rendering: top stop leans toward the second base colour).
@@ -330,6 +346,12 @@ enum ArcImporter {
         }
         return SpaceTheme(colors: colors, intensity: intensity,
                           noise: mods?["noiseFactor"] as? Double ?? 0.15, appearance: appearance, vibrant: vibrant, accent: accent)
+    }
+
+    /// One flat colour (SpaceTheme.solid). Arc draws it the same whether or not it is
+    /// marked vibrant, so only the colour, intensity and text appearance carry over.
+    private static func solidTheme(_ hex: String, intensity: Double, noise: Double, appearance: String) -> SpaceTheme {
+        SpaceTheme(colors: [hex, hex], intensity: intensity, noise: noise, appearance: appearance, accent: hex, solid: true)
     }
 }
 

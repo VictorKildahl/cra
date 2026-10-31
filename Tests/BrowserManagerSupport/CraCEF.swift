@@ -24,6 +24,7 @@ public final class CraBrowser {
     public var isInPictureInPicture = false
     public var isPictureInPicturePlaying = false
     public var isCapturingMedia = false
+    public var isAudible = false
     public var hasDevTools = false
     public var closedByPage = false
     public let isIncognito: Bool
@@ -52,6 +53,10 @@ public final class CraBrowser {
     public func skipPictureInPicture(by seconds: Double) {}
     public func sendDevToolsMethod(_ method: String, params: String, completion: @escaping (String?, String?) -> Void) {
         replies.append((method, completion))
+    }
+    /// Recorded as "<world>:Runtime.evaluate".
+    public func evaluate(inIsolatedWorld world: String, params: String, completion: @escaping (String?, String?) -> Void) {
+        replies.append(("\(world):Runtime.evaluate", completion))
     }
     public func reply(to method: String, with result: String?) {
         guard let index = replies.firstIndex(where: { $0.method == method }) else { fatalError("No pending \(method)") }

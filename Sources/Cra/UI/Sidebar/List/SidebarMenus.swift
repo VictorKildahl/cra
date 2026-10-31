@@ -227,13 +227,18 @@ enum SidebarMenus {
     /// Arc 1.171's split menu, item for item where Cra has the feature (no Share or Change Icon).
     /// It is pinned by dragging it into Pinned or with Pin Tab (⌘D), not from here.
     static func split(_ m: SplitRowModel, list: SpaceListView) -> NSMenu {
-        let store = list.store, ui = list.ui, actions = list.actions
-        let id = m.id
+        split(m.id, panes: m.cells.map { ($0.id, $0.title) }, open: m.selected, store: list.store, ui: list.ui, actions: list.actions)
+    }
+
+    /// A split's menu, from its sidebar row or its favorite tile.
+    static func split(_ id: UUID, panes: [(id: UUID, title: String)], open: Bool, store: SidebarStore, ui: SidebarUIState,
+                      actions: SidebarActions, leading: (NSMenu) -> Void = { _ in }) -> NSMenu {
         let menu = menu()
-        let children = m.cells.map(\.id)
+        leading(menu)
+        let children = panes.map(\.id)
         add(menu, "Separate All Tabs") { store.separateAll(id) }
         // Arc greys it out while the split is closed (no pane to add next to).
-        add(menu, "Add Tab…", enabled: m.selected && children.count < 4) {
+        add(menu, "Add Tab…", enabled: open && children.count < 4) {
             if let first = children.first {
                 actions.focusPane(first)
                 actions.performAction("addSplitView")
@@ -244,8 +249,8 @@ enum SidebarMenus {
         }
         menu.addItem(.separator())
         note(menu, "Tab Options")
-        for c in m.cells {
-            paneItems(submenu(menu, c.title), c.id, list: list)
+        for c in panes {
+            paneItems(submenu(menu, c.title), c.id, store: store, actions: actions)
         }
         menu.addItem(.separator())
         add(menu, "Rename…") { ui.renamingID = id }
@@ -261,8 +266,7 @@ enum SidebarMenus {
     }
 
     /// One pane's submenu under "Tab Options" (Arc: childItem(id, …)).
-    private static func paneItems(_ menu: NSMenu, _ id: UUID, list: SpaceListView) {
-        let store = list.store, actions = list.actions
+    private static func paneItems(_ menu: NSMenu, _ id: UUID, store: SidebarStore, actions: SidebarActions) {
         guard let tab = store.item(id)?.tab else { return }
         add(menu, "Separate from Split View") { store.separateFromSplit(id) }
         menu.addItem(.separator())

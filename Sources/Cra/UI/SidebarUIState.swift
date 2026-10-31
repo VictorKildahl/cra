@@ -17,6 +17,10 @@ final class SidebarUIState {
     var loadedTabIDs: Set<UUID> = []
     /// Tabs using the camera or microphone (Arc's recording indicator).
     var capturingTabIDs: Set<UUID> = []
+    /// Tabs playing sound (Arc's speaker button).
+    var audibleTabIDs: Set<UUID> = []
+    /// The window's sidebar player (NowPlayingTrayView), fed by its BrowserManager.
+    @ObservationIgnored let nowPlaying = NowPlaying()
     var canGoBack = false
     var canGoForward = false
     var isLoading = false

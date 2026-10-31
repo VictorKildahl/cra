@@ -670,9 +670,26 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
 ### One space (Arc 1.171, static)
 - [O strings] Defaults key `showSpaceHeaderOnSingleUnnamedSpaces` (+ `…DidChange` action); the space context
   menu has "Show Space Header" / "Hide Space Header" ("Menu item to toggle space header visibility").
-  Not observed live: it needs a one-space Arc, and rewriting StorableSidebar.json risks syncing deleted spaces.
   Cra: Hide Space Header on the header's menu with one space, Show Space Header on the list's menu, and
   Settings ▸ Tabs ▸ "Show the space header with only one space"; hidden also drops the dock's lone icon.
+- [O] One-space Arc, run live 31 Oct without risking sync: `CFFIXED_USER_HOME=<fake home>` with a trimmed
+  StorableSidebar.json (one untitled space, nothing pinned) plus the Storable{AuthState,FeatureFlags,
+  EducationState,MembershipCard,DefaultBrowserPrompts,KeyBindings}.json copies, launched as
+  `sandbox-exec` (deny network-outbound ip/tcp/udp) `…/MacOS/Arc --no-sandbox`. Without `--no-sandbox` the
+  GPU process dies (nested seatbelt) and Arc never orders its windows in. Traps: cfprefsd ignores the fake
+  home, so the copy writes the REAL company.thebrowser.Browser domain (back it up, restore after); `open -a
+  Arc` while the copy runs launches the real Arc; File ▸ New Window over AX opens a window.
+  "Unnamed" means no title AND no icon: a space with an emoji shows "Space 1" and keeps its header,
+  however the defaults key is set. Drop `customInfo.iconType` too and Arc hides the header by itself.
+  `topBarURLEnabled` (real domain) puts the URL field in the sidebar; the favorites card closes over AX
+  (`sidebarFavoritesEmptyStateDismissButton`, writes `topAppsEmptyStateDismissedForProfiles`).
+- [O] Measured (2x px, URL field in the sidebar, 31 Oct). Everything under the favorites is placed from the
+  tiles' bottom, or with none from the URL field's; the favorites block (8 pt gap + tiles) takes no room
+  when empty. Divider line below that point: header shown 54.5 pt; hidden 15.5 pt (no favorites) or
+  18.5 pt (favorites). Header cap tops 21.5 pt below it either way. Every pinned row takes 41 pt, the
+  first one too; nothing pinned takes none. Line → first Today row 11.5 pt. Cra matches all eight
+  combinations of header × pinned × favorites to the pixel (SpaceColumnView.place, SpaceListView.layoutRows).
+  Left: Arc's header title sits ~1 pt lower and reads slightly larger than Cra's.
 
 ### DevTools docking, Arc's way (25 Oct)
 
@@ -1628,8 +1645,13 @@ GitHub issue #4: opening in window B a tab that window A shows left A with no ta
 - [O live] Favorites columns by sidebar width (4 favorites; `sidebarWidth` set in StorableWindows.json with Arc
   quit, tile frames read from the AX list under `sidebarFavoritesCollectionView`): 347/300/260/230 → 4 columns
   (tiles 76/…/55/47 × 47), 227/225/220/212/205/200/170/140 → 2 columns (101/100/98/94/90/88/73/58), 100 → 1
-  (84). Rule: 4 columns while a tile is at least 47 pt wide (as wide as tall), else 2, else 1; 8 pt margins and
-  gaps. Never 3 (at 200 three 56 pt tiles would fit). Cra: `FavoritesGridView.columns(forWidth:)`.
+  (84). That rule ("4, else 2, else 1, never 3") only held for exactly 4 favorites.
+- [O live, Arc 1.171, 31 Oct] 1–9 favorites at widths 347/230/200/140/100 (offline copy, AX frames). Widest =
+  the most columns up to 4 keeping a tile ≥ 47 pt (3 at 200, 2 at 140, 1 at 100); then the fewest columns
+  that need no more rows: 1 → one full-width tile, 2 → halves, 3 → thirds, 5 → 3 + 2, 6 → 3 × 2, 7 → 4 + 3,
+  9 → 3 × 3; 4 at 200 → 2 × 2. A short last row keeps the tile width, left-aligned. Tile x is rounded to the
+  half point (84.75 → 85, 254.25 → 254.5); widths are not. Cra (`FavoritesGridView.columns(forWidth:)`)
+  matches all 41 measured cases exactly.
 - [O static] Peek is a Little Arc presented modally (`littleWindowViewController`, `presentModally`,
   `modalState`, `peekedModalControlsAlternateOrderEnabled`). Links ▸ "Open a Peek window when clicking on links to
   other sites" (note: "This only affects Favorites and Pinned tabs"; key `modalEnabled`) and "Open a Peek window
@@ -1639,3 +1661,116 @@ GitHub issue #4: opening in window B a tab that window A shows left A with no ta
   that closes it on click, Escape the page didn't use closes it, "Open in <space>" makes it a tab. Same site =
   registrable domain (`SiteKey`). Verified on a test bundle with a CDP click in a favorite: Peek opened, the tab
   stayed, promote and ⌘W worked.
+
+### Splits in Favorites (Arc 1.171, 31 Oct 2026, Swift metadata + offline Arc)
+Request from a Cra user (DM, 31 Oct): "the split tabs being pinned, I also need them pinned at the top".
+- [O static] A top-apps item can be a split: `AppTray…ViewState.AppItem { childItems: OrderedDictionary<id,
+  ChildItem { defaultIconType, highFidelityIconMatchingURL }>, layoutOrientation: horizontal|vertical, isSelected,
+  isHighlighted, … }`, drawn by `AppTrayItemViewAppKit` with one `AppTrayChildItemView` per pane (own isHovered /
+  isSelected / subtitle / badge) and cut by `AppTrayItemMaskShape { numberOfItems, cornerRadius, lineWidth,
+  isReversed, layoutOrientation }`; per-cell rects with their own rounded corners (`AppTrayItemLayout.ItemLayout`).
+- [O live] Offline Arc (fake home, see "One space") with a horizontal and a vertical split in StorableSidebar's
+  topApps container (`splitView` items, children = panes): one tile per split, the same size as a page's tile,
+  cut by a 2 pt gap (4 px at 2x) along the split's axis — side by side, or stacked for a vertical split. Outer
+  corners stay rounded, the cut's corners are square. Hover darkens the whole tile, not one cell. Clicking a cell
+  opens the split; the open split's tile is ONE selected tile with no cut (uniform 240/239/232 on a light theme).
+- Cra: favorites hold splits (`SidebarStore.addToFavorites` lifts a pane to its split, `removeFromFavorites` too),
+  `FavoriteTileModel.cells` + `FavoriteTileMetrics.cut` (an even-odd mask, dropped while the split is open), a
+  click opens the split on the pressed pane, the tooltip names the hovered pane, the menu is the split row's with
+  "Remove from Favorites" first. Not seen in Arc: the open split's icons (offline Arc had no favicons).
+
+### Folder previews (Arc 1.171, 31 Oct 2026, Swift metadata + offline Arc, 120 fps recordings)
+- [O static] `Previews.FolderPreviewState { itemID, title, allPossibleChildren: [FolderPreviewItem] }`,
+  `FolderPreviewItem { sidebarItem, title, url, faviconType, lastVisitDate, isBadged }`,
+  `Arc.FolderPreviewView { searchQuery, selectedItemID, contentViewHeight }` in an in-window
+  `FolderPreviewHostView` with an event monitor; `FolderPreviewAction = onSelectChildItem(index, resultsCount,
+  modifiers, searchQuery) | contextMenu(copyURL, openInSplitView, duplicate, archive) | onAppear | onEscape |
+  onLeftMouseDownOutOfFrame`. Shown by `SidebarPreviewHoverTracker` (`showPreviewTask`); settings key
+  `folderPreviewEnabled`, one of the "Show Arc Previews:" toggles ("Hover your mouse over an Arc Folder, Pinned,
+  or Favorited tab…").
+- [O live] Only a CLOSED folder previews (an open one shows nothing). Rows = every tab under it, nested folders
+  included, newest `lastVisitDate` first, subtitle "31 minutes ago" / "15 hours ago" / "1 week ago" / "1 month
+  ago"; the first row is highlighted and the field already has the caret ("Search Tools…"). Typing filters
+  (title/URL), the panel keeps its height; nothing found: "No tabs matching that search 🤔", 13 pt, centred,
+  wrapped so the emoji takes a second line. Escape closes. The pointer's row gets the same fill as the
+  keyboard's row, both at once (hover doesn't move the selection). Moving onto another folder switches.
+- [O live] Timing: the folder row turns hovered, the preview starts 0.45 s later and is in after ~90 ms (opacity
+  plus scale from ~0.85 about the middle of its left edge); leaving folder and preview fades it out within
+  ~40 ms over ~80 ms.
+- [O live] Geometry (2x captures, sidebar 300): 240 pt wide, 4 pt right of the sidebar, centred on the folder
+  row and kept 18 pt inside the window (so a folder near the top gets a preview at y 18); height
+  53 + 45 × rows, at most 320 (6+ rows scroll; one row = 98). 10 pt corners, 0.5 pt grey (~58) outline and a 0.5 pt
+  white-20 % line inside it. Search area 48 pt (11.5 pt magnifier centred 20 pt in, 13 pt text from x 36,
+  placeholder white ~58 %), 1 pt white-13 % hairline, rows from 4 pt below it on a 45 pt pitch, fill 44 pt tall,
+  4 pt in from each side, 4 pt corners, white ~7.5 %; 16 pt favicon centred 20 pt in, title 13 pt regular
+  (white ~85 %) and age 11 pt (white ~55 %) from x 36. Always dark, whatever the space theme: a blur that lets
+  ~12 % of the backdrop through (23/23/23 over a dark page, 45/44/36 over a light yellow one) — a page icon
+  under it did not show through.
+- Cra: `UI/Sidebar/FolderPreview.swift` (a child panel, since pages are CEF child windows; hudWindow dark +
+  rgb 17 @ 77 % over it), hooked from `SpaceListView.hoverAt`, Settings ▸ Tabs "Preview a folder’s tabs when
+  hovering over it" (`AppSettings.folderPreviews`), a floating sidebar stays out while it is up, and
+  `cra://debug?folderPreview=<folder id>` opens it for screenshots. Text widths, baselines, hairline and
+  magnifier match Arc's to the pixel at 2x. Left as Cra's choice: typing or arrowing keeps it open after the
+  pointer leaves (not observed in Arc); picking a tab in a closed folder leaves the folder closed without
+  showing the tab under it (Arc keeps a closed folder's open tab visible; Cra's 29 Oct work on that isn't on main).
+
+## Solid themes, list scroller, now playing, many spaces (Arc 1.171, 31 Oct 2026, offline Arc, issues #28 #30–#33)
+
+Offline Arc as in "One space", with these extra traps: Arc wipes a hand-built StorableSidebar.json (first-run
+"Space 1") when there is no StorableWindows.json, or when `firebaseSyncState.syncHealthStatus` is `healthy`
+(it syncs and empties the spaces); reuse the sync states from a file Arc itself wrote offline (`notWorking`).
+Arc's menus are disabled while it is in the background: activate it by pid (`open -a` starts the real Arc).
+Theme palettes in a hand-built space can be borrowed; only the `background` style was measured.
+
+**Captures on the built-in display are Display P3.** A solid sRGB colour reads back P3-encoded (cyan #33B2CC →
+~#5BB0C9), so convert before comparing with sRGB colours; compare Cra and Arc through the same pipeline.
+
+- [O] Solid colour (`blendedSingleColor`): flat, the same with `isVibrant` true or false and with light or dark
+  `contentOverBackgroundAppearance`. Over solid white and black backdrops, nine colours, in sRGB: active =
+  α·colour + (1 − α)·(66 + 0.52·backdrop), inactive = α·colour + (1 − α)·212 (flat), α = 0.19 + 0.55·intensity
+  (0.191 / 0.459 / 0.742 at 0 / 0.5 / 1), within 3/255. Cra (`SpaceTheme.solid`, `ShellView.solidBackdrop`: dim
+  0.30, lift 0.26; inactive dim 1, lift 0.83) matches all 22 test spaces within 2/255 over both backdrops, except
+  intensity 0 over white (19/255 light). A space with no `windowTheme` is Arc's default dark purple; the import
+  uses Ink instead of the next preset.
+- [O] Tab list scroller: AppKit overlay scroller (AXScrollBar, 17 pt track) shown while scrolling, then faded;
+  the knob is 4 pt wide, 3 pt in from the sidebar edge, white 49 % on a dark theme, no track. Cra:
+  `SidebarScroller`, 10 pt wide so it stays in the gutter right of the rows (knob on Arc's exact columns).
+- [O] Playing tab row: `speaker.wave.3` between favicon and title (17.5 pt wide, 11.5 tall, title 8 pt after
+  it), white ~60 % on a dark theme (the glyph tone, not the title's colour).
+- [S] Now playing is Arc's `MediaControlsFeature` (ArcCore-free, in the Arc executable): SwiftUI `MiniPlayerView`s in
+  a `MediaControlsHostingView`, fed by Chromium's media session (`webContents:didChangeMediaSessionState:`). Swift
+  field metadata: `MiniPlayerFeature.State` {title, icon {image, tintColor}, volume: Double, isTabMuted,
+  isBackToPIPButtonEnabled, tabURL, isVolumeExpanded, mediaType = audioVideo {mediaSessionStatus, hasNextTrack,
+  hasPreviousTrack} | recording {canToggleMicrophone/Camera, isMicrophoneOn/CameraOn}}; view actions setVolume,
+  setIsPaused, toggleVolumeDrawer, backToTabClicked, titleRowClicked, controlsRowClicked, playNext/PreviousTrack,
+  closeButtonClicked, toggleMuted, toggleCamera/Microphone, backToPipClicked; `MediaControlsData.maxActiveMediaControls`;
+  per-card view state {height, opacity, yOffset, widthOffset}; `MiniPlayerView` reads colorPalette + colorScheme;
+  marquee titles behind `miniPlayerMarqueeTitleEnabled`. Asset catalog `ARC_MediaControlsFeature.bundle`: one colour,
+  `PlaybackControlForeground` = black 50 % (light) / white 66 % (dark). Long strings: "Close Mini Player", "Open
+  Picture in Picture", "Adjust Tab Volume", "Toggle Microphone"; symbols backward/forward.end.fill,
+  speaker.wave.3.fill / speaker.wave.1.fill, video.slash.fill (short ones are inline, read live instead).
+- [O] Now playing, live: a card appears for an audio tab once it is off screen (a video in Picture in Picture has
+  none). Cards 8 pt in, bottom where the list ends (50 pt above the window bottom), 6 pt corners, filled with the
+  palette's `backgroundExtra` for the space's scheme: dark = 15 % of `shadedDark` (#110D00 for #6F5600), light =
+  near-white (#FEFDFC); title white ~81 % / black ~85 %; disabled glyphs a third of the foreground; hover square
+  24 × 23 pt, white 7 % / black 8 %; favicon placeholder foreground ~15 %. Rest: newest card only, 33 pt: favicon,
+  previous, play/pause, next, volume, laid out like an HStack (glyphs 16 / 13 / 8.5 / 13 / 19 pt, equal gaps,
+  14 pt in on the left, 12.5 on the right); up to two more peek out, each 7 pt higher, 5 pt narrower a side and
+  0.2 fainter, the second showing the tops of its controls at ~15 % (raised 7.25 pt). Hover: all cards 65.5 pt,
+  title row (tab title, 13 pt, 14.5 pt in, centred 16.25 pt from the top; Picture in Picture glyph 15.5 pt wide
+  centred 45.5 pt from the right on video tabs; ✕ 11 pt centred 21.75 pt from the right), stacked upward 5 pt
+  apart, oldest on top, ~0.2 s ease-out both ways (collapse starts at once). Tooltips: "Back to Tab", "Previous
+  Track", "Pause"/"Play", "Next Track", "Adjust Tab Volume", "Open Picture in Picture", "Close Mini Player";
+  disabled previous/next (no media session handler) have neither tooltip nor hover; the title row has neither.
+  Volume opens a drawer: the card grows 33 pt (bottom fixed) with a slider centred 16.25 pt from the bottom: 6 pt
+  rounded track 8 pt in, filled = palette tintedLight (dark) / shadedDark (light), empty = white 10 % / black 18 %,
+  knob 20 × 16 pt pill, #DBDBD9 (dark) / white with a soft shadow (light); the volume button stays lit; the glyph
+  shows 3 waves, 1 wave (seen at 27 % and 45 %), none at 0. Pause keeps the card (▶); ✕ removes it. Cra:
+  `NowPlaying` + `NowPlayingTrayView` (verified side by side in both schemes, glyph boxes within 1 px); controls
+  run the page's media session handlers (captured by `PageScript`) or its media elements; volume sets the page's
+  media volume. Not built: the recording card (mic/camera) and marquee titles.
+- [O] Space dock with many spaces (5, 7, 8, 12, 16, 22 spaces): cells share the 217 pt between Library and +
+  (300 pt sidebar) in half points, at most 34; below 22 pt the open space keeps 22 and the others split the
+  rest (17.5 / 13 / 9 pt with 12 / 16 / 22 spaces); icon-less spaces are dots, small when squeezed. Cra
+  (`SpaceDockView.cellWidths`) follows the widths and shrinks emoji in narrow cells; it has no icon-less spaces
+  yet (imported ones get 🗂️).

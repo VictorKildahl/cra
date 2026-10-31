@@ -249,6 +249,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             guard let main = app?.main, let window = main.window, let key = NSApp.keyWindow, key === window || key.parent === window else { return nil }
             return main.extensionPopupAnchor(id)
         }
+        browsers.nowPlaying = sidebarUI.nowPlaying
+        sidebarUI.nowPlaying.perform = { [weak self] id, action in
+            guard let self else { return }
+            switch action {
+            case .show:
+                store.selectTab(id, window: windowID)
+                window?.makeKeyAndOrderFront(nil)
+            case .toggleMute:
+                let muted = !(store.item(id)?.tab?.muted ?? false)
+                store.setMuted(id, muted)
+                app.runtime(for: id)?.browser.setAudioMuted(muted)
+            default:
+                browsers.performNowPlaying(id, action)
+            }
+        }
         sidebarActions.performAction = { [weak self] id in
             if id.hasPrefix("muteTab:"), let uuid = UUID(uuidString: String(id.dropFirst(8))) {
                 let muted = self?.store.item(uuid)?.tab?.muted ?? false
@@ -302,6 +317,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             shell.vibrancyLift.isHidden = !palette.vibrant
             shell.vibrantDark = palette.isDark
             shell.vibrantLight = palette.vibrant && !palette.isDark
+            shell.solidBackdrop = palette.solid
             shell.refreshLift()
             window?.isOpaque = !palette.vibrant
             window?.backgroundColor = palette.vibrant ? .clear : NSColor(palette.gradientColors.first ?? .gray)
@@ -372,6 +388,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if loaded != sidebarUI.loadedTabIDs { sidebarUI.loadedTabIDs = loaded }
         let capturing = Set(app.mainWindows.flatMap { $0.browsers.runtimes.filter { $0.value.browser.isCapturingMedia }.keys })
         if capturing != sidebarUI.capturingTabIDs { sidebarUI.capturingTabIDs = capturing }
+        let audible = Set(app.mainWindows.flatMap { $0.browsers.runtimes.filter { $0.value.browser.isAudible }.keys })
+        if audible != sidebarUI.audibleTabIDs { sidebarUI.audibleTabIDs = audible }
         let b = browsers.visibleRuntime?.browser
         if sidebarUI.canGoBack != (b?.canGoBack ?? false) { sidebarUI.canGoBack = b?.canGoBack ?? false }
         if sidebarUI.canGoForward != (b?.canGoForward ?? false) { sidebarUI.canGoForward = b?.canGoForward ?? false }
@@ -1225,13 +1243,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func browserManagerPageClosedTab(_ tabID: UUID) { closeTab(tabID) }
 
     /// Arc's Peek (Settings ▸ Tabs ▸ Links): a link to another site clicked in a favorite or
-    /// pinned tab, or any Shift-clicked link, opens over the window and the tab stays put.
+    /// pinned tab (any tab with "In every tab" on), or any Shift-clicked link, opens over the
+    /// window and the tab stays put.
     func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool) -> Bool {
         guard !isIncognito, let target = SiteKey.site(of: url) else { return false }
         if shiftClick {
             guard store.settings.peekOnShiftClick else { return false }
         } else {
-            guard store.settings.peekLinksToOtherSites, store.isPinned(tabID),
+            guard store.settings.peekLinksToOtherSites,
+                  store.settings.peekInEveryTab || store.isPinned(tabID),
                   let here = SiteKey.site(of: pageURL), here != target else { return false }
         }
         app.openPeek(url: url, over: self)
@@ -1405,6 +1425,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             self?.focusedSpace.theme.palette ?? SpaceTheme.presets[0].palette
         })
         f.sidebarHidden = { [weak self] in self.map { !$0.sidebarVisible } ?? false }
+        f.staysShown = { FolderPreviewController.shared.isOpen }
         f.didAttachPanel = { [weak self] in
             // Keep toasts and the find bar above the floating sidebar.
             self?.raiseOverlayPanels()

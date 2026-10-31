@@ -13,6 +13,7 @@ struct TabsPane: View {
                 SettingsCheckbox(title: "Add new tabs to the top", isOn: $store.settings.newTabsAtTop)
                 SettingsCheckbox(title: "Show the New Tab button above tabs", isOn: $store.settings.newTabButtonAtTop)
                 SettingsCheckbox(title: "Haptic feedback when reordering tabs", isOn: $store.settings.hapticFeedbackOnReorder)
+                SettingsCheckbox(title: "Preview a folder’s tabs when hovering over it", isOn: $store.settings.folderPreviews)
                 SettingsCheckbox(title: "Show toolbar above the page", isOn: $store.settings.showToolbar)
                 SettingsCheckbox(title: "Pages fill the window edge to edge", isOn: $store.settings.edgeToEdgeContent)
                 SettingsCheckbox(title: "Enable Picture in Picture when you leave a video tab", isOn: $store.settings.autoPictureInPicture)
@@ -29,8 +30,9 @@ struct TabsPane: View {
             SettingsFormRow(label: "Links:") {
                 SettingsCheckbox(title: "Links from other apps open in a Little Window", isOn: $store.settings.openExternalLinksInLittleWindow)
                 SettingsCheckbox(title: "Open a Peek window when clicking on links to other sites", isOn: $store.settings.peekLinksToOtherSites)
-                Text("Only links in Favorites and Pinned tabs.")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                SettingsCheckbox(title: "In every tab, not only Favorites and Pinned tabs", isOn: $store.settings.peekInEveryTab)
+                    .disabled(!store.settings.peekLinksToOtherSites)
+                    .padding(.leading, 20)
                 SettingsCheckbox(title: "Open a Peek window when clicking on links with Shift held", isOn: $store.settings.peekOnShiftClick)
                 HStack(spacing: 8) {
                     Button("Air Traffic Control…") { showsAirTrafficControl = true }

@@ -46,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         installURLEventHandler()
         CraCEFRuntime.setChromeHosting(store.settings.chromeEngine)
         CraCEFRuntime.setOwnContextMenus(EmbeddedPages.isEnabled)
+        CraCEFRuntime.setDocumentStartScript(PageScript.mainWorld, isolatedScript: PageScript.isolatedWorld, world: PageScript.world)
         startContentBlocking()
         SoftwareUpdater.shared.start(app: self)
         buildMenus()
@@ -496,11 +497,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             if let st = dict["status"] { main.browserManager(statusMessage: st); return }
+            if let t = dict["selectTab"].flatMap(UUID.init(uuidString:)) { store.selectTab(t, window: main.windowID); return }
+            // One tab-sleeping pass with a short threshold (seconds), so it can be tried without waiting.
+            if let s = dict["sleepTabs"].flatMap(Double.init) {
+                for w in mainWindows { w.browsers.sleepIdleTabs(hiddenLongerThan: s) }
+                return
+            }
             // Opens what normally needs a pointer or a held key, for screenshots.
             if let v = dict["downloads"] { main.sidebarUI.downloadsListOpen = v == "1"; return }
             if let v = dict["banner"] { SoftwareUpdater.shared.debugUpdated(v == "none" ? nil : v); return }
             if dict["switcher"] != nil { main.debugTabSwitcher(); return }
             if dict["jumpPill"] != nil { SpaceListView.jumpToSelected(for: main.sidebarUI, space: store.focusedSpaceID); return }
+            if let f = dict["folderPreview"] {
+                if let id = UUID(uuidString: f) { SpaceListView.debugFolderPreview(id, ui: main.sidebarUI) } else { FolderPreviewController.shared.close() }
+                return
+            }
             if dict["littlePopup"] != nil { littleWindows.first?.togglePopup(); return }
             if let c = dict["combine"], let content = main.window?.contentView {
                 let tabs = store.children(of: store.focusedSpace.todayContainerID).filter { $0.tab != nil }
