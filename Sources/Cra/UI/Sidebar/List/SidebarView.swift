@@ -13,6 +13,7 @@ final class SidebarView: NSView {
     private let topBar: SidebarTopBarView
     private let pager: SpacePagerView
     private let trayHost: DownloadsTrayView
+    private let player: NowPlayingTrayView
     private let trayMask = CAGradientLayer()
     private let bannerHost = UpdateBannerView()
     private let dock: SpaceDockView
@@ -30,14 +31,16 @@ final class SidebarView: NSView {
         topBar = SidebarTopBarView(store: store, ui: ui, actions: actions)
         pager = SpacePagerView(store: store, ui: ui, actions: actions, favicons: favicons)
         trayHost = DownloadsTrayView(ui: ui)
+        player = NowPlayingTrayView(store: store, ui: ui, favicons: favicons)
         dock = SpaceDockView(store: store, ui: ui, actions: actions)
         super.init(frame: .zero)
         wantsLayer = true
         pager.wantsLayer = true
         trayMask.startPoint = CGPoint(x: 0.5, y: 0)
         trayMask.endPoint = CGPoint(x: 0.5, y: 1)
-        for v in [topBar, pager, trayHost, bannerHost, dock] as [NSView] { tabs.addSubview(v) }
+        for v in [topBar, pager, player, trayHost, bannerHost, dock] as [NSView] { tabs.addSubview(v) }
         addSubview(tabs)
+        player.onCountChange = { [weak self] in self?.needsLayout = true }
         observe()
     }
 
@@ -64,6 +67,7 @@ final class SidebarView: NSView {
             let colors = SidebarColors(palette)
             trayHost.colors = colors
             bannerHost.colors = colors
+            player.setTheme(space.theme.accent ?? space.theme.colors.first, dark: palette.isDark)
             libraryHost?.palette = palette
         }
         self.bannerHeight = bannerHeight
@@ -153,7 +157,10 @@ final class SidebarView: NSView {
         dock.frame = NSRect(x: 10, y: b.height - 6 - dockH, width: b.width - 20, height: dockH)
         let bannerTop = b.height - 6 - dockH - 8 - bannerHeight
         bannerHost.frame = NSRect(x: 0, y: bannerTop, width: b.width, height: bannerHeight)
-        pager.frame = NSRect(x: 0, y: th, width: b.width, height: max(0, bannerTop - th))
+        // The player rests where the list ends and takes that room from it; opened, it grows over the list.
+        player.frame = NSRect(x: 0, y: th, width: b.width, height: max(0, bannerTop - th))
+        let listBottom = bannerTop - NowPlayingMetrics.restHeight(cards: player.shownCount)
+        pager.frame = NSRect(x: 0, y: th, width: b.width, height: max(0, listBottom - th))
         let rows = DownloadHistory.shared.recent.count
         let trayH = DownloadsTrayMetrics.listHeight(rows: rows) + 4
         trayHost.frame = NSRect(x: 0, y: pager.frame.maxY - trayH, width: b.width, height: trayH)
@@ -580,7 +587,29 @@ final class SpaceDockView: NSView {
         }
     }
 
-    private var stripX: CGFloat { (bounds.width - CGFloat(order.count) * Self.cell.width) / 2 }
+    /// Arc 1.171 with 5 to 22 spaces (31 Oct 2026): every space gets an equal share of the 217 pt
+    /// between the Library and + buttons (300 pt sidebar), in half points and at most 34 pt. Below
+    /// 22 pt the open space keeps 22 and the others split the rest: 17.5 pt each with 12 spaces, 13
+    /// with 16, 9 with 22. The strip stays centred, so it never runs past the buttons.
+    private var cellWidths: [CGFloat] {
+        let n = order.count
+        guard n > 0 else { return [] }
+        let room = max(0, bounds.width - 63)
+        let even = min(Self.cell.width, floor(room / CGFloat(n) * 2) / 2)
+        guard even < 22, n > 1 else { return Array(repeating: even, count: n) }
+        let rest = max(4, floor((room - 22) / CGFloat(n - 1) * 2) / 2)
+        return order.map { $0 == focused ? 22 : rest }
+    }
+
+    /// Left edges of the cells, in order.
+    private var cellXs: [CGFloat] {
+        let ws = cellWidths
+        var x = (bounds.width - ws.reduce(0, +)) / 2
+        return ws.map { w in defer { x += w }; return x }
+    }
+
+    /// The width a dragged space moves by per cell (the cells other than the open one).
+    private var pitch: CGFloat { cellWidths.min() ?? Self.cell.width }
 
     override func layout() {
         super.layout()
@@ -593,24 +622,24 @@ final class SpaceDockView: NSView {
     /// The dragged space follows the pointer; the ones it passes slide a cell the other way, like
     /// the gap Arc's collection view opens at the proposed drop index.
     private func placeCells(animated: Bool, dragX: CGFloat = 0) {
-        let w = Self.cell.width
+        let ws = cellWidths, xs = cellXs, step = pitch
         let y = (bounds.height - Self.cell.height) / 2
         for (i, id) in order.enumerated() {
             guard let c = cells[id] else { continue }
-            var x = stripX + CGFloat(i) * w
+            var x = xs[i]
             if let r = reorder {
-                if r.id == id { x += dragX } else if r.from < i && i <= r.to { x -= w } else if r.to <= i && i < r.from { x += w }
+                if r.id == id { x += dragX } else if r.from < i && i <= r.to { x -= step } else if r.to <= i && i < r.from { x += step }
             }
-            let f = NSRect(x: x, y: y, width: w, height: Self.cell.height)
+            let f = NSRect(x: x, y: y, width: ws[i], height: Self.cell.height)
             if animated && reorder?.id != id { c.animator().frame = f } else { c.frame = f }
         }
         if let r = reorder, let c = cells[r.id] { c.removeFromSuperview(); addSubview(c) }
     }
 
     private func index(at p: NSPoint) -> Int? {
-        let i = Int(floor((p.x - stripX) / Self.cell.width))
-        guard p.y >= 0, p.y <= bounds.height, i >= 0, i < order.count, p.x >= stripX else { return nil }
-        return i
+        guard p.y >= 0, p.y <= bounds.height else { return nil }
+        let ws = cellWidths
+        return cellXs.indices.first { p.x >= cellXs[$0] && p.x < cellXs[$0] + ws[$0] }
     }
 
     // Arc's dock items take the mouse themselves (SidebarDockItemView overrides mouseDown:/mouseUp:):
@@ -657,7 +686,7 @@ final class SpaceDockView: NSView {
         let dx = p.x - r.start.x
         if !r.moved && abs(dx) < 3 && abs(p.y - r.start.y) < 3 { return }
         r.moved = true
-        let w = Self.cell.width
+        let w = pitch
         let clamped = min(max(dx, -CGFloat(r.from) * w), CGFloat(order.count - 1 - r.from) * w)
         let to = min(max(r.from + Int((clamped / w).rounded()), 0), order.count - 1)
         let changed = to != r.to
@@ -695,8 +724,8 @@ final class SpaceDockView: NSView {
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.15
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            placeCells(animated: true, dragX: CGFloat(r.to - r.from) * Self.cell.width)
-            cells[r.id]?.animator().frame.origin.x = stripX + CGFloat(r.to) * Self.cell.width
+            placeCells(animated: true, dragX: CGFloat(r.to - r.from) * pitch)
+            cells[r.id]?.animator().frame.origin.x = (cellXs.first ?? 0) + CGFloat(r.to) * pitch
         } completionHandler: { [weak self] in
             MainActor.assumeIsolated {
                 guard let self else { return }
@@ -788,6 +817,9 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
     override func layout() {
         super.layout()
         emojiHolder.frame = bounds
+        // Squeezed cells (many spaces) shrink the emoji with them, like Arc's dots.
+        let size = min(13, max(5, (bounds.width * 0.62).rounded()))
+        if emoji.font?.pointSize != size { emoji.font = .systemFont(ofSize: size) }
         let h = emoji.intrinsicContentSize.height
         emoji.frame = NSRect(x: 0, y: (bounds.height - h) / 2, width: bounds.width, height: h)
     }

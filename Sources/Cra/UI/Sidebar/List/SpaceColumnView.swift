@@ -51,14 +51,20 @@ final class SpaceColumnView: NSView {
         place(animated: false)
     }
 
+    /// Arc 1.171 (one space, live, 31 Oct) places everything under the favorites from the tiles'
+    /// bottom, or with no favorites from the URL field's (the column starts 8 pt under it, where
+    /// the first tile's top goes): the header 10 pt below, the divider line 54.5 pt below. With
+    /// the header hidden the line is 18.5 pt under the tiles, 15.5 pt under the URL field.
     private func place(animated: Bool) {
         let w = bounds.width
         let fh = favorites.height(forWidth: w - 16)
         let set = { (v: NSView, f: NSRect) in if v.frame != f { animated ? (v.animator().frame = f) : (v.frame = f) } }
         set(favorites, NSRect(x: 8, y: 0, width: w - 16, height: fh))
-        let hh: CGFloat = header.isHidden ? 0 : 31
-        set(header, NSRect(x: 10, y: fh, width: w - 20, height: hh))
-        let top = fh + hh + 3
+        let tiles = favorites.tilesBottom(forWidth: w - 16)
+        let base = tiles ?? -8
+        set(header, NSRect(x: 10, y: base + 10, width: w - 20, height: header.isHidden ? 0 : 31))
+        // The list's line sits 11.5 pt into it (3 pt inset, then halfway down the 18 pt divider).
+        let top = base + (!header.isHidden ? 43 : tiles == nil ? 4 : 7)
         set(list, NSRect(x: 0, y: top, width: w, height: max(0, bounds.height - top)))
     }
 }
@@ -257,30 +263,28 @@ final class FavoritesGridView: NSView {
 
     override var isFlipped: Bool { true }
 
-    private struct TileModel: Equatable {
-        var title: String
-        var icon: NSImage?
-        var glyphDark: Bool?
-        var tileColor: String?
-        var selected: Bool
-        var unread: Bool
-        var focus: Bool
-    }
-
     private func sync() {
         syncQueued = false
-        var models: [(UUID, TileModel)] = []
+        var models: [(UUID, FavoriteTileModel)] = []
         var palette: SpacePalette?
         withObservationTracking {
             guard let space = store.space(spaceID) else { return }
             palette = space.theme.palette
-            for item in store.tabs(under: space.favoritesContainerID) {
-                let key = item.tab?.iconKey
-                let icon = favicons.image(forKey: key)
-                models.append((item.id, TileModel(title: item.displayTitle, icon: icon, glyphDark: icon == nil ? nil : favicons.glyphIsDark(forKey: key),
-                                                  tileColor: item.tab?.tileColor,
-                                                  selected: store.isSelected(item.id, inSpace: spaceID, window: ui.windowID),
-                                                  unread: item.isUnread, focus: ui.keyboardFocusID == item.id)))
+            // A favorite split is one tile with a cell per pane (Arc: AppItem.childItems).
+            for item in store.children(of: space.favoritesContainerID) where item.isTab || item.isSplit {
+                let panes = item.isSplit ? store.children(of: item.id).filter(\.isTab) : [item]
+                guard !panes.isEmpty else { continue }
+                let cells = panes.map { p in
+                    let key = p.tab?.iconKey
+                    let icon = favicons.image(forKey: key)
+                    return FavoriteTileModel.Cell(id: p.id, title: p.displayTitle, icon: icon,
+                                                  glyphDark: icon == nil ? nil : favicons.glyphIsDark(forKey: key))
+                }
+                let open = panes.first { store.isSelected($0.id, inSpace: spaceID, window: ui.windowID) }?.id
+                let title = item.isSplit && item.title == nil ? panes.map(\.displayTitle).joined(separator: " | ") : item.displayTitle
+                models.append((item.id, FavoriteTileModel(title: title, cells: cells, vertical: item.split?.orientation == .vertical,
+                                                          tileColor: item.tab?.tileColor, selected: open != nil, openCell: open,
+                                                          unread: panes.contains(where: \.isUnread), focus: ui.keyboardFocusID == item.id)))
             }
         } onChange: { [weak self] in
             Task { @MainActor in
@@ -303,10 +307,7 @@ final class FavoritesGridView: NSView {
                 addSubview(t)
                 return t
             }()
-            if let palette {
-                t.show(title: m.title, icon: m.icon, glyphDark: m.glyphDark, tileColor: m.tileColor, selected: m.selected,
-                       unread: m.unread, focus: m.focus, palette: palette)
-            }
+            if let palette { t.show(m, palette: palette) }
         }
         order = ids
         if let palette { strip.palette = palette }
@@ -315,14 +316,19 @@ final class FavoritesGridView: NSView {
         if countChanged { onHeightChange(false) }
     }
 
-    /// Arc 1.170 (AX frames at sidebar widths 100–347, 29 Oct): four columns while a tile is at
-    /// least as wide as it is tall (47 pt), else two, else one; never three.
-    private static func columns(forWidth w: CGFloat) -> Int {
-        [4, 2].first { (w - CGFloat($0 - 1) * 8) / CGFloat($0) >= 47 } ?? 1
+    /// Arc 1.171 (AX frames, 1–9 favorites at sidebar widths 100–347, 31 Oct): at most as many
+    /// columns (up to four) as keep a tile at least as wide as it is tall (47 pt), then the fewest
+    /// that need no more rows: one favorite fills the row, five go 3 + 2, nine 3 × 3, four at
+    /// 200 pt 2 × 2 (#29). A short last row keeps the tile width, from the left.
+    private func columns(forWidth w: CGFloat) -> Int {
+        let widest = (1...4).last { (w - CGFloat($0 - 1) * 8) / CGFloat($0) >= 47 } ?? 1
+        guard !order.isEmpty else { return widest }
+        let rows = (order.count + widest - 1) / widest
+        return (order.count + rows - 1) / rows
     }
 
     private func rows(forWidth w: CGFloat) -> Int {
-        let c = Self.columns(forWidth: w)
+        let c = columns(forWidth: w)
         return (order.count + c - 1) / c
     }
 
@@ -332,14 +338,31 @@ final class FavoritesGridView: NSView {
         return grid + (order.isEmpty ? 0 : 4) + strip.height
     }
 
+    /// Where the header and list are placed from: the tiles' bottom, the open "Add to Favorites"
+    /// strip's while a tab is dragged over it, nil with no favorites.
+    func tilesBottom(forWidth w: CGFloat) -> CGFloat? {
+        if strip.targeted { return height(forWidth: w) }
+        let rows = rows(forWidth: w)
+        return rows == 0 ? nil : CGFloat(rows) * 47 + CGFloat(rows - 1) * 8
+    }
+
+    /// The resting strip only takes drops (AppKit finds drop targets apart from hitTest). With
+    /// the header hidden and no favorites the divider sits under it, and its Clear gets the click.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let v = super.hitTest(point)
+        return v === self || v === strip ? nil : v
+    }
+
     override func layout() {
         super.layout()
         let w = bounds.width
-        let n = Self.columns(forWidth: w)
+        let n = columns(forWidth: w)
         let cw = (w - CGFloat(n - 1) * 8) / CGFloat(n)
         for (i, id) in order.enumerated() {
             let r = i / n, c = i % n
-            tiles[id]?.frame = NSRect(x: CGFloat(c) * (cw + 8), y: CGFloat(r) * (47 + 8), width: cw, height: 47)
+            // Arc puts each tile on a half point (84.75 → 85 at 347 pt).
+            let x = (CGFloat(c) * (cw + 8) * 2).rounded() / 2
+            tiles[id]?.frame = NSRect(x: x, y: CGFloat(r) * (47 + 8), width: cw, height: 47)
         }
         let rows = rows(forWidth: w)
         let grid = rows == 0 ? 0 : CGFloat(rows) * 47 + CGFloat(rows - 1) * 8
@@ -347,14 +370,14 @@ final class FavoritesGridView: NSView {
     }
 
     func moveFavorite(_ dragged: UUID, before target: UUID, after: Bool) {
-        guard dragged != target, store.item(dragged)?.isSplit != true, let space = store.space(spaceID),
+        guard dragged != target, let space = store.space(spaceID),
               let idx = store.item(space.favoritesContainerID)?.children.firstIndex(of: target) else { return }
         store.moveItem(dragged, to: space.favoritesContainerID, index: idx + (after ? 1 : 0))
     }
 
     func spaceFavoriteIDs() -> [UUID] {
         guard let space = store.space(spaceID) else { return [] }
-        return store.tabs(under: space.favoritesContainerID).map(\.id)
+        return store.favoriteTabs(in: space).map(\.id)
     }
 }
 
@@ -427,6 +450,47 @@ final class FavoritesDropStrip: NSView {
     }
 }
 
+/// What a favorite tile shows: one page, or a split's panes. Arc keeps a split in its top apps as
+/// one tile cut into a cell per pane (AppItem.childItems, AppTrayItemMaskShape), side by side or,
+/// for a vertical split, stacked.
+struct FavoriteTileModel: Equatable {
+    struct Cell: Equatable {
+        var id: UUID
+        var title: String
+        var icon: NSImage?
+        var glyphDark: Bool?
+    }
+    var title: String
+    var cells: [Cell]
+    var vertical: Bool
+    var tileColor: String?
+    var selected: Bool
+    /// The pane open in the window while this favorite is the open one.
+    var openCell: UUID?
+    var unread: Bool
+    var focus: Bool
+}
+
+enum FavoriteTileMetrics {
+    static let corner: CGFloat = 13
+    /// The cut between a split's cells (AppTrayItemMaskShape.lineWidth).
+    static let cut: CGFloat = 2
+
+    /// Cell frames along the tile, whole points, the last cell taking what rounding leaves.
+    static func cellFrames(in bounds: CGRect, count n: Int, vertical: Bool) -> [CGRect] {
+        guard n > 1 else { return [bounds] }
+        let length = vertical ? bounds.height : bounds.width
+        let each = (length - CGFloat(n - 1) * cut) / CGFloat(n)
+        var start: CGFloat = 0
+        return (0..<n).map { i in
+            let end = i == n - 1 ? length : (start + each).rounded()
+            defer { start = end + cut }
+            return vertical ? CGRect(x: 0, y: start, width: bounds.width, height: end - start)
+                            : CGRect(x: start, y: 0, width: end - start, height: bounds.height)
+        }
+    }
+}
+
 /// A favorite tile. Arc 1.170: 13 pt circular corners; the active tile is the hover fill with a
 /// 2 pt darker rim; inactive tiles sit ~4.5% darker than the sidebar. A picked tile colour keeps
 /// its hue in every state; hover and selection shade it.
@@ -437,10 +501,14 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
     private let shade = CALayer()
     /// The selected tile's 2 pt rim, under the focus ring (a layer border would draw over it).
     private let rim = CALayer()
-    private let favicon = SidebarFaviconView(size: 20)
+    private var favicons: [SidebarFaviconView] = []
+    /// Cuts a split's tile into its cells.
+    private let cutMask = CAShapeLayer()
     private let unreadDot = CALayer()
     private var focusRing: FocusRingLayer?
-    private var model: (title: String, icon: NSImage?, glyphDark: Bool?, tileColor: String?, selected: Bool, unread: Bool, focus: Bool, palette: SpacePalette)?
+    private var model: FavoriteTileModel?
+    private var palette: SpacePalette?
+    private var hoveredCell: Int? { didSet { if hoveredCell != oldValue { ArcTooltipController.shared.mouseExited(self) } } }
     private var hovering = false { didSet { if hovering != oldValue { refresh() } } }
     private var targeted = false { didSet { if targeted != oldValue { refresh() } } }
     private var press: NSEvent?
@@ -451,13 +519,13 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         self.grid = grid
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.cornerRadius = 13
-        shade.cornerRadius = 13
+        layer?.cornerRadius = FavoriteTileMetrics.corner
+        shade.cornerRadius = FavoriteTileMetrics.corner
         layer?.addSublayer(shade)
-        rim.cornerRadius = 13
+        rim.cornerRadius = FavoriteTileMetrics.corner
         rim.zPosition = 5
         layer?.addSublayer(rim)
-        addSubview(favicon)
+        cutMask.fillRule = .evenOdd
         unreadDot.cornerRadius = 3
         layer?.addSublayer(unreadDot)
         registerForDraggedTypes([.craSidebarItem])
@@ -470,29 +538,38 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
     override var isFlipped: Bool { true }
     override var mouseDownCanMoveWindow: Bool { false }
 
-    func show(title: String, icon: NSImage?, glyphDark: Bool?, tileColor: String?, selected: Bool, unread: Bool, focus: Bool, palette: SpacePalette) {
-        model = (title, icon, glyphDark, tileColor, selected, unread, focus, palette)
-        setAccessibilityLabel(title)
+    func show(_ m: FavoriteTileModel, palette: SpacePalette) {
+        model = m
+        self.palette = palette
+        setAccessibilityLabel(m.title)
+        while favicons.count < m.cells.count {
+            let f = SidebarFaviconView(size: 20)
+            favicons.append(f)
+            addSubview(f)
+        }
+        while favicons.count > m.cells.count { favicons.removeLast().removeFromSuperview() }
+        // Arc 1.171: the open split's tile is one selected tile; the cut shows while it is closed.
+        layer?.mask = m.cells.count > 1 && !m.selected ? cutMask : nil
         refresh()
     }
 
     private var tileIsDark: Bool {
-        guard let m = model else { return false }
-        return m.tileColor.flatMap(HexColor.luminance).map { $0 < 0.5 } ?? m.palette.isDark
+        guard let m = model, let palette else { return false }
+        return m.tileColor.flatMap(HexColor.luminance).map { $0 < 0.5 } ?? palette.isDark
     }
 
     private func refresh() {
-        guard let m = model else { return }
+        guard let m = model, let palette else { return }
         let dark = tileIsDark
-        let colors = SidebarColors(m.palette)
+        let colors = SidebarColors(palette)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         if let hex = m.tileColor {
             layer?.backgroundColor = NSColor(hex: hex).cgColor
             shade.backgroundColor = (m.selected || hovering || targeted ? (dark ? NSColor.white.withAlphaComponent(0.12) : NSColor.black.withAlphaComponent(0.07)) : .clear).cgColor
         } else {
-            let fill: NSColor = m.selected ? (m.palette.isDark ? NSColor.white.withAlphaComponent(0.13) : NSColor.white.withAlphaComponent(0.38))
-                : (hovering || targeted ? (m.palette.isDark ? NSColor.white.withAlphaComponent(0.15) : NSColor.black.withAlphaComponent(0.09)) : NSColor(m.palette.pillFill))
+            let fill: NSColor = m.selected ? (palette.isDark ? NSColor.white.withAlphaComponent(0.13) : NSColor.white.withAlphaComponent(0.38))
+                : (hovering || targeted ? (palette.isDark ? NSColor.white.withAlphaComponent(0.15) : NSColor.black.withAlphaComponent(0.09)) : NSColor(palette.pillFill))
             layer?.backgroundColor = fill.cgColor
             shade.backgroundColor = NSColor.clear.cgColor
         }
@@ -500,12 +577,12 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         rim.borderColor = (dark ? NSColor.white.withAlphaComponent(0.14) : NSColor.black.withAlphaComponent(0.17)).cgColor
         var faviconColors = colors
         faviconColors.isDark = dark
-        favicon.show(m.icon, flip: m.icon != nil && m.glyphDark == dark, colors: faviconColors)
+        for (f, c) in zip(favicons, m.cells) { f.show(c.icon, flip: c.icon != nil && c.glyphDark == dark, colors: faviconColors) }
         unreadDot.isHidden = !(m.unread && !m.selected)
         unreadDot.backgroundColor = (m.tileColor == nil ? colors.textPrimary : (dark ? NSColor.white : NSColor.black)).withAlphaComponent(0.6).cgColor
         if m.focus != (focusRing != nil) {
             if m.focus {
-                let r = FocusRingLayer(radius: 13)
+                let r = FocusRingLayer(radius: FavoriteTileMetrics.corner)
                 r.zPosition = 10
                 layer?.addSublayer(r)
                 focusRing = r
@@ -524,7 +601,20 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         CATransaction.setDisableActions(true)
         shade.frame = bounds
         rim.frame = bounds
-        favicon.frame = NSRect(x: (bounds.width - 20) / 2, y: (bounds.height - 20) / 2, width: 20, height: 20)
+        let cells = cellFrames
+        for (f, r) in zip(favicons, cells) { f.frame = NSRect(x: (r.midX - 10).rounded(), y: (r.midY - 10).rounded(), width: 20, height: 20) }
+        if cells.count > 1, layer?.mask != nil {
+            // The cuts are holes in the tile (even-odd), so fill, rim and focus ring all stop at them.
+            let path = CGMutablePath()
+            path.addRoundedRect(in: bounds, cornerWidth: FavoriteTileMetrics.corner, cornerHeight: FavoriteTileMetrics.corner)
+            let vertical = model?.vertical == true
+            for (a, b) in zip(cells, cells.dropFirst()) {
+                path.addRect(vertical ? CGRect(x: 0, y: a.maxY, width: bounds.width, height: b.minY - a.maxY)
+                                      : CGRect(x: a.maxX, y: 0, width: b.minX - a.maxX, height: bounds.height))
+            }
+            cutMask.frame = bounds
+            cutMask.path = path
+        }
         unreadDot.frame = CGRect(x: bounds.width - 5 - 6, y: 5, width: 6, height: 6)
         focusRing?.frame = bounds
         CATransaction.commit()
@@ -538,9 +628,24 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect], owner: self, userInfo: nil))
     }
 
-    override func mouseEntered(with event: NSEvent) { hovering = true; ArcTooltipController.shared.mouseMoved(in: self) }
-    override func mouseMoved(with event: NSEvent) { ArcTooltipController.shared.mouseMoved(in: self) }
-    override func mouseExited(with event: NSEvent) { hovering = false; ArcTooltipController.shared.mouseExited(self) }
+    private var cellFrames: [CGRect] {
+        FavoriteTileMetrics.cellFrames(in: bounds, count: model?.cells.count ?? 1, vertical: model?.vertical == true)
+    }
+
+    /// The cell under a point; a cut belongs to the cell before it.
+    private func cellIndex(at p: NSPoint) -> Int {
+        let vertical = model?.vertical == true
+        return cellFrames.lastIndex { vertical ? $0.minY <= p.y : $0.minX <= p.x } ?? 0
+    }
+
+    private func trackPointer(_ event: NSEvent) {
+        hoveredCell = cellIndex(at: convert(event.locationInWindow, from: nil))
+        ArcTooltipController.shared.mouseMoved(in: self)
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovering = true; trackPointer(event) }
+    override func mouseMoved(with event: NSEvent) { trackPointer(event) }
+    override func mouseExited(with event: NSEvent) { hovering = false; hoveredCell = nil; ArcTooltipController.shared.mouseExited(self) }
 
     override func mouseDown(with event: NSEvent) { press = event }
     override func mouseDragged(with event: NSEvent) {
@@ -556,7 +661,7 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         let fill = layer?.backgroundColor.flatMap { NSColor(cgColor: $0) } ?? .clear
         let image = NSImage(size: bounds.size, flipped: false) { r in
             fill.setFill()
-            NSBezierPath(roundedRect: r, xRadius: 13, yRadius: 13).fill()
+            NSBezierPath(roundedRect: r, xRadius: FavoriteTileMetrics.corner, yRadius: FavoriteTileMetrics.corner).fill()
             rep?.draw(in: r)
             return true
         }
@@ -564,10 +669,13 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         beginDraggingSession(with: [item], event: p, source: self)
     }
     override func mouseUp(with event: NSEvent) {
-        guard press != nil, let grid else { return }
+        guard let p = press, let grid else { return }
         press = nil
         grid.ui.keyboardFocusID = nil
-        grid.store.selectTab(itemID, window: grid.ui.windowID)
+        // A split opens with the pressed pane focused.
+        let cells = model?.cells ?? []
+        let i = cellIndex(at: convert(p.locationInWindow, from: nil))
+        grid.store.selectTab(cells.indices.contains(i) ? cells[i].id : itemID, window: grid.ui.windowID)
     }
 
     func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
@@ -610,6 +718,12 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         guard let grid, let item = grid.store.item(itemID) else { return nil }
         let store = grid.store, ui = grid.ui, actions = grid.actions, favicons = grid.favicons
         let id = itemID
+        if item.isSplit, let m = model {
+            return SidebarMenus.split(id, panes: m.cells.map { ($0.id, $0.title) }, open: m.selected, store: store, ui: ui, actions: actions) {
+                MenuItems.add($0, "Remove from Favorites") { store.removeFromFavorites(id) }
+                $0.addItem(.separator())
+            }
+        }
         let tileColor = item.tab?.tileColor
         let m = NSMenu()
         m.autoenablesItems = false
@@ -666,7 +780,11 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
     }
 
     // ArcTooltipTarget: the title by the pointer.
-    var text: String { model?.title ?? "" }
+    var text: String {
+        guard let m = model else { return "" }
+        if let i = hoveredCell, m.cells.count > 1, m.cells.indices.contains(i) { return m.cells[i].title }
+        return m.title
+    }
     var keys: [String] { [] }
     var followsCursor: Bool { true }
     var subtitle: String? { nil }

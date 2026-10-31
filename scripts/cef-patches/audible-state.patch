@@ -1,0 +1,38 @@
+diff --git a/cef/libcef/browser/browser_contents_delegate.cc b/cef/libcef/browser/browser_contents_delegate.cc
+index 72dd7c5..15d995a 100644
+--- a/cef/libcef/browser/browser_contents_delegate.cc
++++ b/cef/libcef/browser/browser_contents_delegate.cc
+@@ -613,6 +613,21 @@ void CefBrowserContentsDelegate::DidFinishLoad(
+   OnLoadEnd(frame, validated_url, http_status_code);
+ }
+ 
++// Cra: Chromium's audible state (Chrome's tab speaker icon), which CEF has no
++// callback for. Delivered as a "Cra.audible" message from PID_BROWSER whose
++// only argument is the new state.
++void CefBrowserContentsDelegate::OnAudioStateChanged(bool audible) {
++  auto c = client();
++  auto b = browser();
++  if (!c || !b) {
++    return;
++  }
++  CefRefPtr<CefProcessMessage> message =
++      CefProcessMessage::Create("Cra.audible");
++  message->GetArgumentList()->SetBool(0, audible);
++  c->OnProcessMessageReceived(b, b->GetMainFrame(), PID_BROWSER, message);
++}
++
+ void CefBrowserContentsDelegate::TitleWasSet(content::NavigationEntry* entry) {
+   // |entry| may be NULL if a popup is created via window.open and never
+   // navigated.
+diff --git a/cef/libcef/browser/browser_contents_delegate.h b/cef/libcef/browser/browser_contents_delegate.h
+index ae50fee..3b7515e 100644
+--- a/cef/libcef/browser/browser_contents_delegate.h
++++ b/cef/libcef/browser/browser_contents_delegate.h
+@@ -134,6 +134,7 @@ class CefBrowserContentsDelegate : public content::WebContentsDelegate,
+   void PrimaryMainDocumentElementAvailable() override;
+   void LoadProgressChanged(double progress) override;
+   void DidStopLoading() override;
++  void OnAudioStateChanged(bool audible) override;
+   void DidFinishNavigation(
+       content::NavigationHandle* navigation_handle) override;
+   void DidFailLoad(content::RenderFrameHost* render_frame_host,

@@ -205,14 +205,19 @@ struct SpaceTheme: Codable, Equatable {
     var vibrant: Bool = false
     /// The theme's raw first colour (Arc's base colour); drives the toolbar band.
     var accent: String? = nil
+    /// Arc's one-colour theme (blendedSingleColor): a flat fill laid over a dark, slightly
+    /// see-through material, at `intensity` (SpacePalette.solidAlpha), not a gradient.
+    var solid: Bool = false
 
-    init(colors: [String], intensity: Double, noise: Double, appearance: String, vibrant: Bool = false, accent: String? = nil) {
+    init(colors: [String], intensity: Double, noise: Double, appearance: String, vibrant: Bool = false, accent: String? = nil,
+         solid: Bool = false) {
         self.colors = colors
         self.intensity = intensity
         self.noise = noise
         self.appearance = appearance
         self.vibrant = vibrant
         self.accent = accent
+        self.solid = solid
     }
 
     init(from decoder: Decoder) throws {
@@ -223,6 +228,7 @@ struct SpaceTheme: Codable, Equatable {
         appearance = try c.decodeIfPresent(String.self, forKey: .appearance) ?? "auto"
         vibrant = try c.decodeIfPresent(Bool.self, forKey: .vibrant) ?? false
         accent = try c.decodeIfPresent(String.self, forKey: .accent)
+        solid = try c.decodeIfPresent(Bool.self, forKey: .solid) ?? false
     }
 
     /// Dark first: colors borrowed from Victor's other projects (GhostWriter
@@ -436,9 +442,15 @@ struct AppSettings: Codable, Equatable {
     /// Arc's "Open a Peek window when clicking on links to other sites" (modalEnabled): only
     /// links clicked in favorites and pinned tabs.
     var peekLinksToOtherSites: Bool = true
+    /// Cra's addition (issue #12): links to other sites peek from every tab, not only
+    /// favorites and pinned tabs.
+    var peekInEveryTab: Bool = false
     /// Arc's "Open a Peek window when clicking on links with Shift held"
     /// (shiftClickModalEntryPointEnabled).
     var peekOnShiftClick: Bool = true
+    /// Arc's Previews ▸ Folders (folderPreviewEnabled): resting the pointer on a closed folder
+    /// lists its tabs, most recent first, with a search field.
+    var folderPreviews: Bool = true
     /// Arc: "Enable Picture in Picture when you leave a video tab".
     var autoPictureInPicture: Bool = true
     /// Dia's onboarding privacy choice "Block third-party ads and trackers": requests
@@ -562,7 +574,9 @@ extension AppSettings {
         // Settings from before Air Traffic Control get Arc's Google Meet route once.
         linkRoutes = c.contains(.linkRoutes) ? (try? c.decode([LinkRoute].self, forKey: .linkRoutes)) ?? [] : [.googleMeet]
         peekLinksToOtherSites = try c.decodeIfPresent(Bool.self, forKey: .peekLinksToOtherSites) ?? true
+        peekInEveryTab = try c.decodeIfPresent(Bool.self, forKey: .peekInEveryTab) ?? false
         peekOnShiftClick = try c.decodeIfPresent(Bool.self, forKey: .peekOnShiftClick) ?? true
+        folderPreviews = try c.decodeIfPresent(Bool.self, forKey: .folderPreviews) ?? true
         hapticFeedbackOnReorder = try c.decodeIfPresent(Bool.self, forKey: .hapticFeedbackOnReorder) ?? true
         warnBeforeQuitting = try c.decodeIfPresent(Bool.self, forKey: .warnBeforeQuitting) ?? false
         autoArchiveEnabled = try c.decodeIfPresent(Bool.self, forKey: .autoArchiveEnabled) ?? true

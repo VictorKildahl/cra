@@ -82,6 +82,10 @@ static CefString CefStringFromNS(NSString* s) {
 /// Page context menus shown by Cra (RunContextMenu) instead of Chrome.
 static BOOL g_ownContextMenus = NO;
 
+/// Page.addScriptToEvaluateOnNewDocument params every page browser gets once it exists
+/// (the page's world, then Cra's isolated world).
+static NSArray<NSString*>* g_documentStartParams = nil;
+
 /// The command picked from a context menu Cra shows; -1 while none is.
 @interface CraMenuPick : NSObject
 @property (nonatomic) int commandID;
@@ -172,6 +176,8 @@ static CraClient* AsCraClient(CefClient* c) {
 @property (nonatomic) BOOL isInPictureInPicture;
 @property (nonatomic) BOOL isPictureInPicturePlaying;
 @property (nonatomic) BOOL isCapturingMedia;
+@property (nonatomic) BOOL isAudible;
+- (void)audibleChanged:(BOOL)audible;
 - (void)requestPictureInPictureInFrame:(CefRefPtr<CefFrame>)frame automatic:(BOOL)automatic x:(int)x y:(int)y;
 - (void)adoptBrowser:(CefRefPtr<CefBrowser>)browser;
 - (void)devToolsBrowserCreated:(CefRefPtr<CefBrowser>)browser;
@@ -1091,6 +1097,15 @@ public:
             [o.delegate browser:o didChangeMediaCapture:capturing];
     }
 
+    // Chromium's audible state, which CEF has no callback for: the engine sends it as a
+    // "Cra.audible" message (scripts/cef-patches/audible-state.patch).
+    bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+                                  CefProcessId source_process, CefRefPtr<CefProcessMessage> message) override {
+        if (source_process != PID_BROWSER || message->GetName() != "Cra.audible") return false;
+        if (CraBrowser* o = owner_) [o audibleChanged:message->GetArgumentList()->GetBool(0)];
+        return true;
+    }
+
     void OnFaviconURLChange(CefRefPtr<CefBrowser> browser, const std::vector<CefString>& icon_urls) override {
         CraBrowser* o = owner_;
         if (!o || icon_urls.empty()) return;
@@ -1160,6 +1175,32 @@ public:
         BOOL background = (target_disposition == CEF_WOD_NEW_BACKGROUND_TAB);
         [o.delegate browser:o requestsNewTabWithURL:NSStringFromCef(target_url) inBackground:background];
         return true;
+    }
+
+    // "Aw, Snap!" and "Page Unresponsive" leave no trace otherwise: Cra ships no crash
+    // reporter. One line in chromium.log tells a report of a site that "keeps crashing"
+    // apart: crashed, killed, out of memory or hung. Only the host: the log gets shared.
+    void OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser, TerminationStatus status, int error_code,
+                                   const CefString& error_string) override {
+        static const char* kStatus[] = {"abnormal termination", "killed", "crashed", "out of memory",
+                                        "launch failed", "integrity failure"};
+        const char* what = status >= 0 && status < TS_NUM_VALUES ? kStatus[status] : "unknown";
+        LOG(ERROR) << "Cra: renderer for " << PageHost(browser) << " ended: " << what << " (code " << error_code
+                   << ", " << error_string.ToString() << ")";
+    }
+
+    bool OnRenderProcessUnresponsive(CefRefPtr<CefBrowser> browser,
+                                     CefRefPtr<CefUnresponsiveProcessCallback> callback) override {
+        LOG(ERROR) << "Cra: renderer for " << PageHost(browser) << " is unresponsive";
+        return false;  // Chrome's "Page Unresponsive" dialog
+    }
+
+    static std::string PageHost(CefRefPtr<CefBrowser> browser) {
+        CefRefPtr<CefFrame> frame = browser->GetMainFrame();
+        CefURLParts parts;
+        if (!frame || !CefParseURL(frame->GetURL(), parts)) return "(no page)";
+        std::string host = CefString(&parts.host).ToString();
+        return host.empty() ? CefString(&parts.scheme).ToString() + ":" : host;
     }
 
     // Context menu --------------------------------------------------------
@@ -1494,6 +1535,7 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     BOOL _isPopupHost;
     NSMutableSet<NSNumber*>* _activeDownloads;
     BOOL _parked;
+    NSUInteger _audibleChanges;
 }
 
 - (instancetype)initWithFrame:(NSRect)frame url:(NSString*)url delegate:(id<CraBrowserDelegate>)delegate {
@@ -1578,6 +1620,13 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 - (void)adoptBrowser:(CefRefPtr<CefBrowser>)browser {
     _browser = browser;
     self.isCreated = YES;
+    // The page agent runs new-document scripts only while its domain is enabled.
+    if (g_documentStartParams.count) [self sendDevToolsMethod:@"Page.enable" params:@"{}" completion:^(NSString*, NSString*) {}];
+    for (NSString* params in g_documentStartParams)
+        [self sendDevToolsMethod:@"Page.addScriptToEvaluateOnNewDocument" params:params
+                      completion:^(NSString*, NSString* error) {
+                          if (error) NSLog(@"Cra: document start script not installed: %@", error);
+                      }];
     if (_pendingFocus) {
         _pendingFocus = NO;
         browser->GetHost()->SetFocus(true);
@@ -1700,6 +1749,25 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 }
 - (void)stopFinding:(BOOL)clearSelection { if (_browser) _browser->GetHost()->StopFinding(clearSelection); }
 - (void)setAudioMuted:(BOOL)muted { if (_browser) _browser->GetHost()->SetAudioMuted(muted); }
+
+// Chrome's RecentlyAudibleHelper: quiet only once the page stayed quiet for 2 s, so the
+// gap between two tracks doesn't blink the speaker.
+- (void)audibleChanged:(BOOL)audible {
+    NSUInteger change = ++_audibleChanges;
+    if (audible) { [self updateAudible:YES]; return; }
+    __weak CraBrowser* weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        CraBrowser* s = weakSelf;
+        if (s && s->_audibleChanges == change) [s updateAudible:NO];
+    });
+}
+
+- (void)updateAudible:(BOOL)audible {
+    if (audible == self.isAudible) return;
+    self.isAudible = audible;
+    if ([self.delegate respondsToSelector:@selector(browser:didChangeAudible:)])
+        [self.delegate browser:self didChangeAudible:audible];
+}
 
 // MARK: Picture in Picture
 //
@@ -1861,6 +1929,36 @@ static NSView* FindRenderWidgetHostView(NSView* root) {
         completion(nil, @"SendDevToolsMessage failed");
     }
 }
+// The isolated world the document start script made: the main frame's id, then that world's
+// execution context (createIsolatedWorld returns the existing world of that name), then evaluate.
+- (void)evaluateInIsolatedWorld:(NSString*)world params:(NSString*)params
+                     completion:(void (^)(NSString* _Nullable, NSString* _Nullable))completion {
+    __weak CraBrowser* weakSelf = self;
+    id (^parse)(NSString*) = ^id(NSString* json) {
+        return json ? [NSJSONSerialization JSONObjectWithData:[json dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil] : nil;
+    };
+    [self sendDevToolsMethod:@"Page.getFrameTree" params:@"{}" completion:^(NSString* tree, NSString* error) {
+        NSString* frameID = [parse(tree) valueForKeyPath:@"frameTree.frame.id"];
+        CraBrowser* s = weakSelf;
+        if (!s || ![frameID isKindOfClass:NSString.class]) { completion(nil, error ?: @"no frame"); return; }
+        NSData* body = [NSJSONSerialization dataWithJSONObject:@{@"frameId": frameID, @"worldName": world} options:0 error:nil];
+        [s sendDevToolsMethod:@"Page.createIsolatedWorld" params:[[NSString alloc] initWithData:body encoding:NSUTF8StringEncoding]
+                   completion:^(NSString* made, NSString* error) {
+            NSNumber* context = [parse(made) valueForKey:@"executionContextId"];
+            NSMutableDictionary* evaluate = [parse(params) mutableCopy];
+            CraBrowser* s = weakSelf;
+            if (!s || ![context isKindOfClass:NSNumber.class] || ![evaluate isKindOfClass:NSMutableDictionary.class]) {
+                completion(nil, error ?: @"no isolated world");
+                return;
+            }
+            evaluate[@"contextId"] = context;
+            NSData* json = [NSJSONSerialization dataWithJSONObject:evaluate options:0 error:nil];
+            [s sendDevToolsMethod:@"Runtime.evaluate" params:[[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding]
+                       completion:completion];
+        }];
+    }];
+}
+
 - (void)notifyMoveOrResizeStarted { if (_browser) _browser->GetHost()->NotifyMoveOrResizeStarted(); }
 
 - (void)close {
@@ -1938,6 +2036,16 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 
 + (void)setChromeHosting:(BOOL)enabled { g_chromeHosting = enabled; }
 + (void)setOwnContextMenus:(BOOL)enabled { g_ownContextMenus = enabled; }
++ (void)setDocumentStartScript:(NSString*)script isolatedScript:(NSString*)isolatedScript world:(NSString*)world {
+    NSMutableArray<NSString*>* all = [NSMutableArray array];
+    for (NSDictionary* params in @[@{@"source": script ?: @"", @"runImmediately": @YES},
+                                   @{@"source": isolatedScript ?: @"", @"worldName": world ?: @"", @"runImmediately": @YES}]) {
+        if (![params[@"source"] length]) continue;
+        NSData* json = [NSJSONSerialization dataWithJSONObject:params options:0 error:nil];
+        if (json) [all addObject:[[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding]];
+    }
+    g_documentStartParams = all;
+}
 + (BOOL)chromeHosting { return g_chromeHosting; }
 
 + (void)setContentBlockingEnabled:(BOOL)enabled { cra_blocker::Enabled().store(enabled); }

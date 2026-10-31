@@ -41,6 +41,14 @@ struct SpacePalette {
     let gradientAlpha: Double
     let gradientAlphaBottom: Double
     let vibrant: Bool
+    /// One flat colour over Arc's solid-theme material (ShellView.solidBackdrop).
+    let solid: Bool
+
+    /// Arc 1.171 over solid white and black backdrops (31 Oct 2026, nine colours, sRGB after
+    /// undoing the display's P3): out = α·colour + (1 − α)·(66 + 0.52·backdrop) while active,
+    /// α·colour + (1 − α)·212 while inactive, with α = 0.19 + 0.55·intensity (fits 0.191,
+    /// 0.459, 0.742 at 0, 0.5, 1; within 3/255). isVibrant and the text appearance don't matter.
+    static func solidAlpha(intensity: Double) -> Double { 0.19 + 0.55 * max(0, min(1, intensity)) }
 
     var gradient: LinearGradient {
         LinearGradient(colors: gradientColors, startPoint: .top, endPoint: .bottom)
@@ -124,7 +132,7 @@ extension SpaceTheme {
         let base = colors.isEmpty ? ["#DDDDDD"] : colors
         // Vibrant (Arc): raw colors at `intensity` opacity over the blur.
         // Opaque: intensity 1 = the raw colors; lower pulls toward white/black.
-        let pull = vibrant ? 0 : (1 - intensity) * (dark ? 0.35 : 0.6)
+        let pull = vibrant || solid ? 0 : (1 - intensity) * (dark ? 0.35 : 0.6)
         var stops = base.map { SpaceTheme.mix($0, towardWhite: !dark, amount: pull) }
         if stops.count == 1 { stops.append(SpaceTheme.mix(base[0], towardWhite: !dark, amount: pull + 0.15)) }
 
@@ -157,9 +165,12 @@ extension SpaceTheme {
             // 27, passes 52 %) could not reach both, so light vibrant themes now blur through
             // an untinted CABackdropLayer with a 0.19 dim and a 0.16→0.18 lift (ShellView);
             // opacity 0.43 top / 0.59 bottom then matches Arc within ±5 over white and black.
-            gradientAlpha: vibrant ? (dark ? max(0.35, min(0.9, intensity * 2.2)) : min(0.95, intensity * 1.70)) : 1,
-            gradientAlphaBottom: vibrant ? (dark ? max(0.35, min(0.9, intensity * 2.2)) : min(0.95, intensity * 2.35)) : 1,
-            vibrant: vibrant
+            gradientAlpha: solid ? SpacePalette.solidAlpha(intensity: intensity)
+                : vibrant ? (dark ? max(0.35, min(0.9, intensity * 2.2)) : min(0.95, intensity * 1.70)) : 1,
+            gradientAlphaBottom: solid ? SpacePalette.solidAlpha(intensity: intensity)
+                : vibrant ? (dark ? max(0.35, min(0.9, intensity * 2.2)) : min(0.95, intensity * 2.35)) : 1,
+            vibrant: vibrant || solid,
+            solid: solid
         )
     }
 }

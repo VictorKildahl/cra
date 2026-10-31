@@ -858,14 +858,18 @@ final class SidebarStore {
 
     /// Favorites belong to one space: the tab's own unless another is given.
     func addToFavorites(_ id: UUID, in spaceID: UUID? = nil) {
-        // A favorite is one page's tile; a split can be pinned but not a favorite.
-        guard items[id]?.isSplit != true else { return }
+        // A pane brings its whole split: Arc's top apps hold a split as one tile (AppItem.childItems).
+        let id = splitContaining(id)?.id ?? id
+        guard let it = items[id], it.isTab || it.isSplit else { return }
         guard let space = spaces[spaceID ?? self.spaceID(ofItem: id) ?? focusedSpaceID] else { return }
         // A new favorite takes the tile color when every existing one shares it.
-        let colors = Set(tabs(under: space.favoritesContainerID).map { $0.tab?.tileColor })
+        let colors = Set(favoriteTabs(in: space).map { $0.tab?.tileColor })
         moveItem(id, to: space.favoritesContainerID, index: nil)
         if colors.count == 1, let color = colors.first!, items[id]?.tab?.tileColor == nil { setTileColor(color, for: [id]) }
     }
+
+    /// The favorites' own tabs, not the panes of favorite splits.
+    func favoriteTabs(in space: Space) -> [SidebarItem] { children(of: space.favoritesContainerID).filter(\.isTab) }
 
     func setTileColor(_ hex: String?, for ids: [UUID]) {
         for id in ids {
@@ -886,6 +890,7 @@ final class SidebarStore {
     }
 
     func removeFromFavorites(_ id: UUID) {
+        let id = splitContaining(id)?.id ?? id
         guard let space = spaceID(ofItem: id).flatMap({ spaces[$0] }) else { return }
         moveItem(id, to: space.pinnedContainerID, index: nil)
     }

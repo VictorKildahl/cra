@@ -3,7 +3,8 @@ import CraCEF
 
 @main
 enum BrowserManagerLifecycleTests {
-    private static let idleReply = #"{"result":{"value":true}}"#
+    private static let idleReply = #"{"result":{"type":"string","value":""}}"#
+    private static let isolatedProbe = "cra:Runtime.evaluate"
     private static var checks = 0
 
     @MainActor
@@ -73,7 +74,11 @@ enum BrowserManagerLifecycleTests {
             manager.unload(rt.tabID)
             manager.ensureRuntime(for: rt.tabID)?.hiddenAt = Date.distantPast
         }
-        await sleepCase("an exception reply cannot authorize sleeping", reply: #"{"exceptionDetails":{},"result":{"value":true}}"#) { _, _ in }
+        await sleepCase("an exception reply cannot authorize sleeping", reply: #"{"exceptionDetails":{},"result":{"value":""}}"#) { _, _ in }
+        await sleepCase("a page holding typed text stays awake", reply: #"{"result":{"type":"string","value":"typed"}}"#) { _, _ in }
+        await refusalBackoffCase()
+        await beforeUnloadCase()
+        nowPlayingCase()
         await sleepCase("malformed or missing replies cannot authorize sleeping", reply: nil) { _, _ in }
         print("Browser manager lifecycle: \(checks) checks passed")
     }
@@ -152,11 +157,84 @@ enum BrowserManagerLifecycleTests {
         let runtime = manager.ensureRuntime(for: id)!
         runtime.hiddenAt = Date.distantPast
         manager.sleepIdleTabs(hiddenLongerThan: 60)
-        expect(runtime.browser.replies.contains { $0.method == "Runtime.evaluate" }, "eligible page receives an asynchronous sleep probe")
+        expect(runtime.browser.replies.contains { $0.method == isolatedProbe }, "eligible page receives an asynchronous sleep probe")
         mutate(manager, runtime)
-        runtime.browser.reply(to: "Runtime.evaluate", with: reply)
+        runtime.browser.reply(to: isolatedProbe, with: reply)
         await drainMainQueue()
+        // The page's own onbeforeunload is asked second, in the page's world.
+        if runtime.browser.replies.contains(where: { $0.method == "Runtime.evaluate" }) {
+            runtime.browser.reply(to: "Runtime.evaluate", with: idleReply)
+            await drainMainQueue()
+        }
         expect((manager.runtime(for: id) == nil) == shouldSleep, message)
+        manager.closeAll()
+    }
+
+    /// A page that refused isn't probed again every minute, only after the back-off or once shown again.
+    @MainActor
+    private static func refusalBackoffCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let id = store.createTab(url: "https://example.test/typed").id
+        let runtime = manager.ensureRuntime(for: id)!
+        runtime.hiddenAt = Date.distantPast
+        manager.sleepIdleTabs(hiddenLongerThan: 60)
+        runtime.browser.reply(to: isolatedProbe, with: #"{"result":{"type":"string","value":"typed"}}"#)
+        await drainMainQueue()
+        manager.sleepIdleTabs(hiddenLongerThan: 60)
+        expect(!runtime.browser.replies.contains { $0.method == isolatedProbe }, "a refused page is not probed again before the back-off")
+        runtime.sleepProbeAfter = Date.distantPast
+        manager.sleepIdleTabs(hiddenLongerThan: 60)
+        expect(runtime.browser.replies.contains { $0.method == isolatedProbe }, "a refused page is probed again after the back-off")
+        manager.closeAll()
+    }
+
+    /// The page's own onbeforeunload, asked in its world after the isolated probe, keeps it awake.
+    @MainActor
+    private static func beforeUnloadCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let id = store.createTab(url: "https://example.test/editor").id
+        let runtime = manager.ensureRuntime(for: id)!
+        runtime.hiddenAt = Date.distantPast
+        manager.sleepIdleTabs(hiddenLongerThan: 60)
+        runtime.browser.reply(to: isolatedProbe, with: idleReply)
+        await drainMainQueue()
+        runtime.browser.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"beforeunload"}}"#)
+        await drainMainQueue()
+        expect(manager.runtime(for: id) != nil, "a page with its own onbeforeunload stays awake")
+        manager.closeAll()
+    }
+
+    /// The sidebar player lists pages that played sound, keeps paused ones, hides the one on
+    /// screen, and drops a page that navigates while quiet or closes.
+    @MainActor
+    private static func nowPlayingCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let np = NowPlaying()
+        manager.nowPlaying = np
+        let a = store.createTab(url: "https://example.test/a").id, b = store.createTab(url: "https://example.test/b").id
+        let ra = manager.ensureRuntime(for: a)!, rb = manager.ensureRuntime(for: b)!
+        ra.browser.isAudible = true
+        manager.browser(ra.browser, didChangeAudible: true)
+        expect(np.entries.map(\.id) == [a] && np.entries[0].playing, "a page that starts playing gets a card")
+        manager.show(a, focus: false)
+        expect(np.shown.isEmpty, "the card of the page on screen is hidden")
+        manager.show(b, focus: false)
+        expect(np.shown.map(\.id) == [a], "leaving the page shows its card")
+        ra.browser.isAudible = false
+        manager.browser(ra.browser, didChangeAudible: false)
+        expect(np.entries.first?.playing == false, "a paused page keeps its card, marked paused")
+        rb.browser.isAudible = true
+        manager.browser(rb.browser, didChangeAudible: true)
+        expect(np.entries.map(\.id) == [a, b], "cards stack oldest first")
+        ra.browser.navigate(to: "https://example.test/elsewhere")
+        expect(np.entries.map(\.id) == [b], "a quiet page that navigates leaves the player")
+        rb.browser.navigate(to: "https://example.test/next-track")
+        expect(np.entries.map(\.id) == [b], "a playing page that navigates (a playlist) keeps its card")
+        manager.unload(b)
+        expect(np.entries.isEmpty, "closing the page removes its card")
         manager.closeAll()
     }
 

@@ -186,6 +186,10 @@ final class SidebarGlyphButton: NSView {
     /// Header buttons follow the app's active state (nil: the plain sidebar tone).
     var active: Bool? { didSet { if active != oldValue { refresh() } } }
     var enabled = true { didSet { if enabled != oldValue { refresh() } } }
+    /// Drawn in this colour instead of the sidebar's glyph tone.
+    var tint: NSColor? { didSet { if tint != oldValue { refresh() } } }
+    /// Keeps the hover fill while what it opened is open (the player's volume drawer).
+    var highlighted = false { didSet { if highlighted != oldValue { refresh() } } }
 
     init(symbol: String, size: CGFloat, height: CGFloat? = nil, iconSize: CGFloat, weight: NSFont.Weight = .medium, help: String,
          optionHelp: String? = nil, colors: SidebarColors, action: @escaping () -> Void) {
@@ -252,7 +256,7 @@ final class SidebarGlyphButton: NSView {
         setHelp(help)
     }
 
-    private func setHelp(_ help: String) {
+    func setHelp(_ help: String) {
         if let tip { (tip.text, tip.keys) = ArcTooltipLabel.split(help) } else if !help.isEmpty { tip = ArcTooltipAnchorView.attach(to: self, help: help) }
     }
 
@@ -268,9 +272,9 @@ final class SidebarGlyphButton: NSView {
         } else {
             tint = enabled ? colors.glyph : colors.textTertiary.withAlphaComponent(colors.textTertiary.alphaComponent * 0.55)
         }
-        glyph.contentTintColor = tint
-        mark?.strokeColor = tint.cgColor
-        layer?.backgroundColor = (hovering && enabled ? colors.hoverFill : .clear).cgColor
+        glyph.contentTintColor = self.tint ?? tint
+        mark?.strokeColor = (self.tint ?? tint).cgColor
+        layer?.backgroundColor = ((hovering || highlighted) && enabled ? colors.hoverFill : .clear).cgColor
     }
 
     override func layout() {
@@ -294,7 +298,13 @@ final class SidebarGlyphButton: NSView {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         for t in trackingAreas where t.owner === self { removeTrackingArea(t) }
-        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil))
+        // A new area under the pointer gets no mouseEntered, so without assumeInside it never sends
+        // the mouseExited either and the hover fill sticks (buttons moved under a resting pointer).
+        let inside = window.map { visibleRect.contains(convert($0.mouseLocationOutsideOfEventStream, from: nil)) } ?? false
+        var options: NSTrackingArea.Options = [.mouseEnteredAndExited, .activeAlways, .inVisibleRect]
+        if inside { options.insert(.assumeInside) }
+        addTrackingArea(NSTrackingArea(rect: .zero, options: options, owner: self, userInfo: nil))
+        if hovering != inside { hovering = inside }
     }
 
     override func viewDidMoveToWindow() {
@@ -667,6 +677,7 @@ struct TabRowModel: Equatable {
     var selected: Bool
     var highlighted: Bool
     var capturing: Bool
+    var audible: Bool
     var muted: Bool
     var unread: Bool
     var navigatedAway: Bool
@@ -749,7 +760,7 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         rebuildAccessories()
     }
 
-    /// Recording dot, mute, unread dot, and on hover "back to pinned page" and close. Made once
+    /// Recording dot, mute or playing sound, unread dot, and on hover "back to pinned page" and close. Made once
     /// per row and shown or hidden: hover moves from row to row on every frame of a scroll.
     private lazy var captureDot: NSView = {
         let dot = NSView(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
@@ -762,11 +773,18 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         _ = ArcTooltipAnchorView.attach(to: dot, help: "This tab is using your camera or microphone")
         return dot
     }()
-    private lazy var muteButton = SidebarGlyphButton(symbol: "speaker.slash.fill", size: 20, iconSize: 10, help: "Unmute Tab", colors: colors) { [weak self] in
-        guard let self, let id = self.model?.id, let list = self.list else { return }
-        list.store.setMuted(id, false)
-        list.actions.performAction("muteTab:\(id)")
+    /// Arc 1.171: a playing or muted tab shows a speaker between the favicon and the title (17.5 pt
+    /// wide, 8 pt before the title, in the glyph tone); clicking it mutes or unmutes the tab
+    /// (31 Oct 2026, issue #28).
+    private lazy var soundButton = SidebarGlyphButton(symbol: Self.soundSymbol, size: 20, iconSize: 13, weight: .regular,
+                                                     help: "Mute Tab", colors: colors) { [weak self] in
+        guard let self, let m = self.model, let list = self.list else { return }
+        list.store.setMuted(m.id, !m.muted)
+        list.actions.performAction("muteTab:\(m.id)")
     }
+    private static let soundSymbol = "speaker.wave.3"
+    private static let soundGlyphWidth: CGFloat = 17.5
+    private var showsSound = false
     private lazy var unreadDot: NSView = {
         let dot = NSView(frame: NSRect(x: 0, y: 0, width: 6, height: 6))
         dot.wantsLayer = true
@@ -790,7 +808,15 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         let id = m.id
         var shown: [NSView] = []
         if m.capturing { shown.append(captureDot) }
-        if m.muted { muteButton.colors = colors; shown.append(muteButton) }
+        let sound = (m.muted || m.audible) && !m.editing
+        if sound {
+            if soundButton.superview == nil { addSubview(soundButton) }
+            soundButton.colors = colors
+            soundButton.setSymbol(m.muted ? "speaker.slash" : Self.soundSymbol, iconSize: 13, weight: .regular,
+                                  help: m.muted ? "Unmute Tab" : "Mute Tab")
+        }
+        soundButton.isHidden = !sound
+        if sound != showsSound { showsSound = sound; needsLayout = true }
         if m.unread && !m.selected && !isHovered {
             unreadDot.layer?.backgroundColor = colors.textPrimary.withAlphaComponent(0.55).cgColor
             shown.append(unreadDot)
@@ -837,6 +863,11 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         var x = 8 + CGFloat(m.depth) * CraMetrics.indent
         favicon.frame = NSRect(x: x, y: (h - CraMetrics.favicon) / 2, width: CraMetrics.favicon, height: CraMetrics.favicon)
         x += CraMetrics.favicon + 11
+        if showsSound {
+            let s = soundButton.size
+            soundButton.frame = NSRect(x: x - (s.width - Self.soundGlyphWidth) / 2, y: (h - s.height) / 2, width: s.width, height: s.height)
+            x += Self.soundGlyphWidth + 8
+        }
         // HStack(spacing: 11) with a Spacer(minLength: 4) between the text and the trailing items.
         var right = bounds.width - 6
         for v in accessories.reversed() {

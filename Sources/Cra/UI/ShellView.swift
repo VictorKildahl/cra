@@ -19,7 +19,9 @@ final class ShellView: NSView {
     private let liftLayer = CAGradientLayer()
     /// Set by the window controller: light theme that wants the blur path.
     var vibrantLight = false { didSet { refreshLift() } }
-    var usesBackdropLayer: Bool { vibrantLight && !vibrantDark && backdropLayer != nil }
+    /// Arc's one-colour themes, light or dark: the blur under SpacePalette.solidAlpha's material.
+    var solidBackdrop = false { didSet { refreshLift() } }
+    var usesBackdropLayer: Bool { (solidBackdrop || vibrantLight && !vibrantDark) && backdropLayer != nil }
     /// Lifts the dark blur toward Arc's mid-grey base before the gradient goes on.
     let vibrancyLift = NSView()
     let backgroundHost: NSView
@@ -124,9 +126,10 @@ final class ShellView: NSView {
             vibrancyLift.isHidden = true
             backdropHost.isHidden = false
             CATransaction.begin(); CATransaction.setDisableActions(true)
-            dimLayer.opacity = Float(windowActive ? t.blurDim : t.blurDimInactive)
-            let top = windowActive ? t.liftActive : t.liftInactive
-            let bottom = windowActive ? t.liftActiveBottom : t.liftInactive
+            // Solid: Arc's material is grey 66 passing 52 % of the backdrop, flat 212 while inactive.
+            dimLayer.opacity = Float(solidBackdrop ? (windowActive ? 0.30 : 1) : windowActive ? t.blurDim : t.blurDimInactive)
+            let top = solidBackdrop ? (windowActive ? 0.26 : 0.83) : windowActive ? t.liftActive : t.liftInactive
+            let bottom = solidBackdrop ? top : windowActive ? t.liftActiveBottom : t.liftInactive
             liftLayer.colors = [NSColor(white: 1, alpha: top).cgColor, NSColor(white: 1, alpha: bottom).cgColor]
             CATransaction.commit()
         } else {
@@ -662,18 +665,40 @@ final class ResizeHandleView: NSView {
     var onDrag: ((CGFloat) -> Void)?
     var onEnd: (() -> Void)?
     private var lastX: CGFloat = 0
+    private var dragging = false
+    private var tracking: NSTrackingArea?
 
     /// The window is movable by its background; this strip must own its drags.
     override var mouseDownCanMoveWindow: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .resizeLeftRight) }
-    override func mouseDown(with event: NSEvent) { lastX = event.locationInWindow.x }
+
+    /// A page window or the floating sidebar's panel is usually not key, so track
+    /// always and set the cursor ourselves.
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let t = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .cursorUpdate, .activeAlways], owner: self, userInfo: nil)
+        addTrackingArea(t)
+        tracking = t
+    }
+
+    override func cursorUpdate(with event: NSEvent) { NSCursor.resizeLeftRight.set() }
+    override func mouseEntered(with event: NSEvent) { NSCursor.resizeLeftRight.set() }
+    override func mouseExited(with event: NSEvent) { if !dragging { NSCursor.arrow.set() } }
+
+    override func mouseDown(with event: NSEvent) { lastX = event.locationInWindow.x; dragging = true }
     override func mouseDragged(with event: NSEvent) {
         let x = event.locationInWindow.x
         onDrag?(x - lastX)
         lastX = x
+        NSCursor.resizeLeftRight.set()
     }
-    override func mouseUp(with event: NSEvent) { onEnd?() }
+    override func mouseUp(with event: NSEvent) {
+        dragging = false
+        onEnd?()
+        if !bounds.contains(convert(event.locationInWindow, from: nil)) { NSCursor.arrow.set() }
+    }
 }
 
 

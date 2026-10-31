@@ -81,6 +81,8 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 - (void)browser:(CraBrowser *)browser didFindMatches:(NSInteger)count activeMatch:(NSInteger)activeMatch;
 /// The page started or stopped using the camera or microphone.
 - (void)browser:(CraBrowser *)browser didChangeMediaCapture:(BOOL)capturing;
+/// The page started or stopped playing sound (see `isAudible`).
+- (void)browser:(CraBrowser *)browser didChangeAudible:(BOOL)audible;
 /// Arc's Peek: a link the user clicked (`shiftClick` NO: before it navigates the page or
 /// opens as a target=_blank tab) or Shift-clicked (YES, instead of a new window). Return
 /// YES to show it in a Peek; the page then stays where it is.
@@ -151,6 +153,9 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 @property (nonatomic, readonly) BOOL isPictureInPicturePlaying;
 /// The page is using the camera or microphone (Chromium's media access state).
 @property (nonatomic, readonly) BOOL isCapturingMedia;
+/// The page is playing sound, in any frame (Chromium's audible state). Like Chrome's tab
+/// speaker it stays YES for 2 s after the page goes quiet. Muting the tab doesn't change it.
+@property (nonatomic, readonly) BOOL isAudible;
 /// Play/pause the video in the Picture in Picture window.
 - (void)togglePictureInPicturePlayback;
 /// Seek the video in the Picture in Picture window by `seconds` (negative = back).
@@ -163,6 +168,10 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 - (void)probeBackgroundColor;
 /// Runs script in this browser's DevTools frontend, if open (debug aid behind cra://debug?devtoolsjs=).
 - (void)executeJavaScript:(NSString *)script inDevTools:(BOOL)inDevTools;
+/// Runtime.evaluate (`params` without a context) in the main frame's isolated world `world`,
+/// where the isolated document start script runs.
+- (void)evaluateInIsolatedWorld:(NSString *)world params:(NSString *)params
+                     completion:(void (^)(NSString * _Nullable result, NSString * _Nullable error))completion;
 /// Chrome DevTools Protocol call on this browser's own session (no DevTools window).
 /// `params` is a JSON object string; the completion gets the result JSON or an error.
 - (void)sendDevToolsMethod:(NSString *)method params:(NSString *)params
@@ -182,6 +191,10 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 + (BOOL)chromeHosting;
 /// Page context menus are shown by Cra, not Chrome (pages embedded in their cards).
 + (void)setOwnContextMenus:(BOOL)enabled;
+/// Run in every frame of every page browser before the page's own scripts (and once in the
+/// document already loaded): `script` in the page's world, `isolatedScript` in the isolated
+/// world named `world` (invisible to the page). Set before browsers are created.
++ (void)setDocumentStartScript:(NSString *)script isolatedScript:(NSString *)isolatedScript world:(NSString *)world;
 /// Third-party ad and tracker blocking: subresource and subframe requests whose host
 /// (or a parent domain) is on the blocked list are cancelled when they are third-party
 /// to the tab's top-level page. Main-frame navigations always load. Takes effect for
