@@ -132,9 +132,9 @@ final class CommandTextField {
                 controller.commit(forceNewTab: cmd)
                 return true
             case #selector(NSResponder.cancelOperation(_:)):
-                if controller.siteSearch != nil { controller.cancelSiteSearch() } else { controller.close() }
+                if controller.scope != nil { controller.cancelScope() } else { controller.close() }
                 return true
-            case #selector(NSResponder.insertTab(_:)) where controller.enterSiteSearch():
+            case #selector(NSResponder.insertTab(_:)) where controller.enterScope():
                 return true
             case #selector(NSResponder.insertTab(_:)), #selector(NSResponder.moveRight(_:)), #selector(NSResponder.moveToEndOfLine(_:)):
                 if pendingCompletion != nil, textView.selectedRange.length > 0 {
@@ -147,8 +147,8 @@ final class CommandTextField {
                 }
                 return selector == #selector(NSResponder.insertTab(_:))
             case #selector(NSResponder.deleteBackward(_:)):
-                if controller.siteSearch != nil, textView.string.isEmpty {
-                    controller.leaveSiteSearch()
+                if controller.scope != nil, textView.string.isEmpty {
+                    controller.leaveScope()
                     return true
                 }
                 if pendingCompletion != nil, textView.selectedRange.length > 0 {
