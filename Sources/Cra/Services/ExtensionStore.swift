@@ -143,6 +143,19 @@ final class ExtensionStore {
         return ExtensionImporter.settings(inProfile: dir)
     }
 
+    /// The extension whose options page `url` is (its options_ui/options_page, or Chrome's
+    /// chrome://extensions page for it). Chrome keeps one such tab and opening it again selects it.
+    func optionsPageOwner(_ url: String) -> String? {
+        guard let u = URLComponents(string: url) else { return nil }
+        if u.scheme == "chrome", u.host == "extensions" {
+            return u.queryItems?.first(where: { $0.name == "options" || $0.name == "id" })?.value
+        }
+        guard u.scheme == "chrome-extension", let id = u.host,
+              let options = entries.first(where: { $0.extensionID == id })?.optionsPath else { return nil }
+        let path = options.split(separator: "?", maxSplits: 1).first.map(String.init) ?? options
+        return u.path == "/" + path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) ? id : nil
+    }
+
     private static func entry(id: String, folder dir: URL, extensionID: String?) -> Entry? {
         guard let data = try? Data(contentsOf: dir.appendingPathComponent("manifest.json")),
               let m = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }

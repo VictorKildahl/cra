@@ -56,6 +56,8 @@ protocol BrowserManagerDelegate: AnyObject {
     func browserManagerFocusedBrowser(_ tabID: UUID)
     /// The page closed itself (window.close()).
     func browserManagerPageClosedTab(_ tabID: UUID)
+    /// An extension asked for this tab to be in front (chrome.tabs.update with active: true).
+    func browserManagerActivationRequested(_ tabID: UUID)
     /// Arc's Peek: a link the user clicked (or Shift-clicked) in `tabID`, whose page is at
     /// `pageURL`. Return true when it opens in a Peek instead.
     func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool) -> Bool
@@ -871,6 +873,11 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     func browserDidReceiveFocus(_ browser: CraBrowser) {
         guard let id = tabID(of: browser) else { return }
         delegate?.browserManagerFocusedBrowser(id)
+    }
+
+    func browserRequestsActivation(_ browser: CraBrowser) {
+        guard let id = tabID(of: browser) else { return }
+        delegate?.browserManagerActivationRequested(id)
     }
 
     func browserDidClose(_ browser: CraBrowser) {

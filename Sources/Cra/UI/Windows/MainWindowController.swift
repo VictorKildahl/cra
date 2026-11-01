@@ -1253,6 +1253,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     func browserManagerPageClosedTab(_ tabID: UUID) { closeTab(tabID) }
 
+    /// An extension brought one of this window's tabs to the front (SwitchyOmega's Options with
+    /// its settings tab already open): selected, as in Arc (GitHub #38).
+    func browserManagerActivationRequested(_ tabID: UUID) {
+        store.selectTab(tabID, window: windowID)
+        if NSApp.isActive, window?.isKeyWindow == false { showWindow(nil) }
+    }
+
     /// Arc's Peek (Settings ▸ Tabs ▸ Links): a link to another site clicked in a favorite or
     /// pinned tab (any tab with "In every tab" on), or any Shift-clicked link, opens over the
     /// window and the tab stays put.
@@ -1737,7 +1744,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             let fallback = window.map { NSPoint(x: $0.frame.maxX - 16, y: $0.frame.maxY - CraMetrics.toolbarHeight) } ?? .zero
             ExtensionPageWindow.open(url: url, anchor: anchor ?? fallback, app: app)
         case .openTab(let url):
-            store.createTab(url: url, select: true, window: windowID)
+            app.openExtensionPage(url, window: windowID)
         }
     }
 

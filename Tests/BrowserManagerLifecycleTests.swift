@@ -372,5 +372,6 @@ private final class Observer: BrowserManagerDelegate {
     func browserManagerHandleUnhandledKey(_ event: NSEvent) -> Bool { false }
     func browserManagerFocusedBrowser(_ tabID: UUID) {}
     func browserManagerPageClosedTab(_ tabID: UUID) { closedTabs.append(tabID) }
+    func browserManagerActivationRequested(_ tabID: UUID) {}
     func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool) -> Bool { false }
 }

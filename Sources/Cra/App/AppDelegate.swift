@@ -95,7 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     return
                 }
                 self.useNormalWindow()
-                self.store.createTab(url: url, select: true)
+                self.openExtensionPage(url)
                 self.main.showWindow(nil)
             }
         }
@@ -283,6 +283,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     if let c = self.mainWindows.first(where: { $0.window === w }) { self.store.activeWindowID = c.windowID }
                 }
             }
+        }
+    }
+
+    /// A page an extension opens as a tab. Its options page stays one tab, as in Chrome and
+    /// Arc: opening it again selects the open one (GitHub #38).
+    func openExtensionPage(_ url: String, window: UUID? = nil) {
+        let page = { (u: String) in u.split(separator: "#", maxSplits: 1).first.map(String.init) ?? u }
+        if ExtensionStore.shared.optionsPageOwner(url) != nil,
+           let open = store.allTabs().first(where: { $0.tab.map { page($0.url) == page(url) } == true && !store.isIncognito(item: $0.id) }) {
+            store.selectTab(open.id, window: window)
+        } else {
+            store.createTab(url: url, select: true, window: window)
         }
     }
 
