@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Arc 1.171's "Edit Pinned URL" dialog (a pinned tab's or favorite's Edit Pinned Page ▸ Edit…),
+/// Arc 1.171's "Edit Pinned URL" dialog (a pinned tab's or favorite's Edit Pinned URL…),
 /// measured from a 2x capture (1 Nov, #54): a 393 × 265 pt navy card over the dimmed window, the
 /// saved URL selected in its field. Arc enables Save for any text; Cra only for an address
 /// (TypedURL.pinnedDestination), so a search or a script can't become the pinned page.

@@ -882,12 +882,12 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         m.autoenablesItems = false
         MenuItems.add(m, "Remove from Favorites") { store.removeFromFavorites(id) }
         MenuItems.add(m, "Rename…") { ui.renamingID = id }
+        if let t = item.tab, t.liveItemURL == nil {
+            SidebarMenus.pinnedURLItems(m, id, navigatedAway: t.url != t.savedURL, store: store, actions: actions)
+        }
         MenuItems.add(m, "Copy Link") {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(item.tab?.url ?? "", forType: .string)
-        }
-        if let t = item.tab, t.liveItemURL == nil {
-            SidebarMenus.editPinnedPage(m, id, navigatedAway: t.url != t.savedURL, store: store, actions: actions)
         }
         if let t = item.tab, t.url != t.savedURL { MenuItems.add(m, "Back to Pinned Page") { actions.resetPinnedTab(id) } }
         m.addItem(.separator())

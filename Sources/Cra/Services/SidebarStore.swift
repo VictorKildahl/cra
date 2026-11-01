@@ -511,7 +511,7 @@ final class SidebarStore {
         touch()
     }
 
-    /// Arc's Edit Pinned Page ▸ Edit…: a new pinned URL for a pinned tab or favorite (#54). A tab
+    /// Edit Pinned URL…: a new pinned URL for a pinned tab or favorite (#54). A tab
     /// on its pinned page goes with it; one navigated away keeps its page until Back to Pinned Page.
     @discardableResult
     func setPinnedURL(_ id: UUID, to url: String) -> Bool {
