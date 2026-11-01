@@ -1,4 +1,5 @@
 import AppKit
+import CraCEF
 import CryptoKit
 import Observation
 
@@ -39,7 +40,10 @@ final class ExtensionStore {
     /// The menu bar's Extensions menu and the toolbar read this one.
     static let shared: ExtensionStore = {
         let store = ExtensionStore()
-        store.watchProfiles()
+        // An install, switch or removal in chrome://extensions or the Web Store (main queue).
+        CraCEFRuntime.setExtensionSettingsChangeHandler { [weak store] in
+            MainActor.assumeIsolated { store?.reload() }
+        }
         return store
     }()
 
@@ -80,9 +84,9 @@ final class ExtensionStore {
         try? fm.createDirectory(at: ExtensionStore.directory, withIntermediateDirectories: true)
         let names = (try? fm.contentsOfDirectory(atPath: ExtensionStore.directory.path)) ?? []
         let root = AppPaths.chromiumCache
-        let profiles = Self.profileNames()
-        let disabled = Self.disabledIDs(profiles)
-        disabledByProfile = disabled
+        let profiles = ((try? fm.contentsOfDirectory(atPath: root.path)) ?? []).filter { $0 == "Default" || $0.hasPrefix("Profile ") }.sorted()
+        let settings = Dictionary(uniqueKeysWithValues: profiles.map { ($0, Self.extensionSettings(inProfile: $0)) })
+        let disabled = settings.mapValues(ExtensionImporter.disabledIDs(settings:))
         let list = names.sorted().compactMap { name -> Entry? in
             guard var entry = Self.entry(id: name, folder: ExtensionStore.directory.appendingPathComponent(name, isDirectory: true),
                                          extensionID: nil) else { return nil }
@@ -94,7 +98,7 @@ final class ExtensionStore {
         var managed: [Entry] = []
         for profile in profiles {
             // Turned-off ones stay listed (as off) so their pins come back with them.
-            for e in ExtensionImporter.extensions(inProfile: root.appendingPathComponent(profile, isDirectory: true))
+            for e in ExtensionImporter.extensions(settings: settings[profile] ?? [:], inProfile: root.appendingPathComponent(profile, isDirectory: true))
             where !loaded.contains(e.id) {
                 var i = managed.firstIndex(where: { $0.extensionID == e.id })
                 if i == nil, var entry = Self.entry(id: e.id, folder: e.folder, extensionID: e.id) {
@@ -117,70 +121,18 @@ final class ExtensionStore {
     /// Site Control Center leave turned-off extensions out (Chrome's toolbar model).
     func entries(inProfile name: String) -> [Entry] { entries.filter { $0.isEnabled(inProfile: name) } }
 
-    // MARK: Turned on and off in chrome://extensions (GitHub #41)
+    // MARK: Installed, turned on and off in chrome://extensions (GitHub #41, #43)
 
-    /// Profile folder → extension IDs turned off there, as `reload` last read them.
-    @ObservationIgnored private var disabledByProfile: [String: Set<String>] = [:]
-    @ObservationIgnored private var profileWatchers: [String: DispatchSourceFileSystemObject] = [:]
-    @ObservationIgnored private var prefsCheckPending = false
-
-    nonisolated private static func profileNames() -> [String] {
-        ((try? FileManager.default.contentsOfDirectory(atPath: AppPaths.chromiumCache.path)) ?? [])
-            .filter { $0 == "Default" || $0.hasPrefix("Profile ") }.sorted()
-    }
-
-    nonisolated private static func disabledIDs(_ profiles: [String]) -> [String: Set<String>] {
-        Dictionary(uniqueKeysWithValues: profiles.map {
-            ($0, ExtensionImporter.disabledIDs(inProfile: AppPaths.chromiumCache.appendingPathComponent($0, isDirectory: true)))
-        })
-    }
-
-    nonisolated private static func prefsDates(_ profiles: [String]) -> [Date?] {
-        profiles.flatMap { name in ["Preferences", "Secure Preferences"].map { file in
-            let path = AppPaths.chromiumCache.appendingPathComponent(name).appendingPathComponent(file).path
-            return (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
-        } }
-    }
-
-    /// Pinned buttons follow a switch in chrome://extensions once Chromium writes the profile's
-    /// prefs (about 10 s later), by renaming a new file into the profile folder. The folders
-    /// change all the time (database journals), so only new prefs files are read.
-    private func watchProfiles() {
-        let root = AppPaths.chromiumCache
-        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        // The root too, for a space's new profile.
-        for name in [""] + Self.profileNames() where profileWatchers[name] == nil {
-            let fd = open(root.appendingPathComponent(name).path, O_EVTONLY)
-            guard fd >= 0 else { continue }
-            let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: .write, queue: .main)
-            source.setEventHandler { [weak self] in MainActor.assumeIsolated { self?.profileFolderChanged() } }
-            source.setCancelHandler { close(fd) }
-            source.resume()
-            profileWatchers[name] = source
+    /// A profile's extensions.settings. Chromium writes its prefs to disk ~10 s after an install
+    /// or a switch, so a profile that has loaded answers from memory (and says when it changes);
+    /// the files only for one no space has opened yet, where nothing can have changed.
+    private static func extensionSettings(inProfile name: String) -> [String: Any] {
+        let dir = AppPaths.chromiumCache.appendingPathComponent(name, isDirectory: true)
+        if let json = CraCEFRuntime.extensionSettings(forProfile: name == "Default" ? nil : dir.path),
+           let live = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] {
+            return live
         }
-    }
-
-    @ObservationIgnored private var prefsDatesSeen: [Date?] = []
-
-    private func profileFolderChanged() {
-        guard !prefsCheckPending else { return }
-        prefsCheckPending = true
-        let seen = prefsDatesSeen
-        let known = disabledByProfile
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1) { [weak self] in
-            let profiles = Self.profileNames()
-            let dates = Self.prefsDates(profiles)
-            let changed = dates != seen && Self.disabledIDs(profiles) != known
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    guard let self else { return }
-                    self.prefsCheckPending = false
-                    self.prefsDatesSeen = dates
-                    if changed { self.reload() }
-                    self.watchProfiles()
-                }
-            }
-        }
+        return ExtensionImporter.settings(inProfile: dir)
     }
 
     private static func entry(id: String, folder dir: URL, extensionID: String?) -> Entry? {

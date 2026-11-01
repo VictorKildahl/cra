@@ -493,34 +493,18 @@ final class FavoritesGridView: NSView {
         if countChanged { onHeightChange(false) }
     }
 
-    /// Arc 1.171 (AX frames, 1–9 favorites at sidebar widths 100–347, 31 Oct): at most as many
-    /// columns (up to four) as keep a tile at least as wide as it is tall (47 pt), then the fewest
-    /// that need no more rows: one favorite fills the row, five go 3 + 2, nine 3 × 3, four at
-    /// 200 pt 2 × 2 (#29). A short last row keeps the tile width, from the left.
-    private func columns(forWidth w: CGFloat) -> Int {
-        let widest = (1...4).last { (w - CGFloat($0 - 1) * 8) / CGFloat($0) >= 47 } ?? 1
-        guard !order.isEmpty else { return widest }
-        let rows = (order.count + widest - 1) / widest
-        return (order.count + rows - 1) / rows
-    }
-
-    private func rows(forWidth w: CGFloat) -> Int {
-        let c = columns(forWidth: w)
-        return (order.count + c - 1) / c
-    }
+    /// Arc's columns and tile frames (FavoritesLayout, #29).
+    private func grid(forWidth w: CGFloat) -> FavoritesLayout { FavoritesLayout(count: order.count, width: w) }
 
     func height(forWidth w: CGFloat) -> CGFloat {
-        let rows = rows(forWidth: w)
-        let grid = rows == 0 ? 0 : CGFloat(rows) * 47 + CGFloat(rows - 1) * 8
-        return grid + (order.isEmpty ? 0 : 4) + strip.height
+        grid(forWidth: w).gridHeight + (order.isEmpty ? 0 : 4) + strip.height
     }
 
     /// Where the header and list are placed from: the tiles' bottom, the open "Add to Favorites"
     /// strip's while a tab is dragged over it, nil with no favorites.
     func tilesBottom(forWidth w: CGFloat) -> CGFloat? {
         if strip.targeted { return height(forWidth: w) }
-        let rows = rows(forWidth: w)
-        return rows == 0 ? nil : CGFloat(rows) * 47 + CGFloat(rows - 1) * 8
+        return order.isEmpty ? nil : grid(forWidth: w).gridHeight
     }
 
     /// The resting strip only takes drops (AppKit finds drop targets apart from hitTest). With
@@ -533,17 +517,9 @@ final class FavoritesGridView: NSView {
     override func layout() {
         super.layout()
         let w = bounds.width
-        let n = columns(forWidth: w)
-        let cw = (w - CGFloat(n - 1) * 8) / CGFloat(n)
-        for (i, id) in order.enumerated() {
-            let r = i / n, c = i % n
-            // Arc puts each tile on a half point (84.75 → 85 at 347 pt).
-            let x = (CGFloat(c) * (cw + 8) * 2).rounded() / 2
-            tiles[id]?.frame = NSRect(x: x, y: CGFloat(r) * (47 + 8), width: cw, height: 47)
-        }
-        let rows = rows(forWidth: w)
-        let grid = rows == 0 ? 0 : CGFloat(rows) * 47 + CGFloat(rows - 1) * 8
-        strip.frame = NSRect(x: 0, y: grid + (order.isEmpty ? 0 : 4), width: w, height: strip.height)
+        let grid = grid(forWidth: w)
+        for (i, id) in order.enumerated() { tiles[id]?.frame = grid.frame(at: i) }
+        strip.frame = NSRect(x: 0, y: grid.gridHeight + (order.isEmpty ? 0 : 4), width: w, height: strip.height)
     }
 
     func moveFavorite(_ dragged: UUID, before target: UUID, after: Bool) {

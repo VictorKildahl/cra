@@ -1,0 +1,759 @@
+{
+  "gradientAppearanceBasedDark": {
+    "customInfo": {
+      "windowTheme": {
+        "background": {
+          "appearanceBased": {
+            "dark": {
+              "contentOverBackgroundAppearance": "dark",
+              "isVibrant": false,
+              "style": {
+                "color": {
+                  "_0": {
+                    "blendedGradient": {
+                      "_0": {
+                        "baseColors": [
+                          {
+                            "alpha": 1,
+                            "blue": 0.12423918396234512,
+                            "colorSpace": "extendedSRGB",
+                            "green": 0.00801163725554943,
+                            "red": 0.0030348505824804306
+                          },
+                          {
+                            "alpha": 1,
+                            "blue": 0.12350984662771225,
+                            "colorSpace": "extendedSRGB",
+                            "green": -0.0005694620776921511,
+                            "red": 0.10257645696401596
+                          }
+                        ],
+                        "modifiers": {
+                          "intensityFactor": 0.8,
+                          "noiseFactor": 0,
+                          "overlay": "grain"
+                        },
+                        "overlayColors": [],
+                        "translucencyStyle": "dark",
+                        "wheel": {
+                          "complimentary": {}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "light": {
+              "contentOverBackgroundAppearance": "light",
+              "isVibrant": false,
+              "style": {
+                "color": {
+                  "_0": {
+                    "blendedGradient": {
+                      "_0": {
+                        "baseColors": [
+                          {
+                            "alpha": 1,
+                            "blue": 1.0133761167526245,
+                            "colorSpace": "extendedSRGB",
+                            "green": 0.7924899458885193,
+                            "red": 0.7825282216072083
+                          },
+                          {
+                            "alpha": 1,
+                            "blue": 0.8998938202857971,
+                            "colorSpace": "extendedSRGB",
+                            "green": 0.8975197672843933,
+                            "red": 1.0203664302825928
+                          }
+                        ],
+                        "modifiers": {
+                          "intensityFactor": 0.5,
+                          "noiseFactor": 0,
+                          "overlay": "grain"
+                        },
+                        "overlayColors": [],
+                        "translucencyStyle": "light",
+                        "wheel": {
+                          "complimentary": {}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "primaryColorPalette": {
+          "midTone": {
+            "alpha": 1,
+            "blue": 1.0143413391776335,
+            "colorSpace": "extendedSRGB",
+            "green": 0.5381175653059538,
+            "red": 0.5139257535271398
+          },
+          "shaded": {
+            "alpha": 1,
+            "blue": 1.0240697860717773,
+            "colorSpace": "extendedSRGB",
+            "green": 0.22479963302612305,
+            "red": 0.1841973066329956
+          },
+          "shadedDark": {
+            "alpha": 1,
+            "blue": 1.0258938698644293,
+            "colorSpace": "extendedSRGB",
+            "green": 0.16605252072365362,
+            "red": 0.12237322284034358
+          },
+          "tintedLight": {
+            "alpha": 1,
+            "blue": 1.0021807805599507,
+            "colorSpace": "extendedSRGB",
+            "green": 0.9297649806557461,
+            "red": 0.9260863121448228
+          }
+        }
+      }
+    }
+  },
+  "gradientVibrantLight": {
+    "customInfo": {
+      "windowTheme": {
+        "background": {
+          "single": {
+            "_0": {
+              "contentOverBackgroundAppearance": "light",
+              "isVibrant": true,
+              "style": {
+                "color": {
+                  "_0": {
+                    "blendedGradient": {
+                      "_0": {
+                        "baseColors": [
+                          {
+                            "alpha": 1,
+                            "blue": 0.3457501530647278,
+                            "colorSpace": "extendedSRGB",
+                            "green": 0.8349388241767883,
+                            "red": 0.9725341200828552
+                          },
+                          {
+                            "alpha": 1,
+                            "blue": 0.33059829473495483,
+                            "colorSpace": "extendedSRGB",
+                            "green": 0.9583556056022644,
+                            "red": 0.6419472098350525
+                          }
+                        ],
+                        "modifiers": {
+                          "intensityFactor": 0.25217215013901756,
+                          "noiseFactor": 0.35,
+                          "overlay": "grain"
+                        },
+                        "overlayColors": [
+                          {
+                            "alpha": 0,
+                            "blue": 0,
+                            "colorSpace": "extendedSRGB",
+                            "green": 0,
+                            "red": 0
+                          },
+                          {
+                            "alpha": 1,
+                            "blue": 0.40259188413619995,
+                            "colorSpace": "extendedSRGB",
+                            "green": 0.45889586210250854,
+                            "red": 1.0189919471740723
+                          }
+                        ],
+                        "translucencyStyle": "light",
+                        "wheel": {
+                          "analogous": {}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "primaryColorPalette": {
+          "midTone": {
+            "alpha": 1,
+            "blue": -0.2314479947090149,
+            "colorSpace": "extendedSRGB",
+            "green": 0.7032328248023987,
+            "red": 0.913607656955719
+          },
+          "shaded": {
+            "alpha": 1,
+            "blue": -0.2314479947090149,
+            "colorSpace": "extendedSRGB",
+            "green": 0.7032328248023987,
+            "red": 0.913607656955719
+          },
+          "shadedDark": {
+            "alpha": 1,
+            "blue": -0.08024805039167404,
+            "colorSpace": "extendedSRGB",
+            "green": 0.33624404668807983,
+            "red": 0.4369257688522339
+          },
+          "tintedLight": {
+            "alpha": 1,
+            "blue": 0.7377796769142151,
+            "colorSpace": "extendedSRGB",
+            "green": 0.9305835962295532,
+            "red": 0.9889748692512512
+          }
+        }
+      }
+    }
+  },
+  "noWindowTheme": {
+    "customInfo": {
+      "iconType": {
+        "emoji_v2": "🌿"
+      }
+    }
+  },
+  "solidBlueDark": {
+    "customInfo": {
+      "windowTheme": {
+        "background": {
+          "single": {
+            "_0": {
+              "contentOverBackgroundAppearance": "dark",
+              "isVibrant": false,
+              "style": {
+                "color": {
+                  "_0": {
+                    "blendedSingleColor": {
+                      "_0": {
+                        "color": {
+                          "alpha": 1,
+                          "blue": 0.701,
+                          "colorSpace": "extendedSRGB",
+                          "green": 0.381,
+                          "red": 0.158
+                        },
+                        "modifiers": {
+                          "intensityFactor": 1,
+                          "noiseFactor": 0,
+                          "overlay": "grain"
+                        },
+                        "translucencyStyle": "light"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "primaryColorPalette": {
+          "midTone": {
+            "alpha": 1,
+            "blue": -0.2314479947090149,
+            "colorSpace": "extendedSRGB",
+            "green": 0.7032328248023987,
+            "red": 0.913607656955719
+          },
+          "shaded": {
+            "alpha": 1,
+            "blue": -0.2314479947090149,
+            "colorSpace": "extendedSRGB",
+            "green": 0.7032328248023987,
+            "red": 0.913607656955719
+          },
+          "shadedDark": {
+            "alpha": 1,
+            "blue": -0.08024805039167404,
+            "colorSpace": "extendedSRGB",
+            "green": 0.33624404668807983,
+            "red": 0.4369257688522339
+          },
+          "tintedLight": {
+            "alpha": 1,
+            "blue": 0.7377796769142151,
+            "colorSpace": "extendedSRGB",
+            "green": 0.9305835962295532,
+            "red": 0.9889748692512512
+          }
+        }
+      }
+    }
+  },
+  "solidBlueHalfIntensity": {
+    "customInfo": {
+      "windowTheme": {
+        "background": {
+          "single": {
+            "_0": {
+              "contentOverBackgroundAppearance": "dark",
+              "isVibrant": false,
+              "style": {
+                "color": {
+                  "_0": {
+                    "blendedSingleColor": {
+                      "_0": {
+                        "color": {
+                          "alpha": 1,
+                          "blue": 0.701,
+                          "colorSpace": "extendedSRGB",
+                          "green": 0.381,
+                          "red": 0.158
+                        },
+                        "modifiers": {
+                          "intensityFactor": 0.5,
+                          "noiseFactor": 0,
+                          "overlay": "grain"
+                        },
+                        "translucencyStyle": "light"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "primaryColorPalette": {
+          "midTone": {
+            "alpha": 1,
+            "blue": -0.2314479947090149,
+            "colorSpace": "extendedSRGB",
+            "green": 0.7032328248023987,
+            "red": 0.913607656955719
+          },
+          "shaded": {
+            "alpha": 1,
+            "blue": -0.2314479947090149,
+            "colorSpace": "extendedSRGB",
+            "green": 0.7032328248023987,
+            "red": 0.913607656955719
+          },
+          "shadedDark": {
+            "alpha": 1,
+            "blue": -0.08024805039167404,
+            "colorSpace": "extendedSRGB",
+            "green": 0.33624404668807983,
+            "red": 0.4369257688522339
+          },
+          "tintedLight": {
+            "alpha": 1,
+            "blue": 0.7377796769142151,
+            "colorSpace": "extendedSRGB",
+            "green": 0.9305835962295532,
+            "red": 0.9889748692512512
+          }
+        }
+      }
+    }
+  },
+  "solidBlueVibrantLight": {
+    "customInfo": {
+      "windowTheme": {
+        "background": {
+          "single": {
+            "_0": {
+              "contentOverBackgroundAppearance": "light",
+              "isVibrant": true,
+              "style": {
+                "color": {
+                  "_0": {
+                    "blendedSingleColor": {
+                      "_0": {
+                        "color": {
+                          "alpha": 1,
+                          "blue": 0.701,
+                          "colorSpace": "extendedSRGB",
+                          "green": 0.381,
+                          "red": 0.158
+                        },
+                        "modifiers": {
+                          "intensityFactor": 1,
+                          "noiseFactor": 0,
+                          "overlay": "grain"
+                        },
+                        "translucencyStyle": "light"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "primaryColorPalette": {
+          "midTone": {
+            "alpha": 1,
+            "blue": -0.2314479947090149,
+            "colorSpace": "extendedSRGB",
+            "green": 0.7032328248023987,
+            "red": 0.913607656955719
+          },
+          "shaded": {
+            "alpha": 1,
+            "blue": -0.2314479947090149,
+            "colorSpace": "extendedSRGB",
+            "green": 0.7032328248023987,
+            "red": 0.913607656955719
+          },
+          "shadedDark": {
+            "alpha": 1,
+            "blue": -0.08024805039167404,
+            "colorSpace": "extendedSRGB",
+            "green": 0.33624404668807983,
+            "red": 0.4369257688522339
+          },
+          "tintedLight": {
+            "alpha": 1,
+            "blue": 0.7377796769142151,
+            "colorSpace": "extendedSRGB",
+            "green": 0.9305835962295532,
+            "red": 0.9889748692512512
+          }
+        }
+      }
+    }
+  },
+  "solidBlueZeroIntensity": {
+    "customInfo": {
+      "windowTheme": {
+        "background": {
+          "single": {
+            "_0": {
+              "contentOverBackgroundAppearance": "dark",
+              "isVibrant": false,
+              "style": {
+                "color": {
+                  "_0": {
+                    "blendedSingleColor": {
+                      "_0": {
+                        "color": {
+                          "alpha": 1,
+                          "blue": 0.701,
+                          "colorSpace": "extendedSRGB",
+                          "green": 0.381,
+                          "red": 0.158
+                        },
+                        "modifiers": {
+                          "intensityFactor": 0.0,
+                          "noiseFactor": 0,
+                          "overlay": "grain"
+                        },
+                        "translucencyStyle": "light"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "primaryColorPalette": {
+          "midTone": {
+            "alpha": 1,
+            "blue": -0.2314479947090149,
+            "colorSpace": "extendedSRGB",
+            "green": 0.7032328248023987,
+            "red": 0.913607656955719
+          },
+          "shaded": {
+            "alpha": 1,
+            "blue": -0.2314479947090149,
+            "colorSpace": "extendedSRGB",
+            "green": 0.7032328248023987,
+            "red": 0.913607656955719
+          },
+          "shadedDark": {
+            "alpha": 1,
+            "blue": -0.08024805039167404,
+            "colorSpace": "extendedSRGB",
+            "green": 0.33624404668807983,
+            "red": 0.4369257688522339
+          },
+          "tintedLight": {
+            "alpha": 1,
+            "blue": 0.7377796769142151,
+            "colorSpace": "extendedSRGB",
+            "green": 0.9305835962295532,
+            "red": 0.9889748692512512
+          }
+        }
+      }
+    }
+  },
+  "solidRedDark": {
+    "customInfo": {
+      "windowTheme": {
+        "background": {
+          "single": {
+            "_0": {
+              "contentOverBackgroundAppearance": "dark",
+              "isVibrant": false,
+              "style": {
+                "color": {
+                  "_0": {
+                    "blendedSingleColor": {
+                      "_0": {
+                        "color": {
+                          "alpha": 1,
+                          "blue": 0.2,
+                          "colorSpace": "extendedSRGB",
+                          "green": 0.2,
+                          "red": 0.9
+                        },
+                        "modifiers": {
+                          "intensityFactor": 1,
+                          "noiseFactor": 0,
+                          "overlay": "grain"
+                        },
+                        "translucencyStyle": "light"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "primaryColorPalette": {
+          "midTone": {
+            "alpha": 1,
+            "blue": -0.2314479947090149,
+            "colorSpace": "extendedSRGB",
+            "green": 0.7032328248023987,
+            "red": 0.913607656955719
+          },
+          "shaded": {
+            "alpha": 1,
+            "blue": -0.2314479947090149,
+            "colorSpace": "extendedSRGB",
+            "green": 0.7032328248023987,
+            "red": 0.913607656955719
+          },
+          "shadedDark": {
+            "alpha": 1,
+            "blue": -0.08024805039167404,
+            "colorSpace": "extendedSRGB",
+            "green": 0.33624404668807983,
+            "red": 0.4369257688522339
+          },
+          "tintedLight": {
+            "alpha": 1,
+            "blue": 0.7377796769142151,
+            "colorSpace": "extendedSRGB",
+            "green": 0.9305835962295532,
+            "red": 0.9889748692512512
+          }
+        }
+      }
+    }
+  },
+  "solidWhiteDark": {
+    "customInfo": {
+      "windowTheme": {
+        "background": {
+          "single": {
+            "_0": {
+              "contentOverBackgroundAppearance": "dark",
+              "isVibrant": false,
+              "style": {
+                "color": {
+                  "_0": {
+                    "blendedSingleColor": {
+                      "_0": {
+                        "color": {
+                          "alpha": 1,
+                          "blue": 1,
+                          "colorSpace": "extendedSRGB",
+                          "green": 1,
+                          "red": 1
+                        },
+                        "modifiers": {
+                          "intensityFactor": 1,
+                          "noiseFactor": 0,
+                          "overlay": "grain"
+                        },
+                        "translucencyStyle": "light"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "primaryColorPalette": {
+          "midTone": {
+            "alpha": 1,
+            "blue": -0.2314479947090149,
+            "colorSpace": "extendedSRGB",
+            "green": 0.7032328248023987,
+            "red": 0.913607656955719
+          },
+          "shaded": {
+            "alpha": 1,
+            "blue": -0.2314479947090149,
+            "colorSpace": "extendedSRGB",
+            "green": 0.7032328248023987,
+            "red": 0.913607656955719
+          },
+          "shadedDark": {
+            "alpha": 1,
+            "blue": -0.08024805039167404,
+            "colorSpace": "extendedSRGB",
+            "green": 0.33624404668807983,
+            "red": 0.4369257688522339
+          },
+          "tintedLight": {
+            "alpha": 1,
+            "blue": 0.7377796769142151,
+            "colorSpace": "extendedSRGB",
+            "green": 0.9305835962295532,
+            "red": 0.9889748692512512
+          }
+        }
+      }
+    }
+  },
+  "solidWhiteLight": {
+    "customInfo": {
+      "windowTheme": {
+        "background": {
+          "single": {
+            "_0": {
+              "contentOverBackgroundAppearance": "light",
+              "isVibrant": false,
+              "style": {
+                "color": {
+                  "_0": {
+                    "blendedSingleColor": {
+                      "_0": {
+                        "color": {
+                          "alpha": 1,
+                          "blue": 1,
+                          "colorSpace": "extendedSRGB",
+                          "green": 1,
+                          "red": 1
+                        },
+                        "modifiers": {
+                          "intensityFactor": 1,
+                          "noiseFactor": 0,
+                          "overlay": "grain"
+                        },
+                        "translucencyStyle": "light"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "primaryColorPalette": {
+          "midTone": {
+            "alpha": 1,
+            "blue": -0.2314479947090149,
+            "colorSpace": "extendedSRGB",
+            "green": 0.7032328248023987,
+            "red": 0.913607656955719
+          },
+          "shaded": {
+            "alpha": 1,
+            "blue": -0.2314479947090149,
+            "colorSpace": "extendedSRGB",
+            "green": 0.7032328248023987,
+            "red": 0.913607656955719
+          },
+          "shadedDark": {
+            "alpha": 1,
+            "blue": -0.08024805039167404,
+            "colorSpace": "extendedSRGB",
+            "green": 0.33624404668807983,
+            "red": 0.4369257688522339
+          },
+          "tintedLight": {
+            "alpha": 1,
+            "blue": 0.7377796769142151,
+            "colorSpace": "extendedSRGB",
+            "green": 0.9305835962295532,
+            "red": 0.9889748692512512
+          }
+        }
+      }
+    }
+  },
+  "unknownStyleWithPalette": {
+    "customInfo": {
+      "windowTheme": {
+        "background": {
+          "appearanceBased": {
+            "dark": {
+              "contentOverBackgroundAppearance": "dark",
+              "isVibrant": false,
+              "style": {
+                "color": {
+                  "_0": {
+                    "someFutureStyle": {
+                      "_0": {}
+                    }
+                  }
+                }
+              }
+            },
+            "light": {
+              "contentOverBackgroundAppearance": "light",
+              "isVibrant": false,
+              "style": {
+                "color": {
+                  "_0": {
+                    "someFutureStyle": {
+                      "_0": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "primaryColorPalette": {
+          "midTone": {
+            "alpha": 1,
+            "blue": 1.0143413391776335,
+            "colorSpace": "extendedSRGB",
+            "green": 0.5381175653059538,
+            "red": 0.5139257535271398
+          },
+          "shaded": {
+            "alpha": 1,
+            "blue": 1.0240697860717773,
+            "colorSpace": "extendedSRGB",
+            "green": 0.22479963302612305,
+            "red": 0.1841973066329956
+          },
+          "shadedDark": {
+            "alpha": 1,
+            "blue": 1.0258938698644293,
+            "colorSpace": "extendedSRGB",
+            "green": 0.16605252072365362,
+            "red": 0.12237322284034358
+          },
+          "tintedLight": {
+            "alpha": 1,
+            "blue": 1.0021807805599507,
+            "colorSpace": "extendedSRGB",
+            "green": 0.9297649806557461,
+            "red": 0.9260863121448228
+          }
+        }
+      }
+    }
+  }
+}

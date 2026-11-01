@@ -266,6 +266,13 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
                        completion:(void (^)(NSString * _Nullable result, NSString * _Nullable error))completion;
 /// Protocol events from the pipe: method, params JSON, and the session they belong to.
 + (void)setBrowserDevToolsEventHandler:(nullable void (^)(NSString *method, NSString *params, NSString * _Nullable sessionID))handler;
+/// A profile's `extensions.settings` pref as Chromium holds it now (nil profilePath is
+/// Default), as JSON. Chromium writes it to Preferences ~10 s after a change. nil until
+/// that profile has loaded.
++ (nullable NSString *)extensionSettingsForProfile:(nullable NSString *)profilePath;
+/// Called on the main queue after a loaded profile's `extensions.settings` changed: an
+/// extension installed, enabled, disabled or removed.
++ (void)setExtensionSettingsChangeHandler:(nullable void (^)(void))handler;
 @end
 
 /// NSApplication subclass CEF requires (CefAppProtocol). Set as

@@ -27,6 +27,9 @@ issue when a newer stable CEF is out; `scripts/update-cef.sh` moves the pin.
   bar, split view, windows, settings, onboarding)
 - `Sources/CraCEF` — Objective-C++ bridge between Swift and CEF
 - `Sources/CraHelper` — Chromium subprocess executable
+- `Packages/CraCore` — models and decisions with no AppKit or Chromium (space themes, Arc
+  theme import, the favorites grid), visible in every `Sources/Cra` file
+- `Tests/` — the harnesses that compile production files against fakes, and the smoke test
 - `resources/` — app icon, brand PNGs, the ad and tracker blocklist with its licence notices
 - `scripts/` — build, release, CEF and test tooling; `scripts/clips` records release clips
 - `docs/arc-reverse-engineering.md` — what was learned from Arc and how
@@ -46,6 +49,33 @@ Logs name sites by host only. Help ▸ Export Diagnostics… zips both with the 
 the on-screen pages' state, settings, extensions and the last week's crash reports, with
 addresses cut to their host; `cra://debug?exportDiagnostics=<path>` does the same without
 the save panel.
+
+## Tests
+
+    scripts/test.sh                  # everything below except the smoke test, in seconds
+    scripts/test.sh core             # only Packages/CraCore
+    Tests/smoke-launch.sh            # launches build/Cra.app three times, about 30 s
+
+CI runs `scripts/test.sh` on every pull request (no CEF download) and the smoke test on the
+app it builds.
+
+- `Packages/CraCore` (`swift test --package-path Packages/CraCore`): a package of its own, so
+  its tests build without `vendor/cef`. Code that decides something without a window or a
+  page belongs here, with a test: a layout rule, a mapping from Arc's or Chromium's files,
+  a policy. Expected values for anything copied from Arc come from Arc's measurements in
+  `docs/arc-reverse-engineering.md`; fixtures hold Arc's own JSON, trimmed to what is read.
+- `Tests/test-browser-manager.sh`, `scripts/test-floating-sidebar.sh`,
+  `scripts/test-extension-popup-candidate.sh`, `scripts/test-extension-state.sh`: compile a
+  few production files with `swiftc` against fakes (`Tests/BrowserManagerSupport` stands in
+  for CraCEF and the rest of the app). When the manager calls something new from the app, add
+  a stub to `AppServices.swift`.
+- `Tests/smoke-launch.sh [app]`: starts the app on a throwaway data folder with no pages,
+  with a page opened, then with it restored, and quits it like ⌘Q after a settings write.
+  It fails on a crash, a hang, an error exit or a new crash report, which is how a `CHECK`
+  inside Chromium shows up. Its own data folder lets it run next to your daily Cra.
+
+What none of these see: compositing (the sidebar blur), fullscreen spaces, and how real sites
+behave. Check those by hand, and say how in the PR.
 
 ## Running a test instance
 

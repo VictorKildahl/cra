@@ -33,8 +33,10 @@ hooks and how to run a test instance next to your daily Cra.
 1. Fork, branch from `main`, keep the change to one thing.
 2. Match the code around you: naming, comments and structure. Doc comments say *why*,
    not what.
-3. Run it. CI only checks that Cra builds and signs, so say in the PR how you tested
-   it, and add a screenshot or a short clip for anything visible.
+3. Run it, and `scripts/test.sh`. CI builds and signs Cra, runs those tests and launches the
+   app, but none of that sees the screen: say in the PR how you tested it, and add a
+   screenshot or a short clip for anything visible. A fix for a bug that a test could
+   have caught comes with that test ([docs/development.md](docs/development.md#tests)).
 4. Don't touch the release pipeline, signing or the CEF pin unless that's the point of
    the PR. Releases are cut by the maintainer.
 
