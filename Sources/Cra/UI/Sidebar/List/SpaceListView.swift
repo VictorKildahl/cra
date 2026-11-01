@@ -92,6 +92,9 @@ final class SpaceListView: NSView, NSDraggingSource {
         for l in all.allObjects where l.ui === ui { l.refreshHover() }
     }
 
+    /// Arc's Spaces page lists a space's tabs without the New Tab row.
+    var showsNewTab = true { didSet { if showsNewTab != oldValue { scheduleSync() } } }
+
     init(spaceID: UUID, store: SidebarStore, ui: SidebarUIState, actions: SidebarActions, favicons: FaviconCache) {
         self.spaceID = spaceID
         self.store = store
@@ -288,11 +291,11 @@ final class SpaceListView: NSView, NSDraggingSource {
         let todayKids = store.item(space.todayContainerID)?.children ?? []
         out.append(Row(key: .divider, content: .divider(hasToday: !todayKids.isEmpty)))
         let atTop = store.settings.newTabButtonAtTop
-        if atTop { out.append(Row(key: .newTab, content: .newTab)) }
+        if atTop && showsNewTab { out.append(Row(key: .newTab, content: .newTab)) }
         for item in store.children(of: space.todayContainerID) {
             add(item, depth: 0, pinned: false, parent: space.todayContainerID, index: todayKids.firstIndex(of: item.id) ?? 0)
         }
-        if !atTop { out.append(Row(key: .newTab, content: .newTab)) }
+        if !atTop && showsNewTab { out.append(Row(key: .newTab, content: .newTab)) }
         return Built(rows: out, pinnedCount: pinnedCount, palette: palette,
                      highlightPinned: section == .pinned && !pinnedItems.isEmpty, highlightToday: section == .today,
                      line: drop?.line)

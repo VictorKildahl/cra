@@ -202,6 +202,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             b.isLoading ? b.stopLoading() : b.reload()
         }
         sidebarActions.editSpace = { [weak self] s in self?.showSpaceEditor(space: s) }
+        sidebarActions.changeSpaceIcon = { [weak self] s, anchor in self?.showSpaceIconPicker(space: s, anchor: anchor) }
+        sidebarActions.editSpaceTheme = { [weak self] s in self?.showSpaceStyleEditor(space: s) }
+        sidebarActions.newProfile = { [weak self] id in self?.showNewProfileDialog(forSpace: id) }
+        sidebarActions.manageSpaces = { [weak self] in self?.showManageSpaces() }
+        sidebarActions.deleteSpace = { [weak self] s in self?.app.confirmDeleteSpace(s) }
         sidebarActions.toggleSidebar = { [weak self] in self?.toggleSidebar() }
         sidebarActions.toggleLibrary = { [weak self] in self?.toggleLibrary() }
         sidebarActions.showLibrary = { [weak self] page in self?.showLibrary(page) }
@@ -367,7 +372,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         if CGFloat(store.prefs.sidebarWidth) != lastSidebarWidth {
             lastSidebarWidth = CGFloat(store.prefs.sidebarWidth)
-            shell.sidebarWidth = lastSidebarWidth + (sidebarUI.libraryPage != nil ? LibraryMetrics.extraWidth : 0)
+            shell.sidebarWidth = sidebarUI.libraryPage.map { libraryWidth($0) } ?? lastSidebarWidth
         }
     }
 
@@ -1384,12 +1389,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func showLibrary(_ page: LibraryPage) {
         sidebarUI.lastLibraryPage = page
         let opening = sidebarUI.libraryPage == nil
+        let resize = !opening && sidebarUI.libraryPage.map(libraryWidth) != libraryWidth(page)
         withAnimation(.easeOut(duration: 0.05)) { sidebarUI.libraryPage = page }
+        if resize {
+            shell.sidebarWidth = libraryWidth(page)
+            shell.animateSidebar(visible: true, floating: false, fullscreen: shell.contentFullscreen, width: shell.sidebarWidth, duration: 0.1)
+        }
         guard opening else { return }
         sidebarUI.downloadsListOpen = false
         commandBar.close()
         shell.sidebarResizable = false
-        let width = CGFloat(store.prefs.sidebarWidth) + LibraryMetrics.extraWidth
+        let width = libraryWidth(page)
         if sidebarVisible {
             shell.sidebarWidth = width
             shell.animateSidebar(visible: true, floating: false, fullscreen: shell.contentFullscreen, width: width)
@@ -1400,6 +1410,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             sidebarVisible = true
         }
         window?.makeKey()
+    }
+
+    /// The sidebar's width with the Library in it: 70 pt wider for the rail, or on the Spaces page
+    /// wide enough for every space's card (Arc), leaving the page at least 320 pt.
+    private func libraryWidth(_ page: LibraryPage) -> CGFloat {
+        let base = CGFloat(store.prefs.sidebarWidth) + LibraryMetrics.extraWidth
+        guard page == .spaces else { return base }
+        let n = store.orderedSpaces.filter { !store.isIncognito(space: $0.id) }.count
+        let room = (window?.frame.width ?? 1280) - 320
+        return max(base, min(SpacesManagerMetrics.width(spaces: n), room))
     }
 
     func closeLibrary() {

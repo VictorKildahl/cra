@@ -1,12 +1,24 @@
 import AppKit
 
-/// The Library's pages Cra has (Arc's rail also lists Media, Easels, Spaces and Boosts).
+/// The Library's pages Cra has, in the order of Arc's rail (which also lists Media, Easels and Boosts).
 enum LibraryPage: String, CaseIterable {
-    case downloads, archive
+    case downloads, spaces, archive
 
-    var title: String { self == .downloads ? "Downloads" : "Archived Tabs" }
-    var symbol: String { self == .downloads ? "arrow.down.circle" : "archivebox" }
-    var selectedSymbol: String { self == .downloads ? "arrow.down.circle.fill" : "archivebox.fill" }
+    var title: String {
+        switch self {
+        case .downloads: "Downloads"
+        case .spaces: "Spaces"
+        case .archive: "Archived Tabs"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .downloads: "arrow.down.circle"
+        case .spaces: "square.on.square"
+        case .archive: "archivebox"
+        }
+    }
+    var selectedSymbol: String { symbol + ".fill" }
     var searchPrompt: String { self == .downloads ? "Search Downloads…" : "Search Archive…" }
 }
 
@@ -40,13 +52,17 @@ final class LibraryView: NSView {
     private let favicons: FaviconCache
     private let rail = LibraryRailView()
     private let list: LibraryListView
+    private let ui: SidebarUIState
+    /// The Spaces page (Manage Spaces…) shows every space instead of a list.
+    private var spaces: SpacesManagerView?
     var page: LibraryPage { didSet { if page != oldValue { pageChanged() } } }
     var palette: SpacePalette { didSet { apply() } }
 
-    init(page: LibraryPage, palette: SpacePalette, store: SidebarStore, actions: SidebarActions, favicons: FaviconCache) {
+    init(page: LibraryPage, palette: SpacePalette, store: SidebarStore, ui: SidebarUIState, actions: SidebarActions, favicons: FaviconCache) {
         self.page = page
         self.palette = palette
         self.store = store
+        self.ui = ui
         self.actions = actions
         self.favicons = favicons
         list = LibraryListView(page: page, store: store, actions: actions, favicons: favicons)
@@ -66,7 +82,18 @@ final class LibraryView: NSView {
 
     private func pageChanged() {
         rail.show(page: page)
-        list.page = page
+        if page == .spaces {
+            if spaces == nil {
+                let v = SpacesManagerView(store: store, ui: ui, actions: actions, favicons: favicons)
+                addSubview(v)
+                spaces = v
+            }
+        } else {
+            list.page = page
+        }
+        list.isHidden = page == .spaces
+        spaces?.isHidden = page != .spaces
+        needsLayout = true
     }
 
     private func apply() {
@@ -85,6 +112,7 @@ final class LibraryView: NSView {
         super.layout()
         rail.frame = NSRect(x: 0, y: 0, width: LibraryMetrics.rail, height: bounds.height)
         list.frame = NSRect(x: LibraryMetrics.rail, y: 0, width: max(0, bounds.width - LibraryMetrics.rail), height: bounds.height)
+        spaces?.frame = list.frame
     }
 }
 
@@ -346,6 +374,8 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
             }
             empty.show(symbol: "arrow.down.circle", title: all.isEmpty ? "Nothing here yet!" : "No matches",
                        detail: all.isEmpty ? "Files you download show up here." : nil)
+        case .spaces:
+            break
         case .archive:
             let shown = needle.isEmpty ? store.archive : store.archive.filter {
                 $0.item.displayTitle.lowercased().contains(needle) || ($0.item.tab?.url.lowercased().contains(needle) ?? false)
@@ -432,6 +462,8 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         case .archive:
             let store = store
             MenuItems.add(menu, "Clear Archive", enabled: !store.archive.isEmpty) { store.clearArchive() }
+        case .spaces:
+            return
         }
         menu.popUp(positioning: nil, at: NSPoint(x: menuButton.frame.minX, y: menuButton.frame.maxY + 4), in: self)
     }

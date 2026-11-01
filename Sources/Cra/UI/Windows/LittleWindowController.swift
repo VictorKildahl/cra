@@ -1327,6 +1327,13 @@ final class LittleSpacesPopup: NSView, NSTextFieldDelegate {
             emoji.alignment = .center
             emoji.frame = NSRect(x: -SidebarText.inset, y: (40 - 25) / 2, width: 40 + 2 * SidebarText.inset, height: 25)
             tile.addSubview(emoji)
+            if let name = s.symbol {
+                let glyph = NSImageView(frame: NSRect(x: 0, y: 0, width: 40, height: 40))
+                glyph.image = SidebarSymbols.image(name, size: 17, weight: .medium)
+                glyph.imageScaling = .scaleNone
+                glyph.contentTintColor = .white
+                tile.addSubview(glyph)
+            }
             row.addSubview(tile)
             let title = NSTextField.sidebarLabel(size: 15, weight: .semibold)
             title.stringValue = s.title

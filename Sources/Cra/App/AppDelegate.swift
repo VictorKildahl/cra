@@ -615,7 +615,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "closeSplitPane", "separateFromSplit", "flipSplitOrientation":
             return store.selectedTabID.flatMap { store.splitContaining($0) } != nil
         case "addSplitView": return store.selectedTabID != nil
-        case "editSpace", "deleteSpace", "nextSpace", "previousSpace": return !main.isIncognito
+        case "editSpace", "deleteSpace", "nextSpace", "previousSpace", "manageSpaces": return !main.isIncognito
         case "closeLittleWindows": return !littleWindows.isEmpty
         default: break
         }
@@ -743,6 +743,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "newSpace": main.showSpaceEditor(space: nil)
         case "editSpace": if !main.isIncognito { main.showSpaceEditor(space: store.focusedSpace) }
         case "deleteSpace": if !main.isIncognito { confirmDeleteSpace(store.focusedSpace) }
+        case "manageSpaces": if !main.isIncognito { main.showManageSpaces() }
         case "closeTab":
             // Arc: "Close current tab or window".
             if current != nil { main.closeCurrentTab() } else { main.window?.performClose(nil) }
@@ -836,8 +837,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return
         }
         let a = NSAlert()
-        a.messageText = "Delete “\(space.title)”?"
-        a.informativeText = "Its tabs move to the archive, where you can restore them."
+        // Arc 1.171's copy (WindowsData+CloseItems).
+        a.messageText = "Delete your \(space.title) Space?"
+        a.informativeText = "This will archive all the tabs and folders inside it."
         a.addButton(withTitle: "Delete")
         a.addButton(withTitle: "Cancel")
         a.alertStyle = .warning
@@ -957,7 +959,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let spaces = NSMenu(title: "Spaces")
         spaces.addItem(item("nextSpace")); spaces.addItem(item("previousSpace"))
         spaces.addItem(.separator())
-        spaces.addItem(item("editSpace")); spaces.addItem(item("deleteSpace"))
+        spaces.addItem(item("editSpace")); spaces.addItem(item("deleteSpace")); spaces.addItem(item("manageSpaces"))
         spaces.addItem(.separator())
         for n in 1...9 { spaces.addItem(item("space\(n)")) }
         menubar.addItem(submenu: spaces, title: "Spaces")
