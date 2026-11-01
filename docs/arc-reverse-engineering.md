@@ -1792,6 +1792,15 @@ Theme palettes in a hand-built space can be borrowed; only the `background` styl
 - [O] Tab list scroller: AppKit overlay scroller (AXScrollBar, 17 pt track) shown while scrolling, then faded;
   the knob is 4 pt wide, 3 pt in from the sidebar edge, white 49 % on a dark theme, no track. Cra:
   `SidebarScroller`, 10 pt wide so it stays in the gutter right of the rows (knob on Arc's exact columns).
+- [O] Same list with "Show scroll bars: Always" (1 Nov 2026, Arc launched with `-AppleShowScrollBars Always`,
+  issue #48): Arc follows the system (its binary reads `preferredScrollerStyle`, never sets a style; own
+  `NoBackgroundScroller`) to a legacy scroller, always shown while the list overflows, no track. AX: a 10 pt
+  AXScrollBar, knob indicator = AppKit's legacy knob rect (3 pt in from the scroller's top and bottom, 237.5 pt
+  for 415 of 716). Pixels: the knob is 5 pt wide, 3 pt in from the sidebar edge, 1 pt inside its knob rect at
+  both ends, 134/132/141 over 14/10/28 (white 50 %, the same as AppKit's own dark legacy knob; its light one is
+  black 50 %). The rows give up 8 pt (selected fill's right end 8 → 16 pt from the edge, outline 349 → 341 wide).
+  Cra: no forced overlay (it hid the knob: AppKit keeps an overlay knob at alpha 0 while the system prefers
+  legacy), `SidebarScroller` draws that knob in legacy style and `SpaceListView.rowsWidth` drops 8 pt.
 - [O] Playing tab row: `speaker.wave.3` between favicon and title (17.5 pt wide, 11.5 tall, title 8 pt after
   it), white ~60 % on a dark theme (the glyph tone, not the title's colour).
 - [S] Now playing is Arc's `MediaControlsFeature` (ArcCore-free, in the Arc executable): SwiftUI `MiniPlayerView`s in
