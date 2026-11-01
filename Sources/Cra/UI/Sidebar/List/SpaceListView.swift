@@ -29,7 +29,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         case liveStatus(LiveStatusModel)
         case placeholder(active: Bool)
         case divider(hasToday: Bool)
-        case newTab
+        case newTab(active: Bool)
     }
 
     struct Row {
@@ -80,6 +80,8 @@ final class SpaceListView: NSView, NSDraggingSource {
     private var scrolling = false
     private var scrollRest: Task<Void, Never>?
     private var lastRenaming: UUID?
+    /// The active row at the last build: a change scrolls the new one into view.
+    private var lastActive: RowKey?
     let autoscroller = DragAutoscroller()
     private static let all = NSHashTable<SpaceListView>.weakObjects()
 
@@ -197,6 +199,8 @@ final class SpaceListView: NSView, NSDraggingSource {
         let capturing = ui.capturingTabIDs
         let audible = ui.audibleTabIDs
         let refreshing = LiveFolderManager.shared.refreshing
+        // The ⌘T bar's New Tab row takes the selection's fill while it is open.
+        let placeholder = showsNewTab && ui.newTabPlaceholderActive && store.focusedSpaceID(window: window) == spaceID
         var out: [Row] = []
 
         func icon(_ key: String?) -> (NSImage?, Bool) {
@@ -224,7 +228,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         }
 
         func add(_ item: SidebarItem, depth: Int, pinned: Bool, parent: UUID, index: Int) {
-            var row = Row(key: .item(item.id), content: .newTab, decor: decor(item.id), itemID: item.id, parent: parent, index: index, depth: depth)
+            var row = Row(key: .item(item.id), content: .newTab(active: false), decor: decor(item.id), itemID: item.id, parent: parent, index: index, depth: depth)
             if item.isFolder {
                 let expanded = store.isExpanded(item.id)
                 let glyph = palette.folderColors(item.folderIcon)
@@ -254,7 +258,7 @@ final class SpaceListView: NSView, NSDraggingSource {
                     renameText: item.title ?? item.displayTitle, subtitle: Self.subtitle(tab, navigatedAway: navigatedAway),
                     icon: img, flipIcon: flip, githubMark: tab.liveItemURL != nil && tab.customIconKey == nil,
                     editing: renaming == item.id, selected: selected,
-                    highlighted: picks.isEmpty ? selected : picks.contains(item.id),
+                    highlighted: picks.isEmpty ? selected && !placeholder : picks.contains(item.id),
                     capturing: capturing.contains(item.id), audible: audible.contains(item.id), muted: tab.muted, unread: item.isUnread,
                     navigatedAway: navigatedAway,
                     closeGroup: picks.contains(item.id) && picks.count > 1 ? picks.count : 1,
@@ -266,9 +270,9 @@ final class SpaceListView: NSView, NSDraggingSource {
                     let (img, flip) = icon(c.tab?.iconKey)
                     return .init(id: c.id, title: c.displayTitle, icon: img, flipIcon: flip)
                 }
+                let selected = children.contains { store.isSelected($0.id, window: window) }
                 row.content = .split(SplitRowModel(
-                    id: item.id, depth: depth, today: !pinned,
-                    selected: children.contains { store.isSelected($0.id, window: window) },
+                    id: item.id, depth: depth, today: !pinned, selected: selected, highlighted: selected && !placeholder,
                     focusRing: focusID.map { f in children.contains { $0.id == f } } ?? false,
                     cells: cells))
                 out.append(row)
@@ -291,11 +295,11 @@ final class SpaceListView: NSView, NSDraggingSource {
         let todayKids = store.item(space.todayContainerID)?.children ?? []
         out.append(Row(key: .divider, content: .divider(hasToday: !todayKids.isEmpty)))
         let atTop = store.settings.newTabButtonAtTop
-        if atTop && showsNewTab { out.append(Row(key: .newTab, content: .newTab)) }
+        if atTop && showsNewTab { out.append(Row(key: .newTab, content: .newTab(active: placeholder))) }
         for item in store.children(of: space.todayContainerID) {
             add(item, depth: 0, pinned: false, parent: space.todayContainerID, index: todayKids.firstIndex(of: item.id) ?? 0)
         }
-        if !atTop && showsNewTab { out.append(Row(key: .newTab, content: .newTab)) }
+        if !atTop && showsNewTab { out.append(Row(key: .newTab, content: .newTab(active: placeholder))) }
         return Built(rows: out, pinnedCount: pinnedCount, palette: palette,
                      highlightPinned: section == .pinned && !pinnedItems.isEmpty, highlightToday: section == .today,
                      line: drop?.line)
@@ -344,6 +348,7 @@ final class SpaceListView: NSView, NSDraggingSource {
     }
 
     private func apply(_ b: Built) {
+        let wasSynced = synced
         palette = b.palette
         (scrollView.verticalScroller as? SidebarScroller)?.isDarkTheme = b.palette.isDark
         let newColors = SidebarColors(b.palette)
@@ -393,6 +398,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         if let h = hovered, h.superview == nil || gone.contains(h) { hovered = nil }
         refreshHover()
         scrollToRenaming()
+        if wasSynced { revealActiveRow() } else { lastActive = activeRowKey() }
         updateJumpPill(animated: synced)
     }
 
@@ -428,7 +434,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         case .liveStatus(let m): (v as? LiveStatusRowView)?.apply(m)
         case .placeholder(let active): (v as? PinPlaceholderRowView)?.apply(active: active)
         case .divider(let hasToday): (v as? DividerRowView)?.apply(hasToday: hasToday)
-        case .newTab: break
+        case .newTab(let active): (v as? NewTabRowView)?.apply(active: active)
         }
     }
 
@@ -690,6 +696,50 @@ final class SpaceListView: NSView, NSDraggingSource {
             ctx.duration = 0.25
             ctx.timingFunction = SidebarListMetrics.timing
             clip.animator().setBoundsOrigin(NSPoint(x: 0, y: y))
+        }
+    }
+
+    /// The row standing for what is open: the ⌘T bar's New Tab row, else the selected tab's
+    /// row or its split's. A tab in a closed folder has none (Arc leaves the list alone then).
+    private func activeRowKey() -> RowKey? {
+        for row in rows {
+            switch row.content {
+            case .newTab(active: true): return row.key
+            case .tab(let m) where m.selected: return row.key
+            case .split(let m) where m.selected: return row.key
+            default: continue
+            }
+        }
+        return nil
+    }
+
+    /// Arc 1.171 (1 Nov 2026) brings whatever becomes active into view, whatever made it so: ⌘T's
+    /// New Tab row, the tab a commit opens, the tab Escape goes back to, Next Tab, a tab picked
+    /// anywhere. It scrolls as little as shows the whole row, which lands on the top or bottom
+    /// edge, and not at all when the row already shows, so a scroll by hand stays put.
+    private func revealActiveRow() {
+        let key = activeRowKey()
+        defer { lastActive = key }
+        guard let key, key != lastActive, showsNewTab, ui.listDrop == nil,
+              let row = rows.first(where: { $0.key == key }) else { return }
+        let clip = scrollView.contentView
+        let visible = clip.bounds
+        guard visible.height > 0 else { return }
+        var y: CGFloat
+        if row.frame.minY < visible.minY { y = row.frame.minY } else if row.frame.maxY > visible.maxY { y = row.frame.maxY - visible.height } else { return }
+        y = min(max(0, y), max(0, document.frame.height - visible.height))
+        guard abs(y - visible.minY) > 0.5 else { return }
+        guard window != nil else {
+            clip.setBoundsOrigin(NSPoint(x: 0, y: y))
+            scrollView.reflectScrolledClipView(clip)
+            return
+        }
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = SidebarListMetrics.duration
+            ctx.timingFunction = SidebarListMetrics.timing
+            clip.animator().setBoundsOrigin(NSPoint(x: 0, y: y))
+        } completionHandler: { [weak self] in
+            MainActor.assumeIsolated { self?.scrollView.reflectScrolledClipView(clip) }
         }
     }
 

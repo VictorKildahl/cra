@@ -338,8 +338,11 @@ struct AppSettings: Codable, Equatable {
     var searchEngine: SearchEngine = .google
     var newTabsAtTop: Bool = true
     /// Tabs ▸ "Show the New Tab button above tabs": the + New Tab row leads Today
-    /// instead of following its last tab.
-    var newTabButtonAtTop: Bool = false
+    /// instead of following its last tab. On like Arc, which keeps it under the divider.
+    var newTabButtonAtTop: Bool = true
+    /// Cra 0.1.15–0.1.23 saved the New Tab row below Today for everyone; settings without
+    /// this mark move it back above, where Arc has it, once.
+    var newTabButtonDefaultMigrated: Bool = true
     var showStatusBar: Bool = true
     /// Arc's toolbar above the page (URL, copy link, DevTools). ⇧⌘D toggles. Off by
     /// default like Arc, which keeps the URL at the top of the sidebar.
@@ -475,7 +478,9 @@ extension AppSettings {
         autoArchive = try c.decodeIfPresent(AutoArchiveThreshold.self, forKey: .autoArchive) ?? .twelveHours
         searchEngine = try c.decodeIfPresent(SearchEngine.self, forKey: .searchEngine) ?? .google
         newTabsAtTop = try c.decodeIfPresent(Bool.self, forKey: .newTabsAtTop) ?? true
-        newTabButtonAtTop = try c.decodeIfPresent(Bool.self, forKey: .newTabButtonAtTop) ?? false
+        if try c.decodeIfPresent(Bool.self, forKey: .newTabButtonDefaultMigrated) == true {
+            newTabButtonAtTop = try c.decodeIfPresent(Bool.self, forKey: .newTabButtonAtTop) ?? true
+        }
         showStatusBar = try c.decodeIfPresent(Bool.self, forKey: .showStatusBar) ?? true
         if try c.decodeIfPresent(Bool.self, forKey: .toolbarDefaultMigrated) == true {
             showToolbar = try c.decodeIfPresent(Bool.self, forKey: .showToolbar) ?? false
