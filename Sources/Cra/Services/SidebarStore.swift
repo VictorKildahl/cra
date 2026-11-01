@@ -484,6 +484,21 @@ final class SidebarStore {
         touch()
     }
 
+    @discardableResult
+    func setPinnedURL(_ id: UUID, to url: String) -> Bool {
+        guard var it = items[id], var t = it.tab, isPinned(id), t.liveItemURL == nil else { return false }
+        if t.url != url {
+            t.savedTitle = ""
+            t.faviconKey = FaviconCache.key(for: url)
+        }
+        t.url = url
+        t.savedURL = url
+        it.data = .tab(t)
+        items[id] = it
+        touch()
+        return true
+    }
+
     func duplicateTab(_ id: UUID) -> SidebarItem? {
         guard let it = items[id], let t = it.tab, let parent = it.parentID else { return nil }
         let idx = (items[parent]?.children.firstIndex(of: id) ?? 0) + 1

@@ -73,6 +73,9 @@ enum SidebarMenus {
         }
         menu.addItem(.separator())
         add(menu, "Rename…") { ui.renamingID = id }
+        if m.pinned, tab.liveItemURL == nil {
+            add(menu, "Edit…") { actions.editPinnedURL(id) }
+        }
         if item.title != nil { add(menu, "Use Page Title") { store.rename(id, to: nil) } }
         add(menu, "Duplicate") { _ = store.duplicateTab(id) }
         add(menu, "Copy Link") { copy(tab.url) }
@@ -83,7 +86,7 @@ enum SidebarMenus {
         if m.pinned {
             menu.addItem(.separator())
             if m.navigatedAway { add(menu, "Back to Pinned Page") { actions.resetPinnedTab(id) } }
-            add(menu, "Make This the Pinned Page") { store.setPinnedHomeToCurrent(id) }
+            add(menu, "Replace Pinned URL with Current") { store.setPinnedHomeToCurrent(id) }
         }
         menu.addItem(.separator())
         let spaces = submenu(menu, "Move to Space")

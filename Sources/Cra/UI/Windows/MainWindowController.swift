@@ -212,6 +212,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             self.closeLibrary()
         }
         sidebarActions.resetPinnedTab = { [weak self] id in self?.resetPinnedTab(id) }
+        sidebarActions.editPinnedURL = { [weak self] id in self?.editPinnedURL(id) }
         sidebarActions.openURL = { [weak self] url in
             guard let self else { return }
             self.store.createTab(url: url, window: self.windowID)
@@ -1315,6 +1316,43 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func resetPinnedTab(_ id: UUID) {
         guard let home = store.resetPinnedTab(id) else { return }
         app.runtime(for: id)?.browser.loadURL(home)
+    }
+
+    func editPinnedURL(_ id: UUID) {
+        guard let window, window.attachedSheet == nil,
+              let tab = store.item(id)?.tab, store.isPinned(id), tab.liveItemURL == nil else { return }
+        let alert = NSAlert()
+        alert.messageText = "Edit URL"
+        alert.informativeText = "Change the saved URL for this item. Saving opens the new address."
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+        let field = NSTextField(string: tab.savedURL)
+        field.frame = NSRect(x: 0, y: 0, width: 360, height: 24)
+        field.setAccessibilityLabel("URL")
+        field.placeholderString = "https://example.com"
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+        func destination() -> String? {
+            let input = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let url = SuggestionEngine.urlFromInput(input)
+            guard SuggestionEngine.looksLikeURL(input), let parsed = URL(string: url) else { return nil }
+            if ["http", "https"].contains(parsed.scheme?.lowercased() ?? ""), parsed.host?.isEmpty != false { return nil }
+            return url
+        }
+        alert.buttons[0].isEnabled = destination() != nil
+        let observer = NotificationCenter.default.addObserver(forName: NSControl.textDidChangeNotification,
+                                                               object: field, queue: .main) { _ in
+            MainActor.assumeIsolated {
+                alert.buttons[0].isEnabled = destination() != nil
+            }
+        }
+        alert.beginSheetModal(for: window) { [weak self] response in
+            NotificationCenter.default.removeObserver(observer)
+            guard response == .alertFirstButtonReturn, let self, let url = destination(),
+                  self.store.setPinnedURL(id, to: url) else { return }
+            self.app.runtime(for: id)?.browser.loadURL(url)
+            self.store.selectTab(id, window: self.windowID)
+        }
     }
 
     func cycleTab(_ delta: Int) {
