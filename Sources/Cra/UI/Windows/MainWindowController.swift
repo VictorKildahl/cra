@@ -1336,7 +1336,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         app.runtime(for: id)?.browser.loadURL(home)
     }
 
-    /// Edit Pinned Page ▸ Edit… (#54): Arc's dialog with the pinned URL. A page showing the old
+    /// Edit Pinned URL… (#54): Arc's dialog with the pinned URL. A page showing the old
     /// pinned URL loads the new one; one navigated away stays where it is.
     func editPinnedURL(_ id: UUID) {
         guard let window, let tab = store.item(id)?.tab, store.isPinned(id), tab.liveItemURL == nil else { return }

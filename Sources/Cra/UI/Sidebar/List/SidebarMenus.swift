@@ -74,13 +74,13 @@ enum SidebarMenus {
         menu.addItem(.separator())
         add(menu, "Rename…") { ui.renamingID = id }
         if item.title != nil { add(menu, "Use Page Title") { store.rename(id, to: nil) } }
+        if m.pinned, tab.liveItemURL == nil { pinnedURLItems(menu, id, navigatedAway: m.navigatedAway, store: store, actions: actions) }
         add(menu, "Duplicate") { _ = store.duplicateTab(id) }
         add(menu, "Copy Link") { copy(tab.url) }
         add(menu, tab.muted ? "Unmute" : "Mute") {
             store.setMuted(id, !tab.muted)
             actions.performAction("muteTab:\(id)")
         }
-        if m.pinned, tab.liveItemURL == nil { editPinnedPage(menu, id, navigatedAway: m.navigatedAway, store: store, actions: actions) }
         if m.pinned, m.navigatedAway {
             menu.addItem(.separator())
             add(menu, "Back to Pinned Page") { actions.resetPinnedTab(id) }
@@ -104,12 +104,12 @@ enum SidebarMenus {
         return menu
     }
 
-    /// Arc's Edit Pinned Page submenu on pinned tabs and favorites (#54). Replace is greyed out
-    /// while the tab is on its pinned page, as in Arc.
-    static func editPinnedPage(_ menu: NSMenu, _ id: UUID, navigatedAway: Bool, store: SidebarStore, actions: SidebarActions) {
-        let sub = submenu(menu, "Edit Pinned Page")
-        add(sub, "Replace Pinned URL with Current", enabled: navigatedAway) { store.setPinnedHomeToCurrent(id) }
-        add(sub, "Edit…") { actions.editPinnedURL(id) }
+    /// The pinned URL's items on pinned tabs and favorites (#54), beside Rename… since they edit
+    /// the same item. Arc puts them in an Edit Pinned Page submenu; Cra lists them flat, as
+    /// Anoninz suggested on PR #55. Replace is greyed out while the tab is on its pinned page.
+    static func pinnedURLItems(_ menu: NSMenu, _ id: UUID, navigatedAway: Bool, store: SidebarStore, actions: SidebarActions) {
+        add(menu, "Edit Pinned URL…") { actions.editPinnedURL(id) }
+        add(menu, "Replace Pinned URL with Current", enabled: navigatedAway) { store.setPinnedHomeToCurrent(id) }
     }
 
     /// Move to Folder / New Folder for this tab, or for every picked tab.

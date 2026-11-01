@@ -241,7 +241,7 @@ enum StoreTests {
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 
-    /// Arc's Edit Pinned Page ▸ Edit… (#54, PR #55 by Anoninz): a new pinned URL keeps the item's
+    /// Edit Pinned URL… (#54, PR #55 by Anoninz): a new pinned URL keeps the item's
     /// name, icon, colour and place, and survives a relaunch.
     @MainActor
     private static func pinnedURL() {
