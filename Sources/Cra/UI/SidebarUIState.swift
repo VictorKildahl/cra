@@ -49,6 +49,15 @@ final class SidebarUIState {
     /// Library per window and reopens it on the page last shown).
     var libraryPage: LibraryPage?
     @ObservationIgnored var lastLibraryPage: LibraryPage = .downloads
+    /// A two-finger swipe pulling the Library in from the left of the first space, or back out
+    /// (Arc 1.171): how much of it shows, 0 the space, 1 the Library, past 1 while it
+    /// rubber-bands. nil when no such swipe is tracking or settling.
+    @ObservationIgnored var libraryReveal: CGFloat? { didSet { for f in libraryRevealObservers { f() } } }
+    /// The page the swipe brings in, and the Library's width on it.
+    @ObservationIgnored var libraryRevealPage: LibraryPage = .downloads
+    @ObservationIgnored var libraryRevealWidth: CGFloat = 0
+    @ObservationIgnored private var libraryRevealObservers: [() -> Void] = []
+    func observeLibraryReveal(_ f: @escaping () -> Void) { libraryRevealObservers.append(f) }
     /// Tab chosen from the keyboard in another space (the tab switcher); Arc draws its
     /// yellow/black dashed ring around it until the mouse picks another tab.
     var keyboardFocusID: UUID?
@@ -196,6 +205,8 @@ final class SidebarActions {
     /// the space, the Library's Spaces page, and deleting this space (not the focused one).
     var changeSpaceIcon: (Space, NSView) -> Void = { _, _ in }
     var editSpaceTheme: (Space) -> Void = { _ in }
+    /// The theme editor beside a Spaces page card.
+    var editSpaceThemeBeside: (Space, NSView) -> Void = { _, _ in }
     var newProfile: (UUID) -> Void = { _ in }
     var manageSpaces: () -> Void = {}
     var deleteSpace: (Space) -> Void = { _ in }

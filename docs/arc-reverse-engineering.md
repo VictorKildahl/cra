@@ -1966,3 +1966,78 @@ are disabled then).
   (example.org), magnifier for a search row ("hello world", "x", "youtulocalhost:3000"). ⌘L untouched or
   emptied: the page's favicon (GitHub), a globe on a page without one (example.com). ⌘T empty: magnifier,
   though its top row is a tab with a favicon. Cra: CommandBarGlyph; `info.circle` is gone.
+
+## Swiping into the Library and the Spaces page overflow (Arc 1.171, 1 Nov 2026)
+
+Offline fake-home Arc (8 hand-built spaces, network denied), 1280×1084 then 1100×1084 pt window on the 2x display.
+Swipes were synthesized as HID pixel scroll events (phases began/changed/ended, ~8–10 ms apart) over the sidebar;
+a probe app confirmed such an event arrives as `scrollingDeltaX` = the posted value, precise, so "px" below means
+scrollingDeltaX points. Recorded app-only at 120 fps; positions from 1-px row crops (card edge, sidebar/page edge),
+curves fitted per frame. "p" = Library reveal progress, 0 = space, 1 = Library open.
+
+**Swipe into the Library**
+- [O static] `ARCUI.PageSwipeController` {pages: [Page {identifier, width}], trackingState {isTracking,
+  isAnimating}, pageOrigins, presentationAdoptionRange, settlingAnimationSession, SettlingAnimation {fromPosition,
+  targetPosition, positions, keyTimes, duration} (a sampled keyframe settle), PagingPosition {floorPageID,
+  ceilPageID, progress}, nonGesturalScrollState {cumulativeDistance, lastEventTime, lastTriggerTime},
+  performsPageDetentHaptics}. The Library is a page before the first space, with its own width.
+- [O] On the first space, fingers moving right (positive scrollingDeltaX) pull the Library in; on any other space
+  the same gesture goes to the previous space. Fingers moving left inside the Library take it back out. Only over
+  the sidebar (the page area was not tried).
+- [O] Tracking is linear: the Library content slides in from the left as one piece (rail + list, full opacity),
+  its offset = p × Library width, p ≈ px / 834 (so 0.50 pt per px for the 417 pt Library, ~1.2–1.3 pt per px for a
+  1044 pt Spaces page; measured 1/834, 1/870, 1/808). A space-to-space swipe measured 0.49 pt per px (one take).
+- [O] The sidebar widens during the drag, not at commit: width = 347 + (Lib − 347) × p (347→417 at p 1; 1044 pt
+  for a Spaces page), the web page column shrinking with it. Library open → swipe out mirrors it exactly.
+- [O] The space's own content fades, alpha ≈ max(0, 1 − 2p) (row contrast 1.00/0.60/0.29/0.08/0 at p 0/0.2/0.36/
+  0.46/0.5), and shrinks a little: scale ≈ 1 − 0.1 p about a point near (417 pt, window mid-height) [I, fitted from
+  the selected row, favourites card and traffic-light positions]. The traffic lights travel with that content and
+  are gone mid-swipe; they reappear on the Library. No window tint/background change: the Library sits on the
+  space's own theme.
+- [O] Commit, slow release (no velocity): p > 0.5. 412 px (p 0.494) snaps back, 424 px (0.508) opens; the same 0.5
+  on the way out (400 px stays, 440 px leaves); toward a 1044 pt Spaces page 400 px stays, 460 px opens.
+- [O] Commit with velocity, 417 pt Library: any release still moving opens it: 80 px at ~200 px/s, 30 px at
+  ~1250 px/s, 240 px with a 60 ms stop before lifting; a 150 ms stop (240 px) snaps back. Toward a 1044 pt Spaces
+  page flicks of 80, 180 and 300 px at ~3750 px/s all snapped back [U why: velocity projection apparently in points].
+- [O] Settle (open, cancel, and close alike): critically damped spring, ω ≈ 30.6 rad/s (ζ 0.96–1.0, no overshoot),
+  i.e. stiffness ≈ 935, damping ≈ 61, mass 1 (SwiftUI `.spring(response: 0.205, dampingFraction: 1)`), within
+  0.2–0.25 px rms; ~0.2 s to within 1 %, ~0.27 s to rest. It starts from the release velocity: a 300 px/s-ish
+  release starts gently, a flick (fit v0 = 25 × displacement/s) leaves at once. Cancel = same spring back to p 0.
+- [O] Rubber band past the Library (fingers right while it is open): the whole Library moves right at ~0.07 pt per
+  px (300 px → 20.5 pt; ~0.14 of the unbanded 0.5, nearly linear over that range, fits D(1 − 1/(0.15x/D + 1)),
+  D 215, x = 0.5 px), the sidebar keeps widening by the same formula (p > 1), and springs back in ~0.2 s.
+- [U] Real-trackpad feel (momentum events were sent with one flick only; Arc does not need them to commit).
+- Frames: scratchpad `arc/rec/t2-strip.png` (paused mid-drag, at release, settling, open), `arc/rec/t4-sheet.png`
+  (swipe out), `arc/rec/t1.mov`–`t4.mov`.
+
+**Spaces page with 8 spaces**
+- [O static] `SpaceManagementViewControllerSpacesPage` holds an `NSScrollView` + `NSCollectionView`; the strip is a
+  `SpaceManagementHScrollCollectionViewItem` with its own private `ScrollView` subclass.
+- [O AX] Sidebar = window width − 56 pt whenever the cards don't fit (500 → 444, 900 → 844, 1100 → 1044, 1728 → 1672,
+  live while resizing, no maximum seen); the web page keeps a 56 pt column (8 spaces need 112 + 2208 pt, more than
+  this 1728 pt display, so the "fits" case was not reached). Rail 112 pt, strip scroll area = the rest (932 pt at
+  1100); content 2208 = 24 + 8 × (240 + 24) + 48 pt add-space button + 24. Cards are clipped at the sidebar edge.
+- [O] Horizontal two-finger swipes scroll the strip 1:1 over a card's tab list, a card's empty body, the gaps
+  between cards alike; elastic at both ends (~17 pt stretch for 340 px), ~0.25 s spring back. A swipe that starts
+  inside the strip never leaves the Library; a new swipe that starts with the strip already at its end (pushing
+  past it) becomes the Library page swipe out (content and sidebar edge follow, then the usual settle). Over the
+  rail the same swipe did nothing (strip at its end).
+- [O] Vertical mouse wheel and vertical trackpad scroll do not move the strip. Shift + wheel scrolls it, 10 pt per
+  line; at the strip's end further Shift + wheel left the Library to the first space (non-gestural page change).
+- [O AX] Scroller: AppKit overlay AXScrollBar, horizontal, 17 pt track at the bottom (y 1060–1077 in a 1084 pt
+  window), inset 19 pt from the scroll area on each side, knob 4 pt tall (373.5 of 894 pt for 932 of 2208), shown
+  while scrolling.
+- [O] Theme editor (a card's brush, AXPress): a separate 382 × 534 pt window, left edge flush with that card's
+  right edge, top at the window top, over the neighbouring cards and the page, overhanging the browser window's right
+  edge when the card is near it (Games card at the strip end: 1339–1721 in a window ending at 1491).
+- [U] Whether the page column has a minimum when the window is narrower than 500 pt; the width rule once all
+  cards fit on a wider display.
+- Frames: `arc/rec/b1.png` (1100 pt window), `arc/rec/b3-main.png` (theme editor), `arc/rec/t10.mov`, `t12.mov`.
+- [Cra, 1 Nov 2026] Victor found Arc's half-speed, sidebar-widening drag "way too slow / laggy" and asked for the
+  space swipe's animation instead. Cra's `LibrarySwipe` (CraCore) treats the Library as the page before the first
+  space: it and the space slide 1:1 under the fingers in the sidebar's current width, with the space swipe's
+  rubber band, release rule (> 0.8 pages/s or past half) and settle (critically damped, ω = 2π/0.4), and the
+  sidebar widens to the Library's width with the Library button's 0.1 s animation once it has landed (no page
+  resizes during the drag). The Spaces page follows Arc: sidebar = window − 56 pt, live on resize; cards scroll
+  sideways under two fingers (over card lists too) and Shift+wheel; a swipe that starts with the cards at their
+  end leaves the Library; the brush's theme editor sits flush with the card's right edge.

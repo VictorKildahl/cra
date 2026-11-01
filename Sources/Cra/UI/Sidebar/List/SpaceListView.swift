@@ -1053,11 +1053,16 @@ enum SidebarListMetrics {
 /// The list's scroll view. Space swipes are read by the window controller's scroll monitor,
 /// which has to see every event of a gesture: responsive scrolling takes a gesture's events
 /// off that path once it starts over the list, and a horizontal gesture never scrolls a list.
+/// It goes on up instead: on the Library's Spaces page the cards scroll sideways under the
+/// fingers, or under Shift and a mouse wheel, over a card's list too (Arc 1.171).
 final class SpaceListScrollView: NSScrollView {
     override class var isCompatibleWithResponsiveScrolling: Bool { false }
 
     override func scrollWheel(with event: NSEvent) {
-        if event.hasPreciseScrollingDeltas, event.momentumPhase.isEmpty, abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) { return }
+        if abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) {
+            nextResponder?.scrollWheel(with: event)
+            return
+        }
         super.scrollWheel(with: event)
     }
 }
