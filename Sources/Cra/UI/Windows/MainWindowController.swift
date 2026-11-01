@@ -1856,6 +1856,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         commandBar.highlight = focusedSpace.theme.palette.commandHighlight
         commandBar.focusedSpaceID = focusedSpaceID
         commandBar.open(mode: effectiveMode, prefill: prefill)
+        // Arc draws the New Tab row as the active one while the bar makes a new tab; the
+        // sidebar scrolls to it (SpaceListView.revealActiveRow).
+        sidebarUI.newTabPlaceholderActive = effectiveMode == .newTab && !fillingEmptyPane
         // Always centred in the window, also when opened from the toolbar.
         commandBar.attached = false
         commandBar.panelWidth = min(CraMetrics.commandBarWidth, window.frame.width - 80)
@@ -1898,6 +1901,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     private func hideCommandPanel() {
+        sidebarUI.newTabPlaceholderActive = false
         if commandPanel.parent != nil { window?.removeChildWindow(commandPanel) }
         let panel = commandPanel!
         // Let CommandBarView's fade-out (0.08 s) play before the panel goes away.

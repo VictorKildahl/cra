@@ -1878,6 +1878,33 @@ white, closer to Arc's formula: at #4F7CAC, intensity 0.5, Arc predicts 147/163/
 153/168/188, now 146/161/181. Cra's solid sidebar still darkens ~12 levels from top to bottom in both builds
 where Arc's is flat [U].
 
+## The sidebar follows the active row (Arc 1.171, 1 Nov 2026, issue #47, offline Arc + AX row frames + 120 fps)
+
+- [S] Swift field names: the space list's view store has `isCommandBarNewTabPlaceholderActive` (next to
+  `isPulsingNewTabButton`); window state has `sidebarScrollToItemRequest` (`SidebarScrollToItemRequest`),
+  `isDismissingCommandBarViaNewTabSelection`, `mousedownSelectionRevertItem`. Tabs menu: "Reveal Tab in Sidebar"
+  (no shortcut). Arc's only setting here is `newTabsAtStart`; it has no "New Tab button above tabs".
+- [O] Offline Arc (fake home as in "One space") with Victor's sidebar plus 40 Today tabs; row frames sampled
+  over AX every 4 ms (`sidebarAllTabList` rows, 41 pt pitch, list viewport 899 pt), keys posted to Arc's pid.
+- [O] The New Tab row is the first row of Today, right under the divider.
+- [O] ⌘T: while the bar is open the New Tab row is drawn as the open row (selected fill, shadow, primary ink) and
+  the selected tab loses its fill; Escape gives it back. The list scrolls to the New Tab row only when it isn't
+  wholly in view: from the bottom of the list it ended exactly at the top edge of the viewport; with the row in
+  view at the bottom nothing moved (Arc's round ↓ jump button then sat over it, pointing at the selected tab).
+- [O] Whatever becomes the open row is brought into view the same way: the tab a commit opens, the tab Escape
+  goes back to, Next Tab (⌘⌥↓). As little as shows the whole row: a row above the viewport lands on its top edge,
+  one below on its bottom edge (41 pt scroll for a row just below). A row already in view never moves the list,
+  also when it sits under 41 pt from an edge. One commit scrolled 64 pt where 23 would have done [U].
+- [O] A tab inside a closed folder is not revealed (the folder row doesn't stand in): Escape left the list alone.
+- [O] Motion (120 fps recording of ⌘T from the bottom, ~1000 pt): most of the way in the first frame, then
+  steadily smaller steps, still after ~0.22 s; the New Tab row arrives already filled.
+- Cra: `SpaceListView.revealActiveRow` runs after every rebuild and scrolls when the active row's key changed
+  (`activeRowKey`: the active New Tab row, else the selected tab's or split's row), with SidebarListMetrics'
+  0.22 s snappy curve; `SidebarUIState.newTabPlaceholderActive` is set by `MainWindowController.openCommandBar`
+  for a new-tab bar (not ⌘L, not an empty split pane) and cleared when the bar closes, before a commit selects
+  its tab. Settings ▸ Tabs "Show the New Tab button above tabs" defaults on; settings saved by 0.1.15–0.1.23
+  (always off) move to on once (`newTabButtonDefaultMigrated`).
+
 ## The page area before a page paints (Arc 1.171, 1 Nov 2026, issue #46, 90–120 fps app-only recordings)
 
 Test page: `html{background:#203040}` behind a 1.5 s busy-wait in `<head>`, so nothing paints for 1.5 s.
