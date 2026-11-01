@@ -47,7 +47,7 @@ def theme(colors, intensity, noise, appearance): return {"colors": colors, "inte
 space("Studio", "🎨", theme(["#C7CAFF", "#FFE5E5"], 0.5, 0.1, "light"),
       [("https://github.com/", "GitHub"), ("https://www.figma.com/", "Figma"), ("https://linear.app/", "Linear"), ("https://www.notion.com/", "Notion"),
        ("https://vercel.com/", "Vercel"), ("https://open.spotify.com/", "Spotify"), ("https://en.wikipedia.org/wiki/Main_Page", "Wikipedia"), ("https://www.apple.com/", "Apple")],
-      [("https://crabrowser.app/", "Cra — A calmer way to browse"),
+      [("https://crabrowser.app/", "Cra - Free, open-source Arc replacement for macOS"),
        lambda p: folder("Launch", p, [("https://github.com/VictorKildahl/cra", "VictorKildahl/cra"),
                                       ("https://developer.apple.com/documentation/swiftui", "SwiftUI | Apple Developer Documentation"),
                                       ("https://crabrowser.app/roadmap", "Roadmap")]),
@@ -73,9 +73,9 @@ json.dump({"hasSeenImportPrompt": True, "warnBeforeQuitting": False, "blockAdsAn
            "showToolbar": True, "showStatusBar": True}, open(f"{out}/settings.json", "w"))
 frame = sys.argv[2] if len(sys.argv) > 2 else "{{0, 0}, {1280, 800}}"
 pick = lambda t: next(i["id"] for i in items if i.get("title") == t)
-sel = [x for sid, t in zip(order, ["Cra — A calmer way to browse", "Copenhagen", "Faroe Islands", "Arc (web browser)"]) for x in (sid, pick(t))]
+sel = [x for sid, t in zip(order, ["Cra - Free, open-source Arc replacement for macOS", "Copenhagen", "Faroe Islands", "Arc (web browser)"]) for x in (sid, pick(t))]
 launch = next(i["id"] for i in items if i.get("title") == "Launch")
-first_tab = next(i["id"] for i in items if i.get("title") == "Cra — A calmer way to browse")
+first_tab = next(i["id"] for i in items if i.get("title") == "Cra - Free, open-source Arc replacement for macOS")
 json.dump({"littleWindowSize": "{780, 520}", "sidebarWidth": 260, "expandedFolders": [launch], "collapsedPinnedSpaces": [],
            "windows": [{"id": U(), "focusedSpaceID": order[0], "selectedTabPerSpace": sel, "frame": frame,
                         "sidebarVisible": True, "isIncognito": False}]}, open(f"{out}/windows.json", "w"))
