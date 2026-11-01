@@ -46,6 +46,7 @@ public final class CraBrowser {
     public func finishClose() { isClosed = true; delegate?.browserDidClose(self) }
     public func closeDevTools() { hasDevTools = false }
     public func setAudioMuted(_ muted: Bool) {}
+    public func probeBackgroundColor() {}
     public func setFocused(_ focused: Bool) {}
     public func requestPictureInPicture(automatic: Bool) {}
     public func exitPictureInPicture() { isInPictureInPicture = false }

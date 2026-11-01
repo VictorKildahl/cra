@@ -191,8 +191,10 @@ static CraClient* AsCraClient(CefClient* c) {
 - (void)hostWindowCreated:(NSWindow*)window;
 - (void)hostPopupBrowserView:(CefRefPtr<CefBrowserView>)view;
 @property (nonatomic, strong, nullable) NSWindow* hostWindow;
-/// The page's background as last reported by kBackgroundProbe (ARGB, white until then).
+/// The page's background as last reported by kBackgroundProbe (ARGB, 0 until then).
 @property (nonatomic) cef_color_t pageBackgroundColor;
+/// What the view shows under the page: its reported background, else the canvas.
+@property (nonatomic, readonly) cef_color_t pageFill;
 @end
 
 // MARK: - CEF app
@@ -820,6 +822,17 @@ private:
     IMPLEMENT_REFCOUNTING(DevToolsClient);
 };
 
+/// The page area before a page reports its own background: Arc fills it black while websites
+/// are dark and white while they are light (measured on Arc 1.171, also for a tab it restores
+/// unloaded). Pages follow the app's appearance; Cra sets no colour scheme of its own.
+static BOOL PagesAreDark() {
+    return [[NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:@[NSAppearanceNameAqua, NSAppearanceNameDarkAqua]]
+        isEqualToString:NSAppearanceNameDarkAqua];
+}
+static cef_color_t CraCanvasColor() {
+    return PagesAreDark() ? CefColorSetARGB(255, 0, 0, 0) : CefColorSetARGB(255, 255, 255, 255);
+}
+
 // "rgb(r, g, b)" / "rgba(r, g, b, a)" from getComputedStyle as "#RRGGBB"; "" when
 // unparsable or mostly transparent.
 static NSString* HexFromCSSColor(const std::string& css) {
@@ -832,17 +845,33 @@ static NSString* HexFromCSSColor(const std::string& css) {
 
 // What the page paints behind its content: the root's background, else the body's
 // (CSS propagates it to the canvas), else the canvas colour of the page's color
-// scheme. Answers through OnConsoleMessage ("__cra_bg:"); installed once per
-// document, re-run on load, after late stylesheets and when the OS appearance flips.
+// scheme ('' before the document has a root).
+#define CRA_PAGE_BACKGROUND_FN \
+    "function(){var r=document.documentElement;if(!r)return '';" \
+    "var bg=function(e){var c=e?getComputedStyle(e).backgroundColor:'';return c&&c!=='transparent'&&c!=='rgba(0, 0, 0, 0)'?c:'';};" \
+    "var c=bg(r)||bg(document.body);" \
+    "if(!c){var d=document.createElement('div');d.style.color='Canvas';r.appendChild(d);c=getComputedStyle(d).color;d.remove();}" \
+    "return c;}"
+
+// Answers through OnConsoleMessage ("__cra_bg:"); installed once per document, re-run on
+// load, after late stylesheets and when the OS appearance flips.
 static const char kBackgroundProbe[] =
-    "(function(){if(!window.__craBg){window.__craBg=function(){try{"
-    "var bg=function(e){var c=e?getComputedStyle(e).backgroundColor:'';return c&&c!=='transparent'&&c!=='rgba(0, 0, 0, 0)'?c:'';};"
-    "var c=bg(document.documentElement)||bg(document.body);"
-    "if(!c){var d=document.createElement('div');d.style.color='Canvas';document.documentElement.appendChild(d);c=getComputedStyle(d).color;d.remove();}"
-    "console.log('__cra_bg:'+c);}catch(e){}};"
+    "(function(){if(!window.__craBg){var color=" CRA_PAGE_BACKGROUND_FN ";"
+    "window.__craBg=function(){try{var c=color();if(c)console.log('__cra_bg:'+c);}catch(e){}};"
     "matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){setTimeout(window.__craBg,50);});"
     "setTimeout(window.__craBg,1500);}"
     "window.__craBg();})();";
+
+// While a page is parsed, the same colour on every frame (only changes are sent). CEF draws a
+// new renderer's first page transparent (chromiumembedded/cef#3891), so the view's canvas showed
+// through a page with no background of its own until its load ended: black text on black while
+// a slow image loaded. Frames wait for render-blocking stylesheets, so the first answer already
+// has the page's styles; the probe above takes over once the document is parsed.
+static const char kLoadingBackgroundProbe[] =
+    "(function(){var color=" CRA_PAGE_BACKGROUND_FN ",last='',n=0;"
+    "function tick(){try{var c=color();if(c&&c!==last){last=c;console.log('__cra_bg:'+c);}}catch(e){}"
+    "if(document.readyState==='loading'&&++n<600)requestAnimationFrame(tick);}"
+    "requestAnimationFrame(tick);})();";
 
 // MARK: - Content blocking and app links
 
@@ -974,11 +1003,15 @@ public:
     }
 
     void OnLoadStart(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, TransitionType transition_type) override {
-        // The last page's colour must not show under the next one while it loads.
+        // The last page's colour must not show under the next one while it loads: the canvas
+        // does until this one reports its own.
         CraBrowser* o = owner_;
         if (!o || !frame->IsMain()) return;
-        o.pageBackgroundColor = CefColorSetARGB(255, 255, 255, 255);
-        if (CefRefPtr<CefBrowserView> view = CefBrowserView::GetForBrowser(browser)) view->SetBackgroundColor(o.pageBackgroundColor);
+        o.pageBackgroundColor = 0;
+        if (CefRefPtr<CefBrowserView> view = CefBrowserView::GetForBrowser(browser)) view->SetBackgroundColor(o.pageFill);
+        if ([o.delegate respondsToSelector:@selector(browser:didReportBackgroundColor:)])
+            [o.delegate browser:o didReportBackgroundColor:@""];
+        frame->ExecuteJavaScript(kLoadingBackgroundProbe, frame->GetURL(), 0);
     }
 
     void OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int httpStatusCode) override {
@@ -1477,7 +1510,7 @@ public:
     // view takes the page's own colour instead; CEF resets it on every theme change.
     void OnThemeChanged(CefRefPtr<CefView> view) override {
         CraBrowser* o = owner_;
-        if (!devtools_) view->SetBackgroundColor(o ? o.pageBackgroundColor : CefColorSetARGB(255, 255, 255, 255));
+        if (!devtools_) view->SetBackgroundColor(o ? o.pageFill : CraCanvasColor());
     }
     CefRefPtr<CefBrowserViewDelegate> GetDelegateForPopupBrowserView(CefRefPtr<CefBrowserView> browser_view,
                                                                      const CefBrowserSettings& settings,
@@ -1584,7 +1617,6 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     _delegate = delegate;
     _isIncognito = incognito;
     _profilePath = incognito ? nil : [profilePath copy];
-    _pageBackgroundColor = CefColorSetARGB(255, 255, 255, 255);
     _currentURL = url ?: @"";
     _currentTitle = @"";
     _pendingURL = url;
@@ -1939,6 +1971,8 @@ static NSView* FindRenderWidgetHostView(NSView* root) {
 - (void)executeJavaScript:(NSString*)script {
     if (_browser) _browser->GetMainFrame()->ExecuteJavaScript(CefStringFromNS(script), _browser->GetMainFrame()->GetURL(), 0);
 }
+- (cef_color_t)pageFill { return _pageBackgroundColor ?: CraCanvasColor(); }
++ (NSColor*)pageCanvasColor { return PagesAreDark() ? NSColor.blackColor : NSColor.whiteColor; }
 - (void)probeBackgroundColor {
     if (_browser) _browser->GetMainFrame()->ExecuteJavaScript(kBackgroundProbe, _browser->GetMainFrame()->GetURL(), 0);
 }

@@ -74,6 +74,9 @@ struct TabData: Codable, Equatable {
     var liveSubtitle: String?
     /// When its pull request left the live folder's results; the tab goes after a grace period.
     var liveGoneAt: Date?
+    /// The page's toolbar colour as last reported (TabRuntime.themeColor). A slept or restored
+    /// tab's toolbar keeps it while the page loads again, as Arc's does.
+    var themeColor: String?
 
     var iconKey: String? { customIconKey ?? faviconKey }
 
@@ -656,5 +659,6 @@ extension TabData {
         liveItemURL = try c.decodeIfPresent(String.self, forKey: .liveItemURL)
         liveSubtitle = try c.decodeIfPresent(String.self, forKey: .liveSubtitle)
         liveGoneAt = try c.decodeIfPresent(Date.self, forKey: .liveGoneAt)
+        themeColor = try c.decodeIfPresent(String.self, forKey: .themeColor)
     }
 }

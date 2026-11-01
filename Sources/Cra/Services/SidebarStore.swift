@@ -442,6 +442,16 @@ final class SidebarStore {
                                          items: Array(items.values), profiles: profiles), delay: 2)
     }
 
+    /// Only saved: nothing on screen reads it back until the tab's page is made again.
+    func setThemeColor(_ id: UUID, _ hex: String) {
+        guard var it = items[id], var t = it.tab, t.themeColor != hex else { return }
+        t.themeColor = hex
+        it.data = .tab(t)
+        items[id] = it
+        sidebarFile.save(SidebarDocument(version: 1, spaceOrder: spaceOrder, spaces: orderedSpaces,
+                                         items: Array(items.values), profiles: profiles), delay: 2)
+    }
+
     func markUnread(_ id: UUID, _ unread: Bool = true) {
         guard var it = items[id] else { return }
         it.isUnread = unread

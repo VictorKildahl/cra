@@ -1877,3 +1877,26 @@ pipeline) light vibrant themes are unchanged, solid themes are unchanged over bl
 white, closer to Arc's formula: at #4F7CAC, intensity 0.5, Arc predicts 147/163/184 over white, 0.1.23 measured
 153/168/188, now 146/161/181. Cra's solid sidebar still darkens ~12 levels from top to bottom in both builds
 where Arc's is flat [U].
+
+## The page area before a page paints (Arc 1.171, 1 Nov 2026, issue #46, 90–120 fps app-only recordings)
+
+Test page: `html{background:#203040}` behind a 1.5 s busy-wait in `<head>`, so nothing paints for 1.5 s.
+macOS in Dark, Victor's JYSK space, View ▸ Appearance ("Websites, Easels, and Notes will use") on Automatic.
+
+| Case | Page area until the first paint | Toolbar until the page reports a colour |
+|---|---|---|
+| Switching between loaded tabs | none: the next page's frame comes straight after | the page's colour |
+| New tab or Little Arc, a page Arc has never shown | #000000 | #FFFFFF |
+| A tab restored unloaded after relaunch (Cra's slept tab) | #000000 | the page's last colour, remembered across the relaunch |
+| Same, Appearance set to Light | #FFFFFF | (not measured) |
+
+So the fill follows the appearance websites get (black or white, not Chromium's #121212 canvas), and Arc
+remembers a tab's toolbar colour but not its page colour. Cra 0.1.23 showed #FFFFFF in the page area and the
+toolbar for both loading cases (169 frames at 120 fps on the test page). Cra now fills the CEF view and the
+pane card with the canvas (CraBrowser.pageCanvasColor), saves the toolbar colour on the tab (TabData.themeColor)
+and seeds it into a woken or restored tab's runtime.
+
+CEF still draws the first page of a new renderer transparent (chromiumembedded/cef#3891): with a black
+canvas, an unstyled page (no background, no color-scheme) showed black text on black until its load ended
+(4 s with a slow image). The page now reports its background on every frame while it is parsed
+(kLoadingBackgroundProbe; frames wait for render-blocking stylesheets), so it turns white with its first paint.
