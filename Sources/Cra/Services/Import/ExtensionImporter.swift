@@ -35,9 +35,10 @@ enum ExtensionImporter {
         return out.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
-    static func extensions(inProfile dir: URL) -> [ImportableExtension] {
+    /// extensions.settings by extension ID. Newer Chromium keeps extension state in
+    /// Secure Preferences; older in Preferences.
+    private static func settings(inProfile dir: URL) -> [String: Any] {
         var settings: [String: Any] = [:]
-        // Newer Chromium keeps extension state in Secure Preferences; older in Preferences.
         for file in ["Preferences", "Secure Preferences"] {
             guard let data = try? Data(contentsOf: dir.appendingPathComponent(file)),
                   let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -45,7 +46,21 @@ enum ExtensionImporter {
                   let s = ext["settings"] as? [String: Any] else { continue }
             settings.merge(s) { _, new in new }
         }
-        return settings.compactMap { id, value -> ImportableExtension? in
+        return settings
+    }
+
+    private static func isDisabled(_ s: [String: Any]) -> Bool {
+        !((s["disable_reasons"] as? [Any])?.isEmpty ?? true) || (s["state"] as? Int) == 0
+    }
+
+    /// Extensions turned off in this profile (chrome://extensions), of any install location:
+    /// also the --load-extension ones (location 8), which Chromium loads disabled again.
+    static func disabledIDs(inProfile dir: URL) -> Set<String> {
+        Set(settings(inProfile: dir).compactMap { id, value in (value as? [String: Any]).flatMap { isDisabled($0) ? id : nil } })
+    }
+
+    static func extensions(inProfile dir: URL) -> [ImportableExtension] {
+        settings(inProfile: dir).compactMap { id, value -> ImportableExtension? in
             guard let s = value as? [String: Any], let location = s["location"] as? Int,
                   importableLocations.contains(location), let path = s["path"] as? String else { return nil }
             let folder = path.hasPrefix("/") ? URL(fileURLWithPath: path, isDirectory: true)
@@ -54,10 +69,9 @@ enum ExtensionImporter {
                   let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
             // Themes and hosted apps are not extensions people pick in a toolbar.
             if manifest["theme"] != nil || manifest["app"] != nil { return nil }
-            let disabled = !((s["disable_reasons"] as? [Any])?.isEmpty ?? true) || (s["state"] as? Int) == 0
             return ImportableExtension(id: id, name: localized(manifest["name"] as? String ?? id, manifest: manifest, folder: folder),
                                        version: manifest["version"] as? String ?? "", folder: folder,
-                                       isEnabled: !disabled, icon: icon(manifest: manifest, folder: folder))
+                                       isEnabled: !isDisabled(s), icon: icon(manifest: manifest, folder: folder))
         }
     }
 

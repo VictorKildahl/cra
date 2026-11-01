@@ -43,12 +43,17 @@ final class ExtensionActions {
 
     /// Triggers the action; `anchor` is the top-right point (screen coordinates) the popup hangs from.
     /// Returns false when the pipe or the page is unavailable (the caller falls back).
+    /// `inDefaultProfile`: the page is in the "Default" profile folder, whose extensions the
+    /// pipe can list.
     @discardableResult
-    func run(_ extensionID: String, on browser: CraBrowser, anchor: NSPoint) async -> Bool {
+    func run(_ extensionID: String, on browser: CraBrowser, anchor: NSPoint, inDefaultProfile: Bool) async -> Bool {
         guard isAvailable else { return false }
         var triggered = false
         HitchMonitor.mark("extension request \(extensionID)")
         do {
+            // Turned off in chrome://extensions moments ago: Chromium writes that to the
+            // profile's prefs ~10 s later, and triggerAction on it crashes Chromium (#41).
+            if inDefaultProfile, await isTurnedOff(extensionID) { throw Failure.turnedOff }
             let tab = try await tabTarget(for: browser)
             let before = WindowSnapshot()
             placingOwnPopup = true
@@ -61,6 +66,12 @@ final class ExtensionActions {
         } catch {
             placingOwnPopup = false
             NSLog("Cra: extension action %@ failed: %@", extensionID, String(describing: error))
+            // Off (CEF's TriggerAction patch says so too): nothing to fall back to.
+            if case Failure.turnedOff = error { ExtensionStore.shared.reload(); return true }
+            if case let Failure.protocolError(message) = error, message.contains("No enabled extension") {
+                ExtensionStore.shared.reload()
+                return true
+            }
             tabTargets[ObjectIdentifier(browser)] = nil
             // The action may still run after its reply timed out; a fallback page would be a
             // second popup.
@@ -141,7 +152,14 @@ final class ExtensionActions {
 
     // MARK: Targets
 
-    private enum Failure: Error { case protocolError(String), noTabTarget }
+    private enum Failure: Error { case protocolError(String), noTabTarget, turnedOff }
+
+    /// Extensions.getExtensions lists the default profile's unpacked extensions (also the
+    /// --load-extension ones) with their live state; Web Store ones are not in it.
+    private func isTurnedOff(_ extensionID: String) async -> Bool {
+        let list = (try? await call("Extensions.getExtensions"))?["extensions"] as? [[String: Any]] ?? []
+        return list.first { $0["id"] as? String == extensionID }?["enabled"] as? Bool == false
+    }
 
     /// The tab target that holds this browser's page: attach to each tab target and let it
     /// auto-attach its page (the protocol has no direct page → tab link). Cached per browser.
