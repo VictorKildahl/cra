@@ -636,6 +636,20 @@ final class ShellView: NSView {
     }
 
     /// Animate between sidebar states by interpolating frames.
+    /// While the sidebar's width follows the fingers (a Library swipe) the pages keep their size
+    /// and their cards move over them: resizing a page makes Chromium lay it out again, and once
+    /// per event that stalled the swipe. `thawPages` gives them the size they end up with, once.
+    func freezePages() {
+        for c in paneCards where c.frozenWebBounds == nil { c.frozenWebBounds = NSRect(origin: .zero, size: c.webArea.bounds.size) }
+    }
+
+    func thawPages() {
+        guard paneCards.contains(where: { $0.frozenWebBounds != nil }) else { return }
+        for c in paneCards { c.frozenWebBounds = nil }
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+    }
+
     func animateSidebar(visible: Bool, floating: Bool, fullscreen: Bool, width: CGFloat, duration: TimeInterval = 0.085) {
         let target = frames(sidebarVisible: visible, floating: floating, fullscreen: fullscreen, width: width)
         // Size the pages for their destination once, up front; the cards then just slide over them.

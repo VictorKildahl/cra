@@ -2035,9 +2035,12 @@ curves fitted per frame. "p" = Library reveal progress, 0 = space, 1 = Library o
 - Frames: `arc/rec/b1.png` (1100 pt window), `arc/rec/b3-main.png` (theme editor), `arc/rec/t10.mov`, `t12.mov`.
 - [Cra, 1 Nov 2026] Victor found Arc's half-speed, sidebar-widening drag "way too slow / laggy" and asked for the
   space swipe's animation instead. Cra's `LibrarySwipe` (CraCore) treats the Library as the page before the first
-  space: it and the space slide 1:1 under the fingers in the sidebar's current width, with the space swipe's
-  rubber band, release rule (> 0.8 pages/s or past half) and settle (critically damped, ω = 2π/0.4), and the
-  sidebar widens to the Library's width with the Library button's 0.1 s animation once it has landed (no page
-  resizes during the drag). The Spaces page follows Arc: sidebar = window − 56 pt, live on resize; cards scroll
+  space, its right edge 1:1 under the fingers, with the space swipe's rubber band, release rule (> 0.8 pages/s or
+  past half) and settle (critically damped, ω = 2π/0.4). Like Arc the sidebar widens with the reveal (base +
+  (Library − base) × r), so it lands at the Library's width with nothing left to resize (a resize after landing
+  looked ugly with a narrow sidebar). Embedded pages keep their size under their cards during the swipe
+  (`ShellView.freezePages`) and resize once when it lands: a page resize per event made Chromium lay the page out
+  each time and stalled the swipe for a second. The Library's search takes focus only after landing (focusing it
+  mid-swipe flashed a system panel). The Spaces page follows Arc: sidebar = window − 56 pt, live on resize; cards scroll
   sideways under two fingers (over card lists too) and Shift+wheel; a swipe that starts with the cards at their
   end leaves the Library; the brush's theme editor sits flush with the card's right edge.

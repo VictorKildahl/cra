@@ -53,9 +53,10 @@ final class SidebarUIState {
     /// (Arc 1.171): how much of it shows, 0 the space, 1 the Library, past 1 while it
     /// rubber-bands. nil when no such swipe is tracking or settling.
     @ObservationIgnored var libraryReveal: CGFloat? { didSet { for f in libraryRevealObservers { f() } } }
-    /// The page the swipe brings in, and the Library's width on it.
+    /// The page the swipe brings in, the Library's width on it and the sidebar's own width.
     @ObservationIgnored var libraryRevealPage: LibraryPage = .downloads
     @ObservationIgnored var libraryRevealWidth: CGFloat = 0
+    @ObservationIgnored var libraryRevealBase: CGFloat = 0
     @ObservationIgnored private var libraryRevealObservers: [() -> Void] = []
     func observeLibraryReveal(_ f: @escaping () -> Void) { libraryRevealObservers.append(f) }
     /// Tab chosen from the keyboard in another space (the tab switcher); Arc draws its

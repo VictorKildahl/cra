@@ -1618,10 +1618,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     // MARK: Swiping into the Library (LibrarySwipe)
 
-    /// The swipe works in the sidebar's width as it is; the Library widens it once it has landed.
     private func prepareLibraryReveal(_ page: LibraryPage) {
         sidebarUI.libraryRevealPage = page
-        sidebarUI.libraryRevealWidth = shell.sidebarWidth
+        sidebarUI.libraryRevealWidth = libraryWidth(page)
+        sidebarUI.libraryRevealBase = CGFloat(store.prefs.sidebarWidth)
+    }
+
+    /// Shows reveal `r`, and like Arc the sidebar widens with it, from its own width to the
+    /// Library's, so the Library lands at its width with nothing left to resize.
+    private func setLibraryReveal(_ r: CGFloat) {
+        // Embedded pages keep their size under their cards until the swipe lands.
+        if sidebarUI.libraryReveal == nil, EmbeddedPages.isEnabled { shell.freezePages() }
+        sidebarUI.libraryReveal = r
+        shell.sidebarWidth = LibrarySwipe.sidebarWidth(reveal: r, base: sidebarUI.libraryRevealBase, library: sidebarUI.libraryRevealWidth)
     }
 
     /// Past the first space the fingers pull the Library in like the page before it; in the
@@ -1630,11 +1639,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         guard let from = librarySwipeFrom else { return false }
         guard let r = LibrarySwipe.reveal(from: from, travel: swipeTravel, width: sidebarUI.libraryRevealWidth) else {
             // Back on the space and beyond: the swipe heads for the next space instead.
-            if sidebarUI.libraryReveal != nil { sidebarUI.libraryReveal = nil }
+            if sidebarUI.libraryReveal != nil {
+                setLibraryReveal(0)
+                sidebarUI.libraryReveal = nil
+                shell.thawPages()
+            }
             return false
         }
         if sidebarUI.spaceSwipe != 0 { sidebarUI.spaceSwipe = 0 }
-        sidebarUI.libraryReveal = r
+        setLibraryReveal(r)
         return true
     }
 
@@ -1659,7 +1672,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             stopLibrarySettle()
             finishLibrarySwipe(at: s.target)
         } else {
-            sidebarUI.libraryReveal = LibrarySwipe.settle(from: s.from, velocity: s.velocity, to: s.target, at: t)
+            setLibraryReveal(LibrarySwipe.settle(from: s.from, velocity: s.velocity, to: s.target, at: t))
         }
     }
 
@@ -1669,8 +1682,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         librarySettleLink = nil
     }
 
-    /// Landed: the window is in the Library or on the space, and the sidebar takes the width
-    /// the Library button would give it.
+    /// Landed: the window is in the Library or on the space, at the width the swipe ends on.
     private func finishLibrarySwipe(at target: CGFloat) {
         var instant = Transaction()
         instant.disablesAnimations = true
@@ -1695,10 +1707,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             width = CGFloat(store.prefs.sidebarWidth)
         }
         sidebarUI.libraryReveal = nil
-        if shell.sidebarWidth != width {
-            shell.sidebarWidth = width
-            shell.animateSidebar(visible: true, floating: false, fullscreen: shell.contentFullscreen, width: width, duration: 0.1)
-        }
+        shell.sidebarWidth = width
+        shell.thawPages()
     }
 
     /// The Spaces page's cards under the pointer are scrolled to their end (or there are none).

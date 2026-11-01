@@ -4,11 +4,24 @@ import Testing
 
 /// The swipe into the Library moves like a space swipe: the Library is the page before the first space.
 struct LibrarySwipeTests {
+    /// The Library's right edge moves with the fingers, point for point.
     @Test func followsTheFingersOneToOne() {
-        #expect(LibrarySwipe.reveal(from: 0, travel: 173.5, width: 347) == 0.5)
+        #expect(LibrarySwipe.reveal(from: 0, travel: 208.5, width: 417) == 0.5)
         #expect(LibrarySwipe.reveal(from: 1, travel: -208.5, width: 417) == 0.5)
-        #expect(LibrarySwipe.libraryX(reveal: 0.5, width: 347) == -173.5)
-        #expect(LibrarySwipe.spaceX(reveal: 0.5, width: 347) == 173.5)
+        #expect(LibrarySwipe.libraryX(reveal: 0.5, base: 347, library: 417) == -208.5)
+        #expect(LibrarySwipe.spaceX(reveal: 0.5, base: 347, library: 417) == 208.5)
+    }
+
+    /// Like Arc, the sidebar widens with the reveal and lands at the Library's width.
+    @Test func sidebarWidensWithTheReveal() {
+        #expect(LibrarySwipe.sidebarWidth(reveal: 0, base: 260, library: 330) == 260)
+        #expect(LibrarySwipe.sidebarWidth(reveal: 0.5, base: 260, library: 330) == 295)
+        #expect(LibrarySwipe.sidebarWidth(reveal: 1, base: 260, library: 1044) == 1044)
+        #expect(LibrarySwipe.sidebarWidth(reveal: -0.2, base: 260, library: 330) == 260)
+        // Rubber-banding past, it keeps widening and the Library rides its edge.
+        let w = LibrarySwipe.sidebarWidth(reveal: 1.1, base: 347, library: 417)
+        #expect(w > 417)
+        #expect(LibrarySwipe.libraryX(reveal: 1.1, base: 347, library: 417) == w - 417)
     }
 
     @Test func goingTheOtherWayFromTheSpaceIsASpaceSwipe() {

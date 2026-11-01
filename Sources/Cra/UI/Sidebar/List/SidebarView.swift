@@ -141,9 +141,9 @@ final class SidebarView: NSView {
     }
 
     /// A swipe's reveal `r` (SidebarUIState.libraryReveal): the Library is the page before the
-    /// first space, and the two slide side by side in the sidebar's width like space pages
-    /// (LibrarySwipe). Once the swipe has landed the window controller has set the page, and the
-    /// column takes that state.
+    /// first space and the two slide side by side like space pages while the sidebar widens under
+    /// them (LibrarySwipe). Each keeps its own width, so neither lays out again as it moves. Once
+    /// the swipe has landed the window controller has set the page, and the column takes that state.
     private func applyLibraryReveal() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -157,6 +157,7 @@ final class SidebarView: NSView {
                 host.alphaValue = 1
                 host.frame = bounds
                 tabs.alphaValue = 0
+                if shownLibrary != page { host.focusSearch() }
                 shownLibrary = page
             } else {
                 libraryHost?.removeFromSuperview()
@@ -173,9 +174,9 @@ final class SidebarView: NSView {
         tabs.alphaValue = 1
         // Neither page shows outside the column, under the card's inset.
         layer?.masksToBounds = true
-        let w = bounds.width
-        host.frame = NSRect(x: LibrarySwipe.libraryX(reveal: r, width: w), y: 0, width: w, height: bounds.height)
-        tabs.setFrameOrigin(NSPoint(x: LibrarySwipe.spaceX(reveal: r, width: w), y: 0))
+        let base = ui.libraryRevealBase, library = ui.libraryRevealWidth
+        host.frame = NSRect(x: LibrarySwipe.libraryX(reveal: r, base: base, library: library), y: 0, width: library, height: bounds.height)
+        tabs.frame = NSRect(x: LibrarySwipe.spaceX(reveal: r, base: base, library: library), y: 0, width: base, height: bounds.height)
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -189,14 +190,14 @@ final class SidebarView: NSView {
 
     override func layout() {
         super.layout()
-        let b = bounds
         if ui.libraryReveal == nil {
-            tabs.frame = b
-            libraryHost?.frame = b
+            tabs.frame = bounds
+            libraryHost?.frame = bounds
         } else {
-            tabs.setFrameSize(b.size)
             applyLibraryReveal()
         }
+        // The column's own size: during a Library swipe it keeps the sidebar's width as that widens.
+        let b = tabs.bounds
         let th = topBar.preferredHeight
         topBar.frame = NSRect(x: 0, y: 0, width: b.width, height: th)
         // Arc's list viewport ends 50 pt above the window bottom; the dock sits centred in that band.
