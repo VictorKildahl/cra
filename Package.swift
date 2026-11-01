@@ -33,6 +33,8 @@ let package = Package(
         // Cra.app/Contents/PlugIns/CraDockTile.docktileplugin.
         .library(name: "CraDockTile", type: .dynamic, targets: ["CraDockTile"]),
     ],
+    // Models and decisions that need no AppKit or CEF, with tests that run without vendor/cef.
+    dependencies: [.package(path: "Packages/CraCore")],
     targets: [
         // Objective-C++ bridge between Swift and CEF.
         .target(
@@ -69,7 +71,7 @@ let package = Package(
         // The browser itself: AppKit window, SwiftUI sidebar and command bar.
         .executableTarget(
             name: "Cra",
-            dependencies: ["CraCEF"],
+            dependencies: ["CraCEF", .product(name: "CraCore", package: "CraCore")],
             path: "Sources/Cra",
             swiftSettings: [.unsafeFlags(["-F", sparkleRoot]), .unsafeFlags(["-Onone"], .when(configuration: .debug))],
             linkerSettings: [.unsafeFlags(["-F", sparkleRoot, "-framework", "Sparkle",

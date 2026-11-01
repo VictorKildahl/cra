@@ -172,21 +172,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// Settings > Privacy > "Always use secure connections", live like content blocking.
     private func observeHttpsOnly() {
-        let enabled = withObservationTracking {
-            store.settings.httpsOnly
-        } onChange: { [weak self] in
-            Task { @MainActor in self?.observeHttpsOnly() }
-        }
-        CraCEFRuntime.setHttpsOnlyModeEnabled(enabled)
+        observeChanges(of: { [store] in store.settings.httpsOnly }, apply: CraCEFRuntime.setHttpsOnlyModeEnabled)
     }
 
     private func observeContentBlocking() {
-        let enabled = withObservationTracking {
-            store.settings.blockAdsAndTrackers
-        } onChange: { [weak self] in
-            Task { @MainActor in self?.observeContentBlocking() }
-        }
-        CraCEFRuntime.setContentBlockingEnabled(enabled)
+        observeChanges(of: { [store] in store.settings.blockAdsAndTrackers }, apply: CraCEFRuntime.setContentBlockingEnabled)
     }
 
     private func installURLEventHandler() {
