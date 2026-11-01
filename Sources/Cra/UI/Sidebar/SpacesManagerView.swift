@@ -14,6 +14,8 @@ enum SpacesManagerMetrics {
     static let plus: CGFloat = 29
     static let plusGap: CGFloat = 34
     static let trail: CGFloat = 37.5
+    /// What the page keeps beside the Spaces page, whatever the window's width (Arc 1.171).
+    static let pageRoom: CGFloat = 56
 
     /// The Library's width on this page: Arc widens the sidebar to fit every card.
     static func width(spaces n: Int) -> CGFloat {
@@ -27,7 +29,7 @@ final class SpacesManagerView: NSView {
     private let ui: SidebarUIState
     private let actions: SidebarActions
     private let favicons: FaviconCache
-    private let scroll = NSScrollView()
+    private let scroll = SpacesStripScrollView()
     private let document = FlippedView()
     private var cards: [UUID: SpaceManagerCard] = [:]
     private var order: [UUID] = []
@@ -143,7 +145,7 @@ private final class SpaceManagerCard: NSView {
     private lazy var brush = SidebarGlyphButton(symbol: "paintbrush.pointed.fill", size: 26, iconSize: 13, help: "Edit Theme Color",
                                                 colors: colors) { [weak self] in
         guard let self, let s = self.store.space(self.spaceID) else { return }
-        self.actions.editSpaceTheme(s)
+        self.actions.editSpaceThemeBeside(s, self)
     }
     /// Dragging it carries the card along the row; where it is let go is the space's new place.
     private let move = SpaceMoveHandle()
@@ -267,4 +269,11 @@ private final class SpaceMoveHandle: NSView {
         NSCursor.pop()
         onEnd()
     }
+}
+
+/// The cards' row. Like the tab lists (SpaceListScrollView) it stays off responsive scrolling,
+/// which would take a gesture's events past the window's scroll monitor once it starts here:
+/// a swipe that starts with the cards at their end has to reach the monitor to leave the Library.
+final class SpacesStripScrollView: NSScrollView {
+    override class var isCompatibleWithResponsiveScrolling: Bool { false }
 }

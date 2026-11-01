@@ -31,6 +31,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var swipeTravel: CGFloat = 0
     private var swipeSamples: [(time: TimeInterval, dx: CGFloat)] = []
     private var swipeDetent = 0
+    /// The Library's reveal a swipe started from: 0 on the first space, 1 in the Library; nil
+    /// when the swipe can only page between spaces.
+    private var librarySwipeFrom: CGFloat?
+    private var librarySettleSpring: (start: CFTimeInterval, from: CGFloat, velocity: CGFloat, target: CGFloat)?
+    private var librarySettleLink: CADisplayLink?
+    /// Shows the lists' overlay knob again once a swipe's scroller flash has faded.
+    private var swipeKnobReveal: DispatchWorkItem?
     private var enteredFullscreenForContent = false
     /// The tab whose page (a video) is in element fullscreen.
     private var contentFullscreenTab: UUID?
@@ -204,6 +211,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         sidebarActions.editSpace = { [weak self] s in self?.showSpaceEditor(space: s) }
         sidebarActions.changeSpaceIcon = { [weak self] s, anchor in self?.showSpaceIconPicker(space: s, anchor: anchor) }
         sidebarActions.editSpaceTheme = { [weak self] s in self?.showSpaceStyleEditor(space: s) }
+        sidebarActions.editSpaceThemeBeside = { [weak self] s, card in self?.showSpaceStyleEditor(space: s, beside: card) }
         sidebarActions.newProfile = { [weak self] id in self?.showNewProfileDialog(forSpace: id) }
         sidebarActions.manageSpaces = { [weak self] in self?.showManageSpaces() }
         sidebarActions.deleteSpace = { [weak self] s in self?.app.confirmDeleteSpace(s) }
@@ -1435,12 +1443,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// The sidebar's width with the Library in it: 70 pt wider for the rail, or on the Spaces page
-    /// wide enough for every space's card (Arc), leaving the page at least 320 pt.
+    /// wide enough for every space's card, leaving the page 56 pt (Arc 1.171; the cards scroll
+    /// sideways when they don't fit).
     private func libraryWidth(_ page: LibraryPage) -> CGFloat {
         let base = CGFloat(store.prefs.sidebarWidth) + LibraryMetrics.extraWidth
         guard page == .spaces else { return base }
         let n = store.orderedSpaces.filter { !store.isIncognito(space: $0.id) }.count
-        let room = (window?.frame.width ?? 1280) - 320
+        let room = (window?.frame.width ?? 1280) - SpacesManagerMetrics.pageRoom
         return max(base, min(SpacesManagerMetrics.width(spaces: n), room))
     }
 
@@ -1534,6 +1543,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // phase switch below; a stale .horizontal would eat the page's momentum and
             // scrolling would stop dead the moment the fingers lift.
             if event.phase == .began || event.phase == .mayBegin { self.swipeAxis = .vertical }
+            // A mouse wheel only ever scrolls.
+            if !event.hasPreciseScrollingDeltas { self.showListKnobs() }
             // The momentum tail of a space swipe belongs to the swipe, not the tab list.
             if !event.momentumPhase.isEmpty { return self.swipeAxis == .horizontal ? nil : event }
             // The floating sidebar is in its own panel (FloatingSidebarController): its swipes
@@ -1543,11 +1554,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                   event.hasPreciseScrollingDeltas else { return event }
             switch event.phase {
             case .mayBegin, .began:
-                // The Library's lists don't page between spaces.
-                let overSidebar = (self.shell.sidebarVisible || self.shell.floatingSidebar) && event.window === host.window
+                let inSidebar = (self.shell.sidebarVisible || self.shell.floatingSidebar) && event.window === host.window
                     && host.bounds.contains(host.convert(event.locationInWindow, from: nil))
-                    && self.sidebarUI.libraryPage == nil
+                // In the Library a swipe can only take it back out; on the Spaces page the cards
+                // scroll first, and only a swipe that starts with them at their end leaves (Arc).
+                var overSidebar = inSidebar
+                if inSidebar, let page = self.sidebarUI.libraryPage {
+                    overSidebar = page != .spaces || self.spacesStripAtEnd(event)
+                }
                 self.swipeAxis = overSidebar ? .undecided : .vertical
+                if overSidebar { self.hideListKnobs() }
                 self.swipeX = 0
                 self.swipeY = 0
                 return event
@@ -1559,8 +1575,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                     self.swipeX += event.scrollingDeltaX
                     self.swipeY += event.scrollingDeltaY
                     guard max(abs(self.swipeX), abs(self.swipeY)) > 6 else { return event }
-                    guard abs(self.swipeX) > abs(self.swipeY) * 1.2, self.store.spaceOrder.count > 1, !self.isIncognito else {
+                    // One space still swipes into the Library.
+                    guard abs(self.swipeX) > abs(self.swipeY) * 1.2, !self.isIncognito,
+                          self.store.spaceOrder.count > 1 || !self.shell.floatingSidebar,
+                          // At the Spaces page's end a swipe back along the cards scrolls them.
+                          !(self.sidebarUI.libraryPage == .spaces && self.swipeX > 0) else {
                         self.swipeAxis = .vertical
+                        self.showListKnobs()
                         return event
                     }
                     self.swipeAxis = .horizontal
@@ -1573,6 +1594,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                     return nil
                 }
             case .ended, .cancelled:
+                if self.swipeAxis != .vertical { self.showListKnobs(after: 1) }
                 guard self.swipeAxis == .horizontal else { return event }
                 self.endSpaceSwipe()
                 return nil
@@ -1582,11 +1604,144 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
     }
 
+    private func hideListKnobs() {
+        swipeKnobReveal?.cancel()
+        swipeKnobReveal = nil
+        SidebarScroller.hiddenForSwipe = true
+    }
+
+    /// After `delay` seconds: by then the knob AppKit flashed at the touch has faded out.
+    private func showListKnobs(after delay: TimeInterval = 0) {
+        swipeKnobReveal?.cancel()
+        guard delay > 0 else { SidebarScroller.hiddenForSwipe = false; return }
+        let work = DispatchWorkItem { SidebarScroller.hiddenForSwipe = false }
+        swipeKnobReveal = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
     private func beginSpaceSwipe() {
         swipeTravel = 0
         swipeSamples = []
         swipeDetent = 0
         sidebarUI.spaceSettleVelocity = 0
+        // A swipe during a Library settle picks it up where it shows.
+        stopLibrarySettle()
+        let shown = sidebarUI.libraryReveal
+        librarySwipeFrom = nil
+        guard !shell.floatingSidebar, shell.sidebarVisible || sidebarUI.libraryPage != nil else { return }
+        if let page = sidebarUI.libraryPage {
+            prepareLibraryReveal(page)
+            librarySwipeFrom = shown ?? 1
+        } else if store.spaceOrder.first == focusedSpaceID {
+            prepareLibraryReveal(sidebarUI.lastLibraryPage)
+            librarySwipeFrom = shown ?? 0
+        }
+    }
+
+    // MARK: Swiping into the Library (LibrarySwipe)
+
+    private func prepareLibraryReveal(_ page: LibraryPage) {
+        sidebarUI.libraryRevealPage = page
+        sidebarUI.libraryRevealWidth = libraryWidth(page)
+        sidebarUI.libraryRevealBase = CGFloat(store.prefs.sidebarWidth)
+    }
+
+    /// Shows reveal `r`, and like Arc the sidebar widens with it, from its own width to the
+    /// Library's, so the Library lands at its width with nothing left to resize.
+    private func setLibraryReveal(_ r: CGFloat) {
+        // Embedded pages keep their size under their cards until the swipe lands.
+        if sidebarUI.libraryReveal == nil, EmbeddedPages.isEnabled { shell.freezePages() }
+        sidebarUI.libraryReveal = r
+        shell.sidebarWidth = LibrarySwipe.sidebarWidth(reveal: r, base: sidebarUI.libraryRevealBase, library: sidebarUI.libraryRevealWidth)
+    }
+
+    /// Past the first space the fingers pull the Library in like the page before it; in the
+    /// Library they push it back out. Returns false when the swipe is one between spaces.
+    private func trackLibrarySwipe() -> Bool {
+        guard let from = librarySwipeFrom else { return false }
+        guard let r = LibrarySwipe.reveal(from: from, travel: swipeTravel, width: sidebarUI.libraryRevealWidth) else {
+            // Back on the space and beyond: the swipe heads for the next space instead.
+            if sidebarUI.libraryReveal != nil {
+                setLibraryReveal(0)
+                sidebarUI.libraryReveal = nil
+                shell.thawPages()
+            }
+            return false
+        }
+        if sidebarUI.spaceSwipe != 0 { sidebarUI.spaceSwipe = 0 }
+        setLibraryReveal(r)
+        return true
+    }
+
+    /// The release settles on the space swipe's spring, frame by frame on the display link.
+    private func endLibrarySwipe(_ r: CGFloat) {
+        librarySwipeFrom = nil
+        let width = sidebarUI.libraryRevealWidth
+        let velocity = LibrarySwipe.velocity(samples: swipeSamples, width: width)
+        let target = LibrarySwipe.target(reveal: r, velocity: velocity)
+        librarySettleSpring = (start: CACurrentMediaTime(), from: r, velocity: velocity, target: target)
+        if librarySettleLink == nil {
+            let link = shell.displayLink(target: self, selector: #selector(stepLibrarySettle))
+            link.add(to: .main, forMode: .common)
+            librarySettleLink = link
+        }
+    }
+
+    @objc private func stepLibrarySettle(_ link: CADisplayLink) {
+        guard let s = librarySettleSpring else { return stopLibrarySettle() }
+        let t = CGFloat(link.targetTimestamp - s.start)
+        if LibrarySwipe.isSettled(from: s.from, velocity: s.velocity, to: s.target, at: t, width: sidebarUI.libraryRevealWidth) {
+            stopLibrarySettle()
+            finishLibrarySwipe(at: s.target)
+        } else {
+            setLibraryReveal(LibrarySwipe.settle(from: s.from, velocity: s.velocity, to: s.target, at: t))
+        }
+    }
+
+    private func stopLibrarySettle() {
+        librarySettleSpring = nil
+        librarySettleLink?.invalidate()
+        librarySettleLink = nil
+    }
+
+    /// Landed: the window is in the Library or on the space, at the width the swipe ends on.
+    private func finishLibrarySwipe(at target: CGFloat) {
+        var instant = Transaction()
+        instant.disablesAnimations = true
+        let width: CGFloat
+        if target >= 1 {
+            let page = sidebarUI.libraryPage ?? sidebarUI.libraryRevealPage
+            if sidebarUI.libraryPage == nil {
+                sidebarUI.lastLibraryPage = page
+                sidebarUI.downloadsListOpen = false
+                commandBar.close()
+                shell.sidebarResizable = false
+                withTransaction(instant) { sidebarUI.libraryPage = page }
+                window?.makeKey()
+            }
+            width = libraryWidth(page)
+        } else {
+            if sidebarUI.libraryPage != nil {
+                withTransaction(instant) { sidebarUI.libraryPage = nil }
+                shell.sidebarResizable = true
+                currentBrowser?.setFocused(true)
+            }
+            width = CGFloat(store.prefs.sidebarWidth)
+        }
+        sidebarUI.libraryReveal = nil
+        shell.sidebarWidth = width
+        shell.thawPages()
+    }
+
+    /// The Spaces page's cards under the pointer are scrolled to their end (or there are none).
+    private func spacesStripAtEnd(_ event: NSEvent) -> Bool {
+        guard let root = shell.sidebarHost.window?.contentView?.superview else { return false }
+        var v = root.hitTest(event.locationInWindow)
+        while let view = v, !(view is NSScrollView && (view as? NSScrollView)?.hasHorizontalScroller == true) { v = view.superview }
+        // Arc ignores a swipe over the Library's rail.
+        guard let strip = v as? NSScrollView else { return false }
+        let clip = strip.contentView
+        return clip.bounds.minX >= (strip.documentView?.frame.width ?? 0) - clip.bounds.width - 1
     }
 
     /// A space swipe of `steps` trackpad samples `dx` apart, 8 ms apart (cra://debug?swipe=).
@@ -1605,6 +1760,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         swipeTravel += dx
         swipeSamples.append((time, dx))
         swipeSamples.removeAll { time - $0.time > 0.08 }
+        if trackLibrarySwipe() { return }
         let index = CGFloat(store.spaceOrder.firstIndex(of: focusedSpaceID) ?? 0)
         let first = -index, last = CGFloat(store.spaceOrder.count - 1) - index
         // Content follows the fingers (natural scrolling: fingers left = next space).
@@ -1624,6 +1780,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     private func endSpaceSwipe() {
         HitchMonitor.mark("swipe-lift")
+        if let r = sidebarUI.libraryReveal, librarySwipeFrom != nil { return endLibrarySwipe(r) }
+        librarySwipeFrom = nil
         let width = max(1, shell.sidebarWidth)
         let pages = sidebarUI.spaceSwipe
         let span = (swipeSamples.last?.time ?? 0) - (swipeSamples.first?.time ?? 0)
@@ -2098,6 +2256,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     func windowDidResize(_ notification: Notification) {
         guard (notification.object as? NSWindow) === window else { return }
+        // Arc's Spaces page keeps the page its 56 pt while the window resizes.
+        if sidebarUI.libraryPage == .spaces, sidebarUI.libraryReveal == nil { shell.sidebarWidth = libraryWidth(.spaces) }
         shell.needsLayout = true
         browsers.layoutVisible()
         if commandBar.isOpen { positionCommandPanel() }

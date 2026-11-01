@@ -34,7 +34,7 @@ extension MainWindowController {
 
     /// Edit Theme Color…: Arc's editor in a panel against the sidebar's edge at the window's top,
     /// applying every change at once. Escape or a click outside closes it.
-    func showSpaceStyleEditor(space: Space) {
+    func showSpaceStyleEditor(space: Space, beside anchor: NSView? = nil) {
         guard let window else { return }
         if let open = window.childWindows?.first(where: { $0 is StyleEditorPanel }) { open.close() }
         let store = self.store, id = space.id
@@ -45,7 +45,9 @@ extension MainWindowController {
         }
         // The card sits 12 pt into its 382 × 534 pt window (19 pt above the bottom), room for the shadow.
         let size = NSSize(width: 382, height: 534)
-        let x = (window.frame.minX + (shell.sidebarVisible ? shell.sidebarWidth : 0)).rounded()
+        // From a Spaces page card Arc puts it flush with the card's right edge.
+        let x = (anchor.flatMap { v in v.window.map { $0.convertToScreen(v.convert(v.bounds, to: nil)).maxX } }
+            ?? window.frame.minX + (shell.sidebarVisible ? shell.sidebarWidth : 0)).rounded()
         let panel = StyleEditorPanel(contentRect: NSRect(x: x, y: window.frame.maxY - size.height, width: size.width, height: size.height))
         let host = NSHostingView(rootView: editor.shadow(color: .black.opacity(0.3), radius: 10, y: 4)
             .padding(.top, 12).padding(.horizontal, 13.5).padding(.bottom, 19))

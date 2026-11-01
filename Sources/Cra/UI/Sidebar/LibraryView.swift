@@ -103,8 +103,11 @@ final class LibraryView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        list.focusSearch()
+        // A swipe brings the Library in under the fingers; its search takes the keys once it lands.
+        if ui.libraryReveal == nil { list.focusSearch() }
     }
+
+    func focusSearch() { list.focusSearch() }
 
     override func cancelOperation(_ sender: Any?) { actions.closeLibrary() }
 

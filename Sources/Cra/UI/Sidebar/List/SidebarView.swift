@@ -41,6 +41,7 @@ final class SidebarView: NSView {
         for v in [topBar, pager, player, trayHost, bannerHost, dock] as [NSView] { tabs.addSubview(v) }
         addSubview(tabs)
         player.onCountChange = { [weak self] in self?.needsLayout = true }
+        ui.observeLibraryReveal { [weak self] in self?.applyLibraryReveal() }
         observe()
     }
 
@@ -100,16 +101,11 @@ final class SidebarView: NSView {
     /// The Library takes over the column: in from a little to the left, out to the left past its
     /// rail while the tab list fades back in.
     private func showLibrary(_ page: LibraryPage?) {
-        guard page != shownLibrary else { return }
+        guard page != shownLibrary, ui.libraryReveal == nil else { return }
         let opening = shownLibrary == nil && page != nil
         shownLibrary = page
         if let page {
-            let host = libraryHost ?? {
-                let h = LibraryView(page: page, palette: palette, store: store, ui: ui, actions: actions, favicons: favicons)
-                addSubview(h)
-                libraryHost = h
-                return h
-            }()
+            let host = libraryHost ?? makeLibraryHost(page)
             host.page = page
             host.frame = bounds
             if opening {
@@ -137,6 +133,52 @@ final class SidebarView: NSView {
         }
     }
 
+    private func makeLibraryHost(_ page: LibraryPage) -> LibraryView {
+        let h = LibraryView(page: page, palette: palette, store: store, ui: ui, actions: actions, favicons: favicons)
+        addSubview(h)
+        libraryHost = h
+        return h
+    }
+
+    /// A swipe's reveal `r` (SidebarUIState.libraryReveal): the Library is the page before the
+    /// first space and the two slide side by side like space pages while the sidebar widens under
+    /// them (LibrarySwipe). Each keeps its own width, so neither lays out again as it moves. Once
+    /// the swipe has landed the window controller has set the page, and the column takes that state.
+    private func applyLibraryReveal() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        guard let r = ui.libraryReveal else {
+            layer?.masksToBounds = false
+            tabs.setFrameOrigin(.zero)
+            if let page = ui.libraryPage {
+                let host = libraryHost ?? makeLibraryHost(page)
+                host.page = page
+                host.alphaValue = 1
+                host.frame = bounds
+                tabs.alphaValue = 0
+                if shownLibrary != page { host.focusSearch() }
+                shownLibrary = page
+            } else {
+                libraryHost?.removeFromSuperview()
+                libraryHost = nil
+                tabs.alphaValue = 1
+                shownLibrary = nil
+            }
+            return
+        }
+        let page = ui.libraryPage ?? ui.libraryRevealPage
+        let host = libraryHost ?? makeLibraryHost(page)
+        host.page = page
+        host.alphaValue = 1
+        tabs.alphaValue = 1
+        // Neither page shows outside the column, under the card's inset.
+        layer?.masksToBounds = true
+        let base = ui.libraryRevealBase, library = ui.libraryRevealWidth
+        host.frame = NSRect(x: LibrarySwipe.libraryX(reveal: r, base: base, library: library), y: 0, width: library, height: bounds.height)
+        tabs.frame = NSRect(x: LibrarySwipe.spaceX(reveal: r, base: base, library: library), y: 0, width: base, height: bounds.height)
+    }
+
     override func hitTest(_ point: NSPoint) -> NSView? {
         if let host = libraryHost {
             // `point` is in the superview's space; the host sits in this (flipped) view's.
@@ -148,9 +190,14 @@ final class SidebarView: NSView {
 
     override func layout() {
         super.layout()
-        let b = bounds
-        tabs.frame = b
-        libraryHost?.frame = b
+        if ui.libraryReveal == nil {
+            tabs.frame = bounds
+            libraryHost?.frame = bounds
+        } else {
+            applyLibraryReveal()
+        }
+        // The column's own size: during a Library swipe it keeps the sidebar's width as that widens.
+        let b = tabs.bounds
         let th = topBar.preferredHeight
         topBar.frame = NSRect(x: 0, y: 0, width: b.width, height: th)
         // Arc's list viewport ends 50 pt above the window bottom; the dock sits centred in that band.
