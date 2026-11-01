@@ -17,7 +17,6 @@ Runs every harness (scripts/test-*.sh, Tests/test-*.sh) compiled with coverage, 
 The summary goes to stdout and, in CI, to the job summary (GITHUB_STEP_SUMMARY).
 """
 import glob
-import json
 import os
 import re
 import shutil
@@ -64,16 +63,13 @@ def core_coverage():
     if not os.path.isdir(pkg):
         return {}
     run(["swift", "test", "--package-path", pkg, "--enable-code-coverage"])
-    path = run(["swift", "test", "--package-path", pkg, "--show-codecov-path"]).strip()
-    data = json.load(open(path))
-    lines = {}
-    for f in data["data"][0]["files"]:
-        counts = lines.setdefault(f["filename"], {})
-        # Segments: [line, col, count, hasCount, isRegionEntry, (isGapRegion)]
-        for seg in f["segments"]:
-            if seg[3] and not (len(seg) > 5 and seg[5]):
-                counts[seg[0]] = max(counts.get(seg[0], 0), seg[2])
-    return lines
+    # Per line, as the harnesses are: the JSON's segments only mark where regions start, so the
+    # other lines kept the 0 of a harness that compiles CraCore without running it.
+    codecov = os.path.dirname(run(["swift", "test", "--package-path", pkg, "--show-codecov-path"]).strip())
+    bin_path = run(["swift", "build", "--package-path", pkg, "--show-bin-path"]).strip()
+    binary = next(b for b in glob.glob(os.path.join(bin_path, "*PackageTests.xctest/Contents/MacOS/*")) if not b.endswith(".dSYM"))
+    return lcov_lines(run(["xcrun", "llvm-cov", "export", "-format=lcov", "-instr-profile",
+                           os.path.join(codecov, "default.profdata"), binary]))
 
 
 def lcov_lines(text):
@@ -118,7 +114,9 @@ def main():
     finally:
         shutil.rmtree(work, ignore_errors=True)
     for f, lines in core.items():
-        cov.setdefault(f, {}).update(lines)
+        merged = cov.setdefault(f, {})
+        for n, count in lines.items():
+            merged[n] = max(merged.get(n, 0), count)
 
     table = ["| File | Lines | Covered |", "|---|---:|---:|"]
     for f in sorted(cov):
