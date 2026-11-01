@@ -28,12 +28,20 @@ final class ExtensionStore {
         /// Chromium profile folders ("Default", "Profile <id>") it is installed in; nil for the
         /// --load-extension ones, which Chromium loads into every profile.
         var profiles: Set<String>?
+        /// Profile folders where it is turned off in chrome://extensions. Chromium keeps it off
+        /// there across launches, also when --load-extension loads the folder again.
+        var disabledProfiles: Set<String> = []
 
         func isInstalled(inProfile name: String) -> Bool { profiles?.contains(name) ?? true }
+        func isEnabled(inProfile name: String) -> Bool { isInstalled(inProfile: name) && !disabledProfiles.contains(name) }
     }
 
     /// The menu bar's Extensions menu and the toolbar read this one.
-    static let shared = ExtensionStore()
+    static let shared: ExtensionStore = {
+        let store = ExtensionStore()
+        store.watchProfiles()
+        return store
+    }()
 
     /// CraCEF loads the same folder (it also honours CRA_DATA_DIR).
     nonisolated static var directory: URL { AppPaths.supportDir.appendingPathComponent("Extensions", isDirectory: true) }
@@ -71,22 +79,33 @@ final class ExtensionStore {
         let fm = FileManager.default
         try? fm.createDirectory(at: ExtensionStore.directory, withIntermediateDirectories: true)
         let names = (try? fm.contentsOfDirectory(atPath: ExtensionStore.directory.path)) ?? []
-        let list = names.sorted().compactMap { name in
-            Self.entry(id: name, folder: ExtensionStore.directory.appendingPathComponent(name, isDirectory: true), extensionID: nil)
+        let root = AppPaths.chromiumCache
+        let profiles = Self.profileNames()
+        let disabled = Self.disabledIDs(profiles)
+        disabledByProfile = disabled
+        let list = names.sorted().compactMap { name -> Entry? in
+            guard var entry = Self.entry(id: name, folder: ExtensionStore.directory.appendingPathComponent(name, isDirectory: true),
+                                         extensionID: nil) else { return nil }
+            entry.disabledProfiles = Set(profiles.filter { disabled[$0]?.contains(entry.extensionID) == true })
+            return entry
         }
         let loaded = Set(list.map(\.extensionID))
         // Each profile has its own Web Store extensions: note which profiles hold each one.
-        let root = AppPaths.chromiumCache
-        let profiles = ((try? fm.contentsOfDirectory(atPath: root.path)) ?? []).filter { $0 == "Default" || $0.hasPrefix("Profile ") }.sorted()
         var managed: [Entry] = []
         for profile in profiles {
+            // Turned-off ones stay listed (as off) so their pins come back with them.
             for e in ExtensionImporter.extensions(inProfile: root.appendingPathComponent(profile, isDirectory: true))
-            where e.isEnabled && !loaded.contains(e.id) {
-                if let i = managed.firstIndex(where: { $0.extensionID == e.id }) { managed[i].profiles?.insert(profile); continue }
-                guard var entry = Self.entry(id: e.id, folder: e.folder, extensionID: e.id) else { continue }
-                entry.managedByChrome = true
-                entry.profiles = [profile]
-                managed.append(entry)
+            where !loaded.contains(e.id) {
+                var i = managed.firstIndex(where: { $0.extensionID == e.id })
+                if i == nil, var entry = Self.entry(id: e.id, folder: e.folder, extensionID: e.id) {
+                    entry.managedByChrome = true
+                    entry.profiles = []
+                    managed.append(entry)
+                    i = managed.count - 1
+                }
+                guard let i else { continue }
+                managed[i].profiles?.insert(profile)
+                if !e.isEnabled { managed[i].disabledProfiles.insert(profile) }
             }
         }
         entries = list + managed.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
@@ -94,8 +113,75 @@ final class ExtensionStore {
     }
 
     /// The extensions a page in this Chromium profile folder can run; running another
-    /// profile's extension there crashes Chromium.
-    func entries(inProfile name: String) -> [Entry] { entries.filter { $0.isInstalled(inProfile: name) } }
+    /// profile's extension there, or one turned off there, crashes Chromium. Arc's toolbar and
+    /// Site Control Center leave turned-off extensions out (Chrome's toolbar model).
+    func entries(inProfile name: String) -> [Entry] { entries.filter { $0.isEnabled(inProfile: name) } }
+
+    // MARK: Turned on and off in chrome://extensions (GitHub #41)
+
+    /// Profile folder → extension IDs turned off there, as `reload` last read them.
+    @ObservationIgnored private var disabledByProfile: [String: Set<String>] = [:]
+    @ObservationIgnored private var profileWatchers: [String: DispatchSourceFileSystemObject] = [:]
+    @ObservationIgnored private var prefsCheckPending = false
+
+    nonisolated private static func profileNames() -> [String] {
+        ((try? FileManager.default.contentsOfDirectory(atPath: AppPaths.chromiumCache.path)) ?? [])
+            .filter { $0 == "Default" || $0.hasPrefix("Profile ") }.sorted()
+    }
+
+    nonisolated private static func disabledIDs(_ profiles: [String]) -> [String: Set<String>] {
+        Dictionary(uniqueKeysWithValues: profiles.map {
+            ($0, ExtensionImporter.disabledIDs(inProfile: AppPaths.chromiumCache.appendingPathComponent($0, isDirectory: true)))
+        })
+    }
+
+    nonisolated private static func prefsDates(_ profiles: [String]) -> [Date?] {
+        profiles.flatMap { name in ["Preferences", "Secure Preferences"].map { file in
+            let path = AppPaths.chromiumCache.appendingPathComponent(name).appendingPathComponent(file).path
+            return (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+        } }
+    }
+
+    /// Pinned buttons follow a switch in chrome://extensions once Chromium writes the profile's
+    /// prefs (about 10 s later), by renaming a new file into the profile folder. The folders
+    /// change all the time (database journals), so only new prefs files are read.
+    private func watchProfiles() {
+        let root = AppPaths.chromiumCache
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        // The root too, for a space's new profile.
+        for name in [""] + Self.profileNames() where profileWatchers[name] == nil {
+            let fd = open(root.appendingPathComponent(name).path, O_EVTONLY)
+            guard fd >= 0 else { continue }
+            let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: .write, queue: .main)
+            source.setEventHandler { [weak self] in MainActor.assumeIsolated { self?.profileFolderChanged() } }
+            source.setCancelHandler { close(fd) }
+            source.resume()
+            profileWatchers[name] = source
+        }
+    }
+
+    @ObservationIgnored private var prefsDatesSeen: [Date?] = []
+
+    private func profileFolderChanged() {
+        guard !prefsCheckPending else { return }
+        prefsCheckPending = true
+        let seen = prefsDatesSeen
+        let known = disabledByProfile
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1) { [weak self] in
+            let profiles = Self.profileNames()
+            let dates = Self.prefsDates(profiles)
+            let changed = dates != seen && Self.disabledIDs(profiles) != known
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.prefsCheckPending = false
+                    self.prefsDatesSeen = dates
+                    if changed { self.reload() }
+                    self.watchProfiles()
+                }
+            }
+        }
+    }
 
     private static func entry(id: String, folder dir: URL, extensionID: String?) -> Entry? {
         guard let data = try? Data(contentsOf: dir.appendingPathComponent("manifest.json")),

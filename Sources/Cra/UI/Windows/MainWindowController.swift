@@ -1652,8 +1652,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let anchor = buttonRightX.map { NSPoint(x: $0, y: urlBarBottomOnScreen() ?? bar.y) }
             ?? extensionPopupAnchor(id) ?? NSPoint(x: bar.cardMaxX - 8, y: bar.y)
         guard let browser = currentBrowser else { openExtensionPopupPage(id, anchor: anchor); return }
+        let inDefaultProfile = profileDirectoryName == "Default"
         Task {
-            if await !ExtensionActions.shared.run(id, on: browser, anchor: anchor) { self.openExtensionPopupPage(id, anchor: anchor) }
+            if await !ExtensionActions.shared.run(id, on: browser, anchor: anchor, inDefaultProfile: inDefaultProfile) {
+                self.openExtensionPopupPage(id, anchor: anchor)
+            }
         }
     }
 
