@@ -393,6 +393,35 @@ static void ApplyProfilePreferences(CefRefPtr<CefRequestContext> context) {
     ApplyHttpsOnly(context);
 }
 
+// Cra's extension list (ExtensionStore) reads extensions.settings. On disk it lags ~10 s
+// behind an install (Chromium's pref writer batches), so a "Load unpacked" extension was
+// missing from the Site Control Center (GitHub #43); the live pref and its changes are not.
+static void (^g_extensionSettingsHandler)(void) = nil;
+static bool g_extensionSettingsChangePending = false;
+
+class ExtensionSettingsObserver : public CefPreferenceObserver {
+public:
+    void OnPreferenceChanged(const CefString& name) override {
+        // An install changes the pref several times in a row: one reload for all of them.
+        if (!g_extensionSettingsHandler || g_extensionSettingsChangePending || g_quitting) return;
+        g_extensionSettingsChangePending = true;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            g_extensionSettingsChangePending = false;
+            if (g_extensionSettingsHandler) g_extensionSettingsHandler();
+        });
+    }
+private:
+    IMPLEMENT_REFCOUNTING(ExtensionSettingsObserver);
+};
+static std::vector<CefRefPtr<CefRegistration>> g_extensionSettingsObservers;
+
+static void ObserveExtensionSettings(CefRefPtr<CefRequestContext> context) {
+    static CefRefPtr<ExtensionSettingsObserver> observer = new ExtensionSettingsObserver();
+    if (CefRefPtr<CefRegistration> r = context->AddPreferenceObserver("extensions.settings", observer)) {
+        g_extensionSettingsObservers.push_back(r);
+    }
+}
+
 /// Profiles other than the global Default one get the same preferences once they load,
 /// then create the browsers that waited for them.
 class ProfileContextHandler : public CefRequestContextHandler {
@@ -401,6 +430,7 @@ public:
     void OnRequestContextInitialized(CefRefPtr<CefRequestContext> context) override {
         ApplyProfilePreferences(context);
         if (!path_) { g_incognitoReady = true; return; }
+        ObserveExtensionSettings(context);
         if (!g_readyProfiles) g_readyProfiles = [NSMutableSet set];
         [g_readyProfiles addObject:path_];
         NSArray<CraBrowser*>* waiting = [g_waitingForProfile[path_] copy];
@@ -542,6 +572,7 @@ public:
     void OnContextInitialized() override {
         CEF_REQUIRE_UI_THREAD();
         ApplyProfilePreferences(CefRequestContext::GetGlobalContext());
+        ObserveExtensionSettings(CefRequestContext::GetGlobalContext());
         g_contextInitialized = true;
         NSArray<CraBrowser*>* pending = [g_pendingCreation copy];
         [g_pendingCreation removeAllObjects];
@@ -2191,6 +2222,7 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
     g_quitting = true;
     g_incognitoContext = nullptr;
     g_profileContexts.clear();
+    g_extensionSettingsObservers.clear();
     g_waitingForProfile = nil;
     CefShutdown();
 }
@@ -2217,6 +2249,18 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 + (BOOL)hasBrowserDevTools { return g_cdpWriteFD >= 0; }
 + (void)setBrowserDevToolsEventHandler:(void (^)(NSString*, NSString*, NSString* _Nullable))handler {
     g_cdpEventHandler = [handler copy];
+}
++ (NSString*)extensionSettingsForProfile:(NSString*)profilePath {
+    // Quitting: the contexts are going away, and ProfileContext would make a new one.
+    if (!g_contextInitialized || g_quitting) return nil;
+    if (profilePath.length && ![g_readyProfiles containsObject:profilePath]) return nil;
+    CefRefPtr<CefRequestContext> context = profilePath.length ? ProfileContext(profilePath) : CefRequestContext::GetGlobalContext();
+    CefRefPtr<CefValue> value = context ? context->GetPreference("extensions.settings") : nullptr;
+    if (!value || value->GetType() != VTYPE_DICTIONARY) return nil;
+    return NSStringFromCef(CefWriteJSON(value, JSON_WRITER_DEFAULT));
+}
++ (void)setExtensionSettingsChangeHandler:(void (^)(void))handler {
+    g_extensionSettingsHandler = [handler copy];
 }
 + (void)sendBrowserDevToolsMethod:(NSString*)method params:(NSString*)params
                        completion:(void (^)(NSString* _Nullable, NSString* _Nullable))completion {

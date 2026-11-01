@@ -36,6 +36,26 @@ enum ExtensionStateTests {
         check(listed.map(\.id) == ["store"], "importable: \(listed.map(\.id))")
         check(listed.first?.isEnabled == false, "the turned-off Web Store install reads as off")
         check(ExtensionImporter.disabledIDs(inProfile: profile.appendingPathComponent("missing")).isEmpty, "no prefs, nothing off")
+
+        // GitHub #43: Cra's own profiles pass Chromium's live extensions.settings instead of the
+        // files, which lag ~10 s behind an install. The same dictionary reads the same.
+        let unpacked = profile.appendingPathComponent("unpacked", isDirectory: true)
+        try fm.createDirectory(at: unpacked.appendingPathComponent("_locales/en"), withIntermediateDirectories: true)
+        try Data(#"{"name":"__MSG_appName__","version":"1.0","default_locale":"en"}"#.utf8).write(to: unpacked.appendingPathComponent("manifest.json"))
+        try Data(#"{"appName":{"message":"Unpacked"}}"#.utf8).write(to: unpacked.appendingPathComponent("_locales/en/messages.json"))
+        let live = ExtensionImporter.settings(inProfile: profile).merging([
+            "fresh": ["location": 4, "disable_reasons": [], "path": unpacked.path],   // just loaded unpacked
+            "component": ["location": 5, "path": unpacked.path],
+            "gone": ["location": 4, "path": profile.appendingPathComponent("removed").path],
+            "noise": "not a dictionary",
+        ]) { _, new in new }
+        let fromLive = ExtensionImporter.extensions(settings: live, inProfile: profile)
+        check(Set(fromLive.map(\.id)) == ["store", "fresh"], "live importable: \(fromLive.map(\.id).sorted())")
+        let fresh = fromLive.first { $0.id == "fresh" }
+        check(fresh?.isEnabled == true && fresh?.name == "Unpacked" && fresh?.folder.path == unpacked.path,
+              "a just-loaded unpacked extension: on, localized name, its own folder")
+        check(fromLive.first { $0.id == "store" }?.folder.path == store.path, "a relative path sits in the profile's Extensions")
+        check(ExtensionImporter.disabledIDs(settings: live) == off, "live disabled IDs match the files'")
         print("ExtensionStateTests: \(checks) checks passed")
     }
 }

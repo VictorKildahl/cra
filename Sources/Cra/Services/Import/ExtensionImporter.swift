@@ -35,9 +35,9 @@ enum ExtensionImporter {
         return out.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
-    /// extensions.settings by extension ID. Newer Chromium keeps extension state in
-    /// Secure Preferences; older in Preferences.
-    private static func settings(inProfile dir: URL) -> [String: Any] {
+    /// extensions.settings by extension ID, from the profile's files. Newer Chromium keeps
+    /// extension state in Secure Preferences; older in Preferences.
+    static func settings(inProfile dir: URL) -> [String: Any] {
         var settings: [String: Any] = [:]
         for file in ["Preferences", "Secure Preferences"] {
             guard let data = try? Data(contentsOf: dir.appendingPathComponent(file)),
@@ -55,12 +55,17 @@ enum ExtensionImporter {
 
     /// Extensions turned off in this profile (chrome://extensions), of any install location:
     /// also the --load-extension ones (location 8), which Chromium loads disabled again.
-    static func disabledIDs(inProfile dir: URL) -> Set<String> {
-        Set(settings(inProfile: dir).compactMap { id, value in (value as? [String: Any]).flatMap { isDisabled($0) ? id : nil } })
+    static func disabledIDs(inProfile dir: URL) -> Set<String> { disabledIDs(settings: settings(inProfile: dir)) }
+
+    static func disabledIDs(settings: [String: Any]) -> Set<String> {
+        Set(settings.compactMap { id, value in (value as? [String: Any]).flatMap { isDisabled($0) ? id : nil } })
     }
 
-    static func extensions(inProfile dir: URL) -> [ImportableExtension] {
-        settings(inProfile: dir).compactMap { id, value -> ImportableExtension? in
+    static func extensions(inProfile dir: URL) -> [ImportableExtension] { extensions(settings: settings(inProfile: dir), inProfile: dir) }
+
+    /// The profile's extensions.settings, from its files or (Cra's own profiles) live from Chromium.
+    static func extensions(settings: [String: Any], inProfile dir: URL) -> [ImportableExtension] {
+        settings.compactMap { id, value -> ImportableExtension? in
             guard let s = value as? [String: Any], let location = s["location"] as? Int,
                   importableLocations.contains(location), let path = s["path"] as? String else { return nil }
             let folder = path.hasPrefix("/") ? URL(fileURLWithPath: path, isDirectory: true)
