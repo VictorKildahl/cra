@@ -173,12 +173,19 @@ without a warning.
    `CRA_GOOGLE_API_KEY` secret. Never commit it.
 
 `build.sh` writes it to Info.plist as `CraGoogleAPIKey`, and CraCEF sets
-`GOOGLE_API_KEY` from it before Chromium starts. Each running Cra fetches list updates
-about every 30 minutes (Google sets the interval) plus a full-hash lookup when a URL
-matches a list, so the project's daily quota caps how many installs are covered; ask
-for more under the API's Quotas page before it runs out. A client over quota backs off
-and checks nothing until the next successful update. The API is for non-commercial
-use; a paid product needs Web Risk instead.
+`GOOGLE_API_KEY` from it before Chromium starts.
+
+Every install shares the project's daily quota. A running Cra fetches list updates 1–5
+minutes after launch and then every 4 hours
+(`scripts/cef-patches/safe-browsing-update-interval.patch`; Chrome uses Google's ~30
+minutes), plus a full-hash lookup when a URL matches a list: roughly 3–10 requests per
+install per day. Watch usage on the API's Quotas page and ask for more there before it
+runs out. A client over quota backs off (up to 24 hours) and its lists go stale until
+an update succeeds.
+
+The Safe Browsing API is for non-commercial use. Google's commercial service, Web Risk,
+is not a drop-in: it has its own endpoints and request format, so Chromium would need
+a patch to its update and full-hash protocol.
 
 ## Updates
 
