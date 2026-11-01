@@ -280,6 +280,7 @@ final class ShellView: NSView {
                 card.toolbarColor = toolbarColors[id]
                 card.transparent = id == ShellView.noTabID
                 card.showToolbar = showToolbar && !contentFullscreen
+                card.onToolbarHeightChange = { [weak self] in self?.needsLayout = true }
                 contentContainer.addSubview(card, positioned: .below, relativeTo: placeholderHost)
                 cards.append(card)
             }
@@ -365,9 +366,9 @@ final class ShellView: NSView {
     /// Each pane's page area in window coordinates, for the given card frames.
     private func paneWebFrames(_ layout: SplitPaneLayout.Result) -> [UUID: NSRect] {
         var out: [UUID: NSRect] = [:]
-        let th: CGFloat = (showToolbar && !contentFullscreen) ? CraMetrics.toolbarHeight : 0
         for c in paneCards where c.tabID != ShellView.noTabID {
             guard let f = layout.frames[c.tabID] else { continue }
+            let th: CGFloat = (showToolbar && !contentFullscreen) ? c.toolbarHeight : 0
             var web = NSRect(x: f.minX, y: f.minY, width: f.width, height: max(0, f.height - th))
             if c.tabID == focusedPaneID, devToolsVisible, !devToolsFrontendDocked, f.width > 640 {
                 web.size.width -= min(max(320, devToolsWidth), f.width * 0.7)
@@ -550,7 +551,7 @@ final class ShellView: NSView {
         // DevTools docks inside the focused card, right of its page.
         let focus = focusedCard
         let fb = focus?.bounds ?? .zero
-        let th: CGFloat = toolbarVisible ? CraMetrics.toolbarHeight : 0
+        let th: CGFloat = toolbarVisible ? focus?.toolbarHeight ?? CraMetrics.toolbarHeight : 0
         let bodyH = max(0, fb.height - th)
         let selfDock = devToolsFrontendDocked
         let showDev = devToolsVisible && hasTab && focus != nil && (selfDock || fb.width > 640)
@@ -622,13 +623,13 @@ final class ShellView: NSView {
     func animateSidebar(visible: Bool, floating: Bool, fullscreen: Bool, width: CGFloat, duration: TimeInterval = 0.085) {
         let target = frames(sidebarVisible: visible, floating: floating, fullscreen: fullscreen, width: width)
         // Size the pages for their destination once, up front; the cards then just slide over them.
-        let toolbarH: CGFloat = (showToolbar && !fullscreen) ? CraMetrics.toolbarHeight : 0
         let targetLayout = paneLayout(in: NSRect(origin: .zero, size: target.content.size))
         var webTargets: [UUID: NSRect] = [:]
         for c in paneCards where c.tabID != ShellView.noTabID {
             guard let f = targetLayout.frames[c.tabID] else { continue }
             var w = f.width
             if c.tabID == focusedPaneID, devToolsVisible, !devToolsFrontendDocked, f.width > 640 { w -= min(max(320, devToolsWidth), f.width * 0.7) }
+            let toolbarH: CGFloat = (showToolbar && !fullscreen) ? c.toolbarHeight : 0
             c.frozenWebBounds = NSRect(x: 0, y: 0, width: w, height: max(0, f.height - toolbarH))
             webTargets[c.tabID] = convert(NSRect(x: target.content.minX + f.minX, y: target.content.minY + f.minY, width: w, height: max(0, f.height - toolbarH)), to: nil)
         }
