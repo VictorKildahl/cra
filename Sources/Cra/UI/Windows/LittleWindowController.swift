@@ -710,9 +710,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     }
 
     func browser(_ browser: CraBrowser, didReportThemeColor hex: String) { state.themeColor = hex }
-    /// The page window trails the shell during a fast resize; the gap shows the page's colour.
+    /// The page window trails the shell during a fast resize; the gap shows the page's colour
+    /// (Arc's canvas while a new page has none yet).
     func browser(_ browser: CraBrowser, didReportBackgroundColor hex: String) {
-        shell.page.layer?.backgroundColor = NSColor(Color(hex: hex)).cgColor
+        shell.page.layer?.backgroundColor = (hex.isEmpty ? CraBrowser.pageCanvasColor : NSColor(Color(hex: hex))).cgColor
     }
     func browser(_ browser: CraBrowser, didChangeStatusMessage message: String) {}
 
@@ -818,7 +819,7 @@ final class LittleShellView: NSView {
         page.layer?.cornerCurve = .continuous
         page.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
         page.layer?.masksToBounds = true
-        page.layer?.backgroundColor = NSColor(white: 34 / 255, alpha: 1).cgColor
+        page.layer?.backgroundColor = CraBrowser.pageCanvasColor.cgColor
         page.autoresizesSubviews = true
         addSubview(page)
     }

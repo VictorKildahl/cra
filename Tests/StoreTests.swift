@@ -23,6 +23,7 @@ enum StoreTests {
         liveFolderExpiry()
         stampsUseTheClock()
         persistenceFaults()
+        incognitoStaysOffDisk()
         print("Store: \(checks) checks passed")
     }
 
@@ -202,6 +203,41 @@ enum StoreTests {
         expect(CraLog.faultCount == before + 2, "a value JSON can't hold is a fault, not a silent skip")
         JSONStore<[String]>("missing-folder/x.json").saveNow(["x"])
         expect(CraLog.faultCount == before + 3, "a write that fails is a fault")
+    }
+
+    /// Incognito tabs never reach sidebar.json (#46's review: updateTab saved every item), and
+    /// what older versions left there goes on load instead of turning into a normal tab.
+    @MainActor
+    private static func incognitoStaysOffDisk() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let normal = store.createTab(url: "https://example.com/normal")
+        let window = store.addIncognitoWindow(frame: nil)
+        let secret = store.createTab(url: "https://example.com/secret", in: window.focusedSpaceID, select: false)
+        store.updateTab(secret.id, url: "https://example.com/secret-later", title: "Secret")
+        store.setThemeColor(secret.id, "#101010")
+        expect(store.item(secret.id)?.tab?.themeColor == nil, "an incognito tab keeps no toolbar colour")
+        store.setThemeColor(normal.id, "#203040")
+        store.updateTab(normal.id, title: "Normal")
+        // Both save on a 2 s debounce on the persistence queue, not on the clock.
+        Thread.sleep(forTimeInterval: 2.5)
+        // JSONEncoder writes "/" as "\/".
+        let saved = ((try? String(contentsOf: AppPaths.file("sidebar.json"), encoding: .utf8)) ?? "").replacingOccurrences(of: "\\/", with: "/")
+        expect(saved.contains("https://example.com/normal") && saved.contains("#203040"), "a normal tab and its toolbar colour are saved")
+        expect(!saved.contains("example.com/secret") && !saved.contains("Secret"), "nothing of the incognito tab is")
+        let reloaded = AppComposition(clock: ManualScheduler()).store
+        expect(reloaded.item(normal.id)?.tab?.themeColor == "#203040", "the toolbar colour reads back after a relaunch")
+
+        // What 0.1.23 left behind when it crashed with an incognito window open.
+        var container = SidebarItem.container(.today(spaceID: UUID()))
+        let leftover = SidebarItem.tab("https://example.com/left-behind", title: "Left behind", parent: container.id)
+        container.children = [leftover.id]
+        store.items[container.id] = container
+        store.items[leftover.id] = leftover
+        store.repair()
+        expect(store.item(container.id) == nil && store.item(leftover.id) == nil, "a gone space's container goes with its tabs")
+        expect(!store.allTabs().contains { $0.tab?.url == "https://example.com/left-behind" }, "rather than landing in a space")
+        expect(store.item(secret.id) != nil, "an open incognito window keeps its tabs")
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {

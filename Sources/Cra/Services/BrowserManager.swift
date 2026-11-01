@@ -142,7 +142,11 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         browser.userInfo = tabID.uuidString
         let rt = TabRuntime(tabID: tabID, browser: browser)
         rt.hiddenAt = clock.now
-        if let t = store.item(tabID)?.tab, t.muted { browser.setAudioMuted(true) }
+        if let t = store.item(tabID)?.tab {
+            if t.muted { browser.setAudioMuted(true) }
+            // A slept or restored page's toolbar keeps its colour while it loads (Arc).
+            rt.themeColor = t.themeColor ?? ""
+        }
         add(rt)
         return rt
     }
@@ -204,7 +208,12 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         var shown: [UUID] = []
         for id in tabIDs {
             guard let rt = ensureRuntime(for: id) else { shown.append(id); continue }
-            if !wasVisible.contains(id) { returnToTab(rt) }
+            if !wasVisible.contains(id) {
+                returnToTab(rt)
+                // A page can change its colours while hidden. One still loading reports them as it
+                // paints; asked now, before its styles arrive, it would answer white.
+                if !rt.browser.isLoading { rt.browser.probeBackgroundColor() }
+            }
             rt.hiddenAt = nil
             rt.sleepProbeAfter = nil
             let v = rt.browser.containerView
@@ -659,6 +668,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     func browser(_ browser: CraBrowser, didReportThemeColor hex: String) {
         guard let id = tabID(of: browser) else { return }
         runtimes[id]?.themeColor = hex
+        store.setThemeColor(id, hex)
         delegate?.browserManagerDidUpdate(id)
     }
 

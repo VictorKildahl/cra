@@ -73,8 +73,9 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 /// The video in the Picture in Picture window started or stopped playing.
 - (void)browser:(CraBrowser *)browser didChangePictureInPicturePlayback:(BOOL)playing;
 /// The colour the page paints behind its content (root/body background, else the
-/// canvas colour of its color scheme), as "#RRGGBB". The shell fills the area under
-/// the page window with it, so a page lagging behind a resize shows no white edge.
+/// canvas colour of its color scheme), as "#RRGGBB"; "" when a new page starts loading
+/// and has not reported one yet (show +[CraBrowser pageCanvasColor] then). The shell fills
+/// the area under the page window with it, so a page lagging behind a resize shows no white edge.
 - (void)browser:(CraBrowser *)browser didReportBackgroundColor:(NSString *)hex;
 /// Find in page progress: `count` matches, `activeMatch` is the highlighted one
 /// (1-based). Either is -1 while Chromium has no new value for it.
@@ -166,6 +167,9 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 /// Asks the page for its background colour again (-browser:didReportBackgroundColor:);
 /// pages can switch themes without a load.
 - (void)probeBackgroundColor;
+/// What the page area shows before a page reports its background: Arc's black while
+/// websites are dark, white while they are light.
+@property (class, nonatomic, readonly) NSColor *pageCanvasColor;
 /// Runs script in this browser's DevTools frontend, if open (debug aid behind cra://debug?devtoolsjs=).
 - (void)executeJavaScript:(NSString *)script inDevTools:(BOOL)inDevTools;
 /// Runtime.evaluate (`params` without a context) in the main frame's isolated world `world`,
