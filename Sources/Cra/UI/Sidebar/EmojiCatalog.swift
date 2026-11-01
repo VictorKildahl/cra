@@ -20,13 +20,11 @@ enum EmojiCatalog {
         "travel": "box.truck", "objects": "gift", "symbols": "heart", "flags": "flag",
     ]
 
-    /// Emoji newer than the system's emoji font draw as an empty box, so those are left out.
+    /// Emoji 15.0 and older (the catalog's cut-off) all draw on macOS 14, Cra's oldest.
     static let categories: [Category] = data.map { key, text in
         let entries = text.split(separator: "\n").compactMap { line -> Entry? in
             guard let space = line.firstIndex(of: " ") else { return nil }
-            let emoji = String(line[..<space])
-            guard drawable(emoji) else { return nil }
-            return Entry(emoji: emoji, name: String(line[line.index(after: space)...]))
+            return Entry(emoji: String(line[..<space]), name: String(line[line.index(after: space)...]))
         }
         return Category(id: key, symbol: symbols[key] ?? "circle", entries: entries)
     }
@@ -37,17 +35,5 @@ enum EmojiCatalog {
         let words = query.lowercased().split(separator: " ")
         guard !words.isEmpty else { return [] }
         return all.filter { e in words.allSatisfy { e.name.contains($0) } }
-    }
-
-    private static let font = CTFontCreateWithName("AppleColorEmoji" as CFString, 16, nil)
-
-    private static func drawable(_ emoji: String) -> Bool {
-        let line = CTLineCreateWithAttributedString(NSAttributedString(string: emoji, attributes: [.font: font]))
-        let runs = CTLineGetGlyphRuns(line) as? [CTRun] ?? []
-        // A supported sequence shapes into one glyph; an unknown one falls apart or into .notdef.
-        guard runs.count == 1, CTRunGetGlyphCount(runs[0]) == 1 else { return false }
-        var glyph = CGGlyph()
-        CTRunGetGlyphs(runs[0], CFRange(location: 0, length: 1), &glyph)
-        return glyph != 0
     }
 }

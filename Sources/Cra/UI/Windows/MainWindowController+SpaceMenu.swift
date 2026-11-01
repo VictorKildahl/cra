@@ -26,7 +26,9 @@ extension MainWindowController {
         popover.contentViewController = host
         popover.contentSize = NSSize(width: 272, height: 272)
         guard let content = anchor.window?.contentView else { return }
-        let rect = anchor.convert((anchor as? SpaceHeaderView)?.iconRect ?? anchor.bounds, to: content)
+        var rect = anchor.convert((anchor as? SpaceHeaderView)?.iconRect ?? anchor.bounds, to: content)
+        // Arc's arrow tip sits a point higher, at the icon box's last row.
+        rect.origin.y += content.isFlipped ? -1 : 1
         popover.show(relativeTo: rect, of: content, preferredEdge: content.isFlipped ? .maxY : .minY)
     }
 
