@@ -10,6 +10,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  test:
+    name: Tests
+    # No Chromium download: Packages/CraCore and the harnesses compile only the files they test.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: CraCore and harnesses
+        run: scripts/test.sh
+
   build:
     name: Build Cra.app
     # Same runner as release.yml, so CI builds what ships.
@@ -34,3 +44,10 @@ jobs:
         run: |
           codesign --verify --deep --strict --verbose=2 build/Cra.app
           /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' build/Cra.app/Contents/Info.plist
+
+      # Launches the app three times and quits it; fails on a crash, hang or crash report.
+      # Not blocking until it has proved steady on the hosted runners.
+      - name: Smoke test
+        continue-on-error: true
+        timeout-minutes: 5
+        run: Tests/smoke-launch.sh build/Cra.app
