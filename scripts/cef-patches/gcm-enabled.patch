@@ -1,0 +1,32 @@
+Cra: Web Push. CEF stubs out GCM (cef/patch/patches/components_gcm_disable.patch,
+CEF issue 4078) to silence DEPRECATED_ENDPOINT log lines, which also left
+PushManager.subscribe() pending forever. This puts Chromium's GCM client back:
+sites' push subscriptions work again (FCM endpoints, as in Chrome). The
+DEPRECATED_ENDPOINT lines come from Chrome's own com.google.android.gms
+registration, which gives up after a few retries (REACHED_MAX_RETRIES).
+
+diff --git a/components/gcm_driver/gcm_client_impl.cc b/components/gcm_driver/gcm_client_impl.cc
+index fcdae6ccac..2bd1a15816 100644
+--- a/components/gcm_driver/gcm_client_impl.cc
++++ b/components/gcm_driver/gcm_client_impl.cc
+@@ -296,9 +296,6 @@ void GCMClientImpl::Initialize(
+ }
+ 
+ void GCMClientImpl::Start(StartMode start_mode) {
+-  // Disable GCM to avoid DEPRECATED_ENDPOINT errors.
+-  return;
+-
+   DCHECK_NE(UNINITIALIZED, state_);
+   DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
+ 
+@@ -795,10 +792,6 @@ void GCMClientImpl::ResetCache() {
+ 
+ void GCMClientImpl::Register(
+     scoped_refptr<RegistrationInfo> registration_info) {
+-  // Disable GCM to avoid DEPRECATED_ENDPOINT errors.
+-  delegate_->OnRegisterFinished(registration_info, std::string(), GCM_DISABLED);
+-  return;
+-
+   DCHECK_EQ(state_, READY);
+   DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
+ 
