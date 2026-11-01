@@ -282,6 +282,8 @@ struct Space: Identifiable, Codable, Equatable {
     var createdAt: Date
     /// The profile its pages load in (Arc: SpaceModel.profile); nil is the Default profile.
     var profileID: UUID?
+    /// An SF Symbol from the Icon tab of Arc's icon picker, shown instead of `emoji` (then empty).
+    var symbol: String? = nil
 }
 
 /// Arc's Profiles: logins, cookies, site storage and Chromium's own data kept apart
@@ -635,6 +637,7 @@ extension Space {
         todayContainerID = try c.decode(UUID.self, forKey: .todayContainerID)
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         profileID = try c.decodeIfPresent(UUID.self, forKey: .profileID)
+        symbol = try c.decodeIfPresent(String.self, forKey: .symbol)
     }
 }
 

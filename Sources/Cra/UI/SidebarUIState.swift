@@ -187,6 +187,13 @@ final class SidebarActions {
     var goForward: () -> Void = {}
     var reload: () -> Void = {}
     var editSpace: (Space?) -> Void = { _ in }
+    /// Arc's space menu: the icon picker under the header, the theme editor, a new profile for
+    /// the space, the Library's Spaces page, and deleting this space (not the focused one).
+    var changeSpaceIcon: (Space, NSView) -> Void = { _, _ in }
+    var editSpaceTheme: (Space) -> Void = { _ in }
+    var newProfile: (UUID) -> Void = { _ in }
+    var manageSpaces: () -> Void = {}
+    var deleteSpace: (Space) -> Void = { _ in }
     var toggleSidebar: () -> Void = {}
     var toggleLibrary: () -> Void = {}
     /// The Library in the sidebar: open it on a page, leave it, restore an archived tab from it.

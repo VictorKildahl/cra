@@ -1336,6 +1336,25 @@ final class SidebarStore {
         touch()
     }
 
+    /// Arc's "Export “<space>” into Folder": the space's favorites, pinned and Today items go into
+    /// a folder named after it at the top of the target's pinned list, then the space is deleted
+    /// (Arc logs it as "Space turned into folder"). Live folders fill themselves, so they go with it.
+    @discardableResult
+    func exportSpace(_ id: UUID, intoFolderIn target: UUID) -> SidebarItem? {
+        guard id != target, let space = spaces[id], let dest = spaces[target], spaceOrder.count > 1 else { return nil }
+        let folder = createFolder(named: space.title, in: dest.pinnedContainerID, index: 0)
+        let moving = [space.favoritesContainerID, space.pinnedContainerID, space.todayContainerID]
+            .flatMap { children(of: $0) }
+            .filter { !$0.isLiveFolder }
+            .map(\.id)
+        moveItems(moving, to: folder.id, index: nil)
+        var windows = prefs.windows
+        for i in windows.indices where windows[i].focusedSpaceID == id { windows[i].focusedSpaceID = target }
+        prefs.windows = windows
+        deleteSpace(id)
+        return items[folder.id]
+    }
+
     // MARK: Profiles
 
     func profile(_ id: UUID?) -> BrowserProfile? { id.flatMap { p in profiles.first { $0.id == p } } }

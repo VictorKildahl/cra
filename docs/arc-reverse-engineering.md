@@ -668,6 +668,38 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
 - [O] Arc lists a matching command above the typed row in general: "sett" → Settings, "new" → Add Split View,
   "clear" in a main window → Clear Unpinned Tabs. Pages/history follow a confidence rule not reproduced.
 
+### Space header ••• and the space menu (Arc 1.171, live, 1 Nov, issue #40)
+- [O] Header hover: the row's geometry, glyphs and colours are under "Space header row" (#39) below, and Cra
+  follows those. Here also: `sidebarSpaceEditButton` (AX "More", 2×26 pt until hovered, then 26×26) is the •••,
+  centred 18.5 pt from the fill's trailing edge on a 24 pt hover tile; fill, chevron and button appear in one
+  frame, no fade. An Icon-tab glyph sits in the emoji's 26 pt box 5 pt in.
+- [O] The ••• and a right-click on the header open the same menu, as a context menu at the pointer (a click
+  at 683,150 put the menu window at 684,144): Change Space Icon…, Rename Space…, Edit Theme Color…, Set Profile ▸
+  (profiles, ✓ on the space's, then New Profile…) | New Folder, Live Folders ▸ (GitHub ✓ when present) |
+  Share Space…, Export “<name>” into Folder ▸ (every space, its own disabled) | Manage Spaces… | Delete Space.
+  The header keeps its hover look while the menu is open. Cra leaves out Share Space… (Arc's servers).
+- [O] Rename Space…: the name turns into a selected text field and the ••• into a grey "Done" (10 pt semibold,
+  `Sidebar space header done button`, 32×26). Export … into Folder deletes the space afterwards
+  (`completeDeleteSpace`, "Space turned into folder"). Delete alert: "Delete your <name> Space?" / "This will
+  archive all the tabs and folders inside it."
+- [O] Change Space Icon…: an NSPopover (298 × 298 window, 272 pt content) under the icon, arrow up: Emoji | Icon
+  segmented (105 × 23) and a trash button; a 254 × 27 search field; an 8-wide grid on a 31 pt pitch opening on
+  the current emoji's row, the current emoji on a 27.5 pt tile; a hairline and 8 category glyphs. The Icon tab
+  has no search: 56 white glyphs, 7 rows of 8, a 29 pt hover tile.
+- [O] Set Profile ▸ New Profile…: Arc's own 450 × 426 dialog (#161C2F, ~24 pt corners) centred on the window,
+  which dims to about (25,25,25) at 65%: profile glyph, "Create a new Profile" (17.5 pt), the "Profiles make
+  your Spaces truly separate…" copy (14 pt, 18 pt lines), "What do you want to call this Profile?", a 49 pt
+  field (placeholder "Personal"), "Profiles are **not synced** between computers.", Cancel `ESC` / Next `↩`.
+- [O] Manage Spaces…: the Library on its Spaces page (`spaceManager`): one 240 pt card per space in its own
+  theme, 24 pt apart, 27 pt after the rail, 48 pt from the window's top and bottom; the icon, name and a brush
+  on a row 25 pt down, the pinned/Today list from 64 pt (no New Tab row), a move handle and ••• 21 pt above the
+  bottom; a 29 pt blue + 34 pt after the last card. The sidebar widens to fit (744.5 pt for two spaces).
+- [O] Edit Theme Color…: SpaceStyleEditor in a 382 × 534 window against the sidebar's edge at the window top
+  (card 355 × 503, 14 pt in): a 340 pt dotted pad with Auto/Light/Dark (sparkles/sun/moon, the chosen one on a
+  32 pt tile) and −/+, "Tap to pick a color for this space" while it has none; nine 24 pt swatches 29.5 pt apart
+  between arrows (#F1EAE5 #E69FBA #9E749B #E1686F #EF8C62 #F2D66D #73E59C #7FB8D6 #666786); a 224 × 15 pt wave
+  slider and a dotted dial.
+
 ### One space (Arc 1.171, static)
 - [O strings] Defaults key `showSpaceHeaderOnSingleUnnamedSpaces` (+ `…DidChange` action); the space context
   menu has "Show Space Header" / "Hide Space Header" ("Menu item to toggle space header visibility").

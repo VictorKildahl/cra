@@ -104,7 +104,7 @@ final class SidebarView: NSView {
         shownLibrary = page
         if let page {
             let host = libraryHost ?? {
-                let h = LibraryView(page: page, palette: palette, store: store, actions: actions, favicons: favicons)
+                let h = LibraryView(page: page, palette: palette, store: store, ui: ui, actions: actions, favicons: favicons)
                 addSubview(h)
                 libraryHost = h
                 return h
@@ -574,7 +574,7 @@ final class SpaceDockView: NSView {
                 addSubview(c)
                 return c
             }()
-            c.show(emoji: s.emoji, title: s.title)
+            c.show(emoji: s.emoji, symbol: s.symbol, title: s.title)
         }
         order = ids
         refreshCells()
@@ -763,6 +763,9 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
     private let ui: SidebarUIState
     private let emoji = NSTextField.sidebarLabel(size: 13)
     private let emojiHolder = NSView()
+    /// An Icon-tab glyph (Space.symbol) in the emoji's place.
+    private let symbol = NSImageView()
+    private var symbolName: String?
     private var title = ""
     private var selected = false
     private var colors = SidebarColors()
@@ -791,8 +794,14 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    func show(emoji text: String, title: String) {
+    func show(emoji text: String, symbol name: String?, title: String) {
         emoji.stringValue = text
+        if symbolName != name {
+            symbolName = name
+            symbol.image = name.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }
+            symbol.isHidden = name == nil
+            if symbol.superview == nil { symbol.imageScaling = .scaleNone; emojiHolder.addSubview(symbol) }
+        }
         self.title = title
         setAccessibilityLabel(title)
         needsLayout = true
@@ -803,6 +812,7 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
         self.colors = colors
         lit = selected || hovered || pressed
         emojiHolder.alphaValue = lit ? 1 : 0.45
+        symbol.contentTintColor = colors.textPrimary
         emojiHolder.layer?.filters = lit ? nil : [CIFilter(name: "CIColorControls", parameters: ["inputSaturation": 0.2])!]
         refreshFill(hovered || pressed)
     }
@@ -822,6 +832,8 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
         if emoji.font?.pointSize != size { emoji.font = .systemFont(ofSize: size) }
         let h = emoji.intrinsicContentSize.height
         emoji.frame = NSRect(x: 0, y: (bounds.height - h) / 2, width: bounds.width, height: h)
+        symbol.frame = bounds
+        symbol.symbolConfiguration = .init(pointSize: size - 2, weight: .medium)
     }
 
     override func accessibilityPerformPress() -> Bool {
