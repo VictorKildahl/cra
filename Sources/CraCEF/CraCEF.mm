@@ -587,9 +587,17 @@ private:
 
 // MARK: - Favicon download
 
+/// The icon URL a browser last got a favicon from, shared with its downloads.
+class FaviconState : public virtual CefBaseRefCounted {
+public:
+    std::string downloaded;
+    IMPLEMENT_REFCOUNTING(FaviconState);
+};
+
 class FaviconCallback : public CefDownloadImageCallback {
 public:
-    explicit FaviconCallback(CraBrowser* owner) : owner_(owner) {}
+    FaviconCallback(CraBrowser* owner, CefRefPtr<FaviconState> state, std::string url)
+        : owner_(owner), state_(state), url_(std::move(url)) {}
 
     void OnDownloadImageFinished(const CefString& image_url, int http_status_code,
                                  CefRefPtr<CefImage> image) override {
@@ -605,11 +613,14 @@ public:
         NSData* data = [NSData dataWithBytes:bytes.data() length:n];
         NSImage* img = [[NSImage alloc] initWithData:data];
         if (!img) return;
+        state_->downloaded = url_;
         [owner.delegate browser:owner didLoadFavicon:img forURL:NSStringFromCef(image_url)];
     }
 
 private:
     __weak CraBrowser* owner_;
+    CefRefPtr<FaviconState> state_;
+    std::string url_;
     IMPLEMENT_REFCOUNTING(FaviconCallback);
 };
 
@@ -1168,9 +1179,10 @@ public:
             if (s.find(".svg") == std::string::npos) { chosen = u; break; }
         }
         std::string chosenStr = chosen.ToString();
-        if (chosenStr == last_icon_url_) return;
-        last_icon_url_ = chosenStr;
-        browser->GetHost()->DownloadImage(chosen, true, 64, false, new FaviconCallback(o));
+        // Skip only an icon that arrived: Chromium drops a download without calling back when the
+        // page replaces its frame while loading (YouTube does), and the next change retries it.
+        if (chosenStr == favicon_->downloaded) return;
+        browser->GetHost()->DownloadImage(chosen, true, 64, false, new FaviconCallback(o, favicon_, chosenStr));
     }
 
     void OnFullscreenModeChange(CefRefPtr<CefBrowser> browser, bool fullscreen) override {
@@ -1459,7 +1471,7 @@ public:
 
 private:
     __weak CraBrowser* owner_;
-    std::string last_icon_url_;
+    CefRefPtr<FaviconState> favicon_ = new FaviconState();
     CefRefPtr<CefResourceRequestHandler> blocker_ = new CraContentBlockingHandler();
     IMPLEMENT_REFCOUNTING(CraClient);
 };
