@@ -63,7 +63,10 @@ enum Diagnostics {
         let staging = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let folder = staging.appendingPathComponent(name, isDirectory: true)
         try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
-        func write(_ text: String, _ file: String) { try? Data(redact(text).utf8).write(to: folder.appendingPathComponent(file)) }
+        let home = NSHomeDirectory()
+        func write(_ text: String, _ file: String) {
+            try? Data(DiagnosticsRedaction.redact(text, home: home).utf8).write(to: folder.appendingPathComponent(file))
+        }
 
         CraLog.flush()
         write(summary(store: store), "summary.txt")
@@ -77,7 +80,7 @@ enum Diagnostics {
         let reports = fm.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/DiagnosticReports", isDirectory: true)
         let weekAgo = Date().addingTimeInterval(-7 * 86400)
         let crashes = ((try? fm.contentsOfDirectory(at: reports, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []).filter {
-            $0.lastPathComponent.hasPrefix("Cra") && ((try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast) > weekAgo
+            DiagnosticsRedaction.isCraCrashReport($0.lastPathComponent) && ((try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast) > weekAgo
         }
         if !crashes.isEmpty {
             try? fm.createDirectory(at: folder.appendingPathComponent("crashes"), withIntermediateDirectories: true)
@@ -155,17 +158,5 @@ enum Diagnostics {
             lines.append("  \(e.name) \(e.version) [\(e.extensionID)]\(e.managedByChrome ? " web store" : "")\(permissions.isEmpty ? "" : " " + permissions.joined(separator: ","))")
         }
         return lines.joined(separator: "\n") + "\n"
-    }
-
-    /// Addresses keep their scheme and host; the home folder becomes `~`. The single sign-on
-    /// hosts IT allowlisted (Chromium's command line in gpu.json) name the user's employer.
-    nonisolated static func redact(_ text: String) -> String {
-        var s = text.replacingOccurrences(of: NSHomeDirectory(), with: "~")
-        for (pattern, template) in [(#"\b((?:https?|wss?|ftp|chrome-extension)://[^/\s"'<>)\]]+)[/?#][^\s"'<>)\]]*"#, "$1/…"),
-                                    (#"(--auth-server-allowlist=)[^\s"]+"#, "$1(set by IT)")] {
-            guard let re = try? NSRegularExpression(pattern: pattern) else { continue }
-            s = re.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: template)
-        }
-        return s
     }
 }
