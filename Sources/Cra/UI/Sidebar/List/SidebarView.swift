@@ -52,7 +52,7 @@ final class SidebarView: NSView {
         var bannerHeight: CGFloat = 0
         let (space, library, trayOpen, recentCount) = withObservationTracking {
             let space = store.focusedSpace(window: ui.windowID)
-            bannerHeight = UpdateBannerView.isShown ? 60 : 0
+            bannerHeight = UpdateBannerView.preferredHeight
             return (space, ui.libraryPage, ui.downloadsListOpen, DownloadHistory.shared.recent.count)
         } onChange: { [weak self] in
             Task { @MainActor in self?.observe() }
@@ -67,6 +67,7 @@ final class SidebarView: NSView {
             let colors = SidebarColors(palette)
             trayHost.colors = colors
             bannerHost.colors = colors
+            bannerHost.themeColor = space.theme.accent ?? space.theme.colors.first
             player.setTheme(space.theme.accent ?? space.theme.colors.first, dark: palette.isDark)
             libraryHost?.palette = palette
         }

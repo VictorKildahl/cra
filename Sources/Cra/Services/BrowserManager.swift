@@ -563,7 +563,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         case .next: op = "nexttrack"
         case .dismiss: op = "pause"; nowPlaying?.remove(id)
         case .pictureInPicture:
-            runtimes[id]?.browser.requestPictureInPicture(automatic: false)
+            requestPictureInPicture(id)
             return
         case .setVolume(let v):
             nowPlaying?.update(id) { $0.volume = v }
@@ -591,6 +591,29 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
             DispatchQueue.main.async {
                 guard let state = Self.stringResult(result) else { return }
                 self?.nowPlaying?.update(id) { $0.playing = state == "playing" }
+            }
+        }
+    }
+
+    /// The player's Picture in Picture button. The tab is off screen, so the key press that lends a
+    /// page user activation for the context menu's Picture in Picture never reaches it; the
+    /// protocol's user gesture does. Only a player in an iframe falls back to the page path.
+    private func requestPictureInPicture(_ id: UUID) {
+        guard let browser = runtimes[id]?.browser else { return }
+        let js = """
+        (() => {
+          const v = [...document.querySelectorAll('video')].filter(v => !v.disablePictureInPicture && v.readyState >= 1)
+            .sort((a, b) => (b.paused ? 0 : 1) - (a.paused ? 0 : 1))[0];
+          return v ? v.requestPictureInPicture().then(() => 'ok', e => e.name + ': ' + e.message) : 'none';
+        })()
+        """
+        let params: [String: Any] = ["expression": js, "returnByValue": true, "awaitPromise": true, "userGesture": true]
+        let json = String(data: try! JSONSerialization.data(withJSONObject: params), encoding: .utf8)!
+        browser.sendDevToolsMethod("Runtime.evaluate", params: json) { [weak browser] result, _ in
+            DispatchQueue.main.async {
+                let answer = Self.stringResult(result)
+                if answer == "none" { browser?.requestPictureInPicture(automatic: false) }
+                else if let answer, answer != "ok" { NSLog("Cra: Picture in Picture from the player failed: %@", answer) }
             }
         }
     }

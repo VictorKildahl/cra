@@ -81,6 +81,7 @@ enum BrowserManagerLifecycleTests {
         devToolsCase()
         await beforeUnloadCase()
         nowPlayingCase()
+        await nowPlayingPictureInPictureCase()
         pageColoursCase()
         await sleepCase("malformed or missing replies cannot authorize sleeping", reply: nil) { _, _ in }
         print("Browser manager lifecycle: \(checks) checks passed")
@@ -288,6 +289,30 @@ enum BrowserManagerLifecycleTests {
         expect(np.entries.map(\.id) == [b], "a playing page that navigates (a playlist) keeps its card")
         manager.unload(b)
         expect(np.entries.isEmpty, "closing the page removes its card")
+        manager.closeAll()
+    }
+
+    /// The player's Picture in Picture button asks the off-screen page through the protocol, as a
+    /// user gesture; only a page with no video of its own (a player in an iframe) gets the
+    /// context menu's request.
+    @MainActor
+    private static func nowPlayingPictureInPictureCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.nowPlaying = NowPlaying()
+        let a = store.createTab(url: "https://example.test/video").id
+        let ra = manager.ensureRuntime(for: a)!
+        for (answer, fallback, label) in [("ok", 0, "a page that entered Picture in Picture"),
+                                          ("NotAllowedError: denied", 0, "a page that refused"),
+                                          ("none", 1, "a page with no video of its own")] {
+            let before = ra.browser.pictureInPictureRequests
+            manager.performNowPlaying(a, .pictureInPicture)
+            expect(ra.browser.lastParams.contains(#""userGesture":true"#), "the player's request runs as a user gesture")
+            ra.browser.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"\#(answer)"}}"#)
+            await drainMainQueue()
+            expect(ra.browser.pictureInPictureRequests - before == fallback,
+                   "\(label) \(fallback == 1 ? "falls back to" : "does not also get") the page request")
+        }
         manager.closeAll()
     }
 
