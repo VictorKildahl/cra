@@ -99,7 +99,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         window.contentView = shell
         window.backgroundColor = NSColor(palette.gradientColors.first ?? .gray)
 
-        browsers = BrowserManager(store: store, favicons: app.favicons, container: shell.parkingView)
+        browsers = BrowserManager(store: store, favicons: app.favicons, container: shell.parkingView, clock: app.composition.clock)
         browsers.delegate = self
         browsers.windowID = session.id
         browsers.takeRuntimeFromOtherWindow = { [weak self] id in
@@ -202,6 +202,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             b.isLoading ? b.stopLoading() : b.reload()
         }
         sidebarActions.editSpace = { [weak self] s in self?.showSpaceEditor(space: s) }
+        sidebarActions.changeSpaceIcon = { [weak self] s, anchor in self?.showSpaceIconPicker(space: s, anchor: anchor) }
+        sidebarActions.editSpaceTheme = { [weak self] s in self?.showSpaceStyleEditor(space: s) }
+        sidebarActions.newProfile = { [weak self] id in self?.showNewProfileDialog(forSpace: id) }
+        sidebarActions.manageSpaces = { [weak self] in self?.showManageSpaces() }
+        sidebarActions.deleteSpace = { [weak self] s in self?.app.confirmDeleteSpace(s) }
         sidebarActions.toggleSidebar = { [weak self] in self?.toggleSidebar() }
         sidebarActions.toggleLibrary = { [weak self] in self?.toggleLibrary() }
         sidebarActions.showLibrary = { [weak self] page in self?.showLibrary(page) }
@@ -216,6 +221,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         sidebarActions.openURL = { [weak self] url in
             guard let self else { return }
             self.store.createTab(url: url, window: self.windowID)
+        }
+        sidebarActions.loadTyped = { [weak self] typed in
+            guard let self else { return }
+            let t = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !t.isEmpty else { return }
+            self.loadInSelectedTab(SuggestionEngine.looksLikeURL(t) ? SuggestionEngine.urlFromInput(t) : self.store.settings.searchEngine.searchURL(t))
         }
         sidebarActions.focusPane = { [weak self] id in
             guard let self, self.selectedTabID != id else { return }
@@ -362,7 +373,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         if CGFloat(store.prefs.sidebarWidth) != lastSidebarWidth {
             lastSidebarWidth = CGFloat(store.prefs.sidebarWidth)
-            shell.sidebarWidth = lastSidebarWidth + (sidebarUI.libraryPage != nil ? LibraryMetrics.extraWidth : 0)
+            shell.sidebarWidth = sidebarUI.libraryPage.map { libraryWidth($0) } ?? lastSidebarWidth
         }
     }
 
@@ -1416,12 +1427,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func showLibrary(_ page: LibraryPage) {
         sidebarUI.lastLibraryPage = page
         let opening = sidebarUI.libraryPage == nil
+        let resize = !opening && sidebarUI.libraryPage.map(libraryWidth) != libraryWidth(page)
         withAnimation(.easeOut(duration: 0.05)) { sidebarUI.libraryPage = page }
+        if resize {
+            shell.sidebarWidth = libraryWidth(page)
+            shell.animateSidebar(visible: true, floating: false, fullscreen: shell.contentFullscreen, width: shell.sidebarWidth, duration: 0.1)
+        }
         guard opening else { return }
         sidebarUI.downloadsListOpen = false
         commandBar.close()
         shell.sidebarResizable = false
-        let width = CGFloat(store.prefs.sidebarWidth) + LibraryMetrics.extraWidth
+        let width = libraryWidth(page)
         if sidebarVisible {
             shell.sidebarWidth = width
             shell.animateSidebar(visible: true, floating: false, fullscreen: shell.contentFullscreen, width: width)
@@ -1432,6 +1448,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             sidebarVisible = true
         }
         window?.makeKey()
+    }
+
+    /// The sidebar's width with the Library in it: 70 pt wider for the rail, or on the Spaces page
+    /// wide enough for every space's card (Arc), leaving the page at least 320 pt.
+    private func libraryWidth(_ page: LibraryPage) -> CGFloat {
+        let base = CGFloat(store.prefs.sidebarWidth) + LibraryMetrics.extraWidth
+        guard page == .spaces else { return base }
+        let n = store.orderedSpaces.filter { !store.isIncognito(space: $0.id) }.count
+        let room = (window?.frame.width ?? 1280) - 320
+        return max(base, min(SpacesManagerMetrics.width(spaces: n), room))
     }
 
     func closeLibrary() {
@@ -1657,7 +1683,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let card = shell.focusedCard.map { shell.contentContainer.convert($0.frame, to: nil) }
             ?? shell.convert(shell.contentContainer.frame, to: nil)
         let onScreen = window.convertToScreen(card)
-        return (onScreen.maxY - (store.settings.showToolbar ? CraMetrics.toolbarHeight : 0), onScreen.maxX)
+        let bar = shell.focusedCard?.toolbarHeight ?? CraMetrics.toolbarHeight
+        return (onScreen.maxY - (store.settings.showToolbar ? bar : 0), onScreen.maxX)
     }
 
     /// Where a popup from a URL-bar button hangs: under the toolbar, or, with the toolbar
@@ -1685,13 +1712,32 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Dia's Extensions menu. The popup hangs under the toolbar, its right edge at `buttonRightX`
     /// (screen x of the clicked button; nil = the extension's toolbar button or the card's right end).
     func runExtensionAction(_ id: String, buttonRightX: CGFloat? = nil) {
-        guard extensionEntries.contains(where: { $0.extensionID == id }) else { return }
-        guard let bar = toolbarBottomOnScreen() else { openExtensionPopupPage(id, anchor: nil); return }
-        let anchor = buttonRightX.map { NSPoint(x: $0, y: urlBarBottomOnScreen() ?? bar.y) }
-            ?? extensionPopupAnchor(id) ?? NSPoint(x: bar.cardMaxX - 8, y: bar.y)
-        guard let browser = currentBrowser else { openExtensionPopupPage(id, anchor: anchor); return }
-        Task {
-            if await !ExtensionActions.shared.run(id, on: browser, anchor: anchor) { self.openExtensionPopupPage(id, anchor: anchor) }
+        let bar = toolbarBottomOnScreen()
+        let browser = currentBrowser
+        let anchor = bar.map { bar in
+            buttonRightX.map { NSPoint(x: $0, y: urlBarBottomOnScreen() ?? bar.y) } ?? extensionPopupAnchor(id) ?? NSPoint(x: bar.cardMaxX - 8, y: bar.y)
+        }
+        let available = profileExtensions
+        switch ExtensionLaunch.decide(id, available: available, hasPage: bar != nil && browser != nil) {
+        case .nothing: return
+        case .runAction:
+            guard let browser, let anchor else { return }
+            let inDefaultProfile = profileDirectoryName == "Default"
+            Task {
+                if await !ExtensionActions.shared.run(id, on: browser, anchor: anchor, inDefaultProfile: inDefaultProfile),
+                   let e = available.first(where: { $0.id == id }) {
+                    self.perform(ExtensionLaunch.fallback(e), anchor: anchor)
+                }
+            }
+        case let fallback: perform(fallback, anchor: anchor)
+        }
+    }
+
+    /// The extensions installed in the focused page's profile, turned on or not.
+    private var profileExtensions: [ExtensionLaunch.Extension] {
+        let profile = profileDirectoryName
+        return ExtensionStore.shared.entries.filter { $0.isInstalled(inProfile: profile) }.map {
+            ExtensionLaunch.Extension(id: $0.extensionID, popupPath: $0.popupPath, optionsPath: $0.optionsPath, enabled: $0.isEnabled(inProfile: profile))
         }
     }
 
@@ -1705,28 +1751,31 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// toolbar or the sidebar's URL pill (also in the floating sidebar's panel), so a popup
     /// hangs from the same place wherever the button was clicked (GitHub #8).
     private static func extensionButtonRightX() -> CGFloat {
+        buttonFrameUnderPointer { $0 is ToolbarGlyphButton }?.maxX ?? NSEvent.mouseLocation.x + 17
+    }
+
+    /// The button under the pointer (screen rect): the one just clicked.
+    private static func buttonFrameUnderPointer(_ isButton: (NSView) -> Bool) -> NSRect? {
         let mouse = NSEvent.mouseLocation
         let number = NSWindow.windowNumber(at: mouse, belowWindowWithWindowNumber: 0)
-        if let w = NSApp.window(withWindowNumber: number), let content = w.contentView {
-            let p = w.convertPoint(fromScreen: mouse)
-            var v = content.hitTest(content.superview?.convert(p, from: nil) ?? p)
-            while let view = v, !(view is ToolbarGlyphButton) { v = view.superview }
-            if let button = v { return w.convertToScreen(button.convert(button.bounds, to: nil)).maxX }
-        }
-        return mouse.x + 17
+        guard let w = NSApp.window(withWindowNumber: number), let content = w.contentView else { return nil }
+        let p = w.convertPoint(fromScreen: mouse)
+        var v = content.hitTest(content.superview?.convert(p, from: nil) ?? p)
+        while let view = v, !isButton(view) { v = view.superview }
+        return v.map { w.convertToScreen($0.convert($0.bounds, to: nil)) }
     }
 
     /// No page for Chrome's popup to attach to (no tab open, no DevTools pipe, a page it
-    /// cannot reach): the popup page in a popup-sized window under the button, else the
-    /// options page, else Chrome's details page for the extension.
-    private func openExtensionPopupPage(_ id: String, anchor: NSPoint?) {
-        guard let e = ExtensionStore.shared.entries.first(where: { $0.extensionID == id }) else { return }
-        let base = "chrome-extension://\(id)/"
-        if let popup = e.popupPath {
+    /// cannot reach): ExtensionLaunch picks the popup page in a popup-sized window under the
+    /// button, else the options page, else Chrome's details page for the extension.
+    private func perform(_ launch: ExtensionLaunch, anchor: NSPoint?) {
+        switch launch {
+        case .nothing, .runAction: break
+        case .popupWindow(let url):
             let fallback = window.map { NSPoint(x: $0.frame.maxX - 16, y: $0.frame.maxY - CraMetrics.toolbarHeight) } ?? .zero
-            ExtensionPageWindow.open(url: base + popup, anchor: anchor ?? fallback, app: app)
-        } else {
-            store.createTab(url: e.optionsPath.map { base + $0 } ?? "chrome://extensions/?id=\(id)", select: true, window: windowID)
+            ExtensionPageWindow.open(url: url, anchor: anchor ?? fallback, app: app)
+        case .openTab(let url):
+            store.createTab(url: url, select: true, window: windowID)
         }
     }
 
@@ -1745,13 +1794,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// Arc's sliders button (toolbar and URL pill): the Site Control Center, hung under the
-    /// button the pointer is on (buttons are 32 × 28).
+    /// button that was clicked (buttons are 32 × 28), not wherever the pointer is in it.
     private func showToolbarExtensionsMenu() {
         guard let window, let content = window.contentView, let y = urlBarBottomOnScreen() else { return }
         ExtensionStore.shared.reload()
-        let mouse = NSEvent.mouseLocation
+        let midX = Self.buttonFrameUnderPointer { $0 is ToolbarGlyphButton || $0 is SidebarGlyphButton }?.midX ?? NSEvent.mouseLocation.x
         // Arc's popover overlaps the bar by 4 pt (popover top 71 under a bar ending at 75).
-        let onScreen = NSRect(x: mouse.x - 16, y: y + 4, width: 32, height: 28)
+        let onScreen = NSRect(x: midX - 16, y: y + 4, width: 32, height: 28)
         let rect = content.convert(window.convertFromScreen(onScreen), from: nil)
         let url = selectedTabID.flatMap { store.item($0)?.tab?.url } ?? ""
         var actions = SiteControlCenterActions()
@@ -1861,6 +1910,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         commandBar.highlight = focusedSpace.theme.palette.commandHighlight
         commandBar.focusedSpaceID = focusedSpaceID
         commandBar.open(mode: effectiveMode, prefill: prefill)
+        // Arc draws the New Tab row as the active one while the bar makes a new tab; the
+        // sidebar scrolls to it (SpaceListView.revealActiveRow).
+        sidebarUI.newTabPlaceholderActive = effectiveMode == .newTab && !fillingEmptyPane
         // Always centred in the window, also when opened from the toolbar.
         commandBar.attached = false
         commandBar.panelWidth = min(CraMetrics.commandBarWidth, window.frame.width - 80)
@@ -1903,6 +1955,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     private func hideCommandPanel() {
+        sidebarUI.newTabPlaceholderActive = false
         if commandPanel.parent != nil { window?.removeChildWindow(commandPanel) }
         let panel = commandPanel!
         // Let CommandBarView's fade-out (0.08 s) play before the panel goes away.
@@ -2123,6 +2176,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         commandBar.close()
     }
 
+    // The sidebar header's toggle moves into the traffic lights' place while they are gone (Arc).
+    func windowWillEnterFullScreen(_ notification: Notification) { sidebarUI.windowFullscreen = true }
+    func windowWillExitFullScreen(_ notification: Notification) { sidebarUI.windowFullscreen = false }
     func windowDidEnterFullScreen(_ notification: Notification) { shell.needsLayout = true }
     func windowDidExitFullScreen(_ notification: Notification) {
         // Left with the green button or ⌃⌘F while a video was fullscreen: the page leaves too.

@@ -69,10 +69,12 @@ final class JSONStore<T: Codable> {
 
     func load(or fallback: () -> T) -> T {
         guard let data = try? Data(contentsOf: url) else { return fallback() }
-        if let v = try? decoder.decode(T.self, from: data) { return v }
-        // Corrupt file: keep it aside for forensics and start fresh.
-        try? FileManager.default.moveItem(at: url, to: url.appendingPathExtension("corrupt"))
-        return fallback()
+        do { return try decoder.decode(T.self, from: data) } catch {
+            // Corrupt file: keep it aside for forensics and start fresh.
+            CraLog.fault("\(url.lastPathComponent) unreadable, set aside as .corrupt: \(error)")
+            try? FileManager.default.moveItem(at: url, to: url.appendingPathExtension("corrupt"))
+            return fallback()
+        }
     }
 
     func save(_ value: T, delay: TimeInterval = 0.4) {
@@ -90,13 +92,19 @@ final class JSONStore<T: Codable> {
     }
 
     private func write(_ value: T) {
-        guard let data = try? encoder.encode(value) else { return }
+        let data: Data
+        do { data = try encoder.encode(value) } catch {
+            CraLog.fault("\(url.lastPathComponent) not saved, encoding failed: \(error)")
+            return
+        }
         let fm = FileManager.default
         let bak = url.appendingPathExtension("bak")
         if fm.fileExists(atPath: url.path) {
             try? fm.removeItem(at: bak)
             try? fm.copyItem(at: url, to: bak)
         }
-        try? data.write(to: url, options: .atomic)
+        do { try data.write(to: url, options: .atomic) } catch {
+            CraLog.fault("\(url.lastPathComponent) not saved: \(error.localizedDescription)")
+        }
     }
 }

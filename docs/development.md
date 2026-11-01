@@ -22,11 +22,16 @@ issue when a newer stable CEF is out; `scripts/update-cef.sh` moves the pin.
 
 ## Layout
 
-- `Sources/Cra` — the app: `App` (delegate, key bindings), `Model`, `Services` (sidebar
-  store, persistence, import, updates, extensions, live folders), `UI` (sidebar, command
-  bar, split view, windows, settings, onboarding)
+- `Sources/Cra` — the app: `App` (delegate, key bindings), `Services` (sidebar store,
+  persistence, import, updates, extensions, live folders), `UI` (sidebar, command bar, split
+  view, windows, settings, onboarding)
 - `Sources/CraCEF` — Objective-C++ bridge between Swift and CEF
 - `Sources/CraHelper` — Chromium subprocess executable
+- `Packages/CraCore` — models and decisions with no AppKit or Chromium (the sidebar model,
+  settings and the other data-folder files, Air Traffic Control, live folder data, key chords,
+  space themes, Arc theme import, the favorites grid), visible in every `Sources/Cra` file.
+  The layer rules are in [CLAUDE.md](../CLAUDE.md)
+- `Tests/` — the harnesses that compile production files against fakes, and the smoke test
 - `resources/` — app icon, brand PNGs, the ad and tracker blocklist with its licence notices
 - `scripts/` — build, release, CEF and test tooling; `scripts/clips` records release clips
 - `docs/arc-reverse-engineering.md` — what was learned from Arc and how
@@ -34,8 +39,63 @@ issue when a newer stable CEF is out; `scripts/update-cef.sh` moves the pin.
 - `vendor/cef` — CEF binary distribution (fetched, not committed)
 
 Data lives in `~/Library/Application Support/Cra`: the sidebar and archive as JSON,
-`keybindings.json`, cached favicons, `chromium.log` and a Chromium profile folder. Delete
-it to start over.
+`keybindings.json`, cached favicons, the logs and a Chromium profile folder. Delete it to
+start over.
+
+`cra.log` is Cra's own log: each tab's page opening, showing, loading and closing, and three
+seconds after a tab comes on screen, what its page holds (`blank`, `visibility`, element and
+text counts, `painted` for a first contentful paint) and where Cra put it (view size,
+`window=covered` when another window hides it). `chromium.log` holds Chromium's warnings,
+failed page loads and crashed renderers. Each launch keeps the last one's as `*.previous.log`.
+Logs name sites by host only. Help ▸ Export Diagnostics… zips both with the GPU report,
+the on-screen pages' state, settings, extensions and the last week's crash reports, with
+addresses cut to their host; `cra://debug?exportDiagnostics=<path>` does the same without
+the save panel.
+
+## Tests
+
+    scripts/test.sh                  # everything below except the smoke test, in seconds
+    scripts/test.sh core             # only Packages/CraCore
+    Tests/smoke-launch.sh            # launches build/Cra.app three times, about 30 s
+    scripts/scenario.sh all          # user journeys in build/Cra.app, about 6 minutes
+    scripts/coverage.py              # line coverage, and the changed-lines gate
+    scripts/fuzz.sh                  # mutated importer fixtures under AddressSanitizer
+    scripts/mutate.py                # mutation testing of the pure code, minutes
+
+[testing.md](testing.md) has the rules, the layers, the gates and how to write a scenario.
+
+CI runs `scripts/test.sh` on every pull request (no CEF download) and the smoke test on the
+app it builds.
+
+- `Packages/CraCore` (`swift test --package-path Packages/CraCore`): a package of its own, so
+  its tests build without `vendor/cef`. Code that decides something without a window or a
+  page belongs here, with a test: a layout rule, a mapping from Arc's or Chromium's files,
+  a policy. Expected values for anything copied from Arc come from Arc's measurements in
+  `docs/arc-reverse-engineering.md`; fixtures hold Arc's own JSON, trimmed to what is read.
+  `Fixtures/Model` holds data-folder files, current and older shapes, each with what Cra
+  saved after loading it (recorded before the model moved here, #51).
+- `Tests/test-browser-manager.sh`, `scripts/test-floating-sidebar.sh`,
+  `scripts/test-extension-popup-candidate.sh`, `scripts/test-extension-state.sh`: compile a
+  few production files with `swiftc` against fakes (`Tests/BrowserManagerSupport` stands in
+  for CraCEF and the rest of the app). When the manager calls something new from the app, add
+  a stub to `AppServices.swift`.
+- `scripts/test-store.sh`: the real `SidebarStore`, `AppComposition` and importers on a
+  `ManualScheduler`, against the made-up Arc and Chromium profiles in `Tests/Fixtures`.
+- `scripts/test-policies.sh`: the decisions pulled out of the window controllers
+  (`ToolbarComposition`, `ExtensionLaunch`, `DevToolsToggle`, `FeatureFlags`).
+- `scripts/lint.py`: Cra's own rules (testing.md), checked by `scripts/test.sh`.
+- `Tests/smoke-launch.sh [app]`: starts the app on a throwaway data folder with no pages,
+  with a page opened, then with it restored, and quits it like ⌘Q after a settings write.
+  It fails on a crash, a hang, an error exit or a new crash report, which is how a `CHECK`
+  inside Chromium shows up. Its own data folder lets it run next to your daily Cra.
+
+What none of these see: compositing (the sidebar blur), fullscreen spaces, and how real sites
+behave. Check those by hand, and say how in the PR.
+
+Scenario hooks for a command file (`cra://debug?…`): `checkStore=1` logs a fault per broken
+sidebar link, `pageJS=<js>` runs script in the focused page, `installExtension=<folder>` and
+`removeExtension=<id>`, `extensionAction=<id>`, `fullscreen=1|0`, `windowSize=1280x800`,
+`snapshot=<ViewClass[,n]>&out=<png>`, `sleepTabs=<seconds>`, `relaunch=1` and `quit=1`.
 
 ## Running a test instance
 

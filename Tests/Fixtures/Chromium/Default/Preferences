@@ -1,0 +1,18 @@
+{
+ "extensions": {
+  "settings": {
+   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+    "location": 1,
+    "state": 1,
+    "path": "aaaa/1.0"
+   },
+   "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+    "location": 4,
+    "disable_reasons": [
+     1
+    ],
+    "path": "/nowhere"
+   }
+  }
+ }
+}

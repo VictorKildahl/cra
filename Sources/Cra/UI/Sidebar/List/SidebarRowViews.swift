@@ -294,6 +294,8 @@ final class SidebarGlyphButton: NSView {
     }
 
     override var mouseDownCanMoveWindow: Bool { false }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { takesClickFromChildWindow }
+    override func hitTest(_ point: NSPoint) -> NSView? { frame.contains(point) ? self : nil }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -544,9 +546,24 @@ class SidebarRowView: NSView {
         fillLayer.backgroundColor = fill.cgColor
     }
 
+    /// The open row's soft shadow under its fill, on light themes only.
+    func setLifted(_ selected: Bool) {
+        let lifted = selected && !colors.isDark && decor.combine == nil
+        layer?.shadowOpacity = lifted ? 0.06 : 0
+        if lifted {
+            layer?.shadowColor = NSColor.black.cgColor
+            layer?.shadowRadius = 3
+            layer?.shadowOffset = CGSize(width: 0, height: -1)
+            layer?.shadowPath = CGPath(roundedRect: fillRect, cornerWidth: CraMetrics.rowCorner, cornerHeight: CraMetrics.rowCorner, transform: nil)
+        }
+    }
+
     override func layout() {
         super.layout()
         fillLayer.frame = fillRect
+        if layer?.shadowOpacity ?? 0 > 0 {
+            layer?.shadowPath = CGPath(roundedRect: fillRect, cornerWidth: CraMetrics.rowCorner, cornerHeight: CraMetrics.rowCorner, transform: nil)
+        }
     }
 
     func applyDecor(_ d: DropDecor, animated: Bool) {
@@ -745,14 +762,7 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
 
     override func refreshBackground() {
         super.refreshBackground()
-        let lifted = model?.highlighted == true && !colors.isDark && decor.combine == nil
-        layer?.shadowOpacity = lifted ? 0.06 : 0
-        if lifted {
-            layer?.shadowColor = NSColor.black.cgColor
-            layer?.shadowRadius = 3
-            layer?.shadowOffset = CGSize(width: 0, height: -1)
-            layer?.shadowPath = CGPath(roundedRect: fillRect, cornerWidth: CraMetrics.rowCorner, cornerHeight: CraMetrics.rowCorner, transform: nil)
-        }
+        setLifted(model?.highlighted == true)
     }
 
     override func hoverChanged() {
@@ -893,9 +903,6 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
             f.frame = NSRect(x: x - SidebarText.inset, y: (h - fh) / 2, width: max(0, bounds.width - 6 - x + SidebarText.inset), height: fh)
         }
         focusRing?.frame = fillRect
-        if layer?.shadowOpacity ?? 0 > 0 {
-            layer?.shadowPath = CGPath(roundedRect: fillRect, cornerWidth: CraMetrics.rowCorner, cornerHeight: CraMetrics.rowCorner, transform: nil)
-        }
     }
 
     // MARK: Rename
@@ -1180,6 +1187,8 @@ struct SplitRowModel: Equatable {
     var depth: Int
     var today: Bool
     var selected: Bool
+    /// Filled as the open row; not while the ⌘T bar's New Tab row stands in for it.
+    var highlighted: Bool
     var focusRing: Bool
     var cells: [Cell]
 }
@@ -1233,19 +1242,12 @@ final class SplitRowView: SidebarRowView {
 
     override func baseFill() -> NSColor {
         guard let m = model else { return .clear }
-        return m.selected ? colors.selectedFill : (isHovered ? colors.hoverFill : .clear)
+        return m.highlighted ? colors.selectedFill : (isHovered ? colors.hoverFill : .clear)
     }
 
     override func refreshBackground() {
         super.refreshBackground()
-        let lifted = model?.selected == true && !colors.isDark && decor.combine == nil
-        layer?.shadowOpacity = lifted ? 0.06 : 0
-        if lifted {
-            layer?.shadowColor = NSColor.black.cgColor
-            layer?.shadowRadius = 3
-            layer?.shadowOffset = CGSize(width: 0, height: -1)
-            layer?.shadowPath = CGPath(roundedRect: fillRect, cornerWidth: CraMetrics.rowCorner, cornerHeight: CraMetrics.rowCorner, transform: nil)
-        }
+        setLifted(model?.highlighted == true)
     }
 
     override func hoverChanged() {
@@ -1473,8 +1475,19 @@ final class NewTabRowView: SidebarRowView {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    /// While the ⌘T bar is open Arc draws this row as the open one: the selected tab's fill,
+    /// shadow and text.
+    private var active = false
+
+    func apply(active: Bool) {
+        guard active != self.active else { return }
+        self.active = active
+        refreshColors()
+        refreshBackground()
+    }
+
     private func refreshColors() {
-        let c = isHovered ? colors.textPrimary : colors.textSecondary
+        let c = isHovered || active ? colors.textPrimary : colors.textSecondary
         plus.contentTintColor = c
         label.textColor = c
     }
@@ -1484,7 +1497,12 @@ final class NewTabRowView: SidebarRowView {
         refreshColors()
     }
 
-    override func baseFill() -> NSColor { isHovered ? colors.selectedFill : .clear }
+    override func baseFill() -> NSColor { isHovered || active ? colors.selectedFill : .clear }
+
+    override func refreshBackground() {
+        super.refreshBackground()
+        setLifted(active)
+    }
 
     override func hoverChanged() {
         super.hoverChanged()

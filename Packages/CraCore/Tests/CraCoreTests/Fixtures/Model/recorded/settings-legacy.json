@@ -1,0 +1,47 @@
+{
+  "autoArchive" : "thirtyDays",
+  "autoArchiveEnabled" : true,
+  "autoPictureInPicture" : true,
+  "blockAdsAndTrackers" : true,
+  "chromeEngine" : true,
+  "defaultLinkDestination" : {
+    "mostRecentSpace" : {
+
+    }
+  },
+  "developerHosts" : [
+
+  ],
+  "edgeToEdgeContent" : false,
+  "folderPreviews" : true,
+  "hapticFeedbackOnReorder" : true,
+  "hasSeenImportPrompt" : true,
+  "httpsOnly" : false,
+  "linkRoutes" : [
+    {
+      "destination" : {
+        "mostRecentSpace" : {
+
+        }
+      },
+      "id" : "00000000-0000-0000-0000-000000000000",
+      "match" : "contains",
+      "text" : "meet.google.com"
+    }
+  ],
+  "newTabButtonAtTop" : true,
+  "newTabButtonDefaultMigrated" : true,
+  "newTabsAtTop" : true,
+  "peekInEveryTab" : false,
+  "peekLinksToOtherSites" : true,
+  "peekOnShiftClick" : true,
+  "searchEngine" : "duckduckgo",
+  "searchSuggestions" : true,
+  "showSpaceHeaderOnSingleSpace" : true,
+  "showStatusBar" : true,
+  "showToolbar" : true,
+  "tabSleep" : "oneHour",
+  "tabSleepEnabled" : false,
+  "toolbarDefaultMigrated" : true,
+  "warnBeforeQuitting" : false
+}

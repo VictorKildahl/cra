@@ -1,4 +1,5 @@
 import AppKit
+import CraCEF
 import CryptoKit
 import Observation
 
@@ -28,12 +29,23 @@ final class ExtensionStore {
         /// Chromium profile folders ("Default", "Profile <id>") it is installed in; nil for the
         /// --load-extension ones, which Chromium loads into every profile.
         var profiles: Set<String>?
+        /// Profile folders where it is turned off in chrome://extensions. Chromium keeps it off
+        /// there across launches, also when --load-extension loads the folder again.
+        var disabledProfiles: Set<String> = []
 
         func isInstalled(inProfile name: String) -> Bool { profiles?.contains(name) ?? true }
+        func isEnabled(inProfile name: String) -> Bool { isInstalled(inProfile: name) && !disabledProfiles.contains(name) }
     }
 
     /// The menu bar's Extensions menu and the toolbar read this one.
-    static let shared = ExtensionStore()
+    static let shared: ExtensionStore = {
+        let store = ExtensionStore()
+        // An install, switch or removal in chrome://extensions or the Web Store (main queue).
+        CraCEFRuntime.setExtensionSettingsChangeHandler { [weak store] in
+            MainActor.assumeIsolated { store?.reload() }
+        }
+        return store
+    }()
 
     /// CraCEF loads the same folder (it also honours CRA_DATA_DIR).
     nonisolated static var directory: URL { AppPaths.supportDir.appendingPathComponent("Extensions", isDirectory: true) }
@@ -71,31 +83,65 @@ final class ExtensionStore {
         let fm = FileManager.default
         try? fm.createDirectory(at: ExtensionStore.directory, withIntermediateDirectories: true)
         let names = (try? fm.contentsOfDirectory(atPath: ExtensionStore.directory.path)) ?? []
-        let list = names.sorted().compactMap { name in
-            Self.entry(id: name, folder: ExtensionStore.directory.appendingPathComponent(name, isDirectory: true), extensionID: nil)
+        let root = AppPaths.chromiumCache
+        let profiles = ((try? fm.contentsOfDirectory(atPath: root.path)) ?? []).filter { $0 == "Default" || $0.hasPrefix("Profile ") }.sorted()
+        let settings = Dictionary(uniqueKeysWithValues: profiles.map { ($0, Self.extensionSettings(inProfile: $0)) })
+        let disabled = settings.mapValues(ExtensionImporter.disabledIDs(settings:))
+        let list = names.sorted().compactMap { name -> Entry? in
+            guard var entry = Self.entry(id: name, folder: ExtensionStore.directory.appendingPathComponent(name, isDirectory: true),
+                                         extensionID: nil) else { return nil }
+            entry.disabledProfiles = Set(profiles.filter { disabled[$0]?.contains(entry.extensionID) == true })
+            return entry
         }
         let loaded = Set(list.map(\.extensionID))
         // Each profile has its own Web Store extensions: note which profiles hold each one.
-        let root = AppPaths.chromiumCache
-        let profiles = ((try? fm.contentsOfDirectory(atPath: root.path)) ?? []).filter { $0 == "Default" || $0.hasPrefix("Profile ") }.sorted()
         var managed: [Entry] = []
         for profile in profiles {
-            for e in ExtensionImporter.extensions(inProfile: root.appendingPathComponent(profile, isDirectory: true))
-            where e.isEnabled && !loaded.contains(e.id) {
-                if let i = managed.firstIndex(where: { $0.extensionID == e.id }) { managed[i].profiles?.insert(profile); continue }
-                guard var entry = Self.entry(id: e.id, folder: e.folder, extensionID: e.id) else { continue }
-                entry.managedByChrome = true
-                entry.profiles = [profile]
-                managed.append(entry)
+            // Turned-off ones stay listed (as off) so their pins come back with them.
+            for e in ExtensionImporter.extensions(settings: settings[profile] ?? [:], inProfile: root.appendingPathComponent(profile, isDirectory: true))
+            where !loaded.contains(e.id) {
+                var i = managed.firstIndex(where: { $0.extensionID == e.id })
+                if i == nil, var entry = Self.entry(id: e.id, folder: e.folder, extensionID: e.id) {
+                    entry.managedByChrome = true
+                    entry.profiles = []
+                    managed.append(entry)
+                    i = managed.count - 1
+                }
+                guard let i else { continue }
+                managed[i].profiles?.insert(profile)
+                if !e.isEnabled { managed[i].disabledProfiles.insert(profile) }
             }
         }
-        entries = list + managed.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        let next = list + managed.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        // chrome://extensions switches, in the log: a report of a click on a turned-off extension
+        // shows when Cra learned about it.
+        for e in next {
+            guard let old = entries.first(where: { $0.extensionID == e.extensionID }) else { continue }
+            for p in e.disabledProfiles.subtracting(old.disabledProfiles).sorted() { CraLog.note("extension \(e.extensionID) turned off in \(p)") }
+            for p in old.disabledProfiles.subtracting(e.disabledProfiles).sorted() { CraLog.note("extension \(e.extensionID) turned on in \(p)") }
+        }
+        entries = next
         pinnedIDs.removeAll { id in !entries.contains { $0.extensionID == id } }
     }
 
     /// The extensions a page in this Chromium profile folder can run; running another
-    /// profile's extension there crashes Chromium.
-    func entries(inProfile name: String) -> [Entry] { entries.filter { $0.isInstalled(inProfile: name) } }
+    /// profile's extension there, or one turned off there, crashes Chromium. Arc's toolbar and
+    /// Site Control Center leave turned-off extensions out (Chrome's toolbar model).
+    func entries(inProfile name: String) -> [Entry] { entries.filter { $0.isEnabled(inProfile: name) } }
+
+    // MARK: Installed, turned on and off in chrome://extensions (GitHub #41, #43)
+
+    /// A profile's extensions.settings. Chromium writes its prefs to disk ~10 s after an install
+    /// or a switch, so a profile that has loaded answers from memory (and says when it changes);
+    /// the files only for one no space has opened yet, where nothing can have changed.
+    private static func extensionSettings(inProfile name: String) -> [String: Any] {
+        let dir = AppPaths.chromiumCache.appendingPathComponent(name, isDirectory: true)
+        if let json = CraCEFRuntime.extensionSettings(forProfile: name == "Default" ? nil : dir.path),
+           let live = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] {
+            return live
+        }
+        return ExtensionImporter.settings(inProfile: dir)
+    }
 
     private static func entry(id: String, folder dir: URL, extensionID: String?) -> Entry? {
         guard let data = try? Data(contentsOf: dir.appendingPathComponent("manifest.json")),

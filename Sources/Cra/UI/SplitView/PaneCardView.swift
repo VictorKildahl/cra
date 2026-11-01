@@ -1,4 +1,5 @@
 import AppKit
+import CraCEF
 import SwiftUI
 
 /// One content pane: Arc's rounded card with its toolbar strip on top and the
@@ -21,15 +22,30 @@ final class PaneCardView: NSView {
     /// them as a light rim in every rounded corner.
     private let pageBackground = NSView()
     var showToolbar = true { didSet { needsLayout = true } }
-    var toolbarHeight: CGFloat = CraMetrics.toolbarHeight { didSet { needsLayout = true } }
+    var toolbarHeight: CGFloat = CraMetrics.toolbarHeight {
+        didSet { if toolbarHeight != oldValue { needsLayout = true; onToolbarHeightChange?() } }
+    }
+    /// The shell lays the page windows out again when the bar's height changes.
+    var onToolbarHeightChange: (() -> Void)?
+    /// Arc's developer bar (PaneToolbarView): its colour behind the bar, and its 40 pt height.
+    var developerBar: NSColor? {
+        didSet {
+            guard developerBar != oldValue else { return }
+            toolbarHeight = developerBar == nil ? CraMetrics.toolbarHeight : CraMetrics.developerToolbarHeight
+            refreshBackground()
+        }
+    }
     var cornerRadius: CGFloat = CraMetrics.contentCornerRadius { didSet { layer?.cornerRadius = cornerRadius; needsLayout = true } }
     /// White page card, or Arc's tinted translucent empty pane.
     var hasPage = true { didSet { refreshBackground() } }
     var isDark = false { didSet { refreshBackground() } }
-    /// The page's own background ("#RRGGBB"; white until it reports one). The page window trails
-    /// the card by a frame or more while the window is resized quickly; in that gap the
-    /// page area must look like the page, not like a white card.
+    /// The page's own background ("#RRGGBB"; Arc's canvas until it reports one). The page window
+    /// trails the card by a frame or more while the window is resized quickly, and a page that is
+    /// loading has not painted yet; in those gaps the page area must look like the page, not
+    /// like a white card.
     var pageColor: String? { didSet { refreshBackground() } }
+    /// The canvas follows the appearance pages get (the app's), not the space theme's.
+    private var appearanceObservation: NSKeyValueObservation?
     /// The toolbar's colour (the page's theme-color, white until it reports one). A white backing
     /// under a dark bar shows through the bar's anti-aliased left edge as a 1px light line.
     var toolbarColor: String? { didSet { refreshBackground() } }
@@ -86,6 +102,9 @@ final class PaneCardView: NSView {
         addSubview(hairline)
         addSubview(toolbarHost)
         refreshBackground()
+        appearanceObservation = NSApp.observe(\.effectiveAppearance) { [weak self] _, _ in
+            MainActor.assumeIsolated { self?.refreshBackground() }
+        }
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -94,9 +113,9 @@ final class PaneCardView: NSView {
         // Measured on Arc 1.170 (Victor theme, 2x): the empty pane is the
         // gradient plus about +9/+11/+12 per channel, i.e. a white veil at ~0.2.
         layer?.backgroundColor = transparent || hasPage ? NSColor.clear.cgColor : NSColor(white: 1, alpha: isDark ? 0.08 : 0.2).cgColor
-        let bar = toolbarColor.map { NSColor(Color(hex: $0)) } ?? .white
+        let bar = developerBar ?? toolbarColor.map { NSColor(Color(hex: $0)) } ?? .white
         toolbarBackground.layer?.backgroundColor = (hasPage && !transparent ? bar : NSColor.clear).cgColor
-        let page = pageColor.map { NSColor(Color(hex: $0)) } ?? .white
+        let page = pageColor.map { NSColor(Color(hex: $0)) } ?? CraBrowser.pageCanvasColor
         pageBackground.layer?.backgroundColor = (hasPage && !transparent ? page : NSColor.clear).cgColor
         hairline.isHidden = hasPage || transparent || !showToolbar
         hairline.layer?.backgroundColor = NSColor(white: isDark ? 1 : 0, alpha: 0.08).cgColor

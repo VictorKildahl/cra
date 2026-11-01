@@ -146,7 +146,10 @@ final class NowPlayingTrayView: NSView {
             ui.nowPlaying.shown.map { e in
                 let item = store.item(e.id)
                 let icon = favicons.image(forKey: item?.tab?.iconKey)
-                return (e, NowPlayingCardModel(title: item?.displayTitle ?? "", icon: icon, playing: e.playing,
+                // What's playing: the page's own title (a video's name), not a favorite's or a
+                // renamed tab's fixed name, which is all the sidebar shows for those.
+                let live = item?.tab?.savedTitle ?? ""
+                return (e, NowPlayingCardModel(title: live.isEmpty ? item?.displayTitle ?? "" : live, icon: icon, playing: e.playing,
                                                muted: item?.tab?.muted ?? false, hasPrevious: e.hasPrevious, hasNext: e.hasNext,
                                                hasVideo: e.hasVideo, volume: e.volume))
             }

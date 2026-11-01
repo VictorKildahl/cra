@@ -39,6 +39,7 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   StorableWindows.json keeps windows[].spacesWithCollapsedPinnedSections (per window). [I] Clicking the space
   name toggles it and the active pinned tab stays visible; not observed live (Arc's window sat on another
   macOS Space and ignored synthetic input, 26 Oct). Cra: WindowPrefs.collapsedPinnedSpaces, SpaceHeader.
+  [O 1 Nov] A click on the name does toggle it (see "Space header row" below).
 
 ## Window state (StorableWindows.json)
 - [O] sidebarWidth 328, sidebarMode "anchored" (binary also has floating, hidden, collapsed), focusedSpaceID, lastFocusedSpaceID,
@@ -79,6 +80,13 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   in the site's colour (hard-coded, e.g. YouTube #FF0000, GitHub #743FC7; glow in the same colour) before the
   field, placeholder "Search…", rows reduced to the typed search tinted with that colour. Backspace on the empty
   field drops the pill and puts back what was typed; Escape returns to how the bar opened. Cra: SiteSearch.all.
+- [O] Scopes (1 Nov, Arc 1.171 Swift field names): `ScopedSearchType` has two cases, `siteSearch` and `typeTravel`;
+  there is no tab scope. The bar's state keeps `scopedSearchType`, `scopedSearchColor`,
+  `queryBeforeEnteringScopedSearch` (what Backspace puts back) and `postScopedSearchRestoration` (Escape); the
+  pill is `CommandBarInputScopedSearchPillView`. `migratedToTabOnlySiteSearchTrigger` and
+  `siteSearchSpaceTriggerEnabled` show Space was a trigger once and Tab is the only one now. Cra's "%" tab scope
+  (#49, Zen's idea) reuses all of it: "%" offers "Search Tabs  Tab", the pill takes the space's colour (Arc has no
+  colour for a scope that isn't a site), rows are the bar's own tab rows. Cra: TabSearchScope, CommandBarScope.
 - [O] Sidebar glyphs (29 Oct, 1x and 2x captures, fitted pixel by pixel): the tab row's hover ✕ is two 2 pt
   round-capped strokes 4.25 pt out from a centre on a whole point, white 0.6 over the hover fill; at 1x it is
   perfectly symmetric (176/142/85), which no SF Symbol size reproduces (xmark 13.5 bold is closest at 2x but
@@ -113,7 +121,7 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
 - [O] Sidebar 328pt wide. Row 1: traffic lights, sidebar toggle right after them (~93pt), nav ← → ↻ right-aligned when a
   tab is selected and the toolbar shows the URL; with no tab the nav moves into the toolbar and the toolbar shows a
   centered "Search or Enter URL…". Favorites: 4 tiles, ~44pt tall, active tile gets a dashed outline. Space header: emoji +
-  name, 13pt medium, secondary color. Rows 40pt pitch, 14pt titles, 16pt favicons, custom-titled/navigated pinned tabs show
+  name, 13pt semibold (re-fitted 1 Nov), secondary color. Rows 40pt pitch, 14pt titles, 16pt favicons, custom-titled/navigated pinned tabs show
   the host as an 11pt second line, folders use a blue folder glyph, nested rows indent ~18pt. Bottom row: library icon
   left, tiny space emoji centered (inactive dimmed), + right.
 - [O] Content: rounded card inset ~8-10pt with the toolbar strip (42pt: lock + monospaced URL, copy link, extensions,
@@ -177,7 +185,7 @@ dark = HSB(h, s · 0.6, v · 0.8) (#010220 → #0A0B19; Arc #0E0B16). Pages with
 
 Other measured details: window buttons are muted grey discs (bg −10 %) until the pointer
 reaches the sidebar's title row; favicons 16 pt centred 25.75 pt from the window edge; space
-header 14 pt medium with no top padding above it; favorites tiles 72 × 47 with 8 pt margins
+header 13 pt semibold (re-fitted 1 Nov; was 14 medium) with no top padding above it; favorites tiles 72 × 47 with 8 pt margins
 and gaps; the yellow/black dashed ring (2 pt, systemYellow, 6/6 black dashes) is Arc's
 keyboard-focus indicator, shown on a tab chosen without the mouse, never on clicked ones.
 Re-measured 29 Oct (issue #12, ScreenCaptureKit frames every ~60 ms): an AppleScript select
@@ -667,6 +675,38 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
 - [O] Arc lists a matching command above the typed row in general: "sett" → Settings, "new" → Add Split View,
   "clear" in a main window → Clear Unpinned Tabs. Pages/history follow a confidence rule not reproduced.
 
+### Space header ••• and the space menu (Arc 1.171, live, 1 Nov, issue #40)
+- [O] Header hover: the row's geometry, glyphs and colours are under "Space header row" (#39) below, and Cra
+  follows those. Here also: `sidebarSpaceEditButton` (AX "More", 2×26 pt until hovered, then 26×26) is the •••,
+  centred 18.5 pt from the fill's trailing edge on a 24 pt hover tile; fill, chevron and button appear in one
+  frame, no fade. An Icon-tab glyph sits in the emoji's 26 pt box 5 pt in.
+- [O] The ••• and a right-click on the header open the same menu, as a context menu at the pointer (a click
+  at 683,150 put the menu window at 684,144): Change Space Icon…, Rename Space…, Edit Theme Color…, Set Profile ▸
+  (profiles, ✓ on the space's, then New Profile…) | New Folder, Live Folders ▸ (GitHub ✓ when present) |
+  Share Space…, Export “<name>” into Folder ▸ (every space, its own disabled) | Manage Spaces… | Delete Space.
+  The header keeps its hover look while the menu is open. Cra leaves out Share Space… (Arc's servers).
+- [O] Rename Space…: the name turns into a selected text field and the ••• into a grey "Done" (10 pt semibold,
+  `Sidebar space header done button`, 32×26). Export … into Folder deletes the space afterwards
+  (`completeDeleteSpace`, "Space turned into folder"). Delete alert: "Delete your <name> Space?" / "This will
+  archive all the tabs and folders inside it."
+- [O] Change Space Icon…: an NSPopover (298 × 298 window, 272 pt content) under the icon, arrow up: Emoji | Icon
+  segmented (105 × 23) and a trash button; a 254 × 27 search field; an 8-wide grid on a 31 pt pitch opening on
+  the current emoji's row, the current emoji on a 27.5 pt tile; a hairline and 8 category glyphs. The Icon tab
+  has no search: 56 white glyphs, 7 rows of 8, a 29 pt hover tile.
+- [O] Set Profile ▸ New Profile…: Arc's own 450 × 426 dialog (#161C2F, ~24 pt corners) centred on the window,
+  which dims to about (25,25,25) at 65%: profile glyph, "Create a new Profile" (17.5 pt), the "Profiles make
+  your Spaces truly separate…" copy (14 pt, 18 pt lines), "What do you want to call this Profile?", a 49 pt
+  field (placeholder "Personal"), "Profiles are **not synced** between computers.", Cancel `ESC` / Next `↩`.
+- [O] Manage Spaces…: the Library on its Spaces page (`spaceManager`): one 240 pt card per space in its own
+  theme, 24 pt apart, 27 pt after the rail, 48 pt from the window's top and bottom; the icon, name and a brush
+  on a row 25 pt down, the pinned/Today list from 64 pt (no New Tab row), a move handle and ••• 21 pt above the
+  bottom; a 29 pt blue + 34 pt after the last card. The sidebar widens to fit (744.5 pt for two spaces).
+- [O] Edit Theme Color…: SpaceStyleEditor in a 382 × 534 window against the sidebar's edge at the window top
+  (card 355 × 503, 14 pt in): a 340 pt dotted pad with Auto/Light/Dark (sparkles/sun/moon, the chosen one on a
+  32 pt tile) and −/+, "Tap to pick a color for this space" while it has none; nine 24 pt swatches 29.5 pt apart
+  between arrows (#F1EAE5 #E69FBA #9E749B #E1686F #EF8C62 #F2D66D #73E59C #7FB8D6 #666786); a 224 × 15 pt wave
+  slider and a dotted dial.
+
 ### One space (Arc 1.171, static)
 - [O strings] Defaults key `showSpaceHeaderOnSingleUnnamedSpaces` (+ `…DidChange` action); the space context
   menu has "Show Space Header" / "Hide Space Header" ("Menu item to toggle space header visibility").
@@ -689,7 +729,31 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
   18.5 pt (favorites). Header cap tops 21.5 pt below it either way. Every pinned row takes 41 pt, the
   first one too; nothing pinned takes none. Line → first Today row 11.5 pt. Cra matches all eight
   combinations of header × pinned × favorites to the pixel (SpaceColumnView.place, SpaceListView.layoutRows).
-  Left: Arc's header title sits ~1 pt lower and reads slightly larger than Cra's.
+  Left: Arc's header title sits ~1 pt lower and reads slightly larger than Cra's (fixed 1 Nov: 13 pt semibold, header fill 36 pt).
+
+### Space header row (Arc 1.171, live, 1 Nov, issue #39)
+- [O] At rest: the space icon, then the title; nothing else. A space with an emoji shows it (the issue's
+  Arc screenshot had none, most likely a space without an icon). Hovered: the row fills (white 0.10 on
+  the dark JYSK theme), the icon is replaced by a down chevron in the same slot and a ••• button shows at
+  the right end. Collapsed: the chevron stays and points right, hovered or not; the icon comes back only
+  when the pinned tabs are expanded again. A click anywhere but ••• (title included) toggles the pinned
+  tabs; the chevron turns a quarter counter-clockwise (down → right) over ~0.12 s; the hover swap and the
+  fill have no visible fade (60 fps screen recording, variable frame rate).
+- [O] 2x window captures, sidebar-relative points: fill 8 pt in from both sidebar edges, 36 pt tall,
+  starting ~8 pt under the favorites tiles, circular corner radius ~12 pt. Icon/chevron centred on the
+  favicon column (25.75 pt); title text starts at 44.5 pt. ••• hover square 24 pt, radius ~6, 6 pt in
+  from the fill's right end, its own hover fill stacked on the row's. No tooltip on ••• after 2.8 s.
+- [O] Pixel fits against SF Symbols / system font: chevron = chevron.down 12.5 pt bold (SSE 1.96; 12 bold
+  4.18), ••• = ellipsis 13 pt semibold (SSE 0.07), title = system 13 pt semibold (SSE 0.02; Cra had
+  14 medium). Dark tones (white alpha over the sidebar): title 0.45, chevron and ••• 0.59.
+- [O] ••• opens the space menu at the pointer like a context menu: Change Space Icon…, Rename Space…,
+  Edit Theme Color…, Set Profile ▸ | New Folder, Live Folders ▸ | Share Space…, Export "<space>" into
+  Folder ▸ | Manage Spaces… | Delete Space. Cra's ••• opens its existing space menu (same as right-click).
+- [?] Not measured: light-theme header tones, a space without an icon, 1x rendering (no 1x display
+  attached), whether the fill needs the app active (one inactive-window frame showed chevron and •••
+  without the fill).
+- Cra: SpaceHeaderView matches all four states (rest, hover, collapsed, collapsed + hover) to within
+  1 px at 2x; the ••• square sits 0.5 pt off so its dots land on Arc's.
 
 ### DevTools docking, Arc's way (25 Oct)
 
@@ -1390,7 +1454,7 @@ the arm64 slice. [O] = observed, [I] = inferred.
     editor shows that destination blank. The payload only picks a profile.
 - [U] what several conditions in one rule mean (any vs all; the UI never creates them), the ⓘ help article URL
   (built at run time, `featuresForLinkRouting`), the empty-list state.
-- Cra: `Model/LinkRouting.swift` (Arc's matching above, checked against every observed case; first match wins; the
+- Cra: `Packages/CraCore/Sources/CraCore/LinkRouting.swift` (Arc's matching above, checked against every observed case; first match wins; the
   Google Meet route is seeded once), `AppSettings.linkRoutes` / `defaultLinkDestination` (the Little Window checkbox is a view of the
   default; old `openExternalLinksInLittleWindow` values migrate), `AppDelegate.openExternalURL`, Settings ▸ Tabs ▸
   Links ▸ "Air Traffic Control…" (`UI/Settings/AirTrafficControlView.swift`, Arc's geometry within 1 pt, 440 tall to
@@ -1735,6 +1799,15 @@ Theme palettes in a hand-built space can be borrowed; only the `background` styl
 - [O] Tab list scroller: AppKit overlay scroller (AXScrollBar, 17 pt track) shown while scrolling, then faded;
   the knob is 4 pt wide, 3 pt in from the sidebar edge, white 49 % on a dark theme, no track. Cra:
   `SidebarScroller`, 10 pt wide so it stays in the gutter right of the rows (knob on Arc's exact columns).
+- [O] Same list with "Show scroll bars: Always" (1 Nov 2026, Arc launched with `-AppleShowScrollBars Always`,
+  issue #48): Arc follows the system (its binary reads `preferredScrollerStyle`, never sets a style; own
+  `NoBackgroundScroller`) to a legacy scroller, always shown while the list overflows, no track. AX: a 10 pt
+  AXScrollBar, knob indicator = AppKit's legacy knob rect (3 pt in from the scroller's top and bottom, 237.5 pt
+  for 415 of 716). Pixels: the knob is 5 pt wide, 3 pt in from the sidebar edge, 1 pt inside its knob rect at
+  both ends, 134/132/141 over 14/10/28 (white 50 %, the same as AppKit's own dark legacy knob; its light one is
+  black 50 %). The rows give up 8 pt (selected fill's right end 8 → 16 pt from the edge, outline 349 → 341 wide).
+  Cra: no forced overlay (it hid the knob: AppKit keeps an overlay knob at alpha 0 while the system prefers
+  legacy), `SidebarScroller` draws that knob in legacy style and `SpaceListView.rowsWidth` drops 8 pt.
 - [O] Playing tab row: `speaker.wave.3` between favicon and title (17.5 pt wide, 11.5 tall, title 8 pt after
   it), white ~60 % on a dark theme (the glyph tone, not the title's colour).
 - [S] Now playing is Arc's `MediaControlsFeature` (ArcCore-free, in the Arc executable): SwiftUI `MiniPlayerView`s in
@@ -1774,3 +1847,122 @@ Theme palettes in a hand-built space can be borrowed; only the `background` styl
   rest (17.5 / 13 / 9 pt with 12 / 16 / 22 spaces); icon-less spaces are dots, small when squeezed. Cra
   (`SpaceDockView.cellWidths`) follows the widths and shrinks emoji in narrow cells; it has no icon-less spaces
   yet (imported ones get 🗂️).
+
+## Developer bar (Arc 1.170, 1 Nov 2026, issue #42, live window captures at 2x)
+
+Arc's toolbar module ContentPanel carries `ContentPanelTextField`/`ContentPanelTextView` (the in-place
+address field) and `Stripes`/`StripesConfig` (drawn in code; `StripeIcon` in Assets.car is the payment
+company's logo). Measured on example.com (a developer host) in the JYSK space, captures in Display P3,
+converted to sRGB where noted:
+
+- Height 40 pt (80 px) against 32 for the normal bar; a 1 pt rule along the bottom, white ~10% over the fill.
+- Fill: not the page's theme-color. JYSK's bar is P3 62/67/202 = sRGB 61/67/210, which is Arc's semantic
+  dark `focus` colour (0.294, 0.329, 1.021, α 0.8075, from StorableSidebar.json) over black. Cra derives
+  it from the accent (SpaceTheme.developerBarColor: OKLab L 0.552 at the sRGB chroma edge × 0.8075) and
+  lands at 44/72/206 for JYSK: Arc's palette hues drift from the base colour's (+5.6° for JYSK, +1.6° for
+  Victor), so one more space would be needed to model that.
+- Stripes: white ~2% bands at 45° running down to the right, 21 pt wide along the bar every 45 pt; at the
+  bar's top the first band starts 14.5 pt from its left edge.
+- Ink: icons and the lock P3 236/237/254 (Arc's foregroundPrimary), URL text the same antialiased.
+  Dividers P3 93/99/230 = foregroundSecondary (131/137/255) at ~45%.
+- Icon hover: a 28 × 28 pt rounded rect (radius ~5–6 pt), centred in the bar, white 8%. The URL has no hover.
+- Click on the URL: the full URL becomes editable in place (same monospaced text), all of it selected;
+  selection P3 111/117/251 (foregroundSecondary at ~60%), text 226/227/254, and the whole bar lifts by a
+  white ~9% veil while editing. One Esc left it editing (it may only revert the text); Cra ends the edit.
+- Arc's developer bar also has buttons Cra doesn't: Capture, Screenshot | DevTools, Network, Inspect |
+  extensions … Split View, with dividers between the groups.
+
+DevTools in Cra: Chrome picks the frontend URL (DevToolsClient::OnBeforeBrowse never sees the first
+navigation), so the dockable `can_dock=true` load now replaces it at the first OnLoadStart instead of
+after OnLoadEnd: open → page bounds 185–200 ms instead of 265–290 ms. A click inside DevTools makes its
+child window key; AppKit then spent the next toolbar click on making the main window key, so toolbar
+buttons accept first mouse while a child window is key. Clicks after the page had focus were not affected
+(real HID test).
+
+## Live sidebar blur (1 Nov 2026, issue #37)
+
+Arc's sidebar blur is `NSVisualEffectView` only (no `CABackdropLayer` in Arc's or ArcCore's strings). AppKit's
+behind-window backdrop layer, dumped from a test `NSVisualEffectView`: `windowServerAware` true, `groupName`
+`NSCGSWindowBehindWindowCaptureBackdropGroup`, `scale` 0.125, `allowsGroupBlending` false, filters sdrNormalize,
+gaussianBlur (radius 30), colorSaturate (2.4). A bare `CABackdropLayer` defaults to `windowServerAware` false, no
+group, `allowsGroupBlending` true. Without the window-server flags the blur is drawn only while the window
+redraws: a screen recording over scrolling text showed the text sharp in every frame of a still window (and
+blurred again for a moment after each hover), while `screencapture` stills always looked right. `ShellView` now
+sets the two flags; recordings stay blurred in every frame. Over solid backdrops (Display P3 captures, same
+pipeline) light vibrant themes are unchanged, solid themes are unchanged over black and 7 levels darker over
+white, closer to Arc's formula: at #4F7CAC, intensity 0.5, Arc predicts 147/163/184 over white, 0.1.23 measured
+153/168/188, now 146/161/181. Cra's solid sidebar still darkens ~12 levels from top to bottom in both builds
+where Arc's is flat [U].
+
+## The sidebar follows the active row (Arc 1.171, 1 Nov 2026, issue #47, offline Arc + AX row frames + 120 fps)
+
+- [S] Swift field names: the space list's view store has `isCommandBarNewTabPlaceholderActive` (next to
+  `isPulsingNewTabButton`); window state has `sidebarScrollToItemRequest` (`SidebarScrollToItemRequest`),
+  `isDismissingCommandBarViaNewTabSelection`, `mousedownSelectionRevertItem`. Tabs menu: "Reveal Tab in Sidebar"
+  (no shortcut). Arc's only setting here is `newTabsAtStart`; it has no "New Tab button above tabs".
+- [O] Offline Arc (fake home as in "One space") with Victor's sidebar plus 40 Today tabs; row frames sampled
+  over AX every 4 ms (`sidebarAllTabList` rows, 41 pt pitch, list viewport 899 pt), keys posted to Arc's pid.
+- [O] The New Tab row is the first row of Today, right under the divider.
+- [O] ⌘T: while the bar is open the New Tab row is drawn as the open row (selected fill, shadow, primary ink) and
+  the selected tab loses its fill; Escape gives it back. The list scrolls to the New Tab row only when it isn't
+  wholly in view: from the bottom of the list it ended exactly at the top edge of the viewport; with the row in
+  view at the bottom nothing moved (Arc's round ↓ jump button then sat over it, pointing at the selected tab).
+- [O] Whatever becomes the open row is brought into view the same way: the tab a commit opens, the tab Escape
+  goes back to, Next Tab (⌘⌥↓). As little as shows the whole row: a row above the viewport lands on its top edge,
+  one below on its bottom edge (41 pt scroll for a row just below). A row already in view never moves the list,
+  also when it sits under 41 pt from an edge. One commit scrolled 64 pt where 23 would have done [U].
+- [O] A tab inside a closed folder is not revealed (the folder row doesn't stand in): Escape left the list alone.
+- [O] Motion (120 fps recording of ⌘T from the bottom, ~1000 pt): most of the way in the first frame, then
+  steadily smaller steps, still after ~0.22 s; the New Tab row arrives already filled.
+- Cra: `SpaceListView.revealActiveRow` runs after every rebuild and scrolls when the active row's key changed
+  (`activeRowKey`: the active New Tab row, else the selected tab's or split's row), with SidebarListMetrics'
+  0.22 s snappy curve; `SidebarUIState.newTabPlaceholderActive` is set by `MainWindowController.openCommandBar`
+  for a new-tab bar (not ⌘L, not an empty split pane) and cleared when the bar closes, before a commit selects
+  its tab. Settings ▸ Tabs "Show the New Tab button above tabs" defaults on; settings saved by 0.1.15–0.1.23
+  (always off) move to on once (`newTabButtonDefaultMigrated`).
+
+## The page area before a page paints (Arc 1.171, 1 Nov 2026, issue #46, 90–120 fps app-only recordings)
+
+Test page: `html{background:#203040}` behind a 1.5 s busy-wait in `<head>`, so nothing paints for 1.5 s.
+macOS in Dark, Victor's JYSK space, View ▸ Appearance ("Websites, Easels, and Notes will use") on Automatic.
+
+| Case | Page area until the first paint | Toolbar until the page reports a colour |
+|---|---|---|
+| Switching between loaded tabs | none: the next page's frame comes straight after | the page's colour |
+| New tab or Little Arc, a page Arc has never shown | #000000 | #FFFFFF |
+| A tab restored unloaded after relaunch (Cra's slept tab) | #000000 | the page's last colour, remembered across the relaunch |
+| Same, Appearance set to Light | #FFFFFF | (not measured) |
+
+So the fill follows the appearance websites get (black or white, not Chromium's #121212 canvas), and Arc
+remembers a tab's toolbar colour but not its page colour. Cra 0.1.23 showed #FFFFFF in the page area and the
+toolbar for both loading cases (169 frames at 120 fps on the test page). Cra now fills the CEF view and the
+pane card with the canvas (CraBrowser.pageCanvasColor), saves the toolbar colour on the tab (TabData.themeColor)
+and seeds it into a woken or restored tab's runtime.
+
+CEF still draws the first page of a new renderer transparent (chromiumembedded/cef#3891): with a black
+canvas, an unstyled page (no background, no color-scheme) showed black text on black until its load ended
+(4 s with a slow image). The page now reports its background on every frame while it is parsed
+(kLoadingBackgroundProbe; frames wait for render-blocking stylesheets), so it turns white with its first paint.
+
+## Sidebar toggle and the command bar's leading glyph (Arc 1.171, 1 Nov 2026, issue #50, live captures at 2x)
+
+Victor's Arc (toolbar shown, full URLs on), window captures by id; Little Arc with keys posted to its pid for
+the command bar (posted keys do not reach the main window's ⌘L while Arc is in the background, and Arc's menus
+are disabled then).
+
+- [O] Sidebar toggle: the sidebar's title row always has it; the toolbar has one only while the sidebar is
+  hidden, floating included (then both show). Windowed: lights 20/43/66, toggle glyph 84–102 (centre 93.25,
+  y 23.75). Fullscreen (no lights): glyph 20–38.5 (centre 29.25). Floating panel: lights 25/48/71, toggle 98.25,
+  y 28.75 (the panel sits 5 pt in). Cra keeps the toggle 27 pt after its last light (its lights are 20/44/68)
+  and draws it at 20–38 in fullscreen; Cra's floating panel sits 8 pt in, so its header is 3 pt right of Arc's.
+- [O] Toolbar left group, sidebar shown: ← → ↻ centred 21/58/95 pt from the card edge (the sidebar is 347 pt wide in
+  this capture). Sidebar hidden: toggle ← → ↻ at 31.25/68/105/142.25 from the window edge, card 10 pt in, so
+  the first glyph is 21 pt from the card edge either way (the old "30 pt" figure was from the window edge).
+  Developer mode follows the same rule (Arc 1.168 above: toggle at 93 + ← → ↻⌄ in the title row, URL text 40 pt
+  from the card edge, i.e. no toggle in the bar).
+- [O] At rest the default toolbar keeps its link glyph before the URL, not the page's favicon.
+- [O] Command bar leading glyph = the highlighted row's icon: favicon when it has one (jira → Atlassian from
+  history, x.com → X via completion, youtube.com typed → YouTube), globe for a URL row without one
+  (example.org), magnifier for a search row ("hello world", "x", "youtulocalhost:3000"). ⌘L untouched or
+  emptied: the page's favicon (GitHub), a globe on a page without one (example.com). ⌘T empty: magnifier,
+  though its top row is a tab with a favicon. Cra: CommandBarGlyph; `info.circle` is gone.

@@ -495,6 +495,8 @@ enum CraMetrics {
     static let contentInset: CGFloat = 10
     static let contentCornerRadius: CGFloat = 6
     static let toolbarHeight: CGFloat = 32
+    /// Arc's developer-mode bar is taller (Arc 1.170 at 2x: 80 px against 64).
+    static let developerToolbarHeight: CGFloat = 40
     /// Traffic lights, sidebar toggle and nav buttons share this centre line.
     static let titleRowCenter: CGFloat = 24
     static let titleAreaHeight: CGFloat = 44

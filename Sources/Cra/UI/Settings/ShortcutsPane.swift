@@ -288,6 +288,7 @@ enum ShortcutDescriptions {
         "previousSpace": "Switch to the previous space.",
         "editSpace": "Change the space’s name, emoji and theme.",
         "deleteSpace": "Delete the current space.",
+        "manageSpaces": "Open the Library’s Spaces page: every space side by side, to reorder or edit them.",
         "pinTab": "Pin the tab or unpin it.",
         "nextTab": "Switch to the next tab.",
         "previousTab": "Switch to the previous tab.",

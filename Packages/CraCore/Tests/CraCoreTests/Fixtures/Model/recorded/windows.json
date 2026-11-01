@@ -1,0 +1,32 @@
+{
+  "collapsedPinnedSpaces" : [
+    "A0000000-0000-0000-0000-000000000002"
+  ],
+  "expandedFolders" : [
+    "D0000000-0000-0000-0000-000000000002"
+  ],
+  "littleWindowSize" : "{480, 640}",
+  "sidebarWidth" : 280,
+  "windows" : [
+    {
+      "focusedSpaceID" : "A0000000-0000-0000-0000-000000000001",
+      "frame" : "{{100, 100}, {1400, 880}}",
+      "id" : "F0000000-0000-0000-0000-000000000001",
+      "isIncognito" : false,
+      "selectedTabPerSpace" : [
+        "A0000000-0000-0000-0000-000000000001",
+        "D0000000-0000-0000-0000-000000000009"
+      ],
+      "sidebarVisible" : false
+    },
+    {
+      "focusedSpaceID" : "A0000000-0000-0000-0000-000000000002",
+      "id" : "F0000000-0000-0000-0000-000000000002",
+      "isIncognito" : false,
+      "selectedTabPerSpace" : [
+
+      ],
+      "sidebarVisible" : true
+    }
+  ]
+}

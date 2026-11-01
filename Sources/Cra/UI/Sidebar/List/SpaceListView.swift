@@ -29,7 +29,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         case liveStatus(LiveStatusModel)
         case placeholder(active: Bool)
         case divider(hasToday: Bool)
-        case newTab
+        case newTab(active: Bool)
     }
 
     struct Row {
@@ -80,6 +80,8 @@ final class SpaceListView: NSView, NSDraggingSource {
     private var scrolling = false
     private var scrollRest: Task<Void, Never>?
     private var lastRenaming: UUID?
+    /// The active row at the last build: a change scrolls the new one into view.
+    private var lastActive: RowKey?
     let autoscroller = DragAutoscroller()
     private static let all = NSHashTable<SpaceListView>.weakObjects()
 
@@ -91,6 +93,9 @@ final class SpaceListView: NSView, NSDraggingSource {
     static func refreshHover(for ui: SidebarUIState) {
         for l in all.allObjects where l.ui === ui { l.refreshHover() }
     }
+
+    /// Arc's Spaces page lists a space's tabs without the New Tab row.
+    var showsNewTab = true { didSet { if showsNewTab != oldValue { scheduleSync() } } }
 
     init(spaceID: UUID, store: SidebarStore, ui: SidebarUIState, actions: SidebarActions, favicons: FaviconCache) {
         self.spaceID = spaceID
@@ -115,6 +120,10 @@ final class SpaceListView: NSView, NSDraggingSource {
         scrollView.documentView = document
         scrollView.contentView.postsBoundsChangedNotifications = true
         NotificationCenter.default.addObserver(self, selector: #selector(scrolled), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
+        // A legacy scroller narrows the clip view when it appears or goes (rows added, the
+        // "Show scroll bars" setting, a mouse plugged in) without the list resizing.
+        scrollView.contentView.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(relayoutIfResized), name: NSView.frameDidChangeNotification, object: scrollView.contentView)
         addSubview(scrollView)
         for h in [topHairline, bottomHairline] {
             h.wantsLayer = true
@@ -148,14 +157,27 @@ final class SpaceListView: NSView, NSDraggingSource {
         scrollView.frame = bounds
         topHairline.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 1)
         bottomHairline.frame = NSRect(x: 0, y: bounds.height - 1, width: bounds.width, height: 1)
-        if bounds.width != laidOutWidth {
-            laidOutWidth = bounds.width
-            layoutRows()
-            placeViews(animated: false, fresh: [], gone: [])
-            materialize()
-        }
+        relayoutIfResized()
         updateHairlines(animated: false)
         updateJumpPill(animated: false)
+    }
+
+    /// A legacy scroller ("Show scroll bars: Always") takes its width from the clip view; the clip
+    /// view also rounds itself to pixels, so a fraction of a point less is still no scroller.
+    private var legacyScrollerShown: Bool {
+        let clip = scrollView.contentView.frame.width
+        return clip > 0 && bounds.width - clip > 1
+    }
+
+    /// Arc's rows give up 8 pt to a legacy scroller, none to an overlay one.
+    private var rowsWidth: CGFloat { legacyScrollerShown ? bounds.width - 8 : bounds.width }
+
+    @objc private func relayoutIfResized() {
+        guard rowsWidth != laidOutWidth else { return }
+        laidOutWidth = rowsWidth
+        layoutRows()
+        placeViews(animated: false, fresh: [], gone: [])
+        materialize()
     }
 
     // MARK: Model
@@ -194,6 +216,8 @@ final class SpaceListView: NSView, NSDraggingSource {
         let capturing = ui.capturingTabIDs
         let audible = ui.audibleTabIDs
         let refreshing = LiveFolderManager.shared.refreshing
+        // The ⌘T bar's New Tab row takes the selection's fill while it is open.
+        let placeholder = showsNewTab && ui.newTabPlaceholderActive && store.focusedSpaceID(window: window) == spaceID
         var out: [Row] = []
 
         func icon(_ key: String?) -> (NSImage?, Bool) {
@@ -221,7 +245,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         }
 
         func add(_ item: SidebarItem, depth: Int, pinned: Bool, parent: UUID, index: Int) {
-            var row = Row(key: .item(item.id), content: .newTab, decor: decor(item.id), itemID: item.id, parent: parent, index: index, depth: depth)
+            var row = Row(key: .item(item.id), content: .newTab(active: false), decor: decor(item.id), itemID: item.id, parent: parent, index: index, depth: depth)
             if item.isFolder {
                 let expanded = store.isExpanded(item.id)
                 let glyph = palette.folderColors(item.folderIcon)
@@ -251,7 +275,7 @@ final class SpaceListView: NSView, NSDraggingSource {
                     renameText: item.title ?? item.displayTitle, subtitle: Self.subtitle(tab, navigatedAway: navigatedAway),
                     icon: img, flipIcon: flip, githubMark: tab.liveItemURL != nil && tab.customIconKey == nil,
                     editing: renaming == item.id, selected: selected,
-                    highlighted: picks.isEmpty ? selected : picks.contains(item.id),
+                    highlighted: picks.isEmpty ? selected && !placeholder : picks.contains(item.id),
                     capturing: capturing.contains(item.id), audible: audible.contains(item.id), muted: tab.muted, unread: item.isUnread,
                     navigatedAway: navigatedAway,
                     closeGroup: picks.contains(item.id) && picks.count > 1 ? picks.count : 1,
@@ -263,9 +287,9 @@ final class SpaceListView: NSView, NSDraggingSource {
                     let (img, flip) = icon(c.tab?.iconKey)
                     return .init(id: c.id, title: c.displayTitle, icon: img, flipIcon: flip)
                 }
+                let selected = children.contains { store.isSelected($0.id, window: window) }
                 row.content = .split(SplitRowModel(
-                    id: item.id, depth: depth, today: !pinned,
-                    selected: children.contains { store.isSelected($0.id, window: window) },
+                    id: item.id, depth: depth, today: !pinned, selected: selected, highlighted: selected && !placeholder,
                     focusRing: focusID.map { f in children.contains { $0.id == f } } ?? false,
                     cells: cells))
                 out.append(row)
@@ -288,11 +312,11 @@ final class SpaceListView: NSView, NSDraggingSource {
         let todayKids = store.item(space.todayContainerID)?.children ?? []
         out.append(Row(key: .divider, content: .divider(hasToday: !todayKids.isEmpty)))
         let atTop = store.settings.newTabButtonAtTop
-        if atTop { out.append(Row(key: .newTab, content: .newTab)) }
+        if atTop && showsNewTab { out.append(Row(key: .newTab, content: .newTab(active: placeholder))) }
         for item in store.children(of: space.todayContainerID) {
             add(item, depth: 0, pinned: false, parent: space.todayContainerID, index: todayKids.firstIndex(of: item.id) ?? 0)
         }
-        if !atTop { out.append(Row(key: .newTab, content: .newTab)) }
+        if !atTop && showsNewTab { out.append(Row(key: .newTab, content: .newTab(active: placeholder))) }
         return Built(rows: out, pinnedCount: pinnedCount, palette: palette,
                      highlightPinned: section == .pinned && !pinnedItems.isEmpty, highlightToday: section == .today,
                      line: drop?.line)
@@ -341,6 +365,7 @@ final class SpaceListView: NSView, NSDraggingSource {
     }
 
     private func apply(_ b: Built) {
+        let wasSynced = synced
         palette = b.palette
         (scrollView.verticalScroller as? SidebarScroller)?.isDarkTheme = b.palette.isDark
         let newColors = SidebarColors(b.palette)
@@ -390,6 +415,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         if let h = hovered, h.superview == nil || gone.contains(h) { hovered = nil }
         refreshHover()
         scrollToRenaming()
+        if wasSynced { revealActiveRow() } else { lastActive = activeRowKey() }
         updateJumpPill(animated: synced)
     }
 
@@ -425,7 +451,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         case .liveStatus(let m): (v as? LiveStatusRowView)?.apply(m)
         case .placeholder(let active): (v as? PinPlaceholderRowView)?.apply(active: active)
         case .divider(let hasToday): (v as? DividerRowView)?.apply(hasToday: hasToday)
-        case .newTab: break
+        case .newTab(let active): (v as? NewTabRowView)?.apply(active: active)
         }
     }
 
@@ -475,7 +501,7 @@ final class SpaceListView: NSView, NSDraggingSource {
     /// 1 pt apart and 10 pt in from the sides. Arc 1.171 (31 Oct): every pinned row takes 41 pt,
     /// the first one too, so the first sits 1 pt lower than Today's; nothing pinned takes none.
     private func layoutRows() {
-        let width = bounds.width
+        let width = rowsWidth
         let inner = max(0, width - 20)
         var y: CGFloat = 3
         let pinnedTop = y
@@ -499,8 +525,9 @@ final class SpaceListView: NSView, NSDraggingSource {
         todayFrame = NSRect(x: 10, y: todayTop, width: inner, height: max(0, y - todayTop))
         contentBottom = y
         let height = max(y + 121, scrollView.contentView.bounds.height)
-        if document.frame.size != NSSize(width: width, height: height) {
-            document.frame = NSRect(x: 0, y: 0, width: width, height: height)
+        let docWidth = legacyScrollerShown ? scrollView.contentView.frame.width : width
+        if document.frame.size != NSSize(width: docWidth, height: height) {
+            document.frame = NSRect(x: 0, y: 0, width: docWidth, height: height)
         }
     }
 
@@ -687,6 +714,50 @@ final class SpaceListView: NSView, NSDraggingSource {
             ctx.duration = 0.25
             ctx.timingFunction = SidebarListMetrics.timing
             clip.animator().setBoundsOrigin(NSPoint(x: 0, y: y))
+        }
+    }
+
+    /// The row standing for what is open: the ⌘T bar's New Tab row, else the selected tab's
+    /// row or its split's. A tab in a closed folder has none (Arc leaves the list alone then).
+    private func activeRowKey() -> RowKey? {
+        for row in rows {
+            switch row.content {
+            case .newTab(active: true): return row.key
+            case .tab(let m) where m.selected: return row.key
+            case .split(let m) where m.selected: return row.key
+            default: continue
+            }
+        }
+        return nil
+    }
+
+    /// Arc 1.171 (1 Nov 2026) brings whatever becomes active into view, whatever made it so: ⌘T's
+    /// New Tab row, the tab a commit opens, the tab Escape goes back to, Next Tab, a tab picked
+    /// anywhere. It scrolls as little as shows the whole row, which lands on the top or bottom
+    /// edge, and not at all when the row already shows, so a scroll by hand stays put.
+    private func revealActiveRow() {
+        let key = activeRowKey()
+        defer { lastActive = key }
+        guard let key, key != lastActive, showsNewTab, ui.listDrop == nil,
+              let row = rows.first(where: { $0.key == key }) else { return }
+        let clip = scrollView.contentView
+        let visible = clip.bounds
+        guard visible.height > 0 else { return }
+        var y: CGFloat
+        if row.frame.minY < visible.minY { y = row.frame.minY } else if row.frame.maxY > visible.maxY { y = row.frame.maxY - visible.height } else { return }
+        y = min(max(0, y), max(0, document.frame.height - visible.height))
+        guard abs(y - visible.minY) > 0.5 else { return }
+        guard window != nil else {
+            clip.setBoundsOrigin(NSPoint(x: 0, y: y))
+            scrollView.reflectScrolledClipView(clip)
+            return
+        }
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = SidebarListMetrics.duration
+            ctx.timingFunction = SidebarListMetrics.timing
+            clip.animator().setBoundsOrigin(NSPoint(x: 0, y: y))
+        } completionHandler: { [weak self] in
+            MainActor.assumeIsolated { self?.scrollView.reflectScrolledClipView(clip) }
         }
     }
 
@@ -985,12 +1056,6 @@ enum SidebarListMetrics {
 final class SpaceListScrollView: NSScrollView {
     override class var isCompatibleWithResponsiveScrolling: Bool { false }
 
-    /// Always overlay, also with "Show scroll bars: Always": rows are laid out over the full width.
-    override var scrollerStyle: NSScroller.Style {
-        get { .overlay }
-        set { super.scrollerStyle = .overlay }
-    }
-
     override func scrollWheel(with event: NSEvent) {
         if event.hasPreciseScrollingDeltas, event.momentumPhase.isEmpty, abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) { return }
         super.scrollWheel(with: event)
@@ -1001,6 +1066,11 @@ final class SpaceListScrollView: NSScrollView {
 /// scrolling and faded out after, with no track and a 4 pt knob 3 pt in from the sidebar's
 /// edge, white at 49 % on dark themes. It is only as wide as the 10 pt gutter right of the rows,
 /// so it never covers a row's trailing buttons.
+/// With "Show scroll bars: Always" (or Automatic with a mouse) Arc follows the system to a legacy
+/// scroller instead (1 Nov 2026, issue #48): always shown, no track, AppKit's legacy knob (5 pt
+/// wide, 3 pt in, 1 pt inside its knob rect, 50 % white or black), and its rows give up 8 pt.
+/// Forcing overlay there hid the knob: AppKit never fades an overlay knob in while the system
+/// prefers legacy. The legacy knob snaps to pixels, as the sidebar can be any width.
 final class SidebarScroller: NSScroller {
     var isDarkTheme = true { didSet { if isDarkTheme != oldValue { needsDisplay = true } } }
 
@@ -1012,6 +1082,12 @@ final class SidebarScroller: NSScroller {
     override func drawKnob() {
         let knob = rect(for: .knob)
         guard knob.height > 0 else { return }
+        if scrollerStyle == .legacy {
+            let r = NSRect(x: bounds.maxX - 8, y: knob.minY + 1, width: 5, height: max(0, knob.height - 2))
+            NSColor(white: isDarkTheme ? 1 : 0, alpha: 0.5).setFill()
+            NSBezierPath(roundedRect: backingAlignedRect(r, options: .alignAllEdgesNearest), xRadius: 2.5, yRadius: 2.5).fill()
+            return
+        }
         let r = NSRect(x: bounds.maxX - 7, y: knob.minY + 2, width: 4, height: max(0, knob.height - 4))
         (isDarkTheme ? NSColor.white.withAlphaComponent(0.49) : NSColor.black.withAlphaComponent(0.3)).setFill()
         NSBezierPath(roundedRect: r, xRadius: 2, yRadius: 2).fill()

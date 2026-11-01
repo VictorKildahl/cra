@@ -10,6 +10,9 @@ final class SidebarUIState {
     /// The browser window this sidebar belongs to (its space and open tab, see WindowSession).
     @ObservationIgnored var windowID = UUID()
     var renamingID: UUID?
+    /// The ⌘T bar is open for a new tab: the focused space's New Tab row is the active row,
+    /// filled like the selected tab, which loses its fill (Arc: isCommandBarNewTabPlaceholderActive).
+    var newTabPlaceholderActive = false
     var draggingID: UUID?
     var hoveredTabID: UUID?
     /// Loading progress per tab (0...1), fed by the browser manager.
@@ -25,6 +28,8 @@ final class SidebarUIState {
     var canGoForward = false
     var isLoading = false
     var isCompact = false
+    /// The window is in macOS fullscreen (no traffic lights), not a page's element fullscreen.
+    var windowFullscreen = false
     /// Cra is the frontmost app (Arc darkens the sidebar header's glyphs then).
     var appActive = true
     /// Page theme colour of the visible tab ("#RRGGBB" or "").
@@ -187,6 +192,13 @@ final class SidebarActions {
     var goForward: () -> Void = {}
     var reload: () -> Void = {}
     var editSpace: (Space?) -> Void = { _ in }
+    /// Arc's space menu: the icon picker under the header, the theme editor, a new profile for
+    /// the space, the Library's Spaces page, and deleting this space (not the focused one).
+    var changeSpaceIcon: (Space, NSView) -> Void = { _, _ in }
+    var editSpaceTheme: (Space) -> Void = { _ in }
+    var newProfile: (UUID) -> Void = { _ in }
+    var manageSpaces: () -> Void = {}
+    var deleteSpace: (Space) -> Void = { _ in }
     var toggleSidebar: () -> Void = {}
     var toggleLibrary: () -> Void = {}
     /// The Library in the sidebar: open it on a page, leave it, restore an archived tab from it.
@@ -213,6 +225,8 @@ final class SidebarActions {
     var runExtension: (String) -> Void = { _ in }
     /// Toolbar Extensions button: the extensions menu, under the pointer.
     var showExtensionsMenu: () -> Void = {}
+    /// The developer bar's address field: a typed URL or search, in the selected tab.
+    var loadTyped: (String) -> Void = { _ in }
 }
 
 private struct SidebarActionsKey: EnvironmentKey {

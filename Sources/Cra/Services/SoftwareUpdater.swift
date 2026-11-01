@@ -19,6 +19,11 @@ final class SoftwareUpdater: NSObject {
         var build: String
         var notesHTML: String?
 
+        init(version: String, build: String) {
+            self.version = version
+            self.build = build
+        }
+
         init(_ item: SUAppcastItem) {
             version = item.displayVersionString
             build = item.versionString
@@ -47,6 +52,8 @@ final class SoftwareUpdater: NSObject {
     /// The first launch after an update: "Cra Updated!" with See What's New.
     private(set) var updatedTo: String?
     func debugUpdated(_ v: String?) { updatedTo = v }
+    /// Shows the "An update is ready!" banner for `version` (screenshots, cra://debug?bannerReady=).
+    func debugReady(_ version: String?) { readyRelease = version.map { Release(version: $0, build: $0) } }
     /// The close button on a banner hides it until the next launch (Arc counts these in
     /// autoUpdateBannerDismissalCount).
     var bannerDismissed = false
@@ -76,7 +83,7 @@ final class SoftwareUpdater: NSObject {
     @ObservationIgnored private var choiceReply: ((SPUUserUpdateChoice) -> Void)?
     @ObservationIgnored private var cancellation: (() -> Void)?
     @ObservationIgnored private var acknowledgement: (() -> Void)?
-    @ObservationIgnored private var autoRestartTimer: Timer?
+    @ObservationIgnored private var autoRestartTimer: ScheduledWork?
     @ObservationIgnored private var inactiveSince: Date?
 
     private enum Keys {
@@ -191,6 +198,15 @@ final class SoftwareUpdater: NSObject {
         }
     }
 
+    static let sponsorsURL = "https://github.com/sponsors/VictorKildahl"
+
+    /// The updated banner's "Sponsor Cra" row (Arc's "Gift Arc").
+    func openSponsors() {
+        guard let app else { return }
+        app.store.createTab(url: Self.sponsorsURL, select: true)
+        app.main.showWindow(nil)
+    }
+
     func openReleaseNotes() {
         updatedTo = nil
         guard let app else { return }
@@ -225,9 +241,9 @@ final class SoftwareUpdater: NSObject {
     /// duration-in-seconds); Cra waits until the user is away: Cra in the background for 10
     /// minutes and no input for 2, or no input at all for 30.
     private func scheduleAutoRestart() {
-        autoRestartTimer?.invalidate()
-        autoRestartTimer = Timer.scheduledTimer(withTimeInterval: max(1, min(60, quickRestart ?? 60)), repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.considerAutoRestart() }
+        autoRestartTimer?.cancel()
+        autoRestartTimer = (app?.composition.clock ?? LiveScheduler.shared).every(max(1, min(60, quickRestart ?? 60))) { [weak self] in
+            self?.considerAutoRestart()
         }
     }
 

@@ -1,8 +1,9 @@
 import AppKit
+import CraCEF
 
 // Unrelated shell services required to typecheck the complete production manager.
 // The tab store deliberately remains observable so stale callbacks can be asserted.
-struct TestTab { var url: String; var savedTitle = ""; var muted = false; var faviconKey: String? }
+struct TestTab { var url: String; var savedTitle = ""; var muted = false; var faviconKey: String?; var themeColor: String? }
 struct TestItem {
     let id: UUID
     var tab: TestTab?
@@ -25,6 +26,7 @@ enum TestRoot { case today }
         if let url { items[id]?.tab?.url = url }
         if let title { items[id]?.tab?.savedTitle = title }
     }
+    func setThemeColor(_ id: UUID, _ hex: String) { items[id]?.tab?.themeColor = hex }
     func recordVisit(url: String, title: String) {}
     func selectTab(_ id: UUID, window: UUID?) {}
     func markUnread(_ id: UUID, _ unread: Bool) {}
@@ -36,8 +38,8 @@ enum TestRoot { case today }
         return item
     }
 }
+enum FaviconKey { static func key(for url: String) -> String? { url } }
 final class FaviconCache {
-    static func key(for url: String) -> String? { url }
     func store(_ image: NSImage, forKey: String, persist: Bool) {}
 }
 enum TabSwitcherMetrics { static let thumbnail = NSSize(width: 320, height: 200) }

@@ -1,0 +1,14 @@
+# Thirty background pages put to sleep: the timed pass no unit test reaches with a real page,
+# run here with a one-second threshold (cra://debug?sleepTabs) instead of waiting an hour.
+budget rss=800 stalls50=70   # each new tab stalls ~100 ms today (Nov 2026)
+cra://open?url=${PAGE}?n=first
+wait 3
+helpers baseline
+pace 0.3
+repeat 30 cra://open?url=${PAGE}?n=${i}
+cra://action/nextTab
+wait 4
+cra://debug?sleepTabs=1
+wait 4
+expect-log tab sleep unloads
+helpers settle 2

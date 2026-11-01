@@ -1,0 +1,30 @@
+diff --git a/chrome/browser/devtools/protocol/extensions_handler.cc b/chrome/browser/devtools/protocol/extensions_handler.cc
+index 08de746ed0..8bdbf16224 100644
+--- a/chrome/browser/devtools/protocol/extensions_handler.cc
++++ b/chrome/browser/devtools/protocol/extensions_handler.cc
+@@ -187,12 +187,25 @@ protocol::DispatchResponse ExtensionsHandler::TriggerAction(
+ 
+   BrowserWindowInterface* browser =
+       extensions::browser_window_util::GetBrowserForTabContents(*web_contents);
++  // Cra: answer with an error instead of crashing. A disabled or uninstalled
++  // extension has no toolbar action, and a tab need not be in a browser with
++  // an extensions container.
++  if (browser == nullptr) {
++    return protocol::Response::ServerError("Tab target has no browser.");
++  }
+ 
+   ExtensionsContainer* extension_container =
+       ExtensionsContainer::From(*browser);
++  if (extension_container == nullptr) {
++    return protocol::Response::ServerError("Browser has no extensions toolbar.");
++  }
+ 
+   ToolbarActionViewModel* extension_model =
+       extension_container->GetActionForId(extension_id);
++  if (extension_model == nullptr) {
++    return protocol::Response::ServerError(
++        "No enabled extension with the provided id.");
++  }
+ 
+   extension_model->ExecuteUserAction(
+       ExtensionActionViewModel::InvocationSource::kCdp);

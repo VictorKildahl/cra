@@ -1,7 +1,7 @@
 import AppKit
 import Observation
 
-/// Favicons keyed by host. Chromium hands us PNG bytes through the bridge;
+/// Favicons keyed by host (FaviconKey). Chromium hands us PNG bytes through the bridge;
 /// we keep them in memory and on disk so the sidebar is populated on launch
 /// before any tab has loaded (Arc: SidebarItemsFaviconCache).
 @MainActor
@@ -10,10 +10,8 @@ final class FaviconCache {
     private(set) var images: [String: NSImage] = [:]
     private var attemptedDiskLoad: Set<String> = []
 
-    static func key(for urlString: String) -> String? {
-        guard let host = URL(string: urlString)?.host, !host.isEmpty else { return nil }
-        return host.lowercased()
-    }
+    /// FaviconKey.key(for:), for code written before it moved to CraCore (#51).
+    static func key(for urlString: String) -> String? { FaviconKey.key(for: urlString) }
 
     func image(forKey key: String?) -> NSImage? {
         guard let key else { return nil }
@@ -29,7 +27,7 @@ final class FaviconCache {
         return nil
     }
 
-    func image(for urlString: String) -> NSImage? { image(forKey: Self.key(for: urlString)) }
+    func image(for urlString: String) -> NSImage? { image(forKey: FaviconKey.key(for: urlString)) }
 
     private var dominant: [String: String] = [:]
 

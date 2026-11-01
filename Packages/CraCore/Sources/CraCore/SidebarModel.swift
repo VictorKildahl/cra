@@ -5,14 +5,14 @@ import Foundation
 // "today" container, tabs/folders are items in a tree keyed by id with explicit
 // child ordering. Unlike Arc, favorites are not shared between spaces.
 
-typealias ItemID = UUID
+public typealias ItemID = UUID
 
-enum ContainerKind: Codable, Equatable, Hashable {
+public enum ContainerKind: Codable, Equatable, Hashable {
     case favorites(spaceID: UUID)
     case pinned(spaceID: UUID)
     case today(spaceID: UUID)
 
-    var spaceID: UUID {
+    public var spaceID: UUID {
         switch self {
         case .favorites(let id), .pinned(let id), .today(let id): return id
         }
@@ -20,12 +20,12 @@ enum ContainerKind: Codable, Equatable, Hashable {
 
     /// Stands in for the space of the favorites container every space shared
     /// before favorites became per space; SidebarStore splits it up on load.
-    static let sharedFavoritesSpaceID = UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+    public static let sharedFavoritesSpaceID = UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
 
     private enum CodingKeys: String, CodingKey { case favorites, pinned, today }
     private enum SpaceKeys: String, CodingKey { case spaceID }
 
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         guard let key = c.allKeys.first else {
             throw DecodingError.dataCorrupted(.init(codingPath: c.codingPath, debugDescription: "No container kind"))
@@ -38,7 +38,7 @@ enum ContainerKind: Codable, Equatable, Hashable {
         }
     }
 
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         let key: CodingKeys
         switch self {
@@ -51,33 +51,36 @@ enum ContainerKind: Codable, Equatable, Hashable {
     }
 }
 
-struct TabData: Codable, Equatable {
+public struct TabData: Codable, Equatable {
     /// Where the tab currently is. Restored on relaunch.
-    var url: String
+    public var url: String
     /// The "home" of the tab. For pinned tabs this is what reset returns to;
     /// for today tabs it is just the URL the tab was created with.
-    var savedURL: String
+    public var savedURL: String
     /// Last known page title.
-    var savedTitle: String
-    var muted: Bool = false
-    var timeLastActiveAt: Date?
-    var activeTabBeforeCreationID: UUID?
+    public var savedTitle: String
+    public var muted: Bool = false
+    public var timeLastActiveAt: Date?
+    public var activeTabBeforeCreationID: UUID?
     /// Host used as favicon cache key.
-    var faviconKey: String?
-    /// FaviconCache key of an image the user picked; wins over the site's favicon.
-    var customIconKey: String?
+    public var faviconKey: String?
+    /// Favicon cache key of an image the user picked; wins over the site's favicon.
+    public var customIconKey: String?
     /// Favorite tile background as "#RRGGBB". nil is the theme's tile fill.
-    var tileColor: String?
+    public var tileColor: String?
     /// The live folder item this tab shows (Arc: liveItemID.url), e.g. a pull request URL.
-    var liveItemURL: String?
+    public var liveItemURL: String?
     /// Line under the title that the live folder writes (a pull request's author).
-    var liveSubtitle: String?
+    public var liveSubtitle: String?
     /// When its pull request left the live folder's results; the tab goes after a grace period.
-    var liveGoneAt: Date?
+    public var liveGoneAt: Date?
+    /// The page's toolbar colour as last reported (TabRuntime.themeColor). A slept or restored
+    /// tab's toolbar keeps it while the page loads again, as Arc's does.
+    public var themeColor: String?
 
-    var iconKey: String? { customIconKey ?? faviconKey }
+    public var iconKey: String? { customIconKey ?? faviconKey }
 
-    init(url: String, title: String = "") {
+    public init(url: String, title: String = "") {
         self.url = url
         self.savedURL = url
         self.savedTitle = title
@@ -87,15 +90,15 @@ struct TabData: Codable, Equatable {
 
 /// Arc's SidebarSplitViewData: a split is a sidebar item whose children are
 /// the pane tabs (in pane order). Widths are stored as factors per child.
-struct SplitData: Codable, Equatable {
-    var widthFactors: [UUID: Double] = [:]
-    var orientation: SplitOrientation = .horizontal
+public struct SplitData: Codable, Equatable {
+    public var widthFactors: [UUID: Double] = [:]
+    public var orientation: SplitOrientation = .horizontal
     /// The pane that has keyboard focus (Arc: focusItemID).
-    var focusTabID: UUID?
-    var timeLastActiveAt: Date?
+    public var focusTabID: UUID?
+    public var timeLastActiveAt: Date?
 
-    init() {}
-    init(from decoder: Decoder) throws {
+    public init() {}
+    public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         widthFactors = try c.decodeIfPresent([UUID: Double].self, forKey: .widthFactors) ?? [:]
         orientation = try c.decodeIfPresent(SplitOrientation.self, forKey: .orientation) ?? .horizontal
@@ -104,7 +107,7 @@ struct SplitData: Codable, Equatable {
     }
 }
 
-enum SplitOrientation: String, Codable {
+public enum SplitOrientation: String, Codable {
     /// Panes side by side (Arc's default).
     case horizontal
     /// Panes stacked top to bottom.
@@ -112,53 +115,66 @@ enum SplitOrientation: String, Codable {
 }
 
 /// A fixed folder glyph colour, for when the theme's own doesn't read well.
-enum FolderIconStyle: String, Codable, CaseIterable {
+public enum FolderIconStyle: String, Codable, CaseIterable {
     case white, black
 }
 
-enum ItemData: Codable, Equatable {
+public enum ItemData: Codable, Equatable {
     case tab(TabData)
     case folder
     case container(ContainerKind)
     case split(SplitData)
 }
 
-struct SidebarItem: Identifiable, Codable, Equatable {
-    var id: UUID
-    var parentID: UUID?
+public struct SidebarItem: Identifiable, Codable, Equatable {
+    public var id: UUID
+    public var parentID: UUID?
     /// Custom title set by renaming. nil means "use the page title".
-    var title: String?
-    var children: [UUID]
-    var isUnread: Bool
-    var createdAt: Date
-    var data: ItemData
+    public var title: String?
+    public var children: [UUID]
+    public var isUnread: Bool
+    public var createdAt: Date
+    public var data: ItemData
     /// A folder's glyph colour; nil is Auto (it follows the theme).
-    var folderIcon: FolderIconStyle? = nil
+    public var folderIcon: FolderIconStyle? = nil
     /// Set on a folder that fills itself (Arc: list.automaticLiveFolderData).
-    var liveFolder: LiveFolderData? = nil
+    public var liveFolder: LiveFolderData? = nil
 
-    var tab: TabData? {
+    public init(id: UUID, parentID: UUID?, title: String?, children: [UUID], isUnread: Bool, createdAt: Date, data: ItemData,
+                folderIcon: FolderIconStyle? = nil, liveFolder: LiveFolderData? = nil) {
+        self.id = id
+        self.parentID = parentID
+        self.title = title
+        self.children = children
+        self.isUnread = isUnread
+        self.createdAt = createdAt
+        self.data = data
+        self.folderIcon = folderIcon
+        self.liveFolder = liveFolder
+    }
+
+    public var tab: TabData? {
         if case .tab(let t) = data { return t }
         return nil
     }
-    var isTab: Bool { tab != nil }
-    var isFolder: Bool { if case .folder = data { return true }; return false }
-    var isLiveFolder: Bool { isFolder && liveFolder != nil }
-    var split: SplitData? {
+    public var isTab: Bool { tab != nil }
+    public var isFolder: Bool { if case .folder = data { return true }; return false }
+    public var isLiveFolder: Bool { isFolder && liveFolder != nil }
+    public var split: SplitData? {
         if case .split(let s) = data { return s }
         return nil
     }
-    var isSplit: Bool { split != nil }
+    public var isSplit: Bool { split != nil }
     /// A tab with no page yet: Arc's empty split pane ("Search or Enter URL…").
-    var isEmptyTab: Bool { tab.map { $0.url.isEmpty || $0.url == "about:blank" } ?? false }
-    var container: ContainerKind? {
+    public var isEmptyTab: Bool { tab.map { $0.url.isEmpty || $0.url == "about:blank" } ?? false }
+    public var container: ContainerKind? {
         if case .container(let c) = data { return c }
         return nil
     }
 
     /// What the sidebar shows: the custom name wins over the page title,
     /// which wins over the host.
-    var displayTitle: String {
+    public var displayTitle: String {
         if let t = title, !t.isEmpty { return t }
         if let tab {
             if isEmptyTab { return "New Tab" }
@@ -170,142 +186,93 @@ struct SidebarItem: Identifiable, Codable, Equatable {
         return "Untitled"
     }
 
-    static func split(parent: UUID?) -> SidebarItem {
+    public static func split(parent: UUID?) -> SidebarItem {
         SidebarItem(id: UUID(), parentID: parent, title: nil, children: [], isUnread: false,
                     createdAt: Date(), data: .split(SplitData()))
     }
 
-    static func tab(_ url: String, title: String = "", parent: UUID?) -> SidebarItem {
+    public static func tab(_ url: String, title: String = "", parent: UUID?) -> SidebarItem {
         SidebarItem(id: UUID(), parentID: parent, title: nil, children: [], isUnread: false,
                     createdAt: Date(), data: .tab(TabData(url: url, title: title)))
     }
 
-    static func folder(_ name: String, parent: UUID?) -> SidebarItem {
+    public static func folder(_ name: String, parent: UUID?) -> SidebarItem {
         SidebarItem(id: UUID(), parentID: parent, title: name, children: [], isUnread: false,
                     createdAt: Date(), data: .folder)
     }
 
-    static func container(_ kind: ContainerKind, id: UUID = UUID()) -> SidebarItem {
+    public static func container(_ kind: ContainerKind, id: UUID = UUID()) -> SidebarItem {
         SidebarItem(id: id, parentID: nil, title: nil, children: [], isUnread: false,
                     createdAt: Date(), data: .container(kind))
     }
 }
 
-struct SpaceTheme: Codable, Equatable {
-    /// One or two hex colors blended into a gradient (Arc: blendedGradient.baseColors).
-    var colors: [String]
-    /// 0...1, how saturated the gradient is rendered (Arc: intensityFactor).
-    var intensity: Double
-    /// 0...1 grain overlay (Arc: noiseFactor).
-    var noise: Double
-    /// "auto" | "light" | "dark" (Arc: contentOverBackgroundAppearance).
-    var appearance: String
-    /// Arc's isVibrant: the gradient is laid over the blurred desktop at
-    /// `intensity` opacity instead of being painted opaque.
-    var vibrant: Bool = false
-    /// The theme's raw first colour (Arc's base colour); drives the toolbar band.
-    var accent: String? = nil
-    /// Arc's one-colour theme (blendedSingleColor): a flat fill laid over a dark, slightly
-    /// see-through material, at `intensity` (SpacePalette.solidAlpha), not a gradient.
-    var solid: Bool = false
-
-    init(colors: [String], intensity: Double, noise: Double, appearance: String, vibrant: Bool = false, accent: String? = nil,
-         solid: Bool = false) {
-        self.colors = colors
-        self.intensity = intensity
-        self.noise = noise
-        self.appearance = appearance
-        self.vibrant = vibrant
-        self.accent = accent
-        self.solid = solid
-    }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        colors = try c.decodeIfPresent([String].self, forKey: .colors) ?? ["#1C242B", "#3A3660"]
-        intensity = try c.decodeIfPresent(Double.self, forKey: .intensity) ?? 0.8
-        noise = try c.decodeIfPresent(Double.self, forKey: .noise) ?? 0.15
-        appearance = try c.decodeIfPresent(String.self, forKey: .appearance) ?? "auto"
-        vibrant = try c.decodeIfPresent(Bool.self, forKey: .vibrant) ?? false
-        accent = try c.decodeIfPresent(String.self, forKey: .accent)
-        solid = try c.decodeIfPresent(Bool.self, forKey: .solid) ?? false
-    }
-
-    /// Dark first: colors borrowed from Victor's other projects (GhostWriter
-    /// ink + brand purple, Spook's "wall" browns, Phantom's greys, moss, gold,
-    /// ember), then a few lighter Arc-style gradients.
-    static let presets: [SpaceTheme] = [
-        SpaceTheme(colors: ["#1C242B", "#3A3660"], intensity: 0.85, noise: 0.18, appearance: "dark"),  // Ink
-        SpaceTheme(colors: ["#1C1712", "#2E2620"], intensity: 0.9, noise: 0.22, appearance: "dark"),   // Wall
-        SpaceTheme(colors: ["#181818", "#262626"], intensity: 0.9, noise: 0.12, appearance: "dark"),   // Phantom
-        SpaceTheme(colors: ["#0F2420", "#2F6F5E"], intensity: 0.75, noise: 0.18, appearance: "dark"),  // Moss
-        SpaceTheme(colors: ["#2A1A14", "#A2481D"], intensity: 0.7, noise: 0.2, appearance: "dark"),    // Ember
-        SpaceTheme(colors: ["#2A2310", "#7A5C0F"], intensity: 0.75, noise: 0.2, appearance: "dark"),   // Gold
-        SpaceTheme(colors: ["#241C3A", "#6944AE"], intensity: 0.75, noise: 0.18, appearance: "dark"),  // Brand
-        SpaceTheme(colors: ["#F8D558", "#A4F554"], intensity: 0.45, noise: 0.25, appearance: "light"),
-        SpaceTheme(colors: ["#C7CAFF", "#FFE5E5"], intensity: 0.5, noise: 0.1, appearance: "light"),
-        SpaceTheme(colors: ["#F4F1EA", "#E6DCC8"], intensity: 0.6, noise: 0.15, appearance: "light"),  // Parchment
-    ]
-
-    /// Incognito windows: near-black with a cool violet cast, so they never pass for a space.
-    static let incognito = SpaceTheme(colors: ["#141318", "#2B2638"], intensity: 0.9, noise: 0.14, appearance: "dark")
-
-    var isDark: Bool {
-        if appearance == "dark" { return true }
-        if appearance == "light" { return false }
-        // auto: judge by the first color's luminance
-        return (colors.first.flatMap(HexColor.luminance) ?? 1) < 0.45
-    }
-}
-
-enum HexColor {
-    static func components(_ hex: String) -> (r: Double, g: Double, b: Double)? {
-        var s = hex.trimmingCharacters(in: .whitespaces)
-        if s.hasPrefix("#") { s.removeFirst() }
-        guard s.count == 6, let v = UInt32(s, radix: 16) else { return nil }
-        return (Double((v >> 16) & 0xff) / 255, Double((v >> 8) & 0xff) / 255, Double(v & 0xff) / 255)
-    }
-    static func luminance(_ hex: String) -> Double? {
-        guard let c = components(hex) else { return nil }
-        return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
-    }
-}
-
-struct Space: Identifiable, Codable, Equatable {
-    var id: UUID
-    var title: String
-    var emoji: String
-    var theme: SpaceTheme
-    var favoritesContainerID: UUID
-    var pinnedContainerID: UUID
-    var todayContainerID: UUID
-    var createdAt: Date
+public struct Space: Identifiable, Codable, Equatable {
+    public var id: UUID
+    public var title: String
+    public var emoji: String
+    public var theme: SpaceTheme
+    public var favoritesContainerID: UUID
+    public var pinnedContainerID: UUID
+    public var todayContainerID: UUID
+    public var createdAt: Date
     /// The profile its pages load in (Arc: SpaceModel.profile); nil is the Default profile.
-    var profileID: UUID?
+    public var profileID: UUID?
+    /// An SF Symbol from the Icon tab of Arc's icon picker, shown instead of `emoji` (then empty).
+    public var symbol: String? = nil
+
+    public init(id: UUID, title: String, emoji: String, theme: SpaceTheme, favoritesContainerID: UUID, pinnedContainerID: UUID,
+                todayContainerID: UUID, createdAt: Date, profileID: UUID? = nil, symbol: String? = nil) {
+        self.id = id
+        self.title = title
+        self.emoji = emoji
+        self.theme = theme
+        self.favoritesContainerID = favoritesContainerID
+        self.pinnedContainerID = pinnedContainerID
+        self.todayContainerID = todayContainerID
+        self.createdAt = createdAt
+        self.profileID = profileID
+        self.symbol = symbol
+    }
 }
 
 /// Arc's Profiles: logins, cookies, site storage and Chromium's own data kept apart
 /// from the Default profile. Any number of spaces can use one.
-struct BrowserProfile: Identifiable, Codable, Equatable {
-    var id: UUID
-    var name: String
+public struct BrowserProfile: Identifiable, Codable, Equatable {
+    public var id: UUID
+    public var name: String
+
+    public init(id: UUID, name: String) {
+        self.id = id
+        self.name = name
+    }
 
     /// Chromium's folder for it, next to Default under AppPaths.chromiumCache.
-    var directoryName: String { "Profile \(id.uuidString)" }
+    public var directoryName: String { "Profile \(id.uuidString)" }
 }
 
-struct SidebarDocument: Codable {
-    var version: Int = 1
-    var spaceOrder: [UUID]
-    var spaces: [Space]
+public struct SidebarDocument: Codable, Equatable {
+    public var version: Int = 1
+    public var spaceOrder: [UUID]
+    public var spaces: [Space]
     /// The favorites container all spaces shared in older files. Only read, to
     /// split it up between the spaces; new files leave it out.
-    var favoritesContainerID: UUID?
-    var items: [SidebarItem]
+    public var favoritesContainerID: UUID?
+    public var items: [SidebarItem]
     /// Profiles besides Default (missing in files from before profiles).
-    var profiles: [BrowserProfile]?
+    public var profiles: [BrowserProfile]?
 
-    static func fresh() -> SidebarDocument {
+    public init(version: Int = 1, spaceOrder: [UUID], spaces: [Space], favoritesContainerID: UUID? = nil, items: [SidebarItem],
+                profiles: [BrowserProfile]? = nil) {
+        self.version = version
+        self.spaceOrder = spaceOrder
+        self.spaces = spaces
+        self.favoritesContainerID = favoritesContainerID
+        self.items = items
+        self.profiles = profiles
+    }
+
+    public static func fresh() -> SidebarDocument {
         let spaceID = UUID()
         let fav = SidebarItem.container(.favorites(spaceID: spaceID))
         let pinned = SidebarItem.container(.pinned(spaceID: spaceID))
@@ -316,30 +283,42 @@ struct SidebarDocument: Codable {
     }
 }
 
-enum ArchiveReason: String, Codable {
+public enum ArchiveReason: String, Codable {
     case manual, auto, clear, spaceDeleted
 }
 
-struct ArchivedItem: Codable, Identifiable, Equatable {
-    var id: UUID { item.id }
-    var archivedAt: Date
-    var reason: ArchiveReason
-    var sourceSpaceID: UUID?
-    var wasPinned: Bool
-    var item: SidebarItem
+public struct ArchivedItem: Codable, Identifiable, Equatable {
+    public var id: UUID { item.id }
+    public var archivedAt: Date
+    public var reason: ArchiveReason
+    public var sourceSpaceID: UUID?
+    public var wasPinned: Bool
+    public var item: SidebarItem
     /// Closed from a Little Window (Arc: archive source `littleArc`); never
     /// had a place in the sidebar, so restoring puts it in the focused space.
-    var fromLittleWindow: Bool? = nil
+    public var fromLittleWindow: Bool? = nil
     /// The folder it was closed out of (live folders too) and its place there:
     /// restoring puts it back while that folder is still in the space.
-    var sourceFolderID: UUID? = nil
-    var sourceIndex: Int? = nil
+    public var sourceFolderID: UUID? = nil
+    public var sourceIndex: Int? = nil
+
+    public init(archivedAt: Date, reason: ArchiveReason, sourceSpaceID: UUID?, wasPinned: Bool, item: SidebarItem,
+                fromLittleWindow: Bool? = nil, sourceFolderID: UUID? = nil, sourceIndex: Int? = nil) {
+        self.archivedAt = archivedAt
+        self.reason = reason
+        self.sourceSpaceID = sourceSpaceID
+        self.wasPinned = wasPinned
+        self.item = item
+        self.fromLittleWindow = fromLittleWindow
+        self.sourceFolderID = sourceFolderID
+        self.sourceIndex = sourceIndex
+    }
 }
 
-enum AutoArchiveThreshold: String, Codable, CaseIterable, Identifiable {
+public enum AutoArchiveThreshold: String, Codable, CaseIterable, Identifiable {
     case twelveHours, twentyFourHours, sevenDays, thirtyDays
-    var id: String { rawValue }
-    var seconds: TimeInterval {
+    public var id: String { rawValue }
+    public var seconds: TimeInterval {
         switch self {
         case .twelveHours: return 12 * 3600
         case .twentyFourHours: return 24 * 3600
@@ -347,7 +326,7 @@ enum AutoArchiveThreshold: String, Codable, CaseIterable, Identifiable {
         case .thirtyDays: return 30 * 86400
         }
     }
-    var label: String {
+    public var label: String {
         switch self {
         case .twelveHours: return "12 hours"
         case .twentyFourHours: return "24 hours"
@@ -357,10 +336,10 @@ enum AutoArchiveThreshold: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-enum TabSleepThreshold: String, Codable, CaseIterable, Identifiable {
+public enum TabSleepThreshold: String, Codable, CaseIterable, Identifiable {
     case fifteenMinutes, oneHour, fourHours, twelveHours
-    var id: String { rawValue }
-    var seconds: TimeInterval {
+    public var id: String { rawValue }
+    public var seconds: TimeInterval {
         switch self {
         case .fifteenMinutes: return 15 * 60
         case .oneHour: return 3600
@@ -368,7 +347,7 @@ enum TabSleepThreshold: String, Codable, CaseIterable, Identifiable {
         case .twelveHours: return 12 * 3600
         }
     }
-    var label: String {
+    public var label: String {
         switch self {
         case .fifteenMinutes: return "15 minutes"
         case .oneHour: return "1 hour"
@@ -378,10 +357,10 @@ enum TabSleepThreshold: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-enum SearchEngine: String, Codable, CaseIterable, Identifiable {
+public enum SearchEngine: String, Codable, CaseIterable, Identifiable {
     case google, duckduckgo, bing, kagi
-    var id: String { rawValue }
-    var label: String {
+    public var id: String { rawValue }
+    public var label: String {
         switch self {
         case .google: return "Google"
         case .duckduckgo: return "DuckDuckGo"
@@ -389,7 +368,7 @@ enum SearchEngine: String, Codable, CaseIterable, Identifiable {
         case .kagi: return "Kagi"
         }
     }
-    func searchURL(_ query: String) -> String {
+    public func searchURL(_ query: String) -> String {
         let q = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)?
             .replacingOccurrences(of: "&", with: "%26") ?? query
         switch self {
@@ -400,7 +379,7 @@ enum SearchEngine: String, Codable, CaseIterable, Identifiable {
         }
     }
     /// Each engine's OpenSearch suggest endpoint, for the command bar's search suggestions.
-    func suggestURL(_ query: String) -> URL? {
+    public func suggestURL(_ query: String) -> URL? {
         guard let q = query.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else { return nil }
         switch self {
         case .google: return URL(string: "https://www.google.com/complete/search?client=chrome&ie=utf-8&oe=utf-8&q=\(q)")
@@ -411,135 +390,177 @@ enum SearchEngine: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-struct AppSettings: Codable, Equatable {
-    var autoArchive: AutoArchiveThreshold = .twelveHours
-    var searchEngine: SearchEngine = .google
-    var newTabsAtTop: Bool = true
+public struct AppSettings: Codable, Equatable {
+    public var autoArchive: AutoArchiveThreshold = .twelveHours
+    public var searchEngine: SearchEngine = .google
+    public var newTabsAtTop: Bool = true
     /// Tabs ▸ "Show the New Tab button above tabs": the + New Tab row leads Today
-    /// instead of following its last tab.
-    var newTabButtonAtTop: Bool = false
-    var showStatusBar: Bool = true
+    /// instead of following its last tab. On like Arc, which keeps it under the divider.
+    public var newTabButtonAtTop: Bool = true
+    /// Cra 0.1.15–0.1.23 saved the New Tab row below Today for everyone; settings without
+    /// this mark move it back above, where Arc has it, once.
+    public var newTabButtonDefaultMigrated: Bool = true
+    public var showStatusBar: Bool = true
     /// Arc's toolbar above the page (URL, copy link, DevTools). ⇧⌘D toggles. Off by
     /// default like Arc, which keeps the URL at the top of the sidebar.
-    var showToolbar: Bool = false
+    public var showToolbar: Bool = false
     /// Cra 0.1.0 saved `showToolbar` as on for everyone; settings without this mark
     /// take the toolbar from Arc's own preference once (off without Arc).
-    var toolbarDefaultMigrated: Bool = true
-    var hasSeenImportPrompt: Bool = false
+    public var toolbarDefaultMigrated: Bool = true
+    public var hasSeenImportPrompt: Bool = false
     /// Arc's per-site Developer Mode (⌃D): the toolbar shows the full URL in
     /// monospace with the developer icons, and the nav buttons move to the sidebar.
-    var developerHosts: Set<String> = []
+    public var developerHosts: Set<String> = []
     /// Host pages in Chrome-style windows: Chrome extensions and Chrome's own
     /// DevTools docking. Needs a restart to change.
-    var chromeEngine: Bool = true
+    public var chromeEngine: Bool = true
     /// Air Traffic Control's "Default": where links from other apps open when no route
     /// matches. Arc's "Links from other apps open in Little Arc" switch is this set to
     /// Little Arc (on) or the most recent space (off).
-    var defaultLinkDestination: LinkDestination = .littleWindow
+    public var defaultLinkDestination: LinkDestination = .littleWindow
     /// Air Traffic Control routes, checked in order (LinkRouting.swift). Starts with Arc's
     /// Google Meet route.
-    var linkRoutes: [LinkRoute] = [.googleMeet]
+    public var linkRoutes: [LinkRoute] = [.googleMeet]
     /// Arc's "Open a Peek window when clicking on links to other sites" (modalEnabled): only
     /// links clicked in favorites and pinned tabs.
-    var peekLinksToOtherSites: Bool = true
+    public var peekLinksToOtherSites: Bool = true
     /// Cra's addition (issue #12): links to other sites peek from every tab, not only
     /// favorites and pinned tabs.
-    var peekInEveryTab: Bool = false
+    public var peekInEveryTab: Bool = false
     /// Arc's "Open a Peek window when clicking on links with Shift held"
     /// (shiftClickModalEntryPointEnabled).
-    var peekOnShiftClick: Bool = true
+    public var peekOnShiftClick: Bool = true
     /// Arc's Previews ▸ Folders (folderPreviewEnabled): resting the pointer on a closed folder
     /// lists its tabs, most recent first, with a search field.
-    var folderPreviews: Bool = true
+    public var folderPreviews: Bool = true
     /// Arc: "Enable Picture in Picture when you leave a video tab".
-    var autoPictureInPicture: Bool = true
+    public var autoPictureInPicture: Bool = true
     /// Dia's onboarding privacy choice "Block third-party ads and trackers": requests
     /// to listed ad and tracker domains are cancelled unless they are first-party.
-    var blockAdsAndTrackers: Bool = true
+    public var blockAdsAndTrackers: Bool = true
     /// Dia's Tabs ▸ "Haptic feedback when reordering tabs" (tabReorderingHapticsEnabled).
-    var hapticFeedbackOnReorder: Bool = true
+    public var hapticFeedbackOnReorder: Bool = true
     /// Dia's Advanced ▸ "Warn before quitting" (shouldWarnBeforeQuitting, off by default).
-    var warnBeforeQuitting: Bool = false
+    public var warnBeforeQuitting: Bool = false
     /// Dia's Tabs ▸ "Clean up tabs I haven't used in:" checkbox; `autoArchive` keeps the
     /// threshold while this is off.
-    var autoArchiveEnabled: Bool = true
+    public var autoArchiveEnabled: Bool = true
     /// Tabs ▸ "Sleep tabs I haven't looked at in:": a page hidden that long closes and
     /// loads again when shown (BrowserManager.sleepIdleTabs). Off by default.
-    var tabSleepEnabled: Bool = false
-    var tabSleep: TabSleepThreshold = .oneHour
+    public var tabSleepEnabled: Bool = false
+    public var tabSleep: TabSleepThreshold = .oneHour
     /// Privacy ▸ "Always use secure connections": Chrome's HTTPS-Only Mode.
-    var httpsOnly: Bool = false
+    public var httpsOnly: Bool = false
     /// Arc's searchSuggestEnabled: the command bar asks the search engine for suggestions
     /// as you type and fills its rows with them.
-    var searchSuggestions: Bool = true
+    public var searchSuggestions: Bool = true
     /// Arc's showSpaceHeaderOnSingleUnnamedSpaces: with only one space, its header (and the
     /// dock's lone space icon) can be hidden, for people who don't use spaces.
-    var showSpaceHeaderOnSingleSpace: Bool = true
+    public var showSpaceHeaderOnSingleSpace: Bool = true
     /// GitHub #24, not in Arc: the page fills the window with no margin and no rounded
     /// card, like a traditional browser. Off by default.
-    var edgeToEdgeContent: Bool = false
+    public var edgeToEdgeContent: Bool = false
 
-    init() {}
+    public init() {}
 
-    static func siteKey(for url: String) -> String? {
+    public static func siteKey(for url: String) -> String? {
         URL(string: url)?.host?.lowercased().replacingOccurrences(of: "www.", with: "")
     }
     /// Arc's "Links from other apps open in Little Arc" (URLs handed over by other apps
     /// open in a small disposable window instead of a sidebar tab).
-    var openExternalLinksInLittleWindow: Bool {
+    public var openExternalLinksInLittleWindow: Bool {
         get { defaultLinkDestination == .littleWindow }
         set { defaultLinkDestination = newValue ? .littleWindow : .mostRecentSpace }
     }
-    func isDeveloperMode(url: String) -> Bool { AppSettings.siteKey(for: url).map(developerHosts.contains) ?? false }
-    mutating func toggleDeveloperMode(url: String) {
+    public func isDeveloperMode(url: String) -> Bool { AppSettings.siteKey(for: url).map(developerHosts.contains) ?? false }
+    public mutating func toggleDeveloperMode(url: String) {
         guard let k = AppSettings.siteKey(for: url) else { return }
         if developerHosts.contains(k) { developerHosts.remove(k) } else { developerHosts.insert(k) }
+    }
+    /// Settings saved without `toolbarDefaultMigrated` take the toolbar from Arc's View ▸
+    /// Show Toolbar (nil without Arc: off), once. Arc's preference is read only then.
+    public mutating func migrateToolbarDefault(arcShowsToolbar: @autoclosure () -> Bool?) {
+        guard !toolbarDefaultMigrated else { return }
+        showToolbar = arcShowsToolbar() ?? false
+        toolbarDefaultMigrated = true
     }
 }
 
 /// One browser window. Each window shows its own space and remembers its own
 /// open tab per space; spaces and tabs themselves are shared (Arc).
-struct WindowSession: Codable, Equatable, Identifiable {
-    var id = UUID()
-    var focusedSpaceID: UUID?
-    var selectedTabPerSpace: [UUID: UUID] = [:]
-    var frame: String?
-    var sidebarVisible = true
+public struct WindowSession: Codable, Equatable, Identifiable {
+    public var id = UUID()
+    public var focusedSpaceID: UUID?
+    public var selectedTabPerSpace: [UUID: UUID] = [:]
+    public var frame: String?
+    public var sidebarVisible = true
     /// Incognito windows show a space of their own, never saved (SidebarStore.addIncognitoWindow).
-    var isIncognito = false
+    public var isIncognito = false
+
+    public init(id: UUID = UUID(), focusedSpaceID: UUID? = nil, selectedTabPerSpace: [UUID: UUID] = [:], frame: String? = nil,
+                sidebarVisible: Bool = true, isIncognito: Bool = false) {
+        self.id = id
+        self.focusedSpaceID = focusedSpaceID
+        self.selectedTabPerSpace = selectedTabPerSpace
+        self.frame = frame
+        self.sidebarVisible = sidebarVisible
+        self.isIncognito = isIncognito
+    }
 }
 
-struct WindowPrefs: Codable, Equatable {
-    var sidebarWidth: Double = 328
-    var expandedFolders: Set<UUID> = []
-    var collapsedPinnedSpaces: Set<UUID> = []
+public struct WindowPrefs: Codable, Equatable {
+    public var sidebarWidth: Double = 328
+    public var expandedFolders: Set<UUID> = []
+    public var collapsedPinnedSpaces: Set<UUID> = []
     /// Open browser windows, restored at launch. Never empty.
-    var windows: [WindowSession] = [WindowSession()]
+    public var windows: [WindowSession] = [WindowSession()]
 
     /// What is written to windows.json: incognito windows are never restored.
-    var withoutIncognito: WindowPrefs {
+    public var withoutIncognito: WindowPrefs {
         var p = self
         p.windows.removeAll { $0.isIncognito }
         return p
     }
     /// Last Little Window size (Arc: LittleBrowserWindow_size).
-    var littleWindowSize: String?
+    public var littleWindowSize: String?
+
+    public init(sidebarWidth: Double = 328, expandedFolders: Set<UUID> = [], collapsedPinnedSpaces: Set<UUID> = [],
+                windows: [WindowSession] = [WindowSession()], littleWindowSize: String? = nil) {
+        self.sidebarWidth = sidebarWidth
+        self.expandedFolders = expandedFolders
+        self.collapsedPinnedSpaces = collapsedPinnedSpaces
+        self.windows = windows
+        self.littleWindowSize = littleWindowSize
+    }
 }
 
-struct HistoryEntry: Codable, Equatable {
-    var url: String
-    var title: String
-    var lastVisit: Date
-    var visitCount: Int
+public struct HistoryEntry: Codable, Equatable {
+    public var url: String
+    public var title: String
+    public var lastVisit: Date
+    public var visitCount: Int
+
+    public init(url: String, title: String, lastVisit: Date, visitCount: Int) {
+        self.url = url
+        self.title = title
+        self.lastVisit = lastVisit
+        self.visitCount = visitCount
+    }
 }
 
 /// Signals the command bar learns from, mirroring Arc's
 /// StorableCommandBarAdditionalRanking.json (recentlySwitchedToTabs,
 /// queriesToSelectedArchetype, typeTravelUsage).
-struct RankingData: Codable, Equatable {
-    var recentlySwitchedToTabs: [UUID: [Date]] = [:]
-    var queriesToSelected: [String: String] = [:]
-    var commandUsage: [String: Int] = [:]
+public struct RankingData: Codable, Equatable {
+    public var recentlySwitchedToTabs: [UUID: [Date]] = [:]
+    public var queriesToSelected: [String: String] = [:]
+    public var commandUsage: [String: Int] = [:]
+
+    public init(recentlySwitchedToTabs: [UUID: [Date]] = [:], queriesToSelected: [String: String] = [:], commandUsage: [String: Int] = [:]) {
+        self.recentlySwitchedToTabs = recentlySwitchedToTabs
+        self.queriesToSelected = queriesToSelected
+        self.commandUsage = commandUsage
+    }
 }
 
 
@@ -548,17 +569,19 @@ extension AppSettings {
     /// Keys earlier versions wrote; read once and replaced.
     private enum LegacyKeys: String, CodingKey { case openExternalLinksInLittleWindow }
 
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         autoArchive = try c.decodeIfPresent(AutoArchiveThreshold.self, forKey: .autoArchive) ?? .twelveHours
         searchEngine = try c.decodeIfPresent(SearchEngine.self, forKey: .searchEngine) ?? .google
         newTabsAtTop = try c.decodeIfPresent(Bool.self, forKey: .newTabsAtTop) ?? true
-        newTabButtonAtTop = try c.decodeIfPresent(Bool.self, forKey: .newTabButtonAtTop) ?? false
+        if try c.decodeIfPresent(Bool.self, forKey: .newTabButtonDefaultMigrated) == true {
+            newTabButtonAtTop = try c.decodeIfPresent(Bool.self, forKey: .newTabButtonAtTop) ?? true
+        }
         showStatusBar = try c.decodeIfPresent(Bool.self, forKey: .showStatusBar) ?? true
-        if try c.decodeIfPresent(Bool.self, forKey: .toolbarDefaultMigrated) == true {
+        // Without the mark, `showToolbar` waits for migrateToolbarDefault(arcShowsToolbar:).
+        toolbarDefaultMigrated = try c.decodeIfPresent(Bool.self, forKey: .toolbarDefaultMigrated) == true
+        if toolbarDefaultMigrated {
             showToolbar = try c.decodeIfPresent(Bool.self, forKey: .showToolbar) ?? false
-        } else {
-            showToolbar = ArcImporter.showsToolbar ?? false
         }
         hasSeenImportPrompt = try c.decodeIfPresent(Bool.self, forKey: .hasSeenImportPrompt) ?? false
         developerHosts = try c.decodeIfPresent(Set<String>.self, forKey: .developerHosts) ?? []
@@ -593,7 +616,7 @@ extension WindowPrefs {
     /// Single-window builds kept the window's state at the top level.
     private enum LegacyKeys: String, CodingKey { case sidebarVisible, focusedSpaceID, selectedTabPerSpace, windowFrame }
 
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         sidebarWidth = try c.decodeIfPresent(Double.self, forKey: .sidebarWidth) ?? 328
         expandedFolders = try c.decodeIfPresent(Set<UUID>.self, forKey: .expandedFolders) ?? []
@@ -612,7 +635,7 @@ extension WindowPrefs {
 }
 
 extension WindowSession {
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         focusedSpaceID = try c.decodeIfPresent(UUID.self, forKey: .focusedSpaceID)
@@ -623,7 +646,7 @@ extension WindowSession {
 }
 
 extension Space {
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
         title = try c.decode(String.self, forKey: .title)
@@ -635,11 +658,12 @@ extension Space {
         todayContainerID = try c.decode(UUID.self, forKey: .todayContainerID)
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         profileID = try c.decodeIfPresent(UUID.self, forKey: .profileID)
+        symbol = try c.decodeIfPresent(String.self, forKey: .symbol)
     }
 }
 
 extension TabData {
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         url = try c.decodeIfPresent(String.self, forKey: .url) ?? ""
         savedURL = try c.decodeIfPresent(String.self, forKey: .savedURL) ?? url
@@ -653,5 +677,6 @@ extension TabData {
         liveItemURL = try c.decodeIfPresent(String.self, forKey: .liveItemURL)
         liveSubtitle = try c.decodeIfPresent(String.self, forKey: .liveSubtitle)
         liveGoneAt = try c.decodeIfPresent(Date.self, forKey: .liveGoneAt)
+        themeColor = try c.decodeIfPresent(String.self, forKey: .themeColor)
     }
 }

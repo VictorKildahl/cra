@@ -191,8 +191,10 @@ static CraClient* AsCraClient(CefClient* c) {
 - (void)hostWindowCreated:(NSWindow*)window;
 - (void)hostPopupBrowserView:(CefRefPtr<CefBrowserView>)view;
 @property (nonatomic, strong, nullable) NSWindow* hostWindow;
-/// The page's background as last reported by kBackgroundProbe (ARGB, white until then).
+/// The page's background as last reported by kBackgroundProbe (ARGB, 0 until then).
 @property (nonatomic) cef_color_t pageBackgroundColor;
+/// What the view shows under the page: its reported background, else the canvas.
+@property (nonatomic, readonly) cef_color_t pageFill;
 @end
 
 // MARK: - CEF app
@@ -378,6 +380,7 @@ static bool g_incognitoReady = false;
 
 /// Chrome's "Always use secure connections" (Settings ▸ Privacy in Cra).
 static void ApplyHttpsOnly(CefRefPtr<CefRequestContext> context) {
+    if (!context) return;
     CefRefPtr<CefValue> value = CefValue::Create();
     value->SetBool(g_httpsOnly);
     CefString error;
@@ -392,6 +395,35 @@ static void ApplyProfilePreferences(CefRefPtr<CefRequestContext> context) {
     ApplyHttpsOnly(context);
 }
 
+// Cra's extension list (ExtensionStore) reads extensions.settings. On disk it lags ~10 s
+// behind an install (Chromium's pref writer batches), so a "Load unpacked" extension was
+// missing from the Site Control Center (GitHub #43); the live pref and its changes are not.
+static void (^g_extensionSettingsHandler)(void) = nil;
+static bool g_extensionSettingsChangePending = false;
+
+class ExtensionSettingsObserver : public CefPreferenceObserver {
+public:
+    void OnPreferenceChanged(const CefString& name) override {
+        // An install changes the pref several times in a row: one reload for all of them.
+        if (!g_extensionSettingsHandler || g_extensionSettingsChangePending || g_quitting) return;
+        g_extensionSettingsChangePending = true;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            g_extensionSettingsChangePending = false;
+            if (g_extensionSettingsHandler) g_extensionSettingsHandler();
+        });
+    }
+private:
+    IMPLEMENT_REFCOUNTING(ExtensionSettingsObserver);
+};
+static std::vector<CefRefPtr<CefRegistration>> g_extensionSettingsObservers;
+
+static void ObserveExtensionSettings(CefRefPtr<CefRequestContext> context) {
+    static CefRefPtr<ExtensionSettingsObserver> observer = new ExtensionSettingsObserver();
+    if (CefRefPtr<CefRegistration> r = context->AddPreferenceObserver("extensions.settings", observer)) {
+        g_extensionSettingsObservers.push_back(r);
+    }
+}
+
 /// Profiles other than the global Default one get the same preferences once they load,
 /// then create the browsers that waited for them.
 class ProfileContextHandler : public CefRequestContextHandler {
@@ -400,6 +432,7 @@ public:
     void OnRequestContextInitialized(CefRefPtr<CefRequestContext> context) override {
         ApplyProfilePreferences(context);
         if (!path_) { g_incognitoReady = true; return; }
+        ObserveExtensionSettings(context);
         if (!g_readyProfiles) g_readyProfiles = [NSMutableSet set];
         [g_readyProfiles addObject:path_];
         NSArray<CraBrowser*>* waiting = [g_waitingForProfile[path_] copy];
@@ -541,6 +574,7 @@ public:
     void OnContextInitialized() override {
         CEF_REQUIRE_UI_THREAD();
         ApplyProfilePreferences(CefRequestContext::GetGlobalContext());
+        ObserveExtensionSettings(CefRequestContext::GetGlobalContext());
         g_contextInitialized = true;
         NSArray<CraBrowser*>* pending = [g_pendingCreation copy];
         [g_pendingCreation removeAllObjects];
@@ -555,9 +589,17 @@ private:
 
 // MARK: - Favicon download
 
+/// The icon URL a browser last got a favicon from, shared with its downloads.
+class FaviconState : public virtual CefBaseRefCounted {
+public:
+    std::string downloaded;
+    IMPLEMENT_REFCOUNTING(FaviconState);
+};
+
 class FaviconCallback : public CefDownloadImageCallback {
 public:
-    explicit FaviconCallback(CraBrowser* owner) : owner_(owner) {}
+    FaviconCallback(CraBrowser* owner, CefRefPtr<FaviconState> state, std::string url)
+        : owner_(owner), state_(state), url_(std::move(url)) {}
 
     void OnDownloadImageFinished(const CefString& image_url, int http_status_code,
                                  CefRefPtr<CefImage> image) override {
@@ -573,11 +615,14 @@ public:
         NSData* data = [NSData dataWithBytes:bytes.data() length:n];
         NSImage* img = [[NSImage alloc] initWithData:data];
         if (!img) return;
+        state_->downloaded = url_;
         [owner.delegate browser:owner didLoadFavicon:img forURL:NSStringFromCef(image_url)];
     }
 
 private:
     __weak CraBrowser* owner_;
+    CefRefPtr<FaviconState> state_;
+    std::string url_;
     IMPLEMENT_REFCOUNTING(FaviconCallback);
 };
 
@@ -706,7 +751,12 @@ public:
         return true;
     }
     void OnLoadStart(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, TransitionType transition_type) override {
-        if (frame->IsMain()) CraDevToolsLog(@"OnLoadStart %s", frame->GetURL().ToString().c_str());
+        if (!frame->IsMain()) return;
+        CraDevToolsLog(@"OnLoadStart %s", frame->GetURL().ToString().c_str());
+        // Chrome picks the frontend URL (OnBeforeBrowse never sees it), so the earliest
+        // point to swap in can_dock=true is the first load's start: the frontend app then
+        // loads once instead of twice (GitHub #42).
+        if (host_) MakeDockable(browser, frame);
     }
     void OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int httpStatusCode) override {
         if (!frame->IsMain()) return;
@@ -714,21 +764,31 @@ public:
         if (host_) Prepare(browser, frame);
     }
 
-    // Docked mode: make a Chrome-style frontend dockable (one reload), then hook it.
+    static bool IsFrontend(const std::string& url) {
+        // Only the main frontend; helper pages it opens (device_mode_emulation_frame.html
+        // when undocked) must not report dock state or page bounds.
+        return url.rfind("devtools://", 0) == 0
+            && (url.find("/devtools_app.html") != std::string::npos || url.find("/inspector.html") != std::string::npos);
+    }
+
+    // A Chrome-style frontend opens undockable; load it again with can_dock=true (once).
+    bool MakeDockable(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame) {
+        std::string url = frame->GetURL().ToString();
+        if (reloaded_ || !IsFrontend(url) || !browser->GetHost()->HasView() || url.find("can_dock=") != std::string::npos) return false;
+        reloaded_ = true;
+        std::string docked = url + (url.find('?') == std::string::npos ? "?" : "&") + "can_dock=true";
+        CraDevToolsLog(@"reloading as dockable: %s", docked.c_str());
+        frame->LoadURL(docked);
+        return true;
+    }
+
+    // Docked mode: make a Chrome-style frontend dockable, then hook it.
     // Alloy frontends (can_dock=false, no close button) only get the close button.
     void Prepare(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame) {
         std::string url = frame->GetURL().ToString();
-        if (url.rfind("devtools://", 0) != 0) return;
-        // Only the main frontend; helper pages it opens (device_mode_emulation_frame.html
-        // when undocked) must not report dock state or page bounds.
-        if (url.find("/devtools_app.html") == std::string::npos && url.find("/inspector.html") == std::string::npos) return;
-        if (browser->GetHost()->HasView() && url.find("can_dock=") == std::string::npos && !reloaded_) {
-            reloaded_ = true;
-            std::string docked = url + (url.find('?') == std::string::npos ? "?" : "&") + "can_dock=true";
-            CraDevToolsLog(@"reloading as dockable: %s", docked.c_str());
-            frame->LoadURL(docked);
-            return;
-        }
+        if (!IsFrontend(url) || MakeDockable(browser, frame)) return;
+        // The undockable load that MakeDockable replaced still reports its end.
+        if (reloaded_ && url.find("can_dock=") == std::string::npos) return;
         frame->ExecuteJavaScript(kCraDevToolsHooks, frame->GetURL(), 0);
     }
 
@@ -804,6 +864,17 @@ private:
     IMPLEMENT_REFCOUNTING(DevToolsClient);
 };
 
+/// The page area before a page reports its own background: Arc fills it black while websites
+/// are dark and white while they are light (measured on Arc 1.171, also for a tab it restores
+/// unloaded). Pages follow the app's appearance; Cra sets no colour scheme of its own.
+static BOOL PagesAreDark() {
+    return [[NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:@[NSAppearanceNameAqua, NSAppearanceNameDarkAqua]]
+        isEqualToString:NSAppearanceNameDarkAqua];
+}
+static cef_color_t CraCanvasColor() {
+    return PagesAreDark() ? CefColorSetARGB(255, 0, 0, 0) : CefColorSetARGB(255, 255, 255, 255);
+}
+
 // "rgb(r, g, b)" / "rgba(r, g, b, a)" from getComputedStyle as "#RRGGBB"; "" when
 // unparsable or mostly transparent.
 static NSString* HexFromCSSColor(const std::string& css) {
@@ -816,17 +887,33 @@ static NSString* HexFromCSSColor(const std::string& css) {
 
 // What the page paints behind its content: the root's background, else the body's
 // (CSS propagates it to the canvas), else the canvas colour of the page's color
-// scheme. Answers through OnConsoleMessage ("__cra_bg:"); installed once per
-// document, re-run on load, after late stylesheets and when the OS appearance flips.
+// scheme ('' before the document has a root).
+#define CRA_PAGE_BACKGROUND_FN \
+    "function(){var r=document.documentElement;if(!r)return '';" \
+    "var bg=function(e){var c=e?getComputedStyle(e).backgroundColor:'';return c&&c!=='transparent'&&c!=='rgba(0, 0, 0, 0)'?c:'';};" \
+    "var c=bg(r)||bg(document.body);" \
+    "if(!c){var d=document.createElement('div');d.style.color='Canvas';r.appendChild(d);c=getComputedStyle(d).color;d.remove();}" \
+    "return c;}"
+
+// Answers through OnConsoleMessage ("__cra_bg:"); installed once per document, re-run on
+// load, after late stylesheets and when the OS appearance flips.
 static const char kBackgroundProbe[] =
-    "(function(){if(!window.__craBg){window.__craBg=function(){try{"
-    "var bg=function(e){var c=e?getComputedStyle(e).backgroundColor:'';return c&&c!=='transparent'&&c!=='rgba(0, 0, 0, 0)'?c:'';};"
-    "var c=bg(document.documentElement)||bg(document.body);"
-    "if(!c){var d=document.createElement('div');d.style.color='Canvas';document.documentElement.appendChild(d);c=getComputedStyle(d).color;d.remove();}"
-    "console.log('__cra_bg:'+c);}catch(e){}};"
+    "(function(){if(!window.__craBg){var color=" CRA_PAGE_BACKGROUND_FN ";"
+    "window.__craBg=function(){try{var c=color();if(c)console.log('__cra_bg:'+c);}catch(e){}};"
     "matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){setTimeout(window.__craBg,50);});"
     "setTimeout(window.__craBg,1500);}"
     "window.__craBg();})();";
+
+// While a page is parsed, the same colour on every frame (only changes are sent). CEF draws a
+// new renderer's first page transparent (chromiumembedded/cef#3891), so the view's canvas showed
+// through a page with no background of its own until its load ended: black text on black while
+// a slow image loaded. Frames wait for render-blocking stylesheets, so the first answer already
+// has the page's styles; the probe above takes over once the document is parsed.
+static const char kLoadingBackgroundProbe[] =
+    "(function(){var color=" CRA_PAGE_BACKGROUND_FN ",last='',n=0;"
+    "function tick(){try{var c=color();if(c&&c!==last){last=c;console.log('__cra_bg:'+c);}}catch(e){}"
+    "if(document.readyState==='loading'&&++n<600)requestAnimationFrame(tick);}"
+    "requestAnimationFrame(tick);})();";
 
 // MARK: - Content blocking and app links
 
@@ -958,11 +1045,15 @@ public:
     }
 
     void OnLoadStart(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, TransitionType transition_type) override {
-        // The last page's colour must not show under the next one while it loads.
+        // The last page's colour must not show under the next one while it loads: the canvas
+        // does until this one reports its own.
         CraBrowser* o = owner_;
         if (!o || !frame->IsMain()) return;
-        o.pageBackgroundColor = CefColorSetARGB(255, 255, 255, 255);
-        if (CefRefPtr<CefBrowserView> view = CefBrowserView::GetForBrowser(browser)) view->SetBackgroundColor(o.pageBackgroundColor);
+        o.pageBackgroundColor = 0;
+        if (CefRefPtr<CefBrowserView> view = CefBrowserView::GetForBrowser(browser)) view->SetBackgroundColor(o.pageFill);
+        if ([o.delegate respondsToSelector:@selector(browser:didReportBackgroundColor:)])
+            [o.delegate browser:o didReportBackgroundColor:@""];
+        frame->ExecuteJavaScript(kLoadingBackgroundProbe, frame->GetURL(), 0);
     }
 
     void OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int httpStatusCode) override {
@@ -1046,7 +1137,12 @@ public:
 
     void OnLoadError(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, ErrorCode errorCode,
                      const CefString& errorText, const CefString& failedUrl) override {
-        if ((int)errorCode == -3 /* ERR_ABORTED */ || !frame->IsMain()) return;
+        if (!frame->IsMain()) return;
+        // A tab left blank is often a navigation that failed or was cut off; Help ▸ Export
+        // Diagnostics sends this log, so the line names the site only.
+        LOG(WARNING) << "Cra: loading " << LogHost(browser, failedUrl) << " failed: " << errorText.ToString() << " ("
+                     << (int)errorCode << ")";
+        if ((int)errorCode == -3 /* ERR_ABORTED */) return;
         // Chrome-style pages get Chrome's own error page: Reload retries the site and it
         // reloads by itself when the network returns. Ours, a data: URL loaded on top,
         // made Reload reload the error and added a history entry.
@@ -1116,9 +1212,10 @@ public:
             if (s.find(".svg") == std::string::npos) { chosen = u; break; }
         }
         std::string chosenStr = chosen.ToString();
-        if (chosenStr == last_icon_url_) return;
-        last_icon_url_ = chosenStr;
-        browser->GetHost()->DownloadImage(chosen, true, 64, false, new FaviconCallback(o));
+        // Skip only an icon that arrived: Chromium drops a download without calling back when the
+        // page replaces its frame while loading (YouTube does), and the next change retries it.
+        if (chosenStr == favicon_->downloaded) return;
+        browser->GetHost()->DownloadImage(chosen, true, 64, false, new FaviconCallback(o, favicon_, chosenStr));
     }
 
     void OnFullscreenModeChange(CefRefPtr<CefBrowser> browser, bool fullscreen) override {
@@ -1185,20 +1282,30 @@ public:
         static const char* kStatus[] = {"abnormal termination", "killed", "crashed", "out of memory",
                                         "launch failed", "integrity failure"};
         const char* what = status >= 0 && status < TS_NUM_VALUES ? kStatus[status] : "unknown";
-        LOG(ERROR) << "Cra: renderer for " << PageHost(browser) << " ended: " << what << " (code " << error_code
+        LOG(ERROR) << "Cra: renderer for " << LogHost(browser) << " ended: " << what << " (code " << error_code
                    << ", " << error_string.ToString() << ")";
     }
 
     bool OnRenderProcessUnresponsive(CefRefPtr<CefBrowser> browser,
                                      CefRefPtr<CefUnresponsiveProcessCallback> callback) override {
-        LOG(ERROR) << "Cra: renderer for " << PageHost(browser) << " is unresponsive";
+        LOG(ERROR) << "Cra: renderer for " << LogHost(browser) << " is unresponsive";
         return false;  // Chrome's "Page Unresponsive" dialog
     }
 
-    static std::string PageHost(CefRefPtr<CefBrowser> browser) {
+    /// The site for chromium.log, which Help ▸ Export Diagnostics sends: never an incognito one
+    /// (nor one whose tab is already gone, when that can't be told).
+    std::string LogHost(CefRefPtr<CefBrowser> browser, const CefString& url = CefString()) {
+        CraBrowser* o = owner_;
+        if (!o) return "(closed tab)";
+        if (o.isIncognito) return "(incognito)";
+        if (!url.empty()) return UrlHost(url);
         CefRefPtr<CefFrame> frame = browser->GetMainFrame();
+        return frame ? UrlHost(frame->GetURL()) : "(no page)";
+    }
+
+    static std::string UrlHost(const CefString& url) {
         CefURLParts parts;
-        if (!frame || !CefParseURL(frame->GetURL(), parts)) return "(no page)";
+        if (!CefParseURL(url, parts)) return "(no page)";
         std::string host = CefString(&parts.host).ToString();
         return host.empty() ? CefString(&parts.scheme).ToString() + ":" : host;
     }
@@ -1397,7 +1504,7 @@ public:
 
 private:
     __weak CraBrowser* owner_;
-    std::string last_icon_url_;
+    CefRefPtr<FaviconState> favicon_ = new FaviconState();
     CefRefPtr<CefResourceRequestHandler> blocker_ = new CraContentBlockingHandler();
     IMPLEMENT_REFCOUNTING(CraClient);
 };
@@ -1446,7 +1553,7 @@ public:
     // view takes the page's own colour instead; CEF resets it on every theme change.
     void OnThemeChanged(CefRefPtr<CefView> view) override {
         CraBrowser* o = owner_;
-        if (!devtools_) view->SetBackgroundColor(o ? o.pageBackgroundColor : CefColorSetARGB(255, 255, 255, 255));
+        if (!devtools_) view->SetBackgroundColor(o ? o.pageFill : CraCanvasColor());
     }
     CefRefPtr<CefBrowserViewDelegate> GetDelegateForPopupBrowserView(CefRefPtr<CefBrowserView> browser_view,
                                                                      const CefBrowserSettings& settings,
@@ -1553,7 +1660,6 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     _delegate = delegate;
     _isIncognito = incognito;
     _profilePath = incognito ? nil : [profilePath copy];
-    _pageBackgroundColor = CefColorSetARGB(255, 255, 255, 255);
     _currentURL = url ?: @"";
     _currentTitle = @"";
     _pendingURL = url;
@@ -1908,6 +2014,8 @@ static NSView* FindRenderWidgetHostView(NSView* root) {
 - (void)executeJavaScript:(NSString*)script {
     if (_browser) _browser->GetMainFrame()->ExecuteJavaScript(CefStringFromNS(script), _browser->GetMainFrame()->GetURL(), 0);
 }
+- (cef_color_t)pageFill { return _pageBackgroundColor ?: CraCanvasColor(); }
++ (NSColor*)pageCanvasColor { return PagesAreDark() ? NSColor.blackColor : NSColor.whiteColor; }
 - (void)probeBackgroundColor {
     if (_browser) _browser->GetMainFrame()->ExecuteJavaScript(kBackgroundProbe, _browser->GetMainFrame()->GetURL(), 0);
 }
@@ -2052,10 +2160,13 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 + (BOOL)contentBlockingEnabled { return cra_blocker::Enabled().load(); }
 
 /// Only contexts that finished loading take preferences (an uninitialised one is fatal);
-/// the rest get it from ApplyProfilePreferences when they load.
+/// the rest get it from ApplyProfilePreferences when they load. Every settings write calls
+/// this, so an unchanged value does nothing. Once quitting starts the global context goes
+/// away (GetGlobalContext returns null, #36); the setting is applied again at the next start.
 + (void)setHttpsOnlyModeEnabled:(BOOL)enabled {
+    if (enabled == g_httpsOnly) return;
     g_httpsOnly = enabled;
-    if (!g_contextInitialized) return;
+    if (!g_contextInitialized || g_quitting) return;
     ApplyHttpsOnly(CefRequestContext::GetGlobalContext());
     for (auto& [path, context] : g_profileContexts) {
         if ([g_readyProfiles containsObject:@(path.c_str())]) ApplyHttpsOnly(context);
@@ -2154,8 +2265,10 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 + (void)runMessageLoop { CefRunMessageLoop(); }
 + (void)quitMessageLoop { CraQuitMessageLoop(); }
 + (void)shutdown {
+    g_quitting = true;
     g_incognitoContext = nullptr;
     g_profileContexts.clear();
+    g_extensionSettingsObservers.clear();
     g_waitingForProfile = nil;
     CefShutdown();
 }
@@ -2182,6 +2295,18 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 + (BOOL)hasBrowserDevTools { return g_cdpWriteFD >= 0; }
 + (void)setBrowserDevToolsEventHandler:(void (^)(NSString*, NSString*, NSString* _Nullable))handler {
     g_cdpEventHandler = [handler copy];
+}
++ (NSString*)extensionSettingsForProfile:(NSString*)profilePath {
+    // Quitting: the contexts are going away, and ProfileContext would make a new one.
+    if (!g_contextInitialized || g_quitting) return nil;
+    if (profilePath.length && ![g_readyProfiles containsObject:profilePath]) return nil;
+    CefRefPtr<CefRequestContext> context = profilePath.length ? ProfileContext(profilePath) : CefRequestContext::GetGlobalContext();
+    CefRefPtr<CefValue> value = context ? context->GetPreference("extensions.settings") : nullptr;
+    if (!value || value->GetType() != VTYPE_DICTIONARY) return nil;
+    return NSStringFromCef(CefWriteJSON(value, JSON_WRITER_DEFAULT));
+}
++ (void)setExtensionSettingsChangeHandler:(void (^)(void))handler {
+    g_extensionSettingsHandler = [handler copy];
 }
 + (void)sendBrowserDevToolsMethod:(NSString*)method params:(NSString*)params
                        completion:(void (^)(NSString* _Nullable, NSString* _Nullable))completion {

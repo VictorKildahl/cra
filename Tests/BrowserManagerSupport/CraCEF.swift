@@ -44,14 +44,22 @@ public final class CraBrowser {
 
     public func close() { closeRequested = true; onClose?() }
     public func finishClose() { isClosed = true; delegate?.browserDidClose(self) }
-    public func closeDevTools() { hasDevTools = false }
+    /// "show" / "close", in the order Cra asked.
+    public var devToolsRequests: [String] = []
+    public func showDevTools() { hasDevTools = true; devToolsRequests.append("show") }
+    public func closeDevTools() { hasDevTools = false; devToolsRequests.append("close") }
     public func setAudioMuted(_ muted: Bool) {}
+    public private(set) var backgroundProbes = 0
+    public func probeBackgroundColor() { backgroundProbes += 1 }
     public func setFocused(_ focused: Bool) {}
-    public func requestPictureInPicture(automatic: Bool) {}
+    public private(set) var pictureInPictureRequests = 0
+    public func requestPictureInPicture(automatic: Bool) { pictureInPictureRequests += 1 }
     public func exitPictureInPicture() { isInPictureInPicture = false }
     public func togglePictureInPicturePlayback() {}
     public func skipPictureInPicture(by seconds: Double) {}
+    public private(set) var lastParams = ""
     public func sendDevToolsMethod(_ method: String, params: String, completion: @escaping (String?, String?) -> Void) {
+        lastParams = params
         replies.append((method, completion))
     }
     /// Recorded as "<world>:Runtime.evaluate".

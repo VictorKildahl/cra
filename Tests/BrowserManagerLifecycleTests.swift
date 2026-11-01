@@ -77,8 +77,12 @@ enum BrowserManagerLifecycleTests {
         await sleepCase("an exception reply cannot authorize sleeping", reply: #"{"exceptionDetails":{},"result":{"value":""}}"#) { _, _ in }
         await sleepCase("a page holding typed text stays awake", reply: #"{"result":{"type":"string","value":"typed"}}"#) { _, _ in }
         await refusalBackoffCase()
+        await sleepClockCase()
+        devToolsCase()
         await beforeUnloadCase()
         nowPlayingCase()
+        await nowPlayingPictureInPictureCase()
+        pageColoursCase()
         await sleepCase("malformed or missing replies cannot authorize sleeping", reply: nil) { _, _ in }
         print("Browser manager lifecycle: \(checks) checks passed")
     }
@@ -189,6 +193,56 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    /// Tab sleeping on the manager's clock: an hour's threshold and the 10-minute back-off run
+    /// in no time, and nothing is asked a second early.
+    @MainActor
+    private static func sleepClockCase() async {
+        let clock = ManualScheduler()
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView(), clock: clock)
+        let id = store.createTab(url: "https://example.test/clock").id
+        let runtime = manager.ensureRuntime(for: id)!
+        func probed() -> Bool { runtime.browser.replies.contains { $0.method == isolatedProbe } }
+        clock.advance(by: 3599)
+        manager.sleepIdleTabs(hiddenLongerThan: 3600)
+        expect(!probed(), "a page hidden a second short of the threshold is not asked")
+        clock.advance(by: 2)
+        manager.sleepIdleTabs(hiddenLongerThan: 3600)
+        expect(probed(), "a page hidden past the threshold is asked")
+        runtime.browser.reply(to: isolatedProbe, with: #"{"result":{"type":"string","value":"typed"}}"#)
+        await drainMainQueue()
+        clock.advance(by: BrowserManager.refusalBackoff - 1)
+        manager.sleepIdleTabs(hiddenLongerThan: 3600)
+        expect(!probed(), "a refused page is not asked again inside the back-off")
+        clock.advance(by: 1)
+        manager.sleepIdleTabs(hiddenLongerThan: 3600)
+        expect(probed(), "a refused page is asked again once the back-off ends")
+        manager.closeAll()
+    }
+
+    /// ⌥⌘I pressed again while CEF is still closing DevTools opens them once they are gone,
+    /// instead of closing them a second time.
+    @MainActor
+    private static func devToolsCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let id = store.createTab(url: "https://example.test/devtools").id
+        manager.show(id, focus: false)
+        let browser = manager.runtime(for: id)!.browser
+        manager.toggleDevTools()
+        manager.browser(browser, didCreateDevToolsView: NSView())
+        manager.toggleDevTools()
+        manager.toggleDevTools()
+        expect(browser.devToolsRequests == ["show", "close"], "a press while DevTools close asks CEF for nothing yet")
+        manager.browserDidCloseDevTools(browser)
+        expect(browser.devToolsRequests == ["show", "close", "show"], "once CEF reports them closed, the press opens them again")
+        manager.browser(browser, didCreateDevToolsView: NSView())
+        manager.showDevTools()
+        expect(browser.devToolsRequests.last == "show" && manager.runtime(for: id)!.devTools.state == .open,
+               "Inspect Element on open DevTools keeps them open")
+        manager.closeAll()
+    }
+
     /// The page's own onbeforeunload, asked in its world after the isolated probe, keeps it awake.
     @MainActor
     private static func beforeUnloadCase() async {
@@ -235,6 +289,55 @@ enum BrowserManagerLifecycleTests {
         expect(np.entries.map(\.id) == [b], "a playing page that navigates (a playlist) keeps its card")
         manager.unload(b)
         expect(np.entries.isEmpty, "closing the page removes its card")
+        manager.closeAll()
+    }
+
+    /// The player's Picture in Picture button asks the off-screen page through the protocol, as a
+    /// user gesture; only a page with no video of its own (a player in an iframe) gets the
+    /// context menu's request.
+    @MainActor
+    private static func nowPlayingPictureInPictureCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.nowPlaying = NowPlaying()
+        let a = store.createTab(url: "https://example.test/video").id
+        let ra = manager.ensureRuntime(for: a)!
+        for (answer, fallback, label) in [("ok", 0, "a page that entered Picture in Picture"),
+                                          ("NotAllowedError: denied", 0, "a page that refused"),
+                                          ("none", 1, "a page with no video of its own")] {
+            let before = ra.browser.pictureInPictureRequests
+            manager.performNowPlaying(a, .pictureInPicture)
+            expect(ra.browser.lastParams.contains(#""userGesture":true"#), "the player's request runs as a user gesture")
+            ra.browser.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"\#(answer)"}}"#)
+            await drainMainQueue()
+            expect(ra.browser.pictureInPictureRequests - before == fallback,
+                   "\(label) \(fallback == 1 ? "falls back to" : "does not also get") the page request")
+        }
+        manager.closeAll()
+    }
+
+    /// A woken page's toolbar starts in the colour its page last reported (Arc, #46), and a tab
+    /// coming on screen asks its page for its background again unless the page is still loading.
+    @MainActor
+    private static func pageColoursCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let a = store.createTab(url: "https://example.test/dark").id, b = store.createTab(url: "https://example.test/other").id
+        let ra = manager.ensureRuntime(for: a)!
+        expect(ra.themeColor.isEmpty, "a page that never reported has no toolbar colour")
+        manager.browser(ra.browser, didReportThemeColor: "#203040")
+        expect(store.item(a)?.tab?.themeColor == "#203040", "the reported toolbar colour is kept on the tab")
+        manager.unload(a)
+        let woken = manager.ensureRuntime(for: a)!
+        expect(woken !== ra && woken.themeColor == "#203040", "the woken page's toolbar starts in its saved colour")
+        let rb = manager.ensureRuntime(for: b)!
+        rb.browser.setLoading(true)
+        manager.show(b, focus: false)
+        expect(rb.browser.backgroundProbes == 0, "a page still loading is not asked: it has no styles yet")
+        manager.show(a, focus: false)
+        expect(woken.browser.backgroundProbes == 1, "a loaded page coming on screen is asked for its background")
+        manager.show(a, focus: false)
+        expect(woken.browser.backgroundProbes == 1, "one already on screen is not asked again")
         manager.closeAll()
     }
 

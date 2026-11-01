@@ -544,7 +544,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         let sid = (spaceID ?? state.targetSpaceID).flatMap { store.space($0) != nil && !store.isIncognito(space: $0) ? $0 : nil }
             ?? store.focusedSpaceID
         let tab = store.createTab(url: b.currentURL, title: b.currentTitle, in: sid, select: true)
-        if let favicon, let key = FaviconCache.key(for: b.currentURL) { app.favicons.store(favicon, forKey: key) }
+        if let favicon, let key = FaviconKey.key(for: b.currentURL) { app.favicons.store(favicon, forKey: key) }
         promoted = true
         browser = nil
         app.main.browsers.adopt(b, for: tab.id)
@@ -559,7 +559,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         // A Peek is a look at a link, not a page to keep.
         guard hasPage, !promoted, !isPeek else { return }
         store.archiveLittleWindowPage(url: currentURL, title: browser?.currentTitle ?? state.title)
-        if let favicon, let key = FaviconCache.key(for: currentURL) { app.favicons.store(favicon, forKey: key) }
+        if let favicon, let key = FaviconKey.key(for: currentURL) { app.favicons.store(favicon, forKey: key) }
         promoted = true  // archived once; a later close must not archive again
     }
 
@@ -706,13 +706,14 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     func browser(_ browser: CraBrowser, didLoadFavicon image: NSImage, forURL iconURL: String) {
         favicon = image
-        if let key = FaviconCache.key(for: browser.currentURL) { app.favicons.store(image, forKey: key) }
+        if let key = FaviconKey.key(for: browser.currentURL) { app.favicons.store(image, forKey: key) }
     }
 
     func browser(_ browser: CraBrowser, didReportThemeColor hex: String) { state.themeColor = hex }
-    /// The page window trails the shell during a fast resize; the gap shows the page's colour.
+    /// The page window trails the shell during a fast resize; the gap shows the page's colour
+    /// (Arc's canvas while a new page has none yet).
     func browser(_ browser: CraBrowser, didReportBackgroundColor hex: String) {
-        shell.page.layer?.backgroundColor = NSColor(Color(hex: hex)).cgColor
+        shell.page.layer?.backgroundColor = (hex.isEmpty ? CraBrowser.pageCanvasColor : NSColor(Color(hex: hex))).cgColor
     }
     func browser(_ browser: CraBrowser, didChangeStatusMessage message: String) {}
 
@@ -818,7 +819,7 @@ final class LittleShellView: NSView {
         page.layer?.cornerCurve = .continuous
         page.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
         page.layer?.masksToBounds = true
-        page.layer?.backgroundColor = NSColor(white: 34 / 255, alpha: 1).cgColor
+        page.layer?.backgroundColor = CraBrowser.pageCanvasColor.cgColor
         page.autoresizesSubviews = true
         addSubview(page)
     }
@@ -1327,6 +1328,13 @@ final class LittleSpacesPopup: NSView, NSTextFieldDelegate {
             emoji.alignment = .center
             emoji.frame = NSRect(x: -SidebarText.inset, y: (40 - 25) / 2, width: 40 + 2 * SidebarText.inset, height: 25)
             tile.addSubview(emoji)
+            if let name = s.symbol {
+                let glyph = NSImageView(frame: NSRect(x: 0, y: 0, width: 40, height: 40))
+                glyph.image = SidebarSymbols.image(name, size: 17, weight: .medium)
+                glyph.imageScaling = .scaleNone
+                glyph.contentTintColor = .white
+                tile.addSubview(glyph)
+            }
             row.addSubview(tile)
             let title = NSTextField.sidebarLabel(size: 15, weight: .semibold)
             title.stringValue = s.title

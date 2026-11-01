@@ -21,6 +21,7 @@ MainActor.assumeIsolated {
     // The run loop has not started, so the list can still hold a Cra that just quit.
     let me = ProcessInfo.processInfo.processIdentifier
     let profileIsFree = !NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "").contains(where: { $0.processIdentifier != me && kill($0.processIdentifier, 0) == 0 })
+    CraLog.startSession(owner: profileIsFree)
     // Cookies and passwords move from the mock keychain to Cra's Keychain item first,
     // staged imports included, so everything below writes with the key Chromium reads.
     SafeStorage.prepare(profileIsFree: profileIsFree)
@@ -61,6 +62,9 @@ MainActor.assumeIsolated {
     DispatchQueue.main.async { delegate.bootstrapIfNeeded() }
     HitchMonitor.startIfRequested()
     CraCEFRuntime.runMessageLoop()
+    // A log that ends without this line ended in a crash or a forced quit.
+    CraLog.note("Cra quits")
+    CraLog.flush()
     delegate.applicationWillShutdown()
     CraCEFRuntime.shutdown()
 }

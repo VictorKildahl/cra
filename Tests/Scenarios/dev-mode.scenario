@@ -1,0 +1,17 @@
+# Developer mode toggled on a site and DevTools opened and closed five times, then twice in
+# quick succession (the press made while DevTools close: DevToolsToggle).
+budget rss=600 stalls50=5
+cra://open?url=${PAGE}?n=dev
+wait 3
+cra://action/toggleDeveloperMode
+wait 2
+pace 2
+repeat 10 cra://action/devTools
+pace 0.1
+cra://action/devTools
+cra://action/devTools
+cra://action/devTools
+wait 3
+pace 0.2
+cra://action/toggleDeveloperMode
+wait 2
