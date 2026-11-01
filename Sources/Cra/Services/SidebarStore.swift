@@ -48,8 +48,11 @@ final class SidebarStore {
     private let settingsStore = JSONStore<AppSettings>("settings.json")
     private let historyFile = JSONStore<[HistoryEntry]>("history.json")
     private let rankingFile = JSONStore<RankingData>("commandbar.json")
+    /// Every date the store stamps or compares (AppComposition passes the app's clock).
+    @ObservationIgnored let clock: Scheduler
 
-    init() {
+    init(clock: Scheduler? = nil) {
+        self.clock = clock ?? LiveScheduler.shared
         let doc = sidebarFile.load(or: SidebarDocument.fresh)
         for s in doc.spaces { spaces[s.id] = s }
         profiles = doc.profiles ?? []
@@ -236,7 +239,7 @@ final class SidebarStore {
         let today = SidebarItem.container(.today(spaceID: id))
         for c in [favorites, pinned, today] { items[c.id] = c }
         spaces[id] = Space(id: id, title: "Incognito", emoji: "🕶️", theme: .incognito, favoritesContainerID: favorites.id,
-                           pinnedContainerID: pinned.id, todayContainerID: today.id, createdAt: Date())
+                           pinnedContainerID: pinned.id, todayContainerID: today.id, createdAt: clock.now)
         incognitoSpaceIDs.insert(id)
         let w = WindowSession(focusedSpaceID: id, frame: frame, isIncognito: true)
         prefs.windows.append(w)
@@ -412,18 +415,18 @@ final class SidebarStore {
         }
         var updated = it
         updated.isUnread = false
-        if var t = updated.tab { t.timeLastActiveAt = Date(); updated.data = .tab(t) }
+        if var t = updated.tab { t.timeLastActiveAt = clock.now; updated.data = .tab(t) }
         items[id] = updated
         // Selecting a pane focuses it inside its split (Arc: focusItemID).
         if let p = it.parentID, var split = items[p], var s = split.split {
             s.focusTabID = id
-            s.timeLastActiveAt = Date()
+            s.timeLastActiveAt = clock.now
             split.data = .split(s)
             items[p] = split
         }
         if !isIncognito(space: sid) {
             var dates = ranking.recentlySwitchedToTabs[id] ?? []
-            dates.append(Date())
+            dates.append(clock.now)
             if dates.count > 10 { dates.removeFirst(dates.count - 10) }
             ranking.recentlySwitchedToTabs[id] = dates
             rankingFile.save(ranking)
@@ -529,7 +532,7 @@ final class SidebarStore {
     /// sidebar slot, so `sourceSpaceID` is nil and restore uses the focused space.
     func archiveLittleWindowPage(url: String, title: String) {
         let it = SidebarItem.tab(url, title: title, parent: nil)
-        archive.insert(ArchivedItem(archivedAt: Date(), reason: .manual, sourceSpaceID: nil, wasPinned: false, item: it, fromLittleWindow: true), at: 0)
+        archive.insert(ArchivedItem(archivedAt: clock.now, reason: .manual, sourceSpaceID: nil, wasPinned: false, item: it, fromLittleWindow: true), at: 0)
         if archive.count > 2000 { archive.removeLast(archive.count - 2000) }
         touch()
     }
@@ -696,7 +699,7 @@ final class SidebarStore {
         }
         var split = SidebarItem.split(parent: parentID)
         var s = SplitData()
-        s.timeLastActiveAt = Date()
+        s.timeLastActiveAt = clock.now
         split.data = .split(s)
         items[split.id] = split
         var p = items[parentID]!
@@ -1124,7 +1127,7 @@ final class SidebarStore {
                 t.liveSubtitle = subtitle
                 tab.data = .tab(t)
                 tab.isUnread = !firstFill
-                tab.createdAt = pr.createdAt ?? Date()
+                tab.createdAt = pr.createdAt ?? clock.now
                 items[tab.id] = tab
                 order.append(tab.id)
             }
@@ -1135,13 +1138,13 @@ final class SidebarStore {
         for id in existing.values {
             guard var it = items[id], var t = it.tab, t.liveGoneAt == nil else { continue }
             if let url = t.liveItemURL, let p = GitHubLiveClient.pullPath(url), ssoHidden.contains(p.owner.lowercased()) { continue }
-            t.liveGoneAt = Date()
+            t.liveGoneAt = clock.now
             it.data = .tab(t)
             items[id] = it
         }
         folder = items[folderID] ?? folder
         folder.children = order + folder.children.filter { !order.contains($0) && items[$0] != nil }
-        live.lastFetch = Date()
+        live.lastFetch = clock.now
         live.lastError = nil
         live.ssoOrganizations = ssoOrganizations
         folder.liveFolder = live
@@ -1156,7 +1159,7 @@ final class SidebarStore {
         var changed = false
         for folder in liveFolders {
             for c in children(of: folder.id) where !open.contains(c.id) {
-                guard let goneAt = c.tab?.liveGoneAt, Date().timeIntervalSince(goneAt) >= age else { continue }
+                guard let goneAt = c.tab?.liveGoneAt, clock.now.timeIntervalSince(goneAt) >= age else { continue }
                 detach(c.id)
                 items[c.id] = nil
                 changed = true
@@ -1176,7 +1179,7 @@ final class SidebarStore {
 
     func applyLiveFailure(_ error: LiveFolderError, to folderID: UUID) {
         updateLiveFolder(folderID) {
-            $0.lastFetch = Date()
+            $0.lastFetch = clock.now
             $0.lastError = error
         }
     }
@@ -1214,7 +1217,7 @@ final class SidebarStore {
         items[id] = nil
         // Empty panes never had a page and incognito pages leave no trace: nothing for the Library.
         if !it.isEmptyTab, !isIncognito(space: sid) {
-            archive.insert(ArchivedItem(archivedAt: Date(), reason: reason, sourceSpaceID: sid, wasPinned: pinned, item: it,
+            archive.insert(ArchivedItem(archivedAt: clock.now, reason: reason, sourceSpaceID: sid, wasPinned: pinned, item: it,
                                         sourceFolderID: folder, sourceIndex: index), at: 0)
             if archive.count > 2000 { archive.removeLast(archive.count - 2000) }
         }
@@ -1301,7 +1304,7 @@ final class SidebarStore {
     /// ArchiveState+AutoArchive, autoArchiveTimeThreshold).
     func runAutoArchive() {
         guard settings.autoArchiveEnabled else { return }
-        let cutoff = Date().addingTimeInterval(-settings.autoArchive.seconds)
+        let cutoff = clock.now.addingTimeInterval(-settings.autoArchive.seconds)
         for space in orderedSpaces {
             let selected = Set(prefs.windows.compactMap { $0.selectedTabPerSpace[space.id] })
             for t in tabs(under: space.todayContainerID) where !selected.contains(t.id) {
@@ -1324,7 +1327,7 @@ final class SidebarStore {
         items[today.id] = today
         let t = theme ?? SpaceTheme.presets[spaceOrder.count % SpaceTheme.presets.count]
         let space = Space(id: id, title: title, emoji: emoji, theme: t, favoritesContainerID: favorites.id,
-                          pinnedContainerID: pinned.id, todayContainerID: today.id, createdAt: Date())
+                          pinnedContainerID: pinned.id, todayContainerID: today.id, createdAt: clock.now)
         spaces[id] = space
         spaceOrder.append(id)
         if focus, !window().isIncognito { updateWindow(nil) { $0.focusedSpaceID = id } }
@@ -1455,9 +1458,9 @@ final class SidebarStore {
 
     func recordVisit(url: String, title: String) {
         guard url.hasPrefix("http") else { return }
-        var e = history[url] ?? HistoryEntry(url: url, title: title, lastVisit: Date(), visitCount: 0)
+        var e = history[url] ?? HistoryEntry(url: url, title: title, lastVisit: clock.now, visitCount: 0)
         e.visitCount += 1
-        e.lastVisit = Date()
+        e.lastVisit = clock.now
         if !title.isEmpty { e.title = title }
         history[url] = e
         if history.count > 5000 {

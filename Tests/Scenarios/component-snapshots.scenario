@@ -1,0 +1,31 @@
+# Views whose geometry Cra takes from Arc, drawn from the running window and compared with
+# Tests/Snapshots/ (Cra's own drawing: no blur, no page content). Record a reference again
+# only after checking that view against Arc 1:1 (docs/testing.md).
+budget rss=600 stalls50=10   # turning developer mode on or off stalls 130–650 ms (a reload)
+port 47123
+cra://debug?windowSize=1280x800
+cra://import?source=arc&archive=0&settings=0
+wait 2
+cra://action/space2
+wait 2
+snapshot SpaceHeaderView space-header
+snapshot FavoritesGridView favorites-grid
+snapshot FolderRowView pinned-folder
+snapshot TabRowView today-tab-row
+snapshot NewTabRowView new-tab-row
+snapshot SpaceDockView space-dock
+cra://open?url=${PAGE}?n=snap
+wait 3
+snapshot SidebarURLPill url-pill
+cra://action/toggleToolbar
+wait 1
+snapshot PaneToolbarView toolbar
+cra://action/toggleDeveloperMode
+wait 2
+snapshot PaneToolbarView toolbar-developer
+cra://action/toggleDeveloperMode
+cra://action/addSplitView
+wait 3
+snapshot PaneToolbarView,0 toolbar-split-pane
+snapshot PaneToolbarView,1 toolbar-split-empty-pane
+snapshot SplitRowView split-row

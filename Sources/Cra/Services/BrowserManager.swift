@@ -19,13 +19,15 @@ final class TabRuntime {
     var snapshot: NSImage?
     var snapshotWork: DispatchWorkItem?
     /// When the page last went off screen (nil while shown); tab sleeping counts from here.
-    var hiddenAt: Date? = Date()
+    var hiddenAt: Date?
     /// Invalidates a pending sleep probe even when navigation returns to the same URL.
     var navigationRevision: UInt = 0
     /// A page that refused to sleep isn't asked again before this (nil: ask on the next pass).
     var sleepProbeAfter: Date?
     /// Why the page last refused to sleep ("" when it didn't), so the log says it once.
     var sleepRefusal: String?
+    /// Whether this page's DevTools are open, closing or asked for (DevToolsToggle).
+    var devTools = DevToolsToggle()
     /// Chrome-style hosting: the page's own window (nil until created, or for Alloy).
     var hostWindow: NSWindow? { browser.hostWindow }
     init(tabID: UUID, browser: CraBrowser) {
@@ -83,10 +85,14 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// CEF's client holds its owner weakly; keep retired browsers alive until teardown finishes.
     private var closingBrowsers: [ObjectIdentifier: CraBrowser] = [:]
 
-    init(store: SidebarStore, favicons: FaviconCache, container: NSView) {
+    /// Tab sleeping's clock: a test advances it instead of waiting out the idle threshold.
+    let clock: Scheduler
+
+    init(store: SidebarStore, favicons: FaviconCache, container: NSView, clock: Scheduler? = nil) {
         self.store = store
         self.favicons = favicons
         self.container = container
+        self.clock = clock ?? LiveScheduler.shared
     }
 
     func runtime(for tabID: UUID) -> TabRuntime? { runtimes[tabID] }
@@ -135,6 +141,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     private func register(browser: CraBrowser, tabID: UUID) -> TabRuntime {
         browser.userInfo = tabID.uuidString
         let rt = TabRuntime(tabID: tabID, browser: browser)
+        rt.hiddenAt = clock.now
         if let t = store.item(tabID)?.tab {
             if t.muted { browser.setAudioMuted(true) }
             // A slept or restored page's toolbar keeps its colour while it loads (Arc).
@@ -195,7 +202,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         let newSet = Set(tabIDs)
         for previous in visibleTabIDs where !newSet.contains(previous) {
             leaveTab(previous)
-            runtimes[previous]?.hiddenAt = Date()
+            runtimes[previous]?.hiddenAt = clock.now
         }
         let wasVisible = Set(visibleTabIDs)
         var shown: [UUID] = []
@@ -342,7 +349,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// user typed or asking before they close (their own onbeforeunload) stay awake, and are
     /// asked again only after `refusalBackoff`. The log says once why a page stays awake.
     func sleepIdleTabs(hiddenLongerThan seconds: TimeInterval) {
-        let now = Date()
+        let now = clock.now
         let cutoff = now.addingTimeInterval(-seconds)
         for (id, rt) in runtimes {
             let b = rt.browser
@@ -362,7 +369,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                             let refusal = Self.sleepRefusal(result)
                             guard refusal.isEmpty else { return self.keepAwake(rt, url, refusal) }
                             if !rt.browser.isIncognito {
-                                CraLog.note("tab sleep unloads \(CraLog.host(url)) (hidden \(Int(Date().timeIntervalSince(rt.hiddenAt ?? Date()) / 60)) min)")
+                                CraLog.note("tab sleep unloads \(CraLog.host(url)) (hidden \(Int(self.clock.now.timeIntervalSince(rt.hiddenAt ?? self.clock.now) / 60)) min)")
                             }
                             self.unload(id)
                         }
@@ -378,7 +385,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     /// Asked again after the back-off; the log names the site once per reason (never an incognito one).
     private func keepAwake(_ rt: TabRuntime, _ url: String, _ refusal: String) {
-        rt.sleepProbeAfter = Date().addingTimeInterval(Self.refusalBackoff)
+        rt.sleepProbeAfter = clock.now.addingTimeInterval(Self.refusalBackoff)
         if rt.sleepRefusal != refusal, !rt.browser.isIncognito { CraLog.note("tab sleep keeps \(CraLog.host(url)) awake: \(refusal)") }
         rt.sleepRefusal = refusal
     }
@@ -730,6 +737,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     func browser(_ browser: CraBrowser, didCreateDevToolsView view: NSView) {
         guard let id = tabID(of: browser) else { return }
         devToolsViews[id] = view
+        runtimes[id]?.devTools.didOpen()
         delegate?.browserManagerDevToolsChanged()
     }
 
@@ -739,6 +747,27 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         devToolsPlaceholders[id] = nil
         devToolsDockedState[id] = nil
         delegate?.browserManagerDevToolsChanged()
+        if let rt = runtimes[id] { perform(rt.devTools.didClose(), on: rt) }
+    }
+
+    /// ⌥⌘I on the focused page: open its DevTools, or close them (DevToolsToggle).
+    func toggleDevTools() {
+        guard let rt = visibleRuntime else { return }
+        perform(rt.devTools.toggle(), on: rt)
+    }
+
+    /// Inspect Element: DevTools open on the focused page, whatever they were doing.
+    func showDevTools() {
+        guard let rt = visibleRuntime else { return }
+        perform(rt.devTools.show(), on: rt)
+    }
+
+    private func perform(_ effect: DevToolsToggle.Effect, on rt: TabRuntime) {
+        switch effect {
+        case .show: rt.browser.showDevTools()
+        case .close: rt.browser.closeDevTools()
+        case .none: break
+        }
     }
 
     /// Chrome's docked frontend reported where the page goes: `bounds` are points with a

@@ -55,6 +55,12 @@ the save panel.
     scripts/test.sh                  # everything below except the smoke test, in seconds
     scripts/test.sh core             # only Packages/CraCore
     Tests/smoke-launch.sh            # launches build/Cra.app three times, about 30 s
+    scripts/scenario.sh all          # user journeys in build/Cra.app, about 6 minutes
+    scripts/coverage.py              # line coverage, and the changed-lines gate
+    scripts/fuzz.sh                  # mutated importer fixtures under AddressSanitizer
+    scripts/mutate.py                # mutation testing of the pure code, minutes
+
+[testing.md](testing.md) has the rules, the layers, the gates and how to write a scenario.
 
 CI runs `scripts/test.sh` on every pull request (no CEF download) and the smoke test on the
 app it builds.
@@ -69,6 +75,11 @@ app it builds.
   few production files with `swiftc` against fakes (`Tests/BrowserManagerSupport` stands in
   for CraCEF and the rest of the app). When the manager calls something new from the app, add
   a stub to `AppServices.swift`.
+- `scripts/test-store.sh`: the real `SidebarStore`, `AppComposition` and importers on a
+  `ManualScheduler`, against the made-up Arc and Chromium profiles in `Tests/Fixtures`.
+- `scripts/test-policies.sh`: the decisions pulled out of the window controllers
+  (`ToolbarComposition`, `ExtensionLaunch`, `DevToolsToggle`, `FeatureFlags`).
+- `scripts/lint.py`: Cra's own rules (testing.md), checked by `scripts/test.sh`.
 - `Tests/smoke-launch.sh [app]`: starts the app on a throwaway data folder with no pages,
   with a page opened, then with it restored, and quits it like ⌘Q after a settings write.
   It fails on a crash, a hang, an error exit or a new crash report, which is how a `CHECK`
@@ -76,6 +87,11 @@ app it builds.
 
 What none of these see: compositing (the sidebar blur), fullscreen spaces, and how real sites
 behave. Check those by hand, and say how in the PR.
+
+Scenario hooks for a command file (`cra://debug?…`): `checkStore=1` logs a fault per broken
+sidebar link, `pageJS=<js>` runs script in the focused page, `installExtension=<folder>` and
+`removeExtension=<id>`, `extensionAction=<id>`, `fullscreen=1|0`, `windowSize=1280x800`,
+`snapshot=<ViewClass[,n]>&out=<png>`, `sleepTabs=<seconds>`, `relaunch=1` and `quit=1`.
 
 ## Running a test instance
 

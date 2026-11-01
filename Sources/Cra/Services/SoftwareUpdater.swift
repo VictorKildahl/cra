@@ -76,7 +76,7 @@ final class SoftwareUpdater: NSObject {
     @ObservationIgnored private var choiceReply: ((SPUUserUpdateChoice) -> Void)?
     @ObservationIgnored private var cancellation: (() -> Void)?
     @ObservationIgnored private var acknowledgement: (() -> Void)?
-    @ObservationIgnored private var autoRestartTimer: Timer?
+    @ObservationIgnored private var autoRestartTimer: ScheduledWork?
     @ObservationIgnored private var inactiveSince: Date?
 
     private enum Keys {
@@ -225,9 +225,9 @@ final class SoftwareUpdater: NSObject {
     /// duration-in-seconds); Cra waits until the user is away: Cra in the background for 10
     /// minutes and no input for 2, or no input at all for 30.
     private func scheduleAutoRestart() {
-        autoRestartTimer?.invalidate()
-        autoRestartTimer = Timer.scheduledTimer(withTimeInterval: max(1, min(60, quickRestart ?? 60)), repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.considerAutoRestart() }
+        autoRestartTimer?.cancel()
+        autoRestartTimer = (app?.composition.clock ?? LiveScheduler.shared).every(max(1, min(60, quickRestart ?? 60))) { [weak self] in
+            self?.considerAutoRestart()
         }
     }
 

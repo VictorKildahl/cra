@@ -20,6 +20,9 @@ if [ "${1:-}" != core ]; then
   suite "Floating sidebar" scripts/test-floating-sidebar.sh
   suite "Extension popup candidate" scripts/test-extension-popup-candidate.sh
   suite "Extension state" scripts/test-extension-state.sh
+  suite "Store and importers" scripts/test-store.sh
+  suite "Policies" scripts/test-policies.sh
+  suite "Lint" scripts/lint.py
 fi
 
 if [ ${#failed[@]} -gt 0 ]; then
