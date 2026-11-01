@@ -669,12 +669,10 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
   "clear" in a main window → Clear Unpinned Tabs. Pages/history follow a confidence rule not reproduced.
 
 ### Space header ••• and the space menu (Arc 1.171, live, 1 Nov, issue #40)
-- [O] Header hover (2x window captures, JYSK space, 347 pt sidebar): the fill runs 8 pt in from both sides,
-  8–44 pt under the favorites' bottom (36 pt tall, ~10 pt continuous corners); the chevron (SF chevron.down
-  13 pt semibold) takes the icon's place; `sidebarSpaceEditButton` (AX "More", 2×26 pt until hovered, then
-  26×26) shows the ••• (SF ellipsis 13 pt medium, white 59% on a dark theme, same tone as the chevron),
-  centred 18.5 pt from the fill's trailing edge, a 24 pt hover tile. Fill, chevron and button appear in one
-  frame, no fade. The name is 13 pt semibold, 36 pt into the fill; the emoji ~14.5 pt in a 26 pt box 5 pt in.
+- [O] Header hover: the row's geometry, glyphs and colours are under "Space header row" (#39) below, and Cra
+  follows those. Here also: `sidebarSpaceEditButton` (AX "More", 2×26 pt until hovered, then 26×26) is the •••,
+  centred 18.5 pt from the fill's trailing edge on a 24 pt hover tile; fill, chevron and button appear in one
+  frame, no fade. An Icon-tab glyph sits in the emoji's 26 pt box 5 pt in.
 - [O] The ••• and a right-click on the header open the same menu, as a context menu at the pointer (a click
   at 683,150 put the menu window at 684,144): Change Space Icon…, Rename Space…, Edit Theme Color…, Set Profile ▸
   (profiles, ✓ on the space's, then New Profile…) | New Folder, Live Folders ▸ (GitHub ✓ when present) |

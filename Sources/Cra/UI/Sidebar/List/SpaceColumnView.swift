@@ -75,18 +75,18 @@ final class SpaceColumnView: NSView {
 /// The space's emoji and name. Arc 1.171 (live, 1 Nov): a click collapses or expands the pinned
 /// tabs; on hover the fill comes in, the chevron takes the icon's place and the ••• button
 /// (sidebarSpaceEditButton) shows at the trailing edge, all in one frame. The ••• and a
-/// right-click open the same space menu at the pointer.
+/// right-click open the same space menu at the pointer. Collapsed, the chevron stays and points right.
 final class SpaceHeaderView: NSView, NSTextFieldDelegate {
     private let spaceID: UUID
     private let store: SidebarStore
     private let ui: SidebarUIState
     private let actions: SidebarActions
-    private let emoji = NSTextField.sidebarLabel(size: 14.5)
+    private let emoji = NSTextField.sidebarLabel(size: 14)
     private let title = NSTextField.sidebarLabel(size: 13, weight: .semibold)
     /// An Icon-tab glyph in the emoji's place.
     private let symbol = NSImageView()
     private let chevron = NSImageView()
-    private lazy var more = SidebarGlyphButton(symbol: "ellipsis", size: 24, iconSize: 13, help: "", colors: colors) { [weak self] in
+    private lazy var more = SidebarGlyphButton(symbol: "ellipsis", size: 24, height: 24, iconSize: 13, weight: .semibold, help: "", colors: colors) { [weak self] in
         self?.showMenu(NSApp.currentEvent)
     }
     /// Rename Space…: the name turns into a field and the ••• into Arc's "Done".
@@ -108,9 +108,9 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         self.actions = actions
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.cornerRadius = 10
-        layer?.cornerCurve = .continuous
-        chevron.image = SidebarSymbols.image("chevron.down", size: 13, weight: .semibold)
+        layer?.cornerRadius = 12
+        // Pixel-fitted to Arc's 2x capture (chevron.down 12.5 bold, ellipsis 13 semibold; #57).
+        chevron.image = SidebarSymbols.image("chevron.down", size: 12.5, weight: .bold)
         chevron.imageScaling = .scaleNone
         chevron.wantsLayer = true
         done.stringValue = "Done"
@@ -128,6 +128,7 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
     private func sync() {
         syncQueued = false
         var hide = false
+        let wasCollapsed = collapsed
         withObservationTracking {
             guard let space = store.space(spaceID) else { return }
             emoji.stringValue = space.emoji
@@ -143,6 +144,7 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
                 self.sync()
             }
         }
+        if collapsed != wasCollapsed { turnChevron(from: wasCollapsed) }
         refresh()
         if hide != isHidden {
             isHidden = hide
@@ -152,21 +154,37 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
 
     private func refresh() {
         let lit = hovering || menuOpen || renameField != nil
-        title.textColor = colors.textSecondary
-        // Arc draws the chevron and the dots in one tone: white at 59% on a dark theme.
-        let glyph = colors.isDark ? NSColor.white.withAlphaComponent(0.59) : colors.textTertiary
+        // Arc's dark header title is dimmer than its other secondary text (white 0.45, 1 Nov).
+        title.textColor = colors.isDark ? NSColor.white.withAlphaComponent(0.45) : colors.textSecondary
         done.textColor = colors.textTertiary
-        chevron.contentTintColor = glyph
-        more.tint = colors.isDark ? glyph : nil
-        chevron.alphaValue = lit ? 1 : 0
-        emoji.alphaValue = lit ? 0 : 1
-        symbol.alphaValue = lit ? 0 : 1
+        chevron.contentTintColor = colors.textSecondary
+        more.tint = colors.textSecondary
+        let showsChevron = lit || collapsed
+        chevron.alphaValue = showsChevron ? 1 : 0
+        emoji.alphaValue = showsChevron ? 0 : 1
+        symbol.alphaValue = showsChevron ? 0 : 1
         symbol.contentTintColor = colors.textSecondary
         more.colors = colors
         more.isHidden = !lit || renameField != nil
         done.isHidden = renameField == nil
-        layer?.backgroundColor = (lit ? colors.hoverFill : .clear).cgColor
+        // Arc's dark header fill is white 0.10, a little lighter than its rows' (1 Nov).
+        let fill = colors.isDark ? NSColor.white.withAlphaComponent(0.1) : colors.hoverFill
+        layer?.backgroundColor = (lit ? fill : .clear).cgColor
         needsLayout = true
+    }
+
+    /// Arc points the chevron down while the pinned tabs show and right while they are collapsed.
+    private func angle(collapsed: Bool) -> CGFloat { collapsed ? -.pi / 2 : 0 }
+
+    /// Arc turns it a quarter over about 0.12 s (a 60 fps capture, 1 Nov).
+    private func turnChevron(from wasCollapsed: Bool) {
+        guard window != nil, let layer = chevron.layer else { return }
+        let turn = CABasicAnimation(keyPath: "transform.rotation.z")
+        turn.fromValue = angle(collapsed: wasCollapsed)
+        turn.toValue = angle(collapsed: collapsed)
+        turn.duration = 0.12
+        turn.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        layer.add(turn, forKey: "turn")
     }
 
     /// Arc 1.171, 2x captures (1 Nov): a 14.5 pt emoji centred in the icon's 26 pt box 5 pt in (its
@@ -177,13 +195,15 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         super.layout()
         let h = bounds.height, w = bounds.width
         let es = emoji.intrinsicContentSize
-        let ew = ceil(emoji.attributedStringValue.size().width)
-        emoji.frame = NSRect(x: 18.5 - ew / 2 - SidebarText.inset, y: (h - es.height) / 2 - 0.75, width: ew + 2 * SidebarText.inset, height: es.height)
+        let ew = emoji.attributedStringValue.size().width
+        emoji.frame = NSRect(x: 18.25 - ew / 2 - SidebarText.inset, y: (h - es.height) / 2 - 1.25, width: ew + 2 * SidebarText.inset, height: es.height)
         symbol.frame = iconRect
-        chevron.frame = NSRect(x: 17.75 - 9, y: (h - 18) / 2 + 0.75, width: 18, height: 18)
+        // Turned right, Arc's chevron sits a little higher than chevron.down turned about its centre.
+        let (cx, cy): (CGFloat, CGFloat) = collapsed ? (18.5, h / 2 - 0.25) : (18.25, h / 2 + 0.5)
+        chevron.frame = NSRect(x: cx - 10, y: cy - 10, width: 20, height: 20)
         chevron.layer?.anchorPoint = CGPoint(x: 0.5, y: 0.5)
         chevron.layer?.position = CGPoint(x: chevron.frame.midX, y: chevron.frame.midY)
-        chevron.layer?.setAffineTransform(CGAffineTransform(rotationAngle: collapsed ? .pi / 2 : 0))
+        chevron.layer?.setAffineTransform(CGAffineTransform(rotationAngle: angle(collapsed: collapsed)))
         more.frame = NSRect(x: w - 18.5 - 12, y: (h - 24) / 2 + 0.5, width: 24, height: 24)
         let dw = ceil(done.attributedStringValue.size().width) + 2 * SidebarText.inset
         let dh = done.intrinsicContentSize.height
