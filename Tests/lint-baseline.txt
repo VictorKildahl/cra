@@ -1,6 +1,5 @@
 # scripts/lint.py findings in code older than the rule. Only ever lower these.
 importer-without-fixture	Services/Import/FirefoxImporter.swift:Firefox	1
-importer-without-fixture	Services/Import/Importers.swift:Dia	1
 importer-without-fixture	Services/Import/SafariImporter.swift:Safari	1
 importer-without-fixture	Services/Import/ZenImporter.swift:Zen	1
 raw-observation-tracking	UI/CommandBar/CommandBarView.swift	1

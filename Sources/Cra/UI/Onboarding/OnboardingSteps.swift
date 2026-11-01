@@ -93,8 +93,10 @@ struct UnlockStep: View {
         ZStack(alignment: .topLeading) {
             BackLink(c: c) { model.go(.source) }
             StepHeader(title: "Unlock your data for import",
-                       subtitle: many ? "Some data is encrypted, so macOS will ask for your computer password once for each selected profile."
-                                      : "Some data is encrypted, so macOS will ask for your computer password to bring it securely into Cra.", c: c)
+                       subtitle: model.unlockReadsSidebar
+                           ? "Dia encrypts your spaces, tabs and passwords, so macOS will ask for your computer password."
+                           : many ? "Some data is encrypted, so macOS will ask for your computer password once for each selected profile."
+                                  : "Some data is encrypted, so macOS will ask for your computer password to bring it securely into Cra.", c: c)
             if many {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
@@ -123,9 +125,14 @@ struct UnlockStep: View {
                 .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(c.rowBorder, lineWidth: 0.5))
                 .offset(y: ImportMetrics.listTop)
             }
+            if let err = model.unlockError {
+                Text(err).font(.system(size: 12)).foregroundStyle(.red.opacity(0.85))
+                    .frame(width: ImportMetrics.columnWidth, alignment: .leading)
+                    .offset(y: ImportMetrics.buttonTop - 44)
+            }
             HStack(spacing: 6) {
                 SecondaryButton(title: "Skip", c: c) { model.skipCredentials() }.frame(width: 146)
-                PrimaryButton(title: model.unlocking ? "Waiting for password" : "Continue",
+                PrimaryButton(title: model.unlocking ? "Waiting for password" : model.unlockError == nil ? "Continue" : "Try Again",
                               c: c, enabled: !model.unlocking, width: 290) { model.unlock() }
             }
             .frame(width: ImportMetrics.columnWidth + 2)

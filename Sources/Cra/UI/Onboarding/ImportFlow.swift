@@ -106,6 +106,8 @@ final class ImportFlowModel {
     /// Read and decrypted, staged for the next launch once the import runs.
     private(set) var credentials = ImportedCredentials()
     private(set) var credentialError: String?
+    /// Dia's sidebar could not be unlocked or read; the unlock step says so and offers a retry.
+    private(set) var unlockError: String?
     private(set) var credentialsAttempted = false
     private(set) var credentialsStaged = false
 
@@ -216,6 +218,7 @@ final class ImportFlowModel {
         loadError = nil
         credentials = ImportedCredentials()
         credentialError = nil
+        unlockError = nil
         credentialsAttempted = false
         exportFileName = nil
         exportError = nil
@@ -282,20 +285,45 @@ final class ImportFlowModel {
         if selectedProfiles.contains(id) { selectedProfiles.remove(id) } else { selectedProfiles.insert(id) }
     }
 
+    /// Dia 1.55 encrypts its sidebar with the same Keychain secret as passwords and cookies.
+    var unlockReadsSidebar: Bool { source?.kind == .dia && DiaImporter.hasEncryptedSidebar }
+
     /// Reads the Keychain secret (macOS asks for the login password) and
     /// decrypts the picked profiles' passwords and cookies, then moves on.
-    func unlock() {
+    func unlock() { unlock(profiles: credentialProfiles.filter { selectedProfiles.contains($0.id) }) }
+
+    private func unlock(profiles: [ChromiumProfile]) {
         guard let source, let service = source.keychainService, let account = source.keychainAccount, !unlocking else { return }
-        let profiles = credentialProfiles.filter { selectedProfiles.contains($0.id) }
-        guard !profiles.isEmpty else { goToSpaces(); return }
+        let readsSidebar = unlockReadsSidebar
+        guard !profiles.isEmpty || readsSidebar else { goToSpaces(); return }
         unlocking = true
         credentialError = nil
+        unlockError = nil
         Task { @MainActor in
-            let result = await Task.detached(priority: .userInitiated) { () -> Result<ImportedCredentials, Error> in
-                Result { try ChromiumImporter.credentials(browser: source.name, profiles: profiles, keychainService: service,
-                                                          keychainAccount: account, cookies: true, passwords: true) }
+            let (result, sidebar) = await Task.detached(priority: .userInitiated) { () -> (Result<ImportedCredentials, Error>, Result<ImportPlan, Error>?) in
+                guard let secret = ChromiumCrypto.keychainSecret(service: service, account: account) else {
+                    CraLog.note("import: no Keychain secret for \(service)")
+                    let denied = CredentialImportError.keychainDenied(source.name)
+                    return (.failure(denied), readsSidebar ? .failure(denied) : nil)
+                }
+                CraLog.note("import: unlocked \(service)\(readsSidebar ? ", reading the sidebar" : "")")
+                let credentials = profiles.isEmpty ? .success(ImportedCredentials()) : Result {
+                    try ChromiumImporter.credentials(browser: source.name, profiles: profiles, secret: secret, cookies: true, passwords: true)
+                }
+                return (credentials, readsSidebar ? Result { try DiaImporter.plan(secret: secret) } : nil)
             }.value
             unlocking = false
+            switch sidebar {
+            case .success(let plan)?: setPlan(plan)
+            case .failure(let error)?:
+                // Dia's older files no longer match its sidebar: stay here rather than import them.
+                unlockError = error is CredentialImportError
+                    ? "macOS didn't unlock Dia's data. Dia encrypts your spaces and tabs, so Cra needs your computer password to bring them over."
+                    : "Cra couldn't read your Dia spaces and tabs. This version of Dia may store them differently."
+                return
+            case nil: break
+            }
+            guard !profiles.isEmpty else { goToSpaces(); return }
             credentialsAttempted = true
             switch result {
             case .success(let c): credentials = c
@@ -308,7 +336,7 @@ final class ImportFlowModel {
     func skipCredentials() {
         credentials = ImportedCredentials()
         credentialsAttempted = false
-        goToSpaces()
+        if unlockReadsSidebar { unlock(profiles: []) } else { goToSpaces() }
     }
 
     /// Safari's exported .zip or folder (bookmarks, history, passwords) or

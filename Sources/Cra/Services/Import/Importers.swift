@@ -265,15 +265,36 @@ enum ArcImporter {
 // MARK: - Dia
 
 enum DiaImporter {
-    static let supportDir = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Application Support/Dia", isDirectory: true)
+    /// CRA_DIA_DIR points a test instance at a made-up profile (Tests/Fixtures/Dia).
+    static let supportDir = ProcessInfo.processInfo.environment["CRA_DIA_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
+        ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Dia", isDirectory: true)
+    static var userData: URL { supportDir.appendingPathComponent("User Data", isDirectory: true) }
 
-    static var isAvailable: Bool { FileManager.default.fileExists(atPath: supportDir.appendingPathComponent("StorableProfileContainers.json").path) }
+    static var isAvailable: Bool {
+        FileManager.default.fileExists(atPath: supportDir.appendingPathComponent("StorableProfileContainers.json").path) || hasEncryptedSidebar
+    }
 
-    static func plan() throws -> ImportPlan {
+    /// Dia 1.55 and later: the sidebar is in encrypted tabs.db files, read with the Keychain secret.
+    static var hasEncryptedSidebar: Bool { !DiaSidebar.databases(userData: userData).isEmpty }
+
+    /// With the "Dia Safe Storage" secret the spaces come from Dia's sidebar database; without
+    /// it (or from an older Dia) from the files Dia kept before 1.55, which no longer follow
+    /// the sidebar: the open tabs as of then and the bookmarks bar. A secret that opens no
+    /// sidebar database throws rather than fall back to those stale files.
+    static func plan(secret: String? = nil) throws -> ImportPlan {
         guard isAvailable else { throw ImportError.notFound("Dia") }
         var plan = ImportPlan(source: "Dia")
+        if let secret, hasEncryptedSidebar {
+            plan.spaces = DiaSidebar.spaces(userData: userData, rootKey: ChromiumCrypto.key(fromSecret: secret))
+            if plan.spaces.isEmpty { throw ImportError.unreadable("Dia's spaces and tabs") }
+        } else {
+            addLegacySidebar(to: &plan)
+        }
+        addArchive(to: &plan)
+        return plan
+    }
 
+    private static func addLegacySidebar(to plan: inout ImportPlan) {
         // Open tabs and the favorites container.
         if let data = try? Data(contentsOf: supportDir.appendingPathComponent("StorableProfileContainers.json")),
            let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -297,7 +318,7 @@ enum DiaImporter {
         }
 
         // Bookmarks: Dia keeps imported Arc spaces as folders on the bookmarks bar.
-        let profiles = (try? FileManager.default.contentsOfDirectory(atPath: supportDir.appendingPathComponent("User Data").path)) ?? []
+        let profiles = (try? FileManager.default.contentsOfDirectory(atPath: userData.path)) ?? []
         for prof in profiles where prof == "Default" || prof.hasPrefix("Profile ") {
             let bm = supportDir.appendingPathComponent("User Data/\(prof)/Bookmarks")
             guard let data = try? Data(contentsOf: bm), let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -329,7 +350,9 @@ enum DiaImporter {
                 plan.spaces.append(ImportedSpace(title: "Other Bookmarks", emoji: "🔖", theme: nil, pinned: kids))
             }
         }
+    }
 
+    private static func addArchive(to plan: inout ImportPlan) {
         // Auto-archive store (best effort; shape varies between Dia versions).
         if let data = try? Data(contentsOf: supportDir.appendingPathComponent("StorableAutoArchive.json")),
            let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -343,7 +366,6 @@ enum DiaImporter {
                 }
             }
         }
-        return plan
     }
 
     private static func firstURL(in obj: Any) -> (String, String)? {
@@ -409,7 +431,9 @@ extension SidebarStore {
                     var tab = SidebarItem.tab(url, title: it.pageTitle, parent: parent)
                     tab.title = it.customTitle
                     tab.createdAt = it.createdAt
-                    if var t = tab.tab { t.timeLastActiveAt = it.createdAt; tab.data = .tab(t) }
+                    // An open tab was alive in the other browser: auto-archive counts from the import,
+                    // not from when the tab was made (Dia keeps tabs for weeks with auto-clean off).
+                    if var t = tab.tab { t.timeLastActiveAt = pinned ? it.createdAt : clock.now; tab.data = .tab(t) }
                     insertItem(tab, into: parent, at: nil)
                     result.tabs += 1
                 }
