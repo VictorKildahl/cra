@@ -128,11 +128,15 @@ final class CommandBarView: NSView {
             keycap.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.04).cgColor
         }
 
-        // Follows the row the arrows moved to; otherwise the completing top match.
+        // Follows the row the arrows moved to; otherwise the top one.
         let previewing = c.previewText != nil && items.indices.contains(c.selectedIndex)
         let row = previewing ? items[c.selectedIndex] : items.first
-        if scope == nil, let s = row, let key = s.faviconKey, s.id != "typed", let img = favicons.image(forKey: key),
-           previewing || c.result.inlineCompletion != nil || c.mode == .editURL {
+        let typed = c.query.trimmingCharacters(in: .whitespaces)
+        let glyph = CommandBarGlyph.resolve(
+            editingURL: c.mode == .editURL, untouched: !previewing && (typed.isEmpty || typed == c.openedPrefill),
+            scoped: scope != nil, pageFaviconKey: c.openedPrefill.flatMap(FaviconCache.key(for:)),
+            row: row.map { ($0.faviconKey, $0.symbol) }, hasFavicon: { [favicons] in favicons.image(forKey: $0) != nil })
+        if case .favicon(let key) = glyph, let img = favicons.image(forKey: key) {
             leadingIcon.imageScaling = .scaleProportionallyUpOrDown
             leadingIcon.image = img
             leadingIcon.contentTintColor = nil
@@ -141,7 +145,7 @@ final class CommandBarView: NSView {
             leadingIcon.frame.size = NSSize(width: 20, height: 20)
         } else {
             leadingIcon.imageScaling = .scaleNone
-            leadingIcon.image = SidebarSymbols.image(c.mode == .editURL ? "info.circle" : "magnifyingglass", size: 17, weight: .medium)
+            if case .symbol(let name) = glyph { leadingIcon.image = SidebarSymbols.image(name, size: 17, weight: .medium) }
             leadingIcon.contentTintColor = .secondaryLabelColor
             leadingIcon.layer?.masksToBounds = false
             leadingIcon.frame.size = NSSize(width: 22, height: 22)

@@ -1943,3 +1943,26 @@ CEF still draws the first page of a new renderer transparent (chromiumembedded/c
 canvas, an unstyled page (no background, no color-scheme) showed black text on black until its load ended
 (4 s with a slow image). The page now reports its background on every frame while it is parsed
 (kLoadingBackgroundProbe; frames wait for render-blocking stylesheets), so it turns white with its first paint.
+
+## Sidebar toggle and the command bar's leading glyph (Arc 1.171, 1 Nov 2026, issue #50, live captures at 2x)
+
+Victor's Arc (toolbar shown, full URLs on), window captures by id; Little Arc with keys posted to its pid for
+the command bar (posted keys do not reach the main window's ⌘L while Arc is in the background, and Arc's menus
+are disabled then).
+
+- [O] Sidebar toggle: the sidebar's title row always has it; the toolbar has one only while the sidebar is
+  hidden, floating included (then both show). Windowed: lights 20/43/66, toggle glyph 84–102 (centre 93.25,
+  y 23.75). Fullscreen (no lights): glyph 20–38.5 (centre 29.25). Floating panel: lights 25/48/71, toggle 98.25,
+  y 28.75 (the panel sits 5 pt in). Cra keeps the toggle 27 pt after its last light (its lights are 20/44/68)
+  and draws it at 20–38 in fullscreen; Cra's floating panel sits 8 pt in, so its header is 3 pt right of Arc's.
+- [O] Toolbar left group, sidebar shown: ← → ↻ centred 21/58/95 pt from the card edge (the sidebar is 347 pt wide in
+  this capture). Sidebar hidden: toggle ← → ↻ at 31.25/68/105/142.25 from the window edge, card 10 pt in, so
+  the first glyph is 21 pt from the card edge either way (the old "30 pt" figure was from the window edge).
+  Developer mode follows the same rule (Arc 1.168 above: toggle at 93 + ← → ↻⌄ in the title row, URL text 40 pt
+  from the card edge, i.e. no toggle in the bar).
+- [O] At rest the default toolbar keeps its link glyph before the URL, not the page's favicon.
+- [O] Command bar leading glyph = the highlighted row's icon: favicon when it has one (jira → Atlassian from
+  history, x.com → X via completion, youtube.com typed → YouTube), globe for a URL row without one
+  (example.org), magnifier for a search row ("hello world", "x", "youtulocalhost:3000"). ⌘L untouched or
+  emptied: the page's favicon (GitHub), a globe on a page without one (example.com). ⌘T empty: magnifier,
+  though its top row is a tab with a favicon. Cra: CommandBarGlyph; `info.circle` is gone.

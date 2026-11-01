@@ -28,6 +28,8 @@ final class SidebarUIState {
     var canGoForward = false
     var isLoading = false
     var isCompact = false
+    /// The window is in macOS fullscreen (no traffic lights), not a page's element fullscreen.
+    var windowFullscreen = false
     /// Cra is the frontmost app (Arc darkens the sidebar header's glyphs then).
     var appActive = true
     /// Page theme colour of the visible tab ("#RRGGBB" or "").

@@ -217,9 +217,9 @@ final class PaneToolbarView: NSView {
         (superview as? PaneCardView)?.developerBar = m.kind == .developer ? m.fill : nil
         hairline.isHidden = m.hairline == nil
         hairline.layer?.backgroundColor = m.hairline?.cgColor
-        let bar = ToolbarComposition(kind: m.kind, inSplit: m.inSplit, focusedPane: m.focusedPane, canGoBack: m.canGoBack,
-                                     canGoForward: m.canGoForward, isLoading: m.isLoading, pinnedExtensions: m.pinned.map(\.id),
-                                     hasExtensions: m.hasExtensions)
+        let bar = ToolbarComposition(kind: m.kind, inSplit: m.inSplit, sidebarVisible: m.sidebarVisible, focusedPane: m.focusedPane,
+                                     canGoBack: m.canGoBack, canGoForward: m.canGoForward, isLoading: m.isLoading,
+                                     pinnedExtensions: m.pinned.map(\.id), hasExtensions: m.hasExtensions)
         // The no-tab bar and an empty pane show navigation that does nothing (Arc greys it out).
         let wide = m.kind == .noTab || m.kind == .emptyPane
         func view(_ item: ToolbarComposition.Item) -> NSView {
@@ -303,8 +303,8 @@ final class PaneToolbarView: NSView {
             b.cornerRadius = m.kind == .developer ? 6 : 7
             b.iconRowHeight = bh
         }
-        // Left group: icons edge to edge.
-        var x: CGFloat = m.kind == .emptyPane ? 1 : (m.inSplit ? 2.5 : 11.5)
+        // Left group: icons edge to edge, the first (toggle or ←) centred 21 pt from the card edge (Arc 1.171).
+        var x: CGFloat = m.kind == .emptyPane ? 1 : 2.5
         for b in left {
             b.frame = NSRect(x: x, y: (h - bh) / 2, width: b.width, height: bh)
             x += b.width

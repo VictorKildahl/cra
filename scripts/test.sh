@@ -22,6 +22,7 @@ if [ "${1:-}" != core ]; then
   suite "Extension state" scripts/test-extension-state.sh
   suite "Store and importers" scripts/test-store.sh
   suite "Policies" scripts/test-policies.sh
+  suite "Command bar glyph" scripts/test-command-bar-glyph.sh
   suite "Lint" scripts/lint.py
 fi
 
