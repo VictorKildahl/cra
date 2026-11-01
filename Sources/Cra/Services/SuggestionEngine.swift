@@ -230,24 +230,9 @@ final class SuggestionEngine {
 
     // MARK: Typed text
 
-    static func looksLikeURL(_ s: String) -> Bool {
-        let t = s.trimmingCharacters(in: .whitespaces)
-        if t.isEmpty || t.contains(" ") { return false }
-        if t.range(of: #"^[a-zA-Z][a-zA-Z0-9+.\-]*://"#, options: .regularExpression) != nil { return true }
-        if t.hasPrefix("localhost") || t.hasPrefix("about:") || t.hasPrefix("view-source:") || t.hasPrefix("data:") || t.hasPrefix("file:") { return true }
-        if t.range(of: #"^(\d{1,3}\.){3}\d{1,3}(:\d+)?(/.*)?$"#, options: .regularExpression) != nil { return true }
-        // host.tld[:port][/path]
-        return t.range(of: #"^[\w\-]+(\.[\w\-]+)+(:\d+)?(/\S*)?$"#, options: .regularExpression) != nil
-    }
+    static func looksLikeURL(_ s: String) -> Bool { TypedURL.looksLikeURL(s) }
 
-    static func urlFromInput(_ s: String) -> String {
-        let t = s.trimmingCharacters(in: .whitespaces)
-        if t.range(of: #"^[a-zA-Z][a-zA-Z0-9+.\-]*:"#, options: .regularExpression) != nil { return t }
-        if t.hasPrefix("localhost") || t.range(of: #"^(\d{1,3}\.){3}\d{1,3}"#, options: .regularExpression) != nil {
-            return "http://" + t
-        }
-        return "https://" + t
-    }
+    static func urlFromInput(_ s: String) -> String { TypedURL.fromInput(s) }
 
     private func typedRow(query: String) -> Suggestion {
         if Self.looksLikeURL(query) {

@@ -57,24 +57,14 @@ extension MainWindowController {
     /// Set Profile ▸ New Profile…: Arc's dialog over the dimmed window; Next makes the profile and
     /// moves the space into it (pages already open reload in it, BrowserManager).
     func showNewProfileDialog(forSpace id: UUID) {
-        guard let window, window.childWindows?.contains(where: { $0 is DialogOverlayWindow }) != true else { return }
-        var overlay: DialogOverlayWindow?
-        let close = { [weak window] in
-            guard let o = overlay else { return }
-            window?.removeChildWindow(o)
-            o.orderOut(nil)
-            overlay = nil
-            window?.makeKey()
-        }
+        guard let window else { return }
         let store = self.store
-        let dialog = NewProfileDialog(onCreate: { name in
-            store.setProfile(store.createProfile(name: name).id, forSpace: id)
-            close()
-        }, onCancel: close)
-        let o = DialogOverlayWindow(over: window, content: dialog)
-        overlay = o
-        window.addChildWindow(o, ordered: .above)
-        o.makeKeyAndOrderFront(nil)
+        DialogOverlayWindow.present(over: window) { close in
+            NewProfileDialog(onCreate: { name in
+                store.setProfile(store.createProfile(name: name).id, forSpace: id)
+                close()
+            }, onCancel: close)
+        }
     }
     /// Manage Spaces…: the Library on its Spaces page, every space side by side.
     func showManageSpaces() { showLibrary(.spaces) }

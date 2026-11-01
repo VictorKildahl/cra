@@ -511,14 +511,16 @@ final class SidebarStore {
         touch()
     }
 
+    /// Arc's Edit Pinned Page ▸ Edit…: a new pinned URL for a pinned tab or favorite (#54). A tab
+    /// on its pinned page goes with it; one navigated away keeps its page until Back to Pinned Page.
     @discardableResult
     func setPinnedURL(_ id: UUID, to url: String) -> Bool {
         guard var it = items[id], var t = it.tab, isPinned(id), t.liveItemURL == nil else { return false }
-        if t.url != url {
+        if t.url == t.savedURL, t.url != url {
+            t.url = url
             t.savedTitle = ""
-            t.faviconKey = FaviconCache.key(for: url)
+            t.faviconKey = FaviconKey.key(for: url)
         }
-        t.url = url
         t.savedURL = url
         it.data = .tab(t)
         items[id] = it

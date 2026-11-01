@@ -73,9 +73,6 @@ enum SidebarMenus {
         }
         menu.addItem(.separator())
         add(menu, "Rename…") { ui.renamingID = id }
-        if m.pinned, tab.liveItemURL == nil {
-            add(menu, "Edit…") { actions.editPinnedURL(id) }
-        }
         if item.title != nil { add(menu, "Use Page Title") { store.rename(id, to: nil) } }
         add(menu, "Duplicate") { _ = store.duplicateTab(id) }
         add(menu, "Copy Link") { copy(tab.url) }
@@ -83,10 +80,10 @@ enum SidebarMenus {
             store.setMuted(id, !tab.muted)
             actions.performAction("muteTab:\(id)")
         }
-        if m.pinned {
+        if m.pinned, tab.liveItemURL == nil { editPinnedPage(menu, id, navigatedAway: m.navigatedAway, store: store, actions: actions) }
+        if m.pinned, m.navigatedAway {
             menu.addItem(.separator())
-            if m.navigatedAway { add(menu, "Back to Pinned Page") { actions.resetPinnedTab(id) } }
-            add(menu, "Replace Pinned URL with Current") { store.setPinnedHomeToCurrent(id) }
+            add(menu, "Back to Pinned Page") { actions.resetPinnedTab(id) }
         }
         menu.addItem(.separator())
         let spaces = submenu(menu, "Move to Space")
@@ -105,6 +102,14 @@ enum SidebarMenus {
             add(menu, "Archive") { actions.closeTab(id) }
         }
         return menu
+    }
+
+    /// Arc's Edit Pinned Page submenu on pinned tabs and favorites (#54). Replace is greyed out
+    /// while the tab is on its pinned page, as in Arc.
+    static func editPinnedPage(_ menu: NSMenu, _ id: UUID, navigatedAway: Bool, store: SidebarStore, actions: SidebarActions) {
+        let sub = submenu(menu, "Edit Pinned Page")
+        add(sub, "Replace Pinned URL with Current", enabled: navigatedAway) { store.setPinnedHomeToCurrent(id) }
+        add(sub, "Edit…") { actions.editPinnedURL(id) }
     }
 
     /// Move to Folder / New Folder for this tab, or for every picked tab.

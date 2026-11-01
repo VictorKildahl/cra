@@ -66,36 +66,64 @@ struct NewProfileDialog: View {
     }
 }
 
-/// Arc's dialog button: a label and its key in a small badge.
-private struct DialogButton: View {
+/// Arc's dialog button: a label and its key in a small badge. `.accent` is the vivid blue of
+/// Edit Pinned URL's Save (measured 1 Nov); disabled it looks like `.primary`.
+struct DialogButton: View {
+    enum Style { case secondary, primary, accent }
     let title: String
     let key: String
     let enabled: Bool
-    let primary: Bool
+    let style: Style
+    /// The key badge's size where it was measured (Edit Pinned URL); otherwise it fits the key.
+    var badge: CGSize?
     let action: () -> Void
+
+    init(title: String, key: String, enabled: Bool, primary: Bool, action: @escaping () -> Void) {
+        self.init(title: title, key: key, enabled: enabled, style: primary ? .primary : .secondary, action: action)
+    }
+
+    init(title: String, key: String, enabled: Bool, style: Style, badge: CGSize? = nil, action: @escaping () -> Void) {
+        self.title = title
+        self.key = key
+        self.enabled = enabled
+        self.style = style
+        self.badge = badge
+        self.action = action
+    }
+
+    private var accent: Bool { style == .accent && enabled }
+    private var primary: Bool { style != .secondary }
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 9) {
                 Text(title).font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(enabled ? Color(hex: "#EBEBEF") : Color(hex: "#5B5C7F"))
+                    .foregroundStyle(accent ? .white : enabled ? Color(hex: "#EBEBEF") : Color(hex: "#5B5C7F"))
                 Text(key).font(.system(size: key == "↩" ? 13 : 11, weight: .bold))
-                    .foregroundStyle(enabled ? Color(hex: "#B7B7DD") : Color(hex: "#5F6193"))
-                    .frame(minWidth: 27, minHeight: 19)
-                    .padding(.horizontal, key == "↩" ? 0 : 2)
-                    .background(RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .fill(primary ? Color(hex: enabled ? "#4E4C9A" : "#222469") : Color(hex: "#4E4C77")))
+                    .foregroundStyle(accent ? Color(hex: "#EDEDFF") : enabled ? Color(hex: "#B7B7DD") : Color(hex: "#5F6193"))
+                    .frame(minWidth: badge?.width ?? 27, maxWidth: badge?.width, minHeight: badge?.height ?? 19, maxHeight: badge?.height)
+                    .padding(.horizontal, badge != nil || key == "↩" ? 0 : 2)
+                    .background(RoundedRectangle(cornerRadius: badge == nil ? 5 : 3, style: .continuous)
+                        .fill(accent ? Color(hex: "#464DFB") : primary ? Color(hex: enabled ? "#4E4C9A" : "#222469") : Color(hex: "#4E4C77")))
+                    .overlay(RoundedRectangle(cornerRadius: badge == nil ? 5 : 3, style: .continuous)
+                        .strokeBorder(accent ? Color(hex: "#6B71FE") : .clear, lineWidth: 1))
             }
             .padding(.leading, 12.5)
             .padding(.trailing, 12)
             .frame(height: 37)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(primary ? Color(hex: enabled ? "#3B3C8F" : "#1C1D4C") : Color(hex: "#302F60"))
+                    .fill(accent ? Color(hex: "#3239FB") : primary ? Color(hex: enabled ? "#3B3C8F" : "#1C1D4C") : Color(hex: "#302F60"))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(primary ? (enabled ? Color(hex: "#6362A9") : .clear) : Color(hex: "#6362A9"), lineWidth: 1)
+                    .strokeBorder(accent ? Color(hex: "#5B61FD") : primary ? (enabled ? Color(hex: "#6362A9") : .clear) : Color(hex: "#6362A9"), lineWidth: 1)
+            )
+            // Arc's Save sits on a darker blue lip, ~1.5 pt below it.
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(style == .accent ? Color(hex: enabled ? "#2C3475" : "#1D2259") : .clear)
+                    .offset(y: 1.5)
             )
         }
         .buttonStyle(.plain)
@@ -154,8 +182,26 @@ final class DialogOverlayWindow: NSWindow {
         let root = ZStack {
             // Arc darkens the window to about 35% under its dialogs (sampled on 1 Nov).
             Color(white: 0.1).opacity(0.65)
-            content.shadow(color: .black.opacity(0.35), radius: 24, y: 8)
+            // One shadow for the card: without the group SwiftUI shadows every text and field on it.
+            content.compositingGroup().shadow(color: .black.opacity(0.35), radius: 24, y: 8)
         }
         contentView = NSHostingView(rootView: root)
+    }
+
+    /// Shows a dialog over `parent` (one at a time); `content` gets the closure that dismisses it.
+    static func present<Content: View>(over parent: NSWindow, _ content: (@escaping () -> Void) -> Content) {
+        guard parent.childWindows?.contains(where: { $0 is DialogOverlayWindow }) != true else { return }
+        var overlay: DialogOverlayWindow?
+        let close = { [weak parent] in
+            guard let o = overlay else { return }
+            parent?.removeChildWindow(o)
+            o.orderOut(nil)
+            overlay = nil
+            parent?.makeKey()
+        }
+        let o = DialogOverlayWindow(over: parent, content: content(close))
+        overlay = o
+        parent.addChildWindow(o, ordered: .above)
+        o.makeKeyAndOrderFront(nil)
     }
 }
