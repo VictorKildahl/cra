@@ -118,7 +118,7 @@ struct BannerPalette {
     init(colors: SidebarColors, themeColor: String?) {
         dark = colors.isDark
         let c = HexColor.components(themeColor ?? "") ?? (0.55, 0.45, 0.75)
-        let (h, s, v) = SpaceTheme.hsb(c.r, c.g, c.b)
+        let (h, s, measured) = SpaceTheme.hsb(c.r, c.g, c.b)
         func hsb(_ s: Double, _ v: Double, _ a: CGFloat = 1) -> NSColor {
             let o = SpaceTheme.rgb(h: h, s: max(0, min(1, s)), v: max(0, min(1, v)))
             return NSColor(srgbRed: o.0, green: o.1, blue: o.2, alpha: a)
@@ -127,6 +127,23 @@ struct BannerPalette {
         // toward the bottom right; text is a dark tint of the space (secondary 70 %, the ✕ 36 %);
         // the heart a paler space colour at 60 %; icons the space colour, darker on hover;
         // sparkles a lighter, greyer tone.
+        // On a pale space (a light grey, a yellow) those tones would vanish into the white card, so
+        // the brightness they're built from is capped where the icon reaches the purple space's
+        // contrast (luminance 0.21, about 4:1 on white). Arc's purple is untouched.
+        func lin(_ x: Double) -> Double { x <= 0.04045 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4) }
+        func iconLuminance(_ v: Double) -> Double {
+            let o = SpaceTheme.rgb(h: h, s: max(0, min(1, s * 0.89)), v: max(0, min(1, v * 0.913)))
+            return 0.2126 * lin(o.0) + 0.7152 * lin(o.1) + 0.0722 * lin(o.2)
+        }
+        var v = measured
+        if !dark, iconLuminance(v) > 0.21 {
+            var lo = 0.0, hi = v
+            for _ in 0..<20 {
+                let m = (lo + hi) / 2
+                if iconLuminance(m) > 0.21 { hi = m } else { lo = m }
+            }
+            v = lo
+        }
         let white = NSColor.white
         fill = dark ? (white.withAlphaComponent(0.12), white.withAlphaComponent(0.07)) : (white.withAlphaComponent(0.94), white.withAlphaComponent(0.58))
         hoverFill = dark ? (white.withAlphaComponent(0.16), white.withAlphaComponent(0.11)) : (white.withAlphaComponent(0.96), white.withAlphaComponent(0.66))
