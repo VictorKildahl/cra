@@ -1,0 +1,18 @@
+# Fullscreen, an extension popup and its options page over it, and back: window and Space
+# transitions. It takes over a Space, so it runs only with CRA_SCENARIO_SCREEN=1 (CI).
+requires screen
+budget rss=600 stalls50=5
+cra://debug?installExtension=${FIXTURES}/Extension
+relaunch
+cra://open?url=${PAGE}?n=full
+wait 3
+cra://debug?fullscreen=1
+wait 3
+cra://debug?extensionAction=${EXTENSION_ID}
+wait 2
+cra://dismiss
+cra://open?url=chrome-extension://${EXTENSION_ID}/options.html
+wait 3
+cra://action/closeTab
+cra://debug?fullscreen=0
+wait 3

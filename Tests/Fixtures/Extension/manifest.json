@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "Cra Scenario Fixture",
+  "version": "1.0",
+  "description": "Made up for scripts/scenario.sh: a popup, an options page, nothing else.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArrHe8/bGDOAVbyjlzsPuq0Nb8Vh6M3P9bsaB8yP4q92PGXq8TkxmPiPGET9gyUOHxUdbMSSNlS6qxkm89gueuIFNTmXLKARMRMlCc2QvF6v+FZJfVZuXBCHWbdSe0SGAlptOWLoS/HFJQLT4q0hEcOXOyr27+XNpL2zp0awUaGlvYEfmmlGxwKwfhovl2odDdWdbM4Coe9IxnzIj6BP/1PvBtwdLDC8Z79wTrRXh/fo+LG3wQmsZzgIqFtqua+90zEqNskZOnJ6+c4iuF7bnfwKudWCSQt9SWEHCc/y7sIK2e2Xo7CL6nqPjbrtvyntHlCbKhV0WQo+VdEAVwp6SqQIDAQAB",
+  "action": { "default_popup": "popup.html", "default_title": "Cra Scenario Fixture" },
+  "options_ui": { "page": "options.html", "open_in_tab": true }
+}

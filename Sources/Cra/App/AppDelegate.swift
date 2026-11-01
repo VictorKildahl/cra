@@ -4,7 +4,9 @@ import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
-    let store = SidebarStore()
+    /// The store, clock and flags; built the same way by the test hosts.
+    let composition = AppComposition()
+    var store: SidebarStore { composition.store }
     let bindings = KeyBindingRegistry()
     let favicons = FaviconCache()
     lazy var engine = SuggestionEngine(store: store, bindings: bindings)
@@ -17,8 +19,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
     private var bootstrapped = false
     private var pendingURLs: [String] = []
-    private var autoArchiveTimer: Timer?
-    private var tabSleepTimer: Timer?
     private var settingsWindow: NSWindow?
     private var settingsController: SettingsWindowController?
     private var isRelaunching = false
@@ -65,13 +65,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         installKeyFallbackMonitor()
         installCommandFileWatcher()
-        store.runAutoArchive()
-        autoArchiveTimer = Timer.scheduledTimer(withTimeInterval: 1800, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.store.runAutoArchive() }
-        }
-        tabSleepTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.sleepIdleTabs() }
-        }
+        composition.startPeriodicWork { [weak self] in self?.sleepIdleTabs() }
+        logSidebarProblems()
         LiveFolderManager.shared.start(store: store)
         // A restart into an update while the user was away leaves the front app alone.
         if HitchMonitor.background {
@@ -165,8 +160,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         observeHttpsOnly()
     }
 
+    /// A sidebar whose links disagree (SidebarIntegrity) says so in the log, one fault a problem.
+    private func logSidebarProblems() {
+        let problems = store.integrityProblems()
+        for p in problems.prefix(20) { CraLog.fault("sidebar: \(p)") }
+        if problems.count > 20 { CraLog.fault("sidebar: \(problems.count - 20) more problems") }
+    }
+
     private func sleepIdleTabs() {
-        guard store.settings.tabSleepEnabled else { return }
         for w in mainWindows { w.browsers.sleepIdleTabs(hiddenLongerThan: store.settings.tabSleep.seconds) }
     }
 
@@ -487,6 +488,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             if let st = dict["status"] { main.browserManager(statusMessage: st); return }
+            // Scenario hooks (scripts/scenario.sh): what a journey needs without a pointer.
+            if dict["checkStore"] != nil { logSidebarProblems(); return }
+            if let js = dict["pageJS"] { main.currentBrowser?.executeJavaScript(js); return }
+            if let path = dict["installExtension"] {
+                do { try ExtensionStore.shared.add(folder: URL(fileURLWithPath: path, isDirectory: true)) } catch {
+                    CraLog.note("scenario: extension not installed: \(error.localizedDescription)")
+                }
+                return
+            }
+            if let id = dict["removeExtension"] {
+                if let e = ExtensionStore.shared.entries.first(where: { $0.extensionID == id }) { ExtensionStore.shared.remove(e) }
+                return
+            }
+            if let v = dict["fullscreen"], let w = main.window, (v == "1") != w.styleMask.contains(.fullScreen) { w.toggleFullScreen(nil); return }
+            if let spec = dict["snapshot"], let out = dict["out"] { ViewSnapshot.write(spec, in: main.window, to: out); return }
+            if let size = dict["windowSize"]?.split(separator: "x").compactMap({ Double($0) }), size.count == 2, let w = main.window {
+                w.setFrame(NSRect(x: w.frame.minX, y: w.frame.maxY - size[1], width: size[0], height: size[1]), display: true)
+                return
+            }
+            if dict["relaunch"] != nil { relaunch(); return }
+            if dict["quit"] != nil { NSApp.terminate(nil); return }
             if let t = dict["selectTab"].flatMap(UUID.init(uuidString:)) { store.selectTab(t, window: main.windowID); return }
             // One tab-sleeping pass with a short threshold (seconds), so it can be tried without waiting.
             if let s = dict["sleepTabs"].flatMap(Double.init) {
@@ -620,24 +642,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// is handled like a cra:// URL (a second instance run with CRA_DATA_DIR
     /// cannot receive cra:// URLs, which LaunchServices routes to the installed app).
     private var commandFileOffset: UInt64 = 0
-    private var commandFileTimer: Timer?
+    private var commandFilePoll: ScheduledWork?
     private func installCommandFileWatcher() {
         guard let path = ProcessInfo.processInfo.environment["CRA_COMMAND_FILE"], !path.isEmpty else { return }
         FileManager.default.createFile(atPath: path, contents: nil)
         commandFileOffset = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? UInt64) ?? 0
-        commandFileTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                guard let self, let h = FileHandle(forReadingAtPath: path) else { return }
-                defer { try? h.close() }
-                let size = (try? h.seekToEnd()) ?? 0
-                guard size > self.commandFileOffset else { return }
-                try? h.seek(toOffset: self.commandFileOffset)
-                let data = h.readDataToEndOfFile()
-                self.commandFileOffset = size
-                for line in String(decoding: data, as: UTF8.self).split(separator: "\n") {
-                    HitchMonitor.mark(String(line))
-                    if let u = URL(string: line.trimmingCharacters(in: .whitespaces)) { self.handleInternalURL(u) }
-                }
+        // A script writes only after this line: the file above starts empty.
+        CraLog.note("pid \(getpid()) reads commands from CRA_COMMAND_FILE")
+        commandFilePoll = composition.clock.every(0.15) { [weak self] in
+            guard let self, let h = FileHandle(forReadingAtPath: path) else { return }
+            defer { try? h.close() }
+            let size = (try? h.seekToEnd()) ?? 0
+            guard size > self.commandFileOffset else { return }
+            try? h.seek(toOffset: self.commandFileOffset)
+            let data = h.readDataToEndOfFile()
+            self.commandFileOffset = size
+            for line in String(decoding: data, as: UTF8.self).split(separator: "\n") {
+                HitchMonitor.mark(String(line))
+                if let u = URL(string: line.trimmingCharacters(in: .whitespaces)) { self.handleInternalURL(u) }
             }
         }
     }
@@ -772,8 +794,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "viewSource": main.currentBrowser?.viewSource()
         case "devTools", "jsConsole":
             // Toggle, like Chrome: ⌥⌘I closes the dock when it is already open.
-            if let b = main.currentBrowser { b.hasDevTools ? b.closeDevTools() : b.showDevTools() }
-        case "inspectElement": main.currentBrowser?.showDevTools()
+            main.browsers.toggleDevTools()
+        case "inspectElement": main.browsers.showDevTools()
         // Arc's Library is a mode of the window's sidebar; ⇧⌘J opens it on Downloads.
         case "openLibrary": main.toggleLibrary()
         case "viewArchive": main.showLibrary(.archive)

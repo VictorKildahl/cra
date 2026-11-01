@@ -112,7 +112,15 @@ final class ExtensionStore {
                 if !e.isEnabled { managed[i].disabledProfiles.insert(profile) }
             }
         }
-        entries = list + managed.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        let next = list + managed.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        // chrome://extensions switches, in the log: a report of a click on a turned-off extension
+        // shows when Cra learned about it.
+        for e in next {
+            guard let old = entries.first(where: { $0.extensionID == e.extensionID }) else { continue }
+            for p in e.disabledProfiles.subtracting(old.disabledProfiles).sorted() { CraLog.note("extension \(e.extensionID) turned off in \(p)") }
+            for p in old.disabledProfiles.subtracting(e.disabledProfiles).sorted() { CraLog.note("extension \(e.extensionID) turned on in \(p)") }
+        }
+        entries = next
         pinnedIDs.removeAll { id in !entries.contains { $0.extensionID == id } }
     }
 

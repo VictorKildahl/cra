@@ -1,0 +1,8 @@
+# A new Mac: onboarding up, a headless Arc import of the made-up profile (CRA_ARC_DIR =
+# Tests/Fixtures/Arc), then two minutes idle, where the crashes after a long import showed up.
+fresh
+budget rss=500 stalls50=5
+wait 3
+cra://import?source=arc&archive=1&settings=1
+expect-log imported 2 spaces, [0-9]+ tabs, [0-9]+ folders, 2 archived
+wait 120

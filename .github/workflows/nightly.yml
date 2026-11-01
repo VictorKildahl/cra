@@ -1,0 +1,107 @@
+name: Nightly
+
+# The slow test layers (docs/testing.md): every scenario on both sidebar backdrop paths
+# (the private CABackdropLayer one and NSVisualEffectView), fullscreen included; the harnesses
+# under AddressSanitizer, ThreadSanitizer and UBSan; the parser fuzzer; and on Mondays
+# mutation testing. Also by hand: Actions ▸ Nightly ▸ Run workflow.
+on:
+  schedule:
+    - cron: "17 2 * * *"
+    - cron: "41 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scenarios:
+    name: Scenarios (backdrop=${{ matrix.backdrop }})
+    runs-on: macos-26
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        backdrop: [layer, material]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read pinned CEF version
+        id: cef
+        run: echo "version=$(sed -n 's/^CEF_VERSION="${CEF_VERSION:-\(.*\)}"$/\1/p' scripts/fetch-cef.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache CEF
+        uses: actions/cache@v6
+        with:
+          path: vendor/cef
+          key: cef-${{ runner.arch }}-${{ steps.cef.outputs.version }}-${{ hashFiles('scripts/fetch-cef.sh') }}
+
+      - name: Build (debug, ad-hoc signed)
+        run: scripts/build.sh debug
+
+      - name: Scenarios
+        env:
+          CRA_FLAGS: backdrop=${{ matrix.backdrop }}
+          CRA_SCENARIO_SCREEN: "1"
+        run: |
+          {
+            echo "## Scenarios, backdrop=${{ matrix.backdrop }}"
+            echo
+            echo "| Scenario | Result | Longest stall / over 50 ms | Memory | Problems |"
+            echo "|---|---|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+          scripts/scenario.sh all
+
+      - name: Keep logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: scenarios-${{ matrix.backdrop }}
+          path: build/scenarios
+          if-no-files-found: ignore
+
+  sanitizers:
+    name: Harnesses under ${{ matrix.sanitizer }} sanitizer
+    runs-on: macos-26
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [address, thread, undefined]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Harnesses
+        env:
+          CRA_TEST_SWIFTC_FLAGS: -sanitize=${{ matrix.sanitizer }}
+        run: |
+          for t in scripts/test-*.sh Tests/test-*.sh; do
+            case "$t" in scripts/test-update.sh|scripts/test.sh) continue ;; esac
+            echo "== $t"; bash "$t"
+          done
+
+  fuzz:
+    name: Parser fuzzing
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - name: 400 000 mutated inputs under AddressSanitizer
+        env:
+          CRA_FUZZ_ITERATIONS: "400000"
+          CRA_FUZZ_SEED: ${{ github.run_id }}
+        run: scripts/fuzz.sh
+      - name: Keep the crashing input
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-crash
+          path: build/fuzz
+
+  mutation:
+    name: Mutation testing
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '41 3 * * 1'
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - name: Mutants of the pure code (70 % must be caught)
+        run: scripts/mutate.py

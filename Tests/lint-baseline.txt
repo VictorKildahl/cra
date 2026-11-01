@@ -1,0 +1,22 @@
+# scripts/lint.py findings in code older than the rule. Only ever lower these.
+importer-without-fixture	Services/Import/FirefoxImporter.swift:Firefox	1
+importer-without-fixture	Services/Import/Importers.swift:Dia	1
+importer-without-fixture	Services/Import/SafariImporter.swift:Safari	1
+importer-without-fixture	Services/Import/ZenImporter.swift:Zen	1
+raw-observation-tracking	UI/CommandBar/CommandBarView.swift	1
+raw-observation-tracking	UI/Overlays.swift	3
+raw-observation-tracking	UI/PaneToolbarView.swift	1
+raw-observation-tracking	UI/Sidebar/DownloadsTray.swift	1
+raw-observation-tracking	UI/Sidebar/LibraryView.swift	1
+raw-observation-tracking	UI/Sidebar/List/SidebarView.swift	4
+raw-observation-tracking	UI/Sidebar/List/SpaceColumnView.swift	2
+raw-observation-tracking	UI/Sidebar/List/SpaceListView.swift	1
+raw-observation-tracking	UI/Sidebar/List/SpacePagerView.swift	1
+raw-observation-tracking	UI/Sidebar/NowPlayingTray.swift	1
+raw-observation-tracking	UI/Sidebar/SpacesManagerView.swift	2
+raw-observation-tracking	UI/SiteControlCenter.swift	1
+raw-observation-tracking	UI/TabSwitcher/TabSwitcherView.swift	1
+raw-observation-tracking	UI/Theme.swift	2
+raw-observation-tracking	UI/Updates/UpdateBanner.swift	1
+raw-observation-tracking	UI/Windows/LittleWindowController.swift	2
+raw-observation-tracking	UI/Windows/MainWindowController.swift	2

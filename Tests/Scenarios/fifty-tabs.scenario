@@ -1,0 +1,14 @@
+# Fifty pages opened, switched through and closed: leaks, helper processes never reaped,
+# and the layout cost of a long Today list.
+budget rss=900 stalls50=70   # each new tab stalls ~100 ms today (Nov 2026)
+cra://open?url=${PAGE}?n=first
+wait 3
+helpers baseline
+pace 0.3
+repeat 50 cra://open?url=${PAGE}?n=${i}
+wait 5
+pace 0.15
+repeat 50 cra://action/nextTab
+repeat 50 cra://action/closeTab   # the first page stays
+wait 3
+helpers settle 2

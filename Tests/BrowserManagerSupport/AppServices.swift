@@ -43,14 +43,6 @@ final class FaviconCache {
 }
 enum TabSwitcherMetrics { static let thumbnail = NSSize(width: 320, height: 200) }
 enum HitchMonitor { static func mark(_ event: String) {} }
-enum CraLog {
-    static func note(_ message: String) {}
-    static func host(_ url: String) -> String { URL(string: url)?.host ?? "?" }
-}
-enum PageProbe {
-    static func run(_ browser: CraBrowser, completion: @escaping (String) -> Void) {}
-    static func viewState(_ runtime: TabRuntime) -> String { "" }
-}
 enum EmbeddedPages {
     static var viewsByHost: [ObjectIdentifier: [NSView]] = [:]
     static func isHost(_ window: NSWindow) -> Bool { viewsByHost[ObjectIdentifier(window)] != nil }

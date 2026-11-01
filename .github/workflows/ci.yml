@@ -14,11 +14,35 @@ jobs:
     name: Tests
     # No Chromium download: Packages/CraCore and the harnesses compile only the files they test.
     runs-on: macos-26
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
-      - name: CraCore and harnesses
+      - name: CraCore, harnesses and lint
         run: scripts/test.sh
+
+      # Changed lines under test >= 70 %, CraCore >= 85 % (docs/testing.md).
+      - name: Coverage
+        if: github.event_name == 'pull_request' || github.event.before != '0000000000000000000000000000000000000000'
+        run: |
+          set -o pipefail
+          scripts/coverage.py --base "${{ github.event.pull_request.base.sha || github.event.before }}" | tee coverage.md
+
+      # Fork pull requests get a read-only token: the job summary has the same table.
+      - name: Coverage comment
+        if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          [ -s coverage.md ] || exit 0
+          { echo "### Coverage"; echo; cat coverage.md; } > comment.md
+          gh pr comment "$PR" --body-file comment.md --edit-last 2>/dev/null || gh pr comment "$PR" --body-file comment.md
 
   build:
     name: Build Cra.app
@@ -51,3 +75,18 @@ jobs:
         continue-on-error: true
         timeout-minutes: 5
         run: Tests/smoke-launch.sh build/Cra.app
+
+      # One short journey on every pull request (thirty tabs put to sleep); the full set and the
+      # component snapshots run nightly (nightly.yml). Not blocking until steady on these runners.
+      - name: Scenario
+        continue-on-error: true
+        timeout-minutes: 5
+        run: scripts/scenario.sh sleep-tabs
+
+      - name: Keep scenario logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: scenario-logs
+          path: build/scenarios
+          if-no-files-found: ignore

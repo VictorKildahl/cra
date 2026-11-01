@@ -17,7 +17,7 @@ final class PaneToolbarView: NSView {
     private let actions: SidebarActions
 
     private struct Model: Equatable {
-        enum Kind: Equatable { case noTab, emptyPane, normal, developer }
+        typealias Kind = ToolbarComposition.Kind
         struct Ext: Equatable { let id: String; let name: String; let icon: NSImage? }
         var kind = Kind.noTab
         var inSplit = false
@@ -217,57 +217,51 @@ final class PaneToolbarView: NSView {
         (superview as? PaneCardView)?.developerBar = m.kind == .developer ? m.fill : nil
         hairline.isHidden = m.hairline == nil
         hairline.layer?.backgroundColor = m.hairline?.cgColor
-        var l: [ToolbarGlyphButton] = []
-        var r: [NSView] = []
-        let toggle = { self.glyph("toggle", "sidebar.left", help: m.sidebarVisible ? "Hide Sidebar (⌘S)" : "Show Sidebar (⌘S)",
-                                  width: 37, iconSize: 15.5) { $0.actions.toggleSidebar() } }
-        switch m.kind {
-        case .noTab:
-            l = [toggle(),
-                 glyph("back", "arrow.left", help: "", enabled: false, width: 37, iconSize: 15) { _ in },
-                 glyph("forward", "arrow.right", help: "", enabled: false, width: 37, iconSize: 15) { _ in },
-                 glyph("reload", "arrow.clockwise", help: "", enabled: false, width: 37, iconSize: 15) { _ in }]
-        case .emptyPane:
-            l = [glyph("back", "arrow.left", help: "", enabled: false, width: 37, iconSize: 15) { _ in },
-                 glyph("forward", "arrow.right", help: "", enabled: false, width: 37, iconSize: 15) { _ in }]
-        case .normal:
-            // Toggle first, centred 30 pt from the card edge (Arc, sidebar hidden), then ← → ↻ at 37 pt
-            // pitch. Split panes drop the toggle and refresh (Arc 1.170: only ← → in a pane).
-            if !m.inSplit { l.append(toggle()) }
-            l.append(glyph("back", "arrow.left", help: "Go Back (⌘[)", enabled: m.canGoBack, width: 37, iconSize: 15) { $0.navigate("goBack") })
-            l.append(glyph("forward", "arrow.right", help: "Go Forward (⌘])", enabled: m.canGoForward, width: 37, iconSize: 15) { $0.navigate("goForward") })
-            if !m.inSplit {
-                l.append(glyph("reload", m.isLoading ? "xmark" : "arrow.clockwise", help: "Refresh (⌘R)", width: 37, iconSize: 15,
-                               animated: true) { $0.navigate("reload") })
-            }
-        case .developer:
-            if !m.inSplit { l.append(toggle()) }
-            r.append(glyph("copy", "link", help: "Copy URL (⇧⌘C)", width: 28) { $0.actions.performAction("copyURL") })
-            r.append(devDivider)
-            r.append(glyph("devtools", "terminal", help: "Developer Tools (⌥⌘I)", width: 28) { $0.actions.performAction("devTools") })
-        }
-        // Arc's right end of the bar: pinned extensions, the Extensions button, then Split View;
-        // also on the no-tab bar. A split pane has its options (focused pane only) and close.
-        if !m.inSplit, m.kind != .emptyPane {
-            for e in m.pinned {
-                let b = button("ext:" + e.id) { ToolbarGlyphButton() }
-                b.configure(symbol: nil, image: e.icon, help: e.name, enabled: true, width: 34, iconSize: 18, tint: m.fgDim, hover: m.hover)
-                let id = e.id
+        let bar = ToolbarComposition(kind: m.kind, inSplit: m.inSplit, focusedPane: m.focusedPane, canGoBack: m.canGoBack,
+                                     canGoForward: m.canGoForward, isLoading: m.isLoading, pinnedExtensions: m.pinned.map(\.id),
+                                     hasExtensions: m.hasExtensions)
+        // The no-tab bar and an empty pane show navigation that does nothing (Arc greys it out).
+        let wide = m.kind == .noTab || m.kind == .emptyPane
+        func view(_ item: ToolbarComposition.Item) -> NSView {
+            switch item {
+            case .toggleSidebar:
+                return glyph("toggle", "sidebar.left", help: m.sidebarVisible ? "Hide Sidebar (⌘S)" : "Show Sidebar (⌘S)",
+                             width: 37, iconSize: 15.5) { $0.actions.toggleSidebar() }
+            case .back(let enabled):
+                return glyph("back", "arrow.left", help: wide ? "" : "Go Back (⌘[)", enabled: enabled, width: 37, iconSize: 15) { if !wide { $0.navigate("goBack") } }
+            case .forward(let enabled):
+                return glyph("forward", "arrow.right", help: wide ? "" : "Go Forward (⌘])", enabled: enabled, width: 37, iconSize: 15) { if !wide { $0.navigate("goForward") } }
+            case .reload(let loading, let enabled):
+                return glyph("reload", loading ? "xmark" : "arrow.clockwise", help: enabled ? "Refresh (⌘R)" : "", enabled: enabled, width: 37,
+                             iconSize: 15, animated: enabled) { if !wide { $0.navigate("reload") } }
+            case .copyURL:
+                return glyph("copy", "link", help: "Copy URL (⇧⌘C)", width: 28) { $0.actions.performAction("copyURL") }
+            case .divider:
+                return devDivider
+            case .devTools:
+                return glyph("devtools", "terminal", help: "Developer Tools (⌥⌘I)", width: 28) { $0.actions.performAction("devTools") }
+            case .pinnedExtension(let id):
+                let e = m.pinned.first { $0.id == id }
+                let b = button("ext:" + id) { ToolbarGlyphButton() }
+                b.configure(symbol: nil, image: e?.icon, help: e?.name ?? "", enabled: true, width: 34, iconSize: 18, tint: m.fgDim, hover: m.hover)
                 b.action = { [weak self] in self?.actions.runExtension(id) }
                 b.menuProvider = { ExtensionStore.shared.entries.first { $0.extensionID == id }.map(ExtensionsMenu.iconMenu) }
-                r.append(b)
+                return b
+            case .extensions:
+                return glyph("extensions", "slider.horizontal.2.square", help: "Extensions", width: 34, iconSize: 16) { $0.actions.showExtensionsMenu() }
+            case .addSplit:
+                return glyph("split", "square.split.2x1", help: "Add Split View (⌃⇧=)", width: 34, iconSize: 16) { $0.actions.performAction("addSplitView") }
+            case .splitOptions:
+                return glyph("splitOptions", "rectangle.split.2x1", help: "Split View Options") { $0.showSplitMenu(from: $0.buttons["splitOptions"]) }
+            case .closePane:
+                let id = paneTabID
+                return glyph("close", "xmark", help: "Close this Split Pane (⌃⇧-)", width: 30, iconSize: 14, tint: m.closeTint) {
+                    if let id { $0.actions.closePane(id) }
+                }
             }
-            if m.hasExtensions {
-                r.append(glyph("extensions", "slider.horizontal.2.square", help: "Extensions", width: 34, iconSize: 16) { $0.actions.showExtensionsMenu() })
-            }
-            r.append(glyph("split", "square.split.2x1", help: "Add Split View (⌃⇧=)", width: 34, iconSize: 16) { $0.actions.performAction("addSplitView") })
         }
-        if m.inSplit, let id = paneTabID {
-            if m.focusedPane, m.kind != .emptyPane {
-                r.append(glyph("splitOptions", "rectangle.split.2x1", help: "Split View Options") { $0.showSplitMenu(from: $0.buttons["splitOptions"]) })
-            }
-            r.append(glyph("close", "xmark", help: "Close this Split Pane (⌃⇧-)", width: 30, iconSize: 14, tint: m.closeTint) { $0.actions.closePane(id) })
-        }
+        let l = bar.left.compactMap { view($0) as? ToolbarGlyphButton }
+        let r = bar.right.map(view)
         devDivider.layer?.backgroundColor = m.dividerColor.cgColor
         let used = Set((l as [NSView] + r).map(ObjectIdentifier.init))
         for (k, b) in buttons where !used.contains(ObjectIdentifier(b)) {

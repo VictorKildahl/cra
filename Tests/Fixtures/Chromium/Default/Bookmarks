@@ -1,0 +1,54 @@
+{
+ "version": 1,
+ "roots": {
+  "bookmark_bar": {
+   "type": "folder",
+   "name": "Bookmarks bar",
+   "children": [
+    {
+     "type": "url",
+     "name": "Docs",
+     "url": "https://example.com/docs",
+     "date_added": "13300000000000000"
+    },
+    {
+     "type": "folder",
+     "name": "Reading",
+     "children": [
+      {
+       "type": "url",
+       "name": "",
+       "url": "https://example.com/read"
+      }
+     ]
+    },
+    {
+     "type": "folder",
+     "name": "Empty",
+     "children": []
+    },
+    {
+     "type": "url",
+     "name": "Local",
+     "url": "file:///etc/hosts"
+    }
+   ]
+  },
+  "other": {
+   "type": "folder",
+   "name": "Other",
+   "children": [
+    {
+     "type": "url",
+     "name": "Other one",
+     "url": "https://example.com/other"
+    }
+   ]
+  },
+  "synced": {
+   "type": "folder",
+   "name": "Mobile",
+   "children": []
+  }
+ }
+}

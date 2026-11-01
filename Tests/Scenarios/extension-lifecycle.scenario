@@ -1,0 +1,25 @@
+# An unpacked extension installed, used, turned off in chrome://extensions, clicked while off,
+# turned on and removed. A click must never reach a disabled extension (GitHub #41).
+budget rss=600 stalls50=5
+cra://debug?installExtension=${FIXTURES}/Extension
+relaunch
+cra://open?url=${PAGE}?n=ext
+wait 3
+cra://debug?extensionAction=${EXTENSION_ID}
+wait 2
+cra://dismiss
+cra://open?url=chrome://extensions/?id=${EXTENSION_ID}
+wait 3
+cra://debug?pageJS=chrome.management.setEnabled('${EXTENSION_ID}',false)
+expect-log extension ${EXTENSION_ID} turned off in Default
+cra://debug?extensionAction=${EXTENSION_ID}
+wait 2
+cra://debug?pageJS=chrome.management.setEnabled('${EXTENSION_ID}',true)
+expect-log extension ${EXTENSION_ID} turned on in Default
+cra://debug?extensionAction=${EXTENSION_ID}
+wait 2
+cra://dismiss
+cra://debug?removeExtension=${EXTENSION_ID}
+relaunch
+cra://debug?extensionAction=${EXTENSION_ID}
+wait 2

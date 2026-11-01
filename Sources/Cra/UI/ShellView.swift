@@ -117,6 +117,16 @@ final class ShellView: NSView {
         return filter
     }
 
+    /// Which blur path this run takes, once: scenarios run both (CRA_FLAGS) and the
+    /// log says which one a crash or a stall happened on.
+    private static var loggedBackdropPath = false
+    private static func logBackdropPath(layer: Bool) {
+        guard !loggedBackdropPath else { return }
+        loggedBackdropPath = true
+        let why = FeatureFlags.current.backdrop == .material ? "CRA_FLAGS" : "no CABackdropLayer or CAFilter"
+        CraLog.note("sidebar backdrop: " + (layer ? "layer" : "material (\(why))"))
+    }
+
     func refreshLift() {
         let t = CraTuning.shared
         let lift = vibrantDark ? (windowActive ? 0.15 : 0.93) : (windowActive ? t.liftActive : t.liftInactive)
@@ -169,7 +179,8 @@ final class ShellView: NSView {
         // The window server only keeps a behind-window capture live for a layer that is
         // window-server aware in AppKit's capture group (NSVisualEffectView's own settings);
         // without them the blur showed only while the window was redrawing (GitHub #37).
-        if let cls = NSClassFromString("CABackdropLayer") as? CALayer.Type,
+        if FeatureFlags.current.backdrop == .layer,
+           let cls = NSClassFromString("CABackdropLayer") as? CALayer.Type,
            let blur = ShellView.makeBackdropBlur(radius: 40) {
             let b = cls.init()
             b.filters = [blur]
@@ -185,6 +196,7 @@ final class ShellView: NSView {
         backdropHost.layer?.addSublayer(liftLayer)
         backdropHost.isHidden = true
         addSubview(backdropHost)
+        Self.logBackdropPath(layer: backdropLayer != nil)
         vibrancyLift.wantsLayer = true
         vibrancyLift.layer?.backgroundColor = NSColor(white: 1, alpha: 0.15).cgColor
         vibrancyLift.isHidden = true

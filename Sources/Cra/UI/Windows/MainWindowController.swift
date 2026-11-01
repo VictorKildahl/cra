@@ -99,7 +99,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         window.contentView = shell
         window.backgroundColor = NSColor(palette.gradientColors.first ?? .gray)
 
-        browsers = BrowserManager(store: store, favicons: app.favicons, container: shell.parkingView)
+        browsers = BrowserManager(store: store, favicons: app.favicons, container: shell.parkingView, clock: app.composition.clock)
         browsers.delegate = self
         browsers.windowID = session.id
         browsers.takeRuntimeFromOtherWindow = { [weak self] id in
@@ -1674,16 +1674,32 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Dia's Extensions menu. The popup hangs under the toolbar, its right edge at `buttonRightX`
     /// (screen x of the clicked button; nil = the extension's toolbar button or the card's right end).
     func runExtensionAction(_ id: String, buttonRightX: CGFloat? = nil) {
-        guard extensionEntries.contains(where: { $0.extensionID == id }) else { return }
-        guard let bar = toolbarBottomOnScreen() else { openExtensionPopupPage(id, anchor: nil); return }
-        let anchor = buttonRightX.map { NSPoint(x: $0, y: urlBarBottomOnScreen() ?? bar.y) }
-            ?? extensionPopupAnchor(id) ?? NSPoint(x: bar.cardMaxX - 8, y: bar.y)
-        guard let browser = currentBrowser else { openExtensionPopupPage(id, anchor: anchor); return }
-        let inDefaultProfile = profileDirectoryName == "Default"
-        Task {
-            if await !ExtensionActions.shared.run(id, on: browser, anchor: anchor, inDefaultProfile: inDefaultProfile) {
-                self.openExtensionPopupPage(id, anchor: anchor)
+        let bar = toolbarBottomOnScreen()
+        let browser = currentBrowser
+        let anchor = bar.map { bar in
+            buttonRightX.map { NSPoint(x: $0, y: urlBarBottomOnScreen() ?? bar.y) } ?? extensionPopupAnchor(id) ?? NSPoint(x: bar.cardMaxX - 8, y: bar.y)
+        }
+        let available = profileExtensions
+        switch ExtensionLaunch.decide(id, available: available, hasPage: bar != nil && browser != nil) {
+        case .nothing: return
+        case .runAction:
+            guard let browser, let anchor else { return }
+            let inDefaultProfile = profileDirectoryName == "Default"
+            Task {
+                if await !ExtensionActions.shared.run(id, on: browser, anchor: anchor, inDefaultProfile: inDefaultProfile),
+                   let e = available.first(where: { $0.id == id }) {
+                    self.perform(ExtensionLaunch.fallback(e), anchor: anchor)
+                }
             }
+        case let fallback: perform(fallback, anchor: anchor)
+        }
+    }
+
+    /// The extensions installed in the focused page's profile, turned on or not.
+    private var profileExtensions: [ExtensionLaunch.Extension] {
+        let profile = profileDirectoryName
+        return ExtensionStore.shared.entries.filter { $0.isInstalled(inProfile: profile) }.map {
+            ExtensionLaunch.Extension(id: $0.extensionID, popupPath: $0.popupPath, optionsPath: $0.optionsPath, enabled: $0.isEnabled(inProfile: profile))
         }
     }
 
@@ -1712,16 +1728,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// No page for Chrome's popup to attach to (no tab open, no DevTools pipe, a page it
-    /// cannot reach): the popup page in a popup-sized window under the button, else the
-    /// options page, else Chrome's details page for the extension.
-    private func openExtensionPopupPage(_ id: String, anchor: NSPoint?) {
-        guard let e = ExtensionStore.shared.entries.first(where: { $0.extensionID == id }) else { return }
-        let base = "chrome-extension://\(id)/"
-        if let popup = e.popupPath {
+    /// cannot reach): ExtensionLaunch picks the popup page in a popup-sized window under the
+    /// button, else the options page, else Chrome's details page for the extension.
+    private func perform(_ launch: ExtensionLaunch, anchor: NSPoint?) {
+        switch launch {
+        case .nothing, .runAction: break
+        case .popupWindow(let url):
             let fallback = window.map { NSPoint(x: $0.frame.maxX - 16, y: $0.frame.maxY - CraMetrics.toolbarHeight) } ?? .zero
-            ExtensionPageWindow.open(url: base + popup, anchor: anchor ?? fallback, app: app)
-        } else {
-            store.createTab(url: e.optionsPath.map { base + $0 } ?? "chrome://extensions/?id=\(id)", select: true, window: windowID)
+            ExtensionPageWindow.open(url: url, anchor: anchor ?? fallback, app: app)
+        case .openTab(let url):
+            store.createTab(url: url, select: true, window: windowID)
         }
     }
 

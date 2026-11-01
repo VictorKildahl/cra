@@ -77,6 +77,8 @@ enum BrowserManagerLifecycleTests {
         await sleepCase("an exception reply cannot authorize sleeping", reply: #"{"exceptionDetails":{},"result":{"value":""}}"#) { _, _ in }
         await sleepCase("a page holding typed text stays awake", reply: #"{"result":{"type":"string","value":"typed"}}"#) { _, _ in }
         await refusalBackoffCase()
+        await sleepClockCase()
+        devToolsCase()
         await beforeUnloadCase()
         nowPlayingCase()
         await sleepCase("malformed or missing replies cannot authorize sleeping", reply: nil) { _, _ in }
@@ -186,6 +188,56 @@ enum BrowserManagerLifecycleTests {
         runtime.sleepProbeAfter = Date.distantPast
         manager.sleepIdleTabs(hiddenLongerThan: 60)
         expect(runtime.browser.replies.contains { $0.method == isolatedProbe }, "a refused page is probed again after the back-off")
+        manager.closeAll()
+    }
+
+    /// Tab sleeping on the manager's clock: an hour's threshold and the 10-minute back-off run
+    /// in no time, and nothing is asked a second early.
+    @MainActor
+    private static func sleepClockCase() async {
+        let clock = ManualScheduler()
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView(), clock: clock)
+        let id = store.createTab(url: "https://example.test/clock").id
+        let runtime = manager.ensureRuntime(for: id)!
+        func probed() -> Bool { runtime.browser.replies.contains { $0.method == isolatedProbe } }
+        clock.advance(by: 3599)
+        manager.sleepIdleTabs(hiddenLongerThan: 3600)
+        expect(!probed(), "a page hidden a second short of the threshold is not asked")
+        clock.advance(by: 2)
+        manager.sleepIdleTabs(hiddenLongerThan: 3600)
+        expect(probed(), "a page hidden past the threshold is asked")
+        runtime.browser.reply(to: isolatedProbe, with: #"{"result":{"type":"string","value":"typed"}}"#)
+        await drainMainQueue()
+        clock.advance(by: BrowserManager.refusalBackoff - 1)
+        manager.sleepIdleTabs(hiddenLongerThan: 3600)
+        expect(!probed(), "a refused page is not asked again inside the back-off")
+        clock.advance(by: 1)
+        manager.sleepIdleTabs(hiddenLongerThan: 3600)
+        expect(probed(), "a refused page is asked again once the back-off ends")
+        manager.closeAll()
+    }
+
+    /// ⌥⌘I pressed again while CEF is still closing DevTools opens them once they are gone,
+    /// instead of closing them a second time.
+    @MainActor
+    private static func devToolsCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let id = store.createTab(url: "https://example.test/devtools").id
+        manager.show(id, focus: false)
+        let browser = manager.runtime(for: id)!.browser
+        manager.toggleDevTools()
+        manager.browser(browser, didCreateDevToolsView: NSView())
+        manager.toggleDevTools()
+        manager.toggleDevTools()
+        expect(browser.devToolsRequests == ["show", "close"], "a press while DevTools close asks CEF for nothing yet")
+        manager.browserDidCloseDevTools(browser)
+        expect(browser.devToolsRequests == ["show", "close", "show"], "once CEF reports them closed, the press opens them again")
+        manager.browser(browser, didCreateDevToolsView: NSView())
+        manager.showDevTools()
+        expect(browser.devToolsRequests.last == "show" && manager.runtime(for: id)!.devTools.state == .open,
+               "Inspect Element on open DevTools keeps them open")
         manager.closeAll()
     }
 
