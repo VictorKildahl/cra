@@ -166,11 +166,15 @@ final class ShellView: NSView {
         // Animation's own filters (private CAFilter "gaussianBlur"); a CIFilter in
         // `filters` is ignored for the backdrop capture, which left the sidebar fully
         // see-through (25 Oct 2026). Without the filter class we keep the NSVisualEffectView path.
+        // The window server only keeps a behind-window capture live for a layer that is
+        // window-server aware in AppKit's capture group (NSVisualEffectView's own settings);
+        // without them the blur showed only while the window was redrawing (GitHub #37).
         if let cls = NSClassFromString("CABackdropLayer") as? CALayer.Type,
            let blur = ShellView.makeBackdropBlur(radius: 40) {
             let b = cls.init()
             b.filters = [blur]
-            b.setValue(true, forKey: "allowsGroupBlending")
+            b.setValue(true, forKey: "windowServerAware")
+            b.setValue("NSCGSWindowBehindWindowCaptureBackdropGroup", forKey: "groupName")
             backdropHost.layer?.addSublayer(b)
             backdropLayer = b
         }
