@@ -53,8 +53,9 @@ final class SpaceColumnView: NSView {
 
     /// Arc 1.171 (one space, live, 31 Oct) places everything under the favorites from the tiles'
     /// bottom, or with no favorites from the URL field's (the column starts 8 pt under it, where
-    /// the first tile's top goes): the header 10 pt below, the divider line 54.5 pt below. With
-    /// the header hidden the line is 18.5 pt under the tiles, 15.5 pt under the URL field.
+    /// the first tile's top goes): the header's 36 pt hover fill 8 pt below (Arc 1.171, 1 Nov), the
+    /// divider line 54.5 pt below. With the header hidden the line is 18.5 pt under the tiles,
+    /// 15.5 pt under the URL field.
     private func place(animated: Bool) {
         let w = bounds.width
         let fh = favorites.height(forWidth: w - 16)
@@ -62,7 +63,7 @@ final class SpaceColumnView: NSView {
         set(favorites, NSRect(x: 8, y: 0, width: w - 16, height: fh))
         let tiles = favorites.tilesBottom(forWidth: w - 16)
         let base = tiles ?? -8
-        set(header, NSRect(x: 10, y: base + 10, width: w - 20, height: header.isHidden ? 0 : 31))
+        set(header, NSRect(x: 8, y: base + 8, width: w - 16, height: header.isHidden ? 0 : 36))
         // The list's line sits 11.5 pt into it (3 pt inset, then halfway down the 18 pt divider).
         let top = base + (!header.isHidden ? 43 : tiles == nil ? 4 : 7)
         set(list, NSRect(x: 0, y: top, width: w, height: max(0, bounds.height - top)))
@@ -71,15 +72,17 @@ final class SpaceColumnView: NSView {
 
 // MARK: - Space header
 
-/// The space's emoji and name. Arc: a click collapses or expands the pinned tabs; the menu is
-/// on right-click; the chevron shows on hover.
+/// The space's emoji and name. Arc 1.171 (live, 1 Nov): a click anywhere but the ••• collapses or
+/// expands the pinned tabs; on hover the row fills, a chevron takes the emoji's place and a •••
+/// button opens the space menu; collapsed, the chevron stays and points right.
 final class SpaceHeaderView: NSView {
     private let spaceID: UUID
     private let store: SidebarStore
     private let actions: SidebarActions
-    private let emoji = NSTextField.sidebarLabel(size: 12)
-    private let title = NSTextField.sidebarLabel(size: 14, weight: .medium)
+    private let emoji = NSTextField.sidebarLabel(size: 14)
+    private let title = NSTextField.sidebarLabel(size: 13, weight: .semibold)
     private let chevron = NSImageView()
+    private var more: SidebarGlyphButton!
     private var hovering = false { didSet { if hovering != oldValue { refresh() } } }
     private var collapsed = false
     private var colors = SidebarColors()
@@ -93,11 +96,15 @@ final class SpaceHeaderView: NSView {
         self.actions = actions
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.cornerRadius = 8
-        chevron.image = SidebarSymbols.image("chevron.down", size: 8, weight: .bold)
+        layer?.cornerRadius = 12
+        // Pixel-fitted to Arc's 2x capture (chevron.down 12.5 bold, ellipsis 13 semibold).
+        chevron.image = SidebarSymbols.image("chevron.down", size: 12.5, weight: .bold)
         chevron.imageScaling = .scaleNone
         chevron.wantsLayer = true
-        for v in [emoji, title, chevron] { addSubview(v) }
+        more = SidebarGlyphButton(symbol: "ellipsis", size: 24, height: 24, iconSize: 13, weight: .semibold, help: "", colors: colors) { [weak self] in
+            self?.showMenu()
+        }
+        for v in [emoji, title, chevron, more!] as [NSView] { addSubview(v) }
         sync()
     }
 
@@ -109,6 +116,7 @@ final class SpaceHeaderView: NSView {
     private func sync() {
         syncQueued = false
         var hide = false
+        let wasCollapsed = collapsed
         withObservationTracking {
             guard let space = store.space(spaceID) else { return }
             emoji.stringValue = space.emoji
@@ -123,6 +131,7 @@ final class SpaceHeaderView: NSView {
                 self.sync()
             }
         }
+        if collapsed != wasCollapsed { turnChevron(from: wasCollapsed) }
         refresh()
         if hide != isHidden {
             isHidden = hide
@@ -131,29 +140,65 @@ final class SpaceHeaderView: NSView {
     }
 
     private func refresh() {
-        title.textColor = colors.textSecondary
-        chevron.contentTintColor = colors.textTertiary
-        chevron.alphaValue = hovering ? 1 : 0
-        layer?.backgroundColor = (hovering ? colors.hoverFill : .clear).cgColor
+        // Arc's dark header title is dimmer than its other secondary text (white 0.45, 1 Nov).
+        title.textColor = colors.isDark ? NSColor.white.withAlphaComponent(0.45) : colors.textSecondary
+        chevron.contentTintColor = colors.textSecondary
+        let showsChevron = collapsed || hovering
+        chevron.isHidden = !showsChevron
+        emoji.isHidden = showsChevron
+        more.colors = colors
+        more.tint = colors.textSecondary
+        more.isHidden = !hovering
+        // Arc's dark header fill is white 0.10, a little lighter than its rows' (1 Nov).
+        let fill = colors.isDark ? NSColor.white.withAlphaComponent(0.1) : colors.hoverFill
+        layer?.backgroundColor = (hovering ? fill : .clear).cgColor
         needsLayout = true
+    }
+
+    /// Arc points the chevron down while the pinned tabs show and right while they are collapsed.
+    private func angle(collapsed: Bool) -> CGFloat { collapsed ? -.pi / 2 : 0 }
+
+    /// Arc turns it a quarter over about 0.12 s (a 60 fps capture, 1 Nov).
+    private func turnChevron(from wasCollapsed: Bool) {
+        guard window != nil, let layer = chevron.layer else { return }
+        let turn = CABasicAnimation(keyPath: "transform.rotation.z")
+        turn.fromValue = angle(collapsed: wasCollapsed)
+        turn.toValue = angle(collapsed: collapsed)
+        turn.duration = 0.12
+        turn.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        layer.add(turn, forKey: "turn")
+    }
+
+    private func showMenu() {
+        guard let event = NSApp.currentEvent, let menu = spaceMenu() else { return }
+        more.highlighted = true
+        NSMenu.popUpContextMenu(menu, with: event, for: more)
+        more.highlighted = false
     }
 
     override func layout() {
         super.layout()
         let h = bounds.height
-        // HStack(spacing: 8), 7 pt in.
+        // Arc centres the emoji and the chevron on the tab rows' favicon column (25.75 pt in from
+        // the sidebar edge, 17.75 pt into this view) and starts the title on their title column.
+        // The emoji is drawn ~0.5 pt right of that and ~1.25 pt above the label's centre.
+        let slot: CGFloat = 17.75
         let es = emoji.intrinsicContentSize
-        let ew = ceil(emoji.attributedStringValue.size().width)
-        emoji.frame = NSRect(x: 7 - SidebarText.inset, y: (h - es.height) / 2, width: ew + 2 * SidebarText.inset, height: es.height)
-        var x = 7 + ew + 8
-        let tw = min(ceil(title.attributedStringValue.size().width), max(0, bounds.width - x - 30))
-        let th = title.intrinsicContentSize.height
-        title.frame = NSRect(x: x - SidebarText.inset, y: (h - th) / 2, width: tw + 2 * SidebarText.inset, height: th)
-        x += tw + 8
-        chevron.frame = NSRect(x: x, y: (h - 10) / 2, width: 10, height: 10)
+        let ew = emoji.attributedStringValue.size().width
+        emoji.frame = NSRect(x: slot + 0.5 - ew / 2 - SidebarText.inset, y: (h - es.height) / 2 - 1.25, width: ew + 2 * SidebarText.inset, height: es.height)
+        // Turned right, Arc's chevron sits a little higher than chevron.down turned about its centre.
+        let (cx, cy): (CGFloat, CGFloat) = collapsed ? (slot + 0.75, h / 2 - 0.25) : (slot + 0.5, h / 2 + 0.5)
+        chevron.frame = NSRect(x: cx - 10, y: cy - 10, width: 20, height: 20)
         chevron.layer?.anchorPoint = CGPoint(x: 0.5, y: 0.5)
         chevron.layer?.position = CGPoint(x: chevron.frame.midX, y: chevron.frame.midY)
-        chevron.layer?.setAffineTransform(CGAffineTransform(rotationAngle: collapsed ? .pi / 2 : 0))
+        chevron.layer?.setAffineTransform(CGAffineTransform(rotationAngle: angle(collapsed: collapsed)))
+        // The ••• button's 24 pt square sits 6 pt in from the row's right end; its dots draw
+        // half a point left of and below the square's centre.
+        more.frame = NSRect(x: bounds.width - 30.5, y: (h - 24) / 2 + 0.5, width: 24, height: 24)
+        let x: CGFloat = 36
+        let tw = min(ceil(title.attributedStringValue.size().width), max(0, more.frame.minX - 8 - x))
+        let th = title.intrinsicContentSize.height
+        title.frame = NSRect(x: x - SidebarText.inset, y: (h - th) / 2, width: tw + 2 * SidebarText.inset, height: th)
     }
 
     override func updateTrackingAreas() {
@@ -169,7 +214,9 @@ final class SpaceHeaderView: NSView {
         if bounds.contains(convert(event.locationInWindow, from: nil)) { store.togglePinnedCollapsed(spaceID) }
     }
 
-    override func menu(for event: NSEvent) -> NSMenu? {
+    override func menu(for event: NSEvent) -> NSMenu? { spaceMenu() }
+
+    private func spaceMenu() -> NSMenu? {
         guard let space = store.space(spaceID) else { return nil }
         let store = self.store, actions = self.actions, id = spaceID
         let m = NSMenu()
