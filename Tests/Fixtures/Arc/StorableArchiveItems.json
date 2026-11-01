@@ -1,0 +1,46 @@
+{
+ "items": [
+  {
+   "sidebarItem": {
+    "id": "a1",
+    "title": null,
+    "childrenIds": [],
+    "createdAt": 800000000.0,
+    "data": {
+     "tab": {
+      "savedURL": "https://example.com/old/1",
+      "savedTitle": "Old one"
+     }
+    }
+   },
+   "reason": "auto",
+   "archivedAt": 799996400.0,
+   "source": {
+    "space": {
+     "_0": "home"
+    }
+   }
+  },
+  {
+   "sidebarItem": {
+    "id": "a2",
+    "title": null,
+    "childrenIds": [],
+    "createdAt": 800000000.0,
+    "data": {
+     "tab": {
+      "savedURL": "https://example.com/old/2",
+      "savedTitle": "Old two"
+     }
+    }
+   },
+   "reason": "manual",
+   "archivedAt": 799999940.0,
+   "source": {
+    "space": {
+     "_0": "work"
+    }
+   }
+  }
+ ]
+}

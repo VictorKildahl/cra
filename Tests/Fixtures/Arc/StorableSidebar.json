@@ -1,0 +1,362 @@
+{
+ "version": 1,
+ "sidebar": {
+  "containers": [
+   {
+    "global": {}
+   },
+   {
+    "spaces": [
+     "home",
+     {
+      "id": "home",
+      "title": "Home",
+      "profile": {
+       "default": true
+      },
+      "containerIDs": [
+       "pinned",
+       "home-pinned",
+       "unpinned",
+       "home-today"
+      ],
+      "customInfo": {
+       "iconType": {
+        "emoji_v2": "🏠"
+       }
+      }
+     },
+     "work",
+     {
+      "id": "work",
+      "title": "Work",
+      "profile": {
+       "default": true
+      },
+      "containerIDs": [
+       "pinned",
+       "work-pinned",
+       "unpinned",
+       "work-today"
+      ],
+      "customInfo": {
+       "iconType": {
+        "emoji": 128188
+       }
+      }
+     }
+    ],
+    "items": [
+     "fav",
+     {
+      "id": "fav",
+      "title": null,
+      "parentID": null,
+      "childrenIds": [
+       "fav-1",
+       "fav-2"
+      ],
+      "isUnread": false,
+      "originatingDevice": "FIXTURE",
+      "createdAt": 800000000.0,
+      "data": {
+       "itemContainer": {
+        "containerType": {
+         "topApps": {
+          "_0": {
+           "default": true
+          }
+         }
+        }
+       }
+      }
+     },
+     "fav-1",
+     {
+      "id": "fav-1",
+      "title": null,
+      "parentID": "fav",
+      "childrenIds": [],
+      "isUnread": false,
+      "originatingDevice": "FIXTURE",
+      "createdAt": 800000000.0,
+      "data": {
+       "tab": {
+        "savedURL": "https://example.com/mail",
+        "savedTitle": "Mail",
+        "savedMuteStatus": "allowAudio",
+        "timeLastActiveAt": 800000000.0
+       }
+      }
+     },
+     "fav-2",
+     {
+      "id": "fav-2",
+      "title": null,
+      "parentID": "fav",
+      "childrenIds": [],
+      "isUnread": false,
+      "originatingDevice": "FIXTURE",
+      "createdAt": 800000000.0,
+      "data": {
+       "tab": {
+        "savedURL": "https://example.com/calendar",
+        "savedTitle": "Calendar",
+        "savedMuteStatus": "allowAudio",
+        "timeLastActiveAt": 800000000.0
+       }
+      }
+     },
+     "home-pinned",
+     {
+      "id": "home-pinned",
+      "title": null,
+      "parentID": null,
+      "childrenIds": [
+       "home-folder"
+      ],
+      "isUnread": false,
+      "originatingDevice": "FIXTURE",
+      "createdAt": 800000000.0,
+      "data": {
+       "itemContainer": {
+        "containerType": {
+         "spaceItems": {
+          "_0": "home"
+         }
+        }
+       }
+      }
+     },
+     "home-folder",
+     {
+      "id": "home-folder",
+      "title": "Reading",
+      "parentID": "home-pinned",
+      "childrenIds": [
+       "home-p1",
+       "home-p2"
+      ],
+      "isUnread": false,
+      "originatingDevice": "FIXTURE",
+      "createdAt": 800000000.0,
+      "data": {
+       "list": {}
+      }
+     },
+     "home-p1",
+     {
+      "id": "home-p1",
+      "title": null,
+      "parentID": "home-folder",
+      "childrenIds": [],
+      "isUnread": false,
+      "originatingDevice": "FIXTURE",
+      "createdAt": 800000000.0,
+      "data": {
+       "tab": {
+        "savedURL": "https://example.com/news",
+        "savedTitle": "News",
+        "savedMuteStatus": "allowAudio",
+        "timeLastActiveAt": 800000000.0
+       }
+      }
+     },
+     "home-p2",
+     {
+      "id": "home-p2",
+      "title": "My blog",
+      "parentID": "home-folder",
+      "childrenIds": [],
+      "isUnread": false,
+      "originatingDevice": "FIXTURE",
+      "createdAt": 800000000.0,
+      "data": {
+       "tab": {
+        "savedURL": "https://example.com/blog",
+        "savedTitle": "Blog",
+        "savedMuteStatus": "allowAudio",
+        "timeLastActiveAt": 800000000.0
+       }
+      }
+     },
+     "home-today",
+     {
+      "id": "home-today",
+      "title": null,
+      "parentID": null,
+      "childrenIds": [
+       "home-t1",
+       "home-t2",
+       "home-t3"
+      ],
+      "isUnread": false,
+      "originatingDevice": "FIXTURE",
+      "createdAt": 800000000.0,
+      "data": {
+       "itemContainer": {
+        "containerType": {
+         "spaceItems": {
+          "_0": "home"
+         }
+        }
+       }
+      }
+     },
+     "home-t1",
+     {
+      "id": "home-t1",
+      "title": null,
+      "parentID": "home-today",
+      "childrenIds": [],
+      "isUnread": false,
+      "originatingDevice": "FIXTURE",
+      "createdAt": 800000000.0,
+      "data": {
+       "tab": {
+        "savedURL": "https://example.com/today/1",
+        "savedTitle": "Today 1",
+        "savedMuteStatus": "allowAudio",
+        "timeLastActiveAt": 800000000.0
+       }
+      }
+     },
+     "home-t2",
+     {
+      "id": "home-t2",
+      "title": null,
+      "parentID": "home-today",
+      "childrenIds": [],
+      "isUnread": false,
+      "originatingDevice": "FIXTURE",
+      "createdAt": 800000000.0,
+      "data": {
+       "tab": {
+        "savedURL": "https://example.com/today/2",
+        "savedTitle": "Today 2",
+        "savedMuteStatus": "allowAudio",
+        "timeLastActiveAt": 800000000.0
+       }
+      }
+     },
+     "home-t3",
+     {
+      "id": "home-t3",
+      "title": null,
+      "parentID": "home-today",
+      "childrenIds": [],
+      "isUnread": false,
+      "originatingDevice": "FIXTURE",
+      "createdAt": 800000000.0,
+      "data": {
+       "tab": {
+        "savedURL": "https://example.com/today/3",
+        "savedTitle": "Today 3",
+        "savedMuteStatus": "allowAudio",
+        "timeLastActiveAt": 800000000.0
+       }
+      }
+     },
+     "work-pinned",
+     {
+      "id": "work-pinned",
+      "title": null,
+      "parentID": null,
+      "childrenIds": [],
+      "isUnread": false,
+      "originatingDevice": "FIXTURE",
+      "createdAt": 800000000.0,
+      "data": {
+       "itemContainer": {
+        "containerType": {
+         "spaceItems": {
+          "_0": "work"
+         }
+        }
+       }
+      }
+     },
+     "work-today",
+     {
+      "id": "work-today",
+      "title": null,
+      "parentID": null,
+      "childrenIds": [
+       "work-split"
+      ],
+      "isUnread": false,
+      "originatingDevice": "FIXTURE",
+      "createdAt": 800000000.0,
+      "data": {
+       "itemContainer": {
+        "containerType": {
+         "spaceItems": {
+          "_0": "work"
+         }
+        }
+       }
+      }
+     },
+     "work-split",
+     {
+      "id": "work-split",
+      "title": null,
+      "parentID": "work-today",
+      "childrenIds": [
+       "work-s1",
+       "work-s2"
+      ],
+      "isUnread": false,
+      "originatingDevice": "FIXTURE",
+      "createdAt": 800000000.0,
+      "data": {
+       "splitView": {}
+      }
+     },
+     "work-s1",
+     {
+      "id": "work-s1",
+      "title": null,
+      "parentID": "work-split",
+      "childrenIds": [],
+      "isUnread": false,
+      "originatingDevice": "FIXTURE",
+      "createdAt": 800000000.0,
+      "data": {
+       "tab": {
+        "savedURL": "https://example.com/docs",
+        "savedTitle": "Docs",
+        "savedMuteStatus": "allowAudio",
+        "timeLastActiveAt": 800000000.0
+       }
+      }
+     },
+     "work-s2",
+     {
+      "id": "work-s2",
+      "title": null,
+      "parentID": "work-split",
+      "childrenIds": [],
+      "isUnread": false,
+      "originatingDevice": "FIXTURE",
+      "createdAt": 800000000.0,
+      "data": {
+       "tab": {
+        "savedURL": "https://example.com/tracker",
+        "savedTitle": "Tracker",
+        "savedMuteStatus": "allowAudio",
+        "timeLastActiveAt": 800000000.0
+       }
+      }
+     }
+    ],
+    "topAppsContainerIDs": [
+     {
+      "default": true
+     },
+     "fav"
+    ]
+   }
+  ]
+ }
+}

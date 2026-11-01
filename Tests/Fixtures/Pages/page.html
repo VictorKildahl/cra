@@ -1,0 +1,14 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Fixture page</title>
+<style>body { font: 15px -apple-system, sans-serif; margin: 40px; } .row { height: 24px; border-bottom: 1px solid #ddd; }</style>
+<h1>Fixture page</h1>
+<p>A local page for scripts/scenario.sh: no network, a little layout, an input to type into.</p>
+<input placeholder="Type here">
+<div id="rows"></div>
+<script>
+  const n = new URLSearchParams(location.search).get('n') || '0';
+  document.title = 'Fixture ' + n;
+  const rows = document.getElementById('rows');
+  for (let i = 0; i < 200; i++) { const d = document.createElement('div'); d.className = 'row'; d.textContent = 'Row ' + i; rows.appendChild(d); }
+</script>

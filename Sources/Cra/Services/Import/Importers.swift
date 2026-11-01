@@ -109,8 +109,9 @@ private func pairs(_ list: Any?) -> [(String, [String: Any])] {
 // MARK: - Arc
 
 enum ArcImporter {
-    static let supportDir = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Application Support/Arc", isDirectory: true)
+    /// CRA_ARC_DIR points a test instance at a made-up profile (Tests/Fixtures/Arc).
+    static let supportDir = ProcessInfo.processInfo.environment["CRA_ARC_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
+        ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Arc", isDirectory: true)
 
     static var isAvailable: Bool { FileManager.default.fileExists(atPath: supportDir.appendingPathComponent("StorableSidebar.json").path) }
 

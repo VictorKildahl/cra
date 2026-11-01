@@ -59,6 +59,63 @@ struct ArcThemeImportTests {
     @Test func spaceWithoutAThemeImportsNone() {
         #expect(Self.theme("noWindowTheme") == nil)
     }
+
+    /// A fixture space with its background variant (single, or the appearance-based one read)
+    /// changed: the same file, one field different.
+    static func theme(_ name: String, changing change: (inout [String: Any]) -> Void) -> SpaceTheme? {
+        var space = spaces[name]!
+        var info = space["customInfo"] as! [String: Any]
+        var wt = info["windowTheme"] as! [String: Any]
+        var bg = wt["background"] as! [String: Any]
+        if var single = bg["single"] as? [String: Any] {
+            var v = single["_0"] as! [String: Any]
+            change(&v)
+            single["_0"] = v
+            bg["single"] = single
+        } else {
+            var ab = bg["appearanceBased"] as! [String: Any]
+            let key = ab["dark"] != nil ? "dark" : "light"
+            var v = ab[key] as! [String: Any]
+            change(&v)
+            ab[key] = v
+            bg["appearanceBased"] = ab
+        }
+        wt["background"] = bg
+        info["windowTheme"] = wt
+        space["customInfo"] = info
+        return ArcThemeImport.theme(from: space)
+    }
+
+    static func gradient(_ v: inout [String: Any], _ change: (inout [String: Any]) -> Void) {
+        var style = v["style"] as! [String: Any], color = style["color"] as! [String: Any], c0 = color["_0"] as! [String: Any]
+        var bg = c0["blendedGradient"] as! [String: Any], g = bg["_0"] as! [String: Any]
+        change(&g)
+        bg["_0"] = g; c0["blendedGradient"] = bg; color["_0"] = c0; style["color"] = color; v["style"] = style
+    }
+
+    /// Arc lets a gradient have one base colour; both stops then come from it.
+    @Test(arguments: ["gradientVibrantLight", "gradientAppearanceBasedDark"])
+    func oneBaseColourGradient(name: String) throws {
+        let full = try #require(Self.theme(name))
+        let theme = try #require(Self.theme(name) { v in
+            Self.gradient(&v) { g in g["baseColors"] = [(g["baseColors"] as! [[String: Any]])[0]] }
+        })
+        #expect(theme.colors.count == 2 && theme.accent == full.accent, "the first base colour stays the accent")
+    }
+
+    /// Only a vibrant light theme gets the over-the-desktop fit; the same gradient opaque keeps its stops.
+    @Test func opaqueLightGradientSkipsTheVibrantFit() throws {
+        let vibrant = try #require(Self.theme("gradientVibrantLight"))
+        let opaque = try #require(Self.theme("gradientVibrantLight") { $0["isVibrant"] = false })
+        #expect(!opaque.vibrant && opaque.colors != vibrant.colors && opaque.intensity == vibrant.intensity)
+    }
+
+    /// Only an opaque dark theme is darkened over Arc's #2B2632; a vibrant dark one keeps its stops.
+    @Test func vibrantDarkGradientIsNotDarkened() throws {
+        let opaque = try #require(Self.theme("gradientAppearanceBasedDark"))
+        let vibrant = try #require(Self.theme("gradientAppearanceBasedDark") { $0["isVibrant"] = true })
+        #expect(vibrant.vibrant && vibrant.colors != opaque.colors && vibrant.intensity != 1)
+    }
 }
 
 struct SpaceThemeTests {
@@ -72,6 +129,12 @@ struct SpaceThemeTests {
         let theme = SpaceTheme(colors: ["#2861B3", "#2861B3"], intensity: 0.5, noise: 0, appearance: "light",
                                vibrant: true, accent: "#2861B3", solid: true)
         #expect(try JSONDecoder().decode(SpaceTheme.self, from: JSONEncoder().encode(theme)) == theme)
+    }
+
+    /// A theme that says its appearance keeps it, whatever its colours.
+    @Test func explicitAppearanceWinsOverTheColours() {
+        #expect(SpaceTheme(colors: ["#FFFFFF", "#FFFFFF"], intensity: 1, noise: 0, appearance: "dark").isDark)
+        #expect(!SpaceTheme(colors: ["#000000", "#000000"], intensity: 1, noise: 0, appearance: "light").isDark)
     }
 
     @Test(arguments: [("#000000", true), ("#FFFFFF", false), ("#2861B3", true), ("#F8D558", false)])

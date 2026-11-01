@@ -16,7 +16,7 @@ final class LiveFolderManager {
     /// Repositories in each folder's last results plus the hidden ones: the folder menu's list
     /// (Arc: "This list is generated based on your currently active pull requests.").
     private(set) var repositories: [UUID: [String]] = [:]
-    @ObservationIgnored private var timer: Timer?
+    @ObservationIgnored private var timer: ScheduledWork?
     /// The last address each tab reported, to tell what a page came from.
     @ObservationIgnored private var lastURL: [UUID: String] = [:]
 
@@ -40,11 +40,9 @@ final class LiveFolderManager {
 
     func start(store: SidebarStore) {
         self.store = store
-        timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.store?.expireLiveItems(olderThan: Self.retention)
-                self?.refreshStale()
-            }
+        timer = store.clock.every(15) { [weak self] in
+            self?.store?.expireLiveItems(olderThan: Self.retention)
+            self?.refreshStale()
         }
         // Dia's windowFocus trigger. App activation makes a window key too.
         NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak self] _ in
@@ -57,11 +55,11 @@ final class LiveFolderManager {
     /// Dia waits for an active window (LiveDataRefreshSkipReason.waitingForActiveWindow): nothing
     /// is fetched while Cra is in the background.
     func refreshStale(olderThan age: TimeInterval = refreshInterval) {
-        guard NSApp.isActive else { return }
-        for f in store?.liveFolders ?? [] {
+        guard NSApp.isActive, let store else { return }
+        for f in store.liveFolders {
             let last = f.liveFolder?.lastFetch ?? .distantPast
             let failing = f.liveFolder.map { $0.lastError != nil || Self.needsSignIn($0) } ?? false
-            if Date().timeIntervalSince(last) >= (failing ? min(age, Self.retryInterval) : age) { refresh(f.id) }
+            if store.clock.now.timeIntervalSince(last) >= (failing ? min(age, Self.retryInterval) : age) { refresh(f.id) }
         }
     }
 
@@ -73,7 +71,7 @@ final class LiveFolderManager {
     /// `force` skips the gap between refreshes: the folder's filters just changed.
     func refresh(_ id: UUID, force: Bool = false) {
         guard let store, let live = store.item(id)?.liveFolder, !refreshing.contains(id) else { return }
-        if !force, let last = live.lastFetch, Date().timeIntervalSince(last) < Self.minimumInterval, live.lastError == nil { return }
+        if !force, let last = live.lastFetch, store.clock.now.timeIntervalSince(last) < Self.minimumInterval, live.lastError == nil { return }
         let attributes: [GitHubLiveFilter.Attributes] = [.authored, .reviewRequests, .teamReviewRequests]
             .filter { live.filter.attributes.contains($0) }
         refreshing.insert(id)
@@ -137,9 +135,10 @@ final class LiveFolderManager {
     private func checkSignIn() {
         signInCheck?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            for f in self?.store?.liveFolders ?? [] where f.liveFolder.map(Self.needsSignIn) ?? false {
+            guard let store = self?.store else { return }
+            for f in store.liveFolders where f.liveFolder.map(Self.needsSignIn) ?? false {
                 let last = f.liveFolder?.lastFetch ?? .distantPast
-                if Date().timeIntervalSince(last) >= Self.minimumInterval { self?.refresh(f.id, force: true) }
+                if store.clock.now.timeIntervalSince(last) >= Self.minimumInterval { self?.refresh(f.id, force: true) }
             }
         }
         signInCheck = work

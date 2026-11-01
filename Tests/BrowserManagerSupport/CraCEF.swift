@@ -44,7 +44,10 @@ public final class CraBrowser {
 
     public func close() { closeRequested = true; onClose?() }
     public func finishClose() { isClosed = true; delegate?.browserDidClose(self) }
-    public func closeDevTools() { hasDevTools = false }
+    /// "show" / "close", in the order Cra asked.
+    public var devToolsRequests: [String] = []
+    public func showDevTools() { hasDevTools = true; devToolsRequests.append("show") }
+    public func closeDevTools() { hasDevTools = false; devToolsRequests.append("close") }
     public func setAudioMuted(_ muted: Bool) {}
     public func setFocused(_ focused: Bool) {}
     public func requestPictureInPicture(automatic: Bool) {}
