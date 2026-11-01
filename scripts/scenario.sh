@@ -117,7 +117,7 @@ ready "$PID" || problem "Cra did not start reading commands in 30 s"
 sleep 2
 
 PACE=0.2
-RSS_BUDGET=1500 MAXSTALL=1000 STALLS50=10 LAUNCHSTALL=600
+RSS_BUDGET=1500 MAXSTALL=1500 STALLS50=10 LAUNCHSTALL=1000
 BASELINE=""
 expand() { local s="$1"; s="${s//\$\{FIXTURES\}/$FIXTURES}"; s="${s//\$\{PAGE\}/$PAGE}"; s="${s//\$\{EXTENSION_ID\}/$EXTENSION_ID}"; printf '%s' "$s"; }
 

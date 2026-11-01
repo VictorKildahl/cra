@@ -55,7 +55,8 @@ no page content), so it checks geometry, ink and fills.
 Stall budgets are set from what the app does today, so they catch regressions rather than
 describe a goal. The count of stalls over 50 ms is steady from run to run and carries the
 budget; the longest stall swings with machine load (235 ms one run, 498 ms the next), so it
-only has to stay under a second. On 1 Nov 2026 every new tab blocked the main thread for
+only has to stay under 1.5 s, and start-up under 1 s. GitHub's macOS runners are slower than
+a desk Mac (sleep-tabs: 1016 ms longest, 52 over 50 ms), and the budgets fit both. On 1 Nov 2026 every new tab blocked the main thread for
 about 100 ms, the first page shown for up to 330 ms, and turning developer mode on or off
 130–650 ms; `fifty-tabs` and `sleep-tabs` carry counts that allow the first. Lower the
 budgets as those get faster. Stalls right after a `snapshot` line are the snapshot being

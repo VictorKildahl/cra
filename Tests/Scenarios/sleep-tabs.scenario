@@ -1,6 +1,6 @@
 # Thirty background pages put to sleep: the timed pass no unit test reaches with a real page,
 # run here with a one-second threshold (cra://debug?sleepTabs) instead of waiting an hour.
-budget rss=800 stalls50=50   # each new tab stalls ~100 ms today (Nov 2026)
+budget rss=800 stalls50=70   # each new tab stalls ~100 ms today (Nov 2026)
 cra://open?url=${PAGE}?n=first
 wait 3
 helpers baseline
