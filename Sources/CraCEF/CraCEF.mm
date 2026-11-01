@@ -1065,8 +1065,7 @@ public:
         if (!frame->IsMain()) return;
         // A tab left blank is often a navigation that failed or was cut off; Help ▸ Export
         // Diagnostics sends this log, so the line names the site only.
-        CraBrowser* owner = owner_;
-        LOG(WARNING) << "Cra: loading " << (owner.isIncognito ? "(incognito)" : UrlHost(failedUrl)) << " failed: " << errorText.ToString() << " ("
+        LOG(WARNING) << "Cra: loading " << LogHost(browser, failedUrl) << " failed: " << errorText.ToString() << " ("
                      << (int)errorCode << ")";
         if ((int)errorCode == -3 /* ERR_ABORTED */) return;
         // Chrome-style pages get Chrome's own error page: Reload retries the site and it
@@ -1207,17 +1206,23 @@ public:
         static const char* kStatus[] = {"abnormal termination", "killed", "crashed", "out of memory",
                                         "launch failed", "integrity failure"};
         const char* what = status >= 0 && status < TS_NUM_VALUES ? kStatus[status] : "unknown";
-        LOG(ERROR) << "Cra: renderer for " << PageHost(browser) << " ended: " << what << " (code " << error_code
+        LOG(ERROR) << "Cra: renderer for " << LogHost(browser) << " ended: " << what << " (code " << error_code
                    << ", " << error_string.ToString() << ")";
     }
 
     bool OnRenderProcessUnresponsive(CefRefPtr<CefBrowser> browser,
                                      CefRefPtr<CefUnresponsiveProcessCallback> callback) override {
-        LOG(ERROR) << "Cra: renderer for " << PageHost(browser) << " is unresponsive";
+        LOG(ERROR) << "Cra: renderer for " << LogHost(browser) << " is unresponsive";
         return false;  // Chrome's "Page Unresponsive" dialog
     }
 
-    static std::string PageHost(CefRefPtr<CefBrowser> browser) {
+    /// The site for chromium.log, which Help ▸ Export Diagnostics sends: never an incognito one
+    /// (nor one whose tab is already gone, when that can't be told).
+    std::string LogHost(CefRefPtr<CefBrowser> browser, const CefString& url = CefString()) {
+        CraBrowser* o = owner_;
+        if (!o) return "(closed tab)";
+        if (o.isIncognito) return "(incognito)";
+        if (!url.empty()) return UrlHost(url);
         CefRefPtr<CefFrame> frame = browser->GetMainFrame();
         return frame ? UrlHost(frame->GetURL()) : "(no page)";
     }

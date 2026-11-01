@@ -227,7 +227,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         for id in shown where !wasVisible.contains(id) {
             scheduleSnapshot(id)
             if let rt = runtimes[id] {
-                log(id, "shown: \(site(rt.browser.currentURL, id))\(rt.browser.isLoading ? ", loading" : "")\(rt.browser.isCreated ? "" : ", page not created yet")")
+                log(id, "shown: \(site(rt.browser.currentURL, id, rt.browser))\(rt.browser.isLoading ? ", loading" : "")\(rt.browser.isCreated ? "" : ", page not created yet")")
                 scheduleProbe(id, rt)
             }
         }
@@ -240,7 +240,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// Tab ids are cut to 8 characters, enough to follow one tab through the log.
     private func log(_ id: UUID, _ message: String) { CraLog.note("tab \(id.uuidString.prefix(8)) \(message)") }
 
-    private func site(_ url: String, _ id: UUID) -> String { store.isIncognito(item: id) ? "(incognito)" : CraLog.host(url) }
+    /// The page's own profile when there is one: an incognito tab can leave the store before a late line.
+    private func site(_ url: String, _ id: UUID, _ browser: CraBrowser? = nil) -> String {
+        browser?.isIncognito ?? store.isIncognito(item: id) ? "(incognito)" : CraLog.host(url)
+    }
 
     /// A moment after a tab comes on screen, the log gets what its page holds and where Cra put
     /// it: for the tab that "shows a white page until reloaded", the line that says why.
@@ -251,7 +254,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
             if rt.browser.isLoading, attempt < 4 { return self.scheduleProbe(id, rt, attempt: attempt + 1) }
             PageProbe.run(rt.browser) { [weak self] probe in
                 guard let self, self.runtimes[id] === rt else { return }
-                self.log(id, "page \(self.site(rt.browser.currentURL, id))\(rt.browser.isLoading ? " still loading" : ""): \(probe) \(PageProbe.viewState(rt))")
+                self.log(id, "page \(self.site(rt.browser.currentURL, id, rt.browser))\(rt.browser.isLoading ? " still loading" : ""): \(probe) \(PageProbe.viewState(rt))")
             }
         }
     }
@@ -633,7 +636,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     func browser(_ browser: CraBrowser, didFinishLoadingURL url: String, title: String, statusCode: Int) {
         guard let id = tabID(of: browser) else { return }
-        log(id, "loaded \(site(url, id)) (HTTP \(statusCode))")
+        log(id, "loaded \(site(url, id, browser)) (HTTP \(statusCode))")
         guard !browser.isIncognito else { return }
         store.recordVisit(url: url, title: title.isEmpty ? (store.item(id)?.tab?.savedTitle ?? "") : title)
     }
