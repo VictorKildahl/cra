@@ -1079,6 +1079,21 @@ final class SpaceListScrollView: NSScrollView {
 final class SidebarScroller: NSScroller {
     var isDarkTheme = true { didSet { if isDarkTheme != oldValue { needsDisplay = true } } }
 
+    /// AppKit flashes an overlay knob as soon as two fingers touch the trackpad over a list, and
+    /// a swipe between spaces starts like that: the window's scroll monitor hides the knob until
+    /// a gesture turns out to scroll the list (the legacy scroller always shows).
+    static var hiddenForSwipe = false {
+        didSet { if hiddenForSwipe != oldValue { for s in all.allObjects { s.needsDisplay = true } } }
+    }
+    private static let all = NSHashTable<SidebarScroller>.weakObjects()
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        Self.all.add(self)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
     override class var isCompatibleWithOverlayScrollers: Bool { true }
     override class func scrollerWidth(for controlSize: NSControl.ControlSize, scrollerStyle: NSScroller.Style) -> CGFloat { 10 }
 
@@ -1093,6 +1108,7 @@ final class SidebarScroller: NSScroller {
             NSBezierPath(roundedRect: backingAlignedRect(r, options: .alignAllEdgesNearest), xRadius: 2.5, yRadius: 2.5).fill()
             return
         }
+        guard !Self.hiddenForSwipe else { return }
         let r = NSRect(x: bounds.maxX - 7, y: knob.minY + 2, width: 4, height: max(0, knob.height - 4))
         (isDarkTheme ? NSColor.white.withAlphaComponent(0.49) : NSColor.black.withAlphaComponent(0.3)).setFill()
         NSBezierPath(roundedRect: r, xRadius: 2, yRadius: 2).fill()

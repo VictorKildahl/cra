@@ -36,6 +36,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var librarySwipeFrom: CGFloat?
     private var librarySettleSpring: (start: CFTimeInterval, from: CGFloat, velocity: CGFloat, target: CGFloat)?
     private var librarySettleLink: CADisplayLink?
+    /// Shows the lists' overlay knob again once a swipe's scroller flash has faded.
+    private var swipeKnobReveal: DispatchWorkItem?
     private var enteredFullscreenForContent = false
     /// The tab whose page (a video) is in element fullscreen.
     private var contentFullscreenTab: UUID?
@@ -1541,6 +1543,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // phase switch below; a stale .horizontal would eat the page's momentum and
             // scrolling would stop dead the moment the fingers lift.
             if event.phase == .began || event.phase == .mayBegin { self.swipeAxis = .vertical }
+            // A mouse wheel only ever scrolls.
+            if !event.hasPreciseScrollingDeltas { self.showListKnobs() }
             // The momentum tail of a space swipe belongs to the swipe, not the tab list.
             if !event.momentumPhase.isEmpty { return self.swipeAxis == .horizontal ? nil : event }
             // The floating sidebar is in its own panel (FloatingSidebarController): its swipes
@@ -1559,6 +1563,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                     overSidebar = page != .spaces || self.spacesStripAtEnd(event)
                 }
                 self.swipeAxis = overSidebar ? .undecided : .vertical
+                if overSidebar { self.hideListKnobs() }
                 self.swipeX = 0
                 self.swipeY = 0
                 return event
@@ -1576,6 +1581,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                           // At the Spaces page's end a swipe back along the cards scrolls them.
                           !(self.sidebarUI.libraryPage == .spaces && self.swipeX > 0) else {
                         self.swipeAxis = .vertical
+                        self.showListKnobs()
                         return event
                     }
                     self.swipeAxis = .horizontal
@@ -1588,6 +1594,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                     return nil
                 }
             case .ended, .cancelled:
+                if self.swipeAxis != .vertical { self.showListKnobs(after: 1) }
                 guard self.swipeAxis == .horizontal else { return event }
                 self.endSpaceSwipe()
                 return nil
@@ -1595,6 +1602,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 return event
             }
         }
+    }
+
+    private func hideListKnobs() {
+        swipeKnobReveal?.cancel()
+        swipeKnobReveal = nil
+        SidebarScroller.hiddenForSwipe = true
+    }
+
+    /// After `delay` seconds: by then the knob AppKit flashed at the touch has faded out.
+    private func showListKnobs(after delay: TimeInterval = 0) {
+        swipeKnobReveal?.cancel()
+        guard delay > 0 else { SidebarScroller.hiddenForSwipe = false; return }
+        let work = DispatchWorkItem { SidebarScroller.hiddenForSwipe = false }
+        swipeKnobReveal = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     private func beginSpaceSwipe() {
