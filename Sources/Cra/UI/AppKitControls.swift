@@ -61,3 +61,15 @@ final class MaterialCardView: NSVisualEffectView {
         }
     }
 }
+
+extension NSView {
+    /// DevTools (and a page) are Chromium child windows of the main window. After a click in one,
+    /// AppKit treated the next click on the main window as the one that activates it, and a toolbar
+    /// button needed a second click (GitHub #42), even once AppKit itself already had the main window
+    /// key. Chrome draws all of it in one window, so buttons take that click while focus is in this
+    /// window or its children; a click into an inactive Cra still only activates it.
+    var takesClickFromChildWindow: Bool {
+        guard NSApp.isActive, let window, let key = NSApp.keyWindow else { return false }
+        return key === window || key.parent === window
+    }
+}

@@ -212,6 +212,8 @@ final class SidebarActions {
     var runExtension: (String) -> Void = { _ in }
     /// Toolbar Extensions button: the extensions menu, under the pointer.
     var showExtensionsMenu: () -> Void = {}
+    /// The developer bar's address field: a typed URL or search, in the selected tab.
+    var loadTyped: (String) -> Void = { _ in }
 }
 
 private struct SidebarActionsKey: EnvironmentKey {

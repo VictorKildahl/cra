@@ -294,6 +294,8 @@ final class SidebarGlyphButton: NSView {
     }
 
     override var mouseDownCanMoveWindow: Bool { false }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { takesClickFromChildWindow }
+    override func hitTest(_ point: NSPoint) -> NSView? { frame.contains(point) ? self : nil }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()

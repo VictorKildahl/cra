@@ -21,7 +21,19 @@ final class PaneCardView: NSView {
     /// them as a light rim in every rounded corner.
     private let pageBackground = NSView()
     var showToolbar = true { didSet { needsLayout = true } }
-    var toolbarHeight: CGFloat = CraMetrics.toolbarHeight { didSet { needsLayout = true } }
+    var toolbarHeight: CGFloat = CraMetrics.toolbarHeight {
+        didSet { if toolbarHeight != oldValue { needsLayout = true; onToolbarHeightChange?() } }
+    }
+    /// The shell lays the page windows out again when the bar's height changes.
+    var onToolbarHeightChange: (() -> Void)?
+    /// Arc's developer bar (PaneToolbarView): its colour behind the bar, and its 40 pt height.
+    var developerBar: NSColor? {
+        didSet {
+            guard developerBar != oldValue else { return }
+            toolbarHeight = developerBar == nil ? CraMetrics.toolbarHeight : CraMetrics.developerToolbarHeight
+            refreshBackground()
+        }
+    }
     var cornerRadius: CGFloat = CraMetrics.contentCornerRadius { didSet { layer?.cornerRadius = cornerRadius; needsLayout = true } }
     /// White page card, or Arc's tinted translucent empty pane.
     var hasPage = true { didSet { refreshBackground() } }
@@ -94,7 +106,7 @@ final class PaneCardView: NSView {
         // Measured on Arc 1.170 (Victor theme, 2x): the empty pane is the
         // gradient plus about +9/+11/+12 per channel, i.e. a white veil at ~0.2.
         layer?.backgroundColor = transparent || hasPage ? NSColor.clear.cgColor : NSColor(white: 1, alpha: isDark ? 0.08 : 0.2).cgColor
-        let bar = toolbarColor.map { NSColor(Color(hex: $0)) } ?? .white
+        let bar = developerBar ?? toolbarColor.map { NSColor(Color(hex: $0)) } ?? .white
         toolbarBackground.layer?.backgroundColor = (hasPage && !transparent ? bar : NSColor.clear).cgColor
         let page = pageColor.map { NSColor(Color(hex: $0)) } ?? .white
         pageBackground.layer?.backgroundColor = (hasPage && !transparent ? page : NSColor.clear).cgColor

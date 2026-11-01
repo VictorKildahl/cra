@@ -1774,3 +1774,34 @@ Theme palettes in a hand-built space can be borrowed; only the `background` styl
   rest (17.5 / 13 / 9 pt with 12 / 16 / 22 spaces); icon-less spaces are dots, small when squeezed. Cra
   (`SpaceDockView.cellWidths`) follows the widths and shrinks emoji in narrow cells; it has no icon-less spaces
   yet (imported ones get 🗂️).
+
+## Developer bar (Arc 1.170, 1 Nov 2026, issue #42, live window captures at 2x)
+
+Arc's toolbar module ContentPanel carries `ContentPanelTextField`/`ContentPanelTextView` (the in-place
+address field) and `Stripes`/`StripesConfig` (drawn in code; `StripeIcon` in Assets.car is the payment
+company's logo). Measured on example.com (a developer host) in the JYSK space, captures in Display P3,
+converted to sRGB where noted:
+
+- Height 40 pt (80 px) against 32 for the normal bar; a 1 pt rule along the bottom, white ~10% over the fill.
+- Fill: not the page's theme-color. JYSK's bar is P3 62/67/202 = sRGB 61/67/210, which is Arc's semantic
+  dark `focus` colour (0.294, 0.329, 1.021, α 0.8075, from StorableSidebar.json) over black. Cra derives
+  it from the accent (SpaceTheme.developerBarColor: OKLab L 0.552 at the sRGB chroma edge × 0.8075) and
+  lands at 44/72/206 for JYSK: Arc's palette hues drift from the base colour's (+5.6° for JYSK, +1.6° for
+  Victor), so one more space would be needed to model that.
+- Stripes: white ~2% bands at 45° running down to the right, 21 pt wide along the bar every 45 pt; at the
+  bar's top the first band starts 14.5 pt from its left edge.
+- Ink: icons and the lock P3 236/237/254 (Arc's foregroundPrimary), URL text the same antialiased.
+  Dividers P3 93/99/230 = foregroundSecondary (131/137/255) at ~45%.
+- Icon hover: a 28 × 28 pt rounded rect (radius ~5–6 pt), centred in the bar, white 8%. The URL has no hover.
+- Click on the URL: the full URL becomes editable in place (same monospaced text), all of it selected;
+  selection P3 111/117/251 (foregroundSecondary at ~60%), text 226/227/254, and the whole bar lifts by a
+  white ~9% veil while editing. One Esc left it editing (it may only revert the text); Cra ends the edit.
+- Arc's developer bar also has buttons Cra doesn't: Capture, Screenshot | DevTools, Network, Inspect |
+  extensions … Split View, with dividers between the groups.
+
+DevTools in Cra: Chrome picks the frontend URL (DevToolsClient::OnBeforeBrowse never sees the first
+navigation), so the dockable `can_dock=true` load now replaces it at the first OnLoadStart instead of
+after OnLoadEnd: open → page bounds 185–200 ms instead of 265–290 ms. A click inside DevTools makes its
+child window key; AppKit then spent the next toolbar click on making the main window key, so toolbar
+buttons accept first mouse while a child window is key. Clicks after the page had focus were not affected
+(real HID test).

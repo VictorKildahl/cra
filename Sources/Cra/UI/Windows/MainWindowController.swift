@@ -216,6 +216,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             guard let self else { return }
             self.store.createTab(url: url, window: self.windowID)
         }
+        sidebarActions.loadTyped = { [weak self] typed in
+            guard let self else { return }
+            let t = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !t.isEmpty else { return }
+            self.loadInSelectedTab(SuggestionEngine.looksLikeURL(t) ? SuggestionEngine.urlFromInput(t) : self.store.settings.searchEngine.searchURL(t))
+        }
         sidebarActions.focusPane = { [weak self] id in
             guard let self, self.selectedTabID != id else { return }
             self.store.selectTab(id, window: windowID)
@@ -1619,7 +1625,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let card = shell.focusedCard.map { shell.contentContainer.convert($0.frame, to: nil) }
             ?? shell.convert(shell.contentContainer.frame, to: nil)
         let onScreen = window.convertToScreen(card)
-        return (onScreen.maxY - (store.settings.showToolbar ? CraMetrics.toolbarHeight : 0), onScreen.maxX)
+        let bar = shell.focusedCard?.toolbarHeight ?? CraMetrics.toolbarHeight
+        return (onScreen.maxY - (store.settings.showToolbar ? bar : 0), onScreen.maxX)
     }
 
     /// Where a popup from a URL-bar button hangs: under the toolbar, or, with the toolbar
@@ -1670,15 +1677,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// toolbar or the sidebar's URL pill (also in the floating sidebar's panel), so a popup
     /// hangs from the same place wherever the button was clicked (GitHub #8).
     private static func extensionButtonRightX() -> CGFloat {
+        buttonFrameUnderPointer { $0 is ToolbarGlyphButton }?.maxX ?? NSEvent.mouseLocation.x + 17
+    }
+
+    /// The button under the pointer (screen rect): the one just clicked.
+    private static func buttonFrameUnderPointer(_ isButton: (NSView) -> Bool) -> NSRect? {
         let mouse = NSEvent.mouseLocation
         let number = NSWindow.windowNumber(at: mouse, belowWindowWithWindowNumber: 0)
-        if let w = NSApp.window(withWindowNumber: number), let content = w.contentView {
-            let p = w.convertPoint(fromScreen: mouse)
-            var v = content.hitTest(content.superview?.convert(p, from: nil) ?? p)
-            while let view = v, !(view is ToolbarGlyphButton) { v = view.superview }
-            if let button = v { return w.convertToScreen(button.convert(button.bounds, to: nil)).maxX }
-        }
-        return mouse.x + 17
+        guard let w = NSApp.window(withWindowNumber: number), let content = w.contentView else { return nil }
+        let p = w.convertPoint(fromScreen: mouse)
+        var v = content.hitTest(content.superview?.convert(p, from: nil) ?? p)
+        while let view = v, !isButton(view) { v = view.superview }
+        return v.map { w.convertToScreen($0.convert($0.bounds, to: nil)) }
     }
 
     /// No page for Chrome's popup to attach to (no tab open, no DevTools pipe, a page it
@@ -1710,13 +1720,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// Arc's sliders button (toolbar and URL pill): the Site Control Center, hung under the
-    /// button the pointer is on (buttons are 32 × 28).
+    /// button that was clicked (buttons are 32 × 28), not wherever the pointer is in it.
     private func showToolbarExtensionsMenu() {
         guard let window, let content = window.contentView, let y = urlBarBottomOnScreen() else { return }
         ExtensionStore.shared.reload()
-        let mouse = NSEvent.mouseLocation
+        let midX = Self.buttonFrameUnderPointer { $0 is ToolbarGlyphButton || $0 is SidebarGlyphButton }?.midX ?? NSEvent.mouseLocation.x
         // Arc's popover overlaps the bar by 4 pt (popover top 71 under a bar ending at 75).
-        let onScreen = NSRect(x: mouse.x - 16, y: y + 4, width: 32, height: 28)
+        let onScreen = NSRect(x: midX - 16, y: y + 4, width: 32, height: 28)
         let rect = content.convert(window.convertFromScreen(onScreen), from: nil)
         let url = selectedTabID.flatMap { store.item($0)?.tab?.url } ?? ""
         var actions = SiteControlCenterActions()

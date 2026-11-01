@@ -536,11 +536,22 @@ final class BlockMenuItem: NSMenuItem {
 @MainActor
 final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
     private var popover: NSPopover?
+    /// When the mouse-down that closed the popover from outside happened (event time).
+    private var closingClick: TimeInterval?
 
     var isShown: Bool { popover?.isShown == true }
 
     func show(relativeTo rect: NSRect, of view: NSView, url: String, dark: Bool, profile: String, store: SidebarStore, actions: SiteControlCenterActions) {
+        // A transient popover closes on the mouse-down outside it; the button fires on that
+        // click's mouse-up. The same click on the sliders button closes it, as in Arc,
+        // however long the press took (GitHub #42): the latest mouse-down is the closing one.
+        let closedByThisClick = closingClick.map { t in
+            NSApp.currentEvent?.type == .leftMouseUp
+                && abs(ProcessInfo.processInfo.systemUptime - CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .leftMouseDown) - t) < 0.05
+        } ?? false
+        closingClick = nil
         if let popover, popover.isShown { popover.performClose(nil); return }
+        if closedByThisClick { return }
         let p = NSPopover()
         p.behavior = .transient
         p.animates = true
@@ -570,6 +581,10 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
     }
 
     func close() { popover?.performClose(nil) }
+
+    func popoverWillClose(_ notification: Notification) {
+        if let e = NSApp.currentEvent, e.type == .leftMouseDown { closingClick = e.timestamp }
+    }
 
     func popoverDidClose(_ notification: Notification) { popover = nil }
 }

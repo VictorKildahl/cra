@@ -707,7 +707,12 @@ public:
         return true;
     }
     void OnLoadStart(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, TransitionType transition_type) override {
-        if (frame->IsMain()) CraDevToolsLog(@"OnLoadStart %s", frame->GetURL().ToString().c_str());
+        if (!frame->IsMain()) return;
+        CraDevToolsLog(@"OnLoadStart %s", frame->GetURL().ToString().c_str());
+        // Chrome picks the frontend URL (OnBeforeBrowse never sees it), so the earliest
+        // point to swap in can_dock=true is the first load's start: the frontend app then
+        // loads once instead of twice (GitHub #42).
+        if (host_) MakeDockable(browser, frame);
     }
     void OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int httpStatusCode) override {
         if (!frame->IsMain()) return;
@@ -715,21 +720,31 @@ public:
         if (host_) Prepare(browser, frame);
     }
 
-    // Docked mode: make a Chrome-style frontend dockable (one reload), then hook it.
+    static bool IsFrontend(const std::string& url) {
+        // Only the main frontend; helper pages it opens (device_mode_emulation_frame.html
+        // when undocked) must not report dock state or page bounds.
+        return url.rfind("devtools://", 0) == 0
+            && (url.find("/devtools_app.html") != std::string::npos || url.find("/inspector.html") != std::string::npos);
+    }
+
+    // A Chrome-style frontend opens undockable; load it again with can_dock=true (once).
+    bool MakeDockable(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame) {
+        std::string url = frame->GetURL().ToString();
+        if (reloaded_ || !IsFrontend(url) || !browser->GetHost()->HasView() || url.find("can_dock=") != std::string::npos) return false;
+        reloaded_ = true;
+        std::string docked = url + (url.find('?') == std::string::npos ? "?" : "&") + "can_dock=true";
+        CraDevToolsLog(@"reloading as dockable: %s", docked.c_str());
+        frame->LoadURL(docked);
+        return true;
+    }
+
+    // Docked mode: make a Chrome-style frontend dockable, then hook it.
     // Alloy frontends (can_dock=false, no close button) only get the close button.
     void Prepare(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame) {
         std::string url = frame->GetURL().ToString();
-        if (url.rfind("devtools://", 0) != 0) return;
-        // Only the main frontend; helper pages it opens (device_mode_emulation_frame.html
-        // when undocked) must not report dock state or page bounds.
-        if (url.find("/devtools_app.html") == std::string::npos && url.find("/inspector.html") == std::string::npos) return;
-        if (browser->GetHost()->HasView() && url.find("can_dock=") == std::string::npos && !reloaded_) {
-            reloaded_ = true;
-            std::string docked = url + (url.find('?') == std::string::npos ? "?" : "&") + "can_dock=true";
-            CraDevToolsLog(@"reloading as dockable: %s", docked.c_str());
-            frame->LoadURL(docked);
-            return;
-        }
+        if (!IsFrontend(url) || MakeDockable(browser, frame)) return;
+        // The undockable load that MakeDockable replaced still reports its end.
+        if (reloaded_ && url.find("can_dock=") == std::string::npos) return;
         frame->ExecuteJavaScript(kCraDevToolsHooks, frame->GetURL(), 0);
     }
 

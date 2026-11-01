@@ -247,6 +247,36 @@ extension SpaceTheme {
         let rgb = OKLab.toRGB(L: L, a: target * cos(hue), b: target * sin(hue))
         return Color(.sRGB, red: rgb.r, green: rgb.g, blue: rgb.b, opacity: dark ? 0.48 : 1)
     }
+
+    /// Arc's developer-mode toolbar: the space's semantic "focus" colour (dark) over black, opaque.
+    /// Arc 1.170, JYSK, 1 Nov 2026: focus (0.294, 0.329, 1.021) at α 0.8075 → sRGB 61/67/210, the bar
+    /// measured 61/67/210 after undoing the display's P3. Focus sits a little darker than hover at the
+    /// sRGB gamut edge in the theme's hue; fitted on JYSK as OKLab L 0.552 at full chroma. Arc's palette
+    /// hue drifts ~5° from its base colour's, so JYSK lands at 44/72/206 (one space measured so far).
+    var developerBarColor: NSColor {
+        let hex = accent ?? colors.first ?? "#808080"
+        let c = HexColor.components(hex) ?? (0.5, 0.5, 0.5)
+        let lab = OKLab.from(r: c.r, g: c.g, b: c.b)
+        let chroma = (lab.a * lab.a + lab.b * lab.b).squareRoot()
+        let hue = atan2(lab.b, lab.a)
+        let L = 0.552
+        let target = OKLab.maxChroma(L: L, hue: hue) * min(1, chroma / 0.03)
+        let rgb = OKLab.toRGB(L: L, a: target * cos(hue), b: target * sin(hue))
+        let k = 0.8075
+        return NSColor(srgbRed: rgb.r * k, green: rgb.g * k, blue: rgb.b * k, alpha: 1)
+    }
+
+    /// Arc's foregroundSecondary (JYSK 131/137/255, OKLab L 0.68): the developer bar's dividers at 45%,
+    /// its selected text at 60%.
+    var developerSecondaryColor: NSColor {
+        let c = HexColor.components(accent ?? colors.first ?? "#808080") ?? (0.5, 0.5, 0.5)
+        let lab = OKLab.from(r: c.r, g: c.g, b: c.b)
+        let hue = atan2(lab.b, lab.a)
+        let L = 0.68
+        let target = OKLab.maxChroma(L: L, hue: hue) * min(1, (lab.a * lab.a + lab.b * lab.b).squareRoot() / 0.03)
+        let rgb = OKLab.toRGB(L: L, a: target * cos(hue), b: target * sin(hue))
+        return NSColor(srgbRed: rgb.r, green: rgb.g, blue: rgb.b, alpha: 1)
+    }
 }
 
 /// Björn Ottosson's OKLab, for colours that keep the same perceived lightness across hues.
