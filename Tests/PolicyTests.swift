@@ -17,10 +17,10 @@ enum PolicyTests {
 
     private static func toolbar() {
         typealias T = ToolbarComposition
-        func bar(_ kind: T.Kind, split: Bool = false, focused: Bool = true, back: Bool = false, forward: Bool = false,
-                 loading: Bool = false, pinned: [String] = [], extensions: Bool = false) -> T {
-            T(kind: kind, inSplit: split, focusedPane: focused, canGoBack: back, canGoForward: forward, isLoading: loading,
-              pinnedExtensions: pinned, hasExtensions: extensions)
+        func bar(_ kind: T.Kind, split: Bool = false, sidebar: Bool = false, focused: Bool = true, back: Bool = false,
+                 forward: Bool = false, loading: Bool = false, pinned: [String] = [], extensions: Bool = false) -> T {
+            T(kind: kind, inSplit: split, sidebarVisible: sidebar, focusedPane: focused, canGoBack: back, canGoForward: forward,
+              isLoading: loading, pinnedExtensions: pinned, hasExtensions: extensions)
         }
         let full = bar(.normal, back: true, loading: true, pinned: ["a", "b"], extensions: true)
         expect(full.left == [.toggleSidebar, .back(enabled: true), .forward(enabled: false), .reload(loading: true, enabled: true)],
@@ -28,6 +28,9 @@ enum PolicyTests {
         expect(full.right == [.pinnedExtension("a"), .pinnedExtension("b"), .extensions, .addSplit],
                "the right end: pinned extensions, Extensions, Split View")
         expect(bar(.normal).right == [.addSplit], "no Extensions button without extensions")
+        expect(bar(.normal, sidebar: true).left == [.back(enabled: false), .forward(enabled: false), .reload(loading: false, enabled: true)]
+               && bar(.noTab, sidebar: true).left.first == .back(enabled: false) && bar(.developer, sidebar: true).left.isEmpty,
+               "the sidebar shown: its header carries the toggle, the bar has none (Arc 1.171, #50)")
         let pane = bar(.normal, split: true, back: true, pinned: ["a"], extensions: true)
         expect(pane.left == [.back(enabled: true), .forward(enabled: false)] && pane.right == [.splitOptions, .closePane],
                "a focused split pane: only ← →, then its options and close")

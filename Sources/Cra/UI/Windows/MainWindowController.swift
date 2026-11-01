@@ -2138,6 +2138,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         commandBar.close()
     }
 
+    // The sidebar header's toggle moves into the traffic lights' place while they are gone (Arc).
+    func windowWillEnterFullScreen(_ notification: Notification) { sidebarUI.windowFullscreen = true }
+    func windowWillExitFullScreen(_ notification: Notification) { sidebarUI.windowFullscreen = false }
     func windowDidEnterFullScreen(_ notification: Notification) { shell.needsLayout = true }
     func windowDidExitFullScreen(_ notification: Notification) {
         // Left with the green button or ⌃⌘F while a video was fullscreen: the page leaves too.

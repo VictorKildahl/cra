@@ -190,6 +190,7 @@ final class SidebarTopBarView: NSView {
     private var colors = SidebarColors()
     private var compact = false
     private var devNav = false
+    private var fullscreen = false
     private var buttons: [String: SidebarGlyphButton] = [:]
     private var rowButtons: [SidebarGlyphButton] = []
     private var chevron: NSView?
@@ -212,6 +213,12 @@ final class SidebarTopBarView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     override var isFlipped: Bool { true }
+
+    // The floating panel and the window place the toggle differently in fullscreen.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        needsLayout = true
+    }
 
     private func sync() {
         syncQueued = false
@@ -249,10 +256,12 @@ final class SidebarTopBarView: NSView {
         devNav = !compact && (tab?.tab.map { store.settings.isDeveloperMode(url: $0.url) } ?? false)
         let active = ui.appActive
         let reloadSymbol = ui.isLoading ? "xmark" : "arrow.clockwise"
-        var shown: [SidebarGlyphButton] = []
+        fullscreen = ui.windowFullscreen
+        // Arc 1.171: the header always carries the sidebar toggle; the toolbar has one only while the
+        // sidebar is hidden (PaneToolbarView), so a floating sidebar shows both.
+        let help = store.window(ui.windowID).sidebarVisible ? "Hide Sidebar (⌘S)" : "Show Sidebar (⌘S)"
+        var shown = [button("toggle", symbol: "sidebar.left", help: help, size: 32, height: 32, iconSize: 15.5, active: active) { [weak self] in self?.actions.toggleSidebar() }]
         if compact {
-            // The toolbar carries the sidebar toggle; this one only stands in while the toolbar is hidden.
-            shown.append(button("toggle", symbol: "sidebar.left", help: "Hide Sidebar (⌘S)", size: 32, height: 32, iconSize: 15.5, active: active) { [weak self] in self?.actions.toggleSidebar() })
             shown.append(button("back", symbol: "arrow.left", help: "Go Back (⌘[)", size: 32, height: 32, iconSize: 15, active: active, enabled: ui.canGoBack) { [weak self] in self?.actions.goBack() })
             shown.append(button("forward", symbol: "arrow.right", help: "Go Forward (⌘])", size: 32, height: 32, iconSize: 15, active: active, enabled: ui.canGoForward) { [weak self] in self?.actions.goForward() })
             shown.append(button("reload", symbol: reloadSymbol, help: "Refresh (⌘R)", size: 32, height: 32, iconSize: 15, active: active, animated: true) { [weak self] in self?.actions.reload() })
@@ -294,10 +303,13 @@ final class SidebarTopBarView: NSView {
     override func layout() {
         super.layout()
         let w = bounds.width
+        // Row 1: 71 pt for the traffic lights, then the toggle. In fullscreen the lights are gone and
+        // Arc draws it from 20 pt in (glyph 20–38.5 pt); the floating panel draws stand-in lights.
+        let lights = !fullscreen || window?.parent != nil
+        if let t = rowButtons.first { t.frame = NSRect(x: lights ? 6 + 71 + 2 : 13, y: CraMetrics.titleRowCenter - 17, width: 32, height: 32) }
         if compact {
-            // Row 1: 71 pt for the traffic lights, the toggle, then ← → ↻ 2 pt apart, 6 pt from the edge.
+            // ← → ↻ 2 pt apart, 6 pt from the edge.
             let y = CraMetrics.titleRowCenter - 17
-            if let t = rowButtons.first { t.frame = NSRect(x: 6 + 71 + 2, y: y, width: 32, height: 32) }
             var x = w - 6
             for b in rowButtons.dropFirst().reversed() {
                 x -= 32
@@ -312,7 +324,7 @@ final class SidebarTopBarView: NSView {
                 x -= 12
                 c.frame = NSRect(x: x, y: y, width: 12, height: 28)
             }
-            for b in rowButtons.reversed() {
+            for b in rowButtons.dropFirst().reversed() {
                 x -= b.size.width
                 b.frame = NSRect(x: x, y: y + (28 - b.size.height) / 2, width: b.size.width, height: b.size.height)
             }

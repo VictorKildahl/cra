@@ -33,7 +33,8 @@ final class CommandBarController {
     private(set) var scope: CommandBarScope?
     /// What was typed when Tab entered the scope; Backspace puts it back.
     private var scopeTyped = ""
-    private var openedPrefill: String?
+    /// The URL ⌘L opened with (the page's), nil for ⌘T.
+    private(set) var openedPrefill: String?
 
     unowned let engine: SuggestionEngine
     unowned let store: SidebarStore
