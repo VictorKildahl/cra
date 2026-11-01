@@ -98,6 +98,18 @@ final class SidebarStore {
             spaceOrder = doc.spaceOrder
             for it in doc.items { items[it.id] = it }
         }
+        // Containers of a space that is gone, with everything in them: an incognito window's,
+        // which updateTab used to write to disk. Its tabs never showed in a space again, but
+        // the command bar offered them in normal windows. They go before the orphan pass below
+        // would move them into a space.
+        func drop(_ id: UUID) {
+            for c in items[id]?.children ?? [] { drop(c) }
+            items[id] = nil
+        }
+        for (id, it) in items.all {
+            guard let sid = it.container?.spaceID, spaces[sid] == nil, sid != ContainerKind.sharedFavoritesSpaceID else { continue }
+            drop(id)
+        }
         // Drop children references that do not resolve and orphans.
         for (id, var it) in items.all {
             it.children = it.children.filter { items[$0] != nil && items[$0]?.parentID == id }
@@ -438,8 +450,8 @@ final class SidebarStore {
         // The window's layout (refresh) only depends on a tab becoming or ceasing to be an
         // empty pane; the rows and the toolbar observe the tab themselves.
         if it.isEmptyTab != wasEmpty { revision &+= 1 }
-        sidebarFile.save(SidebarDocument(version: 1, spaceOrder: spaceOrder, spaces: orderedSpaces,
-                                         items: Array(items.values), profiles: profiles), delay: 2)
+        // The document leaves incognito windows' tabs out.
+        sidebarFile.save(document, delay: 2)
     }
 
     /// Only saved: nothing on screen reads it back until the tab's page is made again. Incognito
