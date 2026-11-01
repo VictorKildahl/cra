@@ -44,8 +44,8 @@ struct SuggestionResult {
     var items: [Suggestion] = []
     /// Host (or more) to complete the typed text to, e.g. "github.com".
     var inlineCompletion: String?
-    /// The site Tab scopes the bar to ("Search YouTube  Tab").
-    var siteSearch: SiteSearch?
+    /// What Tab scopes the bar to ("Search YouTube  Tab", "Search Tabs  Tab").
+    var scope: CommandBarScope?
     var query: String = ""
 }
 
@@ -122,7 +122,7 @@ final class SuggestionEngine {
         }
         result.items = Array(items.prefix(Self.maxRows))
         result.inlineCompletion = completion?.text
-        result.siteSearch = SiteSearch.match(q, completion: completion?.text)
+        result.scope = TabSearchScope.isOffered(by: query) ? .tabs : SiteSearch.match(q, completion: completion?.text).map(CommandBarScope.site)
         return result
     }
 
@@ -133,6 +133,25 @@ final class SuggestionEngine {
         guard !query.isEmpty else { return result }
         result.items = [Suggestion(id: "typed", kind: .search, title: query, subtitle: "Search \(site.name)", url: site.searchURL(query),
                                    faviconKey: nil, symbol: "magnifyingglass", trailing: nil, score: 1000)]
+        return result
+    }
+
+    /// The bar scoped to a space's open tabs ("%" Tab): its favorites, pinned and today tabs but
+    /// the one in front, and nothing from history, the archive or the network.
+    func suggestions(for rawQuery: String, inTabsOf spaceID: UUID, currentTabID: UUID?) -> SuggestionResult {
+        let query = rawQuery.trimmingCharacters(in: .whitespaces)
+        let q = query.lowercased()
+        var result = SuggestionResult(query: query)
+        let tabs = store.visibleTabs(in: spaceID).filter { $0.id != currentTabID && $0.tab != nil }
+        let byID = Dictionary(tabs.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let ranked = TabSearchScope.rank(tabs.map { tab in
+            TabSearchScope.Candidate(id: tab.id, score: q.isEmpty ? 0 : textScore(q, title: tab.displayTitle, url: tab.tab?.url ?? ""),
+                                     lastActive: tab.tab?.timeLastActiveAt)
+        }, typed: !q.isEmpty)
+        result.items = ranked.prefix(Self.maxRows).compactMap { byID[$0] }.map { tab in
+            Suggestion(id: "tab:\(tab.id)", kind: .switchToTab(tab.id), title: tab.displayTitle, subtitle: Self.humanURL(tab.tab?.url ?? ""),
+                       url: tab.tab?.url, faviconKey: tab.tab?.faviconKey, symbol: nil, trailing: "Switch to Tab", score: 0, spaceID: spaceID)
+        }
         return result
     }
 
@@ -486,6 +505,22 @@ final class SuggestionEngine {
 
     static func relative(_ date: Date) -> String {
         relativeFormatter.localizedString(for: date, relativeTo: Date())
+    }
+}
+
+/// What Tab scopes the bar to, a pill before the field until Backspace on the empty field or
+/// Escape (Arc's ScopedSearchType).
+enum CommandBarScope: Equatable {
+    /// Arc's Site Search: "youtube" Tab searches YouTube.
+    case site(SiteSearch)
+    /// The open tabs of the window's space (#49).
+    case tabs
+
+    var name: String {
+        switch self {
+        case .site(let site): return site.name
+        case .tabs: return TabSearchScope.name
+        }
     }
 }
 

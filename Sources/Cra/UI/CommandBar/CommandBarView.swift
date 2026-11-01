@@ -20,8 +20,8 @@ final class CommandBarView: NSView {
     private let leadingIcon = NSImageView()
     private let text: CommandTextField
     private let info = NSImageView()
-    /// Site Search: the scoped site's pill before the field, and "Search YouTube  Tab" at the
-    /// end of the row while the typed text would enter it (Arc 1.170, measured at 2x).
+    /// Scoped search: the scope's pill before the field, and "Search YouTube  Tab" at the end of
+    /// the row while the typed text would enter it (Arc 1.170, measured at 2x).
     private let pill = NSView()
     private let pillLabel = NSTextField.sidebarLabel(size: 13, weight: .semibold)
     private let hint = NSTextField.sidebarLabel(size: 13, weight: .semibold)
@@ -105,17 +105,20 @@ final class CommandBarView: NSView {
         tint.layer?.backgroundColor = (dark ? NSColor.black.withAlphaComponent(0.74) : NSColor.white.withAlphaComponent(0.7)).cgColor
         border.strokeColor = NSColor.labelColor.withAlphaComponent(dark ? 0.12 : 0.08).cgColor
         divider.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.08).cgColor
-        let site = c.siteSearch
-        info.isHidden = !c.query.isEmpty || site != nil
+        let scope = c.scope
+        // A site's brand colour; the tabs scope takes the space's, the colour of its rows.
+        let highlight: NSColor
+        if case .site(let site) = scope { highlight = NSColor(hex: site.color) } else { highlight = NSColor(c.highlight) }
+        info.isHidden = !c.query.isEmpty || scope != nil
         divider.isHidden = items.isEmpty
-        pill.isHidden = site == nil
-        if let site {
-            let color = NSColor(hex: site.color)
+        pill.isHidden = scope == nil
+        if let scope {
+            let color = highlight.withAlphaComponent(1)
             pill.layer?.backgroundColor = color.cgColor
             pill.layer?.shadowColor = color.cgColor
-            pillLabel.stringValue = site.name
+            pillLabel.stringValue = scope.name
         }
-        let offered = site == nil && c.previewText == nil ? c.result.siteSearch : nil
+        let offered = scope == nil && c.previewText == nil ? c.result.scope : nil
         hint.isHidden = offered == nil
         keycap.isHidden = offered == nil
         if let offered {
@@ -128,7 +131,7 @@ final class CommandBarView: NSView {
         // Follows the row the arrows moved to; otherwise the completing top match.
         let previewing = c.previewText != nil && items.indices.contains(c.selectedIndex)
         let row = previewing ? items[c.selectedIndex] : items.first
-        if site == nil, let s = row, let key = s.faviconKey, s.id != "typed", let img = favicons.image(forKey: key),
+        if scope == nil, let s = row, let key = s.faviconKey, s.id != "typed", let img = favicons.image(forKey: key),
            previewing || c.result.inlineCompletion != nil || c.mode == .editURL {
             leadingIcon.imageScaling = .scaleProportionallyUpOrDown
             leadingIcon.image = img
@@ -157,7 +160,6 @@ final class CommandBarView: NSView {
             rows.append(r)
             addSubview(r)
         }
-        let highlight = site.map { NSColor(hex: $0.color) } ?? NSColor(c.highlight)
         for (i, r) in rows.enumerated() {
             guard i < items.count else { r.isHidden = true; continue }
             r.isHidden = false

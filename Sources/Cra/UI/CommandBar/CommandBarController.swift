@@ -28,11 +28,11 @@ final class CommandBarController {
     var highlight: Color = .accentColor.opacity(0.4)
     var focusedSpaceID: UUID?
     var spaceName: (UUID) -> String = { _ in "" }
-    /// Arc's Site Search: Tab on "youtube" scopes the bar to YouTube (a pill before the
-    /// field) until Backspace on an empty field or Escape.
-    private(set) var siteSearch: SiteSearch?
-    /// What was typed when Tab entered the site search; Backspace puts it back.
-    private var siteSearchTyped = ""
+    /// Arc's scoped search: Tab on "youtube" scopes the bar to YouTube, on "%" to the space's open
+    /// tabs (a pill before the field) until Backspace on an empty field or Escape.
+    private(set) var scope: CommandBarScope?
+    /// What was typed when Tab entered the scope; Backspace puts it back.
+    private var scopeTyped = ""
     private var openedPrefill: String?
 
     unowned let engine: SuggestionEngine
@@ -46,7 +46,7 @@ final class CommandBarController {
     }
 
     var placeholder: String {
-        if siteSearch != nil { return "Search…" }
+        if scope != nil { return "Search…" }
         switch mode {
         case .newTab: return "Search or enter URL…"
         case .editURL: return "Edit URL or search…"
@@ -56,7 +56,7 @@ final class CommandBarController {
     func open(mode: CommandBarMode, prefill: String?) {
         engine.resetIndex()
         self.mode = mode
-        siteSearch = nil
+        scope = nil
         openedPrefill = prefill
         query = prefill ?? ""
         fieldText = query
@@ -80,8 +80,13 @@ final class CommandBarController {
     func update(query newQuery: String, allowCompletion: Bool) {
         query = newQuery
         self.allowCompletion = allowCompletion
-        if let site = siteSearch {
-            result = engine.suggestions(for: newQuery, in: site)
+        if let scope {
+            switch scope {
+            case .site(let site):
+                result = engine.suggestions(for: newQuery, in: site)
+            case .tabs:
+                result = engine.suggestions(for: newQuery, inTabsOf: focusedSpaceID ?? store.focusedSpaceID, currentTabID: store.selectedTabID)
+            }
             selectedIndex = 0
             previewText = nil
             return
@@ -100,7 +105,7 @@ final class CommandBarController {
 
     /// The search engine answered: list again, keeping the selected row where it still is.
     private func relist() {
-        guard siteSearch == nil else { return }
+        guard scope == nil else { return }
         let selectedID = result.items.indices.contains(selectedIndex) ? result.items[selectedIndex].id : nil
         result = engine.suggestions(for: query, mode: mode, currentTabID: store.selectedTabID)
         if !allowCompletion { result.inlineCompletion = nil }
@@ -140,25 +145,25 @@ final class CommandBarController {
         }
     }
 
-    /// Tab on text that starts a site search's host: scope the bar to that site.
-    func enterSiteSearch() -> Bool {
-        guard siteSearch == nil, previewText == nil, let site = result.siteSearch else { return false }
-        siteSearchTyped = query
-        siteSearch = site
+    /// Tab on text that starts a site search's host, or on "%": scope the bar to it.
+    func enterScope() -> Bool {
+        guard scope == nil, previewText == nil, let offered = result.scope else { return false }
+        scopeTyped = query
+        scope = offered
         pushFieldText("")
         return true
     }
 
     /// Backspace on the empty scoped field: back to what was typed, the hint showing again.
-    func leaveSiteSearch() {
-        guard siteSearch != nil else { return }
-        siteSearch = nil
-        pushFieldText(siteSearchTyped)
+    func leaveScope() {
+        guard scope != nil else { return }
+        scope = nil
+        pushFieldText(scopeTyped)
     }
 
-    /// Escape in a site search goes back to how the bar opened rather than closing it (Arc).
-    func cancelSiteSearch() {
-        guard siteSearch != nil else { return }
+    /// Escape in a scope goes back to how the bar opened rather than closing it (Arc).
+    func cancelScope() {
+        guard scope != nil else { return }
         open(mode: mode, prefill: openedPrefill)
     }
 
@@ -181,6 +186,8 @@ final class CommandBarController {
 
     func commit(forceNewTab: Bool) {
         let selected = result.items.indices.contains(selectedIndex) ? result.items[selectedIndex] : nil
+        // No tab matched: Return has nowhere to go, and the tabs scope never searches the web.
+        if scope == .tabs, selected == nil { return }
         var typed = query
         // Enter on the typed row with an inline completion goes to the completion.
         if selectedIndex == 0, let c = result.inlineCompletion, selected?.id == "typed" { typed = c }
@@ -196,7 +203,7 @@ final class CommandBarController {
     func close() {
         guard isOpen else { return }
         isOpen = false
-        siteSearch = nil
+        scope = nil
         engine.resetIndex()
         onClose()
     }
