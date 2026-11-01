@@ -39,6 +39,7 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   StorableWindows.json keeps windows[].spacesWithCollapsedPinnedSections (per window). [I] Clicking the space
   name toggles it and the active pinned tab stays visible; not observed live (Arc's window sat on another
   macOS Space and ignored synthetic input, 26 Oct). Cra: WindowPrefs.collapsedPinnedSpaces, SpaceHeader.
+  [O 1 Nov] A click on the name does toggle it (see "Space header row" below).
 
 ## Window state (StorableWindows.json)
 - [O] sidebarWidth 328, sidebarMode "anchored" (binary also has floating, hidden, collapsed), focusedSpaceID, lastFocusedSpaceID,
@@ -113,7 +114,7 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
 - [O] Sidebar 328pt wide. Row 1: traffic lights, sidebar toggle right after them (~93pt), nav ← → ↻ right-aligned when a
   tab is selected and the toolbar shows the URL; with no tab the nav moves into the toolbar and the toolbar shows a
   centered "Search or Enter URL…". Favorites: 4 tiles, ~44pt tall, active tile gets a dashed outline. Space header: emoji +
-  name, 13pt medium, secondary color. Rows 40pt pitch, 14pt titles, 16pt favicons, custom-titled/navigated pinned tabs show
+  name, 13pt semibold (re-fitted 1 Nov), secondary color. Rows 40pt pitch, 14pt titles, 16pt favicons, custom-titled/navigated pinned tabs show
   the host as an 11pt second line, folders use a blue folder glyph, nested rows indent ~18pt. Bottom row: library icon
   left, tiny space emoji centered (inactive dimmed), + right.
 - [O] Content: rounded card inset ~8-10pt with the toolbar strip (42pt: lock + monospaced URL, copy link, extensions,
@@ -177,7 +178,7 @@ dark = HSB(h, s · 0.6, v · 0.8) (#010220 → #0A0B19; Arc #0E0B16). Pages with
 
 Other measured details: window buttons are muted grey discs (bg −10 %) until the pointer
 reaches the sidebar's title row; favicons 16 pt centred 25.75 pt from the window edge; space
-header 14 pt medium with no top padding above it; favorites tiles 72 × 47 with 8 pt margins
+header 13 pt semibold (re-fitted 1 Nov; was 14 medium) with no top padding above it; favorites tiles 72 × 47 with 8 pt margins
 and gaps; the yellow/black dashed ring (2 pt, systemYellow, 6/6 black dashes) is Arc's
 keyboard-focus indicator, shown on a tab chosen without the mouse, never on clicked ones.
 Re-measured 29 Oct (issue #12, ScreenCaptureKit frames every ~60 ms): an AppleScript select
@@ -689,7 +690,31 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
   18.5 pt (favorites). Header cap tops 21.5 pt below it either way. Every pinned row takes 41 pt, the
   first one too; nothing pinned takes none. Line → first Today row 11.5 pt. Cra matches all eight
   combinations of header × pinned × favorites to the pixel (SpaceColumnView.place, SpaceListView.layoutRows).
-  Left: Arc's header title sits ~1 pt lower and reads slightly larger than Cra's.
+  Left: Arc's header title sits ~1 pt lower and reads slightly larger than Cra's (fixed 1 Nov: 13 pt semibold, header fill 36 pt).
+
+### Space header row (Arc 1.171, live, 1 Nov, issue #39)
+- [O] At rest: the space icon, then the title; nothing else. A space with an emoji shows it (the issue's
+  Arc screenshot had none, most likely a space without an icon). Hovered: the row fills (white 0.10 on
+  the dark JYSK theme), the icon is replaced by a down chevron in the same slot and a ••• button shows at
+  the right end. Collapsed: the chevron stays and points right, hovered or not; the icon comes back only
+  when the pinned tabs are expanded again. A click anywhere but ••• (title included) toggles the pinned
+  tabs; the chevron turns a quarter counter-clockwise (down → right) over ~0.12 s; the hover swap and the
+  fill have no visible fade (60 fps screen recording, variable frame rate).
+- [O] 2x window captures, sidebar-relative points: fill 8 pt in from both sidebar edges, 36 pt tall,
+  starting ~8 pt under the favorites tiles, circular corner radius ~12 pt. Icon/chevron centred on the
+  favicon column (25.75 pt); title text starts at 44.5 pt. ••• hover square 24 pt, radius ~6, 6 pt in
+  from the fill's right end, its own hover fill stacked on the row's. No tooltip on ••• after 2.8 s.
+- [O] Pixel fits against SF Symbols / system font: chevron = chevron.down 12.5 pt bold (SSE 1.96; 12 bold
+  4.18), ••• = ellipsis 13 pt semibold (SSE 0.07), title = system 13 pt semibold (SSE 0.02; Cra had
+  14 medium). Dark tones (white alpha over the sidebar): title 0.45, chevron and ••• 0.59.
+- [O] ••• opens the space menu at the pointer like a context menu: Change Space Icon…, Rename Space…,
+  Edit Theme Color…, Set Profile ▸ | New Folder, Live Folders ▸ | Share Space…, Export "<space>" into
+  Folder ▸ | Manage Spaces… | Delete Space. Cra's ••• opens its existing space menu (same as right-click).
+- [?] Not measured: light-theme header tones, a space without an icon, 1x rendering (no 1x display
+  attached), whether the fill needs the app active (one inactive-window frame showed chevron and •••
+  without the fill).
+- Cra: SpaceHeaderView matches all four states (rest, hover, collapsed, collapsed + hover) to within
+  1 px at 2x; the ••• square sits 0.5 pt off so its dots land on Arc's.
 
 ### DevTools docking, Arc's way (25 Oct)
 
