@@ -101,9 +101,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         if let rt = takeRuntimeFromOtherWindow?(tabID) {
             rt.browser.delegate = self
             add(rt)
-            if inRightProfile(rt) { return rt }
+            if inRightProfile(rt) { log(tabID, "moves its page in from another window"); return rt }
             release(tabID)?.browser.close()
         }
+        log(tabID, "opens a page for \(site(tab.url, tabID))")
         let browser = CraBrowser(frame: container.bounds, url: tab.url, delegate: self, incognito: store.isIncognito(item: tabID),
                                  profilePath: store.profilePath(item: tabID))
         return register(browser: browser, tabID: tabID)
@@ -117,6 +118,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         browser.containerView.removeFromSuperview()
         browser.delegate = self
         let rt = register(browser: browser, tabID: tabID)
+        log(tabID, "takes over a Little Window's page")
         store.updateTab(tabID, url: browser.currentURL, title: browser.currentTitle)
         return rt
     }
@@ -222,9 +224,36 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         visibleTabID = focused.flatMap { newSet.contains($0) ? $0 : nil } ?? shown.first
         if wasVisible != Set(shown) { HitchMonitor.mark("page-shown") }
         if focus, let f = visibleTabID, let rt = runtimes[f] { rt.browser.setFocused(true) }
-        for id in shown where !wasVisible.contains(id) { scheduleSnapshot(id) }
+        for id in shown where !wasVisible.contains(id) {
+            scheduleSnapshot(id)
+            if let rt = runtimes[id] {
+                log(id, "shown: \(site(rt.browser.currentURL, id))\(rt.browser.isLoading ? ", loading" : "")\(rt.browser.isCreated ? "" : ", page not created yet")")
+                scheduleProbe(id, rt)
+            }
+        }
         syncDevToolsVisibility()
         delegate?.browserManagerPageWindowsChanged(focus: focus)
+    }
+
+    // MARK: Diagnostics
+
+    /// Tab ids are cut to 8 characters, enough to follow one tab through the log.
+    private func log(_ id: UUID, _ message: String) { CraLog.note("tab \(id.uuidString.prefix(8)) \(message)") }
+
+    private func site(_ url: String, _ id: UUID) -> String { store.isIncognito(item: id) ? "(incognito)" : CraLog.host(url) }
+
+    /// A moment after a tab comes on screen, the log gets what its page holds and where Cra put
+    /// it: for the tab that "shows a white page until reloaded", the line that says why.
+    private func scheduleProbe(_ id: UUID, _ rt: TabRuntime, attempt: Int = 1) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self, weak rt] in
+            guard let self, let rt, self.runtimes[id] === rt, self.visibleTabIDs.contains(id) else { return }
+            // A slow site: look again once it has had time, and say so if it never finishes.
+            if rt.browser.isLoading, attempt < 4 { return self.scheduleProbe(id, rt, attempt: attempt + 1) }
+            PageProbe.run(rt.browser) { [weak self] probe in
+                guard let self, self.runtimes[id] === rt else { return }
+                self.log(id, "page \(self.site(rt.browser.currentURL, id))\(rt.browser.isLoading ? " still loading" : ""): \(probe) \(PageProbe.viewState(rt))")
+            }
+        }
     }
 
     // MARK: Tab switcher thumbnails
@@ -285,6 +314,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         // CEF closes asynchronously. Retire ownership first so reopening the tab
         // creates a new browser, and late callbacks cannot mutate its replacement.
         guard let rt = release(tabID) else { return }
+        log(tabID, "closes its page")
         rt.browser.containerView.isHidden = true
         closingBrowsers[ObjectIdentifier(rt.browser)] = rt.browser
         rt.browser.close()
@@ -320,8 +350,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                             let refusal = Self.sleepRefusal(result)
                             guard refusal.isEmpty else { return self.keepAwake(rt, url, refusal) }
                             if !rt.browser.isIncognito {
-                                NSLog("Cra: tab sleep unloads %@ (hidden %d min)", Self.logHost(url),
-                                      Int(Date().timeIntervalSince(rt.hiddenAt ?? Date()) / 60))
+                                CraLog.note("tab sleep unloads \(CraLog.host(url)) (hidden \(Int(Date().timeIntervalSince(rt.hiddenAt ?? Date()) / 60)) min)")
                             }
                             self.unload(id)
                         }
@@ -338,16 +367,11 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// Asked again after the back-off; the log names the site once per reason (never an incognito one).
     private func keepAwake(_ rt: TabRuntime, _ url: String, _ refusal: String) {
         rt.sleepProbeAfter = Date().addingTimeInterval(Self.refusalBackoff)
-        if rt.sleepRefusal != refusal, !rt.browser.isIncognito { NSLog("Cra: tab sleep keeps %@ awake: %@", Self.logHost(url), refusal) }
+        if rt.sleepRefusal != refusal, !rt.browser.isIncognito { CraLog.note("tab sleep keeps \(CraLog.host(url)) awake: \(refusal)") }
         rt.sleepRefusal = refusal
     }
 
     static let refusalBackoff: TimeInterval = 10 * 60
-
-    /// Only the host: logs get shared in bug reports.
-    private static func logHost(_ url: String) -> String {
-        URL(string: url).flatMap { $0.host ?? $0.scheme.map { "\($0):" } } ?? "(no page)"
-    }
 
     private func canSleep(_ rt: TabRuntime, before cutoff: Date) -> Bool {
         let b = rt.browser
@@ -608,7 +632,9 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     }
 
     func browser(_ browser: CraBrowser, didFinishLoadingURL url: String, title: String, statusCode: Int) {
-        guard let id = tabID(of: browser), !browser.isIncognito else { return }
+        guard let id = tabID(of: browser) else { return }
+        log(id, "loaded \(site(url, id)) (HTTP \(statusCode))")
+        guard !browser.isIncognito else { return }
         store.recordVisit(url: url, title: title.isEmpty ? (store.item(id)?.tab?.savedTitle ?? "") : title)
     }
 
@@ -789,6 +815,6 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         delegate?.browserManagerDidUpdate(id)
         delegate?.browserManagerPageWindowsChanged(focus: false)
         // window.close() (a sign-in or payment popup finishing): the tab goes, like Chrome.
-        if browser.closedByPage { delegate?.browserManagerPageClosedTab(id) }
+        if browser.closedByPage { log(id, "closed by its page"); delegate?.browserManagerPageClosedTab(id) }
     }
 }

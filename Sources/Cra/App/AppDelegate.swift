@@ -534,6 +534,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             if let id = dict["extensionAction"] { main.runExtensionAction(id); return }
+            if let path = dict["exportDiagnostics"] {
+                Diagnostics.export(windows: mainWindows, store: store, to: URL(fileURLWithPath: path))
+                return
+            }
             if let f = dict["floatingSidebar"] { if f == "1" { main.floatingSidebar?.show() } else { main.floatingSidebar?.hide(animated: true) }; return }
             if let method = dict["bcdp"] {
                 CraCEFRuntime.sendBrowserDevToolsMethod(method, params: dict["params"] ?? "{}") { result, error in
@@ -999,6 +1003,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             link.representedObject = url
             help.addItem(link)
         }
+        help.addItem(.separator())
+        help.addItem(withTitle: "Export Diagnostics…", action: #selector(exportDiagnostics), keyEquivalent: "").target = self
         menubar.addItem(submenu: help, title: "Help")
         NSApp.helpMenu = help
 
@@ -1011,6 +1017,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         useNormalWindow()
         store.createTab(url: url, select: true)
         main.showWindow(nil)
+    }
+
+    /// A zip of logs and page state for a bug report (Diagnostics.swift).
+    @objc private func exportDiagnostics() {
+        Diagnostics.export(windows: mainWindows, store: store)
     }
 
     @objc private func showAbout() {

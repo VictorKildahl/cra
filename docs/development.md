@@ -34,8 +34,18 @@ issue when a newer stable CEF is out; `scripts/update-cef.sh` moves the pin.
 - `vendor/cef` — CEF binary distribution (fetched, not committed)
 
 Data lives in `~/Library/Application Support/Cra`: the sidebar and archive as JSON,
-`keybindings.json`, cached favicons, `chromium.log` and a Chromium profile folder. Delete
-it to start over.
+`keybindings.json`, cached favicons, the logs and a Chromium profile folder. Delete it to
+start over.
+
+`cra.log` is Cra's own log: each tab's page opening, showing, loading and closing, and three
+seconds after a tab comes on screen, what its page holds (`blank`, `visibility`, element and
+text counts, `painted` for a first contentful paint) and where Cra put it (view size,
+`window=covered` when another window hides it). `chromium.log` holds Chromium's warnings,
+failed page loads and crashed renderers. Each launch keeps the last one's as `*.previous.log`.
+Logs name sites by host only. Help ▸ Export Diagnostics… zips both with the GPU report,
+the on-screen pages' state, settings, extensions and the last week's crash reports, with
+addresses cut to their host; `cra://debug?exportDiagnostics=<path>` does the same without
+the save panel.
 
 ## Running a test instance
 

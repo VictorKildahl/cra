@@ -1062,7 +1062,13 @@ public:
 
     void OnLoadError(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, ErrorCode errorCode,
                      const CefString& errorText, const CefString& failedUrl) override {
-        if ((int)errorCode == -3 /* ERR_ABORTED */ || !frame->IsMain()) return;
+        if (!frame->IsMain()) return;
+        // A tab left blank is often a navigation that failed or was cut off; Help ▸ Export
+        // Diagnostics sends this log, so the line names the site only.
+        CraBrowser* owner = owner_;
+        LOG(WARNING) << "Cra: loading " << (owner.isIncognito ? "(incognito)" : UrlHost(failedUrl)) << " failed: " << errorText.ToString() << " ("
+                     << (int)errorCode << ")";
+        if ((int)errorCode == -3 /* ERR_ABORTED */) return;
         // Chrome-style pages get Chrome's own error page: Reload retries the site and it
         // reloads by itself when the network returns. Ours, a data: URL loaded on top,
         // made Reload reload the error and added a history entry.
@@ -1213,8 +1219,12 @@ public:
 
     static std::string PageHost(CefRefPtr<CefBrowser> browser) {
         CefRefPtr<CefFrame> frame = browser->GetMainFrame();
+        return frame ? UrlHost(frame->GetURL()) : "(no page)";
+    }
+
+    static std::string UrlHost(const CefString& url) {
         CefURLParts parts;
-        if (!frame || !CefParseURL(frame->GetURL(), parts)) return "(no page)";
+        if (!CefParseURL(url, parts)) return "(no page)";
         std::string host = CefString(&parts.host).ToString();
         return host.empty() ? CefString(&parts.scheme).ToString() + ":" : host;
     }
