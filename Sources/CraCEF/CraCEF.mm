@@ -378,6 +378,7 @@ static bool g_incognitoReady = false;
 
 /// Chrome's "Always use secure connections" (Settings ▸ Privacy in Cra).
 static void ApplyHttpsOnly(CefRefPtr<CefRequestContext> context) {
+    if (!context) return;
     CefRefPtr<CefValue> value = CefValue::Create();
     value->SetBool(g_httpsOnly);
     CefString error;
@@ -2052,10 +2053,13 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 + (BOOL)contentBlockingEnabled { return cra_blocker::Enabled().load(); }
 
 /// Only contexts that finished loading take preferences (an uninitialised one is fatal);
-/// the rest get it from ApplyProfilePreferences when they load.
+/// the rest get it from ApplyProfilePreferences when they load. Every settings write calls
+/// this, so an unchanged value does nothing. Once quitting starts the global context goes
+/// away (GetGlobalContext returns null, #36); the setting is applied again at the next start.
 + (void)setHttpsOnlyModeEnabled:(BOOL)enabled {
+    if (enabled == g_httpsOnly) return;
     g_httpsOnly = enabled;
-    if (!g_contextInitialized) return;
+    if (!g_contextInitialized || g_quitting) return;
     ApplyHttpsOnly(CefRequestContext::GetGlobalContext());
     for (auto& [path, context] : g_profileContexts) {
         if ([g_readyProfiles containsObject:@(path.c_str())]) ApplyHttpsOnly(context);
@@ -2154,6 +2158,7 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 + (void)runMessageLoop { CefRunMessageLoop(); }
 + (void)quitMessageLoop { CraQuitMessageLoop(); }
 + (void)shutdown {
+    g_quitting = true;
     g_incognitoContext = nullptr;
     g_profileContexts.clear();
     g_waitingForProfile = nil;
