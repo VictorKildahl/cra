@@ -1830,3 +1830,18 @@ after OnLoadEnd: open → page bounds 185–200 ms instead of 265–290 ms. A cl
 child window key; AppKit then spent the next toolbar click on making the main window key, so toolbar
 buttons accept first mouse while a child window is key. Clicks after the page had focus were not affected
 (real HID test).
+
+## Live sidebar blur (1 Nov 2026, issue #37)
+
+Arc's sidebar blur is `NSVisualEffectView` only (no `CABackdropLayer` in Arc's or ArcCore's strings). AppKit's
+behind-window backdrop layer, dumped from a test `NSVisualEffectView`: `windowServerAware` true, `groupName`
+`NSCGSWindowBehindWindowCaptureBackdropGroup`, `scale` 0.125, `allowsGroupBlending` false, filters sdrNormalize,
+gaussianBlur (radius 30), colorSaturate (2.4). A bare `CABackdropLayer` defaults to `windowServerAware` false, no
+group, `allowsGroupBlending` true. Without the window-server flags the blur is drawn only while the window
+redraws: a screen recording over scrolling text showed the text sharp in every frame of a still window (and
+blurred again for a moment after each hover), while `screencapture` stills always looked right. `ShellView` now
+sets the two flags; recordings stay blurred in every frame. Over solid backdrops (Display P3 captures, same
+pipeline) light vibrant themes are unchanged, solid themes are unchanged over black and 7 levels darker over
+white, closer to Arc's formula: at #4F7CAC, intensity 0.5, Arc predicts 147/163/184 over white, 0.1.23 measured
+153/168/188, now 146/161/181. Cra's solid sidebar still darkens ~12 levels from top to bottom in both builds
+where Arc's is flat [U].
