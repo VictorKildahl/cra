@@ -14,8 +14,10 @@ enum StoreTests {
         // Before AppPaths and ArcImporter read them: they are fixed for the process.
         setenv("CRA_DATA_DIR", data.path, 1)
         setenv("CRA_ARC_DIR", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Arc").path, 1)
+        setenv("CRA_DIA_DIR", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Dia").path, 1)
 
         try arcImport()
+        try diaImport()
         chromiumProfile()
         autoArchive()
         tabSleepCadence()
@@ -52,6 +54,42 @@ enum StoreTests {
         expect(result.spaces == 2 && result.archived == 2, "applying the plan adds both spaces and the archive")
         let titles = composition.store.orderedSpaces.map(\.title)
         expect(titles.contains("Home") && titles.contains("Work"), "the imported spaces are in the sidebar")
+        expect(composition.store.integrityProblems().isEmpty, "the imported sidebar is sound")
+    }
+
+    /// Dia 1.55's encrypted sidebar (Tests/Fixtures/Dia, rebuilt by its make-fixture.py with the
+    /// Safe Storage secret "cra-test-secret").
+    @MainActor
+    private static func diaImport() throws {
+        expect(DiaImporter.isAvailable && DiaImporter.hasEncryptedSidebar, "a profile with tabs.db counts as Dia data")
+        let plan = try DiaImporter.plan(secret: "cra-test-secret")
+        expect(plan.spaces.map(\.title) == ["Home", "Work"], "Dia's spaces come over oldest first")
+        let home = plan.spaces[0], work = plan.spaces[1]
+        expect(home.theme?.colors.first == "#F8D558" && work.theme == nil, "a named Dia colour becomes a theme, neutral the default")
+        expect(home.favorites.compactMap(\.url) == ["https://example.com/mail", "https://example.com/calendar"]
+               && work.favorites.compactMap(\.url) == ["https://example.com/jira"], "each space keeps its own favorites")
+        expect(home.pinned.map { $0.customTitle ?? $0.pageTitle } == ["Docs", "Reading"], "pinned tabs and folders in order, deleted ones left out")
+        expect(home.pinned[0].pageTitle == "Docs page", "a renamed pinned tab keeps both titles")
+        let reading = home.pinned[1]
+        expect(reading.isFolder && reading.children.count == 2 && reading.children[1].isFolder
+               && reading.children[1].children.compactMap(\.url) == ["https://example.com/read/deep"], "folders nest")
+        expect(home.today.compactMap(\.url) == ["https://example.com/open", "https://example.com/left", "https://example.com/right"],
+               "open tabs come over, a split as its tabs, a new tab page left out")
+        expect(work.pinned.count == 1 && work.pinned[0].customTitle == "Tools" && work.pinned[0].children.compactMap(\.url) == ["https://example.com/ci"],
+               "edits still in the -wal come over")
+
+        expect((try? DiaImporter.plan(secret: "wrong")) == nil,
+               "a secret that opens no sidebar database fails instead of importing Dia's stale older files")
+        expect((try? DiaImporter.plan())?.spaces.contains { $0.title == "Home" } == false, "without the secret nothing comes from the database")
+
+        let clock = ManualScheduler()
+        let composition = AppComposition(clock: clock)
+        let result = composition.store.apply(plan, includeArchive: false, includeSettings: false)
+        expect(result.spaces == 2 && result.folders == 3, "applying adds both spaces and their folders")
+        let homeSpace = composition.store.orderedSpaces.first { $0.title == "Home" }
+        let open = homeSpace.map { composition.store.tabs(under: $0.todayContainerID) } ?? []
+        expect(open.count == 3 && open.allSatisfy { $0.tab?.timeLastActiveAt == clock.now },
+               "open tabs count as active at the import, so auto-archive doesn't take weeks-old Dia tabs at once")
         expect(composition.store.integrityProblems().isEmpty, "the imported sidebar is sound")
     }
 

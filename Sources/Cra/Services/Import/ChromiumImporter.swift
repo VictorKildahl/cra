@@ -210,6 +210,12 @@ enum ChromiumImporter {
         guard let secret = ChromiumCrypto.keychainSecret(service: keychainService, account: keychainAccount) else {
             throw CredentialImportError.keychainDenied(browser)
         }
+        return try credentials(browser: browser, profiles: profiles, secret: secret, cookies: cookies, passwords: passwords)
+    }
+
+    /// The same with a secret already read (Dia's sidebar needs it too: one prompt for both).
+    static func credentials(browser: String, profiles: [ChromiumProfile], secret: String,
+                            cookies: Bool, passwords: Bool) throws -> ImportedCredentials {
         let key = ChromiumCrypto.key(fromSecret: secret)
         var out = ImportedCredentials()
         var readAny = false

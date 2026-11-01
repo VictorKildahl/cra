@@ -137,6 +137,25 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   containers[].archivedTabs (empty here). Chromium profile at User Data/Profile 7 with Bookmarks whose bookmark-bar
   folders mirror Arc spaces ("Favorites", "Victor", "JYSK").
 
+## Dia 1.55 sidebar store (1 Nov 2026)
+- [O] StorableProfileContainers.json stopped being written (last Feb 2026, still names "Profile 1") and the bookmarks
+  bar keeps the Arc import from 14 Oct; neither follows the sidebar. Bookmarks also moved to EncryptedBookmarks2
+  (OSCrypt v10 of the same JSON, same checksum).
+- [O] The sidebar is User Data/<profile>/tabs.db (GRDB with SQLCipher 4 defaults: 4096-byte pages, 80 reserved bytes =
+  IV + HMAC-SHA512, raw 32-byte key). Its siblings key_value_store.db, live_data_database.db, assistant.db … are the same.
+- [O] Key (BoostBrowser Persistence/DatabaseEncryptionKeyDerivationFunction.swift, read from the arm64 code at
+  0x100faf20c and its caller 0x100fc31ec in 1.55.1): `HKDF<SHA256>(ikm: rootKey, salt: HMAC<SHA256>(key:
+  base64 "iOe1Ue/XtonbieE/5m1nAgewvWQlePHRcKnoU10EyOM=", label), info: label, 32 bytes)`, label
+  `profile/<profile folder>/<name>` ("profile/Profile 7/tabs") or `global/<name>`. rootKey = Chromium's OSCrypt key,
+  PBKDF2-SHA1("Dia Safe Storage" secret, "saltysalt", 1003, 16 bytes).
+- [O] Tables: `spaces(id, title, creation_date, theme)` with theme a name (neutral, red, orange, yellow, green, blue,
+  pink, purple; no icon); `nodes(id, kind, entity_id, parent_id, order, deleted_at, space_id)`, kind tab | group |
+  favorites | window | content_pane | pinned_container. Per space one `favorites` and one `pinned_container` node and a
+  `window` node per window (open tabs; closed windows have deleted_at). `tabs`, `tab_groups(title, icon JSON, behavior)`,
+  `content_panes(custom_title, variant web_content | new_tab_page)`, `web_contents(content_pane_id, url, title)`; a split
+  is a tab with several content panes. Dates are GRDB text in UTC. Recent edits often sit only in tabs.db-wal.
+  Cra reads it in Services/Import/DiaSidebar.swift.
+
 ## Other observed features (not in Cra's first scope)
 - Little Arc (LittleBrowser), Peek, Easels, Boosts, split view, hover cards, site control center, sidebar banners,
   sync via CloudKit + Firebase, Chromium extensions, "Tidy", Ask Arc.
