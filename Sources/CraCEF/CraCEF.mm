@@ -203,7 +203,7 @@ static CraClient* AsCraClient(CefClient* c) {
 // extension's chrome.tabs.create / chrome.windows.create, or the welcome page an
 // extension opens once it is installed. CEF gives them GetDefaultClient(); without
 // one they appear in a stock Chrome window with a tab strip. Cra takes the URL as
-// one of its own tabs and closes Chrome's browser before it is shown.
+// one of its own tabs and closes Chrome's browser, whose window stays unseen (HideStrayWindow).
 //
 // Popup-type windows (windows.create({type: "popup"}): 1Password's detached window,
 // sign-in and approval windows) stay what the extension asked for, like Arc's
@@ -212,6 +212,24 @@ static CraClient* AsCraClient(CefClient* c) {
 // view under a transparent title bar (BrowserNativeWidgetMac::PopulateCreateWindowParams)
 // and popups a plain titled window, which is how they are told apart here.
 static NSHashTable<NSWindow*>* g_extensionWindows = nil;
+
+// Chrome shows a new tabbed window at the end of Navigate(), after this first navigation
+// has started, so ordering it out here is not enough: shown, it pulled a full-screen Cra
+// onto the desktop and back (GitHub #38). It is made unseeable instead: transparent, no
+// clicks, and a full-screen auxiliary that opens in the current space without switching.
+static void HideStrayWindow(NSWindow* window) {
+    if (!window) return;
+    window.alphaValue = 0;
+    window.ignoresMouseEvents = YES;
+    window.animationBehavior = NSWindowAnimationBehaviorNone;
+    NSWindowCollectionBehavior behavior = window.collectionBehavior;
+    behavior &= ~(NSWindowCollectionBehaviorFullScreenPrimary | NSWindowCollectionBehaviorFullScreenAllowsTiling
+                  | NSWindowCollectionBehaviorManaged);
+    behavior |= NSWindowCollectionBehaviorFullScreenAuxiliary | NSWindowCollectionBehaviorMoveToActiveSpace
+                | NSWindowCollectionBehaviorTransient | NSWindowCollectionBehaviorIgnoresCycle;
+    window.collectionBehavior = behavior;
+    [window orderOut:nil];
+}
 
 class StrayBrowserClient : public CefClient, public CefLifeSpanHandler, public CefRequestHandler {
 public:
@@ -235,7 +253,7 @@ public:
             [g_extensionWindows addObject:window];
             return false;
         }
-        [window orderOut:nil];
+        HideStrayWindow(window);
         NSString* url = NSStringFromCef(request->GetURL());
         if (url.length == 0 || [url isEqualToString:@"about:blank"]) return false;
         // Chrome's own empty tab (the window it opens to show "extension added" after a
@@ -1194,12 +1212,22 @@ public:
     }
 
     // Chromium's audible state, which CEF has no callback for: the engine sends it as a
-    // "Cra.audible" message (scripts/cef-patches/audible-state.patch).
+    // "Cra.audible" message (scripts/cef-patches/audible-state.patch). "Cra.activate": an
+    // extension asked for this tab to be in front (scripts/cef-patches/extension-tab-activate.patch).
     bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
                                   CefProcessId source_process, CefRefPtr<CefProcessMessage> message) override {
-        if (source_process != PID_BROWSER || message->GetName() != "Cra.audible") return false;
-        if (CraBrowser* o = owner_) [o audibleChanged:message->GetArgumentList()->GetBool(0)];
-        return true;
+        if (source_process != PID_BROWSER) return false;
+        CraBrowser* o = owner_;
+        if (message->GetName() == "Cra.audible") {
+            if (o) [o audibleChanged:message->GetArgumentList()->GetBool(0)];
+            return true;
+        }
+        if (message->GetName() == "Cra.activate") {
+            if (o && [o.delegate respondsToSelector:@selector(browserRequestsActivation:)])
+                [o.delegate browserRequestsActivation:o];
+            return true;
+        }
+        return false;
     }
 
     void OnFaviconURLChange(CefRefPtr<CefBrowser> browser, const std::vector<CefString>& icon_urls) override {

@@ -1,0 +1,87 @@
+diff --git a/cef/libcef/browser/chrome/browser_delegate.h b/cef/libcef/browser/chrome/browser_delegate.h
+index e65325e..5b56d3a 100644
+--- a/cef/libcef/browser/chrome/browser_delegate.h
++++ b/cef/libcef/browser/chrome/browser_delegate.h
+@@ -194,6 +194,11 @@ class BrowserDelegate {
+   // Returns true if this browser is Views-hosted.
+   virtual bool IsViewsHosted() const { return false; }
+ 
++  // Cra: an extension asked to bring this browser's tab to the front
++  // (chrome.tabs.update({active: true})). A Views-hosted browser has only that
++  // tab, so Chrome's own activation changes nothing the client can see.
++  virtual void TabActivationRequested() {}
++
+   // Returns true if this browser has a Views-hosted opener. Only
+   // applicable for Browsers of type picture_in_picture and devtools.
+   virtual bool HasViewsHostedOpener() const { return false; }
+diff --git a/cef/libcef/browser/chrome/chrome_browser_delegate.cc b/cef/libcef/browser/chrome/chrome_browser_delegate.cc
+index 3c4eead..8df4ecf 100644
+--- a/cef/libcef/browser/chrome/chrome_browser_delegate.cc
++++ b/cef/libcef/browser/chrome/chrome_browser_delegate.cc
+@@ -605,6 +605,23 @@ bool ChromeBrowserDelegate::IsViewsHosted() const {
+          create_params_.popup_with_views_hosted_opener;
+ }
+ 
++// Cra: delivered as a "Cra.activate" message from PID_BROWSER (no arguments);
++// the client selects the tab in its own UI.
++void ChromeBrowserDelegate::TabActivationRequested() {
++  auto browser = ChromeBrowserHostImpl::GetBrowserForBrowser(browser_);
++  if (!browser) {
++    return;
++  }
++  auto client = browser->GetClient();
++  if (!client) {
++    return;
++  }
++  CefRefPtr<CefProcessMessage> message =
++      CefProcessMessage::Create("Cra.activate");
++  client->OnProcessMessageReceived(browser.get(), browser->GetMainFrame(),
++                                   PID_BROWSER, message);
++}
++
+ CefWindowImpl* ChromeBrowserDelegate::GetCefWindowImpl() const {
+   if (IsViewsHosted()) {
+     if (auto* chrome_browser_view = static_cast<ChromeBrowserView*>(
+diff --git a/cef/libcef/browser/chrome/chrome_browser_delegate.h b/cef/libcef/browser/chrome/chrome_browser_delegate.h
+index 639ecc8..ca311b4 100644
+--- a/cef/libcef/browser/chrome/chrome_browser_delegate.h
++++ b/cef/libcef/browser/chrome/chrome_browser_delegate.h
+@@ -87,6 +87,7 @@ class ChromeBrowserDelegate : public cef::BrowserDelegate {
+   void WindowFullscreenStateChanged() override;
+   bool IsViewsHosted() const override;
+   bool HasViewsHostedOpener() const override;
++  void TabActivationRequested() override;
+ 
+   Browser* browser() const { return browser_; }
+ 
+diff --git a/chrome/browser/extensions/api/tabs/tabs_api.cc b/chrome/browser/extensions/api/tabs/tabs_api.cc
+index bd5ca46..1c96b36 100644
+--- a/chrome/browser/extensions/api/tabs/tabs_api.cc
++++ b/chrome/browser/extensions/api/tabs/tabs_api.cc
+@@ -63,6 +63,11 @@
+ #include "extensions/browser/extension_zoom_request_client.h"
+ #include "extensions/browser/extensions_browser_client.h"
+ #include "extensions/buildflags/buildflags.h"
++#include "cef/libcef/features/features.h"
++
++#if BUILDFLAG(ENABLE_CEF)
++#include "cef/libcef/browser/chrome/browser_delegate.h"
++#endif
+ #include "extensions/common/extension.h"
+ #include "extensions/common/extension_features.h"
+ #include "extensions/common/manifest_constants.h"
+@@ -2866,6 +2871,14 @@ bool TabsUpdateFunction::UpdateActiveTab(
+     tab_list.ActivateTab(tab_list.GetTab(tab_index)->GetHandle());
+     DCHECK_EQ(tab_index, tab_list.GetActiveIndex());
+   }
++#if BUILDFLAG(ENABLE_CEF)
++  // Cra: each page is a Views-hosted Browser with one, always active tab, so
++  // the activation above never shows. Let the client select it (SwitchyOmega's
++  // Options focuses its open settings tab this way).
++  if (browser.cef_delegate() && browser.cef_delegate()->IsViewsHosted()) {
++    browser.cef_delegate()->TabActivationRequested();
++  }
++#endif
+   return true;
+ }
+ 
