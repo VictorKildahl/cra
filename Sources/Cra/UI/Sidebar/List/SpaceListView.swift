@@ -120,6 +120,10 @@ final class SpaceListView: NSView, NSDraggingSource {
         scrollView.documentView = document
         scrollView.contentView.postsBoundsChangedNotifications = true
         NotificationCenter.default.addObserver(self, selector: #selector(scrolled), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
+        // A legacy scroller narrows the clip view when it appears or goes (rows added, the
+        // "Show scroll bars" setting, a mouse plugged in) without the list resizing.
+        scrollView.contentView.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(relayoutIfResized), name: NSView.frameDidChangeNotification, object: scrollView.contentView)
         addSubview(scrollView)
         for h in [topHairline, bottomHairline] {
             h.wantsLayer = true
@@ -153,14 +157,27 @@ final class SpaceListView: NSView, NSDraggingSource {
         scrollView.frame = bounds
         topHairline.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 1)
         bottomHairline.frame = NSRect(x: 0, y: bounds.height - 1, width: bounds.width, height: 1)
-        if bounds.width != laidOutWidth {
-            laidOutWidth = bounds.width
-            layoutRows()
-            placeViews(animated: false, fresh: [], gone: [])
-            materialize()
-        }
+        relayoutIfResized()
         updateHairlines(animated: false)
         updateJumpPill(animated: false)
+    }
+
+    /// A legacy scroller ("Show scroll bars: Always") takes its width from the clip view; the clip
+    /// view also rounds itself to pixels, so a fraction of a point less is still no scroller.
+    private var legacyScrollerShown: Bool {
+        let clip = scrollView.contentView.frame.width
+        return clip > 0 && bounds.width - clip > 1
+    }
+
+    /// Arc's rows give up 8 pt to a legacy scroller, none to an overlay one.
+    private var rowsWidth: CGFloat { legacyScrollerShown ? bounds.width - 8 : bounds.width }
+
+    @objc private func relayoutIfResized() {
+        guard rowsWidth != laidOutWidth else { return }
+        laidOutWidth = rowsWidth
+        layoutRows()
+        placeViews(animated: false, fresh: [], gone: [])
+        materialize()
     }
 
     // MARK: Model
@@ -484,7 +501,7 @@ final class SpaceListView: NSView, NSDraggingSource {
     /// 1 pt apart and 10 pt in from the sides. Arc 1.171 (31 Oct): every pinned row takes 41 pt,
     /// the first one too, so the first sits 1 pt lower than Today's; nothing pinned takes none.
     private func layoutRows() {
-        let width = bounds.width
+        let width = rowsWidth
         let inner = max(0, width - 20)
         var y: CGFloat = 3
         let pinnedTop = y
@@ -508,8 +525,9 @@ final class SpaceListView: NSView, NSDraggingSource {
         todayFrame = NSRect(x: 10, y: todayTop, width: inner, height: max(0, y - todayTop))
         contentBottom = y
         let height = max(y + 121, scrollView.contentView.bounds.height)
-        if document.frame.size != NSSize(width: width, height: height) {
-            document.frame = NSRect(x: 0, y: 0, width: width, height: height)
+        let docWidth = legacyScrollerShown ? scrollView.contentView.frame.width : width
+        if document.frame.size != NSSize(width: docWidth, height: height) {
+            document.frame = NSRect(x: 0, y: 0, width: docWidth, height: height)
         }
     }
 
@@ -1038,12 +1056,6 @@ enum SidebarListMetrics {
 final class SpaceListScrollView: NSScrollView {
     override class var isCompatibleWithResponsiveScrolling: Bool { false }
 
-    /// Always overlay, also with "Show scroll bars: Always": rows are laid out over the full width.
-    override var scrollerStyle: NSScroller.Style {
-        get { .overlay }
-        set { super.scrollerStyle = .overlay }
-    }
-
     override func scrollWheel(with event: NSEvent) {
         if event.hasPreciseScrollingDeltas, event.momentumPhase.isEmpty, abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) { return }
         super.scrollWheel(with: event)
@@ -1054,6 +1066,11 @@ final class SpaceListScrollView: NSScrollView {
 /// scrolling and faded out after, with no track and a 4 pt knob 3 pt in from the sidebar's
 /// edge, white at 49 % on dark themes. It is only as wide as the 10 pt gutter right of the rows,
 /// so it never covers a row's trailing buttons.
+/// With "Show scroll bars: Always" (or Automatic with a mouse) Arc follows the system to a legacy
+/// scroller instead (1 Nov 2026, issue #48): always shown, no track, AppKit's legacy knob (5 pt
+/// wide, 3 pt in, 1 pt inside its knob rect, 50 % white or black), and its rows give up 8 pt.
+/// Forcing overlay there hid the knob: AppKit never fades an overlay knob in while the system
+/// prefers legacy. The legacy knob snaps to pixels, as the sidebar can be any width.
 final class SidebarScroller: NSScroller {
     var isDarkTheme = true { didSet { if isDarkTheme != oldValue { needsDisplay = true } } }
 
@@ -1065,6 +1082,12 @@ final class SidebarScroller: NSScroller {
     override func drawKnob() {
         let knob = rect(for: .knob)
         guard knob.height > 0 else { return }
+        if scrollerStyle == .legacy {
+            let r = NSRect(x: bounds.maxX - 8, y: knob.minY + 1, width: 5, height: max(0, knob.height - 2))
+            NSColor(white: isDarkTheme ? 1 : 0, alpha: 0.5).setFill()
+            NSBezierPath(roundedRect: backingAlignedRect(r, options: .alignAllEdgesNearest), xRadius: 2.5, yRadius: 2.5).fill()
+            return
+        }
         let r = NSRect(x: bounds.maxX - 7, y: knob.minY + 2, width: 4, height: max(0, knob.height - 4))
         (isDarkTheme ? NSColor.white.withAlphaComponent(0.49) : NSColor.black.withAlphaComponent(0.3)).setFill()
         NSBezierPath(roundedRect: r, xRadius: 2, yRadius: 2).fill()
