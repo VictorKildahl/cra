@@ -49,7 +49,8 @@ public final class CraBrowser {
     public func showDevTools() { hasDevTools = true; devToolsRequests.append("show") }
     public func closeDevTools() { hasDevTools = false; devToolsRequests.append("close") }
     public func setAudioMuted(_ muted: Bool) {}
-    public func probeBackgroundColor() {}
+    public private(set) var backgroundProbes = 0
+    public func probeBackgroundColor() { backgroundProbes += 1 }
     public func setFocused(_ focused: Bool) {}
     public func requestPictureInPicture(automatic: Bool) {}
     public func exitPictureInPicture() { isInPictureInPicture = false }

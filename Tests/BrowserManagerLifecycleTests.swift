@@ -81,6 +81,7 @@ enum BrowserManagerLifecycleTests {
         devToolsCase()
         await beforeUnloadCase()
         nowPlayingCase()
+        pageColoursCase()
         await sleepCase("malformed or missing replies cannot authorize sleeping", reply: nil) { _, _ in }
         print("Browser manager lifecycle: \(checks) checks passed")
     }
@@ -287,6 +288,31 @@ enum BrowserManagerLifecycleTests {
         expect(np.entries.map(\.id) == [b], "a playing page that navigates (a playlist) keeps its card")
         manager.unload(b)
         expect(np.entries.isEmpty, "closing the page removes its card")
+        manager.closeAll()
+    }
+
+    /// A woken page's toolbar starts in the colour its page last reported (Arc, #46), and a tab
+    /// coming on screen asks its page for its background again unless the page is still loading.
+    @MainActor
+    private static func pageColoursCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let a = store.createTab(url: "https://example.test/dark").id, b = store.createTab(url: "https://example.test/other").id
+        let ra = manager.ensureRuntime(for: a)!
+        expect(ra.themeColor.isEmpty, "a page that never reported has no toolbar colour")
+        manager.browser(ra.browser, didReportThemeColor: "#203040")
+        expect(store.item(a)?.tab?.themeColor == "#203040", "the reported toolbar colour is kept on the tab")
+        manager.unload(a)
+        let woken = manager.ensureRuntime(for: a)!
+        expect(woken !== ra && woken.themeColor == "#203040", "the woken page's toolbar starts in its saved colour")
+        let rb = manager.ensureRuntime(for: b)!
+        rb.browser.setLoading(true)
+        manager.show(b, focus: false)
+        expect(rb.browser.backgroundProbes == 0, "a page still loading is not asked: it has no styles yet")
+        manager.show(a, focus: false)
+        expect(woken.browser.backgroundProbes == 1, "a loaded page coming on screen is asked for its background")
+        manager.show(a, focus: false)
+        expect(woken.browser.backgroundProbes == 1, "one already on screen is not asked again")
         manager.closeAll()
     }
 
