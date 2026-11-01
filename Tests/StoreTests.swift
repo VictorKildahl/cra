@@ -24,6 +24,7 @@ enum StoreTests {
         stampsUseTheClock()
         persistenceFaults()
         incognitoStaysOffDisk()
+        pinnedURL()
         print("Store: \(checks) checks passed")
     }
 
@@ -237,6 +238,60 @@ enum StoreTests {
         expect(store.item(container.id) == nil && store.item(leftover.id) == nil, "a gone space's container goes with its tabs")
         expect(!store.allTabs().contains { $0.tab?.url == "https://example.com/left-behind" }, "rather than landing in a space")
         expect(store.item(secret.id) != nil, "an open incognito window keeps its tabs")
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    /// Arc's Edit Pinned Page ▸ Edit… (#54, PR #55 by Anoninz): a new pinned URL keeps the item's
+    /// name, icon, colour and place, and survives a relaunch.
+    @MainActor
+    private static func pinnedURL() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let folder = store.createFolder(named: "Links", in: store.focusedSpace.pinnedContainerID)
+        let pinned = store.createTab(url: "https://example.com/old", title: "Old page", pinned: true, select: false, parent: folder.id)
+        store.rename(pinned.id, to: "My link")
+        store.setCustomIcon("custom-test", for: pinned.id)
+        store.setTileColor("#123456", for: [pinned.id])
+        let before = store.item(pinned.id)!
+        let order = store.children(of: folder.id).map(\.id)
+        expect(store.setPinnedURL(pinned.id, to: "https://example.org/new?q=1#section"), "a pinned tab takes a new pinned URL")
+        let after = store.item(pinned.id)!
+        expect(after.tab?.savedURL == "https://example.org/new?q=1#section" && after.tab?.url == after.tab?.savedURL,
+               "a tab on its pinned page goes to the new one")
+        expect(after.tab?.savedTitle == "" && after.tab?.faviconKey == "example.org", "and drops the old page's title and icon")
+        expect(after.title == before.title && after.parentID == before.parentID && after.tab?.customIconKey == before.tab?.customIconKey
+               && after.tab?.tileColor == before.tab?.tileColor && store.children(of: folder.id).map(\.id) == order,
+               "its name, icon, colour and place stay")
+
+        store.updateTab(pinned.id, url: "https://example.org/elsewhere", title: "Elsewhere")
+        expect(store.setPinnedURL(pinned.id, to: "https://example.org/newer"), "a tab navigated away takes one too")
+        expect(store.item(pinned.id)?.tab?.url == "https://example.org/elsewhere" && store.item(pinned.id)?.tab?.savedTitle == "Elsewhere",
+               "and keeps the page it is on")
+        expect(store.resetPinnedTab(pinned.id) == "https://example.org/newer", "Back to Pinned Page goes to the new URL")
+        store.updateTab(pinned.id, url: "https://example.org/current")
+        store.setPinnedHomeToCurrent(pinned.id)
+        expect(store.item(pinned.id)?.tab?.savedURL == "https://example.org/current", "Replace Pinned URL with Current still works")
+
+        let favorite = store.createTab(url: "https://example.com/favorite", select: false)
+        store.addToFavorites(favorite.id)
+        expect(store.setPinnedURL(favorite.id, to: "https://example.org/favorite") && store.isFavorite(favorite.id),
+               "a favorite takes a new pinned URL and stays a favorite")
+        let today = store.createTab(url: "https://example.com/today", select: false)
+        expect(!store.setPinnedURL(today.id, to: "https://example.org/") && store.item(today.id)?.tab?.url == "https://example.com/today",
+               "a Today tab has no pinned URL to edit")
+        expect(!store.setPinnedURL(folder.id, to: "https://example.org/") && !store.setPinnedURL(UUID(), to: "https://example.org/"),
+               "nor has a folder or a missing item")
+        let live = store.createTab(url: "https://github.com/example/repo/pull/1", pinned: true, select: false)
+        if var t = store.item(live.id)?.tab, var it = store.item(live.id) {
+            t.liveItemURL = t.url
+            it.data = .tab(t)
+            store.items[live.id] = it
+        }
+        expect(!store.setPinnedURL(live.id, to: "https://example.org/"), "nor has a live folder's entry")
+
+        store.saveAll()
+        let restored = AppComposition(clock: ManualScheduler()).store
+        expect([pinned.id, favorite.id].allSatisfy { restored.item($0)?.tab?.savedURL == store.item($0)?.tab?.savedURL },
+               "the pinned URLs read back after a relaunch")
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 

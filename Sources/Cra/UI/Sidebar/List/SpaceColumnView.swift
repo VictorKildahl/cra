@@ -886,8 +886,10 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(item.tab?.url ?? "", forType: .string)
         }
+        if let t = item.tab, t.liveItemURL == nil {
+            SidebarMenus.editPinnedPage(m, id, navigatedAway: t.url != t.savedURL, store: store, actions: actions)
+        }
         if let t = item.tab, t.url != t.savedURL { MenuItems.add(m, "Back to Pinned Page") { actions.resetPinnedTab(id) } }
-        MenuItems.add(m, "Make This the Pinned Page") { store.setPinnedHomeToCurrent(id) }
         m.addItem(.separator())
         MenuItems.add(m, "Change Icon…") { [weak self] in self?.pickIcon() }
         if let key = item.tab?.customIconKey {

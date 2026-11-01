@@ -217,6 +217,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             self.closeLibrary()
         }
         sidebarActions.resetPinnedTab = { [weak self] id in self?.resetPinnedTab(id) }
+        sidebarActions.editPinnedURL = { [weak self] id in self?.editPinnedURL(id) }
         sidebarActions.openURL = { [weak self] url in
             guard let self else { return }
             self.store.createTab(url: url, window: self.windowID)
@@ -1333,6 +1334,20 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func resetPinnedTab(_ id: UUID) {
         guard let home = store.resetPinnedTab(id) else { return }
         app.runtime(for: id)?.browser.loadURL(home)
+    }
+
+    /// Edit Pinned Page ▸ Edit… (#54): Arc's dialog with the pinned URL. A page showing the old
+    /// pinned URL loads the new one; one navigated away stays where it is.
+    func editPinnedURL(_ id: UUID) {
+        guard let window, let tab = store.item(id)?.tab, store.isPinned(id), tab.liveItemURL == nil else { return }
+        DialogOverlayWindow.present(over: window) { [weak self] close in
+            EditPinnedURLDialog(url: tab.savedURL, onSave: { url in
+                close()
+                guard let self, let before = self.store.item(id)?.tab, self.store.setPinnedURL(id, to: url),
+                      before.url == before.savedURL, before.url != url else { return }
+                self.app.runtime(for: id)?.browser.loadURL(url)
+            }, onCancel: close)
+        }
     }
 
     func cycleTab(_ delta: Int) {
