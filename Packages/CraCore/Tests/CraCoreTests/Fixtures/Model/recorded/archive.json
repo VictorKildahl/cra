@@ -1,0 +1,55 @@
+[
+  {
+    "archivedAt" : "2026-10-31T08:00:00Z",
+    "item" : {
+      "children" : [
+
+      ],
+      "createdAt" : "2026-10-20T08:00:00Z",
+      "data" : {
+        "tab" : {
+          "_0" : {
+            "faviconKey" : "news.example.com",
+            "muted" : false,
+            "savedTitle" : "News",
+            "savedURL" : "https:\/\/news.example.com\/",
+            "url" : "https:\/\/news.example.com\/"
+          }
+        }
+      },
+      "id" : "D0000000-0000-0000-0000-0000000000A1",
+      "isUnread" : false
+    },
+    "reason" : "auto",
+    "sourceFolderID" : "D0000000-0000-0000-0000-000000000002",
+    "sourceIndex" : 1,
+    "sourceSpaceID" : "A0000000-0000-0000-0000-000000000001",
+    "wasPinned" : false
+  },
+  {
+    "archivedAt" : "2026-10-30T08:00:00Z",
+    "fromLittleWindow" : true,
+    "item" : {
+      "children" : [
+
+      ],
+      "createdAt" : "2026-10-29T08:00:00Z",
+      "data" : {
+        "tab" : {
+          "_0" : {
+            "faviconKey" : "example.net",
+            "muted" : false,
+            "savedTitle" : "X",
+            "savedURL" : "https:\/\/example.net\/",
+            "url" : "https:\/\/example.net\/x"
+          }
+        }
+      },
+      "id" : "D0000000-0000-0000-0000-0000000000A2",
+      "isUnread" : false,
+      "title" : "Renamed"
+    },
+    "reason" : "manual",
+    "wasPinned" : true
+  }
+]

@@ -62,7 +62,9 @@ final class SidebarStore {
         archive = archiveFile.load(or: { [] })
         archiveChanged = false
         prefs = prefsStore.load(or: { WindowPrefs() })
-        settings = settingsStore.load(or: { AppSettings() })
+        var loaded = settingsStore.load(or: { AppSettings() })
+        loaded.migrateToolbarDefault(arcShowsToolbar: ArcImporter.showsToolbar)
+        settings = loaded
         for h in historyFile.load(or: { [] }) { history[h.url] = h }
         ranking = rankingFile.load(or: { RankingData() })
         repair()
@@ -440,7 +442,7 @@ final class SidebarStore {
             t.url = url
             // A pinned tab that never had a page (a new pane of a pinned split) takes its first one as home.
             if !isPinned(id) || t.savedURL.isEmpty || t.savedURL == "about:blank" { t.savedURL = url }
-            if let key = FaviconCache.key(for: url) { t.faviconKey = key }
+            if let key = FaviconKey.key(for: url) { t.faviconKey = key }
         }
         // A live folder's tab keeps the pull request's title (Arc shows that, not the page's).
         if let title, !(t.liveItemURL.map { t.url.hasPrefix($0) } ?? false) { t.savedTitle = title }

@@ -1,0 +1,24 @@
+{
+  "newTab" : [
+    {
+      "key" : "t",
+      "modifiers" : 1048576
+    }
+  ],
+  "nextTab" : [
+    {
+      "key" : "\t",
+      "modifiers" : 262144
+    },
+    {
+      "key" : "",
+      "modifiers" : 1572864
+    }
+  ],
+  "toggleSidebar" : [
+    {
+      "key" : "s",
+      "modifiers" : 1179648
+    }
+  ]
+}

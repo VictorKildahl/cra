@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "spaceOrder": ["A0000000-0000-0000-0000-000000000001", "A0000000-0000-0000-0000-0000000000FF"],
+  "favoritesContainerID": "C0000000-0000-0000-0000-0000000000F0",
+  "spaces": [
+    {
+      "id": "A0000000-0000-0000-0000-000000000001", "title": "Home", "emoji": "🌱",
+      "theme": {"colors": ["#1C242B", "#3A3660"]},
+      "favoritesContainerID": "C0000000-0000-0000-0000-000000000001",
+      "pinnedContainerID": "C0000000-0000-0000-0000-000000000002",
+      "todayContainerID": "C0000000-0000-0000-0000-000000000003",
+      "createdAt": "2025-05-01T08:00:00Z"
+    }
+  ],
+  "items": [
+    {"id": "C0000000-0000-0000-0000-0000000000F0", "children": ["D0000000-0000-0000-0000-000000000001"], "isUnread": false, "createdAt": "2025-05-01T08:00:00Z",
+     "data": {"container": {"_0": {"favorites": {}}}}},
+    {"id": "C0000000-0000-0000-0000-000000000002", "children": ["D0000000-0000-0000-0000-000000000002"], "isUnread": false, "createdAt": "2025-05-01T08:00:00Z",
+     "data": {"container": {"_0": {"pinned": {"spaceID": "A0000000-0000-0000-0000-000000000001"}}}}},
+    {"id": "C0000000-0000-0000-0000-000000000003", "children": ["D0000000-0000-0000-0000-000000000003"], "isUnread": false, "createdAt": "2025-05-01T08:00:00Z",
+     "data": {"container": {"_0": {"today": {"spaceID": "A0000000-0000-0000-0000-000000000001"}}}}},
+    {"id": "D0000000-0000-0000-0000-000000000001", "parentID": "C0000000-0000-0000-0000-0000000000F0", "children": [], "isUnread": false, "createdAt": "2025-05-02T08:00:00Z",
+     "data": {"tab": {"_0": {"url": "https://Calendar.Example.com/week"}}}},
+    {"id": "D0000000-0000-0000-0000-000000000002", "parentID": "C0000000-0000-0000-0000-000000000002", "title": "Live", "children": [], "isUnread": false, "createdAt": "2025-05-02T08:00:00Z",
+     "data": {"folder": {}}, "liveFolder": {"lastError": "somethingNew", "filter": {"attributes": 2, "hiddenRepositories": []}}},
+    {"id": "D0000000-0000-0000-0000-000000000003", "parentID": "C0000000-0000-0000-0000-000000000003", "children": [], "isUnread": false, "createdAt": "2025-05-02T08:00:00Z",
+     "data": {"split": {"_0": {}}}}
+  ]
+}

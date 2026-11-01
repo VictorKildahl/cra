@@ -70,11 +70,13 @@ a finding fails, and when one loses a finding the baseline comes down
 
 - `layer-colour-outside-transaction`: a colour or opacity set on a `CALayer` Cra made itself,
   outside a `CATransaction` with actions disabled, animates for 0.25 s.
-- `timer-outside-scheduler`: `Timer.scheduledTimer` in `App/`, `Services/` or `Model/`.
+- `timer-outside-scheduler`: `Timer.scheduledTimer` in `App/` or `Services/`.
 - `wall-clock-in-decision`: `Date()` in the store, tab sleep or live folders.
 - `raw-observation-tracking`: `withObservationTracking` outside CraCore's
   `observeChanges(of:apply:)`. A struct copied out before the closure is never tracked.
 - `importer-without-fixture`: an `…Importer` with no profile under `Tests/Fixtures`.
+- `core-platform-import`: `Packages/CraCore` importing AppKit, Cocoa, SwiftUI, UIKit or CraCEF
+  ([CLAUDE.md](../CLAUDE.md) has the layers).
 
 ## Faults
 

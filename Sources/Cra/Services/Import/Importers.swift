@@ -379,7 +379,7 @@ extension SidebarStore {
         func copyFavicons(_ items: [ImportedItem]) {
             for it in items {
                 if it.isFolder { copyFavicons(it.children); continue }
-                guard let src = it.faviconPath, let url = it.url, let key = FaviconCache.key(for: url) else { continue }
+                guard let src = it.faviconPath, let url = it.url, let key = FaviconKey.key(for: url) else { continue }
                 let dst = AppPaths.favicons.appendingPathComponent(FaviconCache.fileName(key))
                 if !FileManager.default.fileExists(atPath: dst.path) {
                     try? FileManager.default.copyItem(atPath: src, toPath: dst.path)

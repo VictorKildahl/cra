@@ -516,7 +516,7 @@ final class ImportFlowModel {
         pinsLoaded = true
         let source = self.source?.kind == .safari ? nil : (self.source ?? sources.first { $0.kind != .safari })
         let fromExport = exportTopSites
-        let existing = Set(store.tabs(under: store.focusedSpace.favoritesContainerID).compactMap { $0.tab.flatMap { FaviconCache.key(for: $0.url) } })
+        let existing = Set(store.tabs(under: store.focusedSpace.favoritesContainerID).compactMap { $0.tab.flatMap { FaviconKey.key(for: $0.url) } })
         pinCandidates = Self.presetPins
         Task { @MainActor in
             let (sites, icons) = await Task.detached(priority: .userInitiated) { () -> ([TopSite], [String: NSImage]) in
@@ -556,7 +556,7 @@ final class ImportFlowModel {
             var plan = ImportPlan(source: "Onboarding")
             plan.favorites = picked.map { ImportedItem(customTitle: $0.name, pageTitle: $0.name, url: $0.url) }
             store.apply(plan, includeArchive: false, includeSettings: false)
-            for p in picked { if let icon = pinIcons[p.host], let key = FaviconCache.key(for: p.url) { favicons.store(icon, forKey: key) } }
+            for p in picked { if let icon = pinIcons[p.host], let key = FaviconKey.key(for: p.url) { favicons.store(icon, forKey: key) } }
         }
         go(.personalization)
     }

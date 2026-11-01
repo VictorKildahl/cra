@@ -38,8 +38,8 @@ enum TestRoot { case today }
         return item
     }
 }
+enum FaviconKey { static func key(for url: String) -> String? { url } }
 final class FaviconCache {
-    static func key(for url: String) -> String? { url }
     func store(_ image: NSImage, forKey: String, persist: Bool) {}
 }
 enum TabSwitcherMetrics { static let thumbnail = NSSize(width: 320, height: 200) }
