@@ -33,6 +33,9 @@ enum BrowserManagerLifecycleTests {
         expect(manager.runtime(for: id) === replacement && manager.visibleTabID == id && manager.visibleTabIDs == [id],
                "late close cannot remove or deselect the replacement")
         expect(observer.closedTabs.isEmpty, "late page-close cannot archive the replacement tab")
+        manager.browserRequestsActivation(old.browser)
+        manager.browserRequestsActivation(replacement.browser)
+        expect(observer.activatedTabs == [id], "an extension's tabs.update activation reaches only the live page's tab")
 
         let retainedID = store.createTab(url: "https://example.test/retained").id
         weak var retainedBrowser = manager.ensureRuntime(for: retainedID)?.browser
@@ -358,6 +361,7 @@ enum BrowserManagerLifecycleTests {
 @MainActor
 private final class Observer: BrowserManagerDelegate {
     var closedTabs: [UUID] = []
+    var activatedTabs: [UUID] = []
     var onPageWindowsChanged: (() -> Void)?
     func browserManagerDidUpdate(_ tabID: UUID) {}
     func browserManager(statusMessage: String) {}
@@ -372,6 +376,6 @@ private final class Observer: BrowserManagerDelegate {
     func browserManagerHandleUnhandledKey(_ event: NSEvent) -> Bool { false }
     func browserManagerFocusedBrowser(_ tabID: UUID) {}
     func browserManagerPageClosedTab(_ tabID: UUID) { closedTabs.append(tabID) }
-    func browserManagerActivationRequested(_ tabID: UUID) {}
+    func browserManagerActivationRequested(_ tabID: UUID) { activatedTabs.append(tabID) }
     func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool) -> Bool { false }
 }
