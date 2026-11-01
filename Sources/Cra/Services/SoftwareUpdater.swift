@@ -19,6 +19,11 @@ final class SoftwareUpdater: NSObject {
         var build: String
         var notesHTML: String?
 
+        init(version: String, build: String) {
+            self.version = version
+            self.build = build
+        }
+
         init(_ item: SUAppcastItem) {
             version = item.displayVersionString
             build = item.versionString
@@ -47,6 +52,8 @@ final class SoftwareUpdater: NSObject {
     /// The first launch after an update: "Cra Updated!" with See What's New.
     private(set) var updatedTo: String?
     func debugUpdated(_ v: String?) { updatedTo = v }
+    /// Shows the "An update is ready!" banner for `version` (screenshots, cra://debug?bannerReady=).
+    func debugReady(_ version: String?) { readyRelease = version.map { Release(version: $0, build: $0) } }
     /// The close button on a banner hides it until the next launch (Arc counts these in
     /// autoUpdateBannerDismissalCount).
     var bannerDismissed = false
@@ -189,6 +196,15 @@ final class SoftwareUpdater: NSObject {
         } else {
             updatedTo = nil
         }
+    }
+
+    static let sponsorsURL = "https://github.com/sponsors/VictorKildahl"
+
+    /// The updated banner's "Sponsor Cra" row (Arc's "Gift Arc").
+    func openSponsors() {
+        guard let app else { return }
+        app.store.createTab(url: Self.sponsorsURL, select: true)
+        app.main.showWindow(nil)
     }
 
     func openReleaseNotes() {
