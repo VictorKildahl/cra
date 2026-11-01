@@ -1,0 +1,71 @@
+Cra: Web Speech recognition on this Mac. Chromium sends audio to Google's speech
+service, which needs an API key Google doesn't give other browsers, so every
+start() failed with "network". Pages now get Chromium's on-device recognizer
+(SODA, as with processLocally), and a missing language pack starts downloading
+on the first start().
+
+diff --git a/content/browser/speech/speech_recognition_dispatcher_host.cc b/content/browser/speech/speech_recognition_dispatcher_host.cc
+--- a/content/browser/speech/speech_recognition_dispatcher_host.cc
++++ b/content/browser/speech/speech_recognition_dispatcher_host.cc
+@@ -247,6 +247,18 @@
+ #else
+   bool on_device_available = false;
+ #endif  // !BUILDFLAG(IS_ANDROID)
++
++#if !BUILDFLAG(IS_FUCHSIA) && !BUILDFLAG(IS_ANDROID)
++  // Cra: Google's speech service needs an API key Cra can't get, so pages
++  // recognize on this Mac (SODA), as if they had set processLocally, and no
++  // audio goes to Google. A language that isn't installed yet starts
++  // downloading in the availability check above (see
++  // chrome_content_browser_client.cc) and works from a later start().
++  if (can_render_frame_use_on_device && !params->on_device) {
++    params->on_device = true;
++    params->allow_cloud_fallback = false;
++  }
++#endif
+ 
+   bool use_on_device = false;
+ #if !BUILDFLAG(IS_FUCHSIA) && !BUILDFLAG(IS_ANDROID)
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -616,6 +616,8 @@
+ #include "components/keep_alive_registry/keep_alive_registry.h"
+ #include "components/password_manager/content/common/web_ui_constants.h"
+ #include "components/password_manager/core/common/password_manager_features.h"
++#include "components/soda/constants.h"
++#include "components/soda/soda_installer.h"
+ #include "components/soda/soda_util.h"
+ #include "components/webapps/isolated_web_apps/url_loading/url_loader_factory.h"
+ #include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom.h"
+@@ -4607,8 +4609,28 @@
+     content::BrowserContext* context,
+     const std::string& language,
+     media::mojom::SpeechRecognitionQuality quality) {
+-  return speech::GetOnDeviceSpeechRecognitionAvailabilityStatus(
+-      context, language, quality);
++  media::mojom::AvailabilityStatus status =
++      speech::GetOnDeviceSpeechRecognitionAvailabilityStatus(context, language,
++                                                             quality);
++#if !BUILDFLAG(IS_ANDROID)
++  // Cra: only SpeechRecognition.start() asks here, and Cra always recognizes on
++  // device (speech_recognition_dispatcher_host.cc), so a missing SODA language
++  // pack starts downloading now and serves a later start().
++  std::optional<speech::SodaLanguagePackComponentConfig> config =
++      speech::GetLanguageComponentConfigMatchingLanguageSubtag(language);
++  if (quality == media::mojom::SpeechRecognitionQuality::kCommand &&
++      (status == media::mojom::AvailabilityStatus::kDownloadable ||
++       status == media::mojom::AvailabilityStatus::
++                     kDownloadableWithoutTransientUserActivation) &&
++      config.has_value()) {
++    // Both install only what is missing.
++    speech::SodaInstaller::GetInstance()->InstallSoda(
++        g_browser_process->local_state());
++    speech::SodaInstaller::GetInstance()->InstallLanguage(
++        config->language_name, g_browser_process->local_state());
++  }
++#endif  // !BUILDFLAG(IS_ANDROID)
++  return status;
+ }
+ 
+ #if BUILDFLAG(IS_CHROMEOS)

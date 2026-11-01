@@ -2252,6 +2252,12 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
     // Make sure the CefAppProtocol NSApplication exists before CefInitialize.
     [CraApplication sharedApplication];
 
+    // Safe Browsing's list updates need a Google API key. Chromium reads it from the
+    // environment (unbranded builds only); one already set there wins, for testing.
+    if (NSString* key = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CraGoogleAPIKey"]; key.length) {
+        setenv("GOOGLE_API_KEY", key.UTF8String, 0);
+    }
+
     CefMainArgs mainArgs(*_NSGetArgc(), *_NSGetArgv());
     CefSettings settings;
     // Renderer, GPU and utility processes run in Chromium's seatbelt sandbox

@@ -15,6 +15,8 @@ name: Release
 #                                required: installed copies only accept updates it signed
 #   MACOS_PROVISIONING_PROFILE   optional, base64 of the Developer ID provisioning profile
 #                                for dk.kildahl.cra: turns on passkeys (docs/release.md)
+#   CRA_GOOGLE_API_KEY           optional, Google API key limited to the Safe Browsing API:
+#                                turns on Safe Browsing (docs/release.md)
 
 on:
   push:
@@ -86,6 +88,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          CRA_GOOGLE_API_KEY: ${{ secrets.CRA_GOOGLE_API_KEY }}
         run: scripts/release.sh
 
       - name: Upload artifacts
