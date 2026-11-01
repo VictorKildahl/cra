@@ -22,13 +22,15 @@ issue when a newer stable CEF is out; `scripts/update-cef.sh` moves the pin.
 
 ## Layout
 
-- `Sources/Cra` — the app: `App` (delegate, key bindings), `Model`, `Services` (sidebar
-  store, persistence, import, updates, extensions, live folders), `UI` (sidebar, command
-  bar, split view, windows, settings, onboarding)
+- `Sources/Cra` — the app: `App` (delegate, key bindings), `Services` (sidebar store,
+  persistence, import, updates, extensions, live folders), `UI` (sidebar, command bar, split
+  view, windows, settings, onboarding)
 - `Sources/CraCEF` — Objective-C++ bridge between Swift and CEF
 - `Sources/CraHelper` — Chromium subprocess executable
-- `Packages/CraCore` — models and decisions with no AppKit or Chromium (space themes, Arc
-  theme import, the favorites grid), visible in every `Sources/Cra` file
+- `Packages/CraCore` — models and decisions with no AppKit or Chromium (the sidebar model,
+  settings and the other data-folder files, Air Traffic Control, live folder data, key chords,
+  space themes, Arc theme import, the favorites grid), visible in every `Sources/Cra` file.
+  The layer rules are in [CLAUDE.md](../CLAUDE.md)
 - `Tests/` — the harnesses that compile production files against fakes, and the smoke test
 - `resources/` — app icon, brand PNGs, the ad and tracker blocklist with its licence notices
 - `scripts/` — build, release, CEF and test tooling; `scripts/clips` records release clips
@@ -70,6 +72,8 @@ app it builds.
   page belongs here, with a test: a layout rule, a mapping from Arc's or Chromium's files,
   a policy. Expected values for anything copied from Arc come from Arc's measurements in
   `docs/arc-reverse-engineering.md`; fixtures hold Arc's own JSON, trimmed to what is read.
+  `Fixtures/Model` holds data-folder files, current and older shapes, each with what Cra
+  saved after loading it (recorded before the model moved here, #51).
 - `Tests/test-browser-manager.sh`, `scripts/test-floating-sidebar.sh`,
   `scripts/test-extension-popup-candidate.sh`, `scripts/test-extension-state.sh`: compile a
   few production files with `swiftc` against fakes (`Tests/BrowserManagerSupport` stands in

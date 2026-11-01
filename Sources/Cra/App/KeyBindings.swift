@@ -1,22 +1,14 @@
 import AppKit
 import Observation
 
-/// A keyboard shortcut. `key` is the lowercase character or a special key
-/// (see `Shortcut.tab`, `.left`...), `modifiers` the device-independent flags.
-struct Shortcut: Codable, Hashable {
-    var key: String
-    var modifiers: UInt
+/// A keyboard shortcut: CraCore's KeyChord (the keybindings.json format), read from and
+/// matched against AppKit key events here.
+typealias Shortcut = KeyChord
 
+extension Shortcut {
     init(_ key: String, _ mods: NSEvent.ModifierFlags) {
-        self.key = key
-        self.modifiers = mods.intersection(.deviceIndependentFlagsMask).rawValue
+        self.init(key: key, modifiers: mods.intersection(.deviceIndependentFlagsMask).rawValue)
     }
-
-    static let tab = "\t"
-    static let left = String(UnicodeScalar(NSLeftArrowFunctionKey)!)
-    static let right = String(UnicodeScalar(NSRightArrowFunctionKey)!)
-    static let up = String(UnicodeScalar(NSUpArrowFunctionKey)!)
-    static let down = String(UnicodeScalar(NSDownArrowFunctionKey)!)
 
     var flags: NSEvent.ModifierFlags { NSEvent.ModifierFlags(rawValue: modifiers) }
 
@@ -51,23 +43,6 @@ struct Shortcut: Codable, Hashable {
         let special = [tab, left, right, up, down].contains(chars) || (chars.unicodeScalars.first.map { $0.value >= 0xF704 && $0.value <= 0xF71F } ?? false)
         guard special || !flags.intersection([.command, .control, .option]).isEmpty else { return nil }
         return Shortcut(chars, flags)
-    }
-
-    var display: String {
-        var s = ""
-        if flags.contains(.control) { s += "⌃" }
-        if flags.contains(.option) { s += "⌥" }
-        if flags.contains(.shift) { s += "⇧" }
-        if flags.contains(.command) { s += "⌘" }
-        switch key {
-        case Shortcut.tab: s += "⇥"
-        case Shortcut.left: s += "←"
-        case Shortcut.right: s += "→"
-        case Shortcut.up: s += "↑"
-        case Shortcut.down: s += "↓"
-        default: s += key.uppercased()
-        }
-        return s
     }
 }
 

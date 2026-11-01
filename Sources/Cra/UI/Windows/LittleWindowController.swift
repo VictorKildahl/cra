@@ -544,7 +544,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         let sid = (spaceID ?? state.targetSpaceID).flatMap { store.space($0) != nil && !store.isIncognito(space: $0) ? $0 : nil }
             ?? store.focusedSpaceID
         let tab = store.createTab(url: b.currentURL, title: b.currentTitle, in: sid, select: true)
-        if let favicon, let key = FaviconCache.key(for: b.currentURL) { app.favicons.store(favicon, forKey: key) }
+        if let favicon, let key = FaviconKey.key(for: b.currentURL) { app.favicons.store(favicon, forKey: key) }
         promoted = true
         browser = nil
         app.main.browsers.adopt(b, for: tab.id)
@@ -559,7 +559,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         // A Peek is a look at a link, not a page to keep.
         guard hasPage, !promoted, !isPeek else { return }
         store.archiveLittleWindowPage(url: currentURL, title: browser?.currentTitle ?? state.title)
-        if let favicon, let key = FaviconCache.key(for: currentURL) { app.favicons.store(favicon, forKey: key) }
+        if let favicon, let key = FaviconKey.key(for: currentURL) { app.favicons.store(favicon, forKey: key) }
         promoted = true  // archived once; a later close must not archive again
     }
 
@@ -706,7 +706,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     func browser(_ browser: CraBrowser, didLoadFavicon image: NSImage, forURL iconURL: String) {
         favicon = image
-        if let key = FaviconCache.key(for: browser.currentURL) { app.favicons.store(image, forKey: key) }
+        if let key = FaviconKey.key(for: browser.currentURL) { app.favicons.store(image, forKey: key) }
     }
 
     func browser(_ browser: CraBrowser, didReportThemeColor hex: String) { state.themeColor = hex }

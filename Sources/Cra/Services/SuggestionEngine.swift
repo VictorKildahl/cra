@@ -224,7 +224,7 @@ final class SuggestionEngine {
             }
             guard !urls.contains(url) else { return nil }
             return Suggestion(id: "sugg:\(url)", kind: .history, title: r.text, subtitle: "", url: url,
-                              faviconKey: FaviconCache.key(for: url), symbol: "globe", trailing: nil, score: 0)
+                              faviconKey: FaviconKey.key(for: url), symbol: "globe", trailing: nil, score: 0)
         }
     }
 
@@ -253,7 +253,7 @@ final class SuggestionEngine {
         if Self.looksLikeURL(query) {
             let url = Self.urlFromInput(query)
             return Suggestion(id: "typed", kind: .navigate, title: query, subtitle: "Open URL", url: url,
-                              faviconKey: FaviconCache.key(for: url), symbol: "globe", trailing: nil, score: 1000)
+                              faviconKey: FaviconKey.key(for: url), symbol: "globe", trailing: nil, score: 1000)
         }
         let engine = store.settings.searchEngine
         return Suggestion(id: "typed", kind: .search, title: query, subtitle: "Search \(engine.label)",
@@ -314,7 +314,7 @@ final class SuggestionEngine {
             if score < 30 { continue }
             score += min(Double(h.visitCount), 20) * 1.5 + recencyBoost(h.lastVisit) * 0.6
             out.append(Suggestion(id: "hist:\(h.url)", kind: .history, title: h.title.isEmpty ? Self.humanURL(h.url) : h.title,
-                                  subtitle: Self.humanURL(h.url), url: h.url, faviconKey: FaviconCache.key(for: h.url),
+                                  subtitle: Self.humanURL(h.url), url: h.url, faviconKey: FaviconKey.key(for: h.url),
                                   symbol: "clock", trailing: nil, score: score, loose: text < Self.looseBelow))
         }
         return out
@@ -328,7 +328,7 @@ final class SuggestionEngine {
             guard bare.hasPrefix(q) || d.hasPrefix(q) else { continue }
             let url = "https://\(d)/"
             out.append(Suggestion(id: "top:\(d)", kind: .topDomain, title: bare, subtitle: "Open URL", url: url,
-                                  faviconKey: FaviconCache.key(for: url), symbol: "globe", trailing: nil,
+                                  faviconKey: FaviconKey.key(for: url), symbol: "globe", trailing: nil,
                                   score: 72 - Double(i) * 0.1))
         }
         return out

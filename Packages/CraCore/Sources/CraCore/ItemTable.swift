@@ -4,8 +4,10 @@ import Observation
 /// One sidebar item's change counter. A view that read the item depends on this, not on
 /// every item.
 @MainActor @Observable
-final class ItemSignal {
-    var version = 0
+public final class ItemSignal {
+    public var version = 0
+
+    public init() {}
 }
 
 /// The sidebar's items, observed one by one. As a single `[UUID: SidebarItem]` property, any
@@ -13,13 +15,15 @@ final class ItemSignal {
 /// and row in every space. Now a view re-renders when an item it read changed; a walk over
 /// all items (`all`, `values`) still depends on every change.
 @MainActor @Observable
-final class ItemTable {
+public final class ItemTable {
     @ObservationIgnored private var storage: [UUID: SidebarItem] = [:]
     @ObservationIgnored private var signals: [UUID: ItemSignal] = [:]
     /// Bumped on every change: what a walk over all items observes.
     private var version = 0
 
-    subscript(id: UUID) -> SidebarItem? {
+    public init() {}
+
+    public subscript(id: UUID) -> SidebarItem? {
         get {
             observe(id)
             return storage[id]
@@ -31,19 +35,19 @@ final class ItemTable {
         }
     }
 
-    var all: [UUID: SidebarItem] {
+    public var all: [UUID: SidebarItem] {
         _ = version
         return storage
     }
 
-    var values: Dictionary<UUID, SidebarItem>.Values { all.values }
+    public var values: Dictionary<UUID, SidebarItem>.Values { all.values }
 
     /// Depend on `id` without reading it (state kept elsewhere, keyed by the item: expansion,
     /// selection).
-    func observe(_ id: UUID) { _ = signal(id).version }
+    public func observe(_ id: UUID) { _ = signal(id).version }
 
     /// What reads `id` is out of date.
-    func notify(_ id: UUID) {
+    public func notify(_ id: UUID) {
         signal(id).version &+= 1
         version &+= 1
     }

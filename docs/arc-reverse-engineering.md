@@ -1454,7 +1454,7 @@ the arm64 slice. [O] = observed, [I] = inferred.
     editor shows that destination blank. The payload only picks a profile.
 - [U] what several conditions in one rule mean (any vs all; the UI never creates them), the ⓘ help article URL
   (built at run time, `featuresForLinkRouting`), the empty-list state.
-- Cra: `Model/LinkRouting.swift` (Arc's matching above, checked against every observed case; first match wins; the
+- Cra: `Packages/CraCore/Sources/CraCore/LinkRouting.swift` (Arc's matching above, checked against every observed case; first match wins; the
   Google Meet route is seeded once), `AppSettings.linkRoutes` / `defaultLinkDestination` (the Little Window checkbox is a view of the
   default; old `openExternalLinksInLittleWindow` values migrate), `AppDelegate.openExternalURL`, Settings ▸ Tabs ▸
   Links ▸ "Air Traffic Control…" (`UI/Settings/AirTrafficControlView.swift`, Arc's geometry within 1 pt, 440 tall to

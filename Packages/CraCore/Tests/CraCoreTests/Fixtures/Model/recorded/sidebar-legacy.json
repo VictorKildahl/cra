@@ -1,0 +1,152 @@
+{
+  "favoritesContainerID" : "C0000000-0000-0000-0000-0000000000F0",
+  "items" : [
+    {
+      "children" : [
+        "D0000000-0000-0000-0000-000000000001"
+      ],
+      "createdAt" : "2025-05-01T08:00:00Z",
+      "data" : {
+        "container" : {
+          "_0" : {
+            "favorites" : {
+              "spaceID" : "00000000-0000-0000-0000-000000000000"
+            }
+          }
+        }
+      },
+      "id" : "C0000000-0000-0000-0000-0000000000F0",
+      "isUnread" : false
+    },
+    {
+      "children" : [
+        "D0000000-0000-0000-0000-000000000002"
+      ],
+      "createdAt" : "2025-05-01T08:00:00Z",
+      "data" : {
+        "container" : {
+          "_0" : {
+            "pinned" : {
+              "spaceID" : "A0000000-0000-0000-0000-000000000001"
+            }
+          }
+        }
+      },
+      "id" : "C0000000-0000-0000-0000-000000000002",
+      "isUnread" : false
+    },
+    {
+      "children" : [
+        "D0000000-0000-0000-0000-000000000003"
+      ],
+      "createdAt" : "2025-05-01T08:00:00Z",
+      "data" : {
+        "container" : {
+          "_0" : {
+            "today" : {
+              "spaceID" : "A0000000-0000-0000-0000-000000000001"
+            }
+          }
+        }
+      },
+      "id" : "C0000000-0000-0000-0000-000000000003",
+      "isUnread" : false
+    },
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2025-05-02T08:00:00Z",
+      "data" : {
+        "tab" : {
+          "_0" : {
+            "faviconKey" : "Calendar.Example.com",
+            "muted" : false,
+            "savedTitle" : "",
+            "savedURL" : "https:\/\/Calendar.Example.com\/week",
+            "url" : "https:\/\/Calendar.Example.com\/week"
+          }
+        }
+      },
+      "id" : "D0000000-0000-0000-0000-000000000001",
+      "isUnread" : false,
+      "parentID" : "C0000000-0000-0000-0000-0000000000F0"
+    },
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2025-05-02T08:00:00Z",
+      "data" : {
+        "folder" : {
+
+        }
+      },
+      "id" : "D0000000-0000-0000-0000-000000000002",
+      "isUnread" : false,
+      "liveFolder" : {
+        "filter" : {
+          "attributes" : 2,
+          "hiddenRepositories" : [
+
+          ]
+        },
+        "hiddenItems" : [
+
+        ],
+        "source" : "github",
+        "ssoOrganizations" : [
+
+        ]
+      },
+      "parentID" : "C0000000-0000-0000-0000-000000000002",
+      "title" : "Live"
+    },
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2025-05-02T08:00:00Z",
+      "data" : {
+        "split" : {
+          "_0" : {
+            "orientation" : "horizontal",
+            "widthFactors" : [
+
+            ]
+          }
+        }
+      },
+      "id" : "D0000000-0000-0000-0000-000000000003",
+      "isUnread" : false,
+      "parentID" : "C0000000-0000-0000-0000-000000000003"
+    }
+  ],
+  "spaceOrder" : [
+    "A0000000-0000-0000-0000-000000000001",
+    "A0000000-0000-0000-0000-0000000000FF"
+  ],
+  "spaces" : [
+    {
+      "createdAt" : "2025-05-01T08:00:00Z",
+      "emoji" : "🌱",
+      "favoritesContainerID" : "C0000000-0000-0000-0000-000000000001",
+      "id" : "A0000000-0000-0000-0000-000000000001",
+      "pinnedContainerID" : "C0000000-0000-0000-0000-000000000002",
+      "theme" : {
+        "appearance" : "auto",
+        "colors" : [
+          "#1C242B",
+          "#3A3660"
+        ],
+        "intensity" : 0.8,
+        "noise" : 0.15,
+        "solid" : false,
+        "vibrant" : false
+      },
+      "title" : "Home",
+      "todayContainerID" : "C0000000-0000-0000-0000-000000000003"
+    }
+  ],
+  "version" : 1
+}

@@ -659,7 +659,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     func browser(_ browser: CraBrowser, didLoadFavicon image: NSImage, forURL iconURL: String) {
         guard let id = tabID(of: browser), let tab = store.item(id)?.tab else { return }
-        let key = FaviconCache.key(for: tab.url) ?? tab.faviconKey
+        let key = FaviconKey.key(for: tab.url) ?? tab.faviconKey
         guard let key else { return }
         favicons.store(image, forKey: key, persist: !browser.isIncognito)
         if tab.faviconKey != key { store.updateTab(id, url: tab.url) }

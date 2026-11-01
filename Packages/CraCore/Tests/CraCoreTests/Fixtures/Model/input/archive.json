@@ -1,0 +1,9 @@
+[
+  {"archivedAt": "2026-10-31T08:00:00Z", "reason": "auto", "sourceSpaceID": "A0000000-0000-0000-0000-000000000001", "wasPinned": false,
+   "sourceFolderID": "D0000000-0000-0000-0000-000000000002", "sourceIndex": 1,
+   "item": {"id": "D0000000-0000-0000-0000-0000000000A1", "children": [], "isUnread": false, "createdAt": "2026-10-20T08:00:00Z",
+            "data": {"tab": {"_0": {"url": "https://news.example.com/", "savedURL": "https://news.example.com/", "savedTitle": "News", "faviconKey": "news.example.com"}}}}},
+  {"archivedAt": "2026-10-30T08:00:00Z", "reason": "manual", "wasPinned": true, "fromLittleWindow": true,
+   "item": {"id": "D0000000-0000-0000-0000-0000000000A2", "title": "Renamed", "children": [], "isUnread": false, "createdAt": "2026-10-29T08:00:00Z",
+            "data": {"tab": {"_0": {"url": "https://example.net/x", "savedURL": "https://example.net/", "savedTitle": "X"}}}}}
+]

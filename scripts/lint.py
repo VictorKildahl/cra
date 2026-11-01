@@ -1,5 +1,5 @@
 #!/usr/bin/env python3 -I
-"""Cra's own lint: the bug classes that kept shipping, as rules over Sources/Cra.
+"""Cra's own lint: the bug classes that kept shipping, as rules over Sources/Cra and CraCore.
 
 Existing code is grandfathered in Tests/lint-baseline.txt (rule, file, count); a file that
 gains a finding fails, one that loses one is reported so the baseline can come down
@@ -11,7 +11,7 @@ gains a finding fails, one that loses one is reported so the baseline can come d
       a flash on every theme or window-activation change. Inits are exempt (not on screen), and
       so is a layer whose `actions` map the property to NSNull().
   timer-outside-scheduler
-      Timer.scheduledTimer in App/, Services/ or Model/: decisions taken from time run on the
+      Timer.scheduledTimer in App/ or Services/: decisions taken from time run on the
       injectable clock (Scheduler), or no test can reach them. UI animation timers are exempt.
   wall-clock-in-decision
       Date() in a file whose decisions run on the clock (store, tab sleep, live folders).
@@ -23,6 +23,10 @@ gains a finding fails, one that loses one is reported so the baseline can come d
   importer-without-fixture
       An importer (enum …Importer) without a checked-in profile under Tests/Fixtures/<Name>:
       parsers are tested against files in the source browser's format, not dictionaries.
+  core-platform-import
+      Packages/CraCore importing AppKit, Cocoa, SwiftUI, UIKit or CraCEF. The core is models and
+      decisions that build and test without a window or Chromium (#51); what needs one stays in
+      the app, with the pure part in CraCore (Shortcut over KeyChord, FaviconCache over FaviconKey).
 """
 import collections
 import os
@@ -31,10 +35,12 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOURCES = os.path.join(ROOT, "Sources", "Cra")
+CORE = os.path.join(ROOT, "Packages", "CraCore", "Sources")
 BASELINE = os.path.join(ROOT, "Tests", "lint-baseline.txt")
 
 LAYER_SET = re.compile(r"\b(?!layer\b)(\w*[Ll]ayer)\.(backgroundColor|borderColor|colors|opacity|shadowColor|fillColor|strokeColor)\s*=")
 FUNC_START = re.compile(r"^\s*(?:@\w+\s+)*(?:(?:private|fileprivate|internal|public|override|static|final|class|nonisolated|convenience|required|@objc)\s+)*(func\s|init[(?!])")
+CORE_IMPORT = re.compile(r"^\s*(?:@\w+\s+)*import\s+(?:(?:struct|class|enum|protocol|func|var|let|typealias)\s+)?(AppKit|Cocoa|SwiftUI|UIKit|CraCEF)\b")
 CLOCK_FILES = {"Services/SidebarStore.swift", "Services/BrowserManager.swift", "Services/LiveFolderManager.swift",
                "Services/SidebarIntegrity.swift", "App/AppComposition.swift"}
 
@@ -77,7 +83,7 @@ def findings():
             for m in LAYER_SET.finditer(line):
                 if depth <= 0 and not in_init and "setDisableActions" not in line and (m.group(1), m.group(2)) not in quiet:
                     hit("layer-colour-outside-transaction", rel, i)
-            if "Timer.scheduledTimer" in line and top in ("App", "Services", "Model") and rel != "Services/Scheduler.swift":
+            if "Timer.scheduledTimer" in line and top in ("App", "Services") and rel != "Services/Scheduler.swift":
                 hit("timer-outside-scheduler", rel, i)
             if rel in CLOCK_FILES and re.search(r"\bDate\(\)", line):
                 hit("wall-clock-in-decision", rel, i)
@@ -86,6 +92,14 @@ def findings():
             for name in re.findall(r"\benum (\w+)Importer\b", line):
                 if not os.path.isdir(os.path.join(ROOT, "Tests", "Fixtures", name)):
                     hit("importer-without-fixture", f"{rel}:{name}", i)
+    for dirpath, _, names in os.walk(CORE):
+        for n in sorted(names):
+            if n.endswith(".swift"):
+                full = os.path.join(dirpath, n)
+                with open(full, encoding="utf-8") as f:
+                    for i, line in enumerate(f, 1):
+                        if CORE_IMPORT.match(code(line)):
+                            hit("core-platform-import", os.path.relpath(full, ROOT), i)
     return out, where
 
 
@@ -116,7 +130,8 @@ def main():
             failed = True
             rule, rel = key
             lines = ", ".join(map(str, where[key]))
-            print(f"Sources/Cra/{rel.split(':')[0]}: {rule}: {n} (baseline {base.get(key, 0)}), lines {lines}")
+            path = rel.split(":")[0]
+            print(f"{path if path.startswith('Packages/') else 'Sources/Cra/' + path}: {rule}: {n} (baseline {base.get(key, 0)}), lines {lines}")
     lower = [(k, base[k], found.get(k, 0)) for k in sorted(base) if found.get(k, 0) < base[k]]
     for (rule, rel), was, now in lower:
         print(f"note: {rel}: {rule} down from {was} to {now}; run scripts/lint.py --update-baseline")

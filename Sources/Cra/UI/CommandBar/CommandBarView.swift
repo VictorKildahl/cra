@@ -134,7 +134,7 @@ final class CommandBarView: NSView {
         let typed = c.query.trimmingCharacters(in: .whitespaces)
         let glyph = CommandBarGlyph.resolve(
             editingURL: c.mode == .editURL, untouched: !previewing && (typed.isEmpty || typed == c.openedPrefill),
-            scoped: scope != nil, pageFaviconKey: c.openedPrefill.flatMap(FaviconCache.key(for:)),
+            scoped: scope != nil, pageFaviconKey: c.openedPrefill.flatMap(FaviconKey.key(for:)),
             row: row.map { ($0.faviconKey, $0.symbol) }, hasFavicon: { [favicons] in favicons.image(forKey: $0) != nil })
         if case .favicon(let key) = glyph, let img = favicons.image(forKey: key) {
             leadingIcon.imageScaling = .scaleProportionallyUpOrDown
