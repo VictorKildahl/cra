@@ -145,6 +145,7 @@ enum Diagnostics {
             "Running from: \(Bundle.main.bundlePath)",
             "Up for: \(Int(ProcessInfo.processInfo.systemUptime / 60)) min (Mac), \(Int(-(NSRunningApplication.current.launchDate ?? Date()).timeIntervalSinceNow / 60)) min (Cra)",
             "Embedded pages: \(EmbeddedPages.isEnabled), Chrome-style hosting: \(CraCEFRuntime.chromeHosting())",
+            "Secure DNS: \(CraCEFRuntime.secureDNSMode().map { SecureDNS(mode: $0, templates: CraCEFRuntime.secureDNSTemplates() ?? "").line } ?? "unknown")",
             "",
             "Spaces: \(store.spaces.count), profiles: \(store.profiles.count), tabs: \(store.allTabs().count)",
         ]

@@ -160,6 +160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         observeContentBlocking()
         observeHttpsOnly()
+        logSecureDNS()
     }
 
     /// A sidebar whose links disagree (SidebarIntegrity) says so in the log, one fault a problem.
@@ -176,6 +177,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Settings > Privacy > "Always use secure connections", live like content blocking.
     private func observeHttpsOnly() {
         observeChanges(of: { [store] in store.settings.httpsOnly }, apply: CraCEFRuntime.setHttpsOnlyModeEnabled)
+    }
+
+    /// Chromium's secure DNS setting (chrome://settings/security), left on Chromium's default
+    /// like Arc: the log says what is in effect at launch and after each change (#110).
+    private func logSecureDNS() {
+        var last: String?
+        CraCEFRuntime.setSecureDNSChangeHandler {
+            guard let mode = CraCEFRuntime.secureDNSMode() else { return }
+            let line = SecureDNS(mode: mode, templates: CraCEFRuntime.secureDNSTemplates() ?? "").line
+            if line != last { last = line; CraLog.note("secure dns: " + line) }
+        }
     }
 
     private func observeContentBlocking() {

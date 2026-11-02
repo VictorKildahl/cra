@@ -230,6 +230,14 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 /// http:// navigations are upgraded, and a site without HTTPS shows Chrome's warning
 /// page before it loads. Profiles that load later get it too. Off until enabled.
 + (void)setHttpsOnlyModeEnabled:(BOOL)enabled;
+/// Chromium's secure DNS setting (chrome://settings/security), app-wide in Local State:
+/// `dns_over_https.mode` and `dns_over_https.templates` as Chromium holds them now. nil
+/// before Chromium is ready and once quitting starts.
++ (nullable NSString *)secureDNSMode;
++ (nullable NSString *)secureDNSTemplates;
+/// Called on the main queue once Chromium is ready (at once if it already is) and after the
+/// secure DNS setting changes.
++ (void)setSecureDNSChangeHandler:(nullable void (^)(void))handler;
 /// Replaces the blocked list (bare domains; a domain also covers its subdomains).
 + (void)setBlockedDomains:(NSArray<NSString *> *)domains;
 /// Reads and installs a list file off the main thread: one domain per line or
