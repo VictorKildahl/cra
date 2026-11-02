@@ -2166,3 +2166,31 @@ Two new Arc windows, both with View ▸ Hide Sidebar and a tab selected, capture
   (⌃⌘1–9, Cra's own: ⌘ added to Go to Space N; neither Arc nor macOS binds ⌃⌘ + a digit). A pane brings its split.
   The sidebar menu's Move to Space follows when it moves the open tab or its split; another tab moves on its own. Whatever moves, a window that had it open in the
   old space opens the next tab there, picked as on close.
+
+## ⌘Return in the command bar and closed folders that keep their tab (Arc 1.171, 2 Nov 2026, issue #85)
+
+Victor's Arc, a window of my own (File ▸ New Window over AX, closed afterwards), keys posted to Arc's pid while it
+was frontmost, 1x region captures and 100 fps recordings; test tabs archived afterwards.
+
+- [O] ⌘Return in the URL editor (⌘L, a page open) or the new-tab bar (⌘T): the highlighted row opens in a new tab at
+  the top of Today, the current tab stays in front and the bar stays open with what was typed; each ⌘Return opens
+  one more (two ⌘Returns, two tabs). A "Switch to Tab" row opens its address again as a new tab rather than switching;
+  a search row opens the search. The tabs are saved read (`isUnread` false). Cra: the field editor reports ⌘Return as
+  `noop:`, never `insertNewline:` (KeyChord.isCommandReturn), CommandBarController.commitInBackground,
+  MainWindowController.openInBackground.
+- [O] Arc only says so when the sidebar is hidden: "New Tab Created" (`backgroundTabCreated`, Toasts.ShinyToastView;
+  "New Tab Created in %@" exists for another space). With the sidebar out, only the new row appears in Today. The toast:
+  138 × 42 pt at 1x, 8 pt below the top of the page area (below the toolbar; with the inline URL editor open, below
+  its input row) and 9 pt in from its right edge; 14 pt medium black text, 12 pt either side; ~10 pt corners; a
+  1 pt outline at ~69 % of the fill; fill 220/226/184 at the top to 208/218/163 at the bottom over a dark page on a
+  yellow/green theme (`ShinyToastBackgroundBasedPalette`). It springs in from its top centre (width 0.41 → 1.04 at
+  ~0.2 s → 1.0 by ~0.4 s, i.e. ≈0.3 s response, damping 0.67), stays ~4.85 s and shrinks into its top while fading in
+  ~80 ms. [U] Whether a second ⌘Return restarts its timer; the fill on other themes. Cra: BackgroundTabToast.
+- [O] Return on a "Switch to Tab" row for a pinned tab two closed folders down (Netfinder ▸ Endpoints ▸ tab): no folder
+  opens. The tab is listed one level under the outermost closed folder (its row slides in, ~0.15 s), Endpoints stays
+  hidden, and the folder's glyph gets three dots (2 pt, 4 pt pitch). StorableWindows.json keeps it per window as
+  `expandedItems: [folder, {"peeked": {"_0": [tab ids]}}]`; the tab stays listed after another tab is picked. The bar
+  lists only the window's space's tabs; a typed URL puts the typed row first and the "Switch to Tab" row second.
+  Arc also has Tabs ▸ Reveal Tab in Sidebar (`revealTabInSidebar`). Cra: FolderPeek (CraCore),
+  WindowPrefs.peekedFolders, SidebarStore.peekedTabs/setExpanded, FolderGlyphView's dots. [U] What a click on a
+  peeked folder does in Arc (Cra opens it and drops the peek; closing it again keeps the open tab listed).

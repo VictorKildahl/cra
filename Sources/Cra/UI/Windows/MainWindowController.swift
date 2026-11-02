@@ -47,6 +47,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var lastSidebarWidth: CGFloat = 0
     private var commandBarOpenedAt = Date.distantPast
     private var commandBarClosingClick = DismissingClick()
+    private let backgroundTabToast = BackgroundTabToast()
     private var commandObserving = false
     /// Closed for good (another window stayed open): it no longer follows the store.
     private var isTornDown = false
@@ -293,7 +294,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 self?.app.perform(id)
             }
         }
-        commandBar.onCommit = { [weak self] s, typed, mode, force in self?.handleCommit(s, typed: typed, mode: mode, forceNewTab: force) }
+        commandBar.onCommit = { [weak self] s, typed, mode in self?.handleCommit(s, typed: typed, mode: mode) }
+        commandBar.onOpenInBackground = { [weak self] s, typed in self?.openInBackground(s, typed: typed) ?? false }
         commandBar.onClose = { [weak self] in self?.hideCommandPanel() }
         commandBar.spaceName = { [weak self] id in self?.store.space(id)?.title ?? "" }
     }
@@ -2125,12 +2127,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         currentBrowser?.setFocused(true)
     }
 
-    private func handleCommit(_ s: Suggestion?, typed: String, mode: CommandBarMode, forceNewTab: Bool) {
+    private func handleCommit(_ s: Suggestion?, typed: String, mode: CommandBarMode) {
         let query = commandBar.query
         func open(_ url: String) {
             store.recordQuerySelection(query: query, url: url)
             let fillsEmptyPane = selectedTab?.isEmptyTab == true
-            if (mode == .editURL || fillsEmptyPane) && !forceNewTab, selectedTabID != nil {
+            if mode == .editURL || fillsEmptyPane, selectedTabID != nil {
                 loadInSelectedTab(url)
             } else {
                 store.createTab(url: url, window: windowID)
@@ -2163,6 +2165,38 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         case .moveToFolder(let id):
             if let t = selectedTabID { store.moveItem(t, to: id, index: nil) }
         }
+    }
+
+    /// ⌘Return in the bar (Arc): the row's page in a new background tab, the current tab staying
+    /// in front; an open tab's row opens its address again rather than switching (GitHub #85).
+    private func openInBackground(_ s: Suggestion?, typed: String) -> Bool {
+        let url: String?
+        switch s?.kind {
+        case nil:
+            url = typed.isEmpty ? nil : SuggestionEngine.looksLikeURL(typed) ? SuggestionEngine.urlFromInput(typed) : store.settings.searchEngine.searchURL(typed)
+        case .navigate?:
+            url = typed == commandBar.query ? (s?.url ?? SuggestionEngine.urlFromInput(typed)) : SuggestionEngine.urlFromInput(typed)
+        case .search?:
+            url = s?.url ?? store.settings.searchEngine.searchURL(typed)
+        case .switchToTab?, .archived?, .history?, .topDomain?:
+            url = s?.url
+        default:
+            url = nil
+        }
+        guard let url, !url.isEmpty else { return false }
+        store.recordQuerySelection(query: commandBar.query, url: url)
+        let tab = store.createTab(url: url, select: false, window: windowID)
+        store.markUnread(tab.id, false)  // Arc saves these read, unlike a link opened in the background
+        // Creating the page takes key from the bar; it takes key back and stays open, as while
+        // opening (windowDidResignKey).
+        commandBarOpenedAt = Date()
+        browsers.ensureRuntime(for: tab.id)  // load it so the title and favicon fill in
+        // With the sidebar out the new row shows there; hidden, Arc says so in a toast.
+        if !sidebarVisible, let window {
+            let page = shell.webContainer.convert(shell.webContainer.bounds, to: nil)
+            backgroundTabToast.show("New Tab Created", page: page, in: window, theme: focusedSpace.theme)
+        }
+        return true
     }
 
     /// Navigate the focused tab (an empty split pane gets its first page here).

@@ -193,7 +193,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         commandHost = CommandBarView(controller: commandBar, favicons: app.favicons)
         commandPanel.contentView = commandHost
         commandPanel.delegate = self
-        commandBar.onCommit = { [weak self] s, typed, mode, force in self?.handleCommit(s, typed: typed, mode: mode, forceNewTab: force) }
+        commandBar.onCommit = { [weak self] s, typed, mode in self?.handleCommit(s, typed: typed, mode: mode) }
         commandBar.onClose = { [weak self] in self?.hideCommandPanel() }
         commandBar.spaceName = { [weak self] id in self?.store.space(id)?.title ?? "" }
 
@@ -407,7 +407,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         focusPage()
     }
 
-    private func handleCommit(_ s: Suggestion?, typed: String, mode: CommandBarMode, forceNewTab: Bool) {
+    private func handleCommit(_ s: Suggestion?, typed: String, mode: CommandBarMode) {
         let query = commandBar.query
         func open(_ url: String) {
             store.recordQuerySelection(query: query, url: url)

@@ -22,6 +22,13 @@ public struct KeyChord: Codable, Hashable {
 
     public var keys: Modifiers { Modifiers(rawValue: modifiers) }
 
+    /// Return or the keypad's Enter (key codes 36, 76) with ⌘ and no other modifier: the command
+    /// bar opens the row in a background tab (Arc, GitHub #85). A text field has no key binding
+    /// for it and reports noop:, so the bar reads the event with this.
+    public static func isCommandReturn(keyCode: UInt16, modifiers: UInt) -> Bool {
+        [36, 76].contains(keyCode) && Modifiers(rawValue: modifiers).intersection([.shift, .control, .option, .command]) == .command
+    }
+
     public static let tab = "\t"
     // AppKit's function-key characters (NSLeftArrowFunctionKey...).
     public static let left = "\u{F702}"

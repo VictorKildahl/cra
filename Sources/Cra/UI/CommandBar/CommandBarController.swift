@@ -38,7 +38,9 @@ final class CommandBarController {
 
     unowned let engine: SuggestionEngine
     unowned let store: SidebarStore
-    var onCommit: (Suggestion?, String, CommandBarMode, Bool) -> Void = { _, _, _, _ in }
+    var onCommit: (Suggestion?, String, CommandBarMode) -> Void = { _, _, _ in }
+    /// Opens the row in a background tab; false when it has no page to open there.
+    var onOpenInBackground: (Suggestion?, String) -> Bool = { _, _ in false }
     var onClose: () -> Void = {}
 
     init(engine: SuggestionEngine, store: SidebarStore) {
@@ -185,20 +187,35 @@ final class CommandBarController {
         return true
     }
 
-    func commit(forceNewTab: Bool) {
+    func commit() {
+        guard let (selected, typed) = committed() else { return }
+        close()
+        onCommit(selected, typed, mode)
+    }
+
+    /// ⌘Return (Arc): the row's page opens in a new background tab and the bar stays open with
+    /// what was typed, so the next ⌘Return opens another. Rows that open no page, and hosts with
+    /// no tabs to open (a Little Window), take it as Return.
+    func commitInBackground() {
+        guard let (selected, typed) = committed() else { return }
+        if onOpenInBackground(selected, typed) { return }
+        close()
+        onCommit(selected, typed, mode)
+    }
+
+    private func committed() -> (Suggestion?, String)? {
         let selected = result.items.indices.contains(selectedIndex) ? result.items[selectedIndex] : nil
         // No tab matched: Return has nowhere to go, and the tabs scope never searches the web.
-        if scope == .tabs, selected == nil { return }
+        if scope == .tabs, selected == nil { return nil }
         var typed = query
         // Enter on the typed row with an inline completion goes to the completion.
         if selectedIndex == 0, let c = result.inlineCompletion, selected?.id == "typed" { typed = c }
-        close()
-        onCommit(selected, typed, mode, forceNewTab)
+        return (selected, typed)
     }
 
     func commit(_ suggestion: Suggestion) {
         close()
-        onCommit(suggestion, query, mode, false)
+        onCommit(suggestion, query, mode)
     }
 
     func close() {

@@ -107,6 +107,13 @@ final class CommandTextField {
             suppressChange = false
         }
 
+        /// If a completion suffix is selected, Enter means "go there".
+        private func acceptSelectedCompletion(_ textView: NSTextView) {
+            guard pendingCompletion != nil, textView.selectedRange.length > 0 else { return }
+            lastTyped = textView.string
+            controller.update(query: textView.string, allowCompletion: false)
+        }
+
         func controlTextDidChange(_ obj: Notification) {
             guard !suppressChange, let field else { return }
             let text = field.stringValue
@@ -123,13 +130,14 @@ final class CommandTextField {
             case #selector(NSResponder.moveUp(_:)):
                 controller.moveSelection(by: -1); return true
             case #selector(NSResponder.insertNewline(_:)):
-                let cmd = NSApp.currentEvent?.modifierFlags.contains(.command) ?? false
-                // If a completion suffix is selected, Enter means "go there".
-                if pendingCompletion != nil, textView.selectedRange.length > 0 {
-                    lastTyped = textView.string
-                    controller.update(query: textView.string, allowCompletion: false)
-                }
-                controller.commit(forceNewTab: cmd)
+                acceptSelectedCompletion(textView)
+                controller.commit()
+                return true
+            // The key bindings have nothing for ⌘Return, so the field editor sends noop:, never
+            // insertNewline: (GitHub #85).
+            case Selector(("noop:")) where NSApp.currentEvent.map { $0.type == .keyDown && Shortcut.isCommandReturn(keyCode: $0.keyCode, modifiers: $0.modifierFlags.rawValue) } == true:
+                acceptSelectedCompletion(textView)
+                controller.commitInBackground()
                 return true
             case #selector(NSResponder.cancelOperation(_:)):
                 if controller.scope != nil { controller.cancelScope() } else { controller.close() }

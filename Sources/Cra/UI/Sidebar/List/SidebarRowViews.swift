@@ -397,6 +397,8 @@ final class FolderGlyphView: NSView {
     private let fill = NSImageView()
     private let outline = NSImageView()
     private let mark = NSImageView()
+    /// Arc's peeked folder (FolderPeek): three 2 pt dots on a 4 pt pitch in the closed body.
+    private let dots = CAShapeLayer()
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -411,6 +413,8 @@ final class FolderGlyphView: NSView {
         mark.image = GitHubMark.image
         mark.imageScaling = .scaleProportionallyUpOrDown
         addSubview(mark)
+        wantsLayer = true
+        layer?.addSublayer(dots)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -418,18 +422,29 @@ final class FolderGlyphView: NSView {
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    func show(expanded: Bool, live: Bool, tint: NSColor, fillColor: NSColor) {
+    func show(expanded: Bool, peeked: Bool = false, live: Bool, tint: NSColor, fillColor: NSColor) {
         fill.isHidden = expanded
         fill.contentTintColor = fillColor
         outline.contentTintColor = tint
         mark.isHidden = !live
         mark.contentTintColor = tint
+        dots.isHidden = !peeked || expanded || live
+        dots.fillColor = tint.cgColor
         needsLayout = true
     }
 
     override func layout() {
         super.layout()
         mark.frame = NSRect(x: (bounds.width - 7) / 2, y: (bounds.height - 7) / 2 + 1.5, width: 7, height: 7)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        dots.frame = bounds
+        let path = CGMutablePath()
+        // On whole points, so each dot is two pixels square at 1x.
+        let y = (bounds.height / 2 + 1.5).rounded(.down) - 1
+        for i in -1...1 { path.addEllipse(in: CGRect(x: (bounds.width / 2).rounded(.down) + CGFloat(i) * 4 - 1, y: y, width: 2, height: 2)) }
+        dots.path = path
+        CATransaction.commit()
     }
 }
 
@@ -998,6 +1013,8 @@ struct FolderRowModel: Equatable {
     var renameText: String
     var editing: Bool
     var expanded: Bool
+    /// Closed with tabs kept in sight under it (FolderPeek): Arc draws three dots in the glyph.
+    var peeked: Bool
     var live: Bool
     var tint: NSColor
     var fill: NSColor
@@ -1030,7 +1047,7 @@ final class FolderRowView: SidebarRowView, NSTextFieldDelegate {
     func apply(_ m: FolderRowModel) {
         guard m != model else { return }
         model = m
-        glyph.show(expanded: m.expanded, live: m.live, tint: m.tint, fillColor: m.fill)
+        glyph.show(expanded: m.expanded, peeked: m.peeked, live: m.live, tint: m.tint, fillColor: m.fill)
         titleLabel.stringValue = m.title
         titleLabel.textColor = colors.textPrimary
         setAccessibilityLabel(m.title)
