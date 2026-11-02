@@ -85,6 +85,9 @@ app it builds.
   `ManualScheduler`, against the made-up Arc and Chromium profiles in `Tests/Fixtures`.
 - `scripts/test-policies.sh`: the decisions pulled out of the window controllers
   (`ToolbarComposition`, `ExtensionLaunch`, `DevToolsToggle`, `FeatureFlags`).
+- `scripts/test-perf.sh`: the performance recorder on a real main run loop: injected stalls,
+  hang files with a `sample` stack, the session marker, ownership, the recording switch
+  ([performance.md](performance.md)).
 - `scripts/lint.py`: Cra's own rules (testing.md), checked by `scripts/test.sh`.
 - `Tests/smoke-launch.sh [app]`: starts the app on a throwaway data folder with no pages,
   with a page opened, then with it restored, and quits it like ⌘Q after a settings write.
@@ -97,7 +100,8 @@ behave. Check those by hand, and say how in the PR.
 Scenario hooks for a command file (`cra://debug?…`): `checkStore=1` logs a fault per broken
 sidebar link, `pageJS=<js>` runs script in the focused page, `installExtension=<folder>` and
 `removeExtension=<id>`, `extensionAction=<id>`, `fullscreen=1|0`, `windowSize=1280x800`,
-`snapshot=<ViewClass[,n]>&out=<png>`, `sleepTabs=<seconds>`, `relaunch=1` and `quit=1`.
+`snapshot=<ViewClass[,n]>&out=<png>`, `sleepTabs=<seconds>`, `stall=<ms>` (blocks the main
+thread), `perfReport=<path>` (the recorder's perf.json now), `relaunch=1` and `quit=1`.
 
 ## Running a test instance
 

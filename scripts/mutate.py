@@ -27,7 +27,7 @@ TARGETS = [
     ("Sources/Cra/App/AppComposition.swift", ["bash", "scripts/test-store.sh"]),
     ("Sources/Cra/App/FeatureFlags.swift", ["bash", "scripts/test-policies.sh"]),
 ] + [(os.path.relpath(p, ROOT), ["swift", "test", "--package-path", "Packages/CraCore"])
-     for p in sorted(glob.glob(os.path.join(ROOT, "Packages/CraCore/Sources/CraCore/*.swift")))]
+     for p in sorted(glob.glob(os.path.join(ROOT, "Packages/CraCore/Sources/CraCore/**/*.swift"), recursive=True))]
 
 OPERATORS = [
     (r" == ", " != "), (r" != ", " == "), (r" < ", " >= "), (r" > ", " <= "), (r" <= ", " > "), (r" >= ", " < "),

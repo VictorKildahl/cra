@@ -18,7 +18,7 @@
 #   wait <s>                    let the app work
 #   pace <s>                    pause after each command (default 0.2)
 #   repeat <n> <cra://…${i}…>   the command n times, ${i} = 1…n
-#   budget rss=<MB> maxstall=<ms> stalls50=<n> launchstall=<ms>
+#   budget rss=<MB> maxstall=<ms> stalls50=<n> launchstall=<ms> perfcpu=<% of a core>
 #     (stalls count from the first command; start-up has its own launchstall budget)
 #   helpers baseline | helpers settle [slack]
 #   relaunch                    cra://debug?relaunch=1, then follow the new process
@@ -117,7 +117,7 @@ ready "$PID" || problem "Cra did not start reading commands in 30 s"
 sleep 2
 
 PACE=0.2
-RSS_BUDGET=1500 MAXSTALL=1500 STALLS50=10 LAUNCHSTALL=1000
+RSS_BUDGET=1500 MAXSTALL=1500 STALLS50=10 LAUNCHSTALL=1000 PERFCPU=0.1
 BASELINE=""
 expand() { local s="$1"; s="${s//\$\{FIXTURES\}/$FIXTURES}"; s="${s//\$\{PAGE\}/$PAGE}"; s="${s//\$\{EXTENSION_ID\}/$EXTENSION_ID}"; printf '%s' "$s"; }
 
@@ -138,7 +138,7 @@ while IFS= read -r raw || [ -n "$raw" ]; do
     budget)
       shift
       for kv in "$@"; do
-        case "$kv" in rss=*) RSS_BUDGET="${kv#*=}" ;; launchstall=*) LAUNCHSTALL="${kv#*=}" ;; maxstall=*) MAXSTALL="${kv#*=}" ;; stalls50=*) STALLS50="${kv#*=}" ;; esac
+        case "$kv" in rss=*) RSS_BUDGET="${kv#*=}" ;; perfcpu=*) PERFCPU="${kv#*=}" ;; launchstall=*) LAUNCHSTALL="${kv#*=}" ;; maxstall=*) MAXSTALL="${kv#*=}" ;; stalls50=*) STALLS50="${kv#*=}" ;; esac
       done ;;
     helpers)
       if [ "$2" = "baseline" ]; then BASELINE=$(helpers); echo "  helpers: baseline $BASELINE"
@@ -203,6 +203,30 @@ echo "  stalls: start-up ${launch} ms (budget ${LAUNCHSTALL}); then longest ${ma
 [ "${launch:-0}" -le "$LAUNCHSTALL" ] || problem "a ${launch} ms main-thread stall at start-up, budget ${LAUNCHSTALL} ms"
 [ "${maxstall:-0}" -le "$MAXSTALL" ] || problem "a ${maxstall} ms main-thread stall, budget ${MAXSTALL} ms"
 [ "${over50:-0}" -le "$STALLS50" ] || problem "${over50} stalls over 50 ms, budget ${STALLS50}"
+
+# The performance recorder (#91): what it costs, and whether it saw the stalls HitchMonitor saw.
+if alive; then
+  send "cra://debug?perfReport=$OUT/perf.json"
+  for _ in $(seq 1 25); do [ -s "$OUT/perf.json" ] && break; sleep 0.2; done
+  hitch250=$(cat "$OUT/hitch.earlier" "$HITCH" 2>/dev/null | awk '$2 == "stall" && $3 >= 250 { n++ } END { print n + 0 }')
+  if [ ! -s "$OUT/perf.json" ]; then problem "no perf.json from the performance recorder"
+  else
+    verdict=$(python3 -I - "$OUT/perf.json" "$PERFCPU" "$hitch250" <<'PY'
+import json, sys
+r = json.load(open(sys.argv[1]))
+cpu, budget, hitch = r["selfCost"]["cpuPct"], float(sys.argv[2]), int(sys.argv[3])
+m = r["mainThread"]
+seen = m["stalls"] + m["outsideFreezes"]
+print(f"perf: recording costs {cpu:.3f} % of a core (budget {budget}); stalls ≥250 ms: recorder {seen}, HitchMonitor {hitch}")
+if cpu > budget: print(f"PROBLEM the performance recorder costs {cpu:.3f} % of a core, budget {budget} %")
+# This run's HitchMonitor log starts after the launch the recorder also saw; a few either way is timing.
+if abs(seen - hitch) > max(2, hitch // 5): print(f"PROBLEM the recorder counted {seen} stalls of 250 ms or more, HitchMonitor {hitch}")
+PY
+)
+    echo "  $(head -1 <<< "$verdict")"
+    while IFS= read -r l; do [[ "$l" == PROBLEM* ]] && problem "${l#PROBLEM }"; done <<< "$verdict"
+  fi
+fi
 
 # A clean quit, within the CefShutdown watchdog.
 if alive; then

@@ -75,6 +75,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     private(set) var visibleTabID: UUID?
     /// Every tab on screen, in pane order (one entry outside split view).
     private(set) var visibleTabIDs: [UUID] = []
+    /// Tabs whose page tab sleeping closed and that haven't been shown since.
+    private(set) var sleptTabs: Set<UUID> = []
     /// Split view: the view a tab's Alloy-hosted Chromium view should live in.
     var paneHost: ((UUID) -> NSView?)?
     /// The browser window this manager shows pages in (tabs it opens are selected there).
@@ -113,8 +115,11 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
             release(tabID)?.browser.close()
         }
         log(tabID, "opens a page for \(site(tab.url, tabID))")
-        let browser = CraBrowser(frame: container.bounds, url: tab.url, delegate: self, incognito: store.isIncognito(item: tabID),
-                                 profilePath: store.profilePath(item: tabID))
+        if sleptTabs.remove(tabID) != nil { Perf.begin(.tabWake, tabID.uuidString) }
+        let browser = Perf.time(.pageCreate) {
+            CraBrowser(frame: container.bounds, url: tab.url, delegate: self, incognito: store.isIncognito(item: tabID),
+                       profilePath: store.profilePath(item: tabID))
+        }
         return register(browser: browser, tabID: tabID)
     }
 
@@ -201,6 +206,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     /// Show several tabs at once (split view); `focused` gets keyboard focus.
     func show(_ tabIDs: [UUID], focused: UUID?, focus: Bool) {
+        let started = Perf.now()
         let newSet = Set(tabIDs)
         for previous in visibleTabIDs where !newSet.contains(previous) {
             leaveTab(previous)
@@ -240,7 +246,13 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         visibleTabIDs = shown
         if let np = nowPlaying, np.onScreen != Set(shown) { np.onScreen = Set(shown) }
         visibleTabID = focused.flatMap { newSet.contains($0) ? $0 : nil } ?? shown.first
-        if wasVisible != Set(shown) { HitchMonitor.mark("page-shown") }
+        if wasVisible != Set(shown) {
+            HitchMonitor.mark("page-shown")
+            if let rt = visibleRuntime {
+                Perf.visibleSite(rt.browser.isIncognito ? nil : SiteNames.siteHost(of: rt.browser.currentURL))
+                Perf.phase("firstPageShown")
+            }
+        }
         if focus, let f = visibleTabID, let rt = runtimes[f] { rt.browser.setFocused(true) }
         for id in shown where !wasVisible.contains(id) {
             scheduleSnapshot(id)
@@ -251,6 +263,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         }
         syncDevToolsVisibility()
         delegate?.browserManagerPageWindowsChanged(focus: focus)
+        if wasVisible != Set(shown) { Perf.time(.tabSwitch, ms: Perf.ms(since: started)) }
     }
 
     // MARK: Diagnostics
@@ -336,6 +349,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         // creates a new browser, and late callbacks cannot mutate its replacement.
         guard let rt = release(tabID) else { return }
         log(tabID, "closes its page")
+        Perf.cancel(.pageLoad, tabID.uuidString)
+        Perf.cancel(.tabWake, tabID.uuidString)
         rt.browser.containerView.isHidden = true
         closingBrowsers[ObjectIdentifier(rt.browser)] = rt.browser
         rt.browser.close()
@@ -370,6 +385,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                             guard let self, let rt, self.stillSleepable(id, rt, url, navigationRevision, cutoff) else { return }
                             let refusal = Self.sleepRefusal(result)
                             guard refusal.isEmpty else { return self.keepAwake(rt, url, refusal) }
+                            self.sleptTabs.insert(id)
+                            Perf.count(.tabSlept)
                             if !rt.browser.isIncognito {
                                 CraLog.note("tab sleep unloads \(CraLog.host(url)) (hidden \(Int(self.clock.now.timeIntervalSince(rt.hiddenAt ?? self.clock.now) / 60)) min)")
                             }
@@ -388,6 +405,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// Asked again after the back-off; the log names the site once per reason (never an incognito one).
     private func keepAwake(_ rt: TabRuntime, _ url: String, _ refusal: String) {
         rt.sleepProbeAfter = clock.now.addingTimeInterval(Self.refusalBackoff)
+        Perf.count(.sleepRefusal, refusal)
         if rt.sleepRefusal != refusal, !rt.browser.isIncognito { CraLog.note("tab sleep keeps \(CraLog.host(url)) awake: \(refusal)") }
         rt.sleepRefusal = refusal
     }
@@ -442,6 +460,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// space switched profiles, closes and loads its URL again there when shown.
     func pruneMissingTabs() {
         for id in runtimes.keys where store.item(id)?.isTab != true { unload(id) }
+        sleptTabs = sleptTabs.filter { store.item($0)?.isTab == true }
         for (id, rt) in runtimes where store.item(id)?.isTab == true && !inRightProfile(rt) {
             release(id)?.browser.close()
         }
@@ -664,6 +683,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         if !browser.isAudible { nowPlaying?.remove(id) }
         // Our own error page is a data: URL; keep the real address in the model.
         if url.hasPrefix("data:text/html;base64,") { return }
+        // A restored page has no address yet when it is shown.
+        if id == visibleTabID { Perf.visibleSite(browser.isIncognito ? nil : SiteNames.siteHost(of: url)) }
         store.updateTab(id, url: url)
         if !browser.isIncognito { LiveFolderManager.shared.pageChanged(tab: id, to: url) }
         delegate?.browserManagerDidUpdate(id)
@@ -672,6 +693,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     func browser(_ browser: CraBrowser, didChangeLoading loading: Bool, canGoBack: Bool, canGoForward: Bool) {
         guard let id = tabID(of: browser) else { return }
         if loading { runtimes[id]?.navigationRevision &+= 1 }
+        if loading { Perf.begin(.pageLoad, id.uuidString) } else {
+            Perf.end(.pageLoad, id.uuidString)
+            Perf.end(.tabWake, id.uuidString)
+        }
         if !loading { runtimes[id]?.progress = 0 }
         if !loading { scheduleSnapshot(id) }
         delegate?.browserManagerDidUpdate(id)

@@ -77,6 +77,23 @@ enum CraLog {
 
     /// Only the host: logs get shared in bug reports.
     static func host(_ url: String) -> String {
-        URL(string: url).flatMap { $0.host ?? $0.scheme.map { "\($0):" } } ?? "(no page)"
+        if let site = SiteNames.siteHost(of: url) { remember(site) }
+        return URL(string: url).flatMap { $0.host ?? $0.scheme.map { "\($0):" } } ?? "(no page)"
+    }
+
+    private static let sitesLock = NSLock()
+    nonisolated(unsafe) private static var sites: Set<String> = []
+
+    /// Every site this session's log named: what "Hide site names" replaces in the export.
+    static var sitesSeen: Set<String> {
+        sitesLock.lock()
+        defer { sitesLock.unlock() }
+        return sites
+    }
+
+    private static func remember(_ site: String) {
+        sitesLock.lock()
+        if sites.count < 10_000 { sites.insert(site) }
+        sitesLock.unlock()
     }
 }

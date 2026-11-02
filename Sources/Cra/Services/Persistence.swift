@@ -69,7 +69,7 @@ final class JSONStore<T: Codable> {
 
     func load(or fallback: () -> T) -> T {
         guard let data = try? Data(contentsOf: url) else { return fallback() }
-        do { return try decoder.decode(T.self, from: data) } catch {
+        do { return try Perf.time(.jsonLoad) { try decoder.decode(T.self, from: data) } } catch {
             // Corrupt file: keep it aside for forensics and start fresh.
             CraLog.fault("\(url.lastPathComponent) unreadable, set aside as .corrupt: \(error)")
             try? FileManager.default.moveItem(at: url, to: url.appendingPathExtension("corrupt"))
@@ -92,6 +92,8 @@ final class JSONStore<T: Codable> {
     }
 
     private func write(_ value: T) {
+        let started = Perf.now()
+        defer { Perf.time(.jsonSave, ms: Perf.ms(since: started)) }
         let data: Data
         do { data = try encoder.encode(value) } catch {
             CraLog.fault("\(url.lastPathComponent) not saved, encoding failed: \(error)")

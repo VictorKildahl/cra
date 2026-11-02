@@ -12,6 +12,10 @@ import Foundation
 ///   player can skip tracks. `setActionHandler` can't be called from outside and its handlers
 ///   live in the page's world, so a small wrapper there keeps them in a closure and answers an
 ///   event whose name is random per launch: nothing in the page's world names Cra.
+/// - `lt`: the top frame's long tasks (50 ms or more) for the performance recorder (GitHub #91):
+///   a count, the total and the last 100 durations, which Cra reads and resets for the visible
+///   tab every few seconds. No attribution, no addresses; the observer only runs when a long
+///   task happens, so it never polls or wakes a background tab.
 enum PageScript {
     static let world = "cra"
     private static let channel = "c" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
@@ -47,6 +51,12 @@ enum PageScript {
       addEventListener('\(channel)r', e => { cra.handlers = String(e.detail || '').split(',').filter(Boolean); });
       cra.send = action => dispatchEvent(new CustomEvent('\(channel)', { detail: action }));
       cra.query = () => (cra.send('?'), cra.handlers);
+      if (window.top === window) try {
+        const lt = cra.lt = { n: 0, t: 0, d: [] };
+        new PerformanceObserver(list => {
+          for (const e of list.getEntries()) { lt.n++; lt.t += e.duration; if (lt.d.length < 100) lt.d.push(Math.round(e.duration)); }
+        }).observe({ type: 'longtask' });
+      } catch {}
     })();
     """
 }

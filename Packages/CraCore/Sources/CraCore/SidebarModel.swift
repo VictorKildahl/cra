@@ -475,6 +475,13 @@ public struct AppSettings: Codable, Equatable {
     /// GitHub #24, not in Arc: the page fills the window with no margin and no rounded
     /// card, like a traditional browser. Off by default.
     public var edgeToEdgeContent: Bool = false
+    /// GitHub #91, Settings ▸ Performance: Cra records its own performance on this Mac (stalls,
+    /// CPU and memory per process, tab timings) for Help ▸ Export Diagnostics. On by default in
+    /// early releases; nothing leaves the Mac. Changing the default needs no migration.
+    public var perfRecording: Bool = AppSettings.perfRecordingDefault
+    public static let perfRecordingDefault = true
+    /// Settings ▸ Performance ▸ "Hide site names": every site in the diagnostics zip becomes site-N.
+    public var perfHidesSiteNames: Bool = false
 
     public init() {}
 
@@ -628,6 +635,8 @@ extension AppSettings {
         searchSuggestions = try c.decodeIfPresent(Bool.self, forKey: .searchSuggestions) ?? true
         showSpaceHeaderOnSingleSpace = try c.decodeIfPresent(Bool.self, forKey: .showSpaceHeaderOnSingleSpace) ?? true
         edgeToEdgeContent = try c.decodeIfPresent(Bool.self, forKey: .edgeToEdgeContent) ?? false
+        perfRecording = try c.decodeIfPresent(Bool.self, forKey: .perfRecording) ?? Self.perfRecordingDefault
+        perfHidesSiteNames = try c.decodeIfPresent(Bool.self, forKey: .perfHidesSiteNames) ?? false
     }
 }
 

@@ -68,6 +68,7 @@ static NSHashTable<CraBrowser*>* g_allBrowsers = nil;
 /// Closed tabs whose page stays alive until its downloads end (see -[CraBrowser close]).
 static NSMutableSet<CraBrowser*>* g_parkedBrowsers = nil;
 static void (^g_strayPageHandler)(NSString*) = nil;
+static void (^g_processEventHandler)(NSString*, NSString*, NSString*) = nil;
 
 static NSString* NSStringFromCef(const CefString& s) {
     std::string utf8 = s.ToString();
@@ -1174,6 +1175,7 @@ public:
         LOG(WARNING) << "Cra: loading " << LogHost(browser, failedUrl) << " failed: " << errorText.ToString() << " ("
                      << (int)errorCode << ")";
         if ((int)errorCode == -3 /* ERR_ABORTED */) return;
+        ReportProcessEvent(browser, @"loadError", [NSString stringWithFormat:@"%d", (int)errorCode], failedUrl);
         // Chrome-style pages get Chrome's own error page: Reload retries the site and it
         // reloads by itself when the network returns. Ours, a data: URL loaded on top,
         // made Reload reload the error and added a history entry.
@@ -1325,12 +1327,40 @@ public:
         const char* what = status >= 0 && status < TS_NUM_VALUES ? kStatus[status] : "unknown";
         LOG(ERROR) << "Cra: renderer for " << LogHost(browser) << " ended: " << what << " (code " << error_code
                    << ", " << error_string.ToString() << ")";
+        ReportProcessEvent(browser, @"terminated", @(what));
     }
 
     bool OnRenderProcessUnresponsive(CefRefPtr<CefBrowser> browser,
                                      CefRefPtr<CefUnresponsiveProcessCallback> callback) override {
         LOG(ERROR) << "Cra: renderer for " << LogHost(browser) << " is unresponsive";
+        ReportProcessEvent(browser, @"unresponsive", @"");
         return false;  // Chrome's "Page Unresponsive" dialog
+    }
+
+    void OnRenderProcessResponsive(CefRefPtr<CefBrowser> browser) override {
+        ReportProcessEvent(browser, @"responsive", @"");
+    }
+
+    /// To the performance recorder: the host only, and none for incognito or Cra's own pages.
+    void ReportProcessEvent(CefRefPtr<CefBrowser> browser, NSString* kind, NSString* detail, const CefString& url = CefString()) {
+        void (^handler)(NSString*, NSString*, NSString*) = g_processEventHandler;
+        if (!handler) return;
+        CraBrowser* o = owner_;
+        NSString* site = nil;
+        if (o && !o.isIncognito) {
+            CefString u = url;
+            if (u.empty()) {
+                CefRefPtr<CefFrame> frame = browser->GetMainFrame();
+                if (frame) u = frame->GetURL();
+            }
+            CefURLParts parts;
+            if (!u.empty() && CefParseURL(u, parts)) {
+                std::string scheme = CefString(&parts.scheme).ToString();
+                std::string host = CefString(&parts.host).ToString();
+                if ((scheme == "http" || scheme == "https") && !host.empty()) site = @(host.c_str());
+            }
+        }
+        handler(kind, detail, site);
     }
 
     /// The site for chromium.log, which Help ▸ Export Diagnostics sends: never an incognito one
@@ -2327,6 +2357,7 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 + (BOOL)anotherInstanceWasNotified { return g_alreadyRunning; }
 + (void)setRelaunchHandler:(void (^)(NSArray<NSString*>*))handler { g_relaunchHandler = [handler copy]; }
 + (void)setStrayPageHandler:(void (^)(NSString*))handler { g_strayPageHandler = [handler copy]; }
++ (void)setProcessEventHandler:(void (^)(NSString*, NSString*, NSString*))handler { g_processEventHandler = [handler copy]; }
 + (BOOL)isExtensionWindow:(NSWindow*)window { return window && [g_extensionWindows containsObject:window]; }
 + (BOOL)isPageWindow:(NSWindow*)window {
     for (CraBrowser* b in g_allBrowsers) if (window && b.hostWindow == window) return YES;

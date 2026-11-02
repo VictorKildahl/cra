@@ -49,8 +49,9 @@ no page content), so it checks geometry, ink and fills.
 - **Scenario invariants**, the same for every scenario: the app is still running at the end,
   no new crash report for its processes, no `fault:` line in `cra.log`, the sidebar sound
   (`SidebarIntegrity`), main-thread stalls inside the scenario's budget, Cra's memory inside
-  its budget, helper processes back to baseline five seconds after tabs close, and a quit
-  within 20 seconds.
+  its budget, helper processes back to baseline five seconds after tabs close, the performance
+  recorder under 0.1 % of a core (`selfCost.cpuPct` in its perf.json, `budget perfcpu=`) with its
+  count of 250 ms stalls within a few of HitchMonitor's, and a quit within 20 seconds.
 
 Stall budgets are set from what the app does today, so they catch regressions rather than
 describe a goal. The count of stalls over 50 ms is steady from run to run and carries the
@@ -77,6 +78,10 @@ a finding fails, and when one loses a finding the baseline comes down
 - `importer-without-fixture`: an `…Importer` with no profile under `Tests/Fixtures`.
 - `core-platform-import`: `Packages/CraCore` importing AppKit, Cocoa, SwiftUI, UIKit or CraCEF
   ([CLAUDE.md](../CLAUDE.md) has the layers).
+- `perf-no-network`: networking under either Perf folder. The performance recorder never sends
+  anything ([performance.md](performance.md)).
+- `perf-boundary`: the recorder reached from a file outside its list, or `CraCEF` imported in
+  `Sources/Cra/Perf` anywhere but `PerfCEF.swift`, so it stays removable and testable.
 
 ## Faults
 

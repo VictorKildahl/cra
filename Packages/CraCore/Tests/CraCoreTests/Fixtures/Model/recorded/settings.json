@@ -45,6 +45,8 @@
   "peekInEveryTab" : true,
   "peekLinksToOtherSites" : false,
   "peekOnShiftClick" : false,
+  "perfHidesSiteNames" : true,
+  "perfRecording" : false,
   "searchEngine" : "kagi",
   "searchSuggestions" : false,
   "showSpaceHeaderOnSingleSpace" : false,

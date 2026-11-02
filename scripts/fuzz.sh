@@ -8,7 +8,8 @@ TEST_DIR="$(mktemp -d /tmp/cra-fuzz.XXXXXX)"
 trap 'rm -rf "$TEST_DIR"' EXIT
 mkdir -p build/fuzz
 xcrun swiftc -swift-version 5 -parse-as-library -sanitize=address -g \
-  Packages/CraCore/Sources/CraCore/*.swift Sources/Cra/Services/Import/*.swift \
+  Packages/CraCore/Sources/CraCore/*.swift Packages/CraCore/Sources/CraCore/Perf/*.swift Sources/Cra/Perf/Perf.swift \
+  Sources/Cra/Services/Import/*.swift \
   Sources/Cra/Services/SidebarStore.swift Sources/Cra/Services/SidebarIntegrity.swift Sources/Cra/Services/Persistence.swift \
   Sources/Cra/Services/GitHubLiveClient.swift Sources/Cra/Services/FaviconCache.swift \
   Sources/Cra/Services/SafeStorage.swift Sources/Cra/Services/CraLog.swift Sources/Cra/Services/Scheduler.swift \

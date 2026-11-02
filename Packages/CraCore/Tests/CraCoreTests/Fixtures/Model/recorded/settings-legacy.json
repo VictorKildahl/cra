@@ -35,6 +35,8 @@
   "peekInEveryTab" : false,
   "peekLinksToOtherSites" : true,
   "peekOnShiftClick" : true,
+  "perfHidesSiteNames" : false,
+  "perfRecording" : true,
   "searchEngine" : "duckduckgo",
   "searchSuggestions" : true,
   "showSpaceHeaderOnSingleSpace" : true,
