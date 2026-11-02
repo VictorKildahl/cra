@@ -3,12 +3,6 @@ import AppKit
 /// The tab list's context menus (the SwiftUI rows' .contextMenu, item for item).
 @MainActor
 enum SidebarMenus {
-    private final class Action: NSObject {
-        let run: () -> Void
-        init(_ run: @escaping () -> Void) { self.run = run }
-        @objc func fire() { run() }
-    }
-
     private static func menu() -> NSMenu {
         let m = NSMenu()
         m.autoenablesItems = false
@@ -17,14 +11,14 @@ enum SidebarMenus {
 
     @discardableResult
     private static func add(_ menu: NSMenu, _ title: String, enabled: Bool = true, on: Bool? = nil, _ run: @escaping () -> Void) -> NSMenuItem {
-        let a = Action(run)
-        let item = NSMenuItem(title: title, action: #selector(Action.fire), keyEquivalent: "")
-        item.target = a
-        item.representedObject = a
-        item.isEnabled = enabled
-        if let on { item.state = on ? .on : .off }
-        menu.addItem(item)
-        return item
+        MenuItems.add(menu, title, enabled: enabled, on: on, run)
+    }
+
+    /// A row for a KeyBindings command, with its shortcut (MenuItems.add(_:action:)).
+    @discardableResult
+    private static func add(_ menu: NSMenu, action id: String, _ title: String? = nil, enabled: Bool = true, on: Bool? = nil,
+                            _ run: @escaping () -> Void) -> NSMenuItem {
+        MenuItems.add(menu, action: id, title: title, enabled: enabled, on: on, run)
     }
 
     private static func note(_ menu: NSMenu, _ title: String) {
@@ -62,28 +56,28 @@ enum SidebarMenus {
         }
         guard let item = store.item(id), let tab = item.tab else { return menu }
         if m.pinned {
-            add(menu, "Unpin Tab") { store.unpinTab(id) }
+            add(menu, action: "pinTab", "Unpin Tab") { store.unpinTab(id) }
         } else {
-            add(menu, "Pin Tab") { store.pinTab(id) }
+            add(menu, action: "pinTab", "Pin Tab") { store.pinTab(id) }
         }
         if store.isFavorite(id) {
-            add(menu, "Remove from Favorites") { store.removeFromFavorites(id) }
+            add(menu, action: "favoriteTab", "Remove from Favorites") { store.removeFromFavorites(id) }
         } else {
-            add(menu, "Add to Favorites") { store.addToFavorites(id) }
+            add(menu, action: "favoriteTab", "Add to Favorites") { store.addToFavorites(id) }
         }
         menu.addItem(.separator())
-        add(menu, "Rename…") { ui.renamingID = id }
+        add(menu, action: "renameTab", "Rename…") { ui.renamingID = id }
         if item.title != nil { add(menu, "Use Page Title") { store.rename(id, to: nil) } }
         if m.pinned, tab.liveItemURL == nil { pinnedURLItems(menu, id, navigatedAway: m.navigatedAway, store: store, actions: actions) }
-        add(menu, "Duplicate") { _ = store.duplicateTab(id) }
-        add(menu, "Copy Link") { copy(tab.url) }
-        add(menu, tab.muted ? "Unmute" : "Mute") {
+        add(menu, action: "duplicateTab", "Duplicate") { _ = store.duplicateTab(id) }
+        add(menu, action: "copyURL", "Copy Link") { copy(tab.url) }
+        add(menu, action: "muteTab", tab.muted ? "Unmute" : "Mute") {
             store.setMuted(id, !tab.muted)
             actions.performAction("muteTab:\(id)")
         }
         if m.pinned, m.navigatedAway {
             menu.addItem(.separator())
-            add(menu, "Back to Pinned Page") { actions.resetPinnedTab(id) }
+            add(menu, action: "resetTab", "Back to Pinned Page") { actions.resetPinnedTab(id) }
         }
         menu.addItem(.separator())
         let spaces = submenu(menu, "Move to Space")
@@ -95,11 +89,11 @@ enum SidebarMenus {
         menu.addItem(.separator())
         if m.pinned {
             if store.isSelected(id, window: ui.windowID) || ui.loadedTabIDs.contains(id) {
-                add(menu, "Close and Keep Pinned") { actions.closeTab(id) }
+                add(menu, action: "closeTab", "Close and Keep Pinned") { actions.closeTab(id) }
             }
             add(menu, "Archive Tab") { store.archiveTab(id, reason: .manual) }
         } else {
-            add(menu, "Archive") { actions.closeTab(id) }
+            add(menu, action: "closeTab", "Archive") { actions.closeTab(id) }
         }
         return menu
     }
@@ -246,13 +240,14 @@ enum SidebarMenus {
         let children = panes.map(\.id)
         add(menu, "Separate All Tabs") { store.separateAll(id) }
         // Arc greys it out while the split is closed (no pane to add next to).
-        add(menu, "Add Tab…", enabled: open && children.count < 4) {
+        add(menu, action: "addSplitView", "Add Tab…", enabled: open && children.count < 4) {
             if let first = children.first {
                 actions.focusPane(first)
                 actions.performAction("addSplitView")
             }
         }
-        add(menu, store.item(id)?.split?.orientation == .vertical ? "Convert to Horizontal Split View" : "Convert to Vertical Split View") {
+        add(menu, action: "flipSplitOrientation",
+            store.item(id)?.split?.orientation == .vertical ? "Convert to Horizontal Split View" : "Convert to Vertical Split View") {
             store.flipSplitOrientation(id)
         }
         menu.addItem(.separator())
@@ -276,6 +271,7 @@ enum SidebarMenus {
     /// One pane's submenu under "Tab Options" (Arc: childItem(id, …)).
     private static func paneItems(_ menu: NSMenu, _ id: UUID, store: SidebarStore, actions: SidebarActions) {
         guard let tab = store.item(id)?.tab else { return }
+        // No shortcut glyphs: every pane has this submenu, and the keys act on the focused one.
         add(menu, "Separate from Split View") { store.separateFromSplit(id) }
         menu.addItem(.separator())
         add(menu, tab.muted ? "Unmute" : "Mute") {
@@ -294,17 +290,17 @@ enum SidebarMenus {
         let store = list.store, actions = list.actions
         let space = list.spaceID
         let menu = menu()
-        add(menu, "New Tab") { actions.openCommandBar(.newTab) }
-        add(menu, "New Folder") { actions.performAction("newFolder") }
-        add(menu, "New GitHub Live Folder", enabled: store.liveFolder(.github, inSpace: space) == nil) {
+        add(menu, action: "newTab", "New Tab") { actions.openCommandBar(.newTab) }
+        add(menu, action: "newFolder") { actions.performAction("newFolder") }
+        add(menu, action: "newGitHubLiveFolder", enabled: store.liveFolder(.github, inSpace: space) == nil) {
             actions.performAction("newGitHubLiveFolder")
         }
         menu.addItem(.separator())
         if let s = store.space(space), !store.children(of: s.todayContainerID).isEmpty {
-            add(menu, "Clear Today") { store.clearToday(space) }
+            add(menu, action: "clearToday") { store.clearToday(space) }
         }
         if let s = store.space(space) {
-            add(menu, "Edit Space…") { actions.editSpace(s) }
+            add(menu, action: "editSpace") { actions.editSpace(s) }
         }
         // With the header hidden (one space), its menu items live here.
         if store.hidesSpaceHeader(space) {

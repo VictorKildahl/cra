@@ -339,7 +339,7 @@ enum SpaceMenu {
         profiles.addItem(.separator())
         MenuItems.add(profiles, "New Profile…") { actions.newProfile(id) }
         m.addItem(.separator())
-        MenuItems.add(m, "New Folder") {
+        MenuItems.add(m, action: "newFolder") {
             ui.renamingID = store.createFolder(named: "New Folder", in: space.pinnedContainerID, index: 0).id
         }
         let live = MenuItems.submenu(m, "Live Folders")
@@ -358,13 +358,13 @@ enum SpaceMenu {
             MenuItems.add(export, s.title, enabled: s.id != id) { store.exportSpace(id, intoFolderIn: s.id) }
         }
         m.addItem(.separator())
-        MenuItems.add(m, "Manage Spaces…") { actions.manageSpaces() }
+        MenuItems.add(m, action: "manageSpaces") { actions.manageSpaces() }
         // Arc offers this only while there is one space; Show Space Header brings it back.
         if store.orderedSpaces.count == 1 {
             MenuItems.add(m, "Hide Space Header") { store.settings.showSpaceHeaderOnSingleSpace = false }
         }
         m.addItem(.separator())
-        MenuItems.add(m, "Delete Space") { actions.deleteSpace(space) }
+        MenuItems.add(m, action: "deleteSpace", title: "Delete Space") { actions.deleteSpace(space) }
         return m
     }
 }
@@ -388,6 +388,16 @@ enum MenuItems {
         item.image = image
         if let on { item.state = on ? .on : .off }
         menu.addItem(item)
+        return item
+    }
+
+    /// A row for a KeyBindings command: its name, unless the menu words it its own way (Arc's
+    /// "Pin Tab" for pinTab), and its shortcut on the right, as in the menu bar (#89).
+    @discardableResult
+    static func add(_ menu: NSMenu, action id: String, title: String? = nil, enabled: Bool = true, on: Bool? = nil,
+                    _ run: @escaping () -> Void) -> NSMenuItem {
+        let item = add(menu, title ?? KeyBindingRegistry.shared.action(id)?.name ?? id, enabled: enabled, on: on, run)
+        item.showShortcut(of: id)
         return item
     }
 
@@ -873,23 +883,25 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         let id = itemID
         if item.isSplit, let m = model {
             return SidebarMenus.split(id, panes: m.cells.map { ($0.id, $0.title) }, open: m.selected, store: store, ui: ui, actions: actions) {
-                MenuItems.add($0, "Remove from Favorites") { store.removeFromFavorites(id) }
+                MenuItems.add($0, action: "favoriteTab", title: "Remove from Favorites") { store.removeFromFavorites(id) }
                 $0.addItem(.separator())
             }
         }
         let tileColor = item.tab?.tileColor
         let m = NSMenu()
         m.autoenablesItems = false
-        MenuItems.add(m, "Remove from Favorites") { store.removeFromFavorites(id) }
-        MenuItems.add(m, "Rename…") { ui.renamingID = id }
+        MenuItems.add(m, action: "favoriteTab", title: "Remove from Favorites") { store.removeFromFavorites(id) }
+        MenuItems.add(m, action: "renameTab", title: "Rename…") { ui.renamingID = id }
         if let t = item.tab, t.liveItemURL == nil {
             SidebarMenus.pinnedURLItems(m, id, navigatedAway: t.url != t.savedURL, store: store, actions: actions)
         }
-        MenuItems.add(m, "Copy Link") {
+        MenuItems.add(m, action: "copyURL", title: "Copy Link") {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(item.tab?.url ?? "", forType: .string)
         }
-        if let t = item.tab, t.url != t.savedURL { MenuItems.add(m, "Back to Pinned Page") { actions.resetPinnedTab(id) } }
+        if let t = item.tab, t.url != t.savedURL {
+            MenuItems.add(m, action: "resetTab", title: "Back to Pinned Page") { actions.resetPinnedTab(id) }
+        }
         m.addItem(.separator())
         MenuItems.add(m, "Change Icon…") { [weak self] in self?.pickIcon() }
         if let key = item.tab?.customIconKey {
@@ -915,7 +927,7 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
             store.setTileColor(tileColor, for: grid.spaceFavoriteIDs())
         }
         m.addItem(.separator())
-        MenuItems.add(m, "Close") { actions.closeTab(id) }
+        MenuItems.add(m, action: "closeTab", title: "Close") { actions.closeTab(id) }
         MenuItems.add(m, "Archive") { store.archiveTab(id, reason: .manual) }
         return m
     }

@@ -535,12 +535,12 @@ final class FolderPreviewView: NSView, NSTextFieldDelegate {
         let m = NSMenu()
         m.autoenablesItems = false
         c.extended = true
-        MenuItems.add(m, "Copy Link") {
+        MenuItems.add(m, action: "copyURL", title: "Copy Link") {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(item.url, forType: .string)
         }
         MenuItems.add(m, "Open in Split View") { c.openInSplitView(item.id) }
-        MenuItems.add(m, "Duplicate") { c.duplicate(item.id) }
+        MenuItems.add(m, action: "duplicateTab", title: "Duplicate") { c.duplicate(item.id) }
         m.addItem(.separator())
         MenuItems.add(m, "Archive") { c.archive(item.id) }
         return m

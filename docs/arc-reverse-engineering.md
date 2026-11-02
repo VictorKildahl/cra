@@ -256,6 +256,14 @@ behind a link glyph, sidebar toggle right; developer = lock + full monospace URL
 copy/capture/DevTools/source icons right, nav buttons in the sidebar's title row. Cra
 stores the hosts in `AppSettings.developerHosts`.
 
+The ⌄ after ↻ in that title row (GitHub #89, Arc screenshot from vrubzov1957): "✓ Reload ⌘R",
+"Refresh (Ignore Cache) ⇧⌘R", a separator, "Clear Cookies and Refresh". Arc's context menus show
+the shortcut glyphs of rows that have one. Cra's chevron lists Refresh ✓ ⌘R, Force Refresh ⇧⌘R |
+Clear Cookies, Clear Cache | View Source ⌥⌘U, Developer Tools ⌥⌘I in the menu bar's words, and
+every context-menu row for a KeyBindings command shows its keys, overrides included
+(`MenuItems.add(_:action:)`, `NSMenuItem.showShortcut(of:)`). The split row's per-pane submenus don't:
+each pane has one and the keys act on the focused pane.
+
 Extensions: CEF 154 has no extension API for Alloy-style browsers. A spike
 (`cra://debug?chromeSpike=<url>`) proved the alternative: a Chrome-style Views window
 (`CefWindow` + `CefBrowserView`, `GetChromeToolbarType = CEF_CTT_NONE`, frameless, runtime

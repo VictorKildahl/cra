@@ -430,11 +430,13 @@ private final class DevMenuChevron: NSView {
         let m = NSMenu()
         m.autoenablesItems = false
         let a = actions
-        MenuItems.add(m, "Refresh the Page") { a.performAction("reload") }
-        MenuItems.add(m, "Force Refresh the Page") { a.performAction("hardReload") }
-        m.addItem(.separator())
-        MenuItems.add(m, "View Source") { a.performAction("viewSource") }
-        MenuItems.add(m, "Developer Tools") { a.performAction("devTools") }
+        // Arc's menu (Reload ✓ ⌘R, Refresh (Ignore Cache) ⇧⌘R | Clear Cookies and Refresh) in the
+        // registry's words, with Clear Cache beside Clear Cookies and Cra's developer items under
+        // them (#89).
+        for group in [["reload", "hardReload"], ["clearCookies", "clearCache"], ["viewSource", "devTools"]] {
+            if m.numberOfItems > 0 { m.addItem(.separator()) }
+            for id in group { MenuItems.add(m, action: id, on: id == "reload" ? true : nil) { a.performAction(id) } }
+        }
         m.popUp(positioning: nil, at: NSPoint(x: 0, y: -4), in: self)
     }
 }
@@ -785,12 +787,12 @@ final class SpaceDockView: NSView {
         let store = self.store, ui = self.ui, actions = self.actions
         let m = NSMenu()
         m.autoenablesItems = false
-        MenuItems.add(m, "Edit Space…") { actions.editSpace(space) }
+        MenuItems.add(m, action: "editSpace") { actions.editSpace(space) }
         m.addItem(.separator())
         MenuItems.add(m, "Move Left") { if let i = store.spaceOrder.firstIndex(of: space.id) { store.moveSpace(space.id, to: max(0, i - 1)) } }
         MenuItems.add(m, "Move Right") { if let i = store.spaceOrder.firstIndex(of: space.id) { store.moveSpace(space.id, to: i + 1) } }
         m.addItem(.separator())
-        MenuItems.add(m, "Delete Space…") {
+        MenuItems.add(m, action: "deleteSpace") {
             store.focusSpace(space.id, window: ui.windowID)
             actions.performAction("deleteSpace")
         }

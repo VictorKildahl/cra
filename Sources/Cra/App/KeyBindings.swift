@@ -69,6 +69,9 @@ struct KeyAction: Identifiable, Hashable {
 @MainActor
 @Observable
 final class KeyBindingRegistry {
+    /// The app's one registry (AppDelegate.bindings), for the context menus' shortcut glyphs.
+    static let shared = KeyBindingRegistry()
+
     private(set) var actions: [KeyAction]
     @ObservationIgnored private let overridesFile = JSONStore<[String: [Shortcut]]>("keybindings.json")
     @ObservationIgnored private var overrides: [String: [Shortcut]]
@@ -227,6 +230,17 @@ final class KeyBindingRegistry {
         }
         return list
     }()
+}
+
+extension NSMenuItem {
+    /// Shows a command's shortcut on the right of a context-menu row, as the menu bar does,
+    /// following the user's overrides. Shortcut.key is already unshifted ("r" for ⇧⌘R), which
+    /// is what keyEquivalent wants.
+    @MainActor func showShortcut(of id: String) {
+        guard let s = KeyBindingRegistry.shared.action(id)?.primary else { return }
+        keyEquivalent = s.key
+        keyEquivalentModifierMask = s.flags
+    }
 }
 
 extension Notification.Name {

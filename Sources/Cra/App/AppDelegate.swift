@@ -7,7 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// The store, clock and flags; built the same way by the test hosts.
     let composition = AppComposition()
     var store: SidebarStore { composition.store }
-    let bindings = KeyBindingRegistry()
+    let bindings = KeyBindingRegistry.shared
     let favicons = FaviconCache()
     lazy var engine = SuggestionEngine(store: store, bindings: bindings)
 
@@ -906,10 +906,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let m = NSMenuItem(title: a.name, action: #selector(menuAction(_:)), keyEquivalent: "")
         m.representedObject = a.id
         m.target = self
-        if let s = a.primary {
-            m.keyEquivalent = s.key
-            m.keyEquivalentModifierMask = s.flags
-        }
+        m.showShortcut(of: id)
         return m
     }
 
