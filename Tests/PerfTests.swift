@@ -45,10 +45,17 @@ enum PerfTests {
         return out
     }
 
-    @inline(never) static func busyMainThreadForPerfTest(_ seconds: Double) {
-        let end = Date().addingTimeInterval(seconds)
-        var x = 0.0
-        while Date() < end { x += sin(x) + 1 }
+    /// Busy on the main thread until `done` (checked every 50 ms) or `limit` seconds.
+    @inline(never) static func busyMainThreadForPerfTest(atLeast seconds: Double, limit: Double, until done: () -> Bool) {
+        let start = Date()
+        var x = 0.0, next = start
+        while Date().timeIntervalSince(start) < limit {
+            x += sin(x) + 1
+            if Date() >= next {
+                if Date().timeIntervalSince(start) >= seconds, done() { break }
+                next = Date().addingTimeInterval(0.05)
+            }
+        }
         if x < 0 { print(x) }
     }
 
@@ -105,10 +112,13 @@ enum PerfTests {
         spin(0.3)
         let files = PerfFiles(folder: c.folder)
         var seenDuring = false
-        // The watchdog writes from its own thread while the main thread is still busy; the block
-        // outlasts the 1 s sample that starts at 0.6 s (sample takes a moment to attach).
+        // The watchdog writes from its own thread while the main thread is still busy. The block
+        // lasts until the stack is in the file, however long `sample` takes to attach (a CI runner
+        // is slower than a desk Mac).
         DispatchQueue.main.async {
-            busyMainThreadForPerfTest(2.6)
+            busyMainThreadForPerfTest(atLeast: 1, limit: 15) {
+                files.hangFiles().first.flatMap { files.read(PerfHang.self, from: $0) }.map { $0.stackNote != "sampling" } ?? false
+            }
             seenDuring = !files.hangFiles().isEmpty
         }
         // `sample` takes about 2 s here and longer on a CI runner: wait for the stack, not a time.
@@ -120,7 +130,7 @@ enum PerfTests {
         }
         expect(seenDuring, "the hang file exists before the main thread comes back")
         expect(hang?.stalledMs ?? 0 >= 600, "it says how long the main thread had been blocked")
-        expect(hang.map { $0.endedMs ?? 0 >= 2500 } == true, "and how long it was in the end (\(hang?.endedMs ?? -1))")
+        expect(hang.map { $0.endedMs ?? 0 >= 1000 } == true, "and how long it was in the end (\(hang?.endedMs ?? -1))")
         expect(hang?.stack.contains { $0.contains("busyMainThreadForPerfTest") } == true,
                "with the main thread's stack from sample (\(hang?.stackNote ?? "")): \(hang?.stack.prefix(6) ?? [])")
         expect(hang?.stack.contains { $0.contains("/Users") || $0.contains("0x") } == false, "no paths or addresses")
