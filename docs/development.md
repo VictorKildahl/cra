@@ -138,6 +138,14 @@ swipe (22 trackpad samples of 14 pt) and `cra://debug?scroll=30,30,150,700` scro
 scroll view at x 150, y 700 of the window (from its top left) 30 pt a frame for 30 frames.
 Measure them with `sample <pid> 6 1` and compare the main thread's busy time between builds.
 
+`cra://debug?menuAt=315,24` opens the menu a click at that window point would open (the
+developer-mode ⌄ here), and `&button=right` the context menu, a tab row's for instance.
+Posted mouse events don't reach Cra's views and the rows have no AX menu action, so this is
+the way to check a menu without the pointer. The menu shows up on screen. While it's open,
+it is an AXMenu child of the app: each item's `AXMenuItemCmdChar`, `AXMenuItemCmdModifiers`
+and `AXMenuItemMarkChar` give its shortcut and checkmark, and AXCancel closes it (a posted
+Esc doesn't). The first menu after a launch can close before AX sees it, so open it again.
+
 The sidebar's tab list and space pager are AppKit (`UI/Sidebar/List`): rows are plain
 layer-backed views rebuilt from the store when it changes, a swipe moves the pager's layers
 and the window tint (`PagedGradientView`) in Core Animation, and SwiftUI keeps the favorites,
