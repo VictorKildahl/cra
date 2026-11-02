@@ -28,6 +28,11 @@ final class TabRuntime {
     var sleepRefusal: String?
     /// Whether this page's DevTools are open, closing or asked for (DevToolsToggle).
     var devTools = DevToolsToggle()
+    /// Loads of an extension's page Chromium blocked because the extension wasn't up yet
+    /// (ExtensionPageRetry); back to 0 once a page loads.
+    var extensionPageRetries = 0
+    /// The next of those loads (LiveScheduler runs work only while its handle is kept).
+    var extensionPageRetry: ScheduledWork?
     /// Chrome-style hosting: the page's own window (nil until created, or for Alloy).
     var hostWindow: NSWindow? { browser.hostWindow }
     init(tabID: UUID, browser: CraBrowser) {
@@ -769,9 +774,27 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     func browser(_ browser: CraBrowser, didFinishLoadingURL url: String, title: String, statusCode: Int) {
         guard let id = tabID(of: browser) else { return }
         log(id, "loaded \(site(url, id, browser)) (HTTP \(statusCode))")
+        if statusCode != 0 { runtimes[id]?.extensionPageRetries = 0 }
         guard !browser.isIncognito else { return }
         if url.hasPrefix("chrome://settings") { watchClearBrowsingData(browser) }
         store.recordVisit(url: url, title: title.isEmpty ? (store.item(id)?.tab?.savedTitle ?? "") : title)
+    }
+
+    /// A restored tab's extension page, asked for before --load-extension loaded the extension,
+    /// loads again once it is up (ExtensionPageRetry).
+    func browser(_ browser: CraBrowser, didFailLoadingURL url: String, errorCode: Int) {
+        guard let id = tabID(of: browser), let rt = runtimes[id], !browser.isIncognito else { return }
+        let profile = store.profileDirectoryName(item: id)
+        guard let wait = ExtensionPageRetry.delay(url: url, errorCode: errorCode, attempt: rt.extensionPageRetries, isOn: { ext in
+            ExtensionStore.shared.entries(inProfile: profile).contains { $0.extensionID == ext }
+        }) else { return }
+        rt.extensionPageRetries += 1
+        log(id, "loads \(site(url, id, browser)) again in \(wait) s: the extension wasn't loaded yet")
+        rt.extensionPageRetry = clock.after(wait) { [weak self, weak browser] in
+            // Still this tab's page, and nobody has gone elsewhere meanwhile.
+            guard let self, let browser, self.runtimes[id]?.browser === browser, browser.currentURL == url else { return }
+            browser.loadURL(url)
+        }
     }
 
     func browser(_ browser: CraBrowser, didLoadFavicon image: NSImage, forURL iconURL: String) {

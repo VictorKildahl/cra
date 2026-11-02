@@ -80,6 +80,9 @@ public final class CraBrowser {
         isLoading = loading
         delegate?.browser(self, didChangeLoading: loading, canGoBack: false, canGoForward: false)
     }
+    /// Addresses Cra asked to load, in order.
+    public private(set) var loads: [String] = []
+    public func loadURL(_ url: String) { loads.append(url) }
     public func navigate(to url: String) {
         currentURL = url
         delegate?.browser(self, didChangeURL: url)
