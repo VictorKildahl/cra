@@ -15,6 +15,12 @@ final class ShellView: NSView {
     /// them (docs, 25 Oct 2026). Falls back to `vibrancy` when the layer class is missing.
     let backdropHost = NSView()
     private var backdropLayer: CALayer?
+    /// In fullscreen there is nothing behind the window to capture (the backdrop read black),
+    /// so NSVisualEffectView, and with it Arc's sidebar, swaps its capture for the desktop
+    /// tint (CAChameleonLayer). We do the same (GitHub #83).
+    private var desktopTintLayer: CALayer?
+    var windowFullscreen = false { didSet { if windowFullscreen != oldValue { refreshLift() } } }
+    private var loggedBackdrop: String?
     private let dimLayer = CALayer()
     private let liftLayer = CAGradientLayer()
     /// Set by the window controller: light theme that wants the blur path.
@@ -136,12 +142,22 @@ final class ShellView: NSView {
             vibrancyLift.isHidden = true
             backdropHost.isHidden = false
             CATransaction.begin(); CATransaction.setDisableActions(true)
+            let tint = windowFullscreen && desktopTintLayer != nil
+            backdropLayer?.isHidden = tint
+            desktopTintLayer?.isHidden = !tint
             // Solid: Arc's material is grey 66 passing 52 % of the backdrop, flat 212 while inactive.
             dimLayer.opacity = Float(solidBackdrop ? (windowActive ? 0.30 : 1) : windowActive ? t.blurDim : t.blurDimInactive)
             let top = solidBackdrop ? (windowActive ? 0.26 : 0.83) : windowActive ? t.liftActive : t.liftInactive
             let bottom = solidBackdrop ? top : windowActive ? t.liftActiveBottom : t.liftInactive
             liftLayer.colors = [NSColor(white: 1, alpha: top).cgColor, NSColor(white: 1, alpha: bottom).cgColor]
             CATransaction.commit()
+            // One line per change, so a report of a sharp or off-colour sidebar can be matched
+            // to the window's state in cra.log.
+            let state = "\(tint ? "desktop tint" : "blur"), \(windowActive ? "active" : "inactive")"
+            if state != loggedBackdrop {
+                loggedBackdrop = state
+                CraLog.note("sidebar backdrop: " + state)
+            }
         } else {
             backdropHost.isHidden = true
             vibrancyLift.isHidden = false
@@ -186,8 +202,18 @@ final class ShellView: NSView {
             b.filters = [blur]
             b.setValue(true, forKey: "windowServerAware")
             b.setValue("NSCGSWindowBehindWindowCaptureBackdropGroup", forKey: "groupName")
+            // While the window server rebuilds the capture (activation, a Space switch) the
+            // layer showed the stale, unblurred backdrop: the window behind, sharp (GitHub
+            // #83). NSVisualEffectView's own layer allows a substitute colour for that time.
+            if b.responds(to: NSSelectorFromString("setAllowsSubstituteColor:")) { b.setValue(true, forKey: "allowsSubstituteColor") }
             backdropHost.layer?.addSublayer(b)
             backdropLayer = b
+            if let tintClass = NSClassFromString("CAChameleonLayer") as? CALayer.Type {
+                let t = tintClass.init()
+                t.isHidden = true
+                backdropHost.layer?.addSublayer(t)
+                desktopTintLayer = t
+            }
         }
         dimLayer.backgroundColor = NSColor.black.cgColor
         backdropHost.layer?.addSublayer(dimLayer)
@@ -509,6 +535,7 @@ final class ShellView: NSView {
         backdropHost.frame = bounds
         CATransaction.begin(); CATransaction.setDisableActions(true)
         backdropLayer?.frame = backdropHost.bounds
+        desktopTintLayer?.frame = backdropHost.bounds
         dimLayer.frame = backdropHost.bounds
         liftLayer.frame = backdropHost.bounds
         CATransaction.commit()
