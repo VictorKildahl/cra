@@ -41,8 +41,8 @@ enum PolicyTests {
         expect(noTab.left == [.toggleSidebar, .back(enabled: false), .forward(enabled: false), .reload(loading: false, enabled: false)]
                && noTab.right == [.pinnedExtension("a"), .extensions, .addSplit], "no tab: greyed navigation, the right end as usual")
         let dev = bar(.developer, pinned: ["a"])
-        expect(dev.left == [.toggleSidebar] && dev.right == [.copyURL, .divider, .devTools, .pinnedExtension("a"), .addSplit],
-               "the developer bar: copy · divider · DevTools before the right end")
+        expect(dev.left == [.toggleSidebar] && dev.right == [.copyURL, .divider, .console, .network, .inspect, .pinnedExtension("a"), .addSplit],
+               "the developer bar: copy · divider · Console, Network, Inspect before the right end (Arc 1.170, #88)")
     }
 
     private static func extensionLaunch() {
@@ -88,6 +88,19 @@ enum PolicyTests {
         _ = userClosed.toggle()
         userClosed.didOpen()
         expect(userClosed.didClose() == .none && userClosed.toggle() == .show, "closed from DevTools' own button: the next press opens")
+
+        // The developer bar and ⌥⌘J/⌥⌘C (#88): Chrome's toggle, with the frontend on a panel.
+        var bar = DevToolsToggle()
+        expect(bar.run(.console) == (.show, "console"), "Console on closed DevTools opens them on the Console")
+        bar.didOpen()
+        expect(bar.run(.network) == (.close, nil), "Network on open DevTools closes them, as Chrome's toggle does")
+        expect(bar.run(.network) == (.none, "network") && bar.state == .closing(reopen: true), "pressed while closing: reopened on Network")
+        expect(bar.didClose() == .show, "once closed")
+        bar.didOpen()
+        expect(bar.run(.inspect) == (.show, "inspect") && bar.state == .open, "Inspect never closes: the picker on open DevTools")
+        expect(bar.run(.toggle) == (.close, nil), "⌥⌘I closes")
+        var plain = DevToolsToggle()
+        expect(plain.run(.toggle) == (.show, nil), "⌥⌘I opens DevTools as they were")
     }
 
     private static func featureFlags() {

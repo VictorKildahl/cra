@@ -59,6 +59,8 @@ final class PaneToolbarView: NSView {
     private let placeholderLabel = NSTextField.sidebarLabel(size: 13)
     private let hairline = NSView()
     private let devDivider = NSView()
+    /// Arc's rule between the developer buttons and the extensions.
+    private let devTrailingDivider = NSView()
     private let stripes = DeveloperStripesView()
     /// Arc lifts the whole developer bar ~9% toward white while its address field is edited.
     private let editVeil = NSView()
@@ -73,6 +75,7 @@ final class PaneToolbarView: NSView {
         wantsLayer = true
         hairline.wantsLayer = true
         devDivider.wantsLayer = true
+        devTrailingDivider.wantsLayer = true
         stripes.isHidden = true
         addSubview(stripes)
         placeholderLabel.stringValue = "Search or Enter URL…"
@@ -81,7 +84,7 @@ final class PaneToolbarView: NSView {
         urlButton.onEditingChange = { [weak self] in self?.editVeil.isHidden = !$0 }
         editVeil.wantsLayer = true
         editVeil.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.09).cgColor
-        for v in [hairline, editVeil, devDivider, urlButton, placeholderLabel] as [NSView] {
+        for v in [hairline, editVeil, devDivider, devTrailingDivider, urlButton, placeholderLabel] as [NSView] {
             v.isHidden = true
             addSubview(v)
         }
@@ -249,8 +252,12 @@ final class PaneToolbarView: NSView {
                 return glyph("copy", "link", help: "Copy URL (⇧⌘C)", width: 28) { $0.actions.performAction("copyURL") }
             case .divider:
                 return devDivider
-            case .devTools:
-                return glyph("devtools", "terminal", help: "Developer Tools (⌥⌘I)", width: 28) { $0.actions.performAction("devTools") }
+            case .console:
+                return glyph("console", "terminal", help: "Toggle Console (⌥⌘J)", width: 28) { $0.actions.performAction("jsConsole") }
+            case .network:
+                return glyph("network", "globe", help: "Toggle Network Panel", width: 28) { $0.actions.performAction("networkPanel") }
+            case .inspect:
+                return glyph("inspect", "scope", help: "Inspect Element (⌥⌘C)", width: 28) { $0.actions.performAction("inspectElement") }
             case .pinnedExtension(let id):
                 let e = m.pinned.first { $0.id == id }
                 let b = button("ext:" + id) { ToolbarGlyphButton() }
@@ -274,12 +281,14 @@ final class PaneToolbarView: NSView {
         let l = bar.left.compactMap { view($0) as? ToolbarGlyphButton }
         let r = bar.right.map(view)
         devDivider.layer?.backgroundColor = m.dividerColor.cgColor
+        devTrailingDivider.layer?.backgroundColor = m.dividerColor.cgColor
         let used = Set((l as [NSView] + r).map(ObjectIdentifier.init))
         for (k, b) in buttons where !used.contains(ObjectIdentifier(b)) {
             b.removeFromSuperview()
             buttons[k] = nil
         }
         devDivider.isHidden = !r.contains { $0 === devDivider }
+        devTrailingDivider.isHidden = devDivider.isHidden || r.last === buttons["inspect"]
         left = l
         right = r
 
@@ -322,13 +331,14 @@ final class PaneToolbarView: NSView {
         }
         let leftEnd = left.isEmpty ? 0 : x
         // Right group, from the trailing edge: pinned extensions … Split View 6 pt in; a split pane's
-        // close 4 pt in; developer copy · divider · DevTools spaced like the HStack around them.
+        // close 4 pt in; developer copy | Console, Network, Inspect | spaced as in Arc 1.170 (#88).
         var rx = w - (m.inSplit ? 4 : (right.isEmpty ? 0 : 6))
         var trailing = right
         var devGroup: [NSView] = []
-        if m.kind == .developer, let i = trailing.firstIndex(where: { $0 === devDivider }) {
-            devGroup = Array(trailing[(i - 1)...(i + 1)])
-            trailing.removeSubrange((i - 1)...(i + 1))
+        if m.kind == .developer, let i = trailing.firstIndex(where: { $0 === devDivider }),
+           let end = trailing.firstIndex(where: { $0 === buttons["inspect"] }) {
+            devGroup = Array(trailing[(i - 1)...end])
+            trailing.removeSubrange((i - 1)...end)
         }
         for v in trailing.reversed() {
             let bw = (v as? ToolbarGlyphButton)?.width ?? 26
@@ -336,12 +346,18 @@ final class PaneToolbarView: NSView {
             v.frame = NSRect(x: rx, y: (h - bh) / 2, width: bw, height: bh)
         }
         if !devGroup.isEmpty {
-            if !trailing.isEmpty { rx -= 6 }
+            // Arc: Inspect, 7 pt, a rule, 8 pt, Extensions; copy, 14 pt, a rule, 13 pt, then the
+            // next group (Arc's Capture buttons, which Cra doesn't have).
+            if !trailing.isEmpty {
+                rx -= 8 + 1
+                devTrailingDivider.frame = NSRect(x: rx, y: (h - 14) / 2, width: 1, height: 14)
+                rx -= 7
+            }
             for v in devGroup.reversed() {
                 if v === devDivider {
-                    rx -= 6 + 5 + 1
+                    rx -= 13 + 1
                     v.frame = NSRect(x: rx, y: (h - 14) / 2, width: 1, height: 14)
-                    rx -= 5 + 6
+                    rx -= 14
                 } else {
                     let bw = (v as? ToolbarGlyphButton)?.width ?? 26
                     rx -= bw
@@ -360,10 +376,10 @@ final class PaneToolbarView: NSView {
             let ux = a + (b - a - uw) / 2
             urlButton.frame = NSRect(x: ux, y: (h - 28) / 2, width: uw, height: 28)
         case .developer:
-            // The URL fills half the room after its 8 pt lead; a Spacer(min 8) takes the rest.
+            // Arc's address field (contentPanelTextField) runs from its 8 pt lead to 7 pt before
+            // Copy Link (Arc 1.170, #88); it has no hover, so only clicks and long URLs see its width.
             let start = a + 8
-            let room = max(0, b - start - 6 - 8)
-            urlButton.frame = NSRect(x: start, y: (h - 28) / 2, width: room / 2 + 8, height: 28)
+            urlButton.frame = NSRect(x: start, y: (h - 28) / 2, width: max(0, rightStart - 7 - start), height: 28)
         case .noTab, .emptyPane:
             let s = placeholderLabel.intrinsicContentSize
             let pw = min(ceil(placeholderLabel.attributedStringValue.size().width), max(0, b - a))
@@ -408,14 +424,20 @@ final class PaneToolbarView: NSView {
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: view.bounds.height + 4), in: view)
     }
 
-    // A click anywhere on the bar edits the URL (a pane's click also focuses it); a drag moves
-    // the window, as on Arc's toolbar.
+    // Arc 1.170 opens the command bar from the address only (ToolbarURLButton) or the no-tab
+    // placeholder; a click on the bar's empty space just focuses its pane (GitHub #88), and a
+    // drag moves the window.
     override var mouseDownCanMoveWindow: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { takesClickFromChildWindow }
     override func mouseDown(with event: NSEvent) { press.begin(event) }
     override func mouseDragged(with event: NSEvent) { press.drag(event) }
     override func mouseUp(with event: NSEvent) {
-        if press.finish() { editURL() }
+        guard press.finish() else { return }
+        if !placeholderLabel.isHidden, placeholderLabel.frame.contains(convert(event.locationInWindow, from: nil)) {
+            editURL()
+        } else if let id = paneTabID {
+            actions.focusPane(id)
+        }
     }
 }
 

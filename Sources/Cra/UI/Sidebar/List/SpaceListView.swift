@@ -270,9 +270,10 @@ final class SpaceListView: NSView, NSDraggingSource {
                 let selected = store.isSelected(item.id, window: window)
                 let navigatedAway = pinned && tab.url != tab.savedURL && !tab.savedURL.isEmpty
                 let (img, flip) = icon(tab.iconKey)
+                let subtitle = tab.sidebarSubtitle(navigatedAway: navigatedAway, developerMode: store.settings.isDeveloperMode(url: tab.url))
                 row.content = .tab(TabRowModel(
                     id: item.id, depth: depth, pinned: pinned, title: item.displayTitle, customTitle: item.title != nil,
-                    renameText: item.title ?? item.displayTitle, subtitle: Self.subtitle(tab, navigatedAway: navigatedAway),
+                    renameText: item.title ?? item.displayTitle, subtitle: subtitle,
                     icon: img, flipIcon: flip, githubMark: tab.liveItemURL != nil && tab.customIconKey == nil,
                     editing: renaming == item.id, selected: selected,
                     highlighted: picks.isEmpty ? selected && !placeholder : picks.contains(item.id),
@@ -320,15 +321,6 @@ final class SpaceListView: NSView, NSDraggingSource {
         return Built(rows: out, pinnedCount: pinnedCount, palette: palette,
                      highlightPinned: section == .pinned && !pinnedItems.isEmpty, highlightToday: section == .today,
                      line: drop?.line)
-    }
-
-    /// Arc shows the host under a pinned tab only when it has left the pinned site (navigating
-    /// within the same host shows nothing); a live folder's pull request shows its author.
-    private static func subtitle(_ tab: TabData, navigatedAway: Bool) -> String? {
-        if let author = tab.liveSubtitle, URL(string: tab.url)?.host == "github.com" { return author }
-        guard navigatedAway, let host = URL(string: tab.url)?.host, let saved = URL(string: tab.savedURL)?.host,
-              host.replacingOccurrences(of: "www.", with: "") != saved.replacingOccurrences(of: "www.", with: "") else { return nil }
-        return host.replacingOccurrences(of: "www.", with: "")
     }
 
     /// A line inside the open live folder when there are no pull requests to show, or GitHub

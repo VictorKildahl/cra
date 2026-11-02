@@ -182,6 +182,7 @@ static CraClient* AsCraClient(CefClient* c) {
 - (void)adoptBrowser:(CefRefPtr<CefBrowser>)browser;
 - (void)devToolsBrowserCreated:(CefRefPtr<CefBrowser>)browser;
 - (void)devToolsBrowserClosed;
+- (void)runDevToolsAction;
 - (void)browserClosed;
 - (void)downloadUpdated:(CraDownloadInfo*)download;
 - (CefRefPtr<CefBrowser>)cefBrowser;
@@ -733,6 +734,10 @@ static const char kCraDevToolsHooks[] =
     "if(++n>60){clearInterval(timer);timer=null;var f=make();f.style.position='fixed';f.style.top='1px';f.style.right='4px';f.style.zIndex='2147483647';document.body.appendChild(f);}},150);}"
     "function removeClose(){if(timer){clearInterval(timer);timer=null;}var b=find(document,'#cra-close');if(b)b.remove();}"
     "h.closeWindow=function(){console.log('__cra_devtools_close');};"
+    // Chrome asks the frontend for a panel or the element picker once it reports loadCompleted
+    // (DevToolsWindow::DoAction); -runDevToolsAction queues on __craRun until then.
+    "var lc=h.loadCompleted;h.loadCompleted=function(){var r=lc&&lc.apply(h,arguments);h.__craLoaded=1;"
+    "var q=h.__craRun||[];h.__craRun=[];q.forEach(function(f){f();});return r;};"
     "if(!/[?&]can_dock=/.test(location.search)){installClose();return;}"
     "var sent=false;"
     "h.setInspectedPageBounds=function(b){sent=true;try{console.log('__cra_devtools_bounds:'+JSON.stringify({x:b.x,y:b.y,width:b.width,height:b.height}));}catch(e){}};"
@@ -786,6 +791,7 @@ public:
         if (!frame->IsMain()) return;
         CraDevToolsLog(@"OnLoadEnd %s", frame->GetURL().ToString().c_str());
         if (host_) Prepare(browser, frame);
+        else if (CraBrowser* o = owner_; o && IsFrontend(frame->GetURL().ToString())) [o runDevToolsAction];
     }
 
     static bool IsFrontend(const std::string& url) {
@@ -814,6 +820,7 @@ public:
         // The undockable load that MakeDockable replaced still reports its end.
         if (reloaded_ && url.find("can_dock=") == std::string::npos) return;
         frame->ExecuteJavaScript(kCraDevToolsHooks, frame->GetURL(), 0);
+        if (CraBrowser* o = owner_) [o runDevToolsAction];
     }
 
     bool OnConsoleMessage(CefRefPtr<CefBrowser> browser, cef_log_severity_t level, const CefString& message,
@@ -1838,12 +1845,17 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     if (!_browser) return;
     if (self.hostWindow) {
         // Chrome-style: Chrome docks DevTools inside the page window itself.
+        BOOL open = _browser->GetHost()->HasDevTools();
         _browser->GetHost()->ShowDevTools(CefWindowInfo(), nullptr, CefBrowserSettings(), CefPoint((int)point.x, (int)point.y));
+        // Open DevTools take the action now; new ones when DevToolsClient prepares the frontend.
+        if (open && _devToolsBrowser && !_devToolsBrowser->IsLoading()) [self runDevToolsAction];
         return;
     }
     if (_browser->GetHost()->HasDevTools()) {
         _browser->GetHost()->ShowDevTools(CefWindowInfo(), nullptr, CefBrowserSettings(),
                                           CefPoint((int)point.x, (int)point.y));
+        // A frontend still loading takes the action when DevToolsClient prepares it.
+        if (_devToolsBrowser && !_devToolsBrowser->IsLoading()) [self runDevToolsAction];
         return;
     }
     NSView* host = [self.delegate devToolsHostViewForBrowser:self];
@@ -1872,6 +1884,25 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 
 - (void)showDevTools { [self showDevToolsInspectingPoint:NSZeroPoint]; }
 - (void)closeDevTools { if (_browser) _browser->GetHost()->CloseDevTools(); }
+// The frontend's own API, which Chrome's DevToolsWindow::DoAction calls through DevToolsAPI.
+- (void)runDevToolsAction {
+    NSString* action = _devToolsAction;
+    if (!action || !_devToolsBrowser) return;
+    _devToolsAction = nil;
+    NSString* call;
+    if ([action isEqualToString:@"inspect"]) call = @"enterInspectElementMode()";
+    else if ([@[@"console", @"network", @"elements"] containsObject:action]) call = [NSString stringWithFormat:@"showPanel('%@')", action];
+    else return;
+    CraDevToolsLog(@"frontend %@", call);
+    // Hooked frontends run it on loadCompleted (or at once once loaded); one loaded before the
+    // hooks went in never reports it, so the call goes out after 3 s regardless.
+    NSString* js = [NSString stringWithFormat:@"(function(){var h=window.InspectorFrontendHost,done=false;"
+                    "function run(){if(done)return;done=true;var a=window.InspectorFrontendAPI;if(a)a.%@;}"
+                    "if(!h||h.__craLoaded){run();return;}(h.__craRun=h.__craRun||[]).push(run);setTimeout(run,3000);})();", call];
+    CefRefPtr<CefFrame> f = _devToolsBrowser->GetMainFrame();
+    if (f) f->ExecuteJavaScript(CefStringFromNS(js), f->GetURL(), 0);
+}
+
 - (void)devToolsBrowserCreated:(CefRefPtr<CefBrowser>)browser { _devToolsBrowser = browser; }
 - (void)devToolsBrowserClosed { _devToolsBrowser = nullptr; }
 - (void)executeJavaScript:(NSString*)script inDevTools:(BOOL)inDevTools {

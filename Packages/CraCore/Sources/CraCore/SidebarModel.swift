@@ -86,6 +86,18 @@ public struct TabData: Codable, Equatable {
         self.savedTitle = title
         self.faviconKey = URL(string: url)?.host
     }
+
+    /// The line under the tab's title in the sidebar. A live folder's pull request shows its
+    /// author. Arc 1.170 shows the host under every tab of a site in developer mode (GitHub #88),
+    /// and under a pinned tab only once it has left the pinned site (navigating within the same
+    /// host shows nothing).
+    public func sidebarSubtitle(navigatedAway: Bool, developerMode: Bool) -> String? {
+        if let liveSubtitle, URL(string: url)?.host == "github.com" { return liveSubtitle }
+        guard let host = URL(string: url)?.host?.replacingOccurrences(of: "www.", with: "") else { return nil }
+        if developerMode { return host }
+        guard navigatedAway, let saved = URL(string: savedURL)?.host, host != saved.replacingOccurrences(of: "www.", with: "") else { return nil }
+        return host
+    }
 }
 
 /// Arc's SidebarSplitViewData: a split is a sidebar item whose children are

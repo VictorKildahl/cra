@@ -47,6 +47,8 @@ public final class CraBrowser {
     /// "show" / "close", in the order Cra asked.
     public var devToolsRequests: [String] = []
     public func showDevTools() { hasDevTools = true; devToolsRequests.append("show") }
+    /// The frontend work asked of the next show (a panel, "inspect"); CEF clears it once done.
+    public var devToolsAction: String?
     public func closeDevTools() { hasDevTools = false; devToolsRequests.append("close") }
     public func setAudioMuted(_ muted: Bool) {}
     public private(set) var backgroundProbes = 0

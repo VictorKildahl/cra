@@ -263,17 +263,20 @@ enum BrowserManagerLifecycleTests {
         let id = store.createTab(url: "https://example.test/devtools").id
         manager.show(id, focus: false)
         let browser = manager.runtime(for: id)!.browser
-        manager.toggleDevTools()
+        manager.runDevTools(.toggle)
         manager.browser(browser, didCreateDevToolsView: NSView())
-        manager.toggleDevTools()
-        manager.toggleDevTools()
+        manager.runDevTools(.toggle)
+        manager.runDevTools(.console)
         expect(browser.devToolsRequests == ["show", "close"], "a press while DevTools close asks CEF for nothing yet")
         manager.browserDidCloseDevTools(browser)
-        expect(browser.devToolsRequests == ["show", "close", "show"], "once CEF reports them closed, the press opens them again")
+        expect(browser.devToolsRequests == ["show", "close", "show"] && browser.devToolsAction == "console",
+               "once CEF reports them closed, the press opens them again, on the Console (#88)")
         manager.browser(browser, didCreateDevToolsView: NSView())
-        manager.showDevTools()
-        expect(browser.devToolsRequests.last == "show" && manager.runtime(for: id)!.devTools.state == .open,
-               "Inspect Element on open DevTools keeps them open")
+        manager.runDevTools(.inspect)
+        expect(browser.devToolsRequests.last == "show" && manager.runtime(for: id)!.devTools.state == .open
+               && browser.devToolsAction == "inspect", "Inspect Element on open DevTools keeps them open and arms the picker")
+        manager.runDevTools(.network)
+        expect(browser.devToolsRequests.last == "close" && browser.devToolsAction == nil, "Network on open DevTools closes them")
         manager.closeAll()
     }
 

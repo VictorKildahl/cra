@@ -724,6 +724,8 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
 
     func apply(_ m: TabRowModel) {
         guard m != model else { return }
+        // A subtitle coming or going moves the title (developer mode on a live tab, GitHub #88).
+        if (m.subtitle == nil) != (model?.subtitle == nil) { needsLayout = true }
         model = m
         if m.githubMark { favicon.showGitHubMark(colors: colors) } else { favicon.show(m.icon, flip: m.flipIcon, colors: colors) }
         titleLabel.stringValue = m.title

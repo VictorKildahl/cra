@@ -582,7 +582,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         case "copyURL": copy(currentURL)
         case "copyURLMarkdown": copy("[\(browser?.currentTitle ?? state.title)](\(currentURL))")
         case "viewSource": browser?.viewSource()
-        case "devTools", "jsConsole", "inspectElement": browser?.showDevTools()
+        case "devTools", "jsConsole", "inspectElement":
+            browser?.devToolsAction = ["jsConsole": "console", "inspectElement": "inspect"][id]
+            browser?.showDevTools()
         case "print": browser?.print()
         case "promoteLittleWindow": promote(to: nil)
         // No find bar or capture in little windows; keep them off the main window.

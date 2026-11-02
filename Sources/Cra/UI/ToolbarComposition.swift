@@ -4,8 +4,10 @@ import Foundation
 /// and places the views. Measured against Arc 1.170: the full bar is sidebar toggle ← → ↻ on
 /// the left and pinned extensions, Extensions, Split View on the right; a split pane has only
 /// ← → and its options (focused pane) and close; the developer bar swaps the navigation for
-/// copy · divider · DevTools. The toggle is there only while the sidebar is hidden or floating:
-/// otherwise the sidebar's header carries it (Arc 1.171, GitHub #50).
+/// copy · divider · Console, Network, Inspect (Arc's Toggle Console, Toggle Network Panel and
+/// Inspect Element, GitHub #88; Arc's Capture Window and Capture between them are not in Cra).
+/// The toggle is there only while the sidebar is hidden or floating: otherwise the sidebar's
+/// header carries it (Arc 1.171, GitHub #50).
 struct ToolbarComposition: Equatable {
     enum Kind: Equatable { case noTab, emptyPane, normal, developer }
 
@@ -17,7 +19,9 @@ struct ToolbarComposition: Equatable {
         case reload(loading: Bool, enabled: Bool)
         case copyURL
         case divider
-        case devTools
+        case console
+        case network
+        case inspect
         case pinnedExtension(String)
         case extensions
         case addSplit
@@ -42,7 +46,7 @@ struct ToolbarComposition: Equatable {
             left += [.back(enabled: canGoBack), .forward(enabled: canGoForward)]
             if !inSplit { left.append(.reload(loading: isLoading, enabled: true)) }
         case .developer:
-            right += [.copyURL, .divider, .devTools]
+            right += [.copyURL, .divider, .console, .network, .inspect]
         }
         // Arc's right end: pinned extensions, the Extensions button, then Split View; also on
         // the no-tab bar. A split pane has its options (focused pane only) and close instead.

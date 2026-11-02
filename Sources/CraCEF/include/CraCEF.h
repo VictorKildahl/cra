@@ -139,6 +139,10 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 - (void)setFocused:(BOOL)focused;
 - (void)showDevToolsInspectingPoint:(NSPoint)point;
 - (void)showDevTools;
+/// What the next -showDevTools asks of the frontend, as Chrome's DevToolsToggleAction does: a
+/// panel to select ("console", "network", "elements"), or "inspect" for the element picker. Done
+/// once the frontend is up (at once when DevTools are already open), then cleared.
+@property (nonatomic, copy, nullable) NSString *devToolsAction;
 - (void)closeDevTools;
 - (double)zoomLevel;
 - (void)setZoomLevel:(double)level;
