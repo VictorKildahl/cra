@@ -183,18 +183,21 @@ final class PerfRecorder: @unchecked Sendable {
             return (hangs, s?.marks ?? [], state.visibleSite)
         }
         guard writesFiles, number <= 3 else { return }
-        var hang = PerfHang(session: sessionID, number: number, at: seconds(start), stalledMs: ms,
+        let hang = PerfHang(session: sessionID, number: number, at: seconds(start), stalledMs: ms,
                             mode: PerfStallPolicy.shortMode(mode), marks: marks, site: site,
                             stackNote: number <= config.stacks ? "sampling" : "stacks off")
         let url = files.hang(session: sessionID, number: number)
         write(hang, to: url)
         queue.async { [weak self] in self?.hangFiles[start] = url }
         guard number <= config.stacks else { return }
-        hang.stack = Self.sampleMainThread()
-        hang.stackNote = hang.stack.isEmpty ? "sample gave no main thread" : nil
-        // The pass may have ended while `sample` ran: keep what the main thread wrote.
-        if let now = files.read(PerfHang.self, from: url) { hang.endedMs = now.endedMs }
-        write(hang, to: url)
+        let stack = Self.sampleMainThread()
+        // On the queue, after any `endedMs` the main thread's recovery queued while `sample` ran.
+        queue.sync {
+            var latest = files.read(PerfHang.self, from: url) ?? hang
+            latest.stack = stack
+            latest.stackNote = stack.isEmpty ? "sample gave no main thread" : nil
+            write(latest, to: url)
+        }
     }
 
     /// One second of `/usr/bin/sample` on Cra, every 10 ms, from the watchdog thread.

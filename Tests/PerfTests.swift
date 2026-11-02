@@ -111,9 +111,14 @@ enum PerfTests {
             busyMainThreadForPerfTest(2.6)
             seenDuring = !files.hangFiles().isEmpty
         }
-        spin(3)   // the stack's `sample` takes about 2 s
+        // `sample` takes about 2 s here and longer on a CI runner: wait for the stack, not a time.
+        var hang: PerfHang?
+        for _ in 0..<100 {
+            spin(0.2)
+            hang = files.hangFiles().first.flatMap { files.read(PerfHang.self, from: $0) }
+            if hang?.stackNote != "sampling", hang?.endedMs != nil { break }
+        }
         expect(seenDuring, "the hang file exists before the main thread comes back")
-        let hang = files.hangFiles().first.flatMap { files.read(PerfHang.self, from: $0) }
         expect(hang?.stalledMs ?? 0 >= 600, "it says how long the main thread had been blocked")
         expect(hang.map { $0.endedMs ?? 0 >= 2500 } == true, "and how long it was in the end (\(hang?.endedMs ?? -1))")
         expect(hang?.stack.contains { $0.contains("busyMainThreadForPerfTest") } == true,
