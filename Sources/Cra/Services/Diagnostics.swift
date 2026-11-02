@@ -25,7 +25,7 @@ enum Diagnostics {
         var pending: [(String, CraBrowser)] = []
         for (n, w) in windows.enumerated() {
             let m = w.browsers!
-            var s = "Window \(n + 1)\(w.window?.isKeyWindow == true ? " (key)" : ""): \(m.runtimes.count) live pages, frame \(w.window.map { NSStringFromRect($0.frame) } ?? "-")\n"
+            var s = "Window \(n + 1)\(w.window?.isKeyWindow == true ? " (key)" : ""): \(m.runtimes.count) live pages, frame \(w.window.map { NSStringFromRect($0.frame) } ?? "-"), display \(PageProbe.refreshRate(w.window?.screen))\n"
             for id in m.visibleTabIDs {
                 let item = store.item(id)
                 let incognito = store.isIncognito(item: id)
@@ -127,12 +127,21 @@ enum Diagnostics {
         sysctlbyname("hw.model", nil, &size, nil, 0)
         var model = [CChar](repeating: 0, count: max(size, 1))
         sysctlbyname("hw.model", &model, &size, nil, 0)
-        let screens = NSScreen.screens.map { "\(Int($0.frame.width))x\(Int($0.frame.height))@\(Int($0.backingScaleFactor))x" }
+        let displays = NSScreen.screens.map { screen in
+            let id = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
+            return DisplayDiagnostics(width: Int(screen.frame.width), height: Int(screen.frame.height), scale: Int(screen.backingScaleFactor),
+                                      maximumHz: screen.maximumFramesPerSecond,
+                                      minimumHz: DisplayDiagnostics.hz(interval: screen.maximumRefreshInterval),
+                                      builtIn: CGDisplayIsBuiltin(id) != 0, main: screen == NSScreen.screens.first)
+        }
+        // Chromium switches part of its window tracking off under Stage Manager (crbug 448103577).
+        let stageManager = UserDefaults.standard.persistentDomain(forName: "com.apple.WindowManager")?["GloballyEnabled"] as? Bool ?? false
         var lines = [
             "Cra \(info?["CFBundleShortVersionString"] as? String ?? "?") (\(info?["CFBundleVersion"] as? String ?? "?"))",
             "Chromium \(CraCEFRuntime.chromiumVersion()), CEF \(CraCEFRuntime.cefVersion())",
             "macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion), \(String(cString: model)), \(ProcessInfo.processInfo.physicalMemory >> 30) GB, \(ProcessInfo.processInfo.activeProcessorCount) cores",
-            "Displays: \(screens.joined(separator: ", "))",
+            DisplayDiagnostics.summary(displays),
+            "Stage Manager: \(stageManager ? "on" : "off")",
             "Running from: \(Bundle.main.bundlePath)",
             "Up for: \(Int(ProcessInfo.processInfo.systemUptime / 60)) min (Mac), \(Int(-(NSRunningApplication.current.launchDate ?? Date()).timeIntervalSinceNow / 60)) min (Cra)",
             "Embedded pages: \(EmbeddedPages.isEnabled), Chrome-style hosting: \(CraCEFRuntime.chromeHosting())",

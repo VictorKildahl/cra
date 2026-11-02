@@ -44,11 +44,13 @@ start over.
 
 `cra.log` is Cra's own log: each tab's page opening, showing, loading and closing, and three
 seconds after a tab comes on screen, what its page holds (`blank`, `visibility`, element and
-text counts, `painted` for a first contentful paint) and where Cra put it (view size,
-`window=covered` when another window hides it). `chromium.log` holds Chromium's warnings,
+text counts, `painted` for a first contentful paint, `frameRate` for the animation frames
+it got in half a second) and where Cra put it (view size, `window=covered` when another
+window hides it, `display=` the refresh rate of the display it is on). A visible page with
+`frameRate=0` was never asked to draw; frames without `painted` never reached the screen. `chromium.log` holds Chromium's warnings,
 failed page loads and crashed renderers. Each launch keeps the last one's as `*.previous.log`.
 Logs name sites by host only. Help ▸ Export Diagnostics… zips both with the GPU report,
-the on-screen pages' state, settings, extensions and the last week's crash reports, with
+the displays and their refresh rates, whether Stage Manager is on, the on-screen pages' state, settings, extensions and the last week's crash reports, with
 addresses cut to their host; `cra://debug?exportDiagnostics=<path>` does the same without
 the save panel.
 

@@ -87,7 +87,38 @@ enum BrowserManagerLifecycleTests {
         await nowPlayingPictureInPictureCase()
         pageColoursCase()
         await sleepCase("malformed or missing replies cannot authorize sleeping", reply: nil) { _, _ in }
+        await pageProbeCase()
         print("Browser manager lifecycle: \(checks) checks passed")
+    }
+
+    /// The line cra.log gets about a page on screen (#80): how many frames the page was asked
+    /// for, and which display's refresh rate its window follows.
+    @MainActor
+    private static func pageProbeCase() async {
+        _ = NSApplication.shared
+        NSApp.setActivationPolicy(.prohibited)
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let runtime = manager.ensureRuntime(for: store.createTab(url: "https://example.test/probe").id)!
+        var line: String?
+        PageProbe.run(runtime.browser) { line = $0 }
+        expect(runtime.browser.lastParams.contains(#""awaitPromise":true"#) && runtime.browser.lastParams.contains("frameRate"),
+               "the probe waits for the page to count its frames")
+        let page = #"{"blank":false,"ready":"complete","visibility":"visible","painted":false,"frameRate":0}"#
+        let reply = try! JSONSerialization.data(withJSONObject: ["result": ["type": "string", "value": page]])
+        runtime.browser.reply(to: "Runtime.evaluate", with: String(decoding: reply, as: UTF8.self))
+        await drainMainQueue()
+        expect(line?.hasSuffix("visibility=visible viewport=? scrollHeight=? elements=? text=? painted=0 frameRate=0") == true,
+               "a visible page that was never asked to draw reads frameRate=0")
+
+        // Off every screen, as in a headless run: the window follows no display.
+        let window = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 20, height: 20),
+                              styleMask: .borderless, backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        window.contentView!.addSubview(runtime.browser.containerView)
+        expect(PageProbe.viewState(runtime).hasSuffix(" display=none"), "the view state names the display the page's window is on")
+        manager.closeAll()
     }
 
     @MainActor
