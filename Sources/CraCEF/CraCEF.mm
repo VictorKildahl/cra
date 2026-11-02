@@ -448,6 +448,45 @@ static void ObserveExtensionSettings(CefRefPtr<CefRequestContext> context) {
     }
 }
 
+// Secure DNS lives in Local State, the global preference manager, not in a profile (#110).
+// Picking a provider changes mode and templates one after the other: one call for both.
+static void (^g_secureDNSHandler)(void) = nil;
+static bool g_secureDNSChangePending = false;
+static std::vector<CefRefPtr<CefRegistration>> g_secureDNSObservers;
+
+static void NotifySecureDNS() {
+    if (!g_secureDNSHandler || g_secureDNSChangePending || g_quitting) return;
+    g_secureDNSChangePending = true;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        g_secureDNSChangePending = false;
+        if (g_secureDNSHandler && !g_quitting) g_secureDNSHandler();
+    });
+}
+
+class SecureDNSObserver : public CefPreferenceObserver {
+public:
+    void OnPreferenceChanged(const CefString& name) override { NotifySecureDNS(); }
+private:
+    IMPLEMENT_REFCOUNTING(SecureDNSObserver);
+};
+
+static void ObserveSecureDNS() {
+    CefRefPtr<CefPreferenceManager> local = CefPreferenceManager::GetGlobalPreferenceManager();
+    if (!local) return;
+    CefRefPtr<SecureDNSObserver> observer = new SecureDNSObserver();
+    for (const char* name : {"dns_over_https.mode", "dns_over_https.templates"}) {
+        if (CefRefPtr<CefRegistration> r = local->AddPreferenceObserver(name, observer)) g_secureDNSObservers.push_back(r);
+    }
+}
+
+static NSString* SecureDNSPreference(const char* name) {
+    if (!g_contextInitialized || g_quitting) return nil;
+    CefRefPtr<CefPreferenceManager> local = CefPreferenceManager::GetGlobalPreferenceManager();
+    CefRefPtr<CefValue> value = local ? local->GetPreference(name) : nullptr;
+    if (!value || value->GetType() != VTYPE_STRING) return nil;
+    return NSStringFromCef(value->GetString());
+}
+
 /// Profiles other than the global Default one get the same preferences once they load,
 /// then create the browsers that waited for them.
 class ProfileContextHandler : public CefRequestContextHandler {
@@ -605,7 +644,9 @@ public:
         CEF_REQUIRE_UI_THREAD();
         ApplyProfilePreferences(CefRequestContext::GetGlobalContext());
         ObserveExtensionSettings(CefRequestContext::GetGlobalContext());
+        ObserveSecureDNS();
         g_contextInitialized = true;
+        NotifySecureDNS();
         NSArray<CraBrowser*>* pending = [g_pendingCreation copy];
         [g_pendingCreation removeAllObjects];
         for (CraBrowser* b in pending) {
@@ -2401,6 +2442,7 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
     g_incognitoContext = nullptr;
     g_profileContexts.clear();
     g_extensionSettingsObservers.clear();
+    g_secureDNSObservers.clear();
     g_waitingForProfile = nil;
     CefShutdown();
 }
@@ -2439,6 +2481,12 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 }
 + (void)setExtensionSettingsChangeHandler:(void (^)(void))handler {
     g_extensionSettingsHandler = [handler copy];
+}
++ (NSString*)secureDNSMode { return SecureDNSPreference("dns_over_https.mode"); }
++ (NSString*)secureDNSTemplates { return SecureDNSPreference("dns_over_https.templates"); }
++ (void)setSecureDNSChangeHandler:(void (^)(void))handler {
+    g_secureDNSHandler = [handler copy];
+    if (g_contextInitialized) NotifySecureDNS();
 }
 + (void)sendBrowserDevToolsMethod:(NSString*)method params:(NSString*)params
                        completion:(void (^)(NSString* _Nullable, NSString* _Nullable))completion {

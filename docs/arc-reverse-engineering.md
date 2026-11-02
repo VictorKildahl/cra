@@ -2233,3 +2233,17 @@ was frontmost, 1x region captures and 100 fps recordings; test tabs archived aft
   dots. A folder without a peek opens as usual. Arc's window state then has no entry for it. So a click on a
   closed folder that keeps tabs in sight means "close", keeping only the open tab (as the 29 Oct folder-peek
   notes found). Cra: FolderPeek.clickOpens.
+
+## Secure DNS (Arc 1.171, 2 Nov 2026, issue #110, live net log)
+- [O] Arc leaves Chromium's default. Victor's Arc `Local State` has no `dns_over_https` key, and a net log of Arc
+  started with `--log-net-log` (in the background, no clicks) shows `secure_dns_mode: 1` (automatic) with
+  `doh_config.servers: []` in every DNS config event: the system resolver, encrypted only when it is a known DoH
+  server. No Arc policy is installed. The binary's `dns.google` templates are Chromium's own provider list.
+- [O] An Arc with `"mode": "secure"` and `https://dns.google/dns-query{?dns}` (the #110 report) is what Chromium
+  writes when Google is picked in arc://settings/security, not something Arc seeds.
+- Cra: no change to the default, so a work network's own DNS keeps resolving its internal names. CEF builds the
+  same provider list as Chrome (OS default, custom, DNS4EU, Cloudflare, CleanBrowsing, OpenDNS, Google) in
+  chrome://settings/security; a choice persists in Cra's `Chromium/Local State` across restarts. `cra.log` says
+  what is in effect at launch and after each change (`secure dns: automatic, no provider (system resolver)`, `secure
+  via dns.google`, `off`), and Export Diagnostics' summary has a `Secure DNS:` line (`SecureDNS` in CraCore, hosts
+  only).
