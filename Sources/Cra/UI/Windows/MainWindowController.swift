@@ -31,6 +31,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var swipeTravel: CGFloat = 0
     private var swipeSamples: [(time: TimeInterval, dx: CGFloat)] = []
     private var swipeDetent = 0
+    /// Shift + wheel over the sidebar adding up toward a space change.
+    private var wheelSpaceSwitch = WheelSpaceSwitch()
     /// The Library's reveal a swipe started from: 0 on the first space, 1 in the Library; nil
     /// when the swipe can only page between spaces.
     private var librarySwipeFrom: CGFloat?
@@ -1540,6 +1542,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             if !event.hasPreciseScrollingDeltas { self.showListKnobs() }
             // The momentum tail of a space swipe belongs to the swipe, not the tab list.
             if !event.momentumPhase.isEmpty { return self.swipeAxis == .horizontal ? nil : event }
+            // A wheel turned sideways, or with Shift (which macOS turns sideways), pages
+            // between spaces over the sidebar like Arc (issue #93).
+            if !event.hasPreciseScrollingDeltas, abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) {
+                return self.wheelSwitchesSpace(event) ? nil : event
+            }
             // The floating sidebar is in its own panel (FloatingSidebarController): its swipes
             // come from that window.
             let host = self.shell.sidebarHost
@@ -1747,13 +1754,44 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// The Spaces page's cards under the pointer are scrolled to their end (or there are none).
     private func spacesStripAtEnd(_ event: NSEvent) -> Bool {
-        guard let root = shell.sidebarHost.window?.contentView?.superview else { return false }
-        var v = root.hitTest(event.locationInWindow)
-        while let view = v, !(view is NSScrollView && (view as? NSScrollView)?.hasHorizontalScroller == true) { v = view.superview }
         // Arc ignores a swipe over the Library's rail.
-        guard let strip = v as? NSScrollView else { return false }
+        guard let strip = spacesStrip(at: event) else { return false }
         let clip = strip.contentView
         return clip.bounds.minX >= (strip.documentView?.frame.width ?? 0) - clip.bounds.width - 1
+    }
+
+    /// The Spaces page's row of cards under the pointer.
+    private func spacesStrip(at event: NSEvent) -> NSScrollView? {
+        guard let root = shell.sidebarHost.window?.contentView?.superview else { return nil }
+        var v = root.hitTest(event.locationInWindow)
+        while let view = v, !(view is NSScrollView && (view as? NSScrollView)?.hasHorizontalScroller == true) { v = view.superview }
+        return v as? NSScrollView
+    }
+
+    /// Shift + wheel, or a sideways wheel, over the sidebar: past a flick the next or previous
+    /// space comes in on the space change's spring, and before the first space the Library
+    /// slides in, as a swipe would bring it (Arc 1.171, WheelSpaceSwitch). Returns false for a
+    /// wheel the sidebar doesn't take.
+    private func wheelSwitchesSpace(_ event: NSEvent) -> Bool {
+        let host = shell.sidebarHost
+        guard shell.sidebarVisible || shell.floatingSidebar, event.window != nil, event.window === host.window,
+              host.bounds.contains(host.convert(event.locationInWindow, from: nil)), !isIncognito else { return false }
+        let dx = event.scrollingDeltaX
+        // On the Spaces page the cards scroll first; at their end the wheel leaves the Library, and
+        // over the rail it leaves at once (Arc).
+        if sidebarUI.libraryPage == .spaces, spacesStrip(at: event) != nil, dx > 0 || !spacesStripAtEnd(event) { return false }
+        let step = wheelSpaceSwitch.step(dx: dx, at: event.timestamp)
+        guard step != 0 else { return true }
+        let order = store.spaceOrder
+        // Where the Library is headed, if it is sliding.
+        let inLibrary = librarySettleSpring.map { $0.target >= 1 } ?? (sidebarUI.libraryPage != nil)
+        switch WheelSpaceSwitch.target(step: step, index: order.firstIndex(of: focusedSpaceID) ?? 0, count: order.count,
+                                       inLibrary: inLibrary, libraryAllowed: !shell.floatingSidebar && shell.sidebarVisible) {
+        case .space(let i): store.focusSpace(order[i], window: windowID)
+        case .openLibrary, .closeLibrary: toggleLibrary()
+        case nil: break
+        }
+        return true
     }
 
     /// A space swipe of `steps` trackpad samples `dx` apart, 8 ms apart (cra://debug?swipe=).

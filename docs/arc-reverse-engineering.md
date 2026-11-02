@@ -2247,3 +2247,28 @@ was frontmost, 1x region captures and 100 fps recordings; test tabs archived aft
   what is in effect at launch and after each change (`secure dns: automatic, no provider (system resolver)`, `secure
   via dns.google`, `off`), and Export Diagnostics' summary has a `Secure DNS:` line (`SecureDNS` in CraCore, hosts
   only).
+
+## Shift + wheel switches spaces (Arc 1.171, 2 Nov 2026, issue #93, live Arc, HID wheel events)
+
+Victor's Arc (2 spaces, Victor and JYSK), the pointer over the sidebar's list, line-unit wheel events posted at the HID
+tap with a real Shift key held around them; the space read from each window's `sidebarSpaceName` AX frames.
+- [O probe] macOS turns Shift + vertical wheel into a horizontal wheel before the app sees it: `scrollingDeltaX` =
+  the posted lines (1.0 per line, point delta 8), `scrollingDeltaY` 0, not precise, no phases, Shift in the flags.
+  A sideways wheel without Shift arrives the same way (point delta 10 per line) without the flag.
+- [O static] `PageSwipeController.nonGesturalScrollState {cumulativeDistance, lastEventTime, lastTriggerTime}`.
+- [O] Over the sidebar both Shift + wheel and a sideways wheel page between spaces. Negative `scrollingDeltaX` = the
+  next space, positive = the previous one (as two fingers moving right go back). No wrap at the last space; before
+  the first space the Library comes in (its Spaces page here), and the opposite flick takes it out again, over the
+  rail as over the cards (cards that fit have nothing to scroll). Over the page: nothing. Vertical wheel: nothing.
+- [O] Distance: one 1-line event never switches; one 2-, 3- or 6-line event always does. Two 1-line events switch
+  35 ms apart (4/4), 45 ms apart half the time (1/2 + borderline runs at 50 ms), 65, 80, 150 ms apart never
+  (0/6); eight notches 100 ms apart never. So quick events add up and a gap of ~45 ms forgets them.
+- [O] Cooldown: 3-line events every ~22 ms switched once for bursts up to 0.245 s long, twice for 0.254–0.306 s:
+  one switch per 0.25 s. Ten 1-line events 30 ms apart (first switch at the 2nd event) switched once, so what
+  arrives during the cooldown is dropped.
+- [O 120 fps] The switch animates like a space change: the header slides in and the tint follows, ~0.15–0.2 s.
+- Cra: `WheelSpaceSwitch` (CraCore) with distance > 1 line, pause 45 ms, cooldown 0.25 s; the window controller's
+  scroll monitor feeds it non-precise horizontal wheels over the sidebar (docked or floating, not incognito). A
+  step focuses the space on Cra's usual space-change spring (Dia's 0.4 s, slower than Arc's here), or slides the
+  Library in or out like its button. On the Spaces page the cards take the wheel first (10 pt per line, as in Arc)
+  and the wheel leaves the Library only at their end.
