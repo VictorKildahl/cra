@@ -2124,9 +2124,11 @@ Two new Arc windows, both with View ▸ Hide Sidebar and a tab selected, capture
   the old list, then plays the ordinary space switch (list slides, theme cross-fades, ~300 ms): the window follows
   the tab, which sits at the top of the new space's Today, selected, page unchanged. Recording `arc-move.mov`
   (scratch, 40 fps), not kept.
-- [U] What the space the tab left selects afterwards, and whether the sidebar's Move to ▸ also follows: other
+- Reported by Anoninz on #86, not captured here: the sidebar's right-click Move to ▸ <space> on the open tab
+  follows too (the row leaves, Arc switches to that space and selects the tab).
+- [U] What the space the tab left selects afterwards, and what Move to ▸ does on a tab that isn't open: other
   sessions were driving Arc at the time and a posted ⌃2 never reached the window.
 - Cra: `SidebarStore.moveTabAndFollow` for the command bar's Move Tab to <space> and the new Move Tab to Space N
   (⌃⌘1–9, Cra's own: ⌘ added to Go to Space N; neither Arc nor macOS binds ⌃⌘ + a digit). A pane brings its split.
-  The sidebar menu's Move to Space keeps the window where it is. Whatever moves, a window that had it open in the
+  The sidebar menu's Move to Space follows when it moves the open tab or its split; another tab moves on its own. Whatever moves, a window that had it open in the
   old space opens the next tab there, picked as on close.
