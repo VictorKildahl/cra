@@ -4,21 +4,32 @@ import CraCEF
 /// What a page holds, asked from the page itself: a blank tab tells apart a navigation that
 /// never committed (about:blank), a page Chromium thinks is hidden, one that has content but
 /// never painted it, and one that is simply empty.
+///
+/// `frameRate` counts animation frames for half a second. A visible page gets one per display
+/// refresh; 0 means Chromium's compositor never asked it to draw. Frames without `painted`
+/// mean they were drawn but never reached the screen (#80).
 @MainActor
 enum PageProbe {
     private static let script = """
-        JSON.stringify({blank: location.href === 'about:blank', ready: document.readyState, visibility: document.visibilityState,
-          viewport: innerWidth + 'x' + innerHeight + '@' + devicePixelRatio,
-          scrollHeight: document.documentElement ? document.documentElement.scrollHeight : 0,
-          elements: document.getElementsByTagName('*').length,
-          text: document.body ? document.body.textContent.length : -1,
-          painted: performance.getEntriesByName('first-contentful-paint').length > 0})
+        new Promise(done => {
+          let frames = 0, counting = true;
+          const tick = () => { if (counting) { frames++; requestAnimationFrame(tick); } };
+          requestAnimationFrame(tick);
+          setTimeout(() => { counting = false;
+            done(JSON.stringify({blank: location.href === 'about:blank', ready: document.readyState, visibility: document.visibilityState,
+              viewport: innerWidth + 'x' + innerHeight + '@' + devicePixelRatio,
+              scrollHeight: document.documentElement ? document.documentElement.scrollHeight : 0,
+              elements: document.getElementsByTagName('*').length,
+              text: document.body ? document.body.textContent.length : -1,
+              painted: performance.getEntriesByName('first-contentful-paint').length > 0,
+              frameRate: frames * 2})); }, 500);
+        })
         """
 
     /// One line ("ready=complete visibility=visible …"), or why there is none.
     static func run(_ browser: CraBrowser, completion: @escaping (String) -> Void) {
         guard browser.isCreated, !browser.isClosed else { completion("no browser yet"); return }
-        let body = try? JSONSerialization.data(withJSONObject: ["expression": script, "returnByValue": true])
+        let body = try? JSONSerialization.data(withJSONObject: ["expression": script, "returnByValue": true, "awaitPromise": true])
         var answered = false
         let finish: (String) -> Void = { line in
             guard !answered else { return }
@@ -36,7 +47,7 @@ enum PageProbe {
                     finish("probe failed: \(error ?? "no result")")
                     return
                 }
-                finish(["blank", "ready", "visibility", "viewport", "scrollHeight", "elements", "text", "painted"]
+                finish(["blank", "ready", "visibility", "viewport", "scrollHeight", "elements", "text", "painted", "frameRate"]
                     .map { "\($0)=\(fields[$0].map { "\($0)" } ?? "?")" }.joined(separator: " "))
             }
         }
@@ -60,7 +71,14 @@ enum PageProbe {
         // fine; hidden in a window on screen is not.
         if let w = views.first?.window {
             s += " window=\(w.occlusionState.contains(.visible) ? "on screen" : "covered")\(NSApp.isActive ? "" : " app=inactive")"
+            // Chromium times the page's frames to the display its own window is on.
+            s += " display=\(refreshRate(w.screen))"
+            if let host = rt.hostWindow, host.screen != w.screen { s += " pageDisplay=\(refreshRate(host.screen))" }
         }
         return s
+    }
+
+    static func refreshRate(_ screen: NSScreen?) -> String {
+        screen.map { "\($0.maximumFramesPerSecond)Hz" } ?? "none"
     }
 }
