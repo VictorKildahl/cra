@@ -2063,3 +2063,18 @@ curves fitted per frame. "p" = Library reveal progress, 0 = space, 1 = Library o
   mid-swipe flashed a system panel). The Spaces page follows Arc: sidebar = window − 56 pt, live on resize; cards scroll
   sideways under two fingers (over card lists too) and Shift+wheel; a swipe that starts with the cards at their
   end leaves the Library; the brush's theme editor sits flush with the card's right edge.
+
+## Hidden sidebar with two windows (Arc 1.171, 2 Nov 2026, issue #82, live Arc, HID pointer, window-id captures)
+
+Two new Arc windows, both with View ▸ Hide Sidebar and a tab selected, captured per window with
+`screencapture -l` (each window's own pixels, even where another window covers it).
+- [O] Stacked at the same frame, the pointer at the shared left edge: only the front (key) window's sidebar
+  comes out; the back window stays hidden and stays behind.
+- [O] The front window moved 400 pt right, so the back window's edge is uncovered and on top under the pointer:
+  the back (non-key) window does not reveal. The same motion at the key window's edge reveals it. So Arc
+  reveals only in the key window, not in whichever window is under the pointer.
+- [O] A pointer jump into the strip did not reveal; moving inside it did (a few points up or down). Cra
+  reveals on arrival.
+- [U] An inactive Arc (another app frontmost); hidden-sidebar windows of other apps over Arc's edge.
+- Cra: `FloatingSidebarController.isKey` gates both reveal paths (the 30 Hz poll and the shell's tracking
+  area): this window, or one of its child windows (page, DevTools, the floating panel), must be key.
