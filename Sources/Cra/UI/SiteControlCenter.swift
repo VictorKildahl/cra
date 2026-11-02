@@ -302,6 +302,11 @@ private class SiteTile: SiteHoverView {
         glyph.imageScaling = .scaleProportionallyDown
         addSubview(glyph)
         if !help.isEmpty { _ = ArcTooltipAnchorView.attach(to: self, help: help) }
+        // A button to VoiceOver, like the popover's other controls.
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+        setAccessibilityLabel(help)
+        glyph.setAccessibilityElement(false)
         refresh()
     }
 
@@ -351,7 +356,10 @@ private final class SiteExtensionTile: SiteTile {
         pinGlyph.frame = NSRect(x: 0, y: 0, width: 14, height: 14)
         badge.addSubview(pinGlyph)
         _ = ArcTooltipAnchorView.attach(to: badge, help: pinned ? "Unpin" : "Pin")
+        badge.setAccessibilityElement(true)
+        badge.setAccessibilityRole(.button)
         badge.setAccessibilityLabel(pinned ? "Unpin" : "Pin")
+        pinGlyph.setAccessibilityElement(false)
         refresh()
     }
 

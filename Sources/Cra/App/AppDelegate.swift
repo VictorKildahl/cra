@@ -308,6 +308,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Arc: opening it again selects the open one (GitHub #38).
     /// `profile` is the Chromium profile folder whose extension asked, nil for the focused page's.
     func openExtensionPage(_ url: String, window: UUID, profile: String? = nil) {
+        // Extensions run in the normal profile, so Chrome opens their pages in a normal window:
+        // in an incognito one the page can't load (#107). Incognito is Default's off the record.
+        var window = window, profile = profile
+        if mainWindows.first(where: { $0.windowID == window })?.isIncognito == true {
+            let normal = useNormalWindow()
+            if !normal.isIncognito {
+                window = normal.windowID
+                profile = profile ?? "Default"
+                normal.showWindow(nil)
+            }
+        }
         let page = { (u: String) in u.split(separator: "#", maxSplits: 1).first.map(String.init) ?? u }
         let space = { (id: UUID) in ExtensionPagePlacement.Space(id: id, profile: self.store.profileDirectoryName(space: id)) }
         let open = store.allTabs().compactMap { t -> (tab: UUID, space: UUID)? in
