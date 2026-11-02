@@ -28,6 +28,13 @@ public enum FolderPeek {
         return out
     }
 
+    /// Whether a click on a folder's row opens it. A folder keeping tabs in sight closes instead,
+    /// keeping only the open tab listed (`expanding(_:false:)`), so a folder showing the open tab
+    /// doesn't open from a click at all (Arc 1.171, real clicks, 2 Nov 2026).
+    public static func clickOpens(expanded: Bool, peeked: Bool) -> Bool {
+        !expanded && !peeked
+    }
+
     /// The peeks once `tab` closes (⌘W) or leaves the sidebar.
     public static func removing<ID: Hashable>(_ tab: ID, peeks: [ID: [ID]]) -> [ID: [ID]] {
         var out: [ID: [ID]] = [:]

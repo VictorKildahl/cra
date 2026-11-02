@@ -2195,12 +2195,20 @@ was frontmost, 1x region captures and 100 fps recordings; test tabs archived aft
   1 pt outline at ~69 % of the fill; fill 220/226/184 at the top to 208/218/163 at the bottom over a dark page on a
   yellow/green theme (`ShinyToastBackgroundBasedPalette`). It springs in from its top centre (width 0.41 → 1.04 at
   ~0.2 s → 1.0 by ~0.4 s, i.e. ≈0.3 s response, damping 0.67), stays ~4.85 s and shrinks into its top while fading in
-  ~80 ms. [U] Whether a second ⌘Return restarts its timer; the fill on other themes. Cra: BackgroundTabToast.
+  ~80 ms. Another ⌘Return while it is up restarts its time (gone 4.77 s after the last one) and bumps it,
+  width 1 → 1.044 (~40 ms) → 1 by ~0.2 s, rather than springing in again. On the default theme in dark mode
+  (JYSK space) it is dark with white text: 43/24/102 → 33/19/79, outline 26/15/62, i.e. the same hue at
+  saturation 0.76, brightness 0.40 → 0.31 (outline 0.24); the light one is saturation 0.19 → 0.25, brightness
+  0.89 → 0.85 (outline 0.61) in the theme's hue. Cra: BackgroundTabToast.
 - [O] Return on a "Switch to Tab" row for a pinned tab two closed folders down (Netfinder ▸ Endpoints ▸ tab): no folder
   opens. The tab is listed one level under the outermost closed folder (its row slides in, ~0.15 s), Endpoints stays
   hidden, and the folder's glyph gets three dots (2 pt, 4 pt pitch). StorableWindows.json keeps it per window as
   `expandedItems: [folder, {"peeked": {"_0": [tab ids]}}]`; the tab stays listed after another tab is picked. The bar
   lists only the window's space's tabs; a typed URL puts the typed row first and the "Switch to Tab" row second.
   Arc also has Tabs ▸ Reveal Tab in Sidebar (`revealTabInSidebar`). Cra: FolderPeek (CraCore),
-  WindowPrefs.peekedFolders, SidebarStore.peekedTabs/setExpanded, FolderGlyphView's dots. [U] What a click on a
-  peeked folder does in Arc (Cra opens it and drops the peek; closing it again keeps the open tab listed).
+  WindowPrefs.peekedFolders, SidebarStore.peekedTabs/setExpanded, FolderGlyphView's dots.
+- [O] Real clicks (cliclick, Victor idle) on a peeked folder never open it: with the peeked tab open it stays
+  closed with the tab listed (two clicks), with another tab open it closes for good and drops the peek and the
+  dots. A folder without a peek opens as usual. Arc's window state then has no entry for it. So a click on a
+  closed folder that keeps tabs in sight means "close", keeping only the open tab (as the 29 Oct folder-peek
+  notes found). Cra: FolderPeek.clickOpens.
