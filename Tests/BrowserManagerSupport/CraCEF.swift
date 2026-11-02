@@ -55,7 +55,11 @@ public final class CraBrowser {
     public func probeBackgroundColor() { backgroundProbes += 1 }
     public func setFocused(_ focused: Bool) {}
     public private(set) var pictureInPictureRequests = 0
-    public func requestPictureInPicture(automatic: Bool) { pictureInPictureRequests += 1 }
+    public private(set) var automaticPictureInPictureRequests = 0
+    public func requestPictureInPicture(automatic: Bool) {
+        pictureInPictureRequests += 1
+        if automatic { automaticPictureInPictureRequests += 1 }
+    }
     public func exitPictureInPicture() { isInPictureInPicture = false }
     public func togglePictureInPicturePlayback() {}
     public func skipPictureInPicture(by seconds: Double) {}

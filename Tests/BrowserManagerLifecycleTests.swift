@@ -85,6 +85,7 @@ enum BrowserManagerLifecycleTests {
         await beforeUnloadCase()
         nowPlayingCase()
         await nowPlayingPictureInPictureCase()
+        await leaveVideoTabPictureInPictureCase()
         pageColoursCase()
         await sleepCase("malformed or missing replies cannot authorize sleeping", reply: nil) { _, _ in }
         await pageProbeCase()
@@ -350,6 +351,37 @@ enum BrowserManagerLifecycleTests {
             expect(ra.browser.pictureInPictureRequests - before == fallback,
                    "\(label) \(fallback == 1 ? "falls back to" : "does not also get") the page request")
         }
+        manager.closeAll()
+    }
+
+    /// Leaving a video tab (Arc's automatic Picture in Picture) asks the page through the protocol as
+    /// a user gesture, for an audible playing video only. The key press the page path lends the page
+    /// raced the tab going hidden, so PiP sometimes never opened (X report, 2 Nov 2026).
+    @MainActor
+    private static func leaveVideoTabPictureInPictureCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let a = store.createTab(url: "https://example.test/video").id, b = store.createTab(url: "https://example.test/other").id
+        let ra = manager.ensureRuntime(for: a)!
+        store.settings.autoPictureInPicture = true
+        manager.show(a, focus: false)
+        for (answer, fallback, label) in [("ok", 0, "a page that entered Picture in Picture"),
+                                          ("none", 1, "a page with no video of its own"),
+                                          (nil, 1, "a page whose answer was lost")] as [(String?, Int, String)] {
+            let before = ra.browser.automaticPictureInPictureRequests
+            manager.show(b, focus: false)
+            expect(ra.browser.lastParams.contains(#""userGesture":true"#), "leaving a video tab asks as a user gesture")
+            expect(ra.browser.lastParams.contains("})(true)"), "leaving a video tab takes only an audible, playing video")
+            let reply = answer.map { #"{"result":{"type":"string","value":"\#($0)"}}"# }
+            ra.browser.reply(to: "Runtime.evaluate", with: reply)
+            await drainMainQueue()
+            expect(ra.browser.automaticPictureInPictureRequests - before == fallback,
+                   "\(label) \(fallback == 1 ? "falls back to" : "does not also get") the page request")
+            manager.show(a, focus: false)
+        }
+        store.settings.autoPictureInPicture = false
+        manager.show(b, focus: false)
+        expect(!ra.browser.replies.contains { $0.method == "Runtime.evaluate" }, "with the setting off, leaving the tab asks nothing")
         manager.closeAll()
     }
 

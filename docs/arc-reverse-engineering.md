@@ -612,6 +612,10 @@ Cra: Chromium's PiP window (class NativeWidgetMac…, title "Picture in Picture"
 that swallows the pointer (so Chrome's controls never appear) and does dragging / aspect-locked edge
 resizing; the frame is remembered in UserDefaults like Arc's LastPiPPosition. Measured on Cra: the
 corner alpha ramp and the shadow extents are identical to Arc's capture, pixel for pixel.
+Chrome's own window ignores the pointer and has `preventKeyWindow` set (2 Nov): it keeps a 4 pt
+resize band outside its frame that the overlay doesn't cover, and once key (a drag on that band, or
+AppKit picking it when a click activates Cra) Chrome shows its ±10 s controls on focus and on every
+mouse move, under Cra's ±15 s ones.
 One residual difference: Chrome paints its origin strip ("File on your device", top gradient)
 inside the compositor layer for about two seconds when the window first appears (present at
 1.5 s, gone at 2.5 s in quarter-second captures); it is drawn whether or not the window is
