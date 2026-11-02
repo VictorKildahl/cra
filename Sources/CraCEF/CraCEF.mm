@@ -1226,6 +1226,9 @@ public:
                      << (int)errorCode << ")";
         if ((int)errorCode == -3 /* ERR_ABORTED */) return;
         ReportProcessEvent(browser, @"loadError", [NSString stringWithFormat:@"%d", (int)errorCode], failedUrl);
+        CraBrowser* o = owner_;
+        if (o && [o.delegate respondsToSelector:@selector(browser:didFailLoadingURL:errorCode:)])
+            [o.delegate browser:o didFailLoadingURL:NSStringFromCef(failedUrl) errorCode:(NSInteger)errorCode];
         // Chrome-style pages get Chrome's own error page: Reload retries the site and it
         // reloads by itself when the network returns. Ours, a data: URL loaded on top,
         // made Reload reload the error and added a history entry.

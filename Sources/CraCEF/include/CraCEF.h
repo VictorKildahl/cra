@@ -96,6 +96,9 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 - (void)browser:(CraBrowser *)browser didChangeMediaCapture:(BOOL)capturing;
 /// The page started or stopped playing sound (see `isAudible`).
 - (void)browser:(CraBrowser *)browser didChangeAudible:(BOOL)audible;
+/// The page's main-frame load failed with a net error (ERR_ABORTED, a navigation cut off,
+/// is left out): `url` is the address that failed.
+- (void)browser:(CraBrowser *)browser didFailLoadingURL:(NSString *)url errorCode:(NSInteger)errorCode;
 /// An extension asked to bring this page's tab to the front (chrome.tabs.update with
 /// active: true; scripts/cef-patches/extension-tab-activate.patch).
 - (void)browserRequestsActivation:(CraBrowser *)browser;

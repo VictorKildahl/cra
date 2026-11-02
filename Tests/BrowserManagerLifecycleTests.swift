@@ -88,6 +88,7 @@ enum BrowserManagerLifecycleTests {
         await leaveVideoTabPictureInPictureCase()
         await coveredWindowPictureInPictureCase()
         pageColoursCase()
+        extensionPageRetryCase()
         await sleepCase("malformed or missing replies cannot authorize sleeping", reply: nil) { _, _ in }
         await pageProbeCase()
         print("Browser manager lifecycle: \(checks) checks passed")
@@ -447,6 +448,47 @@ enum BrowserManagerLifecycleTests {
         expect(woken.browser.backgroundProbes == 1, "a loaded page coming on screen is asked for its background")
         manager.show(a, focus: false)
         expect(woken.browser.backgroundProbes == 1, "one already on screen is not asked again")
+        manager.closeAll()
+    }
+
+    /// A restored tab asked for an extension's page before --load-extension loaded it: Chromium
+    /// blocked it (ERR_BLOCKED_BY_CLIENT), and the page is loaded again while the extension comes up.
+    @MainActor
+    private static func extensionPageRetryCase() {
+        let clock = ManualScheduler()
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView(), clock: clock)
+        let ext = "abcdefghijklmnopabcdefghijklmnop", url = "chrome-extension://\(ext)/options.html"
+        ExtensionStore.shared.entries = [.init(extensionID: ext)]
+        let rt = manager.ensureRuntime(for: store.createTab(url: url).id)!
+        manager.browser(rt.browser, didFailLoadingURL: url, errorCode: -20)
+        clock.advance(by: 0.2)
+        expect(rt.browser.loads.isEmpty, "the page is not loaded again before the first wait ends")
+        clock.advance(by: 0.1)
+        expect(rt.browser.loads == [url], "the blocked page is loaded again once")
+        for _ in 1..<ExtensionPageRetry.attempts {
+            manager.browser(rt.browser, didFailLoadingURL: url, errorCode: -20)
+            clock.advance(by: 4)
+        }
+        expect(rt.browser.loads.count == ExtensionPageRetry.attempts, "every attempt loads it again")
+        manager.browser(rt.browser, didFailLoadingURL: url, errorCode: -20)
+        clock.advance(by: 60)
+        expect(rt.browser.loads.count == ExtensionPageRetry.attempts, "after the last attempt the error page stays")
+        manager.browser(rt.browser, didFinishLoadingURL: url, title: "Options", statusCode: 200)
+        manager.browser(rt.browser, didFailLoadingURL: url, errorCode: -20)
+        clock.advance(by: 0.25)
+        expect(rt.browser.loads.count == ExtensionPageRetry.attempts + 1, "a page that loaded starts counting again")
+
+        let other = manager.ensureRuntime(for: store.createTab(url: url).id)!
+        manager.browser(other.browser, didFailLoadingURL: url, errorCode: -20)
+        other.browser.navigate(to: "https://example.test/")
+        clock.advance(by: 1)
+        expect(other.browser.loads.isEmpty, "a tab that went elsewhere meanwhile stays there")
+        ExtensionStore.shared.entries = []
+        other.browser.navigate(to: url)
+        manager.browser(other.browser, didFailLoadingURL: url, errorCode: -20)
+        clock.advance(by: 60)
+        expect(other.browser.loads.isEmpty, "an extension that is off in the tab's profile is not retried")
         manager.closeAll()
     }
 
