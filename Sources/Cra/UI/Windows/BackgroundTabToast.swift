@@ -14,6 +14,8 @@ final class BackgroundTabToast {
     static let trailingInset: CGFloat = 9
     static let padding: CGFloat = 12
     static let cornerRadius: CGFloat = 10
+    /// Room around the pill in its panel, so the spring's overshoot isn't clipped.
+    static let margin: CGFloat = 8
     static let font = NSFont.systemFont(ofSize: 14, weight: .medium)
     /// How long the toast stays up after the last tab it announced.
     static let visibleFor: TimeInterval = 4.85
@@ -52,7 +54,7 @@ final class BackgroundTabToast {
         let width = ceil((text as NSString).size(withAttributes: [.font: Self.font]).width) + 2 * Self.padding
         let local = NSRect(x: page.maxX - Self.trailingInset - width, y: page.maxY - Self.topInset - Self.height,
                            width: width, height: Self.height)
-        panel.setFrame(window.convertToScreen(local), display: false)
+        panel.setFrame(window.convertToScreen(local.insetBy(dx: -Self.margin, dy: -Self.margin)), display: false)
         let scale = window.backingScaleFactor
         let colors = Self.colors(theme)
         CATransaction.begin()
@@ -60,7 +62,7 @@ final class BackgroundTabToast {
         // Anchored at the top centre, where Arc's toast grows from.
         pill.anchorPoint = CGPoint(x: 0.5, y: 1)
         pill.bounds = CGRect(x: 0, y: 0, width: width, height: Self.height)
-        pill.position = CGPoint(x: width / 2, y: Self.height)
+        pill.position = CGPoint(x: Self.margin + width / 2, y: Self.margin + Self.height)
         pill.backgroundColor = colors.fill.cgColor
         pill.borderColor = colors.outline.cgColor
         label.contentsScale = scale
@@ -68,31 +70,46 @@ final class BackgroundTabToast {
         let lineHeight = ceil(Self.font.ascender - Self.font.descender)
         label.frame = CGRect(x: 0, y: (Self.height - lineHeight) / 2, width: width, height: lineHeight)
         CATransaction.commit()
-        let appearing = !isShown
-        if appearing {
+        if !isShown {
+            // Opening the tab's page holds the main thread for ~0.1 s, so the toast waits for the
+            // next turn, invisible: started now, its first frame showed it most of the way in.
+            setOpacity(0)
             window.addChildWindow(panel, ordered: .above)
-            let spring = CASpringAnimation(keyPath: "transform.scale")
-            spring.fromValue = 0.4
-            spring.toValue = 1
-            // ω = 2π / 0.3 s, damping ratio 0.67: Arc's 4 % overshoot ~0.2 s in, settled by 0.4 s.
-            spring.mass = 1
-            spring.stiffness = 440
-            spring.damping = 28
-            spring.duration = spring.settlingDuration
-            pill.add(spring, forKey: "appear")
-            let fade = CABasicAnimation(keyPath: "opacity")
-            fade.fromValue = 0
-            fade.toValue = 1
-            fade.duration = 0.08
-            pill.add(fade, forKey: "fade")
-        } else if panel.parent !== window {
-            window.addChildWindow(panel, ordered: .above)
+            DispatchQueue.main.async { [weak self] in self?.springIn() }
+        } else {
+            if panel.parent !== window { window.addChildWindow(panel, ordered: .above) }
+            setOpacity(1)
         }
-        pill.opacity = 1
         hide?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.dismiss() }
         hide = work
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.visibleFor, execute: work)
+    }
+
+    private func springIn() {
+        guard isShown else { return }
+        let spring = CASpringAnimation(keyPath: "transform.scale")
+        spring.fromValue = 0.4
+        spring.toValue = 1
+        // ω = 2π / 0.3 s, damping ratio 0.67: Arc's 4 % overshoot ~0.2 s in, settled by 0.4 s.
+        spring.mass = 1
+        spring.stiffness = 440
+        spring.damping = 28
+        spring.duration = spring.settlingDuration
+        // A new child window reaches the screen a frame or two late; hold the start until then.
+        // No fade: Arc's first frame is the small pill at full colour (0.41 of its width).
+        spring.beginTime = CACurrentMediaTime() + 0.03
+        spring.fillMode = .backwards
+        pill.add(spring, forKey: "appear")
+        setOpacity(1)
+    }
+
+    /// The model value only; the explicit animations above are the ones that show.
+    private func setOpacity(_ value: Float) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        pill.opacity = value
+        CATransaction.commit()
     }
 
     func dismiss() {
@@ -116,9 +133,8 @@ final class BackgroundTabToast {
         let group = CAAnimationGroup()
         group.animations = [shrink, fade]
         group.duration = 0.08
-        group.timingFunction = CAMediaTimingFunction(name: .easeIn)
         pill.add(group, forKey: "fade")
-        pill.opacity = 0
+        setOpacity(0)
         CATransaction.commit()
     }
 
