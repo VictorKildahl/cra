@@ -52,11 +52,12 @@ struct ImportedSettings {
     var autoArchive: AutoArchiveThreshold?
     var sidebarWidth: Double?
     var showToolbar: Bool?
+    var toolbarShowsFullURL: Bool?
     var linkRoutes: [ImportedLinkRoute] = []
     var defaultLinkDestination: ImportedLinkDestination?
 
     var isEmpty: Bool {
-        autoArchive == nil && sidebarWidth == nil && showToolbar == nil && linkRoutes.isEmpty && defaultLinkDestination == nil
+        autoArchive == nil && sidebarWidth == nil && showToolbar == nil && toolbarShowsFullURL == nil && linkRoutes.isEmpty && defaultLinkDestination == nil
     }
 }
 
@@ -118,6 +119,11 @@ enum ArcImporter {
     /// Arc's View ▸ Show Toolbar (topBarURLEnabled, off by default); nil when Arc never stored it.
     static var showsToolbar: Bool? {
         UserDefaults(suiteName: "company.thebrowser.Browser")?.object(forKey: "topBarURLEnabled") as? Bool
+    }
+
+    /// Arc's "Show Full URL" on the toolbar address (off by default); nil when Arc never stored it.
+    static var showsFullURL: Bool? {
+        UserDefaults(suiteName: "company.thebrowser.Browser")?.object(forKey: "toolbarShowFullURLsEnabledPreference") as? Bool
     }
 
     static func plan() throws -> ImportPlan {
@@ -219,6 +225,7 @@ enum ArcImporter {
             plan.settings.autoArchive = AutoArchiveThreshold(rawValue: threshold)
         }
         plan.settings.showToolbar = showsToolbar
+        plan.settings.toolbarShowsFullURL = showsFullURL
         if let ldata = try? Data(contentsOf: supportDir.appendingPathComponent("StorableLinkRouting.json")),
            let lroot = try? JSONSerialization.jsonObject(with: ldata) as? [String: Any] {
             plan.settings.defaultLinkDestination = linkDestination(lroot["defaultDestination"], spaceTitles: spaceTitleByID)
@@ -482,6 +489,7 @@ extension SidebarStore {
             if let a = plan.settings.autoArchive { settings.autoArchive = a }
             if let w = plan.settings.sidebarWidth { prefs.sidebarWidth = min(max(w, 220), 520) }
             if let t = plan.settings.showToolbar { settings.showToolbar = t }
+            if let f = plan.settings.toolbarShowsFullURL { settings.toolbarShowsFullURL = f }
             // Air Traffic Control, pointed at the spaces of the same name.
             func destination(_ d: ImportedLinkDestination) -> LinkDestination {
                 switch d {

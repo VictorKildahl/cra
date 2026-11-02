@@ -53,5 +53,6 @@
   "tabSleep" : "fourHours",
   "tabSleepEnabled" : true,
   "toolbarDefaultMigrated" : true,
+  "toolbarShowsFullURL" : false,
   "warnBeforeQuitting" : true
 }

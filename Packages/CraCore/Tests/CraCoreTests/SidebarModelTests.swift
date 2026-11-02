@@ -120,6 +120,16 @@ struct SidebarModelTests {
         #expect(settings.developerHosts.isEmpty, "no host, nothing to toggle")
     }
 
+    @Test func toolbarShowsTheHostOnlyUnlessAsked() throws {
+        #expect(!AppSettings().toolbarShowsFullURL, "Arc's default: the host only")
+        let decode = { (json: String) in try JSONDecoder().decode(AppSettings.self, from: Data(json.utf8)) }
+        #expect(try !decode("{}").toolbarShowsFullURL, "settings from before the option keep Arc's default")
+        #expect(try decode(#"{"toolbarShowsFullURL": true}"#).toolbarShowsFullURL)
+        var settings = AppSettings()
+        settings.toolbarShowsFullURL = true
+        #expect(try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings)).toolbarShowsFullURL)
+    }
+
     @Test func littleWindowSwitchIsTheDefaultDestination() {
         var settings = AppSettings()
         #expect(settings.openExternalLinksInLittleWindow)

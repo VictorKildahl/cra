@@ -419,6 +419,9 @@ public struct AppSettings: Codable, Equatable {
     /// Cra 0.1.0 saved `showToolbar` as on for everyone; settings without this mark
     /// take the toolbar from Arc's own preference once (off without Arc).
     public var toolbarDefaultMigrated: Bool = true
+    /// Arc's "Show Full URL" on the toolbar address's menu (toolbarShowFullURLsEnabledPreference):
+    /// the normal bar shows the host and the dimmer path. Off like Arc, which shows the host only.
+    public var toolbarShowsFullURL: Bool = false
     public var hasSeenImportPrompt: Bool = false
     /// Arc's per-site Developer Mode (⌃D): the toolbar shows the full URL in
     /// monospace with the developer icons, and the nav buttons move to the sidebar.
@@ -598,6 +601,7 @@ extension AppSettings {
         if toolbarDefaultMigrated {
             showToolbar = try c.decodeIfPresent(Bool.self, forKey: .showToolbar) ?? false
         }
+        toolbarShowsFullURL = try c.decodeIfPresent(Bool.self, forKey: .toolbarShowsFullURL) ?? false
         hasSeenImportPrompt = try c.decodeIfPresent(Bool.self, forKey: .hasSeenImportPrompt) ?? false
         developerHosts = try c.decodeIfPresent(Set<String>.self, forKey: .developerHosts) ?? []
         chromeEngine = try c.decodeIfPresent(Bool.self, forKey: .chromeEngine) ?? true

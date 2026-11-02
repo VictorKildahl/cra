@@ -251,7 +251,7 @@ the frontend only offers when it can dock.
 Arc's View ▸ Developer submenu (read via Accessibility): View Source ⌥⌘U, Developer Tools
 ⌥⌘I, Inspect Elements ⌥⌘C, JavaScript Console ⌥⌘J, "Turn off Developer Mode for this
 site" ⌃D. ⇧⌘D is Hide Toolbar and ⌘D is Pin/Unpin Tab. Developer Mode is per site and
-swaps the toolbar: default = nav buttons left, centred friendly URL (host bright, path dim)
+swaps the toolbar: default = nav buttons left, centred host (path dim with Show Full URL)
 behind a link glyph, sidebar toggle right; developer = lock + full monospace URL left,
 copy/capture/DevTools/source icons right, nav buttons in the sidebar's title row. Cra
 stores the hosts in `AppSettings.developerHosts`.
@@ -1931,9 +1931,17 @@ buttons accept first mouse while a child window is key. Clicks after the page ha
 
 AX reads of Arc's windows, 1x window captures, and HID clicks while the Mac was idle:
 
-- [O] Normal bar address: `example.org/cra88/deep/path?q=1` shows host bright and path + query dim (AX
-  static text carries all of it). Arc does not drop the path; Cra already matched. The link glyph before
-  it is a separate button, "Copy Current URL".
+- [O] Normal bar address: `example.org/cra88/deep/path?q=1` showed host bright and path + query dim, but
+  only because Victor's Arc has **Show Full URL** on (`toolbarShowFullURLsEnabledPreference = 1`; the
+  reporter's screenshots, Arc's default, show `github.com` alone). The option is on the address's
+  right-click menu as "Show Full URL" / "Hide Full URL" (ArcCore strings, with "Copy URL" and "Hide
+  Toolbar"). Cra: `AppSettings.toolbarShowsFullURL`, off; the Arc import takes Arc's preference.
+- [O] The link glyph before the address is a button of its own, "Copy Current URL", 24 x 24 pt; the
+  address text starts 27 pt after the button's left edge (AX frames). Hovering the address lights a
+  24 pt pill around the host only, 7 pt either side of the text, starting about 20 pt into the copy
+  button's box (reporter's 2x capture: glyph 14 pt at 34-48 pt, pill 49.75-132.5 pt, text 56.5-126 pt;
+  pill 86/86/86 on a 65/65/65 bar). Cra's ToolbarURLButton draws the two fills itself and gives the
+  4 pt where they meet to the copy box.
 - [O] Clicks: empty bar space left or right of the address opens nothing (window keyed by a page click
   first, two runs, captures); the address opens the command bar; a click on the address while the bar
   is open closes it and it stays closed; the next click opens it. Cra: PaneToolbarView only focuses its
