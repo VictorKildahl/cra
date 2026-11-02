@@ -969,6 +969,16 @@ final class SidebarStore {
         return true
     }
 
+    /// The sidebar's Move to: the tab the window has open (or its split) takes the window
+    /// along, as in Arc (#86); any other tab moves on its own.
+    func moveTab(_ id: UUID, toSpace sid: UUID, window: UUID?) {
+        if let open = selectedTabID(window: window), open == id || splitContaining(open)?.id == id {
+            moveTabAndFollow(open, toSpace: sid, window: window)
+        } else {
+            moveTab(id, toSpace: sid)
+        }
+    }
+
     // MARK: Folders
 
     @discardableResult

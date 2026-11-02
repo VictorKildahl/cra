@@ -370,9 +370,21 @@ enum StoreTests {
         expect(store.focusedSpaceID == work && store.selectedTabID == right.id, "with the same pane focused")
 
         store.selectTab(stay.id)
-        store.moveTab(stay.id, toSpace: work)
-        expect(store.focusedSpaceID == home && store.selectedTabID(in: home) != stay.id,
-               "the context menu's move stays in the space and opens another tab there")
+        let background = store.createTab(url: "https://example.com/background", select: false)
+        store.moveTab(background.id, toSpace: work, window: nil)
+        expect(store.spaceID(ofItem: background.id) == work && store.focusedSpaceID == home && store.selectedTabID == stay.id,
+               "the sidebar's Move to on another tab moves it and stays")
+        store.moveTab(stay.id, toSpace: work, window: nil)
+        expect(store.focusedSpaceID == work && store.selectedTabID == stay.id && store.selectedTabID(in: home) != stay.id,
+               "on the open tab it takes the window along, like Arc")
+        store.selectTab(right.id)
+        store.moveTab(split.id, toSpace: home, window: nil)
+        expect(store.spaceID(ofItem: split.id) == home && store.focusedSpaceID == home && store.selectedTabID == right.id,
+               "and on the open tab's split too")
+
+        store.moveTab(split.id, toSpace: work)
+        expect(store.focusedSpaceID == home && store.selectedTabID(in: home) != right.id,
+               "a move that doesn't follow (a drop on a space) opens another tab in the space it left")
 
         let incognito = store.addIncognitoWindow(frame: nil)
         let secret = store.createTab(url: "https://example.com/secret", window: incognito.id)
