@@ -325,6 +325,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return main
     }
 
+    /// The normal window a page sent to `spaceID` opens in (SpaceWindow): one already showing
+    /// the space, else the one in use last, which then switches to it.
+    @discardableResult
+    func useNormalWindow(forSpace spaceID: UUID) -> MainWindowController {
+        let last = useNormalWindow()
+        guard !last.isIncognito else { return last }
+        var seen = Set<UUID>()
+        let normal = NSApp.orderedWindows.compactMap { w in mainWindows.first { $0.window === w } }
+            .filter { !$0.isIncognito && seen.insert($0.windowID).inserted }
+            .map { (id: $0.windowID, space: store.focusedSpaceID(window: $0.windowID)) }
+        store.activeWindowID = SpaceWindow.window(for: spaceID, windows: normal, lastUsed: last.windowID)
+        return main
+    }
+
     /// Arc's New Window (⌘N): another window on the space in use, cascaded from the
     /// current one, with the command bar up. With every window closed it brings the
     /// hidden one back instead. New Incognito Window (⇧⌘N) always opens a new one.
@@ -675,7 +689,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "addSplitView": return store.selectedTabID != nil
         case "editSpace", "deleteSpace", "nextSpace", "previousSpace", "manageSpaces": return !main.isIncognito
         case "closeLittleWindows": return !littleWindows.isEmpty
-        case let id? where id.hasPrefix("moveTabToSpace"): return store.selectedTabID != nil && !main.isIncognito
+        case let id? where id.hasPrefix("moveTabToSpace"):
+            guard let n = Int(id.dropFirst(14)), n <= store.spaceOrder.count else { return false }
+            if let little = keyLittleWindow { return little.hasPage }
+            return store.selectedTabID != nil && !main.isIncognito
         default: break
         }
         return true

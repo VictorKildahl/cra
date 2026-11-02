@@ -2192,6 +2192,21 @@ Two new Arc windows, both with View ▸ Hide Sidebar and a tab selected, capture
   The sidebar menu's Move to Space follows when it moves the open tab or its split; another tab moves on its own. Whatever moves, a window that had it open in the
   old space opens the next tab there, picked as on close.
 
+## Sending a Little Arc's page to a space (Arc 1.171, 2 Nov 2026, issue #92)
+
+Victor's Arc, a second window of my own (File ▸ New Window over AX, switched to JYSK through the Spaces menu while
+Arc was frontmost, closed afterwards), Little Arcs opened with `open -a Arc https://example.com/?cra92…`, the spaces
+popover driven by AX (the chevron is `openInSpaceExpander`, the rows are AXButtons named after the space).
+
+- [O AX] Window A on Victor (used last), window B on JYSK. Picking JYSK in the Little Arc's popover closed the Little
+  Arc and opened the page in **window B**, which came forward and became main; window A kept Victor.
+- [O AX] No shortcut for it: Tabs ▸ "Open Little Arc or Peek in…" is ⌘O (the target space), Spaces lists the spaces
+  under ⌃1…; a ⌃2 posted to Arc's pid while the Little Arc was key changed nothing.
+- [U] Which window takes the page when two show the space, and what Arc does with no window on it.
+- Cra: `SpaceWindow` (CraCore) picks the window: the one in use if it shows the space, else the frontmost one that
+  does, else the one in use, which switches. It applies to ⌘O, the popover, the command bar's Move to <space> and
+  Move Tab to Space N (⌃⌘1–9, #86), which in a Little Window sends its page (#92, Cra's own like ⌃⌘N itself).
+
 ## ⌘Return in the command bar and closed folders that keep their tab (Arc 1.171, 2 Nov 2026, issue #85)
 
 Victor's Arc, a window of my own (File ▸ New Window over AX, closed afterwards), keys posted to Arc's pid while it

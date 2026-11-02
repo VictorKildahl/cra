@@ -534,8 +534,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     // MARK: Promote / close
 
     /// Move the page into a space (nil = the window's target space) as a Today
-    /// tab. The live browser goes with it, so history, scroll position and
-    /// logins stay.
+    /// tab, in the window already showing that space if there is one (Arc). The
+    /// live browser goes with it, so history, scroll position and logins stay.
     func promote(to spaceID: UUID?) {
         guard let b = browser, hasPage else { return }
         closePopup()
@@ -543,14 +543,16 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         app.useNormalWindow()
         let sid = (spaceID ?? state.targetSpaceID).flatMap { store.space($0) != nil && !store.isIncognito(space: $0) ? $0 : nil }
             ?? store.focusedSpaceID
-        let tab = store.createTab(url: b.currentURL, title: b.currentTitle, in: sid, select: true)
+        // Held: closing this window can make another browser window key, which changes app.main.
+        let target = app.useNormalWindow(forSpace: sid)
+        let tab = store.createTab(url: b.currentURL, title: b.currentTitle, in: sid, select: true, window: target.windowID)
         if let favicon, let key = FaviconKey.key(for: b.currentURL) { app.favicons.store(favicon, forKey: key) }
         promoted = true
         browser = nil
-        app.main.browsers.adopt(b, for: tab.id)
+        target.browsers.adopt(b, for: tab.id)
         window?.close()
-        app.main.showWindow(nil)
-        app.main.window?.makeKeyAndOrderFront(nil)
+        target.showWindow(nil)
+        target.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -587,6 +589,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             browser?.showDevTools()
         case "print": browser?.print()
         case "promoteLittleWindow": promote(to: nil)
+        // Move Tab to Space N (⌃⌘N, #86) sends the page there, as the spaces popup does (#92).
+        case let id where id.hasPrefix("moveTabToSpace"):
+            if let n = Int(id.dropFirst(14)), n - 1 < store.spaceOrder.count { promote(to: store.spaceOrder[n - 1]) }
         // No find bar or capture in little windows; keep them off the main window.
         case "find", "findNext", "findPrevious", "capturePage", "toggleSidebar", "pinTab", "favoriteTab", "renameTab",
              "duplicateTab", "resetTab", "muteTab", "clearToday", "nextTab", "previousTab", "recentTab", "recentTabBackward":
