@@ -22,11 +22,13 @@ final class ExtensionsMenu: NSObject, NSMenuDelegate, NSMenuItemValidation {
         let store = ExtensionStore.shared
         store.reload()
         let entries = app.main.extensionEntries.sorted { $0.name < $1.name }
+        // Each extension's icon as it is now on the focused page (chrome.action.setIcon).
+        let profile = app.main.profileDirectoryName, tab = app.main.selectedTabID
         for e in entries {
             let item = NSMenuItem(title: e.name, action: #selector(runExtension(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = e.extensionID
-            item.image = Self.menuIcon(e.icon)
+            item.image = Self.menuIcon(store.liveIcon(for: e, profile: profile, tab: tab))
             menu.addItem(item)
         }
         if !entries.isEmpty { menu.addItem(.separator()) }
@@ -46,7 +48,7 @@ final class ExtensionsMenu: NSObject, NSMenuDelegate, NSMenuItemValidation {
             let item = NSMenuItem(title: e.name, action: #selector(togglePin(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = e.extensionID
-            item.image = Self.menuIcon(e.icon)
+            item.image = Self.menuIcon(store.liveIcon(for: e, profile: profile, tab: tab))
             item.state = store.isPinned(e.extensionID) ? .on : .off
             pinMenu.addItem(item)
         }
@@ -58,7 +60,7 @@ final class ExtensionsMenu: NSObject, NSMenuDelegate, NSMenuItemValidation {
         let iconsMenu = NSMenu(title: "Toolbar Icons")
         for e in entries {
             let item = NSMenuItem(title: e.name, action: nil, keyEquivalent: "")
-            item.image = Self.menuIcon(store.toolbarIcon(for: e))
+            item.image = Self.menuIcon(store.toolbarIcon(for: e, profile: profile, tab: tab))
             item.submenu = Self.iconMenu(for: e)
             iconsMenu.addItem(item)
         }

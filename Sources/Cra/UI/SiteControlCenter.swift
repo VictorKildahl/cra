@@ -43,12 +43,17 @@ final class SiteControlCenterView: NSView {
     private let store: SidebarStore
     /// The page's Chromium profile folder: only its extensions are offered.
     private let profile: String
+    /// The page's tab, whose extension icons the tiles show.
+    private let tab: UUID?
     private var extensions: ExtensionStore { .shared }
+    /// The tiles by extension ID, whose icons follow the extensions' own changes in place.
+    private var extensionTiles: [String: SiteExtensionTile] = [:]
 
-    init(url: String, secure: Bool, dark: Bool, profile: String, actions: SiteControlCenterActions, store: SidebarStore) {
+    init(url: String, secure: Bool, dark: Bool, profile: String, tab: UUID?, actions: SiteControlCenterActions, store: SidebarStore) {
         self.url = url
         self.secure = secure
         self.profile = profile
+        self.tab = tab
         colors = SiteControlCenterColors(dark: dark)
         self.actions = actions
         self.store = store
@@ -56,6 +61,11 @@ final class SiteControlCenterView: NSView {
         wantsLayer = true
         layer?.backgroundColor = colors.background.cgColor
         observe()
+        // An extension changing its icon redraws only its tile, so the one under the pointer
+        // keeps its hover. Ends with the view: then nothing observable is read.
+        observeChanges(of: { [weak self] in self?.liveIcons() ?? [:] }) { [weak self] icons in
+            for (id, icon) in icons { self?.extensionTiles[id]?.show(icon: icon) }
+        }
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -84,6 +94,11 @@ final class SiteControlCenterView: NSView {
         build()
     }
 
+    /// The tiles' icons as the extensions set them now (chrome.action.setIcon).
+    private func liveIcons() -> [String: NSImage?] {
+        Dictionary(uniqueKeysWithValues: orderedExtensions.map { ($0.extensionID, extensions.liveIcon(for: $0, profile: profile, tab: tab)) })
+    }
+
     private func build() {
         subviews.forEach { $0.removeFromSuperview() }
         let x = M.inset, w = M.width - 2 * M.inset
@@ -101,10 +116,14 @@ final class SiteControlCenterView: NSView {
         y += M.tile.height + 11
         // Extensions: a 4-column grid of tiles, then "+".
         let ext = SiteSectionView(title: "Extensions", hoverText: "Manage", colors: colors, onHeaderClick: actions.manageExtensions)
+        extensionTiles = [:]
         var tiles: [NSView] = orderedExtensions.map { e in
-            SiteExtensionTile(entry: e, pinned: extensions.isPinned(e.extensionID), colors: colors,
-                              run: { [actions] in actions.runExtension(e.extensionID) },
-                              togglePin: { ExtensionStore.shared.setPinned(e.extensionID, !ExtensionStore.shared.isPinned(e.extensionID)) })
+            let tile = SiteExtensionTile(entry: e, pinned: extensions.isPinned(e.extensionID), colors: colors,
+                                         run: { [actions] in actions.runExtension(e.extensionID) },
+                                         togglePin: { ExtensionStore.shared.setPinned(e.extensionID, !ExtensionStore.shared.isPinned(e.extensionID)) })
+            tile.show(icon: extensions.liveIcon(for: e, profile: profile, tab: tab))
+            extensionTiles[e.extensionID] = tile
+            return tile
         }
         let add = SiteTile(colors: colors, help: "Add Extension", action: actions.addExtension)
         add.setGlyph(SidebarSymbols.image("plus", size: 14, weight: .medium), tint: colors.text)
@@ -306,6 +325,7 @@ private class SiteTile: SiteHoverView {
 /// SiteControlCenterExtensionPinButton, "Pin" / "Unpin").
 private final class SiteExtensionTile: SiteTile {
     private let pinned: Bool
+    private var shownIcon: NSImage??
     /// The 14 pt pin badge hangs off the tile's bottom-right corner, 37 × 21 pt in. It sits
     /// next to the tile in the grid, above it, so nothing clips it (SwiftUI's .offset).
     let badge = SiteHoverView()
@@ -314,11 +334,7 @@ private final class SiteExtensionTile: SiteTile {
     init(entry: ExtensionStore.Entry, pinned: Bool, colors: SiteControlCenterColors, run: @escaping () -> Void, togglePin: @escaping () -> Void) {
         self.pinned = pinned
         super.init(colors: colors, help: entry.name, action: run)
-        if let icon = entry.icon {
-            setGlyph(icon, tint: nil, size: 16)
-        } else {
-            setGlyph(SidebarSymbols.image("puzzlepiece.extension.fill", size: 13), tint: colors.secondary)
-        }
+        show(icon: entry.icon)
         setAccessibilityLabel(entry.name)
         badge.onClick = togglePin
         badge.onHover = { [weak self] in self?.refresh() }
@@ -332,6 +348,17 @@ private final class SiteExtensionTile: SiteTile {
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    /// The extension's icon as it is now, else the puzzle piece.
+    func show(icon: NSImage?) {
+        guard shownIcon.map({ $0 !== icon }) ?? true else { return }
+        shownIcon = .some(icon)
+        if let icon {
+            setGlyph(icon, tint: nil, size: 16)
+        } else {
+            setGlyph(SidebarSymbols.image("puzzlepiece.extension.fill", size: 13), tint: colors.secondary)
+        }
+    }
 
     /// The badge as one image: the circle, a 1 pt ring in the panel colour inside its edge, and
     /// the pin turned 45° clockwise.
@@ -573,8 +600,8 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
 
     var isShown: Bool { popover?.isShown == true }
 
-    func show(relativeTo rect: NSRect, of view: NSView, url: String, secure: Bool, dark: Bool, profile: String, store: SidebarStore,
-              actions: SiteControlCenterActions) {
+    func show(relativeTo rect: NSRect, of view: NSView, url: String, secure: Bool, dark: Bool, profile: String, tab: UUID?,
+              store: SidebarStore, actions: SiteControlCenterActions) {
         // A transient popover closes on the mouse-down outside it; the button fires on that
         // click's mouse-up. The same click on the sliders button closes it, as in Arc,
         // however long the press took (GitHub #42): the latest mouse-down is the closing one.
@@ -604,7 +631,7 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
         acts.clearCache = closing(actions.clearCache)
         acts.clearCookies = closing(actions.clearCookies)
         acts.showCertificate = actions.showCertificate.map(closing)
-        let content = SiteControlCenterView(url: url, secure: secure, dark: dark, profile: profile, actions: acts, store: store)
+        let content = SiteControlCenterView(url: url, secure: secure, dark: dark, profile: profile, tab: tab, actions: acts, store: store)
         let host = NSViewController()
         host.view = content
         host.preferredContentSize = content.frame.size

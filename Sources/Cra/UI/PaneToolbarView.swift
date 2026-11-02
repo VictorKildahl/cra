@@ -144,11 +144,14 @@ final class PaneToolbarView: NSView {
             m.path = store.settings.toolbarShowsFullURL && human.hasPrefix(m.host) ? String(human.dropFirst(m.host.count)) : ""
         }
         let extensions = ExtensionStore.shared
-        let entries = extensions.entries(inProfile: item.map { store.profileDirectoryName(item: $0.id) }
-                                         ?? store.profileDirectoryName(space: store.focusedSpaceID(window: ui.windowID)))
+        let profile = item.map { store.profileDirectoryName(item: $0.id) }
+            ?? store.profileDirectoryName(space: store.focusedSpaceID(window: ui.windowID))
+        let entries = extensions.entries(inProfile: profile)
         m.hasExtensions = !entries.isEmpty
         m.pinned = extensions.pinnedIDs.compactMap { id in
-            entries.first { $0.extensionID == id }.map { Model.Ext(id: id, name: $0.name, icon: extensions.toolbarIcon(for: $0)) }
+            entries.first { $0.extensionID == id }.map {
+                Model.Ext(id: id, name: $0.name, icon: extensions.toolbarIcon(for: $0, profile: profile, tab: m.tabID))
+            }
         }
         // Arc's toolbar colour (ToolbarColor): the page's report, else the tab's last colour, else
         // white (MainWindowController.toolbarColors uses the same rule for the card behind the bar).

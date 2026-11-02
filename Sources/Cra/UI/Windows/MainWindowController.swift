@@ -108,6 +108,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         window.backgroundColor = NSColor(palette.gradientColors.first ?? .gray)
 
         browsers = BrowserManager(store: store, favicons: app.favicons, container: shell.parkingView, clock: app.composition.clock)
+        // What extensions set for a tab (chrome.action.setIcon with tabId) went with its page.
+        browsers.pageClosed = { ExtensionStore.shared.forgetActionTab($0) }
         browsers.delegate = self
         browsers.windowID = session.id
         browsers.takeRuntimeFromOtherWindow = { [weak self] id in
@@ -269,6 +271,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         ExtensionActions.shared.watchPopups { [weak app] id in
             guard let main = app?.main, let window = main.window, let key = NSApp.keyWindow, key === window || key.parent === window else { return nil }
             return main.extensionPopupAnchor(id)
+        }
+        ExtensionActions.shared.watchActions { [weak app] in
+            app?.mainWindows.flatMap { $0.browsers.runtimes.values.map { (tab: $0.tabID, browser: $0.browser) } } ?? []
         }
         browsers.nowPlaying = sidebarUI.nowPlaying
         sidebarUI.nowPlaying.perform = { [weak self] id, action in
@@ -1973,7 +1978,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         siteControlCenterSpaceID = focusedSpaceID
         siteControlCenter.show(relativeTo: rect, of: content, url: url, secure: secure, dark: focusedSpace.theme.palette.isDark,
-                               profile: profileDirectoryName, store: store, actions: actions)
+                               profile: profileDirectoryName, tab: selectedTabID, store: store, actions: actions)
     }
 
     private func openTab(_ url: String) {
