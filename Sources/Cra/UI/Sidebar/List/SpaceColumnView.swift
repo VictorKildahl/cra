@@ -86,6 +86,9 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
     /// An Icon-tab glyph in the emoji's place.
     private let symbol = NSImageView()
     private let chevron = NSImageView()
+    /// Holds the chevron at a fixed 20 pt frame, so it turns about its own centre while layout
+    /// moves the box.
+    private let chevronBox = NSView()
     private lazy var more = SidebarGlyphButton(symbol: "ellipsis", size: 24, height: 24, iconSize: 13, weight: .semibold, help: "", colors: colors) { [weak self] in
         self?.showMenu(NSApp.currentEvent)
     }
@@ -113,10 +116,12 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         chevron.image = SidebarSymbols.image("chevron.down", size: 12.5, weight: .bold)
         chevron.imageScaling = .scaleNone
         chevron.wantsLayer = true
+        chevron.frame = NSRect(x: 0, y: 0, width: 20, height: 20)
+        chevronBox.addSubview(chevron)
         done.stringValue = "Done"
         done.isHidden = true
         symbol.imageScaling = .scaleNone
-        for v in [emoji, symbol, title, chevron, more, done] { addSubview(v) }
+        for v in [emoji, symbol, title, chevronBox, more, done] { addSubview(v) }
         sync()
     }
 
@@ -144,7 +149,7 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
                 self.sync()
             }
         }
-        if collapsed != wasCollapsed { turnChevron(from: wasCollapsed) }
+        if collapsed != wasCollapsed { turnChevron() }
         refresh()
         if hide != isHidden {
             isHidden = hide
@@ -173,18 +178,18 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         needsLayout = true
     }
 
-    /// Arc points the chevron down while the pinned tabs show and right while they are collapsed.
-    private func angle(collapsed: Bool) -> CGFloat { collapsed ? -.pi / 2 : 0 }
-
-    /// Arc turns it a quarter over about 0.12 s (a 60 fps capture, 1 Nov).
-    private func turnChevron(from wasCollapsed: Bool) {
-        guard window != nil, let layer = chevron.layer else { return }
-        let turn = CABasicAnimation(keyPath: "transform.rotation.z")
-        turn.fromValue = angle(collapsed: wasCollapsed)
-        turn.toValue = angle(collapsed: collapsed)
-        turn.duration = 0.12
-        turn.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        layer.add(turn, forKey: "turn")
+    /// Arc points the chevron down while the pinned tabs show and right while they are collapsed,
+    /// and turns it a quarter over about 0.12 s (a 60 fps capture, 1 Nov). The turn is AppKit's own
+    /// rotation: one set on the layer was reset by AppKit's layer geometry, so a space that opened
+    /// collapsed showed the chevron pointing down.
+    private func turnChevron() {
+        let degrees: CGFloat = collapsed ? 90 : 0
+        guard window != nil else { chevron.frameCenterRotation = degrees; return }
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.12
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            chevron.animator().frameCenterRotation = degrees
+        }
     }
 
     /// Arc 1.171, 2x captures (1 Nov): a 14.5 pt emoji centred in the icon's 26 pt box 5 pt in (its
@@ -200,10 +205,7 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         symbol.frame = iconRect
         // Turned right, Arc's chevron sits a little higher than chevron.down turned about its centre.
         let (cx, cy): (CGFloat, CGFloat) = collapsed ? (18.5, h / 2 - 0.25) : (18.25, h / 2 + 0.5)
-        chevron.frame = NSRect(x: cx - 10, y: cy - 10, width: 20, height: 20)
-        chevron.layer?.anchorPoint = CGPoint(x: 0.5, y: 0.5)
-        chevron.layer?.position = CGPoint(x: chevron.frame.midX, y: chevron.frame.midY)
-        chevron.layer?.setAffineTransform(CGAffineTransform(rotationAngle: angle(collapsed: collapsed)))
+        chevronBox.frame = NSRect(x: cx - 10, y: cy - 10, width: 20, height: 20)
         more.frame = NSRect(x: w - 18.5 - 12, y: (h - 24) / 2 + 0.5, width: 24, height: 24)
         let dw = ceil(done.attributedStringValue.size().width) + 2 * SidebarText.inset
         let dh = done.intrinsicContentSize.height
