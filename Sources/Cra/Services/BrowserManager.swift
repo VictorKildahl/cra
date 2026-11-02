@@ -85,6 +85,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     var takeRuntimeFromOtherWindow: ((UUID) -> TabRuntime?)?
     /// The window's sidebar player (Arc's "now playing"), fed with this manager's pages.
     var nowPlaying: NowPlaying?
+    /// A tab's page closed (the tab closed or went to sleep), with what Chromium kept for it.
+    var pageClosed: (UUID) -> Void = { _ in }
     private var byBrowser: [ObjectIdentifier: UUID] = [:]
     /// CEF's client holds its owner weakly; keep retired browsers alive until teardown finishes.
     private var closingBrowsers: [ObjectIdentifier: CraBrowser] = [:]
@@ -351,6 +353,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         log(tabID, "closes its page")
         Perf.cancel(.pageLoad, tabID.uuidString)
         Perf.cancel(.tabWake, tabID.uuidString)
+        pageClosed(tabID)
         rt.browser.containerView.isHidden = true
         closingBrowsers[ObjectIdentifier(rt.browser)] = rt.browser
         rt.browser.close()

@@ -1,0 +1,353 @@
+diff --git a/chrome/browser/devtools/inspector_protocol_config.json b/chrome/browser/devtools/inspector_protocol_config.json
+--- a/chrome/browser/devtools/inspector_protocol_config.json
++++ b/chrome/browser/devtools/inspector_protocol_config.json
+@@ -39,7 +39,7 @@
+             },
+             {
+                 "domain": "Extensions",
+-                "include": [ "triggerAction", "loadUnpacked", "getStorageItems", "setStorageItems", "removeStorageItems", "clearStorageItems", "uninstall", "getExtensions" ],
++                "include": [ "triggerAction", "setActionUpdatesEnabled", "loadUnpacked", "getStorageItems", "setStorageItems", "removeStorageItems", "clearStorageItems", "uninstall", "getExtensions" ],
+                 "async": [ "loadUnpacked", "getStorageItems", "setStorageItems", "removeStorageItems", "clearStorageItems", "uninstall" ]
+             },
+             {
+diff --git a/chrome/browser/devtools/protocol/extensions_handler.cc b/chrome/browser/devtools/protocol/extensions_handler.cc
+--- a/chrome/browser/devtools/protocol/extensions_handler.cc
++++ b/chrome/browser/devtools/protocol/extensions_handler.cc
+@@ -7,15 +7,21 @@
+ #include <memory>
+ #include <string>
+ 
++#include "base/base64.h"
+ #include "base/files/file_path.h"
+ #include "base/functional/bind.h"
++#include "base/strings/stringprintf.h"
+ #include "base/strings/utf_string_conversions.h"
++#include "chrome/browser/browser_process.h"
+ #include "chrome/browser/devtools/chrome_devtools_manager_delegate.h"
+ #include "chrome/browser/devtools/devtools_browser_context_manager.h"
+ #include "chrome/browser/devtools/protocol/extensions.h"
+ #include "chrome/browser/devtools/protocol/protocol.h"
+ #include "chrome/browser/extensions/browser_window_util.h"
++#include "chrome/browser/extensions/extension_action_dispatcher.h"
++#include "chrome/browser/extensions/extension_tab_util.h"
+ #include "chrome/browser/extensions/extension_util.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/extensions/extension_action_view_model.h"
+ #include "chrome/browser/ui/extensions/extensions_container.h"
+ #include "chrome/browser/ui/toolbar/toolbar_action_view_model.h"
+@@ -23,9 +29,15 @@
+ #include "content/public/browser/web_contents.h"
+ #include "extensions/browser/api/storage/storage_area_namespace.h"
+ #include "extensions/browser/api/storage/storage_utils.h"
++#include "extensions/browser/extension_action.h"
++#include "extensions/browser/extension_action_manager.h"
+ #include "extensions/browser/extension_registrar.h"
+ #include "extensions/browser/unpacked_installer.h"
+ #include "extensions/common/manifest.h"
++#include "ui/gfx/codec/png_codec.h"
++#include "ui/gfx/image/image.h"
++#include "ui/gfx/image/image_skia.h"
++#include "ui/gfx/image/image_skia_rep.h"
+ 
+ namespace {
+ 
+@@ -160,8 +172,185 @@
+   return result;
+ }
+ 
++// Cra: `image` as a PNG data: URL from its largest scale, empty when it has
++// none.
++std::string PngDataUrl(const gfx::Image& image) {
++  if (image.IsEmpty()) {
++    return std::string();
++  }
++  // image_reps() returns a copy: keep it alive while `best` points into it.
++  const std::vector<gfx::ImageSkiaRep> reps = image.AsImageSkia().image_reps();
++  const gfx::ImageSkiaRep* best = nullptr;
++  for (const gfx::ImageSkiaRep& rep : reps) {
++    if (!best || rep.scale() > best->scale()) {
++      best = &rep;
++    }
++  }
++  if (!best || best->GetBitmap().drawsNothing()) {
++    return std::string();
++  }
++  std::optional<std::vector<uint8_t>> png = gfx::PNGCodec::EncodeBGRASkBitmap(
++      best->GetBitmap(), /*discard_transparency=*/false);
++  return png ? "data:image/png;base64," + base::Base64Encode(*png)
++             : std::string();
++}
++
+ }  // namespace
++
++// Cra: forwards one profile's action changes to the handler.
++class ExtensionsHandler::ActionWatch
++    : public extensions::ExtensionActionDispatcher::Observer {
++ public:
++  ActionWatch(ExtensionsHandler* handler,
++              extensions::ExtensionActionDispatcher* dispatcher)
++      : handler_(handler) {
++    observation_.Observe(dispatcher);
++  }
++
++  bool IsWatching(extensions::ExtensionActionDispatcher* dispatcher) const {
++    return observation_.IsObservingSource(dispatcher);
++  }
++
++  void OnExtensionActionUpdated(
++      extensions::ExtensionAction* extension_action,
++      content::WebContents* web_contents,
++      content::BrowserContext* browser_context) override {
++    handler_->ReportAction(*extension_action, web_contents, browser_context);
++  }
++
++  void OnShuttingDown() override { observation_.Reset(); }
++
++ private:
++  raw_ptr<ExtensionsHandler> handler_;
++  base::ScopedObservation<extensions::ExtensionActionDispatcher,
++                          extensions::ExtensionActionDispatcher::Observer>
++      observation_{this};
++};
++
++protocol::DispatchResponse ExtensionsHandler::SetActionUpdatesEnabled(
++    bool enabled) {
++  if (!allow_loading_extensions_) {
++    return protocol::Response::ServerError("Method not available.");
++  }
++  if (!enabled) {
++    action_watches_.clear();
++    profile_manager_observation_.Reset();
++    reported_actions_.clear();
++    return protocol::Response::Success();
++  }
++  ProfileManager* profile_manager = g_browser_process->profile_manager();
++  if (!profile_manager) {
++    return protocol::Response::ServerError("No profile manager.");
++  }
++  if (!profile_manager_observation_.IsObserving()) {
++    profile_manager_observation_.Observe(profile_manager);
++  }
++  for (Profile* profile : profile_manager->GetLoadedProfiles()) {
++    WatchActions(profile);
++  }
++  return protocol::Response::Success();
++}
++
++void ExtensionsHandler::OnProfileAdded(Profile* profile) {
++  WatchActions(profile);
++}
++
++void ExtensionsHandler::OnProfileManagerDestroying() {
++  action_watches_.clear();
++  profile_manager_observation_.Reset();
++}
+ 
++// Observes `profile`'s actions and reports their tab-independent state.
++void ExtensionsHandler::WatchActions(Profile* profile) {
++  extensions::ExtensionActionDispatcher* dispatcher =
++      extensions::ExtensionActionDispatcher::Get(profile);
++  if (!dispatcher) {
++    return;
++  }
++  for (const auto& watch : action_watches_) {
++    if (watch->IsWatching(dispatcher)) {
++      return;
++    }
++  }
++  action_watches_.push_back(std::make_unique<ActionWatch>(this, dispatcher));
++  extensions::ExtensionActionManager* manager =
++      extensions::ExtensionActionManager::Get(profile);
++  extensions::ExtensionRegistry* registry =
++      extensions::ExtensionRegistry::Get(profile);
++  if (!manager || !registry) {
++    return;
++  }
++  for (const auto& extension : registry->enabled_extensions()) {
++    if (extensions::ExtensionAction* action =
++            manager->GetExtensionAction(*extension)) {
++      ReportAction(*action, nullptr, profile);
++    }
++  }
++}
++
++// Reports what the extension set for a tab (only that tab's own values), or
++// with no `web_contents` its tab-independent values.
++void ExtensionsHandler::ReportAction(const extensions::ExtensionAction& action,
++                                     content::WebContents* web_contents,
++                                     content::BrowserContext* context) {
++  if (!frontend_ || !context) {
++    return;
++  }
++  const std::string profile = Profile::FromBrowserContext(context)
++                                  ->GetOriginalProfile()
++                                  ->GetBaseName()
++                                  .AsUTF8Unsafe();
++  int tab_id = extensions::ExtensionAction::kDefaultTabId;
++  std::optional<std::string> target_id;
++  if (web_contents) {
++    // Cra knows a tab by its page target; one DevTools never listed has none.
++    if (!content::DevToolsAgentHost::HasFor(web_contents)) {
++      return;
++    }
++    target_id =
++        content::DevToolsAgentHost::GetOrCreateFor(web_contents)->GetId();
++    tab_id = extensions::ExtensionTabUtil::GetTabId(web_contents);
++  }
++  const std::string key = profile + "/" + action.extension_id() + "/" +
++                          target_id.value_or(std::string());
++  if (web_contents && web_contents->IsBeingDestroyed()) {
++    reported_actions_.erase(key);
++    return;
++  }
++  const bool for_tab = target_id.has_value();
++  const std::string icon = PngDataUrl(
++      !for_tab || action.HasIcon(tab_id) ? action.GetExplicitlySetIcon(tab_id)
++                                         : action.GetDeclarativeIcon(tab_id));
++  const std::string title =
++      !for_tab || action.HasTitle(tab_id) ? action.GetTitle(tab_id) : "";
++  const std::string badge_text =
++      !for_tab || action.HasBadgeText(tab_id)
++          ? action.GetExplicitlySetBadgeText(tab_id)
++          : "";
++  std::string badge_color;
++  if (!for_tab || action.HasBadgeBackgroundColor(tab_id)) {
++    const SkColor color = action.GetBadgeBackgroundColor(tab_id);
++    badge_color = base::StringPrintf(
++        "#%02X%02X%02X%02X", SkColorGetR(color), SkColorGetG(color),
++        SkColorGetB(color), SkColorGetA(color));
++  }
++  const std::string state =
++      icon + "\n" + title + "\n" + badge_text + "\n" + badge_color;
++  const bool empty =
++      icon.empty() && title.empty() && badge_text.empty() && badge_color.empty();
++  auto it = reported_actions_.find(key);
++  if (it == reported_actions_.end() ? (empty && for_tab) : it->second == state) {
++    return;
++  }
++  if (empty) {
++    reported_actions_.erase(key);
++  } else {
++    reported_actions_[key] = state;
++  }
++  frontend_->ActionUpdated(action.extension_id(), profile, icon, title,
++                           badge_text, badge_color, std::move(target_id));
++}
++
+ protocol::DispatchResponse ExtensionsHandler::TriggerAction(
+     const std::string& extension_id,
+     const std::string& target_id) {
+@@ -219,6 +408,9 @@
+     : target_id_(target_id),
+       allow_loading_extensions_(allow_loading_extensions) {
+   protocol::Extensions::Dispatcher::wire(dispatcher, this);
++  // Cra: actionUpdated needs a frontend.
++  frontend_ =
++      std::make_unique<protocol::Extensions::Frontend>(dispatcher->channel());
+ }
+ 
+ ExtensionsHandler::~ExtensionsHandler() = default;
+diff --git a/chrome/browser/devtools/protocol/extensions_handler.h b/chrome/browser/devtools/protocol/extensions_handler.h
+--- a/chrome/browser/devtools/protocol/extensions_handler.h
++++ b/chrome/browser/devtools/protocol/extensions_handler.h
+@@ -5,13 +5,31 @@
+ #ifndef CHROME_BROWSER_DEVTOOLS_PROTOCOL_EXTENSIONS_HANDLER_H_
+ #define CHROME_BROWSER_DEVTOOLS_PROTOCOL_EXTENSIONS_HANDLER_H_
+ 
++#include <map>
++#include <vector>
++
++#include "base/scoped_observation.h"
+ #include "chrome/browser/devtools/protocol/extensions.h"
+ #include "chrome/browser/devtools/protocol/protocol.h"
++#include "chrome/browser/profiles/profile_manager.h"
++#include "chrome/browser/profiles/profile_manager_observer.h"
+ #include "extensions/browser/api/storage/storage_frontend.h"
+ #include "extensions/common/extension.h"
+ 
++class Profile;
++
++namespace content {
++class BrowserContext;
++class WebContents;
++}  // namespace content
++
++namespace extensions {
++class ExtensionAction;
++}  // namespace extensions
++
+ // Implements the Extensions domain for Chrome DevTools Protocol.
+-class ExtensionsHandler : public protocol::Extensions::Backend {
++class ExtensionsHandler : public protocol::Extensions::Backend,
++                          public ProfileManagerObserver {
+  public:
+   explicit ExtensionsHandler(protocol::UberDispatcher* dispatcher,
+                              const std::string& target_id,
+@@ -26,6 +44,15 @@
+   protocol::DispatchResponse TriggerAction(
+       const protocol::String& extendsion_id,
+       const protocol::String& target_id) override;
++  // Cra: actionUpdated for chrome.action.setIcon and friends.
++  protocol::DispatchResponse SetActionUpdatesEnabled(bool enabled) override;
++  // ProfileManagerObserver:
++  void OnProfileAdded(Profile* profile) override;
++  void OnProfileManagerDestroying() override;
++  void WatchActions(Profile* profile);
++  void ReportAction(const extensions::ExtensionAction& action,
++                    content::WebContents* web_contents,
++                    content::BrowserContext* context);
+   void LoadUnpacked(const protocol::String& path,
+                     std::optional<bool> enable_in_incognito,
+                     std::unique_ptr<LoadUnpackedCallback> callback) override;
+@@ -83,6 +110,15 @@
+   bool allow_loading_extensions_;
+ 
+   std::unique_ptr<protocol::Extensions::Frontend> frontend_;
++
++  // Cra: one observer per profile's ExtensionActionDispatcher.
++  class ActionWatch;
++  std::vector<std::unique_ptr<ActionWatch>> action_watches_;
++  base::ScopedObservation<ProfileManager, ProfileManagerObserver>
++      profile_manager_observation_{this};
++  // The last reported state of each action that has one, by profile, extension
++  // and page target, so a navigation that clears nothing reports nothing.
++  std::map<std::string, std::string> reported_actions_;
+   base::WeakPtrFactory<ExtensionsHandler> weak_factory_{this};
+ };
+ 
+diff --git a/third_party/blink/public/devtools_protocol/domains/Extensions.pdl b/third_party/blink/public/devtools_protocol/domains/Extensions.pdl
+--- a/third_party/blink/public/devtools_protocol/domains/Extensions.pdl
++++ b/third_party/blink/public/devtools_protocol/domains/Extensions.pdl
+@@ -22,6 +22,32 @@
+       # A tab target ID to trigger the default extension action on.
+       string targetId
+ 
++  # Cra: reports changes to extensions' toolbar actions (chrome.action.setIcon,
++  # setTitle, setBadgeText) in every profile as `actionUpdated`. Turning it on
++  # first reports each enabled extension's tab-independent state.
++  command setActionUpdatesEnabled
++    parameters
++      boolean enabled
++
++  # Cra: an extension changed its toolbar action. Empty values are ones the
++  # extension did not set: the manifest's default applies, or for a tab, the
++  # tab-independent value.
++  event actionUpdated
++    parameters
++      # Extension id.
++      string id
++      # Profile directory name ("Default", "Profile 1").
++      string profile
++      # The icon the extension set, as a PNG data: URL at its largest scale.
++      string icon
++      string title
++      string badgeText
++      # Badge background as #RRGGBBAA.
++      string badgeColor
++      # Page target of the tab the change is for; absent for the
++      # tab-independent state.
++      optional string targetId
++
+   # Installs an unpacked extension from the filesystem similar to
+   # --load-extension CLI flags. Returns extension ID once the extension
+   # has been installed.

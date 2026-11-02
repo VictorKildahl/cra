@@ -17,7 +17,8 @@ final class ExtensionStore {
         let url: URL
         /// Chromium's extension ID (from the manifest key, else the folder path).
         var extensionID: String = ""
-        /// Manifest icon for menus (16 px preferred).
+        /// The action's manifest icon (16 px preferred): its default_icon, else the extension's
+        /// icons, as Chrome's toolbar picks it.
         var icon: NSImage?
         /// action / browser_action / page_action default_popup, relative to the folder.
         var popupPath: String?
@@ -164,9 +165,12 @@ final class ExtensionStore {
         if title.hasPrefix("__MSG_") { title = id }
         let action = (m["action"] ?? m["browser_action"] ?? m["page_action"]) as? [String: Any]
         let options = (m["options_ui"] as? [String: Any])?["page"] as? String ?? m["options_page"] as? String
+        // A path or {size: path} (React DevTools' grey "disabled" icon until a page uses React).
+        let actionIcons = action?["default_icon"] as? [String: String] ?? (action?["default_icon"] as? String).map { ["16": $0] }
         return Entry(id: id, name: title.isEmpty ? id : title, version: str("version"), description: str("description"), url: dir,
                      extensionID: extensionID ?? chromiumID(key: m["key"] as? String, folder: dir),
-                     icon: ExtensionImporter.icon(manifest: m, folder: dir, minPixels: 16),
+                     icon: actionIcons.flatMap { ExtensionImporter.icon(manifest: ["icons": $0], folder: dir, minPixels: 16) }
+                        ?? ExtensionImporter.icon(manifest: m, folder: dir, minPixels: 16),
                      popupPath: (action?["default_popup"] as? String).flatMap { $0.isEmpty ? nil : $0 }, optionsPath: options)
     }
 
@@ -245,8 +249,9 @@ final class ExtensionStore {
         guard let data = try? Data(contentsOf: ExtensionStore.iconStylesFile) else { return [:] }
         return (try? JSONDecoder().decode([String: IconStyle].self, from: data)) ?? [:]
     }()
-    /// One image per extension, so the toolbar sees the same object until the style changes.
-    @ObservationIgnored private var toolbarIcons: [String: NSImage] = [:]
+    /// One image per extension, so the toolbar sees the same object until the style or the
+    /// image it was made from changes.
+    @ObservationIgnored private var toolbarIcons: [String: (base: NSImage?, image: NSImage?)] = [:]
 
     func iconStyle(_ id: String) -> IconStyle { iconStyles[id] ?? IconStyle() }
 
@@ -277,12 +282,16 @@ final class ExtensionStore {
         setIconStyle(id, style)
     }
 
-    /// The pinned button's image: the extension's icon, the user's replacement, or either as a
-    /// template image (the button tints templates with the toolbar's ink).
-    func toolbarIcon(for e: Entry) -> NSImage? {
+    /// The pinned button's image: the extension's icon as it is now on `tab`, the user's
+    /// replacement, or either as a template image (the button tints templates with the toolbar's
+    /// ink). A monochrome icon follows the extension's own changes.
+    func toolbarIcon(for e: Entry, profile: String, tab: UUID?) -> NSImage? {
+        // Read before the early return, so every caller's observation sees the extension's changes.
+        let live = liveIcon(for: e, profile: profile, tab: tab)
         let style = iconStyle(e.extensionID)
-        if style == IconStyle() { return e.icon }
-        if let cached = toolbarIcons[e.extensionID] { return cached }
+        if style == IconStyle() { return live }
+        let set = live === e.icon ? nil : live
+        if let cached = toolbarIcons[e.extensionID], cached.base === set { return cached.image }
         var image: NSImage?
         if let symbol = style.symbol {
             image = NSImage(systemSymbolName: symbol, accessibilityDescription: e.name)?
@@ -290,18 +299,54 @@ final class ExtensionStore {
             image?.isTemplate = true
         } else {
             if let file = style.imageFile {
-                image = NSImage(contentsOf: Self.customIconsDir.appendingPathComponent(file)) ?? e.icon
-            } else if style.monochrome {
+                image = NSImage(contentsOf: Self.customIconsDir.appendingPathComponent(file)) ?? live
+            } else if style.monochrome, set == nil {
                 // From the largest icon: in the 16 px one a plate's edge and the mark blur together.
                 let manifest = (try? Data(contentsOf: e.url.appendingPathComponent("manifest.json")))
                     .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
                 image = manifest.flatMap { ExtensionImporter.icon(manifest: $0, folder: e.url, minPixels: 128) } ?? e.icon
             } else {
-                image = e.icon
+                image = live
             }
             if style.monochrome { image = image.flatMap(Self.monochrome) }
         }
-        toolbarIcons[e.extensionID] = image
+        toolbarIcons[e.extensionID] = (set, image)
+        return image
+    }
+
+    // MARK: Live actions (GitHub #106: chrome.action.setIcon, setTitle)
+
+    /// What extensions set on their toolbar actions while running, from Chromium
+    /// (ExtensionActions forwards Extensions.actionUpdated).
+    private(set) var actions = ExtensionActionStates()
+    /// Decoded icons by their PNG bytes, so a redraw sees the same image until the icon changes.
+    @ObservationIgnored private var actionIcons: [Data: NSImage] = [:]
+
+    func applyActionUpdate(_ update: ExtensionActionUpdate, tab: UUID?) {
+        var next = actions
+        next.apply(update, tab: tab)
+        guard next != actions else { return }
+        actions = next
+    }
+
+    /// Drops the values extensions set for a tab whose page is gone (closed or asleep).
+    func forgetActionTab(_ tab: UUID) {
+        var next = actions
+        next.removeTab(tab)
+        guard next != actions else { return }
+        actions = next
+    }
+
+    /// The icon the extension shows on `tab` (any tab when nil): the one it set there, else
+    /// the one it set for every tab, else its manifest's.
+    func liveIcon(for e: Entry, profile: String, tab: UUID?) -> NSImage? {
+        guard let png = actions.state(extensionID: e.extensionID, profile: profile, tab: tab).icon else { return e.icon }
+        if let image = actionIcons[png] { return image }
+        guard let image = NSImage(data: png), image.size.width > 0 else { return e.icon }
+        // Action icons are 16 pt; Chromium sends the largest scale it has (32 px on Retina).
+        image.size = NSSize(width: 16, height: 16 * image.size.height / image.size.width)
+        if actionIcons.count > 64 { actionIcons.removeAll() }
+        actionIcons[png] = image
         return image
     }
 

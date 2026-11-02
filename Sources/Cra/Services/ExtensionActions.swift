@@ -200,6 +200,7 @@ final class ExtensionActions {
 
     private func handleEvent(_ method: String, params: String, sessionID: String?) {
         if method == "Target.targetCreated" || method == "Target.targetInfoChanged" { popupPageCreated(params); return }
+        if method == "Extensions.actionUpdated" { actionUpdated(params); return }
         guard method == "Target.attachedToTarget", let sessionID, childWaiters[sessionID] != nil,
               let p = try? JSONSerialization.jsonObject(with: Data(params.utf8)) as? [String: Any],
               let info = p["targetInfo"] as? [String: Any], info["type"] as? String == "page" else { return }
@@ -221,6 +222,64 @@ final class ExtensionActions {
               seenPopupTargets.insert(target).inserted, !placingOwnPopup,
               let anchor = defaultAnchor(id) else { return }
         placePopup(appearingAfter: WindowSnapshot(), anchor: anchor)
+    }
+
+    // MARK: Live actions (GitHub #106)
+
+    /// Cra's live pages by tab, set by the app.
+    private var liveTabs: () -> [(tab: UUID, browser: CraBrowser)] = { [] }
+    private var watchingActions = false
+    /// Page target → Cra tab: Chromium names the tab an action change is for by its page.
+    private var tabsByPageTarget: [String: UUID] = [:]
+    /// Page targets that were no Cra page when last looked up (Chrome's own pages).
+    private var foreignPageTargets: Set<String> = []
+    private var updatesAwaitingTabs: [ExtensionActionUpdate] = []
+    private var resolvingPageTargets = false
+
+    /// Turns on Chromium's Extensions.actionUpdated (Cra's CEF patch): extensions' own icons
+    /// (chrome.action.setIcon), titles and badges, for every tab or for one, reach ExtensionStore.
+    /// Chromium first reports what each extension has set so far.
+    func watchActions(liveTabs: @escaping () -> [(tab: UUID, browser: CraBrowser)]) {
+        self.liveTabs = liveTabs
+        guard isAvailable, !watchingActions else { return }
+        watchingActions = true
+        Task { _ = try? await call("Extensions.setActionUpdatesEnabled", ["enabled": true]) }
+    }
+
+    private func actionUpdated(_ params: String) {
+        guard let update = ExtensionActionUpdate(params: Data(params.utf8)) else { return }
+        guard let target = update.targetID else { return ExtensionStore.shared.applyActionUpdate(update, tab: nil) }
+        if let tab = tabsByPageTarget[target] { return ExtensionStore.shared.applyActionUpdate(update, tab: tab) }
+        guard !foreignPageTargets.contains(target) else { return }
+        updatesAwaitingTabs.append(update)
+        resolvePageTargets()
+    }
+
+    /// Asks each live page for its target, then applies the updates that waited for one, in order.
+    private func resolvePageTargets() {
+        guard !resolvingPageTargets else { return }
+        resolvingPageTargets = true
+        Task {
+            var map: [String: UUID] = [:]
+            for (tab, browser) in liveTabs() {
+                guard let info = try? await pageCall(browser, "Target.getTargetInfo"),
+                      let target = (info["targetInfo"] as? [String: Any])?["targetId"] as? String else { continue }
+                map[target] = tab
+            }
+            tabsByPageTarget = map
+            resolvingPageTargets = false
+            let waiting = updatesAwaitingTabs
+            updatesAwaitingTabs = []
+            foreignPageTargets = []
+            for update in waiting {
+                guard let target = update.targetID else { continue }
+                if let tab = map[target] {
+                    ExtensionStore.shared.applyActionUpdate(update, tab: tab)
+                } else {
+                    foreignPageTargets.insert(target)
+                }
+            }
+        }
     }
 
     // MARK: Protocol calls
