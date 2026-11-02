@@ -417,7 +417,7 @@ final class PaneToolbarView: NSView {
     private func addressMenu() -> NSMenu? {
         guard model.kind == .normal || model.kind == .developer else { return nil }
         let menu = NSMenu()
-        menu.addItem(ToolbarMenuAction.item("Copy URL", { [weak self] in self?.copyURL() }))
+        menu.addItem(ToolbarMenuAction.item("Copy URL", shortcut: "copyURL", { [weak self] in self?.copyURL() }))
         if model.kind == .normal {
             let full = store.settings.toolbarShowsFullURL
             menu.addItem(ToolbarMenuAction.item(full ? "Hide Full URL" : "Show Full URL", { [weak self] in
@@ -430,17 +430,17 @@ final class PaneToolbarView: NSView {
     private func showSplitMenu(from view: NSView?) {
         guard let id = paneTabID, let view else { return }
         let menu = NSMenu()
-        let items: [(String, () -> Void)?] = [
-            ("Separate Tab from Split", { [weak self] in self?.actions.separatePane(id) }),
-            ("Flip Split View Orientation", { [weak self] in self?.actions.performAction("flipSplitOrientation") }),
+        let items: [(String, String, () -> Void)?] = [
+            ("Separate Tab from Split", "separateFromSplit", { [weak self] in self?.actions.separatePane(id) }),
+            ("Flip Split View Orientation", "flipSplitOrientation", { [weak self] in self?.actions.performAction("flipSplitOrientation") }),
             nil,
-            ("Copy Link", { [weak self] in self?.actions.performAction("copyURL") }),
+            ("Copy Link", "copyURL", { [weak self] in self?.actions.performAction("copyURL") }),
             nil,
-            ("Close this Split Pane", { [weak self] in self?.actions.closePane(id) }),
+            ("Close this Split Pane", "closeSplitPane", { [weak self] in self?.actions.closePane(id) }),
         ]
         for entry in items {
-            guard let (title, run) = entry else { menu.addItem(.separator()); continue }
-            menu.addItem(ToolbarMenuAction.item(title, run))
+            guard let (title, shortcut, run) = entry else { menu.addItem(.separator()); continue }
+            menu.addItem(ToolbarMenuAction.item(title, shortcut: shortcut, run))
         }
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: view.bounds.height + 4), in: view)
     }
@@ -467,11 +467,13 @@ private final class ToolbarMenuAction: NSObject {
     init(_ run: @escaping () -> Void) { self.run = run }
     @objc func fire() { run() }
 
-    static func item(_ title: String, _ run: @escaping () -> Void) -> NSMenuItem {
+    /// `shortcut` names the KeyBindings command whose keys the row shows (#89).
+    @MainActor static func item(_ title: String, shortcut: String? = nil, _ run: @escaping () -> Void) -> NSMenuItem {
         let a = ToolbarMenuAction(run)
         let item = NSMenuItem(title: title, action: #selector(fire), keyEquivalent: "")
         item.target = a
         item.representedObject = a
+        if let shortcut { item.showShortcut(of: shortcut) }
         return item
     }
 }
