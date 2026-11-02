@@ -1604,6 +1604,16 @@ public:
                                 CefRefPtr<CefPermissionPromptCallback> callback) override {
         CraBrowser* o = owner_;
         if (!o || !o.delegate) return false;
+        // A page's <usermedia> or <permission> element (Meet's "Use microphone and camera")
+        // asks again for the requests just allowed, from inside Continue, when macOS has not
+        // yet given Cra the camera or microphone: Chrome's own prompt shows a macOS step
+        // there. Those requests are decided, so a second answer hits a CHECK in Chromium
+        // (#111). Close the step like Chrome's close button; Chrome's media code asks macOS
+        // itself when the page opens the device. CEF runs this Continue after we return.
+        if (answering_prompt_) {
+            callback->Continue(CEF_PERMISSION_RESULT_DISMISS);
+            return true;
+        }
         NSUInteger kinds = 0;
         if (requested_permissions & (CEF_PERMISSION_TYPE_CAMERA_STREAM | CEF_PERMISSION_TYPE_CAMERA_PAN_TILT_ZOOM)) kinds |= 1;
         if (requested_permissions & CEF_PERMISSION_TYPE_MIC_STREAM) kinds |= 2;
@@ -1613,12 +1623,16 @@ public:
         CefRefPtr<CefPermissionPromptCallback> cb = callback;
         [o.delegate browser:o requestsPermissionForOrigin:NSStringFromCef(requesting_origin) kinds:kinds
                  completion:^(BOOL allowed) {
+            answering_prompt_ = true;
             cb->Continue(allowed ? CEF_PERMISSION_RESULT_ACCEPT : CEF_PERMISSION_RESULT_DENY);
+            answering_prompt_ = false;
         }];
         return true;
     }
 
 private:
+    // True while a prompt's answer runs (UI thread only).
+    static inline bool answering_prompt_ = false;
     __weak CraBrowser* owner_;
     CefRefPtr<FaviconState> favicon_ = new FaviconState();
     CefRefPtr<CefResourceRequestHandler> blocker_ = new CraContentBlockingHandler();
