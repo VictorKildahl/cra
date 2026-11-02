@@ -69,12 +69,24 @@ final class FloatingSidebarController {
         let screenPoint = NSEvent.mouseLocation
         let p = shell.convert(window.convertPoint(fromScreen: screenPoint), from: nil)
         if !isShown {
-            guard sidebarHidden(), FloatingSidebarGeometry.shouldReveal(at: p, in: shell.bounds, edgeToEdge: shell.edgeToEdge) else { return }
+            guard sidebarHidden(), isKey, FloatingSidebarGeometry.shouldReveal(at: p, in: shell.bounds, edgeToEdge: shell.edgeToEdge) else { return }
             show()
         } else if !staysShown(), FloatingSidebarGeometry.shouldHide(at: p, in: shell.bounds, sidebarWidth: shell.sidebarWidth,
                                                     pressedMouseButtons: NSEvent.pressedMouseButtons, edgeToEdge: shell.edgeToEdge) {
             hide(animated: true)
         }
+    }
+
+    /// The app's key window (nil while Cra is inactive); the tests stand one in.
+    var keyWindow: () -> NSWindow? = { NSApp.keyWindow }
+
+    /// Like Arc, only the key window's sidebar comes out on hover (GitHub #82): every window
+    /// polls the pointer, and one behind another would otherwise reveal over it. The key
+    /// window is often one of this window's own child windows (a page, DevTools, the panel).
+    var isKey: Bool {
+        var w = keyWindow()
+        while let c = w, c !== window { w = c.parent }
+        return w != nil
     }
 
     /// The sidebar's floating frame on screen, from the shell's layout.

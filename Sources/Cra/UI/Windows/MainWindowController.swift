@@ -1473,7 +1473,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     private func setFloatingSidebar(_ show: Bool) {
         guard let floatingSidebar else { return }
-        if show { if !sidebarVisible { floatingSidebar.show() } } else { floatingSidebar.hide(animated: true) }
+        if show { if !sidebarVisible, floatingSidebar.isKey { floatingSidebar.show() } } else { floatingSidebar.hide(animated: true) }
     }
 
     private func installFloatingSidebar() {

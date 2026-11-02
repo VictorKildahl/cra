@@ -81,6 +81,30 @@ enum FloatingSidebarTests {
         drainAnimations()
         expect(!sidebar.isShown && !shell.sidebarDetached && !shell.floatingSidebar,
                "an uninterrupted hide still reattaches the sidebar normally")
+
+        // GitHub #82: like Arc, only the key window reveals, so a window behind another can't.
+        let page = NSWindow(contentRect: NSRect(x: -9990, y: -9990, width: 1380, height: 860),
+                            styleMask: [.borderless], backing: .buffered, defer: false)
+        page.isReleasedWhenClosed = false
+        window.addChildWindow(page, ordered: .above)
+        let front = NSWindow(contentRect: window.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        front.isReleasedWhenClosed = false
+        var key: NSWindow? = window
+        sidebar.keyWindow = { key }
+        expect(sidebar.isKey, "the key window reveals")
+        key = page
+        expect(sidebar.isKey, "its page being key counts as the window")
+        sidebar.show()
+        key = panel
+        expect(sidebar.isKey, "its floating panel being key counts as the window")
+        sidebar.hide(animated: false)
+        key = front
+        expect(!sidebar.isKey, "a window behind the key window does not reveal")
+        key = nil
+        expect(!sidebar.isKey, "no key window (Cra inactive) does not reveal")
+        window.removeChildWindow(page)
+        page.close()
+        front.close()
         window.close()
         print("Floating sidebar: \(checks) checks passed")
     }
