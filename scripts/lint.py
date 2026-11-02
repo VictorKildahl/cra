@@ -27,6 +27,13 @@ gains a finding fails, one that loses one is reported so the baseline can come d
       Packages/CraCore importing AppKit, Cocoa, SwiftUI, UIKit or CraCEF. The core is models and
       decisions that build and test without a window or Chromium (#51); what needs one stays in
       the app, with the pure part in CraCore (Shortcut over KeyChord, FaviconCache over FaviconKey).
+  perf-no-network
+      Networking (URLSession, CFNetwork, Network.framework, sockets) under either Perf folder: the
+      performance recorder never sends anything anywhere (#91); the export is the user's to share.
+  perf-boundary
+      The performance recorder stays removable (#91, docs/performance.md): outside its two folders
+      only the files in PERF_CALLERS reach it, and inside Sources/Cra/Perf only PerfCEF.swift sees
+      Chromium (CraCEF), so the facade and recorder compile in the test harnesses.
 """
 import collections
 import os
@@ -41,6 +48,12 @@ BASELINE = os.path.join(ROOT, "Tests", "lint-baseline.txt")
 LAYER_SET = re.compile(r"\b(?!layer\b)(\w*[Ll]ayer)\.(backgroundColor|borderColor|colors|opacity|shadowColor|fillColor|strokeColor)\s*=")
 FUNC_START = re.compile(r"^\s*(?:@\w+\s+)*(?:(?:private|fileprivate|internal|public|override|static|final|class|nonisolated|convenience|required|@objc)\s+)*(func\s|init[(?!])")
 CORE_IMPORT = re.compile(r"^\s*(?:@\w+\s+)*import\s+(?:(?:struct|class|enum|protocol|func|var|let|typealias)\s+)?(AppKit|Cocoa|SwiftUI|UIKit|CraCEF)\b")
+PERF_DIRS = ("Perf/",)
+PERF_CORE = os.path.join("Packages", "CraCore", "Sources", "CraCore", "Perf") + os.sep
+PERF_CALLERS = {"App/main.swift", "App/AppDelegate.swift", "Services/BrowserManager.swift", "Services/Persistence.swift",
+                "Services/HitchMonitor.swift", "Services/Diagnostics.swift", "UI/Settings/SettingsWindowController.swift"}
+PERF_NAME = re.compile(r"\b(?:Perf(?:[A-Z]\w*)?|PerformancePane)\b")
+NETWORK = re.compile(r"\bURLSession\b|\bCFNetwork\b|\bNWConnection\b|\bNWPathMonitor\b|^\s*import\s+Network\b|\bCFSocket\w*|\bCFStream\w*|\bsocket\(")
 CLOCK_FILES = {"Services/SidebarStore.swift", "Services/BrowserManager.swift", "Services/LiveFolderManager.swift",
                "Services/SidebarIntegrity.swift", "App/AppComposition.swift"}
 
@@ -89,6 +102,13 @@ def findings():
                 hit("wall-clock-in-decision", rel, i)
             if "withObservationTracking" in line:
                 hit("raw-observation-tracking", rel, i)
+            if rel.startswith(PERF_DIRS):
+                if NETWORK.search(line):
+                    hit("perf-no-network", rel, i)
+                if CORE_IMPORT.match(line) and re.search(r"\bCraCEF\b", line) and rel != "Perf/PerfCEF.swift":
+                    hit("perf-boundary", rel, i)
+            elif rel not in PERF_CALLERS and PERF_NAME.search(line):
+                hit("perf-boundary", rel, i)
             for name in re.findall(r"\benum (\w+)Importer\b", line):
                 if not os.path.isdir(os.path.join(ROOT, "Tests", "Fixtures", name)):
                     hit("importer-without-fixture", f"{rel}:{name}", i)
@@ -100,6 +120,8 @@ def findings():
                     for i, line in enumerate(f, 1):
                         if CORE_IMPORT.match(code(line)):
                             hit("core-platform-import", os.path.relpath(full, ROOT), i)
+                        if os.path.relpath(full, ROOT).startswith(PERF_CORE) and NETWORK.search(code(line)):
+                            hit("perf-no-network", os.path.relpath(full, ROOT), i)
     return out, where
 
 

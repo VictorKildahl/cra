@@ -1,0 +1,118 @@
+import Foundation
+
+/// Everything the recorder holds in memory for one session, and the report made from it. The
+/// recorder keeps one behind a lock; every change is a call here, so what a report says is
+/// decided (and tested) in one place. Times are seconds since the session started.
+public struct PerfState: Sendable {
+    public var policy = PerfStallPolicy()
+    public private(set) var passes = LogHistogram()
+    public private(set) var timings: [PerfMetric: LogHistogram] = [:]
+    public private(set) var counters: [PerfCounter: [String: Int]] = [:]
+    public private(set) var stalls = PerfRing<PerfStall>(capacity: 40)
+    public private(set) var stallCount = 0
+    public private(set) var longStallCount = 0
+    public private(set) var hangCount = 0
+    public private(set) var outsideFreezes = 0
+    public private(set) var longestMs: Double = 0
+    public private(set) var marks = PerfRing<PerfMark>(capacity: 64)
+    public private(set) var events = PerfRing<PerfEvent>(capacity: 150)
+    public private(set) var longTasks = 0
+    public private(set) var longTaskMs: Double = 0
+    public private(set) var startup: [String: Double] = [:]
+    public var processes: [PerfProcessGroup] = []
+    public var system: PerfSystemSample?
+    public var tabs: PerfTabCounts?
+    /// The host of the page Cra put on screen last (nil for none or incognito), for stalls.
+    public var visibleSite: String?
+    private var historyBase = (stalls: 0, long: 0, longTasks: 0, crashes: 0)
+
+    public init() {}
+
+    public mutating func mark(_ label: String, at: Double) { marks.append(PerfMark(at: at, label: label)) }
+
+    public mutating func time(_ metric: PerfMetric, ms: Double) { timings[metric, default: LogHistogram()].record(ms) }
+
+    /// Main-loop passes measured since the last call (the observer keeps its own histogram so the
+    /// main thread never waits on this state for a short pass).
+    public mutating func addPasses(_ h: LogHistogram) { passes.add(h) }
+
+    /// A pass of `ms` that ended at `at`: counted, and returned when it is a stall.
+    @discardableResult
+    public mutating func pass(ms: Double, endedAt at: Double, mode: String) -> PerfStall? {
+        guard let s = policy.stall(at: at, ms: ms, mode: mode, marks: marks.elements, site: visibleSite) else { return nil }
+        stalls.append(s)
+        guard s.freeze else { outsideFreezes += 1; return s }
+        stallCount += 1
+        if s.kind != .stall { longStallCount += 1 }
+        if s.kind == .hang { hangCount += 1 }
+        longestMs = max(longestMs, ms)
+        if s.kind != .stall {
+            events.append(PerfEvent(at: at, kind: s.kind == .hang ? "hang" : "freeze",
+                                    detail: s.marks.last.map { "after \($0)" } ?? "", ms: ms, site: s.site))
+        }
+        return s
+    }
+
+    /// A counted fact; renderer trouble and failed loads are events as well.
+    public mutating func count(_ counter: PerfCounter, key: String, at: Double, site: String? = nil) {
+        counters[counter, default: [:]][key, default: 0] += 1
+        switch counter {
+        case .rendererTerminated: events.append(PerfEvent(at: at, kind: "renderer", detail: key, site: site))
+        case .rendererUnresponsive: events.append(PerfEvent(at: at, kind: "renderer", detail: "unresponsive", site: site))
+        case .rendererResponsive: events.append(PerfEvent(at: at, kind: "renderer", detail: "responsive again", site: site))
+        case .loadError: events.append(PerfEvent(at: at, kind: "load", detail: "error \(key)", site: site))
+        case .tabSlept, .sleepRefusal: break
+        }
+    }
+
+    /// The visible tab's long tasks since the last read (count, total, and each duration).
+    public mutating func pageLongTasks(count: Int, totalMs: Double, durations: [Double]) {
+        guard count > 0 else { return }
+        longTasks += count
+        longTaskMs += max(0, totalMs)
+        for d in durations.prefix(100) { time(.longTask, ms: d) }
+    }
+
+    /// A start-up phase, the first time it is reached (milliseconds since the process started).
+    public mutating func phase(_ name: String, ms: Double) {
+        if startup[name] == nil { startup[name] = ms }
+    }
+
+    /// The counts since the last history sample, with the current levels.
+    public mutating func historySample() -> PerfHistorySample {
+        let crashes = counters[.rendererTerminated]?.values.reduce(0, +) ?? 0
+        let s = PerfHistorySample(cpuPct: processes.reduce(0) { $0 + $1.cpuPct },
+                                  footprintBytes: processes.reduce(0) { $0 + $1.footprintBytes },
+                                  stalls: stallCount - historyBase.stalls, longStalls: longStallCount - historyBase.long,
+                                  longTasks: longTasks - historyBase.longTasks, rendererCrashes: crashes - historyBase.crashes,
+                                  liveTabs: tabs?.live ?? 0)
+        historyBase = (stallCount, longStallCount, longTasks, crashes)
+        return s
+    }
+
+    public func report(generatedAt: Date, session: PerfSessionInfo, selfCost: PerfSelfCost,
+                       storage: PerfReport.Storage = PerfReport.Storage()) -> PerfReport {
+        var storage = storage
+        if storage.freeDiskBytes == nil { storage.freeDiskBytes = system?.freeDiskBytes }
+        var r = PerfReport(
+            generatedAt: generatedAt, session: session, selfCost: selfCost,
+            mainThread: .init(passes: passes, stalls: stallCount, longStalls: longStallCount, hangs: hangCount,
+                              outsideFreezes: outsideFreezes, longestMs: longestMs, recent: stalls.elements),
+            processes: processes, system: system,
+            tabs: .init(latest: tabs, longTasks: longTasks, longTaskMs: longTaskMs),
+            timings: Dictionary(uniqueKeysWithValues: timings.map { ($0.key.rawValue, $0.value) }),
+            counters: Dictionary(uniqueKeysWithValues: counters.map { ($0.key.rawValue, $0.value) }),
+            startup: startup, storage: storage, events: events.elements, insights: [])
+        r.insights = PerfInsights.evaluate(r)
+        return r
+    }
+
+    /// About how much memory this holds: the budget is 5 MB.
+    public var estimatedBytes: Int {
+        let histograms = (timings.count + 1) * (LogHistogram.bucketCount + 3) * 8
+        let marksBytes = marks.elements.reduce(0) { $0 + 32 + $1.label.utf8.count }
+        let stallBytes = stalls.elements.reduce(0) { $0 + 96 + $1.marks.reduce(0) { $0 + $1.utf8.count + 16 } }
+        let eventBytes = events.elements.reduce(0) { $0 + 80 + $1.detail.utf8.count + ($1.site?.utf8.count ?? 0) }
+        return 1024 + histograms + marksBytes + stallBytes + eventBytes + processes.count * 96
+    }
+}

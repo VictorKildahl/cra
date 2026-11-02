@@ -264,6 +264,11 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 /// the URL to open as a Cra tab; Chrome's own window for it is closed.
 /// Popup-type windows (windows.create({type: "popup"})) stay Chrome's windows.
 + (void)setStrayPageHandler:(void (^)(NSString *url))handler;
+/// Renderer trouble and failed loads, for Cra's performance recorder (GitHub #91): `kind` is
+/// terminated, unresponsive, responsive or loadError; `detail` how it ended or the net error
+/// code; `site` the host (nil for incognito, Cra's own pages or a closed tab). Never a URL.
+/// On the main thread. Chrome's "Page Unresponsive" dialog still shows.
++ (void)setProcessEventHandler:(void (^)(NSString *kind, NSString *detail, NSString *_Nullable site))handler;
 /// YES for a popup window an extension opened (kept by the stray page handling).
 + (BOOL)isExtensionWindow:(NSWindow *)window;
 /// YES for the Chrome-style window hosting one of Cra's own browsers.

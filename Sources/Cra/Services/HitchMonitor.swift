@@ -39,7 +39,11 @@ enum HitchMonitor {
         thread.start()
     }
 
-    static func mark(_ label: String) { write("mark \(label)") }
+    /// Also a breadcrumb for the performance recorder: what Cra did before a stall.
+    static func mark(_ label: String) {
+        Perf.mark(label)
+        write("mark \(label)")
+    }
 
     private static func write(_ line: String) {
         lock.lock()

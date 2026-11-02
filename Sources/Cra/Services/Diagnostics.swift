@@ -4,8 +4,10 @@ import UniformTypeIdentifiers
 
 /// Help ▸ Export Diagnostics…: a zip a user can attach to an issue or send by mail. Holds
 /// Cra's and Chromium's logs (this launch and the last), the on-screen pages' state, the GPU
-/// report and recent crash reports. Addresses are cut to their host and the home folder to
-/// `~`; no history, cookies, passwords or page content leave the Mac.
+/// report, recent crash reports and the performance recorder's perf.json (GitHub #91).
+/// Addresses are cut to their host and the home folder to `~`; with Settings ▸ Performance ▸
+/// "Hide site names" the hosts become site-1, site-2… in every file. No history, cookies,
+/// passwords or page content leave the Mac.
 @MainActor
 enum Diagnostics {
     /// Asks where to save, unless `destination` is given (cra://debug?exportDiagnostics=<path>).
@@ -13,8 +15,10 @@ enum Diagnostics {
         CraLog.note("diagnostics export started")
         collectPages(windows: windows, store: store) { pages in
             CraCEFRuntime.sendBrowserDevToolsMethod("SystemInfo.getInfo", params: "{}") { gpu, error in
-                DispatchQueue.main.async {
-                    save(pages: pages, gpu: gpu ?? "{\"error\": \"\(error ?? "no answer")\"}", store: store, to: destination)
+                // The profile's size is measured off the main thread.
+                PerfRecorder.exportFiles { perf, perfSites in
+                    save(pages: pages, gpu: gpu ?? "{\"error\": \"\(error ?? "no answer")\"}", perf: perf, perfSites: perfSites,
+                         store: store, to: destination)
                 }
             }
         }
@@ -49,7 +53,8 @@ enum Diagnostics {
         }
     }
 
-    private static func save(pages: String, gpu: String, store: SidebarStore, to chosen: URL?) {
+    private static func save(pages: String, gpu: String, perf: [(name: String, text: String)], perfSites: Set<String>,
+                             store: SidebarStore, to chosen: URL?) {
         let stamp: String = {
             let f = DateFormatter()
             f.locale = Locale(identifier: "en_US_POSIX")
@@ -64,14 +69,19 @@ enum Diagnostics {
         let folder = staging.appendingPathComponent(name, isDirectory: true)
         try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
         let home = NSHomeDirectory()
+        var sites = store.settings.perfHidesSiteNames ? SiteNames(hosts: knownSites(store).union(perfSites)) : nil
         func write(_ text: String, _ file: String) {
-            try? Data(DiagnosticsRedaction.redact(text, home: home).utf8).write(to: folder.appendingPathComponent(file))
+            var out = DiagnosticsRedaction.redact(text, home: home)
+            if sites != nil { out = sites!.apply(out) }
+            try? Data(out.utf8).write(to: folder.appendingPathComponent(file))
         }
 
         CraLog.flush()
         write(summary(store: store), "summary.txt")
         write(pages, "pages.txt")
         write(gpu, "gpu.json")
+        if perf.contains(where: { $0.name.hasPrefix("perf/") }) { try? fm.createDirectory(at: folder.appendingPathComponent("perf"), withIntermediateDirectories: true) }
+        for (name, text) in perf { write(text, name) }
         for (url, file) in [(CraLog.file, "cra.log"), (CraLog.previousFile, "cra.previous.log"),
                             (AppPaths.log, "chromium.log"), (CraLog.chromiumPreviousFile, "chromium.previous.log")] {
             if let data = try? Data(contentsOf: url) { write(String(decoding: data, as: UTF8.self), file) }
@@ -109,10 +119,20 @@ enum Diagnostics {
         if chosen == nil { NSWorkspace.shared.activateFileViewerSelecting([destination]) }
     }
 
+    /// Every site the zip can name: the log's, the sidebar's, the history's and the archive's
+    /// (Chromium's log names the sites of the same tabs).
+    private static func knownSites(_ store: SidebarStore) -> Set<String> {
+        var hosts = CraLog.sitesSeen
+        let urls = store.allTabs().compactMap { $0.tab?.url } + store.history.values.map(\.url)
+            + store.archive.compactMap { $0.item.tab?.url }
+        for u in urls { if let h = SiteNames.siteHost(of: u) { hosts.insert(h) } }
+        return hosts
+    }
+
     private static func askWhere(_ fileName: String) -> URL? {
         let panel = NSSavePanel()
         panel.title = "Export Diagnostics"
-        panel.message = "Cra's logs, the state of the pages on screen and recent crash reports. Site names only: no addresses, history, cookies or passwords."
+        panel.message = "Cra's logs, its performance record, the state of the pages on screen and recent crash reports. Site names only: no addresses, history, cookies or passwords."
         panel.nameFieldStringValue = fileName
         panel.allowedContentTypes = [.zip]
         panel.directoryURL = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first

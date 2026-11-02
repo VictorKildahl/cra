@@ -26,6 +26,8 @@
   "peekInEveryTab" : false,
   "peekLinksToOtherSites" : true,
   "peekOnShiftClick" : true,
+  "perfHidesSiteNames" : false,
+  "perfRecording" : true,
   "searchEngine" : "google",
   "searchSuggestions" : true,
   "showSpaceHeaderOnSingleSpace" : true,

@@ -44,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         bootstrapped = true
         NSApp.setActivationPolicy(.regular)
         installURLEventHandler()
+        PerfCEF.install(app: self)
         CraCEFRuntime.setChromeHosting(store.settings.chromeEngine)
         CraCEFRuntime.setOwnContextMenus(EmbeddedPages.isEnabled)
         CraCEFRuntime.setDocumentStartScript(PageScript.mainWorld, isolatedScript: PageScript.isolatedWorld, world: PageScript.world)
@@ -113,11 +114,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let urls = pendingURLs
         pendingURLs = []
         for u in urls { openExternalURL(u) }
+        Perf.phase("windowsShown")
     }
 
     /// A fresh install runs Dia's onboarding (cover, default browser, privacy,
     /// import, pinned tabs, personalization, outro).
-    private var needsOnboarding: Bool {
+    var needsOnboarding: Bool {
         !store.settings.hasSeenImportPrompt && store.allTabs().count <= 2
     }
 
@@ -509,6 +511,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let st = dict["status"] { main.browserManager(statusMessage: st); return }
             // Scenario hooks (scripts/scenario.sh): what a journey needs without a pointer.
             if dict["checkStore"] != nil { logSidebarProblems(); return }
+            // A main-thread stall of this many milliseconds, for the performance recorder's tests.
+            if let ms = dict["stall"].flatMap(Double.init) { usleep(useconds_t(min(max(ms, 0), 30_000) * 1000)); return }
+            if let path = dict["perfReport"] {
+                PerfRecorder.shared?.snapshot { report in
+                    try? PerfReport.encoder().encode(report).write(to: URL(fileURLWithPath: path), options: .atomic)
+                }
+                return
+            }
             if let js = dict["pageJS"] { main.currentBrowser?.executeJavaScript(js); return }
             if let path = dict["installExtension"] {
                 do { try ExtensionStore.shared.add(folder: URL(fileURLWithPath: path, isDirectory: true)) } catch {
@@ -898,7 +908,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     _ = self.store.createTab(url: url, select: true)
                     self.settingsWindow?.close()
                     self.main.showWindow(nil)
-                })
+                },
+                exportDiagnostics: { [weak self] in self?.exportDiagnostics() })
             let c = SettingsWindowController(store: store, bindings: bindings, actions: actions)
             settingsController = c
             settingsWindow = c.window

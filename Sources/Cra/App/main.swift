@@ -2,11 +2,14 @@ import AppKit
 import CraCEF
 
 MainActor.assumeIsolated {
+    // Start-up phases count from here, before AppDelegate decodes the data folder's files.
+    Perf.launch()
     // Order matters: the CefAppProtocol NSApplication must exist before Chromium
     // initializes, and Chromium must be initialized before any browser is made.
     let app = CraApplication.shared
     let delegate = AppDelegate()
     app.delegate = delegate
+    Perf.phase("storeLoaded")
 
     // The newest copy of Cra runs: an older install opens a newer one, and an older
     // Cra holding the profile quits rather than receiving this launch (NewestCopy).
@@ -57,11 +60,22 @@ MainActor.assumeIsolated {
 
     ChromiumBluetoothCache.install()
 
+    // Only now: the "another Cra is running" and failed-start exits above leave no session marker.
+    Perf.phase("chromiumStarted")
+    let info = Bundle.main.infoDictionary
+    PerfRecorder.configure(owner: profileIsFree,
+                           recording: PerfSessionRules.recording(setting: delegate.store.settings.perfRecording,
+                                                                 environment: ProcessInfo.processInfo.environment),
+                           config: .init(folder: AppPaths.file("Perf"), chromiumFolder: AppPaths.chromiumCache),
+                           craVersion: "\(info?["CFBundleShortVersionString"] as? String ?? "dev") (\(info?["CFBundleVersion"] as? String ?? "?"))",
+                           chromiumVersion: CraCEFRuntime.chromiumVersion(), onboarding: delegate.needsOnboarding)
+
     // Belt and braces: Chromium's run loop drives NSApplication and should call
     // applicationDidFinishLaunching, but bootstrapping is idempotent either way.
     DispatchQueue.main.async { delegate.bootstrapIfNeeded() }
     HitchMonitor.startIfRequested()
     CraCEFRuntime.runMessageLoop()
+    PerfRecorder.quit()
     // A log that ends without this line ended in a crash or a forced quit.
     CraLog.note("Cra quits")
     CraLog.flush()

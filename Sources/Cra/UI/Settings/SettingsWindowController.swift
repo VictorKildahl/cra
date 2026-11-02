@@ -5,13 +5,14 @@ import SwiftUI
 struct SettingsActions {
     var importData: () -> Void = {}
     var openURL: (String) -> Void = { _ in }
+    var exportDiagnostics: () -> Void = {}
 }
 
 /// The panes in Dia's Settings sidebar (Dia 1.54.2: Account, Tabs, Privacy, Profiles, Skills,
 /// Apps, Shortcuts, Advanced). Cra has no account or AI skills/apps; General
 /// (system integration) and Extensions take rows instead.
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, tabs, privacy, profiles, extensions, shortcuts, advanced
+    case general, tabs, privacy, profiles, extensions, shortcuts, performance, advanced
     var id: String { rawValue }
 
     var title: String {
@@ -22,6 +23,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .profiles: return "Profiles"
         case .extensions: return "Extensions"
         case .shortcuts: return "Shortcuts"
+        case .performance: return "Performance"
         case .advanced: return "Advanced"
         }
     }
@@ -35,6 +37,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .profiles: return "person"
         case .extensions: return "puzzlepiece.extension"
         case .shortcuts: return "keyboard"
+        case .performance: return "gauge.with.dots.needle.67percent"
         case .advanced: return "gearshape.2"
         }
     }
@@ -47,6 +50,8 @@ final class SettingsNavigation {
     private(set) var pane: SettingsPane = .general
     private(set) var back: [SettingsPane] = []
     private(set) var forward: [SettingsPane] = []
+    /// The window is on screen: panes that refresh (Performance) stop while it is closed or covered.
+    var isOpen = false
 
     func show(_ p: SettingsPane) {
         guard p != pane else { return }
@@ -112,6 +117,16 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         // Size last: the toolbar and full-size content change how the frame is derived.
         window.setFrame(NSRect(origin: .zero, size: SettingsMetrics.windowSize), display: false)
         window.center()
+        // On screen: shown and not entirely covered (the window needn't be key).
+        for name in [NSWindow.didChangeOcclusionStateNotification, NSWindow.willCloseNotification] {
+            NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [nav] note in
+                MainActor.assumeIsolated {
+                    guard let w = note.object as? NSWindow else { return }
+                    let open = note.name != NSWindow.willCloseNotification && w.occlusionState.contains(.visible)
+                    if nav.isOpen != open { nav.isOpen = open }
+                }
+            }
+        }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
@@ -225,6 +240,7 @@ struct SettingsContent: View {
                 case .profiles: ProfilesPane()
                 case .extensions: ExtensionsPane(actions: actions)
                 case .shortcuts: ShortcutsPane()
+                case .performance: PerformancePane(nav: nav, actions: actions)
                 case .advanced: AdvancedPane(actions: actions)
                 }
             }

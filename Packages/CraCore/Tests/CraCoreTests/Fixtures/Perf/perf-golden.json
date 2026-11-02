@@ -1,0 +1,264 @@
+{
+  "counters" : {
+    "loadError" : {
+      "-105" : 1
+    },
+    "rendererTerminated" : {
+      "crashed" : 1
+    },
+    "sleepRefusal" : {
+      "typed" : 1
+    }
+  },
+  "events" : [
+    {
+      "at" : 101.7,
+      "detail" : "after page-shown",
+      "kind" : "freeze",
+      "ms" : 1200,
+      "site" : "video.example.com"
+    },
+    {
+      "at" : 300,
+      "detail" : "crashed",
+      "kind" : "renderer",
+      "site" : "video.example.com"
+    },
+    {
+      "at" : 310,
+      "detail" : "error -105",
+      "kind" : "load"
+    }
+  ],
+  "generatedAt" : "2026-10-26T07:43:20Z",
+  "insights" : [
+    {
+      "detail" : "The longest lasted 1.2 s.",
+      "id" : "freezes",
+      "severity" : "warning",
+      "title" : "Cra froze 1 time for a second or more"
+    },
+    {
+      "detail" : "A page's process crashed, ran out of memory or was ended.",
+      "id" : "renderer-crashes",
+      "severity" : "warning",
+      "title" : "1 page stopped (“Aw, Snap!”)"
+    }
+  ],
+  "mainThread" : {
+    "hangs" : 0,
+    "longStalls" : 1,
+    "longestMs" : 1200,
+    "outsideFreezes" : 1,
+    "passes" : {
+      "buckets" : [
+        2,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "count" : 6,
+      "maxMs" : 1200,
+      "totalMs" : 1515.6
+    },
+    "recent" : [
+      {
+        "at" : 50,
+        "freeze" : true,
+        "kind" : "stall",
+        "marks" : [
+
+        ],
+        "mode" : "default",
+        "ms" : 300,
+        "site" : "video.example.com"
+      },
+      {
+        "at" : 101.7,
+        "freeze" : true,
+        "kind" : "long",
+        "marks" : [
+          "swipe-begin",
+          "page-shown"
+        ],
+        "mode" : "default",
+        "ms" : 1200,
+        "site" : "video.example.com"
+      },
+      {
+        "at" : 200,
+        "freeze" : false,
+        "kind" : "hang",
+        "marks" : [
+
+        ],
+        "mode" : "tracking",
+        "ms" : 4000,
+        "site" : "video.example.com"
+      }
+    ],
+    "stalls" : 2
+  },
+  "processes" : [
+    {
+      "available" : true,
+      "count" : 1,
+      "cpuPct" : 4.5,
+      "diskReadBytes" : 1048576,
+      "diskWriteBytes" : 2097152,
+      "ended" : 0,
+      "footprintBytes" : 314572800,
+      "kind" : "browser",
+      "started" : 0,
+      "wakeups" : 1000
+    },
+    {
+      "available" : true,
+      "count" : 3,
+      "cpuPct" : 12.25,
+      "diskReadBytes" : 0,
+      "diskWriteBytes" : 0,
+      "ended" : 1,
+      "footprintBytes" : 943718400,
+      "kind" : "renderer",
+      "started" : 4,
+      "wakeups" : 5000
+    }
+  ],
+  "schema" : 1,
+  "selfCost" : {
+    "bytesWritten" : 70000,
+    "cpuMs" : 120,
+    "cpuPct" : 0.02,
+    "memoryBytes" : 9000,
+    "observerCallbacks" : 50000,
+    "observerMs" : 4,
+    "writes" : 2
+  },
+  "session" : {
+    "chromiumVersion" : "156.0.7445.0",
+    "craVersion" : "0.1.27",
+    "firstLaunchAt" : "2026-10-25T07:33:20Z",
+    "id" : "0123abcd",
+    "launch" : 2,
+    "onboarding" : false,
+    "startedAt" : "2026-10-26T07:33:20Z",
+    "uptimeSeconds" : 600,
+    "writesFiles" : true
+  },
+  "startup" : {
+    "cefStarted" : 480,
+    "main" : 12
+  },
+  "storage" : {
+    "cacheBytes" : 209715200,
+    "freeDiskBytes" : 107374182400,
+    "profileBytes" : 524288000
+  },
+  "system" : {
+    "cpuPct" : 23,
+    "freeDiskBytes" : 107374182400,
+    "lowPowerMode" : false,
+    "memoryPressure" : "normal",
+    "thermalState" : "nominal"
+  },
+  "tabs" : {
+    "latest" : {
+      "incognito" : 0,
+      "live" : 6,
+      "slept" : 3,
+      "tabs" : 40,
+      "visible" : 1,
+      "windows" : 1
+    },
+    "longTaskMs" : 420,
+    "longTasks" : 3
+  },
+  "timings" : {
+    "longTask" : {
+      "buckets" : [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "count" : 3,
+      "maxMs" : 240,
+      "totalMs" : 420
+    },
+    "pageCreate" : {
+      "buckets" : [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "count" : 1,
+      "maxMs" : 110,
+      "totalMs" : 110
+    },
+    "tabSwitch" : {
+      "buckets" : [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "count" : 2,
+      "maxMs" : 40,
+      "totalMs" : 46
+    }
+  }
+}
