@@ -33,7 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         "nextTab", "previousTab", "recentTab", "recentTabBackward", "nextSpace", "previousSpace", "devTools", "jsConsole", "inspectElement",
         "viewArchive", "openLibrary", "settings", "clearToday", "newLittleWindow", "promoteLittleWindow",
         "addSplitView", "closeSplitPane",
-    ] + (1...9).flatMap { ["item\($0)", "space\($0)"] })
+    ] + (1...9).flatMap { ["item\($0)", "space\($0)", "moveTabToSpace\($0)"] })
 
     // MARK: Lifecycle
 
@@ -646,6 +646,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "addSplitView": return store.selectedTabID != nil
         case "editSpace", "deleteSpace", "nextSpace", "previousSpace", "manageSpaces": return !main.isIncognito
         case "closeLittleWindows": return !littleWindows.isEmpty
+        case let id? where id.hasPrefix("moveTabToSpace"): return store.selectedTabID != nil && !main.isIncognito
         default: break
         }
         return true
@@ -849,6 +850,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 if n - 1 < tabs.count { store.selectTab(tabs[n - 1].id) }
             } else if id.hasPrefix("space"), let n = Int(id.dropFirst(5)) {
                 if n - 1 < store.spaceOrder.count { store.focusSpace(store.spaceOrder[n - 1]) }
+            } else if id.hasPrefix("moveTabToSpace"), let n = Int(id.dropFirst(14)) {
+                if let c = current, n - 1 < store.spaceOrder.count { store.moveTabAndFollow(c, toSpace: store.spaceOrder[n - 1]) }
             }
         }
     }
@@ -991,6 +994,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         spaces.addItem(item("editSpace")); spaces.addItem(item("deleteSpace")); spaces.addItem(item("manageSpaces"))
         spaces.addItem(.separator())
         for n in 1...9 { spaces.addItem(item("space\(n)")) }
+        spaces.addItem(.separator())
+        for n in 1...9 { spaces.addItem(item("moveTabToSpace\(n)")) }
         menubar.addItem(submenu: spaces, title: "Spaces")
 
         let tabs = NSMenu(title: "Tabs")

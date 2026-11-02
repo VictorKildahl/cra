@@ -940,10 +940,33 @@ final class SidebarStore {
     }
 
     func moveTab(_ id: UUID, toSpace sid: UUID) {
-        guard let space = spaces[sid] else { return }
-        if isFavorite(id) { return moveItem(id, to: space.favoritesContainerID, index: nil) }
-        let pinned = isPinned(id)
-        moveItem(id, to: pinned ? space.pinnedContainerID : space.todayContainerID, index: pinned ? nil : 0)
+        guard let space = spaces[sid], let it = items[id] else { return }
+        let from = spaceID(ofItem: id)
+        let moved = Set([id] + it.children)
+        if isFavorite(id) {
+            moveItem(id, to: space.favoritesContainerID, index: nil)
+        } else {
+            let pinned = isPinned(id)
+            moveItem(id, to: pinned ? space.pinnedContainerID : space.todayContainerID, index: pinned ? nil : 0)
+        }
+        // A window that had it open in the old space picks the next tab there, as on close.
+        guard let from, from != sid, spaceID(ofItem: id) == sid else { return }
+        for w in prefs.windows {
+            guard let sel = w.selectedTabPerSpace[from], moved.contains(sel) else { continue }
+            updateWindow(w.id) { $0.selectedTabPerSpace[from] = nextSelection(after: it, in: from) }
+        }
+    }
+
+    /// Arc's command bar "Move to Today in <space>": the tab goes to that space and the
+    /// window follows it there with the tab still selected. A pane brings its split along.
+    @discardableResult
+    func moveTabAndFollow(_ id: UUID, toSpace sid: UUID, window: UUID? = nil) -> Bool {
+        let moving = splitContaining(id)?.id ?? id
+        guard items[id]?.isTab == true, spaces[sid] != nil, spaceID(ofItem: moving) != sid else { return false }
+        moveTab(moving, toSpace: sid)
+        guard spaceID(ofItem: moving) == sid else { return false }
+        selectTab(id, window: window)
+        return true
     }
 
     // MARK: Folders
