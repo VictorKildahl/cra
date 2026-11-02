@@ -33,4 +33,19 @@ struct KeyChordTests {
         let chord = KeyChord(key: "s", modifiers: Self.command | KeyChord.Modifiers.shift.rawValue)
         #expect(chord.keys == KeyChord.Modifiers([.command, .shift]))
     }
+
+    /// ⌘Return opens the command bar's row in a background tab (GitHub #85).
+    @Test(arguments: [
+        (UInt16(36), command, true),                      // ⌘Return
+        (76, command, true),                              // ⌘Enter on the keypad
+        (36, command | 0x10000 | 0x800000, true),         // Caps Lock and the function-key bit don't count
+        (36, 0, false),                                   // Return
+        (36, command | KeyChord.Modifiers.shift.rawValue, false),
+        (36, command | KeyChord.Modifiers.option.rawValue, false),
+        (36, KeyChord.Modifiers.control.rawValue, false),
+        (37, command, false),                             // ⌘L
+    ])
+    func commandReturn(keyCode: UInt16, modifiers: UInt, matches: Bool) {
+        #expect(KeyChord.isCommandReturn(keyCode: keyCode, modifiers: modifiers) == matches)
+    }
 }

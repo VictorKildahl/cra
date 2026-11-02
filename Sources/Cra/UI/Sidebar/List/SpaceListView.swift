@@ -248,17 +248,25 @@ final class SpaceListView: NSView, NSDraggingSource {
             var row = Row(key: .item(item.id), content: .newTab(active: false), decor: decor(item.id), itemID: item.id, parent: parent, index: index, depth: depth)
             if item.isFolder {
                 let expanded = store.isExpanded(item.id)
+                let peeked = expanded ? [] : store.peekedTabs(in: item.id)
                 let glyph = palette.folderColors(item.folderIcon)
                 row.content = .folder(FolderRowModel(
                     id: item.id, depth: depth, title: item.title ?? "Folder", renameText: item.title ?? "",
-                    editing: renaming == item.id, expanded: expanded, live: item.isLiveFolder,
+                    editing: renaming == item.id, expanded: expanded, peeked: !peeked.isEmpty, live: item.isLiveFolder,
                     tint: NSColor(glyph.tint), fill: NSColor(glyph.fill),
                     tabCount: expanded ? 0 : store.tabs(under: item.id).count,
                     liveBusy: refreshing.contains(item.id), liveError: item.liveFolder.flatMap(LiveFolderText.warning)?.help,
                     liveSignInURL: item.liveFolder.flatMap(LiveFolderText.warning)?.signInURL,
                     liveHelp: LiveFolderText.refreshHelp(item.liveFolder)))
                 out.append(row)
-                guard expanded else { return }
+                guard expanded else {
+                    // Arc keeps the open tab of a closed folder in sight, one level in (FolderPeek).
+                    for t in peeked {
+                        let index = t.parentID.flatMap { store.item($0)?.children.firstIndex(of: t.id) } ?? 0
+                        add(t, depth: depth + 1, pinned: pinned, parent: t.parentID ?? item.id, index: index)
+                    }
+                    return
+                }
                 let kids = item.children
                 for c in store.children(of: item.id) {
                     add(c, depth: depth + 1, pinned: pinned, parent: item.id, index: kids.firstIndex(of: c.id) ?? 0)

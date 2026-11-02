@@ -524,6 +524,8 @@ public struct WindowPrefs: Codable, Equatable {
     public var sidebarWidth: Double = 328
     public var expandedFolders: Set<UUID> = []
     public var collapsedPinnedSpaces: Set<UUID> = []
+    /// Closed folders that keep tabs in sight (FolderPeek): folder → its peeked tabs.
+    public var peekedFolders: [UUID: [UUID]] = [:]
     /// Open browser windows, restored at launch. Never empty.
     public var windows: [WindowSession] = [WindowSession()]
 
@@ -537,10 +539,11 @@ public struct WindowPrefs: Codable, Equatable {
     public var littleWindowSize: String?
 
     public init(sidebarWidth: Double = 328, expandedFolders: Set<UUID> = [], collapsedPinnedSpaces: Set<UUID> = [],
-                windows: [WindowSession] = [WindowSession()], littleWindowSize: String? = nil) {
+                peekedFolders: [UUID: [UUID]] = [:], windows: [WindowSession] = [WindowSession()], littleWindowSize: String? = nil) {
         self.sidebarWidth = sidebarWidth
         self.expandedFolders = expandedFolders
         self.collapsedPinnedSpaces = collapsedPinnedSpaces
+        self.peekedFolders = peekedFolders
         self.windows = windows
         self.littleWindowSize = littleWindowSize
     }
@@ -633,6 +636,7 @@ extension WindowPrefs {
         sidebarWidth = try c.decodeIfPresent(Double.self, forKey: .sidebarWidth) ?? 328
         expandedFolders = try c.decodeIfPresent(Set<UUID>.self, forKey: .expandedFolders) ?? []
         collapsedPinnedSpaces = try c.decodeIfPresent(Set<UUID>.self, forKey: .collapsedPinnedSpaces) ?? []
+        peekedFolders = (try? c.decodeIfPresent([UUID: [UUID]].self, forKey: .peekedFolders)) ?? [:]
         if let saved = try? c.decodeIfPresent([WindowSession].self, forKey: .windows), !saved.isEmpty {
             windows = saved
         } else {

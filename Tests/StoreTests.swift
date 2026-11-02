@@ -28,6 +28,7 @@ enum StoreTests {
         incognitoStaysOffDisk()
         pinnedURL()
         moveTabToSpace()
+        folderPeek()
         print("Store: \(checks) checks passed")
     }
 
@@ -392,6 +393,45 @@ enum StoreTests {
                && store.isIncognito(item: secret.id) && store.focusedSpaceID(window: incognito.id) != home,
                "an incognito tab never leaves its window")
         expect(store.integrityProblems().isEmpty, "the sidebar stays sound")
+    }
+
+    /// A closed folder keeps its open tab in sight (Arc, GitHub #85): picking a tab two closed
+    /// folders down lists it under the outer one without opening either.
+    @MainActor
+    private static func folderPeek() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let outer = store.createFolder(named: "Outer", in: store.focusedSpace.pinnedContainerID)
+        let inner = store.createFolder(named: "Inner", in: outer.id)
+        let tab = store.createTab(url: "https://example.org/", pinned: true, select: false, parent: inner.id)
+        let sibling = store.createTab(url: "https://example.org/sibling", pinned: true, select: false, parent: inner.id)
+        let elsewhere = store.createTab(url: "https://example.net/", select: true)
+        store.setExpanded(outer.id, false)
+        store.setExpanded(inner.id, false)
+        expect(store.peekedTabs(in: outer.id).isEmpty, "a closed folder shows nothing to begin with")
+
+        store.selectTab(tab.id)
+        expect(!store.isExpanded(outer.id) && !store.isExpanded(inner.id), "picking the tab leaves both folders closed")
+        expect(store.peekedTabs(in: outer.id).map(\.id) == [tab.id] && store.peekedTabs(in: inner.id).isEmpty,
+               "and lists it under the outer one")
+        store.selectTab(elsewhere.id)
+        expect(store.peekedTabs(in: outer.id).map(\.id) == [tab.id], "it stays there when another tab is picked")
+
+        store.setExpanded(outer.id, true)
+        expect(store.peekedTabs(in: outer.id).isEmpty && store.prefs.peekedFolders[outer.id] == nil, "opening the folder drops the peek")
+        store.selectTab(tab.id)
+        expect(store.peekedTabs(in: inner.id).map(\.id) == [tab.id], "with the outer one open, the inner one hosts it")
+        store.setExpanded(outer.id, false)
+        expect(store.peekedTabs(in: outer.id).map(\.id) == [tab.id], "closing a folder keeps the open tab in sight")
+        store.selectTab(sibling.id)
+        expect(store.peekedTabs(in: outer.id).map(\.id) == [tab.id, sibling.id], "a second tab joins, in sidebar order")
+
+        store.saveAll()
+        let restored = AppComposition(clock: ManualScheduler()).store
+        expect(restored.peekedTabs(in: outer.id).map(\.id) == [tab.id, sibling.id], "the peek reads back after a relaunch")
+
+        _ = store.resetPinnedTab(sibling.id)
+        expect(store.peekedTabs(in: outer.id).map(\.id) == [tab.id], "closing a tab (⌘W) takes it out")
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {

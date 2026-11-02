@@ -426,6 +426,10 @@ final class SidebarStore {
             split.data = .split(s)
             items[p] = split
         }
+        // In a closed folder the tab shows under the outermost closed one (Arc, GitHub #85).
+        let peeks = FolderPeek.opening(id, folders: folderChain(of: id), isExpanded: { self._prefs.expandedFolders.contains($0) },
+                                       peeks: _prefs.peekedFolders)
+        if peeks != _prefs.peekedFolders { prefs.peekedFolders = peeks }
         if !isIncognito(space: sid) {
             var dates = ranking.recentlySwitchedToTabs[id] ?? []
             dates.append(clock.now)
@@ -498,6 +502,9 @@ final class SidebarStore {
         t.url = t.savedURL
         it.data = .tab(t)
         items[id] = it
+        // Closed, it no longer shows under a closed folder (Arc).
+        let peeks = FolderPeek.removing(id, peeks: _prefs.peekedFolders)
+        if peeks != _prefs.peekedFolders { prefs.peekedFolders = peeks }
         touch()
         return t.savedURL
     }
@@ -1056,6 +1063,26 @@ final class SidebarStore {
         return _prefs.expandedFolders.contains(id)
     }
 
+    /// The tabs a closed folder lists under itself (FolderPeek), in sidebar order.
+    func peekedTabs(in folder: UUID) -> [SidebarItem] {
+        items.observe(folder)
+        guard _prefs.peekedFolders[folder] != nil else { return [] }
+        let inside = tabs(under: folder)
+        let listed = Set(FolderPeek.listed(in: folder, peeks: _prefs.peekedFolders, tabsInside: inside.map(\.id)))
+        return inside.filter { listed.contains($0.id) }
+    }
+
+    /// The folders an item sits in, outermost first.
+    private func folderChain(of id: UUID) -> [UUID] {
+        var out: [UUID] = []
+        var p = items[id]?.parentID
+        while let pid = p, let parent = items[pid] {
+            if parent.isFolder { out.insert(pid, at: 0) }
+            p = parent.parentID
+        }
+        return out
+    }
+
     /// Whether `id` is the open tab of the window's focused space, or of `space`.
     func isSelected(_ id: UUID, inSpace space: UUID? = nil, window: UUID?) -> Bool {
         items.observe(id)
@@ -1076,6 +1103,9 @@ final class SidebarStore {
     private func notifyItemReaders(of old: WindowPrefs) {
         for id in old.expandedFolders.symmetricDifference(prefs.expandedFolders) { items.notify(id) }
         for id in old.collapsedPinnedSpaces.symmetricDifference(prefs.collapsedPinnedSpaces) { items.notify(id) }
+        for id in Set(old.peekedFolders.keys).union(prefs.peekedFolders.keys) where old.peekedFolders[id] != prefs.peekedFolders[id] {
+            items.notify(id)
+        }
         let first = spaceOrder.first
         for w in prefs.windows {
             let was = old.windows.first { $0.id == w.id }
@@ -1090,7 +1120,12 @@ final class SidebarStore {
         }
     }
     func setExpanded(_ id: UUID, _ expanded: Bool) {
-        if expanded { prefs.expandedFolders.insert(id) } else { prefs.expandedFolders.remove(id) }
+        var p = prefs
+        if expanded { p.expandedFolders.insert(id) } else { p.expandedFolders.remove(id) }
+        // Open, it shows everything; closed again, only the open tab stays in sight (Arc).
+        let open = selectedTabID.flatMap { folderChain(of: $0).contains(id) ? $0 : nil }
+        p.peekedFolders = FolderPeek.expanding(id, expanded, openTabInside: open, peeks: p.peekedFolders)
+        if p != prefs { prefs = p }
     }
 
     /// Arc's spacesWithCollapsedPinnedSections: clicking the space name hides its pinned tabs.
