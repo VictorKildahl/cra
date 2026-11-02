@@ -2114,3 +2114,19 @@ Two new Arc windows, both with View ▸ Hide Sidebar and a tab selected, capture
 - [U] An inactive Arc (another app frontmost); hidden-sidebar windows of other apps over Arc's edge.
 - Cra: `FloatingSidebarController.isKey` gates both reveal paths (the 30 Hz poll and the shell's tracking
   area): this window, or one of its child windows (page, DevTools, the floating panel), must be key.
+
+## Moving a tab to another space (Arc 1.171, 2 Nov 2026, issue #86)
+- [O AX] No key binding: Arc's menu bar has no move-to-space item (Spaces: New Space…, Edit Theme…, Rename Space,
+  Change Profile, Next/Previous Space ⌥⌘→/←, one item per space ⌃1…, Manage Spaces…; Tabs has none either), and
+  the binary's `moveToSpace` / `moveToSpaceTabContextMenuOption` are analytics names, not key-binding actions.
+- [O] Command bar: typing "move" on a Today tab lists "Move to Today in <space chip>" for each other space, with no
+  shortcut glyph (strings also have "Move to Pinned in <space>"). Choosing it closes the bar, takes the row out of
+  the old list, then plays the ordinary space switch (list slides, theme cross-fades, ~300 ms): the window follows
+  the tab, which sits at the top of the new space's Today, selected, page unchanged. Recording `arc-move.mov`
+  (scratch, 40 fps), not kept.
+- [U] What the space the tab left selects afterwards, and whether the sidebar's Move to ▸ also follows: other
+  sessions were driving Arc at the time and a posted ⌃2 never reached the window.
+- Cra: `SidebarStore.moveTabAndFollow` for the command bar's Move Tab to <space> and the new Move Tab to Space N
+  (⌃⌘1–9, Cra's own: ⌘ added to Go to Space N; neither Arc nor macOS binds ⌃⌘ + a digit). A pane brings its split.
+  The sidebar menu's Move to Space keeps the window where it is. Whatever moves, a window that had it open in the
+  old space opens the next tab there, picked as on close.

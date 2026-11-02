@@ -219,6 +219,12 @@ final class KeyBindingRegistry {
             list.append(KeyAction(id: "space\(n)", name: "Go to Space \(n)", section: .spaces,
                                   shortcuts: [Shortcut("\(n)", .control)], inCommandBar: false))
         }
+        // Arc has no default for this (its command bar's "Move to Today in <space>" has no key);
+        // ⌃⌘N adds ⌘ to Go to Space N (#86). Neither Arc nor macOS binds ⌃⌘1–9.
+        for n in 1...9 {
+            list.append(KeyAction(id: "moveTabToSpace\(n)", name: "Move Tab to Space \(n)", section: .spaces,
+                                  shortcuts: [Shortcut("\(n)", [.command, .control])], inCommandBar: false))
+        }
         return list
     }()
 }

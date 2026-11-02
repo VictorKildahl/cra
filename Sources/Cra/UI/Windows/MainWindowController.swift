@@ -2152,7 +2152,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         case .switchSpace(let id):
             store.focusSpace(id, window: windowID)
         case .moveToSpace(let id):
-            if let t = selectedTabID { store.moveTab(t, toSpace: id) }
+            if let t = selectedTabID { store.moveTabAndFollow(t, toSpace: id, window: windowID) }
         case .moveToFolder(let id):
             if let t = selectedTabID { store.moveItem(t, to: id, index: nil) }
         }

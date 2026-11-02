@@ -27,6 +27,7 @@ enum StoreTests {
         persistenceFaults()
         incognitoStaysOffDisk()
         pinnedURL()
+        moveTabToSpace()
         print("Store: \(checks) checks passed")
     }
 
@@ -331,6 +332,54 @@ enum StoreTests {
         expect([pinned.id, favorite.id].allSatisfy { restored.item($0)?.tab?.savedURL == store.item($0)?.tab?.savedURL },
                "the pinned URLs read back after a relaunch")
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    /// Move Tab to Space N (#86) and the command bar's Move Tab to <space>, like Arc's "Move to
+    /// Today in <space>": the tab goes to the top of the other space's Today, the window follows
+    /// it there with the tab selected, and the space it left opens another tab.
+    @MainActor
+    private static func moveTabToSpace() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let home = store.focusedSpaceID
+        let work = store.createSpace(title: "Work", emoji: "💼", focus: false).id
+        _ = store.createTab(url: "https://example.com/work", in: work, select: false)
+        let stay = store.createTab(url: "https://example.com/stay")
+        let tab = store.createTab(url: "https://example.com/move")
+        let other = store.addWindow(spaceID: home, frame: nil)
+        store.selectTab(tab.id, window: other.id)
+        expect(store.moveTabAndFollow(tab.id, toSpace: work), "a tab moves to another space")
+        expect(store.focusedSpaceID == work && store.selectedTabID == tab.id, "the window follows it there with the tab selected")
+        expect(store.children(of: store.space(work)!.todayContainerID).first?.id == tab.id, "it lands at the top of Today")
+        expect(store.selectedTabID(in: home) == stay.id, "the space it left goes back to the tab it came from")
+        expect(store.focusedSpaceID(window: other.id) == home && store.selectedTabID(in: home, window: other.id) == stay.id,
+               "another window that had it open stays in its space and opens the next tab")
+        expect(!store.moveTabAndFollow(tab.id, toSpace: work) && store.focusedSpaceID == work, "moving to its own space does nothing")
+        expect(!store.moveTabAndFollow(tab.id, toSpace: UUID()) && store.spaceID(ofItem: tab.id) == work, "nor does a space that isn't there")
+
+        let pinned = store.createTab(url: "https://example.com/pinned", pinned: true)
+        expect(store.moveTabAndFollow(pinned.id, toSpace: home) && store.isPinned(pinned.id) && store.spaceID(ofItem: pinned.id) == home,
+               "a pinned tab stays pinned in the new space")
+        expect(store.selectedTabID(in: work) != pinned.id, "and leaves no selection behind")
+
+        let left = store.createTab(url: "https://example.com/left")
+        let right = store.createTab(url: "https://example.com/right", select: false)
+        let split = store.createSplit(with: [left.id, right.id])!
+        store.selectTab(right.id)
+        expect(store.moveTabAndFollow(right.id, toSpace: work) && store.spaceID(ofItem: split.id) == work
+               && store.children(of: split.id).map(\.id) == [left.id, right.id], "a pane brings its whole split")
+        expect(store.focusedSpaceID == work && store.selectedTabID == right.id, "with the same pane focused")
+
+        store.selectTab(stay.id)
+        store.moveTab(stay.id, toSpace: work)
+        expect(store.focusedSpaceID == home && store.selectedTabID(in: home) != stay.id,
+               "the context menu's move stays in the space and opens another tab there")
+
+        let incognito = store.addIncognitoWindow(frame: nil)
+        let secret = store.createTab(url: "https://example.com/secret", window: incognito.id)
+        expect(!store.moveTabAndFollow(secret.id, toSpace: home, window: incognito.id)
+               && store.isIncognito(item: secret.id) && store.focusedSpaceID(window: incognito.id) != home,
+               "an incognito tab never leaves its window")
+        expect(store.integrityProblems().isEmpty, "the sidebar stays sound")
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
