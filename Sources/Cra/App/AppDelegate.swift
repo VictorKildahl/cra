@@ -782,12 +782,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "copyURL":
             if let url = current.flatMap({ store.item($0)?.tab?.url }) {
                 copy(url)
-                main.sidebarUI.flashStatus("Copied Current URL", symbol: "link")
+                main.showToast("Copied Current URL")
             }
         case "copyURLMarkdown":
             if let c = current, let it = store.item(c), let url = it.tab?.url {
                 copy("[\(it.displayTitle)](\(url))")
-                main.sidebarUI.flashStatus("Copied URL as Markdown", symbol: "link")
+                main.showToast("Copied URL as Markdown")
             }
         case "print": main.currentBrowser?.print()
         case "capturePage": main.capturePage()

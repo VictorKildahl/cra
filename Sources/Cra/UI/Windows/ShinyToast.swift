@@ -1,15 +1,16 @@
 import AppKit
 import QuartzCore
 
-/// Arc's "New Tab Created" toast (Toasts.ShinyToastView, the `backgroundTabCreated` toast), shown
-/// when ⌘Return in the command bar opens a tab the sidebar can't show because it is hidden
-/// (GitHub #85). Arc 1.171, measured 2 Nov 2026 at 1x: a 42 pt pill 8 pt below the top of the
+/// Arc's toast (Toasts.ShinyToastView): every short confirmation in Arc is one, "New Tab Created"
+/// (⌘Return in the command bar with the sidebar hidden, GitHub #85), "Copied Current URL",
+/// "Cannot Add New Pane" and the rest (`backgroundTabCreated`, `copyTabURL`, `maxNumberPanes`…), so
+/// Cra shows all of its confirmations with this. Arc 1.171, measured 2 Nov 2026 at 1x: a 42 pt pill 8 pt below the top of the
 /// page and 9 pt in from its right edge, 14 pt medium black text with 12 pt either side, a fill
 /// from the space's colours with a 1 pt darker outline. It springs in from its top centre
 /// (≈0.3 s response, 4 % overshoot), stays 4.85 s after the last tab it announced (another one
 /// bumps it by 4 %) and shrinks back into its top in 80 ms.
 @MainActor
-final class BackgroundTabToast {
+final class ShinyToast {
     static let height: CGFloat = 42
     static let topInset: CGFloat = 8
     static let trailingInset: CGFloat = 9
@@ -18,7 +19,7 @@ final class BackgroundTabToast {
     /// Room around the pill in its panel, so the spring's overshoot isn't clipped.
     static let margin: CGFloat = 8
     static let font = NSFont.systemFont(ofSize: 14, weight: .medium)
-    /// How long the toast stays up after the last tab it announced.
+    /// How long the toast stays up after the last message.
     static let visibleFor: TimeInterval = 4.85
 
     private let panel: NSPanel
@@ -82,7 +83,7 @@ final class BackgroundTabToast {
         } else {
             if panel.parent !== window { window.addChildWindow(panel, ordered: .above) }
             setOpacity(1)
-            // Another tab while it is up: Arc bumps it (1 → 1.044 → 1 in ~0.2 s) and restarts its time.
+            // Another message while it is up: Arc bumps it (1 → 1.044 → 1 in ~0.2 s) and restarts its time.
             DispatchQueue.main.async { [weak self] in self?.pulse() }
         }
         hide?.cancel()

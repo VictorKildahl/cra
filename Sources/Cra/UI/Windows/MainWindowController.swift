@@ -47,7 +47,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var lastSidebarWidth: CGFloat = 0
     private var commandBarOpenedAt = Date.distantPast
     private var commandBarClosingClick = DismissingClick()
-    private let backgroundTabToast = BackgroundTabToast()
+    private let toast = ShinyToast()
     private var commandObserving = false
     /// Closed for good (another window stayed open): it no longer follows the store.
     private var isTornDown = false
@@ -438,7 +438,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func addSplitPane() {
         guard let current = selectedTabID else { openCommandBar(.newTab); return }
         if store.paneTabIDs(for: current).count >= 4 {
-            sidebarUI.flashStatus("Cannot Add New Pane", symbol: "rectangle.portrait.split.2x1.slash")
+            showToast("Cannot Add New Pane")
             return
         }
         guard store.addEmptyPane(nextTo: current) != nil else { return }
@@ -2219,11 +2219,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         commandBarOpenedAt = Date()
         browsers.ensureRuntime(for: tab.id)  // load it so the title and favicon fill in
         // With the sidebar out the new row shows there; hidden, Arc says so in a toast.
-        if !sidebarVisible, let window {
-            let page = shell.webContainer.convert(shell.webContainer.bounds, to: nil)
-            backgroundTabToast.show("New Tab Created", page: page, in: window, theme: focusedSpace.theme)
-        }
+        if !sidebarVisible { showToast("New Tab Created") }
         return true
+    }
+
+    /// Arc's toast at the top right of the page (ShinyToast): Cra's confirmations.
+    func showToast(_ text: String) {
+        guard let window else { return }
+        let page = shell.webContainer.convert(shell.webContainer.bounds, to: nil)
+        toast.show(text, page: page, in: window, theme: focusedSpace.theme)
     }
 
     /// Navigate the focused tab (an empty split pane gets its first page here).

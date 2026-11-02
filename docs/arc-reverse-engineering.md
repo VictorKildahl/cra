@@ -1185,7 +1185,9 @@ Static only (strings of `Dia.app/Contents/MacOS/Dia`, no decompiler; not observe
   (split limit; `rectangle.portrait.split.2x1.slash` sits next to the view), extension installed,
   password saved, import progress/result, '<shortcut> again to <action>', trace status.
 - Unknown: display duration and transition (no runtime capture). Cra shows the status for 2 s
-  with a 0.15 s fade in / 0.2 s fade out (`SidebarUIState.flashStatus`).
+  with a 0.15 s fade in / 0.2 s fade out (`SidebarUIState.flashStatus`). Replaced 2 Nov 2026: Arc shows these
+  ("Copied Current URL", "Cannot Add New Pane") as its toast, one component for every confirmation, and Cra now
+  does too (`ShinyToast`, see the #85 section).
 
 ## Dia Extensions menu (Dia 1.54.2, 25 Oct 2026)
 
@@ -2199,7 +2201,13 @@ was frontmost, 1x region captures and 100 fps recordings; test tabs archived aft
   width 1 → 1.044 (~40 ms) → 1 by ~0.2 s, rather than springing in again. On the default theme in dark mode
   (JYSK space) it is dark with white text: 43/24/102 → 33/19/79, outline 26/15/62, i.e. the same hue at
   saturation 0.76, brightness 0.40 → 0.31 (outline 0.24); the light one is saturation 0.19 → 0.25, brightness
-  0.89 → 0.85 (outline 0.61) in the theme's hue. Cra: BackgroundTabToast.
+  0.89 → 0.85 (outline 0.61) in the theme's hue. Cra: ShinyToast.
+- [O static] It is Arc's one toast (Toasts.ShinyToastView, `ToastContent`): the same component carries
+  "Copied Current URL" (`copyTabURL`), "Cannot Add New Pane" (`maxNumberPanes`), "Screenshot Copied to Clipboard",
+  "Pinned Tab to …", zoom changes, undo and more; some kinds add an SF Symbol (`quote.bubble.fill`,
+  `checkmark.shield.fill`, `xmark.octagon.fill` sit next to their strings). Cra shows its confirmations with
+  ShinyToast (MainWindowController.showToast), not Dia's nav-bar status. [U] Whether the copy and pane-limit
+  toasts carry a symbol, and where they sit with the sidebar out: the live check was cut short (Victor in a call).
 - [O] Return on a "Switch to Tab" row for a pinned tab two closed folders down (Netfinder ▸ Endpoints ▸ tab): no folder
   opens. The tab is listed one level under the outermost closed folder (its row slides in, ~0.15 s), Endpoints stays
   hidden, and the folder's glyph gets three dots (2 pt, 4 pt pitch). StorableWindows.json keeps it per window as
