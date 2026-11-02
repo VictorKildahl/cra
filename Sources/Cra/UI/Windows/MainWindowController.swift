@@ -1425,9 +1425,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Set when the Library brought a hidden sidebar out; leaving it hides the sidebar again.
     private var libraryShowedSidebar = false
 
-    /// Arc's Library button and ⇧⌘L: open the Library on the page last shown, or leave it.
+    /// Arc's Library button and ⇧⌘L: open the Library on the page last shown, or leave it. In a
+    /// docked sidebar it slides in and out like the swipe into it (LibrarySwipe).
     func toggleLibrary() {
-        if sidebarUI.libraryPage != nil { closeLibrary() } else { showLibrary(sidebarUI.lastLibraryPage) }
+        let opening = librarySettleSpring.map { $0.target < 1 } ?? (sidebarUI.libraryPage == nil)
+        if librarySwipeFrom == nil, !shell.floatingSidebar, shell.sidebarVisible, !libraryShowedSidebar {
+            slideLibrary(to: opening ? 1 : 0)
+        } else if opening {
+            showLibrary(sidebarUI.lastLibraryPage)
+        } else {
+            closeLibrary()
+        }
     }
 
     /// The Library takes over the sidebar, which widens for its page rail (LibraryView).
@@ -1647,7 +1655,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if let page = sidebarUI.libraryPage {
             prepareLibraryReveal(page)
             librarySwipeFrom = shown ?? 1
-        } else if store.spaceOrder.first == focusedSpaceID {
+        } else if shown != nil || store.spaceOrder.first == focusedSpaceID {
+            // The Library button slides it in from any space.
             prepareLibraryReveal(sidebarUI.lastLibraryPage)
             librarySwipeFrom = shown ?? 0
         }
@@ -1693,7 +1702,25 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         librarySwipeFrom = nil
         let width = sidebarUI.libraryRevealWidth
         let velocity = LibrarySwipe.velocity(samples: swipeSamples, width: width)
-        let target = LibrarySwipe.target(reveal: r, velocity: velocity)
+        settleLibrary(from: r, velocity: velocity, to: LibrarySwipe.target(reveal: r, velocity: velocity))
+    }
+
+    /// The Library button: the same spring from rest, or turned around from where a settle is.
+    private func slideLibrary(to target: CGFloat) {
+        if let s = librarySettleSpring {
+            let t = CGFloat(CACurrentMediaTime() - s.start)
+            let r = LibrarySwipe.settle(from: s.from, velocity: s.velocity, to: s.target, at: t)
+            settleLibrary(from: r, velocity: LibrarySwipe.settleVelocity(from: s.from, velocity: s.velocity, to: s.target, at: t), to: target)
+            return
+        }
+        let from: CGFloat = sidebarUI.libraryPage == nil ? 0 : 1
+        guard from != target else { return }
+        prepareLibraryReveal(sidebarUI.libraryPage ?? sidebarUI.lastLibraryPage)
+        setLibraryReveal(from)
+        settleLibrary(from: from, velocity: 0, to: target)
+    }
+
+    private func settleLibrary(from r: CGFloat, velocity: CGFloat, to target: CGFloat) {
         librarySettleSpring = (start: CACurrentMediaTime(), from: r, velocity: velocity, target: target)
         if librarySettleLink == nil {
             let link = shell.displayLink(target: self, selector: #selector(stepLibrarySettle))

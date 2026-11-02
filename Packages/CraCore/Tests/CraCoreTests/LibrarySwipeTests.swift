@@ -64,4 +64,14 @@ struct LibrarySwipeTests {
         #expect(!LibrarySwipe.isSettled(from: 0.6, velocity: 0, to: 1, at: 0.05, width: 347))
         #expect(LibrarySwipe.isSettled(from: 0.6, velocity: 0, to: 1, at: 1, width: 347))
     }
+
+    /// The Library button turns a settle around at the speed it is moving.
+    @Test func settleVelocityIsTheSlope() {
+        #expect(LibrarySwipe.settleVelocity(from: 0, velocity: 2, to: 1, at: 0) == 2)
+        for t: CGFloat in [0.02, 0.1, 0.3] {
+            let slope = (LibrarySwipe.settle(from: 0, velocity: 0, to: 1, at: t + 0.0005)
+                - LibrarySwipe.settle(from: 0, velocity: 0, to: 1, at: t - 0.0005)) / 0.001
+            #expect(abs(LibrarySwipe.settleVelocity(from: 0, velocity: 0, to: 1, at: t) - slope) < 0.001)
+        }
+    }
 }
