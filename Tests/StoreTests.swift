@@ -29,6 +29,7 @@ enum StoreTests {
         pinnedURL()
         moveTabToSpace()
         folderPeek()
+        closeSuccessor()
         print("Store: \(checks) checks passed")
     }
 
@@ -393,6 +394,58 @@ enum StoreTests {
                && store.isIncognito(item: secret.id) && store.focusedSpaceID(window: incognito.id) != home,
                "an incognito tab never leaves its window")
         expect(store.integrityProblems().isEmpty, "the sidebar stays sound")
+    }
+
+    /// The tab shown after ⌘W (Arc 1.171, GitHub #105): the one shown before while its page is
+    /// loaded, else the Today neighbour above (below at the top), else nothing; it reads as read.
+    @MainActor
+    private static func closeSuccessor() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        var loaded: Set<UUID> = []
+        store.hasPage = { loaded.contains($0) }
+        // Earlier tests left tabs in the data folder.
+        for tab in store.tabs(under: store.focusedSpace.todayContainerID) { store.archiveTab(tab.id, reason: .manual) }
+        let source = store.createTab(url: "https://example.com/list", pinned: true)
+        // Opened in the background from the pinned list: Today is c, b, a.
+        let a = store.createTab(url: "https://example.com/a", select: false)
+        let b = store.createTab(url: "https://example.com/b", select: false)
+        let c = store.createTab(url: "https://example.com/c", select: false)
+        loaded = [source.id, a.id, b.id, c.id]
+        store.selectTab(a.id)
+        store.archiveTab(a.id, reason: .manual)
+        expect(store.selectedTabID == source.id, "closing a post picked from the list goes back to the list")
+
+        store.selectTab(c.id)
+        store.selectTab(b.id)
+        store.archiveTab(b.id, reason: .manual)
+        expect(store.selectedTabID == c.id, "back to the tab shown before, not to the tab it was opened from")
+
+        loaded.remove(source.id)
+        let d = store.createTab(url: "https://example.com/d", select: false)
+        store.selectTab(source.id)
+        store.selectTab(c.id)
+        expect(store.item(d.id)?.isUnread == true, "a tab opened in the background is unread")
+        store.archiveTab(c.id, reason: .manual)
+        expect(store.selectedTabID == d.id, "a closed pinned tab isn't reloaded: the neighbour above instead")
+        expect(store.item(d.id)?.isUnread == false, "the tab a close hands over to is read")
+
+        let e = store.createTab(url: "https://example.com/e", select: false)
+        store.archiveTab(d.id, reason: .manual)
+        expect(store.selectedTabID == e.id, "the tab shown before has closed: the neighbour above")
+        store.archiveTab(e.id, reason: .manual)
+        expect(store.selectedTabID == nil, "the last tab hands over to nothing, not to a pinned tab")
+
+        let p2 = store.createTab(url: "https://example.com/p2", pinned: true)
+        loaded = [source.id, p2.id]
+        store.selectTab(source.id)
+        store.selectTab(p2.id)
+        expect(store.closeSuccessor(ofPinned: p2.id, window: store.activeWindowID) == source.id,
+               "a closed pinned tab goes back to the tab shown before")
+        loaded.remove(p2.id)
+        store.selectTab(source.id)
+        loaded.remove(source.id)
+        expect(store.closeSuccessor(ofPinned: source.id, window: store.activeWindowID) == nil,
+               "and to nothing when that one was closed too")
     }
 
     /// A closed folder keeps its open tab in sight (Arc, GitHub #85): picking a tab two closed

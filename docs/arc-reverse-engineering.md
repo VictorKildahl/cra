@@ -2347,3 +2347,22 @@ tap with a real Shift key held around them; the space read from each window's `s
   `ForceWebRequestProxyForTest` makes `MayHaveProxies()` always true, so a proxy extension enabled later does not
   reset the URL loader factories. Cra logs the winner and the overridden ones per profile when they change, and
   Export Diagnostics' summary.txt has a "Proxy:" section.
+
+## The tab shown after ⌘W (Arc 1.171, 2 Nov 2026, issue #105, offline Arc driven through its menus)
+Offline Arc as in "One space": one space with pinned S and P2 and Today C, B, A, D (A, B, C saved with
+`activeTabBeforeCreationID` and `referrerID` = S, unread), the selected tab and the window's
+`itemLastActiveDates` set in StorableWindows.json, then Tabs ▸ Next/Previous Tab and File ▸ Archive Tab (Close
+Tab on a pinned tab) pressed over AX, a window capture after each step.
+- [O] Arc goes back to the tab shown just before the closed one, if its page is still loaded: D → A, close A → D
+  (not S, the tab A was opened from, loaded or not); S → P2 → close P2 hands back to S only while S is loaded.
+- [O] Only that one tab counts. D → A → B, close B → A, close A → C (the neighbour above), not D: Arc doesn't
+  walk further back. A previous tab without a page doesn't count either: one restored from `itemLastActiveDates`
+  that hasn't loaded since launch, or a pinned tab closed with ⌘W (Arc never reloads it on a later close).
+- [O] Otherwise a Today tab hands over to its neighbour, the one above first (B → C, D → A), the one below at
+  the top (C → A), loaded or not. The last Today tab hands over to nothing, with pinned tabs still in the
+  sidebar. A pinned tab hands over to nothing (no neighbour), even with Today pages loaded.
+- [O] The tab a close hands over to loses its unread mark, as when it is picked.
+- [?] Not tried: favorites, tabs in folders, two windows on one space, a close that would need another space.
+- Cra: CloseSuccessor (CraCore) with SidebarStore's per-window `previousTab` (not saved) and `hasPage` (a
+  window's browser manager has the page). A tab put to sleep has no page, like Arc's unloaded tabs.
+  `activeTabBeforeCreationID` is still saved and imported but no longer picks the next tab.

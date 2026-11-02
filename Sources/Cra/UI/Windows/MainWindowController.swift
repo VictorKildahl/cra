@@ -1318,20 +1318,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 _ = store.resetPinnedTab(p)
                 for w in app.mainWindows { w.browsers.unload(p) }
             }
-            if wasSelected {
-                // Arc goes back to the tab used before this one, if it is still open. A pinned
-                // tab that was closed (unloaded) doesn't count: two of them would otherwise hand
-                // the selection back and forth on every ⌘W, reloading each other.
-                let back = openRecentTabs(limit: .max).first { !panes.contains($0) }
-                store.selectTab(back, window: windowID)
-            }
+            // Arc goes back to the tab shown before this one if its page is still loaded, and
+            // otherwise shows nothing (CloseSuccessor). The panes were just unloaded, so they
+            // don't count.
+            if wasSelected { store.selectTab(store.closeSuccessor(ofPinned: id, window: windowID), window: windowID) }
         } else {
             store.archiveTab(id, reason: .manual)
         }
     }
 
     /// The space's open tabs, the latest first. A pinned tab that was closed (unloaded) isn't
-    /// open: ⌃Tab doesn't list it and ⌘W doesn't go back to it.
+    /// open: ⌃Tab doesn't list it.
     private func openRecentTabs(limit: Int) -> [UUID] {
         Array(store.recentTabs(in: focusedSpaceID, limit: .max)
             .filter { $0 == selectedTabID || !store.isPinned($0) || app.runtime(for: $0) != nil }

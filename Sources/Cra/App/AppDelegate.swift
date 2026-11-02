@@ -51,6 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         startContentBlocking()
         SoftwareUpdater.shared.start(app: self)
         buildMenus()
+        store.hasPage = { [unowned self] in self.runtime(for: $0) != nil }
         NotificationCenter.default.addObserver(forName: .craKeyBindingsChanged, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.buildMenus() }
         }
