@@ -1315,13 +1315,20 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 // Arc goes back to the tab used before this one, if it is still open. A pinned
                 // tab that was closed (unloaded) doesn't count: two of them would otherwise hand
                 // the selection back and forth on every ⌘W, reloading each other.
-                let back = store.recentTabs(in: focusedSpaceID, limit: .max)
-                    .first { !panes.contains($0) && (!store.isPinned($0) || app.runtime(for: $0) != nil) }
+                let back = openRecentTabs(limit: .max).first { !panes.contains($0) }
                 store.selectTab(back, window: windowID)
             }
         } else {
             store.archiveTab(id, reason: .manual)
         }
+    }
+
+    /// The space's open tabs, the latest first. A pinned tab that was closed (unloaded) isn't
+    /// open: ⌃Tab doesn't list it and ⌘W doesn't go back to it.
+    private func openRecentTabs(limit: Int) -> [UUID] {
+        Array(store.recentTabs(in: focusedSpaceID, limit: .max)
+            .filter { $0 == selectedTabID || !store.isPinned($0) || app.runtime(for: $0) != nil }
+            .prefix(limit))
     }
 
     func resetPinnedTab(_ id: UUID) {
@@ -1929,7 +1936,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         tabSwitcher.isDark = dark
         tabSwitcher.highlight = theme.switcherHighlight(dark: dark)
         tabSwitcher.palette = theme.palette
-        tabSwitcher.debugOpen(store.recentTabs(in: focusedSpaceID, limit: TabSwitcherMetrics.maxItems).compactMap { id in
+        tabSwitcher.debugOpen(openRecentTabs(limit: TabSwitcherMetrics.maxItems).compactMap { id in
             guard let it = store.item(id), let tab = it.tab else { return nil }
             return TabSwitcher.Item(id: id, title: it.displayTitle, iconKey: tab.iconKey, snapshot: browsers.runtime(for: id)?.snapshot)
         })
@@ -2068,7 +2075,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             tabSwitcher.palette = theme.palette
         }
         tabSwitcher.cycle(delta, event: event) {
-            store.recentTabs(in: focusedSpaceID, limit: TabSwitcherMetrics.maxItems).compactMap { id in
+            openRecentTabs(limit: TabSwitcherMetrics.maxItems).compactMap { id in
                 guard let it = store.item(id), let tab = it.tab else { return nil }
                 return TabSwitcher.Item(id: id, title: it.displayTitle, iconKey: tab.iconKey, snapshot: browsers.runtime(for: id)?.snapshot)
             }
@@ -2380,6 +2387,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func windowDidBecomeKey(_ notification: Notification) {
         guard (notification.object as? NSWindow) === window else { return }
         shell.windowActive = true
+        browsers.windowVisibilityChanged(covered: false)
         reclaimPages()
     }
 
@@ -2407,6 +2415,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     func windowDidResignKey(_ notification: Notification) {
+        if (notification.object as? NSWindow) === window { leaveIfCovered() }
         guard (notification.object as? NSWindow) === commandPanel, commandBar.isOpen else { return }
         if Date().timeIntervalSince(commandBarOpenedAt) < 0.6 {
             DispatchQueue.main.async { [weak self] in
@@ -2431,6 +2440,26 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if shell.contentFullscreen { shell.contentFullscreen = false }
         enteredFullscreenForContent = false
         shell.needsLayout = true
+    }
+
+    func windowDidChangeOcclusionState(_ notification: Notification) {
+        guard (notification.object as? NSWindow) === window else { return }
+        leaveIfCovered()
+    }
+
+    /// Arc's autoPictureInPictureOnWindowOccluded: a window that isn't key and is completely out
+    /// of sight (another app or desktop in front, minimised) sends its video to Picture in
+    /// Picture, checked when it resigns key and when what covers it changes; the video comes home
+    /// when the window is key again (windowDidBecomeKey). Arc 1.171, 2 Nov 2026: hiding an Arc that
+    /// had not been active opened nothing; losing focus with its window on another desktop did.
+    /// A locked screen covers every window and leaves nothing.
+    private func leaveIfCovered() {
+        guard let window, !window.isKeyWindow, !window.occlusionState.contains(.visible), !Self.screenIsLocked else { return }
+        browsers.windowVisibilityChanged(covered: true)
+    }
+
+    private static var screenIsLocked: Bool {
+        (CGSessionCopyCurrentDictionary() as? [String: Any])?["CGSSessionScreenIsLocked"] as? Bool ?? false
     }
 
     /// The frame lives in the store's observed prefs, which every sidebar row reads (selection):

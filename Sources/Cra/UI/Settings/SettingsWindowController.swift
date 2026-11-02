@@ -221,7 +221,7 @@ struct SettingsContent: View {
                 switch nav.pane {
                 case .general: GeneralPane()
                 case .tabs: TabsPane()
-                case .privacy: PrivacyPane()
+                case .privacy: PrivacyPane(actions: actions)
                 case .profiles: ProfilesPane()
                 case .extensions: ExtensionsPane(actions: actions)
                 case .shortcuts: ShortcutsPane()

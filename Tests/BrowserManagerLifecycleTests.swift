@@ -86,6 +86,7 @@ enum BrowserManagerLifecycleTests {
         nowPlayingCase()
         await nowPlayingPictureInPictureCase()
         await leaveVideoTabPictureInPictureCase()
+        await coveredWindowPictureInPictureCase()
         pageColoursCase()
         await sleepCase("malformed or missing replies cannot authorize sleeping", reply: nil) { _, _ in }
         await pageProbeCase()
@@ -382,6 +383,45 @@ enum BrowserManagerLifecycleTests {
         store.settings.autoPictureInPicture = false
         manager.show(b, focus: false)
         expect(!ra.browser.replies.contains { $0.method == "Runtime.evaluate" }, "with the setting off, leaving the tab asks nothing")
+        manager.closeAll()
+    }
+
+    /// A window out of sight and not key (another app or desktop in front) leaves its video tab
+    /// like a tab switch, as Arc's presentPipForOccludedWindow does, and the video comes back when
+    /// the window is key again (X report, 1 Nov 2026). Silent pages aren't asked, and a Picture in
+    /// Picture the user opened stays.
+    @MainActor
+    private static func coveredWindowPictureInPictureCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let a = store.createTab(url: "https://example.test/video").id
+        let ra = manager.ensureRuntime(for: a)!
+        store.settings.autoPictureInPicture = true
+        manager.show(a, focus: false)
+
+        manager.windowVisibilityChanged(covered: true)
+        expect(!ra.browser.replies.contains { $0.method == "Runtime.evaluate" }, "a covered window doesn't ask a silent page")
+        manager.windowVisibilityChanged(covered: false)
+
+        ra.browser.isAudible = true
+        manager.windowVisibilityChanged(covered: true)
+        expect(ra.browser.lastParams.contains(#""userGesture":true"#) && ra.browser.lastParams.contains("})(true)"),
+               "a covered window asks its playing page for automatic Picture in Picture")
+        ra.browser.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"ok"}}"#)
+        await drainMainQueue()
+        ra.browser.isInPictureInPicture = true
+        manager.browser(ra.browser, didChangePictureInPicture: true)
+        expect(ra.browser.isInPictureInPicture, "the tab is still the one in front, but out of sight: the video stays out")
+        manager.windowVisibilityChanged(covered: false)
+        expect(!ra.browser.isInPictureInPicture, "the window back in sight brings the video home")
+        manager.browser(ra.browser, didChangePictureInPicture: false)
+
+        ra.browser.isInPictureInPicture = true
+        manager.browser(ra.browser, didChangePictureInPicture: true)
+        manager.windowVisibilityChanged(covered: true)
+        expect(!ra.browser.replies.contains { $0.method == "Runtime.evaluate" }, "a page already in Picture in Picture isn't asked again")
+        manager.windowVisibilityChanged(covered: false)
+        expect(ra.browser.isInPictureInPicture, "Picture in Picture the user opened stays when the window shows again")
         manager.closeAll()
     }
 

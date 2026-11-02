@@ -465,6 +465,40 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         return id
     }
 
+    // MARK: Delete browsing data
+
+    /// Chrome's Settings page (its Delete browsing data dialog) runs in Chromium; the command
+    /// bar's history is Cra's. Hear the dialog's "Delete data" and clear the same history here.
+    /// One wait per page (a second load finds the first); the page answers once, then it waits
+    /// again.
+    private func watchClearBrowsingData(_ browser: CraBrowser) {
+        let js = """
+        (() => {
+          if (typeof chrome === 'undefined' || typeof chrome.send !== 'function') return null;
+          return window.__craClearBrowsingData ??= new Promise(resolve => {
+            const send = chrome.send;
+            chrome.send = function (name, args) {
+              if (name === 'clearBrowsingData') {
+                chrome.send = send;
+                window.__craClearBrowsingData = null;
+                resolve(JSON.stringify((args ?? []).slice(1)));
+              }
+              return send.apply(this, arguments);
+            };
+          });
+        })()
+        """
+        let params: [String: Any] = ["expression": js, "returnByValue": true, "awaitPromise": true]
+        let json = String(data: try! JSONSerialization.data(withJSONObject: params), encoding: .utf8)!
+        browser.sendDevToolsMethod("Runtime.evaluate", params: json) { [weak self, weak browser] result, _ in
+            DispatchQueue.main.async {
+                guard let self, let browser, let message = Self.stringResult(result) else { return }
+                if let range = BrowsingDataClear.historyRange(messageJSON: message, now: self.clock.now) { self.store.clearHistory(range) }
+                if browser.currentURL.hasPrefix("chrome://settings") { self.watchClearBrowsingData(browser) }
+            }
+        }
+    }
+
     // MARK: Picture in Picture
 
     /// Arc: "Enable Picture in Picture when you leave a video tab". The request
@@ -477,6 +511,27 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         guard store.settings.autoPictureInPicture, let rt = runtimes[tabID], !rt.browser.isInPictureInPicture else { return }
         rt.pendingAutoPictureInPicture = true
         requestPictureInPicture(tabID, automatic: true)
+    }
+
+    /// The window is out of sight: covered by another app, on another desktop or in the Dock.
+    private(set) var windowCovered = false
+
+    /// Arc's presentPipForOccludedWindow: a window out of sight and not key leaves its video tabs
+    /// the way a tab switch does (a four-finger swipe to another desktop, another app on top), and
+    /// the video comes back when the window is key again. Only pages playing sound are asked:
+    /// the automatic request wants an unmuted video playing, and a page without one in its main
+    /// frame gets the activation nudge, which an app switch shouldn't send to every page.
+    func windowVisibilityChanged(covered: Bool) {
+        guard covered != windowCovered else { return }
+        windowCovered = covered
+        for id in visibleTabIDs {
+            guard let rt = runtimes[id] else { continue }
+            if covered {
+                if rt.browser.isAudible { leaveTab(id) }
+            } else if rt.autoPictureInPicture || rt.pendingAutoPictureInPicture {
+                returnToTab(rt)
+            }
+        }
     }
 
     func browser(_ browser: CraBrowser, didChangePictureInPicturePlayback playing: Bool) {
@@ -522,7 +577,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
             rt.autoPictureInPicture = rt.pendingAutoPictureInPicture
             rt.pendingAutoPictureInPicture = false
             // The request from leaving the tab landed after the user came back.
-            if rt.autoPictureInPicture, id == visibleTabID { browser.exitPictureInPicture() }
+            if rt.autoPictureInPicture, id == visibleTabID, !windowCovered { browser.exitPictureInPicture() }
         } else {
             rt.autoPictureInPicture = false
         }
@@ -687,6 +742,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         guard let id = tabID(of: browser) else { return }
         log(id, "loaded \(site(url, id, browser)) (HTTP \(statusCode))")
         guard !browser.isIncognito else { return }
+        if url.hasPrefix("chrome://settings") { watchClearBrowsingData(browser) }
         store.recordVisit(url: url, title: title.isEmpty ? (store.item(id)?.tab?.savedTitle ?? "") : title)
     }
 

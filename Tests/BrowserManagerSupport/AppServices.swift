@@ -28,6 +28,7 @@ enum TestRoot { case today }
     }
     func setThemeColor(_ id: UUID, _ hex: String) { items[id]?.tab?.themeColor = hex }
     func recordVisit(url: String, title: String) {}
+    func clearHistory(_ range: BrowsingDataClear.Range) {}
     func selectTab(_ id: UUID, window: UUID?) {}
     func markUnread(_ id: UUID, _ unread: Bool) {}
     @discardableResult
@@ -39,6 +40,10 @@ enum TestRoot { case today }
     }
 }
 enum FaviconKey { static func key(for url: String) -> String? { url } }
+enum BrowsingDataClear {
+    enum Range { case allTime }
+    static func historyRange(messageJSON: String, now: Date) -> Range? { nil }
+}
 final class FaviconCache {
     func store(_ image: NSImage, forKey: String, persist: Bool) {}
 }

@@ -1567,6 +1567,14 @@ final class SidebarStore {
         rankingFile.save(ranking)
     }
 
+    /// Chrome's Delete browsing data deleted history: the command bar forgets it too.
+    func clearHistory(_ range: BrowsingDataClear.Range) {
+        (history, ranking) = BrowsingDataClear.clearing(range, history: history, ranking: ranking)
+        historyFile.saveNow(Array(history.values))
+        rankingFile.saveNow(ranking)
+        CraLog.note("history cleared (\(range == .allTime ? "all time" : "a time range"))")
+    }
+
     func recordCommandUse(_ id: String) {
         ranking.commandUsage[id, default: 0] += 1
         rankingFile.save(ranking)
