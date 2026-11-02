@@ -8,7 +8,8 @@ import AppKit
 /// with the connection state and a More menu. A tile's 14 pt badge pins it to the toolbar:
 /// filled for pinned extensions, grey on hover for the others.
 struct SiteControlCenterActions {
-    var share: () -> Void = {}
+    /// Gets the Share button, to hang the share list from.
+    var share: (NSView) -> Void = { _ in }
     var copyURL: () -> Void = {}
     var capture: () -> Void = {}
     var captureFullPage: () -> Void = {}
@@ -18,6 +19,8 @@ struct SiteControlCenterActions {
     var clearCache: () -> Void = {}
     var clearCookies: () -> Void = {}
     var siteSettings: () -> Void = {}
+    /// The lock: the page's certificate. nil without one (http, Chromium's pages).
+    var showCertificate: (() -> Void)?
 }
 
 enum SiteControlCenterMetrics {
@@ -33,6 +36,8 @@ enum SiteControlCenterMetrics {
 final class SiteControlCenterView: NSView {
     private typealias M = SiteControlCenterMetrics
     private let url: String
+    /// The connection badge (ConnectionSecurity).
+    private let secure: Bool
     private let colors: SiteControlCenterColors
     private let actions: SiteControlCenterActions
     private let store: SidebarStore
@@ -40,8 +45,9 @@ final class SiteControlCenterView: NSView {
     private let profile: String
     private var extensions: ExtensionStore { .shared }
 
-    init(url: String, dark: Bool, profile: String, actions: SiteControlCenterActions, store: SidebarStore) {
+    init(url: String, secure: Bool, dark: Bool, profile: String, actions: SiteControlCenterActions, store: SidebarStore) {
         self.url = url
+        self.secure = secure
         self.profile = profile
         colors = SiteControlCenterColors(dark: dark)
         self.actions = actions
@@ -57,8 +63,6 @@ final class SiteControlCenterView: NSView {
     override var isFlipped: Bool { true }
 
     var onResize: (NSSize) -> Void = { _ in }
-
-    private var isSecure: Bool { url.hasPrefix("https://") || url.hasPrefix("chrome://") || url.hasPrefix("chrome-extension://") }
 
     /// Arc: pinned extensions in toolbar order, then the rest by name.
     private var orderedExtensions: [ExtensionStore.Entry] {
@@ -85,10 +89,12 @@ final class SiteControlCenterView: NSView {
         let x = M.inset, w = M.width - 2 * M.inset
         var y: CGFloat = 9
         // The four raised action buttons.
-        for (i, (symbol, help, run)) in [("square.and.arrow.up", "Share", actions.share), ("link", "Copy URL", actions.copyURL),
+        let share = actions.share
+        for (i, (symbol, help, run)) in [("square.and.arrow.up", "Share", {}), ("link", "Copy URL", actions.copyURL),
                                          ("camera", "Capture this page", actions.capture),
                                          ("text.viewfinder", "Capture the full page", actions.captureFullPage)].enumerated() {
             let b = SiteActionButton(symbol: symbol, help: help, colors: colors, action: run)
+            if i == 0 { b.onClick = { [weak b] in if let b { share(b) } } }
             b.frame = NSRect(x: x + CGFloat(i) * (M.tile.width + M.gap), y: y, width: M.tile.width, height: M.tile.height)
             addSubview(b)
         }
@@ -140,7 +146,7 @@ final class SiteControlCenterView: NSView {
         addSubview(divider)
         y += 1 + 12
         // Footer: the connection state, the More menu.
-        let secure = SiteSecurityPill(secure: isSecure, colors: colors)
+        let secure = SiteSecurityPill(secure: secure, colors: colors, action: actions.showCertificate)
         secure.frame.origin = NSPoint(x: x, y: y)
         addSubview(secure)
         let more = SiteMoreButton(colors: colors, actions: actions)
@@ -205,6 +211,12 @@ private class SiteHoverView: NSView {
     override func mouseDown(with event: NSEvent) {}
     override func mouseUp(with event: NSEvent) {
         if bounds.contains(convert(event.locationInWindow, from: nil)) { onClick() }
+    }
+
+    /// VoiceOver's press is a click.
+    override func accessibilityPerformPress() -> Bool {
+        onClick()
+        return true
     }
 }
 
@@ -387,6 +399,9 @@ private final class SiteActionButton: SiteHoverView {
         glyph.imageScaling = .scaleNone
         addSubview(glyph)
         _ = ArcTooltipAnchorView.attach(to: self, help: help)
+        setAccessibilityElement(true)
+        setAccessibilityLabel(help)
+        setAccessibilityRole(.button)
         refresh()
     }
 
@@ -452,9 +467,16 @@ private final class SiteSettingRow: SiteHoverView {
     override func refresh() { alphaValue = hovered ? 0.85 : 1 }
 }
 
-private final class SiteSecurityPill: NSView {
-    init(secure: Bool, colors: SiteControlCenterColors) {
+/// Pressed, it shows the page's certificate (Arc closes the control center and opens it).
+private final class SiteSecurityPill: SiteHoverView {
+    private let colors: SiteControlCenterColors
+    private let clickable: Bool
+
+    init(secure: Bool, colors: SiteControlCenterColors, action: (() -> Void)?) {
+        self.colors = colors
+        clickable = action != nil
         super.init(frame: .zero)
+        if let action { onClick = action }
         wantsLayer = true
         layer?.cornerRadius = 8
         layer?.cornerCurve = .continuous
@@ -474,9 +496,19 @@ private final class SiteSecurityPill: NSView {
         addSubview(lock)
         addSubview(label)
         _ = ArcTooltipAnchorView.attach(to: self, help: secure ? "Your connection to this site is secure" : "Your connection to this site is not secure")
+        setAccessibilityElement(true)
+        setAccessibilityLabel(secure ? "Secure" : "Not Secure")
+        setAccessibilityRole(clickable ? .button : .staticText)
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    override func refresh() {
+        // The More button's hover: SwiftUI's .brightness(0.04).
+        let c = colors.footerFill.usingColorSpace(.sRGB) ?? colors.footerFill
+        layer?.backgroundColor = (hovered && clickable ? NSColor(srgbRed: min(1, c.redComponent + 0.04), green: min(1, c.greenComponent + 0.04),
+                                                                  blue: min(1, c.blueComponent + 0.04), alpha: c.alphaComponent) : c).cgColor
+    }
 }
 
 /// Arc's footer "…": Clear Cache, Clear Cookies, Manage Extensions, Add Extension, All Site Settings.
@@ -541,7 +573,8 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
 
     var isShown: Bool { popover?.isShown == true }
 
-    func show(relativeTo rect: NSRect, of view: NSView, url: String, dark: Bool, profile: String, store: SidebarStore, actions: SiteControlCenterActions) {
+    func show(relativeTo rect: NSRect, of view: NSView, url: String, secure: Bool, dark: Bool, profile: String, store: SidebarStore,
+              actions: SiteControlCenterActions) {
         // A transient popover closes on the mouse-down outside it; the button fires on that
         // click's mouse-up. The same click on the sliders button closes it, as in Arc,
         // however long the press took (GitHub #42): the latest mouse-down is the closing one.
@@ -558,9 +591,9 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
         p.delegate = self
         p.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         var acts = actions
-        // Every action ends the popover, as in Arc (pinning keeps it open).
+        // Every action ends the popover, as in Arc (pinning keeps it open, and the share list
+        // opens over it).
         func closing(_ f: @escaping () -> Void) -> () -> Void { { [weak p] in p?.performClose(nil); f() } }
-        acts.share = closing(actions.share)
         acts.copyURL = closing(actions.copyURL)
         acts.capture = closing(actions.capture)
         acts.captureFullPage = closing(actions.captureFullPage)
@@ -570,7 +603,8 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
         acts.siteSettings = closing(actions.siteSettings)
         acts.clearCache = closing(actions.clearCache)
         acts.clearCookies = closing(actions.clearCookies)
-        let content = SiteControlCenterView(url: url, dark: dark, profile: profile, actions: acts, store: store)
+        acts.showCertificate = actions.showCertificate.map(closing)
+        let content = SiteControlCenterView(url: url, secure: secure, dark: dark, profile: profile, actions: acts, store: store)
         let host = NSViewController()
         host.view = content
         host.preferredContentSize = content.frame.size
@@ -582,9 +616,57 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
 
     func close() { popover?.performClose(nil) }
 
+    /// While the share list is up the popover only closes when Cra closes it: a transient one
+    /// can go when a menu opens over it.
+    func holdOpen(_ hold: Bool) { popover?.behavior = hold ? .applicationDefined : .transient }
+
     func popoverWillClose(_ notification: Notification) {
         if let e = NSApp.currentEvent, e.type == .leftMouseDown { closingClick = e.timestamp }
     }
 
     func popoverDidClose(_ notification: Notification) { popover = nil }
+}
+
+/// The Site Control Center's share list (GitHub #90). macOS finds the share extensions the
+/// first time a process asks, about 0.3 s on the main thread, so that happens once off it
+/// soon after launch. The list keeps the system's own services, as Arc's shorter one does.
+@MainActor
+final class SharePicker: NSObject, @preconcurrency NSSharingServicePickerDelegate {
+    static let shared = SharePicker()
+    private static let kept: [NSSharingService.Name] = [
+        .composeMessage, .composeEmail, .sendViaAirDrop, .init("com.apple.Notes.SharingExtension"),
+        .init("com.apple.reminders.sharingextension"),
+    ]
+    private var picker: NSSharingServicePicker?
+    private var done: (_ chose: Bool) -> Void = { _ in }
+
+    nonisolated static func warmUp() {
+        DispatchQueue.global(qos: .utility).async {
+            // Deprecated, but the only call that finds them without showing a menu.
+            _ = NSSharingService.sharingServices(forItems: [URL(string: "https://example.com")!])
+        }
+    }
+
+    /// `done` runs when the list goes, `chose` when a service was picked.
+    func show(_ url: URL, relativeTo anchor: NSView, done: @escaping (_ chose: Bool) -> Void) {
+        let picker = NSSharingServicePicker(items: [url])
+        picker.delegate = self
+        self.picker = picker
+        self.done = done
+        picker.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .minY)
+    }
+
+    func sharingServicePicker(_ sharingServicePicker: NSSharingServicePicker, sharingServicesForItems items: [Any],
+                              proposedSharingServices proposedServices: [NSSharingService]) -> [NSSharingService] {
+        // NSSharingService has no public name: match the titles of the named services.
+        let titles = Set(Self.kept.compactMap { NSSharingService(named: $0)?.title })
+        let kept = proposedServices.filter { titles.contains($0.title) }
+        return kept.isEmpty ? proposedServices : kept
+    }
+
+    func sharingServicePicker(_ sharingServicePicker: NSSharingServicePicker, didChoose service: NSSharingService?) {
+        guard sharingServicePicker === picker else { return }
+        picker = nil
+        done(service != nil)
+    }
 }

@@ -26,6 +26,7 @@
 #include "include/cef_keyboard_handler.h"
 #include "include/cef_life_span_handler.h"
 #include "include/cef_load_handler.h"
+#include "include/cef_navigation_entry.h"
 #include "include/cef_parser.h"
 #include "include/cef_permission_handler.h"
 #include "include/cef_request_context.h"
@@ -148,6 +149,9 @@ enum CraMenuCommand {
 // MARK: - Downloads
 
 @implementation CraDownloadInfo
+@end
+
+@implementation CraSSLStatus
 @end
 
 // MARK: - CraBrowser private interface
@@ -1910,6 +1914,32 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     if (!_devToolsBrowser) return;
     CefRefPtr<CefFrame> f = _devToolsBrowser->GetMainFrame();
     if (f) f->ExecuteJavaScript(CefStringFromNS(script), f->GetURL(), 0);
+}
+
+- (CraSSLStatus*)sslStatus {
+    if (!_browser) return nil;
+    CefRefPtr<CefNavigationEntry> entry = _browser->GetHost()->GetVisibleNavigationEntry();
+    CefRefPtr<CefSSLStatus> ssl = entry ? entry->GetSSLStatus() : nullptr;
+    if (!ssl) return nil;
+    CraSSLStatus* status = [CraSSLStatus new];
+    status.secureConnection = ssl->IsSecureConnection();
+    status.certStatus = (NSUInteger)ssl->GetCertStatus();
+    status.contentStatus = (NSUInteger)ssl->GetContentStatus();
+    NSMutableArray<NSData*>* certificates = [NSMutableArray array];
+    auto add = [&](CefRefPtr<CefBinaryValue> der) {
+        if (!der || !der->GetSize()) return;
+        NSMutableData* data = [NSMutableData dataWithLength:der->GetSize()];
+        der->GetData(data.mutableBytes, data.length, 0);
+        [certificates addObject:data];
+    };
+    if (CefRefPtr<CefX509Certificate> cert = ssl->GetX509Certificate()) {
+        add(cert->GetDEREncoded());
+        CefX509Certificate::IssuerChainBinaryList chain;
+        cert->GetDEREncodedIssuerChain(chain);
+        for (auto& der : chain) add(der);
+    }
+    status.certificates = certificates;
+    return status;
 }
 
 - (double)zoomLevel { return _browser ? _browser->GetHost()->GetZoomLevel() : 0; }

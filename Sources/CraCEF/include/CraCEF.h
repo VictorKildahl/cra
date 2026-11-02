@@ -24,6 +24,18 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 @property (nonatomic) CraDownloadState state;
 @end
 
+/// The connection of the page on screen (Chromium's SSL status of the visible navigation entry).
+@interface CraSSLStatus : NSObject
+/// The page came over a connection with a certificate (https, whatever the certificate's errors).
+@property (nonatomic) BOOL secureConnection;
+/// net::CertStatus bits: the certificate's errors and notes.
+@property (nonatomic) NSUInteger certStatus;
+/// net::SSLStatus::ContentStatus bits: http content the page showed or ran.
+@property (nonatomic) NSUInteger contentStatus;
+/// The server's certificate, then its issuers, DER encoded; empty without a certificate.
+@property (nonatomic, copy) NSArray<NSData *> *certificates;
+@end
+
 @protocol CraBrowserDelegate <NSObject>
 - (void)browser:(CraBrowser *)browser didChangeTitle:(NSString *)title;
 - (void)browser:(CraBrowser *)browser didChangeURL:(NSString *)url;
@@ -187,6 +199,8 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 /// `params` is a JSON object string; the completion gets the result JSON or an error.
 - (void)sendDevToolsMethod:(NSString *)method params:(NSString *)params
                 completion:(void (^)(NSString * _Nullable result, NSString * _Nullable error))completion;
+/// The page on screen's connection; nil before anything has committed.
+- (nullable CraSSLStatus *)sslStatus;
 - (void)notifyMoveOrResizeStarted;
 /// Asynchronous. -browserDidClose: fires when Chromium is done.
 - (void)close;
