@@ -19,6 +19,8 @@ final class ExtensionPopupWindow: NSWindow {
     private static let savedOffsetKey = "extensionPopupWindowOffset"
 
     private static var current: ExtensionPopupWindow?
+    /// When the mouse-down that closed the last popup happened (event time), if one did.
+    private static var closingClick: TimeInterval?
 
     private weak var bubble: NSWindow?
     /// The top-right point (screen) the popup hangs from: right edge of its button, under the bar.
@@ -176,7 +178,15 @@ final class ExtensionPopupWindow: NSWindow {
     override func performClose(_ sender: Any?) { dismiss(closingBubble: true) }
     override func close() { dismiss(closingBubble: true) }
 
+    /// `event` is the mouse-down that took focus from a popup, closing it. AppKit makes the
+    /// clicked window key before it asks the view whether it takes that click.
+    static func closed(by event: NSEvent?) -> Bool {
+        guard let event, event.type == .leftMouseDown, let closingClick else { return false }
+        return event.timestamp == closingClick
+    }
+
     private func dismiss(closingBubble: Bool) {
+        if let e = NSApp.currentEvent, e.type == .leftMouseDown { Self.closingClick = e.timestamp }
         for o in observers { NotificationCenter.default.removeObserver(o) }
         observers = []
         if let bubble {
