@@ -62,7 +62,7 @@ final class ShellView: NSView {
     var onPaneResizeBegan: (() -> Void)?
     /// Builds a pane's toolbar (the window controller owns the environment).
     var makeToolbar: ((UUID?) -> NSView)?
-    /// Where the status bubble, toasts and find bar live (the content container, or an
+    /// Where the status bubble and find bar live (the content container, or an
     /// overlay panel's content view when pages are separate windows).
     private(set) var overlayParent: NSView
     /// Set while the sidebar/card frames are being animated; layout() then leaves them alone.
@@ -72,7 +72,6 @@ final class ShellView: NSView {
     /// Arc's faint card over the gradient while no tab is selected.
     let placeholderHost = NSView()
     let statusHost: NSView
-    let toastHost: NSView
     let findHost: NSView
 
     /// Stand-in pane id for the no-tab state (toolbar on the gradient, no card).
@@ -169,14 +168,12 @@ final class ShellView: NSView {
     }
     var statusVisible = false
     var findVisible = false
-    var toastCount = 0
     private var trackingArea: NSTrackingArea?
 
-    init(frame: NSRect, background: NSView, sidebar: NSView, toolbar: NSView, status: NSView, toasts: NSView, find: NSView) {
+    init(frame: NSRect, background: NSView, sidebar: NSView, toolbar: NSView, status: NSView, find: NSView) {
         backgroundHost = background
         sidebarHost = sidebar
         statusHost = status
-        toastHost = toasts
         findHost = find
         overlayParent = contentContainer
         super.init(frame: frame)
@@ -247,7 +244,7 @@ final class ShellView: NSView {
             self.layoutSubtreeIfNeeded()
         }
         contentContainer.addSubview(placeholderHost)
-        for h in [statusHost, toastHost, findHost] as [NSView] {
+        for h in [statusHost, findHost] as [NSView] {
             h.isHidden = true
             contentContainer.addSubview(h)
         }
@@ -621,17 +618,12 @@ final class ShellView: NSView {
         if showDev, selfDock, let pr = frontendPageRect { webInContainer = contentContainer.convert(pr, from: nil) }
         let wb = overlayParent === contentContainer ? webInContainer : NSRect(origin: .zero, size: webInContainer.size)
         if overlayParent === contentContainer {
-            for h in [statusHost, toastHost, findHost] where contentContainer.subviews.last !== h {
+            for h in [statusHost, findHost] where contentContainer.subviews.last !== h {
                 contentContainer.addSubview(h, positioned: .above, relativeTo: nil)
             }
         }
         statusHost.isHidden = !statusVisible
         statusHost.frame = NSRect(x: wb.minX, y: wb.minY, width: min(540, wb.width), height: 34)
-        if toastHost.superview === overlayParent {
-            let size = Self.toastStackSize(count: toastCount)
-            toastHost.isHidden = toastCount == 0
-            toastHost.frame = NSRect(x: wb.maxX - size.width, y: wb.minY, width: size.width, height: size.height)
-        }
         if findHost.superview === overlayParent {
             let size = CraMetrics.findBarSize, inset = CraMetrics.findBarInset
             findHost.isHidden = !findVisible
@@ -640,25 +632,18 @@ final class ShellView: NSView {
         if !animatingPanes, paneCards.allSatisfy({ $0.frozenWebBounds == nil }) { onPaneFrames?(paneWebFrames(layout)) }
     }
 
-    /// The download toast stack, bottom trailing over the focused page.
-    static func toastStackSize(count: Int) -> NSSize {
-        NSSize(width: 330, height: CGFloat(count) * 76 + 20)
-    }
-
     /// Chrome-style hosting: the status bubble moves into a click-through panel above the
-    /// page windows; the find bar and the toasts, which take clicks, each into their own
-    /// panel just their size, which the window controller places.
-    func moveOverlays(to view: NSView, findBar: NSPanel, toasts: NSPanel) {
+    /// page windows; the find bar, which takes clicks, into its own panel just its size, which
+    /// the window controller places.
+    func moveOverlays(to view: NSView, findBar: NSPanel) {
         overlayParent = view
         statusHost.removeFromSuperview()
         view.addSubview(statusHost)
-        for (host, panel) in [(findHost, findBar), (toastHost, toasts)] {
-            host.removeFromSuperview()
-            host.isHidden = false
-            host.autoresizingMask = [.width, .height]
-            host.frame = panel.contentView!.bounds
-            panel.contentView!.addSubview(host)
-        }
+        findHost.removeFromSuperview()
+        findHost.isHidden = false
+        findHost.autoresizingMask = [.width, .height]
+        findHost.frame = findBar.contentView!.bounds
+        findBar.contentView!.addSubview(findHost)
         needsLayout = true
     }
 

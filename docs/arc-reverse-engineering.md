@@ -1185,7 +1185,9 @@ Static only (strings of `Dia.app/Contents/MacOS/Dia`, no decompiler; not observe
   (split limit; `rectangle.portrait.split.2x1.slash` sits next to the view), extension installed,
   password saved, import progress/result, '<shortcut> again to <action>', trace status.
 - Unknown: display duration and transition (no runtime capture). Cra shows the status for 2 s
-  with a 0.15 s fade in / 0.2 s fade out (`SidebarUIState.flashStatus`).
+  with a 0.15 s fade in / 0.2 s fade out (`SidebarUIState.flashStatus`). Replaced 2 Nov 2026: Arc shows these
+  ("Copied Current URL", "Cannot Add New Pane") as its toast, one component for every confirmation, and Cra now
+  does too (`ShinyToast`, see the #85 section).
 
 ## Dia Extensions menu (Dia 1.54.2, 25 Oct 2026)
 
@@ -1582,7 +1584,12 @@ Arc's popup this time, so geometry is not measured.
   with no toolbar to anchor to, which swallowed the next click on the page. Cra turns it off the way Chrome's
   "Show downloads when they're done" setting does: `download_bubble.partial_view_enabled` = false on the global and
   incognito request contexts (CraCEF.mm HideDownloadBubble). Verified in a test instance: no bubble window, the first
-  click after a download reaches the page, Cra's toast still shows.
+  click after a download reaches the page.
+- Arc has no download toast. A running download, a failed one ("Failed to Download") and paused or cancelled ones are
+  rows in its downloads list, with a speed ("e.g. 3 MB/s"); finished ones read "54 seconds ago". Cra's bottom-right
+  download cards (its only other toast design) are gone (2 Nov 2026, #85 follow-up): the hover list shows running,
+  failed and cancelled downloads too (DownloadHistory.live, DownloadRow). [U] Arc's exact wording and icon for a
+  running or failed row (Cra: "81.3 MB of 104.9 MB — 30.1 MB/s", the file type's icon) — to capture live.
 - Chrome's download-started animation (DownloadBubbleStartedAnimationViews, Chromium 156.0.8078.48): a views popup
   parented to the page, `accept_events = false`, 2 × kIconBackgroundRadius 32 = 64×64 pt, 500 ms, flying to the hidden
   toolbar's download button. Only reduced motion turns it off (CEF_CTBT_DOWNLOAD is deprecated: downloads became a
@@ -2195,12 +2202,26 @@ was frontmost, 1x region captures and 100 fps recordings; test tabs archived aft
   1 pt outline at ~69 % of the fill; fill 220/226/184 at the top to 208/218/163 at the bottom over a dark page on a
   yellow/green theme (`ShinyToastBackgroundBasedPalette`). It springs in from its top centre (width 0.41 → 1.04 at
   ~0.2 s → 1.0 by ~0.4 s, i.e. ≈0.3 s response, damping 0.67), stays ~4.85 s and shrinks into its top while fading in
-  ~80 ms. [U] Whether a second ⌘Return restarts its timer; the fill on other themes. Cra: BackgroundTabToast.
+  ~80 ms. Another ⌘Return while it is up restarts its time (gone 4.77 s after the last one) and bumps it,
+  width 1 → 1.044 (~40 ms) → 1 by ~0.2 s, rather than springing in again. On the default theme in dark mode
+  (JYSK space) it is dark with white text: 43/24/102 → 33/19/79, outline 26/15/62, i.e. the same hue at
+  saturation 0.76, brightness 0.40 → 0.31 (outline 0.24); the light one is saturation 0.19 → 0.25, brightness
+  0.89 → 0.85 (outline 0.61) in the theme's hue. Cra: ShinyToast.
+- [O static] It is Arc's one toast (Toasts.ShinyToastView, `ToastContent`): the same component carries
+  "Copied Current URL" (`copyTabURL`), "Cannot Add New Pane" (`maxNumberPanes`), "Screenshot Copied to Clipboard",
+  "Pinned Tab to …", zoom changes, undo and more; some kinds add an SF Symbol (`quote.bubble.fill`,
+  `checkmark.shield.fill`, `xmark.octagon.fill` sit next to their strings). Cra shows its confirmations with
+  ShinyToast (MainWindowController.showToast), not Dia's nav-bar status. [U] Whether the copy and pane-limit
+  toasts carry a symbol, and where they sit with the sidebar out: the live check was cut short (Victor in a call).
 - [O] Return on a "Switch to Tab" row for a pinned tab two closed folders down (Netfinder ▸ Endpoints ▸ tab): no folder
   opens. The tab is listed one level under the outermost closed folder (its row slides in, ~0.15 s), Endpoints stays
   hidden, and the folder's glyph gets three dots (2 pt, 4 pt pitch). StorableWindows.json keeps it per window as
   `expandedItems: [folder, {"peeked": {"_0": [tab ids]}}]`; the tab stays listed after another tab is picked. The bar
   lists only the window's space's tabs; a typed URL puts the typed row first and the "Switch to Tab" row second.
   Arc also has Tabs ▸ Reveal Tab in Sidebar (`revealTabInSidebar`). Cra: FolderPeek (CraCore),
-  WindowPrefs.peekedFolders, SidebarStore.peekedTabs/setExpanded, FolderGlyphView's dots. [U] What a click on a
-  peeked folder does in Arc (Cra opens it and drops the peek; closing it again keeps the open tab listed).
+  WindowPrefs.peekedFolders, SidebarStore.peekedTabs/setExpanded, FolderGlyphView's dots.
+- [O] Real clicks (cliclick, Victor idle) on a peeked folder never open it: with the peeked tab open it stays
+  closed with the tab listed (two clicks), with another tab open it closes for good and drops the peek and the
+  dots. A folder without a peek opens as usual. Arc's window state then has no entry for it. So a click on a
+  closed folder that keeps tabs in sight means "close", keeping only the open tab (as the 29 Oct folder-peek
+  notes found). Cra: FolderPeek.clickOpens.

@@ -122,22 +122,6 @@ final class SidebarUIState {
     var selectionAnchor: UUID?
     /// A sidebar drag over the space's list and what releasing it would do.
     var listDrop: SidebarListDrop?
-    /// Dia's nav-bar status: a short confirmation shown in place of the URL
-    /// ("Copied Current URL"), then the URL comes back.
-    var toolbarStatus: ToolbarStatus?
-    @ObservationIgnored private var statusClear: Task<Void, Never>?
-
-    func flashStatus(_ text: String, symbol: String, for seconds: Double = 2) {
-        let status = ToolbarStatus(symbol: symbol, text: text)
-        withAnimation(.easeOut(duration: 0.15)) { toolbarStatus = status }
-        statusClear?.cancel()
-        statusClear = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(seconds))
-            guard !Task.isCancelled, let self, self.toolbarStatus?.id == status.id else { return }
-            withAnimation(.easeOut(duration: 0.2)) { self.toolbarStatus = nil }
-        }
-    }
-
     func navState(for id: UUID) -> TabNavState { navStates[id] ?? TabNavState() }
 
     /// ⌘-click toggles a tab, ⇧-click adds the run of rows from the anchor.
@@ -165,12 +149,6 @@ final class SidebarUIState {
         if !multiSelection.isEmpty { multiSelection = [] }
         selectionAnchor = anchor
     }
-}
-
-struct ToolbarStatus: Equatable, Identifiable {
-    let id = UUID()
-    let symbol: String
-    let text: String
 }
 
 struct RecentDownload: Equatable {

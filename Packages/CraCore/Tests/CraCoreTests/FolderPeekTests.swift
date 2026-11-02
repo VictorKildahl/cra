@@ -35,6 +35,15 @@ struct FolderPeekTests {
         #expect(FolderPeek.expanding(inner, true, openTabInside: nil, peeks: peeks) == peeks)
     }
 
+    @Test func aClickOnAPeekedFolderClosesIt() {
+        #expect(FolderPeek.clickOpens(expanded: false, peeked: false))
+        #expect(!FolderPeek.clickOpens(expanded: true, peeked: false))
+        #expect(!FolderPeek.clickOpens(expanded: false, peeked: true))
+        // Closing it keeps only the open tab: a peek of another tab goes, the open tab's stays.
+        #expect(FolderPeek.expanding(outer, false, openTabInside: nil, peeks: [outer: [other]]).isEmpty)
+        #expect(FolderPeek.expanding(outer, false, openTabInside: tab, peeks: [outer: [tab, other]]) == [outer: [tab]])
+    }
+
     @Test func closingATabDropsItFromEveryPeek() {
         let peeks = [outer: [tab, other], inner: [tab]]
         #expect(FolderPeek.removing(tab, peeks: peeks) == [outer: [other]])

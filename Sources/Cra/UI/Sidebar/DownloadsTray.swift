@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 /// Arc's downloads list: hovering the Library button lists the recent downloads over the
 /// bottom of the sidebar, newest at the bottom, and the tab list behind them fades out.
@@ -142,7 +143,12 @@ final class DownloadsTrayView: NSView {
 
 private final class DownloadsTrayRowView: NSView, NSDraggingSource {
     var colors = SidebarColors() { didSet { refresh() } }
-    private var entry: DownloadHistory.Entry?
+    private var listed: DownloadHistory.Listed?
+    /// The finished file this row stands for (live rows have nothing to open or drag yet).
+    private var entry: DownloadHistory.Entry? {
+        if case .finished(let e)? = listed { return e }
+        return nil
+    }
     var now = Date() { didSet { refreshAge() } }
     private let thumb = NSView()
     private let name = NSTextField.sidebarLabel(size: 14)
@@ -167,9 +173,9 @@ private final class DownloadsTrayRowView: NSView, NSDraggingSource {
 
     override var isFlipped: Bool { true }
 
-    /// Also when only a thumbnail arrived.
-    func show(_ e: DownloadHistory.Entry) {
-        entry = e
+    /// Also when only a thumbnail arrived, and on every progress report.
+    func show(_ l: DownloadHistory.Listed) {
+        listed = l
         refresh()
     }
 
@@ -177,9 +183,18 @@ private final class DownloadsTrayRowView: NSView, NSDraggingSource {
         let ink: NSColor = colors.isDark ? .white : .black
         name.textColor = ink.withAlphaComponent(0.82)
         age.textColor = ink.withAlphaComponent(0.5)
-        guard let entry else { return }
-        name.stringValue = (entry.path as NSString).lastPathComponent
-        if let image = DownloadHistory.shared.thumbnail(for: entry.path) {
+        guard let listed else { return }
+        var image: NSImage?
+        switch listed {
+        case .finished(let e):
+            name.stringValue = (e.path as NSString).lastPathComponent
+            image = DownloadHistory.shared.thumbnail(for: e.path)
+        case .live(let l):
+            // Still running, failed or cancelled: the file type's icon, as in the bin before it lands.
+            name.stringValue = l.name
+            image = NSWorkspace.shared.icon(for: UTType(filenameExtension: (l.name as NSString).pathExtension) ?? .data)
+        }
+        if let image {
             // .aspectRatio(contentMode: .fill): the layer fills and crops.
             let scale = window?.backingScaleFactor ?? 2
             var rect = NSRect(x: 0, y: 0, width: DownloadsTrayMetrics.thumbnail, height: DownloadsTrayMetrics.thumbnail)
@@ -193,18 +208,17 @@ private final class DownloadsTrayRowView: NSView, NSDraggingSource {
         refreshAge()
     }
 
+    /// "54 seconds ago", "6 minutes ago"; progress, "Failed to Download" or "Cancelled" (DownloadRow).
     private func refreshAge() {
-        guard let entry else { return }
-        let s = Self.age.localizedString(for: min(entry.date, now), relativeTo: now)
+        guard let listed else { return }
+        let state: DownloadRow.State
+        switch listed {
+        case .finished(let e): state = .finished(at: e.date)
+        case .live(let l): state = l.row
+        }
+        let s = DownloadRow.subtitle(state, now: now)
         if age.stringValue != s { age.stringValue = s }
     }
-
-    /// "54 seconds ago", "6 minutes ago".
-    private static let age: RelativeDateTimeFormatter = {
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .full
-        return f
-    }()
 
     override func layout() {
         super.layout()

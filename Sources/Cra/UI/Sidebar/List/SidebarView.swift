@@ -341,7 +341,7 @@ final class SidebarTopBarView: NSView {
             let entries = ext.entries(inProfile: tab.map { store.profileDirectoryName(item: $0.id) }
                                       ?? store.profileDirectoryName(space: store.focusedSpaceID(window: ui.windowID)))
             let pinned = ext.pinnedIDs.compactMap { id in entries.first { $0.extensionID == id }.map { (id, $0.name, ext.toolbarIcon(for: $0)) } }
-            pill.show(text: text, url: url, hasTab: tab != nil, status: ui.toolbarStatus, colors: colors, active: active,
+            pill.show(text: text, url: url, hasTab: tab != nil, colors: colors, active: active,
                       pinned: pinned, hasExtensions: !entries.isEmpty)
         }
         needsLayout = true
@@ -444,7 +444,6 @@ final class SidebarURLPill: NSView {
     var actions: SidebarActions?
     var showAccessories = false { didSet { if showAccessories != oldValue { refreshAccessories(animated: true) } } }
     private let label = NSTextField.sidebarLabel(size: 13)
-    private let statusIcon = NSImageView()
     private let tip: ArcTooltipAnchorView
     private var accessories: [NSView] = []
     private var hovering = false { didSet { if hovering != oldValue { refreshFill() } } }
@@ -459,8 +458,6 @@ final class SidebarURLPill: NSView {
         layer?.cornerRadius = 10
         layer?.cornerCurve = .continuous
         label.lineBreakMode = .byTruncatingMiddle
-        statusIcon.imageScaling = .scaleNone
-        addSubview(statusIcon)
         addSubview(label)
         tip.followsCursor = true
         tip.autoresizingMask = [.width, .height]
@@ -472,22 +469,13 @@ final class SidebarURLPill: NSView {
     override var isFlipped: Bool { true }
     override var mouseDownCanMoveWindow: Bool { false }
 
-    func show(text: String, url: String, hasTab: Bool, status: ToolbarStatus?, colors: SidebarColors, active: Bool,
+    func show(text: String, url: String, hasTab: Bool, colors: SidebarColors, active: Bool,
               pinned: [(String, String, NSImage?)], hasExtensions: Bool) {
         self.colors = colors
         self.hasTab = hasTab
         tip.text = url
-        if let status {
-            statusIcon.isHidden = false
-            statusIcon.image = SidebarSymbols.image(status.symbol, size: 10, weight: .semibold)
-            statusIcon.contentTintColor = colors.textSecondary
-            label.stringValue = status.text
-            label.textColor = colors.textSecondary
-        } else {
-            statusIcon.isHidden = true
-            label.stringValue = text
-            label.textColor = hasTab ? colors.textPrimary : colors.textTertiary
-        }
+        label.stringValue = text
+        label.textColor = hasTab ? colors.textPrimary : colors.textTertiary
         model = (pinned, hasExtensions, active)
         refreshAccessories(animated: false)
         refreshFill()
@@ -541,11 +529,7 @@ final class SidebarURLPill: NSView {
             v.frame = NSRect(x: right, y: (h - 28) / 2, width: 28, height: 28)
             right -= 1
         }
-        var x: CGFloat = 12
-        if !statusIcon.isHidden {
-            statusIcon.frame = NSRect(x: x, y: 0, width: 12, height: h)
-            x += 12 + 6
-        }
+        let x: CGFloat = 12
         let lh = label.intrinsicContentSize.height
         label.frame = NSRect(x: x - SidebarText.inset, y: (h - lh) / 2, width: max(0, right - x) + 2 * SidebarText.inset, height: lh)
         tip.frame = NSRect(x: 0, y: 0, width: right, height: h)

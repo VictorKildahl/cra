@@ -225,7 +225,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// window_dialog_sheet_visible, active tabs). Little Windows go to the Library on quit,
     /// so an open one waits too.
     func autoUpdateBlocker() -> String? {
-        if mainWindows.contains(where: { $0.overlay.toasts.contains { $0.state == CraDownloadState.inProgress.rawValue } }) { return "a download is in progress" }
+        if DownloadHistory.shared.hasRunningDownloads { return "a download is in progress" }
         if NSApp.modalWindow != nil || NSApp.windows.contains(where: { $0.isVisible && $0.attachedSheet != nil }) { return "a dialog is open" }
         if !littleWindows.isEmpty { return "a Little Window is open" }
         if PictureInPictureChrome.shared.isPlaying { return "Picture in Picture is playing" }
@@ -782,12 +782,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "copyURL":
             if let url = current.flatMap({ store.item($0)?.tab?.url }) {
                 copy(url)
-                main.sidebarUI.flashStatus("Copied Current URL", symbol: "link")
+                main.showToast("Copied Current URL")
             }
         case "copyURLMarkdown":
             if let c = current, let it = store.item(c), let url = it.tab?.url {
                 copy("[\(it.displayTitle)](\(url))")
-                main.sidebarUI.flashStatus("Copied URL as Markdown", symbol: "link")
+                main.showToast("Copied URL as Markdown")
             }
         case "print": main.currentBrowser?.print()
         case "capturePage": main.capturePage()

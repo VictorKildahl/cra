@@ -28,7 +28,6 @@ final class PaneToolbarView: NSView {
         var url = ""
         var host = ""
         var path = ""
-        var status: ToolbarStatus?
         var sidebarVisible = true
         var pinned: [Ext] = []
         var hasExtensions = false
@@ -132,7 +131,6 @@ final class PaneToolbarView: NSView {
         m.canGoBack = nav.canGoBack
         m.canGoForward = nav.canGoForward
         m.isLoading = nav.isLoading
-        m.status = m.focusedPane ? ui.toolbarStatus : nil
         m.sidebarVisible = store.window(ui.windowID).sidebarVisible
         if let item, item.isEmptyTab {
             m.kind = .emptyPane
@@ -302,8 +300,8 @@ final class PaneToolbarView: NSView {
             placeholderLabel.isHidden = true
             // Arc's developer URL has no hover fill (it edits in place on a click).
             let urlHover = m.kind == .developer ? NSColor.clear : NSColor.white.withAlphaComponent(0.08)
-            urlButton.show(host: m.host, path: m.path, url: m.url, developer: m.kind == .developer, status: m.status,
-                           fg: m.fg, fgDim: m.fgDim, hover: urlHover, copyHover: m.hover, animated: old.status?.id != m.status?.id && window != nil)
+            urlButton.show(host: m.host, path: m.path, url: m.url, developer: m.kind == .developer,
+                           fg: m.fg, fgDim: m.fgDim, hover: urlHover, copyHover: m.hover)
             urlButton.selection = m.selection
         case .noTab, .emptyPane:
             urlButton.isHidden = true
@@ -586,8 +584,7 @@ final class ToolbarGlyphButton: NSView {
 }
 
 /// The URL in the middle of the bar: Arc's Copy Current URL glyph and the host (the dimmer path
-/// after it with Show Full URL; the full URL in monospace after a lock in developer mode), or the
-/// nav-bar status in its place.
+/// after it with Show Full URL; the full URL in monospace after a lock in developer mode).
 final class ToolbarURLButton: NSView, NSTextFieldDelegate {
     var action: () -> Void = {}
     /// The link glyph's own click (Copy Current URL) and the address's right-click menu.
@@ -614,7 +611,7 @@ final class ToolbarURLButton: NSView, NSTextFieldDelegate {
     private var copyHover = NSColor.white.withAlphaComponent(0.1)
     /// Arc's normal bar (1.171, #88): the glyph is a 24 pt button of its own and the host has its
     /// own pill, 24 pt tall, starting 20 pt in with the text 7 pt inside it. Each has its own hover;
-    /// the pointer picks one where they meet. A status or the developer bar is one piece.
+    /// the pointer picks one where they meet. The developer bar is one piece.
     private var split = false
     private enum Region { case none, copy, address }
     private var region = Region.none { didSet { if region != oldValue { refreshFill() } } }
@@ -666,30 +663,19 @@ final class ToolbarURLButton: NSView, NSTextFieldDelegate {
     /// The glyph's own width, as SwiftUI lays an Image out; developer mode boxes it at 14 pt.
     private var iconWidth: CGFloat { developer ? 14 : ceil(icon.image?.size.width ?? 12) }
 
-    func show(host: String, path: String, url: String, developer: Bool, status: ToolbarStatus?, fg: NSColor, fgDim: NSColor, hover: NSColor,
-              copyHover: NSColor, animated: Bool) {
+    func show(host: String, path: String, url: String, developer: Bool, fg: NSColor, fgDim: NSColor, hover: NSColor,
+              copyHover: NSColor) {
         self.developer = developer
         self.hover = hover
         self.copyHover = copyHover
-        split = !developer && status == nil
+        split = !developer
         copyTip.isHidden = !split
         self.url = url
         ink = fg
         field?.textColor = fg
         refreshFill()
         tip.text = url
-        if animated {
-            // SwiftUI's .transition(.opacity) on the status swap.
-            let fade = CATransition()
-            fade.type = .fade
-            fade.duration = 0.18
-            content.layer?.add(fade, forKey: "fade")
-        }
-        if let status {
-            icon.image = SidebarSymbols.image(status.symbol, size: 12, weight: .medium)
-            icon.contentTintColor = fgDim
-            label.attributedStringValue = NSAttributedString(string: status.text, attributes: [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: fgDim])
-        } else if developer {
+        if developer {
             icon.image = SidebarSymbols.image(url.hasPrefix("https://") ? "lock.fill" : "globe", size: 11, weight: .semibold)
             icon.contentTintColor = fgDim
             label.attributedStringValue = NSAttributedString(string: url, attributes: [.font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular), .foregroundColor: fg])
