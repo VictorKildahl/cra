@@ -2298,3 +2298,24 @@ tap with a real Shift key held around them; the space read from each window's `s
   step focuses the space on Cra's usual space-change spring (Dia's 0.4 s, slower than Arc's here), or slides the
   Library in or out like its button. On the Spaces page the cards take the wheel first (10 pt per line, as in Arc)
   and the wheel leaves the Library only at their end.
+
+### Extension action icons, badges and tooltips (Arc 1.171, 2 Nov 2026, issue #106, offline Arc + probe)
+- [O live] Offline Arc (fake home with the Storable*.json files minus both sync states, `--load-extension` with
+  a probe, pinned through the fake profile's `extensions.pinned_extensions`). Probe: red top-level `icons`, blue
+  `action.default_icon`, then `setIcon` (green disc), `setTitle` and `setBadgeText` on alarms.
+- Icon: the pinned button and the Site Control Center tile show the action's `default_icon` (blue), not the
+  top-level `icons`, and follow `setIcon` at once. The menu bar's Extensions menu keeps the manifest's action icon
+  (blue) after `setIcon`. Drawn 16 pt (32 px) in the top bar.
+- Tooltip: none on a pinned extension button after 8 s of hover (Back shows "Go back ⌘[" within 3 s), so
+  `setTitle` shows nowhere there. The Site Control Center tile's tooltip is the extension's name.
+- Badge: Chromium's IconWithBadgeImageSource at half size, its 28 pt icon area centred on the 16 pt icon. "7" is
+  7 × 7 pt and "42" 8 × 7 pt, right-aligned 1 pt in from the icon's bottom right. "1234" is 14 × 7 pt, centred
+  (20+ in Chromium's units). A 0.5 pt ring is cut out of the icon around the badge. Text is white or Google
+  Grey 900 by contrast unless `setBadgeTextColor` set one. A transparent `setBadgeTextColor` is refused and keeps
+  the old colour. With no colour set, the badge is #282828 in dark mode (Chromium's neutral container; light mode
+  not seen). The tile in the Site Control Center carries the same badge; the menu doesn't. Text widths match SF
+  bold at optical size 22–26 (CoreText's own 9 pt instance makes "42" a pixel wider).
+- Custom icons: Arc has none, so Cra's toolbar icon styles (#9) stay toolbar-only.
+- Cra: `extensions-action-updates.patch` reports icon, title, badge text (or the declarativeNetRequest count), badge
+  and text colour. `ExtensionBadge` (CraCore) lays the badge out; `ExtensionStore.badged` draws it into the icon.
+  Captured side by side with the same probe, Cra matches Arc's five states to the pixel (text ±1 px antialiasing).

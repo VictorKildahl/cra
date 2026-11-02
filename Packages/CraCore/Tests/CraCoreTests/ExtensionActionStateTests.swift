@@ -18,12 +18,13 @@ struct ExtensionActionStateTests {
         let u = try #require(ExtensionActionUpdate(params: Self.params([
             "id": "abc", "profile": "Profile 1", "targetId": "T1",
             "icon": "data:image/png;base64," + Self.png.base64EncodedString(),
-            "title": "Omega: auto", "badgeText": "3", "badgeColor": "#FF0000FF",
+            "title": "Omega: auto", "badgeText": "3", "badgeColor": "#FF0000FF", "badgeTextColor": "#FFFFFFFF",
         ])))
         #expect(u.extensionID == "abc")
         #expect(u.profile == "Profile 1")
         #expect(u.targetID == "T1")
-        #expect(u.state == ExtensionActionState(icon: Self.png, title: "Omega: auto", badgeText: "3", badgeColor: "#FF0000FF"))
+        #expect(u.state == ExtensionActionState(icon: Self.png, title: "Omega: auto", badgeText: "3", badgeColor: "#FF0000FF",
+                                                badgeTextColor: "#FFFFFFFF"))
     }
 
     @Test func everyTabEventHasNoTarget() throws {

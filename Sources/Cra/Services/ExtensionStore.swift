@@ -350,6 +350,72 @@ final class ExtensionStore {
         return image
     }
 
+    /// The badge the extension shows on `tab` (chrome.action.setBadgeText), laid out as Arc does.
+    func badge(for e: Entry, profile: String, tab: UUID?) -> ExtensionBadge? {
+        let font = Self.badgeFont(size: ExtensionBadge.measuringFontSize)
+        return ExtensionBadge(state: actions.state(extensionID: e.extensionID, profile: profile, tab: tab),
+                              defaultBackground: Self.badgeDefaultBackground) { text in
+            Double((text as NSString).size(withAttributes: [.font: font]).width)
+        }
+    }
+
+    /// The badge's colour when the extension set none: Chromium's neutral container (kColorRefNeutral15
+    /// dark, 94 light). Arc's dark one measures the same (1.171); light mode not seen in Arc.
+    static var badgeDefaultBackground: ExtensionBadge.RGBA {
+        let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        return ExtensionBadge.RGBA(hex: dark ? "#282828" : "#EFEDED")!
+    }
+
+    /// The badge's bold system font at SF's optical size 24, between its text and display designs:
+    /// with it "7", "42" and "1234" take Arc's widths exactly (CoreText's own choice at 9 pt is wider,
+    /// the display design narrower; measured 2 Nov 2026).
+    static func badgeFont(size: Double) -> NSFont {
+        let opticalSize = 0x6F70737A // 'opsz'
+        let base = NSFont.systemFont(ofSize: size, weight: .bold)
+        let descriptor = base.fontDescriptor.addingAttributes([
+            NSFontDescriptor.AttributeName(rawValue: kCTFontVariationAttribute as String): [opticalSize: 24],
+        ])
+        return NSFont(descriptor: descriptor, size: size) ?? base
+    }
+
+    /// Recent badged icons, so a redraw sees the same image until icon, badge or ink change.
+    @ObservationIgnored private var badgedIcons: [(icon: NSImage, badge: ExtensionBadge, tint: NSColor, image: NSImage)] = []
+
+    /// `icon` with `badge` drawn into it the way Chromium does (IconWithBadgeImageSource): a ring
+    /// cut out of the icon, then the badge. The buttons draw the result as is, so a template icon
+    /// takes `tint` first and the badge keeps its own colours.
+    func badged(_ icon: NSImage?, _ badge: ExtensionBadge?, tint: NSColor) -> NSImage? {
+        guard let icon, let badge else { return icon }
+        if let hit = badgedIcons.first(where: { $0.icon === icon && $0.badge == badge && $0.tint == tint }) { return hit.image }
+        let side = 16.0
+        let image = NSImage(size: NSSize(width: side, height: side), flipped: true) { _ in
+            let fit = min(side / max(icon.size.width, 1), side / max(icon.size.height, 1))
+            let w = icon.size.width * fit, h = icon.size.height * fit
+            let box = NSRect(x: (side - w) / 2, y: (side - h) / 2, width: w, height: h)
+            icon.draw(in: box, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            if icon.isTemplate {
+                tint.setFill()
+                box.fill(using: .sourceAtop)
+            }
+            NSGraphicsContext.current?.compositingOperation = .clear
+            NSBezierPath(roundedRect: badge.cutout, xRadius: badge.cutoutCornerRadius, yRadius: badge.cutoutCornerRadius).fill()
+            NSGraphicsContext.current?.compositingOperation = .sourceOver
+            badge.background.color.setFill()
+            NSBezierPath(roundedRect: badge.frame, xRadius: badge.cornerRadius, yRadius: badge.cornerRadius).fill()
+            let font = Self.badgeFont(size: ExtensionBadge.fontSize)
+            let centred = NSMutableParagraphStyle()
+            centred.alignment = .center
+            centred.lineBreakMode = .byClipping
+            let line = font.ascender - font.descender
+            (badge.text as NSString).draw(in: NSRect(x: badge.frame.minX, y: badge.frame.midY - line / 2, width: badge.frame.width, height: line),
+                                          withAttributes: [.font: font, .foregroundColor: badge.textColor.color, .paragraphStyle: centred])
+            return true
+        }
+        badgedIcons.append((icon, badge, tint, image))
+        if badgedIcons.count > 32 { badgedIcons.removeFirst() }
+        return image
+    }
+
     /// An icon as a one-ink template, the way Arc's own toolbar glyphs read. An icon drawn on a
     /// plate (one colour covering most of it: Bitwarden's blue square, Vercel's black disc) keeps
     /// what stands out from the plate, so Bitwarden becomes its shield. Without a plate, colour
@@ -436,4 +502,8 @@ final class ExtensionStore {
 
 extension Notification.Name {
     static let craPinnedExtensionsChanged = Notification.Name("craPinnedExtensionsChanged")
+}
+
+extension ExtensionBadge.RGBA {
+    var color: NSColor { NSColor(srgbRed: r, green: g, blue: b, alpha: a) }
 }

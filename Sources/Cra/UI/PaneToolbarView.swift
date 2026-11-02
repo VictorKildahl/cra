@@ -18,7 +18,7 @@ final class PaneToolbarView: NSView {
 
     private struct Model: Equatable {
         typealias Kind = ToolbarComposition.Kind
-        struct Ext: Equatable { let id: String; let name: String; let icon: NSImage? }
+        struct Ext: Equatable { let id: String; let name: String; let icon: NSImage?; let badge: ExtensionBadge? }
         var kind = Kind.noTab
         var inSplit = false
         var focusedPane = true
@@ -150,7 +150,8 @@ final class PaneToolbarView: NSView {
         m.hasExtensions = !entries.isEmpty
         m.pinned = extensions.pinnedIDs.compactMap { id in
             entries.first { $0.extensionID == id }.map {
-                Model.Ext(id: id, name: $0.name, icon: extensions.toolbarIcon(for: $0, profile: profile, tab: m.tabID))
+                Model.Ext(id: id, name: $0.name, icon: extensions.toolbarIcon(for: $0, profile: profile, tab: m.tabID),
+                          badge: extensions.badge(for: $0, profile: profile, tab: m.tabID))
             }
         }
         // Arc's toolbar colour (ToolbarColor): the page's report, else the tab's last colour, else
@@ -265,7 +266,9 @@ final class PaneToolbarView: NSView {
             case .pinnedExtension(let id):
                 let e = m.pinned.first { $0.id == id }
                 let b = button("ext:" + id) { ToolbarGlyphButton() }
-                b.configure(symbol: nil, image: e?.icon, help: e?.name ?? "", enabled: true, width: 34, iconSize: 18, tint: m.fgDim, hover: m.hover)
+                // Arc: the 16 pt action icon with its badge, and no tooltip (Arc 1.171, #106).
+                b.configure(symbol: nil, image: ExtensionStore.shared.badged(e?.icon, e?.badge, tint: m.fgDim), help: "", enabled: true,
+                            width: 34, iconSize: 16, tint: m.fgDim, hover: m.hover)
                 b.action = { [weak self] in self?.actions.runExtension(id) }
                 b.menuProvider = { ExtensionStore.shared.entries.first { $0.extensionID == id }.map(ExtensionsMenu.iconMenu) }
                 return b
