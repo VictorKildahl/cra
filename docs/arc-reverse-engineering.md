@@ -1981,6 +1981,24 @@ canvas, an unstyled page (no background, no color-scheme) showed black text on b
 (4 s with a slow image). The page now reports its background on every frame while it is parsed
 (kLoadingBackgroundProbe; frames wait for render-blocking stylesheets), so it turns white with its first paint.
 
+### The toolbar on a tab switch (Arc 1.171, 2 Nov 2026, issue #84, app-only recordings at 100 fps)
+
+New tabs (⌘T + a file:// URL) in a fresh main window, macOS Dark, test pages with a 1 s busy-wait in `<head>`;
+Cra's runs switch tabs with `cra://debug?selectTab=` in a CRA_TEST_BACKGROUND copy.
+
+- [O] A page Arc has never shown: bar #FDFDFD over a #000000 page until the page paints, and still white about
+  16 frames after it. Then it cross-fades white → the page's colour in 14–16 frames, ease in and out. A page
+  whose load is held open (an image that never answers) keeps the white bar after it has painted, theme-color
+  or not.
+- [O] The colour it settles on was the page's background: `html{background:#203040}` with
+  `<meta name="theme-color" content="#602040">` gave a #203040 bar (#1C2E3E captured). Cra's probe still prefers
+  theme-color (one test page; not changed in #84).
+- [O] Little Arc's bar is the space's colour whatever the page (#1A0C20 in Victor's space on all four pages).
+- Cra 0.1.25 retargeted the pane card before `browsers.show` created the tab's page, so a restored, slept or
+  handed-over tab showed a white bar for 3–5 frames before its remembered colour (Arc: the remembered colour
+  at once), on tab and space switches alike. Now the bar takes ToolbarColor (CraCore): the page's report,
+  else TabData.themeColor, else white, and fades to a new report over 0.18 s (14–15 frames).
+
 ## Sidebar toggle and the command bar's leading glyph (Arc 1.171, 1 Nov 2026, issue #50, live captures at 2x)
 
 Victor's Arc (toolbar shown, full URLs on), window captures by id; Little Arc with keys posted to its pid for

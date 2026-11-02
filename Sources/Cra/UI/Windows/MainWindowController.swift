@@ -352,6 +352,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let empty = Set(panes.filter { store.item($0)?.isEmptyTab == true })
         if shell.showToolbar != store.settings.showToolbar { shell.showToolbar = store.settings.showToolbar }
         if shell.edgeToEdge != store.settings.edgeToEdgeContent { shell.edgeToEdge = store.settings.edgeToEdgeContent }
+        // Before setPanes: a pane whose page is not live yet gets its bar colour now, not white.
+        let bars = toolbarColors(panes: panes)
+        if bars != shell.toolbarColors { shell.toolbarColors = bars }
         shell.setPanes(panes, factors: factors, orientation: split?.split?.orientation ?? .horizontal, focused: selected, empty: empty, animated: true)
         // A page is on screen in one window at a time. Arc keeps the tab selected in every window
         // that has it open: the window in use holds the page, the others show a blurred snapshot
@@ -473,10 +476,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         syncSidebarUI()
         let colors = browsers.runtimes.compactMapValues { $0.backgroundColor.isEmpty ? nil : $0.backgroundColor }
         if colors != shell.pageColors { shell.pageColors = colors }
-        // Same rule as PaneToolbarView's bar colour.
-        let bars = browsers.runtimes.compactMapValues { rt in HexColor.components(rt.themeColor) != nil ? rt.themeColor : nil }
+        let bars = toolbarColors(panes: shell.paneIDs)
         if bars != shell.toolbarColors { shell.toolbarColors = bars }
         if tabID == browsers.visibleTabID { window?.title = store.item(tabID)?.displayTitle ?? "Cra" }
+    }
+
+    /// Each live page's and each pane's bar colour, by PaneToolbarView's rule (ToolbarColor):
+    /// a pane shows before browsers.show creates its page, so it falls back to what the tab remembers.
+    private func toolbarColors(panes: [UUID]) -> [UUID: String] {
+        var bars: [UUID: String] = [:]
+        for id in Set(browsers.runtimes.keys).union(panes) {
+            bars[id] = ToolbarColor.hex(reported: browsers.runtime(for: id)?.themeColor, remembered: store.item(id)?.tab?.themeColor)
+        }
+        return bars
     }
 
     func browserManager(statusMessage: String) {
