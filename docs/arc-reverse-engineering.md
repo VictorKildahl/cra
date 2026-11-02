@@ -1542,6 +1542,13 @@ Arc's popup this time, so geometry is not measured.
   (plus Boost items).
 - [O] Extension popup window (user screenshot): ≈472×380 pt titled window, ≈25 pt title bar with a red close button and
   disabled minimize/zoom, the popup page filling the rest.
+- [O] Clicks while a popup is up (2 Nov 2026, live: HID clicks, CGWindowList sampled every 15 ms, AX focused window;
+  Detailed SEO and 1Password pinned): the popup window is key, so the browser window is inactive. A click in the
+  normal toolbar only takes focus back, which closes the popup: its own button leaves it closed (nothing reopens
+  within 3.5 s), 1Password's button closes Detailed SEO's popup and opens nothing (one plain click opens it), and
+  Split View Menu opens no menu (it does on a plain click). The developer bar's Extensions Menu did act on that
+  click (popup closed and the Site Control Center opened); its Detailed SEO tile then did nothing on the first
+  click. Cra: `FirstClick` (CraCore), GitHub #87. [U] Back/reload/URL: Arc's popup covered them.
 - Cra: `UI/SiteControlCenter.swift` (same geometry; Cra's popover lands at Arc's exact screen coordinates), the
   second action is Copy URL (no Boosts), Capture = visible page, Capture full page = DevTools
   `Page.captureScreenshot` with `captureBeyondViewport`; Clear Cookies = `Storage.clearDataForOrigin`, Clear Cache =

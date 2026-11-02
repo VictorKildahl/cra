@@ -67,9 +67,11 @@ extension NSView {
     /// AppKit treated the next click on the main window as the one that activates it, and a toolbar
     /// button needed a second click (GitHub #42), even once AppKit itself already had the main window
     /// key. Chrome draws all of it in one window, so buttons take that click while focus is in this
-    /// window or its children; a click into an inactive Cra still only activates it.
+    /// window or its children; a click into an inactive Cra still only activates it, and one that
+    /// takes focus from an extension's popup only closes the popup (GitHub #87). See FirstClick.
     var takesClickFromChildWindow: Bool {
-        guard NSApp.isActive, let window, let key = NSApp.keyWindow else { return false }
-        return key === window || key.parent === window
+        guard let window, let key = NSApp.keyWindow else { return false }
+        return FirstClick.takes(appActive: NSApp.isActive, focusInWindow: key === window || key.parent === window,
+                                closedPopup: ExtensionPopupWindow.closed(by: NSApp.currentEvent))
     }
 }
