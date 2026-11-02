@@ -297,6 +297,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     guard let self, var w = note.object as? NSWindow else { return }
                     while let parent = w.parent { w = parent }
                     if let c = self.mainWindows.first(where: { $0.window === w }) { self.store.activeWindowID = c.windowID }
+                    self.littleWindows.first { $0.window === w }?.refreshTarget()
                 }
             }
         }

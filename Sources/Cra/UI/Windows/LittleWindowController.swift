@@ -22,7 +22,8 @@ final class LittleWindowState {
     var isLoading = false
     var progress: Double = 0
     var themeColor = ""
-    /// The space ⌘O opens into (the focused space when the window was made).
+    /// The space ⌘O opens into: the focused space of the window in use last, as of when
+    /// this window last took focus (Arc's Little Arc, see `refreshTarget`).
     var targetSpaceID: UUID
     var popupOpen = false
     /// Pointer hover, tracked by AppKit (SwiftUI's onHover sleeps while the
@@ -438,6 +439,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             app.perform(id)
         case .switchSpace(let id):
             store.focusSpace(id)
+            refreshTarget()
         case .moveToSpace(let id):
             promote(to: id)
         case .moveToFolder:
@@ -533,6 +535,13 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     // MARK: Promote / close
 
+    /// Arc's Little Arc names the space of the browser window used last and updates when it
+    /// takes focus again (Arc 1.171: switched in the main window, "Open in" followed; #92).
+    func refreshTarget() {
+        let id = peekParent?.focusedSpaceID ?? store.focusedSpaceID(window: store.lastNormalWindowID)
+        if state.targetSpaceID != id { state.targetSpaceID = id }
+    }
+
     /// Move the page into a space (nil = the window's target space) as a Today
     /// tab, in the window already showing that space if there is one (Arc). The
     /// live browser goes with it, so history, scroll position and logins stay.
@@ -541,8 +550,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         closePopup()
         commandBar.close()
         app.useNormalWindow()
-        let sid = (spaceID ?? state.targetSpaceID).flatMap { store.space($0) != nil && !store.isIncognito(space: $0) ? $0 : nil }
-            ?? store.focusedSpaceID
+        if spaceID == nil { refreshTarget() }
+        let wanted = spaceID ?? state.targetSpaceID
+        let sid = store.space(wanted) != nil && !store.isIncognito(space: wanted) ? wanted : store.focusedSpaceID
         // Held: closing this window can make another browser window key, which changes app.main.
         let target = app.useNormalWindow(forSpace: sid)
         let tab = store.createTab(url: b.currentURL, title: b.currentTitle, in: sid, select: true, window: target.windowID)
