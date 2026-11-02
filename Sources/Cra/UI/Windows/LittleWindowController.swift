@@ -591,7 +591,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         case "promoteLittleWindow": promote(to: nil)
         // Move Tab to Space N (⌃⌘N, #86) sends the page there, as the spaces popup does (#92).
         case let id where id.hasPrefix("moveTabToSpace"):
-            if let n = Int(id.dropFirst(14)), n - 1 < store.spaceOrder.count { promote(to: store.spaceOrder[n - 1]) }
+            if let n = Int(id.dropFirst(14)), n >= 1, n <= store.spaceOrder.count { promote(to: store.spaceOrder[n - 1]) }
         // No find bar or capture in little windows; keep them off the main window.
         case "find", "findNext", "findPrevious", "capturePage", "toggleSidebar", "pinTab", "favoriteTab", "renameTab",
              "duplicateTab", "resetTab", "muteTab", "clearToday", "nextTab", "previousTab", "recentTab", "recentTabBackward":

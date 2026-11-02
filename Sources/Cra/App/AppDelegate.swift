@@ -690,7 +690,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "editSpace", "deleteSpace", "nextSpace", "previousSpace", "manageSpaces": return !main.isIncognito
         case "closeLittleWindows": return !littleWindows.isEmpty
         case let id? where id.hasPrefix("moveTabToSpace"):
-            guard let n = Int(id.dropFirst(14)), n <= store.spaceOrder.count else { return false }
+            guard let n = Int(id.dropFirst(14)), n >= 1, n <= store.spaceOrder.count else { return false }
             if let little = keyLittleWindow { return little.hasPage }
             return store.selectedTabID != nil && !main.isIncognito
         default: break
