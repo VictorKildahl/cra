@@ -225,7 +225,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// window_dialog_sheet_visible, active tabs). Little Windows go to the Library on quit,
     /// so an open one waits too.
     func autoUpdateBlocker() -> String? {
-        if mainWindows.contains(where: { $0.overlay.toasts.contains { $0.state == CraDownloadState.inProgress.rawValue } }) { return "a download is in progress" }
+        if DownloadHistory.shared.hasRunningDownloads { return "a download is in progress" }
         if NSApp.modalWindow != nil || NSApp.windows.contains(where: { $0.isVisible && $0.attachedSheet != nil }) { return "a dialog is open" }
         if !littleWindows.isEmpty { return "a Little Window is open" }
         if PictureInPictureChrome.shared.isPlaying { return "Picture in Picture is playing" }

@@ -4,6 +4,8 @@ import QuickLookThumbnailing
 
 /// Finished downloads, newest last, for the list Arc shows when you hover the Library
 /// button (its downloads tray). Kept in downloads.json; files deleted since drop out.
+/// Downloads still running, and ones that failed or were cancelled, are listed too (`live`,
+/// not saved): Arc shows progress and failures there, not in a toast.
 @MainActor
 @Observable
 final class DownloadHistory {
@@ -29,9 +31,85 @@ final class DownloadHistory {
         entries = file.load(or: { [] })
     }
 
-    /// The hover list: newest downloads still on disk, oldest first.
-    var recent: [Entry] {
-        Array(entries.filter { FileManager.default.fileExists(atPath: $0.path) }.suffix(Self.listLimit))
+    /// A download Chromium is still reporting on, or one that ended without a file.
+    struct Live: Identifiable, Equatable {
+        let id: UInt32
+        var name: String
+        var path: String
+        var started: Date
+        var received: Int64
+        var total: Int64
+        var percent: Int
+        var bytesPerSecond: Double?
+        /// The last point the speed was measured from.
+        var sampleBytes: Int64 = 0
+        var sampleAt = Date.distantPast
+        var failed = false
+        var cancelled = false
+        /// When Chromium last reported on it (see MainWindowController.checkStalledDownloads).
+        var updated: Date
+
+        var running: Bool { !failed && !cancelled }
+        var row: DownloadRow.State {
+            failed ? .failed : cancelled ? .cancelled : .downloading(received: received, total: total, bytesPerSecond: bytesPerSecond)
+        }
+    }
+
+    private(set) var live: [Live] = []
+
+    /// A row in the hover list.
+    enum Listed: Identifiable, Equatable {
+        case finished(Entry)
+        case live(Live)
+
+        var id: String {
+            switch self {
+            case .finished(let e): return e.id.uuidString
+            case .live(let l): return "live-\(l.id)"
+            }
+        }
+        var date: Date {
+            switch self {
+            case .finished(let e): return e.date
+            case .live(let l): return l.started
+            }
+        }
+    }
+
+    /// The hover list: newest downloads, oldest first: files still on disk, and running, failed
+    /// or cancelled ones.
+    var recent: [Listed] {
+        let finished = entries.filter { FileManager.default.fileExists(atPath: $0.path) }.map(Listed.finished)
+        return Array((finished + live.map(Listed.live)).sorted { $0.date < $1.date }.suffix(Self.listLimit))
+    }
+
+    var hasRunningDownloads: Bool { live.contains(where: \.running) }
+
+    /// Chromium's report on a download: running ones update their row, a finished one leaves for
+    /// `add(path:)`, a failed or cancelled one stays listed for this session.
+    func report(id: UInt32, name: String, path: String, received: Int64, total: Int64, percent: Int,
+                complete: Bool, cancelled: Bool, failed: Bool, now: Date = Date()) {
+        if complete {
+            live.removeAll { $0.id == id }
+            return
+        }
+        var l = live.first { $0.id == id } ?? Live(id: id, name: name, path: path, started: now, received: received, total: total,
+                                                    percent: percent, updated: now)
+        if l.sampleAt == .distantPast {
+            (l.sampleBytes, l.sampleAt) = (received, now)
+        } else if let speed = DownloadRow.speed(fromBytes: l.sampleBytes, at: l.sampleAt, toBytes: received, at: now) {
+            l.bytesPerSecond = speed
+            (l.sampleBytes, l.sampleAt) = (received, now)
+        }
+        l.updated = now
+        l.name = name
+        if !path.isEmpty { l.path = path }
+        l.received = received
+        l.total = total
+        l.percent = percent
+        l.failed = failed
+        l.cancelled = cancelled
+        if let i = live.firstIndex(where: { $0.id == id }) { live[i] = l } else { live.append(l) }
     }
 
     @discardableResult

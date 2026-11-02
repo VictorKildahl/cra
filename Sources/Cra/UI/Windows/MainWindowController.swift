@@ -95,7 +95,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                           sidebar: SidebarView(store: store, ui: sidebarUI, actions: sidebarActions, favicons: app.favicons),
                           toolbar: PaneToolbarView(paneTabID: nil, store: store, ui: sidebarUI, actions: sidebarActions),
                           status: StatusBubbleView(overlay: overlay),
-                          toasts: ToastStackView(overlay: overlay, onDismiss: { [weak self] id in self?.removeToast(id) }),
                           find: FindBarView(overlay: overlay, onFind: { [weak self] q, fwd in self?.find(q, forward: fwd) },
                                             onClose: { [weak self] in self?.hideFindBar() }))
         shell.sidebarWidth = CGFloat(store.prefs.sidebarWidth)
@@ -508,48 +507,33 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     func browserManager(download: CraDownloadInfo) {
         let name = (download.fullPath as NSString).lastPathComponent.isEmpty ? download.suggestedName : (download.fullPath as NSString).lastPathComponent
-        let toast = DownloadToast(id: download.identifier, name: name, percent: download.percent, state: download.state.rawValue,
-                                  path: download.fullPath, totalBytes: download.totalBytes)
-        if let i = overlay.toasts.firstIndex(where: { $0.id == toast.id }) { overlay.toasts[i] = toast } else {
-            overlay.toasts.append(toast)
+        if windowDownloads.insert(download.identifier).inserted {
             ChromeDownloadAnimation.suppress()
             showDownloadInSidebar(download, name: name)
         }
+        // Progress and failures show in the downloads list, as in Arc (it has no download toast).
+        DownloadHistory.shared.report(id: download.identifier, name: name, path: download.fullPath, received: download.receivedBytes,
+                                      total: download.totalBytes, percent: download.percent, complete: download.state == .complete,
+                                      cancelled: download.state == .cancelled, failed: download.state == .interrupted)
         updateRecentDownload(download)
         if download.state == .complete, !download.fullPath.isEmpty, finishedDownloads.insert(download.identifier).inserted {
             DownloadHistory.shared.add(path: download.fullPath)
         }
-        layoutToasts()
-        if download.state != .inProgress {
-            let id = toast.id
-            DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in self?.removeToast(id) }
-        } else if downloadWatchdog == nil {
+        if download.state == .inProgress, downloadWatchdog == nil {
             downloadWatchdog = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.checkStalledDownloads() }
             }
         }
     }
 
-    private func removeToast(_ id: UInt32) {
-        guard overlay.toasts.contains(where: { $0.id == id }) else { return }
-        overlay.toasts.removeAll { $0.id == id }
-        layoutToasts()
-    }
-
-    private func layoutToasts() {
-        shell.toastCount = overlay.toasts.count
-        shell.layoutContentChildren()
-        layoutToastPanel()
-    }
-
     private var downloadWatchdog: Timer?
 
     /// Chromium stops reporting a download once the tab that started it is gone (the
-    /// download carries on, or ends, silently), which left its toast "in progress" for
-    /// good. A toast that hasn't heard from Chromium for a while reads the file instead:
+    /// download carries on, or ends, silently), which left its row "in progress" for
+    /// good. A row that hasn't heard from Chromium for a while reads the file instead:
     /// gone means it ended, the full size with no .crdownload beside it means it's done.
     private func checkStalledDownloads() {
-        let inProgress = overlay.toasts.filter { $0.state == CraDownloadState.inProgress.rawValue }
+        let inProgress = DownloadHistory.shared.live.filter { $0.running && windowDownloads.contains($0.id) }
         guard !inProgress.isEmpty else {
             downloadWatchdog?.invalidate()
             downloadWatchdog = nil
@@ -561,13 +545,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             let size = (try? fm.attributesOfItem(atPath: t.path))?[.size] as? Int64
             let state: CraDownloadState
             if size == nil { state = .cancelled }
-            else if let size, t.totalBytes > 0, size >= t.totalBytes { state = .complete }
+            else if let size, t.total > 0, size >= t.total { state = .complete }
             else { continue }
             let info = CraDownloadInfo()
             info.identifier = t.id
             info.fullPath = t.path
             info.suggestedName = t.name
-            info.totalBytes = t.totalBytes
+            info.totalBytes = t.total
             info.receivedBytes = size ?? 0
             info.percent = state == .complete ? 100 : t.percent
             info.state = state
@@ -598,6 +582,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     private var finishedDownloads: Set<UInt32> = []
+    /// Downloads this window's pages started (its flight and stall checks).
+    private var windowDownloads: Set<UInt32> = []
 
     /// Keeps the Library button's file current: its path once known, its Quick Look
     /// thumbnail once the download is complete (Arc showed a text file's page).
@@ -649,10 +635,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// Page-sized and always click-through: it covers the whole page, so if it ever took
     /// mouse events every click on the page would land in it. Anything clickable over the
-    /// page gets its own panel just its size (the find bar, the toasts).
+    /// page gets its own panel just its size (the find bar).
     private var overlayPanel: NSPanel?
     private var findPanel: FindBarPanel?
-    private var toastPanel: NSPanel?
     /// Page area per visible tab, window coordinates (one entry per pane).
     private var lastPaneFrames: [UUID: NSRect] = [:]
     /// While a divider is dragged the page windows follow every mouse move.
@@ -674,40 +659,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let panel = clearPanel()
         panel.ignoresMouseEvents = true
         let find = FindBarPanel()
-        let toasts = clearPanel()
-        shell.moveOverlays(to: panel.contentView!, findBar: find, toasts: toasts)
+        shell.moveOverlays(to: panel.contentView!, findBar: find)
         window.addChildWindow(panel, ordered: .above)
         overlayPanel = panel
         findPanel = find
-        toastPanel = toasts
         if overlay.findVisible { window.addChildWindow(find, ordered: .above) }
-        layoutToastPanel()
-    }
-
-    /// The toast panel is on screen only while there are toasts, sized to the stack in the
-    /// bottom trailing corner of the focused page (the overlay panel's frame).
-    private func layoutToastPanel() {
-        guard let window, let panel = toastPanel, let page = overlayPanel?.frame else { return }
-        guard !overlay.toasts.isEmpty else {
-            if panel.parent != nil { window.removeChildWindow(panel) }
-            if panel.isVisible { panel.orderOut(nil) }
-            return
-        }
-        let frame = toastPanelFrame(page: page)
-        if panel.frame != frame { panel.setFrame(frame, display: true) }
-        if panel.parent !== window { window.addChildWindow(panel, ordered: .above) }
-    }
-
-    private func toastPanelFrame(page: NSRect) -> NSRect {
-        let size = ShellView.toastStackSize(count: overlay.toasts.count)
-        return NSRect(x: page.maxX - size.width, y: page.minY, width: size.width, height: size.height)
     }
 
     /// Overlay panel above the page windows (and the floating sidebar), the find bar above it.
     private func raiseOverlayPanels() {
         guard let window else { return }
         var panels: [NSPanel?] = [overlayPanel]
-        if !overlay.toasts.isEmpty { panels.append(toastPanel) }
         if overlay.findVisible { panels.append(findPanel) }
         // A Peek (and its dimming) stays above everything else in the window.
         let wanted = panels.compactMap { $0 } + peeks.flatMap(\.peekWindows)
@@ -903,7 +865,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let focusOnScreen = window.convertToScreen(focusPage)
         if let panel = overlayPanel, panel.frame != focusOnScreen { panel.setFrame(focusOnScreen, display: true) }
         if let find = findPanel, find.frame != findPanelFrame(page: focusOnScreen) { find.setFrame(findPanelFrame(page: focusOnScreen), display: true) }
-        layoutToastPanel()
     }
 
     /// Pages follow their cards without Chromium laying them out on every frame (an animated
@@ -941,7 +902,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             }
             overlayPanel?.animator().setFrame(window.convertToScreen(focusPage), display: true)
             findPanel?.animator().setFrame(findPanelFrame(page: window.convertToScreen(focusPage)), display: true)
-            if !overlay.toasts.isEmpty { toastPanel?.animator().setFrame(toastPanelFrame(page: window.convertToScreen(focusPage)), display: true) }
         }
     }
 
@@ -1507,7 +1467,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         f.sidebarHidden = { [weak self] in self.map { !$0.sidebarVisible } ?? false }
         f.staysShown = { FolderPreviewController.shared.isOpen }
         f.didAttachPanel = { [weak self] in
-            // Keep toasts and the find bar above the floating sidebar.
+            // Keep the find bar above the floating sidebar.
             self?.raiseOverlayPanels()
         }
         f.install()

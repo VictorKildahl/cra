@@ -1584,7 +1584,12 @@ Arc's popup this time, so geometry is not measured.
   with no toolbar to anchor to, which swallowed the next click on the page. Cra turns it off the way Chrome's
   "Show downloads when they're done" setting does: `download_bubble.partial_view_enabled` = false on the global and
   incognito request contexts (CraCEF.mm HideDownloadBubble). Verified in a test instance: no bubble window, the first
-  click after a download reaches the page, Cra's toast still shows.
+  click after a download reaches the page.
+- Arc has no download toast. A running download, a failed one ("Failed to Download") and paused or cancelled ones are
+  rows in its downloads list, with a speed ("e.g. 3 MB/s"); finished ones read "54 seconds ago". Cra's bottom-right
+  download cards (its only other toast design) are gone (2 Nov 2026, #85 follow-up): the hover list shows running,
+  failed and cancelled downloads too (DownloadHistory.live, DownloadRow). [U] Arc's exact wording and icon for a
+  running or failed row (Cra: "81.3 MB of 104.9 MB — 30.1 MB/s", the file type's icon) — to capture live.
 - Chrome's download-started animation (DownloadBubbleStartedAnimationViews, Chromium 156.0.8078.48): a views popup
   parented to the page, `accept_events = false`, 2 × kIconBackgroundRadius 32 = 64×64 pt, 500 ms, flying to the hidden
   toolbar's download button. Only reduced motion turns it off (CEF_CTBT_DOWNLOAD is deprecated: downloads became a
