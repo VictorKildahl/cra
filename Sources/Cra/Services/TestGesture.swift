@@ -18,4 +18,32 @@ enum TestGesture {
             }
         }
     }
+
+    /// Opens the menu a click (or a right-click) at a point of the window would open, without
+    /// the pointer: the hit view gets the mouse-down, or the nearest view with a menu(for:)
+    /// pops its menu. The menu tracks until Esc or a pick, so tests read it through AX.
+    static func openMenu(at point: NSPoint, in window: NSWindow, right: Bool) {
+        guard let root = window.contentView?.superview, let hit = root.hitTest(point) else { NSLog("Cra TestGesture: nothing at the point"); return }
+        guard let event = NSEvent.mouseEvent(with: right ? .rightMouseDown : .leftMouseDown, location: point, modifierFlags: [],
+                                             timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                                             context: nil, eventNumber: 0, clickCount: 1, pressure: 1) else { return }
+        // After this command returns: the menu's tracking loop would hold it.
+        DispatchQueue.main.async {
+            guard right else {
+                // Buttons act on the mouse-up; the ⌄'s menu has already closed by then.
+                hit.mouseDown(with: event)
+                if let up = NSEvent.mouseEvent(with: .leftMouseUp, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                               windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0) {
+                    hit.mouseUp(with: up)
+                }
+                return
+            }
+            var view: NSView? = hit
+            while let v = view {
+                if let menu = v.menu(for: event) { NSMenu.popUpContextMenu(menu, with: event, for: v); return }
+                view = v.superview
+            }
+            NSLog("Cra TestGesture: no menu at the point")
+        }
+    }
 }
