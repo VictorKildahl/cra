@@ -211,7 +211,12 @@ final class SidebarStore {
         guard let i = prefs.windows.firstIndex(where: { $0.id == (id ?? activeWindowID) }) else { return }
         var w = prefs.windows[i]
         change(&w)
-        if w != prefs.windows[i] { prefs.windows[i] = w }
+        guard w != prefs.windows[i] else { return }
+        // Whatever changes what the window shows (a pick, a close, a space switch), the tab it
+        // showed is the one a close goes back to (CloseSuccessor; Arc counts space switches too).
+        let shown = { (s: WindowSession) in s.focusedSpaceID.flatMap { s.selectedTabPerSpace[$0] } }
+        if shown(w) != shown(prefs.windows[i]) { previousTab[w.id] = shown(prefs.windows[i]) }
+        prefs.windows[i] = w
     }
 
     /// A new window on `spaceID` with nothing open yet.
@@ -416,8 +421,6 @@ final class SidebarStore {
         let sid = spaceID(ofItem: id) ?? focused
         // Incognito pages stay in their own window; normal tabs never open in one.
         guard self.window(w).isIncognito ? sid == focused : !isIncognito(space: sid) else { return }
-        let before = selectedTabID(in: focused, window: w)
-        if before != id { previousTab[w] = before }
         updateWindow(w) {
             $0.focusedSpaceID = sid
             $0.selectedTabPerSpace[sid] = id
@@ -959,9 +962,8 @@ final class SidebarStore {
         moveItem(id, to: space.pinnedContainerID, index: nil)
     }
 
-    /// `following`: the window goes along to `sid`, so the tab left selected in the old space
-    /// isn't shown (and stays unread).
-    func moveTab(_ id: UUID, toSpace sid: UUID, following: Bool = false) {
+    /// `following`: the window that goes along to `sid`.
+    func moveTab(_ id: UUID, toSpace sid: UUID, following: UUID? = nil) {
         guard let space = spaces[sid], let it = items[id] else { return }
         let from = spaceID(ofItem: id)
         let moved = Set([id] + it.children)
@@ -972,15 +974,15 @@ final class SidebarStore {
             let pinned = isPinned(id)
             moveItem(id, to: pinned ? space.pinnedContainerID : space.todayContainerID, index: pinned ? nil : 0)
         }
-        // A window that had it open in the old space picks the next tab there, as on close.
+        // The window that goes along leaves nothing selected in the old space (Arc 1.171, Move to
+        // Today in <space>); another window that had it open there picks the next tab, as on close.
         guard let from, from != sid, spaceID(ofItem: id) == sid else { return }
         for w in prefs.windows {
             guard let sel = w.selectedTabPerSpace[from], moved.contains(sel) else { continue }
-            let next = closeSuccessor(of: sel, in: from, window: w.id, list: list.filter { $0 == sel || !moved.contains($0) })
+            let next = w.id == following ? nil
+                : closeSuccessor(of: sel, in: from, window: w.id, list: list.filter { $0 == sel || !moved.contains($0) })
             updateWindow(w.id) { $0.selectedTabPerSpace[from] = next }
-            guard w.focusedSpaceID == from else { continue }
-            previousTab[w.id] = nil
-            if let next, !following { noteShown(next) }
+            if let next, w.focusedSpaceID == from { noteShown(next) }
         }
     }
 
@@ -990,7 +992,7 @@ final class SidebarStore {
     func moveTabAndFollow(_ id: UUID, toSpace sid: UUID, window: UUID? = nil) -> Bool {
         let moving = splitContaining(id)?.id ?? id
         guard items[id]?.isTab == true, spaces[sid] != nil, spaceID(ofItem: moving) != sid else { return false }
-        moveTab(moving, toSpace: sid, following: true)
+        moveTab(moving, toSpace: sid, following: self.window(window).id)
         guard spaceID(ofItem: moving) == sid else { return false }
         selectTab(id, window: window)
         return true
@@ -1343,13 +1345,14 @@ final class SidebarStore {
         }
         if !selectedIn.isEmpty, let sid {
             for w in selectedIn {
-                // Closing a pane keeps the split on screen: focus a neighbour pane.
+                // Closing a pane keeps the split on screen: focus a neighbour pane. The split
+                // still goes back to the tab shown before it (Arc).
+                let kept = previousTab[w]
                 let next = split.flatMap { s in items[s.id]?.children.first { items[$0]?.isTab == true } }
                     ?? closeSuccessor(of: id, in: sid, window: w, list: list)
                 updateWindow(w) { $0.selectedTabPerSpace[sid] = next }
-                // On screen, the tab shown before the successor is the one that closed.
                 guard focusedSpaceID(window: w) == sid else { continue }
-                previousTab[w] = nil
+                if split != nil { previousTab[w] = kept }
                 if let next { noteShown(next) }
             }
         }
@@ -1364,9 +1367,12 @@ final class SidebarStore {
         return CloseSuccessor.next(closing: id, previous: back, hasPage: hasPage, list: list)
     }
 
-    /// A pinned tab or favorite closed (unloaded) while selected: the tab to show instead, if any.
+    /// A pinned tab, favorite or pinned split closed (unloaded) while selected: the tab to show
+    /// instead, if any.
     func closeSuccessor(ofPinned id: UUID, window w: UUID) -> UUID? {
-        spaceID(ofItem: id).flatMap { closeSuccessor(of: id, in: $0, window: w, list: []) }
+        guard let sid = spaceID(ofItem: id) else { return nil }
+        let back = previousTab[w].flatMap { spaceID(ofItem: $0) == sid ? $0 : nil }
+        return CloseSuccessor.afterPinned(closing: id, isSplit: splitContaining(id) != nil, previous: back, hasPage: hasPage)
     }
 
     @discardableResult

@@ -2185,12 +2185,13 @@ Two new Arc windows, both with View ▸ Hide Sidebar and a tab selected, capture
   (scratch, 40 fps), not kept.
 - Reported by Anoninz on #86, not captured here: the sidebar's right-click Move to ▸ <space> on the open tab
   follows too (the row leaves, Arc switches to that space and selects the tab).
-- [U] What the space the tab left selects afterwards, and what Move to ▸ does on a tab that isn't open: other
-  sessions were driving Arc at the time and a posted ⌃2 never reached the window.
+- [O] What the space the tab left selects afterwards: nothing (measured for #105, see "The tab shown after ⌘W").
+- [U] What Move to ▸ does on a tab that isn't open: other sessions were driving Arc at the time and a posted ⌃2
+  never reached the window.
 - Cra: `SidebarStore.moveTabAndFollow` for the command bar's Move Tab to <space> and the new Move Tab to Space N
   (⌃⌘1–9, Cra's own: ⌘ added to Go to Space N; neither Arc nor macOS binds ⌃⌘ + a digit). A pane brings its split.
-  The sidebar menu's Move to Space follows when it moves the open tab or its split; another tab moves on its own. Whatever moves, a window that had it open in the
-  old space opens the next tab there, picked as on close.
+  The sidebar menu's Move to Space follows when it moves the open tab or its split; another tab moves on its own. The window that follows leaves nothing selected in
+  the old space; another window that had it open there opens the next tab, picked as on close.
 
 ## Sending a Little Arc's page to a space (Arc 1.171, 2 Nov 2026, issue #92)
 
@@ -2367,8 +2368,17 @@ doesn't pick a tab, and the selection saved in StorableWindows.json wasn't alway
 - [O] A favorite closes like a pinned tab: back to the previous tab while it is loaded (F1 after D → D), else nothing.
   Tabs ▸ Next Tab runs through the favorites first.
 - [O] The tab a close hands over to loses its unread mark, as when it is picked.
-- [?] Not measured: a split as the neighbour (Arc moved a hand-built Today split into "Recently recovered"), two
-  windows on one space, Move to Space. Cra: a split row counts as its focused pane; previous tabs are per window.
-- Cra: CloseSuccessor (CraCore) with SidebarStore's per-window `previousTab` (not saved) and `hasPage` (a
-  window's browser manager has the page). A tab put to sleep has no page, like Arc's unloaded tabs.
+- [O] Splits (a `splitView` item needs `layoutOrientation`, `focusItemID` and `itemWidthFactors`, as Arc saves it;
+  without them Arc moves the split into a pinned "Recently recovered" folder): a split row as the neighbour opens the
+  split on its focused pane. Closing a pane keeps the other one and the tab shown before the split (D → split, close
+  L → R, close R → D, not the neighbour C). Closing a pinned split hands over to nothing even with the tab shown
+  before still loaded (D → pinned split, Close Tab → nothing; twice).
+- [O] Previous tabs are per window: window 1 A → B, window 2 D → C, close C in window 2 → D (not B).
+- [O] A space switch counts as showing another tab: space 1 B, space 2 Y → X, Previous Space (B), Next Space (X),
+  close X → W (the neighbour above), not Y. Closing never switches spaces.
+- [O] Command bar "Move to Today in <space>" on the open tab: the window follows, and the space it left has nothing
+  selected when you come back (C → B, move B, Previous Space → nothing; not C, not the neighbour A).
+- [?] Not measured: Move to ▸ on a tab open in another window.
+- Cra: CloseSuccessor (CraCore) with SidebarStore's per-window `previousTab` (not saved; set in `updateWindow`
+  whenever what the window shows changes) and `hasPage` (a window's browser manager has the page). A tab put to sleep has no page, like Arc's unloaded tabs.
   `activeTabBeforeCreationID` is still saved and imported but no longer picks the next tab.

@@ -35,6 +35,12 @@ struct CloseSuccessorTests {
         #expect(next("C", previous: nil, loaded: [], list: ["C"]) == nil)
     }
 
+    @Test func aPinnedSplitHandsOverToNothing() {
+        #expect(CloseSuccessor.afterPinned(closing: "PS", isSplit: true, previous: "D", hasPage: { _ in true }) == nil)
+        #expect(CloseSuccessor.afterPinned(closing: "F1", isSplit: false, previous: "D", hasPage: { _ in true }) == "D")
+        #expect(CloseSuccessor.afterPinned(closing: "F1", isSplit: false, previous: "D", hasPage: { _ in false }) == nil)
+    }
+
     @Test func theClosingTabIsNeverItsOwnSuccessor() {
         #expect(next("A", previous: "A", loaded: ["A"]) == "B")
     }

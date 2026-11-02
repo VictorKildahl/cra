@@ -352,7 +352,7 @@ enum StoreTests {
         expect(store.moveTabAndFollow(tab.id, toSpace: work), "a tab moves to another space")
         expect(store.focusedSpaceID == work && store.selectedTabID == tab.id, "the window follows it there with the tab selected")
         expect(store.children(of: store.space(work)!.todayContainerID).first?.id == tab.id, "it lands at the top of Today")
-        expect(store.selectedTabID(in: home) == stay.id, "the space it left goes back to the tab it came from")
+        expect(store.selectedTabID(in: home) == nil, "the window that went along leaves nothing selected in the space it left (Arc)")
         expect(store.focusedSpaceID(window: other.id) == home && store.selectedTabID(in: home, window: other.id) == stay.id,
                "another window that had it open stays in its space and opens the next tab")
         expect(!store.moveTabAndFollow(tab.id, toSpace: work) && store.focusedSpaceID == work, "moving to its own space does nothing")
@@ -497,6 +497,48 @@ enum StoreTests {
         store.moveTab(n.id, toSpace: work)
         expect(store.selectedTabID(in: store.focusedSpaceID(window: main), window: main) == m.id, "moving it away goes back to the tab shown before")
         expect(store.item(m.id)?.isUnread == false, "which is read")
+
+        // A space switch counts as showing another tab (Arc): after going away and back, the
+        // tab shown before is in the other space, so a close takes the neighbour instead.
+        let space1 = store.focusedSpaceID(window: main)
+        let w1 = store.createTab(url: "https://example.com/w1", select: false, window: main)
+        let x1 = store.createTab(url: "https://example.com/x1", select: false, window: main)
+        let y1 = store.createTab(url: "https://example.com/y1", select: false, window: main)
+        let other = store.createTab(url: "https://example.com/other", in: work, select: false)
+        loaded = [w1.id, x1.id, y1.id, other.id]
+        store.selectTab(other.id, window: main)
+        store.selectTab(w1.id, window: main)
+        store.selectTab(x1.id, window: main)
+        store.focusSpace(work, window: main)
+        store.focusSpace(space1, window: main)
+        expect(store.shownTabs(under: store.space(space1)!.todayContainerID).prefix(3) == [y1.id, x1.id, w1.id], "new tabs go to the top of Today")
+        store.archiveTab(x1.id, reason: .manual)
+        expect(store.selectedTabID(in: space1, window: main) == y1.id,
+               "a round trip through another space: the neighbour above, not the tab picked before")
+
+        // Closing a pane keeps the tab shown before the split.
+        let before = store.createTab(url: "https://example.com/before", select: false, window: main)
+        let l = store.createTab(url: "https://example.com/l", select: false, window: main)
+        let r = store.createTab(url: "https://example.com/r", select: false, window: main)
+        _ = store.createSplit(with: [l.id, r.id])
+        loaded = [before.id, l.id, r.id]
+        store.selectTab(before.id, window: main)
+        store.selectTab(l.id, window: main)
+        store.archiveTab(l.id, reason: .manual)
+        expect(store.selectedTabID(in: space1, window: main) == r.id, "the other pane stays")
+        store.archiveTab(r.id, reason: .manual)
+        expect(store.selectedTabID(in: space1, window: main) == before.id, "then the split goes back to the tab shown before it")
+
+        // A pinned split closing hands over to nothing, even with the tab shown before loaded.
+        let pl = store.createTab(url: "https://example.com/pl", select: false, window: main)
+        let pr = store.createTab(url: "https://example.com/pr", select: false, window: main)
+        _ = store.createSplit(with: [pl.id, pr.id])
+        store.togglePinned(pl.id)
+        expect(store.isPinned(pl.id) && store.splitContaining(pl.id) != nil, "a pinned split")
+        loaded = [before.id, pl.id, pr.id]
+        store.selectTab(before.id, window: main)
+        store.selectTab(pl.id, window: main)
+        expect(store.closeSuccessor(ofPinned: pl.id, window: main) == nil, "a pinned split hands over to nothing (Arc)")
     }
 
     /// A closed folder keeps its open tab in sight (Arc, GitHub #85): picking a tab two closed
