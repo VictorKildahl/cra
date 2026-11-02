@@ -60,7 +60,8 @@ final class SidebarView: NSView {
         }
         let paletteChanged = lastSpaceID == nil || space.theme != store.space(lastSpaceID ?? space.id)?.theme || space.id != lastSpaceID
         if space.id != lastSpaceID {
-            if lastSpaceID != nil { ui.clearPicks() }
+            // A drag that hovered another space's icon carries the picks there; its end clears them.
+            if lastSpaceID != nil, ui.draggingID == nil { ui.clearPicks() }
             lastSpaceID = space.id
         }
         if paletteChanged || palette.isDark != space.theme.palette.isDark {
@@ -920,7 +921,9 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         targeted = false
         guard let id = draggedID(sender) else { return false }
-        store.moveTab(id, toSpace: spaceID)
+        // A picked tab takes the other picks along, as a drop in the list does.
+        store.moveTabs(ui.group(for: id, in: store), toSpace: spaceID)
+        if store.focusedSpaceID(window: ui.windowID) != spaceID { ui.clearPicks() }
         return true
     }
 

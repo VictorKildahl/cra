@@ -964,23 +964,30 @@ final class SidebarStore {
 
     /// `following`: the window that goes along to `sid`.
     func moveTab(_ id: UUID, toSpace sid: UUID, following: UUID? = nil) {
-        guard let space = spaces[sid], let it = items[id] else { return }
-        let from = spaceID(ofItem: id)
-        let moved = Set([id] + it.children)
-        let list = isPinned(id) ? [] : (from.flatMap { spaces[$0] }.map { shownTabs(under: $0.todayContainerID) } ?? [])
-        if isFavorite(id) {
-            moveItem(id, to: space.favoritesContainerID, index: nil)
-        } else {
-            let pinned = isPinned(id)
-            moveItem(id, to: pinned ? space.pinnedContainerID : space.todayContainerID, index: pinned ? nil : 0)
-        }
+        moveTabs([id], toSpace: sid, following: following)
+    }
+
+    /// Items of one space, in sidebar order, moved together (picked tabs dropped on a space):
+    /// favorites and pinned tabs join the end of their section, Today tabs lead the new Today,
+    /// each keeping its order.
+    func moveTabs(_ ids: [UUID], toSpace sid: UUID, following: UUID? = nil) {
+        let ids = ids.filter { items[$0] != nil }
+        guard let space = spaces[sid], let first = ids.first else { return }
+        let from = spaceID(ofItem: first)
+        let moved = Set(ids + ids.flatMap { items[$0]?.children ?? [] })
+        let today = from.flatMap { spaces[$0] }.map { shownTabs(under: $0.todayContainerID) } ?? []
+        let favorites = ids.filter { isFavorite($0) }
+        let pinned = ids.filter { !isFavorite($0) && isPinned($0) }
+        moveItems(favorites, to: space.favoritesContainerID, index: nil)
+        moveItems(pinned, to: space.pinnedContainerID, index: nil)
+        moveItems(ids.filter { !favorites.contains($0) && !pinned.contains($0) }, to: space.todayContainerID, index: 0)
         // The window that goes along leaves nothing selected in the old space (Arc 1.171, Move to
         // Today in <space>); another window that had it open there picks the next tab, as on close.
-        guard let from, from != sid, spaceID(ofItem: id) == sid else { return }
+        guard let from, from != sid, spaceID(ofItem: first) == sid else { return }
         for w in prefs.windows {
             guard let sel = w.selectedTabPerSpace[from], moved.contains(sel) else { continue }
-            let next = w.id == following ? nil
-                : closeSuccessor(of: sel, in: from, window: w.id, list: list.filter { $0 == sel || !moved.contains($0) })
+            let list = today.contains(sel) ? today.filter { $0 == sel || !moved.contains($0) } : []
+            let next = w.id == following ? nil : closeSuccessor(of: sel, in: from, window: w.id, list: list)
             updateWindow(w.id) { $0.selectedTabPerSpace[from] = next }
             if let next, w.focusedSpaceID == from { noteShown(next) }
         }

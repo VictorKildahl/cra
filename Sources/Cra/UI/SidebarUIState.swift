@@ -140,9 +140,11 @@ final class SidebarUIState {
 
     /// The tabs an action on this row moves: every picked tab, in sidebar
     /// order, when the row is one of several picks; otherwise just the row.
+    /// The row's own space, since a drag can switch spaces on the way to its drop.
     func group(for id: UUID, in store: SidebarStore) -> [UUID] {
         guard multiSelection.count > 1, multiSelection.contains(id) else { return [id] }
-        return store.listedTabIDs(in: store.focusedSpaceID(window: windowID)).filter { multiSelection.contains($0) }
+        let space = store.spaceID(ofItem: id) ?? store.focusedSpaceID(window: windowID)
+        return store.listedTabIDs(in: space).filter { multiSelection.contains($0) }
     }
 
     func clearPicks(anchor: UUID? = nil) {
