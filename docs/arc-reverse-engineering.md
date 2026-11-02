@@ -1815,6 +1815,24 @@ Theme palettes in a hand-built space can be borrowed; only the `background` styl
   0.30, lift 0.26; inactive dim 1, lift 0.83) matches all 22 test spaces within 2/255 over both backdrops, except
   intensity 0 over white (19/255 light). A space with no `windowTheme` is Arc's default dark purple; the import
   uses Ink instead of the next preset.
+- [O] Sidebar backdrop through activation and fullscreen (2 Nov 2026, issue #83; Arc 1.171, 1x external display,
+  ~56 fps `screencapture -v` recordings, a probe app with Cra's layer next to NSVisualEffectView panels over a
+  6 pt stripe window). Arc's sidebar is an NSVisualEffectView (`behindWindowBlurView`). Its layer tree, dumped
+  from a probe: inactive = no CABackdropLayer at all, an opaque fill; active windowed = a CABackdropLayer with
+  `allowsSubstituteColor` 1 (Cra's had 0); active fullscreen = the backdrop removed and a `CAChameleonLayer`
+  "desktop tint" at opacity 1 in its place, with the same filters as the blur (hudWindow: sdrNormalize,
+  colorSaturate 1.6). In fullscreen there is nothing behind the window, so Cra's capture read black: black at
+  intensity 1 sat at 17/17/17, NSVisualEffectView over the same wallpaper at 130/102/84, raw tint 186/156/135.
+  Victor's light vibrant theme fullscreen, same display and wallpaper: Arc 207/169/112 (top) … 215/161/105,
+  Cra before 69/64/47 … 78/66/47, Cra with the tint 192/176/129 … 207/171/123 (Arc saturates the tint, Cra's
+  untinted blur path doesn't). A capture that isn't live (probe: `windowServerAware` off) shows the window behind
+  sharp and legible; the same layer with `allowsSubstituteColor` draws a flat fill instead. Arc switches active ↔
+  inactive in one frame, no fade. Cra: `ShellView` allows the substitute colour and swaps in the desktop tint while
+  the window is fullscreen; `cra.log` notes each change ("sidebar backdrop: desktop tint, active"). Cra before the
+  change kept a stale, hard-edged backdrop for seconds after launch and activation in 2 of 3 runs, the changed
+  build in none of 3 (other sessions' windows moved between runs, so take that as a hint). Not seen here: the
+  sharp sidebar on activation from Mission Control, Finder or a fullscreen Space (1x displays).
+  `screencapture` stills are no use for this: they disagreed with recordings of the same state.
 - [O] Tab list scroller: AppKit overlay scroller (AXScrollBar, 17 pt track) shown while scrolling, then faded;
   the knob is 4 pt wide, 3 pt in from the sidebar edge, white 49 % on a dark theme, no track. Cra:
   `SidebarScroller`, 10 pt wide so it stays in the gutter right of the rows (knob on Arc's exact columns).
