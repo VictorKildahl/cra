@@ -1,0 +1,18 @@
+# A watch page focuses its player while loading in a fresh background tab.
+# Wait for that load before selecting it for the first time.
+cra://open?url=${PAGE}
+expect-log loaded 127.0.0.1
+cra://open?url=file://${FIXTURES}/Pages/player-focus.html&background=1
+expect-log loaded file:
+cra://action/nextTab
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.title.concat(':',scrollY)"}
+expect-log Cra cdp Runtime.evaluate .*"value":"Watch fixture:0"
+
+# A later switch back to the comments must keep the reader's place.
+cra://debug?pageJS=window.scrollTo(0,400)
+cra://action/nextTab
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.title"}
+expect-log Cra cdp Runtime.evaluate .*"value":"Fixture 0"
+cra://action/nextTab
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.title.concat(':',scrollY)"}
+expect-log Cra cdp Runtime.evaluate .*"value":"Watch fixture:400"

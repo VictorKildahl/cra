@@ -727,7 +727,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 if EmbeddedPages.isHost(w), let views = EmbeddedPages.pageViews(of: w) {
                     for v in views where v.superview !== w.contentView { v.removeFromSuperview() }
                 }
-                if w.isVisible { w.orderOut(nil) }
+                if w.isVisible {
+                    w.orderOut(nil)
+                    // A new background page starts in CEF's 10 pt window. Let it lay out at
+                    // the pane size before autofocus can scroll its player off the top.
+                    let pane = shell.webContainer
+                    if w.parent == nil, !pane.bounds.isEmpty {
+                        w.setFrame(window.convertToScreen(pane.convert(pane.bounds, to: nil)), display: false)
+                    }
+                }
                 continue
             }
             if w.parent !== window {
