@@ -446,6 +446,57 @@ enum StoreTests {
         loaded.remove(source.id)
         expect(store.closeSuccessor(ofPinned: source.id, window: store.activeWindowID) == nil,
                "and to nothing when that one was closed too")
+
+        // A Today folder above: its tabs are the neighbour only while it's open (Arc).
+        let today = store.focusedSpace.todayContainerID
+        let folder = store.createFolder(named: "Folder", in: today, index: 0)
+        let x = store.createTab(url: "https://example.com/x", select: false, parent: folder.id)
+        let y = store.createTab(url: "https://example.com/y", select: false, parent: folder.id, index: 1)
+        let f = store.createTab(url: "https://example.com/f", select: false, index: 1)
+        loaded = []
+        store.setExpanded(folder.id, false)
+        store.selectTab(f.id)
+        expect(store.shownTabs(under: today) == [f.id], "a closed folder shows none of its tabs")
+        store.archiveTab(f.id, reason: .manual)
+        expect(store.selectedTabID == nil, "so a close doesn't open a tab hidden in it")
+        let g = store.createTab(url: "https://example.com/g", select: false, index: 1)
+        store.setExpanded(folder.id, true)
+        store.selectTab(g.id)
+        expect(store.shownTabs(under: today) == [x.id, y.id, g.id], "an open folder shows its tabs")
+        store.archiveTab(g.id, reason: .manual)
+        expect(store.selectedTabID == y.id, "and the row above it, inside the folder, takes over")
+
+        // Two windows on one space: each goes back to the tab it showed before.
+        store.setExpanded(folder.id, false)
+        let main = store.activeWindowID
+        let second = store.addWindow(spaceID: store.focusedSpaceID, frame: nil).id
+        let h = store.createTab(url: "https://example.com/h", select: false)
+        let i = store.createTab(url: "https://example.com/i", select: false)
+        let j = store.createTab(url: "https://example.com/j", select: false)
+        let k = store.createTab(url: "https://example.com/k", select: false)
+        loaded = [h.id, i.id, j.id, k.id]
+        store.selectTab(h.id, window: main)
+        store.selectTab(i.id, window: main)
+        store.selectTab(j.id, window: second)
+        store.selectTab(k.id, window: second)
+        store.archiveTab(k.id, reason: .manual)
+        expect(store.selectedTabID(in: store.focusedSpaceID, window: second) == j.id
+               && store.selectedTabID(in: store.focusedSpaceID, window: main) == i.id, "the second window goes back to its own previous tab")
+        store.archiveTab(i.id, reason: .manual)
+        expect(store.selectedTabID(in: store.focusedSpaceID, window: main) == h.id, "and the first to its own")
+
+        // Moving the open tab to another space without following it: the space it left
+        // hands over as on a close, and the tab shown there is read.
+        let work = store.createSpace(title: "Work", emoji: "💼", focus: false).id
+        let m = store.createTab(url: "https://example.com/m", select: false, window: main)
+        let n = store.createTab(url: "https://example.com/n", select: false, window: main)
+        loaded.insert(m.id)
+        store.selectTab(m.id, window: main)
+        store.selectTab(n.id, window: main)
+        store.markUnread(m.id)
+        store.moveTab(n.id, toSpace: work)
+        expect(store.selectedTabID(in: store.focusedSpaceID(window: main), window: main) == m.id, "moving it away goes back to the tab shown before")
+        expect(store.item(m.id)?.isUnread == false, "which is read")
     }
 
     /// A closed folder keeps its open tab in sight (Arc, GitHub #85): picking a tab two closed

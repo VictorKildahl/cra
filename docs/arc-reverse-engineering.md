@@ -2352,7 +2352,8 @@ tap with a real Shift key held around them; the space read from each window's `s
 Offline Arc as in "One space": one space with pinned S and P2 and Today C, B, A, D (A, B, C saved with
 `activeTabBeforeCreationID` and `referrerID` = S, unread), the selected tab and the window's
 `itemLastActiveDates` set in StorableWindows.json, then Tabs ▸ Next/Previous Tab and File ▸ Archive Tab (Close
-Tab on a pinned tab) pressed over AX, a window capture after each step.
+Tab on a pinned tab) pressed over AX, a window capture after each step. Setting AXSelected on a row
+doesn't pick a tab, and the selection saved in StorableWindows.json wasn't always honoured; navigate instead.
 - [O] Arc goes back to the tab shown just before the closed one, if its page is still loaded: D → A, close A → D
   (not S, the tab A was opened from, loaded or not); S → P2 → close P2 hands back to S only while S is loaded.
 - [O] Only that one tab counts. D → A → B, close B → A, close A → C (the neighbour above), not D: Arc doesn't
@@ -2361,8 +2362,13 @@ Tab on a pinned tab) pressed over AX, a window capture after each step.
 - [O] Otherwise a Today tab hands over to its neighbour, the one above first (B → C, D → A), the one below at
   the top (C → A), loaded or not. The last Today tab hands over to nothing, with pinned tabs still in the
   sidebar. A pinned tab hands over to nothing (no neighbour), even with Today pages loaded.
+- [O] "Neighbour" means the Today rows on screen: with a closed folder above it (tabs X, Y inside), closing D hands
+  over to nothing; with the folder open (`AXDisclosing` on its row over AX), to Y, the row above inside it.
+- [O] A favorite closes like a pinned tab: back to the previous tab while it is loaded (F1 after D → D), else nothing.
+  Tabs ▸ Next Tab runs through the favorites first.
 - [O] The tab a close hands over to loses its unread mark, as when it is picked.
-- [?] Not tried: favorites, tabs in folders, two windows on one space, a close that would need another space.
+- [?] Not measured: a split as the neighbour (Arc moved a hand-built Today split into "Recently recovered"), two
+  windows on one space, Move to Space. Cra: a split row counts as its focused pane; previous tabs are per window.
 - Cra: CloseSuccessor (CraCore) with SidebarStore's per-window `previousTab` (not saved) and `hasPage` (a
   window's browser manager has the page). A tab put to sleep has no page, like Arc's unloaded tabs.
   `activeTabBeforeCreationID` is still saved and imported but no longer picks the next tab.

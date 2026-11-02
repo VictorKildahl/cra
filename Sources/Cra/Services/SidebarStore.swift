@@ -965,7 +965,7 @@ final class SidebarStore {
         guard let space = spaces[sid], let it = items[id] else { return }
         let from = spaceID(ofItem: id)
         let moved = Set([id] + it.children)
-        let list = isPinned(id) ? [] : (from.flatMap { spaces[$0] }.map { tabs(under: $0.todayContainerID).map(\.id) } ?? [])
+        let list = isPinned(id) ? [] : (from.flatMap { spaces[$0] }.map { shownTabs(under: $0.todayContainerID) } ?? [])
         if isFavorite(id) {
             moveItem(id, to: space.favoritesContainerID, index: nil)
         } else {
@@ -1090,6 +1090,18 @@ final class SidebarStore {
         let inside = tabs(under: folder)
         let listed = Set(FolderPeek.listed(in: folder, peeks: _prefs.peekedFolders, tabsInside: inside.map(\.id)))
         return inside.filter { listed.contains($0.id) }
+    }
+
+    /// The tabs a container shows as rows, top to bottom: an open folder's, a closed folder's
+    /// peeked ones, one pane per split (its focused one). Arc hands a close over to the row
+    /// above or below among these, never to a tab hidden in a closed folder (#105).
+    func shownTabs(under id: UUID) -> [UUID] {
+        children(of: id).flatMap { c -> [UUID] in
+            if c.isTab { return [c.id] }
+            if let s = c.split { return [s.focusTabID.flatMap { c.children.contains($0) ? $0 : nil } ?? c.children.first].compactMap { $0 } }
+            guard c.isFolder else { return [] }
+            return _prefs.expandedFolders.contains(c.id) ? shownTabs(under: c.id) : peekedTabs(in: c.id).map(\.id)
+        }
     }
 
     /// The folders an item sits in, outermost first.
@@ -1315,7 +1327,7 @@ final class SidebarStore {
         let split = splitContaining(id)
         let folder = it.parentID.flatMap { items[$0]?.isFolder == true ? $0 : nil }
         let index = folder.flatMap { items[$0]?.children.firstIndex(of: id) }
-        let list = pinned ? [] : (sid.flatMap { spaces[$0] }.map { tabs(under: $0.todayContainerID).map(\.id) } ?? [])
+        let list = pinned ? [] : (sid.flatMap { spaces[$0] }.map { shownTabs(under: $0.todayContainerID) } ?? [])
         // Closed out of a live folder: the item stays out (Arc: hiddenItems). The archive keeps
         // the live copy so ⇧⌘T can put it back.
         if let folder, items[folder]?.isLiveFolder == true {
