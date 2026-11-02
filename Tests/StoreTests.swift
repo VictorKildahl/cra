@@ -388,6 +388,23 @@ enum StoreTests {
         expect(store.focusedSpaceID == home && store.selectedTabID(in: home) != right.id,
                "a move that doesn't follow (a drop on a space) opens another tab in the space it left")
 
+        // Picked tabs dropped on a space go together, each section keeping their order.
+        let p1 = store.createTab(url: "https://example.com/p1", pinned: true, select: false)
+        let p2 = store.createTab(url: "https://example.com/p2", pinned: true, select: false)
+        let t1 = store.createTab(url: "https://example.com/t1", select: false)
+        let t2 = store.createTab(url: "https://example.com/t2", select: false)
+        let t3 = store.createTab(url: "https://example.com/t3")
+        let picks = store.listedTabIDs(in: home).filter { [p1.id, p2.id, t1.id, t2.id, t3.id].contains($0) }
+        let todayOrder = picks.filter { !store.isPinned($0) }
+        store.moveTabs(picks, toSpace: work)
+        expect(picks.allSatisfy { store.spaceID(ofItem: $0) == work }, "every picked tab moves to the space")
+        expect(Array(store.children(of: store.space(work)!.todayContainerID).map(\.id).prefix(3)) == todayOrder,
+               "Today tabs lead its Today in their order")
+        expect(Array(store.children(of: store.space(work)!.pinnedContainerID).map(\.id).suffix(2)) == [p1.id, p2.id],
+               "pinned tabs stay pinned, in their order")
+        expect(store.focusedSpaceID == home && store.selectedTabID(in: home).map { !picks.contains($0) } ?? true,
+               "the window stays, with none of the moved tabs open")
+
         let incognito = store.addIncognitoWindow(frame: nil)
         let secret = store.createTab(url: "https://example.com/secret", window: incognito.id)
         expect(!store.moveTabAndFollow(secret.id, toSpace: home, window: incognito.id)

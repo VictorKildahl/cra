@@ -872,6 +872,8 @@ final class SpaceListView: NSView, NSDraggingSource {
     func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
         autoscroller.stop()
         ui.draggingID = nil
+        // The drag switched spaces; picks don't outlive leaving their space.
+        if store.focusedSpaceID(window: ui.windowID) != spaceID { ui.clearPicks() }
         if ui.listDrop != nil { ui.listDrop = nil }
     }
 
