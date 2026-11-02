@@ -470,7 +470,8 @@ static CefRefPtr<CefRequestContext> IncognitoContext() {
 }
 
 /// A space's own profile: cookies, logins, storage and cache in a folder next to
-/// Default (it must sit under root_cache_path). nil is the global Default profile.
+/// Default (it must sit under root_cache_path). nil is the global Default profile
+/// (--profile-directory=Default keeps it there).
 static CefRefPtr<CefRequestContext> ProfileContext(NSString* path) {
     if (!path.length) return nullptr;
     std::string key = path.UTF8String;
@@ -517,6 +518,11 @@ public:
         command_line->AppendSwitch("disable-session-crashed-bubble");
         command_line->AppendSwitch("hide-crash-restore-bubble");
         command_line->AppendSwitch("no-first-run");
+        // The global request context, which Default spaces, fetches and extension settings use
+        // (ProfileContext(nil)), is the profile Chrome starts with. Without a profile directory
+        // that is Local State's profile.last_used, which a focused page in another space's
+        // profile sets, so after a relaunch Default pages loaded in that profile (#81).
+        command_line->AppendSwitchWithValue("profile-directory", "Default");
         // Unpacked Chrome extensions (Chrome-style browsers only): one folder per extension.
         if (process_type.empty()) {
             // Use the same resolved data root as AppPaths/ExtensionStore, never an
