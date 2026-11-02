@@ -77,7 +77,7 @@ final class ExtensionStore {
     init() {
         reload()
         // Keep what was taken over from another browser, so it is only read once.
-        if !FileManager.default.fileExists(atPath: Self.pinnedFile.path), !pinnedIDs.isEmpty { savePinned() }
+        if !FileManager.default.fileExists(atPath: Self.pinnedFile.path), !pinned.shared.isEmpty { savePinned() }
     }
 
     func reload() {
@@ -122,7 +122,37 @@ final class ExtensionStore {
             for p in old.disabledProfiles.subtracting(e.disabledProfiles).sorted() { CraLog.note("extension \(e.extensionID) turned on in \(p)") }
         }
         entries = next
-        pinnedIDs.removeAll { id in !entries.contains { $0.extensionID == id } }
+        pinned.removeAll { id in !entries.contains { $0.extensionID == id } }
+        noteProxyControllers(settings: settings)
+    }
+
+    // MARK: Proxy (GitHub #107)
+
+    /// Per profile folder, the turned-on extensions that set the proxy, the one Chromium applies
+    /// first. Two of them collide quietly: the others get "controlled_by_other_extensions",
+    /// which only the extensions themselves show, so the log and diagnostics name them.
+    private(set) var proxyControllers: [String: [ExtensionProxyControl.Controller]] = [:]
+
+    private func noteProxyControllers(settings: [String: [String: Any]]) {
+        var next: [String: [ExtensionProxyControl.Controller]] = [:]
+        for (profile, s) in settings {
+            let on = Set(entries(inProfile: profile).map(\.extensionID))
+            let c = ExtensionProxyControl.controllers(settings: s, enabled: on)
+            if !c.isEmpty { next[profile] = c }
+        }
+        // By what the line says: --load-extension reinstalls (new times) on every launch.
+        for profile in Set(next.keys).union(proxyControllers.keys).sorted() {
+            let line = Self.proxyLine(next[profile] ?? [])
+            if line != Self.proxyLine(proxyControllers[profile] ?? []) { CraLog.note("proxy in \(profile): " + line) }
+        }
+        proxyControllers = next
+    }
+
+    /// "set by <id> (<config>), overriding <id>, <id>", or "not set by an extension".
+    static func proxyLine(_ controllers: [ExtensionProxyControl.Controller]) -> String {
+        guard let first = controllers.first else { return "not set by an extension" }
+        let others = controllers.dropFirst().map(\.extensionID)
+        return "set by \(first.extensionID) (\(first.config))" + (others.isEmpty ? "" : ", overriding " + others.joined(separator: ", "))
     }
 
     /// The extensions a page in this Chromium profile folder can run; running another
@@ -187,40 +217,42 @@ final class ExtensionStore {
 
     private static var pinnedFile: URL { AppPaths.file("pinned-extensions.json") }
 
-    /// Chromium extension IDs in toolbar order.
-    private(set) var pinnedIDs: [String] = ExtensionStore.loadPinned()
+    /// Each profile's pins, like Arc's (GitHub #107).
+    private(set) var pinned = ExtensionStore.loadPinned()
 
     /// Before Cra has a list of its own, the browser it replaces supplies one: Arc keeps its
     /// pinned extensions in Chromium's `extensions.pinned_extensions` pref, as do Dia and Chrome.
-    private static func loadPinned() -> [String] {
-        if let data = try? Data(contentsOf: pinnedFile) { return (try? JSONDecoder().decode([String].self, from: data)) ?? [] }
+    private static func loadPinned() -> PinnedExtensions {
+        if let data = try? Data(contentsOf: pinnedFile) { return (try? JSONDecoder().decode(PinnedExtensions.self, from: data)) ?? PinnedExtensions() }
         for source in [ImportSource.arc, .dia] + ImportSource.allCases.filter({ $0.id == "chrome" }) {
             let prefs = source.dataDir.appendingPathComponent("Default/Preferences")
             guard let data = try? Data(contentsOf: prefs),
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let ids = (json["extensions"] as? [String: Any])?["pinned_extensions"] as? [String], !ids.isEmpty else { continue }
-            return ids
+            return PinnedExtensions(shared: ids)
         }
-        return []
+        return PinnedExtensions()
     }
 
-    func isPinned(_ id: String) -> Bool { pinnedIDs.contains(id) }
+    /// Chromium extension IDs in toolbar order, for spaces on this profile folder.
+    func pinnedIDs(inProfile profile: String) -> [String] { pinned.ids(inProfile: profile) }
 
-    func setPinned(_ id: String, _ pinned: Bool) {
-        guard pinned != isPinned(id) else { return }
-        if pinned { pinnedIDs.append(id) } else { pinnedIDs.removeAll { $0 == id } }
-        savePinned()
+    func isPinned(_ id: String, inProfile profile: String) -> Bool { pinned.isPinned(id, inProfile: profile) }
+
+    func setPinned(_ id: String, _ isPinned: Bool, inProfile profile: String) {
+        let before = pinned
+        pinned.setPinned(id, isPinned, inProfile: profile)
+        if pinned != before { savePinned() }
     }
 
-    func movePinned(_ id: String, to index: Int) {
-        guard let from = pinnedIDs.firstIndex(of: id) else { return }
-        pinnedIDs.remove(at: from)
-        pinnedIDs.insert(id, at: min(max(0, index), pinnedIDs.count))
-        savePinned()
+    func movePinned(_ id: String, to index: Int, inProfile profile: String) {
+        let before = pinned
+        pinned.move(id, to: index, inProfile: profile)
+        if pinned != before { savePinned() }
     }
 
     private func savePinned() {
-        try? JSONEncoder().encode(pinnedIDs).write(to: Self.pinnedFile, options: .atomic)
+        try? JSONEncoder().encode(pinned).write(to: Self.pinnedFile, options: .atomic)
         NotificationCenter.default.post(name: .craPinnedExtensionsChanged, object: self)
     }
 

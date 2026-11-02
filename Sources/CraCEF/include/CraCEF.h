@@ -269,9 +269,10 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 + (void)setRelaunchHandler:(void (^)(NSArray<NSString *> *urls))handler;
 /// Pages Chromium opens on its own (an extension's chrome.tabs.create or
 /// windows.create, welcome pages after an extension loads). The handler gets
-/// the URL to open as a Cra tab; Chrome's own window for it is closed.
+/// the URL to open as a Cra tab and the Chromium profile folder it came from
+/// ("Default", "Profile <id>"; nil off the record); Chrome's own window for it is closed.
 /// Popup-type windows (windows.create({type: "popup"})) stay Chrome's windows.
-+ (void)setStrayPageHandler:(void (^)(NSString *url))handler;
++ (void)setStrayPageHandler:(void (^)(NSString *url, NSString * _Nullable profile))handler;
 /// Renderer trouble and failed loads, for Cra's performance recorder (GitHub #91): `kind` is
 /// terminated, unresponsive, responsive or loadError; `detail` how it ended or the net error
 /// code; `site` the host (nil for incognito, Cra's own pages or a closed tab). Never a URL.

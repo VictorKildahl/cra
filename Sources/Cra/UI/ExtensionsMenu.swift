@@ -47,9 +47,9 @@ final class ExtensionsMenu: NSObject, NSMenuDelegate, NSMenuItemValidation {
         for e in entries {
             let item = NSMenuItem(title: e.name, action: #selector(togglePin(_:)), keyEquivalent: "")
             item.target = self
-            item.representedObject = e.extensionID
+            item.representedObject = [e.extensionID, profile]
             item.image = Self.menuIcon(e.icon)
-            item.state = store.isPinned(e.extensionID) ? .on : .off
+            item.state = store.isPinned(e.extensionID, inProfile: profile) ? .on : .off
             pinMenu.addItem(item)
         }
         pin.submenu = pinMenu
@@ -151,8 +151,9 @@ final class ExtensionsMenu: NSObject, NSMenuDelegate, NSMenuItemValidation {
     @objc private func manageExtensions() { openTab("chrome://extensions") }
 
     @objc private func togglePin(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? String else { return }
-        ExtensionStore.shared.setPinned(id, !ExtensionStore.shared.isPinned(id))
+        // The profile of the space the menu was opened in: the pins are that profile's (GitHub #107).
+        guard let pair = sender.representedObject as? [String], pair.count == 2 else { return }
+        ExtensionStore.shared.setPinned(pair[0], !ExtensionStore.shared.isPinned(pair[0], inProfile: pair[1]), inProfile: pair[1])
     }
 
     private func openTab(_ url: String) {

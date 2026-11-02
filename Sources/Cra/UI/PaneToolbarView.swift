@@ -148,7 +148,7 @@ final class PaneToolbarView: NSView {
             ?? store.profileDirectoryName(space: store.focusedSpaceID(window: ui.windowID))
         let entries = extensions.entries(inProfile: profile)
         m.hasExtensions = !entries.isEmpty
-        m.pinned = extensions.pinnedIDs.compactMap { id in
+        m.pinned = extensions.pinnedIDs(inProfile: profile).compactMap { id in
             entries.first { $0.extensionID == id }.map {
                 Model.Ext(id: id, name: $0.name, icon: extensions.toolbarIcon(for: $0, profile: profile, tab: m.tabID),
                           badge: extensions.badge(for: $0, profile: profile, tab: m.tabID))

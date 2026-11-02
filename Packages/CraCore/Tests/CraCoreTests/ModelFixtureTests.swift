@@ -89,6 +89,21 @@ struct ModelFixtureTests {
         #expect(loaded["nextTab"] == [KeyChord(key: KeyChord.tab, modifiers: 1 << 18), KeyChord(key: KeyChord.right, modifiers: 1 << 20 | 1 << 19)])
     }
 
+    /// pinned-extensions.json: the one list of before #107 loads as every profile's and stays an
+    /// array when saved; per-profile lists keep an emptied profile's empty list.
+    @Test(arguments: ["pinned-extensions.json", "pinned-extensions-profiles.json"])
+    func pinnedExtensionsLoadAsRecorded(name: String) throws {
+        let (loaded, recorded) = try Self.load(name, as: PinnedExtensions.self)
+        #expect(loaded == recorded)
+        #expect(try Self.roundTrips(loaded))
+        if loaded.profiles.isEmpty {
+            #expect(try JSONSerialization.jsonObject(with: JSONEncoder().encode(loaded)) is [String])
+            #expect(loaded.ids(inProfile: "Profile B0000000-0000-0000-0000-000000000001") == loaded.shared)
+        } else {
+            #expect(loaded.ids(inProfile: "Default").isEmpty && loaded.ids(inProfile: "Profile 9") == loaded.shared)
+        }
+    }
+
     // MARK: What the old shapes turn into
 
     @Test func legacySidebarGetsWhatTheStoreRepairsFrom() throws {
