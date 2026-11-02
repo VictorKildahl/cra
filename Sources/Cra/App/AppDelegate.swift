@@ -76,6 +76,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             NSApp.activate(ignoringOtherApps: true)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.installURLEventHandler() }
+        // The Site Control Center's Share would otherwise pay for finding the share extensions.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { SharePicker.warmUp() }
         // Extension welcome pages and chrome.tabs.create land in Cra, not in a Chrome window.
         // --load-extension extensions count as freshly installed on every launch, so their
         // onInstalled welcome pages come back each time: right after launch, drop them unless

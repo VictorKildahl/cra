@@ -8,9 +8,16 @@ import QuartzCore
 /// page and 9 pt in from its right edge, 14 pt medium black text with 12 pt either side, a fill
 /// from the space's colours with a 1 pt darker outline. It springs in from its top centre
 /// (≈0.3 s response, 4 % overshoot), stays 4.85 s after the last tab it announced (another one
-/// bumps it by 4 %) and shrinks back into its top in 80 ms.
+/// bumps it by 4 %) and shrinks back into its top in 80 ms. Some of Arc's carry a button
+/// ("Screenshot Copied to Clipboard" offers Save): a capsule after the text, and the toast stays
+/// up while the pointer is on it.
 @MainActor
 final class ShinyToast {
+    struct Action {
+        let title: String
+        let run: () -> Void
+    }
+
     static let height: CGFloat = 42
     static let topInset: CGFloat = 8
     static let trailingInset: CGFloat = 9
@@ -21,11 +28,22 @@ final class ShinyToast {
     static let font = NSFont.systemFont(ofSize: 14, weight: .medium)
     /// How long the toast stays up after the last message.
     static let visibleFor: TimeInterval = 4.85
+    static let buttonFont = NSFont.systemFont(ofSize: 13, weight: .semibold)
+    static let buttonHeight: CGFloat = 26
+    static let buttonPadding: CGFloat = 10
+    /// Between the text and the button.
+    static let buttonGap: CGFloat = 10
 
     private let panel: NSPanel
+    private let view = ToastView()
     private let pill = CAGradientLayer()
     private let label = CATextLayer()
+    private let button = CALayer()
+    private let buttonLabel = CATextLayer()
     private var hide: DispatchWorkItem?
+    private var action: Action?
+    /// The text colour: the button is a wash of it.
+    private var buttonTint = NSColor.black
 
     init() {
         panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 140, height: Self.height),
@@ -35,7 +53,7 @@ final class ShinyToast {
         panel.hasShadow = false
         panel.ignoresMouseEvents = true
         panel.hidesOnDeactivate = false
-        let view = NSView(frame: panel.contentLayoutRect)
+        view.frame = panel.contentLayoutRect
         view.wantsLayer = true
         panel.contentView = view
         pill.cornerRadius = Self.cornerRadius
@@ -46,14 +64,26 @@ final class ShinyToast {
         label.alignmentMode = .center
         label.foregroundColor = NSColor.black.cgColor
         pill.addSublayer(label)
+        button.cornerRadius = Self.buttonHeight / 2
+        button.cornerCurve = .continuous
+        buttonLabel.font = Self.buttonFont
+        buttonLabel.fontSize = Self.buttonFont.pointSize
+        buttonLabel.alignmentMode = .center
+        button.addSublayer(buttonLabel)
+        pill.addSublayer(button)
         view.layer?.addSublayer(pill)
+        view.onHover = { [weak self] inside in self?.hovered(inside) }
+        view.onClick = { [weak self] point in self?.clicked(at: point) }
     }
 
     var isShown: Bool { panel.parent != nil }
 
     /// Shows `text` at the top right of `page` (window coordinates) over `window`'s pages.
-    func show(_ text: String, page: NSRect, in window: NSWindow, theme: SpaceTheme) {
-        let width = ceil((text as NSString).size(withAttributes: [.font: Self.font]).width) + 2 * Self.padding
+    func show(_ text: String, action: Action? = nil, page: NSRect, in window: NSWindow, theme: SpaceTheme) {
+        self.action = action
+        let textWidth = ceil((text as NSString).size(withAttributes: [.font: Self.font]).width)
+        let buttonWidth = action.map { ceil(($0.title as NSString).size(withAttributes: [.font: Self.buttonFont]).width) + 2 * Self.buttonPadding }
+        let width = textWidth + 2 * Self.padding + (buttonWidth.map { $0 + Self.buttonGap - Self.padding + (Self.height - Self.buttonHeight) / 2 } ?? 0)
         let local = NSRect(x: page.maxX - Self.trailingInset - width, y: page.maxY - Self.topInset - Self.height,
                            width: width, height: Self.height)
         panel.setFrame(window.convertToScreen(local.insetBy(dx: -Self.margin, dy: -Self.margin)), display: false)
@@ -72,8 +102,23 @@ final class ShinyToast {
         label.contentsScale = scale
         label.string = text
         let lineHeight = ceil(Self.font.ascender - Self.font.descender)
-        label.frame = CGRect(x: 0, y: (Self.height - lineHeight) / 2, width: width, height: lineHeight)
+        label.frame = CGRect(x: buttonWidth == nil ? 0 : Self.padding, y: (Self.height - lineHeight) / 2,
+                             width: buttonWidth == nil ? width : textWidth, height: lineHeight)
+        button.isHidden = buttonWidth == nil
+        if let buttonWidth, let action {
+            let inset = (Self.height - Self.buttonHeight) / 2
+            button.frame = CGRect(x: width - inset - buttonWidth, y: inset, width: buttonWidth, height: Self.buttonHeight)
+            buttonTint = colors.text
+            button.backgroundColor = colors.text.withAlphaComponent(0.1).cgColor
+            buttonLabel.foregroundColor = colors.text.cgColor
+            buttonLabel.contentsScale = scale
+            buttonLabel.string = action.title
+            let buttonLine = ceil(Self.buttonFont.ascender - Self.buttonFont.descender)
+            buttonLabel.frame = CGRect(x: 0, y: (Self.buttonHeight - buttonLine) / 2, width: buttonWidth, height: buttonLine)
+        }
         CATransaction.commit()
+        panel.ignoresMouseEvents = action == nil
+        view.hitRect = action == nil ? .zero : NSRect(x: Self.margin, y: Self.margin, width: width, height: Self.height)
         if !isShown {
             // Opening the tab's page holds the main thread for ~0.1 s, so the toast waits for the
             // next turn, invisible: started now, its first frame showed it most of the way in.
@@ -86,10 +131,37 @@ final class ShinyToast {
             // Another message while it is up: Arc bumps it (1 → 1.044 → 1 in ~0.2 s) and restarts its time.
             DispatchQueue.main.async { [weak self] in self?.pulse() }
         }
+        scheduleHide()
+    }
+
+    private func scheduleHide() {
         hide?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.dismiss() }
         hide = work
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.visibleFor, execute: work)
+    }
+
+    /// The pointer on a toast with a button holds it up; leaving starts its time again.
+    private func hovered(_ inside: Bool) {
+        guard isShown, action != nil else { return }
+        if inside {
+            hide?.cancel()
+        } else if hide?.isCancelled != false {
+            scheduleHide()
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        button.backgroundColor = buttonTint.withAlphaComponent(inside ? 0.16 : 0.1).cgColor
+        CATransaction.commit()
+    }
+
+    /// `point` in the content view: the button runs its action and the toast goes.
+    private func clicked(at point: NSPoint) {
+        guard let action, isShown else { return }
+        let local = NSPoint(x: point.x - Self.margin, y: point.y - Self.margin)
+        guard button.frame.insetBy(dx: -4, dy: -4).contains(local) else { return }
+        dismiss()
+        action.run()
     }
 
     private func springIn() {
@@ -131,6 +203,7 @@ final class ShinyToast {
         hide?.cancel()
         hide = nil
         guard isShown else { return }
+        panel.ignoresMouseEvents = true
         CATransaction.begin()
         CATransaction.setCompletionBlock { [weak self] in
             MainActor.assumeIsolated {
@@ -176,4 +249,30 @@ final class ShinyToast {
         let top = color(s, 0.89)
         return (top, color(min(0.25, s * 1.3), 0.85), color(s, 0.61), .black)
     }
+}
+
+/// The toast's content: tracks the pointer over the pill and takes the click on its button
+/// without making Cra active first.
+private final class ToastView: NSView {
+    var hitRect: NSRect = .zero { didSet { updateTrackingAreas() } }
+    var onHover: (Bool) -> Void = { _ in }
+    var onClick: (NSPoint) -> Void = { _ in }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        hitRect.contains(convert(point, from: superview)) ? self : nil
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for t in trackingAreas where t.owner === self { removeTrackingArea(t) }
+        guard !hitRect.isEmpty else { return }
+        addTrackingArea(NSTrackingArea(rect: hitRect, options: [.mouseEnteredAndExited, .activeAlways], owner: self, userInfo: nil))
+    }
+
+    override func mouseEntered(with event: NSEvent) { onHover(true) }
+    override func mouseExited(with event: NSEvent) { onHover(false) }
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) { onClick(convert(event.locationInWindow, from: nil)) }
 }

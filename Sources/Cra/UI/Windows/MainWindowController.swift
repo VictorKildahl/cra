@@ -1356,25 +1356,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         b.setZoomLevel(b.zoomLevel() + delta)
     }
 
-    /// Arc's Capture: save a PNG of the page area to ~/Downloads.
+    /// Arc's Capture: the visible page as a PNG. Chromium draws it (Page.captureScreenshot), so
+    /// it holds the page whatever display the window is on and whatever is in front of it.
     func capturePage() {
-        guard let window else { return }
-        let rectInWindow = shell.webContainer.convert(shell.webContainer.bounds, to: nil)
-        var screenRect = window.convertToScreen(rectInWindow)
-        // CGWindowList uses top-left origin.
-        if let screen = NSScreen.screens.first {
-            screenRect.origin.y = screen.frame.height - screenRect.maxY
+        guard let b = currentBrowser else { return }
+        b.sendDevToolsMethod("Page.captureScreenshot", params: #"{"format":"png","captureBeyondViewport":false}"#) { [weak self] shot, error in
+            MainActor.assumeIsolated { self?.finishCapture(shot, error: error) }
         }
-        let captureWindow = browsers.visibleRuntime?.hostWindow ?? window
-        guard let image = CGWindowListCreateImage(screenRect, .optionIncludingWindow, CGWindowID(captureWindow.windowNumber), [.bestResolution]) else { return }
-        let rep = NSBitmapImageRep(cgImage: image)
-        guard let png = rep.representation(using: .png, properties: [:]) else { return }
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
-        let url = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Cra Capture \(f.string(from: Date())).png")
-        try? png.write(to: url)
-        NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
     // MARK: Sidebar
@@ -1958,7 +1946,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let rect = content.convert(window.convertFromScreen(onScreen), from: nil)
         let url = selectedTabID.flatMap { store.item($0)?.tab?.url } ?? ""
         var actions = SiteControlCenterActions()
-        actions.share = { [weak self] in self?.shareCurrentPage(from: rect, in: content) }
+        actions.share = { [weak self] anchor in self?.shareCurrentPage(from: anchor) }
         actions.copyURL = { [weak self] in self?.app.perform("copyURL") }
         actions.capture = { [weak self] in self?.capturePage() }
         actions.captureFullPage = { [weak self] in self?.captureFullPage() }
@@ -1967,12 +1955,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         actions.manageExtensions = { [weak self] in self?.openTab("chrome://extensions") }
         actions.clearCache = { [weak self] in self?.currentBrowser?.clearSiteDataAndReload(cookies: false) }
         actions.clearCookies = { [weak self] in self?.currentBrowser?.clearSiteDataAndReload(cookies: true) }
+        let ssl = currentBrowser?.sslStatus()
+        let secure = ConnectionSecurity.isSecure(url: url, status: ssl.map {
+            ConnectionSecurity.Status(secureConnection: $0.secureConnection, certStatus: $0.certStatus, contentStatus: $0.contentStatus)
+        })
+        if ssl?.certificates.isEmpty == false { actions.showCertificate = { [weak self] in self?.showCertificate() } }
         actions.siteSettings = { [weak self] in
             guard let origin = URL(string: url).flatMap({ u in u.host.map { "\(u.scheme ?? "https")://\($0)" } }) else { return }
             self?.openTab("chrome://settings/content/siteDetails?site=" + (origin.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? origin))
         }
         siteControlCenterSpaceID = focusedSpaceID
-        siteControlCenter.show(relativeTo: rect, of: content, url: url, dark: focusedSpace.theme.palette.isDark,
+        siteControlCenter.show(relativeTo: rect, of: content, url: url, secure: secure, dark: focusedSpace.theme.palette.isDark,
                                profile: profileDirectoryName, store: store, actions: actions)
     }
 
@@ -1981,33 +1974,84 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         showWindow(nil)
     }
 
-    private func shareCurrentPage(from rect: NSRect, in view: NSView) {
+    /// The share list over the Site Control Center's Share button; the control center stays
+    /// open behind it, as in Arc.
+    private func shareCurrentPage(from anchor: NSView) {
         guard let url = selectedTabID.flatMap({ store.item($0)?.tab?.url }).flatMap(URL.init(string:)) else { return }
-        NSSharingServicePicker(items: [url]).show(relativeTo: rect, of: view, preferredEdge: .minY)
+        siteControlCenter.holdOpen(true)
+        SharePicker.shared.show(url, relativeTo: anchor) { [weak self] chose in
+            self?.siteControlCenter.holdOpen(false)
+            // The service's own window (Mail, AirDrop) takes over.
+            if chose { self?.siteControlCenter.close() }
+        }
     }
 
-    /// Arc's "Capture the full page": the whole document (beyond the viewport) as a PNG in Downloads.
+    /// The lock in the Site Control Center: the certificate of the page on screen.
+    private func showCertificate() {
+        guard let b = currentBrowser, let window else { return }
+        let host = URL(string: b.currentURL)?.host ?? ""
+        guard let certificates = b.sslStatus()?.certificates, !certificates.isEmpty else { return }
+        CertificateWindow.show(certificates, host: host, over: window)
+    }
+
+    /// Arc's "Capture the full page": the whole document, beyond the viewport, as a PNG.
     func captureFullPage() {
         guard let b = currentBrowser else { return }
-        b.sendDevToolsMethod("Page.getLayoutMetrics", params: "{}") { result, _ in
+        showToast("Capture in Progress")
+        // Both completions come on the main queue.
+        b.sendDevToolsMethod("Page.getLayoutMetrics", params: "{}") { [weak self] result, error in
             guard let result, let m = try? JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any],
                   let size = (m["cssContentSize"] ?? m["contentSize"]) as? [String: Any],
-                  let w = size["width"] as? Double, let h = size["height"] as? Double else { return }
+                  let w = size["width"] as? Double, let h = size["height"] as? Double else {
+                MainActor.assumeIsolated { self?.finishCapture(nil, error: error) }
+                return
+            }
             let params = #"{"format":"png","captureBeyondViewport":true,"clip":{"x":0,"y":0,"width":\#(w),"height":\#(min(h, 16384)),"scale":1}}"#
             b.sendDevToolsMethod("Page.captureScreenshot", params: params) { shot, error in
-                guard let shot, let o = try? JSONSerialization.jsonObject(with: Data(shot.utf8)) as? [String: Any],
-                      let b64 = o["data"] as? String, let png = Data(base64Encoded: b64) else {
-                    NSLog("Cra: full-page capture failed: %@", error ?? "no data")
-                    return
-                }
-                DispatchQueue.main.async {
-                    let f = DateFormatter()
-                    f.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
-                    let url = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
-                        .appendingPathComponent("Cra Capture \(f.string(from: Date())).png")
-                    try? png.write(to: url)
-                    NSWorkspace.shared.activateFileViewerSelecting([url])
-                }
+                MainActor.assumeIsolated { self?.finishCapture(shot, error: error) }
+            }
+        }
+    }
+
+    /// As Arc does with a capture: the image goes on the clipboard with the shutter sound, and
+    /// the toast's Save puts it in a file. Finder stays where it is (GitHub #90).
+    private func finishCapture(_ shot: String?, error: String?) {
+        guard let shot, let o = try? JSONSerialization.jsonObject(with: Data(shot.utf8)) as? [String: Any],
+              let b64 = o["data"] as? String, let png = Data(base64Encoded: b64), let image = NSImage(data: png) else {
+            NSLog("Cra: capture failed: %@", error ?? "no data")
+            showToast("Capture Failed")
+            return
+        }
+        let pasteboard = NSPasteboard.general
+        pasteboard.declareTypes([.png, .tiff], owner: nil)
+        pasteboard.setData(png, forType: .png)
+        if let tiff = image.tiffRepresentation { pasteboard.setData(tiff, forType: .tiff) }
+        Self.shutter?.stop()
+        Self.shutter?.play()
+        showToast("Screenshot Copied to Clipboard", action: ShinyToast.Action(title: "Save") { [weak self] in self?.saveCapture(png) })
+    }
+
+    /// macOS's own screenshot sound.
+    private static let shutter = NSSound(contentsOfFile: "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/system/Screen Capture.aif",
+                                         byReference: true)
+
+    /// The toast's Save: Arc's "Save Capture Image" panel, in Downloads.
+    private func saveCapture(_ png: Data) {
+        guard let window else { return }
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
+        let panel = NSSavePanel()
+        panel.title = "Save Capture Image"
+        panel.nameFieldStringValue = "Cra Capture \(f.string(from: Date())).png"
+        panel.allowedContentTypes = [.png]
+        panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            do {
+                try png.write(to: url)
+            } catch {
+                NSLog("Cra: saving a capture failed: %@", error.localizedDescription)
+                self?.showToast("Failed to Save Capture")
             }
         }
     }
@@ -2194,10 +2238,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// Arc's toast at the top right of the page (ShinyToast): Cra's confirmations.
-    func showToast(_ text: String) {
+    func showToast(_ text: String, action: ShinyToast.Action? = nil) {
         guard let window else { return }
         let page = shell.webContainer.convert(shell.webContainer.bounds, to: nil)
-        toast.show(text, page: page, in: window, theme: focusedSpace.theme)
+        toast.show(text, action: action, page: page, in: window, theme: focusedSpace.theme)
     }
 
     /// Navigate the focused tab (an empty split pane gets its first page here).
