@@ -146,11 +146,11 @@ final class PaneToolbarView: NSView {
         m.pinned = extensions.pinnedIDs.compactMap { id in
             entries.first { $0.extensionID == id }.map { Model.Ext(id: id, name: $0.name, icon: extensions.toolbarIcon(for: $0)) }
         }
-        // Arc's toolbar colour: the page's theme-color when it declares one, else white until the
-        // page reports one (MainWindowController.browserManagerDidUpdate uses the same rule).
+        // Arc's toolbar colour (ToolbarColor): the page's report, else the tab's last colour, else
+        // white (MainWindowController.toolbarColors uses the same rule for the card behind the bar).
+        // The tab's own colour counts until its page is live: retarget builds this before it is.
         let onCard = m.kind == .normal || m.kind == .developer
-        let theme = nav.themeColor
-        let cardHex = theme != "none" && !theme.isEmpty && HexColor.components(theme) != nil ? theme : nil
+        let cardHex = ToolbarColor.hex(reported: nav.themeColor, remembered: item?.tab?.themeColor)
         let light = (cardHex.flatMap(HexColor.luminance) ?? 1) > 0.6
         if onCard {
             m.fill = cardHex.map { NSColor(hex: $0) } ?? .white
@@ -211,6 +211,17 @@ final class PaneToolbarView: NSView {
 
     private func apply(old: Model) {
         let m = model
+        // A tab's bar fades to the colour its page reports, like Arc's (white to the page's colour over
+        // 14-16 frames at 100 fps, ease in and out, measured for GitHub #84). A tab switch is instant.
+        if m.kind == .normal, old.kind == .normal, m.tabID != nil, m.tabID == old.tabID, m.fill != old.fill, let layer {
+            let fade = CABasicAnimation(keyPath: "backgroundColor")
+            fade.fromValue = layer.presentation()?.backgroundColor ?? old.fill.cgColor
+            fade.duration = 0.18
+            fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            layer.add(fade, forKey: "barFade")
+        } else {
+            layer?.removeAnimation(forKey: "barFade")
+        }
         layer?.backgroundColor = m.fill.cgColor
         stripes.isHidden = !m.stripes
         // The card under the bar takes its colour and height (Arc's developer bar is 40 pt, 32 otherwise).
@@ -600,7 +611,7 @@ final class ToolbarURLButton: NSView, NSTextFieldDelegate {
             // SwiftUI's .transition(.opacity) on the status swap.
             let fade = CATransition()
             fade.type = .fade
-            fade.duration = 0.15
+            fade.duration = 0.18
             content.layer?.add(fade, forKey: "fade")
         }
         if let status {

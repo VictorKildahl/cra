@@ -46,7 +46,7 @@ final class PaneCardView: NSView {
     var pageColor: String? { didSet { refreshBackground() } }
     /// The canvas follows the appearance pages get (the app's), not the space theme's.
     private var appearanceObservation: NSKeyValueObservation?
-    /// The toolbar's colour (the page's theme-color, white until it reports one). A white backing
+    /// The toolbar's colour (ToolbarColor: the page's, else the tab's last, else white). A white backing
     /// under a dark bar shows through the bar's anti-aliased left edge as a 1px light line.
     var toolbarColor: String? { didSet { refreshBackground() } }
     /// The no-tab stand-in: toolbar on the gradient, no card at all.
