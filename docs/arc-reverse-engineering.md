@@ -1714,7 +1714,9 @@ Library button's hover list (downloads) and its click (the archive) showed diffe
 - Cra: `LibraryView` in the sidebar (Downloads and Archived Tabs; Cra has no Media, Easels, Spaces or Boosts pages),
   `SidebarUIState.libraryPage` per window, `MainWindowController.showLibrary/closeLibrary`. The Library button and
   ⇧⌘L toggle it on the last page, ⇧⌘J opens Downloads, "View Archive" opens Archived Tabs, Esc and the back arrow
-  leave. Opening it from a hidden sidebar shows the sidebar until it closes.
+  leave. Opening it from a hidden sidebar shows the sidebar until it closes. Unlike Arc's quick slide-and-fade, the
+  button and ⇧⌘L slide the Library in and out on the swipe's spring when the sidebar is docked (Victor, 2 Nov 2026;
+  see "Swiping into the Library" below); a second press mid-slide turns it around at its current speed.
 
 ## A tab open in two windows (Arc 1.170, 27 Oct 2026, Swift metadata)
 

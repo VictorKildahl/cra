@@ -61,6 +61,12 @@ public enum LibrarySwipe {
         return target + (x0 + (velocity + omega * x0) * t) * exp(-omega * t)
     }
 
+    /// The settle's speed `t` seconds after release, in reveals per second, so a settle can turn
+    /// around without a jolt.
+    public static func settleVelocity(from r: CGFloat, velocity: CGFloat, to target: CGFloat, at t: CGFloat) -> CGFloat {
+        (velocity - omega * (velocity + omega * (r - target)) * t) * exp(-omega * t)
+    }
+
     /// The settle has come to rest: within a quarter point of `target` and nearly still.
     public static func isSettled(from r: CGFloat, velocity: CGFloat, to target: CGFloat, at t: CGFloat, width: CGFloat) -> Bool {
         let x = settle(from: r, velocity: velocity, to: target, at: t)
