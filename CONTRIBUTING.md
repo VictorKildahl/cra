@@ -5,9 +5,11 @@ you can send. Code is welcome too, within the few rules below.
 
 ## What fits
 
-- **Arc parity, one to one.** Where Arc had a feature, Cra matches it: the same layout,
+- **Arc parity by default.** Where Arc had a feature, Cra matches it: the same layout,
   shortcuts, animations and hover states. When you change one, compare it with Arc and
-  include a screenshot or clip of both.
+  include a screenshot or clip of both. Arc isn't the only source of truth, though: if
+  Arc's way is unintuitive or worse than it could be, open an issue that makes the case,
+  and we'll decide it on its merits.
 - **No built-in AI.** Arc Max-style features (tidy tabs, summaries, LLM search) are out
   of scope.
 - **No account, no server, no telemetry.** Everything stays on the user's Mac.
