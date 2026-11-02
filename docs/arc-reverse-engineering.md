@@ -2192,6 +2192,32 @@ Two new Arc windows, both with View ▸ Hide Sidebar and a tab selected, capture
   The sidebar menu's Move to Space follows when it moves the open tab or its split; another tab moves on its own. Whatever moves, a window that had it open in the
   old space opens the next tab there, picked as on close.
 
+## Sending a Little Arc's page to a space (Arc 1.171, 2 Nov 2026, issue #92)
+
+Victor's Arc, a second window of my own (File ▸ New Window over AX, switched to JYSK through the Spaces menu while
+Arc was frontmost, closed afterwards), Little Arcs opened with `open -a Arc https://example.com/?cra92…`, the spaces
+popover driven by AX (the chevron is `openInSpaceExpander`, the rows are AXButtons named after the space).
+
+- [O AX] Window A on Victor (used last), window B on JYSK. Picking JYSK in the Little Arc's popover closed the Little
+  Arc and opened the page in **window B**, which came forward and became main; window A kept Victor.
+- [O AX] No shortcut for it: Tabs ▸ "Open Little Arc or Peek in…" is ⌘O (the target space), Spaces lists the spaces
+  under ⌃1…; a ⌃2 posted to Arc's pid while the Little Arc was key changed nothing.
+- Offline copy (cra-88's fake home, no network, spaces Alpha/Beta/Gamma, up to three windows W1–W3, Little Arcs
+  from File ▸ New Little Arc Window; the popover rows are AXButtons `d='<space>'` in their own window, present only
+  while it is open; the real chevron is the second `openInSpaceExpander`, `d=''`):
+  - [O AX] "Open in <space> ⌘O" names the focused space of the window used last, read when the Little Arc takes focus:
+    W1 switched Alpha → Beta while the Little Arc sat behind it, the button still said Alpha until the Little Arc was
+    focused again, then Beta. Using W2 (Gamma) after opening the Little Arc from W1 (Alpha) made it say Gamma.
+  - [O AX] ⌘O and a click on that button open the page there: in W1's new space, and in W2 after W2 was used.
+  - [O AX] No window shows the picked space: the window used last switches to it and takes the page.
+  - [O AX] Two windows show it: the one used last if it is one of them, else the frontmost of them (W1 and W2 on Beta,
+    W3 on Alpha used last: whichever of W1/W2 was raised later took the page, both ways round).
+  - [O AX] Only a minimized window shows it: Arc unminimizes that window and opens the page there.
+- Cra: `SpaceWindow` (CraCore) picks the window: the one in use if it shows the space, else the frontmost one that
+  does, else the one in use, which switches. It applies to ⌘O, the popover, the command bar's Move to <space> and
+  Move Tab to Space N (⌃⌘1–9, #86), which in a Little Window sends its page (#92, Cra's own like ⌃⌘N itself). The
+  Little Window's target follows the window used last when it takes focus (`refreshTarget`), as Arc's does.
+
 ## ⌘Return in the command bar and closed folders that keep their tab (Arc 1.171, 2 Nov 2026, issue #85)
 
 Victor's Arc, a window of my own (File ▸ New Window over AX, closed afterwards), keys posted to Arc's pid while it

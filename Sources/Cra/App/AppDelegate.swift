@@ -297,6 +297,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     guard let self, var w = note.object as? NSWindow else { return }
                     while let parent = w.parent { w = parent }
                     if let c = self.mainWindows.first(where: { $0.window === w }) { self.store.activeWindowID = c.windowID }
+                    self.littleWindows.first { $0.window === w }?.refreshTarget()
                 }
             }
         }
@@ -322,6 +323,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             ?? mainWindows.first(where: { !$0.isIncognito }) {
             store.activeWindowID = normal.windowID
         }
+        return main
+    }
+
+    /// The normal window a page sent to `spaceID` opens in (SpaceWindow): one already showing
+    /// the space, else the one in use last, which then switches to it.
+    @discardableResult
+    func useNormalWindow(forSpace spaceID: UUID) -> MainWindowController {
+        let last = useNormalWindow()
+        guard !last.isIncognito else { return last }
+        var seen = Set<UUID>()
+        let normal = NSApp.orderedWindows.compactMap { w in mainWindows.first { $0.window === w } }
+            .filter { !$0.isIncognito && seen.insert($0.windowID).inserted }
+            .map { (id: $0.windowID, space: store.focusedSpaceID(window: $0.windowID)) }
+        store.activeWindowID = SpaceWindow.window(for: spaceID, windows: normal, lastUsed: last.windowID)
         return main
     }
 
@@ -675,7 +690,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "addSplitView": return store.selectedTabID != nil
         case "editSpace", "deleteSpace", "nextSpace", "previousSpace", "manageSpaces": return !main.isIncognito
         case "closeLittleWindows": return !littleWindows.isEmpty
-        case let id? where id.hasPrefix("moveTabToSpace"): return store.selectedTabID != nil && !main.isIncognito
+        case let id? where id.hasPrefix("moveTabToSpace"):
+            guard let n = Int(id.dropFirst(14)), n >= 1, n <= store.spaceOrder.count else { return false }
+            if let little = keyLittleWindow { return little.hasPage }
+            return store.selectedTabID != nil && !main.isIncognito
         default: break
         }
         return true
