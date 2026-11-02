@@ -500,22 +500,28 @@ final class SpaceListView: NSView, NSDraggingSource {
     /// SpaceSectionView's stacks: 3 pt on top, pinned rows, the 18 pt divider, then Today; rows
     /// 1 pt apart and 10 pt in from the sides. Arc 1.171 (31 Oct): every pinned row takes 41 pt,
     /// the first one too, so the first sits 1 pt lower than Today's; nothing pinned takes none.
+    /// With Today empty the divider takes no room either: Arc 1.171 (2 Nov) puts New Tab one
+    /// pinned row (41 pt) under the last pinned tab, and Cra's line left an 18 pt gap there
+    /// (reported on X, 2 Nov 2026, with the pinned tabs collapsed).
     private func layoutRows() {
         let width = rowsWidth
         let inner = max(0, width - 20)
         var y: CGFloat = 3
         let pinnedTop = y
+        var afterLine = false
         for i in 0..<rows.count {
             let isDivider = rows[i].key == .divider
             if i == pinnedCount {
                 pinnedFrame = NSRect(x: 10, y: pinnedTop, width: inner, height: y - pinnedTop)
             }
             if isDivider {
-                rows[i].frame = NSRect(x: 0, y: y, width: width, height: 18)
-                y += 18
+                afterLine = rows[i].content == .divider(hasToday: true)
+                let h: CGFloat = afterLine ? 18 : 0
+                rows[i].frame = NSRect(x: 0, y: y, width: width, height: h)
+                y += h
                 continue
             }
-            if i != pinnedCount + 1 { y += CraMetrics.rowSpacing }
+            if !(afterLine && i == pinnedCount + 1) { y += CraMetrics.rowSpacing }
             let h: CGFloat
             if case .liveStatus(let m) = rows[i].content { h = LiveStatusRowView.height(m, width: inner) } else { h = CraMetrics.rowHeight }
             rows[i].frame = NSRect(x: 10, y: y, width: inner, height: h)
