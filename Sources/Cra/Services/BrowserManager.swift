@@ -775,16 +775,14 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         if let rt = runtimes[id] { perform(rt.devTools.didClose(), on: rt) }
     }
 
-    /// ⌥⌘I on the focused page: open its DevTools, or close them (DevToolsToggle).
-    func toggleDevTools() {
+    /// ⌥⌘I, ⌥⌘J, ⌥⌘C and the developer bar's Console, Network and Inspect on the focused page
+    /// (DevToolsToggle.Command).
+    func runDevTools(_ command: DevToolsToggle.Command) {
         guard let rt = visibleRuntime else { return }
-        perform(rt.devTools.toggle(), on: rt)
-    }
-
-    /// Inspect Element: DevTools open on the focused page, whatever they were doing.
-    func showDevTools() {
-        guard let rt = visibleRuntime else { return }
-        perform(rt.devTools.show(), on: rt)
+        let (effect, frontend) = rt.devTools.run(command)
+        // A press made while DevTools close is done when they reopen (DevToolsToggle.didClose).
+        rt.browser.devToolsAction = frontend
+        perform(effect, on: rt)
     }
 
     private func perform(_ effect: DevToolsToggle.Effect, on rt: TabRuntime) {

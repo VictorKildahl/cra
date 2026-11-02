@@ -806,10 +806,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "zoomOut": main.zoom(by: -0.5)
         case "resetZoom": main.currentBrowser?.setZoomLevel(0)
         case "viewSource": main.currentBrowser?.viewSource()
-        case "devTools", "jsConsole":
-            // Toggle, like Chrome: ⌥⌘I closes the dock when it is already open.
-            main.browsers.toggleDevTools()
-        case "inspectElement": main.browsers.showDevTools()
+        // Like Chrome: ⌥⌘I, ⌥⌘J and Network close the dock when it is already open.
+        case "devTools": main.browsers.runDevTools(.toggle)
+        case "jsConsole": main.browsers.runDevTools(.console)
+        case "networkPanel": main.browsers.runDevTools(.network)
+        case "inspectElement": main.browsers.runDevTools(.inspect)
         // Arc's Library is a mode of the window's sidebar; ⇧⌘J opens it on Downloads.
         case "openLibrary": main.toggleLibrary()
         case "viewArchive": main.showLibrary(.archive)

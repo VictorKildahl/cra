@@ -46,6 +46,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var shownTheme: SpaceTheme?
     private var lastSidebarWidth: CGFloat = 0
     private var commandBarOpenedAt = Date.distantPast
+    private var commandBarClosingClick = DismissingClick()
     private var commandObserving = false
     /// Closed for good (another window stayed open): it no longer follows the store.
     private var isTornDown = false
@@ -2057,6 +2058,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     func openCommandBar(_ mode: CommandBarMode) {
         guard let window else { return }
+        // A click on the address that closed the bar leaves it closed (Arc, GitHub #88).
+        if mode == .editURL, NSApp.currentEvent?.type == .leftMouseUp,
+           commandBarClosingClick.isClosingClick(lastMouseDown: ProcessInfo.processInfo.systemUptime
+                - CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .leftMouseDown)) {
+            return
+        }
         // An empty split pane gets Arc's "Search or Enter URL…" bar; the result fills the pane.
         let fillingEmptyPane = selectedTab?.isEmptyTab == true
         let prefill = mode == .editURL && !fillingEmptyPane ? selectedTab?.tab?.url : nil
@@ -2329,6 +2336,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             }
             return
         }
+        let event = NSApp.currentEvent
+        commandBarClosingClick.panelClosed(byMouseDownAt: event?.type == .leftMouseDown ? event?.timestamp : nil)
         commandBar.close()
     }
 

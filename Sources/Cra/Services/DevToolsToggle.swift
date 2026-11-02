@@ -37,6 +37,23 @@ struct DevToolsToggle: Equatable {
         }
     }
 
+    /// The DevTools commands, as Chrome's DevToolsToggleAction (Arc 1.170's developer bar runs
+    /// Chrome's commands, GitHub #88): ⌥⌘I toggles; Console (⌥⌘J) and Network toggle too and
+    /// open on their panel; Inspect (⌥⌘C) always ends open, with the element picker armed.
+    enum Command: Equatable { case toggle, console, network, inspect }
+
+    /// The effect, and what the frontend is asked once open (CraBrowser.devToolsAction).
+    mutating func run(_ command: Command) -> (effect: Effect, frontend: String?) {
+        let effect = command == .inspect ? show() : toggle()
+        guard effect != .close else { return (effect, nil) }
+        switch command {
+        case .toggle: return (effect, nil)
+        case .console: return (effect, "console")
+        case .network: return (effect, "network")
+        case .inspect: return (effect, "inspect")
+        }
+    }
+
     /// CEF made the DevTools view, also for DevTools opened from Chromium's own menu.
     mutating func didOpen() {
         if case .closing = state { return }

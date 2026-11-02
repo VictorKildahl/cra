@@ -1916,6 +1916,29 @@ child window key; AppKit then spent the next toolbar click on making the main wi
 buttons accept first mouse while a child window is key. Clicks after the page had focus were not affected
 (real HID test).
 
+## Toolbar clicks, developer bar buttons, developer-mode rows (Arc 1.170, 2 Nov 2026, issue #88)
+
+AX reads of Arc's windows, 1x window captures, and HID clicks while the Mac was idle:
+
+- [O] Normal bar address: `example.org/cra88/deep/path?q=1` shows host bright and path + query dim (AX
+  static text carries all of it). Arc does not drop the path; Cra already matched. The link glyph before
+  it is a separate button, "Copy Current URL".
+- [O] Clicks: empty bar space left or right of the address opens nothing (window keyed by a page click
+  first, two runs, captures); the address opens the command bar; a click on the address while the bar
+  is open closes it and it stays closed; the next click opens it. Cra: PaneToolbarView only focuses its
+  pane on empty space; `DismissingClick` keeps the closing click from reopening the bar.
+- [O] Developer bar (AX descriptions, left to right): Site Settings (28 pt), `contentPanelTextField`
+  from 40 pt to 7 pt before Copy Link (530 of 923 pt), Copy Link | Capture Window, Capture | Toggle
+  Console, Toggle Network Panel, Inspect Element | Extensions Menu, pinned extensions, Split View Menu.
+  Buttons 28 pt edge to edge; rules 1 pt: copy, 14, rule, 13, Capture Window; Capture, 8, rule, 8,
+  Console; Inspect, 7, rule, 8, Extensions. Glyphs: terminal, globe, crosshair.
+- [S] ArcCore names Chrome's commands (`DevTools_ToggleConsole`, `DevTools_InspectElement`,
+  `enterInspectElementMode`, `showPanel`): Chrome's ToggleDevToolsWindow closes docked DevTools on
+  Console (only Inspect forces them open). Cra runs the same (DevToolsToggle.Command) and asks the
+  frontend for the panel or the picker once it reports `loadCompleted`, as DevToolsWindow::DoAction does.
+- [O] Sidebar: a Today tab on a developer-mode host (example.com) shows the host under its title; one on
+  another host (httpbin.org) shows nothing.
+
 ## Live sidebar blur (1 Nov 2026, issue #37)
 
 Arc's sidebar blur is `NSVisualEffectView` only (no `CABackdropLayer` in Arc's or ArcCore's strings). AppKit's
