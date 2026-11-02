@@ -357,6 +357,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // Before setPanes: a pane whose page is not live yet gets its bar colour now, not white.
         let bars = toolbarColors(panes: panes)
         if bars != shell.toolbarColors { shell.toolbarColors = bars }
+        // The same for the bar itself: retarget builds it at once, before browsers.show makes the
+        // pane's page visible, so a live page's colour and buttons must already be there. Without
+        // them a switch between loaded tabs drew one frame with Back greyed out, on a white bar when
+        // the tab had no saved colour (incognito, or any tab before 0.1.26) (#84).
+        syncNavStates(panes)
         shell.setPanes(panes, factors: factors, orientation: split?.split?.orientation ?? .horizontal, focused: selected, empty: empty, animated: true)
         // A page is on screen in one window at a time. Arc keeps the tab selected in every window
         // that has it open: the window in use holds the page, the others show a blurred snapshot
@@ -422,8 +427,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let themeColor = browsers.visibleRuntime?.themeColor ?? ""
         if sidebarUI.pageThemeColor != themeColor { sidebarUI.pageThemeColor = themeColor }
         for (id, rt) in browsers.runtimes where sidebarUI.progress[id] != rt.progress { sidebarUI.progress[id] = rt.progress }
+        syncNavStates(browsers.visibleTabIDs)
+    }
+
+    /// Each pane's toolbar state, for the panes whose page is live in this window.
+    private func syncNavStates(_ ids: [UUID]) {
         var nav: [UUID: TabNavState] = [:]
-        for id in browsers.visibleTabIDs {
+        for id in ids {
             guard let rt = browsers.runtime(for: id) else { continue }
             nav[id] = TabNavState(canGoBack: rt.browser.canGoBack, canGoForward: rt.browser.canGoForward, isLoading: rt.browser.isLoading, themeColor: rt.themeColor)
         }
