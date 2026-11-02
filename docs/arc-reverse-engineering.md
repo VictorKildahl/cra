@@ -2185,12 +2185,13 @@ Two new Arc windows, both with View ▸ Hide Sidebar and a tab selected, capture
   (scratch, 40 fps), not kept.
 - Reported by Anoninz on #86, not captured here: the sidebar's right-click Move to ▸ <space> on the open tab
   follows too (the row leaves, Arc switches to that space and selects the tab).
-- [U] What the space the tab left selects afterwards, and what Move to ▸ does on a tab that isn't open: other
-  sessions were driving Arc at the time and a posted ⌃2 never reached the window.
+- [O] What the space the tab left selects afterwards: nothing (measured for #105, see "The tab shown after ⌘W").
+- [U] What Move to ▸ does on a tab that isn't open: other sessions were driving Arc at the time and a posted ⌃2
+  never reached the window.
 - Cra: `SidebarStore.moveTabAndFollow` for the command bar's Move Tab to <space> and the new Move Tab to Space N
   (⌃⌘1–9, Cra's own: ⌘ added to Go to Space N; neither Arc nor macOS binds ⌃⌘ + a digit). A pane brings its split.
-  The sidebar menu's Move to Space follows when it moves the open tab or its split; another tab moves on its own. Whatever moves, a window that had it open in the
-  old space opens the next tab there, picked as on close.
+  The sidebar menu's Move to Space follows when it moves the open tab or its split; another tab moves on its own. The window that follows leaves nothing selected in
+  the old space; another window that had it open there opens the next tab, picked as on close.
 
 ## Sending a Little Arc's page to a space (Arc 1.171, 2 Nov 2026, issue #92)
 
@@ -2347,3 +2348,37 @@ tap with a real Shift key held around them; the space read from each window's `s
   `ForceWebRequestProxyForTest` makes `MayHaveProxies()` always true, so a proxy extension enabled later does not
   reset the URL loader factories. Cra logs the winner and the overridden ones per profile when they change, and
   Export Diagnostics' summary.txt has a "Proxy:" section.
+
+## The tab shown after ⌘W (Arc 1.171, 2 Nov 2026, issue #105, offline Arc driven through its menus)
+Offline Arc as in "One space": one space with pinned S and P2 and Today C, B, A, D (A, B, C saved with
+`activeTabBeforeCreationID` and `referrerID` = S, unread), the selected tab and the window's
+`itemLastActiveDates` set in StorableWindows.json, then Tabs ▸ Next/Previous Tab and File ▸ Archive Tab (Close
+Tab on a pinned tab) pressed over AX, a window capture after each step. Setting AXSelected on a row
+doesn't pick a tab, and the selection saved in StorableWindows.json wasn't always honoured; navigate instead.
+- [O] Arc goes back to the tab shown just before the closed one, if its page is still loaded: D → A, close A → D
+  (not S, the tab A was opened from, loaded or not); S → P2 → close P2 hands back to S only while S is loaded.
+- [O] Only that one tab counts. D → A → B, close B → A, close A → C (the neighbour above), not D: Arc doesn't
+  walk further back. A previous tab without a page doesn't count either: one restored from `itemLastActiveDates`
+  that hasn't loaded since launch, or a pinned tab closed with ⌘W (Arc never reloads it on a later close).
+- [O] Otherwise a Today tab hands over to its neighbour, the one above first (B → C, D → A), the one below at
+  the top (C → A), loaded or not. The last Today tab hands over to nothing, with pinned tabs still in the
+  sidebar. A pinned tab hands over to nothing (no neighbour), even with Today pages loaded.
+- [O] "Neighbour" means the Today rows on screen: with a closed folder above it (tabs X, Y inside), closing D hands
+  over to nothing; with the folder open (`AXDisclosing` on its row over AX), to Y, the row above inside it.
+- [O] A favorite closes like a pinned tab: back to the previous tab while it is loaded (F1 after D → D), else nothing.
+  Tabs ▸ Next Tab runs through the favorites first.
+- [O] The tab a close hands over to loses its unread mark, as when it is picked.
+- [O] Splits (a `splitView` item needs `layoutOrientation`, `focusItemID` and `itemWidthFactors`, as Arc saves it;
+  without them Arc moves the split into a pinned "Recently recovered" folder): a split row as the neighbour opens the
+  split on its focused pane. Closing a pane keeps the other one and the tab shown before the split (D → split, close
+  L → R, close R → D, not the neighbour C). Closing a pinned split hands over to nothing even with the tab shown
+  before still loaded (D → pinned split, Close Tab → nothing; twice).
+- [O] Previous tabs are per window: window 1 A → B, window 2 D → C, close C in window 2 → D (not B).
+- [O] A space switch counts as showing another tab: space 1 B, space 2 Y → X, Previous Space (B), Next Space (X),
+  close X → W (the neighbour above), not Y. Closing never switches spaces.
+- [O] Command bar "Move to Today in <space>" on the open tab: the window follows, and the space it left has nothing
+  selected when you come back (C → B, move B, Previous Space → nothing; not C, not the neighbour A).
+- [?] Not measured: Move to ▸ on a tab open in another window.
+- Cra: CloseSuccessor (CraCore) with SidebarStore's per-window `previousTab` (not saved; set in `updateWindow`
+  whenever what the window shows changes) and `hasPage` (a window's browser manager has the page). A tab put to sleep has no page, like Arc's unloaded tabs.
+  `activeTabBeforeCreationID` is still saved and imported but no longer picks the next tab.

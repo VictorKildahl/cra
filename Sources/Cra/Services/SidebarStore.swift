@@ -39,6 +39,11 @@ final class SidebarStore {
     @ObservationIgnored private(set) var lastNormalWindowID = UUID()
     /// Spaces of incognito windows. Not in `spaceOrder`, never saved.
     private(set) var incognitoSpaceIDs: Set<UUID> = []
+    /// Per window, the tab shown before the selected one: a close goes back to it (CloseSuccessor).
+    /// Not saved: after a relaunch it has no page, so Arc wouldn't go back to it either.
+    @ObservationIgnored private var previousTab: [UUID: UUID] = [:]
+    /// Whether a tab's page is loaded; AppDelegate asks the windows' browser managers.
+    @ObservationIgnored var hasPage: (UUID) -> Bool = { _ in true }
 
     // MARK: Persistence
 
@@ -206,7 +211,12 @@ final class SidebarStore {
         guard let i = prefs.windows.firstIndex(where: { $0.id == (id ?? activeWindowID) }) else { return }
         var w = prefs.windows[i]
         change(&w)
-        if w != prefs.windows[i] { prefs.windows[i] = w }
+        guard w != prefs.windows[i] else { return }
+        // Whatever changes what the window shows (a pick, a close, a space switch), the tab it
+        // showed is the one a close goes back to (CloseSuccessor; Arc counts space switches too).
+        let shown = { (s: WindowSession) in s.focusedSpaceID.flatMap { s.selectedTabPerSpace[$0] } }
+        if shown(w) != shown(prefs.windows[i]) { previousTab[w.id] = shown(prefs.windows[i]) }
+        prefs.windows[i] = w
     }
 
     /// A new window on `spaceID` with nothing open yet.
@@ -415,10 +425,24 @@ final class SidebarStore {
             $0.focusedSpaceID = sid
             $0.selectedTabPerSpace[sid] = id
         }
-        var updated = it
-        updated.isUnread = false
-        if var t = updated.tab { t.timeLastActiveAt = clock.now; updated.data = .tab(t) }
-        items[id] = updated
+        noteShown(id)
+        if !isIncognito(space: sid) {
+            var dates = ranking.recentlySwitchedToTabs[id] ?? []
+            dates.append(clock.now)
+            if dates.count > 10 { dates.removeFirst(dates.count - 10) }
+            ranking.recentlySwitchedToTabs[id] = dates
+            rankingFile.save(ranking)
+        }
+        touch()
+    }
+
+    /// A tab coming on screen, picked or handed the selection by a close: it's read and last
+    /// active now (Arc clears the unread mark either way).
+    private func noteShown(_ id: UUID) {
+        guard var it = items[id] else { return }
+        it.isUnread = false
+        if var t = it.tab { t.timeLastActiveAt = clock.now; it.data = .tab(t) }
+        items[id] = it
         // Selecting a pane focuses it inside its split (Arc: focusItemID).
         if let p = it.parentID, var split = items[p], var s = split.split {
             s.focusTabID = id
@@ -430,14 +454,6 @@ final class SidebarStore {
         let peeks = FolderPeek.opening(id, folders: folderChain(of: id), isExpanded: { self._prefs.expandedFolders.contains($0) },
                                        peeks: _prefs.peekedFolders)
         if peeks != _prefs.peekedFolders { prefs.peekedFolders = peeks }
-        if !isIncognito(space: sid) {
-            var dates = ranking.recentlySwitchedToTabs[id] ?? []
-            dates.append(clock.now)
-            if dates.count > 10 { dates.removeFirst(dates.count - 10) }
-            ranking.recentlySwitchedToTabs[id] = dates
-            rankingFile.save(ranking)
-        }
-        touch()
     }
 
     func updateTab(_ id: UUID, url: String? = nil, title: String? = nil) {
@@ -946,21 +962,27 @@ final class SidebarStore {
         moveItem(id, to: space.pinnedContainerID, index: nil)
     }
 
-    func moveTab(_ id: UUID, toSpace sid: UUID) {
+    /// `following`: the window that goes along to `sid`.
+    func moveTab(_ id: UUID, toSpace sid: UUID, following: UUID? = nil) {
         guard let space = spaces[sid], let it = items[id] else { return }
         let from = spaceID(ofItem: id)
         let moved = Set([id] + it.children)
+        let list = isPinned(id) ? [] : (from.flatMap { spaces[$0] }.map { shownTabs(under: $0.todayContainerID) } ?? [])
         if isFavorite(id) {
             moveItem(id, to: space.favoritesContainerID, index: nil)
         } else {
             let pinned = isPinned(id)
             moveItem(id, to: pinned ? space.pinnedContainerID : space.todayContainerID, index: pinned ? nil : 0)
         }
-        // A window that had it open in the old space picks the next tab there, as on close.
+        // The window that goes along leaves nothing selected in the old space (Arc 1.171, Move to
+        // Today in <space>); another window that had it open there picks the next tab, as on close.
         guard let from, from != sid, spaceID(ofItem: id) == sid else { return }
         for w in prefs.windows {
             guard let sel = w.selectedTabPerSpace[from], moved.contains(sel) else { continue }
-            updateWindow(w.id) { $0.selectedTabPerSpace[from] = nextSelection(after: it, in: from) }
+            let next = w.id == following ? nil
+                : closeSuccessor(of: sel, in: from, window: w.id, list: list.filter { $0 == sel || !moved.contains($0) })
+            updateWindow(w.id) { $0.selectedTabPerSpace[from] = next }
+            if let next, w.focusedSpaceID == from { noteShown(next) }
         }
     }
 
@@ -970,7 +992,7 @@ final class SidebarStore {
     func moveTabAndFollow(_ id: UUID, toSpace sid: UUID, window: UUID? = nil) -> Bool {
         let moving = splitContaining(id)?.id ?? id
         guard items[id]?.isTab == true, spaces[sid] != nil, spaceID(ofItem: moving) != sid else { return false }
-        moveTab(moving, toSpace: sid)
+        moveTab(moving, toSpace: sid, following: self.window(window).id)
         guard spaceID(ofItem: moving) == sid else { return false }
         selectTab(id, window: window)
         return true
@@ -1070,6 +1092,18 @@ final class SidebarStore {
         let inside = tabs(under: folder)
         let listed = Set(FolderPeek.listed(in: folder, peeks: _prefs.peekedFolders, tabsInside: inside.map(\.id)))
         return inside.filter { listed.contains($0.id) }
+    }
+
+    /// The tabs a container shows as rows, top to bottom: an open folder's, a closed folder's
+    /// peeked ones, one pane per split (its focused one). Arc hands a close over to the row
+    /// above or below among these, never to a tab hidden in a closed folder (#105).
+    func shownTabs(under id: UUID) -> [UUID] {
+        children(of: id).flatMap { c -> [UUID] in
+            if c.isTab { return [c.id] }
+            if let s = c.split { return [s.focusTabID.flatMap { c.children.contains($0) ? $0 : nil } ?? c.children.first].compactMap { $0 } }
+            guard c.isFolder else { return [] }
+            return _prefs.expandedFolders.contains(c.id) ? shownTabs(under: c.id) : peekedTabs(in: c.id).map(\.id)
+        }
     }
 
     /// The folders an item sits in, outermost first.
@@ -1295,6 +1329,7 @@ final class SidebarStore {
         let split = splitContaining(id)
         let folder = it.parentID.flatMap { items[$0]?.isFolder == true ? $0 : nil }
         let index = folder.flatMap { items[$0]?.children.firstIndex(of: id) }
+        let list = pinned ? [] : (sid.flatMap { spaces[$0] }.map { shownTabs(under: $0.todayContainerID) } ?? [])
         // Closed out of a live folder: the item stays out (Arc: hiddenItems). The archive keeps
         // the live copy so ⇧⌘T can put it back.
         if let folder, items[folder]?.isLiveFolder == true {
@@ -1309,31 +1344,35 @@ final class SidebarStore {
             if archive.count > 2000 { archive.removeLast(archive.count - 2000) }
         }
         if !selectedIn.isEmpty, let sid {
-            // Closing a pane keeps the split on screen: focus a neighbour pane.
-            let next = split.flatMap { s in items[s.id]?.children.first { items[$0]?.isTab == true } } ?? nextSelection(after: it, in: sid)
-            for w in selectedIn { updateWindow(w) { $0.selectedTabPerSpace[sid] = next } }
+            for w in selectedIn {
+                // Closing a pane keeps the split on screen: focus a neighbour pane. The split
+                // still goes back to the tab shown before it (Arc).
+                let kept = previousTab[w]
+                let next = split.flatMap { s in items[s.id]?.children.first { items[$0]?.isTab == true } }
+                    ?? closeSuccessor(of: id, in: sid, window: w, list: list)
+                updateWindow(w) { $0.selectedTabPerSpace[sid] = next }
+                guard focusedSpaceID(window: w) == sid else { continue }
+                if split != nil { previousTab[w] = kept }
+                if let next { noteShown(next) }
+            }
         }
         if let split { collapseSplitIfNeeded(split.id) }
         touch()
     }
 
-    /// Arc goes back to the tab you came from (activeTabBeforeCreationID) and
-    /// otherwise to the neighbour in the list.
-    private func nextSelection(after closed: SidebarItem, in sid: UUID) -> UUID? {
-        if let back = closed.tab?.activeTabBeforeCreationID, items[back]?.isTab == true, spaceID(ofItem: back) == sid {
-            return back
-        }
-        let list = visibleTabs(in: sid)
-        guard !list.isEmpty else { return nil }
-        if let p = closed.parentID, let siblings = items[p]?.children {
-            // Prefer the sibling that took the closed tab's slot (the one below it).
-            let today = tabs(under: p)
-            if let first = today.first { _ = first }
-            _ = siblings
-        }
-        // Fall back to the top-most today tab, then the first visible tab.
-        if let space = spaces[sid], let first = tabs(under: space.todayContainerID).first { return first.id }
-        return list.first?.id
+    /// The tab shown once the selected `id` closes in window `w`: `list` is the space's Today
+    /// tabs while `id` is still among them, empty for a pinned tab.
+    private func closeSuccessor(of id: UUID, in sid: UUID, window w: UUID, list: [UUID]) -> UUID? {
+        let back = previousTab[w].flatMap { spaceID(ofItem: $0) == sid ? $0 : nil }
+        return CloseSuccessor.next(closing: id, previous: back, hasPage: hasPage, list: list)
+    }
+
+    /// A pinned tab, favorite or pinned split closed (unloaded) while selected: the tab to show
+    /// instead, if any.
+    func closeSuccessor(ofPinned id: UUID, window w: UUID) -> UUID? {
+        guard let sid = spaceID(ofItem: id) else { return nil }
+        let back = previousTab[w].flatMap { spaceID(ofItem: $0) == sid ? $0 : nil }
+        return CloseSuccessor.afterPinned(closing: id, isSplit: splitContaining(id) != nil, previous: back, hasPage: hasPage)
     }
 
     @discardableResult
