@@ -2319,3 +2319,31 @@ tap with a real Shift key held around them; the space read from each window's `s
 - Cra: `extensions-action-updates.patch` reports icon, title, badge text (or the declarativeNetRequest count), badge
   and text colour. `ExtensionBadge` (CraCore) lays the badge out; `ExtensionStore.badged` draws it into the icon.
   Captured side by side with the same probe, Cra matches Arc's five states to the pixel (text ±1 px antialiasing).
+
+## Extensions per profile, options pages and the proxy (Arc 1.171, 2 Nov 2026, issue #107)
+
+- [O static] Pinned extensions are per profile: Arc's `arc::BrowserContext` (one per Chromium profile) has
+  `getPinnedExtensionOrder` / `setPinnedExtensionOrder:`, `browserContext:didChangePinnedExtensionOrder:` and
+  `arc::BrowserContext::Extensions::Delegate::DidPinnedExtensionOrderChange`, over Chromium's
+  `extensions.pinned_extensions` pref. This Mac's Arc has only the Default profile (two pins), so two lists were not
+  compared live. Cra: `PinnedExtensions` (pinned-extensions.json), where the old single list serves every profile until
+  one pins or unpins something of its own.
+- [O] Arc has no per-space extension switch. A space gets the extensions of the profile it is bound to, and an
+  extension is turned off for one profile in that profile's arc://extensions. Cra does the same with
+  chrome://extensions opened from a space on that profile (Extensions ▸ Manage Extensions…). Verified on a test copy:
+  an `Extensions/` extension turned off in a Work profile left that profile's toolbar and proxy, and kept running
+  in Default.
+- [O live] Options page across spaces: offline Arc (fake home, see "One space") with this Mac's two spaces and an
+  unpacked probe (`--load-extension` + `--disable-features=DisableLoadExtensionCommandLineSwitch`) whose service
+  worker calls `chrome.runtime.openOptionsPage()` when a tab opens `…#cra-opts`, driven by Arc's AppleScript (`tell
+  space "…" to focus`, `make new tab`). The options page opened in space 1. Asked again from space 2, Arc went back
+  to space 1 and selected that tab, with no second options tab. Arc has no options-page code of its own
+  (`runtime.openOptionsPage` → Chromium's `ShowSingletonTabOverwritingNTP`). Cra keeps that, per profile: another
+  profile's copy of the page is never reused (`ExtensionPagePlacement`).
+- [O] Two extensions setting the proxy: Chromium applies the latest `last_update_time` among the enabled ones
+  (ExtensionPrefValueMap::GetEffectivePrefValueController; on a tie, the later ID). The other gets
+  `levelOfControl: "controlled_by_other_extensions"`, which CEF reports correctly (checked with two probes).
+  `--load-extension` folders are reinstalled on every launch, but the winner stayed the same over three launches.
+  `ForceWebRequestProxyForTest` makes `MayHaveProxies()` always true, so a proxy extension enabled later does not
+  reset the URL loader factories. Cra logs the winner and the overridden ones per profile when they change, and
+  Export Diagnostics' summary.txt has a "Proxy:" section.

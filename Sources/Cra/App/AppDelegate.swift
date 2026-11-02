@@ -89,7 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let installed = ExtensionStore.shared.entries.map(\.extensionID)
         let hasNewExtension = !Set(installed).isSubset(of: welcomed)
         try? JSONEncoder().encode(installed.sorted()).write(to: welcomedFile, options: .atomic)
-        CraCEFRuntime.setStrayPageHandler { [weak self] url in
+        CraCEFRuntime.setStrayPageHandler { [weak self] url, profile in
             Task { @MainActor in
                 guard let self else { return }
                 if Date().timeIntervalSince(launchedAt) < 10,
@@ -97,9 +97,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     NSLog("Cra: dropped start-up page from an extension: %@", url)
                     return
                 }
-                self.useNormalWindow()
-                self.openExtensionPage(url)
-                self.main.showWindow(nil)
+                // The window in use, and a space on the profile whose extension asked (#107).
+                let window = self.useNormalWindow()
+                self.openExtensionPage(url, window: window.windowID, profile: profile)
+                window.showWindow(nil)
             }
         }
         CraCEFRuntime.setRelaunchHandler { [weak self] urls in
@@ -305,13 +306,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// A page an extension opens as a tab. Its options page stays one tab, as in Chrome and
     /// Arc: opening it again selects the open one (GitHub #38).
-    func openExtensionPage(_ url: String, window: UUID? = nil) {
+    /// `profile` is the Chromium profile folder whose extension asked, nil for the focused page's.
+    func openExtensionPage(_ url: String, window: UUID, profile: String? = nil) {
         let page = { (u: String) in u.split(separator: "#", maxSplits: 1).first.map(String.init) ?? u }
-        if ExtensionStore.shared.optionsPageOwner(url) != nil,
-           let open = store.allTabs().first(where: { $0.tab.map { page($0.url) == page(url) } == true && !store.isIncognito(item: $0.id) }) {
-            store.selectTab(open.id, window: window)
-        } else {
-            store.createTab(url: url, select: true, window: window)
+        let space = { (id: UUID) in ExtensionPagePlacement.Space(id: id, profile: self.store.profileDirectoryName(space: id)) }
+        let open = store.allTabs().compactMap { t -> (tab: UUID, space: UUID)? in
+            guard t.tab.map({ page($0.url) == page(url) }) == true, let sid = store.spaceID(ofItem: t.id) else { return nil }
+            return (t.id, sid)
+        }
+        let target = ExtensionPagePlacement.target(
+            focused: space(store.focusedSpaceID(window: window)),
+            spaces: store.orderedSpaces.filter { !store.isIncognito(space: $0.id) }.map { space($0.id) },
+            profile: profile, openTabs: open, singleton: ExtensionStore.shared.optionsPageOwner(url) != nil)
+        switch target {
+        case .select(let tab): store.selectTab(tab, window: window)
+        case .create(let sid): store.createTab(url: url, in: sid, select: true, window: window)
         }
     }
 

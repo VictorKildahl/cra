@@ -126,6 +126,8 @@ enum Diagnostics {
         let urls = store.allTabs().compactMap { $0.tab?.url } + store.history.values.map(\.url)
             + store.archive.compactMap { $0.item.tab?.url }
         for u in urls { if let h = SiteNames.siteHost(of: u) { hosts.insert(h) } }
+        // The proxy servers extensions set (summary.txt's Proxy section, cra.log).
+        for c in ExtensionStore.shared.proxyControllers.values.joined() { hosts.formUnion(c.hosts) }
         return hosts
     }
 
@@ -186,6 +188,14 @@ enum Diagnostics {
             let permissions = ((manifest?["permissions"] as? [Any]) ?? []).compactMap { $0 as? String }
                 .filter { $0.hasPrefix("webRequest") || $0.hasPrefix("declarativeNetRequest") || $0 == "proxy" }
             lines.append("  \(e.name) \(e.version) [\(e.extensionID)]\(e.managedByChrome ? " web store" : "")\(permissions.isEmpty ? "" : " " + permissions.joined(separator: ","))")
+        }
+        // Two extensions that set the proxy collide quietly (GitHub #107): the one in use and the
+        // ones it overrides, per profile.
+        lines += ["", "Proxy:"]
+        let proxies = ExtensionStore.shared.proxyControllers
+        if proxies.isEmpty { lines.append("  not set by an extension") }
+        for profile in proxies.keys.sorted() {
+            lines.append("  \(profile): " + ExtensionStore.proxyLine(proxies[profile] ?? []))
         }
         return lines.joined(separator: "\n") + "\n"
     }

@@ -68,7 +68,7 @@ static BOOL g_alreadyRunning = NO;
 static NSHashTable<CraBrowser*>* g_allBrowsers = nil;
 /// Closed tabs whose page stays alive until its downloads end (see -[CraBrowser close]).
 static NSMutableSet<CraBrowser*>* g_parkedBrowsers = nil;
-static void (^g_strayPageHandler)(NSString*) = nil;
+static void (^g_strayPageHandler)(NSString*, NSString*) = nil;
 static void (^g_processEventHandler)(NSString*, NSString*, NSString*) = nil;
 
 static NSString* NSStringFromCef(const CefString& s) {
@@ -268,8 +268,13 @@ public:
             browser->GetHost()->CloseBrowser(true);
             return true;
         }
-        void (^handler)(NSString*) = g_strayPageHandler;
-        dispatch_async(dispatch_get_main_queue(), ^{ handler(url); });
+        // The profile whose extension asked: its pages belong in a space on that profile (#107).
+        CefRefPtr<CefRequestContext> context = browser->GetHost()->GetRequestContext();
+        NSString* cache = context ? NSStringFromCef(context->GetCachePath()) : @"";
+        // The global context's path is the root folder: that is Default.
+        NSString* profile = !cache.length ? nil : [cache.lastPathComponent hasPrefix:@"Profile "] ? cache.lastPathComponent : @"Default";
+        void (^handler)(NSString*, NSString*) = g_strayPageHandler;
+        dispatch_async(dispatch_get_main_queue(), ^{ handler(url, profile); });
         browser->GetHost()->CloseBrowser(true);
         return true;
     }
@@ -2441,7 +2446,7 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 
 + (BOOL)anotherInstanceWasNotified { return g_alreadyRunning; }
 + (void)setRelaunchHandler:(void (^)(NSArray<NSString*>*))handler { g_relaunchHandler = [handler copy]; }
-+ (void)setStrayPageHandler:(void (^)(NSString*))handler { g_strayPageHandler = [handler copy]; }
++ (void)setStrayPageHandler:(void (^)(NSString*, NSString*))handler { g_strayPageHandler = [handler copy]; }
 + (void)setProcessEventHandler:(void (^)(NSString*, NSString*, NSString*))handler { g_processEventHandler = [handler copy]; }
 + (BOOL)isExtensionWindow:(NSWindow*)window { return window && [g_extensionWindows containsObject:window]; }
 + (BOOL)isPageWindow:(NSWindow*)window {

@@ -341,7 +341,7 @@ final class SidebarTopBarView: NSView {
             let profile = tab.map { store.profileDirectoryName(item: $0.id) }
                 ?? store.profileDirectoryName(space: store.focusedSpaceID(window: ui.windowID))
             let entries = ext.entries(inProfile: profile)
-            let pinned = ext.pinnedIDs.compactMap { id in
+            let pinned = ext.pinnedIDs(inProfile: profile).compactMap { id in
                 entries.first { $0.extensionID == id }.map {
                     (id, $0.name, ext.badged(ext.toolbarIcon(for: $0, profile: profile, tab: tab?.id),
                                              ext.badge(for: $0, profile: profile, tab: tab?.id), tint: colors.textSecondary))

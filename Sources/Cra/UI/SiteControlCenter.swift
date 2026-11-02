@@ -77,8 +77,8 @@ final class SiteControlCenterView: NSView {
     /// Arc: pinned extensions in toolbar order, then the rest by name.
     private var orderedExtensions: [ExtensionStore.Entry] {
         let entries = extensions.entries(inProfile: profile)
-        let pinned = extensions.pinnedIDs.compactMap { id in entries.first { $0.extensionID == id } }
-        let rest = entries.filter { !extensions.isPinned($0.extensionID) }
+        let pinned = extensions.pinnedIDs(inProfile: profile).compactMap { id in entries.first { $0.extensionID == id } }
+        let rest = entries.filter { !extensions.isPinned($0.extensionID, inProfile: profile) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         return pinned + rest
     }
@@ -86,7 +86,7 @@ final class SiteControlCenterView: NSView {
     private func observe() {
         withObservationTracking {
             _ = extensions.entries
-            _ = extensions.pinnedIDs
+            _ = extensions.pinned
             _ = store.settings
         } onChange: { [weak self] in
             Task { @MainActor in self?.observe() }
@@ -124,9 +124,11 @@ final class SiteControlCenterView: NSView {
         let ext = SiteSectionView(title: "Extensions", hoverText: "Manage", colors: colors, onHeaderClick: actions.manageExtensions)
         extensionTiles = [:]
         var tiles: [NSView] = orderedExtensions.map { e in
-            let tile = SiteExtensionTile(entry: e, pinned: extensions.isPinned(e.extensionID), colors: colors,
+            let tile = SiteExtensionTile(entry: e, pinned: extensions.isPinned(e.extensionID, inProfile: profile), colors: colors,
                                          run: { [actions] in actions.runExtension(e.extensionID) },
-                                         togglePin: { ExtensionStore.shared.setPinned(e.extensionID, !ExtensionStore.shared.isPinned(e.extensionID)) })
+                                         togglePin: { [profile] in
+                                             ExtensionStore.shared.setPinned(e.extensionID, !ExtensionStore.shared.isPinned(e.extensionID, inProfile: profile), inProfile: profile)
+                                         })
             tile.show(icon: liveIcon(e))
             extensionTiles[e.extensionID] = tile
             return tile
