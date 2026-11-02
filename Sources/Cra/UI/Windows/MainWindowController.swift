@@ -1263,10 +1263,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func browserManagerPageClosedTab(_ tabID: UUID) { closeTab(tabID) }
 
     /// An extension brought one of this window's tabs to the front (SwitchyOmega's Options with
-    /// its settings tab already open): selected, as in Arc (GitHub #38).
-    func browserManagerActivationRequested(_ tabID: UUID) {
+    /// its settings tab already open): selected, as in Arc (GitHub #38). A page that asked
+    /// (Chromium allows that after a click on its notification, or from its opener) also
+    /// brings the window and Cra to the front, like Arc: Messenger's chat opens on a click.
+    func browserManagerActivationRequested(_ tabID: UUID, byPage: Bool) {
         store.selectTab(tabID, window: windowID)
-        if NSApp.isActive, window?.isKeyWindow == false { showWindow(nil) }
+        if byPage, !HitchMonitor.background {
+            showWindow(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        } else if NSApp.isActive, window?.isKeyWindow == false {
+            showWindow(nil)
+        }
     }
 
     /// Arc's Peek (Settings ▸ Tabs ▸ Links): a link to another site clicked in a favorite or

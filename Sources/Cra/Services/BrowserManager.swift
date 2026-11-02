@@ -61,8 +61,9 @@ protocol BrowserManagerDelegate: AnyObject {
     func browserManagerFocusedBrowser(_ tabID: UUID)
     /// The page closed itself (window.close()).
     func browserManagerPageClosedTab(_ tabID: UUID)
-    /// An extension asked for this tab to be in front (chrome.tabs.update with active: true).
-    func browserManagerActivationRequested(_ tabID: UUID)
+    /// An extension asked for this tab to be in front (chrome.tabs.update with active: true),
+    /// or with byPage the page did (window.focus(), clients.focus() from a notification click).
+    func browserManagerActivationRequested(_ tabID: UUID, byPage: Bool)
     /// Arc's Peek: a link the user clicked (or Shift-clicked) in `tabID`, whose page is at
     /// `pageURL`. Return true when it opens in a Peek instead.
     func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool) -> Bool
@@ -967,16 +968,16 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     }
 
     func browser(_ browser: CraBrowser, requestsPermissionForOrigin origin: String, kinds: UInt, completion: @escaping (Bool) -> Void) {
-        // Notification prompts are denied quietly (no modal), like Arc's default.
-        if kinds == 8 { completion(false); return }
+        // Notifications ask like the others: Arc asks too, and sites like Messenger need them.
         var what: [String] = []
         if kinds & 1 != 0 { what.append("camera") }
         if kinds & 2 != 0 { what.append("microphone") }
         if kinds & 4 != 0 { what.append("location") }
-        if kinds & 8 != 0 { what.append("notifications") }
+        var wants = what.isEmpty ? [] : ["use your \(what.joined(separator: " and "))"]
+        if kinds & 8 != 0 { wants.append("show notifications") }
         let alert = NSAlert()
-        alert.messageText = what.isEmpty ? "\(origin) is asking for a browser permission"
-                                         : "\(origin) wants to use your \(what.joined(separator: " and "))"
+        alert.messageText = wants.isEmpty ? "\(origin) is asking for a browser permission"
+                                          : "\(origin) wants to \(wants.joined(separator: " and "))"
         alert.addButton(withTitle: "Allow")
         alert.addButton(withTitle: "Block")
         guard let window = container.window else { completion(false); return }
@@ -988,9 +989,9 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         delegate?.browserManagerFocusedBrowser(id)
     }
 
-    func browserRequestsActivation(_ browser: CraBrowser) {
+    func browserRequestsActivation(_ browser: CraBrowser, byPage: Bool) {
         guard let id = tabID(of: browser) else { return }
-        delegate?.browserManagerActivationRequested(id)
+        delegate?.browserManagerActivationRequested(id, byPage: byPage)
     }
 
     func browserDidClose(_ browser: CraBrowser) {
