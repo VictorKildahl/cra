@@ -88,6 +88,15 @@ final class PictureInPictureChrome {
         window.backgroundColor = .clear
         window.hasShadow = true
         window.titleVisibility = .hidden
+        // Only the overlay takes the pointer. Chrome's window keeps a 4 pt resize band outside
+        // its frame (NativeWidgetMacNSWindow) that the overlay doesn't cover: a drag there
+        // resized it natively and made it key, and a key PiP window shows Chrome's own controls
+        // (±10 s) on every mouse move, under Arc's. It also must not become key when a click
+        // on the overlay activates Cra.
+        window.ignoresMouseEvents = true
+        if window.responds(to: NSSelectorFromString("setPreventKeyWindow:")) {
+            window.setValue(true, forKey: "preventKeyWindow")
+        }
         if let cv = window.contentView {
             cv.wantsLayer = true
             cv.layer?.cornerRadius = Self.cornerRadius

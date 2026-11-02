@@ -468,12 +468,15 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     // MARK: Picture in Picture
 
     /// Arc: "Enable Picture in Picture when you leave a video tab". The request
-    /// goes out before the page is hidden, so the video keeps playing in the
+    /// goes out as the page is hidden, so the video keeps playing in the
     /// floating window; the page answers through didChangePictureInPicture.
+    /// It goes through the protocol's user gesture like the player's button:
+    /// the key press that lends the page activation raced the page going
+    /// hidden, and PiP sometimes never opened.
     private func leaveTab(_ tabID: UUID) {
         guard store.settings.autoPictureInPicture, let rt = runtimes[tabID], !rt.browser.isInPictureInPicture else { return }
         rt.pendingAutoPictureInPicture = true
-        rt.browser.requestPictureInPicture(automatic: true)
+        requestPictureInPicture(tabID, automatic: true)
     }
 
     func browser(_ browser: CraBrowser, didChangePictureInPicturePlayback playing: Bool) {
@@ -565,7 +568,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         case .next: op = "nexttrack"
         case .dismiss: op = "pause"; nowPlaying?.remove(id)
         case .pictureInPicture:
-            requestPictureInPicture(id)
+            requestPictureInPicture(id, automatic: false)
             return
         case .setVolume(let v):
             nowPlaying?.update(id) { $0.volume = v }
@@ -597,25 +600,30 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         }
     }
 
-    /// The player's Picture in Picture button. The tab is off screen, so the key press that lends a
-    /// page user activation for the context menu's Picture in Picture never reaches it; the
-    /// protocol's user gesture does. Only a player in an iframe falls back to the page path.
-    private func requestPictureInPicture(_ id: UUID) {
+    /// The player's Picture in Picture button, and leaving a video tab. The tab is (about to be) off
+    /// screen, so the key press that lends a page user activation for the context menu's Picture in
+    /// Picture doesn't reliably reach it; the protocol's user gesture does. Only a player in an
+    /// iframe falls back to the page path. Leaving a tab takes only an audible, playing video of
+    /// some size, as the page path does (muted ones are hover previews or GIF-like loops).
+    private func requestPictureInPicture(_ id: UUID, automatic: Bool) {
         guard let browser = runtimes[id]?.browser else { return }
         let js = """
-        (() => {
+        ((auto) => {
+          if (document.pictureInPictureElement) return 'ok';
+          const area = v => { const r = v.getBoundingClientRect(); return r.width * r.height; };
           const v = [...document.querySelectorAll('video')].filter(v => !v.disablePictureInPicture && v.readyState >= 1)
-            .sort((a, b) => (b.paused ? 0 : 1) - (a.paused ? 0 : 1))[0];
+            .filter(v => !auto || (!v.paused && !v.ended && !v.muted && v.volume > 0 && v.videoWidth > 0 && area(v) >= 20000))
+            .sort((a, b) => ((b.paused ? 0 : 1) - (a.paused ? 0 : 1)) || (area(b) - area(a)))[0];
           return v ? v.requestPictureInPicture().then(() => 'ok', e => e.name + ': ' + e.message) : 'none';
-        })()
+        })(\(automatic))
         """
         let params: [String: Any] = ["expression": js, "returnByValue": true, "awaitPromise": true, "userGesture": true]
         let json = String(data: try! JSONSerialization.data(withJSONObject: params), encoding: .utf8)!
         browser.sendDevToolsMethod("Runtime.evaluate", params: json) { [weak browser] result, _ in
             DispatchQueue.main.async {
                 let answer = Self.stringResult(result)
-                if answer == "none" { browser?.requestPictureInPicture(automatic: false) }
-                else if let answer, answer != "ok" { NSLog("Cra: Picture in Picture from the player failed: %@", answer) }
+                if answer == nil || answer == "none" { browser?.requestPictureInPicture(automatic: automatic) }
+                else if let answer, answer != "ok" { NSLog("Cra: Picture in Picture request failed: %@", answer) }
             }
         }
     }
