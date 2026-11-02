@@ -441,35 +441,38 @@ final class SuggestionEngine {
         return 0
     }
 
-    /// Arc dedups by title+host for sites whose tabs share titles
-    /// (command_bar_behavior.json: dedupByTitleAndHostList).
-    private static let dedupHosts: Set<String> = ["figma.com", "www.figma.com", "notion.so", "www.notion.so", "github.com",
-                                                   "zoom.us", "maps.google.com", "console.cloud.google.com", "app.slack.com",
-                                                   "linear.app", "www.youtube.com", "docs.google.com", "mail.google.com"]
-
     private func dedupe(_ items: [Suggestion]) -> [Suggestion] {
-        var seen: Set<String> = []
-        var out: [Suggestion] = []
-        for s in items.sorted(by: { $0.score > $1.score }) {
-            var key = s.id
-            if let url = s.url, let host = URL(string: url)?.host?.lowercased() {
-                key = Self.dedupHosts.contains(host) ? "\(host)|\(s.title.lowercased())" : url
-                if case .command = s.kind { key = s.id }
-            }
-            if seen.insert(key).inserted { out.append(s) }
+        let rows = items.map { s -> CommandBarDedupe.Row in
+            let isCommand: Bool
+            if case .command = s.kind { isCommand = true } else { isCommand = false }
+            return CommandBarDedupe.Row(keys: CommandBarDedupe.keys(id: s.id, url: isCommand ? nil : s.url, title: s.title),
+                                        score: s.score, isOpenTab: s.tabID != nil)
         }
-        return out
+        return CommandBarDedupe.kept(rows).map { kept in
+            var s = items[kept.index]
+            s.score = kept.score
+            return s
+        }
     }
 
     private func inlineCompletion(_ q: String, candidates: [Suggestion]) -> (text: String, candidateID: String)? {
         guard !q.contains(" "), q.count >= 2, !Self.looksLikeURL(q) || !q.contains("/") else { return nil }
-        for c in candidates {
-            guard let url = c.url, c.score >= 90 || c.kind == .topDomain, let host = URL(string: url)?.host?.lowercased() else { continue }
+        func completion(_ c: Suggestion) -> String? {
+            guard let url = c.url, c.score >= 90 || c.kind == .topDomain, let host = URL(string: url)?.host?.lowercased() else { return nil }
             let bare = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
-            if bare.hasPrefix(q) && bare != q { return (bare, c.id) }
-            if host.hasPrefix(q) && host != q { return (host, c.id) }
+            if bare.hasPrefix(q) && bare != q { return bare }
+            if host.hasPrefix(q) && host != q { return host }
+            return nil
         }
-        return nil
+        guard let best = candidates.lazy.compactMap({ c in completion(c).map { (text: $0, candidateID: c.id) } }).first else { return nil }
+        // An open tab on the completed host leads, so Return switches to it rather than opening the
+        // site again from history, and completes to its whole address (Arc 1.171: "semrush" →
+        // semrush.com/projects for a tab on www.semrush.com/projects/).
+        if let tab = candidates.first(where: { $0.tabID != nil && completion($0) == best.text }), let url = tab.url {
+            let address = CommandBarDedupe.completionAddress(url)
+            return (address.lowercased().hasPrefix(q) && address.count > q.count ? address : best.text, tab.id)
+        }
+        return best
     }
 
     // MARK: Formatting

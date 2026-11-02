@@ -47,9 +47,10 @@ final class TabSwitcher {
     func cycle(_ delta: Int, event: NSEvent?, items make: () -> [Item]) {
         if isOpen { move(delta); return }
         let list = make()
-        guard list.count > 1 else { return }
+        // Arc 1.171 shows the switcher with one open tab too (its only card); with none, nothing.
+        guard !list.isEmpty else { return }
         items = list
-        selectedIndex = delta > 0 ? 1 : list.count - 1
+        selectedIndex = list.count == 1 ? 0 : delta > 0 ? 1 : list.count - 1
         isOpen = true
         // From a menu or the command bar nothing is held: switch straight away.
         let pressed = event.flatMap { $0.type == .keyDown ? $0.modifierFlags : nil } ?? []
@@ -71,9 +72,9 @@ final class TabSwitcher {
 
     /// Testing: open on the second card without a held key.
     func debugOpen(_ list: [Item]) {
-        guard list.count > 1 else { return }
+        guard !list.isEmpty else { return }
         items = list
-        selectedIndex = 1
+        selectedIndex = min(1, list.count - 1)
         isOpen = true
         onShow()
     }

@@ -107,9 +107,14 @@ final class CommandTextField {
             suppressChange = false
         }
 
-        /// If a completion suffix is selected, Enter means "go there".
+        /// If a completion suffix is selected, Enter means "go there". A completion an open tab
+        /// supplies leads the list as its "Switch to Tab" row, and Enter switches to that tab, as
+        /// in Arc 1.171 ("youtube" → youtube.com with a pinned YouTube). Asking again for the
+        /// completed address put the typed row first and opened the site in a new tab instead
+        /// (reported on X, 1 Nov 2026).
         private func acceptSelectedCompletion(_ textView: NSTextView) {
             guard pendingCompletion != nil, textView.selectedRange.length > 0 else { return }
+            if controller.result.inlineCompletion == pendingCompletion, controller.result.items.first?.tabID != nil { return }
             lastTyped = textView.string
             controller.update(query: textView.string, allowCompletion: false)
         }
