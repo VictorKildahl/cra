@@ -94,9 +94,15 @@ final class SiteControlCenterView: NSView {
         build()
     }
 
-    /// The tiles' icons as the extensions set them now (chrome.action.setIcon).
+    /// The tiles' icons as the extensions set them now, badge included (chrome.action.setIcon,
+    /// setBadgeText; Arc's tiles show both).
     private func liveIcons() -> [String: NSImage?] {
-        Dictionary(uniqueKeysWithValues: orderedExtensions.map { ($0.extensionID, extensions.liveIcon(for: $0, profile: profile, tab: tab)) })
+        Dictionary(uniqueKeysWithValues: orderedExtensions.map { ($0.extensionID, liveIcon($0)) })
+    }
+
+    private func liveIcon(_ e: ExtensionStore.Entry) -> NSImage? {
+        extensions.badged(extensions.liveIcon(for: e, profile: profile, tab: tab), extensions.badge(for: e, profile: profile, tab: tab),
+                          tint: colors.secondary)
     }
 
     private func build() {
@@ -121,7 +127,7 @@ final class SiteControlCenterView: NSView {
             let tile = SiteExtensionTile(entry: e, pinned: extensions.isPinned(e.extensionID), colors: colors,
                                          run: { [actions] in actions.runExtension(e.extensionID) },
                                          togglePin: { ExtensionStore.shared.setPinned(e.extensionID, !ExtensionStore.shared.isPinned(e.extensionID)) })
-            tile.show(icon: extensions.liveIcon(for: e, profile: profile, tab: tab))
+            tile.show(icon: liveIcon(e))
             extensionTiles[e.extensionID] = tile
             return tile
         }

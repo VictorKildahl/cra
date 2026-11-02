@@ -10,22 +10,29 @@ public struct ExtensionActionState: Equatable, Sendable {
     public var badgeText = ""
     /// "#RRGGBBAA".
     public var badgeColor = ""
+    /// "#RRGGBBAA" (chrome.action.setBadgeTextColor).
+    public var badgeTextColor = ""
 
-    public init(icon: Data? = nil, title: String = "", badgeText: String = "", badgeColor: String = "") {
+    public init(icon: Data? = nil, title: String = "", badgeText: String = "", badgeColor: String = "",
+                badgeTextColor: String = "") {
         self.icon = icon
         self.title = title
         self.badgeText = badgeText
         self.badgeColor = badgeColor
+        self.badgeTextColor = badgeTextColor
     }
 
-    public var isEmpty: Bool { icon == nil && title.isEmpty && badgeText.isEmpty && badgeColor.isEmpty }
+    public var isEmpty: Bool {
+        icon == nil && title.isEmpty && badgeText.isEmpty && badgeColor.isEmpty && badgeTextColor.isEmpty
+    }
 
     /// Chrome's rule, value by value: what the extension set for the tab, else what it set for
     /// every tab.
     public func over(_ fallback: ExtensionActionState) -> ExtensionActionState {
         ExtensionActionState(icon: icon ?? fallback.icon, title: title.isEmpty ? fallback.title : title,
                              badgeText: badgeText.isEmpty ? fallback.badgeText : badgeText,
-                             badgeColor: badgeColor.isEmpty ? fallback.badgeColor : badgeColor)
+                             badgeColor: badgeColor.isEmpty ? fallback.badgeColor : badgeColor,
+                             badgeTextColor: badgeTextColor.isEmpty ? fallback.badgeTextColor : badgeTextColor)
     }
 }
 
@@ -63,7 +70,8 @@ public struct ExtensionActionUpdate: Equatable, Sendable {
         self.init(extensionID: id, profile: profile, targetID: target,
                   state: ExtensionActionState(icon: icon, title: p["title"] as? String ?? "",
                                               badgeText: p["badgeText"] as? String ?? "",
-                                              badgeColor: p["badgeColor"] as? String ?? ""))
+                                              badgeColor: p["badgeColor"] as? String ?? "",
+                                              badgeTextColor: p["badgeTextColor"] as? String ?? ""))
     }
 }
 

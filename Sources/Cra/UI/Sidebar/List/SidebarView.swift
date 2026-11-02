@@ -342,7 +342,10 @@ final class SidebarTopBarView: NSView {
                 ?? store.profileDirectoryName(space: store.focusedSpaceID(window: ui.windowID))
             let entries = ext.entries(inProfile: profile)
             let pinned = ext.pinnedIDs.compactMap { id in
-                entries.first { $0.extensionID == id }.map { (id, $0.name, ext.toolbarIcon(for: $0, profile: profile, tab: tab?.id)) }
+                entries.first { $0.extensionID == id }.map {
+                    (id, $0.name, ext.badged(ext.toolbarIcon(for: $0, profile: profile, tab: tab?.id),
+                                             ext.badge(for: $0, profile: profile, tab: tab?.id), tint: colors.textSecondary))
+                }
             }
             pill.show(text: text, url: url, hasTab: tab != nil, colors: colors, active: active,
                       pinned: pinned, hasExtensions: !entries.isEmpty)
@@ -496,9 +499,10 @@ final class SidebarURLPill: NSView {
         accessories.forEach { $0.removeFromSuperview() }
         accessories = []
         guard showAccessories, hasTab, let m = model, let actions else { needsLayout = true; return }
-        for (id, name, icon) in m.pinned {
+        for (id, _, icon) in m.pinned {
             let b = ToolbarGlyphButton()
-            b.configure(symbol: nil, image: icon, help: name, enabled: true, width: 28, iconSize: 16, tint: colors.textSecondary)
+            // Arc's pinned extension buttons have no tooltip (#106).
+            b.configure(symbol: nil, image: icon, help: "", enabled: true, width: 28, iconSize: 16, tint: colors.textSecondary)
             b.action = { actions.runExtension(id) }
             b.menuProvider = { ExtensionStore.shared.entries.first { $0.extensionID == id }.map(ExtensionsMenu.iconMenu) }
             accessories.append(b)

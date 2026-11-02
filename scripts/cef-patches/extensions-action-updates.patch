@@ -51,7 +51,7 @@ diff --git a/chrome/browser/devtools/protocol/extensions_handler.cc b/chrome/bro
  
  namespace {
  
-@@ -160,8 +172,185 @@
+@@ -160,7 +172,194 @@
    return result;
  }
  
@@ -142,7 +142,7 @@ diff --git a/chrome/browser/devtools/protocol/extensions_handler.cc b/chrome/bro
 +  action_watches_.clear();
 +  profile_manager_observation_.Reset();
 +}
- 
++
 +// Observes `profile`'s actions and reports their tab-independent state.
 +void ExtensionsHandler::WatchActions(Profile* profile) {
 +  extensions::ExtensionActionDispatcher* dispatcher =
@@ -206,21 +206,30 @@ diff --git a/chrome/browser/devtools/protocol/extensions_handler.cc b/chrome/bro
 +                                         : action.GetDeclarativeIcon(tab_id));
 +  const std::string title =
 +      !for_tab || action.HasTitle(tab_id) ? action.GetTitle(tab_id) : "";
++  // A tab's badge is its own text, else the declarativeNetRequest action
++  // count when the extension asked for it.
 +  const std::string badge_text =
-+      !for_tab || action.HasBadgeText(tab_id)
-+          ? action.GetExplicitlySetBadgeText(tab_id)
++      !for_tab ? action.GetExplicitlySetBadgeText(tab_id)
++      : action.HasBadgeText(tab_id) || action.HasDNRActionCount(tab_id)
++          ? action.GetDisplayBadgeText(tab_id)
 +          : "";
-+  std::string badge_color;
-+  if (!for_tab || action.HasBadgeBackgroundColor(tab_id)) {
-+    const SkColor color = action.GetBadgeBackgroundColor(tab_id);
-+    badge_color = base::StringPrintf(
-+        "#%02X%02X%02X%02X", SkColorGetR(color), SkColorGetG(color),
-+        SkColorGetB(color), SkColorGetA(color));
-+  }
-+  const std::string state =
-+      icon + "\n" + title + "\n" + badge_text + "\n" + badge_color;
-+  const bool empty =
-+      icon.empty() && title.empty() && badge_text.empty() && badge_color.empty();
++  auto hex = [](SkColor color) {
++    return base::StringPrintf("#%02X%02X%02X%02X", SkColorGetR(color),
++                              SkColorGetG(color), SkColorGetB(color),
++                              SkColorGetA(color));
++  };
++  const std::string badge_color =
++      !for_tab || action.HasBadgeBackgroundColor(tab_id)
++          ? hex(action.GetBadgeBackgroundColor(tab_id))
++          : "";
++  const std::string badge_text_color =
++      !for_tab || action.HasBadgeTextColor(tab_id)
++          ? hex(action.GetBadgeTextColor(tab_id))
++          : "";
++  const std::string state = icon + "\n" + title + "\n" + badge_text + "\n" +
++                            badge_color + "\n" + badge_text_color;
++  const bool empty = icon.empty() && title.empty() && badge_text.empty() &&
++                     badge_color.empty() && badge_text_color.empty();
 +  auto it = reported_actions_.find(key);
 +  if (it == reported_actions_.end() ? (empty && for_tab) : it->second == state) {
 +    return;
@@ -231,13 +240,13 @@ diff --git a/chrome/browser/devtools/protocol/extensions_handler.cc b/chrome/bro
 +    reported_actions_[key] = state;
 +  }
 +  frontend_->ActionUpdated(action.extension_id(), profile, icon, title,
-+                           badge_text, badge_color, std::move(target_id));
++                           badge_text, badge_color, badge_text_color,
++                           std::move(target_id));
 +}
-+
+ 
  protocol::DispatchResponse ExtensionsHandler::TriggerAction(
      const std::string& extension_id,
-     const std::string& target_id) {
-@@ -219,6 +408,9 @@
+@@ -219,6 +418,9 @@
      : target_id_(target_id),
        allow_loading_extensions_(allow_loading_extensions) {
    protocol::Extensions::Dispatcher::wire(dispatcher, this);
@@ -318,7 +327,7 @@ diff --git a/chrome/browser/devtools/protocol/extensions_handler.h b/chrome/brow
 diff --git a/third_party/blink/public/devtools_protocol/domains/Extensions.pdl b/third_party/blink/public/devtools_protocol/domains/Extensions.pdl
 --- a/third_party/blink/public/devtools_protocol/domains/Extensions.pdl
 +++ b/third_party/blink/public/devtools_protocol/domains/Extensions.pdl
-@@ -22,6 +22,32 @@
+@@ -22,6 +22,34 @@
        # A tab target ID to trigger the default extension action on.
        string targetId
  
@@ -344,6 +353,8 @@ diff --git a/third_party/blink/public/devtools_protocol/domains/Extensions.pdl b
 +      string badgeText
 +      # Badge background as #RRGGBBAA.
 +      string badgeColor
++      # Badge text colour (chrome.action.setBadgeTextColor) as #RRGGBBAA.
++      string badgeTextColor
 +      # Page target of the tab the change is for; absent for the
 +      # tab-independent state.
 +      optional string targetId

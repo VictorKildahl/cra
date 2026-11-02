@@ -22,13 +22,13 @@ final class ExtensionsMenu: NSObject, NSMenuDelegate, NSMenuItemValidation {
         let store = ExtensionStore.shared
         store.reload()
         let entries = app.main.extensionEntries.sorted { $0.name < $1.name }
-        // Each extension's icon as it is now on the focused page (chrome.action.setIcon).
         let profile = app.main.profileDirectoryName, tab = app.main.selectedTabID
         for e in entries {
             let item = NSMenuItem(title: e.name, action: #selector(runExtension(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = e.extensionID
-            item.image = Self.menuIcon(store.liveIcon(for: e, profile: profile, tab: tab))
+            // Arc lists the manifest's action icon here, not the one the extension set (#106).
+            item.image = Self.menuIcon(e.icon)
             menu.addItem(item)
         }
         if !entries.isEmpty { menu.addItem(.separator()) }
@@ -48,7 +48,7 @@ final class ExtensionsMenu: NSObject, NSMenuDelegate, NSMenuItemValidation {
             let item = NSMenuItem(title: e.name, action: #selector(togglePin(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = e.extensionID
-            item.image = Self.menuIcon(store.liveIcon(for: e, profile: profile, tab: tab))
+            item.image = Self.menuIcon(e.icon)
             item.state = store.isPinned(e.extensionID) ? .on : .off
             pinMenu.addItem(item)
         }
