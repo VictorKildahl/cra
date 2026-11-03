@@ -495,7 +495,9 @@ extension SidebarStore {
             result.spaces += 1
             result.spaceIDs.append(space.id)
             if imported[sp.title.lowercased()] == nil { imported[sp.title.lowercased()] = space.id }
-            insert(sp.favorites, into: space.favoritesContainerID, skip: existingURLs(under: space.favoritesContainerID), pinned: true)
+            // With shared favorites (#154) the profile picks which list the space shows.
+            let favorites = self.space(space.id)?.favoritesContainerID ?? space.favoritesContainerID
+            insert(sp.favorites, into: favorites, skip: existingURLs(under: favorites), pinned: true)
             insert(sp.pinned, into: space.pinnedContainerID, skip: existingURLs(under: space.pinnedContainerID), pinned: true)
             insert(sp.today, into: space.todayContainerID, skip: existingURLs(under: space.todayContainerID), pinned: false)
         }

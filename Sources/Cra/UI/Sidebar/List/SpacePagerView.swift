@@ -97,6 +97,25 @@ final class SpacePagerView: NSView {
         CATransaction.setDisableActions(true)
         strip.setFrameOrigin(NSPoint(x: x, y: 0))
         CATransaction.commit()
+        holdSharedFavorites()
+    }
+
+    /// Between two pages that show one favorites list (#154) the tiles stay where they are,
+    /// as Arc's do: each page's copy is held back by the page's offset, the nearer one shown.
+    private func holdSharedFavorites() {
+        guard placedWidth > 0 else { return }
+        let ids = store.pagedSpaces(window: ui.windowID).map(\.id)
+        let shown = -strip.frame.minX / placedWidth
+        let left = Int(shown.rounded(.down))
+        let moving = abs(shown - shown.rounded()) > 0.001
+        func list(_ i: Int) -> UUID? { ids.indices.contains(i) ? store.space(ids[i])?.favoritesContainerID : nil }
+        let shared = moving && list(left) != nil && list(left) == list(left + 1)
+        for (i, id) in ids.enumerated() {
+            guard let column = columns[id] as? SpaceColumnView else { continue }
+            guard shared, i == left || i == left + 1 else { column.holdFavorites(shift: 0, shown: true); continue }
+            let dx = column.frame.minX + strip.frame.minX
+            column.holdFavorites(shift: -dx, shown: i == Int(shown.rounded()))
+        }
     }
 
     private func column(for id: UUID) -> NSView {

@@ -14,6 +14,8 @@ final class SpaceColumnView: NSView {
     private let favorites: FavoritesGridView
     private let header: SpaceHeaderView
     private let list: SpaceListView
+    /// How far SpacePagerView holds the favorites left of their place (see holdFavorites).
+    private var favoritesShift: CGFloat = 0
 
     init(spaceID: UUID, store: SidebarStore, ui: SidebarUIState, actions: SidebarActions, favicons: FaviconCache) {
         self.spaceID = spaceID
@@ -51,6 +53,20 @@ final class SpaceColumnView: NSView {
         place(animated: false)
     }
 
+    /// Arc's favorites sit beside its space pager, not on a page (AX tree, 25 Oct), so a swipe
+    /// between spaces that share them (#154) leaves the tiles still. SpacePagerView shifts each
+    /// of the two pages' copies back by the page's offset and shows the nearer page's one.
+    func holdFavorites(shift: CGFloat, shown: Bool) {
+        let alpha: CGFloat = shown ? 1 : 0
+        guard shift != favoritesShift || favorites.alphaValue != alpha else { return }
+        favoritesShift = shift
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        favorites.setFrameOrigin(NSPoint(x: 8 + shift, y: favorites.frame.minY))
+        favorites.alphaValue = alpha
+        CATransaction.commit()
+    }
+
     /// Arc 1.171 (one space, live, 31 Oct) places everything under the favorites from the tiles'
     /// bottom, or with no favorites from the URL field's (the column starts 8 pt under it, where
     /// the first tile's top goes): the header's hover fill 8–44 pt below, 8 pt in from both
@@ -60,7 +76,7 @@ final class SpaceColumnView: NSView {
         let w = bounds.width
         let fh = favorites.height(forWidth: w - 16)
         let set = { (v: NSView, f: NSRect) in if v.frame != f { animated ? (v.animator().frame = f) : (v.frame = f) } }
-        set(favorites, NSRect(x: 8, y: 0, width: w - 16, height: fh))
+        set(favorites, NSRect(x: 8 + favoritesShift, y: 0, width: w - 16, height: fh))
         let tiles = favorites.tilesBottom(forWidth: w - 16)
         let base = tiles ?? -8
         set(header, NSRect(x: 8, y: base + 8, width: w - 16, height: header.isHidden ? 0 : 36))
@@ -1053,14 +1069,15 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         let id = itemID
         if item.isSplit, let m = model {
             return SidebarMenus.split(id, panes: m.cells.map { ($0.id, $0.title) }, open: m.selected, store: store, ui: ui, actions: actions) {
-                MenuItems.add($0, action: "favoriteTab", title: "Remove from Favorites") { store.removeFromFavorites(id) }
+                MenuItems.add($0, action: "favoriteTab", title: Self.removeTitle(id, store)) { store.removeFromFavorites(id) }
+                Self.moveToProfile($0, id, store)
                 $0.addItem(.separator())
             }
         }
         let tileColor = item.tab?.tileColor
         let m = NSMenu()
         m.autoenablesItems = false
-        MenuItems.add(m, action: "favoriteTab", title: "Remove from Favorites") { store.removeFromFavorites(id) }
+        MenuItems.add(m, action: "favoriteTab", title: Self.removeTitle(id, store)) { store.removeFromFavorites(id) }
         MenuItems.add(m, action: "renameTab", title: "Rename…") { ui.renamingID = id }
         if let t = item.tab, t.liveItemURL == nil {
             SidebarMenus.pinnedURLItems(m, id, navigatedAway: t.url != t.savedURL, store: store, actions: actions)
@@ -1096,10 +1113,26 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
             guard let grid else { return }
             store.setTileColor(tileColor, for: grid.spaceFavoriteIDs())
         }
+        Self.moveToProfile(m, id, store)
         m.addItem(.separator())
         MenuItems.add(m, action: "closeTab", title: "Close") { actions.closeTab(id) }
         MenuItems.add(m, "Archive") { store.archiveTab(id, reason: .manual) }
         return m
+    }
+
+    /// Shared favorites (#154) take Arc's words: Remove Favorite deletes the favorite.
+    private static func removeTitle(_ id: UUID, _ store: SidebarStore) -> String {
+        store.profileList(ofItem: id) == nil ? "Remove from Favorites" : "Remove Favorite"
+    }
+
+    /// Arc 1.171's Move to ▸ Profile ▸ ✓Default / <profile>… on a shared favorite.
+    private static func moveToProfile(_ menu: NSMenu, _ id: UUID, _ store: SidebarStore) {
+        guard let list = store.profileList(ofItem: id) else { return }
+        let profiles = MenuItems.submenu(MenuItems.submenu(menu, "Move to"), "Profile")
+        MenuItems.add(profiles, "Default", on: list.profileID == nil) { store.moveFavorite(id, toProfile: nil) }
+        for p in store.profiles {
+            MenuItems.add(profiles, p.name, on: list.profileID == p.id) { store.moveFavorite(id, toProfile: p.id) }
+        }
     }
 
     private func pickIcon() {

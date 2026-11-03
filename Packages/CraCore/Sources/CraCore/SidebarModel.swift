@@ -3,7 +3,8 @@ import Foundation
 // Cra's sidebar model. Shape follows what Arc persists in StorableSidebar.json
 // (see docs/arc-reverse-engineering.md): spaces own a favorites, a pinned and a
 // "today" container, tabs/folders are items in a tree keyed by id with explicit
-// child ordering. Unlike Arc, favorites are not shared between spaces.
+// child ordering. Unlike Arc, favorites are not shared between spaces unless
+// AppSettings.sharedFavorites is on (FavoritesSharing).
 
 public typealias ItemID = UUID
 
@@ -18,8 +19,9 @@ public enum ContainerKind: Codable, Equatable, Hashable {
         }
     }
 
-    /// Stands in for the space of the favorites container every space shared
-    /// before favorites became per space; SidebarStore splits it up on load.
+    /// Stands in for the space of a favorites container no one space owns: a profile's
+    /// shared list (#154, `SidebarDocument.profileFavorites`), or the one every space shared
+    /// in files from before favorites became per space, which SidebarStore splits up on load.
     public static let sharedFavoritesSpaceID = UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
 
     private enum CodingKeys: String, CodingKey { case favorites, pinned, today }
@@ -286,6 +288,18 @@ public struct BrowserProfile: Identifiable, Codable, Equatable {
     public var directoryName: String { "Profile \(id.uuidString)" }
 }
 
+/// A profile's favorites list (Arc: StorableSidebar.topAppsContainerIDs, profile → container).
+public struct ProfileFavorites: Codable, Equatable {
+    /// nil is the Default profile.
+    public var profileID: UUID?
+    public var containerID: UUID
+
+    public init(profileID: UUID?, containerID: UUID) {
+        self.profileID = profileID
+        self.containerID = containerID
+    }
+}
+
 public struct SidebarDocument: Codable, Equatable {
     public var version: Int = 1
     public var spaceOrder: [UUID]
@@ -296,15 +310,19 @@ public struct SidebarDocument: Codable, Equatable {
     public var items: [SidebarItem]
     /// Profiles besides Default (missing in files from before profiles).
     public var profiles: [BrowserProfile]?
+    /// Arc's favorites per profile (topApps{profile}), with AppSettings.sharedFavorites on: the
+    /// list each profile's spaces show. A list outlives its spaces, as in Arc (#154).
+    public var profileFavorites: [ProfileFavorites]?
 
     public init(version: Int = 1, spaceOrder: [UUID], spaces: [Space], favoritesContainerID: UUID? = nil, items: [SidebarItem],
-                profiles: [BrowserProfile]? = nil) {
+                profiles: [BrowserProfile]? = nil, profileFavorites: [ProfileFavorites]? = nil) {
         self.version = version
         self.spaceOrder = spaceOrder
         self.spaces = spaces
         self.favoritesContainerID = favoritesContainerID
         self.items = items
         self.profiles = profiles
+        self.profileFavorites = profileFavorites
     }
 
     public static func fresh() -> SidebarDocument {
@@ -477,6 +495,9 @@ public struct AppSettings: Codable, Equatable {
     /// Arc's showSpaceHeaderOnSingleUnnamedSpaces: with only one space, its header (and the
     /// dock's lone space icon) can be hidden, for people who don't use spaces.
     public var showSpaceHeaderOnSingleSpace: Bool = true
+    /// GitHub #154: the spaces of one profile show one set of favorites, as Arc's do (a topApps
+    /// container per profile). Off by default: Cra keeps favorites per space (FavoritesSharing).
+    public var sharedFavorites: Bool = false
     /// GitHub #24, not in Arc: the page fills the window with no margin and no rounded
     /// card, like a traditional browser. Off by default.
     public var edgeToEdgeContent: Bool = false
@@ -645,6 +666,7 @@ extension AppSettings {
         httpsOnly = try c.decodeIfPresent(Bool.self, forKey: .httpsOnly) ?? false
         searchSuggestions = try c.decodeIfPresent(Bool.self, forKey: .searchSuggestions) ?? true
         showSpaceHeaderOnSingleSpace = try c.decodeIfPresent(Bool.self, forKey: .showSpaceHeaderOnSingleSpace) ?? true
+        sharedFavorites = try c.decodeIfPresent(Bool.self, forKey: .sharedFavorites) ?? false
         edgeToEdgeContent = try c.decodeIfPresent(Bool.self, forKey: .edgeToEdgeContent) ?? false
         perfRecording = try c.decodeIfPresent(Bool.self, forKey: .perfRecording) ?? Self.perfRecordingDefault
         perfHidesSiteNames = try c.decodeIfPresent(Bool.self, forKey: .perfHidesSiteNames) ?? false

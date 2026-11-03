@@ -40,8 +40,15 @@ extension SidebarStore {
                 problems.append("space \(name(space.id)) has no container \(name(c))")
             }
         }
+        // A shared favorite stays open in a space that changed profile (#154, Arc).
+        let lists = Set(profileFavorites.map(\.containerID))
+        func inList(_ id: UUID) -> Bool {
+            var up = all[id]?.parentID
+            while let p = up { if lists.contains(p) { return true }; up = all[p]?.parentID }
+            return false
+        }
         for w in prefs.windows {
-            for (sid, tid) in w.selectedTabPerSpace where all[tid] != nil && spaceID(ofItem: tid) != sid {
+            for (sid, tid) in w.selectedTabPerSpace where all[tid] != nil && !isInSpace(tid, sid) && !inList(tid) {
                 problems.append("window \(name(w.id)) selects \(name(tid)) for space \(name(sid)), but it lives elsewhere")
             }
         }
