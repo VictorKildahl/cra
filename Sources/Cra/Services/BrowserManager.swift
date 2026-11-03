@@ -384,8 +384,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     // MARK: Tab sleeping
 
-    /// Settings ▸ Tabs ▸ "Sleep tabs I haven't looked at in": a page off screen that long
-    /// closes, like a closed pinned tab, and loads its URL again when shown. Pages that are
+    /// Like Arc, with no setting: a page off screen that long (AppComposition.tabSleepAfter, Arc's
+    /// 4 hours) closes, like a closed pinned tab, and loads its URL again when shown. Pages that are
     /// loading, playing sound, recording, in Picture in Picture or DevTools, holding text the
     /// user typed or asking before they close (their own onbeforeunload) stay awake, and are
     /// asked again only after `refusalBackoff`. The log says once why a page stays awake.

@@ -165,7 +165,7 @@ struct PerfInsightTests {
         #expect(r.insights[3].title == "1 page stopped (“Aw, Snap!”)")
         #expect(r.insights[8].detail.hasPrefix("1.0 GB free"))
         #expect(r.insights[9].title == "Cra uses 9.0 GB of memory")
-        #expect(r.insights[9].detail.contains("Tab sleeping (Settings ▸ Tabs)"))
+        #expect(r.insights[9].detail.contains("4 hours"))
     }
 
     @Test func aFewStallsInALongSessionAreNotFrequent() {

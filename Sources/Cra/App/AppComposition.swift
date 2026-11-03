@@ -21,16 +21,16 @@ final class AppComposition {
     /// the windows' browser managers, which the composition does not own.
     static let autoArchiveInterval: TimeInterval = 1800
     static let tabSleepInterval: TimeInterval = 60
+    /// Arc discards a page after 4 hours out of sight and has no setting for it
+    /// (WebContentLifecycleOptimization's timeToDiscardTab, GitHub #136).
+    static let tabSleepAfter: TimeInterval = 4 * 3600
 
     func startPeriodicWork(sleepTabs: @escaping @MainActor () -> Void) {
         periodic.forEach { $0.cancel() }
         store.runAutoArchive()
         periodic = [
             clock.every(Self.autoArchiveInterval) { [weak self] in self?.store.runAutoArchive() },
-            clock.every(Self.tabSleepInterval) { [weak self] in
-                guard let self, self.store.settings.tabSleepEnabled else { return }
-                sleepTabs()
-            },
+            clock.every(Self.tabSleepInterval) { sleepTabs() },
         ]
     }
 }

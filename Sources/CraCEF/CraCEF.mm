@@ -640,9 +640,15 @@ public:
         // loader factories (WebRequestAPI::UpdateMayHaveProxies), which strands a navigation
         // already in flight: the tab stayed blank and "loading" for good. Proxying from the
         // start leaves nothing to reset (it also covers such an extension installed later).
+        // Arc freezes the pages of tabs out of sight through Chromium's freezing policy (its
+        // FreezingVote), which keeps the 10 tabs used last running, and pages that play or
+        // recently played sound, capture, hold a Web Lock or IndexedDB lock, use a device, have
+        // a WebRTC connection or notification permission. InfiniteTabsFreezing is that policy
+        // without Arc's own voter: hidden tabs beyond the 10 used last freeze, with Chromium's
+        // periodic unfreeze (GitHub #136).
         std::string enabled = command_line->GetSwitchValue("enable-features");
         command_line->AppendSwitchWithValue("enable-features",
-            (enabled.empty() ? "" : enabled + ",") + "ForceWebRequestProxyForTest");
+            (enabled.empty() ? "" : enabled + ",") + "ForceWebRequestProxyForTest,InfiniteTabsFreezing:num_protected_tabs/10");
         // Kerberos/NTLM single sign-on (ADFS /adfs/ls/wia and the like). Chromium only sends
         // the OS ticket to allowlisted hosts, and IT sets that list as a Chrome or Edge policy,
         // which CEF never reads. Without it those logins fail with ERR_INVALID_AUTH_CREDENTIALS.

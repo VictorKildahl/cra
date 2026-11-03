@@ -175,7 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     private func sleepIdleTabs() {
-        for w in mainWindows { w.browsers.sleepIdleTabs(hiddenLongerThan: store.settings.tabSleep.seconds) }
+        for w in mainWindows { w.browsers.sleepIdleTabs(hiddenLongerThan: AppComposition.tabSleepAfter) }
     }
 
     /// Settings > Privacy > "Always use secure connections", live like content blocking.

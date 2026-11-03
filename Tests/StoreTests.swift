@@ -139,12 +139,11 @@ enum StoreTests {
         expect(!archived(later.id), "with auto-archive off nothing is archived")
     }
 
-    /// Tab sleeping asks the windows once a minute, and only while it is turned on.
+    /// Tab sleeping asks the windows once a minute; like Arc, it has no switch.
     @MainActor
     private static func tabSleepCadence() {
         let clock = ManualScheduler()
         let composition = AppComposition(clock: clock)
-        composition.store.settings.tabSleepEnabled = true
         var passes = 0
         composition.startPeriodicWork { passes += 1 }
         clock.advance(by: 59)
@@ -153,9 +152,6 @@ enum StoreTests {
         expect(passes == 1, "a pass every minute")
         clock.advance(by: 9 * 60)
         expect(passes == 10, "ten passes in ten minutes")
-        composition.store.settings.tabSleepEnabled = false
-        clock.advance(by: 10 * 60)
-        expect(passes == 10, "no passes while tab sleeping is off")
         composition.startPeriodicWork { passes += 100 }
         expect(clock.pendingCount == 2, "starting again replaces the timers instead of adding to them")
     }

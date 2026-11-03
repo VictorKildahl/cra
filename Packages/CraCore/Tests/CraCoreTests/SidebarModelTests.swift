@@ -89,9 +89,6 @@ struct SidebarModelTests {
         #expect(AutoArchiveThreshold.allCases.map(\.seconds) == [43_200, 86_400, 604_800, 2_592_000])
         #expect(AutoArchiveThreshold.allCases.map(\.label) == ["12 hours", "24 hours", "7 days", "30 days"])
         #expect(AutoArchiveThreshold.allCases.map(\.id) == AutoArchiveThreshold.allCases.map(\.rawValue))
-        #expect(TabSleepThreshold.allCases.map(\.seconds) == [900, 3600, 14_400, 43_200])
-        #expect(TabSleepThreshold.allCases.map(\.label) == ["15 minutes", "1 hour", "4 hours", "12 hours"])
-        #expect(TabSleepThreshold.allCases.map(\.id) == TabSleepThreshold.allCases.map(\.rawValue))
     }
 
     @Test(arguments: [
