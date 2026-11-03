@@ -71,6 +71,9 @@ final class ShellView: NSView {
     private var animatingPanes = false
     /// Arc's faint card over the gradient while no tab is selected.
     let placeholderHost = NSView()
+    /// Arc's loading bar in the margin above the card, for the front tab.
+    let loadingIndicator = LoadingIndicatorView()
+    private var loadingTabID: UUID?
     let statusHost: NSView
     let findHost: NSView
 
@@ -83,7 +86,12 @@ final class ShellView: NSView {
     private(set) var focusedPaneID: UUID?
     /// Panes without a page (Arc's tinted "Search or Enter URL…" pane).
     private(set) var emptyPaneIDs: Set<UUID> = []
-    var isDarkTheme = false { didSet { for c in paneCards { c.isDark = isDarkTheme } } }
+    var isDarkTheme = false {
+        didSet {
+            for c in paneCards { c.isDark = isDarkTheme }
+            loadingIndicator.isDark = isDarkTheme
+        }
+    }
     /// Each tab's page background ("#RRGGBB"), painted under its page window (PaneCardView.pageColor).
     var pageColors: [UUID: String] = [:] {
         didSet { for c in paneCards where c.pageColor != pageColors[c.tabID] { c.pageColor = pageColors[c.tabID] } }
@@ -228,6 +236,7 @@ final class ShellView: NSView {
         contentContainer.wantsLayer = true
         contentContainer.layer?.backgroundColor = NSColor.clear.cgColor
         addSubview(contentContainer)
+        addSubview(loadingIndicator)
         parkingView.isHidden = true
         parkingView.autoresizesSubviews = false
         contentContainer.addSubview(parkingView)
@@ -548,6 +557,7 @@ final class ShellView: NSView {
         resizeHandle.frame = f.handle
         resizeHandle.isHidden = f.handle.isEmpty || !sidebarResizable
         contentContainer.frame = f.content
+        placeLoadingIndicator(over: f.content)
         cardCornerRadius = f.cornerRadius
         sidebarHost.layer?.cornerRadius = f.sidebarCorner
         if f.sidebarCorner > 0 {
@@ -559,6 +569,26 @@ final class ShellView: NSView {
             sidebarHost.shadow = nil
         }
         layoutContentChildren()
+    }
+
+    /// Centred over the card, in the margin above it; hidden where there is none (edge to
+    /// edge, fullscreen).
+    private func placeLoadingIndicator(over content: NSRect) {
+        let margin = bounds.maxY - content.maxY
+        loadingIndicator.isHidden = margin < CGFloat(LoadingIndicator.height) + 2
+        loadingIndicator.frame = loadingIndicatorFrame(over: content)
+    }
+
+    private func loadingIndicatorFrame(over content: NSRect) -> NSRect {
+        let w = CGFloat(LoadingIndicator.trackWidth) + 2
+        return NSRect(x: (content.midX - w / 2).rounded(), y: content.maxY, width: w, height: bounds.maxY - content.maxY)
+    }
+
+    /// The front tab's loading state. Another tab coming to the front shows its state at once.
+    func setLoading(_ phase: LoadingIndicator.Phase, tab: UUID?) {
+        let sameTab = tab == loadingTabID
+        loadingTabID = tab
+        loadingIndicator.setPhase(phase, animated: sameTab)
     }
 
     func layoutContentChildren(animated: Bool = false) {
@@ -688,6 +718,7 @@ final class ShellView: NSView {
             ctx.allowsImplicitAnimation = true
             if !sidebarDetached { sidebarHost.animator().frame = target.sidebar }
             contentContainer.animator().frame = target.content
+            loadingIndicator.animator().frame = loadingIndicatorFrame(over: target.content)
             cardCornerRadius = target.cornerRadius
             if paneCards.count == 1, let c = paneCards.first { c.cornerRadius = target.cornerRadius }
         } completionHandler: { [weak self] in
