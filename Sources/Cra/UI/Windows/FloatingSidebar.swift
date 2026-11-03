@@ -49,10 +49,13 @@ final class FloatingSidebarController {
     deinit {
         poll?.invalidate()
         activation.forEach(NotificationCenter.default.removeObserver)
+        displayOptions.map(NSWorkspace.shared.notificationCenter.removeObserver)
     }
 
     private var poll: Timer?
     private var activation: [NSObjectProtocol] = []
+    /// Reduce transparency changes the panel's lift (GitHub #156).
+    private var displayOptions: NSObjectProtocol?
 
     /// No window of ours reliably receives mouse-moved events here: the key window
     /// is usually a Chromium page window, and the shell's tracking areas only run in
@@ -68,6 +71,11 @@ final class FloatingSidebarController {
             }
         }
         setPolling(NSApp.isActive)
+        displayOptions = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshBackdrop() }
+        }
     }
 
     private func setPolling(_ on: Bool) {
@@ -184,7 +192,8 @@ final class FloatingSidebarController {
         lift.isHidden = !pal.vibrant
         blur.material = pal.isDark ? .underWindowBackground : t.material
         blur.appearance = NSAppearance(named: t.darkBlur ? .darkAqua : .aqua)
-        lift.layer?.backgroundColor = NSColor(white: 1, alpha: pal.isDark ? 0.15 : t.liftActive).cgColor
+        let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        lift.layer?.backgroundColor = NSColor(white: 1, alpha: SidebarBackdrop.floatingLift(dark: pal.isDark, reduceTransparency: reduce, lift: t.liftActive)).cgColor
     }
 
     func show() {

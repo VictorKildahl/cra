@@ -47,6 +47,13 @@ struct SidebarBackdropTests {
         #expect(resolve(solid: false, active: false) == SidebarBackdrop(source: .none, dim: 1, liftTop: 0.28, liftBottom: 0.28))
     }
 
+    @Test func floatingSidebarDropsItsLiftUnderReduceTransparency() {
+        #expect(SidebarBackdrop.floatingLift(dark: false, reduceTransparency: false, lift: 0.35) == 0.35)
+        #expect(SidebarBackdrop.floatingLift(dark: false, reduceTransparency: true, lift: 0.35) == 0)
+        #expect(SidebarBackdrop.floatingLift(dark: true, reduceTransparency: false, lift: 0.35) == 0.15)
+        #expect(SidebarBackdrop.floatingLift(dark: true, reduceTransparency: true, lift: 0.35) == 0.15)
+    }
+
     @Test func logLineNamesTheState() {
         #expect(resolve(solid: true).logLine(active: true, reduceTransparency: false) == "blur, active, dim 0.30")
         #expect(resolve(solid: true, fullscreen: true).logLine(active: true, reduceTransparency: false) == "desktop tint, active, dim 0.30")

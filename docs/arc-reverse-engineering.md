@@ -2004,7 +2004,8 @@ Theme palettes in a hand-built space can be borrowed; only the `background` styl
   212 inactive), and ≈ 40 for its floating panel (the dark material's fill). Cra's own CABackdropLayer ignored the
   setting. Cra now resolves the layer through `SidebarBackdrop` (CraCore): with Reduce transparency there is no
   capture at all, solid themes rest at dim 1, lift 0.63 active or inactive (Arc's value doesn't move when its
-  fullscreen swipe lands, Cra's stepped from the inactive 212), light vibrant themes at their inactive look; cra.log adds ", reduce transparency" and the diagnostics export names the setting.
+  fullscreen swipe lands, Cra's stepped from the inactive 212), light vibrant themes at their inactive look, and the floating sidebar drops its white lift so the
+  dark material's fill shows under the colour like Arc's panel (Cra pinned − floating 45/46/45, Arc 54/46/45); cra.log adds ", reduce transparency" and the diagnostics export names the setting.
 - [O] Tab list scroller: AppKit overlay scroller (AXScrollBar, 17 pt track) shown while scrolling, then faded;
   the knob is 4 pt wide, 3 pt in from the sidebar edge, white 49 % on a dark theme, no track. Cra:
   `SidebarScroller`, 10 pt wide so it stays in the gutter right of the rows (knob on Arc's exact columns).

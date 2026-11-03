@@ -70,6 +70,13 @@ public struct SidebarBackdrop: Equatable, Sendable {
             liftBottom: full ? vibrant.liftBottom : vibrant.liftInactive)
     }
 
+    /// The white lift over the floating sidebar's material (dark hudWindow), light themes. Under
+    /// Reduce transparency that material is its opaque dark fill, 38, which is Arc's floating panel
+    /// under the space colour (GitHub #156: 156/64/72 at #F25E6B 0.8), so the lift goes.
+    public static func floatingLift(dark: Bool, reduceTransparency: Bool, lift: Double) -> Double {
+        dark ? 0.15 : reduceTransparency ? 0 : lift
+    }
+
     /// One cra.log line per change, so a report of a sharp or off-colour sidebar can be matched to
     /// the window's state.
     public func logLine(active: Bool, reduceTransparency: Bool) -> String {
