@@ -290,7 +290,8 @@ final class SpaceListView: NSView, NSDraggingSource {
                     capturing: capturing.contains(item.id), audible: audible.contains(item.id), muted: tab.muted, unread: item.isUnread,
                     navigatedAway: navigatedAway,
                     focusRing: focusID == item.id, developerMode: developerMode, peeked: peeked,
-                    homeIcon: homeImg, homeFlipIcon: homeFlip))
+                    homeIcon: homeImg, homeFlipIcon: homeFlip,
+                    peekIcon: ui.peekBadge?.tabID == item.id ? icon(ui.peekBadge?.iconKey).0 : nil))
                 out.append(row)
             } else if item.isSplit {
                 let children = store.children(of: item.id).filter(\.isTab)

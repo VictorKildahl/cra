@@ -8,4 +8,11 @@ public enum PinnedNavigation {
         guard let to = URL(string: typed)?.host?.lowercased() else { return false }
         return to != URL(string: current)?.host?.lowercased()
     }
+
+    /// A link that opens Peek (Settings ▸ Tabs ▸ Links) leads to another host: pin.lvh.me →
+    /// away.lvh.me peeked in Arc, though both are one site.
+    public static func linkLeavesHost(_ link: String, from page: String) -> Bool {
+        guard let to = URL(string: link)?.host?.lowercased(), !to.isEmpty else { return false }
+        return to != URL(string: page)?.host?.lowercased()
+    }
 }

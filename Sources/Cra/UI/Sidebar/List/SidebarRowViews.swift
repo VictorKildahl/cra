@@ -710,9 +710,10 @@ class SidebarRowView: NSView {
         let spring = CASpringAnimation(keyPath: "sublayerTransform")
         spring.fromValue = NSValue(caTransform3D: t)
         spring.toValue = NSValue(caTransform3D: CATransform3DIdentity)
+        // Critically damped; tuned against a Cra recording to Arc's curve (half way at ~0.12 s).
         spring.mass = 1
-        spring.stiffness = 196
-        spring.damping = 28
+        spring.stiffness = 119
+        spring.damping = 21.8
         spring.duration = spring.settlingDuration
         layer.add(spring, forKey: "bounce")
     }
@@ -877,6 +878,8 @@ struct TabRowModel: Equatable {
     /// The pinned page's favicon (Arc: resetTabIcon), shown on the icon while it would go back there.
     var homeIcon: NSImage?
     var homeFlipIcon: Bool
+    /// The favicon of a Peek opened from this tab (Arc: modalIcon), in the close button's place.
+    var peekIcon: NSImage?
 }
 
 final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
@@ -1093,6 +1096,7 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
     private static let soundSymbol = "speaker.wave.3"
     private static let soundGlyphWidth: CGFloat = 17.5
     private var showsSound = false
+    private lazy var peekBadge = SidebarFaviconView()
     private lazy var unreadDot: NSView = {
         let dot = NSView(frame: NSRect(x: 0, y: 0, width: 6, height: 6))
         dot.wantsLayer = true
@@ -1122,6 +1126,10 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         }
         soundButton.isHidden = !sound
         if sound != showsSound { showsSound = sound; needsLayout = true }
+        if let peek = m.peekIcon, !isHovered {
+            peekBadge.show(peek, flip: false, colors: colors)
+            shown.append(peekBadge)
+        }
         if m.unread && !m.selected && !isHovered {
             unreadDot.layer?.backgroundColor = colors.textPrimary.withAlphaComponent(0.55).cgColor
             shown.append(unreadDot)
@@ -1184,7 +1192,7 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
             // The unread dot is centred where the close button shows on hover, which is also
             // under a live folder's refresh button (FolderRowView, Arc lines them up too).
             let s = v.frame.size
-            let slot = v === unreadDot ? Self.closeSize : s.width
+            let slot = v === unreadDot || v === peekBadge ? Self.closeSize : s.width
             v.frame = NSRect(x: right - slot / 2 - s.width / 2, y: (h - s.height) / 2, width: s.width, height: s.height)
             right = v.frame.minX - 11
         }

@@ -9,4 +9,10 @@ struct PinnedNavigationTests {
         #expect(PinnedNavigation.typedURLOpensNewTab("https://www.google.com/search?q=x", from: "https://github.com/"), "a search leaves the site")
         #expect(!PinnedNavigation.typedURLOpensNewTab("not a url", from: "https://github.com/"))
     }
+
+    @Test func peekFollowsTheHost() {
+        #expect(PinnedNavigation.linkLeavesHost("http://away.lvh.me:47139/away2.html", from: "http://pin.lvh.me:47139/c.html"))
+        #expect(!PinnedNavigation.linkLeavesHost("http://pin.lvh.me:47139/away1.html", from: "http://pin.lvh.me:47139/c.html"))
+        #expect(!PinnedNavigation.linkLeavesHost("mailto:a@b.c", from: "https://github.com/"))
+    }
 }

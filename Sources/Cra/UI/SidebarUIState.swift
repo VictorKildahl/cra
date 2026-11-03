@@ -118,6 +118,12 @@ final class SidebarUIState {
     }
     /// Tabs picked with ⌘/⇧-click; closing acts on all of them.
     var multiSelection: Set<UUID> = []
+    /// The tab an open Peek came from and the peeked page's favicon, which its row shows.
+    var peekBadge: PeekBadge?
+    struct PeekBadge: Equatable {
+        let tabID: UUID
+        let iconKey: String?
+    }
     /// Where the next ⇧-click range starts.
     var selectionAnchor: UUID?
     /// A sidebar drag over the space's list and what releasing it would do.

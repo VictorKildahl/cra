@@ -1290,15 +1290,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// pinned tab (any tab with "In every tab" on), or any Shift-clicked link, opens over the
     /// window and the tab stays put.
     func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool) -> Bool {
-        guard !isIncognito, let target = SiteKey.site(of: url) else { return false }
+        guard !isIncognito, SiteKey.site(of: url) != nil else { return false }
         if shiftClick {
             guard store.settings.peekOnShiftClick else { return false }
         } else {
+            // Another host, not another site: Arc peeks from pin.lvh.me to away.lvh.me (GitHub #139).
             guard store.settings.peekLinksToOtherSites,
                   store.settings.peekInEveryTab || store.isPinned(tabID),
-                  let here = SiteKey.site(of: pageURL), here != target else { return false }
+                  PinnedNavigation.linkLeavesHost(url, from: pageURL) else { return false }
         }
-        app.openPeek(url: url, over: self)
+        app.openPeek(url: url, over: self, fromTab: tabID)
         return true
     }
 
