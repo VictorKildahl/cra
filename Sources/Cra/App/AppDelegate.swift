@@ -914,6 +914,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "previousSplitPane": main.cycleSplitPane(-1)
         case "settings": showSettingsWindow()
         case "importData": main.showImport()
+        case "rebuildArcProfiles": ArcProfileRebuilder.run(store: store) { [weak self] in self?.relaunch() }
         case "setDefaultBrowser": Task { await SystemIntegration.shared.makeDefaultBrowser() }
         default:
             if id.hasPrefix("item"), let n = Int(id.dropFirst(4)) {
@@ -955,6 +956,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if settingsController == nil {
             let actions = SettingsActions(
                 importData: { [weak self] in self?.main.showImport() },
+                rebuildArcProfiles: { [weak self] in
+                    guard let self else { return }
+                    ArcProfileRebuilder.run(store: self.store) { [weak self] in self?.relaunch() }
+                },
                 openURL: { [weak self] url in
                     guard let self else { return }
                     self.useNormalWindow()

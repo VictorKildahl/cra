@@ -94,6 +94,25 @@ enum StoreTests {
         expect(ExtensionImporter.pinnedIDs(inProfile: ArcImporter.userData.appendingPathComponent("Profile 2")) == [String(repeating: "c", count: 32), String(repeating: "a", count: 32)],
                "Arc's pins of a profile come from its Preferences")
         newProfileDatabases()
+        rebuildFromArc(plan: plan)
+    }
+
+    /// Rebuild from Arc (#131): a sidebar imported before profiles came over gets them afterwards.
+    @MainActor
+    private static func rebuildFromArc(plan: ImportPlan) {
+        let store = AppComposition(clock: ManualScheduler()).store
+        var flat = plan
+        for i in flat.spaces.indices { flat.spaces[i].profile = nil }
+        store.apply(flat, includeArchive: false, includeSettings: false)
+        expect(store.profiles.isEmpty, "an import that drops the profiles, as before #131")
+        let moves = store.arcProfileMoves(plan)
+        expect(moves.map(\.spaceTitle) == ["Work"] && moves.first?.folder == "Profile 2", "only Work is on an Arc profile")
+        let map = store.applyArcProfileMoves(moves)
+        let work = store.orderedSpaces.first { $0.title == "Work" }!
+        let client = store.profiles.first { $0.name == "Client" }
+        expect(store.profiles.count == 1 && work.profileID == client?.id && map.folders == ["Default": "Default", "Profile 2": client!.directoryName],
+               "Work goes on a Client profile, Home stays on Default")
+        expect(store.arcProfileMoves(plan).isEmpty, "a second rebuild finds nothing to move")
     }
 
     /// A profile Chromium hasn't opened gets its sign-in databases with Default's schema (#131).

@@ -70,4 +70,36 @@ struct ExtensionProfilesTests {
         #expect(pins.ids(inProfile: "Profile A") == ["b", "c"])
         #expect(pins.profiles["Profile B"] == nil, "the same list as everyone's stays shared")
     }
+
+    /// Rebuild from Arc (#131): spaces an older import left on Default go back to their Arc profiles.
+    @Test func rebuildMatchesSpacesByName() {
+        let home = UUID(), work = UUID(), client = UUID(), mine = UUID(), twin1 = UUID(), twin2 = UUID(), shared = UUID()
+        let cra = [
+            ArcProfileRebuild.CraSpace(id: home, title: "Home", movable: true),
+            .init(id: work, title: "work", movable: true),
+            .init(id: client, title: "Client", movable: false),
+            .init(id: mine, title: "Mine", movable: true),
+            .init(id: twin1, title: "Twin", movable: true), .init(id: twin2, title: "Twin", movable: true),
+            .init(id: shared, title: "Shared", movable: true),
+        ]
+        let arc = [
+            ArcProfileRebuild.ArcSpace(title: "Home", folder: nil, name: "Personal"),
+            .init(title: "Work", folder: "Profile 2", name: "Work"),
+            .init(title: "Client", folder: "Profile 3", name: "Client"),
+            .init(title: "Twin", folder: "Profile 2", name: "Work"),
+            .init(title: "Shared", folder: "Profile 2", name: "Work"), .init(title: "Shared", folder: "Profile 3", name: "Client"),
+        ]
+        let moves = ArcProfileRebuild.moves(cra: cra, arc: arc)
+        #expect(moves.map(\.spaceID) == [work], "only a movable space whose name is one Arc space's on a profile")
+        #expect(moves.first?.folder == "Profile 2" && moves.first?.profileName == "Work" && moves.first?.spaceTitle == "work")
+    }
+
+    @Test func rebuildKeepsExtensionsInProfilesMadeInCra() {
+        let map = ImportProfileMap(folders: ["Default": "Default", "Profile 2": "Profile W"])
+        let all: Set<String> = ["Default", "Profile W", "Profile Mine"]
+        #expect(map.extensionProfiles(sources: ["Profile 2"], allFolders: all, keepUnmapped: true) == ["Profile W", "Profile Mine"])
+        #expect(map.extensionProfiles(sources: ["Default"], allFolders: all, keepUnmapped: true) == ["Default", "Profile Mine"])
+        #expect(map.extensionProfiles(sources: ["Default", "Profile 2"], allFolders: all, keepUnmapped: true) == nil)
+        #expect(map.extensionProfiles(sources: [], allFolders: all, keepUnmapped: true) == nil, "not in Arc: left alone")
+    }
 }

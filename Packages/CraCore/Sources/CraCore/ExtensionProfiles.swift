@@ -65,10 +65,14 @@ public struct ImportProfileMap: Equatable, Sendable {
 
     /// The Cra profiles an extension the source had in `sources` loads in: nil (every profile)
     /// when the import bound no profiles, or when that is every profile Cra has (`allFolders`).
-    public func extensionProfiles(sources: Set<String>, allFolders: Set<String>) -> Set<String>? {
+    /// `keepUnmapped`: an extension already loading everywhere (a rebuild from Arc) also stays in
+    /// the Cra profiles no source profile maps to, made in Cra and unknown to the source.
+    public func extensionProfiles(sources: Set<String>, allFolders: Set<String>, keepUnmapped: Bool = false) -> Set<String>? {
         guard bindsProfiles else { return nil }
-        let targets = Set(sources.map { craFolder(forSource: $0) })
-        return targets.isEmpty || allFolders.isSubset(of: targets) ? nil : targets
+        var targets = Set(sources.map { craFolder(forSource: $0) })
+        if targets.isEmpty { return nil }
+        if keepUnmapped { targets.formUnion(allFolders.subtracting(folders.values).subtracting(["Default"])) }
+        return allFolders.isSubset(of: targets) ? nil : targets
     }
 
     /// Arc's `profile` of a space: `{"custom": {"_0": {"directoryBasename": "Profile 2", …}}}`, or

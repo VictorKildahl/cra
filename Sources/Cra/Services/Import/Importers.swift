@@ -482,16 +482,11 @@ extension SidebarStore {
             return "\(title) \(n)"
         }
 
-        // A source profile becomes a Cra profile of the same name (one already there is reused, so
-        // importing again doesn't add "Work" twice); its spaces go on it, the rest stay on Default.
-        func craProfile(for source: ImportedProfile) -> BrowserProfile {
-            profiles.first { $0.name == source.name } ?? createProfile(name: source.name)
-        }
-
+        // A source profile's spaces go on the Cra profile of its name; the rest stay on Default.
         for sp in plan.spaces {
             let space = createSpace(title: freeTitle(sp.title), emoji: sp.emoji, theme: sp.theme, focus: false)
             if let source = sp.profile {
-                let folder = result.profiles.folders[source.folder] ?? craProfile(for: source).directoryName
+                let folder = result.profiles.folders[source.folder] ?? importedProfile(named: source.name).directoryName
                 result.profiles.folders[source.folder] = folder
                 if let p = profiles.first(where: { $0.directoryName == folder }) { setProfile(p.id, forSpace: space.id) }
             } else {
@@ -538,5 +533,33 @@ extension SidebarStore {
         }
         touchAfterImport()
         return result
+    }
+
+    /// The Cra profile a source profile becomes: one already there of the same name is reused, so
+    /// importing again (or rebuilding from Arc) doesn't add "Work" twice.
+    private func importedProfile(named name: String) -> BrowserProfile {
+        profiles.first { $0.name == name } ?? createProfile(name: name)
+    }
+
+    // MARK: Rebuild from Arc (GitHub #131)
+
+    /// Spaces an import from before Cra kept Arc's profiles left on Default, that Arc has on a
+    /// profile of their own (matched by name).
+    func arcProfileMoves(_ plan: ImportPlan) -> [ArcProfileRebuild.Move] {
+        let cra = orderedSpaces.map { ArcProfileRebuild.CraSpace(id: $0.id, title: $0.title, movable: $0.profileID == nil && !isIncognito(space: $0.id)) }
+        let arc = plan.spaces.map { ArcProfileRebuild.ArcSpace(title: $0.title, folder: $0.profile?.folder, name: $0.profile?.name ?? "Default") }
+        return ArcProfileRebuild.moves(cra: cra, arc: arc)
+    }
+
+    /// Puts each space on the Cra profile its Arc profile becomes; what Arc's profiles map to.
+    @discardableResult
+    func applyArcProfileMoves(_ moves: [ArcProfileRebuild.Move]) -> ImportProfileMap {
+        var map = ImportProfileMap(folders: ["Default": "Default"])
+        for m in moves where spaces[m.spaceID] != nil {
+            let profile = map.folders[m.folder].flatMap { f in profiles.first { $0.directoryName == f } } ?? importedProfile(named: m.profileName)
+            map.folders[m.folder] = profile.directoryName
+            setProfile(profile.id, forSpace: m.spaceID)
+        }
+        return map
     }
 }
