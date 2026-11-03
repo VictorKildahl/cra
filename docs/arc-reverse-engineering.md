@@ -2729,3 +2729,31 @@ events, the window recorded with `screencapture -V`.
 - [O] A Shift-click on a link in the Little Arc's page opened it in that Little Arc: no Peek, no second window
   (AX and CG window lists before and after). Cra used to open another Little Window. A Shift-clicked link in a
   browser window still opens a Peek (`shiftClickModalEntryPointEnabled`).
+
+## Peek and the copy toast's Share button (Arc 1.171, 3 Nov 2026, offline Arc)
+
+Offline Arc in a 1728 × 1084 pt window (sidebar 347 pt), a page that is one big link, Shift-click as a HID
+event with `shiftClickModalEntryPointEnabled` set for the run, AX frames and 60 fps recordings.
+- [O] With `shiftClickModalEntryPointEnabled` unset (Victor's defaults), a Shift-click on a file:// link opened a
+  new tab below, not a Peek. With it on, a Shift-click on an https link opened the Peek.
+- [O] The Peek is a card in the browser window: x 485…1590, 12 pt in from the window's top and bottom, i.e. 80 %
+  of the area from the sidebar's edge to the window's right edge, centred on it. 8 pt continuous corners, a soft
+  shadow. It has its own 32 pt bar (back, forward, refresh from the card edge, the address centred with its
+  copy-link glyph, "example.com/peek", host then dimmed path), white while the page had no colour.
+- [O] Beside it, 13 pt right of the card, a column of 34 × 33 pt round buttons 7 pt below its top, 43.5 pt
+  apart: `confirmCloseModal` "Close ⌘W" (xmark), `openInSpaceExpander` "Expand ⌘O"
+  (arrow.up.left.and.arrow.down.right), `openInSplit` "Add To Split" (square.split.2x1). Fill 16/13/0, glyph
+  250/238/194 on the fake home's yellow space: the space's tooltip fill (shadedDark at 30 %) and its light
+  foreground. Their tips are the space's ArcTooltip.
+- [O] The page behind fades to about 28 % over the window's background (233/240/254 → 178/172/151); the sidebar
+  stays. Opening, the card starts at the area's full size and shrinks to its frame as it fades in (~0.12 s), the
+  buttons appearing at the end. Escape closes it backwards: out to the full area, fading, as the page comes back
+  (~0.22 s).
+- [O] "Copied Current URL" carries a Share glyph button in browser windows too (AX `square.and.arrow.up`, "Share",
+  31 × 27). The toast is 195 × 47 pt: text 13 pt in, 14.5 pt to a 29 × 27 pt button 13 pt from the end, 10 pt from
+  top and bottom. The button is a white wash over the pill (≈ 60 % on the light toast, 15 % on Little Arc's dark
+  one) with an outline. A click opens the macOS share menu (AirDrop, Notes…) from the button; the toast stays.
+- Cra: PeekLayout (CraCore) has the geometry; PeekBarView and PeekControlsPanel (PeekChrome.swift) the card's bar
+  and the buttons; MainWindowController.setPeekVeil fades the page; ShinyToast.Action.share the button.
+- [?] Not measured: the card at other window widths (Cra keeps 80 % of the area), and the Peek with Arc's
+  toolbar turned off.

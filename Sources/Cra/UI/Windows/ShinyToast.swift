@@ -15,8 +15,28 @@ import QuartzCore
 final class ShinyToast {
     struct Action {
         let title: String
+        /// A glyph button instead of the text capsule, given the button to anchor a menu to
+        /// (Arc's Share on "Copied Current URL").
+        var symbol: String? = nil
         let run: () -> Void
+        var anchored: ((NSView, NSRect) -> Void)? = nil
+
+        /// Arc's Share glyph on "Copied Current URL" (Arc 1.171, browser windows and Little Arc):
+        /// the macOS share menu for the address, from the button.
+        static func share(_ url: String) -> Action {
+            Action(title: "Share", symbol: "square.and.arrow.up", run: {}, anchored: { view, rect in
+                guard let u = URL(string: url) else { return }
+                NSSharingServicePicker(items: [u]).show(relativeTo: rect, of: view, preferredEdge: .minY)
+            })
+        }
     }
+
+    /// The glyph button's toast (Arc 1.171, 3 Nov 2026, 2x captures): 47 pt tall, the text 13 pt in,
+    /// 14.5 pt to a 29 × 27 pt button 13 pt from the end and 10 pt from the top and bottom.
+    static let glyphHeight: CGFloat = 47
+    static let glyphButton = CGSize(width: 29, height: 27)
+    static let glyphPadding: CGFloat = 13
+    static let glyphGap: CGFloat = 14.5
 
     static let height: CGFloat = 42
     static let topInset: CGFloat = 8
@@ -40,6 +60,7 @@ final class ShinyToast {
     private let label = CATextLayer()
     private let button = CALayer()
     private let buttonLabel = CATextLayer()
+    private let buttonGlyph = CALayer()
     private var hide: DispatchWorkItem?
     private var action: Action?
     /// The text colour: the button is a wash of it.
@@ -70,6 +91,8 @@ final class ShinyToast {
         buttonLabel.fontSize = Self.buttonFont.pointSize
         buttonLabel.alignmentMode = .center
         button.addSublayer(buttonLabel)
+        buttonGlyph.contentsGravity = .center
+        button.addSublayer(buttonGlyph)
         pill.addSublayer(button)
         view.layer?.addSublayer(pill)
         view.onHover = { [weak self] inside in self?.hovered(inside) }
@@ -87,19 +110,23 @@ final class ShinyToast {
 
     func show(_ text: String, action: Action? = nil, page: NSRect, in window: NSWindow, colors: Colors) {
         self.action = action
+        let glyph = action?.symbol
         let textWidth = ceil((text as NSString).size(withAttributes: [.font: Self.font]).width)
-        let buttonWidth = action.map { ceil(($0.title as NSString).size(withAttributes: [.font: Self.buttonFont]).width) + 2 * Self.buttonPadding }
-        let width = textWidth + 2 * Self.padding + (buttonWidth.map { $0 + Self.buttonGap - Self.padding + (Self.height - Self.buttonHeight) / 2 } ?? 0)
-        let local = NSRect(x: page.maxX - Self.trailingInset - width, y: page.maxY - Self.topInset - Self.height,
-                           width: width, height: Self.height)
+        let buttonWidth = glyph != nil ? Self.glyphButton.width
+            : action.map { ceil(($0.title as NSString).size(withAttributes: [.font: Self.buttonFont]).width) + 2 * Self.buttonPadding }
+        let height = glyph != nil ? Self.glyphHeight : Self.height
+        let width = glyph != nil ? Self.glyphPadding + textWidth + Self.glyphGap + Self.glyphButton.width + Self.glyphPadding
+            : textWidth + 2 * Self.padding + (buttonWidth.map { $0 + Self.buttonGap - Self.padding + (Self.height - Self.buttonHeight) / 2 } ?? 0)
+        let local = NSRect(x: page.maxX - Self.trailingInset - width, y: page.maxY - Self.topInset - height,
+                           width: width, height: height)
         panel.setFrame(window.convertToScreen(local.insetBy(dx: -Self.margin, dy: -Self.margin)), display: false)
         let scale = window.backingScaleFactor
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         // Anchored at the top centre, where Arc's toast grows from.
         pill.anchorPoint = CGPoint(x: 0.5, y: 1)
-        pill.bounds = CGRect(x: 0, y: 0, width: width, height: Self.height)
-        pill.position = CGPoint(x: Self.margin + width / 2, y: Self.margin + Self.height)
+        pill.bounds = CGRect(x: 0, y: 0, width: width, height: height)
+        pill.position = CGPoint(x: Self.margin + width / 2, y: Self.margin + height)
         // Top to bottom (a layer's y runs up).
         pill.colors = [colors.bottom.cgColor, colors.top.cgColor]
         pill.borderColor = colors.outline.cgColor
@@ -107,10 +134,28 @@ final class ShinyToast {
         label.contentsScale = scale
         label.string = text
         let lineHeight = ceil(Self.font.ascender - Self.font.descender)
-        label.frame = CGRect(x: buttonWidth == nil ? 0 : Self.padding, y: (Self.height - lineHeight) / 2,
+        label.frame = CGRect(x: buttonWidth == nil ? 0 : glyph != nil ? Self.glyphPadding : Self.padding, y: (height - lineHeight) / 2,
                              width: buttonWidth == nil ? width : textWidth, height: lineHeight)
         button.isHidden = buttonWidth == nil
-        if let buttonWidth, let action {
+        buttonLabel.isHidden = glyph != nil
+        buttonGlyph.isHidden = glyph == nil
+        if let glyph {
+            // A wash of white over the pill (60 % on a light toast, 15 % on a dark one) with an
+            // outline of the text colour, the glyph in the text colour.
+            let dark = (colors.text.usingColorSpace(.sRGB)?.brightnessComponent ?? 0) > 0.5
+            let b = Self.glyphButton
+            button.frame = CGRect(x: width - Self.glyphPadding - b.width, y: (height - b.height) / 2, width: b.width, height: b.height)
+            button.cornerRadius = 7
+            button.borderWidth = 1
+            button.borderColor = colors.text.withAlphaComponent(dark ? 0.2 : 0.3).cgColor
+            button.backgroundColor = (colors.top.blended(withFraction: dark ? 0.15 : 0.6, of: .white) ?? colors.top).cgColor
+            let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium).applying(.init(paletteColors: [colors.text]))
+            buttonGlyph.contents = NSImage(systemSymbolName: glyph, accessibilityDescription: action?.title)?.withSymbolConfiguration(config)
+            buttonGlyph.contentsScale = scale
+            buttonGlyph.frame = CGRect(origin: .zero, size: b)
+        } else if let buttonWidth, let action {
+            button.cornerRadius = Self.buttonHeight / 2
+            button.borderWidth = 0
             let inset = (Self.height - Self.buttonHeight) / 2
             button.frame = CGRect(x: width - inset - buttonWidth, y: inset, width: buttonWidth, height: Self.buttonHeight)
             buttonTint = colors.text
@@ -123,7 +168,7 @@ final class ShinyToast {
         }
         CATransaction.commit()
         panel.ignoresMouseEvents = action == nil
-        view.hitRect = action == nil ? .zero : NSRect(x: Self.margin, y: Self.margin, width: width, height: Self.height)
+        view.hitRect = action == nil ? .zero : NSRect(x: Self.margin, y: Self.margin, width: width, height: height)
         if !isShown {
             // Opening the tab's page holds the main thread for ~0.1 s, so the toast waits for the
             // next turn, invisible: started now, its first frame showed it most of the way in.
@@ -156,7 +201,7 @@ final class ShinyToast {
         }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        button.backgroundColor = buttonTint.withAlphaComponent(inside ? 0.16 : 0.1).cgColor
+        if action?.symbol == nil { button.backgroundColor = buttonTint.withAlphaComponent(inside ? 0.16 : 0.1).cgColor }
         CATransaction.commit()
     }
 
@@ -165,6 +210,13 @@ final class ShinyToast {
         guard let action, isShown else { return }
         let local = NSPoint(x: point.x - Self.margin, y: point.y - Self.margin)
         guard button.frame.insetBy(dx: -4, dy: -4).contains(local) else { return }
+        if let anchored = action.anchored, let root = view.layer {
+            // The menu hangs from the button, the toast stays up under it (Arc), then goes on its time.
+            hide?.cancel()
+            anchored(view, root.convert(button.frame, from: pill))
+            scheduleHide()
+            return
+        }
         dismiss()
         action.run()
     }
