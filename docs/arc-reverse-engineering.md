@@ -1861,6 +1861,19 @@ Theme palettes in a hand-built space can be borrowed; only the `background` styl
   build in none of 3 (other sessions' windows moved between runs, so take that as a hint). Not seen here: the
   sharp sidebar on activation from Mission Control, Finder or a fullscreen Space (1x displays).
   `screencapture` stills are no use for this: they disagreed with recordings of the same state.
+- [O] Follow-up (3 Nov 2026, issue #132: on another Mac the fullscreen solid sidebar rested ~60 levels darker than
+  Arc in the same space). NSVisualEffectView's hudWindow tree, dumped from a probe: windowed active = backdrop
+  (sdrNormalize, gaussianBlur 30, colorSaturate 1.6, `scale` 0.125, `substituteColor` nil: the window server picks
+  the substitute) + fill + tone + the `CAChameleonLayer` at opacity 0.05; fullscreen = the backdrop REMOVED from
+  the tree, the chameleon first at opacity 1 with `[sdrNormalize, colorSaturate 1.6]` and no blur. CAChameleonLayer
+  has no properties of its own. Cra's tint was bare (no filters) and its blur only hidden. On this Mac's SDR
+  displays a bare chameleon already resolves the wallpaper (194/166/146; with the filters 209/163/131) and a hidden
+  blur beside it changes nothing, so the dark rest did not reproduce; the filters are the one difference left
+  against Arc's layer, and `sdrNormalize` is the EDR-display step. Cra now builds the tint with those filters and
+  keeps only the layer it draws from in the tree, like AppKit (none while inactive, under the opaque fill).
+  CloudDev (#F25E6B, 0.8) fullscreen, stills: 214/116/119 before, 217/114/117 after (Arc on #132's Mac 210/110/117).
+  A Space swipe reads the inactive value until the app is active again, then steps in one frame, as AppKit's
+  material does (`followsWindowActiveState`).
 - [O] Tab list scroller: AppKit overlay scroller (AXScrollBar, 17 pt track) shown while scrolling, then faded;
   the knob is 4 pt wide, 3 pt in from the sidebar edge, white 49 % on a dark theme, no track. Cra:
   `SidebarScroller`, 10 pt wide so it stays in the gutter right of the rows (knob on Arc's exact columns).
