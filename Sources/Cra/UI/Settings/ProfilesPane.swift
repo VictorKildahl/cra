@@ -7,7 +7,6 @@ struct ProfilesPane: View {
     let actions: SettingsActions
     @Environment(SidebarStore.self) private var store
     @State private var naming: BrowserProfile?
-    @State private var creating = false
     @State private var name = ""
     @State private var deleting: BrowserProfile?
 
@@ -26,7 +25,7 @@ struct ProfilesPane: View {
                 }
             }
             HStack {
-                Button("Create Profile…") { name = ""; creating = true }
+                Button("Create Profile…") { actions.newProfile() }
                 Spacer()
                 // Spaces an Arc import left on Default, back on their Arc profiles (#131).
                 if ArcProfileRebuilder.isAvailable {
@@ -35,14 +34,7 @@ struct ProfilesPane: View {
                 }
             }
             .padding(.top, 7.5)
-            SettingsFootnote("Profiles help keep your data separate across Spaces, like logins, cookies and site data. You can use any Profile across one or more Spaces: right-click a Space and choose Edit Space to pick one. Only Profiles not assigned to any Spaces can be deleted.")
-        }
-        .alert("Create a new Profile", isPresented: $creating) {
-            TextField("Profile name", text: $name)
-            Button("Create") { if !trimmed.isEmpty { store.createProfile(name: trimmed) } }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("What do you want to call this Profile?")
+            SettingsFootnote("Profiles help keep your data separate across Spaces, like logins, cookies and site data. You can use any Profile across one or more Spaces: choose Spaces ▸ Change Profile, or Set Profile on a Space's menu. Spaces on the same Profile share their logins. Only Profiles not assigned to any Spaces can be deleted.")
         }
         .alert("Rename Profile", isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
             TextField("Profile name", text: $name)

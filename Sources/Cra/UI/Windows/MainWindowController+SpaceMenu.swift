@@ -56,17 +56,45 @@ extension MainWindowController {
         window.addChildWindow(panel, ordered: .above)
         panel.makeKeyAndOrderFront(nil)
     }
-    /// Set Profile ▸ New Profile…: Arc's dialog over the dimmed window; Next makes the profile and
-    /// moves the space into it (pages already open reload in it, BrowserManager).
+    /// Set Profile ▸ New Profile…: Arc's dialog over the dimmed window; Next asks which spaces use
+    /// the profile (this one ticked) and Create Profile moves them into it (pages already open
+    /// reload in it, BrowserManager).
     func showNewProfileDialog(forSpace id: UUID) {
         guard let window else { return }
-        let store = self.store
+        showNewProfileDialog(over: window, ticked: [id])
+    }
+
+    /// Settings ▸ Profiles ▸ Create Profile…: the same dialog over Settings, no space ticked.
+    func showNewProfileDialog(over window: NSWindow, ticked: Set<UUID> = []) {
         DialogOverlayWindow.present(over: window) { close in
-            NewProfileDialog(onCreate: { name in
-                store.setProfile(store.createProfile(name: name).id, forSpace: id)
+            NewProfileDialog(spaces: profileSpaces, ticked: ticked, onCreate: { [weak self] name, ids in
+                self?.createProfile(name: name, forSpaces: ids)
                 close()
             }, onCancel: close)
         }
+    }
+
+    /// Spaces ▸ Change Profile: Arc's "Change <space>’s Profile" dialog for the focused space.
+    func showChangeProfileDialog(forSpace id: UUID) {
+        guard let window, let space = store.space(id) else { return }
+        let store = self.store
+        DialogOverlayWindow.present(over: window) { close in
+            ChangeProfileDialog(space: space, profiles: store.profiles, spaces: profileSpaces, onChange: { p in
+                store.setProfile(p, forSpace: id)
+                close()
+            }, onCreate: { [weak self] name, ids in
+                self?.createProfile(name: name, forSpaces: ids)
+                close()
+            }, onCancel: close)
+        }
+    }
+
+    /// The spaces a profile can be given to: every space but incognito ones, in sidebar order.
+    private var profileSpaces: [Space] { store.orderedSpaces.filter { !store.isIncognito(space: $0.id) } }
+
+    private func createProfile(name: String, forSpaces ids: Set<UUID>) {
+        let p = store.createProfile(name: name)
+        for s in profileSpaces where ids.contains(s.id) { store.setProfile(p.id, forSpace: s.id) }
     }
     /// Manage Spaces…: the Library on its Spaces page, every space side by side.
     func showManageSpaces() { showLibrary(.spaces) }

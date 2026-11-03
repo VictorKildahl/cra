@@ -930,6 +930,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if isNew { LiveFolderManager.shared.refresh(f.id) }
         case "newSpace": main.showSpaceEditor(space: nil)
         case "editSpace": if !main.isIncognito { main.showSpaceEditor(space: store.focusedSpace) }
+        case "changeProfile": if !main.isIncognito { main.showChangeProfileDialog(forSpace: store.focusedSpace.id) }
         case "deleteSpace": if !main.isIncognito { confirmDeleteSpace(store.focusedSpace) }
         case "manageSpaces": if !main.isIncognito { main.showManageSpaces() }
         case "closeTab":
@@ -1061,7 +1062,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     self.settingsWindow?.close()
                     self.main.showWindow(nil)
                 },
-                exportDiagnostics: { [weak self] in self?.exportDiagnostics() })
+                exportDiagnostics: { [weak self] in self?.exportDiagnostics() },
+                newProfile: { [weak self] in
+                    guard let self, let w = self.settingsWindow else { return }
+                    self.main.showNewProfileDialog(over: w)
+                })
             let c = SettingsWindowController(store: store, bindings: bindings, actions: actions)
             settingsController = c
             settingsWindow = c.window
@@ -1160,7 +1165,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let spaces = NSMenu(title: "Spaces")
         spaces.addItem(item("nextSpace")); spaces.addItem(item("previousSpace"))
         spaces.addItem(.separator())
-        spaces.addItem(item("editSpace")); spaces.addItem(item("deleteSpace")); spaces.addItem(item("manageSpaces"))
+        for id in ["editSpace", "changeProfile", "deleteSpace", "manageSpaces"] { spaces.addItem(item(id)) }
         spaces.addItem(.separator())
         for n in 1...9 { spaces.addItem(item("space\(n)")) }
         spaces.addItem(.separator())

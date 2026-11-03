@@ -26,11 +26,12 @@ struct SpaceEditorView: View {
     private static let emojis = ["🌱", "💼", "🏠", "🎨", "🧪", "📚", "🎮", "🎵", "🛒", "✈️", "💡", "🔥", "🌊", "🍕", "🐦", "🧑‍💻",
                                  "📈", "🧠", "❤️", "⭐️", "🌙", "☕️", "🏃", "📷", "🎬", "🧩", "🪴", "🏔️", "🛠️", "💰", "📝", "🎯"]
 
-    init(existing: Space?, profiles: [BrowserProfile], onSave: @escaping (String, String, SpaceTheme, SpaceProfileChoice, String) -> Void,
-         onCancel: @escaping () -> Void) {
+    /// `initialProfile` is a new space's starting profile (Arc: the focused space's).
+    init(existing: Space?, profiles: [BrowserProfile], initialProfile: UUID? = nil,
+         onSave: @escaping (String, String, SpaceTheme, SpaceProfileChoice, String) -> Void, onCancel: @escaping () -> Void) {
         self.existing = existing
         self.profiles = profiles
-        _profile = State(initialValue: .existing(existing?.profileID))
+        _profile = State(initialValue: .existing(existing == nil ? initialProfile : existing?.profileID))
         self.onSave = onSave
         self.onCancel = onCancel
         let t = existing?.theme ?? SpaceTheme.presets[Int.random(in: 0..<5)]

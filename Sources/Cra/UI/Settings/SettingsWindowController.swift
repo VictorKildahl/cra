@@ -7,6 +7,7 @@ struct SettingsActions {
     var rebuildArcProfiles: () -> Void = {}
     var openURL: (String) -> Void = { _ in }
     var exportDiagnostics: () -> Void = {}
+    var newProfile: () -> Void = {}
 }
 
 /// The panes in Dia's Settings sidebar (Dia 1.54.2: Account, Tabs, Privacy, Profiles, Skills,
