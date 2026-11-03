@@ -102,7 +102,9 @@ Scenario hooks for a command file (`cra://debug?…`): `checkStore=1` logs a fau
 sidebar link, `pageJS=<js>` runs script in the focused page, `installExtension=<folder>` and
 `removeExtension=<id>`, `extensionAction=<id>`, `fullscreen=1|0`, `windowSize=1280x800`,
 `snapshot=<ViewClass[,n]>&out=<png>`, `sleepTabs=<seconds>`, `stall=<ms>` (blocks the main
-thread), `perfReport=<path>` (the recorder's perf.json now), `relaunch=1` and `quit=1`.
+thread), `perfReport=<path>` (the recorder's perf.json now), `systemAppearance=light|dark|system`
+(the appearance Auto space themes follow, without changing the Mac's), `themeEditor=1` (Edit
+Theme Color… for the focused space), `relaunch=1` and `quit=1`.
 
 ## Running a test instance
 

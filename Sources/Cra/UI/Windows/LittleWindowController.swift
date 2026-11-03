@@ -101,7 +101,8 @@ enum LittlePalette {
     /// The space name in "Open in Victor": the target theme's light foreground
     /// (Arc: semanticColorPalette.dark.foregroundPrimary; Victor → #FCEDBC).
     static func spaceName(_ theme: SpaceTheme) -> Color {
-        Color(hex: theme.accent ?? theme.colors.first ?? "#FFFFFF").blendedToward(.white, 0.72)
+        let theme = theme.shown
+        return Color(hex: theme.accent ?? theme.colors.first ?? "#FFFFFF").blendedToward(.white, 0.72)
     }
 }
 
@@ -1335,7 +1336,7 @@ final class LittleSpacesPopup: NSView, NSTextFieldDelegate {
             tile.wantsLayer = true
             tile.layer?.cornerRadius = 9
             tile.layer?.cornerCurve = .continuous
-            tile.layer?.backgroundColor = NSColor(hex: s.theme.accent ?? s.theme.colors.first ?? "#888888").cgColor
+            tile.layer?.backgroundColor = NSColor(hex: s.theme.shown.accent ?? s.theme.shown.colors.first ?? "#888888").cgColor
             let emoji = NSTextField.sidebarLabel(size: 20)
             emoji.stringValue = s.emoji
             emoji.alignment = .center

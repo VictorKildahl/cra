@@ -1,4 +1,5 @@
 import AppKit
+import Observation
 import SwiftUI
 
 extension Color {
@@ -104,7 +105,14 @@ extension SpaceTheme {
         return Color(.sRGB, red: o.0, green: o.1, blue: o.2, opacity: 1)
     }
 
-    var palette: SpacePalette {
+    /// The theme as macOS shows it now: an Auto theme's light or dark half. Read under
+    /// observation tracking, a switch of macOS' appearance redraws whatever showed the old half.
+    var shown: SpaceTheme { resolved(systemDark: SystemAppearance.shared.isDark) }
+
+    var palette: SpacePalette { shown.fixedPalette }
+
+    /// The palette of a resolved theme (its appearance is light or dark, or judged by colour).
+    private var fixedPalette: SpacePalette {
         let dark = isDark
         let base = colors.isEmpty ? ["#DDDDDD"] : colors
         // Vibrant (Arc): raw colors at `intensity` opacity over the blur.
@@ -149,6 +157,28 @@ extension SpaceTheme {
             vibrant: vibrant || solid,
             solid: solid
         )
+    }
+}
+
+/// macOS' light or dark appearance, which an Auto space theme follows (Arc: appearanceBased).
+/// Cra never sets NSApp.appearance, so the app's effective appearance is the system's.
+@Observable
+final class SystemAppearance: @unchecked Sendable {
+    static let shared = SystemAppearance()
+    /// Written on the main thread only.
+    private(set) var isDark = false
+    @ObservationIgnored private var observation: NSKeyValueObservation?
+
+    @MainActor func start() {
+        update()
+        observation = NSApp.observe(\.effectiveAppearance) { [weak self] _, _ in
+            MainActor.assumeIsolated { self?.update() }
+        }
+    }
+
+    @MainActor private func update() {
+        let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        if dark != isDark { isDark = dark }
     }
 }
 

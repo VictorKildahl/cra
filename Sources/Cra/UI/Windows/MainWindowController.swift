@@ -323,6 +323,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             _ = store.prefs
             _ = store.settings
             _ = store.spaces
+            _ = SystemAppearance.shared.isDark
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.refresh()
@@ -341,8 +342,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // view rebuilds its whole SwiftUI tree, and a new window appearance or background redraws
         // every view, so all of these follow the theme only when it changes. What the root
         // views show beyond the palette they observe themselves.
-        if shownTheme != space.theme {
-            shownTheme = space.theme
+        if shownTheme != space.theme.shown {
+            shownTheme = space.theme.shown
             // A swipe in the floating sidebar changes space under it (issue #12).
             floatingSidebar?.refreshBackdrop()
             shell.placeholderHost.wantsLayer = true

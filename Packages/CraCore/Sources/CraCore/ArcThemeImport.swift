@@ -2,19 +2,24 @@ import Foundation
 
 /// An Arc space's `customInfo.windowTheme` (StorableSidebar.json) as a Cra theme.
 public enum ArcThemeImport {
-    /// Arc's blendedGradient → SpaceTheme. Prefers the dark variant when one exists.
+    /// Arc's blendedGradient → SpaceTheme. An Auto theme (appearanceBased) keeps both halves and
+    /// follows macOS; Light and Dark ones (single) keep their one look.
     public static func theme(from space: [String: Any]) -> SpaceTheme? {
         guard let info = space["customInfo"] as? [String: Any], let wt = info["windowTheme"] as? [String: Any],
               let bg = wt["background"] as? [String: Any] else { return nil }
-        var variant: [String: Any]?
-        var appearance = "auto"
         if let ab = bg["appearanceBased"] as? [String: Any] {
-            variant = (ab["dark"] as? [String: Any]) ?? (ab["light"] as? [String: Any])
-            appearance = ab["dark"] != nil ? "dark" : "light"
-        } else if let single = bg["single"] as? [String: Any] {
-            variant = single["_0"] as? [String: Any]
+            let light = (ab["light"] as? [String: Any]).flatMap { theme(variant: $0, appearance: "light", windowTheme: wt) }
+            let dark = (ab["dark"] as? [String: Any]).flatMap { theme(variant: $0, appearance: "dark", windowTheme: wt) }
+            if let light, let dark { return SpaceTheme(light: light, dark: dark) }
+            return dark ?? light
         }
-        guard let v = variant else { return nil }
+        guard let single = (bg["single"] as? [String: Any])?["_0"] as? [String: Any] else { return nil }
+        return theme(variant: single, appearance: "auto", windowTheme: wt)
+    }
+
+    /// One half of `background`: its own `contentOverBackgroundAppearance` wins over `appearance`.
+    private static func theme(variant v: [String: Any], appearance: String, windowTheme wt: [String: Any]) -> SpaceTheme? {
+        var appearance = appearance
         if let a = v["contentOverBackgroundAppearance"] as? String { appearance = a }
         let vibrant = v["isVibrant"] as? Bool ?? false
         func comp(_ c: [String: Any], _ k: String) -> Double { max(0, min(1, c[k] as? Double ?? 0)) }
