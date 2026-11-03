@@ -31,12 +31,22 @@
     }
   ],
   "generatedAt" : "2026-10-26T07:43:20Z",
+  "idle" : {
+    "cpuPct" : 3,
+    "samples" : 1
+  },
   "insights" : [
     {
       "detail" : "The longest lasted 1.2 s.",
       "id" : "freezes",
       "severity" : "warning",
       "title" : "Cra froze 1 time for a second or more"
+    },
+    {
+      "detail" : "Not counted as freezes: Cra was in a loop of its own on purpose. The longest lasted 4.0 s (tracking).",
+      "id" : "outside-freezes",
+      "severity" : "info",
+      "title" : "1 long pass in menus, drags, alerts or start-up"
     },
     {
       "detail" : "A page's process crashed, ran out of memory or was ended.",
@@ -46,9 +56,12 @@
     }
   ],
   "mainThread" : {
+    "freezes" : 2,
     "hangs" : 0,
-    "longStalls" : 1,
-    "longestMs" : 1200,
+    "longFreezes" : 1,
+    "longestFreezeMs" : 1200,
+    "longestPassMode" : "tracking",
+    "longestPassMs" : 4000,
     "outsideFreezes" : 1,
     "passes" : {
       "buckets" : [
@@ -87,6 +100,7 @@
         "site" : "video.example.com"
       },
       {
+        "active" : true,
         "at" : 101.7,
         "freeze" : true,
         "kind" : "long",
@@ -96,9 +110,11 @@
         ],
         "mode" : "default",
         "ms" : 1200,
+        "onScreen" : true,
         "site" : "video.example.com"
       },
       {
+        "active" : true,
         "at" : 200,
         "freeze" : false,
         "kind" : "hang",
@@ -107,10 +123,27 @@
         ],
         "mode" : "tracking",
         "ms" : 4000,
+        "onScreen" : true,
         "site" : "video.example.com"
       }
     ],
-    "stalls" : 2
+    "slowPass" : {
+      "at" : 100.5,
+      "endedMs" : 1200,
+      "marks" : [
+        "swipe-begin",
+        "page-shown"
+      ],
+      "mode" : "default",
+      "number" : 0,
+      "session" : "0123abcd",
+      "site" : "video.example.com",
+      "stack" : [
+        "10 main [Cra]",
+        "  9 layout() [Cra]"
+      ],
+      "stalledMs" : 1000
+    }
   },
   "processes" : [
     {
@@ -138,17 +171,23 @@
       "wakeups" : 5000
     }
   ],
-  "schema" : 1,
+  "schema" : 2,
   "selfCost" : {
     "bytesWritten" : 70000,
     "cpuMs" : 120,
     "cpuPct" : 0.02,
+    "filesMs" : 0,
+    "mainSamplerMs" : 0,
     "memoryBytes" : 9000,
     "observerCallbacks" : 50000,
     "observerMs" : 4,
+    "processSampleMs" : 0,
+    "systemSampleMs" : 0,
+    "watchdogMs" : 0,
     "writes" : 2
   },
   "session" : {
+    "asleepSeconds" : 0,
     "chromiumVersion" : "156.0.7445.0",
     "craVersion" : "0.1.27",
     "firstLaunchAt" : "2026-10-25T07:33:20Z",
@@ -176,6 +215,7 @@
     "thermalState" : "nominal"
   },
   "tabs" : {
+    "droppedVideoFrames" : 12,
     "latest" : {
       "incognito" : 0,
       "live" : 6,
@@ -184,8 +224,11 @@
       "visible" : 1,
       "windows" : 1
     },
+    "longFrames" : 4,
     "longTaskMs" : 420,
-    "longTasks" : 3
+    "longTasks" : 3,
+    "longestFrameMs" : 180,
+    "videoFrames" : 600
   },
   "timings" : {
     "longTask" : {

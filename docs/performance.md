@@ -29,30 +29,58 @@ libproc calls; once every 5 s it counts tabs and asks the visible page for its l
 ## What a pass is
 
 `MainLoopObserver` puts two `CFRunLoopObserver`s on the main run loop in the common modes: one
-first in line when a pass starts (entry, after waiting, before timers), one last in line when
-it ends (before waiting, exit), so Core Animation's commit counts. A pass is the time between
-two points where the main thread could take input. It differs from HitchMonitor, which times
-how long a block queued on the main queue waits; that wait can span several passes. On
-`fifty-tabs` both see the same number of 250 ms stalls, give or take one.
+first in line when the loop wakes up (after waiting), one last in line before it sleeps (before
+waiting) and when it returns to AppKit (exit). Those last two are where Core Animation commits,
+so a pass is the main thread's work between two points where what it did reaches the screen:
+from waking (or from the exit before it, after which AppKit handles the event the loop returned
+for) to the next sleep or exit, commit included. Entering the loop and turning it without
+sleeping are no boundary (GitHub #135): before, a pass ended at every observer callback, so one
+turn was recorded as two halves, and a 300 ms turn of a 150 ms timer and a 150 ms block was no
+stall at all. A pass differs from HitchMonitor's numbers, which time how long a block queued on
+the main queue waits; that wait can span several passes.
 
-- 250 ms or more is a stall, 1 s a freeze, 2 s a hang (the watchdog writes `hang-<session>-<n>.json`
-  while it lasts, then runs `/usr/bin/sample` on Cra for a second, at most three times a session).
-- Stalls are tagged with the run-loop mode. `tracking` (a held menu, a drag), `modal` (an
-  alert) and `launch` (from the recorder's start until the run loop first sleeps: AppKit runs
-  `applicationDidFinishLaunching` before the loop's first pass) are recorded but are not freezes.
-- Breadcrumbs are HitchMonitor's marks (swipes, page shown, extension popups, scripted
-  commands), cut before any `?`.
+- 250 ms or more is a stall. A stall in the default mode is a freeze: `freezes`, `longFreezes`
+  (1 s or more) and `hangs` (2 s or more) count those, and `longestFreezeMs` is the longest.
+- `tracking` (a held menu, a drag), `modal` (an alert, a save panel) and `launch` (from the
+  recorder's start until the run loop first sleeps: AppKit runs `applicationDidFinishLaunching`
+  before the loop's first pass) are loops Cra is in on purpose: their stalls are in
+  `outsideFreezes`, not in the freeze counts. `longestPassMs` and `longestPassMode` are over every
+  pass, the honest answer to "how long was the main thread blocked". Copy Summary and the pane
+  show both.
+- Stacks: at 2 s the watchdog writes `hang-<session>-<n>.json` while the hang lasts, then runs
+  `/usr/bin/sample` on Cra for a second. No pass in the first real exports reached 2 s, so the
+  session's first pass that is still going at 1 s (`slowStackMs`) gets one `sample` too, kept in
+  memory as `mainThread.slowPass` (no file: it is no hang). At most three `sample` runs a session
+  in all. `sample` takes a second to attach, so a pass that ends soon after shows mostly the idle
+  run loop; `endedMs` against `stalledMs` says how much of the sample saw the block.
+- Breadcrumbs are HitchMonitor's marks, cut before any `?`: swipes, page shown, page loads
+  starting and ending (`load-start`, `load-end`), extension popups, scripted commands, Cra
+  becoming active or not (`app-active`, `app-inactive`), full screen (`fullscreen-enter`,
+  `fullscreen-exit`) and `diagnostics-export`. Every stall also says whether Cra was the active
+  app and whether a window of it was on screen (`active`, `onScreen`).
+- Time: `session.startedAt` is when Cra started (the top of `main.swift`), cut to the second as
+  the files keep dates, and every `at` (stalls, marks, events, hang files) is seconds since then
+  on the clock that counts the Mac's sleep, so `startedAt + at` lines up with `cra.log`. `uptimeSeconds` is on the
+  same clock and `asleepSeconds` says how much of it the Mac slept; pass durations use the clock
+  that stops in sleep, so a sleep is never a stall.
 
 ## What is recorded
 
-Main-thread passes as a histogram, stalls with mode, breadcrumbs and the site on screen. Per
-process kind (browser, renderer, GPU, utility, other, from Chromium's `--type=` argument): CPU,
-memory footprint, disk reads and writes, wakeups (in the file only), and processes started and
-ended. The Mac: CPU, memory pressure, thermal state, Low Power Mode, free disk. Tabs by state,
-sleep refusals by reason, and timings for tab switch, page create, page load and waking a
-slept tab. Long tasks in the visible page. Renderer crashes, hangs and failed loads with their
-codes. Start-up phases, JSON load and save times, the profile's and caches' size (at export).
-The session: a random id, the launch number, the previous session and whether it quit.
+Main-thread passes as a histogram, stalls with mode, breadcrumbs, the site on screen and
+whether Cra was active. Per process kind (browser, renderer, GPU, utility, other, from
+Chromium's `--type=` argument): CPU, memory footprint, disk reads and writes, wakeups (in the
+file only), and processes started and ended. The Mac: CPU, memory pressure, thermal state, Low
+Power Mode, free disk, and Cra's average CPU while nobody used the Mac (`idle`: 5-second samples
+with no keyboard or mouse input for a minute). Tabs by state, sleep refusals by reason, and
+timings for tab switch, page create, page load and waking a slept tab. In the visible page,
+read with the long tasks every 5 s and never in background tabs: long tasks, Chromium's long
+animation frames (`longFrames`, `longestFrameMs`: a passive observer, it asks for no frames) and
+the frames its videos played and dropped (`getVideoPlaybackQuality`). Renderer crashes, hangs
+and failed loads with their codes. Start-up phases, JSON load and save times (saves run on the
+persistence queue, so `jsonSave` is never a main-thread stall), the profile's and caches' size
+(at export only). The session: a random id, the launch number, the previous session and whether
+it quit. The totals in `tabs` are since launch; `history.json`, in the export too, has stalls
+and long tasks per 5 minutes.
 
 Never: addresses beyond the host, paths, query strings, titles, page text, form values, typed
 text, an installation id. Incognito pages give counts only.
@@ -74,17 +102,29 @@ A `session.open` found at launch means that session ended without quitting (cras
 `kill -9`, power loss). It is made only after `CraCEFRuntime.initialize` succeeds, so the
 "another Cra is running" and failed-start exits never leave one.
 
-## Measured (2 Nov 2026, M-series Mac)
+## Measured (3 Nov 2026, M-series Mac)
 
 | | Budget | Measured |
 |---|---|---|
-| CPU | < 0.1 % of a core | 0.027–0.039 % (`fifty-tabs`, three runs; an idle session 0.027 %) |
-| Main thread | < 0.2 ms per tick | ~95 ns per observer callback (114,663 callbacks, 10.8 ms over a `fifty-tabs` run) |
+| CPU | < 0.1 % of a core | 0.029 % (`fifty-tabs`; 2 Nov, before #135: 0.027–0.039 %) |
+| Main thread | < 0.2 ms per tick | ~110 ns per observer callback (60,319 callbacks, 6.7 ms over a `fifty-tabs` run; 114,663 before #135) |
 | Memory | < 5 MB | ~5 KB of recorder data (`selfCost.memoryBytes`) |
 | Disk writes | < 60 KB per minute | ~5 KB per minute (black box) plus ~4 KB per minute (history) |
 
-`selfCost` in every report says what recording cost that session; `scripts/scenario.sh`
-fails a scenario above 0.1 %.
+`selfCost` in every report says what recording cost that session, over the awake time it ran,
+and which part: `observerMs`, `watchdogMs`, `processSampleMs` (libproc over every helper),
+`systemSampleMs`, `filesMs` (black box and history: building, encoding, writing) and
+`mainSamplerMs` (the tab count and the visible page's read on the main thread).
+`scripts/scenario.sh` fails a scenario above 0.1 %, and a report above it says so in its
+findings (`profiler-overhead`); the numbers still hold, the finding is there so a report says
+what recording cost.
+
+The first real exports (GitHub #135: 2 500 tabs, 9 loaded, 3 hours) measured 0.13–0.145 %,
+against 0.03 % on `fifty-tabs`. Most of it was the 5-second queue, not the observer (536 ms of
+6 342), and the observer's callbacks were twice what they needed to be (one record per
+callback). The callbacks are halved (#135); the parts above say where the rest goes on the next
+real export. On `fifty-tabs` the 13.5 ms were: observer 6.7, process sample 5.1 (libproc and the
+`--type=` of each new renderer), main sampler 1.0, watchdog 0.4, system sample 0.3, files 0.1.
 
 ## Spikes (phase 0)
 
@@ -128,7 +168,8 @@ fails a scenario above 0.1 %.
    `Services/HitchMonitor.swift`, `Services/Diagnostics.swift`, `UI/Settings/SettingsWindowController.swift`
    (the pane, `isOpen`). Then the two rules in `scripts/lint.py`.
 3. `CraLog.sitesSeen` and `SiteNames` serve "Hide site names"; keep them if that stays.
-4. The `lt` observer in `PageScript.isolatedWorld`, and `setProcessEventHandler` in CraCEF.
+4. The `lt` and `lf` observers in `PageScript.isolatedWorld`, the `load-start`/`load-end` and
+   `diagnostics-export` marks, and `setProcessEventHandler` in CraCEF.
 5. `perfRecording` and `perfHidesSiteNames` in `AppSettings` (old files keep loading: unknown
    keys are ignored) and their lines in `Fixtures/Model`.
 6. The harness lists that compile `Perf.swift` and `CraCore/Perf/*.swift`
