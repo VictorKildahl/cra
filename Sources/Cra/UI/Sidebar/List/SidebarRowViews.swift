@@ -392,29 +392,52 @@ final class SidebarFaviconView: NSImageView {
     }
 }
 
-/// Arc's folder glyph: the outline over a filled folder while closed, GitHub's mark on a live folder.
+/// Arc's folder glyph (FolderIconView, read from Arc 1.171's binary): a back panel with the tab
+/// and a front panel, both hinged at the bottom-left corner. Opening turns them toward you in
+/// perspective, the front tipping forward and the back leaning away, each shaded darker as it
+/// turns, with Core Animation's implicit 0.25 s transition. GitHub's mark on a live folder.
 final class FolderGlyphView: NSView {
-    private let fill = NSImageView()
-    private let outline = NSImageView()
+    /// Arc fixes the glyph at 16 × 16 pt.
+    static let side: CGFloat = 16
+    private let icon = CALayer()
+    private let back = CAShapeLayer()
+    private let backShade = CAGradientLayer()
+    private let backShadeMask = CAShapeLayer()
+    private let front = CALayer()
+    private let frontPanel = CAShapeLayer()
+    private let frontShade = CAGradientLayer()
+    private let frontShadeMask = CAShapeLayer()
     private let mark = NSImageView()
     /// Arc's peeked folder (FolderPeek): three 2 pt dots on a 4 pt pitch in the closed body.
     private let dots = CAShapeLayer()
+    private var expanded = false
 
     override init(frame: NSRect) {
         super.init(frame: frame)
-        for v in [fill, outline] {
-            v.imageScaling = .scaleNone
-            v.autoresizingMask = [.width, .height]
-            v.frame = bounds
-            addSubview(v)
+        wantsLayer = true
+        // Arc: black from clear to 0.36 across the back, to 0.15 across the front.
+        backShade.colors = [NSColor.black.withAlphaComponent(0).cgColor, NSColor.black.withAlphaComponent(0.36).cgColor]
+        backShade.startPoint = CGPoint(x: 0, y: 0)
+        backShade.endPoint = CGPoint(x: 0.6, y: 1)
+        backShade.mask = backShadeMask
+        frontShade.colors = [NSColor.black.withAlphaComponent(0).cgColor, NSColor.black.withAlphaComponent(0.15).cgColor]
+        frontShade.startPoint = CGPoint(x: 0.1, y: 0)
+        frontShade.endPoint = CGPoint(x: 0.9, y: 1)
+        frontShade.mask = frontShadeMask
+        back.addSublayer(backShade)
+        front.addSublayer(frontPanel)
+        front.addSublayer(frontShade)
+        for l in [back, front] as [CALayer] {
+            // Hinged on the bottom-left corner.
+            l.anchorPoint = CGPoint(x: 0, y: 1)
+            icon.addSublayer(l)
         }
-        fill.image = SidebarSymbols.image("folder.fill", size: 15)
-        outline.image = SidebarSymbols.image("folder", size: 15)
+        layer?.addSublayer(icon)
+        layer?.addSublayer(dots)
         mark.image = GitHubMark.image
         mark.imageScaling = .scaleProportionallyUpOrDown
         addSubview(mark)
-        wantsLayer = true
-        layer?.addSublayer(dots)
+        apply(animated: false)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -422,29 +445,97 @@ final class FolderGlyphView: NSView {
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    func show(expanded: Bool, peeked: Bool = false, live: Bool, tint: NSColor, fillColor: NSColor) {
-        fill.isHidden = expanded
-        fill.contentTintColor = fillColor
-        outline.contentTintColor = tint
+    func show(expanded: Bool, peeked: Bool = false, live: Bool, tint: NSColor, fillColor: NSColor, animated: Bool = false) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for l in [back, frontPanel] {
+            l.fillColor = fillColor.cgColor
+            l.strokeColor = tint.cgColor
+        }
         mark.isHidden = !live
         mark.contentTintColor = tint
         dots.isHidden = !peeked || expanded || live
         dots.fillColor = tint.cgColor
+        CATransaction.commit()
+        guard expanded != self.expanded else { return }
+        self.expanded = expanded
+        apply(animated: animated)
+    }
+
+    /// Arc's per-state transforms: perspective m34 −0.00291, 3 pt to the right, 32° about the
+    /// vertical axis, then the back 28° and the front −30° about the horizontal one.
+    private func apply(animated: Bool) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(!animated)
+        let open = expanded
+        var t = CATransform3DIdentity
+        t.m34 = -0.0029129464
+        t = CATransform3DTranslate(t, open ? 3 : 0, 0, 0)
+        t = CATransform3DRotate(t, open ? 32 * .pi / 180 : 0, 0, 1, 0)
+        back.transform = CATransform3DRotate(t, open ? 28 * .pi / 180 : 0, 1, 0, 0)
+        front.transform = CATransform3DRotate(t, open ? -30 * .pi / 180 : 0, 1, 0, 0)
+        frontShade.opacity = open ? 1 : 0
+        backShade.opacity = open ? 1 : 0.2
+        CATransaction.commit()
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
         needsLayout = true
     }
 
     override func layout() {
         super.layout()
-        mark.frame = NSRect(x: (bounds.width - 7) / 2, y: (bounds.height - 7) / 2 + 1.5, width: 7, height: 7)
+        let scale = window?.backingScaleFactor ?? 2
+        func px(_ v: CGFloat) -> CGFloat { (v * scale).rounded() / scale }
+        let w = Self.side, h = Self.side
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        dots.frame = bounds
+        icon.frame = CGRect(x: px((bounds.width - w) / 2), y: px((bounds.height - h) / 2), width: w, height: h)
+        let r = (w / 7).rounded()
+        let tabH = px((h * 0.25).rounded())
+        let t = (tabH / 1.5).rounded(.down)
+        let line = px(1.25)
+        // The back panel with its tab (the view is flipped: y runs down).
         let path = CGMutablePath()
-        // On whole points, so each dot is two pixels square at 1x.
-        let y = (bounds.height / 2 + 1.5).rounded(.down) - 1
-        for i in -1...1 { path.addEllipse(in: CGRect(x: (bounds.width / 2).rounded(.down) + CGFloat(i) * 4 - 1, y: y, width: 2, height: 2)) }
-        dots.path = path
+        path.move(to: CGPoint(x: r, y: 0))
+        path.addLine(to: CGPoint(x: px(0.41 * w), y: 0))
+        path.addLine(to: CGPoint(x: px(0.58 * w), y: t))
+        path.addLine(to: CGPoint(x: w - r, y: t))
+        path.addArc(center: CGPoint(x: w - r, y: t + r), radius: r, startAngle: -.pi / 2, endAngle: 0, clockwise: false)
+        path.addLine(to: CGPoint(x: w, y: h - r))
+        path.addArc(center: CGPoint(x: w - r, y: h - r), radius: r, startAngle: 0, endAngle: .pi / 2, clockwise: false)
+        path.addLine(to: CGPoint(x: r, y: h))
+        path.addArc(center: CGPoint(x: r, y: h - r), radius: r, startAngle: .pi / 2, endAngle: .pi, clockwise: false)
+        path.addLine(to: CGPoint(x: 0, y: r))
+        path.addArc(center: CGPoint(x: r, y: r), radius: r, startAngle: .pi, endAngle: 1.5 * .pi, clockwise: false)
+        path.closeSubpath()
+        let backFrame = CGRect(x: 0, y: 0, width: w, height: h)
+        back.bounds = CGRect(origin: .zero, size: backFrame.size)
+        back.position = CGPoint(x: backFrame.minX, y: backFrame.maxY)
+        back.path = path
+        back.lineWidth = line
+        backShade.frame = back.bounds
+        backShadeMask.frame = back.bounds
+        backShadeMask.path = path
+        let frontFrame = CGRect(x: 0, y: tabH, width: w, height: h - tabH)
+        front.bounds = CGRect(origin: .zero, size: frontFrame.size)
+        front.position = CGPoint(x: frontFrame.minX, y: frontFrame.maxY)
+        let panel = CGPath(roundedRect: front.bounds, cornerWidth: r, cornerHeight: r, transform: nil)
+        frontPanel.frame = front.bounds
+        frontPanel.path = panel
+        frontPanel.lineWidth = line
+        frontShade.frame = front.bounds
+        frontShadeMask.frame = front.bounds
+        frontShadeMask.path = panel
+        // In the front panel, on whole points so each dot is two pixels square at 1x.
+        dots.frame = bounds
+        let dotPath = CGMutablePath()
+        let y = (icon.frame.minY + frontFrame.midY).rounded(.down) - 1
+        for i in -1...1 { dotPath.addEllipse(in: CGRect(x: (bounds.width / 2).rounded(.down) + CGFloat(i) * 4 - 1, y: y, width: 2, height: 2)) }
+        dots.path = dotPath
         CATransaction.commit()
+        mark.frame = NSRect(x: icon.frame.minX + (w - 7) / 2, y: icon.frame.minY + frontFrame.midY - 3.5, width: 7, height: 7)
     }
 }
 
@@ -1046,8 +1137,10 @@ final class FolderRowView: SidebarRowView, NSTextFieldDelegate {
 
     func apply(_ m: FolderRowModel) {
         guard m != model else { return }
+        // The same folder opening or closing turns its glyph; a row taking another folder doesn't.
+        let toggled = model.map { $0.id == m.id && $0.expanded != m.expanded } ?? false
         model = m
-        glyph.show(expanded: m.expanded, peeked: m.peeked, live: m.live, tint: m.tint, fillColor: m.fill)
+        glyph.show(expanded: m.expanded, peeked: m.peeked, live: m.live, tint: m.tint, fillColor: m.fill, animated: toggled && window != nil)
         titleLabel.stringValue = m.title
         titleLabel.textColor = colors.textPrimary
         setAccessibilityLabel(m.title)
@@ -1477,15 +1570,24 @@ final class LiveStatusRowView: SidebarRowView {
 final class NewTabRowView: SidebarRowView {
     private let plus = NSImageView()
     private let label = NSTextField.sidebarLabel(size: 14)
+    /// Zen's ⌘ + New Tab: the clipboard's text under "Paste and Search", in Arc's 11 pt second line.
+    private let preview = NSTextField.sidebarLabel(size: 11)
+    private var flagsMonitor: Any?
+    /// What a click opens while ⌘ is held over the row with text on the clipboard; nil reads New Tab.
+    private var paste: ClipboardPaste?
+    private var pasteCheck: Task<Void, Never>?
 
     override init(key: SpaceListView.RowKey, list: SpaceListView, colors: SidebarColors) {
         super.init(key: key, list: list, colors: colors)
         // Arc's plus, fitted pixel by pixel at 1x and 2x.
-        plus.image = SidebarSymbols.image("plus", size: 14.5, weight: .medium)
+        plus.image = Self.plusImage
         plus.imageScaling = .scaleNone
         label.stringValue = "New Tab"
+        preview.lineBreakMode = .byTruncatingTail
+        preview.isHidden = true
         addSubview(plus)
         addSubview(label)
+        addSubview(preview)
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
         setAccessibilityLabel("New Tab")
@@ -1493,6 +1595,9 @@ final class NewTabRowView: SidebarRowView {
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    private static let plusImage = SidebarSymbols.image("plus", size: 14.5, weight: .medium)
+    private static let clipboardImage = SidebarSymbols.image("doc.on.clipboard", size: 13, weight: .medium)
 
     /// While the ⌘T bar is open Arc draws this row as the open one: the selected tab's fill,
     /// shadow and text.
@@ -1509,6 +1614,7 @@ final class NewTabRowView: SidebarRowView {
         let c = isHovered || active ? colors.textPrimary : colors.textSecondary
         plus.contentTintColor = c
         label.textColor = c
+        preview.textColor = colors.textTertiary
     }
 
     override func setColors(_ c: SidebarColors) {
@@ -1526,6 +1632,48 @@ final class NewTabRowView: SidebarRowView {
     override func hoverChanged() {
         super.hoverChanged()
         refreshColors()
+        if isHovered, flagsMonitor == nil {
+            flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] e in
+                self?.checkClipboard(e.modifierFlags)
+                return e
+            }
+        } else if !isHovered {
+            stopWatchingKeys()
+        }
+        checkClipboard(NSEvent.modifierFlags)
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { stopWatchingKeys() }
+    }
+
+    private func stopWatchingKeys() {
+        if let m = flagsMonitor { NSEvent.removeMonitor(m) }
+        flagsMonitor = nil
+    }
+
+    /// ⌘ alone over the row: what the clipboard holds, asked without reading it where reading
+    /// would raise macOS's paste alert.
+    private func checkClipboard(_ flags: NSEvent.ModifierFlags) {
+        pasteCheck?.cancel()
+        guard isHovered, flags.intersection([.command, .shift, .option, .control]) == .command else { return show(nil) }
+        pasteCheck = Task { [weak self] in
+            let found = await ClipboardPaste.peek()
+            guard !Task.isCancelled else { return }
+            self?.show(found)
+        }
+    }
+
+    private func show(_ p: ClipboardPaste?) {
+        guard p != paste else { return }
+        paste = p
+        plus.image = p == nil ? Self.plusImage : Self.clipboardImage
+        label.stringValue = p?.title ?? "New Tab"
+        preview.stringValue = p?.text?.replacingOccurrences(of: "\n", with: " ") ?? ""
+        preview.isHidden = preview.stringValue.isEmpty
+        setAccessibilityLabel(label.stringValue)
+        needsLayout = true
     }
 
     override func layout() {
@@ -1534,10 +1682,54 @@ final class NewTabRowView: SidebarRowView {
         plus.frame = NSRect(x: 8, y: 0, width: CraMetrics.favicon, height: h)
         let th = label.intrinsicContentSize.height
         let x = 8 + CraMetrics.favicon + 9
-        label.frame = NSRect(x: x - SidebarText.inset, y: (h - th) / 2, width: max(0, bounds.width - 10 - x) + 2 * SidebarText.inset, height: th)
+        let w = max(0, bounds.width - 10 - x) + 2 * SidebarText.inset
+        guard !preview.isHidden else {
+            label.frame = NSRect(x: x - SidebarText.inset, y: (h - th) / 2, width: w, height: th)
+            return
+        }
+        let ph = preview.intrinsicContentSize.height
+        let top = (h - th - ph) / 2
+        label.frame = NSRect(x: x - SidebarText.inset, y: top, width: w, height: th)
+        preview.frame = NSRect(x: x - SidebarText.inset, y: top + th, width: w, height: ph)
     }
 
-    override func click(_ event: NSEvent, at point: NSPoint) { list?.actions.openCommandBar(.newTab) }
+    override func click(_ event: NSEvent, at point: NSPoint) {
+        // Read on the click: the user asked for the paste, so macOS lets it through or asks once.
+        if paste != nil, event.modifierFlags.contains(.command), let text = ClipboardPaste.read() {
+            show(nil)
+            list?.actions.openTyped(text)
+        } else {
+            list?.actions.openCommandBar(.newTab)
+        }
+    }
+}
+
+/// The clipboard's text as a new tab (Zen's ⌘ + New Tab; Chrome's "Paste and Go" / "Paste and Search").
+struct ClipboardPaste: Equatable {
+    let isAddress: Bool
+    /// The text itself where it can be read without macOS's paste alert, else nil.
+    let text: String?
+
+    var title: String { isAddress ? "Paste and Go" : "Paste and Search" }
+
+    /// What the clipboard holds. Since macOS 15.4 reading it unasked raises an alert unless the user
+    /// allowed Cra always; asking what kind of text it is never does.
+    @MainActor static func peek() async -> ClipboardPaste? {
+        let board = NSPasteboard.general
+        guard board.types?.contains(.string) == true else { return nil }
+        if #available(macOS 15.4, *), board.accessBehavior != .alwaysAllow {
+            guard let found = try? await board.detectedPatterns(for: [\.probableWebURL, \.probableWebSearch]), !found.isEmpty else { return nil }
+            return ClipboardPaste(isAddress: found.contains(\.probableWebURL), text: nil)
+        }
+        return read().map { ClipboardPaste(isAddress: TypedURL.looksLikeURL($0), text: $0) }
+    }
+
+    /// The clipboard's text on one line, nil when it holds none.
+    @MainActor static func read() -> String? {
+        guard let s = NSPasteboard.general.string(forType: .string) else { return nil }
+        let line = s.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        return line.isEmpty || line.count > 2048 ? nil : line
+    }
 }
 
 /// The line between pinned and Today; "Clear" shows on hover.

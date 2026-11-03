@@ -122,7 +122,8 @@ final class SuggestionEngine {
         }
         result.items = Array(items.prefix(Self.maxRows))
         result.inlineCompletion = completion?.text
-        result.scope = TabSearchScope.isOffered(by: query) ? .tabs : SiteSearch.match(q, completion: completion?.text).map(CommandBarScope.site)
+        result.scope = TabSearchScope.isOffered(by: query) ? .tabs
+            : SiteSearch.match(q, completion: completion?.text, keywords: engines.keywords).map(CommandBarScope.site)
         return result
     }
 
@@ -200,19 +201,40 @@ final class SuggestionEngine {
     /// The command bar opened or closed: what it searches may have changed since.
     func resetIndex() {
         index = nil
+        enginesRead = nil
         remote.reset()
     }
+
+    // MARK: Search engines
+
+    private var enginesRead: (default: ChromiumSearchEngine, keywords: [ChromiumSearchEngine])?
+
+    /// Chromium's, in the window's space's profile (an incognito window's are its Default's),
+    /// read when the bar opens.
+    private var engines: (default: ChromiumSearchEngine, keywords: [ChromiumSearchEngine]) {
+        if let enginesRead { return enginesRead }
+        let profile = store.profilePath(space: store.focusedSpaceID)
+        let read = (SearchEngines.shared.defaultEngine(profilePath: profile, legacy: store.settings.searchEngine),
+                    SearchEngines.shared.keywords(profilePath: profile))
+        enginesRead = read
+        return read
+    }
+
+    /// Where typed text that isn't an address is searched.
+    var searchEngine: ChromiumSearchEngine { engines.default }
+
+    func searchURL(_ text: String) -> String { engines.default.searchURL(text) }
 
     /// Asks the search engine about `rawQuery`; `done` runs when its answer is in, to list again.
     func fetchSearchSuggestions(for rawQuery: String, done: @escaping @MainActor () -> Void) {
         let query = rawQuery.trimmingCharacters(in: .whitespaces)
         guard store.settings.searchSuggestions, !query.isEmpty, !query.contains("://") else { return }
-        remote.fetch(query, engine: store.settings.searchEngine, done: done)
+        remote.fetch(query, engine: searchEngine, done: done)
     }
 
     /// The engine's suggestions not already listed, as search rows (or site rows).
     private func searchSuggestions(_ query: String, after items: [Suggestion]) -> [Suggestion] {
-        let engine = store.settings.searchEngine
+        let engine = searchEngine
         let titles = Set(items.map { $0.title.lowercased() })
         let urls = Set(items.compactMap(\.url))
         return remote.items(for: query, engine: engine).compactMap { r in
@@ -240,8 +262,8 @@ final class SuggestionEngine {
             return Suggestion(id: "typed", kind: .navigate, title: query, subtitle: "Open URL", url: url,
                               faviconKey: FaviconKey.key(for: url), symbol: "globe", trailing: nil, score: 1000)
         }
-        let engine = store.settings.searchEngine
-        return Suggestion(id: "typed", kind: .search, title: query, subtitle: "Search \(engine.label)",
+        let engine = searchEngine
+        return Suggestion(id: "typed", kind: .search, title: query, subtitle: "Search \(engine.name)",
                           url: engine.searchURL(query), faviconKey: nil, symbol: "magnifyingglass", trailing: nil, score: 1000)
     }
 
@@ -510,55 +532,6 @@ enum CommandBarScope: Equatable {
         case .tabs: return TabSearchScope.name
         }
     }
-}
-
-/// Arc's Site Search: the sites it seeds into Chromium's keyword table (active, not
-/// auto-added), with the pill colour each one gets in the bar.
-struct SiteSearch: Equatable {
-    let name: String
-    /// Chromium's keyword: what the typed text has to start.
-    let host: String
-    let url: String
-    let color: String
-
-    func searchURL(_ query: String) -> String {
-        let q = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)?
-            .replacingOccurrences(of: "&", with: "%26") ?? query
-        return url.replacingOccurrences(of: "%s", with: q)
-    }
-
-    /// "twit" offers X (twitter.com) though it completes to twitch.tv; the completed host
-    /// wins when it is a site search itself.
-    static func match(_ q: String, completion: String?) -> SiteSearch? {
-        var t = q
-        if t.hasPrefix("www.") { t.removeFirst(4) }
-        guard !t.isEmpty, !t.contains(" "), !t.contains("/") else { return nil }
-        if let completion, let site = all.first(where: { $0.host == completion && $0.host.hasPrefix(t) }) { return site }
-        return all.first { $0.host.hasPrefix(t) }
-    }
-
-    /// Arc 1.170's list, in its order; colours measured off its pills.
-    static let all: [SiteSearch] = [
-        SiteSearch(name: "Google Drive", host: "drive.google.com", url: "https://drive.google.com/drive/search?q=%s", color: "#0F9D58"),
-        SiteSearch(name: "Gmail", host: "mail.google.com", url: "https://mail.google.com/mail/u/0/#search/%s", color: "#D44638"),
-        SiteSearch(name: "Google Maps", host: "maps.google.com", url: "https://www.google.com/maps/search/%s", color: "#FBBC05"),
-        SiteSearch(name: "Google Calendar", host: "calendar.google.com", url: "https://calendar.google.com/calendar/u/0/r/search?q=%s", color: "#9C27B0"),
-        SiteSearch(name: "Google Docs", host: "docs.google.com", url: "https://docs.google.com/document/u/0/?q=%s", color: "#4285F4"),
-        SiteSearch(name: "Dropbox", host: "dropbox.com", url: "https://www.dropbox.com/search/personal?&query=%s", color: "#007EE5"),
-        SiteSearch(name: "Amazon", host: "amazon.com", url: "https://www.amazon.com/s?k=%s", color: "#FF9900"),
-        SiteSearch(name: "GitHub", host: "github.com", url: "https://github.com/search?q=%s", color: "#743FC7"),
-        SiteSearch(name: "Figma", host: "figma.com", url: "https://www.figma.com/files/search?q=%s", color: "#F24E1E"),
-        SiteSearch(name: "X", host: "x.com", url: "https://x.com/search?q=%s", color: "#000000"),
-        SiteSearch(name: "X", host: "twitter.com", url: "https://x.com/search?q=%s", color: "#000000"),
-        SiteSearch(name: "YouTube", host: "youtube.com", url: "https://www.youtube.com/results?search_query=%s", color: "#FF0000"),
-        SiteSearch(name: "Wikipedia", host: "wikipedia.org", url: "https://wikipedia.org/w/index.php?search=%s", color: "#FFA500"),
-        SiteSearch(name: "Reddit", host: "reddit.com", url: "https://www.reddit.com/search/?q=%s", color: "#FF4500"),
-        SiteSearch(name: "SoundCloud", host: "soundcloud.com", url: "https://soundcloud.com/search?q=%s", color: "#F85216"),
-        SiteSearch(name: "Asana", host: "asana.com", url: "https://app.asana.com/0/search?q=%s", color: "#F06A6A"),
-        SiteSearch(name: "LinkedIn", host: "linkedin.com", url: "https://linkedin.com/search/results/all/?keywords=%s", color: "#0B66C2"),
-        SiteSearch(name: "Apple Music", host: "music.apple.com", url: "https://music.apple.com/us/search?term=%s", color: "#FA2A44"),
-        SiteSearch(name: "Spotify", host: "spotify.com", url: "https://open.spotify.com/search/%s", color: "#1DB954"),
-    ]
 }
 
 enum PopularDomains {

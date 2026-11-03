@@ -31,6 +31,10 @@ final class CommandBarView: NSView {
     private var rows: [CommandBarRowView] = []
     private var syncQueued = false
     private var attached = false
+    /// The scope shown last, to bounce when Tab enters one or Backspace leaves it.
+    private var shownScope: CommandBarScope?
+    private var splash: NSPanel?
+    private var innerSplash: NSView?
 
     init(controller: CommandBarController, favicons: FaviconCache) {
         self.controller = controller
@@ -106,9 +110,15 @@ final class CommandBarView: NSView {
         border.strokeColor = NSColor.labelColor.withAlphaComponent(dark ? 0.12 : 0.08).cgColor
         divider.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.08).cgColor
         let scope = c.scope
-        // A site's brand colour; the tabs scope takes the space's, the colour of its rows.
+        if c.isOpen, (scope == nil) != (shownScope == nil) {
+            let site: SiteSearch? = if case .site(let site) = scope { site } else { nil }
+            scopeChanged(color: site?.color.map { NSColor(hex: $0) })
+        }
+        shownScope = c.isOpen ? scope : nil
+        // A site's brand colour; the tabs scope and Chromium's other keywords take the space's, the
+        // colour of its rows.
         let highlight: NSColor
-        if case .site(let site) = scope { highlight = NSColor(hex: site.color) } else { highlight = NSColor(c.highlight) }
+        if case .site(let site) = scope, let hex = site.color { highlight = NSColor(hex: hex) } else { highlight = NSColor(c.highlight) }
         info.isHidden = !c.query.isEmpty || scope != nil
         divider.isHidden = items.isEmpty
         pill.isHidden = scope == nil
@@ -223,6 +233,89 @@ final class CommandBarView: NSView {
         }
     }
 
+    // MARK: Entering a scope (Arc's CommandBarContainer, 1.171)
+
+    /// Tab into a scope and Backspace out of it: the bar bounces, and a site's colour washes
+    /// through it (Arc's arc_commandBarBounce and SplashView, read from its binary).
+    private func scopeChanged(color: NSColor?) {
+        bounce()
+        splash?.parent?.removeChildWindow(splash!)
+        splash?.orderOut(nil)
+        splash = nil
+        innerSplash?.removeFromSuperview()
+        innerSplash = nil
+        if let color { showSplash(color) }
+    }
+
+    /// A spring toward 0.95 (damping ratio 0.9, response 0.7) cut off after 0.1 s and played
+    /// back: the bar dips about 1% and returns within 0.2 s.
+    private func bounce() {
+        guard let layer else { return }
+        let w = layer.bounds.width, h = layer.bounds.height
+        // About the bar's centre, whatever anchor AppKit gave the layer.
+        let dx = (0.5 - layer.anchorPoint.x) * w, dy = (0.5 - layer.anchorPoint.y) * h
+        let scaled = CATransform3DTranslate(CATransform3DScale(CATransform3DMakeTranslation(dx, dy, 0), 0.95, 0.95, 1), -dx, -dy, 0)
+        let a = CASpringAnimation(keyPath: "transform")
+        a.mass = 1
+        a.stiffness = pow(2 * .pi / 0.7, 2)
+        a.damping = 4 * .pi * 0.9 / 0.7
+        a.fromValue = layer.presentation()?.transform ?? CATransform3DIdentity
+        a.toValue = scaled
+        a.autoreverses = true
+        a.repeatCount = 1
+        a.fillMode = .forwards
+        a.duration = 0.1
+        layer.add(a, forKey: "arc_commandBarBounce")
+    }
+
+    /// The site's colour as a 12 pt rounded rectangle under the bar, blurring to 150 and fading
+    /// out over 1.2 s (ease-out). It spreads past the bar, so it gets a panel of its own below the
+    /// bar's. Arc's sits under the bar's background in the same window and shows through it: the
+    /// inside turns dark red at once ((47, 20, 19) over (26, 26, 26) for YouTube), holds for 0.17 s
+    /// and is gone after a second (measured at 100 fps, 3 Nov). The bar's material can't see the
+    /// panel below, so the inside is the colour under the bar's tint, following that curve.
+    private func showSplash(_ color: NSColor) {
+        guard let window else { return }
+        let inner = NSView(frame: bounds)
+        inner.autoresizingMask = [.width, .height]
+        inner.wantsLayer = true
+        inner.layer?.backgroundColor = color.cgColor
+        inner.layer?.opacity = 0
+        let fade = CAKeyframeAnimation(keyPath: "opacity")
+        fade.keyTimes = Self.innerSplashCurve.map { NSNumber(value: $0.time) }
+        fade.values = Self.innerSplashCurve.map { 0.42 * $0.level }
+        fade.duration = 1
+        inner.layer?.add(fade, forKey: "splash")
+        addSubview(inner, positioned: .above, relativeTo: material)
+        innerSplash = inner
+        let margin: CGFloat = 420
+        let panel = NSPanel(contentRect: window.frame.insetBy(dx: -margin, dy: -margin), styleMask: [.borderless, .nonactivatingPanel],
+                            backing: .buffered, defer: false)
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        panel.hasShadow = false
+        panel.ignoresMouseEvents = true
+        panel.collectionBehavior = window.collectionBehavior
+        panel.contentView = NSHostingView(rootView: CommandBarSplash(color: Color(nsColor: color), size: window.frame.size))
+        window.addChildWindow(panel, ordered: .below)
+        splash = panel
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) { [weak self, weak panel] in
+            guard let self, let panel, self.splash === panel else { return }
+            panel.parent?.removeChildWindow(panel)
+            panel.orderOut(nil)
+            self.splash = nil
+            self.innerSplash?.removeFromSuperview()
+            self.innerSplash = nil
+        }
+    }
+
+    /// How much of the site's colour shows inside Arc's bar after Tab, relative to the start (red
+    /// over green, sampled off a 100 fps recording of Arc 1.171).
+    private static let innerSplashCurve: [(time: Double, level: Double)] = [
+        (0, 1), (0.17, 1), (0.21, 0.89), (0.27, 0.67), (0.33, 0.52), (0.39, 0.36), (0.45, 0.30), (0.51, 0.23),
+        (0.57, 0.185), (0.69, 0.107), (0.75, 0.078), (0.87, 0.06), (0.93, 0.026), (1, 0),
+    ]
+
     /// UnevenRoundedRectangle: smaller top corners while the bar hangs from the toolbar.
     private static func path(_ r: CGRect, top: CGFloat, bottom: CGFloat) -> CGPath {
         let p = CGMutablePath()
@@ -238,6 +331,29 @@ final class CommandBarView: NSView {
         p.addArc(tangent1End: CGPoint(x: r.minX, y: r.minY), tangent2End: CGPoint(x: r.minX + top, y: r.minY), radius: top)
         p.closeSubpath()
         return p
+    }
+}
+
+/// Arc's SplashView: `Color(nsColor:)` clipped to a 12 pt continuous rounded rectangle, blurred and
+/// faded by one ease-out animation of 1.2 s that starts as it appears.
+private struct CommandBarSplash: View {
+    let color: Color
+    let size: CGSize
+    @State private var blurRadius: CGFloat = 0
+    @State private var opacity: Double = 1
+
+    var body: some View {
+        color
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .frame(width: size.width, height: size.height)
+            .blur(radius: blurRadius, opaque: false)
+            .opacity(opacity)
+            .animation(.easeOut(duration: 1.2), value: blurRadius)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onAppear {
+                blurRadius = 150
+                opacity = 0
+            }
     }
 }
 

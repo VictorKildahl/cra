@@ -2625,6 +2625,29 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
     if (!value || value->GetType() != VTYPE_DICTIONARY) return nil;
     return NSStringFromCef(CefWriteJSON(value, JSON_WRITER_DEFAULT));
 }
++ (NSString*)preference:(NSString*)name forProfile:(NSString*)profilePath {
+    if (!g_contextInitialized || g_quitting) return nil;
+    if (profilePath.length && ![g_readyProfiles containsObject:profilePath]) return nil;
+    CefRefPtr<CefRequestContext> context = profilePath.length ? ProfileContext(profilePath) : CefRequestContext::GetGlobalContext();
+    CefRefPtr<CefValue> value = context ? context->GetPreference(CefStringFromNS(name)) : nullptr;
+    if (!value) return nil;
+    return NSStringFromCef(CefWriteJSON(value, JSON_WRITER_DEFAULT));
+}
++ (BOOL)setPreference:(NSString*)name json:(NSString*)json forProfile:(NSString*)profilePath {
+    if (!g_contextInitialized || g_quitting) return NO;
+    if (profilePath.length && ![g_readyProfiles containsObject:profilePath]) return NO;
+    CefRefPtr<CefRequestContext> context = profilePath.length ? ProfileContext(profilePath) : CefRequestContext::GetGlobalContext();
+    CefRefPtr<CefValue> value = CefParseJSON(CefStringFromNS(json), JSON_PARSER_RFC);
+    if (!context || !value) return NO;
+    CefString cefName = CefStringFromNS(name);
+    if (!context->CanSetPreference(cefName)) return NO;
+    CefString error;
+    if (!context->SetPreference(cefName, value, error)) {
+        NSLog(@"CraCEF: %@: %s", name, error.ToString().c_str());
+        return NO;
+    }
+    return YES;
+}
 + (void)setExtensionSettingsChangeHandler:(void (^)(void))handler {
     g_extensionSettingsHandler = [handler copy];
 }

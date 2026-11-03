@@ -331,6 +331,13 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 /// Default), as JSON. Chromium writes it to Preferences ~10 s after a change. nil until
 /// that profile has loaded.
 + (nullable NSString *)extensionSettingsForProfile:(nullable NSString *)profilePath;
+/// A profile's pref as Chromium holds it now (nil profilePath is Default), as JSON: how Cra reads
+/// `default_search_provider_data.template_url_data`, the engine chrome://settings/searchEngines
+/// made the default. nil until that profile has loaded.
++ (nullable NSString *)preference:(NSString *)name forProfile:(nullable NSString *)profilePath;
+/// Sets a profile's pref to a JSON value, as chrome://settings would. NO when the profile hasn't
+/// loaded, a policy holds the pref, or the value isn't one it takes.
++ (BOOL)setPreference:(NSString *)name json:(NSString *)json forProfile:(nullable NSString *)profilePath;
 /// Called on the main queue after a loaded profile's `extensions.settings` changed: an
 /// extension installed, enabled, disabled or removed.
 + (void)setExtensionSettingsChangeHandler:(nullable void (^)(void))handler;

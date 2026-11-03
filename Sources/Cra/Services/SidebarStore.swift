@@ -1521,7 +1521,11 @@ final class SidebarStore {
     /// The Chromium folder a tab's pages load in: its space's profile, or nil for the
     /// Default profile (and for incognito, which has its own off-the-record one).
     func profilePath(item id: UUID) -> String? {
-        guard let sid = spaceID(ofItem: id), !isIncognito(space: sid), let p = profile(spaces[sid]?.profileID) else { return nil }
+        spaceID(ofItem: id).flatMap { profilePath(space: $0) }
+    }
+
+    func profilePath(space sid: UUID) -> String? {
+        guard !isIncognito(space: sid), let p = profile(spaces[sid]?.profileID) else { return nil }
         return AppPaths.chromiumCache.appendingPathComponent(p.directoryName, isDirectory: true).path
     }
 
@@ -1613,11 +1617,15 @@ final class SidebarStore {
         rankingFile.save(ranking)
     }
 
-    /// Chrome's Delete browsing data deleted history: the command bar forgets it too.
+    /// Chrome's Delete browsing data deleted history: the command bar forgets it too, and the
+    /// archive (Cra's History) drops the tabs closed in that time.
     func clearHistory(_ range: BrowsingDataClear.Range) {
         (history, ranking) = BrowsingDataClear.clearing(range, history: history, ranking: ranking)
+        archive = BrowsingDataClear.keptArchive(archive, clearing: range)
         historyFile.saveNow(Array(history.values))
         rankingFile.saveNow(ranking)
+        archiveFile.saveNow(archive)
+        touch()
         CraLog.note("history cleared (\(range == .allTime ? "all time" : "a time range"))")
     }
 

@@ -239,7 +239,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             guard let self else { return }
             let t = typed.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !t.isEmpty else { return }
-            self.loadInSelectedTab(SuggestionEngine.looksLikeURL(t) ? SuggestionEngine.urlFromInput(t) : self.store.settings.searchEngine.searchURL(t))
+            self.loadInSelectedTab(SuggestionEngine.looksLikeURL(t) ? SuggestionEngine.urlFromInput(t) : self.commandBar.engine.searchURL(t))
+        }
+        sidebarActions.openTyped = { [weak self] typed in
+            guard let self else { return }
+            let t = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !t.isEmpty else { return }
+            self.store.createTab(url: SuggestionEngine.looksLikeURL(t) ? SuggestionEngine.urlFromInput(t) : self.commandBar.engine.searchURL(t), window: self.windowID)
         }
         sidebarActions.focusPane = { [weak self] id in
             guard let self, self.selectedTabID != id else { return }
@@ -302,6 +308,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         commandBar.onCommit = { [weak self] s, typed, mode in self?.handleCommit(s, typed: typed, mode: mode) }
         commandBar.onOpenInBackground = { [weak self] s, typed in self?.openInBackground(s, typed: typed) ?? false }
+        commandBar.onOpenInSplit = { [weak self] s, typed in self?.openInSplit(s, typed: typed) ?? false }
         commandBar.onClose = { [weak self] in self?.hideCommandPanel() }
         commandBar.spaceName = { [weak self] id in self?.store.space(id)?.title ?? "" }
     }
@@ -2245,7 +2252,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         guard let s else {
             if typed.isEmpty { return }
-            open(SuggestionEngine.looksLikeURL(typed) ? SuggestionEngine.urlFromInput(typed) : store.settings.searchEngine.searchURL(typed))
+            open(SuggestionEngine.looksLikeURL(typed) ? SuggestionEngine.urlFromInput(typed) : commandBar.engine.searchURL(typed))
             return
         }
         switch s.kind {
@@ -2258,7 +2265,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             let url = typed == commandBar.query ? (s.url ?? SuggestionEngine.urlFromInput(typed)) : SuggestionEngine.urlFromInput(typed)
             open(url)
         case .search:
-            open(s.url ?? store.settings.searchEngine.searchURL(typed))
+            open(s.url ?? commandBar.engine.searchURL(typed))
         case .history, .topDomain:
             open(s.url ?? "")
         case .command(let id):
@@ -2275,20 +2282,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// ⌘Return in the bar (Arc): the row's page in a new background tab, the current tab staying
     /// in front; an open tab's row opens its address again rather than switching (GitHub #85).
     private func openInBackground(_ s: Suggestion?, typed: String) -> Bool {
-        let url: String?
-        switch s?.kind {
-        case nil:
-            url = typed.isEmpty ? nil : SuggestionEngine.looksLikeURL(typed) ? SuggestionEngine.urlFromInput(typed) : store.settings.searchEngine.searchURL(typed)
-        case .navigate?:
-            url = typed == commandBar.query ? (s?.url ?? SuggestionEngine.urlFromInput(typed)) : SuggestionEngine.urlFromInput(typed)
-        case .search?:
-            url = s?.url ?? store.settings.searchEngine.searchURL(typed)
-        case .switchToTab?, .archived?, .history?, .topDomain?:
-            url = s?.url
-        default:
-            url = nil
-        }
-        guard let url, !url.isEmpty else { return false }
+        guard let url = pageURL(s, typed: typed) else { return false }
         store.recordQuerySelection(query: commandBar.query, url: url)
         let tab = store.createTab(url: url, select: false, window: windowID)
         store.markUnread(tab.id, false)  // Arc saves these read, unlike a link opened in the background
@@ -2299,6 +2293,54 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // With the sidebar out the new row shows there; hidden, Arc says so in a toast.
         if !sidebarVisible { showToast("New Tab Created") }
         return true
+    }
+
+    /// ⌥Return in the bar: the row opens as a split pane beside the current tab instead of in its
+    /// place, an open tab of this space joining the split as it is. False takes it as Return: no
+    /// tab to split, an empty one (the row fills it), a tab in another space, a row with no page.
+    private func openInSplit(_ s: Suggestion?, typed: String) -> Bool {
+        guard let current = selectedTabID, store.item(current)?.isEmptyTab == false else { return false }
+        if case .switchToTab(let id)? = s?.kind {
+            guard id != current, store.spaceID(ofItem: id) == store.spaceID(ofItem: current) else { return false }
+            if store.paneTabIDs(for: current).contains(id) {
+                store.selectTab(id, window: windowID)
+                return true
+            }
+        }
+        guard store.paneTabIDs(for: current).count < 4 else {
+            showToast("Cannot Add New Pane")
+            return true
+        }
+        if case .switchToTab(let id)? = s?.kind {
+            store.recordQuerySelection(query: commandBar.query, url: s?.url ?? "")
+            let split = store.splitContaining(current).map { sp in store.addToSplit(sp.id, tabID: id, at: nil); return store.item(sp.id) }
+                ?? store.createSplit(with: [current, id], at: current)
+            store.selectTab(split.flatMap { store.paneID(for: id, in: $0) } ?? id, window: windowID)
+            return true
+        }
+        guard let url = pageURL(s, typed: typed) else { return false }
+        store.recordQuerySelection(query: commandBar.query, url: url)
+        guard store.addEmptyPane(nextTo: current, url: url) != nil else { return false }
+        refresh()
+        return true
+    }
+
+    /// The page a row opens anew (⌘Return, ⌥Return), nil for rows that open none.
+    private func pageURL(_ s: Suggestion?, typed: String) -> String? {
+        let url: String?
+        switch s?.kind {
+        case nil:
+            url = typed.isEmpty ? nil : SuggestionEngine.looksLikeURL(typed) ? SuggestionEngine.urlFromInput(typed) : commandBar.engine.searchURL(typed)
+        case .navigate?:
+            url = typed == commandBar.query ? (s?.url ?? SuggestionEngine.urlFromInput(typed)) : SuggestionEngine.urlFromInput(typed)
+        case .search?:
+            url = s?.url ?? commandBar.engine.searchURL(typed)
+        case .switchToTab?, .archived?, .history?, .topDomain?:
+            url = s?.url
+        default:
+            url = nil
+        }
+        return url?.isEmpty == false ? url : nil
     }
 
     /// Arc's toast at the top right of the page (ShinyToast): Cra's confirmations.

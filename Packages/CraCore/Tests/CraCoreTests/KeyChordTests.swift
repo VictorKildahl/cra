@@ -22,6 +22,8 @@ struct KeyChordTests {
         (KeyChord(key: KeyChord.right, modifiers: command), "⌘→"),
         (KeyChord(key: KeyChord.up, modifiers: KeyChord.Modifiers([.control, .option, .shift, .command]).rawValue), "⌃⌥⇧⌘↑"),
         (KeyChord(key: KeyChord.down, modifiers: 0), "↓"),
+        // Chrome's Clear Browsing Data; menus take the Delete key as NSBackspaceCharacter.
+        (KeyChord(key: KeyChord.delete, modifiers: command | KeyChord.Modifiers.shift.rawValue), "⇧⌘⌫"),
         // Caps Lock and the function-key bit are kept in the file but never shown.
         (KeyChord(key: "d", modifiers: command | 0x10000 | 0x800000), "⌘D"),
     ])

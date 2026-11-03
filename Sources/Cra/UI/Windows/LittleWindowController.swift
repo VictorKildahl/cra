@@ -416,7 +416,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         }
         guard let s else {
             if typed.isEmpty { return }
-            open(SuggestionEngine.looksLikeURL(typed) ? SuggestionEngine.urlFromInput(typed) : store.settings.searchEngine.searchURL(typed))
+            open(SuggestionEngine.looksLikeURL(typed) ? SuggestionEngine.urlFromInput(typed) : commandBar.engine.searchURL(typed))
             return
         }
         switch s.kind {
@@ -432,7 +432,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         case .navigate:
             open(typed == query ? (s.url ?? SuggestionEngine.urlFromInput(typed)) : SuggestionEngine.urlFromInput(typed))
         case .search:
-            open(s.url ?? store.settings.searchEngine.searchURL(typed))
+            open(s.url ?? commandBar.engine.searchURL(typed))
         case .history, .topDomain:
             open(s.url ?? "")
         case .command(let id):
