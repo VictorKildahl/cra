@@ -150,8 +150,8 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
 - [O] Sidebar 328pt wide. Row 1: traffic lights, sidebar toggle right after them (~93pt), nav ← → ↻ right-aligned when a
   tab is selected and the toolbar shows the URL; with no tab the nav moves into the toolbar and the toolbar shows a
   centered "Search or Enter URL…". Favorites: 4 tiles, ~44pt tall, active tile gets a dashed outline. Space header: emoji +
-  name, 13pt semibold (re-fitted 1 Nov), secondary color. Rows 40pt pitch, 14pt titles, 16pt favicons, custom-titled/navigated pinned tabs show
-  the host as an 11pt second line, folders use a blue folder glyph, nested rows indent ~18pt. Bottom row: library icon
+  name, 13pt semibold (re-fitted 1 Nov), secondary color. Rows 40pt pitch, 14pt titles, 16pt favicons, a site in developer mode shows its host
+  as an 11pt second line (see "A pinned tab away from its page"), folders use a blue folder glyph, nested rows indent ~18pt. Bottom row: library icon
   left, tiny space emoji centered (inactive dimmed), + right.
 - [O] Content: rounded card inset ~8-10pt with the toolbar strip (42pt: lock + monospaced URL, copy link, extensions,
   capture, DevTools, sidebar toggle) on top; no card at all when no tab is selected.
@@ -239,9 +239,9 @@ keyboard-focus indicator, shown on a tab chosen without the mouse, never on clic
 Re-measured 29 Oct (issue #12, ScreenCaptureKit frames every ~60 ms): an AppleScript select
 of a tab in another space switched the space and drew the ring ~0.4 s later, still there
 2.5 s on; a select within the shown space drew none. Cra rings only a tab switcher pick
-that changed space; next/previous tab and ⌘1–9 stay in the space and show no ring. Host subtitles under pinned
-tabs appear only when the tab left the pinned host (Phantom at /signin shows none); the
-"Ahrefs / ahrefs.com" row in Arc stays unexplained (same host, same URL, loaded).
+that changed space; next/previous tab and ⌘1–9 stay in the space and show no ring. Host subtitles: wrongly read
+here as "a pinned tab that left its host"; Arc's code (3 Nov, #139) shows the host only for a site in
+developer mode, and ahrefs.com is in Victor's StorableDeveloperModeState.json.
 
 ### DevTools docking (CEF 154 note)
 
@@ -1030,6 +1030,10 @@ of the sidebar strip, pixel runs at x=500 px (2x), y = 160/700/1200/1700/2100.
   of 11. For `developerTab` they are systemYellow under black dashes at 80 % opacity, and each dash is the
   perimeter ÷ 60 / 80 / 100 (width < 210 / < 346 / larger). `tabCapturing` is solid yellow, `syncedTab` is
   rgb(0.901, 0.631, 0.827).
+- [O static] `TabCellState.subtitle` (built in `TabCellState.init`, first match wins): the host (+ `:port`)
+  when developer mode is on for the page; "Double-click to rename" for the rename-hint item; a GitHub live
+  folder item's subtitle; else none. `titleSourceInfo` and leaving the pinned URL never set it. Victor's
+  "Ahrefs" row shows ahrefs.com because ahrefs.com is in `StorableDeveloperModeState.json`.
 - [O reporter, 2x screenshots] Nested rows: Arc's fill starts after the indent (24 pt for depth 1 against 5 pt
   at the top level), so a folder's gutter stays empty.
 - Cra (TabRowView): the slash replaces the trailing ↩ button, and the icon region (the fill's edge to just past the

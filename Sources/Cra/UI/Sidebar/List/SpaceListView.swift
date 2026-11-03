@@ -279,7 +279,7 @@ final class SpaceListView: NSView, NSDraggingSource {
                 let navigatedAway = pinned && tab.url != tab.savedURL && !tab.savedURL.isEmpty
                 let (img, flip) = icon(tab.iconKey)
                 let developerMode = store.settings.isDeveloperMode(url: tab.url)
-                let subtitle = tab.sidebarSubtitle(navigatedAway: navigatedAway, developerMode: developerMode)
+                let subtitle = tab.sidebarSubtitle(developerMode: developerMode)
                 row.content = .tab(TabRowModel(
                     id: item.id, depth: depth, pinned: pinned, title: item.displayTitle, customTitle: item.title != nil,
                     renameText: item.title ?? item.displayTitle, subtitle: subtitle,
