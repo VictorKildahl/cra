@@ -33,9 +33,12 @@ enum BrowserManagerLifecycleTests {
         expect(manager.runtime(for: id) === replacement && manager.visibleTabID == id && manager.visibleTabIDs == [id],
                "late close cannot remove or deselect the replacement")
         expect(observer.closedTabs.isEmpty, "late page-close cannot archive the replacement tab")
-        manager.browserRequestsActivation(old.browser)
-        manager.browserRequestsActivation(replacement.browser)
+        manager.browserRequestsActivation(old.browser, byPage: false)
+        manager.browserRequestsActivation(replacement.browser, byPage: false)
         expect(observer.activatedTabs == [id], "an extension's tabs.update activation reaches only the live page's tab")
+        manager.browserRequestsActivation(replacement.browser, byPage: true)
+        expect(observer.activatedTabs == [id, id] && observer.activatedByPage == [false, true],
+               "a page's own focus request (a notification click) arrives marked as the page's")
 
         let retainedID = store.createTab(url: "https://example.test/retained").id
         weak var retainedBrowser = manager.ensureRuntime(for: retainedID)?.browser
@@ -510,6 +513,7 @@ enum BrowserManagerLifecycleTests {
 private final class Observer: BrowserManagerDelegate {
     var closedTabs: [UUID] = []
     var activatedTabs: [UUID] = []
+    var activatedByPage: [Bool] = []
     var onPageWindowsChanged: (() -> Void)?
     func browserManagerDidUpdate(_ tabID: UUID) {}
     func browserManager(statusMessage: String) {}
@@ -524,6 +528,9 @@ private final class Observer: BrowserManagerDelegate {
     func browserManagerHandleUnhandledKey(_ event: NSEvent) -> Bool { false }
     func browserManagerFocusedBrowser(_ tabID: UUID) {}
     func browserManagerPageClosedTab(_ tabID: UUID) { closedTabs.append(tabID) }
-    func browserManagerActivationRequested(_ tabID: UUID) { activatedTabs.append(tabID) }
+    func browserManagerActivationRequested(_ tabID: UUID, byPage: Bool) {
+        activatedTabs.append(tabID)
+        activatedByPage.append(byPage)
+    }
     func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool) -> Bool { false }
 }

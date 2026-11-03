@@ -63,6 +63,14 @@ for entry in "|" " (Alerts)|.alerts" " (GPU)|.gpu" " (Plugin)|.plugin" " (Render
       -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD_NUMBER/" \
       resources/Helper-Info.plist > "$HELPER/Contents/Info.plist"
   echo -n "APPL????" > "$HELPER/Contents/PkgInfo"
+  # Chromium posts page notifications from the Alerts helper too, so macOS asks for it and lists
+  # it under System Settings ▸ Notifications: Cra's name and icon there, like Arc's helper.
+  if [ "$NAME_SUFFIX" = " (Alerts)" ]; then
+    mkdir -p "$HELPER/Contents/Resources"
+    cp resources/AppIcon.icns "$HELPER/Contents/Resources/AppIcon.icns"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Cra" -c "Add :CFBundleIconFile string AppIcon" \
+      -c "Add :NSUserNotificationAlertStyle string alert" "$HELPER/Contents/Info.plist"
+  fi
 done
 
 # The Dock tile plug-in (Info.plist NSDockTilePlugIn), a SwiftPM dynamic library in a bundle.

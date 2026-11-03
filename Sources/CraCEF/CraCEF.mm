@@ -424,6 +424,38 @@ static void ApplyProfilePreferences(CefRefPtr<CefRequestContext> context) {
     ApplyHttpsOnly(context);
 }
 
+static const char kNotificationBlocksCleared[] = "cra.notification_blocks_cleared";
+
+/// Up to 0.1.27 Cra answered every notification request with a quiet deny, and Chromium kept
+/// each one as the site's notification block (Messenger, Facebook, YouTube...), so those sites
+/// could never ask again. Once per profile, those blocks go back to Ask. Blocks made after this
+/// come from the prompt and stay.
+static void ClearSilentNotificationBlocks(CefRefPtr<CefRequestContext> context) {
+    CefRefPtr<CefValue> done = context->GetPreference(kNotificationBlocksCleared);
+    if (!done || done->GetType() != VTYPE_BOOL || done->GetBool()) return;
+    CefRefPtr<CefValue> exceptions = context->GetPreference("profile.content_settings.exceptions.notifications");
+    if (exceptions && exceptions->GetType() == VTYPE_DICTIONARY) {
+        CefRefPtr<CefDictionaryValue> sites = exceptions->GetDictionary();
+        CefDictionaryValue::KeyList patterns;
+        sites->GetKeys(patterns);
+        for (const CefString& pattern : patterns) {
+            CefRefPtr<CefDictionaryValue> entry = sites->GetDictionary(pattern);
+            if (!entry || entry->GetInt("setting") != CEF_CONTENT_SETTING_VALUE_BLOCK) continue;
+            // "https://www.messenger.com:443,*": the requesting origin, any top-level site.
+            std::string origin = pattern.ToString().substr(0, pattern.ToString().find(','));
+            context->SetContentSetting(origin, origin, CEF_CONTENT_SETTING_TYPE_NOTIFICATIONS,
+                                       CEF_CONTENT_SETTING_VALUE_DEFAULT);
+            NSLog(@"CraCEF: notification block cleared for %s", origin.c_str());
+        }
+    }
+    CefRefPtr<CefValue> yes = CefValue::Create();
+    yes->SetBool(true);
+    CefString error;
+    if (!context->SetPreference(kNotificationBlocksCleared, yes, error)) {
+        NSLog(@"CraCEF: %s: %s", kNotificationBlocksCleared, error.ToString().c_str());
+    }
+}
+
 // Cra's extension list (ExtensionStore) reads extensions.settings. On disk it lags ~10 s
 // behind an install (Chromium's pref writer batches), so a "Load unpacked" extension was
 // missing from the Site Control Center (GitHub #43); the live pref and its changes are not.
@@ -500,6 +532,7 @@ public:
     void OnRequestContextInitialized(CefRefPtr<CefRequestContext> context) override {
         ApplyProfilePreferences(context);
         if (!path_) { g_incognitoReady = true; return; }
+        ClearSilentNotificationBlocks(context);
         ObserveExtensionSettings(context);
         if (!g_readyProfiles) g_readyProfiles = [NSMutableSet set];
         [g_readyProfiles addObject:path_];
@@ -549,6 +582,13 @@ static BOOL ProfileReady(NSString* path, CraBrowser* browser) {
 class CraApp : public CefApp, public CefBrowserProcessHandler {
 public:
     CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override { return this; }
+
+    void OnRegisterCustomPreferences(cef_preferences_type_t type, CefRawPtr<CefPreferenceRegistrar> registrar) override {
+        if (type != CEF_PREFERENCES_TYPE_REQUEST_CONTEXT) return;
+        CefRefPtr<CefValue> no = CefValue::Create();
+        no->SetBool(false);
+        registrar->AddPreference(kNotificationBlocksCleared, no);
+    }
 
     CefRefPtr<CefClient> GetDefaultClient() override {
         if (!g_strayClient) g_strayClient = new StrayBrowserClient();
@@ -648,6 +688,7 @@ public:
     void OnContextInitialized() override {
         CEF_REQUIRE_UI_THREAD();
         ApplyProfilePreferences(CefRequestContext::GetGlobalContext());
+        ClearSilentNotificationBlocks(CefRequestContext::GetGlobalContext());
         ObserveExtensionSettings(CefRequestContext::GetGlobalContext());
         ObserveSecureDNS();
         g_contextInitialized = true;
@@ -1281,7 +1322,8 @@ public:
 
     // Chromium's audible state, which CEF has no callback for: the engine sends it as a
     // "Cra.audible" message (scripts/cef-patches/audible-state.patch). "Cra.activate": an
-    // extension asked for this tab to be in front (scripts/cef-patches/extension-tab-activate.patch).
+    // extension asked for this tab to be in front (scripts/cef-patches/extension-tab-activate.patch),
+    // or with true the page did (scripts/cef-patches/page-activate.patch).
     bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
                                   CefProcessId source_process, CefRefPtr<CefProcessMessage> message) override {
         if (source_process != PID_BROWSER) return false;
@@ -1291,8 +1333,10 @@ public:
             return true;
         }
         if (message->GetName() == "Cra.activate") {
-            if (o && [o.delegate respondsToSelector:@selector(browserRequestsActivation:)])
-                [o.delegate browserRequestsActivation:o];
+            CefRefPtr<CefListValue> args = message->GetArgumentList();
+            BOOL byPage = args->GetSize() > 0 && args->GetBool(0);
+            if (o && [o.delegate respondsToSelector:@selector(browserRequestsActivation:byPage:)])
+                [o.delegate browserRequestsActivation:o byPage:byPage];
             return true;
         }
         return false;
