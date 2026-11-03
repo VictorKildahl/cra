@@ -14,6 +14,7 @@ enum Perf {
         case mark(String, at: UInt64)
         case phase(String, ms: Double)
         case visibleSite(String?)
+        case app(active: Bool, onScreen: Bool)
     }
 
     private static let lock = NSLock()
@@ -21,14 +22,29 @@ enum Perf {
     nonisolated(unsafe) private static var early: [Fact]? = []
     nonisolated(unsafe) private static var started: [String: UInt64] = [:]
     nonisolated(unsafe) private(set) static var launchedAt: UInt64 = now()
+    nonisolated(unsafe) private(set) static var launchedAsleep: UInt64 = asleepNs()
 
-    /// Monotonic nanoseconds (the clock DispatchTime and mach_absolute_time share).
+    /// Monotonic nanoseconds (the clock DispatchTime and mach_absolute_time share). It stops while
+    /// the Mac sleeps, so a sleep is never a long pass.
     static func now() -> UInt64 { DispatchTime.now().uptimeNanoseconds }
 
     static func ms(since t: UInt64) -> Double { Double(now() &- t) / 1e6 }
 
+    /// How long the Mac has slept since it started: the clock that counts sleep less `now()`'s.
+    static func asleepNs() -> UInt64 { clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW) &- clock_gettime_nsec_np(CLOCK_UPTIME_RAW) }
+
+    /// Seconds from `launch()` to `t` (a `now()`) on the clock that counts sleep, so the launch's
+    /// wall time plus this is wall time (GitHub #135). `t` is recent: a sleep between `t` and the
+    /// call would be counted before it.
+    static func secondsSinceLaunch(_ t: UInt64) -> Double {
+        Double(Int64(bitPattern: (t &+ asleepNs()) &- (launchedAt &+ launchedAsleep))) / 1e9
+    }
+
     /// The top of main.swift: start-up phases count from here.
-    static func launch() { launchedAt = now() }
+    static func launch() {
+        launchedAt = now()
+        launchedAsleep = asleepNs()
+    }
 
     /// The recorder, once it starts; nil when recording is off (buffered facts are dropped).
     static func attach(_ newSink: ((Fact) -> Void)?) {
@@ -82,6 +98,9 @@ enum Perf {
     /// The site of the page put on screen last, for the stalls that happen while it is (nil: none,
     /// or incognito).
     static func visibleSite(_ host: String?) { send(.visibleSite(host)) }
+
+    /// Whether Cra is the active app and shows a window, for the stalls that happen meanwhile.
+    static func app(active: Bool, onScreen: Bool) { send(.app(active: active, onScreen: onScreen)) }
 
     /// A duration that ends on another call: `begin` and `end` with the same key. A begin
     /// without an end (a page closed while loading) is forgotten by `cancel` or the next begin.

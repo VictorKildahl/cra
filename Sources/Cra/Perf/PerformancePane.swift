@@ -76,9 +76,11 @@ struct PerformancePane: View {
             }
             let m = r.mainThread
             card("Main thread", [
-                ("Stalls of ¼ s or more", "\(m.stalls)"),
-                ("Freezes of 1 s or more", "\(m.longStalls)"),
-                ("Longest", m.longestMs > 0 ? PerfInsights.duration(m.longestMs) : "–"),
+                ("Stalls of ¼ s or more", "\(m.freezes)"),
+                ("Freezes of 1 s or more", "\(m.longFreezes)"),
+                ("Longest freeze", m.longestFreezeMs > 0 ? PerfInsights.duration(m.longestFreezeMs) : "–"),
+                ("In menus, drags, alerts, start-up", "\(m.outsideFreezes)"),
+                ("Longest pass", m.longestPassMs > 0 ? PerfInsights.duration(m.longestPassMs) + (m.longestPassMode.map { " (\($0))" } ?? "") : "–"),
                 ("Typical pass (99 %)", PerfInsights.duration(m.passes.percentile(0.99))),
             ])
             card("Processes", r.processes.filter { $0.count > 0 }.map { g in
@@ -114,6 +116,8 @@ struct PerformancePane: View {
             rows.append((title, "\(PerfInsights.duration(h.percentile(0.5))) typical · \(PerfInsights.duration(h.percentile(0.95))) slow"))
         }
         if r.tabs.longTasks > 0 { rows.append(("Busy page (long tasks)", "\(r.tabs.longTasks) · \(PerfInsights.duration(r.tabs.longTaskMs))")) }
+        if r.tabs.longFrames > 0 { rows.append(("Late frames", "\(r.tabs.longFrames) · longest \(PerfInsights.duration(r.tabs.longestFrameMs))")) }
+        if r.tabs.videoFrames > 0 { rows.append(("Video frames dropped", "\(r.tabs.droppedVideoFrames) of \(r.tabs.videoFrames)")) }
         return rows
     }
 

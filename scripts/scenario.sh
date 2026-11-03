@@ -216,7 +216,7 @@ import json, sys
 r = json.load(open(sys.argv[1]))
 cpu, budget, hitch = r["selfCost"]["cpuPct"], float(sys.argv[2]), int(sys.argv[3])
 m = r["mainThread"]
-seen = m["stalls"] + m["outsideFreezes"]
+seen = m["freezes"] + m["outsideFreezes"]
 print(f"perf: recording costs {cpu:.3f} % of a core (budget {budget}); stalls ≥250 ms: recorder {seen}, HitchMonitor {hitch}")
 if cpu > budget: print(f"PROBLEM the performance recorder costs {cpu:.3f} % of a core, budget {budget} %")
 # This run's HitchMonitor log starts after the launch the recorder also saw; a few either way is timing.

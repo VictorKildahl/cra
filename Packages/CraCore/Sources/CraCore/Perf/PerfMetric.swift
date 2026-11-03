@@ -3,9 +3,6 @@ import Foundation
 /// What the performance recorder times, in milliseconds (GitHub #91). The raw values are the
 /// keys in perf.json, so renaming one changes the file's schema.
 public enum PerfMetric: String, Codable, CaseIterable, Sendable {
-    /// One pass of the main run loop between two points where it could take input. The main
-    /// thread is also Chromium's browser UI thread: a long pass is a frozen window.
-    case mainLoop
     /// Putting other tabs on screen (BrowserManager.show), the part on the main thread.
     case tabSwitch
     /// Making a tab's page: Chromium's view, its window and the browser object.
@@ -14,7 +11,8 @@ public enum PerfMetric: String, Codable, CaseIterable, Sendable {
     case pageLoad
     /// A tab that tab sleeping closed, shown again until its page finished loading.
     case tabWake
-    /// A data-folder JSON file decoded at launch, or encoded and written.
+    /// A data-folder JSON file decoded at launch, or encoded and written. Saves run on the
+    /// persistence queue, so `jsonSave` is that queue's time, never a main-thread stall.
     case jsonLoad
     case jsonSave
     /// Long tasks (50 ms or more) in the visible tab's page.

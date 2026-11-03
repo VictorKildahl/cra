@@ -18,15 +18,18 @@ enum PerfTests {
         recordingOffStopsSamplingAndWriting()
         theFacadeWaitsForTheRecorderAndTimesWork()
         aSlowLaunchIsAStallButNotAFreeze()
+        workAcrossATimerBoundaryIsOnePass()
+        theFirstSlowPassGetsAStack()
         print("Perf recorder: \(checks) checks passed")
     }
 
-    static func config(_ name: String, hangMs: Double = 2000, stacks: Int = 0) -> PerfRecorder.Config {
+    static func config(_ name: String, hangMs: Double = 2000, slowMs: Double = 1000, stacks: Int = 0) -> PerfRecorder.Config {
         var c = PerfRecorder.Config(folder: root.appendingPathComponent(name))
         c.sampleInterval = 0.2
         c.blackBoxEvery = 2
         c.historyEvery = 3
         c.policy.hangMs = hangMs
+        c.policy.slowStackMs = slowMs
         c.stacks = stacks
         return c
     }
@@ -63,20 +66,29 @@ enum PerfTests {
         let c = config("stall")
         start(c)
         spin(0.3)
+        var stallEnded = Date.distantPast
         DispatchQueue.main.async {
             Perf.mark("cra://debug?stall=500")
             usleep(500_000)
+            stallEnded = Date()
         }
         spin(0.5)
         DispatchQueue.main.async { usleep(300_000) }
         spin(1.2)
         guard let r = report() else { return expect(false, "a report while recording") }
-        expect(r.mainThread.stalls == 2, "both stalls counted (\(r.mainThread.stalls))")
+        expect(r.mainThread.freezes == 2, "both stalls counted (\(r.mainThread.freezes))")
+        expect(r.mainThread.longestPassMs >= 500 && r.mainThread.longestPassMode == "default", "the longest pass (\(r.mainThread.longestPassMs))")
         expect(r.mainThread.recent.allSatisfy { $0.mode != "launch" }, "a quick start is no stall")
         let first = r.mainThread.recent.first
         expect(first.map { $0.ms >= 500 && $0.ms < 900 } == true, "the injected 500 ms stall measured as such (\(first?.ms ?? 0))")
         expect(first?.marks == ["cra://debug"], "with its breadcrumb, cut before the query (\(first?.marks ?? []))")
         expect(first?.mode == "default" && first?.freeze == true, "in the default mode: a freeze")
+        // Read back from the file, which keeps dates to the second.
+        let file = (try? PerfReport.encoder().encode(r)).flatMap { try? PerfReport.decoder.decode(PerfReport.self, from: $0) }
+        let drift = file.flatMap { f in f.mainThread.recent.first.map { f.session.startedAt.addingTimeInterval($0.at).timeIntervalSince(stallEnded) } } ?? 99
+        expect(abs(drift) < 0.1, "startedAt + at in perf.json is the wall time the stall ended (off by \(drift) s)")
+        expect(r.session.uptimeSeconds >= 2 && r.session.uptimeSeconds < 60 && r.session.asleepSeconds < 1,
+               "uptime from Cra's start on the same clock (\(r.session.uptimeSeconds) s)")
         expect(r.mainThread.passes.count > 2 && r.mainThread.passes.maxMs >= 500, "every pass in the histogram")
         expect(r.processes.contains { $0.kind == .browser && $0.count == 1 && $0.footprintBytes > 0 }, "libproc read this process")
         expect(r.system?.memoryPressure != nil && r.system?.thermalState.isEmpty == false, "the Mac sampled")
@@ -90,7 +102,8 @@ enum PerfTests {
         var sites: Set<String> = ["unset"]
         PerfRecorder.exportFiles { exported = $0; sites = $1 }
         for _ in 0..<100 where exported.isEmpty { spin(0.05) }
-        expect(exported.first?.name == "perf.json" && exported.first!.text.contains("\"stalls\" : 2"), "perf.json in the export")
+        expect(exported.first?.name == "perf.json" && exported.first!.text.contains("\"freezes\" : 2"), "perf.json in the export")
+        expect(exported.contains { $0.name == "perf/history.json" }, "with the 24-hour history")
         expect(sites.isEmpty, "no sites: no page was on screen")
 
         PerfRecorder.quit()
@@ -229,9 +242,54 @@ enum PerfTests {
         let r = report()
         expect(r?.mainThread.recent.first?.mode == "launch" && r?.mainThread.recent.first?.freeze == false,
                "a slow start-up is a stall in the launch mode (\(r?.mainThread.recent.first?.mode ?? "none"))")
-        expect(r?.mainThread.stalls == 0 && r?.mainThread.outsideFreezes == 1
+        expect(r?.mainThread.freezes == 0 && r?.mainThread.outsideFreezes == 1
                && r?.insights.contains { $0.id == "freezes" || $0.id == "stalls" } == false,
-               "not a freeze, no freeze finding (\(r?.mainThread.stalls ?? -1), \(r?.mainThread.outsideFreezes ?? -1), \(r?.insights.map(\.id) ?? []))")
+               "not a freeze, no freeze finding (\(r?.mainThread.freezes ?? -1), \(r?.mainThread.outsideFreezes ?? -1), \(r?.insights.map(\.id) ?? []))")
+        expect(r?.mainThread.longestPassMs ?? 0 >= 400 && r?.mainThread.longestPassMode == "launch"
+               && r?.insights.contains { $0.id == "outside-freezes" } == true,
+               "but the longest pass, and a finding that says it was not counted (\(r?.mainThread.longestPassMs ?? -1))")
+        PerfRecorder.quit()
+    }
+
+    /// GitHub #135: a timer and a queued block that run in one turn of the loop, with no sleep
+    /// or commit between them, are one 300 ms pass. Split at before-timers they were two 150 ms
+    /// halves and no stall at all.
+    @MainActor static func workAcrossATimerBoundaryIsOnePass() {
+        start(config("one-pass"))
+        spin(0.5)
+        let before = report()?.mainThread.passes.count ?? 0
+        Timer.scheduledTimer(withTimeInterval: 0, repeats: false) { _ in usleep(150_000) }
+        DispatchQueue.main.async { usleep(150_000) }
+        spin(0.6)
+        let r = report()
+        let stalls = r?.mainThread.recent ?? []
+        expect(stalls.count == 1 && stalls[0].ms >= 300 && stalls[0].ms < 600 && r?.mainThread.freezes == 1,
+               "one stall of 300 ms (\(stalls.map(\.ms)))")
+        // A quiet loop sleeps between the 5 Hz samples and reports: a few passes a second, not hundreds.
+        let after = r?.mainThread.passes.count ?? 0
+        expect(after - before < 60, "one pass per wake, not one per observer callback (\(after - before) in 0.6 s)")
+        expect(r.map { $0.selfCost.observerCallbacks < 4 * $0.mainThread.passes.count + 20 } == true,
+               "two or three callbacks a pass (\(r?.selfCost.observerCallbacks ?? -1) for \(r?.mainThread.passes.count ?? -1))")
+        PerfRecorder.quit()
+    }
+
+    /// GitHub #135: the first pass that lasts `slowStackMs` gets one `sample`, in memory, while the
+    /// watchdog goes on watching; the report says how long the pass was in the end.
+    @MainActor static func theFirstSlowPassGetsAStack() {
+        start(config("slow", hangMs: 30_000, slowMs: 400, stacks: 1))
+        spin(0.3)
+        DispatchQueue.main.async {
+            Perf.mark("slow-test")
+            busyMainThreadForPerfTest(atLeast: 0.8, limit: 15) { PerfRecorder.shared?.slowPass.map { $0.stackNote != "sampling" } ?? false }
+        }
+        spin(0.5)
+        let slow = report()?.mainThread.slowPass
+        expect(slow?.stack.contains { $0.contains("busyMainThreadForPerfTest") } == true,
+               "with the main thread's stack (\(slow?.stackNote ?? "no slow pass")): \(slow?.stack.prefix(6) ?? [])")
+        expect(slow.map { $0.stalledMs >= 400 && ($0.endedMs ?? 0) >= 800 && $0.marks == ["slow-test"] && $0.number == 0 } == true,
+               "how long it was when sampled and in the end, after what (\(slow?.stalledMs ?? -1), \(slow?.endedMs ?? -1))")
+        expect(FileManager.default.fileExists(atPath: PerfFiles(folder: config("slow").folder).hangFiles().first?.path ?? "/nonexistent") == false,
+               "no hang file below the hang threshold")
         PerfRecorder.quit()
     }
 
