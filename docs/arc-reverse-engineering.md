@@ -2692,3 +2692,16 @@ that waits 3 s before answering and then serves a page whose image takes 5 s.
   Auto theme saved before keeps its colours on the side they suit and derives the other.
 - [?] Not worked out: how Arc's editor maps a picked colour to its halves (the pad's `lightnessRange` and the bias
   value). Cra's halves are fitted to Arc's default theme only.
+
+## Little Arc: Copy URL and Shift-click (Arc 1.171, 3 Nov 2026, X DM, offline Arc)
+
+An offline Arc (fake home, no network) with a Little Arc on a file:// page, ⇧⌘C and a Shift-click sent as HID
+events, the window recorded with `screencapture -V`.
+- [O] ⇧⌘C shows Arc's toast, "Copied Current URL" with a share glyph button, springing in from the top over the
+  "Open in" button and settling 8 pt under the window's top and ~8 pt in from its right edge, 42 pt tall, over the
+  toolbar. The link glyph itself doesn't change. Fill (sRGB, from Display P3) 41/18/77 at the top → 33/16/61, outline
+  33/14/66, white text, darker than the default dark theme's toast in a browser window. Cra: the same ShinyToast,
+  `LittlePalette.toast`. The share button isn't reproduced (not checked whether a browser window's copy toast has it).
+- [O] A Shift-click on a link in the Little Arc's page opened it in that Little Arc: no Peek, no second window
+  (AX and CG window lists before and after). Cra used to open another Little Window. A Shift-clicked link in a
+  browser window still opens a Peek (`shiftClickModalEntryPointEnabled`).

@@ -95,6 +95,11 @@ enum LittlePalette {
     static let tooltipBorder = Color(red: 34 / 255, green: 37 / 255, blue: 93 / 255)
     static let tooltipCap = Color(red: 211 / 255, green: 212 / 255, blue: 253 / 255)
     static let tooltipCapGlyph = Color(red: 40 / 255, green: 46 / 255, blue: 252 / 255)
+    /// Arc's toast in a Little Arc ("Copied Current URL", 1.171, 3 Nov 2026, sRGB): deeper than the
+    /// default dark theme's in a browser window, the same in every space.
+    static let toast: ShinyToast.Colors = (NSColor(srgbRed: 41 / 255, green: 18 / 255, blue: 77 / 255, alpha: 1),
+                                           NSColor(srgbRed: 33 / 255, green: 16 / 255, blue: 61 / 255, alpha: 1),
+                                           NSColor(srgbRed: 33 / 255, green: 14 / 255, blue: 66 / 255, alpha: 1), .white)
     static let barNS = NSColor(red: 12 / 255, green: 9 / 255, blue: 28 / 255, alpha: 1)
     static let buttonNS = NSColor(red: 5 / 255, green: 6 / 255, blue: 37 / 255, alpha: 1)
 
@@ -132,6 +137,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private var popup: LittlePopupPanel?
     private var tooltip: LittleTooltipPanel?
     private var tooltipTimer: Timer?
+    private let toast = ShinyToast()
 
     var store: SidebarStore { app.store }
     var currentURL: String { browser?.currentURL ?? state.url }
@@ -186,7 +192,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         }
 
         actions.openCommandBar = { [weak self] in self?.openCommandBar() }
-        actions.copyURL = { [weak self] in self?.copy(self?.currentURL ?? "") }
+        actions.copyURL = { [weak self] in self?.copyURL() }
         actions.promote = { [weak self] sid in self?.promote(to: sid) }
         actions.togglePopup = { [weak self] in self?.togglePopup() }
         actions.closePopup = { [weak self] in self?.closePopup() }
@@ -592,8 +598,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         case "zoomIn": if let b = browser { b.setZoomLevel(b.zoomLevel() + 0.5) }
         case "zoomOut": if let b = browser { b.setZoomLevel(b.zoomLevel() - 0.5) }
         case "resetZoom": browser?.setZoomLevel(0)
-        case "copyURL": copy(currentURL)
-        case "copyURLMarkdown": copy("[\(browser?.currentTitle ?? state.title)](\(currentURL))")
+        case "copyURL": copyURL()
+        case "copyURLMarkdown":
+            copy("[\(browser?.currentTitle ?? state.title)](\(currentURL))")
+            showToast("Copied URL as Markdown")
         case "viewSource": browser?.viewSource()
         case "devTools", "jsConsole", "inspectElement":
             browser?.devToolsAction = ["jsConsole": "console", "inspectElement": "inspect"][id]
@@ -615,6 +623,18 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private func copy(_ s: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(s, forType: .string)
+    }
+
+    /// ⇧⌘C and the link button: Arc's toast over the window's top-right corner, as in a browser window.
+    private func copyURL() {
+        copy(currentURL)
+        showToast("Copied Current URL")
+    }
+
+    /// The toast sits 8 pt under the window's top, over the toolbar (Arc's Little Arc).
+    private func showToast(_ text: String) {
+        guard let window, let content = window.contentView else { return }
+        toast.show(text, page: content.convert(content.bounds, to: nil), in: window, colors: LittlePalette.toast)
     }
 
     /// ⌘W / Close Window: the same path as the close button. (performClose is
@@ -742,6 +762,14 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         guard let window else { return }
         pageFullscreen = fullscreen
         if fullscreen != window.styleMask.contains(.fullScreen) { window.toggleFullScreen(nil) }
+    }
+
+    /// A Shift-clicked link opens in this window: Arc's Little Arc has no Peek of its own, so its
+    /// Shift-click is a plain click (1.171, 3 Nov 2026).
+    func browser(_ browser: CraBrowser, opensPeekForURL url: String, shiftClick: Bool) -> Bool {
+        guard shiftClick, !url.lowercased().hasPrefix("cra:") else { return false }
+        browser.loadURL(url)
+        return true
     }
 
     /// Links that want a new tab open another little window (Arc does the same).
