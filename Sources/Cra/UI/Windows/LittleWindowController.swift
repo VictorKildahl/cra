@@ -786,14 +786,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     func browser(_ browser: CraBrowser, didUpdateDownload download: CraDownloadInfo) { app.main.browserManager(download: download) }
 
     func browser(_ browser: CraBrowser, requestsPermissionForOrigin origin: String, kinds: UInt, completion: @escaping (Bool) -> Void) {
-        if kinds == 8 { completion(false); return }
-        var what: [String] = []
-        if kinds & 1 != 0 { what.append("camera") }
-        if kinds & 2 != 0 { what.append("microphone") }
-        if kinds & 4 != 0 { what.append("location") }
+        // The main window's sheet. A quiet notification deny here would save a block for the
+        // site that its tabs then hit too (#137).
         let alert = NSAlert()
-        alert.messageText = what.isEmpty ? "\(origin) is asking for a browser permission"
-                                         : "\(origin) wants to use your \(what.joined(separator: " and "))"
+        alert.messageText = PermissionPrompt.message(origin: origin, kinds: kinds)
         alert.addButton(withTitle: "Allow")
         alert.addButton(withTitle: "Block")
         guard let window else { completion(false); return }

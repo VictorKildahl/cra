@@ -74,7 +74,9 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 - (BOOL)browser:(CraBrowser *)browser handleUnhandledKeyEvent:(NSEvent *)event;
 - (void)browser:(CraBrowser *)browser didUpdateDownload:(CraDownloadInfo *)download;
 /// Ask the user. `kinds` is a bitmask: 1 = camera, 2 = microphone,
-/// 4 = location, 8 = notifications, 16 = other.
+/// 4 = location, 8 = notifications, 16 = a type CraCEF has no bit for, and from
+/// 1 << 5 Chrome's other types (kPermissionKinds in CraCEF.mm, worded by CraCore's
+/// PermissionPrompt).
 - (void)browser:(CraBrowser *)browser requestsPermissionForOrigin:(NSString *)origin kinds:(NSUInteger)kinds completion:(void (^)(BOOL allowed))completion;
 - (void)browserDidReceiveFocus:(CraBrowser *)browser;
 - (void)browserDidClose:(CraBrowser *)browser;

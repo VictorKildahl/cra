@@ -1075,6 +1075,48 @@ private:
 
 // MARK: - Browser client
 
+// Chrome's permission request types as CraCEF's `kinds` bits (CraCEF.h), so the sheet can say
+// what a page asks for. A type CEF adds later, not in this table, comes through as 16.
+static const struct { uint32_t cef; NSUInteger kind; } kPermissionKinds[] = {
+    {CEF_PERMISSION_TYPE_CAMERA_STREAM | CEF_PERMISSION_TYPE_CAMERA_PAN_TILT_ZOOM, 1},
+    {CEF_PERMISSION_TYPE_MIC_STREAM, 2},
+    {CEF_PERMISSION_TYPE_GEOLOCATION, 4},
+    {CEF_PERMISSION_TYPE_NOTIFICATIONS, 8},
+    {CEF_PERMISSION_TYPE_CLIPBOARD, 1 << 5},
+    {CEF_PERMISSION_TYPE_WINDOW_MANAGEMENT, 1 << 6},
+    {CEF_PERMISSION_TYPE_LOCAL_NETWORK_ACCESS_DEPRECATED | CEF_PERMISSION_TYPE_LOCAL_NETWORK, 1 << 7},
+    {CEF_PERMISSION_TYPE_LOOPBACK_NETWORK, 1 << 8},
+    {CEF_PERMISSION_TYPE_STORAGE_ACCESS, 1 << 9},
+    {CEF_PERMISSION_TYPE_TOP_LEVEL_STORAGE_ACCESS, 1 << 10},
+    {CEF_PERMISSION_TYPE_LOCAL_FONTS, 1 << 11},
+    {CEF_PERMISSION_TYPE_IDLE_DETECTION, 1 << 12},
+    {CEF_PERMISSION_TYPE_MIDI_SYSEX, 1 << 13},
+    {CEF_PERMISSION_TYPE_MULTIPLE_DOWNLOADS, 1 << 14},
+    {CEF_PERMISSION_TYPE_KEYBOARD_LOCK, 1 << 15},
+    {CEF_PERMISSION_TYPE_POINTER_LOCK, 1 << 16},
+    {CEF_PERMISSION_TYPE_PROTECTED_MEDIA_IDENTIFIER, 1 << 17},
+    {CEF_PERMISSION_TYPE_REGISTER_PROTOCOL_HANDLER, 1 << 18},
+    {CEF_PERMISSION_TYPE_AR_SESSION, 1 << 19},
+    {CEF_PERMISSION_TYPE_VR_SESSION, 1 << 20},
+    {CEF_PERMISSION_TYPE_HAND_TRACKING, 1 << 21},
+    {CEF_PERMISSION_TYPE_SENSORS, 1 << 22},
+    {CEF_PERMISSION_TYPE_DISK_QUOTA, 1 << 23},
+    {CEF_PERMISSION_TYPE_IDENTITY_PROVIDER, 1 << 24},
+    {CEF_PERMISSION_TYPE_CAPTURED_SURFACE_CONTROL, 1 << 25},
+    {CEF_PERMISSION_TYPE_WEB_APP_INSTALLATION, 1 << 26},
+    {CEF_PERMISSION_TYPE_FILE_SYSTEM_ACCESS, 1 << 27},
+    {CEF_PERMISSION_TYPE_AMBIENT_LOGIN, 1 << 28},
+};
+
+static NSUInteger CraPermissionKinds(uint32_t requested) {
+    NSUInteger kinds = 0;
+    for (const auto& k : kPermissionKinds) {
+        if (requested & k.cef) kinds |= k.kind;
+        requested &= ~k.cef;
+    }
+    return requested ? kinds | 16 : kinds;
+}
+
 class CraClient : public CefClient,
                   public CefLifeSpanHandler,
                   public CefLoadHandler,
@@ -1685,14 +1727,9 @@ public:
             callback->Continue(CEF_PERMISSION_RESULT_DISMISS);
             return true;
         }
-        NSUInteger kinds = 0;
-        if (requested_permissions & (CEF_PERMISSION_TYPE_CAMERA_STREAM | CEF_PERMISSION_TYPE_CAMERA_PAN_TILT_ZOOM)) kinds |= 1;
-        if (requested_permissions & CEF_PERMISSION_TYPE_MIC_STREAM) kinds |= 2;
-        if (requested_permissions & CEF_PERMISSION_TYPE_GEOLOCATION) kinds |= 4;
-        if (requested_permissions & CEF_PERMISSION_TYPE_NOTIFICATIONS) kinds |= 8;
-        if (kinds == 0) kinds = 16;
         CefRefPtr<CefPermissionPromptCallback> cb = callback;
-        [o.delegate browser:o requestsPermissionForOrigin:NSStringFromCef(requesting_origin) kinds:kinds
+        [o.delegate browser:o requestsPermissionForOrigin:NSStringFromCef(requesting_origin)
+                      kinds:CraPermissionKinds(requested_permissions)
                  completion:^(BOOL allowed) {
             answering_prompt_ = true;
             cb->Continue(allowed ? CEF_PERMISSION_RESULT_ACCEPT : CEF_PERMISSION_RESULT_DENY);
