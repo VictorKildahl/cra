@@ -1301,13 +1301,48 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         return true
     }
 
-    /// Arc's Peek covers the page area less a margin, inside this window.
-    func peekFrame() -> NSRect {
+    /// The area Arc's Peek is centred on (window coordinates): right of the sidebar to the
+    /// window's edge, top to bottom; the whole window with the sidebar out of the way.
+    private func peekAreaInWindow() -> NSRect {
         guard let window else { return .zero }
         // Asked from windowDidResize, before the shell has laid out at the new size.
         shell.layoutSubtreeIfNeeded()
-        let r = window.convertToScreen(shell.convert(shell.contentContainer.frame, to: nil))
-        return r.insetBy(dx: max(24, (r.width * 0.06).rounded()), dy: max(20, (r.height * 0.05).rounded()))
+        let content = shell.convert(shell.contentContainer.frame, to: nil)
+        let sidebarShown = store.window(windowID).sidebarVisible && content.minX > CraMetrics.contentInset
+        return PeekLayout.area(window: window.frame.size, contentMinX: sidebarShown ? content.minX : 0)
+    }
+
+    /// The whole area, where a Peek grows from and goes back to (screen coordinates).
+    func peekArea() -> NSRect { window?.convertToScreen(peekAreaInWindow()) ?? .zero }
+
+    /// Arc's Peek card (screen coordinates).
+    func peekFrame() -> NSRect { window?.convertToScreen(PeekLayout.card(in: peekAreaInWindow())) ?? .zero }
+
+    /// Close, Expand and Add To Split beside the card, top first (screen coordinates).
+    func peekButtonFrames() -> [NSRect] {
+        guard let window else { return [] }
+        return PeekLayout.buttons(beside: PeekLayout.card(in: peekAreaInWindow())).map { window.convertToScreen($0) }
+    }
+
+    /// Arc fades the page under a Peek to 28 % over the window's background, its sidebar as it is.
+    func setPeekVeil(_ on: Bool, duration: TimeInterval) {
+        let alpha: CGFloat = on ? PeekLayout.pageAlpha : 1
+        let pages = browsers.runtimes.values.compactMap(\.hostWindow).filter { $0.parent === window }
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = duration
+            shell.contentContainer.animator().alphaValue = alpha
+            for w in pages { w.animator().alphaValue = alpha }
+        }
+    }
+
+    /// Add To Split from a Peek: the peeked page, a new tab, joins `source` as a pane (Arc's
+    /// openInSplit), or a toast when the split is full.
+    func canAddPane(to source: UUID) -> Bool { store.paneTabIDs(for: source).count < 4 }
+
+    func joinSplit(_ tabID: UUID, with source: UUID) {
+        let split = store.splitContaining(source).map { sp in store.addToSplit(sp.id, tabID: tabID, at: nil); return store.item(sp.id) }
+            ?? store.createSplit(with: [source, tabID], at: source)
+        store.selectTab(split.flatMap { store.paneID(for: tabID, in: $0) } ?? tabID, window: windowID)
     }
 
     private var peeks: [LittleWindowController] { app.littleWindows.filter { $0.peekParent === self } }
