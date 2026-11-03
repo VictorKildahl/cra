@@ -46,6 +46,7 @@ enum TestRoot { case today }
     static let shared = ExtensionStore()
     var entries: [Entry] = []
     func entries(inProfile name: String) -> [Entry] { entries }
+    func proxyLine(inProfile name: String) -> String { "not set by an extension" }
 }
 enum FaviconKey { static func key(for url: String) -> String? { url } }
 enum BrowsingDataClear {

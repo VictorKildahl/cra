@@ -7,7 +7,9 @@ import CraCEF
 ///
 /// `frameRate` counts animation frames for half a second. A visible page gets one per display
 /// refresh; 0 means Chromium's compositor never asked it to draw. Frames without `painted`
-/// mean they were drawn but never reached the screen (#80).
+/// mean they were drawn but never reached the screen (#80). `children` tells a page with
+/// content from an empty body without reading its text, a walk of the whole page (#136), and
+/// `video` is the first video's dropped/total frames so far (getVideoPlaybackQuality).
 @MainActor
 enum PageProbe {
     private static let script = """
@@ -20,7 +22,8 @@ enum PageProbe {
               viewport: innerWidth + 'x' + innerHeight + '@' + devicePixelRatio,
               scrollHeight: document.documentElement ? document.documentElement.scrollHeight : 0,
               elements: document.getElementsByTagName('*').length,
-              text: document.body ? document.body.textContent.length : -1,
+              children: document.body ? document.body.childElementCount : -1,
+              video: (q => q ? q.droppedVideoFrames + '/' + q.totalVideoFrames : 'none')(document.querySelector('video')?.getVideoPlaybackQuality()),
               painted: performance.getEntriesByName('first-contentful-paint').length > 0,
               frameRate: frames * 2})); }, 500);
         })
@@ -47,7 +50,7 @@ enum PageProbe {
                     finish("probe failed: \(error ?? "no result")")
                     return
                 }
-                finish(["blank", "ready", "visibility", "viewport", "scrollHeight", "elements", "text", "painted", "frameRate"]
+                finish(["blank", "ready", "visibility", "viewport", "scrollHeight", "elements", "children", "painted", "frameRate", "video"]
                     .map { "\($0)=\(fields[$0].map { "\($0)" } ?? "?")" }.joined(separator: " "))
             }
         }

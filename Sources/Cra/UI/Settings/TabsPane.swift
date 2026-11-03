@@ -51,18 +51,6 @@ struct TabsPane: View {
                     .fixedSize()
                     .disabled(!store.settings.autoArchiveEnabled)
                 }
-                HStack(spacing: 6) {
-                    SettingsCheckbox(title: "Sleep tabs I haven’t looked at in:", isOn: $store.settings.tabSleepEnabled)
-                    Picker("", selection: $store.settings.tabSleep) {
-                        ForEach(TabSleepThreshold.allCases) { Text($0.label).tag($0) }
-                    }
-                    .labelsHidden()
-                    .fixedSize()
-                    .disabled(!store.settings.tabSleepEnabled)
-                }
-                Text("Sleeping tabs free their memory and reload when you open them. Tabs playing sound or holding something you typed stay awake.")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .sheet(isPresented: $showsAirTrafficControl) {

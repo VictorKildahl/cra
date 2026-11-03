@@ -112,8 +112,9 @@ final class ShellView: NSView {
     var showToolbar = true { didSet { needsLayout = true } }
     var hasTab = false { didSet { needsLayout = true } }
     var onEdgeHover: ((Bool) -> Void)?
+    /// Set again each time the window becomes key; only a change rebuilds the backdrop.
     var windowActive = true {
-        didSet { refreshLift() }
+        didSet { if windowActive != oldValue { refreshLift() } }
     }
 
     /// Dark vibrant themes keep the earlier calibration (underWindowBackground + 15% lift).

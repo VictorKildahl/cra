@@ -61,6 +61,7 @@ enum BrowserManagerLifecycleTests {
 
         embeddedPageHandoffCase()
         await snapshotCase()
+        loadingTabCase()
         await sleepCase("an unchanged idle page sleeps", shouldSleep: true) { _, _ in }
         await sleepCase("loading started while the probe was pending stays awake") { _, rt in rt.browser.setLoading(true) }
         await sleepCase("a completed same-URL reload invalidates the old probe") { _, rt in
@@ -83,6 +84,8 @@ enum BrowserManagerLifecycleTests {
         await sleepCase("an exception reply cannot authorize sleeping", reply: #"{"exceptionDetails":{},"result":{"value":""}}"#) { _, _ in }
         await sleepCase("a page holding typed text stays awake", reply: #"{"result":{"type":"string","value":"typed"}}"#) { _, _ in }
         await refusalBackoffCase()
+        recentTabsCase()
+        freezingVoteCase()
         await sleepClockCase()
         devToolsCase()
         await beforeUnloadCase()
@@ -114,7 +117,7 @@ enum BrowserManagerLifecycleTests {
         let reply = try! JSONSerialization.data(withJSONObject: ["result": ["type": "string", "value": page]])
         runtime.browser.reply(to: "Runtime.evaluate", with: String(decoding: reply, as: UTF8.self))
         await drainMainQueue()
-        expect(line?.hasSuffix("visibility=visible viewport=? scrollHeight=? elements=? text=? painted=0 frameRate=0") == true,
+        expect(line?.hasSuffix("visibility=visible viewport=? scrollHeight=? elements=? children=? painted=0 frameRate=0 video=?") == true,
                "a visible page that was never asked to draw reads frameRate=0")
 
         // Off every screen, as in a headless run: the window follows no display.
@@ -192,11 +195,32 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    /// A tab shown while its page loads is neither captured nor probed until the load is over
+    /// (#136): both ask the renderer for work in the busiest second of the page.
+    @MainActor
+    private static func loadingTabCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let id = store.createTab(url: "https://example.test/loading").id
+        let rt = manager.ensureRuntime(for: id)!
+        rt.browser.isLoading = true
+        manager.show(id, focus: false)
+        let probe = rt.probeWork
+        expect(rt.snapshotWork == nil && probe != nil, "a page shown while loading gets no thumbnail yet, and a pending probe")
+        rt.browser.setLoading(false)
+        expect(rt.snapshotWork != nil, "its thumbnail is taken once it has loaded")
+        expect(probe?.isCancelled == true && rt.probeWork != nil && rt.probeWork !== probe, "its probe moves to after the load")
+        manager.unload(id)
+        expect(rt.probeWork == nil && rt.snapshotWork == nil, "unloading drops the pending probe")
+        manager.closeAll()
+    }
+
     @MainActor
     private static func sleepCase(_ message: String, shouldSleep: Bool = false, reply: String? = idleReply,
                                   mutate: (BrowserManager, TabRuntime) -> Void) async {
         let store = SidebarStore()
         let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.protectedRecentTabs = 0  // one page alone; the 10 most recent are kept (recentTabsCase)
         let id = store.createTab(url: "https://example.test/sleep").id
         let runtime = manager.ensureRuntime(for: id)!
         runtime.hiddenAt = Date.distantPast
@@ -214,11 +238,51 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    /// Like Arc, the 10 tabs used last keep their pages however long they have been hidden (#136).
+    @MainActor
+    private static func recentTabsCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let ids = (0..<13).map { store.createTab(url: "https://example.test/recent\($0)").id }
+        let runtimes = ids.map { manager.ensureRuntime(for: $0)! }
+        manager.show(ids[12], focus: false)
+        for (n, rt) in runtimes.dropLast().enumerated() { rt.hiddenAt = Date(timeIntervalSince1970: Double(n)) }
+        manager.sleepIdleTabs(hiddenLongerThan: 60)
+        let probed = runtimes.map { $0.browser.replies.contains { $0.method == isolatedProbe } }
+        expect(probed == [true, true, true] + Array(repeating: false, count: 10),
+               "the visible tab and the 9 hidden most recently stay awake; only older pages are asked")
+        manager.closeAll()
+    }
+
+    /// Like Arc, a page out of sight past the threshold is voted to freeze unless it is one of
+    /// the 10 tabs used last; showing it drops the vote (#136).
+    @MainActor
+    private static func freezingVoteCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let ids = (0..<12).map { store.createTab(url: "https://example.test/freeze\($0)").id }
+        let runtimes = ids.map { manager.ensureRuntime(for: $0)! }
+        manager.show(ids[11], focus: false)
+        for (n, rt) in runtimes.dropLast().enumerated() { rt.hiddenAt = Date(timeIntervalSince1970: Double(n)) }
+        let votes = { runtimes.map { rt in rt.browser.replies.filter { $0.method == "Cra.setFreezingVote" }.count } }
+        manager.freezeIdleTabs(hiddenLongerThan: 60)
+        expect(votes() == [1, 1] + Array(repeating: 0, count: 10) && runtimes[0].freezeVoted && !runtimes[2].freezeVoted,
+               "only pages beyond the 10 tabs used last are voted to freeze")
+        expect(runtimes[0].browser.lastParams.contains("true") || runtimes[1].browser.lastParams.contains("true"), "the vote says true")
+        manager.freezeIdleTabs(hiddenLongerThan: 60)
+        expect(votes() == [1, 1] + Array(repeating: 0, count: 10), "a vote already cast is not sent again")
+        manager.show(ids[0], focus: false)
+        expect(!runtimes[0].freezeVoted && votes()[0] == 2 && runtimes[0].browser.lastParams.contains("false"),
+               "showing a frozen tab drops its vote")
+        manager.closeAll()
+    }
+
     /// A page that refused isn't probed again every minute, only after the back-off or once shown again.
     @MainActor
     private static func refusalBackoffCase() async {
         let store = SidebarStore()
         let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.protectedRecentTabs = 0  // one page alone; the 10 most recent are kept (recentTabsCase)
         let id = store.createTab(url: "https://example.test/typed").id
         let runtime = manager.ensureRuntime(for: id)!
         runtime.hiddenAt = Date.distantPast
@@ -240,6 +304,7 @@ enum BrowserManagerLifecycleTests {
         let clock = ManualScheduler()
         let store = SidebarStore()
         let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView(), clock: clock)
+        manager.protectedRecentTabs = 0  // one page alone; the 10 most recent are kept (recentTabsCase)
         let id = store.createTab(url: "https://example.test/clock").id
         let runtime = manager.ensureRuntime(for: id)!
         func probed() -> Bool { runtime.browser.replies.contains { $0.method == isolatedProbe } }
@@ -296,6 +361,7 @@ enum BrowserManagerLifecycleTests {
     private static func beforeUnloadCase() async {
         let store = SidebarStore()
         let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.protectedRecentTabs = 0  // one page alone; the 10 most recent are kept (recentTabsCase)
         let id = store.createTab(url: "https://example.test/editor").id
         let runtime = manager.ensureRuntime(for: id)!
         runtime.hiddenAt = Date.distantPast

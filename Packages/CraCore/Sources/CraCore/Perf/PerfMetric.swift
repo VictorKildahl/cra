@@ -3,7 +3,8 @@ import Foundation
 /// What the performance recorder times, in milliseconds (GitHub #91). The raw values are the
 /// keys in perf.json, so renaming one changes the file's schema.
 public enum PerfMetric: String, Codable, CaseIterable, Sendable {
-    /// Putting other tabs on screen (BrowserManager.show), the part on the main thread.
+    /// Putting other tabs on screen (BrowserManager.show), the part on the main thread, without
+    /// making a page for a tab that had none (that is `pageCreate`).
     case tabSwitch
     /// Making a tab's page: Chromium's view, its window and the browser object.
     case pageCreate
@@ -17,6 +18,8 @@ public enum PerfMetric: String, Codable, CaseIterable, Sendable {
     case jsonSave
     /// Long tasks (50 ms or more) in the visible tab's page.
     case longTask
+    /// Framing an extension's popup once Chrome shows it (ExtensionPopupWindow.present).
+    case extensionPopup
 }
 
 /// What the recorder counts. Some carry a key (`loadError` the error code, `sleepRefusal` the

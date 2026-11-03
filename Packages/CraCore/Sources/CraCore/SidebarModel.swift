@@ -348,27 +348,6 @@ public enum AutoArchiveThreshold: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-public enum TabSleepThreshold: String, Codable, CaseIterable, Identifiable {
-    case fifteenMinutes, oneHour, fourHours, twelveHours
-    public var id: String { rawValue }
-    public var seconds: TimeInterval {
-        switch self {
-        case .fifteenMinutes: return 15 * 60
-        case .oneHour: return 3600
-        case .fourHours: return 4 * 3600
-        case .twelveHours: return 12 * 3600
-        }
-    }
-    public var label: String {
-        switch self {
-        case .fifteenMinutes: return "15 minutes"
-        case .oneHour: return "1 hour"
-        case .fourHours: return "4 hours"
-        case .twelveHours: return "12 hours"
-        }
-    }
-}
-
 public enum SearchEngine: String, Codable, CaseIterable, Identifiable {
     case google, duckduckgo, bing, kagi
     public var id: String { rawValue }
@@ -460,10 +439,6 @@ public struct AppSettings: Codable, Equatable {
     /// Dia's Tabs ▸ "Clean up tabs I haven't used in:" checkbox; `autoArchive` keeps the
     /// threshold while this is off.
     public var autoArchiveEnabled: Bool = true
-    /// Tabs ▸ "Sleep tabs I haven't looked at in:": a page hidden that long closes and
-    /// loads again when shown (BrowserManager.sleepIdleTabs). Off by default.
-    public var tabSleepEnabled: Bool = false
-    public var tabSleep: TabSleepThreshold = .oneHour
     /// Privacy ▸ "Always use secure connections": Chrome's HTTPS-Only Mode.
     public var httpsOnly: Bool = false
     /// Arc's searchSuggestEnabled: the command bar asks the search engine for suggestions
@@ -629,8 +604,6 @@ extension AppSettings {
         hapticFeedbackOnReorder = try c.decodeIfPresent(Bool.self, forKey: .hapticFeedbackOnReorder) ?? true
         warnBeforeQuitting = try c.decodeIfPresent(Bool.self, forKey: .warnBeforeQuitting) ?? false
         autoArchiveEnabled = try c.decodeIfPresent(Bool.self, forKey: .autoArchiveEnabled) ?? true
-        tabSleepEnabled = try c.decodeIfPresent(Bool.self, forKey: .tabSleepEnabled) ?? false
-        tabSleep = (try? c.decodeIfPresent(TabSleepThreshold.self, forKey: .tabSleep)) ?? .oneHour
         httpsOnly = try c.decodeIfPresent(Bool.self, forKey: .httpsOnly) ?? false
         searchSuggestions = try c.decodeIfPresent(Bool.self, forKey: .searchSuggestions) ?? true
         showSpaceHeaderOnSingleSpace = try c.decodeIfPresent(Bool.self, forKey: .showSpaceHeaderOnSingleSpace) ?? true

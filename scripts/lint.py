@@ -51,7 +51,8 @@ CORE_IMPORT = re.compile(r"^\s*(?:@\w+\s+)*import\s+(?:(?:struct|class|enum|prot
 PERF_DIRS = ("Perf/",)
 PERF_CORE = os.path.join("Packages", "CraCore", "Sources", "CraCore", "Perf") + os.sep
 PERF_CALLERS = {"App/main.swift", "App/AppDelegate.swift", "Services/BrowserManager.swift", "Services/Persistence.swift",
-                "Services/HitchMonitor.swift", "Services/Diagnostics.swift", "UI/Settings/SettingsWindowController.swift"}
+                "Services/HitchMonitor.swift", "Services/Diagnostics.swift", "Services/ExtensionActions.swift",
+                "UI/Settings/SettingsWindowController.swift"}
 PERF_NAME = re.compile(r"\b(?:Perf(?:[A-Z]\w*)?|PerformancePane)\b")
 NETWORK = re.compile(r"\bURLSession\b|\bCFNetwork\b|\bNWConnection\b|\bNWPathMonitor\b|^\s*import\s+Network\b|\bCFSocket\w*|\bCFStream\w*|\bsocket\(")
 CLOCK_FILES = {"Services/SidebarStore.swift", "Services/BrowserManager.swift", "Services/LiveFolderManager.swift",

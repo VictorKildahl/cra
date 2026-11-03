@@ -48,20 +48,42 @@ final class FloatingSidebarController {
 
     deinit {
         poll?.invalidate()
+        activation.forEach(NotificationCenter.default.removeObserver)
     }
 
     private var poll: Timer?
+    private var activation: [NSObjectProtocol] = []
 
     /// No window of ours reliably receives mouse-moved events here: the key window
     /// is usually a Chromium page window, and the shell's tracking areas only run in
-    /// the key window. So the pointer is sampled on a timer while the app is active.
+    /// the key window. So the pointer is sampled on a timer while the app is active,
+    /// and the timer stops while it is not: at 30 Hz it was most of the run loop's
+    /// wake-ups in a Cra left in the background (#136).
     func install() {
-        guard poll == nil else { return }
+        guard activation.isEmpty else { return }
+        let center = NotificationCenter.default
+        activation = [(NSApplication.didBecomeActiveNotification, true), (NSApplication.didResignActiveNotification, false)].map { name, on in
+            center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.setPolling(on) }
+            }
+        }
+        setPolling(NSApp.isActive)
+    }
+
+    private func setPolling(_ on: Bool) {
+        guard on != (poll != nil) else { return }
+        poll?.invalidate()
+        poll = nil
+        guard on else { return }
+        // Fired on the main run loop, so no hop to the main actor: one wake-up per tick, not two.
         poll = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.pointerMoved() }
+            MainActor.assumeIsolated { self?.pointerMoved() }
         }
         poll?.tolerance = 0.01
     }
+
+    /// Whether the pointer is being sampled (the tests check it follows the app's activation).
+    var isPolling: Bool { poll != nil }
 
     private func pointerMoved() {
         guard NSApp.isActive, !shell.contentFullscreen, window.isVisible else { return }

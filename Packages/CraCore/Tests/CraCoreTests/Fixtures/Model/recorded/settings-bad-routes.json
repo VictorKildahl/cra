@@ -33,8 +33,6 @@
   "showSpaceHeaderOnSingleSpace" : true,
   "showStatusBar" : true,
   "showToolbar" : false,
-  "tabSleep" : "oneHour",
-  "tabSleepEnabled" : false,
   "toolbarDefaultMigrated" : true,
   "toolbarShowsFullURL" : false,
   "warnBeforeQuitting" : false

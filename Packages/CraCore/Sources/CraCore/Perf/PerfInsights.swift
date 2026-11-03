@@ -21,7 +21,9 @@ public struct PerfInsight: Codable, Equatable, Sendable, Identifiable {
 /// a test all agree.
 public enum PerfInsights {
     public static let lowDiskBytes: Int64 = 5 << 30
-    public static let largeFootprintBytes: Int64 = 8 << 30
+    /// A 16 GB Mac is short of memory well before 8 GB (#136): nine live pages, four of them
+    /// YouTube, came to 4.2 GB there.
+    public static let largeFootprintBytes: Int64 = 4 << 30
     /// Short stalls per hour of the session that are worth a line.
     public static let frequentStallsPerHour = 30.0
     /// What recording may cost, in percent of one core (docs/performance.md).
@@ -96,7 +98,7 @@ public enum PerfInsights {
         if footprint >= largeFootprintBytes {
             let slept = r.tabs.latest?.slept ?? 0
             out.append(PerfInsight(id: "footprint", severity: .info, title: "Cra uses \(bytes(footprint)) of memory",
-                                   detail: slept > 0 ? "Tab sleeping has \(slept) tab\(slept == 1 ? "" : "s") asleep." : "Tab sleeping (Settings ▸ Tabs) closes pages you haven't looked at in a while."))
+                                   detail: slept > 0 ? "Tab sleeping has \(slept) tab\(slept == 1 ? "" : "s") asleep." : "Pages you haven't looked at in 4 hours close, and reload when you open them; the 10 tabs used last stay."))
         }
         return out
     }

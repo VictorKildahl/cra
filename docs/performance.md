@@ -72,11 +72,13 @@ Chromium's `--type=` argument): CPU, memory footprint, disk reads and writes, wa
 file only), and processes started and ended. The Mac: CPU, memory pressure, thermal state, Low
 Power Mode, free disk, and Cra's average CPU while nobody used the Mac (`idle`: 5-second samples
 with no keyboard or mouse input for a minute). Tabs by state, sleep refusals by reason, and
-timings for tab switch, page create, page load and waking a slept tab. In the visible page,
+timings for tab switch (without the page created for a tab that had none, which is page
+create), page create, page load, waking a slept tab and framing an extension's popup. In the visible page,
 read with the long tasks every 5 s and never in background tabs: long tasks, Chromium's long
 animation frames (`longFrames`, `longestFrameMs`: a passive observer, it asks for no frames) and
 the frames its videos played and dropped (`getVideoPlaybackQuality`). Renderer crashes, hangs
-and failed loads with their codes. Start-up phases, JSON load and save times (saves run on the
+and failed loads with their codes. Start-up phases (store loaded, Chromium started, windows shown, then the first page shown,
+committed and loaded), JSON load and save times (saves run on the
 persistence queue, so `jsonSave` is never a main-thread stall), the profile's and caches' size
 (at export only). The session: a random id, the launch number, the previous session and whether
 it quit. The totals in `tabs` are since launch; `history.json`, in the export too, has stalls
@@ -165,7 +167,8 @@ real export. On `fifty-tabs` the 13.5 ms were: observer 6.7, process sample 5.1 
 2. Remove the calls in the files `perf-boundary` allows: `App/main.swift`, `App/AppDelegate.swift`
    (`PerfCEF.install`, the `stall` and `perfReport` hooks, `exportDiagnostics` in the settings
    actions), `Services/BrowserManager.swift`, `Services/Persistence.swift`,
-   `Services/HitchMonitor.swift`, `Services/Diagnostics.swift`, `UI/Settings/SettingsWindowController.swift`
+   `Services/HitchMonitor.swift`, `Services/Diagnostics.swift`, `Services/ExtensionActions.swift`
+   (the popup's `Perf.time`), `UI/Settings/SettingsWindowController.swift`
    (the pane, `isOpen`). Then the two rules in `scripts/lint.py`.
 3. `CraLog.sitesSeen` and `SiteNames` serve "Hide site names"; keep them if that stays.
 4. The `lt` and `lf` observers in `PageScript.isolatedWorld`, the `load-start`/`load-end` and

@@ -105,6 +105,14 @@ enum FloatingSidebarTests {
         window.removeChildWindow(page)
         page.close()
         front.close()
+
+        // #136: the pointer is sampled only while Cra is the active app.
+        sidebar.install()
+        expect(!sidebar.isPolling, "an inactive app installs no pointer timer")
+        NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApp)
+        expect(sidebar.isPolling, "becoming active starts the pointer timer")
+        NotificationCenter.default.post(name: NSApplication.didResignActiveNotification, object: NSApp)
+        expect(!sidebar.isPolling, "leaving the app stops it")
         window.close()
         print("Floating sidebar: \(checks) checks passed")
     }
