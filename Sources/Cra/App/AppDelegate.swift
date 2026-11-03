@@ -183,13 +183,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         observeChanges(of: { [store] in store.settings.httpsOnly }, apply: CraCEFRuntime.setHttpsOnlyModeEnabled)
     }
 
-    /// Chromium's secure DNS setting (chrome://settings/security), left on Chromium's default
-    /// like Arc: the log says what is in effect at launch and after each change (#110).
+    /// Chromium's secure DNS setting (Settings > Privacy, chrome://settings/security), left on
+    /// Chromium's default like Arc: the log says what is in effect at launch and after each
+    /// change (#110), and the Settings row follows it (#133).
     private func logSecureDNS() {
         var last: String?
         CraCEFRuntime.setSecureDNSChangeHandler {
-            guard let mode = CraCEFRuntime.secureDNSMode() else { return }
-            let line = SecureDNS(mode: mode, templates: CraCEFRuntime.secureDNSTemplates() ?? "").line
+            let setting = SecureDNSSetting.shared
+            setting.refresh()
+            guard let line = setting.inEffect?.line else { return }
             if line != last { last = line; CraLog.note("secure dns: " + line) }
         }
     }

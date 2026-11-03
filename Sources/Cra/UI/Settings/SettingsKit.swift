@@ -82,7 +82,8 @@ struct SettingsFootnote: View {
     }
 }
 
-/// Dia's coloured 20 pt rounded-square glyph in front of a Privacy row.
+/// Dia's coloured 20 pt rounded-square glyph in front of a Privacy row. Decoration: the row's
+/// text names it, so VoiceOver skips it.
 struct SettingsGlyph: View {
     let symbol: String
     let color: Color
@@ -91,6 +92,7 @@ struct SettingsGlyph: View {
             .fill(color)
             .frame(width: 20, height: 20)
             .overlay(Image(systemName: symbol).font(.system(size: 11, weight: .semibold)).foregroundStyle(.white))
+            .accessibilityHidden(true)
     }
 }
 

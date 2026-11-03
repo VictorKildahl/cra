@@ -2287,6 +2287,15 @@ was frontmost, 1x region captures and 100 fps recordings; test tabs archived aft
   what is in effect at launch and after each change (`secure dns: automatic, no provider (system resolver)`, `secure
   via dns.google`, `off`), and Export Diagnostics' summary has a `Secure DNS:` line (`SecureDNS` in CraCore, hosts
   only).
+- Cra (3 Nov 2026, issue #133, a deviation: Arc and Dia have no such row): Settings ▸ Privacy ▸ Connections has a Secure
+  DNS menu under "Always use secure connections": Automatic (the default), Off, Google, Cloudflare, Quad9, OpenDNS,
+  CleanBrowsing (Family Filter), DNS4EU (Protective), Custom…. It reads and writes the same two Local State prefs as
+  chrome://settings/security (`SecureDNSPrefs`, `SecureDNSProvider` in CraCore; `setSecureDNSMode:templates:` in
+  CraCEF), so settings.json keeps no copy, a fresh install still has no `dns_over_https` key, and a choice made on
+  either page shows on the other at once. The write is live: a net log shows `secure_dns_mode` 1 → 2 and DoH queries
+  to dns.google with no relaunch. Custom takes whitespace-separated `https://` templates with a host, path kept as
+  typed (NextDNS ids). The footnote is `SecureDNS.summary`, built from the same value as the log line. A
+  DnsOverHttps* policy makes the menu read-only.
 
 ## Shift + wheel switches spaces (Arc 1.171, 2 Nov 2026, issue #93, live Arc, HID wheel events)
 
