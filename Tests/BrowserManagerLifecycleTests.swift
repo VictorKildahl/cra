@@ -87,6 +87,9 @@ enum BrowserManagerLifecycleTests {
         recentTabsCase()
         freezingVoteCase()
         await sleepClockCase()
+        await pressureSweepCase()
+        shortTimerCase()
+        recentlyAudibleCase()
         devToolsCase()
         await beforeUnloadCase()
         nowPlayingCase()
@@ -224,7 +227,7 @@ enum BrowserManagerLifecycleTests {
         let id = store.createTab(url: "https://example.test/sleep").id
         let runtime = manager.ensureRuntime(for: id)!
         runtime.hiddenAt = Date.distantPast
-        manager.sleepIdleTabs(hiddenLongerThan: 60)
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
         expect(runtime.browser.replies.contains { $0.method == isolatedProbe }, "eligible page receives an asynchronous sleep probe")
         mutate(manager, runtime)
         runtime.browser.reply(to: isolatedProbe, with: reply)
@@ -247,7 +250,7 @@ enum BrowserManagerLifecycleTests {
         let runtimes = ids.map { manager.ensureRuntime(for: $0)! }
         manager.show(ids[12], focus: false)
         for (n, rt) in runtimes.dropLast().enumerated() { rt.hiddenAt = Date(timeIntervalSince1970: Double(n)) }
-        manager.sleepIdleTabs(hiddenLongerThan: 60)
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
         let probed = runtimes.map { $0.browser.replies.contains { $0.method == isolatedProbe } }
         expect(probed == [true, true, true] + Array(repeating: false, count: 10),
                "the visible tab and the 9 hidden most recently stay awake; only older pages are asked")
@@ -286,13 +289,13 @@ enum BrowserManagerLifecycleTests {
         let id = store.createTab(url: "https://example.test/typed").id
         let runtime = manager.ensureRuntime(for: id)!
         runtime.hiddenAt = Date.distantPast
-        manager.sleepIdleTabs(hiddenLongerThan: 60)
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
         runtime.browser.reply(to: isolatedProbe, with: #"{"result":{"type":"string","value":"typed"}}"#)
         await drainMainQueue()
-        manager.sleepIdleTabs(hiddenLongerThan: 60)
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
         expect(!runtime.browser.replies.contains { $0.method == isolatedProbe }, "a refused page is not probed again before the back-off")
         runtime.sleepProbeAfter = Date.distantPast
-        manager.sleepIdleTabs(hiddenLongerThan: 60)
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
         expect(runtime.browser.replies.contains { $0.method == isolatedProbe }, "a refused page is probed again after the back-off")
         manager.closeAll()
     }
@@ -309,19 +312,89 @@ enum BrowserManagerLifecycleTests {
         let runtime = manager.ensureRuntime(for: id)!
         func probed() -> Bool { runtime.browser.replies.contains { $0.method == isolatedProbe } }
         clock.advance(by: 3599)
-        manager.sleepIdleTabs(hiddenLongerThan: 3600)
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 3600))
         expect(!probed(), "a page hidden a second short of the threshold is not asked")
         clock.advance(by: 2)
-        manager.sleepIdleTabs(hiddenLongerThan: 3600)
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 3600))
         expect(probed(), "a page hidden past the threshold is asked")
         runtime.browser.reply(to: isolatedProbe, with: #"{"result":{"type":"string","value":"typed"}}"#)
         await drainMainQueue()
         clock.advance(by: BrowserManager.refusalBackoff - 1)
-        manager.sleepIdleTabs(hiddenLongerThan: 3600)
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 3600))
         expect(!probed(), "a refused page is not asked again inside the back-off")
         clock.advance(by: 1)
-        manager.sleepIdleTabs(hiddenLongerThan: 3600)
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 3600))
         expect(probed(), "a refused page is asked again once the back-off ends")
+        manager.closeAll()
+    }
+
+    /// Under memory pressure (#153) the 3 pages hidden longest are asked, the 10 tabs used last
+    /// included; a page refusing inside its back-off doesn't take one of the 3, and a page left
+    /// less than 5 minutes ago isn't asked.
+    @MainActor
+    private static func pressureSweepCase() async {
+        let clock = ManualScheduler()
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView(), clock: clock)
+        let ids = (0..<6).map { store.createTab(url: "https://example.test/pressure\($0)").id }
+        let runtimes = ids.map { manager.ensureRuntime(for: $0)! }
+        for (n, rt) in runtimes.enumerated() { rt.hiddenAt = clock.now.addingTimeInterval(-3600 + Double(n) * 60) }
+        runtimes[5].hiddenAt = clock.now.addingTimeInterval(-4 * 60)
+        runtimes[0].sleepProbeAfter = clock.now.addingTimeInterval(60)
+        func probed() -> [Bool] { runtimes.map { rt in rt.browser.replies.contains { $0.method == isolatedProbe } } }
+        manager.sleepIdleTabs(.memoryPressure)
+        expect(probed() == [false, true, true, true, false, false],
+               "the 3 pages hidden longest are asked, past a refusing page, none of the 10 used last kept")
+        for rt in runtimes[1...3] {
+            rt.browser.reply(to: isolatedProbe, with: idleReply)
+            await drainMainQueue()
+            rt.browser.reply(to: "Runtime.evaluate", with: idleReply)
+            await drainMainQueue()
+        }
+        expect(ids.map { manager.runtime(for: $0) == nil } == [false, true, true, true, false, false], "the 3 pages close")
+        manager.sleepIdleTabs(.memoryPressure)
+        expect(probed()[4] && !probed()[5], "the next sweep takes the next page, not one left 4 minutes ago")
+        manager.closeAll()
+    }
+
+    /// "Force tabs out of memory after:" below Arc's 4 hours closes the 10 tabs used last too;
+    /// 4 hours and more keep them (#153).
+    @MainActor
+    private static func shortTimerCase() {
+        let clock = ManualScheduler()
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView(), clock: clock)
+        let id = store.createTab(url: "https://example.test/short").id
+        let runtime = manager.ensureRuntime(for: id)!
+        clock.advance(by: 9 * 3600)
+        manager.sleepIdleTabs(.timer(.fourHours))
+        manager.sleepIdleTabs(.timer(.eightHours))
+        expect(!runtime.browser.replies.contains { $0.method == isolatedProbe }, "at 4 hours or more the tab used last stays")
+        manager.sleepIdleTabs(.timer(.twoHours))
+        expect(runtime.browser.replies.contains { $0.method == isolatedProbe }, "below 4 hours it is asked")
+        manager.closeAll()
+    }
+
+    /// A page that played sound counts as in use: tab sleeping waits as long after it went quiet
+    /// as after it went out of sight (#153).
+    @MainActor
+    private static func recentlyAudibleCase() {
+        let clock = ManualScheduler()
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView(), clock: clock)
+        manager.protectedRecentTabs = 0
+        let id = store.createTab(url: "https://example.test/audible").id
+        let runtime = manager.ensureRuntime(for: id)!
+        clock.advance(by: 3600)
+        manager.browser(runtime.browser, didChangeAudible: true)
+        clock.advance(by: 120)
+        manager.browser(runtime.browser, didChangeAudible: false)
+        clock.advance(by: 14 * 60)
+        manager.sleepIdleTabs(.timer(.fifteenMinutes))
+        expect(!runtime.browser.replies.contains { $0.method == isolatedProbe }, "a page quiet for 14 minutes isn't asked at 15")
+        clock.advance(by: 2 * 60)
+        manager.sleepIdleTabs(.timer(.fifteenMinutes))
+        expect(runtime.browser.replies.contains { $0.method == isolatedProbe }, "quiet for 16 minutes it is")
         manager.closeAll()
     }
 
@@ -365,7 +438,7 @@ enum BrowserManagerLifecycleTests {
         let id = store.createTab(url: "https://example.test/editor").id
         let runtime = manager.ensureRuntime(for: id)!
         runtime.hiddenAt = Date.distantPast
-        manager.sleepIdleTabs(hiddenLongerThan: 60)
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
         runtime.browser.reply(to: isolatedProbe, with: idleReply)
         await drainMainQueue()
         runtime.browser.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"beforeunload"}}"#)

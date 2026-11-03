@@ -188,11 +188,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// AppComposition.tabFreezeAfter; `cra://debug?freezeTabs=` shortens it for a test.
     private var freezeAfter = AppComposition.tabFreezeAfter
 
+    /// The last memory-pressure sweep (TabSleepPolicy.sweepsForPressure).
+    private var lastPressureSweep: Date?
+
+    /// Settings ▸ Tabs ▸ Tab Cleanup, read every minute so a change counts from the next pass.
     private func sleepIdleTabs() {
+        let settings = store.settings
         for w in mainWindows {
             w.browsers.freezeIdleTabs(hiddenLongerThan: freezeAfter)
-            w.browsers.sleepIdleTabs(hiddenLongerThan: AppComposition.tabSleepAfter)
+            if settings.tabSleepTimerEnabled { w.browsers.sleepIdleTabs(.timer(settings.tabSleepAfter)) }
         }
+        sweepForMemoryPressure(PerfSystemSample.pressure(level: PerfSystemSampler.pressureLevel()))
+    }
+
+    /// "Force tabs out of memory when the Mac is short of memory" (GitHub #153): while macOS
+    /// reports memory pressure, the pages hidden longest close, a few per sweep, until it doesn't.
+    private func sweepForMemoryPressure(_ pressure: PerfSystemSample.Pressure) {
+        let now = composition.clock.now
+        guard TabSleepPolicy.sweepsForPressure(pressure, enabled: store.settings.tabSleepOnMemoryPressure,
+                                               lastSweep: lastPressureSweep, now: now) else { return }
+        lastPressureSweep = now
+        CraLog.note("tab sleep: memory pressure \(pressure.rawValue), closing up to \(TabSleepPolicy.memoryPressure.limit ?? 0) pages per window")
+        for w in mainWindows { w.browsers.sleepIdleTabs(.memoryPressure) }
     }
 
     /// Settings > Privacy > "Always use secure connections", live like content blocking.
@@ -624,7 +641,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // One tab-sleeping pass with a short threshold (seconds), so it can be tried without waiting.
             if let s = dict["sleepTabs"].flatMap(Double.init) {
-                for w in mainWindows { w.browsers.sleepIdleTabs(hiddenLongerThan: s) }
+                for w in mainWindows { w.browsers.sleepIdleTabs(TabSleepPolicy(hiddenFor: s)) }
+                return
+            }
+            // One memory-pressure sweep as if macOS reported this level (warning, critical), without
+            // filling memory or waiting out the last sweep. The setting still decides.
+            if let level = dict["memoryPressure"].flatMap(PerfSystemSample.Pressure.init(rawValue:)) {
+                lastPressureSweep = nil
+                sweepForMemoryPressure(level)
                 return
             }
             // Opens what normally needs a pointer or a held key, for screenshots.

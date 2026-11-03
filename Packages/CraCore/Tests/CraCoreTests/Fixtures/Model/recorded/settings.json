@@ -52,6 +52,9 @@
   "showSpaceHeaderOnSingleSpace" : false,
   "showStatusBar" : false,
   "showToolbar" : true,
+  "tabSleepAfter" : "oneHour",
+  "tabSleepOnMemoryPressure" : true,
+  "tabSleepTimerEnabled" : false,
   "toolbarDefaultMigrated" : true,
   "toolbarShowsFullURL" : false,
   "warnBeforeQuitting" : true

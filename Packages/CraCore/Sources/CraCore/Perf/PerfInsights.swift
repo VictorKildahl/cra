@@ -98,7 +98,7 @@ public enum PerfInsights {
         if footprint >= largeFootprintBytes {
             let slept = r.tabs.latest?.slept ?? 0
             out.append(PerfInsight(id: "footprint", severity: .info, title: "Cra uses \(bytes(footprint)) of memory",
-                                   detail: slept > 0 ? "Tab sleeping has \(slept) tab\(slept == 1 ? "" : "s") asleep." : "Pages you haven't looked at in 4 hours close, and reload when you open them; the 10 tabs used last stay."))
+                                   detail: slept > 0 ? "Tab sleeping has \(slept) tab\(slept == 1 ? "" : "s") asleep." : "Pages you haven't looked at in a while (4 hours unless you change it) close, and reload when you open them. Settings ▸ Tabs ▸ Tab Cleanup can close them sooner, or when the Mac is short of memory."))
         }
         return out
     }

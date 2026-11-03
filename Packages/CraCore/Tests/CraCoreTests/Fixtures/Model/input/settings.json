@@ -10,5 +10,6 @@
   "newTabButtonAtTop": false, "newTabButtonDefaultMigrated": true, "newTabsAtTop": false,
   "peekInEveryTab": true, "peekLinksToOtherSites": false, "peekOnShiftClick": false, "perfHidesSiteNames": true, "perfRecording": false,
   "searchEngine": "kagi", "searchSuggestions": false, "showSpaceHeaderOnSingleSpace": false, "showStatusBar": false,
-  "showToolbar": true, "tabSleep": "fourHours", "tabSleepEnabled": true, "toolbarDefaultMigrated": true, "warnBeforeQuitting": true
+  "showToolbar": true, "tabSleep": "fourHours", "tabSleepAfter": "oneHour", "tabSleepEnabled": true,
+  "tabSleepOnMemoryPressure": true, "tabSleepTimerEnabled": false, "toolbarDefaultMigrated": true, "warnBeforeQuitting": true
 }

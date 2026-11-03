@@ -24,6 +24,8 @@ final class TabRuntime {
     var freezeVoted = false
     /// When the page last went off screen (nil while shown); tab sleeping counts from here.
     var hiddenAt: Date?
+    /// When the page last started or stopped playing sound; tab sleeping waits as long after it.
+    var audibleAt: Date?
     /// Invalidates a pending sleep probe even when navigation returns to the same URL.
     var navigationRevision: UInt = 0
     /// A page that refused to sleep isn't asked again before this (nil: ask on the next pass).
@@ -387,18 +389,21 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     // MARK: Tab sleeping
 
-    /// Like Arc, with no setting: a page off screen that long (AppComposition.tabSleepAfter, Arc's
-    /// 4 hours) closes, like a closed pinned tab, and loads its URL again when shown. Pages that are
-    /// loading, playing sound, recording, in Picture in Picture or DevTools, holding text the
+    /// The pages `policy` picks (by default Arc's: out of sight 4 hours, not one of the 10 tabs
+    /// used last) close, like a closed pinned tab, and load their URL again when shown. Pages that
+    /// are loading, playing sound, recording, in Picture in Picture or DevTools, holding text the
     /// user typed or asking before they close (their own onbeforeunload) stay awake, and are
-    /// asked again only after `refusalBackoff`. The log says once why a page stays awake.
-    func sleepIdleTabs(hiddenLongerThan seconds: TimeInterval) {
+    /// asked again only after `refusalBackoff`; those don't count toward the policy's limit. The
+    /// log says once why a page stays awake.
+    func sleepIdleTabs(_ policy: TabSleepPolicy) {
         let now = clock.now
-        let cutoff = now.addingTimeInterval(-seconds)
-        let recent = recentlyShown
-        for (id, rt) in runtimes where !recent.contains(id) {
+        let cutoff = now.addingTimeInterval(-policy.hiddenFor)
+        var asked = 0
+        for id in policy.candidates(sleepPages, visible: visibleTabIDs, protectedRecent: protectedRecentTabs, now: now) {
+            guard let rt = runtimes[id], canSleep(rt, before: cutoff), rt.sleepProbeAfter.map({ $0 <= now }) ?? true else { continue }
+            if let limit = policy.limit, asked >= limit { break }
+            asked += 1
             let b = rt.browser
-            guard canSleep(rt, before: cutoff), rt.sleepProbeAfter.map({ $0 <= now }) ?? true else { continue }
             let url = b.currentURL
             let navigationRevision = rt.navigationRevision
             // Cra's isolated world sees typed text and media; the page's own onbeforeunload is only
@@ -414,9 +419,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                             let refusal = Self.sleepRefusal(result)
                             guard refusal.isEmpty else { return self.keepAwake(rt, url, refusal) }
                             self.sleptTabs.insert(id)
-                            Perf.count(.tabSlept)
+                            Perf.count(.tabSlept, policy.reason.rawValue)
                             if !rt.browser.isIncognito {
-                                CraLog.note("tab sleep unloads \(CraLog.host(url)) (hidden \(Int(self.clock.now.timeIntervalSince(rt.hiddenAt ?? self.clock.now) / 60)) min)")
+                                let why = policy.reason == .memoryPressure ? ", the Mac is short of memory" : ""
+                                CraLog.note("tab sleep unloads \(CraLog.host(url)) (hidden \(Int(self.clock.now.timeIntervalSince(rt.hiddenAt ?? self.clock.now) / 60)) min\(why))")
                             }
                             self.unload(id)
                         }
@@ -470,20 +476,23 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     private static var loggedFreezingError = false
 
-    /// Arc never discards the pages of the 10 tabs used last, however long ago that was
-    /// (WebContentLifecycleOptimization's protectedLRUTabCount, GitHub #136).
-    var protectedRecentTabs = 10
+    /// Arc never freezes or discards the pages of the 10 tabs used last, however long ago that
+    /// was (TabSleepPolicy.protectedRecentTabs, GitHub #136).
+    var protectedRecentTabs = TabSleepPolicy.protectedRecentTabs
+
+    private var sleepPages: [TabSleepPolicy.Page] {
+        runtimes.values.map { TabSleepPolicy.Page(id: $0.tabID, hiddenAt: $0.hiddenAt, audibleAt: $0.audibleAt) }
+    }
 
     /// The tabs on screen now, then the ones hidden most recently, up to `protectedRecentTabs`.
     private var recentlyShown: Set<UUID> {
-        let hidden = runtimes.values.compactMap { rt in rt.hiddenAt.map { (rt.tabID, $0) } }.sorted { $0.1 > $1.1 }.map(\.0)
-        return Set((visibleTabIDs + hidden).prefix(protectedRecentTabs))
+        TabSleepPolicy.recentlyShown(sleepPages, visible: visibleTabIDs, count: protectedRecentTabs)
     }
 
     private func canSleep(_ rt: TabRuntime, before cutoff: Date) -> Bool {
         let b = rt.browser
-        return rt.hiddenAt.map { $0 < cutoff } == true && !visibleTabIDs.contains(rt.tabID)
-            && b.isCreated && !b.isClosed && !b.isLoading && !b.isInPictureInPicture
+        return rt.hiddenAt.map { $0 < cutoff } == true && rt.audibleAt.map { $0 < cutoff } != false
+            && !visibleTabIDs.contains(rt.tabID) && b.isCreated && !b.isClosed && !b.isLoading && !b.isInPictureInPicture
             && !b.isCapturingMedia && !b.isAudible && !b.hasDevTools
     }
 
@@ -686,6 +695,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     func browser(_ browser: CraBrowser, didChangeAudible audible: Bool) {
         guard let id = tabID(of: browser) else { return }
+        runtimes[id]?.audibleAt = clock.now
         if let np = nowPlaying {
             if np.entries.contains(where: { $0.id == id }) {
                 np.update(id) { $0.playing = audible }
