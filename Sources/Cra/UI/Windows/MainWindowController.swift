@@ -2515,8 +2515,23 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         browsers.windowVisibilityChanged(covered: true)
     }
 
-    private static var screenIsLocked: Bool {
-        (CGSessionCopyCurrentDictionary() as? [String: Any])?["CGSSessionScreenIsLocked"] as? Bool ?? false
+    /// Asked once, then kept by the system's lock and unlock notifications: the session query is a
+    /// WindowServer round trip, and every occlusion change of a fullscreen window asked it (#136).
+    private static let screenLock = ScreenLockState()
+    private static var screenIsLocked: Bool { screenLock.isLocked }
+
+    @MainActor private final class ScreenLockState {
+        private(set) var isLocked = (CGSessionCopyCurrentDictionary() as? [String: Any])?["CGSSessionScreenIsLocked"] as? Bool ?? false
+        private var observers: [NSObjectProtocol] = []
+
+        init() {
+            let center = DistributedNotificationCenter.default()
+            observers = [("com.apple.screenIsLocked", true), ("com.apple.screenIsUnlocked", false)].map { name, locked in
+                center.addObserver(forName: Notification.Name(name), object: nil, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.isLocked = locked }
+                }
+            }
+        }
     }
 
     /// The frame lives in the store's observed prefs, which every sidebar row reads (selection):
