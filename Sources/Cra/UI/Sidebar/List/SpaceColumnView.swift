@@ -416,8 +416,9 @@ enum MenuItems {
 // MARK: - Favorites
 
 /// Arc's "top apps": a 4-wide grid of favorite tiles, 8 pt apart, and under it a strip that
-/// opens into "Add to Favorites" while a tab is dragged over it. Arc shares them between
-/// spaces; in Cra every space has its own.
+/// opens into "Add to Favorites" while a tab is dragged over it. With none, Arc's empty-state
+/// card stands in for the tiles until its × closes it. Arc shares them between spaces; in Cra
+/// every space has its own.
 final class FavoritesGridView: NSView {
     private let spaceID: UUID
     let store: SidebarStore
@@ -428,6 +429,8 @@ final class FavoritesGridView: NSView {
     private var tiles: [UUID: FavoriteTileView] = [:]
     private var order: [UUID] = []
     private let strip = FavoritesDropStrip()
+    private let card = FavoritesEmptyCard()
+    private var favoritesID: UUID?
     private(set) var palette: SpacePalette?
     private var syncQueued = false
 
@@ -444,7 +447,14 @@ final class FavoritesGridView: NSView {
             return true
         }
         strip.onTargetChange = { [weak self] _ in self?.onHeightChange(true) }
+        card.onDrop = strip.onDrop
+        card.onDismiss = { [weak self] in
+            guard let self, let id = self.favoritesID else { return }
+            self.store.dismissFavoritesEmptyState(id)
+        }
+        card.isHidden = true
         addSubview(strip)
+        addSubview(card)
         sync()
     }
 
@@ -456,9 +466,12 @@ final class FavoritesGridView: NSView {
         syncQueued = false
         var models: [(UUID, FavoriteTileModel)] = []
         var palette: SpacePalette?
+        var dismissed = true
         withObservationTracking {
             guard let space = store.space(spaceID) else { return }
             palette = space.theme.palette
+            favoritesID = space.favoritesContainerID
+            dismissed = store.isIncognito(space: spaceID) || store.isFavoritesEmptyStateDismissed(space.favoritesContainerID)
             // A favorite split is one tile with a cell per pane (Arc: AppItem.childItems).
             for item in store.children(of: space.favoritesContainerID) where item.isTab || item.isSplit {
                 let panes = item.isSplit ? store.children(of: item.id).filter(\.isTab) : [item]
@@ -484,7 +497,9 @@ final class FavoritesGridView: NSView {
         }
         self.palette = palette
         let ids = models.map(\.0)
-        let countChanged = ids.count != order.count
+        let showsCard = ids.isEmpty && !dismissed
+        // Arc drops the card and moves the list up in one frame, like a first tile coming in.
+        let countChanged = ids.count != order.count || showsCard == card.isHidden
         for (id, t) in tiles where !ids.contains(id) {
             t.removeFromSuperview()
             tiles[id] = nil
@@ -499,8 +514,11 @@ final class FavoritesGridView: NSView {
             if let palette { t.show(m, palette: palette) }
         }
         order = ids
-        if let palette { strip.palette = palette }
+        if let palette { strip.palette = palette; card.palette = palette }
         strip.hasFavorites = !ids.isEmpty
+        // The card takes the strip's drops while it shows.
+        strip.isHidden = showsCard
+        card.isHidden = !showsCard
         needsLayout = true
         if countChanged { onHeightChange(false) }
     }
@@ -509,12 +527,15 @@ final class FavoritesGridView: NSView {
     private func grid(forWidth w: CGFloat) -> FavoritesLayout { FavoritesLayout(count: order.count, width: w) }
 
     func height(forWidth w: CGFloat) -> CGFloat {
-        grid(forWidth: w).gridHeight + (order.isEmpty ? 0 : 4) + strip.height
+        if !card.isHidden { return FavoritesEmptyCard.height }
+        return grid(forWidth: w).gridHeight + (order.isEmpty ? 0 : 4) + strip.height
     }
 
-    /// Where the header and list are placed from: the tiles' bottom, the open "Add to Favorites"
-    /// strip's while a tab is dragged over it, nil with no favorites.
+    /// Where the header and list are placed from: the tiles' bottom (the empty-state card's
+    /// while it stands in for them), the open "Add to Favorites" strip's while a tab is dragged
+    /// over it, nil with no favorites.
     func tilesBottom(forWidth w: CGFloat) -> CGFloat? {
+        if !card.isHidden { return FavoritesEmptyCard.height }
         if strip.targeted { return height(forWidth: w) }
         return order.isEmpty ? nil : grid(forWidth: w).gridHeight
     }
@@ -532,6 +553,7 @@ final class FavoritesGridView: NSView {
         let grid = grid(forWidth: w)
         for (i, id) in order.enumerated() { tiles[id]?.frame = grid.frame(at: i) }
         strip.frame = NSRect(x: 0, y: grid.gridHeight + (order.isEmpty ? 0 : 4), width: w, height: strip.height)
+        card.frame = NSRect(x: 0, y: 0, width: w, height: FavoritesEmptyCard.height)
     }
 
     func moveFavorite(_ dragged: UUID, before target: UUID, after: Bool) {
@@ -546,51 +568,23 @@ final class FavoritesGridView: NSView {
     }
 }
 
-/// The drop strip under the grid: 6–8 pt of nothing, 36 pt "Add to Favorites" while targeted.
-final class FavoritesDropStrip: NSView {
+/// Takes a sidebar item dropped on it into the favorites: the strip under the grid, or the
+/// empty-state card in its place.
+class FavoritesDropTarget: NSView {
     var onDrop: (UUID) -> Bool = { _ in false }
     var onTargetChange: (Bool) -> Void = { _ in }
     var palette: SpacePalette? { didSet { refresh() } }
-    var hasFavorites = true
     private(set) var targeted = false { didSet { if targeted != oldValue { refresh(); onTargetChange(targeted) } } }
-    private let border = CAShapeLayer()
-    private let label = NSTextField.sidebarLabel(size: 11, weight: .medium)
-
-    var height: CGFloat { targeted ? 36 : (hasFavorites ? 6 : 8) }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        layer?.cornerRadius = 10
-        border.fillColor = nil
-        border.lineWidth = 1
-        border.lineDashPattern = [4, 3]
-        layer?.addSublayer(border)
-        label.stringValue = "Add to Favorites"
-        label.alignment = .center
-        addSubview(label)
         registerForDraggedTypes([.craSidebarItem])
-        refresh()
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
-    private func refresh() {
-        guard let p = palette else { return }
-        let colors = SidebarColors(p)
-        border.strokeColor = colors.textTertiary.withAlphaComponent(targeted ? 0.6 : 0).cgColor
-        layer?.backgroundColor = (targeted ? colors.hoverFill : .clear).cgColor
-        label.textColor = colors.textSecondary
-        label.isHidden = !targeted
-    }
-
-    override func layout() {
-        super.layout()
-        border.frame = bounds
-        border.path = CGPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), cornerWidth: 10, cornerHeight: 10, transform: nil)
-        let lh = label.intrinsicContentSize.height
-        label.frame = NSRect(x: 0, y: (bounds.height - lh) / 2, width: bounds.width, height: lh)
-    }
+    func refresh() {}
 
     private func draggedID(_ info: NSDraggingInfo) -> UUID? {
         guard let data = info.draggingPasteboard.data(forType: .craSidebarItem),
@@ -613,6 +607,180 @@ final class FavoritesDropStrip: NSView {
         guard let id = draggedID(sender) else { return false }
         return onDrop(id)
     }
+}
+
+/// The drop strip under the grid: 6–8 pt of nothing, 36 pt "Add to Favorites" while targeted.
+final class FavoritesDropStrip: FavoritesDropTarget {
+    var hasFavorites = true
+    private let border = CAShapeLayer()
+    private let label = NSTextField.sidebarLabel(size: 11, weight: .medium)
+
+    var height: CGFloat { targeted ? 36 : (hasFavorites ? 6 : 8) }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        layer?.cornerRadius = 10
+        border.fillColor = nil
+        border.lineWidth = 1
+        border.lineDashPattern = [4, 3]
+        layer?.addSublayer(border)
+        label.stringValue = "Add to Favorites"
+        label.alignment = .center
+        addSubview(label)
+        refresh()
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func refresh() {
+        guard let p = palette else { return }
+        let colors = SidebarColors(p)
+        border.strokeColor = colors.textTertiary.withAlphaComponent(targeted ? 0.6 : 0).cgColor
+        layer?.backgroundColor = (targeted ? colors.hoverFill : .clear).cgColor
+        label.textColor = colors.textSecondary
+        label.isHidden = !targeted
+    }
+
+    override func layout() {
+        super.layout()
+        border.frame = bounds
+        border.path = CGPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), cornerWidth: 10, cornerHeight: 10, transform: nil)
+        let lh = label.intrinsicContentSize.height
+        label.frame = NSRect(x: 0, y: (bounds.height - lh) / 2, width: bounds.width, height: lh)
+    }
+}
+
+/// Arc's empty Favorites (Arc 1.171, live, 3 Nov, #157): a card where the tiles go, a star badge,
+/// "Drag to add Favorites" and a line on what they are, in the space's own ink. It takes a dragged
+/// tab, and its × (sidebarFavoritesEmptyStateDismissButton) closes it for good. Measured at 2x:
+/// the fill sits where the first tile would (8 pt in, 12 pt corners) and is 93.5 pt tall; a 1 pt
+/// dashed line (5.5 on, 4.5 off) runs just outside it; the header goes 4 pt further down than
+/// under a row of tiles. No hover state; a tab dragged over it makes the line solid, lightens the
+/// fill and dims the rest to half.
+final class FavoritesEmptyCard: FavoritesDropTarget {
+    static let fillHeight: CGFloat = 93.5
+    /// Where the header is placed from, like the tiles' bottom.
+    static let height: CGFloat = fillHeight + 4
+    var onDismiss: () -> Void = {}
+    private let fill = CAShapeLayer()
+    private let border = CAShapeLayer()
+    private let content = FlippedView()
+    private let badge = NSImageView()
+    private let title = NSTextField.sidebarLabel(size: 13, weight: .semibold)
+    private let subtitle = NSTextField(wrappingLabelWithString: "")
+    private let close = FavoritesEmptyCardClose()
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        layer?.masksToBounds = false
+        fill.lineWidth = 0
+        border.fillColor = nil
+        border.lineWidth = 1
+        for l in [fill, border] {
+            l.actions = ["path": NSNull(), "fillColor": NSNull(), "strokeColor": NSNull(), "lineDashPattern": NSNull()]
+            layer?.addSublayer(l)
+        }
+        content.wantsLayer = true
+        badge.imageScaling = .scaleNone
+        badge.wantsLayer = true
+        badge.shadow = NSShadow()
+        title.stringValue = "Drag to add Favorites"
+        title.alignment = .center
+        subtitle.font = .systemFont(ofSize: 11)
+        subtitle.maximumNumberOfLines = 2
+        close.onPress = { [weak self] in self?.onDismiss() }
+        for v in [badge, title, subtitle, close] { content.addSubview(v) }
+        addSubview(content)
+        refresh()
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var isFlipped: Bool { true }
+    override var mouseDownCanMoveWindow: Bool { false }
+
+    override func refresh() {
+        guard let p = palette else { return }
+        let dark = p.isDark
+        // Arc's badge is the darkest ink on a light theme (the toolbar's shade) and the brightest on
+        // a dark one; the star inside takes the other end, with a glow of its colour on dark themes.
+        let ink = NSColor(dark ? p.textPrimary : p.toolbarFill)
+        let star = NSColor(dark ? p.toolbarFill : p.folderFill)
+        let text = dark ? NSColor.white.withAlphaComponent(0.85) : NSColor(p.textPrimary)
+        let lighter = targeted ? 0.32 : 0.14
+        fill.fillColor = (dark ? NSColor.black.withAlphaComponent(targeted ? 0 : 0.135) : NSColor.white.withAlphaComponent(lighter)).cgColor
+        border.strokeColor = ink.withAlphaComponent(0.3).cgColor
+        border.lineDashPattern = targeted ? nil : [5.5, 4.5]
+        content.alphaValue = targeted ? 0.5 : 1
+        badge.image = NSImage(systemSymbolName: "star.circle.fill", accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 16, weight: .regular)
+                .applying(NSImage.SymbolConfiguration(paletteColors: [star, ink])))
+        badge.shadow?.shadowColor = dark ? star : .clear
+        badge.shadow?.shadowBlurRadius = 6
+        title.textColor = text
+        let para = NSMutableParagraphStyle()
+        para.alignment = .center
+        para.minimumLineHeight = 15
+        para.maximumLineHeight = 15
+        subtitle.attributedStringValue = NSAttributedString(string: "Favorites keep your most used sites and apps close",
+                                                            attributes: [.font: NSFont.systemFont(ofSize: 11), .paragraphStyle: para,
+                                                                         .foregroundColor: text.withAlphaComponent(text.alphaComponent * 0.7)])
+        close.color = text.withAlphaComponent(text.alphaComponent * 0.7)
+        needsLayout = true
+    }
+
+    override func layout() {
+        super.layout()
+        let w = bounds.width
+        let card = NSRect(x: 0, y: 0, width: w, height: Self.fillHeight)
+        fill.frame = bounds
+        border.frame = bounds
+        fill.path = CGPath(roundedRect: card, cornerWidth: 12, cornerHeight: 12, transform: nil)
+        border.path = CGPath(roundedRect: card.insetBy(dx: -0.5, dy: -0.5), cornerWidth: 12.5, cornerHeight: 12.5, transform: nil)
+        content.frame = card
+        // Arc's centres and frames, from the fill's top-left: badge centre 19.75 pt down, title 33.5–49.5,
+        // subtitle 53–83 (two 15 pt lines, 150 pt wide), × centred 15 pt in from the top-right corner.
+        let b = badge.image?.size ?? NSSize(width: 16, height: 16)
+        badge.frame = NSRect(x: ((w - b.width) / 2).rounded(.down), y: (19.75 - b.height / 2).rounded(), width: b.width, height: b.height)
+        title.frame = NSRect(x: 10, y: 33.5, width: max(0, w - 20), height: 16)
+        let sw = min(150, max(0, w - 20))
+        subtitle.frame = NSRect(x: ((w - sw) / 2).rounded(), y: 53, width: sw, height: 30)
+        close.frame = NSRect(x: w - 15 - 7, y: 15 - 7, width: 14, height: 14)
+    }
+}
+
+/// The card's ×: a plain glyph in the subtitle's tone, no hover fill (Arc).
+final class FavoritesEmptyCardClose: NSView {
+    var onPress: () -> Void = {}
+    var color: NSColor = .labelColor { didSet { glyph.contentTintColor = color } }
+    private let glyph = NSImageView()
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        glyph.image = SidebarSymbols.image("xmark", size: 10, weight: .semibold)
+        glyph.imageScaling = .scaleNone
+        glyph.autoresizingMask = [.width, .height]
+        addSubview(glyph)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+        setAccessibilityLabel("Dismiss")
+        setAccessibilityIdentifier("sidebarFavoritesEmptyStateDismissButton")
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        super.layout()
+        glyph.frame = bounds
+    }
+
+    override var mouseDownCanMoveWindow: Bool { false }
+    override func hitTest(_ point: NSPoint) -> NSView? { frame.contains(point) ? self : nil }
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) {
+        if bounds.contains(convert(event.locationInWindow, from: nil)) { onPress() }
+    }
+    override func accessibilityPerformPress() -> Bool { onPress(); return true }
 }
 
 /// What a favorite tile shows: one page, or a split's panes. Arc keeps a split in its top apps as

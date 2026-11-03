@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import SQLite3
 
 /// The production store and the Arc importer, booted through AppComposition with a manual
@@ -31,6 +32,7 @@ enum StoreTests {
         moveTabToSpace()
         folderPeek()
         closeSuccessor()
+        favoritesEmptyState()
         print("Store: \(checks) checks passed")
     }
 
@@ -412,6 +414,28 @@ enum StoreTests {
         expect([pinned.id, favorite.id].allSatisfy { restored.item($0)?.tab?.savedURL == store.item($0)?.tab?.savedURL },
                "the pinned URLs read back after a relaunch")
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    /// Arc's "Drag to add Favorites" card (#157): its × closes it for that space's favorites only,
+    /// for good, and readers see the change.
+    @MainActor
+    private static func favoritesEmptyState() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let home = store.focusedSpaceID
+        let work = store.createSpace(title: "Work", emoji: "💼", focus: false).id
+        guard let homeFavorites = store.space(home)?.favoritesContainerID,
+              let workFavorites = store.space(work)?.favoritesContainerID else { return expect(false, "both spaces have favorites") }
+        expect(!store.isFavoritesEmptyStateDismissed(homeFavorites), "a space starts with the card")
+        final class Flag: @unchecked Sendable { var on = false }
+        let changed = Flag()
+        withObservationTracking { _ = store.isFavoritesEmptyStateDismissed(homeFavorites) } onChange: { changed.on = true }
+        store.dismissFavoritesEmptyState(homeFavorites)
+        expect(changed.on && store.isFavoritesEmptyStateDismissed(homeFavorites), "the × closes it, and the grid hears about it")
+        expect(!store.isFavoritesEmptyStateDismissed(workFavorites), "another space keeps its card")
+        store.saveAll()
+        let restored = AppComposition(clock: ManualScheduler()).store
+        expect(restored.isFavoritesEmptyStateDismissed(homeFavorites) && !restored.isFavoritesEmptyStateDismissed(workFavorites),
+               "and it stays closed after a relaunch")
     }
 
     /// Move Tab to Space N (#86) and the command bar's Move Tab to <space>, like Arc's "Move to
