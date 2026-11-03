@@ -75,6 +75,15 @@ final class ExtensionStore {
         try saveProfiles(scopes)
     }
 
+    /// Rebuild from Arc (#131): an extension an older import left loading everywhere gets the
+    /// profiles that had it. One that already has its own list keeps it.
+    nonisolated static func scopeImported(folder: String, profiles: Set<String>?) {
+        var scopes = loadProfiles()
+        guard scopes.profiles(ofFolder: folder) == nil, let profiles else { return }
+        scopes.add(folder: folder, profiles: profiles, folderExisted: false)
+        try? saveProfiles(scopes)
+    }
+
     private nonisolated static func importExtension(_ ext: ImportableExtension) throws {
         let fm = FileManager.default
         try fm.createDirectory(at: directory, withIntermediateDirectories: true)

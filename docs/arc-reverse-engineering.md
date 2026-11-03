@@ -2405,6 +2405,11 @@ tap with a real Shift key held around them; the space read from each window's `s
 - Checked on a test copy with a three-profile fake Arc: each space's page read its own profile's cookie, Chromium's
   per-profile prefs held exactly the probes that profile was given, and the toolbar and Extensions menu differed per
   space as in Arc.
+- Installs imported before this: Settings ▸ Profiles ▸ Rebuild from Arc… (also the command bar's "Rebuild Profiles
+  from Arc…"). It moves spaces still on Default onto their Arc space's profile, matched by name (a name Arc or Cra
+  uses twice is skipped), stages those Arc profiles' sign-ins (or, if the Keychain refuses, moves them signed out
+  after asking), scopes the extensions the old import left loading everywhere (profiles made in Cra keep them),
+  seeds the pins and restarts. Sign-ins made in Cra since the import stay with Default.
 
 ## The tab shown after ⌘W (Arc 1.171, 2 Nov 2026, issue #105, offline Arc driven through its menus)
 Offline Arc as in "One space": one space with pinned S and P2 and Today C, B, A, D (A, B, C saved with
