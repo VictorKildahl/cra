@@ -256,6 +256,10 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 + (NSInteger)blockedDomainCount;
 /// The blocking decision for a request made by a page, for diagnostics and tests.
 + (BOOL)shouldBlockRequestURL:(NSString *)requestURL onPageURL:(NSString *)pageURL;
+/// Unpacked extension folders to load with --load-extension, set before initializing, and
+/// for each in the same order the profile folders that load it ("Default|Profile <id>", "*"
+/// for every profile), comma-separated; nil when every one loads in every profile.
++ (void)setExtensionPaths:(NSArray<NSString *> *)paths profiles:(nullable NSString *)profiles;
 + (BOOL)initializeWithCachePath:(NSString *)cachePath
                  userAgentProduct:(NSString *)product
                           logPath:(NSString *)logPath

@@ -1,4 +1,5 @@
 import Foundation
+import SQLite3
 
 /// The production store and the Arc importer, booted through AppComposition with a manual
 /// clock and a throwaway data folder: timed work (auto-archive, tab sleep cadence) and the
@@ -58,6 +59,68 @@ enum StoreTests {
         let titles = composition.store.orderedSpaces.map(\.title)
         expect(titles.contains("Home") && titles.contains("Work"), "the imported spaces are in the sidebar")
         expect(composition.store.integrityProblems().isEmpty, "the imported sidebar is sound")
+        arcProfiles(plan: plan, store: composition.store)
+    }
+
+    /// Arc's spaces keep their profiles (GitHub #131): Work is on "Profile 2", named Client.
+    @MainActor
+    private static func arcProfiles(plan: ImportPlan, store: SidebarStore) {
+        expect(plan.spaces[0].profile == nil && plan.spaces[1].profile == ImportedProfile(folder: "Profile 2", name: "Client"),
+               "a space on Arc's Default has no profile, one on Profile 2 carries it with Local State's name")
+        let work = store.orderedSpaces.first { $0.title == "Work" }!, home = store.orderedSpaces.first { $0.title == "Home" }!
+        let client = store.profiles.first { $0.name == "Client" }
+        expect(store.profiles.count == 1 && client != nil && work.profileID == client?.id && home.profileID == nil,
+               "the import makes one Cra profile per Arc profile besides Default and puts its spaces on it")
+        expect(store.profileDirectoryName(space: work.id) == client?.directoryName && store.profileDirectoryName(space: home.id) == "Default",
+               "pages of Work load in the new profile's folder")
+
+        let again = store.apply(plan, includeArchive: false, includeSettings: false)
+        expect(store.profiles.count == 1 && again.profiles.folders == ["Default": "Default", "Profile 2": client!.directoryName],
+               "importing again reuses the profile of the same name")
+        let map = again.profiles
+        let all: Set<String> = ["Default", client!.directoryName]
+
+        let exts = ExtensionImporter.extensions(inUserData: ArcImporter.userData)
+        func ext(_ name: String) -> ImportableExtension { exts.first { $0.name == name }! }
+        expect(exts.map(\.name) == ["Fixture Client", "Fixture Everywhere", "Fixture Personal Off"], "one entry per extension across profiles")
+        expect(ext("Fixture Everywhere").profiles == ["Default": true, "Profile 2": true] && ext("Fixture Personal Off").profiles == ["Default": false],
+               "each extension knows the profiles that have it and whether it is on there")
+        expect(map.extensionProfiles(sources: ext("Fixture Everywhere").sourceProfiles, allFolders: all) == nil,
+               "an extension in every profile loads everywhere, as before")
+        expect(map.extensionProfiles(sources: ext("Fixture Client").sourceProfiles, allFolders: all) == [client!.directoryName],
+               "an extension only Client had loads only in its Cra profile")
+        expect(map.extensionProfiles(sources: ext("Fixture Personal Off").sourceProfiles, allFolders: all) == ["Default"],
+               "a turned-off extension picked anyway goes where it was installed")
+        expect(ExtensionImporter.pinnedIDs(inProfile: ArcImporter.userData.appendingPathComponent("Profile 2")) == [String(repeating: "c", count: 32), String(repeating: "a", count: 32)],
+               "Arc's pins of a profile come from its Preferences")
+        newProfileDatabases()
+    }
+
+    /// A profile Chromium hasn't opened gets its sign-in databases with Default's schema (#131).
+    private static func newProfileDatabases() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("cra-db-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let template = root.appendingPathComponent("Default/Cookies"), target = root.appendingPathComponent("Profile X/Cookies")
+        try? FileManager.default.createDirectory(at: template.deletingLastPathComponent(), withIntermediateDirectories: true)
+        var db: OpaquePointer?
+        sqlite3_open(template.path, &db)
+        sqlite3_exec(db, """
+            CREATE TABLE meta(key LONGVARCHAR NOT NULL UNIQUE PRIMARY KEY, value LONGVARCHAR);
+            INSERT INTO meta VALUES ('version', '24'), ('last_compatible_version', '24');
+            CREATE TABLE cookies(creation_utc INTEGER NOT NULL, host_key TEXT NOT NULL, name TEXT NOT NULL);
+            CREATE UNIQUE INDEX cookies_unique_index ON cookies(host_key, name);
+            INSERT INTO cookies VALUES (1, 'example.com', 'secret');
+            """, nil, nil, nil)
+        sqlite3_close(db)
+        CredentialImport.createDatabase(target, like: template)
+        sqlite3_open(target.path, &db)
+        defer { sqlite3_close(db) }
+        let meta = SQLite.rows(db, "SELECT key, value FROM meta ORDER BY key").compactMap { $0["value"] as? String }
+        let objects = SQLite.rows(db, "SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name").compactMap { $0["name"] as? String }
+        expect(meta == ["24", "24"] && objects == ["cookies", "cookies_unique_index", "meta"]
+               && SQLite.rows(db, "SELECT 1 FROM cookies").isEmpty, "same tables, index and schema version, none of Default's rows")
+        let mode = { (u: URL) in (try? FileManager.default.attributesOfItem(atPath: u.path)[.posixPermissions] as? Int) ?? 0 }
+        expect(mode(target) == 0o600 && mode(target.deletingLastPathComponent()) == 0o700, "owner only, like Chromium's own")
     }
 
     /// Dia 1.55's encrypted sidebar (Tests/Fixtures/Dia, rebuilt by its make-fixture.py with the

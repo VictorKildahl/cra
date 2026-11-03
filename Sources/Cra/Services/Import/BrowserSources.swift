@@ -36,10 +36,10 @@ struct ImportSource: Identifiable, Hashable {
     }
 
     static let arc = ImportSource(id: "arc", name: "Arc", bundleID: "company.thebrowser.Browser", kind: .arc,
-                                  dataDir: support.appendingPathComponent("Arc/User Data", isDirectory: true),
+                                  dataDir: ArcImporter.userData,
                                   keychainService: "Arc Safe Storage", keychainAccount: "Arc")
     static let dia = ImportSource(id: "dia", name: "Dia", bundleID: "company.thebrowser.dia", kind: .dia,
-                                  dataDir: support.appendingPathComponent("Dia/User Data", isDirectory: true),
+                                  dataDir: DiaImporter.userData,
                                   keychainService: "Dia Safe Storage", keychainAccount: "Dia")
 
     static let allCases: [ImportSource] = [

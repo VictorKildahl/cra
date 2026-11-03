@@ -2362,6 +2362,28 @@ tap with a real Shift key held around them; the space read from each window's `s
   reset the URL loader factories. Cra logs the winner and the overridden ones per profile when they change, and
   Export Diagnostics' summary.txt has a "Proxy:" section.
 
+## Importing Arc's profiles (3 Nov 2026, issue #131, reporter's Arc: seven spaces on six profiles)
+
+- [O static] Each space in StorableSidebar.json names its Chromium profile: `profile` is `{"default": true}` or
+  `{"custom": {"_0": {"directoryBasename": "Profile 2", "machineID": …}}}`. The folder's name in Arc's space
+  menu is `User Data/Local State` → `profile.info_cache[<folder>].name`. Each profile keeps its own cookies, logins,
+  `extensions.settings` and `extensions.pinned_extensions`.
+- Cra's import makes one Cra profile per Arc profile besides Default (reusing a Cra profile of the same name) and
+  puts the spaces on it. Each Arc profile's cookies and passwords are staged for the Cra profile its spaces landed
+  on. A Cra profile Chromium has not opened yet gets Cookies and Login Data with Default's schema and meta rows
+  before Chromium starts, so the first page is signed in. Arc's pins become that profile's list. An Arc profile no
+  imported space uses goes to Default, as everything did before.
+- `--load-extension` installs in every profile (`ExtensionService::Init` runs it per profile, and command-line
+  installs are never restored from prefs). `extension-profiles.patch` (CEF codecs9) adds
+  `--cra-load-extension-profiles`: for each `--load-extension` path, in order, the profile folders that load it
+  ("Default|Profile <id>") or `*`. An imported extension loads only in the Cra profiles of the Arc profiles that
+  had it turned on (extension-profiles.json); one every profile had, or one from an import that bound no profiles,
+  still loads everywhere. CDP's `Extensions.loadUnpacked`/`uninstall` only reach the default profile, and a
+  hand-written `extensions.settings` entry fails Secure Preferences' MAC check, so neither could do this.
+- Checked on a test copy with a three-profile fake Arc: each space's page read its own profile's cookie, Chromium's
+  per-profile prefs held exactly the probes that profile was given, and the toolbar and Extensions menu differed per
+  space as in Arc.
+
 ## The tab shown after ⌘W (Arc 1.171, 2 Nov 2026, issue #105, offline Arc driven through its menus)
 Offline Arc as in "One space": one space with pinned S and P2 and Today C, B, A, D (A, B, C saved with
 `activeTabBeforeCreationID` and `referrerID` = S, unread), the selected tab and the window's

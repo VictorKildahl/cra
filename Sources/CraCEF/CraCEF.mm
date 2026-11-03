@@ -54,7 +54,9 @@ static bool g_quitting = false;
 static bool g_useChromeStyle = false;
 static bool g_useMockKeychain = false;
 /// Resolved by Swift from the chosen profile, including environment-free dev launches.
-static NSString* g_extensionsDirectory = nil;
+// Extensions/ folders for --load-extension and the profiles each loads in (+setExtensionPaths:profiles:).
+static NSArray<NSString*>* g_extensionPaths = nil;
+static NSString* g_extensionProfiles = nil;
 static BOOL g_chromeHosting = NO;
 static NSMutableArray<CraBrowser*>* g_pendingCreation = nil;
 
@@ -616,15 +618,13 @@ public:
         command_line->AppendSwitchWithValue("profile-directory", "Default");
         // Unpacked Chrome extensions (Chrome-style browsers only): one folder per extension.
         if (process_type.empty()) {
-            // Use the same resolved data root as AppPaths/ExtensionStore, never an
-            // independent production fallback when CraDev is opened from Finder.
-            NSString* dir = g_extensionsDirectory;
-            NSMutableArray<NSString*>* paths = [NSMutableArray array];
-            for (NSString* name in [[NSFileManager defaultManager] contentsOfDirectoryAtPath:dir error:nil]) {
-                NSString* p = [dir stringByAppendingPathComponent:name];
-                if ([[NSFileManager defaultManager] fileExistsAtPath:[p stringByAppendingPathComponent:@"manifest.json"]]) [paths addObject:p];
+            // The app lists them from the same data root as AppPaths/ExtensionStore. The
+            // command line installs them in every profile; Cra's CEF build skips a profile
+            // --cra-load-extension-profiles leaves out (extension-profiles.patch, #131).
+            if (g_extensionPaths.count) {
+                command_line->AppendSwitchWithValue("load-extension", CefStringFromNS([g_extensionPaths componentsJoinedByString:@","]));
+                if (g_extensionProfiles) command_line->AppendSwitchWithValue("cra-load-extension-profiles", CefStringFromNS(g_extensionProfiles));
             }
-            if (paths.count) command_line->AppendSwitchWithValue("load-extension", CefStringFromNS([paths componentsJoinedByString:@","]));
         }
         command_line->AppendSwitchWithValue("autoplay-policy", "document-user-activation-required");
         // WebRTC hides this Mac's local IP behind a random .local name announced over
@@ -2458,6 +2458,11 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
     CefWindow::CreateTopLevelWindow(new SpikeWindowDelegate(view));
 }
 
++ (void)setExtensionPaths:(NSArray<NSString*>*)paths profiles:(NSString*)profiles {
+    g_extensionPaths = [paths copy];
+    g_extensionProfiles = [profiles copy];
+}
+
 + (BOOL)initializeWithCachePath:(NSString*)cachePath
                userAgentProduct:(NSString*)product
                         logPath:(NSString*)logPath
@@ -2466,7 +2471,6 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
     if (g_libraryLoader) return YES;
     g_useChromeStyle = useChromeStyle;
     g_useMockKeychain = useMockKeychain;
-    g_extensionsDirectory = [[cachePath stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"Extensions"];
     g_libraryLoader = new CefScopedLibraryLoader();
     if (!g_libraryLoader->LoadInMain()) {
         NSLog(@"CraCEF: failed to load Chromium Embedded Framework");

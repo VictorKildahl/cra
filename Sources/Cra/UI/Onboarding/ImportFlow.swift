@@ -90,6 +90,8 @@ final class ImportFlowModel {
     private(set) var finished = false
     private(set) var importedExtensionCount = 0
     private var importedSpaceID: UUID?
+    /// The Cra profiles the import put the source's profiles on (Arc, GitHub #131).
+    private var importedProfiles = ImportProfileMap()
 
     // Default browser step: Dia's NewDefaultBrowserViewModel options.
     var setAsDefault = true
@@ -279,6 +281,21 @@ final class ImportFlowModel {
 
     func continueFromSpaces() { if extensions.isEmpty { startImport(withExtensions: false) } else { go(.extensions) } }
 
+    /// The profiles an extension will load in, by name, while the picked spaces bring Arc profiles
+    /// along; nil when it loads in every profile (GitHub #131).
+    func profileNames(of e: ImportableExtension) -> [String]? {
+        guard let plan else { return nil }
+        var map = ImportProfileMap()
+        var names = ["Default": "Default"]
+        for sp in plan.selecting(spaces: selectedSpaces, favorites: false).spaces {
+            if let p = sp.profile { map.folders[p.folder] = p.folder; names[p.folder] = p.name } else { map.folders["Default"] = "Default" }
+        }
+        // Cra profiles the import doesn't reuse keep counting as profiles the extension may miss.
+        let others = store.profiles.filter { p in !names.values.contains(p.name) }.map(\.directoryName)
+        guard let targets = map.extensionProfiles(sources: e.sourceProfiles, allFolders: Set(["Default"] + map.folders.values + others)) else { return nil }
+        return targets.sorted { $0 == "Default" || ($1 != "Default" && (names[$0] ?? $0) < (names[$1] ?? $1)) }.map { names[$0] ?? $0 }
+    }
+
     // MARK: Passwords and cookies
 
     func toggleProfile(_ id: String) {
@@ -467,8 +484,9 @@ final class ImportFlowModel {
         let result = store.apply(selection, includeArchive: includeArchive, includeSettings: includeSettings,
                                  replacing: emptyBefore.map(\.id))
         importedSpaceID = result.spaceIDs.first
+        importedProfiles = result.profiles
         favicons.reset()
-        let creds = credentials
+        let creds = credentials, profiles = result.profiles
         Task { @MainActor in
             // Dia paces the tiles (ImportProgressController.progressUIIntervals) so
             // each category visibly lands; the sidebar work above is already done.
@@ -480,7 +498,7 @@ final class ImportFlowModel {
                 case "passwords", "cookies":
                     // Both land in one staged file; the first tile writes it.
                     if !credentialsStaged && credentialError == nil {
-                        let ok = await Task.detached(priority: .userInitiated) { CredentialImport.stage(creds) }.value
+                        let ok = await Task.detached(priority: .userInitiated) { CredentialImport.stage(creds, profiles: profiles) }.value
                         credentialsStaged = ok
                         if !ok { credentialError = "Cra could not save the imported passwords and cookies." }
                     }
@@ -493,15 +511,34 @@ final class ImportFlowModel {
                     categories[i].state = .done
                 }
             }
+            // After the extensions are in: a reload drops pins of extensions Cra doesn't have.
+            seedPinnedExtensions(profiles)
             finished = true
         }
+    }
+
+    /// Each profile the import used shows the toolbar pins its source profile had; Default first,
+    /// so its list is in place before the file exists.
+    private func seedPinnedExtensions(_ map: ImportProfileMap) {
+        guard let source, map.bindsProfiles else { return }
+        for (folder, target) in map.folders.sorted(by: { $0.value == "Default" && $1.value != "Default" }) {
+            guard let ids = ExtensionImporter.pinnedIDs(inProfile: source.dataDir.appendingPathComponent(folder, isDirectory: true)) else { continue }
+            ExtensionStore.shared.seedPinned(ids, inProfile: target)
+        }
+    }
+
+    /// The Cra profiles an extension loads in: those the import put its source profiles on.
+    private func targetProfiles(of ext: ImportableExtension) -> Set<String>? {
+        importedProfiles.extensionProfiles(sources: ext.sourceProfiles, allFolders: Set(["Default"] + store.profiles.map(\.directoryName)))
     }
 
     private func importExtensions(_ chosen: [ImportableExtension], tile i: Int) async {
         var failed: [String] = []
         for ext in chosen {
+            let profiles = targetProfiles(of: ext)
+            if let profiles { CraLog.note("import: extension \(ext.id) for \(profiles.sorted().joined(separator: ", "))") }
             let ok = await Task.detached(priority: .userInitiated) { () -> Bool in
-                (try? ExtensionStore.importExtension(ext)) != nil
+                (try? ExtensionStore.importExtension(ext, profiles: profiles)) != nil
             }.value
             if ok { importedExtensionCount += 1 } else { failed.append(ext.name) }
         }

@@ -16,12 +16,7 @@ enum ChromiumImporter {
     /// Opera keeps its single profile in the root itself.
     static func profiles(userData: URL) -> [ChromiumProfile] {
         let fm = FileManager.default
-        var names: [String: String] = [:]
-        if let data = try? Data(contentsOf: userData.appendingPathComponent("Local State")),
-           let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let cache = (root["profile"] as? [String: Any])?["info_cache"] as? [String: Any] {
-            for (dir, info) in cache { if let n = (info as? [String: Any])?["name"] as? String { names[dir] = n } }
-        }
+        let names = profileNames(userData: userData)
         let dirs = ((try? fm.contentsOfDirectory(atPath: userData.path)) ?? [])
             .filter { $0 == "Default" || $0.hasPrefix("Profile ") }
             .sorted { $0 == "Default" ? true : ($1 == "Default" ? false : $0.localizedStandardCompare($1) == .orderedAscending) }
@@ -32,6 +27,14 @@ enum ChromiumImporter {
         }
         if out.isEmpty && hasData(userData) { out = [ChromiumProfile(id: "Default", name: "Default", dir: userData)] }
         return out
+    }
+
+    /// Local State's profile.info_cache: the name the browser shows for each profile folder.
+    static func profileNames(userData: URL) -> [String: String] {
+        guard let data = try? Data(contentsOf: userData.appendingPathComponent("Local State")),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let cache = (root["profile"] as? [String: Any])?["info_cache"] as? [String: Any] else { return [:] }
+        return cache.compactMapValues { ($0 as? [String: Any])?["name"] as? String }
     }
 
     private static func hasData(_ dir: URL) -> Bool {
@@ -223,11 +226,11 @@ enum ChromiumImporter {
             if cookies, let db = SQLiteSnapshot(copying: p.dir.appendingPathComponent("Cookies"))
                 ?? SQLiteSnapshot(copying: p.dir.appendingPathComponent("Network/Cookies")) {
                 readAny = true
-                out.cookies += readCookies(db, key: key)
+                out.cookies += readCookies(db, key: key).map { var c = $0; c.sourceProfile = p.id; return c }
             }
             if passwords, let db = SQLiteSnapshot(copying: p.dir.appendingPathComponent("Login Data")) {
                 readAny = true
-                out.logins += readLogins(db, key: key)
+                out.logins += readLogins(db, key: key).map { var l = $0; l.sourceProfile = p.id; return l }
             }
         }
         if !readAny && (cookies || passwords) { throw CredentialImportError.unreadable(browser) }

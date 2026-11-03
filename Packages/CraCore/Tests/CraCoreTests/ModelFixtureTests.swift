@@ -104,6 +104,15 @@ struct ModelFixtureTests {
         }
     }
 
+    /// extension-profiles.json (#131): a folder's profiles; a folder it doesn't name loads everywhere.
+    @Test func extensionProfilesLoadAsRecorded() throws {
+        let (loaded, recorded) = try Self.load("extension-profiles.json", as: ExtensionProfiles.self)
+        #expect(loaded == recorded)
+        #expect(try Self.roundTrips(loaded))
+        #expect(!loaded.loads(folder: "aeblfdkhhhdcdjpifhhbdiojplfjncoa", inProfile: "Default"))
+        #expect(loaded.loads(folder: "some-folder", inProfile: "Profile 9"))
+    }
+
     // MARK: What the old shapes turn into
 
     @Test func legacySidebarGetsWhatTheStoreRepairsFrom() throws {
