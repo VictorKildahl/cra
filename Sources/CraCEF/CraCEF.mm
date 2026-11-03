@@ -1138,8 +1138,14 @@ public:
         if ([o.delegate respondsToSelector:@selector(browser:didReportBackgroundColor:)])
             [o.delegate browser:o didReportBackgroundColor:@""];
         frame->ExecuteJavaScript(kLoadingBackgroundProbe, frame->GetURL(), 0);
-        o.hasCommittedLoad = YES;
-        if ([o.delegate respondsToSelector:@selector(browserDidCommitLoad:)]) [o.delegate browserDidCommitLoad:o];
+        SetCommittedLoad(o, YES);
+    }
+
+    void SetCommittedLoad(CraBrowser* o, BOOL committed) {
+        if (o.hasCommittedLoad == committed) return;
+        o.hasCommittedLoad = committed;
+        if ([o.delegate respondsToSelector:@selector(browser:didChangeCommittedLoad:)])
+            [o.delegate browser:o didChangeCommittedLoad:committed];
     }
 
     void OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int httpStatusCode) override {
@@ -1354,7 +1360,16 @@ public:
     bool OnBeforeBrowse(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request,
                         bool user_gesture, bool is_redirect) override {
         CraBrowser* o = owner_;
-        if (!o || !user_gesture || is_redirect || !frame->IsMain()) return false;
+        if (!o || !frame->IsMain()) return false;
+        if (OpensPeek(o, request, user_gesture, is_redirect)) return true;
+        // A new page, also one started while the last is still loading: the loading bar waits
+        // for its answer again.
+        if (!is_redirect) SetCommittedLoad(o, NO);
+        return false;
+    }
+
+    bool OpensPeek(CraBrowser* o, CefRefPtr<CefRequest> request, bool user_gesture, bool is_redirect) {
+        if (!user_gesture || is_redirect) return false;
         cef_transition_type_t tt = request->GetTransitionType();
         if ((tt & TT_SOURCE_MASK) != TT_LINK || (tt & TT_FORWARD_BACK_FLAG)) return false;
         if (![o.delegate respondsToSelector:@selector(browser:opensPeekForURL:shiftClick:)]) return false;

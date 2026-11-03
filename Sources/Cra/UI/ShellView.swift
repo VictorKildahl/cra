@@ -576,8 +576,12 @@ final class ShellView: NSView {
     private func placeLoadingIndicator(over content: NSRect) {
         let margin = bounds.maxY - content.maxY
         loadingIndicator.isHidden = margin < CGFloat(LoadingIndicator.height) + 2
+        loadingIndicator.frame = loadingIndicatorFrame(over: content)
+    }
+
+    private func loadingIndicatorFrame(over content: NSRect) -> NSRect {
         let w = CGFloat(LoadingIndicator.trackWidth) + 2
-        loadingIndicator.frame = NSRect(x: (content.midX - w / 2).rounded(), y: content.maxY, width: w, height: margin)
+        return NSRect(x: (content.midX - w / 2).rounded(), y: content.maxY, width: w, height: bounds.maxY - content.maxY)
     }
 
     /// The front tab's loading state. Another tab coming to the front shows its state at once.
@@ -714,6 +718,7 @@ final class ShellView: NSView {
             ctx.allowsImplicitAnimation = true
             if !sidebarDetached { sidebarHost.animator().frame = target.sidebar }
             contentContainer.animator().frame = target.content
+            loadingIndicator.animator().frame = loadingIndicatorFrame(over: target.content)
             cardCornerRadius = target.cornerRadius
             if paneCards.count == 1, let c = paneCards.first { c.cornerRadius = target.cornerRadius }
         } completionHandler: { [weak self] in

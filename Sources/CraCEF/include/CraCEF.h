@@ -96,8 +96,8 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 - (void)browser:(CraBrowser *)browser didChangeMediaCapture:(BOOL)capturing;
 /// The page started or stopped playing sound (see `isAudible`).
 - (void)browser:(CraBrowser *)browser didChangeAudible:(BOOL)audible;
-/// The current load's main frame committed (see `hasCommittedLoad`).
-- (void)browserDidCommitLoad:(CraBrowser *)browser;
+/// `hasCommittedLoad` changed: the main frame committed, or a new navigation started.
+- (void)browser:(CraBrowser *)browser didChangeCommittedLoad:(BOOL)committed;
 /// The page's main-frame load failed with a net error (ERR_ABORTED, a navigation cut off,
 /// is left out): `url` is the address that failed.
 - (void)browser:(CraBrowser *)browser didFailLoadingURL:(NSString *)url errorCode:(NSInteger)errorCode;
@@ -122,8 +122,8 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 @property (nonatomic, readonly, copy) NSString *currentURL;
 @property (nonatomic, readonly, copy) NSString *currentTitle;
 @property (nonatomic, readonly) BOOL isLoading;
-/// NO from the start of a load until its main frame commits (the server answered and the new
-/// page began to load), YES after.
+/// NO from the start of a main-frame navigation until it commits (the server answered and the
+/// new page began to load), YES after.
 @property (nonatomic, readonly) BOOL hasCommittedLoad;
 @property (nonatomic, readonly) BOOL canGoBack;
 @property (nonatomic, readonly) BOOL canGoForward;

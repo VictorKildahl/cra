@@ -2382,3 +2382,22 @@ doesn't pick a tab, and the selection saved in StorableWindows.json wasn't alway
 - Cra: CloseSuccessor (CraCore) with SidebarStore's per-window `previousTab` (not saved; set in `updateWindow`
   whenever what the window shows changes) and `hasPage` (a window's browser manager has the page). A tab put to sleep has no page, like Arc's unloaded tabs.
   `activeTabBeforeCreationID` is still saved and imported but no longer picks the next tab.
+
+## The loading bar above the card (Arc 1.171, 2 Nov 2026, PR #130, Kevin McKelvin's 60 fps recordings)
+Measured frame by frame by Kevin McKelvin from screen recordings of Arc (1.4 px per pt), against a local server
+that waits 3 s before answering and then serves a page whose image takes 5 s.
+- [O] A 4 pt bar, centred over the card in the margin above it.
+- [O] Waiting (the request is out, nothing committed): a 48 pt pill at 75 % white fades in over 0.7 s, out over
+  0.65 s and stays off for 0.25 s (a 1.6 s cycle).
+- [O] Loading (the main frame committed): the pill widens to a 130 pt track at 18 % white in about 0.35 s. A 76 %
+  white segment sweeps it every 1.12 s: its head runs left to right in 0.37 s, then its tail, then the track
+  stays empty for the rest of the cycle. Both edges move at a steady speed.
+- [O] Done: the whole track lights up, then shrinks toward the middle (to about 75 pt) and fades in 0.3 s.
+- [O] It moves whatever Reduce Motion says.
+- [?] Not measured: a navigation started while the last page is still loading. Cra goes back to the waiting pill
+  until the new page commits, as Chromium treats it as a new navigation.
+- Cra: LoadingIndicator (CraCore) has the numbers and the phase rule. CraBrowser.hasCommittedLoad is NO from each
+  main-frame navigation (OnBeforeBrowse, not redirects) until OnLoadStart. LoadingIndicatorView draws it with Core
+  Animation; a tab coming to the front shows its own state at once, without the widening or the finish. With no
+  margin (edge to edge, fullscreen) there is no bar; on light themes it is black at the same opacities. It slides
+  with the card when the sidebar hides or shows.

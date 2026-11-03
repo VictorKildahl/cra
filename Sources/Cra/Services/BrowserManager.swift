@@ -765,8 +765,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         delegate?.browserManagerDidUpdate(id)
     }
 
-    /// The window's loading bar stops pulsing and starts sweeping (LoadingIndicator).
-    func browserDidCommitLoad(_ browser: CraBrowser) {
+    /// The window's loading bar pulses until the page commits, then sweeps (LoadingIndicator).
+    func browser(_ browser: CraBrowser, didChangeCommittedLoad committed: Bool) {
         guard let id = tabID(of: browser) else { return }
         delegate?.browserManagerDidUpdate(id)
     }
