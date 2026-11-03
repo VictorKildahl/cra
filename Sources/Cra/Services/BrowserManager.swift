@@ -20,6 +20,8 @@ final class TabRuntime {
     var snapshotWork: DispatchWorkItem?
     /// The page probe for this time on screen, until it has run (BrowserManager.scheduleProbe).
     var probeWork: DispatchWorkItem?
+    /// Cra votes to freeze the page (BrowserManager.freezeIdleTabs); Chromium decides.
+    var freezeVoted = false
     /// When the page last went off screen (nil while shown); tab sleeping counts from here.
     var hiddenAt: Date?
     /// Invalidates a pending sleep probe even when navigation returns to the same URL.
@@ -240,6 +242,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
             }
             rt.hiddenAt = nil
             rt.sleepProbeAfter = nil
+            if rt.freezeVoted { setFreezingVote(rt, false) }
             let v = rt.browser.containerView
             // Alloy hosting only: the Chromium view moves into its pane. Chrome-style
             // pages live in their own windows; re-parenting their view makes Chrome
@@ -436,6 +439,36 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     }
 
     static let refusalBackoff: TimeInterval = 10 * 60
+
+    /// Arc's WebContentLifecycleOptimization freezes a page out of sight for `timeToFreezeTab`
+    /// (30 minutes), unless it is one of the 10 tabs used last or has a media player open, by
+    /// voting for it in Chromium's freezing policy (its freeze token). The policy freezes it only
+    /// while nothing it knows forbids that: sound now or lately, capture, a Web Lock or IndexedDB
+    /// lock, a device, a WebRTC connection, notification permission. Showing the tab drops the
+    /// vote. Needs the CEF patch behind "Cra.setFreezingVote" (cef-patches/freezing-vote.patch);
+    /// an older CEF answers that the method doesn't exist and nothing freezes (GitHub #136).
+    func freezeIdleTabs(hiddenLongerThan seconds: TimeInterval) {
+        let cutoff = clock.now.addingTimeInterval(-seconds)
+        let recent = recentlyShown
+        for (id, rt) in runtimes {
+            let b = rt.browser
+            let vote = !recent.contains(id) && rt.hiddenAt.map { $0 < cutoff } == true && b.isCreated && !b.isClosed
+                && !(nowPlaying?.entries.contains { $0.id == id } ?? false)
+            if vote != rt.freezeVoted { setFreezingVote(rt, vote) }
+        }
+    }
+
+    private func setFreezingVote(_ rt: TabRuntime, _ vote: Bool) {
+        rt.freezeVoted = vote
+        log(rt.tabID, vote ? "votes to freeze its page" : "drops its freezing vote")
+        rt.browser.sendDevToolsMethod("Cra.setFreezingVote", params: vote ? #"{"vote":true}"# : #"{"vote":false}"#) { _, error in
+            guard let error, vote, !Self.loggedFreezingError else { return }
+            Self.loggedFreezingError = true
+            DispatchQueue.main.async { CraLog.note("tab freezing unavailable: \(error)") }
+        }
+    }
+
+    private static var loggedFreezingError = false
 
     /// Arc never discards the pages of the 10 tabs used last, however long ago that was
     /// (WebContentLifecycleOptimization's protectedLRUTabCount, GitHub #136).

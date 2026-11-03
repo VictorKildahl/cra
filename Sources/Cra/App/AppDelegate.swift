@@ -174,8 +174,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if problems.count > 20 { CraLog.fault("sidebar: \(problems.count - 20) more problems") }
     }
 
+    /// AppComposition.tabFreezeAfter; `cra://debug?freezeTabs=` shortens it for a test.
+    private var freezeAfter = AppComposition.tabFreezeAfter
+
     private func sleepIdleTabs() {
-        for w in mainWindows { w.browsers.sleepIdleTabs(hiddenLongerThan: AppComposition.tabSleepAfter) }
+        for w in mainWindows {
+            w.browsers.freezeIdleTabs(hiddenLongerThan: freezeAfter)
+            w.browsers.sleepIdleTabs(hiddenLongerThan: AppComposition.tabSleepAfter)
+        }
     }
 
     /// Settings > Privacy > "Always use secure connections", live like content blocking.
@@ -589,6 +595,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if dict["relaunch"] != nil { relaunch(); return }
             if dict["quit"] != nil { NSApp.terminate(nil); return }
             if let t = dict["selectTab"].flatMap(UUID.init(uuidString:)) { store.selectTab(t, window: main.windowID); return }
+            // Tab freezing with a short threshold (seconds) from now on, so it can be tried without
+            // waiting: the minute's pass would otherwise take the votes back.
+            if let s = dict["freezeTabs"].flatMap(Double.init) {
+                freezeAfter = s
+                for w in mainWindows { w.browsers.freezeIdleTabs(hiddenLongerThan: s) }
+                return
+            }
             // One tab-sleeping pass with a short threshold (seconds), so it can be tried without waiting.
             if let s = dict["sleepTabs"].flatMap(Double.init) {
                 for w in mainWindows { w.browsers.sleepIdleTabs(hiddenLongerThan: s) }
@@ -638,8 +651,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             if let method = dict["cdp"] {
-                // target=little: the newest Little Window's (or Peek's) page.
-                let b = dict["target"] == "little" ? littleWindows.last?.browser : main.currentBrowser
+                // target=little: the newest Little Window's (or Peek's) page; tab=<id>: that tab's page.
+                let tab = dict["tab"].flatMap(UUID.init(uuidString:)).flatMap { main.browsers.runtime(for: $0)?.browser }
+                let b = dict["target"] == "little" ? littleWindows.last?.browser : tab ?? main.currentBrowser
                 b?.sendDevToolsMethod(method, params: dict["params"] ?? "{}") { result, error in
                     NSLog("Cra cdp %@ → %@", method, result ?? "error: \(error ?? "?")")
                 }

@@ -1,0 +1,162 @@
+diff --git a/cef/BUILD.gn b/cef/BUILD.gn
+index dd0a558c0..a54f79de4 100644
+--- a/cef/BUILD.gn
++++ b/cef/BUILD.gn
+@@ -973,6 +973,7 @@ source_set("libcef_static") {
+     "//components/network_session_configurator/common",
+     "//components/pdf/browser",
+     "//components/pdf/renderer",
++    "//components/performance_manager",
+     "//components/plugins/renderer",
+     "//components/pref_registry",
+     "//components/printing/browser",
+diff --git a/cef/libcef/browser/devtools/devtools_controller.cc b/cef/libcef/browser/devtools/devtools_controller.cc
+index c60f22d1a..0e4b547b7 100644
+--- a/cef/libcef/browser/devtools/devtools_controller.cc
++++ b/cef/libcef/browser/devtools/devtools_controller.cc
+@@ -6,9 +6,108 @@
+ 
+ #include "base/json/json_reader.h"
+ #include "base/json/json_writer.h"
++#include "base/supports_user_data.h"
++#include "base/task/sequenced_task_runner.h"
+ #include "cef/libcef/browser/devtools/devtools_util.h"
+ #include "cef/libcef/browser/thread_util.h"
++#include "components/performance_manager/freezing/freezing_policy.h"
++#include "components/performance_manager/public/freezing/freezing.h"
++#include "components/performance_manager/public/performance_manager.h"
+ #include "content/public/browser/devtools_agent_host.h"
++#include "content/public/browser/web_contents.h"
++
++namespace {
++
++// Cra: a page's freezing vote, held while the client asks for it, like Arc's
++// freeze token. Chromium's freezing policy freezes the page only while no
++// CannotFreezeReason applies (audible, capturing, Web Locks, WebRTC,
++// notification permission, ...).
++const char kCraFreezingVoteKey[] = "cra-freezing-vote";
++
++struct CraFreezingVote : public base::SupportsUserData::Data {
++  explicit CraFreezingVote(content::WebContents* contents) : vote(contents) {}
++  performance_manager::freezing::FreezingVote vote;
++};
++
++base::ListValue ReasonList(
++    const performance_manager::freezing::CannotFreezeReasonSet& reasons) {
++  base::ListValue list;
++  for (auto reason : reasons) {
++    list.Append(
++        performance_manager::freezing::CannotFreezeReasonToString(reason));
++  }
++  return list;
++}
++
++// {"id":N,"method":"Cra.setFreezingVote","params":{"vote":true|false}}: sets
++// or drops the vote. {"id":N,"method":"Cra.getFreezingState"}: whether the
++// page has Cra's vote, is frozen, and why the policy won't freeze it.
++// Returns true for either; any other message returns false.
++bool HandleCraMethod(content::WebContents* contents,
++                     std::string_view message,
++                     int* message_id,
++                     base::DictValue* result,
++                     std::string* error) {
++  if (message.find("\"Cra.") == std::string_view::npos) {
++    return false;
++  }
++  std::optional<base::DictValue> dict =
++      base::JSONReader::ReadDict(message, base::JSON_PARSE_RFC);
++  if (!dict) {
++    return false;
++  }
++  const std::string* method = dict->FindString("method");
++  std::optional<int> id = dict->FindInt("id");
++  if (!method || !id ||
++      (*method != "Cra.setFreezingVote" && *method != "Cra.getFreezingState")) {
++    return false;
++  }
++  *message_id = *id;
++  if (*method == "Cra.getFreezingState") {
++    result->Set("vote", !!contents->GetUserData(kCraFreezingVoteKey));
++    const performance_manager::PageNode* page =
++        performance_manager::PerformanceManager::
++            GetPrimaryPageNodeForWebContents(contents)
++                .get();
++    if (page && performance_manager::PerformanceManager::GetGraph()
++                    ->GetRegisteredObjectAs<
++                        performance_manager::FreezingPolicy>()) {
++      result->Set("frozen", page->GetLifecycleState() ==
++                                performance_manager::mojom::LifecycleState::kFrozen);
++      auto details =
++          performance_manager::freezing::GetCanFreezeDetailsForPageNode(page);
++      result->Set("reasons", ReasonList(details.cannot_freeze_reasons));
++      result->Set("connectedReasons",
++                  ReasonList(details.cannot_freeze_reasons_connected_pages));
++    }
++    return true;
++  }
++  const base::DictValue* params = dict->FindDict("params");
++  const bool vote = params && params->FindBool("vote").value_or(false);
++  if (!vote) {
++    contents->RemoveUserData(kCraFreezingVoteKey);
++    return true;
++  }
++  if (contents->GetUserData(kCraFreezingVoteKey)) {
++    return true;
++  }
++  // FreezingVote CHECKs both: a page Chrome's tab helpers never saw has no
++  // page node.
++  auto* graph = performance_manager::PerformanceManager::GetGraph();
++  if (!performance_manager::PerformanceManager::
++          GetPrimaryPageNodeForWebContents(contents) ||
++      !graph ||
++      !graph->GetRegisteredObjectAs<
++          performance_manager::FreezingPolicy>()) {
++    *error = "freezing is not available for this page";
++    return true;
++  }
++  contents->SetUserData(kCraFreezingVoteKey,
++                        std::make_unique<CraFreezingVote>(contents));
++  return true;
++}
++
++}  // namespace
+ 
+ CefDevToolsController::CefDevToolsController(
+     content::WebContents* inspected_contents)
+@@ -30,6 +129,36 @@ CefDevToolsController::~CefDevToolsController() {
+ bool CefDevToolsController::SendDevToolsMessage(
+     const std::string_view& message) {
+   CEF_REQUIRE_UIT();
++  int cra_message_id = 0;
++  base::DictValue cra_result;
++  std::string cra_error;
++  if (HandleCraMethod(inspected_contents_, message, &cra_message_id,
++                      &cra_result, &cra_error)) {
++    // Answered like a protocol method, after the caller has returned.
++    base::DictValue reply;
++    reply.Set("id", cra_message_id);
++    if (cra_error.empty()) {
++      reply.Set("result", std::move(cra_result));
++    } else {
++      base::DictValue error;
++      error.Set("code", -32000);
++      error.Set("message", cra_error);
++      reply.Set("error", std::move(error));
++    }
++    std::string json;
++    base::JSONWriter::Write(reply, &json);
++    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE,
++        base::BindOnce(
++            [](base::WeakPtr<CefDevToolsController> self, std::string json) {
++              if (self) {
++                self->DispatchProtocolMessage(
++                    nullptr, base::as_bytes(base::span(json)));
++              }
++            },
++            weak_ptr_factory_.GetWeakPtr(), std::move(json)));
++    return true;
++  }
+   if (!EnsureAgentHost()) {
+     return false;
+   }

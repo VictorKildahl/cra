@@ -17,13 +17,15 @@ final class AppComposition {
         store = SidebarStore(clock: self.clock)
     }
 
-    /// Arc archives on a 30-minute pass; tab sleeping looks every minute. `sleepTabs` reaches
+    /// Arc archives on a 30-minute pass; tab freezing and sleeping look every minute. `sleepTabs` reaches
     /// the windows' browser managers, which the composition does not own.
     static let autoArchiveInterval: TimeInterval = 1800
     static let tabSleepInterval: TimeInterval = 60
     /// Arc discards a page after 4 hours out of sight and has no setting for it
     /// (WebContentLifecycleOptimization's timeToDiscardTab, GitHub #136).
     static let tabSleepAfter: TimeInterval = 4 * 3600
+    /// Arc's timeToFreezeTab: a page out of sight 30 minutes is voted to freeze.
+    static let tabFreezeAfter: TimeInterval = 30 * 60
 
     func startPeriodicWork(sleepTabs: @escaping @MainActor () -> Void) {
         periodic.forEach { $0.cancel() }
