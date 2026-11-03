@@ -831,6 +831,13 @@ static const char kCraDevToolsHooks[] =
     // (DevToolsWindow::DoAction); -runDevToolsAction queues on __craRun until then.
     "var lc=h.loadCompleted;h.loadCompleted=function(){var r=lc&&lc.apply(h,arguments);h.__craLoaded=1;"
     "var q=h.__craRun||[];h.__craRun=[];q.forEach(function(f){f();});return r;};"
+    // The panel on show, so Console and Network can tell a switch from a close (GitHub #138):
+    // the main tab bar is the one with Elements; its selected tab is #tab-<panel>.
+    "(function(){var now=null,n=0,w=setInterval(function(){var e=find(document,'#tab-elements'),tabs=e&&e.parentNode;"
+    "if(tabs){clearInterval(w);var report=function(){var t=tabs.querySelector('.tabbed-pane-header-tab.selected');"
+    "var p=t&&t.id.indexOf('tab-')==0?t.id.slice(4):null;if(p&&p!==now){now=p;console.log('__cra_devtools_panel:'+p);}};"
+    "report();new MutationObserver(report).observe(tabs,{attributes:true,subtree:true,attributeFilter:['class']});return;}"
+    "if(++n>200)clearInterval(w);},150);})();"
     "if(!/[?&]can_dock=/.test(location.search)){installClose();return;}"
     "var sent=false;"
     "h.setInspectedPageBounds=function(b){sent=true;try{console.log('__cra_devtools_bounds:'+JSON.stringify({x:b.x,y:b.y,width:b.width,height:b.height}));}catch(e){}};"
@@ -921,6 +928,7 @@ public:
         static const std::string kClose = "__cra_devtools_close";
         static const std::string kBounds = "__cra_devtools_bounds:";
         static const std::string kDocked = "__cra_devtools_docked:";
+        static const std::string kPanel = "__cra_devtools_panel:";
         std::string m = message.ToString();
         if (m == kClose) {
             if (CraBrowser* o = owner_) [o closeDevTools];
@@ -934,6 +942,14 @@ public:
                 CraDevToolsLog(@"bounds %@", NSStringFromRect(r));
                 if (CraBrowser* o = owner_) [o.delegate browser:o devToolsPageBounds:r];
             }
+            return true;
+        }
+        if (m.rfind(kPanel, 0) == 0) {
+            NSString* panel = [NSString stringWithUTF8String:m.c_str() + kPanel.size()];
+            CraDevToolsLog(@"panel %@", panel);
+            CraBrowser* o = owner_;
+            if (o && panel.length && [o.delegate respondsToSelector:@selector(browser:devToolsShowsPanel:)])
+                [o.delegate browser:o devToolsShowsPanel:panel];
             return true;
         }
         if (m.rfind("__cra_dbg:", 0) == 0) { CraDevToolsLog(@"%s", m.c_str()); return true; }
@@ -2044,6 +2060,10 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 
 - (void)showDevTools { [self showDevToolsInspectingPoint:NSZeroPoint]; }
 - (void)closeDevTools { if (_browser) _browser->GetHost()->CloseDevTools(); }
+- (void)applyDevToolsAction {
+    // A frontend still loading takes the action when DevToolsClient prepares it.
+    if (_devToolsBrowser && !_devToolsBrowser->IsLoading()) [self runDevToolsAction];
+}
 // The frontend's own API, which Chrome's DevToolsWindow::DoAction calls through DevToolsAPI.
 - (void)runDevToolsAction {
     NSString* action = _devToolsAction;

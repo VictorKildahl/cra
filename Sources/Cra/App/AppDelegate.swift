@@ -876,7 +876,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "zoomOut": main.zoom(by: -0.5)
         case "resetZoom": main.currentBrowser?.setZoomLevel(0)
         case "viewSource": main.currentBrowser?.viewSource()
-        // Like Chrome: ⌥⌘I, ⌥⌘J and Network close the dock when it is already open.
+        // Like Arc: ⌥⌘I closes open DevTools; ⌥⌘J and Network switch to their panel and close
+        // DevTools only when that panel already shows (DevToolsToggle.run).
         case "devTools": main.browsers.runDevTools(.toggle)
         case "jsConsole": main.browsers.runDevTools(.console)
         case "networkPanel": main.browsers.runDevTools(.network)
