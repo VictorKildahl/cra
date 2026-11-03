@@ -640,6 +640,9 @@ enum BrowserManagerLifecycleTests {
         expect(!ra.browser.replies.contains { $0.method == "Runtime.evaluate" }, "a page already in Picture in Picture isn't asked again")
         manager.windowVisibilityChanged(covered: false)
         expect(ra.browser.isInPictureInPicture, "Picture in Picture the user opened stays when the window shows again")
+        PictureInPictureChrome.shared.actions?.close()
+        expect(ra.browser.pictureInPictureCloses == 1 && !ra.browser.isInPictureInPicture,
+               "the window's close button pauses the video as it comes home (Arc)")
         manager.closeAll()
     }
 

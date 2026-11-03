@@ -62,6 +62,8 @@ public final class CraBrowser {
         if automatic { automaticPictureInPictureRequests += 1 }
     }
     public func exitPictureInPicture() { isInPictureInPicture = false }
+    public private(set) var pictureInPictureCloses = 0
+    public func closePictureInPicture() { pictureInPictureCloses += 1; isInPictureInPicture = false }
     public func togglePictureInPicturePlayback() {}
     public func skipPictureInPicture(by seconds: Double) {}
     public private(set) var lastParams = ""
