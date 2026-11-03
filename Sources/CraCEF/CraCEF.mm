@@ -172,6 +172,7 @@ static CraClient* AsCraClient(CefClient* c) {
 @property (nonatomic, copy) NSString* currentURL;
 @property (nonatomic, copy) NSString* currentTitle;
 @property (nonatomic) BOOL isLoading;
+@property (nonatomic) BOOL hasCommittedLoad;
 @property (nonatomic) BOOL canGoBack;
 @property (nonatomic) BOOL canGoForward;
 @property (nonatomic) BOOL isCreated;
@@ -1120,6 +1121,7 @@ public:
                               bool canGoForward) override {
         CraBrowser* o = owner_;
         if (!o) return;
+        if (isLoading && !o.isLoading) o.hasCommittedLoad = NO;
         o.isLoading = isLoading;
         o.canGoBack = canGoBack;
         o.canGoForward = canGoForward;
@@ -1136,6 +1138,8 @@ public:
         if ([o.delegate respondsToSelector:@selector(browser:didReportBackgroundColor:)])
             [o.delegate browser:o didReportBackgroundColor:@""];
         frame->ExecuteJavaScript(kLoadingBackgroundProbe, frame->GetURL(), 0);
+        o.hasCommittedLoad = YES;
+        if ([o.delegate respondsToSelector:@selector(browserDidCommitLoad:)]) [o.delegate browserDidCommitLoad:o];
     }
 
     void OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int httpStatusCode) override {
