@@ -3,7 +3,8 @@ import Foundation
 // Cra's sidebar model. Shape follows what Arc persists in StorableSidebar.json
 // (see docs/arc-reverse-engineering.md): spaces own a favorites, a pinned and a
 // "today" container, tabs/folders are items in a tree keyed by id with explicit
-// child ordering. Unlike Arc, favorites are not shared between spaces.
+// child ordering. Unlike Arc, favorites are not shared between spaces unless
+// AppSettings.sharedFavorites is on (FavoritesSharing).
 
 public typealias ItemID = UUID
 
@@ -477,6 +478,9 @@ public struct AppSettings: Codable, Equatable {
     /// Arc's showSpaceHeaderOnSingleUnnamedSpaces: with only one space, its header (and the
     /// dock's lone space icon) can be hidden, for people who don't use spaces.
     public var showSpaceHeaderOnSingleSpace: Bool = true
+    /// GitHub #154: the spaces of one profile show one set of favorites, as Arc's do (a topApps
+    /// container per profile). Off by default: Cra keeps favorites per space (FavoritesSharing).
+    public var sharedFavorites: Bool = false
     /// GitHub #24, not in Arc: the page fills the window with no margin and no rounded
     /// card, like a traditional browser. Off by default.
     public var edgeToEdgeContent: Bool = false
@@ -645,6 +649,7 @@ extension AppSettings {
         httpsOnly = try c.decodeIfPresent(Bool.self, forKey: .httpsOnly) ?? false
         searchSuggestions = try c.decodeIfPresent(Bool.self, forKey: .searchSuggestions) ?? true
         showSpaceHeaderOnSingleSpace = try c.decodeIfPresent(Bool.self, forKey: .showSpaceHeaderOnSingleSpace) ?? true
+        sharedFavorites = try c.decodeIfPresent(Bool.self, forKey: .sharedFavorites) ?? false
         edgeToEdgeContent = try c.decodeIfPresent(Bool.self, forKey: .edgeToEdgeContent) ?? false
         perfRecording = try c.decodeIfPresent(Bool.self, forKey: .perfRecording) ?? Self.perfRecordingDefault
         perfHidesSiteNames = try c.decodeIfPresent(Bool.self, forKey: .perfHidesSiteNames) ?? false

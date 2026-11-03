@@ -24,6 +24,12 @@ struct TabsPane: View {
                 SettingsCheckbox(title: "Show the space header with only one space", isOn: $store.settings.showSpaceHeaderOnSingleSpace)
                 Text("Off hides the space’s name and its icon at the bottom of the sidebar while you have one space.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
+                // #154: Arc's favorites, one set per profile.
+                SettingsCheckbox(title: "Share Favorites across Spaces with the same profile",
+                                 isOn: Binding(get: { store.settings.sharedFavorites }, set: { store.setFavoritesShared($0) }))
+                Text("Spaces on one profile show the same Favorites, as in Arc. Turning it on combines their Favorites; turning it off gives each Space its own copy.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             // Arc's Links pane: the Little Arc switch and "Choose where links open inside
             // Arc." with an "Air Traffic Control…" button.

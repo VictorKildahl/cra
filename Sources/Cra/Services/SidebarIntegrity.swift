@@ -41,7 +41,7 @@ extension SidebarStore {
             }
         }
         for w in prefs.windows {
-            for (sid, tid) in w.selectedTabPerSpace where all[tid] != nil && spaceID(ofItem: tid) != sid {
+            for (sid, tid) in w.selectedTabPerSpace where all[tid] != nil && !isInSpace(tid, sid) {
                 problems.append("window \(name(w.id)) selects \(name(tid)) for space \(name(sid)), but it lives elsewhere")
             }
         }

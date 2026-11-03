@@ -27,6 +27,9 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   - itemContainer { containerType: topApps{profile} | spaceItems{spaceID} }
   - [O strings only] easel, splitView, arcDocument, tabGroup also exist.
 - [O] Favorites = the "topApps" container, one per profile, shared by all spaces (StorableSidebar.topAppsContainerIDs).
+  Cra keeps favorites per space by default; Settings ▸ Tabs ▸ "Share Favorites across Spaces with the same profile"
+  (#154, `FavoritesSharing`) points a profile's spaces at one list, the first space's in sidebar order. A swipe between
+  two spaces that share it leaves the tiles still, since Arc's favorites sit beside the space pager (see "Sidebar scrolling").
 - [O] Every space owns one pinned container and one unpinned ("Today") container; ordering = childrenIds; folders nest via parentID.
 - [O] A pinned tab keeps savedURL/savedTitle as its home; strings: resetTab, resetCurrentTab, replacePinnedTab,
   PinnedTabNavigationProfile, renamePinnedTabsEnabled=1.

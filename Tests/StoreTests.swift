@@ -33,6 +33,7 @@ enum StoreTests {
         folderPeek()
         closeSuccessor()
         favoritesEmptyState()
+        sharedFavorites()
         print("Store: \(checks) checks passed")
     }
 
@@ -441,6 +442,75 @@ enum StoreTests {
     /// Move Tab to Space N (#86) and the command bar's Move Tab to <space>, like Arc's "Move to
     /// Today in <space>": the tab goes to the top of the other space's Today, the window follows
     /// it there with the tab selected, and the space it left opens another tab.
+    /// Settings ▸ Tabs ▸ Share Favorites (#154): Arc's one favorites list per profile.
+    @MainActor
+    private static func sharedFavorites() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let home = store.focusedSpaceID
+        let work = store.createSpace(title: "Shared Work", emoji: "💼", focus: false).id
+        let client = store.createProfile(name: "Shared Client")
+        let other = store.createSpace(title: "Shared Client", emoji: "🧾", focus: false).id
+        store.setProfile(client.id, forSpace: other)
+        func list(_ sid: UUID) -> UUID { store.space(sid)!.favoritesContainerID }
+        func favorites(_ sid: UUID) -> [UUID] { store.children(of: list(sid)).map(\.id) }
+        func favorite(_ url: String, in sid: UUID) -> UUID {
+            let t = store.createTab(url: url, in: sid, select: false)
+            store.addToFavorites(t.id, in: sid)
+            return t.id
+        }
+        let before = favorites(home)
+        let mail = favorite("https://example.com/shared-mail", in: home)
+        let music = favorite("https://example.com/shared-music", in: work)
+        let mailAgain = favorite("https://example.com/shared-mail", in: work)
+        let jira = favorite("https://example.com/shared-jira", in: other)
+        store.selectTab(mailAgain)
+
+        store.setFavoritesShared(true)
+        expect(list(home) == list(work) && list(other) != list(home), "spaces on one profile show one list, another profile its own")
+        expect(favorites(home) == before + [mail, music] && favorites(other) == [jira],
+               "the first space's favorites, then the others', a page they both had once")
+        expect(store.item(mailAgain) == nil && store.focusedSpaceID == work && store.selectedTabID == mail,
+               "the window that had the dropped copy open shows the kept one, in the space it was in")
+        expect(store.spaceID(ofItem: mail) == work && store.isInSpace(mail, home) && store.isInSpace(mail, work) && !store.isInSpace(mail, other),
+               "a shared favorite is in the window's space, and in every space of its profile")
+        expect(store.integrityProblems().isEmpty, "sharing leaves the sidebar sound")
+
+        let third = store.createSpace(title: "Shared Third", emoji: "3️⃣", focus: false).id
+        expect(list(third) == list(home), "a new space joins its profile's list")
+        store.moveTab(music, toSpace: home)
+        expect(favorites(home) == before + [mail, music], "moving a favorite to a space that shows it changes nothing")
+
+        store.focusSpace(third)
+        store.selectTab(music)
+        store.focusSpace(work)
+        store.selectTab(music)
+        store.archiveTab(music, reason: .manual)
+        expect(store.selectedTabID(in: work) != music && store.selectedTabID(in: third) != music,
+               "closing a shared favorite closes it in every space that had it open")
+
+        store.setProfile(client.id, forSpace: work)
+        expect(list(work) == list(other) && favorites(work) == [jira] && favorites(home) == before + [mail],
+               "a space changing profile takes its new profile's list and leaves the old one with the others")
+        expect(store.selectedTabID(in: work) == nil && store.integrityProblems().isEmpty, "and nothing of the old list stays open in it")
+
+        store.deleteSpace(home)
+        expect(favorites(third) == before + [mail] && store.item(list(third))?.container == .favorites(spaceID: third),
+               "deleting a space leaves the list it shared with the others")
+
+        store.setFavoritesShared(false)
+        expect(list(work) != list(other) && favorites(work) == [jira] && favorites(other).count == 1 && favorites(other) != [jira]
+               && store.item(favorites(other)[0])?.tab?.savedURL == "https://example.com/shared-jira",
+               "turning it off gives each space its own copy, the first in the sidebar keeping the favorites themselves")
+        expect(store.integrityProblems().isEmpty, "unsharing leaves the sidebar sound")
+        store.setFavoritesShared(true)
+        expect(list(work) == list(other) && favorites(work) == [jira], "on again, the copies fold back into one list")
+        store.setFavoritesShared(false)
+        store.saveAll()
+        let reloaded = AppComposition(clock: ManualScheduler()).store
+        expect(!reloaded.settings.sharedFavorites && reloaded.space(work)!.favoritesContainerID != reloaded.space(other)!.favoritesContainerID
+               && reloaded.integrityProblems().isEmpty, "the lists load as they were saved")
+    }
+
     @MainActor
     private static func moveTabToSpace() {
         let store = AppComposition(clock: ManualScheduler()).store
