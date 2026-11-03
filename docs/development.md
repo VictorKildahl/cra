@@ -42,10 +42,11 @@ Data lives in `~/Library/Application Support/Cra`: the sidebar and archive as JS
 `keybindings.json`, cached favicons, the logs and a Chromium profile folder. Delete it to
 start over.
 
-`cra.log` is Cra's own log: each tab's page opening, showing, loading and closing, and three
-seconds after a tab comes on screen, what its page holds (`blank`, `visibility`, element and
-text counts, `painted` for a first contentful paint, `frameRate` for the animation frames
-it got in half a second) and where Cra put it (view size, `window=covered` when another
+`cra.log` is Cra's own log: each tab's page opening, showing, loading, failing to load (with
+the net error and the extension that set the proxy) and closing, and three seconds after a tab
+comes on screen and its page has loaded, what the page holds (`blank`, `visibility`, element
+and body child counts, `painted` for a first contentful paint, `frameRate` for the animation
+frames it got in half a second, `video` for the first video's dropped/total frames) and where Cra put it (view size, `window=covered` when another
 window hides it, `display=` the refresh rate of the display it is on). A visible page with
 `frameRate=0` was never asked to draw; frames without `painted` never reached the screen. `chromium.log` holds Chromium's warnings,
 failed page loads and crashed renderers. Each launch keeps the last one's as `*.previous.log`.

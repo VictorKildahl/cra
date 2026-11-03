@@ -148,6 +148,9 @@ final class ExtensionStore {
         proxyControllers = next
     }
 
+    /// The line for one profile folder, as a page's failed load in cra.log names it.
+    func proxyLine(inProfile name: String) -> String { Self.proxyLine(proxyControllers[name] ?? []) }
+
     /// "set by <id> (<config>), overriding <id>, <id>", or "not set by an extension".
     static func proxyLine(_ controllers: [ExtensionProxyControl.Controller]) -> String {
         guard let first = controllers.first else { return "not set by an extension" }

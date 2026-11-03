@@ -61,6 +61,7 @@ enum BrowserManagerLifecycleTests {
 
         embeddedPageHandoffCase()
         await snapshotCase()
+        loadingTabCase()
         await sleepCase("an unchanged idle page sleeps", shouldSleep: true) { _, _ in }
         await sleepCase("loading started while the probe was pending stays awake") { _, rt in rt.browser.setLoading(true) }
         await sleepCase("a completed same-URL reload invalidates the old probe") { _, rt in
@@ -114,7 +115,7 @@ enum BrowserManagerLifecycleTests {
         let reply = try! JSONSerialization.data(withJSONObject: ["result": ["type": "string", "value": page]])
         runtime.browser.reply(to: "Runtime.evaluate", with: String(decoding: reply, as: UTF8.self))
         await drainMainQueue()
-        expect(line?.hasSuffix("visibility=visible viewport=? scrollHeight=? elements=? text=? painted=0 frameRate=0") == true,
+        expect(line?.hasSuffix("visibility=visible viewport=? scrollHeight=? elements=? children=? painted=0 frameRate=0 video=?") == true,
                "a visible page that was never asked to draw reads frameRate=0")
 
         // Off every screen, as in a headless run: the window follows no display.
@@ -189,6 +190,26 @@ enum BrowserManagerLifecycleTests {
             old.browser.reply(to: "Page.captureScreenshot", with: "{\"data\":\"\(pixels)\"}")
         }
         expect(manager.runtime(for: id)?.snapshot == nil, "a late thumbnail cannot overwrite the replacement page's snapshot")
+        manager.closeAll()
+    }
+
+    /// A tab shown while its page loads is neither captured nor probed until the load is over
+    /// (#136): both ask the renderer for work in the busiest second of the page.
+    @MainActor
+    private static func loadingTabCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let id = store.createTab(url: "https://example.test/loading").id
+        let rt = manager.ensureRuntime(for: id)!
+        rt.browser.isLoading = true
+        manager.show(id, focus: false)
+        let probe = rt.probeWork
+        expect(rt.snapshotWork == nil && probe != nil, "a page shown while loading gets no thumbnail yet, and a pending probe")
+        rt.browser.setLoading(false)
+        expect(rt.snapshotWork != nil, "its thumbnail is taken once it has loaded")
+        expect(probe?.isCancelled == true && rt.probeWork != nil && rt.probeWork !== probe, "its probe moves to after the load")
+        manager.unload(id)
+        expect(rt.probeWork == nil && rt.snapshotWork == nil, "unloading drops the pending probe")
         manager.closeAll()
     }
 

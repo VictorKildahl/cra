@@ -18,6 +18,8 @@ final class TabRuntime {
     /// The tab switcher's thumbnail, taken while the page was last on screen.
     var snapshot: NSImage?
     var snapshotWork: DispatchWorkItem?
+    /// The page probe for this time on screen, until it has run (BrowserManager.scheduleProbe).
+    var probeWork: DispatchWorkItem?
     /// When the page last went off screen (nil while shown); tab sleeping counts from here.
     var hiddenAt: Date?
     /// Invalidates a pending sleep probe even when navigation returns to the same URL.
@@ -188,6 +190,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         byBrowser[ObjectIdentifier(rt.browser)] = nil
         rt.snapshotWork?.cancel()
         rt.snapshotWork = nil
+        rt.probeWork?.cancel()
+        rt.probeWork = nil
         if rt.browser.hasDevTools { rt.browser.closeDevTools() }
         devToolsViews[tabID] = nil
         devToolsPlaceholders[tabID] = nil
@@ -222,8 +226,12 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         }
         let wasVisible = Set(visibleTabIDs)
         var shown: [UUID] = []
+        // A tab without a page gets one here, timed as pageCreate: tabSwitch leaves it out (#136).
+        var creating = 0.0
         for id in tabIDs {
+            let made = runtimes[id] == nil ? Perf.now() : nil
             guard let rt = ensureRuntime(for: id) else { shown.append(id); continue }
+            if let made { creating += Perf.ms(since: made) }
             if !wasVisible.contains(id) {
                 returnToTab(rt)
                 // A page can change its colours while hidden. One still loading reports them as it
@@ -263,15 +271,18 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         }
         if focus, let f = visibleTabID, let rt = runtimes[f] { rt.browser.setFocused(true) }
         for id in shown where !wasVisible.contains(id) {
-            scheduleSnapshot(id)
             if let rt = runtimes[id] {
+                // A loading page gets its thumbnail once it has loaded: a capture now would be of
+                // a half-painted page, in the busiest second of its load (#136).
+                if !rt.browser.isLoading { scheduleSnapshot(id) }
                 log(id, "shown: \(site(rt.browser.currentURL, id, rt.browser))\(rt.browser.isLoading ? ", loading" : "")\(rt.browser.isCreated ? "" : ", page not created yet")")
-                scheduleProbe(id, rt)
+                // A loading page is probed once it has loaded (didChangeLoading), or says it never did.
+                scheduleProbe(id, rt, after: rt.browser.isLoading ? 12 : 3)
             }
         }
         syncDevToolsVisibility()
         delegate?.browserManagerPageWindowsChanged(focus: focus)
-        if wasVisible != Set(shown) { Perf.time(.tabSwitch, ms: Perf.ms(since: started)) }
+        if wasVisible != Set(shown) { Perf.time(.tabSwitch, ms: Perf.ms(since: started) - creating) }
     }
 
     // MARK: Diagnostics
@@ -284,18 +295,22 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         browser?.isIncognito ?? store.isIncognito(item: id) ? "(incognito)" : CraLog.host(url)
     }
 
-    /// A moment after a tab comes on screen, the log gets what its page holds and where Cra put
-    /// it: for the tab that "shows a white page until reloaded", the line that says why.
-    private func scheduleProbe(_ id: UUID, _ rt: TabRuntime, attempt: Int = 1) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self, weak rt] in
-            guard let self, let rt, self.runtimes[id] === rt, self.visibleTabIDs.contains(id) else { return }
-            // A slow site: look again once it has had time, and say so if it never finishes.
-            if rt.browser.isLoading, attempt < 4 { return self.scheduleProbe(id, rt, attempt: attempt + 1) }
+    /// A moment after a tab comes on screen and its page has loaded, the log gets what the page
+    /// holds and where Cra put it: for the tab that "shows a white page until reloaded", the line
+    /// that says why. Not sooner: the probe runs in the page, which is busiest while it loads (#136).
+    private func scheduleProbe(_ id: UUID, _ rt: TabRuntime, after delay: TimeInterval) {
+        rt.probeWork?.cancel()
+        let work = DispatchWorkItem { [weak self, weak rt] in
+            guard let self, let rt, self.runtimes[id] === rt else { return }
+            rt.probeWork = nil
+            guard self.visibleTabIDs.contains(id) else { return }
             PageProbe.run(rt.browser) { [weak self] probe in
                 guard let self, self.runtimes[id] === rt else { return }
                 self.log(id, "page \(self.site(rt.browser.currentURL, id, rt.browser))\(rt.browser.isLoading ? " still loading" : ""): \(probe) \(PageProbe.viewState(rt))")
             }
         }
+        rt.probeWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     // MARK: Tab switcher thumbnails
@@ -762,13 +777,18 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
             Perf.end(.tabWake, id.uuidString)
         }
         if !loading { runtimes[id]?.progress = 0 }
-        if !loading { scheduleSnapshot(id) }
+        // Two seconds on, the page (a video player especially) has settled before it is captured.
+        if !loading { scheduleSnapshot(id, after: 2) }
+        if !loading, let rt = runtimes[id], rt.probeWork != nil { scheduleProbe(id, rt, after: 3) }
+        if !loading, id == visibleTabID { Perf.phase("firstPageLoaded") }
         delegate?.browserManagerDidUpdate(id)
     }
 
     /// The window's loading bar pulses until the page commits, then sweeps (LoadingIndicator).
     func browser(_ browser: CraBrowser, didChangeCommittedLoad committed: Bool) {
         guard let id = tabID(of: browser) else { return }
+        // Start-up phases: firstPageShown, then the page's navigation committed, then loaded.
+        if committed, id == visibleTabID { Perf.phase("firstPageCommitted") }
         delegate?.browserManagerDidUpdate(id)
     }
 
@@ -790,8 +810,12 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// A restored tab's extension page, asked for before --load-extension loaded the extension,
     /// loads again once it is up (ExtensionPageRetry).
     func browser(_ browser: CraBrowser, didFailLoadingURL url: String, errorCode: Int) {
-        guard let id = tabID(of: browser), let rt = runtimes[id], !browser.isIncognito else { return }
+        guard let id = tabID(of: browser), let rt = runtimes[id] else { return }
         let profile = store.profileDirectoryName(item: id)
+        // Which extension the request went through, if any: a slow or failed first page is then a
+        // network wait or a proxy that is down, told apart from a render (#136).
+        log(id, "\(site(url, id, browser)) failed to load: net error \(errorCode), proxy \(ExtensionStore.shared.proxyLine(inProfile: profile))")
+        guard !browser.isIncognito else { return }
         guard let wait = ExtensionPageRetry.delay(url: url, errorCode: errorCode, attempt: rt.extensionPageRetries, isOn: { ext in
             ExtensionStore.shared.entries(inProfile: profile).contains { $0.extensionID == ext }
         }) else { return }

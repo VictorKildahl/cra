@@ -21,7 +21,9 @@ public struct PerfInsight: Codable, Equatable, Sendable, Identifiable {
 /// a test all agree.
 public enum PerfInsights {
     public static let lowDiskBytes: Int64 = 5 << 30
-    public static let largeFootprintBytes: Int64 = 8 << 30
+    /// A 16 GB Mac is short of memory well before 8 GB (#136): nine live pages, four of them
+    /// YouTube, came to 4.2 GB there.
+    public static let largeFootprintBytes: Int64 = 4 << 30
     /// Short stalls per hour of the session that are worth a line.
     public static let frequentStallsPerHour = 30.0
 

@@ -6,7 +6,8 @@ public enum PerfMetric: String, Codable, CaseIterable, Sendable {
     /// One pass of the main run loop between two points where it could take input. The main
     /// thread is also Chromium's browser UI thread: a long pass is a frozen window.
     case mainLoop
-    /// Putting other tabs on screen (BrowserManager.show), the part on the main thread.
+    /// Putting other tabs on screen (BrowserManager.show), the part on the main thread, without
+    /// making a page for a tab that had none (that is `pageCreate`).
     case tabSwitch
     /// Making a tab's page: Chromium's view, its window and the browser object.
     case pageCreate
@@ -19,6 +20,8 @@ public enum PerfMetric: String, Codable, CaseIterable, Sendable {
     case jsonSave
     /// Long tasks (50 ms or more) in the visible tab's page.
     case longTask
+    /// Framing an extension's popup once Chrome shows it (ExtensionPopupWindow.present).
+    case extensionPopup
 }
 
 /// What the recorder counts. Some carry a key (`loadError` the error code, `sleepRefusal` the

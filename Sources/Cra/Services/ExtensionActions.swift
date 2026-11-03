@@ -126,7 +126,7 @@ final class ExtensionActions {
             if !unsized || popup.alphaValue > 0 || Date().timeIntervalSince(since) > 0.25 {
                 HitchMonitor.mark("extension present window=\(popup.windowNumber) frame=\(NSStringFromRect(popup.frame)) parent=\(popup.parent?.windowNumber ?? -1)")
                 placingOwnPopup = false
-                ExtensionPopupWindow.present(popup, anchor: anchor)
+                Perf.time(.extensionPopup) { ExtensionPopupWindow.present(popup, anchor: anchor) }
                 revealHiddenBubbles()
                 return
             }

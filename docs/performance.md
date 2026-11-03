@@ -49,9 +49,11 @@ Main-thread passes as a histogram, stalls with mode, breadcrumbs and the site on
 process kind (browser, renderer, GPU, utility, other, from Chromium's `--type=` argument): CPU,
 memory footprint, disk reads and writes, wakeups (in the file only), and processes started and
 ended. The Mac: CPU, memory pressure, thermal state, Low Power Mode, free disk. Tabs by state,
-sleep refusals by reason, and timings for tab switch, page create, page load and waking a
-slept tab. Long tasks in the visible page. Renderer crashes, hangs and failed loads with their
-codes. Start-up phases, JSON load and save times, the profile's and caches' size (at export).
+sleep refusals by reason, and timings for tab switch (without the page created for a tab that
+had none, which is page create), page create, page load, waking a slept tab and framing an
+extension's popup. Long tasks in the visible page. Renderer crashes, hangs and failed loads
+with their codes. Start-up phases (store loaded, Chromium started, windows shown, then the
+first page shown, committed and loaded), JSON load and save times, the profile's and caches' size (at export).
 The session: a random id, the launch number, the previous session and whether it quit.
 
 Never: addresses beyond the host, paths, query strings, titles, page text, form values, typed
@@ -125,7 +127,8 @@ fails a scenario above 0.1 %.
 2. Remove the calls in the files `perf-boundary` allows: `App/main.swift`, `App/AppDelegate.swift`
    (`PerfCEF.install`, the `stall` and `perfReport` hooks, `exportDiagnostics` in the settings
    actions), `Services/BrowserManager.swift`, `Services/Persistence.swift`,
-   `Services/HitchMonitor.swift`, `Services/Diagnostics.swift`, `UI/Settings/SettingsWindowController.swift`
+   `Services/HitchMonitor.swift`, `Services/Diagnostics.swift`, `Services/ExtensionActions.swift`
+   (the popup's `Perf.time`), `UI/Settings/SettingsWindowController.swift`
    (the pane, `isOpen`). Then the two rules in `scripts/lint.py`.
 3. `CraLog.sitesSeen` and `SiteNames` serve "Hide site names"; keep them if that stays.
 4. The `lt` observer in `PageScript.isolatedWorld`, and `setProcessEventHandler` in CraCEF.
