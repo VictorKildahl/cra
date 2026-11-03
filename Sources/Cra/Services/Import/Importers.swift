@@ -24,6 +24,14 @@ struct ImportedSpace {
     var favorites: [ImportedItem] = []
     var pinned: [ImportedItem] = []
     var today: [ImportedItem] = []
+    /// The source browser's profile the space was on, when it is not Default (Arc, GitHub #131).
+    var profile: ImportedProfile?
+}
+
+/// A Chromium profile of the source browser: its folder under `User Data` and the name it shows.
+struct ImportedProfile: Hashable {
+    var folder: String
+    var name: String
 }
 
 struct ImportedArchiveEntry {
@@ -116,6 +124,9 @@ enum ArcImporter {
 
     static var isAvailable: Bool { FileManager.default.fileExists(atPath: supportDir.appendingPathComponent("StorableSidebar.json").path) }
 
+    /// Arc's Chromium profiles: Default and "Profile <n>", one per profile a space can be on.
+    static var userData: URL { supportDir.appendingPathComponent("User Data", isDirectory: true) }
+
     /// Arc's View ▸ Show Toolbar (topBarURLEnabled, off by default); nil when Arc never stored it.
     static var showsToolbar: Bool? {
         UserDefaults(suiteName: "company.thebrowser.Browser")?.object(forKey: "topBarURLEnabled") as? Bool
@@ -159,6 +170,9 @@ enum ArcImporter {
             return nil
         }
 
+        // Each space is on a Chromium profile in User Data, named as Arc's space menu shows it.
+        let profileNames = ChromiumImporter.profileNames(userData: userData)
+
         // Favorites (topApps): one container per profile, shared by that profile's spaces.
         var favoritesByProfile: [(profile: NSDictionary, items: [ImportedItem])] = []
         var allFavorites: [ImportedItem] = []
@@ -193,6 +207,7 @@ enum ArcImporter {
             var sp = ImportedSpace(title: title, emoji: emoji, theme: ArcThemeImport.theme(from: space) ?? SpaceTheme.presets[0])
             let profile = space["profile"] as? NSDictionary
             sp.favorites = favoritesByProfile.first { $0.profile.isEqual(profile) }?.items ?? allFavorites
+            sp.profile = ImportProfileMap.arcProfileFolder(space["profile"]).map { ImportedProfile(folder: $0, name: profileNames[$0] ?? $0) }
             if let p = pinnedID, let c = items[p] { sp.pinned = (c["childrenIds"] as? [String] ?? []).compactMap(convert) }
             if let t = todayID, let c = items[t] { sp.today = (c["childrenIds"] as? [String] ?? []).compactMap(convert) }
             plan.spaces.append(sp)
@@ -389,7 +404,11 @@ enum DiaImporter {
 // MARK: - Applying
 
 extension SidebarStore {
-    struct ImportResult { var spaces = 0; var tabs = 0; var folders = 0; var archived = 0; var spaceIDs: [UUID] = [] }
+    struct ImportResult {
+        var spaces = 0; var tabs = 0; var folders = 0; var archived = 0; var spaceIDs: [UUID] = []
+        /// The Cra profile each source profile of an imported space landed in.
+        var profiles = ImportProfileMap()
+    }
 
     /// Add a plan to the sidebar. Like Dia, every imported space is a new one (importing
     /// twice gives two of each), so people pick what to keep; a taken title gets a number
@@ -463,8 +482,21 @@ extension SidebarStore {
             return "\(title) \(n)"
         }
 
+        // A source profile becomes a Cra profile of the same name (one already there is reused, so
+        // importing again doesn't add "Work" twice); its spaces go on it, the rest stay on Default.
+        func craProfile(for source: ImportedProfile) -> BrowserProfile {
+            profiles.first { $0.name == source.name } ?? createProfile(name: source.name)
+        }
+
         for sp in plan.spaces {
             let space = createSpace(title: freeTitle(sp.title), emoji: sp.emoji, theme: sp.theme, focus: false)
+            if let source = sp.profile {
+                let folder = result.profiles.folders[source.folder] ?? craProfile(for: source).directoryName
+                result.profiles.folders[source.folder] = folder
+                if let p = profiles.first(where: { $0.directoryName == folder }) { setProfile(p.id, forSpace: space.id) }
+            } else {
+                result.profiles.folders["Default"] = "Default"
+            }
             result.spaces += 1
             result.spaceIDs.append(space.id)
             if imported[sp.title.lowercased()] == nil { imported[sp.title.lowercased()] = space.id }

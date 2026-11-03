@@ -9,8 +9,17 @@ struct ImportableExtension: Identifiable {
     let name: String
     let version: String
     let folder: URL
-    let isEnabled: Bool
+    /// Turned on in at least one of `profiles`.
+    var isEnabled: Bool
     let icon: NSImage?
+    /// The source profile folders it is installed in, and whether it is on there (GitHub #131).
+    var profiles: [String: Bool] = [:]
+
+    /// Where Cra loads it: the profiles that have it on, else (picked though off) every one that has it.
+    var sourceProfiles: Set<String> {
+        let on = Set(profiles.filter(\.value).keys)
+        return on.isEmpty ? Set(profiles.keys) : on
+    }
 }
 
 enum ExtensionImporter {
@@ -22,17 +31,33 @@ enum ExtensionImporter {
         extensions(inUserData: supportDir.appendingPathComponent("User Data", isDirectory: true))
     }
 
-    /// Every profile under a Chromium "User Data" folder (Chrome, Brave, Edge… keep it at the top level).
+    /// Every profile under a Chromium "User Data" folder (Chrome, Brave, Edge… keep it at the top level),
+    /// one entry per extension with the profiles that have it.
     static func extensions(inUserData userData: URL) -> [ImportableExtension] {
         let profiles = ((try? FileManager.default.contentsOfDirectory(atPath: userData.path)) ?? [])
             .filter { $0 == "Default" || $0.hasPrefix("Profile ") }.sorted()
-        var seen = Set<String>()
         var out: [ImportableExtension] = []
         for profile in profiles {
             let dir = userData.appendingPathComponent(profile, isDirectory: true)
-            for e in extensions(inProfile: dir) where seen.insert(e.id).inserted { out.append(e) }
+            for e in extensions(inProfile: dir) {
+                if let i = out.firstIndex(where: { $0.id == e.id }) {
+                    out[i].profiles[profile] = e.isEnabled
+                    out[i].isEnabled = out[i].isEnabled || e.isEnabled
+                } else {
+                    var e = e
+                    e.profiles = [profile: e.isEnabled]
+                    out.append(e)
+                }
+            }
         }
         return out.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    /// The profile's pinned extensions (Chromium's extensions.pinned_extensions), in toolbar order.
+    static func pinnedIDs(inProfile dir: URL) -> [String]? {
+        guard let data = try? Data(contentsOf: dir.appendingPathComponent("Preferences")),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return (json["extensions"] as? [String: Any])?["pinned_extensions"] as? [String]
     }
 
     /// extensions.settings by extension ID, from the profile's files. Newer Chromium keeps

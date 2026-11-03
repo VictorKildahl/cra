@@ -1,0 +1,21 @@
+{
+  "extensions": {
+    "pinned_extensions": [
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ],
+    "settings": {
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+        "location": 1,
+        "path": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/1.0_0",
+        "state": 1
+      },
+      "dddddddddddddddddddddddddddddddd": {
+        "location": 1,
+        "path": "dddddddddddddddddddddddddddddddd/1.0_0",
+        "disable_reasons": [
+          1
+        ]
+      }
+    }
+  }
+}

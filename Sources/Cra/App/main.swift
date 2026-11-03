@@ -30,12 +30,16 @@ MainActor.assumeIsolated {
     SafeStorage.prepare(profileIsFree: profileIsFree)
     if profileIsFree {
         let profile = AppPaths.chromiumCache.appendingPathComponent("Default", isDirectory: true)
-        if CredentialImport.hasPending { CredentialImport.applyPending(profileDir: profile) }
+        if CredentialImport.hasPending { CredentialImport.applyPending(root: AppPaths.chromiumCache) }
         CredentialImport.repairImportedCookies(profileDir: profile)
         ProfileCleanup.run()
     }
 
     NativeMessagingHosts.link(into: AppPaths.chromiumCache)
+
+    let extensions = ExtensionStore.loadList()
+    CraCEFRuntime.setExtensionPaths(extensions.paths, profiles: extensions.profiles)
+    if let p = extensions.profiles { CraLog.note("extension profiles: \(p)") }
 
     let useChromeStyle = ProcessInfo.processInfo.environment["CRA_CHROME_STYLE"] == "1"
     let started = CraCEFRuntime.initialize(withCachePath: AppPaths.chromiumCache.path,

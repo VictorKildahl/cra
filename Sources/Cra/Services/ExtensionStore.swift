@@ -27,8 +27,8 @@ final class ExtensionStore {
         /// Installed by Chrome into the profile (Web Store); Chrome owns the folder and
         /// loads changes at once, so removing goes through chrome://extensions.
         var managedByChrome = false
-        /// Chromium profile folders ("Default", "Profile <id>") it is installed in; nil for the
-        /// --load-extension ones, which Chromium loads into every profile.
+        /// Chromium profile folders ("Default", "Profile <id>") it is installed in; nil for an
+        /// --load-extension one that loads into every profile (extension-profiles.json, GitHub #131).
         var profiles: Set<String>?
         /// Profile folders where it is turned off in chrome://extensions. Chromium keeps it off
         /// there across launches, also when --load-extension loads the folder again.
@@ -51,13 +51,31 @@ final class ExtensionStore {
     /// CraCEF loads the same folder (it also honours CRA_DATA_DIR).
     nonisolated static var directory: URL { AppPaths.supportDir.appendingPathComponent("Extensions", isDirectory: true) }
 
+    /// The folders --load-extension loads at start-up, in name order, and the switch that says
+    /// which profiles load each (CraCEFRuntime.setExtensionPaths).
+    nonisolated static func loadList() -> (paths: [String], profiles: String?) {
+        let fm = FileManager.default
+        let names = ((try? fm.contentsOfDirectory(atPath: directory.path)) ?? []).sorted()
+            .filter { fm.fileExists(atPath: directory.appendingPathComponent($0).appendingPathComponent("manifest.json").path) }
+        return (names.map { directory.appendingPathComponent($0, isDirectory: true).path }, loadProfiles().commandLineValue(forFolders: names))
+    }
+
     nonisolated static func isInstalled(id: String) -> Bool {
         FileManager.default.fileExists(atPath: directory.appendingPathComponent(id).appendingPathComponent("manifest.json").path)
     }
 
     /// Copies an extension imported from Arc or Dia in as Extensions/<id>,
-    /// replacing an older copy of the same extension.
-    nonisolated static func importExtension(_ ext: ImportableExtension) throws {
+    /// replacing an older copy of the same extension. It loads in `profiles` (nil: every
+    /// profile) from the next launch.
+    nonisolated static func importExtension(_ ext: ImportableExtension, profiles: Set<String>?) throws {
+        let existed = isInstalled(id: ext.id)
+        try importExtension(ext)
+        var scopes = loadProfiles()
+        scopes.add(folder: ext.id, profiles: profiles, folderExisted: existed)
+        try saveProfiles(scopes)
+    }
+
+    private nonisolated static func importExtension(_ ext: ImportableExtension) throws {
         let fm = FileManager.default
         try fm.createDirectory(at: directory, withIntermediateDirectories: true)
         let dest = directory.appendingPathComponent(ext.id, isDirectory: true)
@@ -68,6 +86,23 @@ final class ExtensionStore {
         try? fm.removeItem(at: staging.appendingPathComponent("_metadata"))
         try? fm.removeItem(at: dest)
         try fm.moveItem(at: staging, to: dest)
+    }
+
+    // MARK: Profiles of the Extensions/ folders (GitHub #131)
+
+    nonisolated private static var profilesFile: URL { AppPaths.file("extension-profiles.json") }
+
+    nonisolated static func loadProfiles() -> ExtensionProfiles {
+        guard let data = try? Data(contentsOf: profilesFile) else { return ExtensionProfiles() }
+        return (try? JSONDecoder().decode(ExtensionProfiles.self, from: data)) ?? ExtensionProfiles()
+    }
+
+    nonisolated private static func saveProfiles(_ profiles: ExtensionProfiles) throws {
+        if profiles.folders.isEmpty {
+            try? FileManager.default.removeItem(at: profilesFile)
+        } else {
+            try JSONEncoder().encode(profiles).write(to: profilesFile, options: .atomic)
+        }
     }
 
     private(set) var entries: [Entry] = []
@@ -88,9 +123,11 @@ final class ExtensionStore {
         let profiles = ((try? fm.contentsOfDirectory(atPath: root.path)) ?? []).filter { $0 == "Default" || $0.hasPrefix("Profile ") }.sorted()
         let settings = Dictionary(uniqueKeysWithValues: profiles.map { ($0, Self.extensionSettings(inProfile: $0)) })
         let disabled = settings.mapValues(ExtensionImporter.disabledIDs(settings:))
+        let scopes = Self.loadProfiles()
         let list = names.sorted().compactMap { name -> Entry? in
             guard var entry = Self.entry(id: name, folder: ExtensionStore.directory.appendingPathComponent(name, isDirectory: true),
                                          extensionID: nil) else { return nil }
+            entry.profiles = scopes.profiles(ofFolder: name)
             entry.disabledProfiles = Set(profiles.filter { disabled[$0]?.contains(entry.extensionID) == true })
             return entry
         }
@@ -225,10 +262,8 @@ final class ExtensionStore {
     private static func loadPinned() -> PinnedExtensions {
         if let data = try? Data(contentsOf: pinnedFile) { return (try? JSONDecoder().decode(PinnedExtensions.self, from: data)) ?? PinnedExtensions() }
         for source in [ImportSource.arc, .dia] + ImportSource.allCases.filter({ $0.id == "chrome" }) {
-            let prefs = source.dataDir.appendingPathComponent("Default/Preferences")
-            guard let data = try? Data(contentsOf: prefs),
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let ids = (json["extensions"] as? [String: Any])?["pinned_extensions"] as? [String], !ids.isEmpty else { continue }
+            guard let ids = ExtensionImporter.pinnedIDs(inProfile: source.dataDir.appendingPathComponent("Default", isDirectory: true)),
+                  !ids.isEmpty else { continue }
             return PinnedExtensions(shared: ids)
         }
         return PinnedExtensions()
@@ -242,6 +277,20 @@ final class ExtensionStore {
     func setPinned(_ id: String, _ isPinned: Bool, inProfile profile: String) {
         let before = pinned
         pinned.setPinned(id, isPinned, inProfile: profile)
+        if pinned != before { savePinned() }
+    }
+
+    /// The pins a profile had in the browser the import came from (GitHub #131): a profile the
+    /// import made gets them as its own. Default's become everyone's list while Cra has none
+    /// saved yet, as they would at the first launch after the import (loadPinned).
+    func seedPinned(_ ids: [String], inProfile profile: String) {
+        let before = pinned
+        if profile == "Default" {
+            guard !FileManager.default.fileExists(atPath: Self.pinnedFile.path), pinned.shared.isEmpty else { return }
+            pinned.shared = ids
+        } else {
+            pinned.seed(ids, inProfile: profile)
+        }
         if pinned != before { savePinned() }
     }
 
@@ -527,6 +576,11 @@ final class ExtensionStore {
 
     func remove(_ entry: Entry) {
         try? FileManager.default.removeItem(at: entry.url)
+        if !entry.managedByChrome {
+            var scopes = Self.loadProfiles()
+            scopes.remove(folder: entry.id)
+            try? Self.saveProfiles(scopes)
+        }
         needsRestart = true
         reload()
     }
