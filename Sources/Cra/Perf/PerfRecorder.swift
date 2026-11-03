@@ -303,10 +303,25 @@ final class PerfRecorder: @unchecked Sendable {
             return true
         }
 
+        private var collected = false
+
         /// The main thread's stack, once `ended`; the output file goes.
         func stack() -> [String] {
+            collected = true
             defer { try? FileManager.default.removeItem(at: out) }
             return (try? String(contentsOf: out, encoding: .utf8)).map { PerfSampleStack.mainThread(from: $0) } ?? []
+        }
+
+        /// Recording turned off or Cra quitting mid-sample: no zombie, and the raw output (every
+        /// thread, paths included) doesn't stay in the temporary folder.
+        deinit {
+            guard !collected else { return }
+            var status: Int32 = 0
+            if waitpid(pid, &status, WNOHANG) == 0 {
+                kill(pid, SIGKILL)
+                _ = waitpid(pid, &status, 0)
+            }
+            try? FileManager.default.removeItem(at: out)
         }
     }
 
@@ -434,12 +449,25 @@ final class PerfRecorder: @unchecked Sendable {
             if let folder {
                 let files = PerfFiles(folder: folder)
                 for url in [files.previousBlackBox, files.history] + files.hangFiles() {
-                    if let data = try? Data(contentsOf: url) { out.append(("perf/" + url.lastPathComponent, String(decoding: data, as: UTF8.self))) }
+                    guard let data = try? Data(contentsOf: url) else { continue }
+                    out.append(("perf/" + url.lastPathComponent, String(decoding: data, as: UTF8.self)))
+                    // The last session's sites too, whatever its schema, for "Hide site names".
+                    sites.formUnion(Self.sites(in: (try? JSONSerialization.jsonObject(with: data)) ?? [:]))
                 }
             }
             DispatchQueue.main.async { done(out, sites) }
         }
         if let r { r.queue.async(execute: work) } else { DispatchQueue.global(qos: .utility).async(execute: work) }
+    }
+
+    /// Every `site` value in a Perf file.
+    private static func sites(in json: Any) -> Set<String> {
+        if let d = json as? [String: Any] {
+            return d.reduce(into: Set<String>()) { s, kv in
+                if kv.key == "site", let host = kv.value as? String { s.insert(host) } else { s.formUnion(sites(in: kv.value)) }
+            }
+        }
+        return (json as? [Any])?.reduce(into: Set<String>()) { $0.formUnion(sites(in: $1)) } ?? []
     }
 
     /// Settings ▸ Performance ▸ Clear: the files, and what this session recorded so far.

@@ -83,6 +83,7 @@ enum PerfCEF {
             (() => { const c = window.__cra, l = c?.lt; if (!l) return null;
               const f = c.lf || { n: 0, max: 0 }, q = c.vq || (c.vq = new WeakMap()); let vt = 0, vd = 0;
               for (const v of document.getElementsByTagName('video')) {
+                if (!(v instanceof HTMLVideoElement)) continue;
                 const p = v.getVideoPlaybackQuality(), o = q.get(v) || [0, 0], b = p.totalVideoFrames < o[0] ? [0, 0] : o;
                 vt += p.totalVideoFrames - b[0]; vd += p.droppedVideoFrames - b[1]; q.set(v, [p.totalVideoFrames, p.droppedVideoFrames]);
               }

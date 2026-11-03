@@ -165,12 +165,19 @@ enum PerfTests {
         files.write(marker!, to: files.marker)
         files.write(PerfHang(session: id!, number: 1, at: 1, stalledMs: 3000, mode: "default", marks: [], site: nil), to: files.hang(session: id!, number: 1))
         files.write(PerfHang(session: "older000", number: 1, at: 1, stalledMs: 3000, mode: "default", marks: [], site: nil), to: files.hang(session: "older000", number: 1))
+        files.write(PerfHang(session: id!, number: 2, at: 1, stalledMs: 3000, mode: "default", marks: [], site: "old.example.com"),
+                    to: files.hang(session: id!, number: 2))
 
         start(c)
         let previous = report()?.session.previous
         expect(previous?.abnormal == true && previous?.id == id, "the next launch reports it as ended without quitting")
         expect(report()?.insights.first?.id == "previous-abnormal", "and says so first")
-        expect(files.hangFiles().map(\.lastPathComponent) == ["hang-\(id!)-1.json"], "its hang file stays, older ones go")
+        expect(files.hangFiles().map(\.lastPathComponent) == ["hang-\(id!)-1.json", "hang-\(id!)-2.json"], "its hang files stay, older ones go")
+        var sites: Set<String> = []
+        var exported = false
+        PerfRecorder.exportFiles { _, s in sites = s; exported = true }
+        for _ in 0..<100 where !exported { spin(0.05) }
+        expect(sites.contains("old.example.com"), "the last session's sites are hidden with this one's (\(sites))")
         PerfRecorder.quit()
     }
 
