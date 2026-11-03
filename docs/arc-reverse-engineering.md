@@ -624,6 +624,19 @@ Chrome's own window ignores the pointer and has `preventKeyWindow` set (2 Nov): 
 resize band outside its frame that the overlay doesn't cover, and once key (a drag on that band, or
 AppKit picking it when a click activates Cra) Chrome shows its ±10 s controls on focus and on every
 mouse move, under Cra's ±15 s ones.
+Pressing the overlay (3 Nov, #134, `PictureInPictureGesture` in CraCore): the buttons take clicks
+whether or not the controls are faded in, a press moves or resizes only past 3 pt of travel (a click
+on play used to nudge the window by its drift), edges are 8 pt deep with 16 pt corners like
+Chromium's, and a resize keeps the opposite edge or corner where it was (the vertical anchors were
+inverted, so the top edge stayed put while the bottom was dragged). The cursor comes from a tracking
+area over the same zones (cursor rects only work in a key window, and the overlay never is one), and
+while the pointer is over the window Cra sets "SetsCursorInBackground" on its WindowServer
+connection, so the resize cursors show with another app in front too (verified with `screencapture
+-C` over each edge and corner, Finder in front and Cra in front). A press with Cra in the background
+already reached the overlay (it activates Cra and acceptsFirstMouse lets it through); without the
+cursor it only looked dead. Drags are measured from each
+event's own screen location; `cra.log` gets `pip: move`, `pip: resize <edge> from W×H`, `pip: resized
+<edge> W×H → W×H` (with "asked" when Chromium kept another size) and `pip: overlay has no parent window`.
 One residual difference: Chrome paints its origin strip ("File on your device", top gradient)
 inside the compositor layer for about two seconds when the window first appears (present at
 1.5 s, gone at 2.5 s in quarter-second captures); it is drawn whether or not the window is
