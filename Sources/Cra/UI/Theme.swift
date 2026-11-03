@@ -1,5 +1,4 @@
 import AppKit
-import AppKit
 import SwiftUI
 
 extension Color {
@@ -13,6 +12,10 @@ extension NSColor {
     convenience init(hex: String) {
         let c = HexColor.components(hex) ?? (0.5, 0.5, 0.5)
         self.init(srgbRed: c.r, green: c.g, blue: c.b, alpha: 1)
+    }
+
+    convenience init(_ c: RGB, alpha: CGFloat = 1) {
+        self.init(srgbRed: c.r, green: c.g, blue: c.b, alpha: alpha)
     }
 }
 
@@ -81,32 +84,6 @@ extension SpaceTheme {
     /// Arc's toolbar band: the first theme colour pushed to a dark, fully
     /// saturated shade on light themes (Victor: #72601D) and a muted,
     /// slightly darker one on dark themes (JYSK: #0E0B16).
-    static func hsb(_ r: Double, _ g: Double, _ b: Double) -> (h: Double, s: Double, v: Double) {
-        let mx = max(r, g, b), mn = min(r, g, b), d = mx - mn
-        var h = 0.0
-        if d > 0.00001 {
-            if mx == r { h = ((g - b) / d).truncatingRemainder(dividingBy: 6) }
-            else if mx == g { h = (b - r) / d + 2 }
-            else { h = (r - g) / d + 4 }
-            h /= 6
-            if h < 0 { h += 1 }
-        }
-        return (h, mx > 0 ? d / mx : 0, mx)
-    }
-
-    static func rgb(h: Double, s: Double, v: Double) -> (Double, Double, Double) {
-        let i = floor(h * 6), f = h * 6 - i
-        let p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s)
-        switch Int(i) % 6 {
-        case 0: return (v, t, p)
-        case 1: return (q, v, p)
-        case 2: return (p, v, t)
-        case 3: return (p, q, v)
-        case 4: return (t, p, v)
-        default: return (v, p, q)
-        }
-    }
-
     /// Light: 46% brightness, saturation +0.10 (Victor #F8D558 → #725F1D, Arc #72601D).
     /// Dark: 60% saturation, 80% brightness (JYSK #010220 → #0A0B19, Arc #0E0B16).
     /// Arc's light-theme ink: the first theme colour pushed to ~13% brightness

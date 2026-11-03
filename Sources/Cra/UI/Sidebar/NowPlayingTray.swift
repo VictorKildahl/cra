@@ -47,8 +47,7 @@ enum NowPlayingMetrics {
 
 /// The card's colours for a theme colour and scheme. Arc derives them from the window palette
 /// (`backgroundExtra`, `PlaybackControlForeground`, `tintedLight`, `shadedDark`); Cra has no Arc
-/// palette, so its shades are rebuilt from the theme colour: Arc's shadedDark is the theme's hue,
-/// strongly saturated, at ~10 % luminance (#6F5600 for #F8D558, #1F2AFF for a deep blue).
+/// palette, so its shades are rebuilt from the theme colour (SpaceTheme.shadedDark).
 struct NowPlayingColors {
     let isDark: Bool
     let fill: NSColor
@@ -68,17 +67,10 @@ struct NowPlayingColors {
             let o = SpaceTheme.rgb(h: h, s: s, v: v)
             return NSColor(srgbRed: o.0, green: o.1, blue: o.2, alpha: 1)
         }
-        // shadedDark: the brightness at which the saturated hue reaches 10 % luminance.
-        func lin(_ x: Double) -> Double { x <= 0.04045 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4) }
-        let ds = grey ? 0 : 0.94
-        var lo = 0.0, hi = 1.0
-        for _ in 0..<20 {
-            let v = (lo + hi) / 2, o = SpaceTheme.rgb(h: h, s: ds, v: v)
-            if 0.2126 * lin(o.0) + 0.7152 * lin(o.1) + 0.0722 * lin(o.2) < 0.1 { lo = v } else { hi = v }
-        }
+        let shaded = SpaceTheme.shadedDark(hex)
         isDark = dark
         if dark {
-            fill = color(ds, lo * 0.15)
+            fill = NSColor(RGB.black.mixed(with: shaded, 0.15))
             foreground = NSColor.white.withAlphaComponent(0.66)
             title = NSColor.white.withAlphaComponent(0.81)
             hover = NSColor.white.withAlphaComponent(0.07)
@@ -92,7 +84,7 @@ struct NowPlayingColors {
             title = NSColor.black.withAlphaComponent(0.85)
             hover = NSColor.black.withAlphaComponent(0.08)
             placeholder = NSColor.black.withAlphaComponent(0.15)
-            trackFilled = color(ds, lo)
+            trackFilled = NSColor(shaded)
             trackEmpty = NSColor.black.withAlphaComponent(0.18)
             knob = .white
         }

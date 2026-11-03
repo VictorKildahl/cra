@@ -974,9 +974,10 @@ of the sidebar strip, pixel runs at x=500 px (2x), y = 160/700/1200/1700/2100.
   .immediate, maxWidth, colorPalette }`, `TooltipController { presentationTimer, lastTooltipDismissedAtTime,
   … }`. [O live, 1x recordings] Shown 1.60 s after the pointer's last move (two cases, 30 fps); moving
   straight from one tip to another control swaps at once; pops in with no fade, fades out in ~2 frames.
-  Navy capsule 28 pt, no visible border, 12 pt medium text (fill 96 for "Canteen plan", 110 for
+  Navy capsule 28 pt (the default theme's tones and ring, see "Space dock tooltip"), 12 pt medium text (fill 96 for "Canteen plan", 110 for
   "Archive this tab", 198 for "Close and Keep Pinned ⌘W"), 10 pt side padding, 7 pt text→caps, caps
-  ~18 pt with a darker 2 px bottom band (~#777AD3), 3 pt apart. Button tips hang off the bottom-trailing
+  ~18 pt with a darker 2 px bottom band (~#777AD3), 3 pt apart (re-measured at 2x on 3 Nov: 19 pt, 6 pt from
+  the text, 10 pt to the end; the 1x widths left out the ring's pixel on each side). Button tips hang off the bottom-trailing
   corner of a 16 pt box around the glyph (fill top-left = glyph centre + (8, 7)); row tips ("Canteen plan",
   the title) follow the cursor at +(13, 14).
 - Cra: `ArcTooltip.swift` (`.arcTooltip(help)`, one shared non-activating child panel, `(⌘W)` suffixes
@@ -1755,7 +1756,8 @@ iconOffsetXAnimator, iconBounceAnimator, lazy g / vx0 / vy0 / projectileMotionDu
 - The tab list behind is hidden from 3 pt above the first row and fades back in linearly over the 170 pt above it.
 - Opens 0.2 s into the hover: rows fade in and rise 5 pt in ~0.12 s, bottom row first, ~25 ms apart; the fade comes
   in over ~0.18 s. Closes ~0.07 s after the pointer leaves: rows gone within ~0.05 s (bottom first), the fade
-  out over ~0.13 s. Arc's own "View Library ⇧⌘L" tooltip shows under the button meanwhile.
+  out over ~0.13 s. Arc's own "View Library ⇧⌘L" tooltip shows meanwhile (beside the button, see "Space dock
+  tooltip").
 - Cra: DownloadsTray / DownloadsTrayMask (sidebar), DownloadHistory (downloads.json). The mask must be a single
   GeometryReader gradient: fixed-height layers in it raised the sidebar's minimum height and the window grew.
 
@@ -1785,6 +1787,42 @@ strings "Opens the tab switcher, where you can cycle through recent tabs like Co
 - **Cra test (CraTK, pid-targeted keys):** geometry, borders, text and favicon position match Arc's captures to the
   pixel. Thumbnails come from `Page.captureScreenshot` of the visible viewport (Chromium draws nothing for hidden
   pages), taken 1 s after a tab shows or finishes loading and again for the current tab when the switcher opens.
+
+### Space dock tooltip and tooltip tones (Arc 1.171, 3 Nov 2026, issue #152, offline Arc + Arc's data)
+
+- [O data] Every tip in a browser window takes the palette of the space that window is in, whichever control or
+  space icon it belongs to (`ArcTooltipConfiguration.colorPalette`). Hovering the Work icon while Personal is
+  focused gives "Work" in Personal's yellow-brown; the Library tip changes with the space too. The four tones
+  are slots of the semantic palette, and all four are mixes of `primaryColorPalette.shadedDark` (=
+  `light.maxContrastColor`), checked on Victor's yellow theme and Arc's default theme (StorableSidebar.json),
+  and on the issue's CloudDev and RM: fill = `dark.background` = shadedDark × 0.30; text = `dark.title` =
+  white with 15 % of shadedDark; pill and key caps = `light.hover` = white with 20 %; profile name, avatar and
+  cap glyphs = shadedDark. Cap edge = halfway between the cap face and the glyph colour (160/148/97 measured,
+  161/146/96 predicted). Ring: one device pixel of white at 10 % over the fill (on Arc's default theme exactly
+  Little Arc's `#22255D` around `#0A0D4B`, which is that theme's fill: Little Arc uses the default palette).
+  The navy measured on 27 Oct was the default theme's: the JYSK space has no windowTheme.
+- [O live, 2x] Space icon tip: "<space> [☺ <profile>] ⌃N". A Default-profile space says "Default" (Arc's
+  Local State calls that profile "Your Arc"); N is the space's place in the order. Capsule 28 pt, centred on the
+  icon, its bottom 19.75 pt above the icon's centre. Name 12 pt medium, 10 pt in; profile pill 6 pt after it,
+  22 pt tall, 3 pt from the capsule's edges: avatar 14 pt, 6 pt in and centred, then the name in 11 pt medium
+  (cap height 8 pt against the title's 9) 3 pt on, 6 pt to the pill's end (pill = 29 pt + the name). Caps 6 pt
+  on, 19 × 19 pt, 3 pt apart, 10 pt to the capsule's end; each a face inset 1 pt on the sides and top and 2.5 pt
+  at the bottom over the darker edge. "View Library ⇧⌘L" uses the same caps; its tip hangs 19.5 pt right of the
+  button's centre, centred on it. Widths: Personal 191.5, Work 160, View Library 161.5 pt.
+- [O live] Avatar: `ARC_ProfilesUI.bundle` "archie", a 14 pt template image: disc at alpha 26/255, two upright
+  eyes and a smile at full alpha, drawn in the ink. The same glyph on every profile.
+- [O live, 120 Hz] The dock tip shows ~0.6 s after the pointer stops (0.62–0.65 s in two recordings), sooner
+  than a control's 1.6 s. Moving along the icons replaces it in place in one frame. The cell's hover fill fades
+  in over ~0.2 s.
+- Cra: `ArcTooltipController.tones` (AppDelegate: the window's focused space → CraCore `TooltipTones`, nil and
+  Little Arc's navy elsewhere); `SpaceTheme.shadedDark` rebuilds Arc's shade from the theme colour (the hue at
+  10 % luminance, the rule Now Playing already used); `SpaceCellView` gives the name, the profile and
+  `space<N>`'s keys; `ProfilePill` / `ProfileAvatarView` (the smiley redrawn as a path, fitted to the image's
+  pixels at RMS 1.7/255). Compared side by side with Arc in both themes: widths within 1 px at 2x, tones
+  within ~5/255 where Arc's shade stays in the sRGB gamut. The dock's timer is 0.55 s: with a real pointer Cra's
+  tip reached the screen 0.69 s after the last move at 0.6. The dock enters the new cell before leaving the
+  others, so the tip is replaced in place either way (it used to fade one out while the next popped in, moving
+  right). Not done: the cell's hover-fill fade.
 
 ### Space dock: press area, fills and reordering (Arc 1.170, 27 Oct 2026, ObjC metadata + AX tree + captures)
 

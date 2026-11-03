@@ -40,20 +40,23 @@ public struct KeyChord: Codable, Hashable {
     public static let delete = "\u{8}"
 
     /// How menus and the command bar show it: ⌃⌥⇧⌘ in Apple's order, then the key.
-    public var display: String {
-        var s = ""
-        if keys.contains(.control) { s += "⌃" }
-        if keys.contains(.option) { s += "⌥" }
-        if keys.contains(.shift) { s += "⇧" }
-        if keys.contains(.command) { s += "⌘" }
+    public var display: String { caps.joined() }
+
+    /// One glyph per key, as a tooltip's key caps show them: ⌃3 is ["⌃", "3"].
+    public var caps: [String] {
+        var s: [String] = []
+        if keys.contains(.control) { s.append("⌃") }
+        if keys.contains(.option) { s.append("⌥") }
+        if keys.contains(.shift) { s.append("⇧") }
+        if keys.contains(.command) { s.append("⌘") }
         switch key {
-        case Self.tab: s += "⇥"
-        case Self.left: s += "←"
-        case Self.right: s += "→"
-        case Self.up: s += "↑"
-        case Self.down: s += "↓"
-        case Self.delete: s += "⌫"
-        default: s += key.uppercased()
+        case Self.tab: s.append("⇥")
+        case Self.left: s.append("←")
+        case Self.right: s.append("→")
+        case Self.up: s.append("↑")
+        case Self.down: s.append("↓")
+        case Self.delete: s.append("⌫")
+        default: s.append(key.uppercased())
         }
         return s
     }
