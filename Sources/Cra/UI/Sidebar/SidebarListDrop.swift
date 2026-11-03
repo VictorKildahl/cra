@@ -181,13 +181,13 @@ final class CombineDropPreview: NSView {
         let icon = SidebarFaviconView()
         icon.show(favicons.image(forKey: item.tab?.iconKey), flip: favicons.glyphIsDark(forKey: item.tab?.iconKey) == palette.isDark, colors: colors)
         let h = bounds.height
-        icon.frame = NSRect(x: 8, y: (h - CraMetrics.favicon) / 2, width: CraMetrics.favicon, height: CraMetrics.favicon)
+        icon.frame = NSRect(x: SplitRowMetrics.cellInset + SplitRowMetrics.favicon, y: (h - CraMetrics.favicon) / 2, width: CraMetrics.favicon, height: CraMetrics.favicon)
         v.addSubview(icon)
         let label = NSTextField.sidebarLabel(size: 14)
         label.stringValue = item.displayTitle
         label.textColor = colors.textPrimary
         // HStack(spacing: 8) after 8 pt, Spacer(minLength: 2), 4 pt trailing.
-        let x = 8 + CraMetrics.favicon + 8
+        let x = SplitRowMetrics.cellInset + SplitRowMetrics.favicon + CraMetrics.favicon + 11
         label.frame = NSRect(x: x - SidebarText.inset, y: (h - 17) / 2, width: max(0, width - x - 14) + 2 * SidebarText.inset, height: 17)
         v.addSubview(label)
         return v
@@ -236,7 +236,7 @@ final class CombineDropPreview: NSView {
     // MARK: Folder
 
     private func buildFolder() {
-        let x0 = 8 + CGFloat(depth) * CraMetrics.indent
+        let x0 = CraMetrics.rowLeading + CGFloat(depth) * CraMetrics.indent
         let h = bounds.height
         let tones = palette.folderColors(nil)
         // The folder: its outline over its fill, popping from 40%.

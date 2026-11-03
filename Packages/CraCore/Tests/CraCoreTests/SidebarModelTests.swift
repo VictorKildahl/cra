@@ -45,21 +45,55 @@ struct SidebarModelTests {
         #expect(tab.iconKey == "picked")
     }
 
-    /// The line under a tab's title (GitHub #88): a developer-mode site shows its host on every
-    /// tab, a pinned tab shows it once it has left its site, a pull request shows its author.
+    /// The line under a tab's title (GitHub #88, #139): Arc's TabCellState.subtitle is a
+    /// developer-mode site's host (and port), else a pull request's author. Leaving a pinned
+    /// page shows none.
     @Test func sidebarSubtitle() {
         var tab = TabData(url: "https://www.youtube.com/watch?v=1", title: "Video")
-        #expect(tab.sidebarSubtitle(navigatedAway: false, developerMode: false) == nil)
-        #expect(tab.sidebarSubtitle(navigatedAway: false, developerMode: true) == "youtube.com", "developer mode: the host, without www.")
-        tab.savedURL = "https://youtube.com/"
-        #expect(tab.sidebarSubtitle(navigatedAway: true, developerMode: false) == nil, "still on the pinned site")
+        #expect(tab.sidebarSubtitle(developerMode: false) == nil)
+        #expect(tab.sidebarSubtitle(developerMode: true) == "youtube.com", "developer mode: the host, without www.")
         tab.savedURL = "https://example.com/"
-        #expect(tab.sidebarSubtitle(navigatedAway: true, developerMode: false) == "youtube.com", "left the pinned site")
-        #expect(tab.sidebarSubtitle(navigatedAway: false, developerMode: false) == nil)
+        #expect(tab.sidebarSubtitle(developerMode: false) == nil, "a pinned tab that left its site shows no host")
+        #expect(TabData(url: "http://127.0.0.1:8080/a").sidebarSubtitle(developerMode: true) == "127.0.0.1:8080", "with its port")
         var pull = TabData(url: "https://github.com/o/r/pull/1")
         pull.liveSubtitle = "octocat"
-        #expect(pull.sidebarSubtitle(navigatedAway: false, developerMode: true) == "octocat", "a pull request's author wins")
-        #expect(TabData(url: "notes").sidebarSubtitle(navigatedAway: false, developerMode: true) == nil, "no host, no line")
+        #expect(pull.sidebarSubtitle(developerMode: false) == "octocat")
+        #expect(pull.sidebarSubtitle(developerMode: true) == "github.com", "developer mode comes first in Arc")
+        #expect(TabData(url: "notes").sidebarSubtitle(developerMode: true) == nil, "no host, no line")
+    }
+
+    /// GitHub #139: a pinned tab that goes back to its page shows that page's name and favicon,
+    /// not the last page's, before it loads again.
+    @Test func returningHomeShowsTheHomesNameAndIcon() throws {
+        var tab = TabData(url: "https://github.com/", title: "")
+        tab.noteTitle("GitHub", pinned: true)
+        #expect(tab.homeTitle == "GitHub")
+        tab.url = "https://gist.github.com/o/1"
+        tab.faviconKey = "gist.github.com"
+        tab.noteTitle("Developer bar: Console", pinned: true)
+        #expect(tab.homeTitle == "GitHub", "a page away from home is not the home")
+        tab.returnHome()
+        #expect(tab.url == "https://github.com/" && tab.savedTitle == "GitHub" && tab.faviconKey == "github.com")
+
+        var today = TabData(url: "https://example.com/", title: "")
+        today.noteTitle("Example", pinned: false)
+        #expect(today.homeTitle == nil, "only pinned tabs keep a home name")
+
+        var unseen = TabData(url: "https://a.com/", title: "A")
+        unseen.url = "https://a.com/b"
+        unseen.savedTitle = "B"
+        unseen.returnHome()
+        #expect(unseen.savedTitle == "B", "a home never seen keeps the last name until its page reports")
+
+        var pinning = TabData(url: "https://b.com/", title: "Bee")
+        pinning.url = "https://c.com/"
+        pinning.savedTitle = "Sea"
+        pinning.makeCurrentPageHome()
+        #expect(pinning.savedURL == "https://c.com/" && pinning.homeTitle == "Sea")
+
+        let data = try JSONEncoder().encode(tab)
+        #expect(try JSONDecoder().decode(TabData.self, from: data).homeTitle == "GitHub")
+        #expect(try !String(decoding: JSONEncoder().encode(today), as: UTF8.self).contains("homeTitle"), "not written when unknown")
     }
 
     @Test func containerKindsRoundTripAndNeedAKind() throws {

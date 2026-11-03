@@ -458,15 +458,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     /// Arc's Peek: a Little Window over `parent` that closes when a click lands past it.
-    func openPeek(url: String, over parent: MainWindowController) {
+    func openPeek(url: String, over parent: MainWindowController, fromTab tabID: UUID? = nil) {
         for p in littleWindows where p.peekParent === parent { p.closeWindow() }
         let w = LittleWindowController(app: self, url: url, peekOver: parent)
         littleWindows.append(w)
+        // Arc badges the tab the Peek came from with the peeked page's favicon (modalIcon).
+        parent.sidebarUI.peekBadge = tabID.map { .init(tabID: $0, iconKey: FaviconKey.key(for: url)) }
         w.showAsPeek()
     }
 
     func removeLittleWindow(_ w: LittleWindowController) {
         littleWindows.removeAll { $0 === w }
+        if let parent = w.peekParent, !littleWindows.contains(where: { $0.peekParent === parent }) { parent.sidebarUI.peekBadge = nil }
     }
 
     func closeLittleWindows() {

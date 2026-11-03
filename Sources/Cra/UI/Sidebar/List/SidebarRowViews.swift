@@ -544,10 +544,24 @@ final class FocusRingLayer: CALayer {
     private let yellow = CAShapeLayer()
     private let dashes = CAShapeLayer()
     private var radius = CraMetrics.rowCorner
+    /// Arc's ring round the open tab of a site in developer mode (TabHighlightView,
+    /// TabHighlightState.developerTab, GitHub #139): systemYellow under black dashes at 80 %, a
+    /// radius of 11, and dashes cut to the edge's length (1/60, 1/80 or 1/100 of it by width).
+    private(set) var developer = false
 
     convenience init(radius: CGFloat) {
         self.init()
         self.radius = radius
+    }
+
+    convenience init(developer: Bool) {
+        self.init()
+        guard developer else { return }
+        self.developer = true
+        radius = 11
+        yellow.strokeColor = NSColor.systemYellow.cgColor
+        dashes.strokeColor = NSColor.black.cgColor
+        dashes.opacity = 0.8
     }
 
     override init() {
@@ -567,11 +581,38 @@ final class FocusRingLayer: CALayer {
 
     override func layoutSublayers() {
         super.layoutSublayers()
-        let path = CGPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), cornerWidth: radius - 1, cornerHeight: radius - 1, transform: nil)
+        let rect = bounds.insetBy(dx: 1, dy: 1)
+        let r = developer ? min(radius, rect.width / 2, rect.height / 2) : radius - 1
+        let path = CGPath(roundedRect: rect, cornerWidth: r, cornerHeight: r, transform: nil)
         for l in [yellow, dashes] {
             l.frame = bounds
             l.path = path
         }
+        if developer, rect.width > 0 {
+            let edge = 2 * rect.width + 2 * rect.height - 8 * r + 2 * .pi * r
+            let d = edge / (rect.width < 210 ? 60 : rect.width < 346 ? 80 : 100)
+            dashes.lineDashPattern = [NSNumber(value: Double(d)), NSNumber(value: Double(d))]
+        }
+    }
+}
+
+/// Arc's SlashView: between a pinned tab's favicon and its name once the tab has left its
+/// pinned page (GitHub #139). A 2 pt round-capped stroke corner to corner of a 4 × 15 pt box,
+/// in TabCellSlash (black or white at 30 %).
+final class SidebarSlashView: NSView {
+    static let size = NSSize(width: 4, height: 15)
+    var color: NSColor = .gray { didSet { if color != oldValue { needsDisplay = true } } }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let p = NSBezierPath()
+        p.move(to: NSPoint(x: 1, y: 1))
+        p.line(to: NSPoint(x: bounds.width - 1, y: bounds.height - 1))
+        p.lineWidth = 2
+        p.lineCapStyle = .round
+        color.setStroke()
+        p.stroke()
     }
 }
 
@@ -607,7 +648,12 @@ class SidebarRowView: NSView {
     /// filled rows keep a 5 pt gap (GitHub #10: Cra filled all 40 pt and rows touched).
     private let fillLayer = CALayer()
     static let fillInset: CGFloat = 2
-    var fillRect: CGRect { bounds.insetBy(dx: 0, dy: Self.fillInset) }
+    /// Arc starts a nested row's fill after its indent, so the gutter by a folder's tabs stays
+    /// empty (GitHub #139). The fill, shadow, drop badge and focus ring all follow it.
+    var fillLeading: CGFloat { 0 }
+    var fillRect: CGRect {
+        CGRect(x: fillLeading, y: Self.fillInset, width: max(0, bounds.width - fillLeading), height: max(0, bounds.height - 2 * Self.fillInset))
+    }
 
     init(key: SpaceListView.RowKey, list: SpaceListView, colors: SidebarColors) {
         self.key = key
@@ -650,6 +696,26 @@ class SidebarRowView: NSView {
         var fill = baseFill()
         if decor.combine != nil { fill = .clear } else if decor.badge != nil, fill == .clear { fill = colors.selectedFill }
         fillLayer.backgroundColor = fill.cgColor
+    }
+
+    /// Arc's bounce when a close button keeps the item (TabCellView, `deselect`): the row jumps to
+    /// 90 % and springs back in ~0.24 s without overshoot (critically damped, recorded at 100 fps).
+    func bounce() {
+        guard let layer else { return }
+        let a = layer.anchorPoint
+        let c = CGPoint(x: bounds.width * (0.5 - a.x), y: bounds.height * (0.5 - a.y))
+        var t = CATransform3DMakeTranslation(c.x, c.y, 0)
+        t = CATransform3DScale(t, 0.9, 0.9, 1)
+        t = CATransform3DTranslate(t, -c.x, -c.y, 0)
+        let spring = CASpringAnimation(keyPath: "sublayerTransform")
+        spring.fromValue = NSValue(caTransform3D: t)
+        spring.toValue = NSValue(caTransform3D: CATransform3DIdentity)
+        // Critically damped; tuned against a Cra recording to Arc's curve (half way at ~0.12 s).
+        spring.mass = 1
+        spring.stiffness = 119
+        spring.damping = 21.8
+        spring.duration = spring.settlingDuration
+        layer.add(spring, forKey: "bounce")
     }
 
     /// The open row's soft shadow under its fill, on light themes only.
@@ -804,8 +870,16 @@ struct TabRowModel: Equatable {
     var muted: Bool
     var unread: Bool
     var navigatedAway: Bool
-    var closeGroup: Int
     var focusRing: Bool
+    /// The page's site is in developer mode: Arc rings the open tab (TabHighlightState.developerTab).
+    var developerMode: Bool
+    /// Shown under a closed folder (FolderPeek): its close button keeps it pinned.
+    var peeked: Bool
+    /// The pinned page's favicon (Arc: resetTabIcon), shown on the icon while it would go back there.
+    var homeIcon: NSImage?
+    var homeFlipIcon: Bool
+    /// The favicon of a Peek opened from this tab (Arc: modalIcon), in the close button's place.
+    var peekIcon: NSImage?
 }
 
 final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
@@ -816,12 +890,26 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
     private var renameField: NSTextField?
     private var accessories: [NSView] = []
     private var focusRing: FocusRingLayer?
+    private let slash = SidebarSlashView(frame: NSRect(origin: .zero, size: SidebarSlashView.size))
+    /// The pointer is on the favicon of a pinned tab away from its page (Arc's icon region):
+    /// a click there goes back, and the line under the name says so.
+    private var overIcon = false
+    /// ⌘ is down while `overIcon`: a click separates the page from the pinned tab instead.
+    private var separating = false
+    private var flagsMonitor: Any?
+    /// Arc's regional hover background for a tab that can go back: the icon's square or the body.
+    private let regionLayer = CALayer()
 
     override init(key: SpaceListView.RowKey, list: SpaceListView, colors: SidebarColors) {
         super.init(key: key, list: list, colors: colors)
         addSubview(favicon)
+        addSubview(slash)
         addSubview(titleLabel)
         addSubview(subtitleLabel)
+        regionLayer.cornerRadius = CraMetrics.rowCorner
+        regionLayer.cornerCurve = .continuous
+        regionLayer.actions = ["backgroundColor": NSNull(), "position": NSNull(), "bounds": NSNull(), "hidden": NSNull()]
+        layer?.insertSublayer(regionLayer, at: 1)
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
     }
@@ -831,26 +919,29 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
     func apply(_ m: TabRowModel) {
         guard m != model else { return }
         // A subtitle coming or going moves the title (developer mode on a live tab, GitHub #88).
-        if (m.subtitle == nil) != (model?.subtitle == nil) { needsLayout = true }
+        if (m.subtitle == nil) != (model?.subtitle == nil) || m.depth != model?.depth || m.navigatedAway != model?.navigatedAway {
+            needsLayout = true
+        }
         model = m
-        if m.githubMark { favicon.showGitHubMark(colors: colors) } else { favicon.show(m.icon, flip: m.flipIcon, colors: colors) }
+        if overIcon, !canReset { overIcon = false; stopWatchingFlags(); needsLayout = true }
+        refreshIcon()
+        slash.color = (colors.isDark ? NSColor.white : .black).withAlphaComponent(0.3)
         titleLabel.stringValue = m.title
         titleLabel.textColor = colors.textPrimary
-        subtitleLabel.stringValue = m.subtitle ?? ""
-        subtitleLabel.textColor = colors.textTertiary
-        subtitleLabel.isHidden = m.subtitle == nil
+        refreshSubtitle()
         setAccessibilityLabel(m.title)
         if m.editing != (renameField != nil) { m.editing ? beginRename(m.renameText) : endRename() }
-        if m.focusRing != (focusRing != nil) {
-            if m.focusRing {
-                let r = FocusRingLayer()
-                r.frame = bounds
+        // The keyboard's ring wins over developer mode's; they differ in tone and dash length.
+        let ring: Bool? = m.focusRing ? false : (m.developerMode && m.selected ? true : nil)
+        if ring != focusRing.map(\.developer) {
+            focusRing?.removeFromSuperlayer()
+            focusRing = nil
+            if let developer = ring {
+                let r = FocusRingLayer(developer: developer)
+                r.frame = fillRect
                 r.zPosition = 10
                 layer?.addSublayer(r)
                 focusRing = r
-            } else {
-                focusRing?.removeFromSuperlayer()
-                focusRing = nil
             }
         }
         rebuildAccessories()
@@ -863,22 +954,124 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         if let m = model { model = nil; apply(m) }
     }
 
+    override var fillLeading: CGFloat { CGFloat(model?.depth ?? 0) * CraMetrics.indent }
+
     override func baseFill() -> NSColor {
         guard let m = model else { return .clear }
-        return m.highlighted ? colors.selectedFill : (isHovered ? colors.hoverFill : .clear)
+        if m.highlighted { return colors.selectedFill }
+        // A tab that can go back fills only the hovered region (regionLayer), as Arc does.
+        return isHovered && !canReset ? colors.hoverFill : .clear
     }
 
     override func refreshBackground() {
         super.refreshBackground()
         setLifted(model?.highlighted == true)
+        refreshRegion()
     }
 
     override func hoverChanged() {
         super.hoverChanged()
+        if !isHovered { setOverIcon(false) }
+        refreshIcon()
         rebuildAccessories()
     }
 
-    /// Recording dot, mute or playing sound, unread dot, and on hover "back to pinned page" and close. Made once
+    override func hoverMoved(to point: NSPoint) { setOverIcon(canReset && iconRegion.contains(point)) }
+
+    private var canReset: Bool { model.map { $0.navigatedAway && !$0.editing } ?? false }
+    /// Arc's icon region (TabCellView.BackgroundRegion.icon): the 36 pt square at the fill's left.
+    private var iconRegion: NSRect {
+        NSRect(x: fillLeading, y: 0, width: Self.iconRegionWidth, height: bounds.height)
+    }
+    private static let iconRegionWidth: CGFloat = 36
+    /// The body region starts this far into the fill (it overlaps the icon's square by 6 pt).
+    private static let bodyRegionInset: CGFloat = 30
+
+    private func setOverIcon(_ on: Bool) {
+        guard on != overIcon else { return }
+        overIcon = on
+        if on { watchFlags() } else { stopWatchingFlags() }
+        refreshIcon()
+        refreshSubtitle()
+        rebuildAccessories()
+        refreshBackground()
+        needsLayout = true
+    }
+
+    private func watchFlags() {
+        separating = NSEvent.modifierFlags.contains(.command)
+        guard flagsMonitor == nil else { return }
+        flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            if let self, self.overIcon {
+                let cmd = event.modifierFlags.contains(.command)
+                if cmd != self.separating {
+                    self.separating = cmd
+                    self.refreshIcon()
+                    self.refreshSubtitle()
+                }
+            }
+            return event
+        }
+    }
+
+    private func stopWatchingFlags() {
+        separating = false
+        if let m = flagsMonitor { NSEvent.removeMonitor(m) }
+        flagsMonitor = nil
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        if newWindow == nil { stopWatchingFlags() }
+    }
+
+    /// On the icon the pinned page's favicon stands in (⌘: the page's own, which separates);
+    /// the slash hides on the icon and, on a background row, on the body too.
+    private func refreshIcon() {
+        guard let m = model else { return }
+        if overIcon && !separating {
+            favicon.show(m.homeIcon, flip: m.homeFlipIcon, colors: colors)
+        } else if m.githubMark {
+            favicon.showGitHubMark(colors: colors)
+        } else {
+            favicon.show(m.icon, flip: m.flipIcon, colors: colors)
+        }
+        slash.isHidden = !m.navigatedAway || overIcon || (isHovered && !m.highlighted)
+    }
+
+    private func refreshRegion() {
+        guard let m = model, canReset, isHovered else { regionLayer.isHidden = true; return }
+        let fill = fillRect
+        if overIcon {
+            // Over the open row's white fill only the icon's left corners round.
+            regionLayer.frame = CGRect(x: fill.minX, y: fill.minY, width: Self.iconRegionWidth, height: fill.height)
+            regionLayer.maskedCorners = m.highlighted ? [.layerMinXMinYCorner, .layerMinXMaxYCorner]
+                : [.layerMinXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMinYCorner, .layerMaxXMaxYCorner]
+        } else if !m.highlighted {
+            regionLayer.frame = CGRect(x: fill.minX + Self.bodyRegionInset, y: fill.minY,
+                                       width: max(0, fill.width - Self.bodyRegionInset), height: fill.height)
+            regionLayer.maskedCorners = [.layerMinXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMinYCorner, .layerMaxXMaxYCorner]
+        } else {
+            regionLayer.isHidden = true
+            return
+        }
+        regionLayer.backgroundColor = colors.hoverFill.cgColor
+        regionLayer.isHidden = false
+    }
+
+    /// Arc's hover subtitle (HoverSubtitleState.reset, ⌘: resetAndSeparate) stands in for the
+    /// line under the title while the pointer is on the icon.
+    private var shownSubtitle: String? {
+        overIcon ? (separating ? "Separate From Pinned Tab" : "Back to Pinned URL") : model?.subtitle
+    }
+
+    private func refreshSubtitle() {
+        subtitleLabel.stringValue = shownSubtitle ?? ""
+        subtitleLabel.textColor = colors.textTertiary
+        subtitleLabel.isHidden = shownSubtitle == nil || renameField != nil
+    }
+
+    /// Recording dot, mute or playing sound, unread dot, and on hover close. Made once
     /// per row and shown or hidden: hover moves from row to row on every frame of a scroll.
     private lazy var captureDot: NSView = {
         let dot = NSView(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
@@ -903,23 +1096,21 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
     private static let soundSymbol = "speaker.wave.3"
     private static let soundGlyphWidth: CGFloat = 17.5
     private var showsSound = false
+    private lazy var peekBadge = SidebarFaviconView()
     private lazy var unreadDot: NSView = {
         let dot = NSView(frame: NSRect(x: 0, y: 0, width: 6, height: 6))
         dot.wantsLayer = true
         dot.layer?.cornerRadius = 3
         return dot
     }()
-    private lazy var resetButton = SidebarGlyphButton(symbol: "arrow.uturn.backward", size: 22, iconSize: 13, help: "Back to pinned page", colors: colors) { [weak self] in
-        guard let self, let id = self.model?.id else { return }
-        self.list?.actions.resetPinnedTab(id)
-    }
     private lazy var closeButton: SidebarGlyphButton = {
         let b = SidebarGlyphButton(symbol: "xmark", size: Self.closeSize, iconSize: 13, help: "", colors: colors) {}
         b.setCloseMark(minus: false, help: "")
         return b
     }()
-    private static let closeSize: CGFloat = 22
-    private var closeKind = ""
+    /// Arc's close button: a 24 pt square (TabCellView, GitHub #139).
+    private static let closeSize: CGFloat = 24
+    private var closeKind: SidebarClose.Button?
 
     private func rebuildAccessories() {
         guard let m = model, list != nil else { return }
@@ -935,30 +1126,31 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         }
         soundButton.isHidden = !sound
         if sound != showsSound { showsSound = sound; needsLayout = true }
+        if let peek = m.peekIcon, !isHovered {
+            peekBadge.show(peek, flip: false, colors: colors)
+            shown.append(peekBadge)
+        }
         if m.unread && !m.selected && !isHovered {
             unreadDot.layer?.backgroundColor = colors.textPrimary.withAlphaComponent(0.55).cgColor
             shown.append(unreadDot)
         }
-        if isHovered && !m.editing {
-            if m.navigatedAway { resetButton.colors = colors; shown.append(resetButton) }
-            // Arc: the open pinned tab shows a minus (it unloads and stays pinned); any other pinned
-            // tab an ✕ that archives it out of the pinned section; Today tabs an ✕ that archives.
-            let kind = m.closeGroup > 1 ? "group\(m.closeGroup)" : (m.pinned && m.selected ? "keep" : (m.pinned ? "archivePinned" : "archive"))
-            if kind != closeKind {
-                closeKind = kind
-                switch kind {
-                case "keep":
-                    closeButton.setCloseMark(minus: true, help: "Close and Keep Pinned (⌘W)")
-                    closeButton.action = { [weak self] in self?.list?.closeTabs([id]) }
-                case "archivePinned":
-                    closeButton.setCloseMark(minus: false, help: "Archive this tab")
-                    closeButton.action = { [weak self] in self?.list?.store.archiveTab(id, reason: .manual) }
-                default:
-                    closeButton.setCloseMark(minus: false, help: m.closeGroup > 1 ? "Close \(m.closeGroup) Tabs (⌘W)" : "Archive (⌘W)")
-                    closeButton.action = { [weak self] in
-                        guard let list = self?.list else { return }
-                        list.closeTabs(list.closeGroup(for: id))
+        // Arc hides the button while the pointer is on the icon of a tab it can take back.
+        if isHovered && !m.editing && !overIcon {
+            // SidebarClose: a minus keeps the tab pinned (it unloads and goes back to its page), an
+            // ✕ archives it. Either acts on this row only, picked tabs or not; ⌘W takes them all.
+            let button = SidebarClose.tab(pinned: m.pinned, current: m.selected, navigatedAway: m.navigatedAway, peeked: m.peeked)
+            if button != closeKind {
+                closeKind = button
+                closeButton.setCloseMark(minus: button.minus, help: button.help)
+                closeButton.action = { [weak self] in
+                    guard let self, let list = self.list else { return }
+                    if button.minus {
+                        self.bounce()
+                        list.actions.closeTab(id)
+                    } else {
+                        list.store.archiveTab(id, reason: .manual)
                     }
+                    list.ui.multiSelection.remove(id)
                 }
             }
             closeButton.colors = colors
@@ -978,9 +1170,17 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         super.layout()
         guard let m = model else { return }
         let h = bounds.height
-        var x = 8 + CGFloat(m.depth) * CraMetrics.indent
+        var x = CraMetrics.rowLeading + CGFloat(m.depth) * CraMetrics.indent
         favicon.frame = NSRect(x: x, y: (h - CraMetrics.favicon) / 2, width: CraMetrics.favicon, height: CraMetrics.favicon)
-        x += CraMetrics.favicon + 11
+        if m.navigatedAway {
+            // Arc: 4 pt, the slash, then the name 5 pt on (2 pt later than without it).
+            x += CraMetrics.favicon + 4
+            let s = SidebarSlashView.size
+            slash.frame = NSRect(x: x, y: ((h - s.height) / 2).rounded(), width: s.width, height: s.height)
+            x += s.width + 5
+        } else {
+            x += CraMetrics.favicon + 11
+        }
         if showsSound {
             let s = soundButton.size
             soundButton.frame = NSRect(x: x - (s.width - Self.soundGlyphWidth) / 2, y: (h - s.height) / 2, width: s.width, height: s.height)
@@ -992,13 +1192,13 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
             // The unread dot is centred where the close button shows on hover, which is also
             // under a live folder's refresh button (FolderRowView, Arc lines them up too).
             let s = v.frame.size
-            let slot = v === unreadDot ? Self.closeSize : s.width
+            let slot = v === unreadDot || v === peekBadge ? Self.closeSize : s.width
             v.frame = NSRect(x: right - slot / 2 - s.width / 2, y: (h - s.height) / 2, width: s.width, height: s.height)
             right = v.frame.minX - 11
         }
         let textWidth = max(0, right - 4 - 11 - x)
         let th = titleLabel.intrinsicContentSize.height
-        if m.subtitle != nil {
+        if shownSubtitle != nil {
             let sh = subtitleLabel.intrinsicContentSize.height
             let top = (h - th - 1 - sh) / 2
             titleLabel.frame = NSRect(x: x - SidebarText.inset, y: top, width: textWidth + 2 * SidebarText.inset, height: th)
@@ -1011,6 +1211,7 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
             f.frame = NSRect(x: x - SidebarText.inset, y: (h - fh) / 2, width: max(0, bounds.width - 6 - x + SidebarText.inset), height: fh)
         }
         focusRing?.frame = fillRect
+        refreshRegion()
     }
 
     // MARK: Rename
@@ -1042,7 +1243,7 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         if let w = window, let editor = f.currentEditor(), w.firstResponder === editor { w.makeFirstResponder(nil) }
         f.removeFromSuperview()
         titleLabel.isHidden = false
-        subtitleLabel.isHidden = model?.subtitle == nil
+        refreshSubtitle()
     }
 
     private func commitRename() {
@@ -1067,6 +1268,19 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         guard let m = model, let list else { return }
         // A click on the row (not the field) ends a rename, so it can never get stuck.
         if m.editing { commitRename() }
+        // Arc: the favicon of a pinned tab away from its page takes it back there and opens it;
+        // with ⌘ the page moves out to a new Today tab first (GitHub #139).
+        if canReset, iconRegion.contains(point) {
+            setOverIcon(false)
+            if event.modifierFlags.contains(.command) {
+                list.actions.separatePinnedTab(m.id)
+            } else {
+                list.actions.resetPinnedTab(m.id)
+                list.ui.clearPicks(anchor: m.id)
+                list.store.selectTab(m.id, window: list.ui.windowID)
+            }
+            return
+        }
         list.clickTab(m.id, event: event)
     }
 
@@ -1155,6 +1369,7 @@ final class FolderRowView: SidebarRowView, NSTextFieldDelegate {
         if let m = model { model = nil; apply(m) }
     }
 
+    override var fillLeading: CGFloat { CGFloat(model?.depth ?? 0) * CraMetrics.indent }
     override func baseFill() -> NSColor { isHovered ? colors.hoverFill : .clear }
 
     override func hoverChanged() {
@@ -1209,7 +1424,7 @@ final class FolderRowView: SidebarRowView, NSTextFieldDelegate {
         super.layout()
         guard let m = model else { return }
         let h = bounds.height
-        var x = 8 + CGFloat(m.depth) * CraMetrics.indent
+        var x = CraMetrics.rowLeading + CGFloat(m.depth) * CraMetrics.indent
         glyph.frame = NSRect(x: x, y: (h - 20) / 2, width: CraMetrics.favicon, height: 20)
         x += CraMetrics.favicon + 11
         var right = bounds.width
@@ -1305,18 +1520,27 @@ struct SplitRowModel: Equatable {
     var cells: [Cell]
 }
 
-/// Arc's split cell (SplitViewCellView): the panes side by side, hairlines between them.
+/// Arc's split cell (SplitViewCellView): the panes side by side, hairlines between them, each
+/// pane a pill while the split is open. Its close buttons follow SidebarClose.split: one at the
+/// row's end for a pinned split or a Today split in the background, one in every pane of an
+/// open Today split (GitHub #139).
 final class SplitRowView: SidebarRowView {
     private(set) var model: SplitRowModel?
     private var cells: [SplitCellView] = []
     private var separators: [NSView] = []
     private var focusRing: FocusRingLayer?
+    private lazy var closeButton: SidebarGlyphButton = {
+        let b = SidebarGlyphButton(symbol: "xmark", size: SplitRowMetrics.button, iconSize: 13, help: "", colors: colors) {}
+        b.setCloseMark(minus: false, help: "")
+        b.isHidden = true
+        addSubview(b)
+        return b
+    }()
+    private var shownButtons: SidebarClose.SplitButtons?
 
     func apply(_ m: SplitRowModel) {
         guard m != model else { return }
-        let closeChanged = m.selected != model?.selected || m.today != model?.today
         model = m
-        defer { if closeChanged { for c in cells where c.hovering { c.refreshClose() } } }
         if cells.map(\.cellID) != m.cells.map(\.id) {
             cells.forEach { $0.removeFromSuperview() }
             separators.forEach { $0.removeFromSuperview() }
@@ -1329,8 +1553,11 @@ final class SplitRowView: SidebarRowView {
             cells.forEach { addSubview($0) }
             separators.forEach { addSubview($0) }
         }
-        for (c, cm) in zip(cells, m.cells) { c.apply(cm, colors: colors) }
-        for s in separators { s.layer?.backgroundColor = colors.separator.cgColor }
+        for (c, cm) in zip(cells, m.cells) { c.apply(cm, colors: colors, pill: m.highlighted) }
+        for s in separators {
+            s.layer?.backgroundColor = colors.separator.cgColor
+            s.isHidden = m.highlighted
+        }
         if m.focusRing != (focusRing != nil) {
             if m.focusRing {
                 let r = FocusRingLayer()
@@ -1342,6 +1569,7 @@ final class SplitRowView: SidebarRowView {
                 focusRing = nil
             }
         }
+        refreshButtons()
         refreshBackground()
         needsLayout = true
     }
@@ -1351,6 +1579,8 @@ final class SplitRowView: SidebarRowView {
         super.setColors(c)
         if let m = model { model = nil; apply(m) }
     }
+
+    override var fillLeading: CGFloat { CGFloat(model?.depth ?? 0) * CraMetrics.indent }
 
     override func baseFill() -> NSColor {
         guard let m = model else { return .clear }
@@ -1365,26 +1595,65 @@ final class SplitRowView: SidebarRowView {
     override func hoverChanged() {
         super.hoverChanged()
         if !isHovered { cells.forEach { $0.hovering = false } }
+        refreshButtons()
     }
 
     override func hoverMoved(to point: NSPoint) {
         for c in cells { c.hovering = c.frame.contains(point) }
     }
 
+    /// The buttons show while the row is hovered, as on a tab's row.
+    private func refreshButtons() {
+        guard let m = model, let list else { return }
+        let buttons: SidebarClose.SplitButtons? = isHovered ? SidebarClose.split(pinned: !m.today, current: m.selected) : nil
+        guard buttons != shownButtons else { return }
+        shownButtons = buttons
+        let panes = m.cells.map(\.id)
+        if case .row(let b)? = buttons {
+            closeButton.setCloseMark(minus: b.minus, help: b.help)
+            closeButton.colors = colors
+            closeButton.action = { [weak self, weak list] in
+                guard let self, let list else { return }
+                // Keep: the whole split unloads and stays pinned; archive: the whole split goes.
+                if b.minus {
+                    self.bounce()
+                    if let first = panes.first { list.actions.closeTab(first) }
+                } else {
+                    for p in panes { list.store.archiveTab(p, reason: .manual) }
+                }
+            }
+            closeButton.isHidden = false
+        } else {
+            closeButton.isHidden = true
+        }
+        let perPane: SidebarClose.Button?
+        if case .perPane(let b)? = buttons { perPane = b } else { perPane = nil }
+        for c in cells { c.setClose(perPane) }
+        needsLayout = true
+    }
+
     override func layout() {
         super.layout()
-        guard let m = model, !cells.isEmpty else { return }
-        let x0 = CGFloat(m.depth) * CraMetrics.indent
+        guard model != nil, !cells.isEmpty else { return }
+        let fill = fillRect
+        let gap = SplitRowMetrics.cellGap
         let n = CGFloat(cells.count)
-        let w = (bounds.width - x0 - (n - 1)) / n
-        var x = x0
+        let w = (fill.width - 2 * SplitRowMetrics.cellInset - (n - 1) * gap) / n
+        let button = closeButton.isHidden ? nil
+            : NSRect(x: fill.maxX - SplitRowMetrics.buttonInset - SplitRowMetrics.button, y: (bounds.height - SplitRowMetrics.button) / 2,
+                     width: SplitRowMetrics.button, height: SplitRowMetrics.button)
+        if let button { closeButton.frame = button }
+        var x = fill.minX + SplitRowMetrics.cellInset
         for (i, c) in cells.enumerated() {
             if i > 0 {
-                separators[i - 1].frame = NSRect(x: x, y: SplitRowMetrics.separatorInset, width: 1, height: bounds.height - 2 * SplitRowMetrics.separatorInset)
-                x += 1
+                separators[i - 1].frame = NSRect(x: x - gap / 2 - 0.5, y: SplitRowMetrics.separatorInset, width: 1,
+                                                 height: bounds.height - 2 * SplitRowMetrics.separatorInset)
             }
-            c.frame = NSRect(x: x, y: 0, width: w, height: bounds.height)
-            x += w
+            var cw = w
+            // The row's button takes the end of the last pane (Arc shortens its pill to 5 pt before it).
+            if let button, i == cells.count - 1 { cw = max(0, button.minX - SplitRowMetrics.cellToButton - x) }
+            c.frame = NSRect(x: x, y: fill.minY, width: cw, height: fill.height)
+            x += w + gap
         }
         focusRing?.frame = fillRect
     }
@@ -1409,8 +1678,21 @@ final class SplitRowView: SidebarRowView {
     override func tooltipTarget(at point: NSPoint) -> (any ArcTooltipTarget)? { cell(at: point) }
 }
 
+/// Arc 1.171, measured at 1x (GitHub #139): panes 4 pt inside the fill and 4 pt apart, buttons 24 pt.
 enum SplitRowMetrics {
     static let separatorInset: CGFloat = 9
+    static let cellInset: CGFloat = 4
+    static let cellGap: CGFloat = 4
+    static let button: CGFloat = 24
+    /// The row's button ends this far before the fill's end; a pane's 2 pt before the pane's.
+    static let buttonInset: CGFloat = 6
+    static let paneButtonInset: CGFloat = 2
+    static let cellToButton: CGFloat = 5
+    /// An open split's pane pill: 4 pt inside the fill top and bottom.
+    static let pillInset: CGFloat = 4
+    static let pillRadius: CGFloat = 7
+    /// The favicon sits this far into its pane.
+    static let favicon: CGFloat = 6
 }
 
 /// One pane inside the split row (Arc: SplitViewCellChildItemView).
@@ -1419,14 +1701,20 @@ final class SplitCellView: NSView, ArcTooltipTarget {
     private weak var row: SplitRowView?
     private let favicon = SidebarFaviconView()
     private let titleLabel = NSTextField.sidebarLabel(size: 14)
+    private let pill = CALayer()
     private var close: SidebarGlyphButton?
     private var title = ""
-    var hovering = false { didSet { if hovering != oldValue { refreshClose() } } }
+    var hovering = false
 
     init(cellID: UUID, row: SplitRowView) {
         self.cellID = cellID
         self.row = row
         super.init(frame: .zero)
+        wantsLayer = true
+        pill.cornerRadius = SplitRowMetrics.pillRadius
+        pill.cornerCurve = .continuous
+        pill.actions = ["backgroundColor": NSNull(), "position": NSNull(), "bounds": NSNull(), "hidden": NSNull()]
+        layer?.addSublayer(pill)
         addSubview(favicon)
         addSubview(titleLabel)
     }
@@ -1441,29 +1729,30 @@ final class SplitCellView: NSView, ArcTooltipTarget {
         return nil
     }
 
-    func apply(_ m: SplitRowModel.Cell, colors: SidebarColors) {
+    func apply(_ m: SplitRowModel.Cell, colors: SidebarColors, pill shown: Bool) {
         title = m.title
         favicon.show(m.icon, flip: m.flipIcon, colors: colors)
         titleLabel.stringValue = m.title
         titleLabel.textColor = colors.textPrimary
         close?.colors = colors
+        // Arc's open split: each pane a pill a shade darker than the white fill (224 on 241).
+        pill.backgroundColor = (colors.isDark ? NSColor.white : .black).withAlphaComponent(0.07).cgColor
+        pill.isHidden = !shown
         needsLayout = true
     }
 
-    func refreshClose() {
+    /// An open Today split's ✕ in this pane, or none.
+    func setClose(_ button: SidebarClose.Button?) {
         close?.removeFromSuperview()
         close = nil
-        guard hovering, let row, let list = row.list else { needsLayout = true; return }
+        guard let button, let row, let list = row.list else { needsLayout = true; return }
         let id = cellID
-        // Arc 1.171: an open pinned split shows a minus (the whole split closes and stays pinned),
-        // like an open pinned tab; otherwise the ✕ takes this pane out.
-        let keep = row.model.map { !$0.today && $0.selected } ?? false
-        let b = SidebarGlyphButton(symbol: "xmark", size: 20, iconSize: 11, help: keep ? "Close and Keep Pinned (⌘W)" : "Close pane",
+        let b = SidebarGlyphButton(symbol: "xmark", size: SplitRowMetrics.button, iconSize: 13, help: button.help,
                                    optionHelp: "Separate from Split View", colors: row.colors) { [weak list] in
             // Option-click un-splits instead of closing (Arc flag option-click-split-tab-close-button-to-unsplit).
-            if NSEvent.modifierFlags.contains(.option) { list?.store.separateFromSplit(id) } else if keep { list?.actions.closeTab(id) } else { list?.actions.closePane(id) }
+            if NSEvent.modifierFlags.contains(.option) { list?.store.separateFromSplit(id) } else { list?.actions.closePane(id) }
         }
-        if keep { b.setCloseMark(minus: true, help: "Close and Keep Pinned (⌘W)") }
+        b.setCloseMark(minus: false, help: button.help)
         addSubview(b)
         close = b
         needsLayout = true
@@ -1472,16 +1761,21 @@ final class SplitCellView: NSView, ArcTooltipTarget {
     override func layout() {
         super.layout()
         let h = bounds.height
-        favicon.frame = NSRect(x: 8, y: (h - CraMetrics.favicon) / 2, width: CraMetrics.favicon, height: CraMetrics.favicon)
-        var right = bounds.width - 4
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        pill.frame = bounds.insetBy(dx: 0, dy: SplitRowMetrics.pillInset)
+        CATransaction.commit()
+        let fx = SplitRowMetrics.favicon
+        favicon.frame = NSRect(x: fx, y: (h - CraMetrics.favicon) / 2, width: CraMetrics.favicon, height: CraMetrics.favicon)
+        var right = bounds.width
         if let close {
-            right -= 20
-            close.frame = NSRect(x: right, y: (h - 20) / 2, width: 20, height: 20)
-            right -= 8
+            let s = SplitRowMetrics.button
+            close.frame = NSRect(x: right - SplitRowMetrics.paneButtonInset - s, y: (h - s) / 2, width: s, height: s)
+            right = close.frame.minX
         }
         let th = titleLabel.intrinsicContentSize.height
-        let x = 8 + CraMetrics.favicon + 8
-        titleLabel.frame = NSRect(x: x - SidebarText.inset, y: (h - th) / 2, width: max(0, right - 2 - 8 - x) + 2 * SidebarText.inset, height: th)
+        let x = fx + CraMetrics.favicon + 11
+        titleLabel.frame = NSRect(x: x - SidebarText.inset, y: (h - th) / 2, width: max(0, right - 4 - x) + 2 * SidebarText.inset, height: th)
     }
 
     var text: String { title }
@@ -1520,7 +1814,7 @@ final class LiveStatusRowView: SidebarRowView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    static func leading(depth: Int) -> CGFloat { 8 + CGFloat(depth) * CraMetrics.indent + CraMetrics.favicon + 11 }
+    static func leading(depth: Int) -> CGFloat { CraMetrics.rowLeading + CGFloat(depth) * CraMetrics.indent + CraMetrics.favicon + 11 }
 
     static func height(_ m: LiveStatusModel, width: CGFloat) -> CGFloat {
         let w = max(1, width - leading(depth: m.depth) - 10)
@@ -1549,6 +1843,7 @@ final class LiveStatusRowView: SidebarRowView {
     }
 
     override func baseFill() -> NSColor { model?.url != nil && isHovered ? colors.hoverFill : .clear }
+    override var fillLeading: CGFloat { CGFloat(model?.depth ?? 0) * CraMetrics.indent }
 
     override func hoverChanged() {
         super.hoverChanged()
@@ -1679,9 +1974,9 @@ final class NewTabRowView: SidebarRowView {
     override func layout() {
         super.layout()
         let h = bounds.height
-        plus.frame = NSRect(x: 8, y: 0, width: CraMetrics.favicon, height: h)
+        plus.frame = NSRect(x: CraMetrics.rowLeading, y: 0, width: CraMetrics.favicon, height: h)
         let th = label.intrinsicContentSize.height
-        let x = 8 + CraMetrics.favicon + 9
+        let x = CraMetrics.rowLeading + CraMetrics.favicon + 9
         let w = max(0, bounds.width - 10 - x) + 2 * SidebarText.inset
         guard !preview.isHidden else {
             label.frame = NSRect(x: x - SidebarText.inset, y: (h - th) / 2, width: w, height: th)
@@ -1786,13 +2081,14 @@ final class DividerRowView: SidebarRowView {
 
     override func layout() {
         super.layout()
-        var right = bounds.width - 20
+        // Arc 1.171 at 1x (GitHub #139): the line runs 18 pt in from both edges; "Clear" ends 20 pt in.
+        var right = bounds.width - 18
         if let clear {
             let s = clear.fittingSize
-            clear.frame = NSRect(x: right - s.width, y: (bounds.height - s.height) / 2, width: s.width, height: s.height)
-            right -= s.width + 8
+            clear.frame = NSRect(x: bounds.width - 20 - s.width, y: (bounds.height - s.height) / 2, width: s.width, height: s.height)
+            right = clear.frame.minX - 8
         }
-        line.frame = NSRect(x: 20, y: (bounds.height - 1) / 2, width: max(0, right - 20), height: 1)
+        line.frame = NSRect(x: 18, y: (bounds.height - 1) / 2, width: max(0, right - 18), height: 1)
     }
 
     private final class ClearButton: NSView {
