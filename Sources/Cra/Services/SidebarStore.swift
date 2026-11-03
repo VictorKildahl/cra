@@ -1145,6 +1145,7 @@ final class SidebarStore {
     private func notifyItemReaders(of old: WindowPrefs) {
         for id in old.expandedFolders.symmetricDifference(prefs.expandedFolders) { items.notify(id) }
         for id in old.collapsedPinnedSpaces.symmetricDifference(prefs.collapsedPinnedSpaces) { items.notify(id) }
+        for id in old.favoritesEmptyStateDismissed.symmetricDifference(prefs.favoritesEmptyStateDismissed) { items.notify(id) }
         for id in Set(old.peekedFolders.keys).union(prefs.peekedFolders.keys) where old.peekedFolders[id] != prefs.peekedFolders[id] {
             items.notify(id)
         }
@@ -1177,6 +1178,16 @@ final class SidebarStore {
     }
     func togglePinnedCollapsed(_ spaceID: UUID) {
         if prefs.collapsedPinnedSpaces.remove(spaceID) == nil { prefs.collapsedPinnedSpaces.insert(spaceID) }
+    }
+
+    /// Arc's topAppsEmptyStateDismissedForProfiles: the × on the empty Favorites card closes it
+    /// for that set of favorites, for good.
+    func isFavoritesEmptyStateDismissed(_ favoritesID: UUID) -> Bool {
+        items.observe(favoritesID)
+        return _prefs.favoritesEmptyStateDismissed.contains(favoritesID)
+    }
+    func dismissFavoritesEmptyState(_ favoritesID: UUID) {
+        prefs.favoritesEmptyStateDismissed.insert(favoritesID)
     }
 
     // MARK: Live folders

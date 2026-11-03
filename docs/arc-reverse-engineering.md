@@ -804,6 +804,27 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
   combinations of header × pinned × favorites to the pixel (SpaceColumnView.place, SpaceListView.layoutRows).
   Left: Arc's header title sits ~1 pt lower and reads slightly larger than Cra's (fixed 1 Nov: 13 pt semibold, header fill 36 pt).
 
+### Favorites empty state (Arc 1.171, live, 3 Nov, issue #157)
+- [O] Offline two-space Arc (fake home, no favorites), sidebar 228 and 300 pt, 2x window captures. A profile with
+  no favorites shows a card where the tiles go (AX: `sidebarFavoritesCollectionView` holds it, ×
+  `sidebarFavoritesEmptyStateDismissButton` "Dismiss"; closing writes `topAppsEmptyStateDismissedForProfiles`).
+- [O] Geometry, from the first tile's top-left (8 pt in): fill 93.5 pt tall, the column's width, circular 12 pt
+  corners; a 1 pt dashed line just outside it (5.5 on, 4.5 off). The space header sits 4 pt lower than under a
+  row of tiles. Badge: a 16.2 pt circle (`star.circle.fill` 16 pt) centred 19.75 pt down; title 13 pt semibold,
+  frame 33.5–49.5, 10 pt in from both sides; subtitle 11 pt, two 15 pt lines in a frame 150 pt wide at both sidebar
+  widths, from 53 pt; × (`xmark` 10 pt semibold) centred 15 pt in from the top-right corner.
+- [O] Tones: the subtitle and × are the title colour at 70%; the line is the badge colour at 30%. Light theme:
+  badge = the toolbar's dark theme shade, star = a cream, fill = white ~0.14 over the sidebar. Dark: badge ≈
+  white 0.92, star = a dark theme blue with a soft glow of its colour around the badge, fill = black ~0.135.
+- [O] No hover state on the card or the ×. A tab dragged over it: the line turns solid, the fill lightens
+  (white ~0.32 on the light theme), everything inside drops to 50%. A drop puts the tab in as the first tile; the
+  × hides the card. Both change the layout in one frame (60 fps recording), no slide.
+- [O] A multi-tab selection's menu has no Add to Favorites (Copy Links, Share 2 Items…, Change Icon…, Mute, Open
+  in Split View, Duplicate, Move to, New Folder with 2 Items, Archive Tabs…).
+- [?] Not measured: the drag-over fill on a dark theme, coloured dark themes (the star's colour there), 1x.
+- Cra: FavoritesEmptyCard, dismissed per favorites container (WindowPrefs.favoritesEmptyStateDismissed, since
+  Cra's favorites are per space). Badge, title, subtitle and × land within 1 px of Arc's at 2x.
+
 ### Space header row (Arc 1.171, live, 1 Nov, issue #39)
 - [O] At rest: the space icon, then the title; nothing else. A space with an emoji shows it (the issue's
   Arc screenshot had none, most likely a space without an icon). Hovered: the row fills (white 0.10 on
