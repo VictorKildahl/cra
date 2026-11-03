@@ -260,13 +260,16 @@ enum PerfTests {
 
     /// GitHub #135: a timer and a queued block that run in one turn of the loop, with no sleep
     /// or commit between them, are one 300 ms pass. Split at before-timers they were two 150 ms
-    /// halves and no stall at all.
+    /// halves and no stall at all. The timer queues the block: queued side by side, the block could
+    /// run first and the loop sleep before a late timer (a slow CI runner), two passes after all.
     @MainActor static func workAcrossATimerBoundaryIsOnePass() {
         start(config("one-pass"))
         spin(0.5)
         let before = report()?.mainThread.passes.count ?? 0
-        Timer.scheduledTimer(withTimeInterval: 0, repeats: false) { _ in usleep(150_000) }
-        DispatchQueue.main.async { usleep(150_000) }
+        Timer.scheduledTimer(withTimeInterval: 0, repeats: false) { _ in
+            usleep(150_000)
+            DispatchQueue.main.async { usleep(150_000) }
+        }
         spin(0.6)
         let r = report()
         let stalls = r?.mainThread.recent ?? []
