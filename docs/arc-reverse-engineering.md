@@ -2028,6 +2028,22 @@ Theme palettes in a hand-built space can be borrowed; only the `background` styl
   CloudDev (#F25E6B, 0.8) fullscreen, stills: 214/116/119 before, 217/114/117 after (Arc on #132's Mac 210/110/117).
   A Space swipe reads the inactive value until the app is active again, then steps in one frame, as AppKit's
   material does (`followsWindowActiveState`).
+- [O] Reduce Transparency (3 Nov 2026, issue #156, the reporter's 0.1.28 recordings next to Arc's, 60 fps). On the
+  reporter's Mac Arc's sidebar never passes the backdrop: flat in every frame, windowed or fullscreen, active or not,
+  over a wallpaper Cra's blur shows plainly (white 0.8 space 218–222 grey; CloudDev #F25E6B 0.8 210/110/117 windowed
+  and fullscreen alike; hidden-sidebar panel 156/64/72). Cra in the same captures: blur active, 231/127/135 flat
+  inactive, 169/74/82 over the desktop tint in fullscreen, so every activation and every Space swipe stepped and Arc's
+  never did. That is Accessibility ▸ Display ▸ Reduce transparency (or Increase contrast, which turns it on):
+  NSVisualEffectView, dumped from a probe with `NSWorkspace.accessibilityDisplayShouldReduceTransparency` swapped to
+  true and `_accessibilityRTChanged:` sent, drops the CABackdropLayer and the CAChameleonLayer and keeps one opaque
+  fill (hudWindow aqua 228 active / 240 inactive, dark 38 / 40; sidebar and underWindowBackground aqua 246 / 236, dark
+  56 / 20). ArcCore also reads the setting itself (one ObjC helper at 0x457c2d4 in 1.171's arm64 slice). Solving
+  α·colour + (1 − α)·F, α = solidAlpha(0.8) = 0.63, gives F ≈ 160 for Arc's pinned sidebar in both spaces (against
+  212 inactive), and ≈ 40 for its floating panel (the dark material's fill). Cra's own CABackdropLayer ignored the
+  setting. Cra now resolves the layer through `SidebarBackdrop` (CraCore): with Reduce transparency there is no
+  capture at all, solid themes rest at dim 1, lift 0.63 active or inactive (Arc's value doesn't move when its
+  fullscreen swipe lands, Cra's stepped from the inactive 212), light vibrant themes at their inactive look, and the floating sidebar drops its white lift so the
+  dark material's fill shows under the colour like Arc's panel (Cra pinned − floating 45/46/45, Arc 54/46/45); cra.log adds ", reduce transparency" and the diagnostics export names the setting.
 - [O] Tab list scroller: AppKit overlay scroller (AXScrollBar, 17 pt track) shown while scrolling, then faded;
   the knob is 4 pt wide, 3 pt in from the sidebar edge, white 49 % on a dark theme, no track. Cra:
   `SidebarScroller`, 10 pt wide so it stays in the gutter right of the rows (knob on Arc's exact columns).

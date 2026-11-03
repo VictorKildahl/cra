@@ -23,10 +23,13 @@ final class ShellView: NSView {
     private var loggedBackdrop: String?
     private let dimLayer = CALayer()
     private let liftLayer = CAGradientLayer()
-    /// Set by the window controller: light theme that wants the blur path.
-    var vibrantLight = false { didSet { refreshLift() } }
+    /// Light theme that wants the blur path (setTheme).
+    private(set) var vibrantLight = false
     /// Arc's one-colour themes, light or dark: the blur under SpacePalette.solidAlpha's material.
-    var solidBackdrop = false { didSet { refreshLift() } }
+    private(set) var solidBackdrop = false
+    /// System Settings ▸ Accessibility ▸ Display ▸ Reduce transparency (or Increase contrast):
+    /// AppKit's materials, and Arc's sidebar, go opaque. The backdrop layer path follows (GitHub #156).
+    private var reduceTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
     var usesBackdropLayer: Bool { (solidBackdrop || vibrantLight && !vibrantDark) && backdropLayer != nil }
     /// Lifts the dark blur toward Arc's mid-grey base before the gradient goes on.
     let vibrancyLift = NSView()
@@ -118,7 +121,16 @@ final class ShellView: NSView {
     }
 
     /// Dark vibrant themes keep the earlier calibration (underWindowBackground + 15% lift).
-    var vibrantDark = false { didSet { refreshLift() } }
+    private(set) var vibrantDark = false
+
+    /// A space's theme in one refresh: set one flag at a time, a switch from a vibrant to a solid
+    /// space drew a frame with the vibrant calibration (two cra.log lines, dim 0.36 then 0.30).
+    func setTheme(vibrantDark: Bool, vibrantLight: Bool, solid: Bool) {
+        self.vibrantDark = vibrantDark
+        self.vibrantLight = vibrantLight
+        solidBackdrop = solid
+        refreshLift()
+    }
 
     /// Core Animation's gaussian blur (the filter NSVisualEffectView uses), built
     /// through its private class; nil when the runtime does not provide it.
@@ -161,25 +173,25 @@ final class ShellView: NSView {
             vibrancyLift.isHidden = true
             backdropHost.isHidden = false
             CATransaction.begin(); CATransaction.setDisableActions(true)
-            let tint = windowFullscreen && desktopTintLayer != nil
-            // Solid: Arc's material is grey 66 passing 52 % of the backdrop, flat 212 while inactive.
-            let dim = solidBackdrop ? (windowActive ? 0.30 : 1) : windowActive ? t.blurDim : t.blurDimInactive
-            dimLayer.opacity = Float(dim)
-            // NSVisualEffectView keeps only the layer it draws from in the tree: no capture under an
-            // opaque fill, the desktop tint instead of the blur in fullscreen. A capture added back
-            // on activation draws the substitute colour until it is live, where one kept under the
-            // fill showed the window behind sharp for a frame (GitHub #132).
-            let source = dim >= 1 ? nil : tint ? desktopTintLayer : backdropLayer
+            let backdrop = SidebarBackdrop.resolve(
+                solid: solidBackdrop, active: windowActive, fullscreen: windowFullscreen,
+                reduceTransparency: reduceTransparency, tintAvailable: desktopTintLayer != nil,
+                vibrant: .init(dim: t.blurDim, liftTop: t.liftActive, liftBottom: t.liftActiveBottom,
+                               dimInactive: t.blurDimInactive, liftInactive: t.liftInactive))
+            dimLayer.opacity = Float(backdrop.dim)
+            // A capture added back on activation draws the substitute colour until it is live, where
+            // one kept under the fill showed the window behind sharp for a frame (GitHub #132).
+            let source: CALayer? = switch backdrop.source {
+            case .none: nil
+            case .blur: backdropLayer
+            case .desktopTint: desktopTintLayer
+            }
             for l in [backdropLayer, desktopTintLayer].compactMap({ $0 }) where (l === source) != (l.superlayer != nil) {
                 if l === source { backdropHost.layer?.insertSublayer(l, at: 0) } else { l.removeFromSuperlayer() }
             }
-            let top = solidBackdrop ? (windowActive ? 0.26 : 0.83) : windowActive ? t.liftActive : t.liftInactive
-            let bottom = solidBackdrop ? top : windowActive ? t.liftActiveBottom : t.liftInactive
-            liftLayer.colors = [NSColor(white: 1, alpha: top).cgColor, NSColor(white: 1, alpha: bottom).cgColor]
+            liftLayer.colors = [NSColor(white: 1, alpha: backdrop.liftTop).cgColor, NSColor(white: 1, alpha: backdrop.liftBottom).cgColor]
             CATransaction.commit()
-            // One line per change, so a report of a sharp or off-colour sidebar can be matched
-            // to the window's state in cra.log.
-            let state = "\(source == nil ? "flat" : tint ? "desktop tint" : "blur"), \(windowActive ? "active" : "inactive"), dim \(String(format: "%.2f", dim))"
+            let state = backdrop.logLine(active: windowActive, reduceTransparency: reduceTransparency)
             if state != loggedBackdrop {
                 loggedBackdrop = state
                 CraLog.note("sidebar backdrop: " + state)
@@ -249,6 +261,9 @@ final class ShellView: NSView {
         backdropHost.isHidden = true
         addSubview(backdropHost)
         Self.logBackdropPath(layer: backdropLayer != nil)
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(accessibilityDisplayOptionsChanged),
+            name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
         vibrancyLift.wantsLayer = true
         vibrancyLift.layer?.backgroundColor = NSColor(white: 1, alpha: 0.15).cgColor
         vibrancyLift.isHidden = true
@@ -292,6 +307,13 @@ final class ShellView: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    @objc private func accessibilityDisplayOptionsChanged() {
+        let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        guard reduce != reduceTransparency else { return }
+        reduceTransparency = reduce
+        refreshLift()
+    }
 
     override var isFlipped: Bool { false }
 
