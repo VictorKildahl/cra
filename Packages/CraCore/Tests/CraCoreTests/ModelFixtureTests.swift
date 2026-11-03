@@ -128,7 +128,7 @@ struct ModelFixtureTests {
                 "Links from other apps → Little Window off becomes the most recent space")
         #expect(legacy.linkRoutes.map(\.text) == ["meet.google.com"], "settings from before Air Traffic Control get Arc's Meet route")
         #expect(legacy.newTabButtonAtTop, "the New Tab row goes back above Today once")
-        #expect(legacy.tabSleep == .oneHour, "a sleep threshold this version doesn't know falls back")
+        #expect(legacy.tabSleep == .fourHours, "a sleep threshold this version doesn't know falls back to Arc's 4 hours")
         #expect(legacy.showToolbar, "Arc's toolbar preference wins over the 0.1.0 value")
 
         let bad = try Self.loadSettings("settings-bad-routes.json").loaded

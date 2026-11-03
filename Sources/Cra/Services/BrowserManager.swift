@@ -392,7 +392,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     func sleepIdleTabs(hiddenLongerThan seconds: TimeInterval) {
         let now = clock.now
         let cutoff = now.addingTimeInterval(-seconds)
-        for (id, rt) in runtimes {
+        let recent = recentlyShown
+        for (id, rt) in runtimes where !recent.contains(id) {
             let b = rt.browser
             guard canSleep(rt, before: cutoff), rt.sleepProbeAfter.map({ $0 <= now }) ?? true else { continue }
             let url = b.currentURL
@@ -435,6 +436,16 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     }
 
     static let refusalBackoff: TimeInterval = 10 * 60
+
+    /// Arc never discards the pages of the 10 tabs used last, however long ago that was
+    /// (WebContentLifecycleOptimization's protectedLRUTabCount, GitHub #136).
+    var protectedRecentTabs = 10
+
+    /// The tabs on screen now, then the ones hidden most recently, up to `protectedRecentTabs`.
+    private var recentlyShown: Set<UUID> {
+        let hidden = runtimes.values.compactMap { rt in rt.hiddenAt.map { (rt.tabID, $0) } }.sorted { $0.1 > $1.1 }.map(\.0)
+        return Set((visibleTabIDs + hidden).prefix(protectedRecentTabs))
+    }
 
     private func canSleep(_ rt: TabRuntime, before cutoff: Date) -> Bool {
         let b = rt.browser

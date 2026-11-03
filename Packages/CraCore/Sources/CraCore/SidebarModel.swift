@@ -461,9 +461,11 @@ public struct AppSettings: Codable, Equatable {
     /// threshold while this is off.
     public var autoArchiveEnabled: Bool = true
     /// Tabs ▸ "Sleep tabs I haven't looked at in:": a page hidden that long closes and
-    /// loads again when shown (BrowserManager.sleepIdleTabs). Off by default.
-    public var tabSleepEnabled: Bool = false
-    public var tabSleep: TabSleepThreshold = .oneHour
+    /// loads again when shown (BrowserManager.sleepIdleTabs). On at 4 hours, like Arc, which
+    /// discards a page after 4 hours and has no switch (WebContentLifecycleOptimization's
+    /// timeToDiscardTab, GitHub #136); a file that says off stays off.
+    public var tabSleepEnabled: Bool = true
+    public var tabSleep: TabSleepThreshold = .fourHours
     /// Privacy ▸ "Always use secure connections": Chrome's HTTPS-Only Mode.
     public var httpsOnly: Bool = false
     /// Arc's searchSuggestEnabled: the command bar asks the search engine for suggestions
@@ -629,8 +631,8 @@ extension AppSettings {
         hapticFeedbackOnReorder = try c.decodeIfPresent(Bool.self, forKey: .hapticFeedbackOnReorder) ?? true
         warnBeforeQuitting = try c.decodeIfPresent(Bool.self, forKey: .warnBeforeQuitting) ?? false
         autoArchiveEnabled = try c.decodeIfPresent(Bool.self, forKey: .autoArchiveEnabled) ?? true
-        tabSleepEnabled = try c.decodeIfPresent(Bool.self, forKey: .tabSleepEnabled) ?? false
-        tabSleep = (try? c.decodeIfPresent(TabSleepThreshold.self, forKey: .tabSleep)) ?? .oneHour
+        tabSleepEnabled = try c.decodeIfPresent(Bool.self, forKey: .tabSleepEnabled) ?? true
+        tabSleep = (try? c.decodeIfPresent(TabSleepThreshold.self, forKey: .tabSleep)) ?? .fourHours
         httpsOnly = try c.decodeIfPresent(Bool.self, forKey: .httpsOnly) ?? false
         searchSuggestions = try c.decodeIfPresent(Bool.self, forKey: .searchSuggestions) ?? true
         showSpaceHeaderOnSingleSpace = try c.decodeIfPresent(Bool.self, forKey: .showSpaceHeaderOnSingleSpace) ?? true

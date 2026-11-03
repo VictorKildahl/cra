@@ -84,6 +84,7 @@ enum BrowserManagerLifecycleTests {
         await sleepCase("an exception reply cannot authorize sleeping", reply: #"{"exceptionDetails":{},"result":{"value":""}}"#) { _, _ in }
         await sleepCase("a page holding typed text stays awake", reply: #"{"result":{"type":"string","value":"typed"}}"#) { _, _ in }
         await refusalBackoffCase()
+        recentTabsCase()
         await sleepClockCase()
         devToolsCase()
         await beforeUnloadCase()
@@ -218,6 +219,7 @@ enum BrowserManagerLifecycleTests {
                                   mutate: (BrowserManager, TabRuntime) -> Void) async {
         let store = SidebarStore()
         let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.protectedRecentTabs = 0  // one page alone; the 10 most recent are kept (recentTabsCase)
         let id = store.createTab(url: "https://example.test/sleep").id
         let runtime = manager.ensureRuntime(for: id)!
         runtime.hiddenAt = Date.distantPast
@@ -235,11 +237,28 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    /// Like Arc, the 10 tabs used last keep their pages however long they have been hidden (#136).
+    @MainActor
+    private static func recentTabsCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let ids = (0..<13).map { store.createTab(url: "https://example.test/recent\($0)").id }
+        let runtimes = ids.map { manager.ensureRuntime(for: $0)! }
+        manager.show(ids[12], focus: false)
+        for (n, rt) in runtimes.dropLast().enumerated() { rt.hiddenAt = Date(timeIntervalSince1970: Double(n)) }
+        manager.sleepIdleTabs(hiddenLongerThan: 60)
+        let probed = runtimes.map { $0.browser.replies.contains { $0.method == isolatedProbe } }
+        expect(probed == [true, true, true] + Array(repeating: false, count: 10),
+               "the visible tab and the 9 hidden most recently stay awake; only older pages are asked")
+        manager.closeAll()
+    }
+
     /// A page that refused isn't probed again every minute, only after the back-off or once shown again.
     @MainActor
     private static func refusalBackoffCase() async {
         let store = SidebarStore()
         let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.protectedRecentTabs = 0  // one page alone; the 10 most recent are kept (recentTabsCase)
         let id = store.createTab(url: "https://example.test/typed").id
         let runtime = manager.ensureRuntime(for: id)!
         runtime.hiddenAt = Date.distantPast
@@ -261,6 +280,7 @@ enum BrowserManagerLifecycleTests {
         let clock = ManualScheduler()
         let store = SidebarStore()
         let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView(), clock: clock)
+        manager.protectedRecentTabs = 0  // one page alone; the 10 most recent are kept (recentTabsCase)
         let id = store.createTab(url: "https://example.test/clock").id
         let runtime = manager.ensureRuntime(for: id)!
         func probed() -> Bool { runtime.browser.replies.contains { $0.method == isolatedProbe } }
@@ -312,6 +332,7 @@ enum BrowserManagerLifecycleTests {
     private static func beforeUnloadCase() async {
         let store = SidebarStore()
         let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.protectedRecentTabs = 0  // one page alone; the 10 most recent are kept (recentTabsCase)
         let id = store.createTab(url: "https://example.test/editor").id
         let runtime = manager.ensureRuntime(for: id)!
         runtime.hiddenAt = Date.distantPast
