@@ -26,6 +26,9 @@ final class TabRuntime {
     var hiddenAt: Date?
     /// When the page last started or stopped playing sound; tab sleeping waits as long after it.
     var audibleAt: Date?
+    /// Tab sleeping discarded the page in place (Cra.discard): Chromium keeps its history and
+    /// scroll position and loads it again when the tab is shown.
+    var discarded = false
     /// Invalidates a pending sleep probe even when navigation returns to the same URL.
     var navigationRevision: UInt = 0
     /// A page that refused to sleep isn't asked again before this (nil: ask on the next pass).
@@ -237,6 +240,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
             guard let rt = ensureRuntime(for: id) else { shown.append(id); continue }
             if let made { creating += Perf.ms(since: made) }
             if !wasVisible.contains(id) {
+                wake(id, rt)
                 returnToTab(rt)
                 // A page can change its colours while hidden. One still loading reports them as it
                 // paints; asked now, before its styles arrive, it would answer white.
@@ -390,11 +394,13 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     // MARK: Tab sleeping
 
     /// The pages `policy` picks (by default Arc's: out of sight 4 hours, not one of the 10 tabs
-    /// used last) close, like a closed pinned tab, and load their URL again when shown. Pages that
-    /// are loading, playing sound, recording, in Picture in Picture or DevTools, holding text the
-    /// user typed or asking before they close (their own onbeforeunload) stay awake, and are
-    /// asked again only after `refusalBackoff`; those don't count toward the policy's limit. The
-    /// log says once why a page stays awake.
+    /// used last) are discarded like Arc's: Chromium ends the page and keeps its back/forward list
+    /// and scroll position, and loads it again when the tab is shown. Pages that are loading,
+    /// playing sound, recording, in Picture in Picture or DevTools, holding text the user typed,
+    /// asking before they close (their own onbeforeunload), in a call (even with the camera and
+    /// microphone off) or using a device stay awake, and are asked again only after
+    /// `refusalBackoff`; those don't count toward the policy's limit. The log says once why a page
+    /// stays awake.
     func sleepIdleTabs(_ policy: TabSleepPolicy) {
         let now = clock.now
         let cutoff = now.addingTimeInterval(-policy.hiddenFor)
@@ -418,18 +424,66 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                             guard let self, let rt, self.stillSleepable(id, rt, url, navigationRevision, cutoff) else { return }
                             let refusal = Self.sleepRefusal(result)
                             guard refusal.isEmpty else { return self.keepAwake(rt, url, refusal) }
-                            self.sleptTabs.insert(id)
-                            Perf.count(.tabSlept, policy.reason.rawValue)
-                            if !rt.browser.isIncognito {
-                                let why = policy.reason == .memoryPressure ? ", the Mac is short of memory" : ""
-                                CraLog.note("tab sleep unloads \(CraLog.host(url)) (hidden \(Int(self.clock.now.timeIntervalSince(rt.hiddenAt ?? self.clock.now) / 60)) min\(why))")
+                            // Chromium knows about calls, devices and capture that the page's own
+                            // world can't show; an older CEF without Cra's methods doesn't say.
+                            rt.browser.sendDevToolsMethod("Cra.getFreezingState", params: "{}") { [weak self, weak rt] result, _ in
+                                DispatchQueue.main.async {
+                                    guard let self, let rt, self.stillSleepable(id, rt, url, navigationRevision, cutoff) else { return }
+                                    let refusal = TabSleepPolicy.refusal(freezingReasons: Self.freezingReasons(result))
+                                    guard refusal.isEmpty else { return self.keepAwake(rt, url, refusal) }
+                                    self.discard(id, rt, url, policy)
+                                }
                             }
-                            self.unload(id)
                         }
                     }
                 }
             }
         }
+    }
+
+    /// Chrome's in-place discard (Cra.discard, which needs WebContentsDiscard). A CEF without it
+    /// answers an error: the page closes instead, and its tab loads the URL again when shown.
+    private func discard(_ id: UUID, _ rt: TabRuntime, _ url: String, _ policy: TabSleepPolicy) {
+        rt.browser.sendDevToolsMethod("Cra.discard", params: "{}") { [weak self, weak rt] result, error in
+            DispatchQueue.main.async {
+                guard let self, let rt, self.runtimes[id] === rt, !self.visibleTabIDs.contains(id) else { return }
+                let reply = error == nil ? Self.jsonObject(result) : nil
+                let discarded = reply?["discarded"] as? Bool == true
+                // Chromium keeps a page whose navigation was about to commit; ask again later.
+                if error == nil, !discarded { return self.keepAwake(rt, url, "navigating") }
+                self.sleptTabs.insert(id)
+                Perf.count(.tabSlept, policy.reason.rawValue)
+                if !rt.browser.isIncognito {
+                    let why = policy.reason == .memoryPressure ? ", the Mac is short of memory" : ""
+                    let how = !discarded ? "unloads" : reply?["processEnded"] as? Bool == true ? "discards (its renderer ended)" : "discards"
+                    CraLog.note("tab sleep \(how) \(CraLog.host(url)) (hidden \(Int(self.clock.now.timeIntervalSince(rt.hiddenAt ?? self.clock.now) / 60)) min\(why))")
+                }
+                guard discarded else { return self.unload(id) }
+                rt.discarded = true
+                if rt.freezeVoted { self.setFreezingVote(rt, false) }
+                self.delegate?.browserManagerDidUpdate(id)
+            }
+        }
+    }
+
+    /// Shown again: Chromium loads a discarded page when it becomes visible; Cra.load starts it
+    /// now, as Chrome does on selecting the tab, so a covered window doesn't wait.
+    private func wake(_ id: UUID, _ rt: TabRuntime) {
+        guard rt.discarded else { return }
+        rt.discarded = false
+        if sleptTabs.remove(id) != nil { Perf.begin(.tabWake, id.uuidString) }
+        log(id, "loads its discarded page again")
+        rt.browser.sendDevToolsMethod("Cra.load", params: "{}") { _, _ in }
+    }
+
+    private static func jsonObject(_ s: String?) -> [String: Any]? {
+        s?.data(using: .utf8).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+    }
+
+    /// Cra.getFreezingState's reasons for the page and the pages connected to it.
+    private static func freezingReasons(_ result: String?) -> [String] {
+        guard let json = jsonObject(result) else { return [] }
+        return (json["reasons"] as? [String] ?? []) + (json["connectedReasons"] as? [String] ?? [])
     }
 
     private func stillSleepable(_ id: UUID, _ rt: TabRuntime, _ url: String, _ revision: UInt, _ cutoff: Date) -> Bool {
@@ -458,7 +512,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         let recent = recentlyShown
         for (id, rt) in runtimes {
             let b = rt.browser
-            let vote = !recent.contains(id) && rt.hiddenAt.map { $0 < cutoff } == true && b.isCreated && !b.isClosed
+            let vote = !recent.contains(id) && !rt.discarded && rt.hiddenAt.map { $0 < cutoff } == true && b.isCreated && !b.isClosed
                 && !(nowPlaying?.entries.contains { $0.id == id } ?? false)
             if vote != rt.freezeVoted { setFreezingVote(rt, vote) }
         }
@@ -481,7 +535,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     var protectedRecentTabs = TabSleepPolicy.protectedRecentTabs
 
     private var sleepPages: [TabSleepPolicy.Page] {
-        runtimes.values.map { TabSleepPolicy.Page(id: $0.tabID, hiddenAt: $0.hiddenAt, audibleAt: $0.audibleAt) }
+        // A discarded page has given its memory back, like a closed one: it holds none of the 10 places.
+        runtimes.values.filter { !$0.discarded }.map { TabSleepPolicy.Page(id: $0.tabID, hiddenAt: $0.hiddenAt, audibleAt: $0.audibleAt) }
     }
 
     /// The tabs on screen now, then the ones hidden most recently, up to `protectedRecentTabs`.
@@ -491,7 +546,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     private func canSleep(_ rt: TabRuntime, before cutoff: Date) -> Bool {
         let b = rt.browser
-        return rt.hiddenAt.map { $0 < cutoff } == true && rt.audibleAt.map { $0 < cutoff } != false
+        return !rt.discarded && rt.hiddenAt.map { $0 < cutoff } == true && rt.audibleAt.map { $0 < cutoff } != false
             && !visibleTabIDs.contains(rt.tabID) && b.isCreated && !b.isClosed && !b.isLoading && !b.isInPictureInPicture
             && !b.isCapturingMedia && !b.isAudible && !b.hasDevTools
     }

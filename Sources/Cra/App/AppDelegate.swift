@@ -52,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         startContentBlocking()
         SoftwareUpdater.shared.start(app: self)
         buildMenus()
-        store.hasPage = { [unowned self] in self.runtime(for: $0) != nil }
+        store.hasPage = { [unowned self] in self.runtime(for: $0).map { !$0.discarded } ?? false }
         // A tip takes the tones of the space its browser window is in (the sidebar may be a
         // floating panel, a child of that window).
         ArcTooltipController.shared.tones = { [unowned self] window in
@@ -639,9 +639,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 for w in mainWindows { w.browsers.freezeIdleTabs(hiddenLongerThan: s) }
                 return
             }
-            // One tab-sleeping pass with a short threshold (seconds), so it can be tried without waiting.
+            // One tab-sleeping pass with a short threshold (seconds), so it can be tried without waiting
+            // or opening 11 tabs: the 10 tabs used last aren't kept.
             if let s = dict["sleepTabs"].flatMap(Double.init) {
-                for w in mainWindows { w.browsers.sleepIdleTabs(TabSleepPolicy(hiddenFor: s)) }
+                for w in mainWindows { w.browsers.sleepIdleTabs(TabSleepPolicy(hiddenFor: s, keepsRecentTabs: false)) }
                 return
             }
             // One memory-pressure sweep as if macOS reported this level (warning, critical), without

@@ -103,6 +103,18 @@ struct TabSleepPolicyTests {
         #expect(TabSleepPolicy.sweepsForPressure(.warning, enabled: true, lastSweep: now.addingTimeInterval(-91), now: now))
     }
 
+    /// Chromium's freezing reasons that keep a page from sleeping; the rest (a Web Lock, recently
+    /// visible, notification permission) don't.
+    @Test func freezingReasonsThatKeepAPage() {
+        #expect(TabSleepPolicy.refusal(freezingReasons: ["has an active WebRTC connection", "holding Web Lock"]) == "call")
+        #expect(TabSleepPolicy.refusal(freezingReasons: ["connected to USB device"]) == "device")
+        #expect(TabSleepPolicy.refusal(freezingReasons: ["connected to serial port"]) == "device")
+        #expect(TabSleepPolicy.refusal(freezingReasons: ["being mirrored"]) == "capturing")
+        #expect(TabSleepPolicy.refusal(freezingReasons: ["capturing display"]) == "capturing")
+        #expect(TabSleepPolicy.refusal(freezingReasons: ["holding Web Lock", "recently visible", "has notification permission"]) == "")
+        #expect(TabSleepPolicy.refusal(freezingReasons: []) == "")
+    }
+
     @Test func pressureLevels() {
         #expect([PerfSystemSample.Pressure.normal, .warning, .critical, .unknown].map(\.isShort) == [false, true, true, false])
     }

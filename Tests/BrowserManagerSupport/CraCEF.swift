@@ -77,6 +77,11 @@ public final class CraBrowser {
         guard let index = replies.firstIndex(where: { $0.method == method }) else { fatalError("No pending \(method)") }
         replies.remove(at: index).completion(result, nil)
     }
+    /// Answers with a protocol error, as CEF does for a method it doesn't have.
+    public func fail(_ method: String, with error: String) {
+        guard let index = replies.firstIndex(where: { $0.method == method }) else { fatalError("No pending \(method)") }
+        replies.remove(at: index).completion(nil, error)
+    }
     public func setLoading(_ loading: Bool) {
         isLoading = loading
         delegate?.browser(self, didChangeLoading: loading, canGoBack: false, canGoForward: false)

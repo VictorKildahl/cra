@@ -65,6 +65,17 @@ public struct TabSleepPolicy: Equatable, Sendable {
         return Set((visible + hidden).prefix(count))
     }
 
+    /// Chromium's freezing policy sees what Cra's page probes can't: a call with the camera and
+    /// microphone off (an open RTCPeerConnection), a USB, Bluetooth, HID or serial device, a
+    /// mirrored or captured tab. `reasons` are its CannotFreezeReasonToString names for the page
+    /// and the pages connected to it (Cra.getFreezingState); "" when none of them keeps it awake.
+    public static func refusal(freezingReasons reasons: [String]) -> String {
+        if reasons.contains("has an active WebRTC connection") { return "call" }
+        if reasons.contains(where: { $0.hasPrefix("connected to ") }) { return "device" }
+        if reasons.contains(where: { $0.hasPrefix("capturing ") || $0 == "being mirrored" }) { return "capturing" }
+        return ""
+    }
+
     /// The pages to ask, hidden longest first. The caller skips the ones its probes refuse
     /// before it counts toward `limit`.
     public func candidates(_ pages: [Page], visible: [UUID], protectedRecent: Int = protectedRecentTabs, now: Date) -> [UUID] {

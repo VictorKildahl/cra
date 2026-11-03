@@ -88,6 +88,7 @@ enum BrowserManagerLifecycleTests {
         freezingVoteCase()
         await sleepClockCase()
         await pressureSweepCase()
+        await discardCase()
         shortTimerCase()
         recentlyAudibleCase()
         devToolsCase()
@@ -237,8 +238,31 @@ enum BrowserManagerLifecycleTests {
             runtime.browser.reply(to: "Runtime.evaluate", with: idleReply)
             await drainMainQueue()
         }
-        expect((manager.runtime(for: id) == nil) == shouldSleep, message)
+        await finishSleep(runtime.browser)
+        expect(asleep(manager, id) == shouldSleep, message)
         manager.closeAll()
+    }
+
+    private static let discardedReply = #"{"discarded":true,"processEnded":true}"#
+
+    /// Answers the steps after the page's own probes: Chromium's freezing reasons, then the discard.
+    @MainActor
+    private static func finishSleep(_ browser: CraBrowser, reasons: String = #"{"reasons":[]}"#,
+                                    discard: String? = discardedReply, discardError: String? = nil) async {
+        if browser.replies.contains(where: { $0.method == "Cra.getFreezingState" }) {
+            browser.reply(to: "Cra.getFreezingState", with: reasons)
+            await drainMainQueue()
+        }
+        if browser.replies.contains(where: { $0.method == "Cra.discard" }) {
+            if let discardError { browser.fail("Cra.discard", with: discardError) } else { browser.reply(to: "Cra.discard", with: discard) }
+            await drainMainQueue()
+        }
+    }
+
+    /// Discarded in place, or closed by a CEF that can't discard.
+    @MainActor
+    private static func asleep(_ manager: BrowserManager, _ id: UUID) -> Bool {
+        manager.runtime(for: id).map(\.discarded) ?? true
     }
 
     /// Like Arc, the 10 tabs used last keep their pages however long they have been hidden (#136).
@@ -350,10 +374,56 @@ enum BrowserManagerLifecycleTests {
             await drainMainQueue()
             rt.browser.reply(to: "Runtime.evaluate", with: idleReply)
             await drainMainQueue()
+            await finishSleep(rt.browser)
         }
-        expect(ids.map { manager.runtime(for: $0) == nil } == [false, true, true, true, false, false], "the 3 pages close")
+        expect(ids.map { asleep(manager, $0) } == [false, true, true, true, false, false], "the 3 pages are discarded")
         manager.sleepIdleTabs(.memoryPressure)
         expect(probed()[4] && !probed()[5], "the next sweep takes the next page, not one left 4 minutes ago")
+        manager.closeAll()
+    }
+
+    /// Sleeping discards the page in place (#153): the runtime stays with Chromium's history and
+    /// scroll position, showing the tab loads it now, and it holds none of the 10 recent places.
+    /// A call with camera and microphone off, or a device, keeps the page awake; a CEF without
+    /// Cra.discard closes the page as before.
+    @MainActor
+    private static func discardCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.protectedRecentTabs = 0
+        func sleepOne(_ reasons: String = #"{"reasons":[]}"#, discard: String? = discardedReply, error: String? = nil) async -> (UUID, TabRuntime) {
+            let id = store.createTab(url: "https://example.test/discard").id
+            let rt = manager.ensureRuntime(for: id)!
+            rt.hiddenAt = Date.distantPast
+            manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
+            rt.browser.reply(to: isolatedProbe, with: idleReply)
+            await drainMainQueue()
+            rt.browser.reply(to: "Runtime.evaluate", with: idleReply)
+            await drainMainQueue()
+            await finishSleep(rt.browser, reasons: reasons, discard: discard, discardError: error)
+            return (id, rt)
+        }
+
+        let (id, rt) = await sleepOne()
+        expect(manager.runtime(for: id) === rt && rt.discarded && manager.sleptTabs.contains(id) && !rt.browser.closeRequested,
+               "a discarded page keeps its runtime and browser")
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
+        expect(!rt.browser.replies.contains { $0.method == isolatedProbe }, "a discarded page isn't asked again")
+        manager.show(id, focus: false)
+        expect(!rt.discarded && !manager.sleptTabs.contains(id) && rt.browser.replies.contains { $0.method == "Cra.load" },
+               "showing a discarded tab loads its page at once")
+
+        let (call, callRT) = await sleepOne(#"{"reasons":["has an active WebRTC connection"],"connectedReasons":[]}"#)
+        expect(!callRT.discarded && manager.runtime(for: call) === callRT && callRT.sleepRefusal == "call",
+               "a page in a call with camera and microphone off stays awake")
+        let (popup, popupRT) = await sleepOne(#"{"reasons":[],"connectedReasons":["connected to HID device"]}"#)
+        expect(!popupRT.discarded && manager.runtime(for: popup) === popupRT && popupRT.sleepRefusal == "device",
+               "a page whose connected page uses a device stays awake")
+        let (old, _) = await sleepOne(error: "'Cra.discard' wasn't found")
+        expect(manager.runtime(for: old) == nil && manager.sleptTabs.contains(old), "a CEF without Cra.discard closes the page as before")
+        let (busy, busyRT) = await sleepOne(discard: #"{"discarded":false}"#)
+        expect(!busyRT.discarded && manager.runtime(for: busy) === busyRT && busyRT.sleepRefusal == "navigating",
+               "a page Chromium wouldn't discard is asked again later")
         manager.closeAll()
     }
 
