@@ -122,6 +122,17 @@ final class ShellView: NSView {
         return filter
     }
 
+    /// The hudWindow material's filters on its desktop tint: SDR normalize, saturate 1.6.
+    static func makeTintFilters() -> [NSObject] {
+        guard let cls = NSClassFromString("CAFilter") as? NSObject.Type else { return [] }
+        let sel = NSSelectorFromString("filterWithType:")
+        guard cls.responds(to: sel) else { return [] }
+        let make = { (type: String) in cls.perform(sel, with: type)?.takeUnretainedValue() as? NSObject }
+        guard let normalize = make("sdrNormalize"), let saturate = make("colorSaturate") else { return [] }
+        saturate.setValue(1.6, forKey: "inputAmount")
+        return [normalize, saturate]
+    }
+
     /// Which blur path this run takes, once: scenarios run both (CRA_FLAGS) and the
     /// log says which one a crash or a stall happened on.
     private static var loggedBackdropPath = false
@@ -142,17 +153,24 @@ final class ShellView: NSView {
             backdropHost.isHidden = false
             CATransaction.begin(); CATransaction.setDisableActions(true)
             let tint = windowFullscreen && desktopTintLayer != nil
-            backdropLayer?.isHidden = tint
-            desktopTintLayer?.isHidden = !tint
             // Solid: Arc's material is grey 66 passing 52 % of the backdrop, flat 212 while inactive.
-            dimLayer.opacity = Float(solidBackdrop ? (windowActive ? 0.30 : 1) : windowActive ? t.blurDim : t.blurDimInactive)
+            let dim = solidBackdrop ? (windowActive ? 0.30 : 1) : windowActive ? t.blurDim : t.blurDimInactive
+            dimLayer.opacity = Float(dim)
+            // NSVisualEffectView keeps only the layer it draws from in the tree: no capture under an
+            // opaque fill, the desktop tint instead of the blur in fullscreen. A capture added back
+            // on activation draws the substitute colour until it is live, where one kept under the
+            // fill showed the window behind sharp for a frame (GitHub #132).
+            let source = dim >= 1 ? nil : tint ? desktopTintLayer : backdropLayer
+            for l in [backdropLayer, desktopTintLayer].compactMap({ $0 }) where (l === source) != (l.superlayer != nil) {
+                if l === source { backdropHost.layer?.insertSublayer(l, at: 0) } else { l.removeFromSuperlayer() }
+            }
             let top = solidBackdrop ? (windowActive ? 0.26 : 0.83) : windowActive ? t.liftActive : t.liftInactive
             let bottom = solidBackdrop ? top : windowActive ? t.liftActiveBottom : t.liftInactive
             liftLayer.colors = [NSColor(white: 1, alpha: top).cgColor, NSColor(white: 1, alpha: bottom).cgColor]
             CATransaction.commit()
             // One line per change, so a report of a sharp or off-colour sidebar can be matched
             // to the window's state in cra.log.
-            let state = "\(tint ? "desktop tint" : "blur"), \(windowActive ? "active" : "inactive")"
+            let state = "\(source == nil ? "flat" : tint ? "desktop tint" : "blur"), \(windowActive ? "active" : "inactive"), dim \(String(format: "%.2f", dim))"
             if state != loggedBackdrop {
                 loggedBackdrop = state
                 CraLog.note("sidebar backdrop: " + state)
@@ -205,10 +223,12 @@ final class ShellView: NSView {
             if b.responds(to: NSSelectorFromString("setAllowsSubstituteColor:")) { b.setValue(true, forKey: "allowsSubstituteColor") }
             backdropHost.layer?.addSublayer(b)
             backdropLayer = b
+            // AppKit's tint carries the material's colour filters, not the blur (hudWindow). Bare,
+            // it skipped the SDR normalize and the saturate: the fullscreen sidebar came out greyer
+            // than Arc's, and dark on the display in GitHub #132.
             if let tintClass = NSClassFromString("CAChameleonLayer") as? CALayer.Type {
                 let t = tintClass.init()
-                t.isHidden = true
-                backdropHost.layer?.addSublayer(t)
+                t.filters = ShellView.makeTintFilters()
                 desktopTintLayer = t
             }
         }
