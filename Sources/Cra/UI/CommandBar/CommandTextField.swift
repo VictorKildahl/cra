@@ -144,6 +144,11 @@ final class CommandTextField {
                 acceptSelectedCompletion(textView)
                 controller.commitInBackground()
                 return true
+            // ⌥Return, which a field editor reads as a line break.
+            case #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)):
+                acceptSelectedCompletion(textView)
+                controller.commitInSplit()
+                return true
             case #selector(NSResponder.cancelOperation(_:)):
                 if controller.scope != nil { controller.cancelScope() } else { controller.close() }
                 return true

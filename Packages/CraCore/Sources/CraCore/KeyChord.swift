@@ -35,6 +35,9 @@ public struct KeyChord: Codable, Hashable {
     public static let right = "\u{F703}"
     public static let up = "\u{F700}"
     public static let down = "\u{F701}"
+    /// The Delete key as a menu's key equivalent wants it (NSBackspaceCharacter), shown ⌫.
+    /// Its key events carry U+007F, which the app reads as this.
+    public static let delete = "\u{8}"
 
     /// How menus and the command bar show it: ⌃⌥⇧⌘ in Apple's order, then the key.
     public var display: String {
@@ -49,6 +52,7 @@ public struct KeyChord: Codable, Hashable {
         case Self.right: s += "→"
         case Self.up: s += "↑"
         case Self.down: s += "↓"
+        case Self.delete: s += "⌫"
         default: s += key.uppercased()
         }
         return s

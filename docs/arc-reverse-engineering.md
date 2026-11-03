@@ -87,6 +87,35 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   `siteSearchSpaceTriggerEnabled` show Space was a trigger once and Tab is the only one now. Cra's "%" tab scope
   (#49, Zen's idea) reuses all of it: "%" offers "Search Tabs  Tab", the pill takes the space's colour (Arc has no
   colour for a scope that isn't a site), rows are the bar's own tab rows. Cra: TabSearchScope, CommandBarScope.
+- [O] Entering and leaving a scope (3 Nov, Arc 1.171, disassembly of `CommandBar.CommandBarContainer` + a 120 fps
+  recording of Little Arc, "youtube" Tab): the container's layer gets `arc_commandBarBounce`, a CASpringAnimation on
+  `transform` toward scale 0.95 about the centre (damping ratio 0.9, response 0.7: stiffness ≈ 80.57, damping ≈ 16.16,
+  mass 1), its duration cut to 0.1 s, autoreverses, fill forwards: the bar dips ~1% and is back within 0.2 s. With a
+  site colour, an `NSHostingController<SplashView>` goes under the bar: `Color(nsColor:)` clipped to a 12 pt continuous
+  rounded rectangle, `.blur(radius:)` 0 → 150 and `.opacity` 1 → 0 under `.animation(.easeOut(duration: 1.2))`; on
+  screen a haze of the site's colour spreads past the bar over the page and fades. Leaving the scope bounces again and
+  drops the splash. Measured side by side (100 fps, same crops, 3 Nov): the bar's edge moves in 0.96% (Arc) / 1.0%
+  (Cra) peaking at 80/90 ms on Tab, 1.04/1.07% on Backspace; red 60–140 pt above the bar starts at ~150 ms and peaks at
+  10.3 at 450 ms in both, gone by 1 s, within 0.5 at every 50 ms. Arc's splash also shows through the bar: its inside
+  goes from (26, 26, 26) to (47, 20, 19) at once, holds for 0.17 s, then fades by 1 s. Cra's material can't see the
+  panel under it, so the inside is a layer of the colour under the bar's tint keyed to that curve (within 2 levels).
+  Cra: CommandBarView.scopeChanged.
+- [O] Search engines (3 Nov): Settings ▸ Profiles has "Default Search Engine" and "Search Settings" (Chromium's page).
+  Arc's bar is Chromium's omnibox, so the profile's default (`default_search_provider_data.template_url_data`, kept in
+  Secure Preferences with a MAC) and its keywords (Web Data `keywords`) are what it searches with. Chromium adds sites
+  it sees as inactive keywords (`safe_for_autoreplace` 1, `is_active` 0); those never take Tab. Cra kept its own engine
+  list until 3 Nov (reported on X: custom engines and edited built-in ones did nothing). Cra: ChromiumSearchEngine,
+  SearchEngines (reads Web Data as `immutable=1`, Chromium holds it with an exclusive lock), SiteSearch.match.
+- [O] Folder glyph (3 Nov, `FolderIcon.FolderIconView` disassembled, checked against AX-toggled folders captured at
+  1x): 16 × 16, r = round(W/7), line px(1.25), tab height px(round(H·0.25)), shoulder floor(tab/1.5); back path (r,0) →
+  (0.41W,0) → (0.58W,t) → round corners; the front a rounded rect under the tab. Both hinge on the bottom-left
+  (anchor (0,1)); per state m34 −0.0029129464, x +3 / Y 32° when expanded (+1.5 / 16° peeked open), then X +28° on the
+  back, −30° on the front (half for peeked open). Shading gradients black 0 → 0.36 (back, 0,0 → 0.6,1, opacity 0.2
+  closed / 1 open) and 0 → 0.15 (front, 0.1,0 → 0.9,1, 0 / 1). No animation of its own: the state change runs in a
+  CATransaction with actions on, so Core Animation's implicit 0.25 s (recorded: 50% at ~95 ms, 90% at ~165 ms in Arc;
+  ~105 / ~175 ms in Cra). Colours come from outside (`ColorSpec`): on one
+  gold theme the back was #E9B300, the front #FCEDBC and every edge black at ~26%; how the back colour follows the
+  theme was not worked out, so Cra keeps its measured outline over cream. Cra: FolderGlyphView.
 - [O] Sidebar glyphs (29 Oct, 1x and 2x captures, fitted pixel by pixel): the tab row's hover ✕ is two 2 pt
   round-capped strokes 4.25 pt out from a centre on a whole point, white 0.6 over the hover fill; at 1x it is
   perfectly symmetric (176/142/85), which no SF Symbol size reproduces (xmark 13.5 bold is closest at 2x but

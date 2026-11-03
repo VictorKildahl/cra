@@ -32,9 +32,9 @@ final class SearchSuggestions {
         return langs.enumerated().map { i, l in i == 0 ? l : "\(l);q=\(String(format: "%.1f", 1 - Double(i) * 0.2))" }.joined(separator: ",")
     }
 
-    func items(for query: String, engine: SearchEngine) -> [Item] {
+    func items(for query: String, engine: ChromiumSearchEngine) -> [Item] {
         let q = query.lowercased()
-        if let hit = cache["\(engine.rawValue)|\(q)"] { return hit }
+        if let hit = cache["\(engine.suggestURL)|\(q)"] { return hit }
         guard let last, pending == q else { return [] }
         // What still starts the typed text first; the rest only holds the bar's height, since
         // the engine often corrects the spelling ("ramayyana mov" → "ramayana movie").
@@ -43,11 +43,11 @@ final class SearchSuggestions {
         return narrowed + rest.filter { !narrowed.contains($0) }
     }
 
-    func fetch(_ query: String, engine: SearchEngine, done: @escaping @MainActor () -> Void) {
+    func fetch(_ query: String, engine: ChromiumSearchEngine, done: @escaping @MainActor () -> Void) {
         task?.cancel()
         pending = nil
         let q = query.lowercased()
-        let key = "\(engine.rawValue)|\(q)"
+        let key = "\(engine.suggestURL)|\(q)"
         guard cache[key] == nil, let url = engine.suggestURL(query) else { return }
         pending = q
         task = Task { [session, weak self] in

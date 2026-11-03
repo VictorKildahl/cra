@@ -72,4 +72,12 @@ public enum BrowsingDataClear {
             .filter { !$0.value.isEmpty }
         return (kept, r)
     }
+
+    /// The archive without the tabs closed inside `range`. Cra's History (⌘Y) is its archive, and
+    /// the command bar lists archived tabs ("Archived 7 days ago"), so they go with the history, as
+    /// Chrome's recently closed tabs do. Reported on X, 2 Nov 2026: results from 7 or 8 days ago
+    /// stayed after the history was cleared.
+    public static func keptArchive(_ archive: [ArchivedItem], clearing range: Range) -> [ArchivedItem] {
+        archive.filter { !range.contains($0.archivedAt) }
+    }
 }

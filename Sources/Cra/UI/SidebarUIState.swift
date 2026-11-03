@@ -219,6 +219,8 @@ final class SidebarActions {
     var showExtensionsMenu: () -> Void = {}
     /// The developer bar's address field: a typed URL or search, in the selected tab.
     var loadTyped: (String) -> Void = { _ in }
+    /// A typed URL or search in a new tab (⌘ + New Tab pastes the clipboard's text).
+    var openTyped: (String) -> Void = { _ in }
 }
 
 private struct SidebarActionsKey: EnvironmentKey {

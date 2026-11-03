@@ -63,4 +63,16 @@ struct BrowsingDataClearTests {
         let out = BrowsingDataClear.clearing(.before(now.addingTimeInterval(-30 * 86400)), history: [old.url: old, new.url: new], ranking: RankingData())
         #expect(Array(out.history.keys) == [new.url])
     }
+
+    /// Archived tabs show in the command bar ("Archived 7 days ago"): those closed in the range go.
+    @Test func archivedTabsInTheRangeGo() {
+        func archived(_ daysAgo: Double) -> ArchivedItem {
+            ArchivedItem(archivedAt: now.addingTimeInterval(-daysAgo * 86400), reason: .manual, sourceSpaceID: nil, wasPinned: false,
+                         item: .tab("https://\(Int(daysAgo)).example/", parent: nil))
+        }
+        let archive = [archived(0.01), archived(3), archived(8), archived(40)]
+        #expect(BrowsingDataClear.keptArchive(archive, clearing: .since(now.addingTimeInterval(-7 * 86400))) == Array(archive[2...]))
+        #expect(BrowsingDataClear.keptArchive(archive, clearing: .before(now.addingTimeInterval(-30 * 86400))) == Array(archive[..<3]))
+        #expect(BrowsingDataClear.keptArchive(archive, clearing: .allTime).isEmpty)
+    }
 }

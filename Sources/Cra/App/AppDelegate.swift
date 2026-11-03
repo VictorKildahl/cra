@@ -645,6 +645,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
+            // What the command bar would list for the text (rows, the Tab scope, the search), without opening it.
+            if let text = dict["suggest"] {
+                let engine = main.commandBar.engine
+                engine.resetIndex()
+                let r = engine.suggestions(for: text, mode: .newTab, currentTabID: store.selectedTabID)
+                let rows = r.items.map { "\($0.kind) \($0.title) \($0.url ?? "")" }.joined(separator: " | ")
+                NSLog("Cra suggest %@ → scope=%@ search=%@ rows=%@", text, r.scope.map { "\($0.name) \($0)" } ?? "none",
+                      engine.searchURL(text), rows)
+                engine.resetIndex()
+                return
+            }
+            // folder=<id>,1 opens a folder, ,0 closes it (its glyph turns as a click's does).
+            if let f = dict["folder"]?.split(separator: ","), f.count == 2, let id = UUID(uuidString: String(f[0])) {
+                store.setExpanded(id, f[1] == "1")
+                return
+            }
+            // Settings ▸ Advanced's search engine picker, by keyword.
+            if let keyword = dict["searchEngine"] {
+                if let e = SearchEngines.shared.keywords(profilePath: nil).first(where: { $0.keyword == keyword }) {
+                    SearchEngines.shared.setDefault(e, store: store)
+                }
+                return
+            }
             if let spikeURL = dict["chromeSpike"] {
                 CraCEFRuntime.spikeChromeWindow(withURL: spikeURL) { [weak self] w in
                     guard let self, let host = self.main.window else { return }
@@ -917,6 +940,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "importData": main.showImport()
         case "rebuildArcProfiles": ArcProfileRebuilder.run(store: store) { [weak self] in self?.relaunch() }
         case "setDefaultBrowser": Task { await SystemIntegration.shared.makeDefaultBrowser() }
+        case "clearBrowsingData":
+            // Chrome's dialog, in a normal window: what it deletes from history leaves the command bar too.
+            let normal = useNormalWindow()
+            _ = store.createTab(url: BrowsingDataClear.pageURL, select: true)
+            normal.showWindow(nil)
         default:
             if id.hasPrefix("item"), let n = Int(id.dropFirst(4)) {
                 let tabs = store.visibleTabs(in: store.focusedSpaceID)
@@ -1003,6 +1031,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let setDefault = item("setDefaultBrowser")
         if setDefault.keyEquivalent.isEmpty { setDefault.keyEquivalent = "♡"; setDefault.keyEquivalentModifierMask = .command }
         appMenu.addItem(setDefault)
+        appMenu.addItem(item("clearBrowsingData"))
         appMenu.addItem(.separator())
         appMenu.addItem(item("importData"))
         let update = NSMenuItem(title: "Check for Updates…", action: #selector(SoftwareUpdater.checkForUpdates(_:)), keyEquivalent: "")

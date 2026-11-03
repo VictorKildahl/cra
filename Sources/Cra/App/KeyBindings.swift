@@ -13,8 +13,8 @@ extension Shortcut {
     var flags: NSEvent.ModifierFlags { NSEvent.ModifierFlags(rawValue: modifiers) }
 
     /// Shift turns "[" into "{" in charactersIgnoringModifiers; undo that.
-    /// ⇧Tab arrives as backtab (U+0019).
-    private static let unshift: [String: String] = ["\u{19}": Shortcut.tab, "{": "[", "}": "]", "<": ",", ">": ".", "?": "/", "+": "=", "_": "-", "~": "`", ":": ";", "\"": "'", "|": "\\"]
+    /// ⇧Tab arrives as backtab (U+0019), the Delete key as U+007F.
+    private static let unshift: [String: String] = ["\u{19}": Shortcut.tab, "\u{7F}": Shortcut.delete, "{": "[", "}": "]", "<": ",", ">": ".", "?": "/", "+": "=", "_": "-", "~": "`", ":": ";", "\"": "'", "|": "\\"]
 
     /// Physical-key fallbacks so ⌘[ / ⌘] work on layouts (Danish, German...)
     /// where those characters live on other keys. Key codes are ANSI positions.
@@ -216,6 +216,9 @@ final class KeyBindingRegistry {
             KeyAction(id: "setDefaultBrowser", name: "Set as Default Browser", section: .app, shortcuts: [], triggers: ["default browser"]),
             KeyAction(id: "importData", name: "Import from Arc or Dia…", section: .app, shortcuts: [], triggers: ["import", "arc", "dia"]),
             KeyAction(id: "rebuildArcProfiles", name: "Rebuild Profiles from Arc…", section: .app, shortcuts: [], triggers: ["profiles", "arc profiles"]),
+            // Chrome's app menu item and key; Arc has neither, only Settings ▸ Profiles ▸ Clear Browsing Data.
+            KeyAction(id: "clearBrowsingData", name: "Clear Browsing Data…", section: .app, shortcuts: [Shortcut(Shortcut.delete, cmdShift)],
+                      triggers: ["clear history", "delete history", "clear browsing data", "delete browsing data"], symbol: "trash"),
         ]
         for n in 1...9 {
             list.append(KeyAction(id: "item\(n)", name: "Go to Tab \(n)", section: .tabs,

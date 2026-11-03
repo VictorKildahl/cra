@@ -25,11 +25,7 @@ struct AdvancedPane: View {
                 Text("Restart Cra to apply an engine change.").font(.system(size: 11)).foregroundStyle(.secondary)
             }
             SettingsFormRow(label: "Address Bar:") {
-                Picker("", selection: $store.settings.searchEngine) {
-                    ForEach(SearchEngine.allCases) { Text($0.label).tag($0) }
-                }
-                .labelsHidden()
-                .fixedSize()
+                SearchEnginePicker(store: store, openURL: actions.openURL)
                 SettingsCheckbox(title: "Show search suggestions", isOn: $store.settings.searchSuggestions)
             }
             SettingsFormRow(label: "When quitting Cra:") {
@@ -58,5 +54,41 @@ struct AdvancedPane: View {
                     .textSelection(.enabled)
             }
         }
+    }
+}
+
+/// Chromium's default search engine, the one chrome://settings/searchEngines sets (Arc: Settings ▸
+/// Profiles ▸ Default Search Engine, beside "Search Settings"): its built-in engines and whichever is
+/// the default. The page adds, edits and removes the rest.
+private struct SearchEnginePicker: View {
+    let store: SidebarStore
+    let openURL: (String) -> Void
+    @State private var engines: [ChromiumSearchEngine] = []
+    @State private var selected = ""
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Picker("", selection: Binding(get: { selected }, set: pick)) {
+                ForEach(engines, id: \.keyword) { Text($0.name).tag($0.keyword) }
+            }
+            .labelsHidden()
+            .fixedSize()
+            Button("Manage Search Engines…") { openURL(SearchEngines.settingsPage) }
+        }
+        .onAppear(perform: reload)
+    }
+
+    private func reload() {
+        let current = SearchEngines.shared.defaultEngine(profilePath: nil, legacy: store.settings.searchEngine)
+        var list = SearchEngines.shared.keywords(profilePath: nil).filter(\.isBuiltIn)
+        if !list.contains(where: { $0.keyword == current.keyword }) { list.insert(current, at: 0) }
+        engines = list
+        selected = current.keyword
+    }
+
+    private func pick(_ keyword: String) {
+        guard let engine = engines.first(where: { $0.keyword == keyword }) else { return }
+        SearchEngines.shared.setDefault(engine, store: store)
+        selected = keyword
     }
 }

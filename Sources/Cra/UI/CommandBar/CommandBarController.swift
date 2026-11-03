@@ -41,6 +41,8 @@ final class CommandBarController {
     var onCommit: (Suggestion?, String, CommandBarMode) -> Void = { _, _, _ in }
     /// Opens the row in a background tab; false when it has no page to open there.
     var onOpenInBackground: (Suggestion?, String) -> Bool = { _, _ in false }
+    /// Opens the row as a split pane beside the current tab; false when it can't go there.
+    var onOpenInSplit: (Suggestion?, String) -> Bool = { _, _ in false }
     var onClose: () -> Void = {}
 
     init(engine: SuggestionEngine, store: SidebarStore) {
@@ -201,6 +203,14 @@ final class CommandBarController {
         if onOpenInBackground(selected, typed) { return }
         close()
         onCommit(selected, typed, mode)
+    }
+
+    /// ⌥Return: the row opens in Split View with the current tab. Rows that open no page, and
+    /// hosts with no split to make (a Little Window, an empty tab), take it as Return.
+    func commitInSplit() {
+        guard let (selected, typed) = committed() else { return }
+        close()
+        if !onOpenInSplit(selected, typed) { onCommit(selected, typed, mode) }
     }
 
     private func committed() -> (Suggestion?, String)? {
