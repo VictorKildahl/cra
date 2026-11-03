@@ -230,6 +230,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             self.closeLibrary()
         }
         sidebarActions.resetPinnedTab = { [weak self] id in self?.resetPinnedTab(id) }
+        sidebarActions.separatePinnedTab = { [weak self] id in self?.separatePinnedTab(id) }
         sidebarActions.editPinnedURL = { [weak self] id in self?.editPinnedURL(id) }
         sidebarActions.openURL = { [weak self] url in
             guard let self else { return }
@@ -1318,16 +1319,23 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func debugRunInDevTools(_ script: String) { currentBrowser?.executeJavaScript(script, inDevTools: true) }
 
     func closeCurrentTab() {
-        // ⌘W with tabs picked in the sidebar closes all of them.
-        if !sidebarUI.multiSelection.isEmpty {
-            let ids = sidebarUI.multiSelection
-            sidebarUI.clearPicks()
-            for id in ids where id != selectedTabID { closeTab(id) }
-            if let open = selectedTabID, ids.contains(open) { closeTab(open) }
-            return
+        // ⌘W with tabs picked in the sidebar takes all of them. As in Arc (SidebarClose.commandW),
+        // a Today tab among them archives them all, pinned ones too; otherwise they all keep
+        // their place and unload.
+        let ids = sidebarUI.multiSelection.isEmpty ? selectedTabID.map { [$0] } ?? [] : Array(sidebarUI.multiSelection)
+        guard !ids.isEmpty else { return }
+        sidebarUI.clearPicks()
+        let action = SidebarClose.commandW(anyToday: ids.contains { !store.isPinned($0) })
+        // The open tab goes last so closing it doesn't hop through tabs about to close.
+        let open = selectedTabID
+        for id in ids.filter({ $0 != open }) + ids.filter({ $0 == open }) {
+            if action == .keep || !store.isPinned(id) {
+                closeTab(id)
+            } else {
+                // A pinned split goes as one, as it closes as one.
+                for p in store.paneTabIDs(for: id) { store.archiveTab(p, reason: .manual) }
+            }
         }
-        guard let id = selectedTabID else { return }
-        closeTab(id)
     }
 
     /// Today tabs are archived. Pinned tabs and favorites stay; they unload
@@ -1362,6 +1370,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func resetPinnedTab(_ id: UUID) {
         guard let home = store.resetPinnedTab(id) else { return }
         app.runtime(for: id)?.browser.loadURL(home)
+    }
+
+    /// Arc's ⌘-click on the favicon of a pinned tab away from its page ("Separate From Pinned
+    /// Tab", GitHub #139): the page moves to a new Today tab at the top, the pinned tab goes back
+    /// to its page and stays open.
+    func separatePinnedTab(_ id: UUID) {
+        guard let t = store.item(id)?.tab, store.isPinned(id), t.url != t.savedURL else { return }
+        _ = store.createTab(url: t.url, title: t.savedTitle, in: store.spaceID(ofItem: id), select: false, index: 0)
+        resetPinnedTab(id)
+        store.selectTab(id, window: windowID)
     }
 
     /// Edit Pinned URL… (#54): Arc's dialog with the pinned URL. A page showing the old
@@ -2244,7 +2262,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         func open(_ url: String) {
             store.recordQuerySelection(query: query, url: url)
             let fillsEmptyPane = selectedTab?.isEmptyTab == true
-            if mode == .editURL || fillsEmptyPane, selectedTabID != nil {
+            // A pinned tab keeps to its host: another host's address opens a Today tab (Arc).
+            let leavesPinned = !fillsEmptyPane && selectedTabID.map(store.isPinned) == true
+                && PinnedNavigation.typedURLOpensNewTab(url, from: selectedTab?.tab?.url ?? "")
+            if mode == .editURL || fillsEmptyPane, selectedTabID != nil, !leavesPinned {
                 loadInSelectedTab(url)
             } else {
                 store.createTab(url: url, window: windowID)

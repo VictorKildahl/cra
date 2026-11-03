@@ -491,7 +491,12 @@ enum CraMetrics {
     static let rowSpacing: CGFloat = 1
     static let rowCorner: CGFloat = 10
     static let favicon: CGFloat = 16
-    static let indent: CGFloat = 18
+    /// A nested row's step in (Arc 1.171, measured at 1x: favicon 26 → 42, text 45 → 61; GitHub #139).
+    static let indent: CGFloat = 16
+    /// Arc 1.171 at 1x (GitHub #139): a row's fill starts 8 pt in from the sidebar's edge and its
+    /// favicon 10 pt into the fill (18 pt in), the same on the right (fill ends 8 pt short).
+    static let rowInset: CGFloat = 8
+    static let rowLeading: CGFloat = 10
     static let contentInset: CGFloat = 10
     static let contentCornerRadius: CGFloat = 6
     static let toolbarHeight: CGFloat = 32

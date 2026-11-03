@@ -244,7 +244,7 @@ final class SpaceListView: NSView, NSDraggingSource {
             return d
         }
 
-        func add(_ item: SidebarItem, depth: Int, pinned: Bool, parent: UUID, index: Int) {
+        func add(_ item: SidebarItem, depth: Int, pinned: Bool, parent: UUID, index: Int, peeked: Bool = false) {
             var row = Row(key: .item(item.id), content: .newTab(active: false), decor: decor(item.id), itemID: item.id, parent: parent, index: index, depth: depth)
             if item.isFolder {
                 let expanded = store.isExpanded(item.id)
@@ -263,7 +263,7 @@ final class SpaceListView: NSView, NSDraggingSource {
                     // Arc keeps the open tab of a closed folder in sight, one level in (FolderPeek).
                     for t in peeked {
                         let index = t.parentID.flatMap { store.item($0)?.children.firstIndex(of: t.id) } ?? 0
-                        add(t, depth: depth + 1, pinned: pinned, parent: t.parentID ?? item.id, index: index)
+                        add(t, depth: depth + 1, pinned: pinned, parent: t.parentID ?? item.id, index: index, peeked: true)
                     }
                     return
                 }
@@ -278,6 +278,7 @@ final class SpaceListView: NSView, NSDraggingSource {
                 let selected = store.isSelected(item.id, window: window)
                 let navigatedAway = pinned && tab.url != tab.savedURL && !tab.savedURL.isEmpty
                 let (img, flip) = icon(tab.iconKey)
+                let (homeImg, homeFlip) = navigatedAway ? icon(tab.customIconKey ?? FaviconKey.key(for: tab.savedURL)) : (img, flip)
                 let developerMode = store.settings.isDeveloperMode(url: tab.url)
                 let subtitle = tab.sidebarSubtitle(developerMode: developerMode)
                 row.content = .tab(TabRowModel(
@@ -288,8 +289,8 @@ final class SpaceListView: NSView, NSDraggingSource {
                     highlighted: picks.isEmpty ? selected && !placeholder : picks.contains(item.id),
                     capturing: capturing.contains(item.id), audible: audible.contains(item.id), muted: tab.muted, unread: item.isUnread,
                     navigatedAway: navigatedAway,
-                    closeGroup: picks.contains(item.id) && picks.count > 1 ? picks.count : 1,
-                    focusRing: focusID == item.id, developerMode: developerMode))
+                    focusRing: focusID == item.id, developerMode: developerMode, peeked: peeked,
+                    homeIcon: homeImg, homeFlipIcon: homeFlip))
                 out.append(row)
             } else if item.isSplit {
                 let children = store.children(of: item.id).filter(\.isTab)
@@ -506,14 +507,14 @@ final class SpaceListView: NSView, NSDraggingSource {
     /// (reported on X, 2 Nov 2026, with the pinned tabs collapsed).
     private func layoutRows() {
         let width = rowsWidth
-        let inner = max(0, width - 20)
+        let inner = max(0, width - 2 * CraMetrics.rowInset)
         var y: CGFloat = 3
         let pinnedTop = y
         var afterLine = false
         for i in 0..<rows.count {
             let isDivider = rows[i].key == .divider
             if i == pinnedCount {
-                pinnedFrame = NSRect(x: 10, y: pinnedTop, width: inner, height: y - pinnedTop)
+                pinnedFrame = NSRect(x: CraMetrics.rowInset, y: pinnedTop, width: inner, height: y - pinnedTop)
             }
             if isDivider {
                 afterLine = rows[i].content == .divider(hasToday: true)
@@ -525,11 +526,11 @@ final class SpaceListView: NSView, NSDraggingSource {
             if !(afterLine && i == pinnedCount + 1) { y += CraMetrics.rowSpacing }
             let h: CGFloat
             if case .liveStatus(let m) = rows[i].content { h = LiveStatusRowView.height(m, width: inner) } else { h = CraMetrics.rowHeight }
-            rows[i].frame = NSRect(x: 10, y: y, width: inner, height: h)
+            rows[i].frame = NSRect(x: CraMetrics.rowInset, y: y, width: inner, height: h)
             y += h
         }
         let todayTop = rows.indices.contains(pinnedCount) ? rows[pinnedCount].frame.maxY : y
-        todayFrame = NSRect(x: 10, y: todayTop, width: inner, height: max(0, y - todayTop))
+        todayFrame = NSRect(x: CraMetrics.rowInset, y: todayTop, width: inner, height: max(0, y - todayTop))
         contentBottom = y
         let height = max(y + 121, scrollView.contentView.bounds.height)
         let docWidth = legacyScrollerShown ? scrollView.contentView.frame.width : width
@@ -1044,7 +1045,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         // An empty pinned list shows its own placeholder instead of a line.
         guard let y else { return drop }
         let depth = items.first { $0.itemID == parent }.map { $0.depth + 1 } ?? 0
-        drop.line = .init(y: y, minX: todayFrame.minX + 8 + CGFloat(depth) * CraMetrics.indent, maxX: todayFrame.maxX - 6)
+        drop.line = .init(y: y, minX: todayFrame.minX + CraMetrics.rowLeading + CGFloat(depth) * CraMetrics.indent, maxX: todayFrame.maxX - 6)
         drop.rowAbove = items.last { $0.frame.maxY <= y + 1 }?.itemID
         drop.rowBelow = items.first { $0.frame.minY >= y - 1 }?.itemID
         return drop

@@ -151,7 +151,7 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   tab is selected and the toolbar shows the URL; with no tab the nav moves into the toolbar and the toolbar shows a
   centered "Search or Enter URL…". Favorites: 4 tiles, ~44pt tall, active tile gets a dashed outline. Space header: emoji +
   name, 13pt semibold (re-fitted 1 Nov), secondary color. Rows 40pt pitch, 14pt titles, 16pt favicons, a site in developer mode shows its host
-  as an 11pt second line (see "A pinned tab away from its page"), folders use a blue folder glyph, nested rows indent ~18pt. Bottom row: library icon
+  as an 11pt second line (see "A pinned tab away from its page"), folders use a blue folder glyph, nested rows indent 16 pt (measured 3 Nov, #139). Bottom row: library icon
   left, tiny space emoji centered (inactive dimmed), + right.
 - [O] Content: rounded card inset ~8-10pt with the toolbar strip (42pt: lock + monospaced URL, copy link, extensions,
   capture, DevTools, sidebar toggle) on top; no card at all when no tab is selected.
@@ -1041,6 +1041,51 @@ of the sidebar strip, pixel runs at x=500 px (2x), y = 160/700/1200/1700/2100.
   going back restores that title and the home's favicon key. The developer ring is `FocusRingLayer(developer:)` on
   the open tab. Each row's fill starts `depth × 18` pt in (23 pt against Arc's 24). The capturing and synced
   rings are not built.
+
+### Closing and pinned tabs, recorded (Arc 1.171, 3 Nov 2026, GitHub #139)
+Offline Arc on a fake home (scratch tools: fake-home generator, `sandbox-exec` allowing only loopback, pages on
+`pin.lvh.me` / `away.lvh.me` / `dev.lvh.me` port 47139 served locally; `localhost` is developer mode by itself,
+so test pages must not use it). Live HID clicks and hovers at 1x, plus a static pass over TabCellState.
+- [O live] Close button per row, shown only while the row is hovered (24 pt square, hover square GrayA4,
+  radius 6, 6 pt before the fill's right end; glyph two 14 × 2 pt bars, crossed or flat):
+
+  | Row | Glyph | Tooltip | Click |
+  |---|---|---|---|
+  | Pinned, open | minus | Close and Keep Pinned ⌘W | unloads, back to its pinned page (name and icon too), the tab before it opens |
+  | Pinned, background, away from its page | minus | Close and Keep Pinned | back to its pinned page, unloads; selection stays |
+  | Pinned, background, on its page (loaded or not) | ✕ | Archive this tab | archived out of the pinned section |
+  | Pinned, shown under a closed folder [O static] | minus | Close and Keep Pinned | as above |
+  | Today, open | ✕ | Archive this tab ⌘W | archived; the tab below opens |
+  | Today, background (loaded or not) | ✕ | Archive this tab | archived |
+  | Picked with others | its own button | singular tooltip | acts on that row only |
+  | Favorite tile | none | — | ⌘W deselects it, the tab before it opens |
+  | Pinned split, open | one minus at the row's end | Close this item ⌘W | the whole split unloads, stays pinned |
+  | Pinned split, background | one ✕ at the row's end | Archive this item | the whole split is archived |
+  | Today split, open | an ✕ inside every pane | Archive this item | that pane is archived, the split becomes a tab |
+  | Today split, background | one ✕ at the row's end | Archive this item | the whole split is archived |
+
+- [O live] ⌘W on several picked tabs closes them all; [O static] a Today tab among them archives every one,
+  otherwise they all deselect. The ⌘W keycaps only show on the open row's tooltip.
+- [O live] Split cells: 4 pt inside the fill, 4 pt apart, each favicon 6 pt into its cell. An open split draws
+  each pane as a 28 pt pill (4 pt inset top and bottom, radius ~6, 224 on the 241 fill, light theme); a hovered
+  pinned split shortens its last pill to end 5 pt before the minus.
+- [O live] A pinned tab away from its page: current favicon, slash, current title, nothing under it. Its hover
+  splits in two: the icon region (a 36 pt rounded square at the fill's left) and the body (the fill from 30 pt
+  in to its end). On the icon: the pinned page's favicon (resetTabIcon) replaces the icon, the slash and the close
+  button hide, "Back to Pinned URL" shows under the title; with ⌘ held, the current favicon and "Separate From
+  Pinned Tab". On the body of a background row: its own fill, the slash hides, the button shows. On the open row
+  the icon square darkens over the white fill (241 → 230), left corners round, right edge straight.
+  Click on the icon: the tab goes back to its pinned page (a navigation: Back works) and opens. ⌘-click: the
+  current page moves to a new Today tab at the top of Today, the pinned tab goes back and stays open.
+- [O live] A typed address (⌘L, Enter) on a pinned tab: another host opens a new Today tab (pin.lvh.me →
+  away.lvh.me did, so it is the host, not the site), the same host stays in the pinned tab. A same-host link
+  stays; another host's link opens Peek, with the peeked page's favicon as a badge on the pinned row.
+- [O live] ⌘W on an open Today split archives only the focused pane (the other becomes a tab). ⌘-click picks a
+  tab without opening it; the open tab is part of the selection, so ⌘W takes it too.
+- [O live] Developer mode: the host and port under the title on every row of that site, the dashed ring only
+  on the open one. Nested rows indent 16 pt (favicon 26 → 42, text 45 → 61) and their fill starts after it.
+- [O live, 100 fps] The minus makes the row jump to scale 0.9 at once and spring back to 1 in ~0.24 s without
+  overshoot (left edge 10 px in at 1x, back by 1.11 s): a critically damped spring, ω ≈ 14 (stiffness 196, damping 28).
 
 ### Backdrop-layer blur for light vibrant themes (25 Oct 2026, final)
 

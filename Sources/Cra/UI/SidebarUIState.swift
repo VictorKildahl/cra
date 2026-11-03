@@ -198,6 +198,7 @@ final class SidebarActions {
     var closeLibrary: () -> Void = {}
     var restoreArchived: (UUID) -> Void = { _ in }
     var resetPinnedTab: (UUID) -> Void = { _ in }
+    var separatePinnedTab: (UUID) -> Void = { _ in }
     var editPinnedURL: (UUID) -> Void = { _ in }
     var openURL: (String) -> Void = { _ in }
     var performAction: (String) -> Void = { _ in }
