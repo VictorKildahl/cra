@@ -165,6 +165,8 @@ enum Diagnostics {
             "macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion), \(String(cString: model)), \(ProcessInfo.processInfo.physicalMemory >> 30) GB, \(ProcessInfo.processInfo.activeProcessorCount) cores",
             DisplayDiagnostics.summary(displays),
             "Stage Manager: \(stageManager ? "on" : "off")",
+            // The sidebar goes opaque under it, like AppKit's materials (GitHub #156).
+            "Reduce transparency: \(NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency ? "on" : "off"), increase contrast: \(NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? "on" : "off")",
             "Running from: \(Bundle.main.bundlePath)",
             "Up for: \(Int(ProcessInfo.processInfo.systemUptime / 60)) min (Mac), \(Int(-(NSRunningApplication.current.launchDate ?? Date()).timeIntervalSinceNow / 60)) min (Cra)",
             "Embedded pages: \(EmbeddedPages.isEnabled), Chrome-style hosting: \(CraCEFRuntime.chromeHosting())",
