@@ -28,8 +28,7 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   - [O strings only] easel, splitView, arcDocument, tabGroup also exist.
 - [O] Favorites = the "topApps" container, one per profile, shared by all spaces (StorableSidebar.topAppsContainerIDs).
   Cra keeps favorites per space by default; Settings ▸ Tabs ▸ "Share Favorites across Spaces with the same profile"
-  (#154, `FavoritesSharing`) points a profile's spaces at one list, the first space's in sidebar order. A swipe between
-  two spaces that share it leaves the tiles still, since Arc's favorites sit beside the space pager (see "Sidebar scrolling").
+  (#154) does it Arc's way (see "Favorites per profile").
 - [O] Every space owns one pinned container and one unpinned ("Today") container; ordering = childrenIds; folders nest via parentID.
 - [O] A pinned tab keeps savedURL/savedTitle as its home; strings: resetTab, resetCurrentTab, replacePinnedTab,
   PinnedTabNavigationProfile, renamePinnedTabsEnabled=1.
@@ -1975,6 +1974,28 @@ GitHub issue #4: opening in window B a tab that window A shows left A with no ta
   that closes it on click, Escape the page didn't use closes it, "Open in <space>" makes it a tab. Same site =
   registrable domain (`SiteKey`). Verified on a test bundle with a CDP click in a favorite: Peek opened, the tab
   stayed, promote and ⌘W worked.
+
+### Favorites per profile (Arc 1.171, 3 Nov 2026, offline Arc, issue #154)
+Offline Arc (fake home with Arc's own second profile "Work" = Profile 1, see "One space") with spaces Personal and
+Side on Default (topApps: Mail, Music, News) and Work on Profile 1 (topApps: Jira). Space switches through
+Spaces ▸ <space> (AX), profile changes through Spaces ▸ Change Profile (the sheet's picker is a SwiftUI menu: one HID
+click, then AX), 120 fps region recordings.
+- [O] AX: `sidebarFavoritesCollectionView` (347×63) is its own list above the 3 × 347 pt pager of space pages.
+- [O live] Personal → Side (same profile): header and list slide, the tiles stay still in every frame. Side → Work
+  (other profile): the tiles slide out with the page and Work's slide in.
+- [O live] The open tab is per space: Mail opened in Personal, Side still showed its own (nothing), Music opened in
+  Side; each space came back to its own.
+- [O live] Change Profile: the space shows the new profile's list, nothing moves. With Personal and Side both on Work,
+  StorableSidebar kept Default's topApps container with all three; Personal back on Default showed them again, Mail
+  still highlighted. A favorite open in the space stays on screen (same page, title) after the change, its tile gone.
+- [O live] A favorite's menu: Copy Link, Share ›, Change Icon…, Rename…, Mute, Edit Pinned Page ›, Open in Split View
+  (Add Split View while open), Duplicate, Move to › Profile › ✓Default / Work, (Close Tab ⌘W while open), Remove
+  Favorite. Remove Favorite deletes it: not in any space's pinned or Today list, not in StorableArchive.
+- Cra (`FavoritesSharing`, `SidebarDocument.profileFavorites`): with the setting on, each profile has a list
+  (container kind `.favorites(spaceID: sharedFavoritesSpaceID)`) that its spaces point at and that outlives them;
+  a favorite loads in its list's profile; turning it on merges the spaces' own favorites into their profile's list
+  (a page twice once), off gives each space its own copy. Tile menu: Remove Favorite, Move to › Profile.
+  SpacePagerView holds the tiles still between two pages that show one list.
 
 ### Splits in Favorites (Arc 1.171, 31 Oct 2026, Swift metadata + offline Arc)
 Request from a Cra user (DM, 31 Oct): "the split tabs being pinned, I also need them pinned at the top".

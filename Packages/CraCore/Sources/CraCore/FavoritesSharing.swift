@@ -1,10 +1,11 @@
 import Foundation
 
-/// Settings ▸ Tabs ▸ "Share Favorites across Spaces with the same profile" (GitHub #154). Arc
-/// keeps one favorites container per profile (topApps{profile}) that every space on that profile
-/// shows. Cra keeps a container per space; with sharing on, the spaces of a profile point at
-/// one of them, the first space's in sidebar order, which takes in the others' favorites.
-/// Turning it off gives every space its own copy again (SidebarStore).
+/// Settings ▸ Tabs ▸ "Share Favorites across Spaces with the same profile" (GitHub #154), Arc's
+/// favorites: one list per profile (StorableSidebar topApps{profile}) that every space on the
+/// profile shows. The list belongs to the profile, not to a space: a space that changes profile
+/// shows the other profile's list and takes nothing along, and a list nobody shows stays until a
+/// space uses the profile again. Off, Cra's favorites are per space; SidebarStore turns one
+/// shape into the other.
 public enum FavoritesSharing {
     /// A space's favorites as the store holds them.
     public struct SpaceFavorites: Equatable {
@@ -18,6 +19,17 @@ public enum FavoritesSharing {
             self.spaceID = spaceID
             self.profileID = profileID
             self.containerID = containerID
+            self.items = items
+        }
+    }
+
+    /// A profile's list and what is in it.
+    public struct ProfileList: Equatable {
+        public var list: ProfileFavorites
+        public var items: [Entry]
+
+        public init(_ list: ProfileFavorites, items: [Entry]) {
+            self.list = list
             self.items = items
         }
     }
@@ -43,73 +55,86 @@ public enum FavoritesSharing {
     }
 
     public struct Plan: Equatable {
-        /// The favorites container each space shows.
-        public var containers: [UUID: UUID] = [:]
-        /// The space each shown container names in its kind: the first space that shows it.
-        public var owners: [UUID: UUID] = [:]
-        /// Containers to make, empty, for a profile whose first space's container another
-        /// profile already shows.
+        /// Every profile's list afterwards: the ones there were, then new ones.
+        public var lists: [ProfileFavorites] = []
+        /// Lists to make, empty.
         public var created: [UUID] = []
-        /// Favorites that join the end of another container, in this order.
+        /// The list each space shows.
+        public var containers: [UUID: UUID] = [:]
+        /// Favorites that join the end of a list, in this order.
         public var moves: [Move] = []
-        /// Favorites of the same page as one already in the list they would join: they go, and
-        /// a window that had one open shows the kept one.
+        /// Favorites of the same page as one the list already has: they go, and a window
+        /// that had one open shows the kept one.
         public var duplicates: [UUID: UUID] = [:]
-        /// Containers no space shows any more, emptied by `moves` and `duplicates`.
+        /// Space containers emptied into a list.
         public var dropped: [UUID] = []
 
         public init() {}
     }
 
-    /// Spaces in sidebar order (incognito ones left out). A container several spaces already
-    /// show is taken in once.
-    public static func share(_ spaces: [SpaceFavorites], newID: () -> UUID = UUID.init) -> Plan {
+    /// Sharing on: each space shows its profile's list, made when the profile has none, and its
+    /// own favorites join it in sidebar order. Already shared, nothing changes.
+    public static func share(_ spaces: [SpaceFavorites], lists: [ProfileList], newID: () -> UUID = UUID.init) -> Plan {
         var plan = Plan()
+        plan.lists = lists.map(\.list)
         var target: [UUID?: UUID] = [:]
         var keys: [UUID: [String: UUID]] = [:]
         var taken: Set<UUID> = []
-        func index(_ items: [Entry]) -> [String: UUID] {
-            var out: [String: UUID] = [:]
-            for e in items { if let k = e.key, out[k] == nil { out[k] = e.id } }
-            return out
+        for l in lists where target[l.list.profileID] == nil {
+            target[l.list.profileID] = l.list.containerID
+            keys[l.list.containerID] = index(l.items, into: [:])
         }
+        for l in lists { taken.insert(l.list.containerID) }
         for s in spaces {
-            if let t = target[s.profileID] {
-                plan.containers[s.spaceID] = t
-                guard taken.insert(s.containerID).inserted else { continue }
-                for e in s.items {
-                    if let k = e.key, let kept = keys[t]?[k] {
-                        plan.duplicates[e.id] = kept
-                    } else {
-                        plan.moves.append(Move(item: e.id, container: t))
-                        if let k = e.key { keys[t, default: [:]][k] = e.id }
-                    }
-                }
-                plan.dropped.append(s.containerID)
-            } else if taken.insert(s.containerID).inserted {
-                target[s.profileID] = s.containerID
-                plan.containers[s.spaceID] = s.containerID
-                plan.owners[s.containerID] = s.spaceID
-                keys[s.containerID] = index(s.items)
+            let t: UUID
+            if let known = target[s.profileID] {
+                t = known
             } else {
-                // Another profile's list: this profile starts its own, empty.
-                let c = newID()
-                target[s.profileID] = c
-                plan.created.append(c)
-                plan.containers[s.spaceID] = c
-                plan.owners[c] = s.spaceID
+                t = newID()
+                target[s.profileID] = t
+                plan.created.append(t)
+                plan.lists.append(ProfileFavorites(profileID: s.profileID, containerID: t))
+                taken.insert(t)
             }
+            plan.containers[s.spaceID] = t
+            guard taken.insert(s.containerID).inserted else { continue }
+            // A page the list already had goes; two of a page from one space both stay.
+            let before = keys[t] ?? [:]
+            for e in s.items {
+                if let k = e.key, let kept = before[k] {
+                    plan.duplicates[e.id] = kept
+                } else {
+                    plan.moves.append(Move(item: e.id, container: t))
+                }
+            }
+            keys[t] = index(s.items.filter { plan.duplicates[$0.id] == nil }, into: before)
+            plan.dropped.append(s.containerID)
         }
         return plan
     }
 
-    /// Turning sharing off: every space after the first that shows a container gets a copy of
-    /// it (space → container to copy). The first keeps the favorites themselves, open pages too.
-    public static func unshare(_ spaces: [SpaceFavorites]) -> [UUID: UUID] {
+    /// Sharing off: the spaces showing a list each get a list of their own. The first in sidebar
+    /// order takes the favorites themselves, open pages too; the others get copies. Lists no
+    /// space shows stay with their profiles.
+    public struct Split: Equatable {
+        public var spaceID: UUID
+        public var from: UUID
+        /// True for the space that takes the favorites, false for a copy.
+        public var takes: Bool
+
+        public init(spaceID: UUID, from: UUID, takes: Bool) {
+            self.spaceID = spaceID
+            self.from = from
+            self.takes = takes
+        }
+    }
+
+    public static func unshare(_ spaces: [SpaceFavorites], lists: [ProfileFavorites]) -> [Split] {
+        let listIDs = Set(lists.map(\.containerID))
         var seen: Set<UUID> = []
-        var copies: [UUID: UUID] = [:]
-        for s in spaces where !seen.insert(s.containerID).inserted { copies[s.spaceID] = s.containerID }
-        return copies
+        return spaces.filter { listIDs.contains($0.containerID) }.map {
+            Split(spaceID: $0.spaceID, from: $0.containerID, takes: seen.insert($0.containerID).inserted)
+        }
     }
 
     /// What makes two favorites the same when lists merge: a tab's pinned home, a split's panes'
@@ -120,5 +145,11 @@ public enum FavoritesSharing {
         let homes = children.compactMap { $0.tab?.savedURL }
         guard !homes.isEmpty, !homes.contains(where: \.isEmpty) else { return nil }
         return "split " + homes.joined(separator: " ")
+    }
+
+    private static func index(_ items: [Entry], into start: [String: UUID]) -> [String: UUID] {
+        var out = start
+        for e in items { if let k = e.key, out[k] == nil { out[k] = e.id } }
+        return out
     }
 }

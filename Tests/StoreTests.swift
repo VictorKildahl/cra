@@ -467,8 +467,9 @@ enum StoreTests {
 
         store.setFavoritesShared(true)
         expect(list(home) == list(work) && list(other) != list(home), "spaces on one profile show one list, another profile its own")
+        expect(store.profileFavorites.map(\.profileID) == [nil, client.id], "one list per profile")
         expect(favorites(home) == before + [mail, music] && favorites(other) == [jira],
-               "the first space's favorites, then the others', a page they both had once")
+               "the spaces' favorites in sidebar order, a page they both had once")
         expect(store.item(mailAgain) == nil && store.focusedSpaceID == work && store.selectedTabID == mail,
                "the window that had the dropped copy open shows the kept one, in the space it was in")
         expect(store.spaceID(ofItem: mail) == work && store.isInSpace(mail, home) && store.isInSpace(mail, work) && !store.isInSpace(mail, other),
@@ -476,7 +477,7 @@ enum StoreTests {
         expect(store.integrityProblems().isEmpty, "sharing leaves the sidebar sound")
 
         let third = store.createSpace(title: "Shared Third", emoji: "3️⃣", focus: false).id
-        expect(list(third) == list(home), "a new space joins its profile's list")
+        expect(list(third) == list(home), "a new space shows its profile's list")
         store.moveTab(music, toSpace: home)
         expect(favorites(home) == before + [mail, music], "moving a favorite to a space that shows it changes nothing")
 
@@ -488,22 +489,46 @@ enum StoreTests {
         expect(store.selectedTabID(in: work) != music && store.selectedTabID(in: third) != music,
                "closing a shared favorite closes it in every space that had it open")
 
+        let defaults = list(home)
+        store.selectTab(mail)
         store.setProfile(client.id, forSpace: work)
         expect(list(work) == list(other) && favorites(work) == [jira] && favorites(home) == before + [mail],
-               "a space changing profile takes its new profile's list and leaves the old one with the others")
-        expect(store.selectedTabID(in: work) == nil && store.integrityProblems().isEmpty, "and nothing of the old list stays open in it")
+               "a space changing profile shows its new profile's list and takes nothing along (Arc)")
+        expect(store.selectedTabID(in: work) == mail && store.profileDirectoryName(item: mail) == "Default"
+               && store.profileDirectoryName(item: jira) == client.directoryName && store.integrityProblems().isEmpty,
+               "a favorite it had open stays open in the profile it was opened in (Arc)")
 
         store.deleteSpace(home)
-        expect(favorites(third) == before + [mail] && store.item(list(third))?.container == .favorites(spaceID: third),
-               "deleting a space leaves the list it shared with the others")
+        store.setProfile(client.id, forSpace: third)
+        expect(store.item(defaults) != nil && store.children(of: defaults).map(\.id) == before + [mail],
+               "Default's list stays while no space uses Default (Arc)")
+        expect(store.spaceIDs(ofItem: mail).isEmpty && store.spaceID(ofItem: mail) == nil
+               && !store.profileTabs(window: nil).contains { $0.id == mail }, "and nothing shows or offers it")
+        store.setProfile(nil, forSpace: third)
+        expect(list(third) == defaults, "a space back on Default shows that list again")
 
         store.setFavoritesShared(false)
         expect(list(work) != list(other) && favorites(work) == [jira] && favorites(other).count == 1 && favorites(other) != [jira]
                && store.item(favorites(other)[0])?.tab?.savedURL == "https://example.com/shared-jira",
                "turning it off gives each space its own copy, the first in the sidebar keeping the favorites themselves")
+        expect(favorites(third) == before + [mail] && store.profileFavorites.isEmpty, "every list was shown, so none is left")
         expect(store.integrityProblems().isEmpty, "unsharing leaves the sidebar sound")
         store.setFavoritesShared(true)
         expect(list(work) == list(other) && favorites(work) == [jira], "on again, the copies fold back into one list")
+        store.setProfile(nil, forSpace: other)
+        let unused = store.createProfile(name: "Shared Unused")
+        store.setProfile(unused.id, forSpace: other)
+        store.setProfile(client.id, forSpace: other)
+        let unusedList = store.profileFavorites.first { $0.profileID == unused.id }?.containerID
+        store.deleteProfile(unused.id)
+        expect(unusedList.map { store.item($0) == nil } == true && !store.profileFavorites.contains { $0.profileID == unused.id },
+               "deleting a profile deletes its favorites")
+        let moving = favorite("https://example.com/shared-move", in: work)
+        store.moveFavorite(moving, toProfile: nil)
+        expect(store.profileList(ofItem: moving)?.profileID == nil && !store.isInSpace(moving, work) && store.isInSpace(moving, third),
+               "Move to ▸ Profile puts a favorite on the other profile's list (Arc)")
+        store.removeFromFavorites(moving)
+        expect(store.item(moving) == nil && !store.archive.contains { $0.id == moving }, "Remove Favorite deletes it, unarchived (Arc)")
         store.setFavoritesShared(false)
         store.saveAll()
         let reloaded = AppComposition(clock: ManualScheduler()).store

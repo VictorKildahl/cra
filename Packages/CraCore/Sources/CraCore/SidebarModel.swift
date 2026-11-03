@@ -19,8 +19,9 @@ public enum ContainerKind: Codable, Equatable, Hashable {
         }
     }
 
-    /// Stands in for the space of the favorites container every space shared
-    /// before favorites became per space; SidebarStore splits it up on load.
+    /// Stands in for the space of a favorites container no one space owns: a profile's
+    /// shared list (#154, `SidebarDocument.profileFavorites`), or the one every space shared
+    /// in files from before favorites became per space, which SidebarStore splits up on load.
     public static let sharedFavoritesSpaceID = UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
 
     private enum CodingKeys: String, CodingKey { case favorites, pinned, today }
@@ -287,6 +288,18 @@ public struct BrowserProfile: Identifiable, Codable, Equatable {
     public var directoryName: String { "Profile \(id.uuidString)" }
 }
 
+/// A profile's favorites list (Arc: StorableSidebar.topAppsContainerIDs, profile → container).
+public struct ProfileFavorites: Codable, Equatable {
+    /// nil is the Default profile.
+    public var profileID: UUID?
+    public var containerID: UUID
+
+    public init(profileID: UUID?, containerID: UUID) {
+        self.profileID = profileID
+        self.containerID = containerID
+    }
+}
+
 public struct SidebarDocument: Codable, Equatable {
     public var version: Int = 1
     public var spaceOrder: [UUID]
@@ -297,15 +310,19 @@ public struct SidebarDocument: Codable, Equatable {
     public var items: [SidebarItem]
     /// Profiles besides Default (missing in files from before profiles).
     public var profiles: [BrowserProfile]?
+    /// Arc's favorites per profile (topApps{profile}), with AppSettings.sharedFavorites on: the
+    /// list each profile's spaces show. A list outlives its spaces, as in Arc (#154).
+    public var profileFavorites: [ProfileFavorites]?
 
     public init(version: Int = 1, spaceOrder: [UUID], spaces: [Space], favoritesContainerID: UUID? = nil, items: [SidebarItem],
-                profiles: [BrowserProfile]? = nil) {
+                profiles: [BrowserProfile]? = nil, profileFavorites: [ProfileFavorites]? = nil) {
         self.version = version
         self.spaceOrder = spaceOrder
         self.spaces = spaces
         self.favoritesContainerID = favoritesContainerID
         self.items = items
         self.profiles = profiles
+        self.profileFavorites = profileFavorites
     }
 
     public static func fresh() -> SidebarDocument {

@@ -1069,14 +1069,15 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         let id = itemID
         if item.isSplit, let m = model {
             return SidebarMenus.split(id, panes: m.cells.map { ($0.id, $0.title) }, open: m.selected, store: store, ui: ui, actions: actions) {
-                MenuItems.add($0, action: "favoriteTab", title: "Remove from Favorites") { store.removeFromFavorites(id) }
+                MenuItems.add($0, action: "favoriteTab", title: Self.removeTitle(id, store)) { store.removeFromFavorites(id) }
+                Self.moveToProfile($0, id, store)
                 $0.addItem(.separator())
             }
         }
         let tileColor = item.tab?.tileColor
         let m = NSMenu()
         m.autoenablesItems = false
-        MenuItems.add(m, action: "favoriteTab", title: "Remove from Favorites") { store.removeFromFavorites(id) }
+        MenuItems.add(m, action: "favoriteTab", title: Self.removeTitle(id, store)) { store.removeFromFavorites(id) }
         MenuItems.add(m, action: "renameTab", title: "Rename…") { ui.renamingID = id }
         if let t = item.tab, t.liveItemURL == nil {
             SidebarMenus.pinnedURLItems(m, id, navigatedAway: t.url != t.savedURL, store: store, actions: actions)
@@ -1112,10 +1113,26 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
             guard let grid else { return }
             store.setTileColor(tileColor, for: grid.spaceFavoriteIDs())
         }
+        Self.moveToProfile(m, id, store)
         m.addItem(.separator())
         MenuItems.add(m, action: "closeTab", title: "Close") { actions.closeTab(id) }
         MenuItems.add(m, "Archive") { store.archiveTab(id, reason: .manual) }
         return m
+    }
+
+    /// Shared favorites (#154) take Arc's words: Remove Favorite deletes the favorite.
+    private static func removeTitle(_ id: UUID, _ store: SidebarStore) -> String {
+        store.profileList(ofItem: id) == nil ? "Remove from Favorites" : "Remove Favorite"
+    }
+
+    /// Arc 1.171's Move to ▸ Profile ▸ ✓Default / <profile>… on a shared favorite.
+    private static func moveToProfile(_ menu: NSMenu, _ id: UUID, _ store: SidebarStore) {
+        guard let list = store.profileList(ofItem: id) else { return }
+        let profiles = MenuItems.submenu(MenuItems.submenu(menu, "Move to"), "Profile")
+        MenuItems.add(profiles, "Default", on: list.profileID == nil) { store.moveFavorite(id, toProfile: nil) }
+        for p in store.profiles {
+            MenuItems.add(profiles, p.name, on: list.profileID == p.id) { store.moveFavorite(id, toProfile: p.id) }
+        }
     }
 
     private func pickIcon() {

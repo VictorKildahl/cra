@@ -13,6 +13,9 @@ final class SidebarStore {
     private(set) var spaceOrder: [UUID] = []
     /// Profiles besides Default, in the order they were made.
     private(set) var profiles: [BrowserProfile] = []
+    /// Arc's favorites per profile, with Share Favorites on (#154): the list each profile's
+    /// spaces show. One stays while no space uses its profile.
+    private(set) var profileFavorites: [ProfileFavorites] = []
     /// Observed item by item (ItemTable): a view re-renders when an item it read changes.
     let items = ItemTable()
     private(set) var archive: [ArchivedItem] = [] { didSet { archiveChanged = true } }
@@ -61,6 +64,7 @@ final class SidebarStore {
         let doc = sidebarFile.load(or: SidebarDocument.fresh)
         for s in doc.spaces { spaces[s.id] = s }
         profiles = doc.profiles ?? []
+        profileFavorites = doc.profileFavorites ?? []
         spaceOrder = doc.spaceOrder.filter { spaces[$0] != nil }
         for s in doc.spaces where !spaceOrder.contains(s.id) { spaceOrder.append(s.id) }
         for it in doc.items { items[it.id] = it }
@@ -277,7 +281,8 @@ final class SidebarStore {
         if isIncognito(space: sid), let s = spaces[sid] {
             return tabs(under: s.favoritesContainerID) + tabs(under: s.pinnedContainerID) + tabs(under: s.todayContainerID)
         }
-        return allTabs().filter { !isIncognito(item: $0.id) }
+        // Not the favorites of a profile no space uses (#154): nothing shows them.
+        return allTabs().filter { !isIncognito(item: $0.id) && spaceID(ofItem: $0.id) != nil }
     }
 
     private func collectSubtree(of space: Space, into ids: inout Set<UUID>) {
@@ -372,11 +377,9 @@ final class SidebarStore {
     /// then it's the window's space when that is one of them, else the first.
     func spaceID(ofItem id: UUID, window: UUID? = nil) -> UUID? {
         guard let root = rootContainerItem(of: id), let kind = root.container else { return nil }
-        if case .favorites = kind, let focused = untrackedWindow(window).focusedSpaceID,
-           focused != kind.spaceID, spaces[focused]?.favoritesContainerID == root.id {
-            return focused
-        }
-        return kind.spaceID
+        guard case .favorites(let owner) = kind, owner == ContainerKind.sharedFavoritesSpaceID else { return kind.spaceID }
+        if let focused = untrackedWindow(window).focusedSpaceID, spaces[focused]?.favoritesContainerID == root.id { return focused }
+        return spaceOrder.first { spaces[$0]?.favoritesContainerID == root.id }
     }
 
     /// Whether a space lists the item: its own, or favorites it shares.
@@ -385,12 +388,12 @@ final class SidebarStore {
         return [s.favoritesContainerID, s.pinnedContainerID, s.todayContainerID].contains(root)
     }
 
-    /// The spaces that show an item: one, or every space sharing its favorites.
+    /// The spaces that show an item: one, every space on its profile for a shared favorite, or
+    /// none for one on a profile no space uses.
     func spaceIDs(ofItem id: UUID) -> [UUID] {
         guard let root = rootContainerItem(of: id), let kind = root.container else { return [] }
-        guard case .favorites = kind else { return [kind.spaceID] }
-        let sharing = spaceOrder.filter { spaces[$0]?.favoritesContainerID == root.id }
-        return sharing.isEmpty ? [kind.spaceID] : sharing
+        guard case .favorites(let owner) = kind, owner == ContainerKind.sharedFavoritesSpaceID else { return [kind.spaceID] }
+        return spaceOrder.filter { spaces[$0]?.favoritesContainerID == root.id }
     }
 
     func isPinned(_ id: UUID) -> Bool {
@@ -620,7 +623,7 @@ final class SidebarStore {
         for sid in incognitoSpaceIDs { if let s = spaces[sid] { collectSubtree(of: s, into: &hidden) } }
         return SidebarDocument(version: 1, spaceOrder: spaceOrder, spaces: orderedSpaces,
                                items: hidden.isEmpty ? Array(items.values) : items.values.filter { !hidden.contains($0.id) },
-                               profiles: profiles)
+                               profiles: profiles, profileFavorites: profileFavorites.isEmpty ? nil : profileFavorites)
     }
 
     /// The tab switcher's list (⌃Tab): a space's most recently used tabs, newest first
@@ -986,41 +989,67 @@ final class SidebarStore {
 
     func removeFromFavorites(_ id: UUID) {
         let id = splitContaining(id)?.id ?? id
+        // Arc's Remove Favorite (1.171, shared favorites): the favorite is gone, not pinned or archived.
+        if profileList(ofItem: id) != nil {
+            let tabs = items[id]?.isSplit == true ? children(of: id).filter(\.isTab).map(\.id) : [id]
+            for t in tabs { archiveTab(t, reason: .manual) }
+            archive.removeAll { tabs.contains($0.id) }
+            return
+        }
         guard let space = spaceID(ofItem: id).flatMap({ spaces[$0] }) else { return }
         moveItem(id, to: space.pinnedContainerID, index: nil)
     }
 
     // MARK: Shared favorites (#154)
 
-    /// Settings ▸ Tabs ▸ Share Favorites: the spaces of a profile show one list, made of every
-    /// one of their lists (a page in two of them once). Off again, each space gets a copy of it.
+    /// Settings ▸ Tabs ▸ Share Favorites: Arc's favorites, one list per profile. On, each
+    /// profile's spaces show its list, which takes in their own favorites (a page in two of them
+    /// once); off, each space gets its own list again.
     func setFavoritesShared(_ on: Bool) {
         guard settings.sharedFavorites != on else { return }
         settings.sharedFavorites = on
         on ? shareFavorites() : unshareFavorites()
     }
 
+    private func entries(_ container: UUID) -> [FavoritesSharing.Entry] {
+        children(of: container).map { FavoritesSharing.Entry(id: $0.id, key: FavoritesSharing.key(of: $0, children: children(of: $0.id))) }
+    }
+
     private func favoritesBySpace() -> [FavoritesSharing.SpaceFavorites] {
-        orderedSpaces.map { s in
-            let entries = children(of: s.favoritesContainerID).map {
-                FavoritesSharing.Entry(id: $0.id, key: FavoritesSharing.key(of: $0, children: children(of: $0.id)))
-            }
-            return FavoritesSharing.SpaceFavorites(spaceID: s.id, profileID: s.profileID, containerID: s.favoritesContainerID, items: entries)
+        orderedSpaces.map {
+            FavoritesSharing.SpaceFavorites(spaceID: $0.id, profileID: $0.profileID, containerID: $0.favoritesContainerID,
+                                            items: entries($0.favoritesContainerID))
         }
+    }
+
+    /// A profile's list, made empty when it has none (a space moving to a new profile).
+    private func profileList(_ profileID: UUID?) -> UUID {
+        if let l = profileFavorites.first(where: { $0.profileID == profileID }), items[l.containerID] != nil { return l.containerID }
+        let c = SidebarItem.container(.favorites(spaceID: ContainerKind.sharedFavoritesSpaceID))
+        items[c.id] = c
+        profileFavorites.removeAll { $0.profileID == profileID }
+        profileFavorites.append(ProfileFavorites(profileID: profileID, containerID: c.id))
+        return c.id
+    }
+
+    private func isProfileList(_ container: UUID) -> Bool { profileFavorites.contains { $0.containerID == container } }
+
+    /// Arc's Move to ▸ Profile on a favorite: it joins the end of that profile's list.
+    func moveFavorite(_ id: UUID, toProfile profileID: UUID?) {
+        let id = splitContaining(id)?.id ?? id
+        guard let from = profileList(ofItem: id), from.profileID != profileID, profileID == nil || profile(profileID) != nil else { return }
+        reparent(id, to: profileList(profileID))
+        touch()
     }
 
     /// Makes the sidebar match FavoritesSharing.share; nothing changes when it already does.
     private func shareFavorites() {
-        let plan = FavoritesSharing.share(favoritesBySpace())
-        for c in plan.created { items[c] = SidebarItem.container(.favorites(spaceID: plan.owners[c]!), id: c) }
+        profileFavorites.removeAll { items[$0.containerID] == nil }
+        let lists = profileFavorites.map { FavoritesSharing.ProfileList($0, items: entries($0.containerID)) }
+        let plan = FavoritesSharing.share(favoritesBySpace(), lists: lists)
+        for c in plan.created { items[c] = SidebarItem.container(.favorites(spaceID: ContainerKind.sharedFavoritesSpaceID), id: c) }
         // Raw moves: a favorite keeps its home (moveItem would make the current page it).
-        for m in plan.moves {
-            guard var it = items[m.item] else { continue }
-            detach(m.item)
-            it.parentID = m.container
-            items[m.item] = it
-            items[m.container]?.children.append(m.item)
-        }
+        for m in plan.moves { reparent(m.item, to: m.container) }
         // A window that had a dropped duplicate open shows the kept one (a split's panes in order).
         var replaced: [UUID: UUID] = [:]
         for (dup, kept) in plan.duplicates {
@@ -1036,12 +1065,9 @@ final class SidebarStore {
         }
         for c in plan.dropped { items[c] = nil }
         var changed = !plan.created.isEmpty || !plan.moves.isEmpty || !plan.duplicates.isEmpty || !plan.dropped.isEmpty
+        profileFavorites = plan.lists
         for (sid, c) in plan.containers where spaces[sid]?.favoritesContainerID != c {
             spaces[sid]?.favoritesContainerID = c
-            changed = true
-        }
-        for (c, owner) in plan.owners where items[c]?.container != .favorites(spaceID: owner) {
-            items[c]?.data = .container(.favorites(spaceID: owner))
             changed = true
         }
         if !replaced.isEmpty {
@@ -1055,25 +1081,41 @@ final class SidebarStore {
         if changed { touch() }
     }
 
-    /// Each space after the first showing a list gets a copy; the first keeps the favorites and
-    /// their pages. Nothing changes while no list is shared.
+    /// Each space showing a list gets one of its own: the first takes the favorites and their
+    /// pages, the others copies. A list no space shows stays with its profile for next time.
     private func unshareFavorites() {
-        let copies = FavoritesSharing.unshare(favoritesBySpace())
-        guard !copies.isEmpty else { return }
+        let splits = FavoritesSharing.unshare(favoritesBySpace(), lists: profileFavorites)
+        guard !splits.isEmpty else { return }
         var windows = prefs.windows
         var expanded = prefs.expandedFolders
-        for sid in spaceOrder {
-            guard let from = copies[sid] else { continue }
-            let c = SidebarItem.container(.favorites(spaceID: sid))
+        var own: [UUID: UUID] = [:]
+        for s in splits {
+            let c = SidebarItem.container(.favorites(spaceID: s.spaceID))
             items[c.id] = c
-            spaces[sid]?.favoritesContainerID = c.id
+            own[s.spaceID] = c.id
+        }
+        // Copies first: the space that takes the favorites empties the list.
+        for s in splits where !s.takes {
             var map: [UUID: UUID] = [:]
-            for child in items[from]?.children ?? [] { copySubtree(child, into: c.id, copies: &map) }
+            for child in items[s.from]?.children ?? [] { copySubtree(child, into: own[s.spaceID]!, copies: &map) }
             // A favorite open in this space stays open: it is now this space's copy.
             for i in windows.indices {
-                if let sel = windows[i].selectedTabPerSpace[sid], let copy = map[sel] { windows[i].selectedTabPerSpace[sid] = copy }
+                if let sel = windows[i].selectedTabPerSpace[s.spaceID], let copy = map[sel] { windows[i].selectedTabPerSpace[s.spaceID] = copy }
             }
             for (old, new) in map where expanded.contains(old) { expanded.insert(new) }
+        }
+        for s in splits where s.takes {
+            for child in items[s.from]?.children ?? [] { reparent(child, to: own[s.spaceID]!) }
+        }
+        for s in splits { spaces[s.spaceID]?.favoritesContainerID = own[s.spaceID]! }
+        let emptied = Set(splits.map(\.from))
+        for c in emptied { items[c] = nil }
+        profileFavorites.removeAll { emptied.contains($0.containerID) }
+        // A favorite left open in a space that changed profile now belongs to one space.
+        for i in windows.indices {
+            for (sid, tid) in windows[i].selectedTabPerSpace where items[tid] != nil && !isInSpace(tid, sid) && profileList(ofItem: tid) == nil {
+                windows[i].selectedTabPerSpace[sid] = nil
+            }
         }
         var p = prefs
         p.windows = windows
@@ -1082,9 +1124,12 @@ final class SidebarStore {
         touch()
     }
 
-    /// The space's favorites list is shown by other spaces too.
-    private func sharesFavorites(_ space: Space) -> Bool {
-        spaces.values.contains { $0.id != space.id && $0.favoritesContainerID == space.favoritesContainerID }
+    private func reparent(_ id: UUID, to parent: UUID) {
+        guard var it = items[id] else { return }
+        detach(id)
+        it.parentID = parent
+        items[id] = it
+        items[parent]?.children.append(id)
     }
 
     /// `following`: the window that goes along to `sid`.
@@ -1616,8 +1661,8 @@ final class SidebarStore {
 
     func deleteSpace(_ id: UUID) {
         guard spaceOrder.count > 1, spaceOrder.contains(id), let space = spaces[id] else { return }
-        // Shared favorites stay with the profile's other spaces.
-        let shared = sharesFavorites(space)
+        // A profile's favorites stay with the profile (Arc).
+        let shared = isProfileList(space.favoritesContainerID)
         let favorites = shared ? [] : [space.favoritesContainerID]
         for t in (favorites + [space.pinnedContainerID, space.todayContainerID]).flatMap({ tabs(under: $0) }) {
             archiveTab(t.id, reason: .spaceDeleted)
@@ -1628,10 +1673,6 @@ final class SidebarStore {
         items[space.todayContainerID] = nil
         spaces[id] = nil
         spaceOrder.removeAll { $0 == id }
-        if shared, items[space.favoritesContainerID]?.container == .favorites(spaceID: id),
-           let next = spaceOrder.first(where: { spaces[$0]?.favoritesContainerID == space.favoritesContainerID }) {
-            items[space.favoritesContainerID]?.data = .container(.favorites(spaceID: next))
-        }
         var windows = prefs.windows
         for i in windows.indices {
             windows[i].selectedTabPerSpace[id] = nil
@@ -1648,7 +1689,7 @@ final class SidebarStore {
     func exportSpace(_ id: UUID, intoFolderIn target: UUID) -> SidebarItem? {
         guard id != target, let space = spaces[id], let dest = spaces[target], spaceOrder.count > 1 else { return nil }
         let folder = createFolder(named: space.title, in: dest.pinnedContainerID, index: 0)
-        let moving = ((sharesFavorites(space) ? [] : [space.favoritesContainerID]) + [space.pinnedContainerID, space.todayContainerID])
+        let moving = ((isProfileList(space.favoritesContainerID) ? [] : [space.favoritesContainerID]) + [space.pinnedContainerID, space.todayContainerID])
             .flatMap { children(of: $0) }
             .filter { !$0.isLiveFolder }
             .map(\.id)
@@ -1668,7 +1709,17 @@ final class SidebarStore {
     /// The Chromium folder a tab's pages load in: its space's profile, or nil for the
     /// Default profile (and for incognito, which has its own off-the-record one).
     func profilePath(item id: UUID) -> String? {
-        spaceID(ofItem: id).flatMap { profilePath(space: $0) }
+        if let l = profileList(ofItem: id) {
+            return profile(l.profileID).map { AppPaths.chromiumCache.appendingPathComponent($0.directoryName, isDirectory: true).path }
+        }
+        return spaceID(ofItem: id).flatMap { profilePath(space: $0) }
+    }
+
+    /// A shared favorite loads in its list's profile (#154): a space that changed profile with
+    /// one open keeps showing it, in the profile it was opened in (Arc).
+    func profileList(ofItem id: UUID) -> ProfileFavorites? {
+        guard let root = rootContainerItem(of: id)?.id else { return nil }
+        return profileFavorites.first { $0.containerID == root }
     }
 
     func profilePath(space sid: UUID) -> String? {
@@ -1683,7 +1734,10 @@ final class SidebarStore {
         return p.directoryName
     }
 
-    func profileDirectoryName(item id: UUID) -> String { spaceID(ofItem: id).map { profileDirectoryName(space: $0) } ?? "Default" }
+    func profileDirectoryName(item id: UUID) -> String {
+        if let l = profileList(ofItem: id) { return profile(l.profileID)?.directoryName ?? "Default" }
+        return spaceID(ofItem: id).map { profileDirectoryName(space: $0) } ?? "Default"
+    }
 
     @discardableResult
     func createProfile(name: String) -> BrowserProfile {
@@ -1702,23 +1756,12 @@ final class SidebarStore {
     /// Pages already open in the space load again in the new profile (BrowserManager).
     func setProfile(_ profileID: UUID?, forSpace id: UUID) {
         guard var s = spaces[id], s.profileID != profileID, profileID == nil || profile(profileID) != nil else { return }
-        // Shared favorites stay with the old profile's other spaces; the space takes its new
-        // profile's list, or brings its own when it was the only one showing it.
-        if sharesFavorites(s) {
-            let c = SidebarItem.container(.favorites(spaceID: id))
-            items[c.id] = c
-            s.favoritesContainerID = c.id
-        }
+        // Arc: favorites belong to the profile. The space shows its new profile's list and takes
+        // nothing along; the old list stays with the old profile, shown or not. A favorite open in
+        // the space stays open, in its own profile, though its tile is gone (Arc 1.171).
+        if isProfileList(s.favoritesContainerID) { s.favoritesContainerID = profileList(profileID) }
         s.profileID = profileID
         spaces[id] = s
-        if settings.sharedFavorites {
-            shareFavorites()
-            var windows = prefs.windows
-            for i in windows.indices {
-                if let t = windows[i].selectedTabPerSpace[id], items[t] != nil, !isInSpace(t, id) { windows[i].selectedTabPerSpace[id] = nil }
-            }
-            if windows != prefs.windows { prefs.windows = windows }
-        }
         touch()
     }
 
@@ -1727,6 +1770,15 @@ final class SidebarStore {
     func deleteProfile(_ id: UUID) {
         guard let p = profile(id), spaces.values.allSatisfy({ $0.profileID != id }) else { return }
         profiles.removeAll { $0.id == id }
+        // Its favorites go with it.
+        for l in profileFavorites where l.profileID == id {
+            func drop(_ id: UUID) {
+                for c in items[id]?.children ?? [] { drop(c) }
+                items[id] = nil
+            }
+            drop(l.containerID)
+        }
+        profileFavorites.removeAll { $0.profileID == id }
         ProfileCleanup.schedule(p.directoryName)
         touch()
     }
