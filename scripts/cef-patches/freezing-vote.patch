@@ -11,12 +11,15 @@ index dd0a558c0..a54f79de4 100644
      "//components/pref_registry",
      "//components/printing/browser",
 diff --git a/cef/libcef/browser/devtools/devtools_controller.cc b/cef/libcef/browser/devtools/devtools_controller.cc
-index c60f22d1a..0e4b547b7 100644
+index c60f22d1a..d06000302 100644
 --- a/cef/libcef/browser/devtools/devtools_controller.cc
 +++ b/cef/libcef/browser/devtools/devtools_controller.cc
-@@ -6,9 +6,108 @@
+@@ -5,10 +5,149 @@
+ #include "cef/libcef/browser/devtools/devtools_controller.h"
  
  #include "base/json/json_reader.h"
++#include "base/feature_list.h"
++#include "base/functional/callback_helpers.h"
  #include "base/json/json_writer.h"
 +#include "base/supports_user_data.h"
 +#include "base/task/sequenced_task_runner.h"
@@ -26,7 +29,11 @@ index c60f22d1a..0e4b547b7 100644
 +#include "components/performance_manager/public/freezing/freezing.h"
 +#include "components/performance_manager/public/performance_manager.h"
  #include "content/public/browser/devtools_agent_host.h"
++#include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/render_process_host.h"
 +#include "content/public/browser/web_contents.h"
++#include "content/public/common/content_features.h"
 +
 +namespace {
 +
@@ -54,7 +61,13 @@ index c60f22d1a..0e4b547b7 100644
 +// {"id":N,"method":"Cra.setFreezingVote","params":{"vote":true|false}}: sets
 +// or drops the vote. {"id":N,"method":"Cra.getFreezingState"}: whether the
 +// page has Cra's vote, is frozen, and why the policy won't freeze it.
-+// Returns true for either; any other message returns false.
++// {"id":N,"method":"Cra.discard"}: discards the page in place, like Chrome's
++// TabLifecycleUnit with WebContentsDiscard on: its renderer goes, the
++// WebContents keeps its back/forward list and each entry's page state (scroll
++// position, form contents), and showing it loads the page again.
++// {"id":N,"method":"Cra.load"}: loads a discarded page now, as Chrome does
++// when its tab is selected, even while the window is covered.
++// Returns true for these; any other message returns false.
 +bool HandleCraMethod(content::WebContents* contents,
 +                     std::string_view message,
 +                     int* message_id,
@@ -71,10 +84,38 @@ index c60f22d1a..0e4b547b7 100644
 +  const std::string* method = dict->FindString("method");
 +  std::optional<int> id = dict->FindInt("id");
 +  if (!method || !id ||
-+      (*method != "Cra.setFreezingVote" && *method != "Cra.getFreezingState")) {
++      (*method != "Cra.setFreezingVote" && *method != "Cra.getFreezingState" &&
++       *method != "Cra.discard" && *method != "Cra.load")) {
 +    return false;
 +  }
 +  *message_id = *id;
++  if (*method == "Cra.load") {
++    // Does nothing unless the page was discarded and hasn't loaded since.
++    contents->GetController().LoadIfNecessary();
++    return true;
++  }
++  if (*method == "Cra.discard") {
++    if (!base::FeatureList::IsEnabled(features::kWebContentsDiscard)) {
++      *error = "discarding needs the WebContentsDiscard feature";
++      return true;
++    }
++    if (!contents->WasDiscarded()) {
++      // First try to end the renderer, if it holds only this page
++      // (AttemptFastKillForDiscard).
++      content::RenderFrameHost* main_frame = contents->GetPrimaryMainFrame();
++      result->Set("processEnded",
++                  main_frame && main_frame->GetProcess()->FastShutdownIfPossible(
++                                    1u, /*skip_unload_handlers=*/false,
++                                    /*ignore_workers=*/false,
++                                    /*ignore_keep_alive=*/false,
++                                    /*ignore_pending_reuse=*/false,
++                                    /*use_outermost_main_frame_check=*/true));
++      contents->Discard(base::DoNothing());
++    }
++    // False when a navigation was about to commit: Chromium keeps the page.
++    result->Set("discarded", contents->WasDiscarded());
++    return true;
++  }
 +  if (*method == "Cra.getFreezingState") {
 +    result->Set("vote", !!contents->GetUserData(kCraFreezingVoteKey));
 +    const performance_manager::PageNode* page =
@@ -123,7 +164,7 @@ index c60f22d1a..0e4b547b7 100644
  
  CefDevToolsController::CefDevToolsController(
      content::WebContents* inspected_contents)
-@@ -30,6 +129,36 @@ CefDevToolsController::~CefDevToolsController() {
+@@ -30,6 +169,36 @@ CefDevToolsController::~CefDevToolsController() {
  bool CefDevToolsController::SendDevToolsMessage(
      const std::string_view& message) {
    CEF_REQUIRE_UIT();

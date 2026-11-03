@@ -21,9 +21,6 @@ final class AppComposition {
     /// the windows' browser managers, which the composition does not own.
     static let autoArchiveInterval: TimeInterval = 1800
     static let tabSleepInterval: TimeInterval = 60
-    /// Arc discards a page after 4 hours out of sight and has no setting for it
-    /// (WebContentLifecycleOptimization's timeToDiscardTab, GitHub #136).
-    static let tabSleepAfter: TimeInterval = 4 * 3600
     /// Arc's timeToFreezeTab: a page out of sight 30 minutes is voted to freeze.
     static let tabFreezeAfter: TimeInterval = 30 * 60
 

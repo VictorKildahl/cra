@@ -462,6 +462,13 @@ public struct AppSettings: Codable, Equatable {
     /// Dia's Tabs ▸ "Clean up tabs I haven't used in:" checkbox; `autoArchive` keeps the
     /// threshold while this is off.
     public var autoArchiveEnabled: Bool = true
+    /// Tabs ▸ "Force tabs out of memory after:" (GitHub #153): on at Arc's 4 hours, like 0.1.28,
+    /// which had no setting. Off, the clock closes no page. Keys of their own: the switch 0.1.22–0.1.27
+    /// saved (tabSleepEnabled, tabSleep) must not turn this off on update.
+    public var tabSleepTimerEnabled: Bool = true
+    public var tabSleepAfter: TabSleepThreshold = .fourHours
+    /// Tabs ▸ "Force tabs out of memory when the Mac is short of memory" (GitHub #153), off like Arc.
+    public var tabSleepOnMemoryPressure: Bool = false
     /// Privacy ▸ "Always use secure connections": Chrome's HTTPS-Only Mode.
     public var httpsOnly: Bool = false
     /// Arc's searchSuggestEnabled: the command bar asks the search engine for suggestions
@@ -632,6 +639,9 @@ extension AppSettings {
         hapticFeedbackOnReorder = try c.decodeIfPresent(Bool.self, forKey: .hapticFeedbackOnReorder) ?? true
         warnBeforeQuitting = try c.decodeIfPresent(Bool.self, forKey: .warnBeforeQuitting) ?? false
         autoArchiveEnabled = try c.decodeIfPresent(Bool.self, forKey: .autoArchiveEnabled) ?? true
+        tabSleepTimerEnabled = try c.decodeIfPresent(Bool.self, forKey: .tabSleepTimerEnabled) ?? true
+        tabSleepAfter = (try? c.decodeIfPresent(TabSleepThreshold.self, forKey: .tabSleepAfter)) ?? .fourHours
+        tabSleepOnMemoryPressure = try c.decodeIfPresent(Bool.self, forKey: .tabSleepOnMemoryPressure) ?? false
         httpsOnly = try c.decodeIfPresent(Bool.self, forKey: .httpsOnly) ?? false
         searchSuggestions = try c.decodeIfPresent(Bool.self, forKey: .searchSuggestions) ?? true
         showSpaceHeaderOnSingleSpace = try c.decodeIfPresent(Bool.self, forKey: .showSpaceHeaderOnSingleSpace) ?? true
