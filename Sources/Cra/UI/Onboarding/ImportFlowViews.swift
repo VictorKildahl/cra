@@ -287,10 +287,13 @@ private struct ExtensionsStep: View {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(model.extensions) { e in
                         let installed = ExtensionStore.isInstalled(id: e.id)
+                        // Arc keeps extensions per profile: say which profiles it goes to (#131).
+                        let profiles = model.profileNames(of: e).map { " · " + $0.joined(separator: ", ") } ?? ""
                         SelectableRow(c: c, checked: model.selectedExtensions.contains(e.id), toggle: { model.toggleExtension(e.id) }) {
                             ExtensionIcon(image: e.icon, size: 24, c: c)
                             RowTitle(title: e.name,
-                                     caption: installed ? "Already in Cra · \(e.version)" : (e.isEnabled ? e.version : "Turned off in \(model.source?.rawValue ?? "Arc")"),
+                                     caption: installed ? "Already in Cra · \(e.version)"
+                                        : (e.isEnabled ? e.version + profiles : "Turned off in \(model.source?.rawValue ?? "Arc")"),
                                      c: c)
                         }
                     }

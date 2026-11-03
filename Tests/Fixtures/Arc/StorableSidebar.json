@@ -31,7 +31,7 @@
       "id": "work",
       "title": "Work",
       "profile": {
-       "default": true
+       "custom": { "_0": { "directoryBasename": "Profile 2", "machineID": "fixture-machine" } }
       },
       "containerIDs": [
        "pinned",

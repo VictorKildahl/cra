@@ -74,7 +74,9 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 - (BOOL)browser:(CraBrowser *)browser handleUnhandledKeyEvent:(NSEvent *)event;
 - (void)browser:(CraBrowser *)browser didUpdateDownload:(CraDownloadInfo *)download;
 /// Ask the user. `kinds` is a bitmask: 1 = camera, 2 = microphone,
-/// 4 = location, 8 = notifications, 16 = other.
+/// 4 = location, 8 = notifications, 16 = a type CraCEF has no bit for, and from
+/// 1 << 5 Chrome's other types (kPermissionKinds in CraCEF.mm, worded by CraCore's
+/// PermissionPrompt).
 - (void)browser:(CraBrowser *)browser requestsPermissionForOrigin:(NSString *)origin kinds:(NSUInteger)kinds completion:(void (^)(BOOL allowed))completion;
 - (void)browserDidReceiveFocus:(CraBrowser *)browser;
 - (void)browserDidClose:(CraBrowser *)browser;
@@ -109,6 +111,9 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 /// opens as a target=_blank tab) or Shift-clicked (YES, instead of a new window). Return
 /// YES to show it in a Peek; the page then stays where it is.
 - (BOOL)browser:(CraBrowser *)browser opensPeekForURL:(NSString *)url shiftClick:(BOOL)shiftClick;
+/// The DevTools frontend shows `panel` ("elements", "console", "network", …): on load, and
+/// on every switch, from Cra or the frontend's own tab bar.
+- (void)browser:(CraBrowser *)browser devToolsShowsPanel:(NSString *)panel;
 @end
 
 @interface CraBrowser : NSObject
@@ -164,6 +169,9 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 /// panel to select ("console", "network", "elements"), or "inspect" for the element picker. Done
 /// once the frontend is up (at once when DevTools are already open), then cleared.
 @property (nonatomic, copy, nullable) NSString *devToolsAction;
+/// Does devToolsAction in DevTools already open, without showing them again; a frontend
+/// still loading does it once up.
+- (void)applyDevToolsAction;
 - (void)closeDevTools;
 - (double)zoomLevel;
 - (void)setZoomLevel:(double)level;
@@ -244,6 +252,11 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 /// before Chromium is ready and once quitting starts.
 + (nullable NSString *)secureDNSMode;
 + (nullable NSString *)secureDNSTemplates;
+/// Writes both, as chrome://settings/security does; Chromium's network service picks the
+/// change up at once. NO when Chromium isn't ready, a policy sets them, or a write fails.
++ (BOOL)setSecureDNSMode:(NSString *)mode templates:(NSString *)templates;
+/// A policy (DnsOverHttpsMode, DnsOverHttpsTemplates) sets secure DNS, so Settings can't.
++ (BOOL)secureDNSIsManaged;
 /// Called on the main queue once Chromium is ready (at once if it already is) and after the
 /// secure DNS setting changes.
 + (void)setSecureDNSChangeHandler:(nullable void (^)(void))handler;
@@ -256,6 +269,10 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 + (NSInteger)blockedDomainCount;
 /// The blocking decision for a request made by a page, for diagnostics and tests.
 + (BOOL)shouldBlockRequestURL:(NSString *)requestURL onPageURL:(NSString *)pageURL;
+/// Unpacked extension folders to load with --load-extension, set before initializing, and
+/// for each in the same order the profile folders that load it ("Default|Profile <id>", "*"
+/// for every profile), comma-separated; nil when every one loads in every profile.
++ (void)setExtensionPaths:(NSArray<NSString *> *)paths profiles:(nullable NSString *)profiles;
 + (BOOL)initializeWithCachePath:(NSString *)cachePath
                  userAgentProduct:(NSString *)product
                           logPath:(NSString *)logPath

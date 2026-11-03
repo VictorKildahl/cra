@@ -215,6 +215,7 @@ final class KeyBindingRegistry {
             // Arc's app menu shows ⌘♡ beside it, a glyph no key types (see buildMenus).
             KeyAction(id: "setDefaultBrowser", name: "Set as Default Browser", section: .app, shortcuts: [], triggers: ["default browser"]),
             KeyAction(id: "importData", name: "Import from Arc or Dia…", section: .app, shortcuts: [], triggers: ["import", "arc", "dia"]),
+            KeyAction(id: "rebuildArcProfiles", name: "Rebuild Profiles from Arc…", section: .app, shortcuts: [], triggers: ["profiles", "arc profiles"]),
         ]
         for n in 1...9 {
             list.append(KeyAction(id: "item\(n)", name: "Go to Tab \(n)", section: .tabs,

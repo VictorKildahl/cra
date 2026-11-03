@@ -26,6 +26,12 @@ public enum PerfInsights {
     public static let largeFootprintBytes: Int64 = 4 << 30
     /// Short stalls per hour of the session that are worth a line.
     public static let frequentStallsPerHour = 30.0
+    /// What recording may cost, in percent of one core (docs/performance.md).
+    public static let selfCostBudgetPct = 0.1
+    /// Cra's average CPU, percent of one core, while nobody used the Mac, over at least
+    /// `idleMinSamples` 5-second samples, that is worth a line.
+    public static let idleCpuPct = 10.0
+    public static let idleMinSamples = 12
 
     public static func evaluate(_ r: PerfReport) -> [PerfInsight] {
         var out: [PerfInsight] = []
@@ -34,15 +40,31 @@ public enum PerfInsights {
                                    detail: "Cra \(p.craVersion) crashed, was forced to quit or the Mac lost power. Its last minute is in the export."))
         }
         let m = r.mainThread
-        if m.longStalls > 0 {
+        if m.longFreezes > 0 {
             out.append(PerfInsight(id: "freezes", severity: .warning,
-                                   title: "Cra froze \(m.longStalls) time\(m.longStalls == 1 ? "" : "s") for a second or more",
-                                   detail: "The longest lasted \(Self.duration(m.longestMs))\(m.hangs > 0 ? "; \(m.hangs) went past 2 s" : "")."))
+                                   title: "Cra froze \(m.longFreezes) time\(m.longFreezes == 1 ? "" : "s") for a second or more",
+                                   detail: "The longest lasted \(Self.duration(m.longestFreezeMs))\(m.hangs > 0 ? "; \(m.hangs) went past 2 s" : "")."))
         }
-        let hours = max(r.session.uptimeSeconds / 3600, 1.0 / 12)
-        if m.stalls >= 5, Double(m.stalls) / hours >= frequentStallsPerHour {
+        let hours = max(r.session.awakeSeconds / 3600, 1.0 / 12)
+        if m.freezes >= 5, Double(m.freezes) / hours >= frequentStallsPerHour {
             out.append(PerfInsight(id: "stalls", severity: .info, title: "Frequent short stalls",
-                                   detail: "\(m.stalls) pauses of a quarter second or more since launch."))
+                                   detail: "\(m.freezes) pauses of a quarter second or more since launch."))
+        }
+        if m.outsideFreezes > 0 {
+            let longest = m.longestPassMs > m.longestFreezeMs ? " The longest lasted \(Self.duration(m.longestPassMs))\(m.longestPassMode.map { " (\($0))" } ?? "")." : ""
+            out.append(PerfInsight(id: "outside-freezes", severity: .info,
+                                   title: "\(m.outsideFreezes) long pass\(m.outsideFreezes == 1 ? "" : "es") in menus, drags, alerts or start-up",
+                                   detail: "Not counted as freezes: Cra was in a loop of its own on purpose.\(longest)"))
+        }
+        if r.selfCost.cpuPct > selfCostBudgetPct {
+            out.append(PerfInsight(id: "profiler-overhead", severity: .info,
+                                   title: "Recording costs \(String(format: "%.3f", r.selfCost.cpuPct)) % of a core",
+                                   detail: "Over its \(selfCostBudgetPct) % budget. The numbers still hold; selfCost in perf.json says which part costs it."))
+        }
+        if r.idle.samples >= idleMinSamples, r.idle.cpuPct >= idleCpuPct {
+            out.append(PerfInsight(id: "idle-cpu", severity: .info,
+                                   title: "Cra kept working while the Mac was idle",
+                                   detail: "\(Int(r.idle.cpuPct.rounded())) % of a core on average over \(r.idle.samples * 5 / 60) min without keyboard or mouse input. A playing video counts too."))
         }
         let crashes = r.counters[PerfCounter.rendererTerminated.rawValue]?.values.reduce(0, +) ?? 0
         if crashes > 0 {
@@ -98,8 +120,13 @@ public enum PerfSummary {
         let m = r.mainThread
         var lines = [
             "Cra \(r.session.craVersion), Chromium \(r.session.chromiumVersion), launch \(r.session.launch), up \(Int(r.session.uptimeSeconds / 60)) min",
-            "Main thread: \(m.stalls) stalls ≥250 ms, \(m.longStalls) ≥1 s, \(m.hangs) ≥2 s, longest \(PerfInsights.duration(m.longestMs)) (p99 pass \(PerfInsights.duration(m.passes.percentile(0.99))))",
+            "Main thread: \(m.freezes) freezes ≥250 ms (\(m.longFreezes) ≥1 s, \(m.hangs) ≥2 s), longest freeze \(PerfInsights.duration(m.longestFreezeMs)); "
+                + "longest pass \(PerfInsights.duration(m.longestPassMs))\(m.longestPassMode.map { " (\($0))" } ?? ""), "
+                + "\(m.outsideFreezes) outside freezes (menus, drags, alerts, start-up); p99 pass \(PerfInsights.duration(m.passes.percentile(0.99)))",
         ]
+        if let s = m.slowPass {
+            lines.append("Slow pass sampled: \(PerfInsights.duration(s.endedMs ?? s.stalledMs)) (\(s.mode)), top: \(s.stack.first?.trimmingCharacters(in: .whitespaces) ?? s.stackNote ?? "no stack")")
+        }
         if let p = r.session.previous { lines.append("Previous session: \(p.abnormal ? "ended without quitting" : "quit normally") (Cra \(p.craVersion))") }
         for g in r.processes where g.count > 0 {
             lines.append("\(g.kind.rawValue) ×\(g.count): \(String(format: "%.1f", g.cpuPct)) % CPU, \(PerfInsights.bytes(g.footprintBytes))")
@@ -116,6 +143,10 @@ public enum PerfSummary {
             }
         }
         if r.tabs.longTasks > 0 { lines.append("Page long tasks: \(r.tabs.longTasks), \(PerfInsights.duration(r.tabs.longTaskMs)) in all") }
+        if r.tabs.longFrames > 0 { lines.append("Page long frames: \(r.tabs.longFrames), longest \(PerfInsights.duration(r.tabs.longestFrameMs))") }
+        if r.tabs.videoFrames > 0 { lines.append("Video: \(r.tabs.droppedVideoFrames) of \(r.tabs.videoFrames) frames dropped") }
+        if r.idle.samples > 0 { lines.append("Idle: \(String(format: "%.1f", r.idle.cpuPct)) % CPU over \(r.idle.samples * 5 / 60) min") }
+        lines.append("Recording: \(String(format: "%.3f", r.selfCost.cpuPct)) % of a core")
         for (counter, keys) in r.counters.sorted(by: { $0.key < $1.key }) where !keys.isEmpty {
             lines.append("\(counter): " + keys.sorted { $0.key < $1.key }.map { "\($0.key) ×\($0.value)" }.joined(separator: ", "))
         }

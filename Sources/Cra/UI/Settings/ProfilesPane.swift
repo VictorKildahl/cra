@@ -4,6 +4,7 @@ import SwiftUI
 /// use each, "Create Profile…" under the card. A space picks its profile in Edit Space.
 /// Arc only deletes profiles no space uses, and never Default.
 struct ProfilesPane: View {
+    let actions: SettingsActions
     @Environment(SidebarStore.self) private var store
     @State private var naming: BrowserProfile?
     @State private var creating = false
@@ -27,6 +28,11 @@ struct ProfilesPane: View {
             HStack {
                 Button("Create Profile…") { name = ""; creating = true }
                 Spacer()
+                // Spaces an Arc import left on Default, back on their Arc profiles (#131).
+                if ArcProfileRebuilder.isAvailable {
+                    Button("Rebuild from Arc…") { actions.rebuildArcProfiles() }
+                        .help("Put spaces imported from Arc back on the profiles they use in Arc, with their sign-ins and extensions.")
+                }
             }
             .padding(.top, 7.5)
             SettingsFootnote("Profiles help keep your data separate across Spaces, like logins, cookies and site data. You can use any Profile across one or more Spaces: right-click a Space and choose Edit Space to pick one. Only Profiles not assigned to any Spaces can be deleted.")

@@ -173,90 +173,157 @@ final class PictureInPictureOverlay: NSWindow {
 }
 
 final class PictureInPictureOverlayView: NSView {
-    private enum Edge { case none, left, right, top, bottom, topLeft, topRight, bottomLeft, bottomRight }
-    private static let grip: CGFloat = 8
-    private var edge: Edge = .none
-    private var startMouse: NSPoint = .zero
-    private var startFrame: NSRect = .zero
+    private typealias Edge = PictureInPictureGesture.Edge
+    private var gesture: PictureInPictureGesture?
+    private var requested: NSRect?
 
     private var target: NSWindow? { window?.parent }
 
     override var mouseDownCanMoveWindow: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    override func resetCursorRects() {
-        let g = Self.grip
-        let b = bounds
-        addCursorRect(NSRect(x: b.minX, y: b.minY + g, width: g, height: b.height - 2 * g), cursor: .resizeLeftRight)
-        addCursorRect(NSRect(x: b.maxX - g, y: b.minY + g, width: g, height: b.height - 2 * g), cursor: .resizeLeftRight)
-        addCursorRect(NSRect(x: b.minX + g, y: b.maxY - g, width: b.width - 2 * g, height: g), cursor: .resizeUpDown)
-        addCursorRect(NSRect(x: b.minX + g, y: b.minY, width: b.width - 2 * g, height: g), cursor: .resizeUpDown)
+    // The cursor follows the same edge zones as a press. Cursor rects don't do: AppKit applies
+    // them to a key window, and this one never becomes key, so corners came and went (#134).
+    // While the pointer is over the window Cra may set it from the background as well, so the
+    // resize cursor shows with another app in front, as it does over any window's edge.
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for t in trackingAreas { removeTrackingArea(t) }
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.cursorUpdate, .mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
     }
 
-    private func edge(at p: NSPoint) -> Edge {
-        let g = Self.grip
-        let l = p.x < g, r = p.x > bounds.maxX - g, t = p.y > bounds.maxY - g, bt = p.y < g
-        switch (l, r, t, bt) {
-        case (true, _, true, _): return .topLeft
-        case (_, true, true, _): return .topRight
-        case (true, _, _, true): return .bottomLeft
-        case (_, true, _, true): return .bottomRight
-        case (true, _, _, _): return .left
-        case (_, true, _, _): return .right
-        case (_, _, true, _): return .top
-        case (_, _, _, true): return .bottom
-        default: return .none
+    private func updateCursor(_ event: NSEvent) {
+        guard gesture == nil else { return }
+        let edge = PictureInPictureGesture.edge(at: convert(event.locationInWindow, from: nil), in: bounds.size)
+        (edge == .none ? NSCursor.arrow : Self.cursor(edge)).set()
+    }
+
+    override func cursorUpdate(with event: NSEvent) { updateCursor(event) }
+    override func mouseEntered(with event: NSEvent) {
+        BackgroundCursor.allow(true)
+        updateCursor(event)
+    }
+    override func mouseExited(with event: NSEvent) {
+        guard gesture == nil else { return }
+        NSCursor.arrow.set()
+        BackgroundCursor.allow(false)
+    }
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil { BackgroundCursor.allow(false) }
+    }
+
+    /// The resize cursor for an edge or corner; AppKit has diagonal ones from macOS 15.
+    private static func cursor(_ edge: Edge) -> NSCursor {
+        if #available(macOS 15, *) {
+            let position: NSCursor.FrameResizePosition = switch edge {
+            case .left: .left
+            case .right: .right
+            case .top: .top
+            case .bottom: .bottom
+            case .topLeft: .topLeft
+            case .topRight: .topRight
+            case .bottomLeft: .bottomLeft
+            case .bottomRight, .none: .bottomRight
+            }
+            return .frameResize(position: position, directions: .all)
         }
+        return edge == .top || edge == .bottom ? .resizeUpDown : .resizeLeftRight
     }
 
     override func mouseDown(with event: NSEvent) {
-        guard let target else { return }
-        edge = edge(at: convert(event.locationInWindow, from: nil))
-        startMouse = NSEvent.mouseLocation
-        startFrame = target.frame
+        guard let target else {
+            CraLog.note("pip: overlay has no parent window")
+            return
+        }
+        gesture = PictureInPictureGesture(mouse: Self.screenLocation(of: event), frame: target.frame)
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let target else { return }
-        let m = NSEvent.mouseLocation
-        let dx = m.x - startMouse.x, dy = m.y - startMouse.y
-        if edge == .none {
-            target.setFrameOrigin(NSPoint(x: startFrame.minX + dx, y: startFrame.minY + dy))
-            return
+        guard let target, var g = gesture else { return }
+        // The button was let go without a mouse-up reaching this window.
+        if NSEvent.pressedMouseButtons & 1 == 0 { finish(event); return }
+        let constraints = target.contentMaxSize
+        let visible = target.screen?.visibleFrame.size ?? constraints
+        let maxSize = NSSize(width: min(constraints.width, visible.width - 2 * PictureInPictureChrome.edgeMargin),
+                             height: min(constraints.height, visible.height - 2 * PictureInPictureChrome.edgeMargin))
+        let minSize = NSSize(width: max(target.contentMinSize.width, 160), height: max(target.contentMinSize.height, 90))
+        let wasDragging = g.isDragging
+        let frame = g.frame(mouse: Self.screenLocation(of: event), minSize: minSize, maxSize: maxSize)
+        gesture = g
+        guard let frame else { return }
+        if !wasDragging { CraLog.note(g.edge == .none ? "pip: move" : "pip: resize \(g.edge) from \(Self.size(g.startFrame))") }
+        if g.edge == .none {
+            target.setFrameOrigin(frame.origin)
+        } else {
+            // Cursor rects only describe the pointer before the press; keep the resize cursor
+            // for the whole drag, also when the pointer runs ahead of the edge.
+            Self.cursor(g.edge).set()
+            requested = frame
+            target.setFrame(frame, display: true)
         }
-        // Aspect-locked resize anchored on the opposite edge/corner.
-        let aspect = startFrame.width / max(startFrame.height, 1)
-        var w = startFrame.width
-        switch edge {
-        case .right, .topRight, .bottomRight: w = startFrame.width + dx
-        case .left, .topLeft, .bottomLeft: w = startFrame.width - dx
-        case .top: w = (startFrame.height + dy) * aspect
-        case .bottom: w = (startFrame.height - dy) * aspect
-        case .none: break
-        }
-        w = max(160, min(w, (target.screen?.visibleFrame.width ?? 2000) - 2 * PictureInPictureChrome.edgeMargin))
-        let h = w / aspect
-        var f = startFrame
-        f.size = NSSize(width: w, height: h)
-        switch edge {
-        case .left, .bottomLeft: f.origin.x = startFrame.maxX - w
-        case .topLeft: f.origin = NSPoint(x: startFrame.maxX - w, y: startFrame.maxY - h)
-        case .topRight, .top: f.origin.y = startFrame.maxY - h
-        default: break
-        }
-        target.setFrame(f, display: true)
     }
 
-    override func mouseUp(with event: NSEvent) {
-        guard let target else { return }
+    override func mouseUp(with event: NSEvent) { finish(event) }
+
+    private func finish(_ event: NSEvent) {
+        guard let target, let g = gesture else { return }
+        gesture = nil
+        if let window, !window.frame.contains(NSEvent.mouseLocation) {
+            // Let go outside the window: its exit came during the drag.
+            NSCursor.arrow.set()
+            BackgroundCursor.allow(false)
+        } else {
+            updateCursor(event)
+        }
+        guard g.isDragging else { return }
+        if g.edge != .none {
+            // Chromium owns the window's bounds; say so if it kept another size than the one asked.
+            let asked = requested.map { $0.size == target.frame.size ? "" : " (asked \(Self.size($0)))" } ?? ""
+            CraLog.note("pip: resized \(g.edge) \(Self.size(g.startFrame)) → \(Self.size(target.frame))\(asked)")
+            requested = nil
+        }
         PictureInPictureChrome.shared.remember(target.frame)
-        edge = .none
     }
+
+    /// Where on the screen the event happened. The window moves and resizes under the pointer, so
+    /// not its window location, and not `NSEvent.mouseLocation`, which is wherever the pointer is
+    /// by the time the event is handled.
+    private static func screenLocation(of event: NSEvent) -> NSPoint {
+        guard let p = event.cgEvent?.location, let primary = NSScreen.screens.first else { return NSEvent.mouseLocation }
+        return NSPoint(x: p.x, y: primary.frame.maxY - p.y)
+    }
+
+    private static func size(_ r: NSRect) -> String { "\(Int(r.width))×\(Int(r.height))" }
 
     // The pointer never reaches Chromium (its own controls stay hidden); the
     // controls subview shows Arc's on hover.
-    override func mouseMoved(with event: NSEvent) {}
+    override func mouseMoved(with event: NSEvent) {
+        if gesture != nil { finish(event) } else { updateCursor(event) }   // a move means no button is down: the mouse-up got lost
+    }
     override func rightMouseDown(with event: NSEvent) {}
     override func otherMouseDown(with event: NSEvent) {}
     override func scrollWheel(with event: NSEvent) {}
+}
+
+/// Lets Cra set the cursor while another app is in front. macOS only takes the frontmost app's
+/// cursor, so without this the Picture in Picture window, which floats over every app, shows no
+/// resize cursor unless Cra is active. On only while the pointer is over that window. Private
+/// WindowServer API (`CGSSetConnectionProperty`, "SetsCursorInBackground"); a no-op if it's gone.
+@MainActor
+enum BackgroundCursor {
+    private typealias MainConnection = @convention(c) () -> Int32
+    private typealias SetProperty = @convention(c) (Int32, Int32, CFString, CFTypeRef) -> Int32
+    private static let calls: (MainConnection, SetProperty)? = {
+        let any = UnsafeMutableRawPointer(bitPattern: -2)   // RTLD_DEFAULT
+        guard let main = dlsym(any, "CGSMainConnectionID"), let set = dlsym(any, "CGSSetConnectionProperty") else { return nil }
+        return (unsafeBitCast(main, to: MainConnection.self), unsafeBitCast(set, to: SetProperty.self))
+    }()
+    private static var isAllowed = false
+
+    static func allow(_ on: Bool) {
+        guard on != isAllowed, let calls else { return }
+        isAllowed = on
+        let cid = calls.0()
+        _ = calls.1(cid, cid, "SetsCursorInBackground" as CFString, (on ? kCFBooleanTrue : kCFBooleanFalse) as CFTypeRef)
+    }
 }

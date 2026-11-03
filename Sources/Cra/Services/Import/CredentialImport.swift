@@ -8,7 +8,8 @@ import SQLite3
 // and ImportPasswordsAndCookiesResultView). Sources decrypt with their own key;
 // rows are re-encrypted for Cra's Chromium profile and staged in a file, then
 // written into Cookies / Login Data on the next launch before Chromium opens
-// them (Chromium keeps both databases locked while it runs).
+// them (Chromium keeps both databases locked while it runs). Rows from an Arc
+// profile go to the Cra profile its spaces were put on (GitHub #131).
 
 struct ImportedCookie: Codable {
     var host: String            // host_key: ".example.com" for domain cookies
@@ -23,6 +24,8 @@ struct ImportedCookie: Codable {
     var httpOnly: Bool
     /// Chromium CookieSameSite: -1 unspecified, 0 none, 1 lax, 2 strict.
     var sameSite: Int
+    /// The source browser's profile folder it was read from.
+    var sourceProfile: String?
 }
 
 struct ImportedLogin: Codable {
@@ -34,6 +37,8 @@ struct ImportedLogin: Codable {
     var password: String
     var signonRealm: String
     var created: Int64
+    /// The source browser's profile folder it was read from.
+    var sourceProfile: String?
 
     /// A login from a CSV or Firefox: the realm is the page's origin.
     init?(url: String, username: String, password: String, created: Int64 = ChromiumTime.now) {
@@ -229,8 +234,9 @@ enum CredentialImport {
     /// Staged rows, already encrypted for Cra's profile (SafeStorage.key), so the
     /// file is no easier to read than the databases it feeds.
     private struct Pending: Codable {
-        struct Cookie: Codable { var c: ImportedCookie; var encrypted: Data }
-        struct Login: Codable { var l: ImportedLogin; var encrypted: Data }
+        /// `profile`: the Cra profile folder it goes to; nil (files from before #131) is Default.
+        struct Cookie: Codable { var c: ImportedCookie; var encrypted: Data; var profile: String? }
+        struct Login: Codable { var l: ImportedLogin; var encrypted: Data; var profile: String? }
         var cookies: [Cookie] = []
         var logins: [Login] = []
     }
@@ -238,21 +244,22 @@ enum CredentialImport {
     static var pendingFile: URL { AppPaths.file("pending-credentials.json") }
     static var hasPending: Bool { FileManager.default.fileExists(atPath: pendingFile.path) }
 
-    /// Adds to whatever is already staged; returns false when nothing could be written.
+    /// Adds to whatever is already staged, each row for the Cra profile `profiles` maps its
+    /// source profile to; returns false when nothing could be written.
     @discardableResult
-    static func stage(_ creds: ImportedCredentials) -> Bool {
+    static func stage(_ creds: ImportedCredentials, profiles: ImportProfileMap = ImportProfileMap()) -> Bool {
         guard !creds.isEmpty else { return true }
         guard let key = SafeStorage.key else { return false }
         var pending = (try? Data(contentsOf: pendingFile)).flatMap { try? JSONDecoder().decode(Pending.self, from: $0) } ?? Pending()
         for var c in creds.cookies {
             let encrypted = ChromiumCrypto.encrypt(Data(c.value.utf8), key: key)
             c.value = ""
-            pending.cookies.append(.init(c: c, encrypted: encrypted))
+            pending.cookies.append(.init(c: c, encrypted: encrypted, profile: profiles.craFolder(forSource: c.sourceProfile)))
         }
         for var l in creds.logins {
             let encrypted = ChromiumCrypto.encrypt(Data(l.password.utf8), key: key)
             l.password = ""
-            pending.logins.append(.init(l: l, encrypted: encrypted))
+            pending.logins.append(.init(l: l, encrypted: encrypted, profile: profiles.craFolder(forSource: l.sourceProfile)))
         }
         return write(pending)
     }
@@ -286,19 +293,67 @@ enum CredentialImport {
         return write(pending)
     }
 
-    /// Called from main.swift before Chromium starts. Leaves the file in place
-    /// when the profile's databases are missing (no first run yet) or busy.
-    static func applyPending(profileDir: URL) {
+    /// Called from main.swift before Chromium starts, with the folder that holds the profiles.
+    /// A profile Chromium has not made yet gets its databases from Default's schema, so its spaces
+    /// are signed in from their first page. Rows stay in the file while their profile's databases
+    /// are missing (no first run yet) or busy.
+    static func applyPending(root: URL) {
         guard let data = try? Data(contentsOf: pendingFile),
-              let pending = try? JSONDecoder().decode(Pending.self, from: data),
+              var pending = try? JSONDecoder().decode(Pending.self, from: data),
               let key = SafeStorage.key else { return }
-        let cookiesOK = pending.cookies.isEmpty || insertCookies(pending.cookies, into: profileDir.appendingPathComponent("Cookies"), key: key)
-        let loginsOK = pending.logins.isEmpty || insertLogins(pending.logins, into: profileDir.appendingPathComponent("Login Data"))
-        if cookiesOK && loginsOK {
+        let template = root.appendingPathComponent("Default", isDirectory: true)
+        let folders = Set(pending.cookies.map { $0.profile ?? "Default" } + pending.logins.map { $0.profile ?? "Default" })
+        for folder in folders.sorted() {
+            let dir = root.appendingPathComponent(folder, isDirectory: true)
+            let cookies = pending.cookies.filter { ($0.profile ?? "Default") == folder }
+            let logins = pending.logins.filter { ($0.profile ?? "Default") == folder }
+            let cookiesDB = dir.appendingPathComponent("Cookies"), loginsDB = dir.appendingPathComponent("Login Data")
+            if folder != "Default" {
+                if !cookies.isEmpty { createDatabase(cookiesDB, like: template.appendingPathComponent("Cookies")) }
+                if !logins.isEmpty { createDatabase(loginsDB, like: template.appendingPathComponent("Login Data")) }
+            }
+            let cookiesOK = cookies.isEmpty || insertCookies(cookies, into: cookiesDB, key: key)
+            let loginsOK = logins.isEmpty || insertLogins(logins, into: loginsDB)
+            if cookiesOK { pending.cookies.removeAll { ($0.profile ?? "Default") == folder } }
+            if loginsOK { pending.logins.removeAll { ($0.profile ?? "Default") == folder } }
+            if !cookiesOK || !loginsOK { NSLog("Cra: imported passwords/cookies for \(folder) stay pending (cookies \(cookiesOK), logins \(loginsOK))") }
+        }
+        if pending.cookies.isEmpty && pending.logins.isEmpty {
             try? FileManager.default.removeItem(at: pendingFile)
         } else {
-            NSLog("Cra: imported passwords/cookies stay pending (cookies \(cookiesOK), logins \(loginsOK))")
+            _ = write(pending)
         }
+    }
+
+    /// An empty database with `template`'s tables, indexes and meta rows (Chromium's schema
+    /// version), for a profile Chromium has not opened yet. Nothing when `url` exists.
+    static func createDatabase(_ url: URL, like template: URL) {
+        let fm = FileManager.default
+        guard !fm.fileExists(atPath: url.path), fm.fileExists(atPath: template.path) else { return }
+        var source: OpaquePointer?
+        guard sqlite3_open_v2(template.path, &source, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else { sqlite3_close(source); return }
+        let schema = SQLite.rows(source, "SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY type = 'table' DESC, rowid")
+            .compactMap { $0["sql"] as? String }
+        let meta = SQLite.rows(source, "SELECT key, value FROM meta")
+        sqlite3_close(source)
+        guard !schema.isEmpty, !meta.isEmpty else { return }
+        // Owner only, as Chromium makes its profile folders and databases.
+        try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        let staging = url.deletingLastPathComponent().appendingPathComponent(".\(url.lastPathComponent).creating")
+        try? fm.removeItem(at: staging)
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(staging.path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK else { sqlite3_close(db); return }
+        let ok = transaction(db) {
+            for sql in schema where sqlite3_exec(db, sql, nil, nil, nil) != SQLITE_OK { return false }
+            for row in meta {
+                guard let k = row["key"] as? String else { return false }
+                if !insert(db, table: "meta", values: ["key": k, "value": row["value"] ?? ""], orIgnore: false) { return false }
+            }
+            return true
+        }
+        sqlite3_close(db)
+        guard ok, (try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: staging.path)) != nil else { try? fm.removeItem(at: staging); return }
+        try? fm.moveItem(at: staging, to: url)
     }
 
     private static func open(_ url: URL) -> OpaquePointer? {

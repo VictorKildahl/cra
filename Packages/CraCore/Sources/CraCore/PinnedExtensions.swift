@@ -39,6 +39,13 @@ public struct PinnedExtensions: Codable, Equatable, Sendable {
         profiles[profile] = list
     }
 
+    /// A new profile's pins from the browser it was imported from (GitHub #131); a profile that
+    /// already has a list of its own keeps it.
+    public mutating func seed(_ ids: [String], inProfile profile: String) {
+        guard profiles[profile] == nil, ids != shared else { return }
+        profiles[profile] = ids
+    }
+
     /// Drops the extensions `isGone` says are no longer installed, from every list.
     public mutating func removeAll(where isGone: (String) -> Bool) {
         shared.removeAll(where: isGone)

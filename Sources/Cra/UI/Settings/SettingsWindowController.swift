@@ -4,6 +4,7 @@ import SwiftUI
 /// Callbacks the panes hand back to the app.
 struct SettingsActions {
     var importData: () -> Void = {}
+    var rebuildArcProfiles: () -> Void = {}
     var openURL: (String) -> Void = { _ in }
     var exportDiagnostics: () -> Void = {}
 }
@@ -237,7 +238,7 @@ struct SettingsContent: View {
                 case .general: GeneralPane()
                 case .tabs: TabsPane()
                 case .privacy: PrivacyPane(actions: actions)
-                case .profiles: ProfilesPane()
+                case .profiles: ProfilesPane(actions: actions)
                 case .extensions: ExtensionsPane(actions: actions)
                 case .shortcuts: ShortcutsPane()
                 case .performance: PerformancePane(nav: nav, actions: actions)

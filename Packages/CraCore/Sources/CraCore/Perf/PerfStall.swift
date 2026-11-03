@@ -26,8 +26,13 @@ public struct PerfStall: Codable, Equatable, Sendable {
     public var marks: [String]
     /// The host of the page on screen, nil for incognito or none.
     public var site: String?
+    /// Whether Cra was the active app, and whether any of its windows showed on screen (not
+    /// covered, minimised or on another Space), when the stall ended; nil before Cra said.
+    public var active: Bool?
+    public var onScreen: Bool?
 
-    public init(at: Double, ms: Double, kind: Kind, mode: String, freeze: Bool, marks: [String], site: String?) {
+    public init(at: Double, ms: Double, kind: Kind, mode: String, freeze: Bool, marks: [String], site: String?,
+                active: Bool? = nil, onScreen: Bool? = nil) {
         self.at = at
         self.ms = ms
         self.kind = kind
@@ -35,6 +40,8 @@ public struct PerfStall: Codable, Equatable, Sendable {
         self.freeze = freeze
         self.marks = marks
         self.site = site
+        self.active = active
+        self.onScreen = onScreen
     }
 }
 
@@ -43,6 +50,9 @@ public struct PerfStallPolicy: Equatable, Sendable {
     public var stallMs: Double = 250
     public var longMs: Double = 1000
     public var hangMs: Double = 2000
+    /// A pass this long, still going, gets the session's one early stack: no real session in the
+    /// first exports reached 2 s, so the hang stacks never ran (GitHub #135).
+    public var slowStackMs: Double = 1000
     /// Marks this close before the end of a stall are its breadcrumbs.
     public var breadcrumbWindow: Double = 5
     public var breadcrumbLimit = 8
@@ -72,12 +82,18 @@ public struct PerfStallPolicy: Equatable, Sendable {
     public static func isFreeze(mode: String) -> Bool { !["tracking", "modal", "launch"].contains(mode) }
 
     /// The stall a pass of `ms` ending at `at` makes, with the marks of the seconds before it.
-    public func stall(at: Double, ms: Double, mode: String, marks: [PerfMark], site: String?) -> PerfStall? {
+    public func stall(at: Double, ms: Double, mode: String, marks: [PerfMark], site: String?,
+                      active: Bool? = nil, onScreen: Bool? = nil) -> PerfStall? {
         guard let kind = kind(ms: ms) else { return nil }
         let short = Self.shortMode(mode)
+        return PerfStall(at: at, ms: ms, kind: kind, mode: short, freeze: Self.isFreeze(mode: short),
+                         marks: breadcrumbs(at: at, ms: ms, marks: marks), site: site, active: active, onScreen: onScreen)
+    }
+
+    /// The marks of the seconds before a pass of `ms` that ended (or was seen) at `at`.
+    public func breadcrumbs(at: Double, ms: Double, marks: [PerfMark]) -> [String] {
         let since = at - ms / 1000 - breadcrumbWindow
-        let crumbs = marks.filter { $0.at >= since && $0.at <= at }.suffix(breadcrumbLimit).map(\.label)
-        return PerfStall(at: at, ms: ms, kind: kind, mode: short, freeze: Self.isFreeze(mode: short), marks: Array(crumbs), site: site)
+        return Array(marks.filter { $0.at >= since && $0.at <= at }.suffix(breadcrumbLimit).map(\.label))
     }
 }
 

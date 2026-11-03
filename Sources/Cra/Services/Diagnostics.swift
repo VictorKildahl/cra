@@ -13,6 +13,7 @@ enum Diagnostics {
     /// Asks where to save, unless `destination` is given (cra://debug?exportDiagnostics=<path>).
     static func export(windows: [MainWindowController], store: SidebarStore, to destination: URL? = nil) {
         CraLog.note("diagnostics export started")
+        HitchMonitor.mark("diagnostics-export")
         collectPages(windows: windows, store: store) { pages in
             CraCEFRuntime.sendBrowserDevToolsMethod("SystemInfo.getInfo", params: "{}") { gpu, error in
                 // The profile's size is measured off the main thread.

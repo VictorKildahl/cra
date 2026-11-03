@@ -624,6 +624,19 @@ Chrome's own window ignores the pointer and has `preventKeyWindow` set (2 Nov): 
 resize band outside its frame that the overlay doesn't cover, and once key (a drag on that band, or
 AppKit picking it when a click activates Cra) Chrome shows its ±10 s controls on focus and on every
 mouse move, under Cra's ±15 s ones.
+Pressing the overlay (3 Nov, #134, `PictureInPictureGesture` in CraCore): the buttons take clicks
+whether or not the controls are faded in, a press moves or resizes only past 3 pt of travel (a click
+on play used to nudge the window by its drift), edges are 8 pt deep with 16 pt corners like
+Chromium's, and a resize keeps the opposite edge or corner where it was (the vertical anchors were
+inverted, so the top edge stayed put while the bottom was dragged). The cursor comes from a tracking
+area over the same zones (cursor rects only work in a key window, and the overlay never is one), and
+while the pointer is over the window Cra sets "SetsCursorInBackground" on its WindowServer
+connection, so the resize cursors show with another app in front too (verified with `screencapture
+-C` over each edge and corner, Finder in front and Cra in front). A press with Cra in the background
+already reached the overlay (it activates Cra and acceptsFirstMouse lets it through); without the
+cursor it only looked dead. Drags are measured from each
+event's own screen location; `cra.log` gets `pip: move`, `pip: resize <edge> from W×H`, `pip: resized
+<edge> W×H → W×H` (with "asked" when Chromium kept another size) and `pip: overlay has no parent window`.
 One residual difference: Chrome paints its origin strip ("File on your device", top gradient)
 inside the compositor layer for about two seconds when the window first appears (present at
 1.5 s, gone at 2.5 s in quarter-second captures); it is drawn whether or not the window is
@@ -2287,6 +2300,15 @@ was frontmost, 1x region captures and 100 fps recordings; test tabs archived aft
   what is in effect at launch and after each change (`secure dns: automatic, no provider (system resolver)`, `secure
   via dns.google`, `off`), and Export Diagnostics' summary has a `Secure DNS:` line (`SecureDNS` in CraCore, hosts
   only).
+- Cra (3 Nov 2026, issue #133, a deviation: Arc and Dia have no such row): Settings ▸ Privacy ▸ Connections has a Secure
+  DNS menu under "Always use secure connections": Automatic (the default), Off, Google, Cloudflare, Quad9, OpenDNS,
+  CleanBrowsing (Family Filter), DNS4EU (Protective), Custom…. It reads and writes the same two Local State prefs as
+  chrome://settings/security (`SecureDNSPrefs`, `SecureDNSProvider` in CraCore; `setSecureDNSMode:templates:` in
+  CraCEF), so settings.json keeps no copy, a fresh install still has no `dns_over_https` key, and a choice made on
+  either page shows on the other at once. The write is live: a net log shows `secure_dns_mode` 1 → 2 and DoH queries
+  to dns.google with no relaunch. Custom takes whitespace-separated `https://` templates with a host, path kept as
+  typed (NextDNS ids). The footnote is `SecureDNS.summary`, built from the same value as the log line. A
+  DnsOverHttps* policy makes the menu read-only.
 
 ## Shift + wheel switches spaces (Arc 1.171, 2 Nov 2026, issue #93, live Arc, HID wheel events)
 
@@ -2361,6 +2383,33 @@ tap with a real Shift key held around them; the space read from each window's `s
   `ForceWebRequestProxyForTest` makes `MayHaveProxies()` always true, so a proxy extension enabled later does not
   reset the URL loader factories. Cra logs the winner and the overridden ones per profile when they change, and
   Export Diagnostics' summary.txt has a "Proxy:" section.
+
+## Importing Arc's profiles (3 Nov 2026, issue #131, reporter's Arc: seven spaces on six profiles)
+
+- [O static] Each space in StorableSidebar.json names its Chromium profile: `profile` is `{"default": true}` or
+  `{"custom": {"_0": {"directoryBasename": "Profile 2", "machineID": …}}}`. The folder's name in Arc's space
+  menu is `User Data/Local State` → `profile.info_cache[<folder>].name`. Each profile keeps its own cookies, logins,
+  `extensions.settings` and `extensions.pinned_extensions`.
+- Cra's import makes one Cra profile per Arc profile besides Default (reusing a Cra profile of the same name) and
+  puts the spaces on it. Each Arc profile's cookies and passwords are staged for the Cra profile its spaces landed
+  on. A Cra profile Chromium has not opened yet gets Cookies and Login Data with Default's schema and meta rows
+  before Chromium starts, so the first page is signed in. Arc's pins become that profile's list. An Arc profile no
+  imported space uses goes to Default, as everything did before.
+- `--load-extension` installs in every profile (`ExtensionService::Init` runs it per profile, and command-line
+  installs are never restored from prefs). `extension-profiles.patch` (CEF codecs9) adds
+  `--cra-load-extension-profiles`: for each `--load-extension` path, in order, the profile folders that load it
+  ("Default|Profile <id>") or `*`. An imported extension loads only in the Cra profiles of the Arc profiles that
+  had it turned on (extension-profiles.json); one every profile had, or one from an import that bound no profiles,
+  still loads everywhere. CDP's `Extensions.loadUnpacked`/`uninstall` only reach the default profile, and a
+  hand-written `extensions.settings` entry fails Secure Preferences' MAC check, so neither could do this.
+- Checked on a test copy with a three-profile fake Arc: each space's page read its own profile's cookie, Chromium's
+  per-profile prefs held exactly the probes that profile was given, and the toolbar and Extensions menu differed per
+  space as in Arc.
+- Installs imported before this: Settings ▸ Profiles ▸ Rebuild from Arc… (also the command bar's "Rebuild Profiles
+  from Arc…"). It moves spaces still on Default onto their Arc space's profile, matched by name (a name Arc or Cra
+  uses twice is skipped), stages those Arc profiles' sign-ins (or, if the Keychain refuses, moves them signed out
+  after asking), scopes the extensions the old import left loading everywhere (profiles made in Cra keep them),
+  seeds the pins and restarts. Sign-ins made in Cra since the import stay with Default.
 
 ## The tab shown after ⌘W (Arc 1.171, 2 Nov 2026, issue #105, offline Arc driven through its menus)
 Offline Arc as in "One space": one space with pinned S and P2 and Today C, B, A, D (A, B, C saved with

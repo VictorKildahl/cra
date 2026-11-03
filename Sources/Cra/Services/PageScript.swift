@@ -56,6 +56,10 @@ enum PageScript {
         new PerformanceObserver(list => {
           for (const e of list.getEntries()) { lt.n++; lt.t += e.duration; if (lt.d.length < 100) lt.d.push(Math.round(e.duration)); }
         }).observe({ type: 'longtask' });
+        const lf = cra.lf = { n: 0, max: 0 };
+        new PerformanceObserver(list => {
+          for (const e of list.getEntries()) { lf.n++; if (e.duration > lf.max) lf.max = Math.round(e.duration); }
+        }).observe({ type: 'long-animation-frame' });
       } catch {}
     })();
     """

@@ -183,13 +183,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         observeChanges(of: { [store] in store.settings.httpsOnly }, apply: CraCEFRuntime.setHttpsOnlyModeEnabled)
     }
 
-    /// Chromium's secure DNS setting (chrome://settings/security), left on Chromium's default
-    /// like Arc: the log says what is in effect at launch and after each change (#110).
+    /// Chromium's secure DNS setting (Settings > Privacy, chrome://settings/security), left on
+    /// Chromium's default like Arc: the log says what is in effect at launch and after each
+    /// change (#110), and the Settings row follows it (#133).
     private func logSecureDNS() {
         var last: String?
         CraCEFRuntime.setSecureDNSChangeHandler {
-            guard let mode = CraCEFRuntime.secureDNSMode() else { return }
-            let line = SecureDNS(mode: mode, templates: CraCEFRuntime.secureDNSTemplates() ?? "").line
+            let setting = SecureDNSSetting.shared
+            setting.refresh()
+            guard let line = setting.inEffect?.line else { return }
             if line != last { last = line; CraLog.note("secure dns: " + line) }
         }
     }
@@ -874,7 +876,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "zoomOut": main.zoom(by: -0.5)
         case "resetZoom": main.currentBrowser?.setZoomLevel(0)
         case "viewSource": main.currentBrowser?.viewSource()
-        // Like Chrome: ⌥⌘I, ⌥⌘J and Network close the dock when it is already open.
+        // Like Arc: ⌥⌘I closes open DevTools; ⌥⌘J and Network switch to their panel and close
+        // DevTools only when that panel already shows (DevToolsToggle.run).
         case "devTools": main.browsers.runDevTools(.toggle)
         case "jsConsole": main.browsers.runDevTools(.console)
         case "networkPanel": main.browsers.runDevTools(.network)
@@ -912,6 +915,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "previousSplitPane": main.cycleSplitPane(-1)
         case "settings": showSettingsWindow()
         case "importData": main.showImport()
+        case "rebuildArcProfiles": ArcProfileRebuilder.run(store: store) { [weak self] in self?.relaunch() }
         case "setDefaultBrowser": Task { await SystemIntegration.shared.makeDefaultBrowser() }
         default:
             if id.hasPrefix("item"), let n = Int(id.dropFirst(4)) {
@@ -953,6 +957,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if settingsController == nil {
             let actions = SettingsActions(
                 importData: { [weak self] in self?.main.showImport() },
+                rebuildArcProfiles: { [weak self] in
+                    guard let self else { return }
+                    ArcProfileRebuilder.run(store: self.store) { [weak self] in self?.relaunch() }
+                },
                 openURL: { [weak self] url in
                     guard let self else { return }
                     self.useNormalWindow()

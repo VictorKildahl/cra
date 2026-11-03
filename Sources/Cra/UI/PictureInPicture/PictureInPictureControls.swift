@@ -31,7 +31,10 @@ final class PictureInPictureControlsView: NSView {
                         NSColor.black.withAlphaComponent(0.45).cgColor]
         scrim.locations = [0, 0.3, 0.7, 1]
         layer?.addSublayer(scrim)
-        for b in buttons { addSubview(b) }
+        for b in buttons {
+            addSubview(b)
+            b.onPress = { [weak self] in self?.show() }
+        }
         closeButton.onClick = { PictureInPictureChrome.shared.actions?.close() }
         backButton.onClick = { PictureInPictureChrome.shared.actions?.backToTab() }
         playButton.onClick = { [weak self] in
@@ -61,11 +64,13 @@ final class PictureInPictureControlsView: NSView {
         skipAheadButton.setFrameOrigin(NSPoint(x: playButton.frame.maxX + gap, y: c.y - skipAheadButton.frame.height / 2))
     }
 
-    // Only the buttons are hit; drags anywhere else reach the overlay view below.
+    // Only the buttons are hit; drags anywhere else reach the overlay view below. A button takes
+    // its click while the controls are faded out too (the pointer was already in the window when
+    // it opened, or rested there): fading is drawing, and a click on a hidden play button still
+    // means play, not a drag (#134).
     override func hitTest(_ point: NSPoint) -> NSView? {
         let p = convert(point, from: superview)
-        for b in buttons where b.frame.contains(p) { return shown ? b : nil }
-        return nil
+        return buttons.first { $0.frame.contains(p) }
     }
 
     override func updateTrackingAreas() {
@@ -120,6 +125,7 @@ final class PictureInPictureControlsView: NSView {
 @MainActor
 final class PictureInPictureButton: NSView {
     var onClick: () -> Void = {}
+    var onPress: () -> Void = {}
     var symbol: String { didSet { image.image = Self.image(symbol, pointSize) } }
     private(set) var isHovered = false { didSet { updateBackground() } }
     private var isPressed = false { didSet { updateBackground() } }
@@ -171,7 +177,7 @@ final class PictureInPictureButton: NSView {
 
     override func mouseEntered(with event: NSEvent) { isHovered = true }
     override func mouseExited(with event: NSEvent) { isHovered = false }
-    override func mouseDown(with event: NSEvent) { isPressed = true }
+    override func mouseDown(with event: NSEvent) { isPressed = true; onPress() }
     override func mouseUp(with event: NSEvent) {
         isPressed = false
         if bounds.contains(convert(event.locationInWindow, from: nil)) { onClick() }
