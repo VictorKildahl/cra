@@ -439,14 +439,13 @@ enum StoreTests {
                "and it stays closed after a relaunch")
     }
 
-    /// Move Tab to Space N (#86) and the command bar's Move Tab to <space>, like Arc's "Move to
-    /// Today in <space>": the tab goes to the top of the other space's Today, the window follows
-    /// it there with the tab selected, and the space it left opens another tab.
     /// Settings ▸ Tabs ▸ Share Favorites (#154): Arc's one favorites list per profile.
     @MainActor
     private static func sharedFavorites() {
         let store = AppComposition(clock: ManualScheduler()).store
         let home = store.focusedSpaceID
+        // Spaces earlier tests saved would share Default's list too.
+        for s in store.orderedSpaces where s.id != home { store.deleteSpace(s.id) }
         let work = store.createSpace(title: "Shared Work", emoji: "💼", focus: false).id
         let client = store.createProfile(name: "Shared Client")
         let other = store.createSpace(title: "Shared Client", emoji: "🧾", focus: false).id
@@ -502,8 +501,8 @@ enum StoreTests {
         store.setProfile(client.id, forSpace: third)
         expect(store.item(defaults) != nil && store.children(of: defaults).map(\.id) == before + [mail],
                "Default's list stays while no space uses Default (Arc)")
-        expect(store.spaceIDs(ofItem: mail).isEmpty && store.spaceID(ofItem: mail) == nil
-               && !store.profileTabs(window: nil).contains { $0.id == mail }, "and nothing shows or offers it")
+        expect(store.spaceIDs(ofItem: mail).isEmpty && store.spaceID(ofItem: mail) == nil, "no space shows it")
+        expect(!store.profileTabs(window: nil).contains { $0.id == mail }, "and the command bar doesn't offer it")
         store.setProfile(nil, forSpace: third)
         expect(list(third) == defaults, "a space back on Default shows that list again")
 
@@ -536,6 +535,9 @@ enum StoreTests {
                && reloaded.integrityProblems().isEmpty, "the lists load as they were saved")
     }
 
+    /// Move Tab to Space N (#86) and the command bar's Move Tab to <space>, like Arc's "Move to
+    /// Today in <space>": the tab goes to the top of the other space's Today, the window follows
+    /// it there with the tab selected, and the space it left opens another tab.
     @MainActor
     private static func moveTabToSpace() {
         let store = AppComposition(clock: ManualScheduler()).store
