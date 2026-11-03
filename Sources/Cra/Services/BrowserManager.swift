@@ -968,16 +968,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     }
 
     func browser(_ browser: CraBrowser, requestsPermissionForOrigin origin: String, kinds: UInt, completion: @escaping (Bool) -> Void) {
-        // Notifications ask like the others: Arc asks too, and sites like Messenger need them.
-        var what: [String] = []
-        if kinds & 1 != 0 { what.append("camera") }
-        if kinds & 2 != 0 { what.append("microphone") }
-        if kinds & 4 != 0 { what.append("location") }
-        var wants = what.isEmpty ? [] : ["use your \(what.joined(separator: " and "))"]
-        if kinds & 8 != 0 { wants.append("show notifications") }
         let alert = NSAlert()
-        alert.messageText = wants.isEmpty ? "\(origin) is asking for a browser permission"
-                                          : "\(origin) wants to \(wants.joined(separator: " and "))"
+        alert.messageText = PermissionPrompt.message(origin: origin, kinds: kinds)
         alert.addButton(withTitle: "Allow")
         alert.addButton(withTitle: "Block")
         guard let window = container.window else { completion(false); return }
