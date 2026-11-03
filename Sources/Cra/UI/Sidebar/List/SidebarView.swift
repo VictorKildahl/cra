@@ -719,7 +719,10 @@ final class SpaceDockView: NSView {
         guard reorder == nil else { return }
         let i = index(at: point(event))
         hovered = i.map { order[$0] }
-        for (j, id) in order.enumerated() { if let c = cells[id] { j == i ? ArcTooltipController.shared.mouseMoved(in: c) : ArcTooltipController.shared.mouseExited(c) } }
+        // The new cell first: its tip replaces the shown one in place. Leaving the old cell first
+        // faded that tip out while the new one popped in, two tips for 60 ms (#152).
+        if let i, let c = cells[order[i]] { ArcTooltipController.shared.mouseMoved(in: c) }
+        for (j, id) in order.enumerated() where j != i { if let c = cells[id] { ArcTooltipController.shared.mouseExited(c) } }
     }
     override func mouseEntered(with event: NSEvent) { mouseMoved(with: event) }
     override func mouseExited(with event: NSEvent) {
@@ -927,8 +930,18 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
         return true
     }
 
+    // Arc's tip: the space's name, its profile in a pill, then Go to Space N's keys for the
+    // space's place in the order (⌃1–⌃9, the user's own if rebound; none past the ninth).
     var text: String { title }
-    var keys: [String] { [] }
+    var keys: [String] {
+        guard let i = store.spaceOrder.firstIndex(of: spaceID), i < 9 else { return [] }
+        return KeyBindingRegistry.shared.action("space\(i + 1)")?.primary?.caps ?? []
+    }
+    var badge: String? { store.profile(store.space(spaceID)?.profileID)?.name ?? "Default" }
+    // Arc 1.171: ~0.62 s after the pointer stops (two 120 Hz recordings, 3 Nov 2026), sooner
+    // than a control's tip. Cra's panel takes ~0.07 s more to reach the screen.
+    var idleDelay: TimeInterval { 0.55 }
+    var placement: ArcTooltipPlacement { .above }
     var followsCursor: Bool { false }
     var subtitle: String? { nil }
     var optionText: String? { nil }
@@ -966,7 +979,8 @@ final class LibraryButtonView: NSView {
         glyph.imageScaling = .scaleNone
         glyph.image = LibraryGlyph.image(dark: false)
         addSubview(glyph)
-        (tip.text, tip.keys) = ArcTooltipLabel.split("Library (⇧⌘L)")
+        (tip.text, tip.keys) = ArcTooltipLabel.split("View Library (⇧⌘L)")
+        tip.placement = .trailing
         addSubview(tip)
         bin.wantsLayer = true
         binImage.cornerRadius = 8

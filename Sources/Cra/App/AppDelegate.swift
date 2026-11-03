@@ -52,6 +52,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         SoftwareUpdater.shared.start(app: self)
         buildMenus()
         store.hasPage = { [unowned self] in self.runtime(for: $0) != nil }
+        // A tip takes the tones of the space its browser window is in (the sidebar may be a
+        // floating panel, a child of that window).
+        ArcTooltipController.shared.tones = { [unowned self] window in
+            var w: NSWindow? = window
+            while let x = w {
+                if let m = mainWindows.first(where: { $0.window === x }) { return TooltipTones(theme: m.focusedSpace.theme) }
+                w = x.parent
+            }
+            return nil
+        }
         NotificationCenter.default.addObserver(forName: .craKeyBindingsChanged, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.buildMenus() }
         }
@@ -633,6 +643,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             if dict["siteControls"] != nil { main.debugSiteControls(); return }
+            // The n-th space icon's tip, without a pointer.
+            if let n = dict["spaceTip"].flatMap({ Int($0) }), let content = main.window?.contentView {
+                ArcTooltipController.shared.debugShowSpaceTip(n, in: content)
+                return
+            }
             if let t = dict["tooltip"], let content = main.window?.contentView {
                 ArcTooltipController.shared.debugShow(t, in: content, at: NSRect(x: 380, y: content.bounds.height - 120, width: 28, height: 28))
                 return

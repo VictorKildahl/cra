@@ -31,6 +31,13 @@ struct KeyChordTests {
         #expect(chord.display == shown)
     }
 
+    /// A tooltip's key caps: one per modifier, then the key (Arc's space tip shows ⌃ and 3).
+    @Test func capsSplitTheDisplay() {
+        #expect(KeyChord(key: "3", modifiers: KeyChord.Modifiers.control.rawValue).caps == ["⌃", "3"])
+        #expect(KeyChord(key: "l", modifiers: Self.command | KeyChord.Modifiers.shift.rawValue).caps == ["⇧", "⌘", "L"])
+        #expect(KeyChord(key: KeyChord.left, modifiers: KeyChord.Modifiers([.control, .option]).rawValue).caps == ["⌃", "⌥", "←"])
+    }
+
     @Test func keysReadsTheStoredBits() {
         let chord = KeyChord(key: "s", modifiers: Self.command | KeyChord.Modifiers.shift.rawValue)
         #expect(chord.keys == KeyChord.Modifiers([.command, .shift]))
