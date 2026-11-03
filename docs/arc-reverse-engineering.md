@@ -2604,3 +2604,29 @@ that waits 3 s before answering and then serves a page whose image takes 5 s.
   Animation; a tab coming to the front shows its own state at once, without the widening or the finish. With no
   margin (edge to edge, fullscreen) there is no bar; on light themes it is black at the same opacities. It slides
   with the card when the sidebar hides or shows.
+
+## Light and dark space themes (Arc 1.171, 3 Nov 2026, issue #155, Swift metadata + offline Arc)
+- [O static] `WindowTheme.background` is `AppearanceBasedConfiguration<Background>`: `single(_0)` or
+  `appearanceBased(light:, dark:)`; `semanticColorPalette` and `windowAppearance` use the same wrapper. The editor's
+  state (`SpaceStyleEditor.State`) keeps `primaryColor`, `numberOfColors`, `wheel`, `intensityFactor`, `noiseFactor`,
+  `lightnessRange` and `darkModeBiasSetting = .value(Double) | .forceAppearance(light|dark)`; the toggles send
+  `didSetAutomaticAppearance` / `didSetLightAppearance` / `didSetDarkAppearance`. Strings: `sidebar-dark-mode-bias`.
+- [O live] An `appearanceBased` space (this Mac's JYSK) shows its light half under View ▸ Appearance ▸ Light, its dark
+  half under Dark, and the system's under Automatic, at once. Sidebar sampled at 2x: light 226/222/238 → 232/225/236,
+  dark 40/37/54 → 44/37/55 (Cra: 233/227/245 → 246/234/240 and 45/39/57 → 47/39/57; the light half's gap is Cra's
+  older pull toward white for opaque light themes, not this change).
+- [O live] Opened on that space, the editor shows Auto with "Tap to pick a color for this space": the two-half theme is
+  Arc's colourless default (base #C8CAFF / #FFE5E5 light at 0.5, #01021F / #1A001F dark at 0.8, key #8389FF). Both
+  halves keep the key's HSL hue; the light one sits at HSL lightness ≈ 0.9, the dark one at ≈ 0.064.
+- [O live] A swatch picked in Auto (offline Arc, menus and swatches pressed over AX: Spaces ▸ Edit Theme…, the swatch
+  buttons "Set space color to Catalog color: … ColorPickerBrandN") was written as one `single` vibrant light theme; Arc
+  writes StorableSidebar.json when the editor commits, not on every change. View ▸ Appearance is Arc's own
+  `appearance` default (cleared again after the run) and also turns the editor's toggles.
+- Cra: `SpaceTheme.dark` holds an Auto theme's dark half (top-level fields = light half) and `resolved(systemDark:)`
+  picks one; `SpaceTheme.palette` resolves through `SystemAppearance` (NSApp.effectiveAppearance, observed), so a macOS
+  switch redraws at once. Arc imports keep both halves. The editor builds halves from its pad (`SpaceTheme.key`) with
+  `SpaceThemeVariants`: the light half is the pad's colours (lifted to HSL lightness 0.9 only when they read dark),
+  the dark half keeps their hue at HSL lightness 0.064, drawn like an imported dark half (27 % over #2B2632). An
+  Auto theme saved before keeps its colours on the side they suit and derives the other.
+- [?] Not worked out: how Arc's editor maps a picked colour to its halves (the pad's `lightnessRange` and the bias
+  value). Cra's halves are fitted to Arc's default theme only.

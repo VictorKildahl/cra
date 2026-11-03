@@ -20,6 +20,7 @@ final class SidebarView: NSView {
     private var libraryHost: LibraryView?
     private var palette: SpacePalette
     private var lastSpaceID: UUID?
+    private var shownTheme: SpaceTheme?
     private var shownLibrary: LibraryPage?
 
     init(store: SidebarStore, ui: SidebarUIState, actions: SidebarActions, favicons: FaviconCache) {
@@ -53,12 +54,14 @@ final class SidebarView: NSView {
         var bannerHeight: CGFloat = 0
         let (space, library, trayOpen, recentCount) = withObservationTracking {
             let space = store.focusedSpace(window: ui.windowID)
+            _ = SystemAppearance.shared.isDark
             bannerHeight = UpdateBannerView.preferredHeight
             return (space, ui.libraryPage, ui.downloadsListOpen, DownloadHistory.shared.recent.count)
         } onChange: { [weak self] in
             Task { @MainActor in self?.observe() }
         }
-        let paletteChanged = lastSpaceID == nil || space.theme != store.space(lastSpaceID ?? space.id)?.theme || space.id != lastSpaceID
+        let paletteChanged = lastSpaceID == nil || space.theme.shown != shownTheme || space.id != lastSpaceID
+        shownTheme = space.theme.shown
         if space.id != lastSpaceID {
             // A drag that hovered another space's icon carries the picks there; its end clears them.
             if lastSpaceID != nil, ui.draggingID == nil { ui.clearPicks() }
@@ -69,8 +72,9 @@ final class SidebarView: NSView {
             let colors = SidebarColors(palette)
             trayHost.colors = colors
             bannerHost.colors = colors
-            bannerHost.themeColor = space.theme.accent ?? space.theme.colors.first
-            player.setTheme(space.theme.accent ?? space.theme.colors.first, dark: palette.isDark)
+            let shown = space.theme.shown
+            bannerHost.themeColor = shown.accent ?? shown.colors.first
+            player.setTheme(shown.accent ?? shown.colors.first, dark: palette.isDark)
             libraryHost?.palette = palette
         }
         self.bannerHeight = bannerHeight

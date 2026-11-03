@@ -232,6 +232,7 @@ final class ShinyToast {
     /// light (Victor's yellow/green) 220/226/184 → 208/218/163, outline 151/157/124; dark (the
     /// default theme in dark mode) 43/24/102 → 33/19/79, outline 26/15/62, white text.
     static func colors(_ theme: SpaceTheme) -> (top: NSColor, bottom: NSColor, outline: NSColor, text: NSColor) {
+        let theme = theme.shown
         let comps = theme.colors.compactMap(HexColor.components)
         let n = Double(max(comps.count, 1))
         let mean = NSColor(srgbRed: comps.reduce(0) { $0 + $1.r } / n, green: comps.reduce(0) { $0 + $1.g } / n,
