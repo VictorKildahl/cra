@@ -2308,16 +2308,19 @@ static NSView* FindRenderWidgetHostView(NSView* root) {
     }
 }
 
-- (void)exitPictureInPicture {
+- (void)exitPictureInPicture { [self exitPictureInPicturePausing:NO]; }
+- (void)closePictureInPicture { [self exitPictureInPicturePausing:YES]; }
+
+- (void)exitPictureInPicturePausing:(BOOL)pause {
     if (!_browser) return;
+    CefString js = pause ? "(function(){var v=document.pictureInPictureElement;if(!v)return;v.pause();"
+                           "document.exitPictureInPicture().catch(function(){});})();"
+                         : "if(document.pictureInPictureElement){document.exitPictureInPicture().catch(function(){});}";
     std::vector<CefString> ids;
     _browser->GetFrameIdentifiers(ids);
     for (const auto& id : ids) {
         CefRefPtr<CefFrame> f = _browser->GetFrameByIdentifier(id);
-        if (f && f->IsValid()) {
-            f->ExecuteJavaScript("if(document.pictureInPictureElement){document.exitPictureInPicture().catch(function(){});}",
-                                 f->GetURL(), 0);
-        }
+        if (f && f->IsValid()) f->ExecuteJavaScript(js, f->GetURL(), 0);
     }
 }
 - (void)print { if (_browser) _browser->GetHost()->Print(); }

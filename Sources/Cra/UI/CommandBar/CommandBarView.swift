@@ -188,6 +188,9 @@ final class CommandBarView: NSView {
     override func layout() {
         super.layout()
         let b = bounds
+        // Tab into a scope empties the list and the panel shrinks to the field after the glow
+        // started: the glow follows, or it stays centred on the old list below the bar.
+        if let splash, let window { splash.setFrame(window.frame.insetBy(dx: -Self.splashMargin, dy: -Self.splashMargin), display: false) }
         material.frame = b
         tint.frame = b
         let top: CGFloat = attached ? 10 : 14
@@ -288,7 +291,7 @@ final class CommandBarView: NSView {
         inner.layer?.add(fade, forKey: "splash")
         addSubview(inner, positioned: .above, relativeTo: material)
         innerSplash = inner
-        let margin: CGFloat = 420
+        let margin = Self.splashMargin
         let panel = NSPanel(contentRect: window.frame.insetBy(dx: -margin, dy: -margin), styleMask: [.borderless, .nonactivatingPanel],
                             backing: .buffered, defer: false)
         panel.backgroundColor = .clear
@@ -296,7 +299,7 @@ final class CommandBarView: NSView {
         panel.hasShadow = false
         panel.ignoresMouseEvents = true
         panel.collectionBehavior = window.collectionBehavior
-        panel.contentView = NSHostingView(rootView: CommandBarSplash(color: Color(nsColor: color), size: window.frame.size))
+        panel.contentView = NSHostingView(rootView: CommandBarSplash(color: Color(nsColor: color), margin: margin))
         window.addChildWindow(panel, ordered: .below)
         splash = panel
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) { [weak self, weak panel] in
@@ -308,6 +311,9 @@ final class CommandBarView: NSView {
             self.innerSplash = nil
         }
     }
+
+    /// Room around the bar for the glow's blur.
+    private static let splashMargin: CGFloat = 420
 
     /// How much of the site's colour shows inside Arc's bar after Tab, relative to the start (red
     /// over green, sampled off a 100 fps recording of Arc 1.171).
@@ -338,18 +344,18 @@ final class CommandBarView: NSView {
 /// faded by one ease-out animation of 1.2 s that starts as it appears.
 private struct CommandBarSplash: View {
     let color: Color
-    let size: CGSize
+    /// The bar is the panel less this on every side.
+    let margin: CGFloat
     @State private var blurRadius: CGFloat = 0
     @State private var opacity: Double = 1
 
     var body: some View {
         color
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .frame(width: size.width, height: size.height)
+            .padding(margin)
             .blur(radius: blurRadius, opaque: false)
             .opacity(opacity)
             .animation(.easeOut(duration: 1.2), value: blurRadius)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .onAppear {
                 blurRadius = 150
                 opacity = 0
