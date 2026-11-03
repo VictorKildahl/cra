@@ -1013,6 +1013,31 @@ of the sidebar strip, pixel runs at x=500 px (2x), y = 160/700/1200/1700/2100.
   step with the hit-testing, so later clicks landed on other rows. In Cra, `cliclick c:` is too fast for
   the row's SwiftUI tap; `dd: w:80 du:` selects.
 
+### A pinned tab away from its page (Arc 1.171, 3 Nov 2026, GitHub #139, field metadata + disassembly)
+- [O static] `TabCellView` has no reset button. Its fields include `iconContainerView`, `_slashView`,
+  `_regionHoverState: RegionHoverState<BackgroundRegion>?` (region `icon | body`, plus modifier flags) and
+  `_hoverSubtitleState: HoverSubtitleState?` (`reset | resetAndSeparate`, strings "Back to Pinned URL" and
+  "Separate From Pinned Tab"). `TabCellState` carries `canResetTab`, `resetTabTitle`, `resetTabIcon` and
+  `resetItemShortcut`, so Arc keeps the pinned page's own name and icon next to the current page's.
+- [O static] `ARCUI.SlashView`: a 4 × 15 pt view, stroked from (1, 1) to (w − 1, h − 1) with a 2 pt line and
+  round caps, in the `TabCellSlash` asset (black 30 % light, white 30 % dark, P3), with 4 pt after it.
+  [O reporter, 2x screenshot] Favicon, 4 pt, the slash, 5 pt, the name (13 pt after the favicon, not 11).
+- [I] Hovering the icon region shows "Back to Pinned URL" as the subtitle, and a click there resets the tab.
+  Not checked live: which modifier picks `resetAndSeparate`, and whether the icon region gets its own hover fill
+  (`_regionalBackgroundView`).
+- [O static] `SidebarUI.TabHighlightState`: `developerTab | tabCapturing | syncedTab`, drawn by
+  `TabHighlightView` (in `CellSelectionStateView`). It has two 2 pt layers on the bounds inset by 1 pt with a radius
+  of 11. For `developerTab` they are systemYellow under black dashes at 80 % opacity, and each dash is the
+  perimeter ÷ 60 / 80 / 100 (width < 210 / < 346 / larger). `tabCapturing` is solid yellow, `syncedTab` is
+  rgb(0.901, 0.631, 0.827).
+- [O reporter, 2x screenshots] Nested rows: Arc's fill starts after the indent (24 pt for depth 1 against 5 pt
+  at the top level), so a folder's gutter stays empty.
+- Cra (TabRowView): the slash replaces the trailing ↩ button, and the icon region (the fill's edge to just past the
+  slash) shows the hover subtitle and resets on click. `TabData.homeTitle` keeps the pinned page's title, and
+  going back restores that title and the home's favicon key. The developer ring is `FocusRingLayer(developer:)` on
+  the open tab. Each row's fill starts `depth × 18` pt in (23 pt against Arc's 24). The capturing and synced
+  rings are not built.
+
 ### Backdrop-layer blur for light vibrant themes (25 Oct 2026, final)
 
 The system materials could not reproduce Arc's intercept and slope together, so

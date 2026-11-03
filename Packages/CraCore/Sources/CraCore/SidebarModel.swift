@@ -77,8 +77,32 @@ public struct TabData: Codable, Equatable {
     /// The page's toolbar colour as last reported (TabRuntime.themeColor). A slept or restored
     /// tab's toolbar keeps it while the page loads again, as Arc's does.
     public var themeColor: String?
+    /// A pinned tab's own page title (Arc: resetTabTitle), last reported while the tab was on it.
+    /// Going back to the pinned page shows it again before the page loads (GitHub #139).
+    public var homeTitle: String?
 
     public var iconKey: String? { customIconKey ?? faviconKey }
+
+    /// A title the page reported. On a pinned tab's own page it is also the home's name.
+    public mutating func noteTitle(_ title: String, pinned: Bool) {
+        savedTitle = title
+        if pinned, url == savedURL, !title.isEmpty { homeTitle = title }
+    }
+
+    /// The current page becomes the home (pinning it, Replace Pinned URL with Current).
+    public mutating func makeCurrentPageHome() {
+        savedURL = url
+        homeTitle = savedTitle.isEmpty ? nil : savedTitle
+    }
+
+    /// Back to the pinned page (Arc: resetTab): its name and favicon come back with it, not the
+    /// last page's. A home whose title was never seen keeps the last one until its page reports.
+    public mutating func returnHome() {
+        guard url != savedURL else { return }
+        url = savedURL
+        if let homeTitle { savedTitle = homeTitle }
+        if let key = FaviconKey.key(for: savedURL) { faviconKey = key }
+    }
 
     public init(url: String, title: String = "") {
         self.url = url
@@ -680,5 +704,6 @@ extension TabData {
         liveSubtitle = try c.decodeIfPresent(String.self, forKey: .liveSubtitle)
         liveGoneAt = try c.decodeIfPresent(Date.self, forKey: .liveGoneAt)
         themeColor = try c.decodeIfPresent(String.self, forKey: .themeColor)
+        homeTitle = try c.decodeIfPresent(String.self, forKey: .homeTitle)
     }
 }

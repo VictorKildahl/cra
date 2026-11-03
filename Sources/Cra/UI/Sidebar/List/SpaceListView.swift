@@ -278,7 +278,8 @@ final class SpaceListView: NSView, NSDraggingSource {
                 let selected = store.isSelected(item.id, window: window)
                 let navigatedAway = pinned && tab.url != tab.savedURL && !tab.savedURL.isEmpty
                 let (img, flip) = icon(tab.iconKey)
-                let subtitle = tab.sidebarSubtitle(navigatedAway: navigatedAway, developerMode: store.settings.isDeveloperMode(url: tab.url))
+                let developerMode = store.settings.isDeveloperMode(url: tab.url)
+                let subtitle = tab.sidebarSubtitle(navigatedAway: navigatedAway, developerMode: developerMode)
                 row.content = .tab(TabRowModel(
                     id: item.id, depth: depth, pinned: pinned, title: item.displayTitle, customTitle: item.title != nil,
                     renameText: item.title ?? item.displayTitle, subtitle: subtitle,
@@ -288,7 +289,7 @@ final class SpaceListView: NSView, NSDraggingSource {
                     capturing: capturing.contains(item.id), audible: audible.contains(item.id), muted: tab.muted, unread: item.isUnread,
                     navigatedAway: navigatedAway,
                     closeGroup: picks.contains(item.id) && picks.count > 1 ? picks.count : 1,
-                    focusRing: focusID == item.id))
+                    focusRing: focusID == item.id, developerMode: developerMode))
                 out.append(row)
             } else if item.isSplit {
                 let children = store.children(of: item.id).filter(\.isTab)

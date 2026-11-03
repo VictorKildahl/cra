@@ -62,6 +62,40 @@ struct SidebarModelTests {
         #expect(TabData(url: "notes").sidebarSubtitle(navigatedAway: false, developerMode: true) == nil, "no host, no line")
     }
 
+    /// GitHub #139: a pinned tab that goes back to its page shows that page's name and favicon,
+    /// not the last page's, before it loads again.
+    @Test func returningHomeShowsTheHomesNameAndIcon() throws {
+        var tab = TabData(url: "https://github.com/", title: "")
+        tab.noteTitle("GitHub", pinned: true)
+        #expect(tab.homeTitle == "GitHub")
+        tab.url = "https://gist.github.com/o/1"
+        tab.faviconKey = "gist.github.com"
+        tab.noteTitle("Developer bar: Console", pinned: true)
+        #expect(tab.homeTitle == "GitHub", "a page away from home is not the home")
+        tab.returnHome()
+        #expect(tab.url == "https://github.com/" && tab.savedTitle == "GitHub" && tab.faviconKey == "github.com")
+
+        var today = TabData(url: "https://example.com/", title: "")
+        today.noteTitle("Example", pinned: false)
+        #expect(today.homeTitle == nil, "only pinned tabs keep a home name")
+
+        var unseen = TabData(url: "https://a.com/", title: "A")
+        unseen.url = "https://a.com/b"
+        unseen.savedTitle = "B"
+        unseen.returnHome()
+        #expect(unseen.savedTitle == "B", "a home never seen keeps the last name until its page reports")
+
+        var pinning = TabData(url: "https://b.com/", title: "Bee")
+        pinning.url = "https://c.com/"
+        pinning.savedTitle = "Sea"
+        pinning.makeCurrentPageHome()
+        #expect(pinning.savedURL == "https://c.com/" && pinning.homeTitle == "Sea")
+
+        let data = try JSONEncoder().encode(tab)
+        #expect(try JSONDecoder().decode(TabData.self, from: data).homeTitle == "GitHub")
+        #expect(try !String(decoding: JSONEncoder().encode(today), as: UTF8.self).contains("homeTitle"), "not written when unknown")
+    }
+
     @Test func containerKindsRoundTripAndNeedAKind() throws {
         for kind in [ContainerKind.favorites(spaceID: Self.space), .pinned(spaceID: Self.space), .today(spaceID: Self.space)] {
             #expect(try JSONDecoder().decode(ContainerKind.self, from: JSONEncoder().encode(kind)) == kind)
