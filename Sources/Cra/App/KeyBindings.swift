@@ -186,6 +186,7 @@ final class KeyBindingRegistry {
             KeyAction(id: "nextSpace", name: "Next Space", section: .spaces, shortcuts: [Shortcut(Shortcut.right, cmdOpt)], inCommandBar: false),
             KeyAction(id: "previousSpace", name: "Previous Space", section: .spaces, shortcuts: [Shortcut(Shortcut.left, cmdOpt)], inCommandBar: false),
             KeyAction(id: "editSpace", name: "Edit Space…", section: .spaces, shortcuts: [], triggers: ["theme", "color", "emoji", "edit space"]),
+            KeyAction(id: "changeProfile", name: "Change Profile", section: .spaces, shortcuts: [], triggers: ["profile", "change profile", "set profile"]),
             KeyAction(id: "deleteSpace", name: "Delete Space…", section: .spaces, shortcuts: [], triggers: ["delete space", "remove space"]),
             KeyAction(id: "manageSpaces", name: "Manage Spaces…", section: .spaces, shortcuts: [], triggers: ["manage spaces", "reorder spaces"]),
             // Tabs

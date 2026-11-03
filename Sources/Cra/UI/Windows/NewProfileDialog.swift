@@ -2,18 +2,43 @@ import AppKit
 import SwiftUI
 
 /// Arc 1.171's "Create a new Profile" dialog (Set Profile ▸ New Profile…), measured from a 2x
-/// capture (1 Nov): a 450 × 426 pt navy card centred on the window, which dims behind it.
+/// capture (1 Nov): a 450 × 426 pt navy card centred on the window, which dims behind it. Next
+/// goes on to "Which Spaces should use this Profile?" (3 Nov), with the space it was opened for
+/// ticked; Create Profile makes the profile and moves the ticked spaces onto it.
 struct NewProfileDialog: View {
-    let onCreate: (String) -> Void
+    let spaces: [Space]
+    let onCreate: (String, Set<UUID>) -> Void
     let onCancel: () -> Void
     @State private var name = ""
+    @State private var ticked: Set<UUID>
+    @State private var choosingSpaces = false
     @FocusState private var focused: Bool
 
-    private static let card = Color(hex: "#161C2F")
-    private static let body = Color(hex: "#B8B9C4")
+    static let card = Color(hex: "#161C2F")
+    static let body = Color(hex: "#B8B9C4")
     private var trimmed: String { name.trimmingCharacters(in: .whitespaces) }
 
+    init(spaces: [Space], ticked: Set<UUID>, onCreate: @escaping (String, Set<UUID>) -> Void, onCancel: @escaping () -> Void) {
+        self.spaces = spaces
+        self.onCreate = onCreate
+        self.onCancel = onCancel
+        _ticked = State(initialValue: ticked)
+    }
+
     var body: some View {
+        if choosingSpaces {
+            ProfileSpacesStep(spaces: spaces, ticked: $ticked, onBack: { choosingSpaces = false }) { onCreate(trimmed, ticked) }
+        } else {
+            nameStep
+        }
+    }
+
+    private func next() {
+        guard !trimmed.isEmpty else { return }
+        if spaces.isEmpty { onCreate(trimmed, []) } else { choosingSpaces = true }
+    }
+
+    private var nameStep: some View {
         VStack(alignment: .leading, spacing: 0) {
             ProfileAvatar().padding(.top, 38.5)
             Text("Create a new Profile")
@@ -37,7 +62,7 @@ struct NewProfileDialog: View {
                 .font(.system(size: 14))
                 .foregroundStyle(.white)
                 .focused($focused)
-                .onSubmit { if !trimmed.isEmpty { onCreate(trimmed) } }
+                .onSubmit(next)
                 .padding(.horizontal, 12.5)
                 .frame(height: 49)
                 .background(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color(hex: "#23293B"), lineWidth: 1))
@@ -53,7 +78,7 @@ struct NewProfileDialog: View {
                 Spacer()
                 DialogButton(title: "Cancel", key: "ESC", enabled: true, primary: false, action: onCancel)
                     .keyboardShortcut(.cancelAction)
-                DialogButton(title: "Next", key: "↩", enabled: !trimmed.isEmpty, primary: true) { onCreate(trimmed) }
+                DialogButton(title: "Next", key: "↩", enabled: !trimmed.isEmpty, primary: true, action: next)
             }
             .padding(.top, 27)
             Spacer(minLength: 0)
@@ -132,7 +157,7 @@ struct DialogButton: View {
 }
 
 /// Arc's profile glyph: a lavender smiley in a dashed ring with a green plus badge.
-private struct ProfileAvatar: View {
+struct ProfileAvatar: View {
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             ZStack {
@@ -161,7 +186,7 @@ private struct ProfileAvatar: View {
     }
 }
 
-private struct SmileArc: Shape {
+struct SmileArc: Shape {
     func path(in r: CGRect) -> Path {
         var p = Path()
         p.move(to: CGPoint(x: r.minX, y: r.minY))

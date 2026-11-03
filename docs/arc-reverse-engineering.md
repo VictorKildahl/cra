@@ -780,6 +780,31 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
   between arrows (#F1EAE5 #E69FBA #9E749B #E1686F #EF8C62 #F2D66D #73E59C #7FB8D6 #666786); a 224 × 15 pt wave
   slider and a dotted dial.
 
+### Profiles and spaces: who shares cookies (Arc 1.171, live in a fake-home copy, 3 Nov)
+- [O] A space's cookies, logins, history and extensions are its profile's. Every space is on Default
+  (`"profile": {"default": true}`) until it is moved; spaces on one profile share sign-ins. There is no
+  setting for "cookies per space": Settings, Spaces menu and space menu only pick a space's profile.
+  Victor's own Arc: both spaces on Default. Favorites are per profile too (topAppsContainerIDs).
+- [O] New Space… (sidebar "Create a Space": Space name…, `Profile [Default ▾] ⓘ`, Choose a Theme,
+  Create Space / Cancel) preselects the focused space's profile: AX `Profile, Work` from a space on Work,
+  `Profile, Default` from one on Default.
+- [O] Spaces ▸ Change Profile: a 450 × 338 sheet, the space icon on a 62 pt #4049DC tile with the
+  profile badge, "Change **<space>’s** Profile", "Each Profile has different browser data, so you might
+  get logged out of some websites, see different Favorites up top, or need to re-install extensions.",
+  "**<space>’s** Profile" + a #2E36E7 pill (`spacePicker`; 14 pt #BEC0F3 circle with the chevron in
+  the pill blue, the name in #BEC0F3) opening an NSMenu Default | other profiles | — | New Profile;
+  Cancel `ESC` / Change Profile `↩`. Change Profile with New Profile opens Create a new Profile.
+- [O] Create a new Profile ▸ Next ▸ "Which Spaces should use this Profile?" (450 × 506): "These Spaces
+  will start fresh in your brand new Profile — so you’ll have to log back in to websites, re-save your
+  passwords, add extensions, etc. You can always switch back to your previous Profile though if you
+  forgot something!", one 63 × 95 theme card per space 76 pt apart, a 16 pt circle under each (#5B616F
+  ring; #007C00 with a tick when chosen, the space it was opened for already ticked), the name;
+  Back `ESC` / Create Profile `↩`.
+- [O] Settings ▸ Profiles: "Your Profiles" with "N Space" counts and + / − / rename; per profile Search
+  engine, Search Settings…, Include search engine suggestions, Archive tabs after (asks "all of your
+  Profiles, or only your X Profile?"), New documents, Download location, and Privacy and Security,
+  Passwords, Credit Cards, Notifications, Clear Browsing Data.
+
 ### One space (Arc 1.171, static)
 - [O strings] Defaults key `showSpaceHeaderOnSingleUnnamedSpaces` (+ `…DidChange` action); the space context
   menu has "Show Space Header" / "Hide Space Header" ("Menu item to toggle space header visibility").
