@@ -244,6 +244,11 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 /// before Chromium is ready and once quitting starts.
 + (nullable NSString *)secureDNSMode;
 + (nullable NSString *)secureDNSTemplates;
+/// Writes both, as chrome://settings/security does; Chromium's network service picks the
+/// change up at once. NO when Chromium isn't ready, a policy sets them, or a write fails.
++ (BOOL)setSecureDNSMode:(NSString *)mode templates:(NSString *)templates;
+/// A policy (DnsOverHttpsMode, DnsOverHttpsTemplates) sets secure DNS, so Settings can't.
++ (BOOL)secureDNSIsManaged;
 /// Called on the main queue once Chromium is ready (at once if it already is) and after the
 /// secure DNS setting changes.
 + (void)setSecureDNSChangeHandler:(nullable void (^)(void))handler;

@@ -2573,6 +2573,30 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 }
 + (NSString*)secureDNSMode { return SecureDNSPreference("dns_over_https.mode"); }
 + (NSString*)secureDNSTemplates { return SecureDNSPreference("dns_over_https.templates"); }
++ (BOOL)setSecureDNSMode:(NSString*)mode templates:(NSString*)templates {
+    if (!g_contextInitialized || g_quitting || [self secureDNSIsManaged]) return NO;
+    CefRefPtr<CefPreferenceManager> local = CefPreferenceManager::GetGlobalPreferenceManager();
+    if (!local) return NO;
+    // Provider first when turning secure on, mode first otherwise, so the network service
+    // never sees "secure" without a server in between.
+    std::vector<std::pair<const char*, NSString*>> writes = {{"dns_over_https.mode", mode}, {"dns_over_https.templates", templates}};
+    if ([mode isEqualToString:@"secure"]) std::swap(writes[0], writes[1]);
+    for (const auto& [name, string] : writes) {
+        CefRefPtr<CefValue> value = CefValue::Create();
+        value->SetString(CefStringFromNS(string));
+        CefString error;
+        if (!local->SetPreference(name, value, error)) {
+            NSLog(@"CraCEF: %s: %s", name, error.ToString().c_str());
+            return NO;
+        }
+    }
+    return YES;
+}
++ (BOOL)secureDNSIsManaged {
+    if (!g_contextInitialized || g_quitting) return NO;
+    CefRefPtr<CefPreferenceManager> local = CefPreferenceManager::GetGlobalPreferenceManager();
+    return local && !(local->CanSetPreference("dns_over_https.mode") && local->CanSetPreference("dns_over_https.templates"));
+}
 + (void)setSecureDNSChangeHandler:(void (^)(void))handler {
     g_secureDNSHandler = [handler copy];
     if (g_contextInitialized) NotifySecureDNS();
