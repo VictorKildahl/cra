@@ -119,6 +119,8 @@ enum StoreTests {
         let objects = SQLite.rows(db, "SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name").compactMap { $0["name"] as? String }
         expect(meta == ["24", "24"] && objects == ["cookies", "cookies_unique_index", "meta"]
                && SQLite.rows(db, "SELECT 1 FROM cookies").isEmpty, "same tables, index and schema version, none of Default's rows")
+        let mode = { (u: URL) in (try? FileManager.default.attributesOfItem(atPath: u.path)[.posixPermissions] as? Int) ?? 0 }
+        expect(mode(target) == 0o600 && mode(target.deletingLastPathComponent()) == 0o700, "owner only, like Chromium's own")
     }
 
     /// Dia 1.55's encrypted sidebar (Tests/Fixtures/Dia, rebuilt by its make-fixture.py with the

@@ -45,6 +45,7 @@ struct ExtensionProfilesTests {
         #expect(try parse(#"{"default": true}"#) == nil)
         #expect(try parse(#"{"custom": {"_0": {"directoryBasename": "Default"}}}"#) == nil)
         #expect(ImportProfileMap.arcProfileFolder(nil) == nil)
+        #expect(try parse(#"{"custom": {"_0": {"directoryBasename": "Profile 2/../../x"}}}"#) == nil, "never a path out of User Data")
     }
 
     @Test func importedExtensionsGoWhereTheirProfilesWent() {

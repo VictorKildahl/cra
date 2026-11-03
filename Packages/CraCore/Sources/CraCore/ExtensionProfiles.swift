@@ -72,11 +72,12 @@ public struct ImportProfileMap: Equatable, Sendable {
     }
 
     /// Arc's `profile` of a space: `{"custom": {"_0": {"directoryBasename": "Profile 2", …}}}`, or
-    /// `{"default": true}` for the Default profile (nil).
+    /// `{"default": true}` for the Default profile (nil). Only a "Profile <n>" folder name counts:
+    /// it is read as a path under Arc's User Data.
     public static func arcProfileFolder(_ profile: Any?) -> String? {
         guard let custom = (profile as? [String: Any])?["custom"] as? [String: Any],
               let folder = (custom["_0"] as? [String: Any])?["directoryBasename"] as? String,
-              !folder.isEmpty, folder != "Default" else { return nil }
+              folder.hasPrefix("Profile "), !folder.contains("/"), !folder.contains("..") else { return nil }
         return folder
     }
 }

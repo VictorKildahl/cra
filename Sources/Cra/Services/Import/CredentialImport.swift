@@ -337,7 +337,8 @@ enum CredentialImport {
         let meta = SQLite.rows(source, "SELECT key, value FROM meta")
         sqlite3_close(source)
         guard !schema.isEmpty, !meta.isEmpty else { return }
-        try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        // Owner only, as Chromium makes its profile folders and databases.
+        try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         let staging = url.deletingLastPathComponent().appendingPathComponent(".\(url.lastPathComponent).creating")
         try? fm.removeItem(at: staging)
         var db: OpaquePointer?
@@ -351,7 +352,8 @@ enum CredentialImport {
             return true
         }
         sqlite3_close(db)
-        if ok { try? fm.moveItem(at: staging, to: url) } else { try? fm.removeItem(at: staging) }
+        guard ok, (try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: staging.path)) != nil else { try? fm.removeItem(at: staging); return }
+        try? fm.moveItem(at: staging, to: url)
     }
 
     private static func open(_ url: URL) -> OpaquePointer? {
