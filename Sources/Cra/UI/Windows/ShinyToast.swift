@@ -79,7 +79,13 @@ final class ShinyToast {
     var isShown: Bool { panel.parent != nil }
 
     /// Shows `text` at the top right of `page` (window coordinates) over `window`'s pages.
+    typealias Colors = (top: NSColor, bottom: NSColor, outline: NSColor, text: NSColor)
+
     func show(_ text: String, action: Action? = nil, page: NSRect, in window: NSWindow, theme: SpaceTheme) {
+        show(text, action: action, page: page, in: window, colors: Self.colors(theme))
+    }
+
+    func show(_ text: String, action: Action? = nil, page: NSRect, in window: NSWindow, colors: Colors) {
         self.action = action
         let textWidth = ceil((text as NSString).size(withAttributes: [.font: Self.font]).width)
         let buttonWidth = action.map { ceil(($0.title as NSString).size(withAttributes: [.font: Self.buttonFont]).width) + 2 * Self.buttonPadding }
@@ -88,7 +94,6 @@ final class ShinyToast {
                            width: width, height: Self.height)
         panel.setFrame(window.convertToScreen(local.insetBy(dx: -Self.margin, dy: -Self.margin)), display: false)
         let scale = window.backingScaleFactor
-        let colors = Self.colors(theme)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         // Anchored at the top centre, where Arc's toast grows from.
@@ -231,7 +236,7 @@ final class ShinyToast {
     /// at the bottom, outlined darker still. Fitted to one Arc theme of each kind (2 Nov 2026, sRGB):
     /// light (Victor's yellow/green) 220/226/184 → 208/218/163, outline 151/157/124; dark (the
     /// default theme in dark mode) 43/24/102 → 33/19/79, outline 26/15/62, white text.
-    static func colors(_ theme: SpaceTheme) -> (top: NSColor, bottom: NSColor, outline: NSColor, text: NSColor) {
+    static func colors(_ theme: SpaceTheme) -> Colors {
         let theme = theme.shown
         let comps = theme.colors.compactMap(HexColor.components)
         let n = Double(max(comps.count, 1))

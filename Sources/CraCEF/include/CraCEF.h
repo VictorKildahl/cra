@@ -184,6 +184,9 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 /// size qualifies, and nothing happens when there is none.
 - (void)requestPictureInPictureAutomatic:(BOOL)automatic NS_SWIFT_NAME(requestPictureInPicture(automatic:));
 - (void)exitPictureInPicture;
+/// Picture in Picture's close button: the video pauses and goes back to the page, as in Arc
+/// and Chrome (back to tab and returning to the tab keep it playing).
+- (void)closePictureInPicture;
 /// YES while a video of this page is in the Picture in Picture window.
 @property (nonatomic, readonly) BOOL isInPictureInPicture;
 /// YES while that video is playing.

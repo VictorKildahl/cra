@@ -718,7 +718,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                 backToTab: { [weak self] in self?.bringToFront(id) },
                 togglePlayback: { [weak browser] in browser?.togglePictureInPicturePlayback() },
                 skip: { [weak browser] s in browser?.skipPictureInPicture(by: s) },
-                close: { [weak browser] in browser?.exitPictureInPicture() })
+                close: { [weak browser] in browser?.closePictureInPicture() })
             PictureInPictureChrome.shared.isPlaying = browser.isPictureInPicturePlaying
             PictureInPictureChrome.shared.videoEntered()
         } else {
