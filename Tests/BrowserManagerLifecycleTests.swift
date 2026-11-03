@@ -261,7 +261,7 @@ enum BrowserManagerLifecycleTests {
     }
 
     /// ⌥⌘I pressed again while CEF is still closing DevTools opens them once they are gone,
-    /// instead of closing them a second time.
+    /// instead of closing them a second time. Console and Network switch panels on open DevTools.
     @MainActor
     private static func devToolsCase() {
         let store = SidebarStore()
@@ -281,8 +281,13 @@ enum BrowserManagerLifecycleTests {
         manager.runDevTools(.inspect)
         expect(browser.devToolsRequests.last == "show" && manager.runtime(for: id)!.devTools.state == .open
                && browser.devToolsAction == "inspect", "Inspect Element on open DevTools keeps them open and arms the picker")
+        manager.browser(browser, devToolsShowsPanel: "console")
         manager.runDevTools(.network)
-        expect(browser.devToolsRequests.last == "close" && browser.devToolsAction == nil, "Network on open DevTools closes them")
+        expect(browser.devToolsRequests.last == "apply network" && manager.runtime(for: id)!.devTools.state == .open,
+               "Network on the Console switches the open frontend to Network (#138)")
+        manager.browser(browser, devToolsShowsPanel: "network")
+        manager.runDevTools(.network)
+        expect(browser.devToolsRequests.last == "close" && browser.devToolsAction == nil, "Network on the Network panel closes them")
         manager.closeAll()
     }
 

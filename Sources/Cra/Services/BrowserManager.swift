@@ -903,7 +903,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     func runDevTools(_ command: DevToolsToggle.Command) {
         guard let rt = visibleRuntime else { return }
         let (effect, frontend) = rt.devTools.run(command)
-        // A press made while DevTools close is done when they reopen (DevToolsToggle.didClose).
+        // A press made while DevTools close is done when they reopen (DevToolsToggle.didClose),
+        // one made while they open once the frontend is up.
         rt.browser.devToolsAction = frontend
         perform(effect, on: rt)
     }
@@ -912,6 +913,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         switch effect {
         case .show: rt.browser.showDevTools()
         case .close: rt.browser.closeDevTools()
+        case .frontend: rt.browser.applyDevToolsAction()
         case .none: break
         }
     }
@@ -941,6 +943,11 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         guard devToolsDockedState[id] != docked else { return }
         devToolsDockedState[id] = docked
         delegate?.browserManagerDevToolsChanged()
+    }
+
+    func browser(_ browser: CraBrowser, devToolsShowsPanel panel: String) {
+        guard let id = tabID(of: browser) else { return }
+        runtimes[id]?.devTools.didShowPanel(panel)
     }
 
     /// CEF's window for the visible tab's DevTools, if any.

@@ -109,6 +109,9 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 /// opens as a target=_blank tab) or Shift-clicked (YES, instead of a new window). Return
 /// YES to show it in a Peek; the page then stays where it is.
 - (BOOL)browser:(CraBrowser *)browser opensPeekForURL:(NSString *)url shiftClick:(BOOL)shiftClick;
+/// The DevTools frontend shows `panel` ("elements", "console", "network", …): on load, and
+/// on every switch, from Cra or the frontend's own tab bar.
+- (void)browser:(CraBrowser *)browser devToolsShowsPanel:(NSString *)panel;
 @end
 
 @interface CraBrowser : NSObject
@@ -164,6 +167,9 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 /// panel to select ("console", "network", "elements"), or "inspect" for the element picker. Done
 /// once the frontend is up (at once when DevTools are already open), then cleared.
 @property (nonatomic, copy, nullable) NSString *devToolsAction;
+/// Does devToolsAction in DevTools already open, without showing them again; a frontend
+/// still loading does it once up.
+- (void)applyDevToolsAction;
 - (void)closeDevTools;
 - (double)zoomLevel;
 - (void)setZoomLevel:(double)level;
