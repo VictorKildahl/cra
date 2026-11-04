@@ -347,6 +347,21 @@ final class PaneToolbarView: NSView {
             devGroup = Array(trailing[(i - 1)...end])
             trailing.removeSubrange((i - 1)...end)
         }
+        // Arc hides pins from the front until the address fits whole (ToolbarExtensionFit); the
+        // Extensions menu still has them.
+        let pins = trailing.filter { v in m.pinned.contains { buttons["ext:" + $0.id] === v } }
+        var hidden = 0
+        if m.kind == .normal, !pins.isEmpty {
+            let widthOf = { (v: NSView) in (v as? ToolbarGlyphButton)?.width ?? 26 }
+            let allRight = trailing.reduce(0) { $0 + widthOf($1) }
+            let a = leftEnd + (left.isEmpty ? 0 : 6)
+            hidden = ToolbarExtensionFit.hiddenCount(widths: pins.map(widthOf), needed: urlButton.idealWidth) { freed in
+                rx - (allRight - freed) - 6 - a - 2 * (8 + 6)
+            }
+        }
+        for (i, v) in pins.enumerated() { v.isHidden = i < hidden }
+        let dropped = pins.prefix(hidden)
+        trailing.removeAll { v in dropped.contains { $0 === v } }
         for v in trailing.reversed() {
             let bw = (v as? ToolbarGlyphButton)?.width ?? 26
             rx -= bw
@@ -501,6 +516,8 @@ final class ToolbarGlyphButton: NSView {
     private var hover = NSColor.white.withAlphaComponent(0.1)
     private var iconBox: NSSize?
     var cornerRadius: CGFloat = 7 { didSet { layer?.cornerRadius = cornerRadius } }
+    /// The fill while not hovered (the sidebar's pinned extension grid draws its cells like tiles).
+    var restFill: NSColor = .clear { didSet { refreshFill() } }
     /// The height an extension icon is centred in, from the bottom (the toolbar sets its button height;
     /// the sidebar pill keeps the 26 pt it was laid out with).
     var iconRowHeight: CGFloat = 26 { didSet { needsLayout = true } }
@@ -554,12 +571,12 @@ final class ToolbarGlyphButton: NSView {
     override func layout() {
         super.layout()
         let h = bounds.height
-        imageView.frame = iconBox.map { NSRect(x: (width - $0.width) / 2, y: (iconRowHeight - $0.height) / 2, width: $0.width, height: $0.height) }
+        imageView.frame = iconBox.map { NSRect(x: (bounds.width - $0.width) / 2, y: (iconRowHeight - $0.height) / 2, width: $0.width, height: $0.height) }
             ?? NSRect(x: 0, y: 0, width: width, height: h)
     }
 
     private func refreshFill() {
-        layer?.backgroundColor = (hovering && enabled ? hover : .clear).cgColor
+        layer?.backgroundColor = (hovering && enabled ? hover : restFill).cgColor
     }
 
     override var mouseDownCanMoveWindow: Bool { false }

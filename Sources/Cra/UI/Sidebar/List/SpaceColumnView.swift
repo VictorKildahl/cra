@@ -434,7 +434,8 @@ enum MenuItems {
 /// Arc's "top apps": a 4-wide grid of favorite tiles, 8 pt apart, and under it a strip that
 /// opens into "Add to Favorites" while a tab is dragged over it. With none, Arc's empty-state
 /// card stands in for the tiles until its × closes it. Arc shares them between spaces; in Cra
-/// every space has its own.
+/// every space has its own. While the toolbar is hidden the profile's pinned extensions sit
+/// over the tiles in a grid of their own (PinnedExtensionGrid), as in Arc.
 final class FavoritesGridView: NSView {
     private let spaceID: UUID
     let store: SidebarStore
@@ -446,6 +447,8 @@ final class FavoritesGridView: NSView {
     private var order: [UUID] = []
     private let strip = FavoritesDropStrip()
     private let card = FavoritesEmptyCard()
+    private var extensionButtons: [String: ToolbarGlyphButton] = [:]
+    private var extensionOrder: [String] = []
     private var favoritesID: UUID?
     private(set) var palette: SpacePalette?
     private var syncQueued = false
@@ -483,9 +486,23 @@ final class FavoritesGridView: NSView {
         var models: [(UUID, FavoriteTileModel)] = []
         var palette: SpacePalette?
         var dismissed = true
+        var pins: [Pin] = []
         withObservationTracking {
             guard let space = store.space(spaceID) else { return }
             palette = space.theme.palette
+            // Arc (4 Nov): with the URL field in the sidebar, the pins leave it for this grid.
+            if !store.settings.showToolbar, !store.isIncognito(space: spaceID) {
+                let ext = ExtensionStore.shared
+                let profile = store.profileDirectoryName(space: spaceID)
+                let entries = ext.entries(inProfile: profile)
+                let tab = store.selectedTabID(in: spaceID, window: ui.windowID)
+                pins = ext.pinnedIDs(inProfile: profile).compactMap { id in
+                    entries.first { $0.extensionID == id }.map {
+                        Pin(id: id, name: $0.name, icon: ext.toolbarIcon(for: $0, profile: profile, tab: tab),
+                            badge: ext.badge(for: $0, profile: profile, tab: tab))
+                    }
+                }
+            }
             favoritesID = space.favoritesContainerID
             dismissed = store.isIncognito(space: spaceID) || store.isFavoritesEmptyStateDismissed(space.favoritesContainerID)
             // A favorite split is one tile with a cell per pane (Arc: AppItem.childItems).
@@ -515,7 +532,8 @@ final class FavoritesGridView: NSView {
         let ids = models.map(\.0)
         let showsCard = ids.isEmpty && !dismissed
         // Arc drops the card and moves the list up in one frame, like a first tile coming in.
-        let countChanged = ids.count != order.count || showsCard == card.isHidden
+        let countChanged = ids.count != order.count || showsCard == card.isHidden || pins.count != extensionOrder.count
+        showExtensions(pins, palette: palette)
         for (id, t) in tiles where !ids.contains(id) {
             t.removeFromSuperview()
             tiles[id] = nil
@@ -539,21 +557,65 @@ final class FavoritesGridView: NSView {
         if countChanged { onHeightChange(false) }
     }
 
+    private struct Pin { let id: String; let name: String; let icon: NSImage?; let badge: ExtensionBadge? }
+
+    /// The pinned extensions' buttons, in pin order; none while the toolbar shows them. Arc 1.171
+    /// (4 Nov) draws each cell like a favorite tile, the tile's fill at rest and its hover fill,
+    /// the 18 pt icon centred, and names it in a tooltip (its toolbar pins have none, #106).
+    private func showExtensions(_ pins: [Pin], palette: SpacePalette?) {
+        let colors = palette.map(SidebarColors.init) ?? SidebarColors()
+        let dark = palette?.isDark ?? false
+        let ids = pins.map(\.id)
+        for (id, b) in extensionButtons where !ids.contains(id) {
+            b.removeFromSuperview()
+            extensionButtons[id] = nil
+        }
+        let ext = ExtensionStore.shared
+        for p in pins {
+            let b = extensionButtons[p.id] ?? {
+                let b = ToolbarGlyphButton()
+                extensionButtons[p.id] = b
+                addSubview(b)
+                return b
+            }()
+            b.configure(symbol: nil, image: ext.badged(p.icon, p.badge, tint: colors.textSecondary), help: p.name, enabled: true,
+                        width: 28, iconSize: 18, tint: colors.textSecondary,
+                        hover: dark ? NSColor.white.withAlphaComponent(0.15) : NSColor.black.withAlphaComponent(0.09))
+            b.restFill = palette.map { NSColor($0.pillFill) } ?? .clear
+            b.cornerRadius = 10
+            b.iconRowHeight = PinnedExtensionGrid.cellHeight
+            let id = p.id
+            b.action = { [weak self] in self?.actions.runExtension(id) }
+            b.menuProvider = { ExtensionStore.shared.entries.first { $0.extensionID == id }.map(ExtensionsMenu.iconMenu) }
+        }
+        extensionOrder = ids
+    }
+
+    /// None while they all fit in the URL field (`w` is its width too).
+    private func extensionGrid(forWidth w: CGFloat) -> PinnedExtensionGrid {
+        let n = extensionOrder.count
+        return PinnedExtensionGrid(count: PinnedExtensionGrid.fitsInURLField(count: n, fieldWidth: w) ? 0 : n, width: w)
+    }
+
     /// Arc's columns and tile frames (FavoritesLayout, #29).
     private func grid(forWidth w: CGFloat) -> FavoritesLayout { FavoritesLayout(count: order.count, width: w) }
 
     func height(forWidth w: CGFloat) -> CGFloat {
-        if !card.isHidden { return FavoritesEmptyCard.height }
-        return grid(forWidth: w).gridHeight + (order.isEmpty ? 0 : 4) + strip.height
+        let top = extensionGrid(forWidth: w).favoritesOffset
+        if !card.isHidden { return top + FavoritesEmptyCard.height }
+        return top + grid(forWidth: w).gridHeight + (order.isEmpty ? 0 : 4) + strip.height
     }
 
     /// Where the header and list are placed from: the tiles' bottom (the empty-state card's
     /// while it stands in for them), the open "Add to Favorites" strip's while a tab is dragged
-    /// over it, nil with no favorites.
+    /// over it, the pinned extensions' with no favorites, nil with neither.
     func tilesBottom(forWidth w: CGFloat) -> CGFloat? {
-        if !card.isHidden { return FavoritesEmptyCard.height }
+        let ext = extensionGrid(forWidth: w)
+        let top = ext.favoritesOffset
+        if !card.isHidden { return top + FavoritesEmptyCard.height }
         if strip.targeted { return height(forWidth: w) }
-        return order.isEmpty ? nil : grid(forWidth: w).gridHeight
+        if order.isEmpty { return ext.count == 0 ? nil : ext.height }
+        return top + grid(forWidth: w).gridHeight
     }
 
     /// The resting strip only takes drops (AppKit finds drop targets apart from hitTest). With
@@ -566,10 +628,16 @@ final class FavoritesGridView: NSView {
     override func layout() {
         super.layout()
         let w = bounds.width
+        let ext = extensionGrid(forWidth: w)
+        for (i, id) in extensionOrder.enumerated() {
+            extensionButtons[id]?.isHidden = ext.count == 0
+            if ext.count > 0 { extensionButtons[id]?.frame = ext.frame(at: i) }
+        }
+        let top = ext.favoritesOffset
         let grid = grid(forWidth: w)
-        for (i, id) in order.enumerated() { tiles[id]?.frame = grid.frame(at: i) }
-        strip.frame = NSRect(x: 0, y: grid.gridHeight + (order.isEmpty ? 0 : 4), width: w, height: strip.height)
-        card.frame = NSRect(x: 0, y: 0, width: w, height: FavoritesEmptyCard.height)
+        for (i, id) in order.enumerated() { tiles[id]?.frame = grid.frame(at: i).offsetBy(dx: 0, dy: top) }
+        strip.frame = NSRect(x: 0, y: top + grid.gridHeight + (order.isEmpty ? 0 : 4), width: w, height: strip.height)
+        card.frame = NSRect(x: 0, y: top, width: w, height: FavoritesEmptyCard.height)
     }
 
     func moveFavorite(_ dragged: UUID, before target: UUID, after: Bool) {

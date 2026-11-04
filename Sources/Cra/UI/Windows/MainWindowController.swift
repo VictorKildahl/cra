@@ -272,7 +272,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         // Toolbar buttons are ~34 pt wide and the click lands near the middle: the popup's
         // right edge lines up with the button's (Chrome anchors popups that way).
-        sidebarActions.runExtension = { [weak self] id in self?.runExtensionAction(id, buttonRightX: Self.extensionButtonRightX()) }
+        sidebarActions.runExtension = { [weak self] id in
+            let button = Self.extensionButtonUnderPointer()
+            // A pin in the sidebar's grid (toolbar hidden) hangs its popup under its own button.
+            self?.runExtensionAction(id, buttonRightX: button?.maxX ?? NSEvent.mouseLocation.x + 17,
+                                     buttonBottomY: self?.store.settings.showToolbar == false ? button?.minY : nil)
+        }
         sidebarActions.showExtensionsMenu = { [weak self] in self?.showToolbarExtensionsMenu() }
         // Popups from an extension's shortcut or chrome.action.openPopup() hang where the
         // menu bar's do: under the extension's toolbar button, else at the card's right end.
@@ -2065,12 +2070,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// Runs an extension's toolbar action on the focused page, like Arc's toolbar buttons and
     /// Dia's Extensions menu. The popup hangs under the toolbar, its right edge at `buttonRightX`
-    /// (screen x of the clicked button; nil = the extension's toolbar button or the card's right end).
-    func runExtensionAction(_ id: String, buttonRightX: CGFloat? = nil) {
+    /// (screen x of the clicked button; nil = the extension's toolbar button or the card's right end),
+    /// its top at `buttonBottomY` (nil = under the URL bar).
+    func runExtensionAction(_ id: String, buttonRightX: CGFloat? = nil, buttonBottomY: CGFloat? = nil) {
         let bar = toolbarBottomOnScreen()
         let browser = currentBrowser
         let anchor = bar.map { bar in
-            buttonRightX.map { NSPoint(x: $0, y: urlBarBottomOnScreen() ?? bar.y) } ?? extensionPopupAnchor(id) ?? NSPoint(x: bar.cardMaxX - 8, y: bar.y)
+            // Under the URL bar, or under a grid pin lower down.
+            buttonRightX.map { x in NSPoint(x: x, y: min(buttonBottomY ?? .infinity, urlBarBottomOnScreen() ?? bar.y)) } ?? extensionPopupAnchor(id) ?? NSPoint(x: bar.cardMaxX - 8, y: bar.y)
         }
         let available = profileExtensions
         switch ExtensionLaunch.decide(id, available: available, hasPage: bar != nil && browser != nil) {
@@ -2102,11 +2109,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// The extensions installed in the focused page's profile.
     var extensionEntries: [ExtensionStore.Entry] { ExtensionStore.shared.entries(inProfile: profileDirectoryName) }
 
-    /// The right edge (screen x) of the pinned-extension button under the pointer, in the
-    /// toolbar or the sidebar's URL pill (also in the floating sidebar's panel), so a popup
-    /// hangs from the same place wherever the button was clicked (GitHub #8).
-    private static func extensionButtonRightX() -> CGFloat {
-        buttonFrameUnderPointer { $0 is ToolbarGlyphButton }?.maxX ?? NSEvent.mouseLocation.x + 17
+    /// The pinned-extension button under the pointer (screen rect), in the toolbar or the
+    /// sidebar's grid (also in the floating sidebar's panel), so a popup hangs from the same
+    /// place wherever the button was clicked (GitHub #8).
+    private static func extensionButtonUnderPointer() -> NSRect? {
+        buttonFrameUnderPointer { $0 is ToolbarGlyphButton }
     }
 
     /// The button under the pointer (screen rect): the one just clicked.

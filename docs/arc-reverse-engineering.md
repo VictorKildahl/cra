@@ -2842,3 +2842,40 @@ event with `shiftClickModalEntryPointEnabled` set for the run, AX frames and 60 
 - Cra (CaptureOverlay, ContentCapture in CraCore): the same mode over a Page.captureScreenshot picture in a panel over
   the page; picker run in Cra's isolated world; Copy / Save… / Send via iMessage… / Retake (no Easels, Library Media or
   Edit in Cra); Copy shows "Screenshot Copied to Clipboard"; the macOS screenshot sound plays when a capture is taken.
+
+## Pinned extensions with the toolbar hidden, and in a narrow toolbar (Arc 1.171, 4 Nov 2026, X report, offline Arc)
+
+Offline Arc as in "One space", with 11 of Victor's extensions copied into the fake home's Default profile
+(`Extensions/<id>` plus his `Secure Preferences` wholesale, so the MACs stay valid) and
+`extensions.pinned_extensions` set in its Preferences. Traps: the space must be on the profile that holds
+the extensions (the fixture's "Side" space was on Profile 1 and showed none); ModHeader never loaded.
+Sidebar width via StorableWindows' `sidebarWidth`, window size over AX. Frames from AX dumps.
+
+- [O] URL field in the sidebar (`topBarURLEnabled` NO). While the pins leave the address room they go in
+  the URL field, shown on hover after the address and before Copy Link and Site Control Center: 30 pt boxes,
+  one every 28 pt, Site Control Center's box ending 4 pt in from the field's end (240 pt sidebar, 3 pins:
+  1Password, JSON Formatter, Lighthouse at x 86, 114, 142, Copy 170, Site Control Center 198). The host
+  truncates under them (7 pins at 347 pt: "github.co").
+- [O] With more, they leave the field (which keeps Copy Link and Site Control Center only) for a grid of
+  their own, shown all the time: the first section of `sidebarFavoritesCollectionView`, 8 pt in from both
+  sides and 8 pt under the URL field, the favorites 8 pt under its last row. Cells 28 pt tall, 8 pt apart
+  both ways, spread over the width: like the favorites grid, as many columns as keep a cell at least
+  ~28 pt wide (no cap seen: 7 in one row at 270 and 300 pt), then the fewest that need no more rows.
+  11 pins: 4 + 4 + 3 at 200 pt (cells 40 wide), 6 + 5 at 240 (30.67), 300 (40.67) and 347 (48.5).
+  5 at 200 pt: one row of 30.4. Icons 18 pt, centred.
+- [O] Field or grid (github.com in the field), by field width (sidebar − 16) less 28 pt per pin:
+  in the field 3 @ 240 (140 left), 4 @ 252 (124), 4 @ 262, 5 @ 300 (144), 7 @ 347 (135);
+  grid 4 @ 240 (112), 4 @ 245 (117), 5 @ 200, 7 @ 270, 300, 320 (108), 8 @ 347 (107), 11 everywhere measured.
+  The cut is between 117 and 124 pt; Cra keeps the pins in the field while that leaves at least 120
+  (PinnedExtensionGrid.fieldReserve).
+- [O] The field's Copy Link and Site Control Center show while the pointer is anywhere over the sidebar
+  (a point 600 pt down the tab list showed them), not only over the field. Cra still shows them for the
+  header only.
+- [O] Toolbar on (`topBarURLEnabled` YES): every pin in the toolbar at 1728 pt and no grid. Narrow windows
+  keep the address whole and centred and hide pins from the front of the list: ten pins, the last seven
+  at 1100 pt, the last two at 800 pt (`numberOfExtensionsThatFit`, `urlDomainHasRoom` in the content
+  toolbar's layout). Cra: ToolbarExtensionFit in PaneToolbarView.layout, against Cra's own address
+  room (centred between the button groups, not in the card as Arc's), so the cut can be a pin off Arc's.
+- [?] Not measured: whether the switch depends on the host's width (only github.com was tried), the grid
+  cells' hover and pressed fills, where a grid pin's popup opens (Cra: under the cell), a space with
+  pins but no favorites (Cra: the header follows the grid as it follows tiles).

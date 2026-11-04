@@ -236,6 +236,8 @@ final class FlippedView: NSView {
 /// and 6 pt from the sidebar edge, no ⌄ menu. The URL pill spans the sidebar 8 pt in from each
 /// side, 36 pt tall, 2 pt under the title area, radius 10, the bare host in 13 pt at 12 pt in.
 /// Its accessories (pinned extensions, copy link, site controls) show while the header is hovered.
+/// Pins that would crowd the address out move to a grid over the favorites instead, as in Arc
+/// 1.171 (PinnedExtensionGrid.fitsInURLField, FavoritesGridView; 4 Nov).
 final class SidebarTopBarView: NSView {
     private let store: SidebarStore
     private let ui: SidebarUIState
@@ -499,12 +501,17 @@ final class SidebarURLPill: NSView {
         layer?.backgroundColor = (hovering ? colors.selectedFill : colors.pillFill).cgColor
     }
 
-    /// Arc's URL-bar accessories: pinned extensions, Copy Link, then the site controls.
+    /// Whether the pins go in this field (else in the grid over the favorites), for its width.
+    private var pinsInField = true
+
+    /// Arc's URL-bar accessories: pinned extensions (while they leave the address room), Copy
+    /// Link, then the site controls.
     private func refreshAccessories(animated: Bool) {
         accessories.forEach { $0.removeFromSuperview() }
         accessories = []
         guard showAccessories, hasTab, let m = model, let actions else { needsLayout = true; return }
-        for (id, _, icon) in m.pinned {
+        pinsInField = PinnedExtensionGrid.fitsInURLField(count: m.pinned.count, fieldWidth: bounds.width)
+        for (id, _, icon) in pinsInField ? m.pinned : [] {
             let b = ToolbarGlyphButton()
             // Arc's pinned extension buttons have no tooltip (#106).
             b.configure(symbol: nil, image: icon, help: "", enabled: true, width: 28, iconSize: 16, tint: colors.textSecondary)
@@ -536,12 +543,15 @@ final class SidebarURLPill: NSView {
     /// The accessories' hover fill is the sidebar's, not the toolbar's.
     override func layout() {
         super.layout()
+        if let m = model, showAccessories, PinnedExtensionGrid.fitsInURLField(count: m.pinned.count, fieldWidth: bounds.width) != pinsInField {
+            refreshAccessories(animated: false)
+        }
         let h = bounds.height
+        // Arc 1.171 (4 Nov): one every 28 pt, the last centred 19 pt in from the end.
         var right = bounds.width - 5
         for v in accessories.reversed() {
             right -= 28
             v.frame = NSRect(x: right, y: (h - 28) / 2, width: 28, height: 28)
-            right -= 1
         }
         let x: CGFloat = 12
         let lh = label.intrinsicContentSize.height
