@@ -601,8 +601,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 TestGesture.scroll(by: g[0], steps: Int(g[1]), at: NSPoint(x: g[2], y: w.frame.height - g[3]), in: w)
                 return
             }
-            // menuAt=x,y (&button=right): the menu a click there opens, e.g. the ⌄ or a row's (#89).
-            if let g = dict["menuAt"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2, let w = main.window {
+            // menuAt=x,y (&button=right): the menu a click there opens, e.g. the ⌄ or a row's (#89);
+            // target=little: in the newest Little Window (its profile chip, #172).
+            if let g = dict["menuAt"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2,
+               let w = dict["target"] == "little" ? littleWindows.last?.window : main.window {
                 TestGesture.openMenu(at: NSPoint(x: g[0], y: w.frame.height - g[1]), in: w, right: dict["button"] == "right")
                 return
             }

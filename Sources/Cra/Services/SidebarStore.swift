@@ -1755,8 +1755,25 @@ final class SidebarStore {
     }
 
     func profilePath(space sid: UUID) -> String? {
-        guard !isIncognito(space: sid), let p = profile(spaces[sid]?.profileID) else { return nil }
-        return AppPaths.chromiumCache.appendingPathComponent(p.directoryName, isDirectory: true).path
+        guard !isIncognito(space: sid) else { return nil }
+        return profilePath(profile: spaces[sid]?.profileID)
+    }
+
+    /// A profile's Chromium folder, nil for Default (and for a profile that is gone).
+    func profilePath(profile id: UUID?) -> String? {
+        profile(id).map { AppPaths.chromiumCache.appendingPathComponent($0.directoryName, isDirectory: true).path }
+    }
+
+    /// The profile a page loads in, from its browser's folder (nil = Default).
+    func profileID(path: String?) -> UUID? {
+        guard let path else { return nil }
+        return profiles.first { profilePath(profile: $0.id) == path }?.id
+    }
+
+    /// The profile a tab's pages load in: its shared-favorites list's, else its space's.
+    func profileID(item id: UUID) -> UUID? {
+        if let l = profileList(ofItem: id) { return profile(l.profileID)?.id }
+        return spaceID(ofItem: id).flatMap { isIncognito(space: $0) ? nil : profile(spaces[$0]?.profileID)?.id }
     }
 
     /// The Chromium profile folder ("Default" or "Profile <id>") a space's pages load in;

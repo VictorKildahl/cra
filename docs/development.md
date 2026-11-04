@@ -156,6 +156,7 @@ Measure them with `sample <pid> 6 1` and compare the main thread's busy time bet
 
 `cra://debug?menuAt=315,24` opens the menu a click at that window point would open (the
 developer-mode ⌄ here), and `&button=right` the context menu, a tab row's for instance.
+`&target=little` aims at the newest Little Window instead (its profile chip, for one).
 Posted mouse events don't reach Cra's views and the rows have no AX menu action, so this is
 the way to check a menu without the pointer. The menu shows up on screen. While it's open,
 it is an AXMenu child of the app: each item's `AXMenuItemCmdChar`, `AXMenuItemCmdModifiers`

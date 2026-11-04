@@ -532,6 +532,10 @@ enum StoreTests {
         expect(store.selectedTabID(in: work) == mail && store.profileDirectoryName(item: mail) == "Default"
                && store.profileDirectoryName(item: jira) == client.directoryName && store.integrityProblems().isEmpty,
                "a favorite it had open stays open in the profile it was opened in (Arc)")
+        expect(store.profileID(item: mail) == nil && store.profileID(item: jira) == client.id
+               && store.profileID(path: store.profilePath(item: jira)) == client.id && store.profileID(path: nil) == nil
+               && store.profilePath(profile: UUID()) == nil,
+               "a page's profile reads back from its folder; Default and a missing profile have none (#172)")
 
         store.deleteSpace(home)
         store.setProfile(client.id, forSpace: third)

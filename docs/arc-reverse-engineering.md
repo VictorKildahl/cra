@@ -2865,6 +2865,34 @@ events, the window recorded with `screencapture -V`.
   (AX and CG window lists before and after). Cra used to open another Little Window. A Shift-clicked link in a
   browser window still opens a Peek (`shiftClickModalEntryPointEnabled`).
 
+## Little Arc's profile (Arc 1.171, 4 Nov 2026, issue #172, Swift metadata + strings + assets)
+
+- [O static] `LittleBrowser.State` holds `profile: Profile` and `shouldShowProfileIndicators: Bool`;
+  `LittleBrowserCreationProfileType = profile(Profile) | lastUsedProfileFromStandardWindow`, and the window
+  record keeps the profile (`little { profile: … }` in StorableWindows.json, above). So a Little Arc gets
+  the profile of the window used last when it opens and keeps it; "Open in <space>" follows the window used
+  last separately (issue #92).
+- [O static] The toolbar's ViewState has `profileName: String?`, drawn as `URLField.Accessory.profileIndicator
+  {profileName, onClick}` in the address field (AX id `littleBrowserProfileIndicator`) by ProfilesUI's
+  `ProfileIndicatorView` (`ProfileIndicatorConfig {profileName, tooltip, theme, size condensed|full,
+  showsChevron}`, icon `profile` = the "archie" smiley, or `incognito`). Fill `ProfileIndicatorBackgroundColor`:
+  white at 31/255 in dark, #181B1F at 18/255 in light.
+- [O static] A click is `LittleBrowserToolbarAction.showChangeProfileMenu(mouseLocation:)`: a menu of
+  `ChangeProfileMenuOption {profile, isCurrent}` ("Caption for Little Browser menu to change the current
+  profile"). Picking one is `onClickChangeProfile(Profile)` → `ProfileDialogUtils.MoveKind.changeProfileInLittleWindow`,
+  a confirm with "Each Profile has different browser data, so this webpage might look a little different." and
+  "Don’t ask again" (`shouldBypassConfirmLittleBrowserProfileDialog`; decisions abort | proceed | alwaysProceed),
+  then `LittleBrowser.Action.setProfile`.
+- [U] Not seen live: the offline copy's Little Arc opened as a 490 × 329 card that didn't load a typed file://
+  address, and the Arc lock was wanted by other sessions. The dialog's title and button names, the chip's exact
+  geometry and whether ⌘O into a space on another profile asks first (`MoveKind.to`, "… is using a different
+  Profile, so you might get logged out or lose your progress in …", `shouldBypassConfirmInterProfileMoveDialog`)
+  are still open.
+- Cra: `LittleWindowState.profileID` (set when the window opens, kept), `LittleProfileChip` in the pill left of
+  the extensions button (the tooltip pill's 22 pt metrics, white 31/255), the menu Default | profiles with the
+  page's ticked, an NSAlert with that text and "Don’t ask again" (defaults
+  `shouldBypassConfirmLittleWindowProfileDialog`), then the page reloads in a new browser in that profile.
+
 ## Peek and the copy toast's Share button (Arc 1.171, 3 Nov 2026, offline Arc)
 
 Offline Arc in a 1728 × 1084 pt window (sidebar 347 pt), a page that is one big link, Shift-click as a HID

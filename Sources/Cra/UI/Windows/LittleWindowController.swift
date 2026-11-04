@@ -25,17 +25,22 @@ final class LittleWindowState {
     /// The space ⌘O opens into: the focused space of the window in use last, as of when
     /// this window last took focus (Arc's Little Arc, see `refreshTarget`).
     var targetSpaceID: UUID
+    /// The profile the page loads in (nil = Default). Arc's LittleBrowser.State.profile: set
+    /// when the window opens and kept, whichever space "Open in" names later (#172).
+    var profileID: UUID?
     var popupOpen = false
     /// Pointer hover, tracked by AppKit (SwiftUI's onHover sleeps while the
     /// Chrome page window, a child, is the key window).
     var hover: LittleHover = .none
     /// Width of the "Open in" button, reported by LittleToolbarView for hit-testing.
     var openButtonWidth: CGFloat = 160
+    /// Width of the profile chip (0 = hidden), reported the same way.
+    var profileChipWidth: CGFloat = 0
 
     init(targetSpaceID: UUID) { self.targetSpaceID = targetSpaceID }
 }
 
-enum LittleHover { case none, pill, puzzle, link, open, chevron }
+enum LittleHover { case none, pill, profile, puzzle, link, open, chevron }
 
 /// What the strip needs AppKit to do.
 @MainActor
@@ -45,6 +50,7 @@ final class LittleWindowActions {
     var promote: (UUID?) -> Void = { _ in }
     var togglePopup: () -> Void = {}
     var closePopup: () -> Void = {}
+    var showProfileMenu: (NSView) -> Void = { _ in }
 }
 
 /// Arc's Little Arc chrome, measured at 2x (window 1688×1010, profile "default").
@@ -55,6 +61,8 @@ enum LittleMetrics {
     static let pillGap: CGFloat = 10            // pill → button
     static let rightMargin: CGFloat = 7
     static let chevronWidth: CGFloat = 29
+    /// From the pill's right end to the profile chip's: past the link and puzzle buttons, 5 pt clear.
+    static let profileChipTrailing: CGFloat = 64
     /// Arc's window corners; used when the system radius can't be read (see LittleWindow).
     static let cornerRadius: CGFloat = 10
     /// The light rim macOS draws along the window's edge. The page is a child window
@@ -215,6 +223,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             self.scheduleTooltip(for: h)
         }
         shell.openButtonWidth = { [weak self] in self?.state.openButtonWidth ?? 160 }
+        shell.profileChipWidth = { [weak self] in self?.state.profileChipWidth ?? 0 }
         if parent != nil {
             // A Peek is part of its window: no minimizing or zooming it on its own.
             window.isMovableByWindowBackground = false
@@ -229,6 +238,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         actions.promote = { [weak self] sid in self?.promote(to: sid) }
         actions.togglePopup = { [weak self] in self?.togglePopup() }
         actions.closePopup = { [weak self] in self?.closePopup() }
+        actions.showProfileMenu = { [weak self] v in self?.showProfileMenu(from: v) }
 
         commandPanel = CommandBarPanel()
         commandHost = CommandBarView(controller: commandBar, favicons: app.favicons)
@@ -242,16 +252,16 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         // and keeps it; a Peek uses its tab's, so a shared favorite peeks in its list's profile. A
         // link from a Little Window stays in its page's profile, and a popup has to: Chromium
         // hosts a popup in its opener's profile. nil is the Default profile.
-        let profilePath: String?
         if let opener {
-            profilePath = opener.profilePath
+            state.profileID = app.store.profileID(path: opener.profilePath)
         } else if let fromTab, app.store.item(fromTab) != nil {
-            profilePath = app.store.profilePath(item: fromTab)
+            state.profileID = app.store.profileID(item: fromTab)
         } else {
-            profilePath = app.store.profilePath(space: state.targetSpaceID)
+            let sid = state.targetSpaceID
+            state.profileID = app.store.isIncognito(space: sid) ? nil : app.store.profile(app.store.space(sid)?.profileID)?.id
         }
         let b = CraBrowser(frame: shell.page.bounds, url: url.map { $0.isEmpty ? "about:blank" : $0 }, delegate: self,
-                           incognito: false, profilePath: profilePath)
+                           incognito: false, profilePath: app.store.profilePath(profile: state.profileID))
         attach(b)
         state.url = (url == "about:blank" ? "" : url) ?? ""
     }
@@ -745,6 +755,61 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    // MARK: Profile
+
+    /// Arc's Little Arc shows the page's profile in its address pill once there is more than one
+    /// (LittleBrowser.State.shouldShowProfileIndicators).
+    var showsProfile: Bool { !store.profiles.isEmpty }
+
+    var profileName: String { store.profile(state.profileID)?.name ?? "Default" }
+
+    /// The indicator's menu (LittleBrowserToolbarAction.showChangeProfileMenu): every profile,
+    /// the page's ticked (ChangeProfileMenuOption.isCurrent).
+    func showProfileMenu(from view: NSView) {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        let options: [(UUID?, String)] = [(nil, "Default")] + store.profiles.map { ($0.id, $0.name) }
+        for (id, name) in options {
+            MenuItems.add(menu, name, on: id == state.profileID) { [weak self] in self?.changeProfile(to: id) }
+        }
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: view.bounds.maxY + 4), in: view)
+    }
+
+    static let bypassProfileDialogKey = "shouldBypassConfirmLittleWindowProfileDialog"
+
+    /// Arc asks first (ProfileDialogUtils.MoveKind.changeProfileInLittleWindow), with a
+    /// "Don't ask again" that sets shouldBypassConfirmLittleBrowserProfileDialog.
+    func changeProfile(to id: UUID?) {
+        guard id != state.profileID, let window else { return }
+        if UserDefaults.standard.bool(forKey: Self.bypassProfileDialogKey) { reload(inProfile: id); return }
+        let alert = NSAlert()
+        alert.messageText = "Open this page in \(store.profile(id)?.name ?? "Default")?"
+        alert.informativeText = "Each Profile has different browser data, so this webpage might look a little different."
+        alert.addButton(withTitle: "Change Profile")
+        alert.addButton(withTitle: "Cancel")
+        alert.showsSuppressionButton = true
+        alert.suppressionButton?.title = "Don’t ask again"
+        alert.beginSheetModal(for: window) { [weak self, weak alert] resp in
+            guard let self, resp == .alertFirstButtonReturn else { return }
+            if alert?.suppressionButton?.state == .on { UserDefaults.standard.set(true, forKey: Self.bypassProfileDialogKey) }
+            self.reload(inProfile: id)
+        }
+    }
+
+    /// A page can't move between profiles: a new browser in the other one loads its address.
+    private func reload(inProfile id: UUID?) {
+        guard let old = browser else { return }
+        let url = hasPage ? currentURL : "about:blank"
+        state.profileID = id
+        old.delegate = nil
+        if let w = old.hostWindow, w.parent === window { window?.removeChildWindow(w); w.orderOut(nil) }
+        old.containerView.removeFromSuperview()
+        let b = CraBrowser(frame: shell.page.bounds, url: url, delegate: self, incognito: false, profilePath: store.profilePath(profile: id))
+        attach(b)
+        old.close()
+        if window?.isKeyWindow == true { focusPage() }
+    }
+
     /// Archive the page to the Library (Arc keeps closed Little Arcs there too).
     func archivePage() {
         // A Peek is a look at a link, not a page to keep.
@@ -1028,6 +1093,8 @@ final class LittleShellView: NSView {
     var onPageFrame: ((NSRect) -> Void)?
     var onHover: ((LittleHover) -> Void)?
     var openButtonWidth: () -> CGFloat = { 160 }
+    /// The profile chip's width in the pill, 0 while it is hidden.
+    var profileChipWidth: () -> CGFloat = { 0 }
     /// While the window grows open, lay out for this (final) size anchored top-left.
     var frozenSize: NSSize? { didSet { needsLayout = true } }
     /// Arc's Peek card: its own 32 pt bar, the page edge to edge, 8 pt corners all round.
@@ -1103,6 +1170,9 @@ final class LittleShellView: NSView {
         if x >= LittleMetrics.pillLeft, x < pillRight {
             if abs(x - (pillRight - 46)) <= 13 { return .puzzle }
             if abs(x - (pillRight - 15)) <= 13 { return .link }
+            let chipW = profileChipWidth()
+            let chipRight = pillRight - LittleMetrics.profileChipTrailing
+            if chipW > 0, x >= chipRight - chipW, x < chipRight { return .profile }
             return .pill
         }
         if x >= buttonLeft, x < w - LittleMetrics.rightMargin {
@@ -1313,6 +1383,7 @@ final class LittleToolbarView: NSView {
     private let urlLabel = NSTextField.sidebarLabel(size: 13)
     private let puzzle = LittleIconView(symbol: "puzzlepiece.extension", size: 15)
     private let link = LittleIconView(symbol: "link", size: 14)
+    private let profileChip = LittleProfileChip()
     private let openButton = NSView()
     private let openPart = NSView()
     private let openLabel = NSTextField.sidebarLabel(size: 13, weight: .medium)
@@ -1344,6 +1415,7 @@ final class LittleToolbarView: NSView {
         pill.addSubview(urlLabel)
         pill.addSubview(puzzle)
         pill.addSubview(link)
+        pill.addSubview(profileChip)
         openButton.wantsLayer = true
         openButton.layer?.backgroundColor = LittlePalette.buttonNS.cgColor
         openButton.layer?.cornerRadius = 7
@@ -1379,8 +1451,10 @@ final class LittleToolbarView: NSView {
     override var isFlipped: Bool { true }
 
     private func observe() {
-        let (url, hover, popupOpen, space) = withObservationTracking {
-            (state.url, state.hover, state.popupOpen, store.space(state.targetSpaceID) ?? store.focusedSpace)
+        let (url, hover, popupOpen, space, profile) = withObservationTracking {
+            (state.url, state.hover, state.popupOpen, store.space(state.targetSpaceID) ?? store.focusedSpace,
+             // Arc's shouldShowProfileIndicators: only once there is a profile besides Default.
+             store.profiles.isEmpty ? nil : store.profile(state.profileID)?.name ?? "Default")
         } onChange: { [weak self] in
             Task { @MainActor in self?.observe() }
         }
@@ -1389,6 +1463,9 @@ final class LittleToolbarView: NSView {
         pill.layer?.backgroundColor = NSColor(hover == .pill ? LittlePalette.pillHover : LittlePalette.pill).cgColor
         puzzle.hovered = hover == .puzzle
         link.hovered = hover == .link
+        profileChip.isHidden = profile == nil
+        profileChip.name = profile ?? ""
+        profileChip.hovered = hover == .profile
         let text = NSMutableAttributedString(string: "Open in ", attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .medium),
                                                                              .foregroundColor: NSColor(LittlePalette.label)])
         text.append(NSAttributedString(string: space.title, attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .bold),
@@ -1423,9 +1500,15 @@ final class LittleToolbarView: NSView {
         pill.frame = NSRect(x: LittleMetrics.pillLeft, y: y, width: pillW, height: ch)
         search.frame = NSRect(x: 0, y: 0, width: 34, height: ch)
         // The URL is centred over the whole pill, 80 pt clear of each end.
-        urlLabel.frame = NSRect(x: 80 - SidebarText.inset, y: (ch - 16) / 2, width: max(0, pillW - 160) + 2 * SidebarText.inset, height: 16)
         link.frame = NSRect(x: pillW - 2 - 26, y: 2, width: 26, height: 26)
         puzzle.frame = NSRect(x: pillW - 2 - 26 - 5 - 26, y: 2, width: 26, height: 26)
+        let chipW = profileChip.isHidden ? 0 : profileChip.fittingWidth
+        profileChip.frame = NSRect(x: pillW - LittleMetrics.profileChipTrailing - chipW, y: (ch - LittleProfileChip.height) / 2,
+                                   width: chipW, height: LittleProfileChip.height)
+        if state.profileChipWidth != chipW { state.profileChipWidth = chipW }
+        // The URL stays centred, clear of the chip on both sides.
+        let clear = max(80, chipW > 0 ? LittleMetrics.profileChipTrailing + chipW + 8 : 80)
+        urlLabel.frame = NSRect(x: clear - SidebarText.inset, y: (ch - 16) / 2, width: max(0, pillW - 2 * clear) + 2 * SidebarText.inset, height: 16)
     }
 
     // MARK: Clicks
@@ -1448,8 +1531,62 @@ final class LittleToolbarView: NSView {
         } else if pill.frame.contains(p) {
             let q = pill.convert(p, from: self)
             if link.frame.contains(q) { actions.copyURL() }
+            else if !profileChip.isHidden, profileChip.frame.contains(q) { actions.showProfileMenu(profileChip) }
             else if !puzzle.frame.contains(q) { actions.openCommandBar() }
         }
+    }
+}
+
+/// Arc's ProfileIndicatorView in the Little Arc's address field (URLField.Accessory.profileIndicator):
+/// the profile smiley ("archie"), the profile's name and a chevron, as it opens the profile menu, on
+/// ProfileIndicatorBackgroundColor (dark: white at 31/255). Sized like the profile pill in Arc's tips.
+final class LittleProfileChip: NSView {
+    static let height: CGFloat = 22
+    private let face = ProfileAvatarView(frame: NSRect(x: 6, y: 4, width: 14, height: 14))
+    private let label = NSTextField.sidebarLabel(size: 11, weight: .medium)
+    private let chevron = NSImageView()
+    private static let font = NSFont.systemFont(ofSize: 11, weight: .medium)
+    var name = "" { didSet { if name != oldValue { label.stringValue = name; needsLayout = true } } }
+    var hovered = false {
+        didSet {
+            layer?.backgroundColor = NSColor.white.withAlphaComponent(hovered ? 46 / 255 : 31 / 255).cgColor
+            let ink = NSColor(hovered ? LittlePalette.iconHot : LittlePalette.text)
+            label.textColor = ink
+            face.ink = ink
+            chevron.contentTintColor = ink
+        }
+    }
+
+    var fittingWidth: CGFloat {
+        let textW = ceil((name as NSString).size(withAttributes: [.font: Self.font]).width)
+        return 6 + 14 + 3 + textW + 4 + 8 + 6
+    }
+
+    init() {
+        super.init(frame: NSRect(x: 0, y: 0, width: 60, height: Self.height))
+        wantsLayer = true
+        layer?.cornerRadius = Self.height / 2
+        label.font = Self.font
+        label.lineBreakMode = .byClipping
+        chevron.image = SidebarSymbols.image("chevron.down", size: 8, weight: .bold)
+        chevron.imageScaling = .scaleNone
+        addSubview(face)
+        addSubview(label)
+        addSubview(chevron)
+        hovered = false
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func layout() {
+        super.layout()
+        let textW = ceil((name as NSString).size(withAttributes: [.font: Self.font]).width)
+        let th = ceil(label.intrinsicContentSize.height)
+        label.frame = NSRect(x: 6 + 14 + 3 - SidebarText.inset, y: (Self.height - th) / 2, width: textW + 2 * SidebarText.inset, height: th)
+        chevron.frame = NSRect(x: 6 + 14 + 3 + textW + 4, y: 0, width: 8, height: Self.height)
     }
 }
 
