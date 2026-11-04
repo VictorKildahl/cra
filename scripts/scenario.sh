@@ -30,13 +30,15 @@
 #   requires screen
 #   port <n>                    serve ${PAGE} on a fixed port (snapshots show the address)
 # ${FIXTURES}, ${PAGE} (Tests/Fixtures/Pages/page.html from a local server, so it has a host
-# for developer mode and tab sleep) and ${EXTENSION_ID} (Tests/Fixtures/Extension) expand.
+# for developer mode and tab sleep), ${EXTENSION_ID} (Tests/Fixtures/Extension) and
+# ${SIDE_PANEL_EXTENSION_ID} (Tests/Fixtures/SidePanelExtension) expand.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
 APP="${CRA_APP:-$ROOT/build/Cra.app}"
 FIXTURES="$ROOT/Tests/Fixtures"
 EXTENSION_ID="$(cat "$FIXTURES/Extension/ID")"
+SIDE_PANEL_EXTENSION_ID="$(cat "$FIXTURES/SidePanelExtension/ID")"
 
 if [ "${1:-}" = "all" ]; then
   failed=()
@@ -120,7 +122,7 @@ sleep 2
 PACE=0.2
 RSS_BUDGET=1500 MAXSTALL=1500 STALLS50=10 LAUNCHSTALL=1000 PERFCPU=0.1
 BASELINE=""
-expand() { local s="$1"; s="${s//\$\{FIXTURES\}/$FIXTURES}"; s="${s//\$\{PAGE\}/$PAGE}"; s="${s//\$\{EXTENSION_ID\}/$EXTENSION_ID}"; printf '%s' "$s"; }
+expand() { local s="$1"; s="${s//\$\{FIXTURES\}/$FIXTURES}"; s="${s//\$\{PAGE\}/$PAGE}"; s="${s//\$\{EXTENSION_ID\}/$EXTENSION_ID}"; s="${s//\$\{SIDE_PANEL_EXTENSION_ID\}/$SIDE_PANEL_EXTENSION_ID}"; printf '%s' "$s"; }
 
 echo "$NAME (pid $PID, logs in ${OUT#$ROOT/})"
 while IFS= read -r raw || [ -n "$raw" ]; do

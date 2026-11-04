@@ -201,6 +201,7 @@ final class ExtensionActions {
     private func handleEvent(_ method: String, params: String, sessionID: String?) {
         if method == "Target.targetCreated" || method == "Target.targetInfoChanged" { popupPageCreated(params); return }
         if method == "Extensions.actionUpdated" { actionUpdated(params); return }
+        if method == "Extensions.sidePanelRequested" { sidePanelRequested(params); return }
         guard method == "Target.attachedToTarget", let sessionID, childWaiters[sessionID] != nil,
               let p = try? JSONSerialization.jsonObject(with: Data(params.utf8)) as? [String: Any],
               let info = p["targetInfo"] as? [String: Any], info["type"] as? String == "page" else { return }
@@ -234,6 +235,7 @@ final class ExtensionActions {
     /// Page targets that were no Cra page when last looked up (Chrome's own pages).
     private var foreignPageTargets: Set<String> = []
     private var updatesAwaitingTabs: [ExtensionActionUpdate] = []
+    private var sidePanelRequestsAwaitingTabs: [ExtensionSidePanelRequest] = []
     private var resolvingPageTargets = false
 
     /// Turns on Chromium's Extensions.actionUpdated (Cra's CEF patch): extensions' own icons
@@ -255,6 +257,21 @@ final class ExtensionActions {
         resolvePageTargets()
     }
 
+    // MARK: Side panels
+
+    /// Gets each side panel request with the Cra tab it is for (nil: no Cra tab, e.g. the panel
+    /// page itself or a Little Window). Chromium sends them while action updates are on
+    /// (scripts/cef-patches/extension-side-panels.patch).
+    var sidePanelHandler: ((ExtensionSidePanelRequest, UUID?) -> Void)?
+
+    private func sidePanelRequested(_ params: String) {
+        guard let request = ExtensionSidePanelRequest(params: Data(params.utf8)) else { return }
+        if let tab = tabsByPageTarget[request.targetID] { sidePanelHandler?(request, tab); return }
+        if foreignPageTargets.contains(request.targetID) { sidePanelHandler?(request, nil); return }
+        sidePanelRequestsAwaitingTabs.append(request)
+        resolvePageTargets()
+    }
+
     /// Asks each live page for its target, then applies the updates that waited for one, in order.
     private func resolvePageTargets() {
         guard !resolvingPageTargets else { return }
@@ -271,6 +288,9 @@ final class ExtensionActions {
             let waiting = updatesAwaitingTabs
             updatesAwaitingTabs = []
             foreignPageTargets = []
+            let panelRequests = sidePanelRequestsAwaitingTabs
+            sidePanelRequestsAwaitingTabs = []
+            for request in panelRequests { sidePanelHandler?(request, map[request.targetID]) }
             for update in waiting {
                 guard let target = update.targetID else { continue }
                 if let tab = map[target] {

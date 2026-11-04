@@ -1,0 +1,133 @@
+diff --git a/chrome/browser/ui/extensions/extension_side_panel_utils.cc b/chrome/browser/ui/extensions/extension_side_panel_utils.cc
+--- a/chrome/browser/ui/extensions/extension_side_panel_utils.cc
++++ b/chrome/browser/ui/extensions/extension_side_panel_utils.cc
+@@ -20,6 +20,10 @@
+ #include "chrome/browser/ui/views/tabs/organizer/organizer_panel_utils.h"
+ #endif
+ 
++#if BUILDFLAG(ENABLE_CEF)
++#include "cef/libcef/browser/chrome/browser_delegate.h"
++#endif
++
+ namespace extensions::side_panel_util {
+ 
+ namespace {
+@@ -43,6 +47,32 @@ SidePanelRegistry* GetTabRegistry(content::WebContents* web_contents) {
+   return GetTabRegistry(tabs::TabInterface::MaybeGetFromContents(web_contents));
+ }
+ 
++// Cra: see SetCraSidePanelHandler.
++CraSidePanelHandler g_cra_side_panel_handler = nullptr;
++
++// Cra: hands the request to Cra when `browser_window` is a page CEF hosts.
++// `web_contents` defaults to the window's active page. True when Cra took it.
++bool ForwardToCra(BrowserWindowInterface* browser_window,
++                  content::WebContents* web_contents,
++                  const ExtensionId& extension_id,
++                  CraSidePanelRequest request) {
++#if BUILDFLAG(ENABLE_CEF)
++  if (!g_cra_side_panel_handler || !browser_window ||
++      !browser_window->cef_delegate() ||
++      !browser_window->cef_delegate()->IsViewsHosted()) {
++    return false;
++  }
++  if (!web_contents) {
++    tabs::TabInterface* tab = GetActiveTab(browser_window);
++    web_contents = tab ? tab->GetContents() : nullptr;
++  }
++  return web_contents &&
++         g_cra_side_panel_handler(web_contents, extension_id, request);
++#else
++  return false;
++#endif
++}
++
+ // Returns true if `registry` exists and has an active entry whose key matches
+ // the provided `key`.
+ bool IsKeyActiveInRegistry(SidePanelRegistry* registry,
+@@ -56,12 +86,20 @@ bool IsKeyActiveInRegistry(SidePanelRegistry* registry,
+ 
+ }  // namespace
+ 
++void SetCraSidePanelHandler(CraSidePanelHandler handler) {
++  g_cra_side_panel_handler = handler;
++}
++
+ // Defined in extension_side_panel_utils.h
+ void ToggleExtensionSidePanel(BrowserWindowInterface* browser_window,
+                               const ExtensionId& extension_id) {
+   if (!browser_window) {
+     return;
+   }
++  if (ForwardToCra(browser_window, nullptr, extension_id,
++                   CraSidePanelRequest::kToggle)) {
++    return;
++  }
+ 
+ #if BUILDFLAG(ENABLE_EXTENSIONS)
+   auto* organizer_controller =
+@@ -88,6 +126,10 @@ void ToggleExtensionSidePanel(BrowserWindowInterface* browser_window,
+ void OpenGlobalExtensionSidePanel(BrowserWindowInterface& browser_window,
+                                   content::WebContents* web_contents,
+                                   const ExtensionId& extension_id) {
++  if (ForwardToCra(&browser_window, web_contents, extension_id,
++                   CraSidePanelRequest::kOpen)) {
++    return;
++  }
+ #if BUILDFLAG(ENABLE_EXTENSIONS)
+   auto* organizer_controller =
+       organizer_panel::IsShowExtensionsSidePanelUiInOrganizerPanelEnabled()
+@@ -172,6 +214,10 @@ void OpenGlobalExtensionSidePanel(BrowserWindowInterface& browser_window,
+ void OpenContextualExtensionSidePanel(BrowserWindowInterface& browser_window,
+                                       content::WebContents& web_contents,
+                                       const ExtensionId& extension_id) {
++  if (ForwardToCra(&browser_window, &web_contents, extension_id,
++                   CraSidePanelRequest::kOpen)) {
++    return;
++  }
+ #if BUILDFLAG(ENABLE_EXTENSIONS)
+   auto* organizer_controller =
+       organizer_panel::IsShowExtensionsSidePanelUiInOrganizerPanelEnabled()
+@@ -213,6 +259,10 @@ void CloseGlobalExtensionSidePanel(BrowserWindowInterface* browser_window,
+   if (!browser_window) {
+     return;
+   }
++  if (ForwardToCra(browser_window, nullptr, extension_id,
++                   CraSidePanelRequest::kClose)) {
++    return;
++  }
+ 
+ #if BUILDFLAG(ENABLE_EXTENSIONS)
+   auto* organizer_controller =
+@@ -261,6 +311,10 @@ void CloseContextualExtensionSidePanel(BrowserWindowInterface* browser_window,
+   if (!browser_window || !web_contents) {
+     return;
+   }
++  if (ForwardToCra(browser_window, web_contents, extension_id,
++                   CraSidePanelRequest::kClose)) {
++    return;
++  }
+ 
+ #if BUILDFLAG(ENABLE_EXTENSIONS)
+   auto* organizer_controller =
+diff --git a/chrome/browser/ui/extensions/extension_side_panel_utils.h b/chrome/browser/ui/extensions/extension_side_panel_utils.h
+--- a/chrome/browser/ui/extensions/extension_side_panel_utils.h
++++ b/chrome/browser/ui/extensions/extension_side_panel_utils.h
+@@ -17,6 +17,17 @@ class WebContents;
+ 
+ namespace extensions::side_panel_util {
+ 
++// Cra: Cra shows extension side panels in its own windows. While a handler is
++// set, a request for a browser that CEF hosts in a views window goes to it
++// (with that browser's active page) instead of to Chrome's side panel, which
++// CEF's hidden browser view never shows. The handler returns false to leave
++// the request to Chrome.
++enum class CraSidePanelRequest { kToggle, kOpen, kClose };
++using CraSidePanelHandler = bool (*)(content::WebContents* web_contents,
++                                     const ExtensionId& extension_id,
++                                     CraSidePanelRequest request);
++void SetCraSidePanelHandler(CraSidePanelHandler handler);
++
+ // Toggles the side panel for the given `extension_id` in `browser_window`,
+ // opening the panel if it is closed and closing it if it is open.
+ void ToggleExtensionSidePanel(BrowserWindowInterface* browser_window,

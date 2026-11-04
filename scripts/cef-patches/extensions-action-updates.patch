@@ -13,13 +13,17 @@ diff --git a/chrome/browser/devtools/inspector_protocol_config.json b/chrome/bro
 diff --git a/chrome/browser/devtools/protocol/extensions_handler.cc b/chrome/browser/devtools/protocol/extensions_handler.cc
 --- a/chrome/browser/devtools/protocol/extensions_handler.cc
 +++ b/chrome/browser/devtools/protocol/extensions_handler.cc
-@@ -7,15 +7,21 @@
+@@ -5,17 +5,26 @@
+ #include "chrome/browser/devtools/protocol/extensions_handler.h"
+ 
  #include <memory>
++#include <set>
  #include <string>
  
 +#include "base/base64.h"
  #include "base/files/file_path.h"
  #include "base/functional/bind.h"
++#include "base/no_destructor.h"
 +#include "base/strings/stringprintf.h"
  #include "base/strings/utf_string_conversions.h"
 +#include "chrome/browser/browser_process.h"
@@ -28,6 +32,7 @@ diff --git a/chrome/browser/devtools/protocol/extensions_handler.cc b/chrome/bro
  #include "chrome/browser/devtools/protocol/extensions.h"
  #include "chrome/browser/devtools/protocol/protocol.h"
  #include "chrome/browser/extensions/browser_window_util.h"
++#include "chrome/browser/extensions/api/side_panel/side_panel_service.h"
 +#include "chrome/browser/extensions/extension_action_dispatcher.h"
 +#include "chrome/browser/extensions/extension_tab_util.h"
  #include "chrome/browser/extensions/extension_util.h"
@@ -35,7 +40,7 @@ diff --git a/chrome/browser/devtools/protocol/extensions_handler.cc b/chrome/bro
  #include "chrome/browser/ui/extensions/extension_action_view_model.h"
  #include "chrome/browser/ui/extensions/extensions_container.h"
  #include "chrome/browser/ui/toolbar/toolbar_action_view_model.h"
-@@ -23,9 +29,15 @@
+@@ -23,9 +32,15 @@
  #include "content/public/browser/web_contents.h"
  #include "extensions/browser/api/storage/storage_area_namespace.h"
  #include "extensions/browser/api/storage/storage_utils.h"
@@ -51,7 +56,7 @@ diff --git a/chrome/browser/devtools/protocol/extensions_handler.cc b/chrome/bro
  
  namespace {
  
-@@ -160,7 +172,194 @@
+@@ -160,8 +175,269 @@ GetExtensionAndStorageFrontendResult GetExtensionAndStorageFrontend(
    return result;
  }
  
@@ -79,6 +84,13 @@ diff --git a/chrome/browser/devtools/protocol/extensions_handler.cc b/chrome/bro
 +}
 +
  }  // namespace
+ 
++// Cra: the handlers with action updates on, which also take side panel
++// requests.
++std::set<ExtensionsHandler*>& SidePanelHandlers() {
++  static base::NoDestructor<std::set<ExtensionsHandler*>> handlers;
++  return *handlers;
++}
 +
 +// Cra: forwards one profile's action changes to the handler.
 +class ExtensionsHandler::ActionWatch
@@ -119,8 +131,12 @@ diff --git a/chrome/browser/devtools/protocol/extensions_handler.cc b/chrome/bro
 +    action_watches_.clear();
 +    profile_manager_observation_.Reset();
 +    reported_actions_.clear();
++    SidePanelHandlers().erase(this);
 +    return protocol::Response::Success();
 +  }
++  SidePanelHandlers().insert(this);
++  extensions::side_panel_util::SetCraSidePanelHandler(
++      &ExtensionsHandler::ForwardSidePanelRequest);
 +  ProfileManager* profile_manager = g_browser_process->profile_manager();
 +  if (!profile_manager) {
 +    return protocol::Response::ServerError("No profile manager.");
@@ -243,10 +259,74 @@ diff --git a/chrome/browser/devtools/protocol/extensions_handler.cc b/chrome/bro
 +                           badge_text, badge_color, badge_text_color,
 +                           std::move(target_id));
 +}
- 
++
++// static
++bool ExtensionsHandler::ForwardSidePanelRequest(
++    content::WebContents* web_contents,
++    const extensions::ExtensionId& extension_id,
++    extensions::side_panel_util::CraSidePanelRequest request) {
++  bool taken = false;
++  // A copy: a handler can't go away while it reports, but stay safe.
++  const std::set<ExtensionsHandler*> handlers = SidePanelHandlers();
++  for (ExtensionsHandler* handler : handlers) {
++    taken = handler->ReportSidePanelRequest(web_contents, extension_id,
++                                            request) ||
++            taken;
++  }
++  return taken;
++}
++
++// Reports the request with the panel page for `web_contents`'s tab; false
++// (Chrome keeps it) when the extension has no panel enabled there.
++bool ExtensionsHandler::ReportSidePanelRequest(
++    content::WebContents* web_contents,
++    const extensions::ExtensionId& extension_id,
++    extensions::side_panel_util::CraSidePanelRequest request) {
++  using Request = extensions::side_panel_util::CraSidePanelRequest;
++  if (!frontend_ || !web_contents) {
++    return false;
++  }
++  content::BrowserContext* context = web_contents->GetBrowserContext();
++  extensions::ExtensionRegistry* registry =
++      extensions::ExtensionRegistry::Get(context);
++  const extensions::Extension* extension =
++      registry ? registry->enabled_extensions().GetByID(extension_id)
++               : nullptr;
++  if (!extension) {
++    return false;
++  }
++  std::string url;
++  if (request != Request::kClose) {
++    extensions::SidePanelService* service =
++        extensions::SidePanelService::Get(context);
++    if (!service) {
++      return false;
++    }
++    extensions::api::side_panel::PanelOptions options = service->GetOptions(
++        *extension, extensions::ExtensionTabUtil::GetTabId(web_contents));
++    if (!options.path || options.path->empty() ||
++        (options.enabled.has_value() && !*options.enabled)) {
++      return false;
++    }
++    url = extension->ResolveExtensionURL(*options.path).spec();
++  }
++  const std::string profile = Profile::FromBrowserContext(context)
++                                  ->GetOriginalProfile()
++                                  ->GetBaseName()
++                                  .AsUTF8Unsafe();
++  const std::string kind = request == Request::kToggle ? "toggle"
++                           : request == Request::kOpen ? "open"
++                                                       : "close";
++  frontend_->SidePanelRequested(
++      extension_id, profile, kind, url,
++      content::DevToolsAgentHost::GetOrCreateFor(web_contents)->GetId());
++  return true;
++}
++
  protocol::DispatchResponse ExtensionsHandler::TriggerAction(
      const std::string& extension_id,
-@@ -219,6 +418,9 @@
+     const std::string& target_id) {
+@@ -219,9 +495,14 @@ ExtensionsHandler::ExtensionsHandler(protocol::UberDispatcher* dispatcher,
      : target_id_(target_id),
        allow_loading_extensions_(allow_loading_extensions) {
    protocol::Extensions::Dispatcher::wire(dispatcher, this);
@@ -255,11 +335,17 @@ diff --git a/chrome/browser/devtools/protocol/extensions_handler.cc b/chrome/bro
 +      std::make_unique<protocol::Extensions::Frontend>(dispatcher->channel());
  }
  
- ExtensionsHandler::~ExtensionsHandler() = default;
+-ExtensionsHandler::~ExtensionsHandler() = default;
++ExtensionsHandler::~ExtensionsHandler() {
++  SidePanelHandlers().erase(this);
++}
+ 
+ void ExtensionsHandler::LoadUnpacked(
+     const protocol::String& path,
 diff --git a/chrome/browser/devtools/protocol/extensions_handler.h b/chrome/browser/devtools/protocol/extensions_handler.h
 --- a/chrome/browser/devtools/protocol/extensions_handler.h
 +++ b/chrome/browser/devtools/protocol/extensions_handler.h
-@@ -5,13 +5,31 @@
+@@ -5,13 +5,32 @@
  #ifndef CHROME_BROWSER_DEVTOOLS_PROTOCOL_EXTENSIONS_HANDLER_H_
  #define CHROME_BROWSER_DEVTOOLS_PROTOCOL_EXTENSIONS_HANDLER_H_
  
@@ -271,6 +357,7 @@ diff --git a/chrome/browser/devtools/protocol/extensions_handler.h b/chrome/brow
  #include "chrome/browser/devtools/protocol/protocol.h"
 +#include "chrome/browser/profiles/profile_manager.h"
 +#include "chrome/browser/profiles/profile_manager_observer.h"
++#include "chrome/browser/ui/extensions/extension_side_panel_utils.h"
  #include "extensions/browser/api/storage/storage_frontend.h"
  #include "extensions/common/extension.h"
  
@@ -292,7 +379,7 @@ diff --git a/chrome/browser/devtools/protocol/extensions_handler.h b/chrome/brow
   public:
    explicit ExtensionsHandler(protocol::UberDispatcher* dispatcher,
                               const std::string& target_id,
-@@ -26,6 +44,15 @@
+@@ -26,6 +45,24 @@ class ExtensionsHandler : public protocol::Extensions::Backend {
    protocol::DispatchResponse TriggerAction(
        const protocol::String& extendsion_id,
        const protocol::String& target_id) override;
@@ -305,10 +392,19 @@ diff --git a/chrome/browser/devtools/protocol/extensions_handler.h b/chrome/brow
 +  void ReportAction(const extensions::ExtensionAction& action,
 +                    content::WebContents* web_contents,
 +                    content::BrowserContext* context);
++  // Cra: sidePanelRequested, for every handler with action updates on.
++  static bool ForwardSidePanelRequest(
++      content::WebContents* web_contents,
++      const extensions::ExtensionId& extension_id,
++      extensions::side_panel_util::CraSidePanelRequest request);
++  bool ReportSidePanelRequest(
++      content::WebContents* web_contents,
++      const extensions::ExtensionId& extension_id,
++      extensions::side_panel_util::CraSidePanelRequest request);
    void LoadUnpacked(const protocol::String& path,
                      std::optional<bool> enable_in_incognito,
                      std::unique_ptr<LoadUnpackedCallback> callback) override;
-@@ -83,6 +110,15 @@
+@@ -83,6 +120,15 @@ class ExtensionsHandler : public protocol::Extensions::Backend {
    bool allow_loading_extensions_;
  
    std::unique_ptr<protocol::Extensions::Frontend> frontend_;
@@ -327,7 +423,7 @@ diff --git a/chrome/browser/devtools/protocol/extensions_handler.h b/chrome/brow
 diff --git a/third_party/blink/public/devtools_protocol/domains/Extensions.pdl b/third_party/blink/public/devtools_protocol/domains/Extensions.pdl
 --- a/third_party/blink/public/devtools_protocol/domains/Extensions.pdl
 +++ b/third_party/blink/public/devtools_protocol/domains/Extensions.pdl
-@@ -22,6 +22,34 @@
+@@ -22,6 +22,51 @@ experimental domain Extensions
        # A tab target ID to trigger the default extension action on.
        string targetId
  
@@ -358,6 +454,23 @@ diff --git a/third_party/blink/public/devtools_protocol/domains/Extensions.pdl b
 +      # Page target of the tab the change is for; absent for the
 +      # tab-independent state.
 +      optional string targetId
++
++  # Cra: with action updates on, an extension's request to show, hide or toggle
++  # its side panel for a page CEF hosts (its toolbar action with
++  # openPanelOnActionClick, chrome.sidePanel.open or close) comes here instead
++  # of to Chrome's side panel, which CEF never shows.
++  event sidePanelRequested
++    parameters
++      # Extension id.
++      string id
++      # Profile directory name ("Default", "Profile 1").
++      string profile
++      # "toggle", "open" or "close".
++      string request
++      # The panel's page for that tab (chrome-extension://…); empty for "close".
++      string url
++      # Page target of the tab the request is for.
++      string targetId
 +
    # Installs an unpacked extension from the filesystem similar to
    # --load-extension CLI flags. Returns extension ID once the extension

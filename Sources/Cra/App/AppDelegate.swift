@@ -707,6 +707,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             if let id = dict["extensionAction"] { main.runExtensionAction(id); return }
+            // What the side panel's close button does (scripts/scenario.sh).
+            if dict["sidePanel"] == "close" { main.sidePanel.hide(); return }
             if let path = dict["exportDiagnostics"] {
                 Diagnostics.export(windows: mainWindows, store: store, to: URL(fileURLWithPath: path))
                 return

@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Cra Side Panel Fixture",
+  "version": "1.0",
+  "description": "Made up for scripts/scenario.sh: like MetaMask, a popup in the manifest but the toolbar button opens the side panel.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApW4QzzYh7p/Zl9rDQ7QsEI6hg9GDXQwlQ6Qj5Gphj9vje+JODZduUy5zsLcSdpkeprcEjvflwKnCGknSsMSgzN8Gtk+R7pCOvsR77iAK3zCS3PBLQldI+65XlFjTf/SzjsioaimAs9m/lMRQV98gnkc6EmWxmglJSD3AyiuHcfCTcd8ylpl002ukh3s+45rdzoB64DpsvGY6oqNDe4+wPSJQTDTjd43CBARk1BTQmqsRMhj2NB0X/SRDc4fMRtAg0ZoFfSW91/buIIqlI3wuqy7P6Jfr73xQWWfhmFUSPQyzxjQmC/njtqY2ACfwyVbEZmlz+xogdWB7hZeJ4nuttwIDAQAB",
+  "permissions": ["sidePanel"],
+  "background": { "service_worker": "worker.js" },
+  "action": { "default_popup": "popup.html", "default_title": "Cra Side Panel Fixture" },
+  "side_panel": { "default_path": "panel.html" }
+}

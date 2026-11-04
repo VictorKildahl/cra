@@ -56,6 +56,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     var currentBrowser: CraBrowser? { browsers.visibleRuntime?.browser }
 
+    /// The window's extension side panel (chrome.sidePanel; Chrome's, which Arc lacks).
+    private(set) lazy var sidePanel = ExtensionSidePanelController(app: app, shell: shell, owner: self)
+
+    /// The side panel's page window joined this window's children: the overlay panels stay above it.
+    func sidePanelPageAttached() { raiseOverlayPanels() }
+
     /// This window's entry in the store (WindowSession): its space, open tabs, frame.
     let windowID: UUID
     /// Pages load in the off-the-record profile; nothing is saved (WindowSession.isIncognito).
@@ -328,6 +334,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         ExtensionActions.shared.watchActions { [weak app] in
             app?.mainWindows.flatMap { $0.browsers.runtimes.values.map { (tab: $0.tabID, browser: $0.browser) } } ?? []
+        }
+        ExtensionActions.shared.sidePanelHandler = { [weak app] request, tab in
+            guard let app else { return }
+            ExtensionSidePanelController.route(request, tab: tab, app: app)
         }
         browsers.nowPlaying = sidebarUI.nowPlaying
         sidebarUI.nowPlaying.perform = { [weak self] id, action in
@@ -934,7 +944,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         guard EmbeddedPages.isEnabled, let window, let responder = window.firstResponder as? NSView,
               NSStringFromClass(type(of: responder)) == "RenderWidgetHostViewCocoa" else { return }
         let focused = browsers.visibleTabID.flatMap { browsers.runtime(for: $0)?.hostWindow }.flatMap(EmbeddedPages.pageViews(of:)) ?? []
-        if !focused.contains(where: { responder.isDescendant(of: $0) }) { window.makeFirstResponder(nil) }
+        // The extension side panel's page keeps the keys it has.
+        let panel = sidePanel.isShowing ? sidePanel.embeddedViews : []
+        if !(focused + panel).contains(where: { responder.isDescendant(of: $0) }) { window.makeFirstResponder(nil) }
     }
 
     /// The tab whose embedded page should take keyboard focus once it is in its card.
@@ -2860,6 +2872,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func tearDown() {
         isTornDown = true
         dismissTransientUI()
+        sidePanel.hide()
         for p in peeks { p.closeWindow() }
         // A page another window shows behind its blurred stand-in moves there with its history
         // and state; closed with this window, that window loaded it again from scratch.

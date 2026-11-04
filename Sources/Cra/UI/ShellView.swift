@@ -54,6 +54,13 @@ final class ShellView: NSView {
     var devToolsFrontendDocked = false { didSet { needsLayout = true } }
     /// The page rect (window coordinates) the frontend-docked layout produced; overlays follow it.
     var frontendPageRect: NSRect? { didSet { if oldValue != frontendPageRect { needsLayout = true } } }
+    /// An extension's side panel (chrome.sidePanel) right of the panes, Chrome's place for it.
+    let sidePanel = ExtensionSidePanelCard()
+    let sidePanelHandle = DevToolsResizeHandle()
+    /// The panel's width; 0 = no panel.
+    var sidePanelWidth: CGFloat = 0 { didSet { if sidePanelWidth != oldValue { needsLayout = true } } }
+    /// The panel page's area (window coordinates), nil while no panel shows.
+    var onSidePanelFrame: ((NSRect?) -> Void)?
     /// Reports the dock area (window coordinates) so the DevTools child window follows it.
     var onDevToolsFrame: ((NSRect) -> Void)?
     /// Reports each pane's page area (window coordinates) so Chrome-style page windows follow it.
@@ -295,6 +302,10 @@ final class ShellView: NSView {
             self.layoutSubtreeIfNeeded()
         }
         contentContainer.addSubview(placeholderHost)
+        sidePanel.isHidden = true
+        sidePanelHandle.isHidden = true
+        contentContainer.addSubview(sidePanel)
+        contentContainer.addSubview(sidePanelHandle)
         for h in [statusHost, findHost] as [NSView] {
             h.isHidden = true
             contentContainer.addSubview(h)
@@ -464,10 +475,33 @@ final class ShellView: NSView {
         }
     }
 
+    /// The side panel's width in `bounds` (the content area), 0 when none shows: none open, a
+    /// page in full screen, or no room beside the page.
+    private func sidePanelShownWidth(in bounds: NSRect) -> CGFloat {
+        let gap = Double(SplitPaneLayout.Constants.gap)
+        let pages = sidePanelPageMinimum
+        guard sidePanelWidth > 0, hasTab, !contentFullscreen,
+              ExtensionSidePanelWidth.fits(container: Double(bounds.width), gap: gap, pages: pages) else { return 0 }
+        return CGFloat(ExtensionSidePanelWidth.clamp(Double(sidePanelWidth), container: Double(bounds.width), gap: gap, pages: pages)).rounded()
+    }
+
+    /// What the panes need beside the side panel: each split pane keeps its minimum.
+    var sidePanelPageMinimum: Double {
+        ExtensionSidePanelWidth.pageMinimum(panes: paneCards.count, paneMinimum: Double(SplitPaneLayout.Constants.minimumPaneLength),
+                                            gap: Double(SplitPaneLayout.Constants.gap), sideBySide: splitOrientation == .horizontal)
+    }
+
+    /// The panes' share of `bounds`: all of it, less the side panel and its gap on the right.
+    private func paneArea(in bounds: NSRect) -> NSRect {
+        let w = sidePanelShownWidth(in: bounds)
+        guard w > 0 else { return bounds }
+        return NSRect(x: bounds.minX, y: bounds.minY, width: bounds.width - w - SplitPaneLayout.Constants.gap, height: bounds.height)
+    }
+
     private func paneLayout(in bounds: NSRect) -> SplitPaneLayout.Result {
         let ids = paneCards.map(\.tabID)
         let panes = ids.map { SplitPaneLayout.Pane(id: $0, factor: paneFactors[$0] ?? (1 / CGFloat(max(1, ids.count)))) }
-        var layout = SplitPaneLayout(panes: panes, orientation: splitOrientation, containerSize: bounds.size)
+        var layout = SplitPaneLayout(panes: panes, orientation: splitOrientation, containerSize: paneArea(in: bounds).size)
         layout.backingScaleFactor = window?.backingScaleFactor ?? 2
         return layout.compute()
     }
@@ -500,7 +534,7 @@ final class ShellView: NSView {
     private func dragPane(_ index: Int, delta: CGFloat) {
         let ids = paneCards.map(\.tabID)
         let panes = ids.map { SplitPaneLayout.Pane(id: $0, factor: dragStartFactors[$0] ?? (1 / CGFloat(max(1, ids.count)))) }
-        let layout = SplitPaneLayout(panes: panes, orientation: splitOrientation, containerSize: contentContainer.bounds.size)
+        let layout = SplitPaneLayout(panes: panes, orientation: splitOrientation, containerSize: paneArea(in: contentContainer.bounds).size)
         paneFactors = layout.dragging(dividerAfter: index, by: delta).factors
         layoutContentChildren()
     }
@@ -677,6 +711,7 @@ final class ShellView: NSView {
         }
         placeholderHost.frame = cb
         placeholderHost.isHidden = hasTab
+        layoutSidePanel(in: cb)
         // The no-tab card is rounded like a page's (GitHub #6: a new window showed a square one).
         placeholderHost.layer?.cornerRadius = cardCornerRadius
         placeholderHost.layer?.cornerCurve = .continuous
@@ -724,6 +759,22 @@ final class ShellView: NSView {
             findHost.frame = NSRect(x: wb.maxX - size.width - inset, y: wb.maxY - size.height - inset, width: size.width, height: size.height)
         }
         if !animatingPanes, paneCards.allSatisfy({ $0.frozenWebBounds == nil }) { onPaneFrames?(paneWebFrames(layout)) }
+    }
+
+    private func layoutSidePanel(in cb: NSRect) {
+        let w = sidePanelShownWidth(in: cb)
+        sidePanel.isHidden = w == 0
+        sidePanelHandle.isHidden = w == 0
+        guard w > 0 else { onSidePanelFrame?(nil); return }
+        let gap = SplitPaneLayout.Constants.gap
+        let f = NSRect(x: cb.maxX - w, y: cb.minY, width: w, height: cb.height)
+        if sidePanel.frame != f { sidePanel.frame = f }
+        sidePanel.cornerRadius = edgeToEdge ? 0 : CraMetrics.contentCornerRadius
+        sidePanel.castsShadow = !edgeToEdge
+        sidePanel.layoutSubtreeIfNeeded()
+        // The handle covers the gap and reaches a little into the cards on both sides.
+        sidePanelHandle.frame = NSRect(x: f.minX - gap - 3, y: cb.minY, width: gap + 6, height: cb.height)
+        onSidePanelFrame?(contentContainer.convert(sidePanel.convert(sidePanel.pageArea.frame, to: contentContainer), to: nil))
     }
 
     /// Chrome-style hosting: the status bubble moves into a click-through panel above the

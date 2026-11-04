@@ -1,0 +1,28 @@
+# An extension whose toolbar button opens Chrome's side panel (openPanelOnActionClick), as
+# MetaMask's does by default. Chrome's own panel never shows in CEF, so the click did nothing,
+# in Cra as in Arc; Cra now shows the panel beside the page. A second click closes it, and so
+# does the panel's close button (sidePanel=close), after which a click opens it again.
+budget rss=700 stalls50=5
+cra://debug?installExtension=${FIXTURES}/SidePanelExtension
+relaunch
+cra://open?url=${PAGE}?n=panel
+wait 3
+cra://debug?extensionAction=${SIDE_PANEL_EXTENSION_ID}
+expect-log side panel shows ${SIDE_PANEL_EXTENSION_ID} in Default
+wait 2
+cra://debug?extensionAction=${SIDE_PANEL_EXTENSION_ID}
+expect-log side panel hides ${SIDE_PANEL_EXTENSION_ID}
+wait 1
+cra://debug?extensionAction=${SIDE_PANEL_EXTENSION_ID}
+wait 2
+cra://debug?windowSize=900x700
+wait 1
+cra://debug?windowSize=1400x880
+wait 1
+cra://debug?sidePanel=close
+wait 1
+cra://debug?extensionAction=${SIDE_PANEL_EXTENSION_ID}
+wait 2
+cra://debug?removeExtension=${SIDE_PANEL_EXTENSION_ID}
+wait 1
+reject-log fault:
