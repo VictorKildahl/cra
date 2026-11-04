@@ -2014,6 +2014,21 @@ click, then AX), 120 fps region recordings.
   (a page twice once), off gives each space its own copy. Tile menu: Remove Favorite, Move to › Profile.
   SpacePagerView holds the tiles still between two pages that show one list.
 
+### Reordering Favorites (Arc 1.171, 4 Nov 2026, offline Arc, issue #176)
+- [O static] The top apps are an NSCollectionView (`AppTrayViewController`, `AppTrayCollectionViewLayout`) with the
+  collection view's drag delegate (`validateDrop:proposedIndexPath:`, `layoutAttributesForInterItemGapBeforeIndexPath:`).
+- [O live] Offline Arc, 4 favorites at 347 pt, real HID drags, AX tile frames read mid-drag, 60 fps recording. A dragged
+  favorite leaves the flow: the others close up and the slot under the pointer stays open (over News: News moves to
+  slot 0, slot 1 open; over Maps: News, Docs, Maps, slot 3 open). The tiles slide over ~0.15 s, fast at first. The
+  image under the pointer is a light card (white at about two thirds over the sidebar), the tile's corners, a soft
+  shadow. Dragged down off the tiles over the space header the slot stays open and no "Add to Favorites" shows.
+  Released over Maps' slot: News, Docs, Maps, Music.
+- [O live] A Today tab dragged over the tiles opens a slot at once and the grid relays out for five (3 + 2, a second
+  row, the header moves down). Released over the second slot: News, Today P, Docs, Maps, Music.
+- Cra: `FavoritesGridView` is the drop target (the tiles no longer are), `FavoritesLayout.slot(at:)` /
+  `slot(ofTile:opening:)` place the open slot, `SidebarStore.addToFavorites(_:in:at:)` inserts a tab there. The
+  same drags on a test copy give the same orders and frames.
+
 ### Splits in Favorites (Arc 1.171, 31 Oct 2026, Swift metadata + offline Arc)
 Request from a Cra user (DM, 31 Oct): "the split tabs being pinned, I also need them pinned at the top".
 - [O static] A top-apps item can be a split: `AppTray…ViewState.AppItem { childItems: OrderedDictionary<id,

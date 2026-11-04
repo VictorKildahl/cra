@@ -57,4 +57,27 @@ struct FavoritesLayoutTests {
         #expect(FavoritesLayout(count: 4, width: 331).gridHeight == 47)
         #expect(FavoritesLayout(count: 9, width: 331).gridHeight == 157, "3 rows of 47 and 2 gaps of 8")
     }
+
+    /// #176: the slot under the pointer, across rows, with gaps going to the nearer tile.
+    @Test func slotUnderThePointer() {
+        let grid = FavoritesLayout(count: 5, width: 331)  // 3 + 2, tiles 105 wide, 55 pt row pitch
+        #expect(grid.slot(at: CGPoint(x: 10, y: 10)) == 0)
+        #expect(grid.slot(at: CGPoint(x: 120, y: 10)) == 1)
+        #expect(grid.slot(at: CGPoint(x: 110, y: 10)) == 1, "a gap's right half goes to the tile after it")
+        #expect(grid.slot(at: CGPoint(x: 108, y: 10)) == 0, "its left half to the tile before")
+        #expect(grid.slot(at: CGPoint(x: 330, y: 10)) == 2)
+        #expect(grid.slot(at: CGPoint(x: 10, y: 60)) == 3)
+        #expect(grid.slot(at: CGPoint(x: 120, y: 60)) == 4)
+        #expect(grid.slot(at: CGPoint(x: 300, y: 60)) == 4, "past the short last row: the last slot")
+        #expect(grid.slot(at: CGPoint(x: -20, y: -20)) == 0)
+        #expect(grid.slot(at: CGPoint(x: 400, y: 400)) == 4)
+        #expect(FavoritesLayout(count: 0, width: 331).slot(at: .zero) == 0)
+    }
+
+    @Test func tilesMoveAlongPastTheOpenSlot() {
+        #expect((0..<4).map { FavoritesLayout.slot(ofTile: $0, opening: nil) } == [0, 1, 2, 3])
+        #expect((0..<4).map { FavoritesLayout.slot(ofTile: $0, opening: 0) } == [1, 2, 3, 4])
+        #expect((0..<4).map { FavoritesLayout.slot(ofTile: $0, opening: 2) } == [0, 1, 3, 4])
+        #expect((0..<4).map { FavoritesLayout.slot(ofTile: $0, opening: 4) } == [0, 1, 2, 3])
+    }
 }

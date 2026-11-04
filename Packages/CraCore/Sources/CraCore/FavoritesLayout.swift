@@ -41,4 +41,21 @@ public struct FavoritesLayout: Equatable {
         let x = (CGFloat(c) * (cw + Self.gap) * 2).rounded() / 2
         return CGRect(x: x, y: CGFloat(r) * (Self.tileHeight + Self.gap), width: cw, height: Self.tileHeight)
     }
+
+    /// The slot a tile dragged over the grid would land in: the one under `point`, a gap going to
+    /// the nearer side, a point past the last tile to the last slot (#176). This grid counts the
+    /// open slot among its tiles.
+    public func slot(at point: CGPoint) -> Int {
+        guard count > 0 else { return 0 }
+        let row = min(max(Int(((point.y + Self.gap / 2) / (Self.tileHeight + Self.gap)).rounded(.down)), 0), rows - 1)
+        let column = min(max(Int(((point.x + Self.gap / 2) / (tileWidth + Self.gap)).rounded(.down)), 0), columns - 1)
+        return min(row * columns + column, count - 1)
+    }
+
+    /// Where the tile at `index` goes while slot `open` is held for a drop: the tiles from the
+    /// open slot on move one slot along, so the grid reads as if the dragged tile were in it.
+    public static func slot(ofTile index: Int, opening open: Int?) -> Int {
+        guard let open, index >= open else { return index }
+        return index + 1
+    }
 }

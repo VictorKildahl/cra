@@ -453,6 +453,12 @@ final class FavoritesGridView: NSView {
     private var favoritesID: UUID?
     private(set) var palette: SpacePalette?
     private var syncQueued = false
+    /// A sidebar item dragged over the tiles and the slot held open for it (#176).
+    private var drop: Drop? { didSet { if drop != oldValue { dropChanged(from: oldValue) } } }
+    private struct Drop: Equatable {
+        let id: UUID
+        let slot: Int
+    }
 
     init(spaceID: UUID, store: SidebarStore, ui: SidebarUIState, actions: SidebarActions, favicons: FaviconCache) {
         self.spaceID = spaceID
@@ -467,6 +473,8 @@ final class FavoritesGridView: NSView {
             return true
         }
         strip.onTargetChange = { [weak self] _ in self?.onHeightChange(true) }
+        strip.accepts = { [weak self] id in self?.isFavorite(id) != true }
+        card.accepts = strip.accepts
         card.onDrop = strip.onDrop
         card.onDismiss = { [weak self] in
             guard let self, let id = self.favoritesID else { return }
@@ -475,6 +483,7 @@ final class FavoritesGridView: NSView {
         card.isHidden = true
         addSubview(strip)
         addSubview(card)
+        registerForDraggedTypes([.craSidebarItem])
         sync()
     }
 
@@ -598,8 +607,14 @@ final class FavoritesGridView: NSView {
         return PinnedExtensionGrid(count: PinnedExtensionGrid.fitsInURLField(count: n, fieldWidth: w) ? 0 : n, width: w)
     }
 
-    /// Arc's columns and tile frames (FavoritesLayout, #29).
-    private func grid(forWidth w: CGFloat) -> FavoritesLayout { FavoritesLayout(count: order.count, width: w) }
+    /// Arc's columns and tile frames (FavoritesLayout, #29). A drag over the tiles counts the slot
+    /// it holds open, so a tab brought in from the list can add a row.
+    private func grid(forWidth w: CGFloat) -> FavoritesLayout { FavoritesLayout(count: slotCount(drop), width: w) }
+
+    /// The tiles that keep a place of their own: all but the one being dragged over the grid.
+    private func restingOrder(_ drop: Drop?) -> [UUID] { drop.map { d in order.filter { $0 != d.id } } ?? order }
+
+    private func slotCount(_ drop: Drop?) -> Int { restingOrder(drop).count + (drop == nil ? 0 : 1) }
 
     func height(forWidth w: CGFloat) -> CGFloat {
         let top = extensionGrid(forWidth: w).favoritesOffset
@@ -636,16 +651,103 @@ final class FavoritesGridView: NSView {
         }
         let top = ext.favoritesOffset
         let grid = grid(forWidth: w)
-        for (i, id) in order.enumerated() { tiles[id]?.frame = grid.frame(at: i).offsetBy(dx: 0, dy: top) }
+        placeTiles(grid, top: top, animated: false)
         strip.frame = NSRect(x: 0, y: top + grid.gridHeight + (order.isEmpty ? 0 : 4), width: w, height: strip.height)
         card.frame = NSRect(x: 0, y: top, width: w, height: FavoritesEmptyCard.height)
     }
 
-    func moveFavorite(_ dragged: UUID, before target: UUID, after: Bool) {
-        guard dragged != target, let space = store.space(spaceID),
-              let idx = store.item(space.favoritesContainerID)?.children.firstIndex(of: target) else { return }
-        store.moveItem(dragged, to: space.favoritesContainerID, index: idx + (after ? 1 : 0))
+    /// Every tile in its slot. While a drag holds a slot open the tiles after it sit one slot
+    /// along, and a favorite being dragged waits, hidden, in the open slot.
+    private func placeTiles(_ grid: FavoritesLayout, top: CGFloat, animated: Bool) {
+        let open = drop?.slot
+        for (i, id) in restingOrder(drop).enumerated() {
+            guard let t = tiles[id] else { continue }
+            let f = grid.frame(at: FavoritesLayout.slot(ofTile: i, opening: open)).offsetBy(dx: 0, dy: top)
+            // A tile that just came in, or was hidden, has no place to move from.
+            if animated && t.frame != .zero && t.alphaValue > 0 { t.animator().frame = f } else { t.frame = f }
+        }
+        for (id, t) in tiles {
+            let dragged = drop?.id == id
+            if dragged, let open { t.frame = grid.frame(at: open).offsetBy(dx: 0, dy: top) }
+            t.alphaValue = dragged ? 0 : 1
+        }
     }
+
+    private func dropChanged(from old: Drop?) {
+        let w = bounds.width
+        guard window != nil, w > 0 else { needsLayout = true; return }
+        let grid = grid(forWidth: w)
+        // Arc 1.171 (60 fps capture, 4 Nov): the tiles slide over ~0.15 s, fast at first.
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            placeTiles(grid, top: extensionGrid(forWidth: w).favoritesOffset, animated: true)
+        }
+        // A tab from the list can open a row, and leaving gives it back.
+        if grid.rows != FavoritesLayout(count: slotCount(old), width: w).rows { onHeightChange(true) }
+    }
+
+    // MARK: Drops (#176)
+
+    /// Arc's top apps take a drop between their tiles: the tile or tab dragged over them opens a
+    /// slot under the pointer, the others move aside, and letting go puts it there.
+    private func dropSlot(_ info: NSDraggingInfo) -> Drop? {
+        guard !order.isEmpty,
+              let data = info.draggingPasteboard.data(forType: .craSidebarItem),
+              let id = (try? JSONDecoder().decode(SidebarDragItem.self, from: data))?.id,
+              let item = store.item(id), item.isTab || item.isSplit,
+              store.isIncognito(item: id) == store.isIncognito(space: spaceID) else { return nil }
+        let w = bounds.width
+        let top = extensionGrid(forWidth: w).favoritesOffset
+        let p = convert(info.draggingLocation, from: nil)
+        // The pinned extensions over the tiles take nothing.
+        guard p.y >= top - FavoritesLayout.gap / 2 else { return nil }
+        let grid = FavoritesLayout(count: order.filter { $0 != id }.count + 1, width: w)
+        return Drop(id: id, slot: grid.slot(at: CGPoint(x: p.x, y: p.y - top)))
+    }
+
+    private func dragOperation(_ info: NSDraggingInfo) -> NSDragOperation {
+        drop = dropSlot(info)
+        guard drop != nil else { return [] }
+        return info.draggingSourceOperationMask.contains(.move) ? .move : .copy
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { dragOperation(sender) }
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation { dragOperation(sender) }
+    /// Arc keeps a dragged favorite's slot open after it leaves the tiles (down over the header,
+    /// 4 Nov); the slot closes when the drag ends or lands elsewhere. A tab from the list gives
+    /// its slot back as it leaves.
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        if let d = drop, !order.contains(d.id) { drop = nil }
+    }
+    override func draggingEnded(_ sender: NSDraggingInfo) { drop = nil }
+
+    /// The strip and the card only add: a favorite of this grid dragged over them is not offered
+    /// "Add to Favorites" (Arc shows none under its tiles).
+    func isFavorite(_ id: UUID) -> Bool { order.contains(id) }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let d = drop ?? dropSlot(sender), let space = store.space(spaceID) else { drop = nil; return false }
+        let container = space.favoritesContainerID
+        let children = store.item(container)?.children ?? []
+        let resting = order.filter { $0 != d.id }
+        let index = d.slot < resting.count ? (children.firstIndex(of: resting[d.slot]) ?? children.count) : children.count
+        if order.contains(d.id) {
+            store.moveItem(d.id, to: container, index: index)
+        } else {
+            store.addToFavorites(d.id, in: spaceID, at: index)
+        }
+        if store.settings.hapticFeedbackOnReorder {
+            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .drawCompleted)
+        }
+        // The new order lands with the slot closing, so nothing jumps.
+        sync()
+        drop = nil
+        return true
+    }
+
+    /// The dragged favorite's session ended: dropped elsewhere, or let go outside the sidebar.
+    func favoriteDragEnded() { drop = nil }
 
     func spaceFavoriteIDs() -> [UUID] {
         guard let space = store.space(spaceID) else { return [] }
@@ -657,6 +759,7 @@ final class FavoritesGridView: NSView {
 /// empty-state card in its place.
 class FavoritesDropTarget: NSView {
     var onDrop: (UUID) -> Bool = { _ in false }
+    var accepts: (UUID) -> Bool = { _ in true }
     var onTargetChange: (Bool) -> Void = { _ in }
     var palette: SpacePalette? { didSet { refresh() } }
     private(set) var targeted = false { didSet { if targeted != oldValue { refresh(); onTargetChange(targeted) } } }
@@ -673,7 +776,7 @@ class FavoritesDropTarget: NSView {
 
     private func draggedID(_ info: NSDraggingInfo) -> UUID? {
         guard let data = info.draggingPasteboard.data(forType: .craSidebarItem),
-              let d = try? JSONDecoder().decode(SidebarDragItem.self, from: data) else { return nil }
+              let d = try? JSONDecoder().decode(SidebarDragItem.self, from: data), accepts(d.id) else { return nil }
         return d.id
     }
 
@@ -928,7 +1031,6 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
     private var palette: SpacePalette?
     private var hoveredCell: Int? { didSet { if hoveredCell != oldValue { ArcTooltipController.shared.mouseExited(self) } } }
     private var hovering = false { didSet { if hovering != oldValue { refresh() } } }
-    private var targeted = false { didSet { if targeted != oldValue { refresh() } } }
     private var press: NSEvent?
 
     init(itemID: UUID, spaceID: UUID, grid: FavoritesGridView) {
@@ -946,7 +1048,6 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         cutMask.fillRule = .evenOdd
         unreadDot.cornerRadius = 3
         layer?.addSublayer(unreadDot)
-        registerForDraggedTypes([.craSidebarItem])
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
     }
@@ -984,10 +1085,10 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         CATransaction.setDisableActions(true)
         if let hex = m.tileColor {
             layer?.backgroundColor = NSColor(hex: hex).cgColor
-            shade.backgroundColor = (m.selected || hovering || targeted ? (dark ? NSColor.white.withAlphaComponent(0.12) : NSColor.black.withAlphaComponent(0.07)) : .clear).cgColor
+            shade.backgroundColor = (m.selected || hovering ? (dark ? NSColor.white.withAlphaComponent(0.12) : NSColor.black.withAlphaComponent(0.07)) : .clear).cgColor
         } else {
             let fill: NSColor = m.selected ? (palette.isDark ? NSColor.white.withAlphaComponent(0.13) : NSColor.white.withAlphaComponent(0.38))
-                : (hovering || targeted ? (palette.isDark ? NSColor.white.withAlphaComponent(0.15) : NSColor.black.withAlphaComponent(0.09)) : NSColor(palette.pillFill))
+                : (hovering ? (palette.isDark ? NSColor.white.withAlphaComponent(0.15) : NSColor.black.withAlphaComponent(0.09)) : NSColor(palette.pillFill))
             layer?.backgroundColor = fill.cgColor
             shade.backgroundColor = NSColor.clear.cgColor
         }
@@ -1074,16 +1175,7 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         let pb = NSPasteboardItem()
         if let data = try? JSONEncoder().encode(SidebarDragItem(id: itemID)) { pb.setData(data, forType: .craSidebarItem) }
         let item = NSDraggingItem(pasteboardWriter: pb)
-        let rep = bitmapImageRepForCachingDisplay(in: bounds)
-        if let rep { cacheDisplay(in: bounds, to: rep) }
-        let fill = layer?.backgroundColor.flatMap { NSColor(cgColor: $0) } ?? .clear
-        let image = NSImage(size: bounds.size, flipped: false) { r in
-            fill.setFill()
-            NSBezierPath(roundedRect: r, xRadius: FavoriteTileMetrics.corner, yRadius: FavoriteTileMetrics.corner).fill()
-            rep?.draw(in: r)
-            return true
-        }
-        item.setDraggingFrame(bounds, contents: image)
+        item.setDraggingFrame(bounds.insetBy(dx: -Self.dragShadow, dy: -Self.dragShadow), contents: dragImage())
         beginDraggingSession(with: [item], event: p, source: self)
     }
     override func mouseUp(with event: NSEvent) {
@@ -1100,34 +1192,46 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         context == .withinApplication ? [.move, .copy, .generic, .private] : []
     }
 
+    /// Room around the drag image for its shadow.
+    private static let dragShadow: CGFloat = 6
+
+    /// Arc 1.171 (4 Nov): the tile follows the pointer as a light card, white at about two thirds
+    /// over the sidebar, the tile's corners and a soft shadow under it, with the icons on it.
+    private func dragImage() -> NSImage {
+        let icons = favicons.map { f -> (NSRect, NSBitmapImageRep?) in
+            let rep = f.bitmapImageRepForCachingDisplay(in: f.bounds)
+            if let rep { f.cacheDisplay(in: f.bounds, to: rep) }
+            return (f.frame, rep)
+        }
+        let size = bounds.size, pad = Self.dragShadow
+        return NSImage(size: NSSize(width: size.width + 2 * pad, height: size.height + 2 * pad), flipped: true) { _ in
+            let card = NSRect(x: pad, y: pad, width: size.width, height: size.height)
+            let shape = NSBezierPath(roundedRect: card, xRadius: FavoriteTileMetrics.corner, yRadius: FavoriteTileMetrics.corner)
+            // The shadow only outside the card, so it doesn't show through the see-through fill.
+            NSGraphicsContext.saveGraphicsState()
+            let outside = NSBezierPath(rect: NSRect(x: 0, y: 0, width: card.maxX + pad, height: card.maxY + pad))
+            outside.append(shape)
+            outside.windingRule = .evenOdd
+            outside.addClip()
+            let shadow = NSShadow()
+            shadow.shadowColor = NSColor.black.withAlphaComponent(0.18)
+            shadow.shadowBlurRadius = 4
+            shadow.shadowOffset = NSSize(width: 0, height: -1)
+            shadow.set()
+            NSColor.black.setFill()
+            shape.fill()
+            NSGraphicsContext.restoreGraphicsState()
+            NSColor.white.withAlphaComponent(0.67).setFill()
+            shape.fill()
+            for (f, rep) in icons { rep?.draw(in: f.offsetBy(dx: pad, dy: pad), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil) }
+            return true
+        }
+    }
+
     func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
         grid?.ui.draggingID = nil
         if grid?.ui.listDrop != nil { grid?.ui.listDrop = nil }
-    }
-
-    // MARK: Drops (reorder)
-
-    private func draggedID(_ info: NSDraggingInfo) -> UUID? {
-        guard let data = info.draggingPasteboard.data(forType: .craSidebarItem),
-              let d = try? JSONDecoder().decode(SidebarDragItem.self, from: data), d.id != itemID else { return nil }
-        return d.id
-    }
-
-    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        guard draggedID(sender) != nil else { return [] }
-        targeted = true
-        return sender.draggingSourceOperationMask.contains(.move) ? .move : .copy
-    }
-    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-        draggedID(sender) == nil ? [] : (sender.draggingSourceOperationMask.contains(.move) ? .move : .copy)
-    }
-    override func draggingExited(_ sender: NSDraggingInfo?) { targeted = false }
-    override func draggingEnded(_ sender: NSDraggingInfo) { targeted = false }
-    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        targeted = false
-        guard let id = draggedID(sender) else { return false }
-        grid?.moveFavorite(id, before: itemID, after: convert(sender.draggingLocation, from: nil).x > 30)
-        return true
+        grid?.favoriteDragEnded()
     }
 
     // MARK: Menu

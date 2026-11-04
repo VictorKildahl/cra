@@ -964,14 +964,15 @@ final class SidebarStore {
     }
 
     /// Favorites belong to one space: the tab's own unless another is given.
-    func addToFavorites(_ id: UUID, in spaceID: UUID? = nil) {
+    /// `index` is a place among the favorites container's children (#176: a tab dropped between tiles); nil appends.
+    func addToFavorites(_ id: UUID, in spaceID: UUID? = nil, at index: Int? = nil) {
         // A pane brings its whole split: Arc's top apps hold a split as one tile (AppItem.childItems).
         let id = splitContaining(id)?.id ?? id
         guard let it = items[id], it.isTab || it.isSplit else { return }
         guard let space = spaces[spaceID ?? self.spaceID(ofItem: id) ?? focusedSpaceID] else { return }
         // A new favorite takes the tile color when every existing one shares it.
         let colors = Set(favoriteTabs(in: space).map { $0.tab?.tileColor })
-        moveItem(id, to: space.favoritesContainerID, index: nil)
+        moveItem(id, to: space.favoritesContainerID, index: index)
         if colors.count == 1, let color = colors.first!, items[id]?.tab?.tileColor == nil { setTileColor(color, for: [id]) }
     }
 
