@@ -135,6 +135,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private var closingPeek = false
     /// The Peek is shrinking into place; a page window attaching now waits for the end.
     private var openingPeek = false
+    /// The pictures moving while the Peek opens or closes.
+    private var transition: PeekTransition?
     private var commandPanel: CommandBarPanel!
     private var commandHost: CommandBarView!
     private var commandBarOpenedAt = Date.distantPast
@@ -274,7 +276,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         }
         // CEF hands the page window over at its own small frame: shown during a Peek's open it
         // flashed as a black block in the corner.
-        if openingPeek { w.alphaValue = 0 }
+        if openingPeek { w.contentView?.isHidden = true }
         window.addChildWindow(w, ordered: .above)
         positionHostWindow(shell.convert(shell.page.frame, to: nil))
         w.orderFront(nil)
@@ -355,7 +357,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     var peekWindows: [NSWindow] { [dim, window, controls].compactMap { $0 } }
 
     /// Arc's Peek: the card shrinks from the whole area right of the sidebar to its own frame as
-    /// it fades in (0.12 s) while the page behind fades to 28 %; the buttons beside it come after.
+    /// it fades in, its buttons riding its corner, while the page behind fades to 28 %. The motion
+    /// is PeekTransition's pictures on Core Animation; the real card and buttons wait at their
+    /// places, invisible, and take over when it lands.
     func showAsPeek() {
         guard let window, let parent = peekParent, let pw = parent.window else { return }
         let dim = PeekDimPanel(covering: pw) { [weak self] in self?.closeWindow() }
@@ -370,38 +374,44 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         self.controls = controls
         controls.place(parent.peekButtonFrames(), theme: parent.focusedSpace.theme)
         controls.alphaValue = 0
-        let card = parent.peekFrame()
-        // Laid out at the card's size from the start, as Little Windows open; the page window
-        // waits for the end, it can't follow a frame animation.
-        shell.frozenSize = card.size
-        let host = browser?.hostWindow
-        if let host, host.parent === window { host.alphaValue = 0 }
         window.alphaValue = 0
-        window.setFrame(parent.peekArea(), display: false)
+        window.setFrame(parent.peekFrame(), display: false)
+        shell.layoutSubtreeIfNeeded()
         pw.addChildWindow(window, ordered: .above)
+        pw.addChildWindow(controls, ordered: .above)
+        controls.orderFront(nil)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        parent.setPeekVeil(true, duration: PeekLayout.openDuration)
         openingPeek = true
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = PeekLayout.openDuration
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            window.animator().alphaValue = 1
-            window.animator().setFrame(card, display: true)
-        }, completionHandler: { [weak self] in
-            MainActor.assumeIsolated {
-                guard let self, let window = self.window, !self.closingPeek else { return }
-                self.openingPeek = false
-                self.shell.frozenSize = nil
-                self.shell.needsLayout = true
-                self.shell.layoutSubtreeIfNeeded()
-                if let host = self.browser?.hostWindow, host.parent === window { host.alphaValue = 1 }
-                pw.addChildWindow(controls, ordered: .above)
-                controls.orderFront(nil)
-                NSAnimationContext.runAnimationGroup { $0.duration = 0.1; controls.animator().alphaValue = 1 }
-            }
-        })
+        // Hidden, not transparent: Chromium sets its page window's alpha back to 1 as it shows it.
+        if let host = browser?.hostWindow, host.parent === window { host.contentView?.isHidden = true }
+        let t = PeekTransition(over: pw, card: pw.convertFromScreen(window.frame), cardImage: PeekTransition.picture(of: shell),
+                               column: pw.convertFromScreen(controls.frame), columnImage: controls.contentView.flatMap { PeekTransition.picture(of: $0) })
+        transition = t
         if hasPage || isPopupHost { focusPage() } else { openCommandBar() }
+        // Next turn, with the page focused and the panel on its way to the screen.
+        DispatchQueue.main.async { [weak self, weak t] in
+            guard let self, let t, self.transition === t, !self.closingPeek else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + PeekTransition.lead) {
+                parent.setPeekVeil(true, duration: PeekLayout.openVeilDuration, timing: PeekTransition.easeOutCubic)
+            }
+            self.landPeek(t)
+        }
+    }
+
+    private func landPeek(_ t: PeekTransition) {
+        t.open { [weak self, weak t] in
+            guard let self, let window = self.window, !self.closingPeek else { return }
+            self.openingPeek = false
+            window.alphaValue = 1
+            if let host = self.browser?.hostWindow, host.parent === window { host.contentView?.isHidden = false }
+            self.controls?.alphaValue = 1
+            // The real card is on screen a frame later; the picture goes after it.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                t?.remove()
+                if self.transition === t { self.transition = nil }
+            }
+        }
     }
 
     func repositionPeek() {
@@ -412,26 +422,51 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     }
 
     /// Arc closes a Peek the way it opened, backwards: out to the whole area, fading, as the page
-    /// behind comes back (0.22 s). Expand and Add To Split don't animate: the page stays on screen.
+    /// behind comes back. A picture of the card with its page (Chromium's own screenshot, waited
+    /// for at most 80 ms) takes over from the real one. Expand and Add To Split don't animate.
     private func closePeekAnimated(then finish: @escaping () -> Void) {
-        guard let window, let parent = peekParent else { finish(); return }
+        guard let window, let parent = peekParent, let pw = parent.window else { finish(); return }
         closingPeek = true
-        parent.setPeekVeil(false, duration: PeekLayout.closeDuration)
-        let host = browser?.hostWindow
-        let controls = controls
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = PeekLayout.closeDuration
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            window.animator().alphaValue = 0
-            host?.animator().alphaValue = 0
-            controls?.animator().alphaValue = 0
-            window.animator().setFrame(parent.peekArea(), display: true)
-        }, completionHandler: { MainActor.assumeIsolated { finish() } })
+        transition?.remove()
+        transition = nil
+        var started = false
+        let start: (CGImage?) -> Void = { [weak self] page in
+            guard let self, !started else { return }
+            started = true
+            let card = pw.convertFromScreen(window.frame)
+            let pageRect = self.shell.page.frame
+            let t = PeekTransition(over: pw, card: card,
+                                   cardImage: PeekTransition.picture(of: self.shell, page: page, pageRect: pageRect),
+                                   column: self.controls.map { pw.convertFromScreen($0.frame) } ?? .zero,
+                                   columnImage: self.controls?.contentView.flatMap { PeekTransition.picture(of: $0) })
+            self.transition = t
+            t.close {
+                finish()
+                t.remove()
+            }
+            // The picture is on screen (the same pixels) before the real card goes, so nothing blinks.
+            DispatchQueue.main.asyncAfter(deadline: .now() + PeekTransition.lead) {
+                window.alphaValue = 0
+                if let host = self.browser?.hostWindow { host.alphaValue = 0 }
+                self.controls?.alphaValue = 0
+                parent.setPeekVeil(false, duration: PeekLayout.closeVeilDuration, timing: PeekTransition.easeOutCubic)
+            }
+        }
+        guard let b = browser, hasPage else { start(nil); return }
+        b.sendDevToolsMethod("Page.captureScreenshot", params: #"{"format":"jpeg","quality":85,"optimizeForSpeed":true}"#) { shot, _ in
+            let image = shot.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+                .flatMap { $0["data"] as? String }.flatMap { Data(base64Encoded: $0) }
+                .flatMap { CGImageSourceCreateWithData($0 as CFData, nil) }.flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) }
+            DispatchQueue.main.async { start(image) }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { start(nil) }
     }
 
     private func endPeek() {
         guard isPeek, let dim else { return }
         self.dim = nil
+        transition?.remove()
+        transition = nil
         dim.parent?.removeChildWindow(dim)
         dim.orderOut(nil)
         if let controls {
@@ -455,13 +490,19 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         closePopup()
         commandBar.close()
         let sid = store.spaceID(ofItem: source) ?? parent.focusedSpaceID
+        // Arc leaves a pinned tab where it is: the split is a new one at the top of Today, a copy
+        // of the pinned tab's page beside the peeked one.
+        var partner = source
+        if store.isPinned(source), store.splitContaining(source) == nil, let page = store.item(source)?.tab {
+            partner = store.createTab(url: page.url, title: page.savedTitle, in: sid, select: false, window: parent.windowID).id
+        }
         let tab = store.createTab(url: b.currentURL, title: b.currentTitle, in: sid, select: false, window: parent.windowID)
         if let favicon, let key = FaviconKey.key(for: b.currentURL) { app.favicons.store(favicon, forKey: key) }
         promoted = true
         browser = nil
         parent.browsers.adopt(b, for: tab.id)
         window?.close()
-        parent.joinSplit(tab.id, with: source)
+        parent.joinSplit(tab.id, with: partner)
     }
 
     // MARK: Command bar (Arc: clicking the pill or ⌘L opens the command bar in the window)
@@ -750,6 +791,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     func closeWindow() {
         guard let window, window.isVisible else { return }
         if isPeek, !closingPeek {
+            if hasPage, !promoted, let parent = peekParent {
+                parent.closedPeek = (currentURL, parent.sidebarUI.peekBadge?.tabID, store.clock.now)
+            }
             closePeekAnimated { [weak self] in self?.closeWindow() }
             return
         }
@@ -879,7 +923,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     /// A Shift-clicked link opens in this window: Arc's Little Arc has no Peek of its own, so its
     /// Shift-click is a plain click (1.171, 3 Nov 2026).
-    func browser(_ browser: CraBrowser, opensPeekForURL url: String, shiftClick: Bool) -> Bool {
+    func browser(_ browser: CraBrowser, opensPeekForURL url: String, shiftClick: Bool, newTab: Bool) -> Bool {
         guard shiftClick, !url.lowercased().hasPrefix("cra:") else { return false }
         browser.loadURL(url)
         return true

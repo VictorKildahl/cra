@@ -2753,7 +2753,30 @@ event with `shiftClickModalEntryPointEnabled` set for the run, AX frames and 60 
   31 × 27). The toast is 195 × 47 pt: text 13 pt in, 14.5 pt to a 29 × 27 pt button 13 pt from the end, 10 pt from
   top and bottom. The button is a white wash over the pill (≈ 60 % on the light toast, 15 % on Little Arc's dark
   one) with an outline. A click opens the macOS share menu (AirDrop, Notes…) from the button; the toast stays.
+- [O] The motion, frame by frame at 60 fps (card edges on one row, the card's and the page's luminance): opening,
+  the card's opacity reaches 1 in ~0.075 s, and its scale goes from the whole area (1.25, centred) to 1 on an
+  ease-out cubic over ~0.205 s (scale − 1 per frame: .168, .127, .092, .063, .041, .025, .015, .008, .002). The
+  buttons appear with it and ride its top-right corner. The page fades on an ease-out cubic over ~0.18 s.
+  Closing: the card grows to ~1.19 in ~0.09 s (near linear), fading from ~0.07 s, gone by ~0.16 s; the page is
+  back after ~0.2 s.
+- Cra draws the motion on Core Animation (PeekTransition): pictures of the card (with Chromium's screenshot of
+  the page when closing) and of the buttons in a panel over the window, the real card and buttons invisible at
+  their places until it lands. Animating the windows' frames (the first version) resized and laid out the card
+  and its page window on every frame and stuttered; Chromium also sets its page window's alpha back to 1 as it
+  shows it, so the page waits hidden (contentView.isHidden), not transparent.
 - Cra: PeekLayout (CraCore) has the geometry; PeekBarView and PeekControlsPanel (PeekChrome.swift) the card's bar
   and the buttons; MainWindowController.setPeekVeil fades the page; ShinyToast.Action.share the button.
+- [O, 4 Nov] Which links peek, with both Links settings on (`modalEnabled` and
+  `shiftClickModalEntryPointEnabled` set for the run, the sidebar reset before each run), HID clicks on a
+  lab page at 127.0.0.1 in a pinned tab: a link to localhost peeked, plain or target=_blank; a link to
+  127.0.0.1 loaded in the tab, but with target=_blank it peeked, and so did window.open to localhost; a
+  ⌘-click opened a background Today tab. A Shift-click peeked, same host or not, also from a Today tab.
+  With `modalEnabled` unset (Victor's defaults) the pinned tab's link to localhost opened a new tab.
+  Cra: PeekTrigger (CraCore).
+- [O] Inside the Peek, links to either host loaded in the Peek. A click on another sidebar row closed the
+  Peek and opened that tab. ⌘W closed it, and ⇧⌘T right after brought the Peek back over the pinned tab.
+  ⌘O and Expand made it a tab at the top of Today. Add To Split from the pinned tab left the pinned tab
+  where it was and put a new split at the top of Today: a copy of the pinned page ("Lab") on the left,
+  the peeked page on the right. Cra: MainWindowController.closedPeek, LittleWindowController.promoteToSplit.
 - [?] Not measured: the card at other window widths (Cra keeps 80 % of the area), and the Peek with Arc's
   toolbar turned off.

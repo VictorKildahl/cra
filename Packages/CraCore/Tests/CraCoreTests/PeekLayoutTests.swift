@@ -28,4 +28,13 @@ struct PeekLayoutTests {
         #expect(card.midX == Self.window.width / 2)
         #expect(card.width == (Self.window.width * 0.8).rounded())
     }
+
+    @Test func openStartsAtTheAreasWidth() {
+        let area = PeekLayout.area(window: Self.window, contentMinX: 347)
+        let card = PeekLayout.card(in: area)
+        #expect(abs(card.width * PeekLayout.areaScale - area.width) <= 1)
+        // Arc's first measured frame (scale 1.1675): the corner 93 pt right and 89 pt up of its place.
+        let shift = PeekLayout.cornerShift(card: card, scale: 1.1675)
+        #expect(abs(shift.dx - 92.5) < 0.5 && abs(shift.dy - 88.8) < 0.5)
+    }
 }
