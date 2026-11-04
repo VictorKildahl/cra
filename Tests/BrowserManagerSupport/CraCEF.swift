@@ -11,8 +11,9 @@ public protocol CraBrowserDelegate: AnyObject {
 
 public final class CraDownloadInfo {}
 
+/// `open`: the app subclasses it (WebKitBrowser, faked in AppServices.swift).
 @MainActor
-public final class CraBrowser {
+open class CraBrowser {
     public weak var delegate: CraBrowserDelegate?
     public let containerView: NSView
     public var hostWindow: NSWindow?

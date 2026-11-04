@@ -135,9 +135,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         }
         log(tabID, "opens a page for \(site(tab.url, tabID))")
         if sleptTabs.remove(tabID) != nil { Perf.begin(.tabWake, tabID.uuidString) }
+        // Chromium, or WebKit for a DRM service (ProtectedMediaSites).
         let browser = Perf.time(.pageCreate) {
-            CraBrowser(frame: container.bounds, url: tab.url, delegate: self, incognito: store.isIncognito(item: tabID),
-                       profilePath: store.profilePath(item: tabID))
+            PageEngines.makeBrowser(frame: container.bounds, url: tab.url, delegate: self, incognito: store.isIncognito(item: tabID),
+                                    profilePath: store.profilePath(item: tabID))
         }
         return register(browser: browser, tabID: tabID)
     }
@@ -155,10 +156,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         return rt
     }
 
-    /// Popup host: a browser shell CEF will fill with window.open content.
-    func makePopupHost(for tabID: UUID) -> CraBrowser {
-        let browser = CraBrowser(frame: container.bounds, url: nil, delegate: self, incognito: store.isIncognito(item: tabID),
-                                 profilePath: store.profilePath(item: tabID))
+    /// Popup host: a browser shell its opener's engine will fill with window.open content.
+    func makePopupHost(for tabID: UUID, opener: CraBrowser) -> CraBrowser {
+        let browser = PageEngines.makeBrowser(frame: container.bounds, url: nil, delegate: self, incognito: store.isIncognito(item: tabID),
+                                              profilePath: store.profilePath(item: tabID), opener: opener)
         register(browser: browser, tabID: tabID)
         return browser
     }
@@ -738,7 +739,9 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
             if active { np.pictureInPicture.insert(id) } else { np.pictureInPicture.remove(id) }
         }
         log(id, active ? "enters Picture in Picture" : "leaves Picture in Picture")
-        if active {
+        // WebKit's video goes to the system's own Picture in Picture window, with its own controls.
+        if browser is WebKitBrowser {
+        } else if active {
             // The floating window's hover controls act on this tab.
             PictureInPictureChrome.shared.actions = PictureInPictureActions(
                 backToTab: { [weak self] in self?.bringToFront(id) },
@@ -1023,9 +1026,35 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         let sourceSpace = tabID(of: browser).flatMap { store.spaceID(ofItem: $0) }
         let tab = store.createTab(url: url, in: sourceSpace, select: !background, window: windowID)
         if background { store.markUnread(tab.id, true) }
-        let host = makePopupHost(for: tab.id)
+        let host = makePopupHost(for: tab.id, opener: browser)
         if !background { show(tab.id, focus: true) }
         return host
+    }
+
+    /// A page about to navigate where the other engine has to show it (ProtectedMediaSites): the
+    /// navigation stops here and the tab's page opens again in that engine, at that address.
+    func browser(_ browser: CraBrowser, handsOffNavigationToURL url: String, method: String) -> Bool {
+        guard let id = tabID(of: browser), let engine = PageEngines.handoffTarget(from: browser, to: url, method: method) else { return false }
+        log(id, "moves to \(engine == .webKit ? "WebKit" : "Chromium") for \(site(url, id, browser))")
+        // Not from inside Chromium's navigation callback: the page closes a turn later.
+        DispatchQueue.main.async { [weak self, weak browser] in
+            guard let self, let browser else { return }
+            self.reopen(id, at: url, replacing: browser)
+        }
+        return true
+    }
+
+    /// The tab's page closes and opens again at `url`, in the engine the address gets, on screen
+    /// where it was (its split pane, the focus).
+    private func reopen(_ id: UUID, at url: String, replacing old: CraBrowser) {
+        guard runtimes[id]?.browser === old, store.item(id)?.isTab == true else { return }
+        let visible = visibleTabIDs
+        let focused = visibleTabID
+        let hadFocus = old.containerView.window?.firstResponder.map { r in (r as? NSView)?.isDescendant(of: old.containerView) ?? false } ?? false
+        store.updateTab(id, url: url)
+        unload(id)
+        ensureRuntime(for: id)
+        if visible.contains(id) { show(visible, focused: focused, focus: hadFocus || focused == id) }
     }
 
     func browser(_ browser: CraBrowser, opensPeekForURL url: String, shiftClick: Bool, newTab: Bool) -> Bool {

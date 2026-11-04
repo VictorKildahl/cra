@@ -33,6 +33,8 @@ issue when a newer stable CEF is out; `scripts/update-cef.sh` moves the pin.
   view, windows, settings, onboarding)
 - `Sources/CraCEF` — Objective-C++ bridge between Swift and CEF
 - `Sources/CraHelper` — Chromium subprocess executable
+- `Sources/Cra/Services/WebKit` — the WebKit page that DRM services open in
+  ([protected-media.md](protected-media.md))
 - `Packages/CraCore` — models and decisions with no AppKit or Chromium (the sidebar model,
   settings and the other data-folder files, Air Traffic Control, live folder data, key chords,
   space themes, Arc theme import, the favorites grid), visible in every `Sources/Cra` file.
@@ -114,7 +116,9 @@ sidebar link, `pageJS=<js>` runs script in the focused page, `installExtension=<
 memory-pressure sweep at that level, if Settings ▸ Tabs has it on), `stall=<ms>` (blocks the main
 thread), `perfReport=<path>` (the recorder's perf.json now), `systemAppearance=light|dark|system`
 (the appearance Auto space themes follow, without changing the Mac's), `themeEditor=1` (Edit
-Theme Color… for the focused space), `relaunch=1` and `quit=1`.
+Theme Color… for the focused space), `relaunch=1`, `quit=1`, and `nowPlaying=state|toggle|next|previous|pip|dismiss` (the sidebar player's
+newest card, then a `Cra nowPlaying[<label>] <host> playing=… prev=… next=… video=… pip=…` line per card
+on stdout; `&label=` tells checks apart).
 
 ## Running a test instance
 

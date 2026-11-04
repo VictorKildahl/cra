@@ -30,7 +30,8 @@
 #   requires screen
 #   port <n>                    serve ${PAGE} on a fixed port (snapshots show the address)
 # ${FIXTURES}, ${PAGE} (Tests/Fixtures/Pages/page.html from a local server, so it has a host
-# for developer mode and tab sleep), ${EXTENSION_ID} (Tests/Fixtures/Extension) and
+# for developer mode and tab sleep), ${WEBKIT} (that server as http://localhost:<port>, a host the
+# run treats as a DRM service, so its pages open in WebKit), ${EXTENSION_ID} (Tests/Fixtures/Extension) and
 # ${SIDE_PANEL_EXTENSION_ID} (Tests/Fixtures/SidePanelExtension) expand.
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -83,8 +84,11 @@ python3 -I -u -m http.server --bind 127.0.0.1 --directory "$FIXTURES/Pages" "${F
 SERVER=$!
 for _ in $(seq 1 50); do PORT=$(sed -n 's/.*port \([0-9]*\).*/\1/p' "$OUT/server.log" | head -1); [ -n "$PORT" ] && break; sleep 0.1; done
 PAGE="http://127.0.0.1:${PORT:?http server did not start}/page.html"
+# The same server under another host, which the run lists as a DRM service (CRA_WEBKIT_HOSTS):
+# its pages open in WebKit, the way Spotify and Netflix do (ProtectedMediaSites).
+WEBKIT="http://localhost:${PORT}"
 
-CRA_DATA_DIR="$DATA" CRA_COMMAND_FILE="$CMD" CRA_HITCH_LOG="$HITCH" CRA_TEST_BACKGROUND=1 \
+CRA_DATA_DIR="$DATA" CRA_COMMAND_FILE="$CMD" CRA_HITCH_LOG="$HITCH" CRA_TEST_BACKGROUND=1 CRA_WEBKIT_HOSTS=localhost \
   CRA_ARC_DIR="$FIXTURES/Arc" CRA_FLAGS="${CRA_FLAGS:-}" \
   "$APP/Contents/MacOS/Cra" >"$OUT/stdout.log" 2>&1 &
 PID=$!
@@ -122,7 +126,7 @@ sleep 2
 PACE=0.2
 RSS_BUDGET=1500 MAXSTALL=1500 STALLS50=10 LAUNCHSTALL=1000 PERFCPU=0.1
 BASELINE=""
-expand() { local s="$1"; s="${s//\$\{FIXTURES\}/$FIXTURES}"; s="${s//\$\{PAGE\}/$PAGE}"; s="${s//\$\{EXTENSION_ID\}/$EXTENSION_ID}"; s="${s//\$\{SIDE_PANEL_EXTENSION_ID\}/$SIDE_PANEL_EXTENSION_ID}"; printf '%s' "$s"; }
+expand() { local s="$1"; s="${s//\$\{FIXTURES\}/$FIXTURES}"; s="${s//\$\{PAGE\}/$PAGE}"; s="${s//\$\{WEBKIT\}/$WEBKIT}"; s="${s//\$\{EXTENSION_ID\}/$EXTENSION_ID}"; s="${s//\$\{SIDE_PANEL_EXTENSION_ID\}/$SIDE_PANEL_EXTENSION_ID}"; printf '%s' "$s"; }
 
 echo "$NAME (pid $PID, logs in ${OUT#$ROOT/})"
 while IFS= read -r raw || [ -n "$raw" ]; do

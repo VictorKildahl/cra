@@ -32,6 +32,8 @@ MainActor.assumeIsolated {
         let profile = AppPaths.chromiumCache.appendingPathComponent("Default", isDirectory: true)
         if CredentialImport.hasPending { CredentialImport.applyPending(root: AppPaths.chromiumCache) }
         CredentialImport.repairImportedCookies(profileDir: profile)
+        // WebKit's data for a deleted profile goes with its Chromium folder (PageEngines).
+        ProfileCleanup.removed = { name in MainActor.assumeIsolated { WebKitStores.removeProfile(folderName: name) } }
         ProfileCleanup.run()
     }
 

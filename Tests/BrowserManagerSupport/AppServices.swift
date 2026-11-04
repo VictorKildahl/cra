@@ -89,3 +89,6 @@ final class PictureInPictureChrome {
     func videoEntered() {}
     func videoLeft() {}
 }
+/// The WebKit page (Sources/Cra/Services/WebKit/WebKitBrowser.swift): here only its type, which
+/// is what PageEngines and BrowserManager decide on.
+final class WebKitBrowser: CraBrowser {}

@@ -1496,6 +1496,11 @@ public:
         CraBrowser* o = owner_;
         if (!o || !frame->IsMain()) return false;
         if (OpensPeek(o, request, user_gesture, is_redirect)) return true;
+        // A page Cra shows in another engine (ProtectedMediaSites, WebKit for DRM services):
+        // cancelled before the request goes out, so a sign-in's one-time code isn't spent here.
+        if ([o.delegate respondsToSelector:@selector(browser:handsOffNavigationToURL:method:)]
+            && [o.delegate browser:o handsOffNavigationToURL:NSStringFromCef(request->GetURL())
+                            method:NSStringFromCef(request->GetMethod())]) return true;
         // A new page, also one started while the last is still loading: the loading bar waits
         // for its answer again.
         if (!is_redirect) SetCommittedLoad(o, NO);

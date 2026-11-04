@@ -1,0 +1,102 @@
+# DRM services open in WebKit, where Apple's FairPlay plays them (ProtectedMediaSites,
+# docs/protected-media.md). ${WEBKIT} is the fixture server as localhost, which this run lists as
+# such a service, so the journey needs no network and no account. A Chromium page answers
+# 'userAgentData' in navigator with true, a WebKit page with false.
+# Covers: the engine a tab gets, the page's world kept apart from Cra's, the DevTools methods Cra
+# calls, FairPlay, moving between engines both ways, split view with one page of each, the sidebar
+# player and its media session buttons, a Little Window, tab sleep and waking, closing the page.
+# No & in a script: it ends the cra:// query. The clip is silent and paused before its tab is left: nothing plays aloud or pops out in
+# Picture in Picture while it runs behind your windows.
+budget rss=900 stalls50=40
+pace 0.5
+
+# A Chromium tab, then a service: WebKit, Safari's user agent, the page's world without Cra's.
+cra://open?url=${PAGE}?n=chromium
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://open?url=${WEBKIT}/page.html?n=webkit
+expect-log opens a page for localhost
+expect-log loaded localhost \(HTTP 200\)
+cra://debug?cdp=Runtime.evaluate&params={"expression":"[document.title,'userAgentData' in navigator,navigator.userAgent.includes('Safari/605.1.15'),typeof window.__cra].join()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"Fixture webkit,false,true,undefined"
+# Cra's isolated world: PageScript's long-task counter answers there (the page probe uses it too).
+expect-log page localhost: .*painted
+cra://debug?cdp=Runtime.evaluate&params={"expression":"navigator.requestMediaKeySystemAccess('com.apple.fps',[{initDataTypes:['skd'],videoCapabilities:[{contentType:'application/vnd.apple.mpegurl'}]}]).then(()=>'fairplay:yes',e=>'fairplay:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"fairplay:yes"
+cra://debug?cdp=Page.captureScreenshot&params={"format":"jpeg","quality":80}
+expect-log Cra cdp Page.captureScreenshot → \{"data":"/9j/
+cra://debug?cdp=Page.getLayoutMetrics
+expect-log Cra cdp Page.getLayoutMetrics → .*cssContentSize
+cra://debug?cdp=Cra.discard
+expect-log Cra cdp Cra.discard → error: Cra.discard is not available in a WebKit page
+
+# A Chromium page's own navigation to the service moves to WebKit before its request goes out.
+cra://open?url=${PAGE}?n=link
+expect-log loaded 127\.0\.0\.1
+cra://debug?pageJS=location.href='${WEBKIT}/page.html?n=moved'
+expect-log moves to WebKit for localhost
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"[document.title,'userAgentData' in navigator].join()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"Fixture moved,false"
+# An address typed for that tab goes back to Chromium.
+cra://navigate?url=${PAGE}?n=typed
+expect-log moves to Chromium for 127\.0\.0\.1
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"[document.title,'userAgentData' in navigator].join()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"Fixture typed,true"
+
+# Split view: the Chromium page on the left, a WebKit player in the new pane.
+cra://action/addSplitView
+wait 1
+cra://navigate?url=${WEBKIT}/media.html
+expect-log shown: localhost
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.querySelector('video').play().then(()=>'playing:'+('userAgentData' in navigator))","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"playing:false"
+# The WebKit page fills its pane (half the window), not the whole card.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"['pane',innerWidth>300?innerWidth<800:false,document.querySelector('video').videoWidth,document.querySelector('video').webkitSupportsPresentationMode('picture-in-picture')].join()"}
+# Picture in Picture is on (WebKit has it off for apps other than Safari until asked).
+expect-log Cra cdp Runtime.evaluate .*"value":"pane,true,320,true"
+wait 2
+# The sidebar player has it, with the page's own previous/next handlers.
+cra://debug?nowPlaying=state&label=split
+expect-log Cra nowPlaying\[split\] localhost playing=1 prev=1 next=1 video=1 pip=0
+cra://debug?nowPlaying=next
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.title"}
+expect-log Cra cdp Runtime.evaluate .*"value":"Media nexttrack"
+cra://debug?nowPlaying=toggle
+wait 1
+cra://debug?nowPlaying=state&label=paused
+expect-log Cra nowPlaying\[paused\] localhost playing=0
+# Playing on out of sight (Spotify while you browse other tabs): the card stays playing. No
+# Picture in Picture for this video, so leaving its tab pops nothing out over your screen.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(v=>(v.disablePictureInPicture=true,v.play().then(()=>'again')))(document.querySelector('video'))","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"again"
+cra://open?url=${PAGE}?n=away
+wait 5
+cra://debug?nowPlaying=state&label=away
+expect-log Cra nowPlaying\[away\] localhost playing=1 prev=1 next=1 video=1 pip=0
+cra://debug?nowPlaying=toggle&label=stopped
+expect-log Cra nowPlaying\[stopped\] localhost
+cra://debug?checkStore=1
+
+# A Little Window for a service is WebKit too.
+cra://open?url=${WEBKIT}/page.html?n=little&little=1
+wait 3
+cra://debug?cdp=Runtime.evaluate&target=little&params={"expression":"[document.title,'userAgentData' in navigator].join()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"Fixture little,false"
+
+# Tab sleep: the hidden WebKit page closes (WebKit has no in-place discard) and opens again when shown.
+cra://open?url=${WEBKIT}/page.html?n=sleeper
+expect-log loaded localhost
+cra://open?url=${PAGE}?n=front
+wait 2
+cra://debug?sleepTabs=1
+expect-log tab sleep unloads localhost
+cra://action/nextTab
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"[document.title,'userAgentData' in navigator].join()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"Fixture sleeper,false"
+cra://action/closeTab
+wait 2
+reject-log WebKit page process ended

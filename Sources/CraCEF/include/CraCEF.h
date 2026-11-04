@@ -111,6 +111,11 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 /// opens as a target=_blank tab) or Shift-clicked (YES, instead of a new window). Return
 /// YES to show it in a Peek; the page then stays where it is.
 - (BOOL)browser:(CraBrowser *)browser opensPeekForURL:(NSString *)url shiftClick:(BOOL)shiftClick newTab:(BOOL)newTab;
+/// A main-frame navigation (a link, a redirect, history, an address Cra loaded) before its request
+/// goes out; `method` is its HTTP method. Return YES to cancel it here because Cra shows `url` in
+/// another engine (ProtectedMediaSites: WebKit for DRM services). Called on the main thread from
+/// inside Chromium: don't close the browser before returning.
+- (BOOL)browser:(CraBrowser *)browser handsOffNavigationToURL:(NSString *)url method:(NSString *)method;
 /// The DevTools frontend shows `panel` ("elements", "console", "network", …): on load, and
 /// on every switch, from Cra or the frontend's own tab bar.
 - (void)browser:(CraBrowser *)browser devToolsShowsPanel:(NSString *)panel;

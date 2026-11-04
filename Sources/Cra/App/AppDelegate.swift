@@ -444,7 +444,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         mainWindows.removeAll { $0 === c }
         c.tearDown()
         store.removeWindow(c.windowID)
-        if c.isIncognito, !mainWindows.contains(where: \.isIncognito) { CraCEFRuntime.endIncognitoSession() }
+        if c.isIncognito, !mainWindows.contains(where: \.isIncognito) {
+            CraCEFRuntime.endIncognitoSession()
+            WebKitStores.endIncognitoSession()
+        }
         // AppKit makes the next window key on its own; until then actions go to the frontmost.
         if let front = NSApp.orderedWindows.compactMap({ w in mainWindows.first { $0.window === w } }).first {
             store.activeWindowID = front.windowID
@@ -692,6 +695,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let v = dict["banner"] { SoftwareUpdater.shared.debugUpdated(v == "none" ? nil : v); return }
             if let v = dict["bannerReady"] { SoftwareUpdater.shared.debugReady(v == "none" ? nil : v); return }
             if dict["switcher"] != nil { main.debugTabSwitcher(); return }
+            // The sidebar player without the pointer: play/pause/next/previous/pip on the newest
+            // card ("state" only logs), then its cards: "Cra nowPlaying[<label>] <host> playing=… prev=… next=… video=… pip=…".
+            if let op = dict["nowPlaying"], let np = main.browsers.nowPlaying {
+                let label = dict["label"].map { "[\($0)]" } ?? ""
+                let actions: [String: NowPlaying.Action] = ["toggle": .togglePlayback, "next": .next, "previous": .previous,
+                                                           "pip": .pictureInPicture, "dismiss": .dismiss]
+                if let action = actions[op], let id = np.entries.last?.id { main.browsers.performNowPlaying(id, action) }
+                for e in np.entries {
+                    let host = CraLog.host(main.browsers.runtime(for: e.id)?.browser.currentURL ?? "")
+                    NSLog("Cra nowPlaying%@ %@ playing=%d prev=%d next=%d video=%d pip=%d", label, host, e.playing ? 1 : 0, e.hasPrevious ? 1 : 0,
+                          e.hasNext ? 1 : 0, e.hasVideo ? 1 : 0, np.pictureInPicture.contains(e.id) ? 1 : 0)
+                }
+                if np.entries.isEmpty { NSLog("Cra nowPlaying%@ none", label) }
+                return
+            }
             if dict["themeEditor"] != nil { main.showSpaceStyleEditor(space: store.focusedSpace); return }
             if dict["jumpPill"] != nil { SpaceListView.jumpToSelected(for: main.sidebarUI, space: store.focusedSpaceID); return }
             if let f = dict["folderPreview"] {

@@ -265,8 +265,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             let sid = state.targetSpaceID
             state.profileID = app.store.isIncognito(space: sid) ? nil : app.store.profile(app.store.space(sid)?.profileID)?.id
         }
-        let b = CraBrowser(frame: shell.page.bounds, url: url.map { $0.isEmpty ? "about:blank" : $0 }, delegate: self,
-                           incognito: false, profilePath: app.store.profilePath(profile: state.profileID))
+        // Chromium, or WebKit for a DRM service; a popup host takes its opener's engine.
+        let b = PageEngines.makeBrowser(frame: shell.page.bounds, url: url.map { $0.isEmpty ? "about:blank" : $0 }, delegate: self,
+                                        incognito: false, profilePath: app.store.profilePath(profile: state.profileID), opener: opener)
         attach(b)
         state.url = (url == "about:blank" ? "" : url) ?? ""
     }
@@ -825,16 +826,35 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     /// A page can't move between profiles: a new browser in the other one loads its address.
     private func reload(inProfile id: UUID?) {
-        guard let old = browser else { return }
-        let url = hasPage ? currentURL : "about:blank"
+        guard browser != nil else { return }
         state.profileID = id
+        replacePage(at: hasPage ? currentURL : "about:blank")
+    }
+
+    /// A new page at `url` in place of this window's, in the engine the address gets (a profile
+    /// change, or a navigation the other engine has to show).
+    private func replacePage(at url: String) {
+        guard let old = browser else { return }
         old.delegate = nil
         if let w = old.hostWindow, w.parent === window { window?.removeChildWindow(w); w.orderOut(nil) }
         old.containerView.removeFromSuperview()
-        let b = CraBrowser(frame: shell.page.bounds, url: url, delegate: self, incognito: false, profilePath: store.profilePath(profile: id))
+        let b = PageEngines.makeBrowser(frame: shell.page.bounds, url: url, delegate: self, incognito: false,
+                                        profilePath: store.profilePath(profile: state.profileID))
         attach(b)
         old.close()
         if window?.isKeyWindow == true { focusPage() }
+    }
+
+    /// A navigation the other engine has to show (ProtectedMediaSites): this window's page opens
+    /// again there, a turn later (not from inside Chromium's navigation callback).
+    func browser(_ browser: CraBrowser, handsOffNavigationToURL url: String, method: String) -> Bool {
+        guard browser === self.browser, PageEngines.handoffTarget(from: browser, to: url, method: method) != nil else { return false }
+        DispatchQueue.main.async { [weak self, weak browser] in
+            guard let self, let browser, browser === self.browser else { return }
+            self.state.url = url
+            self.replacePage(at: url)
+        }
+        return true
     }
 
     /// Archive the page to the Library (Arc keeps closed Little Arcs there too).
