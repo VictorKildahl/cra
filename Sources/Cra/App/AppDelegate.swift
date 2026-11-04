@@ -472,15 +472,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     /// Creates a little window without showing it (`url` nil = popup host).
-    func makeLittleWindow(url: String?, opener: CraBrowser? = nil) -> LittleWindowController {
-        let w = LittleWindowController(app: self, url: url, opener: opener)
+    func makeLittleWindow(url: String?, opener: CraBrowser? = nil, space: UUID? = nil) -> LittleWindowController {
+        let w = LittleWindowController(app: self, url: url, opener: opener, space: space)
         littleWindows.append(w)
         return w
     }
 
     @discardableResult
-    func openLittleWindow(url: String, activate: Bool = true, opener: CraBrowser? = nil) -> LittleWindowController {
-        let w = makeLittleWindow(url: url, opener: opener)
+    func openLittleWindow(url: String, activate: Bool = true, opener: CraBrowser? = nil, space: UUID? = nil) -> LittleWindowController {
+        let w = makeLittleWindow(url: url, opener: opener, space: space)
         if activate { w.show() } else { w.window?.orderFront(nil) }
         return w
     }
@@ -521,8 +521,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
     }
 
-    /// cra://commandbar?query=…&mode=edit, cra://action/<id>, cra://open?url=…,
-    /// cra://dismiss.
+    /// cra://commandbar?query=…&mode=edit, cra://action/<id>,
+    /// cra://open?url=…[&space=<space id>][&background=1|&little=1], cra://dismiss.
     func handleInternalURL(_ u: URL) {
         let comps = URLComponents(url: u, resolvingAgainstBaseURL: false)
         func q(_ name: String) -> String? { comps?.queryItems?.first { $0.name == name }?.value }
@@ -543,12 +543,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // Load a URL in the focused tab / split pane (scripting).
             if let url = q("url") { main.loadInSelectedTab(url) }
         case "open":
-            if let url = q("url"), q("little") == "1" {
-                openLittleWindow(url: url)
-            } else if let url = q("url") {
+            guard let url = q("url") else { break }
+            let background = q("background") == "1"
+            // space=<id> (#168): a real, normal space, as Air Traffic Control routes to; an unknown
+            // or incognito one opens where it did before, in the space in use.
+            let space = q("space").flatMap(UUID.init(uuidString:)).flatMap { store.space($0) != nil && !store.isIncognito(space: $0) ? $0 : nil }
+            if q("little") == "1" {
+                openLittleWindow(url: url, space: space)
+            } else if let space {
+                // Held: useNormalWindow(forSpace:) can change which window is main.
+                let target = useNormalWindow(forSpace: space)
+                let tab = store.createTab(url: url, in: space, select: !background, window: target.windowID)
+                if background { store.markUnread(tab.id, true); target.browsers.ensureRuntime(for: tab.id) }
+                if !HitchMonitor.background { target.showWindow(nil) }
+            } else {
                 useNormalWindow()
-                let tab = store.createTab(url: url, select: q("background") != "1")
-                if q("background") == "1" { store.markUnread(tab.id, true); main.browsers.ensureRuntime(for: tab.id) }
+                let tab = store.createTab(url: url, select: !background)
+                if background { store.markUnread(tab.id, true); main.browsers.ensureRuntime(for: tab.id) }
             }
         case "key":
             // Scripted key press through the normal event path (testing).

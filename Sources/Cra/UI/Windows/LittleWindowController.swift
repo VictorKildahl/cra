@@ -145,6 +145,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private var tooltip: LittleTooltipPanel?
     private var tooltipTimer: Timer?
     private let toast = ShinyToast()
+    /// The space a cra://open named: "Open in" stays on it, matching the page's profile,
+    /// until the user switches spaces from this window's command bar.
+    private var requestedSpaceID: UUID?
 
     var store: SidebarStore { app.store }
     var currentURL: String { browser?.currentURL ?? state.url }
@@ -153,14 +156,18 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// `url` nil makes a popup host: the browser adopts the next window.open
     /// CEF hands it (see `CraBrowserDelegate.browser:popupHostForURL:`).
     /// `opener` is the page a link or popup came from; `fromTab` the tab a Peek came from.
-    init(app: AppDelegate, url: String?, peekOver parent: MainWindowController? = nil, opener: CraBrowser? = nil, fromTab: UUID? = nil) {
+    /// `space` is the space a cra://open asked for (#168).
+    init(app: AppDelegate, url: String?, peekOver parent: MainWindowController? = nil, opener: CraBrowser? = nil, fromTab: UUID? = nil,
+         space: UUID? = nil) {
         self.app = app
         isPopupHost = url == nil
         isPeek = parent != nil
         peekParent = parent
+        requestedSpaceID = parent == nil ? space : nil
         // Little Windows are normal browsing: they target the last normal window's space
-        // (a Peek: the space of the window it covers).
-        state = LittleWindowState(targetSpaceID: parent?.focusedSpaceID ?? app.store.focusedSpaceID(window: app.store.lastNormalWindowID))
+        // (a Peek: the space of the window it covers; a cra://open: the space it names).
+        state = LittleWindowState(targetSpaceID: parent?.focusedSpaceID ?? requestedSpaceID
+            ?? app.store.focusedSpaceID(window: app.store.lastNormalWindowID))
         commandBar = CommandBarController(engine: app.engine, store: app.store)
         let size = app.store.prefs.littleWindowSize.map { NSSizeFromString($0) }
             .flatMap { $0 == LittleMetrics.legacyDefaultSize ? nil : $0 }
@@ -609,6 +616,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             app.perform(id)
         case .switchSpace(let id):
             store.focusSpace(id)
+            requestedSpaceID = nil
             refreshTarget()
         case .moveToSpace(let id):
             promote(to: id)
@@ -708,7 +716,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// Arc's Little Arc names the space of the browser window used last and updates when it
     /// takes focus again (Arc 1.171: switched in the main window, "Open in" followed; #92).
     func refreshTarget() {
-        let id = peekParent?.focusedSpaceID ?? store.focusedSpaceID(window: store.lastNormalWindowID)
+        if let r = requestedSpaceID, store.space(r) == nil { requestedSpaceID = nil }
+        let id = peekParent?.focusedSpaceID ?? requestedSpaceID ?? store.focusedSpaceID(window: store.lastNormalWindowID)
         if state.targetSpaceID != id { state.targetSpaceID = id }
     }
 
