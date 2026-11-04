@@ -219,6 +219,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         let capturing = ui.capturingTabIDs
         let audible = ui.audibleTabIDs
         let refreshing = LiveFolderManager.shared.refreshing
+        let tidyEffects = TidyTitlesService.shared.effects
         // The ⌘T bar's New Tab row takes the selection's fill while it is open.
         let placeholder = showsNewTab && ui.newTabPlaceholderActive && store.focusedSpaceID(window: window) == spaceID
         var out: [Row] = []
@@ -291,10 +292,14 @@ final class SpaceListView: NSView, NSDraggingSource {
                 let (img, flip) = icon(tab.iconKey)
                 let (homeImg, homeFlip) = navigatedAway ? icon(tab.customIconKey ?? FaviconKey.key(for: tab.savedURL)) : (img, flip)
                 let developerMode = store.settings.isDeveloperMode(url: tab.url)
-                let subtitle = tab.sidebarSubtitle(developerMode: developerMode)
+                // Tidy Tab Titles' rename: "Double-click to rename" under the new name for a few seconds.
+                let tidyRename = tidyEffects[item.id]
+                let subtitle = tidyRename != nil ? TidyTitlesService.subtitle : tab.sidebarSubtitle(developerMode: developerMode)
+                // Arc's tidy titles: a known site's page shows a shorter title unless the tab has a name.
+                let title = item.title == nil ? TidyTitleRules.arc.tidy(item.displayTitle, url: tab.url) : item.displayTitle
                 row.content = .tab(TabRowModel(
-                    id: item.id, depth: depth, pinned: pinned, title: item.displayTitle, customTitle: item.title != nil,
-                    renameText: item.title ?? item.displayTitle, subtitle: subtitle,
+                    id: item.id, depth: depth, pinned: pinned, title: title, customTitle: item.title != nil,
+                    renameText: item.title ?? title, subtitle: subtitle,
                     icon: img, flipIcon: flip, githubMark: tab.liveItemURL != nil && tab.customIconKey == nil,
                     editing: renaming == item.id, selected: selected,
                     highlighted: picks.isEmpty ? selected && !placeholder : picks.contains(item.id),
@@ -302,13 +307,15 @@ final class SpaceListView: NSView, NSDraggingSource {
                     navigatedAway: navigatedAway,
                     focusRing: focusID == item.id, developerMode: developerMode, peeked: peeked,
                     homeIcon: homeImg, homeFlipIcon: homeFlip,
-                    peekIcon: ui.peekBadge?.tabID == item.id ? icon(ui.peekBadge?.iconKey).0 : nil))
+                    peekIcon: ui.peekBadge?.tabID == item.id ? icon(ui.peekBadge?.iconKey).0 : nil,
+                    tidyRename: tidyRename))
                 out.append(row)
             } else if item.isSplit {
                 let children = store.children(of: item.id).filter(\.isTab)
                 let cells = children.map { c -> SplitRowModel.Cell in
                     let (img, flip) = icon(c.tab?.iconKey)
-                    return .init(id: c.id, title: c.displayTitle, icon: img, flipIcon: flip)
+                    let title = c.title == nil ? c.tab.map { TidyTitleRules.arc.tidy(c.displayTitle, url: $0.url) } ?? c.displayTitle : c.displayTitle
+                    return .init(id: c.id, title: title, icon: img, flipIcon: flip)
                 }
                 let selected = children.contains { store.isSelected($0.id, window: window) }
                 row.content = .split(SplitRowModel(

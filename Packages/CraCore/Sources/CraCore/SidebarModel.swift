@@ -521,6 +521,9 @@ public struct AppSettings: Codable, Equatable {
     /// Arc Max's Tidy Tabs (tidyTabsEnabled), done by the Mac's Apple Intelligence model: the Today
     /// divider's Tidy button. On by default; the button only shows while Apple Intelligence is on.
     public var tidyTabs: Bool = true
+    /// Arc Max's Tidy Tab Titles (renamePinnedTabsEnabled): a tab you pin gets a shorter name from the
+    /// Mac's Apple Intelligence model. Off by default: it renames, where Tidy waits for a click.
+    public var tidyTabTitles: Bool = false
 
     public init() {}
 
@@ -684,6 +687,7 @@ extension AppSettings {
         perfRecording = try c.decodeIfPresent(Bool.self, forKey: .perfRecording) ?? Self.perfRecordingDefault
         perfHidesSiteNames = try c.decodeIfPresent(Bool.self, forKey: .perfHidesSiteNames) ?? false
         tidyTabs = try c.decodeIfPresent(Bool.self, forKey: .tidyTabs) ?? true
+        tidyTabTitles = try c.decodeIfPresent(Bool.self, forKey: .tidyTabTitles) ?? false
     }
 }
 

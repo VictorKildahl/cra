@@ -905,6 +905,8 @@ struct TabRowModel: Equatable {
     var homeFlipIcon: Bool
     /// The favicon of a Peek opened from this tab (Arc: modalIcon), in the close button's place.
     var peekIcon: NSImage?
+    /// Tidy Tab Titles just renamed it: the row plays Arc's rename once.
+    var tidyRename: TidyTitlesService.Effect? = nil
 }
 
 final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
@@ -924,6 +926,11 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
     private var flagsMonitor: Any?
     /// Arc's regional hover background for a tab that can go back: the icon's square or the body.
     private let regionLayer = CALayer()
+    /// The Tidy Tab Titles rename this row last played, and what it is drawing for it.
+    private var playedRename: UUID?
+    private var renameOld: NSTextField?
+    private var renameSparkles: CALayer?
+    private var renameBright = false
 
     override init(key: SpaceListView.RowKey, list: SpaceListView, colors: SidebarColors) {
         super.init(key: key, list: list, colors: colors)
@@ -971,12 +978,123 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         }
         rebuildAccessories()
         refreshBackground()
+        // A rename that just happened plays once; a row rebuilt later shows only the subtitle.
+        if let e = m.tidyRename, e.token != playedRename {
+            playedRename = e.token
+            if window != nil, Date().timeIntervalSince(e.start) < 0.3 { playTidyRename(from: e.oldTitle) }
+        }
     }
 
     override func setColors(_ c: SidebarColors) {
         guard c != colors else { return }
         super.setColors(c)
         if let m = model { model = nil; apply(m) }
+    }
+
+    /// Arc's rename (TabCellView: animatedGradientView over the old and new title, sparksView;
+    /// measured at 120 fps on Arc 1.171, 4 Nov 2026): one soft front 72 pt wide crosses the row
+    /// left to right at ~1,180 pt/s, fading the old title out and the new title and its "Double-click
+    /// to rename" in, the subtitle bright meanwhile; sparkles rise along a band that crosses the row in
+    /// 0.55 s, and everything stops at once when it has.
+    private func playTidyRename(from old: String) {
+        layoutSubtreeIfNeeded()
+        let total = TidyTitlesService.sweep
+        let fade: CGFloat = 72, speed: CGFloat = 1180
+        let start = titleLabel.frame.minX + SidebarText.inset + 20
+        let oldLabel = NSTextField.sidebarLabel(size: 14)
+        oldLabel.stringValue = old
+        oldLabel.textColor = colors.textPrimary
+        oldLabel.lineBreakMode = .byClipping
+        oldLabel.cell?.truncatesLastVisibleLine = false
+        oldLabel.frame = NSRect(x: titleLabel.frame.minX, y: titleLabel.frame.minY,
+                                width: max(titleLabel.frame.width, bounds.width - 8 - titleLabel.frame.minX), height: titleLabel.frame.height)
+        oldLabel.wantsLayer = true
+        addSubview(oldLabel)
+        renameOld = oldLabel
+        titleLabel.wantsLayer = true
+        subtitleLabel.wantsLayer = true
+        let end = oldLabel.frame.maxX + fade / 2
+        let sweep = min(total, Double((end - start) / speed))
+        for (view, reveal) in [(titleLabel as NSView, true), (subtitleLabel, true), (oldLabel, false)] {
+            view.layer?.mask = Self.frontMask(reveal: reveal, fade: fade, height: view.bounds.height,
+                                              from: start - view.frame.minX, to: end - view.frame.minX, duration: sweep)
+        }
+        renameBright = true
+        refreshSubtitle()
+        let sparkles = Self.sparkles(in: bounds, dark: colors.isDark, duration: total)
+        layer?.addSublayer(sparkles)
+        renameSparkles = sparkles
+        layer?.zPosition = 50
+        DispatchQueue.main.asyncAfter(deadline: .now() + total) { [weak self] in self?.endTidyRename() }
+    }
+
+    private func endTidyRename() {
+        renameOld?.removeFromSuperview()
+        renameOld = nil
+        renameSparkles?.removeFromSuperlayer()
+        renameSparkles = nil
+        titleLabel.layer?.mask = nil
+        subtitleLabel.layer?.mask = nil
+        layer?.zPosition = 0
+        renameBright = false
+        refreshSubtitle()
+    }
+
+    /// A horizontal mask whose soft edge (`fade` wide) travels `from` → `to`: opaque behind the front
+    /// when it reveals, opaque ahead of it when it hides.
+    private static func frontMask(reveal: Bool, fade: CGFloat, height: CGFloat, from: CGFloat, to: CGFloat, duration: Double) -> CALayer {
+        let span: CGFloat = 4000
+        let g = CAGradientLayer()
+        g.startPoint = CGPoint(x: 0, y: 0.5)
+        g.endPoint = CGPoint(x: 1, y: 0.5)
+        let on = NSColor.black.cgColor, off = NSColor.clear.cgColor
+        g.colors = reveal ? [on, on, off, off] : [off, off, on, on]
+        let half = Double(fade / 2 / (2 * span))
+        g.locations = [0, NSNumber(value: 0.5 - half), NSNumber(value: 0.5 + half), 1]
+        g.bounds = CGRect(x: 0, y: 0, width: 2 * span, height: height + 40)
+        g.position = CGPoint(x: to, y: height / 2)
+        g.actions = ["position": NSNull(), "bounds": NSNull()]
+        let move = CABasicAnimation(keyPath: "position.x")
+        move.fromValue = from
+        move.toValue = to
+        move.duration = duration
+        move.timingFunction = CAMediaTimingFunction(name: .linear)
+        g.add(move, forKey: "front")
+        return g
+    }
+
+    /// Arc's sparks: small dots that come up along a band crossing the row, scattered up to ~28 pt
+    /// above and below it, most staying lit until the sweep ends, a few going out early.
+    private static func sparkles(in rect: CGRect, dark: Bool, duration: Double) -> CALayer {
+        let box = CALayer()
+        box.frame = rect
+        box.actions = ["sublayers": NSNull()]
+        var rng = SystemRandomNumberGenerator()
+        let count = 46
+        let now = CACurrentMediaTime()
+        for i in 0..<count {
+            let born = duration * (Double(i) + Double.random(in: 0...1, using: &rng)) / Double(count)
+            let x = rect.width * CGFloat(born / duration) + CGFloat.random(in: -14...14, using: &rng)
+            let spread = CGFloat((0..<3).map { _ in Double.random(in: -1...1, using: &rng) }.reduce(0, +) / 3) * 28
+            let r = CGFloat.random(in: 0.6...1.5, using: &rng)
+            let dot = CALayer()
+            dot.frame = CGRect(x: min(max(x, 2), rect.width - 2) - r, y: rect.midY + spread - r, width: 2 * r, height: 2 * r)
+            dot.cornerRadius = r
+            dot.backgroundColor = (dark ? NSColor.white : NSColor.black.withAlphaComponent(0.55)).cgColor
+            dot.opacity = 0
+            let life = Bool.random(using: &rng) && i % 3 == 0 ? Double.random(in: 0.15...0.3, using: &rng) : duration - born
+            let blink = CAKeyframeAnimation(keyPath: "opacity")
+            let peak = Float.random(in: 0.55...1, using: &rng)
+            blink.values = [0, peak, peak * 0.6, peak, 0]
+            blink.keyTimes = [0, 0.12, 0.5, 0.85, 1]
+            blink.beginTime = now + born
+            blink.duration = max(0.05, life)
+            blink.fillMode = .both
+            blink.isRemovedOnCompletion = false
+            dot.add(blink, forKey: "spark")
+            box.addSublayer(dot)
+        }
+        return box
     }
 
     override var fillLeading: CGFloat { CGFloat(model?.depth ?? 0) * CraMetrics.indent }
@@ -1092,7 +1210,8 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
 
     private func refreshSubtitle() {
         subtitleLabel.stringValue = shownSubtitle ?? ""
-        subtitleLabel.textColor = colors.textTertiary
+        // Arc draws the subtitle bright while the rename sweeps in.
+        subtitleLabel.textColor = renameBright ? colors.textPrimary : colors.textTertiary
         subtitleLabel.isHidden = shownSubtitle == nil || renameField != nil
     }
 

@@ -50,6 +50,9 @@ final class SidebarStore {
     @ObservationIgnored private var previousTab: [UUID: UUID] = [:]
     /// Whether a tab's page is loaded; AppDelegate asks the windows' browser managers.
     @ObservationIgnored var hasPage: (UUID) -> Bool = { _ in true }
+    /// A tab came into a space's pinned tabs from elsewhere (⌘D, a drag, a menu): Tidy Tab Titles
+    /// may give it a shorter name (TidyTitlesService).
+    @ObservationIgnored var tabPinned: (UUID) -> Void = { _ in }
 
     // MARK: Persistence
 
@@ -686,6 +689,7 @@ final class SidebarStore {
         if it.isLiveFolder, case .today? = rootContainerKind(newParent) { return }
         if fromParent != newParent, let from = fromParent, items[from]?.isLiveFolder == true { hideLiveItem(id, in: from) }
         let oldIndex = fromParent.flatMap { items[$0]?.children.firstIndex(of: id) }
+        let wasPinned = fromParent.map { if case .pinned? = rootContainerKind($0) { return true } else { return false } } ?? false
         if it.isFolder, !it.isTabGroup, case .today? = rootContainerKind(newParent) {
             // Unpack: move the folder's tabs instead.
             let kids = it.children
@@ -729,6 +733,7 @@ final class SidebarStore {
         }
         if let from = fromParent, from != newParent { collapseSplitIfNeeded(from) }
         touch()
+        if !wasPinned, it.isTab, it.title == nil, !isIncognito(item: id), case .pinned? = rootContainerKind(newParent) { tabPinned(id) }
     }
 
     /// Moves several items so they end up next to each other, in the given

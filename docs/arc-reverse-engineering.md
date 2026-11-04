@@ -3060,3 +3060,38 @@ Apple Intelligence is on, so it's free and nothing leaves the Mac).
   ramps 0.38 s.
 - [?] Not seen: Arc's real grouping (the server is gone), what Arc does with a model answer naming an existing
   group, whether a header can be dragged, and the arrow Arc sometimes draws before "Clear" (offline copy).
+
+## Tidy titles and Tidy Tab Titles (Arc 1.171, 4 Nov 2026, Swift metadata + strings, Victor's Arc, 60 fps recordings)
+
+Two things share the name. Arc tidies every tab's displayed title by per-site rules, always; Arc Max's Tidy Tab
+Titles (`renamePinnedTabsEnabled`, AI endpoint `renamePinnedTabs`) gives a tab a new name when it is pinned.
+- [O] Rules: `tidyTitles` in web_content_behavior.json (ARC_WebContentBehaviorConfigurationClient.bundle, also
+  served by content.arc.net): 52 sites (51 online, less app.notion.com), each `{siteName, rules: [{match?, title}]}`.
+  `match`: pathEquals, pathContainsRegex, fragmentEquals, fragmentContainsRegex (none: everywhere); `title`:
+  always, removingPattern, removingPatterns (decoder strings next to "Unable to decode TitleModifier"). Live:
+  "Jupiter - Wikipedia" shows "Jupiter", "Y Combinator | Hacker News" "Y Combinator", "Climate - BBC News"
+  unchanged (no rules), the same with renamePinnedTabsEnabled off. Stored savedTitle stays the page's.
+- [O] Tidy Tab Titles, live (two pins, Tabs ▸ Pin Tab): "Foundation Models | Apple Developer Documentation" →
+  "Foundation Models", "Climate - BBC News" → "Climate News". Stored as the item's custom `title`. Arc's server
+  still answered on 4 Nov 2026 (Tidy Tabs' didn't).
+- [O] Timeline (60 fps): the row moves into Pinned in ~0.12 s; the rename starts 0.95–1.07 s after the pin (the
+  server's round trip). At once the row turns two-line: title up, "Double-click to rename" under it (Arc's
+  TabCellState hint, also the hover tooltip's subtitle). One soft front (~72 pt from opaque to clear) crosses
+  left to right at ~1,180 pt/s: the old title (drawn whole, clipped, no ellipsis) fades out behind it, the new title
+  and the subtitle in; the subtitle is bright (white ~96 % on the dark space) until the end. Sparkles: white dots
+  ~1.5–3 pt, ~28 at a time, rising along a band that crosses the whole row in 0.55 s, scattered up to ~30 pt above
+  and below it, mostly lit until the end. At 0.55 s (0.525 and 0.55 measured) sparkles go at once and the
+  subtitle drops to its usual tone; it leaves 3.1 s later (in ~0.07 s), the row back to one line.
+- [O static] TabCellView: isAnimatingAiRename, animatedGradientView (AnimatedGradientView: oldView, newView,
+  baseMaskLayer, overlayMaskLayer, animationDuration, animationDelay, fadeWidth, contentOffset), sparksView
+  (sparkles, animationPeriod, animationDuration, sparkleColor), currentSubtitleAnimationUUID. Analytics
+  `auto_renamed_pinned_tab` with old/new title length.
+- Arc's earlier renames in Victor's sidebar (the model's examples): "IT Career Paths - IT General - Confluence" →
+  "IT Career Paths", "Personal apps | Heroku" → "Heroku", "Deltagere ‹ Grønne tanker — WordPress" → "Grønne tanker".
+- Cra: TidyTitleRules (Arc's rules data, every unnamed tab row and split cell), TidyTitles + TidyTitlesService
+  (FoundationModels, ~0.5 s, held to ~1 s after the pin like Arc), TabRowView.playTidyRename (front masks on the
+  old and new title and the subtitle, 46 sparkles). Measured on Cra: rename 1.08 s after the pin, 0.55 s sweep,
+  "Climate - BBC News" → "Climate News" as Arc. Settings ▸ Max ▸ Tidy Tab Titles, off by default (Arc's Max is
+  opt-in).
+- [?] Not seen: whether a drag into Pinned renames (Cra does, every pin counts), a rename whose new name isn't a
+  prefix of the old (Cra crossfades in the soft edge), undo.

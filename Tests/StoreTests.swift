@@ -36,6 +36,7 @@ enum StoreTests {
         sharedFavorites()
         themePreview()
         tidyTabs()
+        pinHook()
         print("Store: \(checks) checks passed")
     }
 
@@ -925,6 +926,29 @@ enum StoreTests {
         store.archiveTab(byName["Croissant"]!, reason: .manual)
         expect(store.item(bread.id) == nil && !store.item(today)!.children.contains(bread.id), "its last tab takes the header with it")
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    /// Tidy Tab Titles hears of a tab pinned from elsewhere, once, and only while it has no name.
+    @MainActor
+    private static func pinHook() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        var heard: [UUID] = []
+        store.tabPinned = { heard.append($0) }
+        let sid = store.createSpace(title: "Pins", emoji: "📌").id
+        let a = store.createTab(url: "https://example.org/a", in: sid, select: false)
+        let b = store.createTab(url: "https://example.org/b", in: sid, select: false)
+        store.rename(b.id, to: "Mine")
+        store.pinTab(a.id)
+        store.pinTab(b.id)
+        expect(heard == [a.id], "pinning tells Tidy Tab Titles about an unnamed tab, not a named one")
+        let pinned = store.focusedSpace.pinnedContainerID
+        store.moveItem(a.id, to: pinned, index: 0)
+        let folder = store.createFolder(named: "F", in: pinned)
+        store.moveItem(a.id, to: folder.id, index: nil)
+        expect(heard == [a.id], "moves inside the pinned tabs don't count")
+        store.unpinTab(a.id)
+        store.togglePinned(a.id)
+        expect(heard == [a.id, a.id], "pinning it again does")
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {

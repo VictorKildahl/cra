@@ -19,6 +19,12 @@ struct MaxPane: View {
                 } description: {
                     Text("Press the \(Image(nsImage: BroomGlyph.image).renderingMode(.template)) icon to let your Sidebar organize itself whenever you have six or more Today Tabs.")
                 }
+                SettingsCardDivider()
+                MaxFeatureRow(title: "Tidy Tab Titles", isOn: $store.settings.tidyTabTitles, enabled: available) {
+                    TidyTabTitlesPicture()
+                } description: {
+                    Text("Have your tabs automatically renamed with tidier, shorter titles when you Pin them.")
+                }
             }
             MaxFooter(status: service.status) { service.openSystemSettings() }
                 .padding(.top, 14)
@@ -108,6 +114,34 @@ private struct MaxFooter: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+/// Arc's Tidy Tab Titles picture: a renamed tab, "Double-click to rename" under it, sparkles round
+/// it, on mauve.
+private struct TidyTabTitlesPicture: View {
+    private let ink = Color(red: 0.42, green: 0.27, blue: 0.62)
+    var body: some View {
+        ZStack {
+            Color(red: 0.61, green: 0.48, blue: 0.62)
+            HStack(spacing: 4) {
+                RoundedRectangle(cornerRadius: 1.5).fill(Color(red: 0.32, green: 0.12, blue: 0.36))
+                    .frame(width: 8, height: 6)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Interior Design Book").font(.system(size: 6, weight: .medium)).foregroundStyle(ink)
+                        .lineLimit(1).fixedSize()
+                    Text("Double-click to rename").font(.system(size: 4.5)).foregroundStyle(ink.opacity(0.8))
+                        .lineLimit(1).fixedSize()
+                }
+            }
+            .padding(.horizontal, 5).padding(.vertical, 2.5)
+            .background(Capsule().fill(Color.white))
+            ForEach(0..<9, id: \.self) { i in
+                Circle().fill(Color.white.opacity(i % 2 == 0 ? 0.9 : 0.6))
+                    .frame(width: i % 3 == 0 ? 1.6 : 1.1, height: i % 3 == 0 ? 1.6 : 1.1)
+                    .offset(x: [-33, -20, -6, 9, 22, 34, -26, 15, 30][i], y: [-12, 13, -14, 12, -13, 10, 9, -11, -6][i])
+            }
+        }
     }
 }
 
