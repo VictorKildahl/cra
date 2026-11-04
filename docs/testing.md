@@ -111,8 +111,8 @@ that breaks the private path fails a run instead of shipping.
 
 `component-snapshots` imports the made-up Arc profile, sizes the window and draws the space
 header, favorites, sidebar rows, dock, URL pill, the toolbar in its normal, developer and
-split-pane forms and the split row. A difference over 0.05 % of pixels fails, with a red diff
-image next to the new snapshot.
+split-pane forms and the split row, plain and being renamed. A difference over 0.05 % of
+pixels fails, with a red diff image next to the new snapshot.
 
 A reference is Cra's own drawing, so it can only be as right as Cra was when it was recorded.
 Before recording one again (`CRA_SNAPSHOT_RECORD=1 scripts/scenario.sh component-snapshots`),
