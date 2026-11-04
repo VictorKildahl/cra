@@ -86,9 +86,14 @@ services pick their DRM by browser.
 - **Chrome's DevTools**: Develop ▸ Developer Tools opens WebKit's Web Inspector in its own window.
 - **Arc's Picture in Picture window**: the video goes to the system's own Picture in Picture
   window, with its controls. Auto Picture in Picture, the sidebar player's button and coming
-  back to the tab work as for Chromium pages.
+  back to the tab work as for Chromium pages. WebKit has Picture in Picture off for apps other
+  than Safari until its `allowsPictureInPictureMediaPlayback` preference is set (without it,
+  `requestPictureInPicture()` answers NotSupportedError).
 - **Chromium's fullscreen handling**: WebKit takes a fullscreen video to its own fullscreen
-  window, as in Safari.
+  window, as in Safari, and Esc leaves it. That window covers Cra's, so the covered-window
+  auto Picture in Picture leaves a WebKit page in its own fullscreen alone
+  (`PageEngines.isInOwnFullscreen`): a request made then got stuck in WebKit's transition, and
+  that video never went to Picture in Picture again.
 - **In-place tab sleep**: a sleeping WebKit page closes and loads its address again when shown.
   Its back/forward list goes with it.
 
@@ -112,6 +117,13 @@ They are read at launch. A test instance takes `CRA_WEBKIT_DRM=0|1` and
   FairPlay being offered and every emulated protocol method. It also covers both handoffs, split
   view with one engine per pane, the sidebar player and its media-session buttons, playback
   while the tab is out of sight, a Little Window, tab sleep, waking and closing.
-- By hand (L5), with real accounts: Spotify plays track after track, Netflix and Disney+ play,
-  Picture in Picture opens and returns, fullscreen enters and leaves, ⌘-shortcuts reach Cra, Peek
-  works, and sign-in through Google or Apple comes back signed in.
+- On screen (4 Nov 2026, a renamed test copy): a WebKit tab and a split with one engine per
+  pane drawn in their cards. Picture in Picture opens from the player's button, on leaving the
+  tab, and after container and video fullscreen. Fullscreen enters and Esc leaves. ⌘F opens Cra's
+  find bar with a count, and ⌘L opens the command bar with the page's address. In a background
+  instance, EZDRM's public FairPlay stream played (licence, keys usable, 720p), and logged out,
+  Spotify, Netflix, Disney+, Max, Apple TV, Apple Music, Prime Video and Tidal open in WebKit with
+  no "browser not supported" message. Cookies and storage survive a relaunch, which restores the
+  tab in WebKit. A download from a WebKit page lands in Downloads.
+- Still by hand, with real accounts: Spotify plays track after track, Netflix and Disney+ play,
+  and sign-in through Google or Apple comes back signed in. Peek from a pinned WebKit tab.

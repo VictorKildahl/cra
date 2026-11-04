@@ -21,6 +21,10 @@ enum PageEngines {
 
     static func engine(of browser: CraBrowser) -> PageEngine { browser is WebKitBrowser ? .webKit : .chromium }
 
+    /// The page is in WebKit's own fullscreen window, which covers Cra's (Chromium's fullscreen
+    /// is Cra's window going fullscreen).
+    static func isInOwnFullscreen(_ browser: CraBrowser) -> Bool { (browser as? WebKitBrowser)?.isContentFullscreen == true }
+
     /// A page browser for `url` in the engine the rules pick. A popup host (`url` nil) takes its
     /// opener's engine: WebKit can only hand a popup to a web view it made, CEF to a CraBrowser.
     static func makeBrowser(frame: NSRect, url: String?, delegate: CraBrowserDelegate?, incognito: Bool,

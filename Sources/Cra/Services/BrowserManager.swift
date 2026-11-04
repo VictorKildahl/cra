@@ -704,7 +704,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         for id in visibleTabIDs {
             guard let rt = runtimes[id] else { continue }
             if covered {
-                if rt.browser.isAudible { leaveTab(id) }
+                // A WebKit page's own fullscreen window covers this one: that is the video on
+                // screen, not out of sight. Asked then, WebKit's Picture in Picture got stuck in its
+                // transition and never opened for that video again.
+                if rt.browser.isAudible, !PageEngines.isInOwnFullscreen(rt.browser) { leaveTab(id) }
             } else if rt.autoPictureInPicture || rt.pendingAutoPictureInPicture {
                 returnToTab(rt)
             }

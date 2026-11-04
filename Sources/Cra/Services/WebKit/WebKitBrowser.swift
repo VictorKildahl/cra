@@ -37,6 +37,8 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
     private var audible = false
     private var audibleOff: DispatchWorkItem?
     private var capturing = false
+    /// WebKit took the page to its own fullscreen window (Chromium's fullscreen is Cra's window).
+    private(set) var isContentFullscreen = false
     private var inPictureInPicture = false
     private var pictureInPicturePlaying = false
     private var hoverURL = ""
@@ -172,6 +174,9 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
             },
             web.observe(\.microphoneCaptureState, options: [.new]) { [weak self] _, _ in
                 MainActor.assumeIsolated { self?.reportCapture() }
+            },
+            web.observe(\.fullscreenState, options: [.new]) { [weak self] web, _ in
+                MainActor.assumeIsolated { self?.isContentFullscreen = web.fullscreenState != .notInFullscreen }
             },
         ]
         // WebKit's own "playing audio" (Safari's tab speaker), when this macOS has it; the

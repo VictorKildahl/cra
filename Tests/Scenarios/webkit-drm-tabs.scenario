@@ -3,7 +3,7 @@
 # such a service, so the journey needs no network and no account. A Chromium page answers
 # 'userAgentData' in navigator with true, a WebKit page with false.
 # Covers: the engine a tab gets, the page's world kept apart from Cra's, the DevTools methods Cra
-# calls, FairPlay, moving between engines both ways, split view with one page of each, the sidebar
+# calls, FairPlay, cookies, popups with their opener, moving between engines both ways, split view with one page of each, the sidebar
 # player and its media session buttons, a Little Window, tab sleep and waking, closing the page.
 # No & in a script: it ends the cra:// query. The clip is silent and paused before its tab is left: nothing plays aloud or pops out in
 # Picture in Picture while it runs behind your windows.
@@ -28,6 +28,25 @@ cra://debug?cdp=Page.getLayoutMetrics
 expect-log Cra cdp Page.getLayoutMetrics → .*cssContentSize
 cra://debug?cdp=Cra.discard
 expect-log Cra cdp Cra.discard → error: Cra.discard is not available in a WebKit page
+
+# Arc's Clear Cookies and Refresh empties the WebKit page's own cookies.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.cookie='cra=1; max-age=3600',document.cookie"}
+expect-log Cra cdp Runtime.evaluate .*"value":"cra=1"
+cra://debug?cdp=Storage.clearDataForOrigin&params={"origin":"${WEBKIT}","storageTypes":"cookies"}
+expect-log Cra cdp Storage.clearDataForOrigin → \{\}
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'cookies:'+document.cookie"}
+expect-log Cra cdp Runtime.evaluate .*"value":"cookies:"
+
+# window.open (a sign-in window) opens a tab that keeps its opener and is WebKit too; its own
+# window.close() closes the tab.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"window.open('${WEBKIT}/page.html?n=popup')?'opened':'blocked'"}
+expect-log Cra cdp Runtime.evaluate .*"value":"opened"
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"[document.title,!!window.opener,'userAgentData' in navigator].join()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"Fixture popup,true,false"
+cra://debug?pageJS=window.close()
+expect-log closed by its page
 
 # A Chromium page's own navigation to the service moves to WebKit before its request goes out.
 cra://open?url=${PAGE}?n=link

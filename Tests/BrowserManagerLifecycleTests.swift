@@ -191,6 +191,22 @@ enum BrowserManagerLifecycleTests {
         expect(manager.runtime(for: hidden.tabID)?.browser is WebKitBrowser && !manager.visibleTabIDs.contains(hidden.tabID),
                "a hidden tab is reopened in WebKit and stays hidden")
 
+        // WebKit's own fullscreen window covers Cra's: the video is on screen, so no Picture in Picture.
+        store.settings.autoPictureInPicture = true
+        let player2 = store.createTab(url: "https://www.netflix.com/watch/1").id
+        manager.show(player2, focus: false)
+        let fullscreen = manager.runtime(for: player2)!.browser as! WebKitBrowser
+        fullscreen.isAudible = true
+        fullscreen.isContentFullscreen = true
+        manager.windowVisibilityChanged(covered: true)
+        expect(!fullscreen.replies.contains { $0.method == "Runtime.evaluate" }, "a WebKit page in its own fullscreen isn't sent to Picture in Picture")
+        manager.windowVisibilityChanged(covered: false)
+        fullscreen.isContentFullscreen = false
+        manager.windowVisibilityChanged(covered: true)
+        expect(fullscreen.replies.contains { $0.method == "Runtime.evaluate" }, "out of fullscreen, a covered window's playing WebKit page is asked as before")
+        manager.windowVisibilityChanged(covered: false)
+        store.settings.autoPictureInPicture = false
+
         // A late request from a page that already moved changes nothing.
         expect(!manager.browser(chromium, handsOffNavigationToURL: "https://www.netflix.com/", method: "GET"), "a retired page can't move its tab again")
         manager.closeAll()

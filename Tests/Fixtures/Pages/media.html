@@ -5,7 +5,7 @@
 <!-- A looping H.264/AAC clip (clip.mp4: ffmpeg testsrc2 with a silent AAC track, 4 s; WebKit counts a playing, unmuted track as sound, and a scenario stays quiet) with media
      session handlers, for the sidebar player, Picture in Picture and tab sleep. Paused until a
      scenario plays it with a user gesture. The title says what the page last heard. -->
-<video id="v" src="clip.mp4" loop playsinline></video>
+<div id="player"><video id="v" src="clip.mp4" loop playsinline></video></div>
 <p id="state">ready</p>
 <script>
   const v = document.getElementById('v');
