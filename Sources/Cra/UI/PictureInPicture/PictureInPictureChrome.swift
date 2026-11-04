@@ -211,9 +211,10 @@ final class PictureInPictureOverlayView: NSView {
     override func viewWillMove(toWindow newWindow: NSWindow?) {
         if newWindow == nil {
             BackgroundCursor.allow(false)
-            flightLink?.invalidate()
-            flightLink = nil
+            stopLink()
+            swipe = nil
             flight = nil
+            releasePointer()
         }
     }
 
@@ -241,6 +242,9 @@ final class PictureInPictureOverlayView: NSView {
             return
         }
         land()
+        swipe = nil
+        releasePointer()
+        stopLink()
         gesture = PictureInPictureGesture(mouse: Self.screenLocation(of: event), frame: target.frame)
     }
 
@@ -313,13 +317,18 @@ final class PictureInPictureOverlayView: NSView {
 
     private var swipe: PictureInPictureThrow?
     private var flight: PictureInPictureFlight?
-    private var flightLink: CADisplayLink?
-    private var flightTime: CFTimeInterval = 0
+    /// Runs while the fingers are on the window and while it flies: the window moves once per
+    /// screen refresh, never straight from a scroll event.
+    private var link: CADisplayLink?
+    private var lastTick: CFTimeInterval = 0
+    /// Where the pointer sits in the window while it rides along with the fingers.
+    private var carried: CGVector?
 
     /// Two fingers on the trackpad (or a Magic Mouse) move the window with them, and when they
     /// lift it flies on into the corner of the screen it was heading for, as Arc's does. A wheel
     /// without phases (a plain mouse) moves nothing, and AppKit's own momentum after the lift is
-    /// left out: the flight is the momentum.
+    /// left out: the flight is the momentum. Scroll events only record where the fingers are;
+    /// `tick` shows the window there, a frame at a time (see `PictureInPictureThrow.origin(at:)`).
     override func scrollWheel(with event: NSEvent) {
         guard gesture == nil, let target, event.hasPreciseScrollingDeltas, event.momentumPhase.isEmpty else { return }
         let t = event.timestamp
@@ -327,45 +336,87 @@ final class PictureInPictureOverlayView: NSView {
         case .mayBegin, .began:
             land()
             swipe = PictureInPictureThrow(frame: target.frame, at: t)
+            startLink()
         case .changed:
             if swipe == nil {
                 land()
                 swipe = PictureInPictureThrow(frame: target.frame, at: t)
+                startLink()
             }
             // The window goes where the fingers go: with natural scrolling the deltas already
             // follow them, without it they're the other way round.
             let toFingers: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
-            guard let frame = swipe?.move(dx: toFingers * event.scrollingDeltaX, dy: -toFingers * event.scrollingDeltaY, at: t) else { return }
-            target.setFrameOrigin(frame.origin)
+            _ = swipe?.move(dx: toFingers * event.scrollingDeltaX, dy: -toFingers * event.scrollingDeltaY, at: t)
         case .ended, .cancelled:
             guard let s = swipe else { return }
             swipe = nil
-            guard s.hasMoved else { return }
-            throwWindow(target, from: s.frame, velocity: event.phase == .ended ? s.velocity(at: t) : .zero)
+            releasePointer()
+            guard s.hasMoved else { return stopLink() }
+            throwWindow(target, aim: s.frame, velocity: event.phase == .ended ? s.velocity(at: t) : .zero)
         default:
             break
         }
     }
 
-    private func throwWindow(_ target: NSWindow, from frame: NSRect, velocity: CGVector) {
-        let rest = PictureInPictureThrow.restingCentre(of: frame, velocity: velocity)
+    /// The fingers lifted with the window shown at its own frame and aimed at `aim` (where the
+    /// fingers had it): it flies on from where it is shown, at their speed, so the hand-off is seamless.
+    private func throwWindow(_ target: NSWindow, aim: NSRect, velocity: CGVector) {
+        let rest = PictureInPictureThrow.restingCentre(of: aim, velocity: velocity)
         let screen = NSScreen.screens.first { $0.frame.contains(rest) } ?? target.screen ?? NSScreen.main
-        guard let visible = screen?.visibleFrame else { return }
-        let corner = PictureInPictureThrow.corner(for: frame, velocity: velocity, in: visible)
-        let end = PictureInPictureThrow.frame(in: corner, size: frame.size, visible: visible, margin: PictureInPictureChrome.edgeMargin)
+        guard let visible = screen?.visibleFrame else { return stopLink() }
+        let corner = PictureInPictureThrow.corner(for: aim, velocity: velocity, in: visible)
+        let end = PictureInPictureThrow.frame(in: corner, size: aim.size, visible: visible, margin: PictureInPictureChrome.edgeMargin)
         CraLog.note("pip: swipe to \(corner.rawValue) at \(Int(hypot(velocity.dx, velocity.dy))) pt/s")
-        flight = PictureInPictureFlight(from: frame.origin, velocity: velocity, to: end.origin)
-        flightLink?.invalidate()
-        let link = displayLink(target: self, selector: #selector(flightStep(_:)))
-        link.add(to: .main, forMode: .common)
-        flightLink = link
-        flightTime = 0
+        flight = PictureInPictureFlight(from: target.frame.origin, velocity: velocity, to: end.origin)
+        startLink()
     }
 
-    @objc private func flightStep(_ link: CADisplayLink) {
-        guard let target, var f = flight else { return land() }
-        let dt = flightTime == 0 ? link.targetTimestamp - link.timestamp : link.timestamp - flightTime
-        flightTime = link.timestamp
+    /// Scroll events go to the window under the pointer, so once the window slid out from under
+    /// it the fingers moved whatever was behind instead. As in Arc, the pointer hides when the
+    /// window starts to move and rides along at its spot in the window until the fingers lift.
+    private func carryPointer(from old: CGPoint, to origin: CGPoint) {
+        if carried == nil {
+            let m = NSEvent.mouseLocation
+            carried = CGVector(dx: m.x - old.x, dy: m.y - old.y)
+            NSCursor.hide()
+        }
+        guard let c = carried, let primary = NSScreen.screens.first else { return }
+        CGWarpMouseCursorPosition(CGPoint(x: origin.x + c.dx, y: primary.frame.maxY - (origin.y + c.dy)))
+        // A warp holds the pointer's own moves back for a quarter of a second; this lifts the hold.
+        CGAssociateMouseAndMouseCursorPosition(1)
+    }
+
+    private func releasePointer() {
+        guard carried != nil else { return }
+        carried = nil
+        NSCursor.unhide()
+    }
+
+    private func startLink() {
+        guard link == nil else { return }
+        let l = displayLink(target: self, selector: #selector(tick(_:)))
+        l.add(to: .main, forMode: .common)
+        link = l
+        lastTick = 0
+    }
+
+    private func stopLink() {
+        link?.invalidate()
+        link = nil
+    }
+
+    @objc private func tick(_ link: CADisplayLink) {
+        let dt = lastTick == 0 ? link.targetTimestamp - link.timestamp : link.timestamp - lastTick
+        lastTick = link.timestamp
+        guard let target else { return stopLink() }
+        if let s = swipe {
+            let origin = s.origin(at: link.timestamp)
+            guard origin != target.frame.origin else { return }
+            carryPointer(from: target.frame.origin, to: origin)
+            target.setFrameOrigin(origin)
+            return
+        }
+        guard var f = flight else { return stopLink() }
         target.setFrameOrigin(f.step(max(dt, 1.0 / 240)))
         flight = f
         if f.isSettled { land() }
@@ -374,10 +425,9 @@ final class PictureInPictureOverlayView: NSView {
     /// Ends a flight where the window is (a new swipe or press catches it mid-air) and keeps the
     /// spot for the next video.
     private func land() {
-        guard let link = flightLink else { return }
-        link.invalidate()
-        flightLink = nil
+        guard flight != nil else { return }
         flight = nil
+        if swipe == nil { stopLink() }
         if let target { PictureInPictureChrome.shared.remember(target.frame) }
     }
 }

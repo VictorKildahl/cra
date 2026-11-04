@@ -17,16 +17,22 @@ public struct PictureInPictureThrow: Sendable {
     /// millisecond) comes to rest after v · 0.998 / (1 − 0.998) / 1000 = v · 0.499 s.
     public static let projection: CGFloat = 0.998 / (1 - 0.998) / 1000
 
+    /// Where the fingers have the window: after the latest move, ahead of what is on screen.
     public private(set) var frame: CGRect
     /// False while the fingers only rest on the window: lifting them then throws nothing.
     public private(set) var hasMoved = false
     private let start: Double
     private var samples: [(time: Double, dx: CGFloat, dy: CGFloat)] = []
+    /// The window's origin after each move, for `origin(at:)`.
+    private var path: [(time: Double, origin: CGPoint)]
+    /// The time between the last few moves (a trackpad sends about 120 a second, unevenly).
+    private var gaps: [Double] = []
 
     /// The fingers touched down on a window at `frame` at `time` (seconds, any clock).
     public init(frame: CGRect, at time: Double) {
         self.frame = frame
         start = time
+        path = [(time, frame.origin)]
     }
 
     /// The fingers moved the window by `dx, dy` at `time`; returns where it is now.
@@ -35,7 +41,39 @@ public struct PictureInPictureThrow: Sendable {
         if dx != 0 || dy != 0 { hasMoved = true }
         samples.append((time, dx, dy))
         samples.removeAll { $0.time < time - 2 * Self.sampleWindow }
+
+        let last = path[path.count - 1]
+        let gap = time - last.time
+        if gap > 0.05 {
+            // The fingers rested before this move: they were still where they were until just
+            // before it, rather than creeping there since the last one.
+            path.append((time - (gaps.last ?? 1.0 / 120), last.origin))
+        } else if gap > 0 {
+            gaps.append(gap)
+            if gaps.count > 8 { gaps.removeFirst() }
+        }
+        path.append((max(time, last.time), frame.origin))
+        if path.count > 64 { path.removeFirst(path.count - 64) }
         return frame
+    }
+
+    /// How far the window on screen runs behind the fingers: the longest of the last few gaps
+    /// between moves, so a frame almost always falls between two moves that have both come in.
+    public var lag: Double { min(max((gaps.max() ?? 1.0 / 120) + 0.001, 1.0 / 240), 1.0 / 30) }
+
+    /// Where to show the window for a display frame at `time` (the same clock as the moves):
+    /// where the fingers had it `lag` earlier, interpolated between the two moves around then.
+    /// Moving the window on each move instead puts it wherever the last move left it when the
+    /// screen refreshes, so a frame that caught two moves jumps twice as far as one that caught
+    /// one, and the window shudders even though the fingers glide. Past the latest move the
+    /// window waits for the next one rather than guessing ahead and stepping back.
+    public func origin(at time: Double) -> CGPoint {
+        let t = time - lag
+        guard let after = path.firstIndex(where: { $0.time > t }) else { return path[path.count - 1].origin }
+        guard after > 0 else { return path[0].origin }
+        let a = path[after - 1], b = path[after]
+        let f = CGFloat((t - a.time) / (b.time - a.time))
+        return CGPoint(x: a.origin.x + (b.origin.x - a.origin.x) * f, y: a.origin.y + (b.origin.y - a.origin.y) * f)
     }
 
     /// The window's speed when the fingers lift at `time`: how far it went in the moves of the

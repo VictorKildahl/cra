@@ -24,6 +24,47 @@ struct PictureInPictureThrowTests {
         #expect(s.frame == window.offsetBy(dx: -40, dy: 20))
     }
 
+    /// Fingers gliding at 600 pt/s whose moves come unevenly (4 ms, then 12 ms apart, the way a
+    /// trackpad's land against a 120 Hz screen): the window on screen still steps the same
+    /// distance every frame, where showing the latest move steps 0, 5 or 10 points. Moves and
+    /// frames are replayed in time order, so a frame only sees the moves that came before it.
+    @Test func eachFrameStepsEvenly() {
+        var s = PictureInPictureThrow(frame: window, at: 0)
+        var shown: [CGFloat] = [], latest: [CGFloat] = []
+        var t = 0.0, i = 0
+        var frame = 1.0 / 120
+        while t < 0.5 {
+            let next = t + (i % 2 == 0 ? 0.004 : 0.012)
+            while frame < next {
+                if frame > 0.1 {
+                    shown.append(s.origin(at: frame).x)
+                    latest.append(s.frame.minX)
+                }
+                frame += 1.0 / 120
+            }
+            _ = s.move(dx: CGFloat((next - t) * 600), dy: 0, at: next)
+            t = next
+            i += 1
+        }
+        let steps = zip(shown.dropFirst(), shown).map { $0 - $1 }
+        let latestSteps = zip(latest.dropFirst(), latest).map { $0 - $1 }
+        #expect(steps.allSatisfy { abs($0 - 5) < 0.01 })
+        #expect(latestSteps.contains { abs($0 - 5) > 2 })
+        // About a move behind the fingers, no more.
+        #expect(s.lag < 0.015)
+    }
+
+    /// Fingers that stop leave the window where they stopped, not past it.
+    @Test func theWindowStopsWithTheFingers() {
+        var s = PictureInPictureThrow(frame: window, at: 0)
+        for i in 1...10 { _ = s.move(dx: 8, dy: 0, at: Double(i) / 120) }
+        #expect(s.origin(at: 1).x == window.minX + 80)
+        // Resting, then moving again: the window doesn't creep there over the rest.
+        _ = s.move(dx: 8, dy: 0, at: 1)
+        #expect(s.origin(at: 0.9).x == window.minX + 80)
+        #expect(s.origin(at: 1.05).x == window.minX + 88)
+    }
+
     @Test func speedComesFromTheLastMoves() {
         let (s, t) = swipe(-10, 0, frames: 30)
         let v = s.velocity(at: t)
