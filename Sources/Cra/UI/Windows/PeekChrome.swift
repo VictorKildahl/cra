@@ -328,7 +328,9 @@ final class PeekTransition {
     /// window), with `page` drawn over `pageRect` (the view's coordinates, y up) when given.
     static func picture(of view: NSView, page: CGImage? = nil, pageRect: NSRect = .zero) -> CGImage? {
         view.layoutSubtreeIfNeeded()
-        view.displayIfNeeded()
+        // AppKit hangs the subviews' layers under the view's only when the window displays;
+        // before that render(in:) drew the card's navy background alone, without its bar or page.
+        if let window = view.window { window.display() } else { view.displayIfNeeded() }
         guard let layer = view.layer else { return nil }
         let scale = view.window?.backingScaleFactor ?? 2
         let w = Int(view.bounds.width * scale), h = Int(view.bounds.height * scale)
