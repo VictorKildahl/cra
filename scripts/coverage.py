@@ -14,7 +14,11 @@ Runs every harness (scripts/test-*.sh, Tests/test-*.sh) compiled with coverage, 
   - changed files no harness compiles (views, CEF glue) are listed, not counted: they are
     covered by scenarios (scripts/scenario.sh), not by percentages.
 
-The summary goes to stdout and, in CI, to the job summary (GITHUB_STEP_SUMMARY).
+It is also CI's one run of those tests: a failing test fails it, with that suite's output, after
+every suite has run. Lint is separate (scripts/lint.py).
+
+The summary goes to stdout and, in CI, to the job summary (GITHUB_STEP_SUMMARY). Progress and
+test failures go to stderr.
 """
 import glob
 import os
@@ -34,7 +38,16 @@ def run(cmd, **kw):
     return subprocess.run(cmd, cwd=ROOT, check=True, text=True, capture_output=True, **kw).stdout
 
 
-def harness_coverage(work):
+def suite(name, cmd, failures, **kw):
+    """Runs one test suite; a failure is kept with its output and the next suite still runs."""
+    print(f"==> {name}", file=sys.stderr, flush=True)
+    r = subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True, **kw)
+    if r.returncode != 0:
+        failures.append(name)
+        print(f"{r.stdout}{r.stderr}\n{name} failed", file=sys.stderr, flush=True)
+
+
+def harness_coverage(work, failures):
     """{file: {line: count}} over every harness binary."""
     keep = os.path.join(work, "bin")
     os.makedirs(keep)
@@ -45,9 +58,7 @@ def harness_coverage(work):
         rel = os.path.relpath(s, ROOT)
         if rel in NOT_HARNESSES:
             continue
-        r = subprocess.run(["bash", s], cwd=ROOT, env=env, text=True, capture_output=True)
-        if r.returncode != 0:
-            sys.exit(f"{rel} failed:\n{r.stdout[-2000:]}{r.stderr[-2000:]}")
+        suite(rel, ["bash", s], failures, env=env)
     raws = glob.glob(os.path.join(work, "*.profraw"))
     binaries = sorted(glob.glob(os.path.join(keep, "*")))
     if not raws or not binaries:
@@ -58,11 +69,13 @@ def harness_coverage(work):
     return lcov_lines(run(["xcrun", "llvm-cov", "export", "-format=lcov", "-instr-profile", merged] + objects))
 
 
-def core_coverage():
+def core_coverage(failures):
     pkg = os.path.join(ROOT, "Packages/CraCore")
     if not os.path.isdir(pkg):
         return {}
-    run(["swift", "test", "--package-path", pkg, "--enable-code-coverage"])
+    suite("CraCore", ["swift", "test", "--package-path", pkg, "--enable-code-coverage"], failures)
+    if "CraCore" in failures:
+        return {}
     # Per line, as the harnesses are: the JSON's segments only mark where regions start, so the
     # other lines kept the 0 of a harness that compiles CraCore without running it.
     codecov = os.path.dirname(run(["swift", "test", "--package-path", pkg, "--show-codecov-path"]).strip())
@@ -108,11 +121,15 @@ def pct(hit, total):
 def main():
     base = sys.argv[sys.argv.index("--base") + 1] if "--base" in sys.argv else "origin/main"
     work = tempfile.mkdtemp(prefix="cra-coverage.")
+    failures = []
     try:
-        cov = harness_coverage(work)
-        core = core_coverage()
+        cov = harness_coverage(work, failures)
+        core = core_coverage(failures)
     finally:
         shutil.rmtree(work, ignore_errors=True)
+    if failures:
+        print("Failed: " + ", ".join(failures), file=sys.stderr)
+        return 1
     for f, lines in core.items():
         merged = cov.setdefault(f, {})
         for n, count in lines.items():
@@ -120,7 +137,7 @@ def main():
 
     table = ["| File | Lines | Covered |", "|---|---:|---:|"]
     for f in sorted(cov):
-        if not f.startswith(ROOT) or "/Tests/" in f:
+        if not f.startswith(ROOT) or "/Tests/" in f or "/.build/" in f:
             continue
         lines = cov[f]
         hit = sum(1 for c in lines.values() if c > 0)
