@@ -2776,7 +2776,8 @@ that waits 3 s before answering and then serves a page whose image takes 5 s.
   switch redraws at once. Arc imports keep both halves. The editor builds halves from its pad (`SpaceTheme.key`) with
   `SpaceThemeVariants`: the light half is the pad's colours (lifted to HSL lightness 0.9 only when they read dark),
   the dark half keeps their hue at HSL lightness 0.064, drawn like an imported dark half (27 % over #2B2632). An
-  Auto theme saved before keeps its colours on the side they suit and derives the other.
+  Auto theme with one set of colours (saved before, or from the Edit Space sheet or Zen) stays on the side they suit
+  whatever macOS shows, and an Arc `single` without `contentOverBackgroundAppearance` imports as that side (#171).
 - [?] Not worked out: how Arc's editor maps a picked colour to its halves (the pad's `lightnessRange` and the bias
   value). Cra's halves are fitted to Arc's default theme only.
 

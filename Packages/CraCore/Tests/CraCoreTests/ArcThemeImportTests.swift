@@ -54,6 +54,25 @@ struct ArcThemeImportTests {
                                                                 appearance: "light", accent: "#C8CAFF"))
     }
 
+    /// Arc's `single` theme never follows macOS: one without `contentOverBackgroundAppearance` takes
+    /// the side its colours suit instead of Auto, so it is never swapped for a derived half (#171).
+    @Test(arguments: [("solidRedDark", "dark"), ("solidWhiteLight", "light"), ("gradientVibrantLight", "light")])
+    func singleWithoutAppearanceKeepsItsSide(name: String, appearance: String) throws {
+        let theme = try #require(ArcThemeImport.theme(from: Self.withoutAppearanceKey(Self.spaces[name]!)))
+        #expect(theme.appearance == appearance && !theme.followsSystem)
+        #expect(theme.resolved(systemDark: true) == theme && theme.resolved(systemDark: false) == theme)
+    }
+
+    static func withoutAppearanceKey(_ space: [String: Any]) -> [String: Any] {
+        var space = space
+        var info = space["customInfo"] as! [String: Any], wt = info["windowTheme"] as! [String: Any]
+        var bg = wt["background"] as! [String: Any], single = bg["single"] as! [String: Any]
+        var v = single["_0"] as! [String: Any]
+        v["contentOverBackgroundAppearance"] = nil
+        single["_0"] = v; bg["single"] = single; wt["background"] = bg; info["windowTheme"] = wt; space["customInfo"] = info
+        return space
+    }
+
     /// An appearance-based theme with one half shows that half whatever macOS shows.
     @Test func appearanceBasedWithOneHalfKeepsIt() throws {
         var space = Self.spaces["gradientAppearanceBasedDark"]!
@@ -178,15 +197,15 @@ struct SpaceThemeAppearanceTests {
         #expect(Self.dark.resolved(systemDark: systemDark) == Self.dark)
     }
 
-    /// An Auto theme saved before 0.1.29 (one set of colours) looks as it did on the side its colours
-    /// suit and gets a derived half on the other.
-    @Test(arguments: ["#F8D558", "#2861B3"])
-    func olderAutoThemeKeepsItsSideAndDerivesTheOther(hex: String) {
+    /// An Auto theme with one set of colours (saved before 0.1.29, or an import that had no second
+    /// half) stays on the side its colours suit while macOS changes: no derived half (#171).
+    @Test(arguments: ["#F8D558", "#2861B3", "#F25E6B"])
+    func autoThemeWithOneHalfKeepsItsLook(hex: String) {
         let theme = SpaceTheme(colors: [hex, hex], intensity: 0.8, noise: 0.1, appearance: "auto")
-        let own = theme.resolved(systemDark: theme.isDark)
-        #expect(own.colors == theme.colors && own.isDark == theme.isDark)
-        let other = theme.resolved(systemDark: !theme.isDark)
-        #expect(other.isDark != theme.isDark && other.colors != theme.colors)
+        var own = theme
+        own.appearance = theme.isDark ? "dark" : "light"
+        #expect(theme.resolved(systemDark: false) == own)
+        #expect(theme.resolved(systemDark: true) == own)
     }
 
     /// Both halves and the editor's colours are saved; a theme without them saves as before.

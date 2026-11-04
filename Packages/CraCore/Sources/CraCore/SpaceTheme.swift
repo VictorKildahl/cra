@@ -19,8 +19,8 @@ public struct SpaceTheme: Codable, Equatable {
     public var solid: Bool = false
     /// Arc's Auto theme (background.appearanceBased): with `appearance` "auto" the space follows
     /// macOS, the fields above are its light half and this is the half shown while macOS is dark.
-    /// nil on an "auto" theme from before 0.1.29: its colours are the half their brightness
-    /// suits, and the other half is derived (`resolved(systemDark:)`).
+    /// nil on an "auto" theme with one set of colours (saved before 0.1.29, the Edit Space sheet's
+    /// Auto, a Zen import): it stays on the side its colours suit whatever macOS shows.
     public var dark: Variant? = nil
     /// The theme editor's pad colours the theme was built from (Arc: the editor's key colour and
     /// the ones its wheel adds); nil for a preset or an import, whose own colours go on the pad.
@@ -94,11 +94,12 @@ public struct SpaceTheme: Codable, Equatable {
             return SpaceTheme(colors: d.colors, intensity: d.intensity, noise: d.noise, appearance: "dark", vibrant: d.vibrant,
                               accent: d.accent, solid: d.solid)
         }
-        // An Auto theme saved before both halves were kept shows as it always did on the side its
-        // colours suit, and as the derived other half on the other.
+        // One set of colours keeps its look on both sides, as an Arc `single` theme does: swapping
+        // it for a derived half made an imported space look nothing like Arc's while macOS ran the
+        // other way (#171).
         var t = self
         t.appearance = isDark ? "dark" : "light"
-        return t.isDark == systemDark ? t : SpaceThemeVariants.flipped(t)
+        return t
     }
 
     /// Dark first: colors borrowed from Victor's other projects (GhostWriter

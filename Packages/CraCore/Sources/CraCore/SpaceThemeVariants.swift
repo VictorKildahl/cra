@@ -20,12 +20,6 @@ public enum SpaceThemeVariants {
         return t
     }
 
-    /// The other half of a theme that has one: a dark theme's light half or a light theme's dark half.
-    public static func flipped(_ t: SpaceTheme) -> SpaceTheme {
-        t.isDark ? light(key: t.colors, intensity: t.intensity, noise: t.noise)
-            : dark(key: t.colors, intensity: t.intensity, noise: t.noise)
-    }
-
     /// The half shown while macOS is light, from the pad's colours: the colours themselves (Arc
     /// saves a colour picked in Light as that colour), lifted to Arc's default light half (HSL
     /// lightness 0.9, #8389FF → #C8CAFF) when they would read as a dark theme. One colour is Arc's

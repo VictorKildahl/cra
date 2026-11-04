@@ -189,6 +189,7 @@ final class SiteControlCenterView: NSView {
 }
 
 /// Arc's site control center palette (dark values sampled from Arc 1.170; light ones mirror them).
+/// `dark` is macOS's appearance, not the space's: like Arc's menus, the popover follows the Mac (#171).
 struct SiteControlCenterColors {
     let dark: Bool
     var background: NSColor { dark ? NSColor(hex: "#272728") : NSColor(hex: "#F4F4F5") }

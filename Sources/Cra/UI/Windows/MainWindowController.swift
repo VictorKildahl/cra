@@ -363,8 +363,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             shell.placeholderHost.wantsLayer = true
             shell.placeholderHost.layer?.backgroundColor = (palette.isDark ? NSColor.white.withAlphaComponent(0.04) : NSColor.black.withAlphaComponent(0.03)).cgColor
             shell.isDarkTheme = palette.isDark
-            window?.appearance = NSAppearance(named: palette.isDark ? .darkAqua : .aqua)
-            commandPanel?.appearance = window?.appearance
+            // The space's light or dark goes to the window's content (sidebar, toolbar, pages'
+            // frame), not to the window: AppKit hands a window's appearance to every menu, sheet,
+            // alert and popover it presents, and those follow macOS as Arc's do, whatever the
+            // space colour (#171).
+            shell.appearance = NSAppearance(named: palette.isDark ? .darkAqua : .aqua)
+            commandPanel?.appearance = shell.appearance
             // Vibrant themes see through to the desktop like Arc; others are opaque.
             shell.vibrancy.isHidden = !palette.vibrant
             shell.vibrancyLift.isHidden = !palette.vibrant
@@ -2205,7 +2209,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             self?.openTab("chrome://settings/content/siteDetails?site=" + (origin.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? origin))
         }
         siteControlCenterSpaceID = focusedSpaceID
-        siteControlCenter.show(relativeTo: rect, of: content, url: url, secure: secure, dark: focusedSpace.theme.palette.isDark,
+        siteControlCenter.show(relativeTo: rect, of: content, url: url, secure: secure, dark: SystemAppearance.shared.isDark,
                                profile: profileDirectoryName, tab: selectedTabID, store: store, actions: actions)
     }
 
@@ -2351,9 +2355,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // Always centred in the window, also when opened from the toolbar.
         commandBar.attached = false
         commandBar.panelWidth = min(CraMetrics.commandBarWidth, window.frame.width - 80)
-        // Light or dark with the space's theme, as the window is: a child panel would otherwise
+        // Light or dark with the space's theme, as the sidebar is: a child panel would otherwise
         // follow macOS, a dark bar over a light space while the Mac runs dark (reported on X).
-        commandPanel.appearance = window.appearance
+        commandPanel.appearance = shell.appearance
         positionCommandPanel()
         if commandPanel.parent == nil { window.addChildWindow(commandPanel, ordered: .above) }
         commandBarOpenedAt = Date()

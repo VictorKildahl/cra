@@ -13,8 +13,12 @@ public enum ArcThemeImport {
             if let light, let dark { return SpaceTheme(light: light, dark: dark) }
             return dark ?? light
         }
-        guard let single = (bg["single"] as? [String: Any])?["_0"] as? [String: Any] else { return nil }
-        return theme(variant: single, appearance: "auto", windowTheme: wt)
+        guard let single = (bg["single"] as? [String: Any])?["_0"] as? [String: Any],
+              var t = theme(variant: single, appearance: "auto", windowTheme: wt) else { return nil }
+        // A `single` theme never follows macOS in Arc. Without `contentOverBackgroundAppearance` it
+        // takes the side its colours suit (#171).
+        if t.followsSystem { t.appearance = t.isDark ? "dark" : "light" }
+        return t
     }
 
     /// One half of `background`: its own `contentOverBackgroundAppearance` wins over `appearance`.
