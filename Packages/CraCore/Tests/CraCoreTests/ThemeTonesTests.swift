@@ -58,6 +58,42 @@ struct ThemeTonesTests {
         if a.s < 0.05 { #expect(b.s < 0.001) } else { #expect(abs(a.h - b.h) < 0.002) }
     }
 
+    /// Arc's primaryColorPalette for three theme colours: Arc's default dark theme, Victor's gold and
+    /// a light blue (an offline Arc's StorableSidebar.json, 4 Nov 2026).
+    @Test(arguments: [
+        ("#010220", (131.0, 137.0, 255.0), (236.0, 237.0, 255.0)),
+        ("#F8D558", (233.0, 179.0, 0.0), (252.0, 237.0, 188.0)),
+        ("#6CBAD9", (108.0, 186.0, 217.0), (228.0, 242.0, 248.0)),
+    ])
+    func midToneAndTintedLightMatchArcsPalette(hex: String, mid: (Double, Double, Double), tinted: (Double, Double, Double)) {
+        #expect(Self.close(SpaceTheme.midTone(hex), mid, within: 2.5))
+        #expect(Self.close(SpaceTheme.tintedLight(hex), tinted, within: 2.5))
+    }
+
+    /// Arc's folder glyph: midTone back on every theme; the front and outline trade tintedLight
+    /// and shadedDark between light and dark themes. Dark fronts are opaque (an X report on
+    /// 4 Nov: the open folder looked see-through on dark themes only).
+    @Test func folderTonesSwapFrontAndOutlineOnDarkThemes() {
+        let light = FolderTones(themeColor: "#6CBAD9", dark: false)
+        let dark = FolderTones(themeColor: "#010220", dark: true)
+        #expect(light.front == SpaceTheme.tintedLight("#6CBAD9"))
+        #expect(light.outline == SpaceTheme.shadedDark("#6CBAD9"))
+        #expect(dark.front == SpaceTheme.shadedDark("#010220"))
+        #expect(dark.outline == SpaceTheme.tintedLight("#010220"))
+        #expect(light.back == SpaceTheme.midTone("#6CBAD9") && dark.back == SpaceTheme.midTone("#010220"))
+        // Arc's default dark theme, sampled off the glyph: front #1F2AFF, outline #ECEDFF. The
+        // front is shadedDark's fit, which runs more saturated than Arc's on this blue (#0F17FF).
+        #expect(Self.close(dark.front, (31, 42, 255), within: 20))
+        #expect(Self.close(dark.outline, (236, 237, 255), within: 2))
+    }
+
+    @Test(arguments: ["#808080", "#202020", "#EEEEEE"])
+    func greyTonesStayGrey(hex: String) {
+        for c in [SpaceTheme.midTone(hex), SpaceTheme.tintedLight(hex)] {
+            #expect(abs(c.r - c.g) < 0.001 && abs(c.g - c.b) < 0.001)
+        }
+    }
+
     @Test func themeWithoutAccentUsesItsFirstColour() {
         let theme = SpaceTheme(colors: ["#2861B3", "#FFFFFF"], intensity: 1, noise: 0, appearance: "dark")
         #expect(theme.shadedDark == SpaceTheme.shadedDark("#2861B3"))

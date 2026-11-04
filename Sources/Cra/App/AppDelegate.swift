@@ -674,6 +674,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 if let id = UUID(uuidString: f) { SpaceListView.debugFolderPreview(id, ui: main.sidebarUI) } else { FolderPreviewController.shared.close() }
                 return
             }
+            if let t = dict["expandFolder"] {
+                for item in store.items.values where item.isFolder && item.title == t { store.setExpanded(item.id, true) }
+                return
+            }
             if dict["littlePopup"] != nil { littleWindows.first?.togglePopup(); return }
             if let c = dict["combine"], let content = main.window?.contentView {
                 let tabs = store.children(of: store.focusedSpace.todayContainerID).filter { $0.tab != nil }

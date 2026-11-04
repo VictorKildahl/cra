@@ -117,10 +117,18 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   CATransaction with actions on, so Core Animation's implicit 0.25 s (recorded: 50% at ~95 ms, 90% at ~165 ms in Arc;
   ~105 / ~175 ms in Cra). Colours come from outside (`ColorSpec`): on one
   gold theme the back was #E9B300, the front #FCEDBC and every edge black at ~26%; how the back colour follows the
-  theme was not worked out, so Cra keeps its measured outline over cream. Cra: FolderGlyphView.
-  Dark themes fill both panels with translucent white, so the open back panel's edges showed through the
-  front (reported on X, 4 Nov); Cra masks the back with the front panel's shape (`frontHole`, turned with the
-  front's transform), which is what the opaque light-theme fill does anyway.
+  theme is worked out in the next entry. Cra: FolderGlyphView. Cra masks the back with the front panel's shape
+  (`frontHole`, turned with the front's transform) for the translucent White and Black icon styles.
+- [O] Folder glyph colours (4 Nov, offline Arc 1.171, 2x window captures in sRGB of the default dark theme, a
+  dark gold and a light blue, folders opened over AX `AXDisclosing`): every panel is opaque and comes from the
+  theme's primaryColorPalette. Back = midTone on every theme. Light themes: front tintedLight (#E4F2F8 exact),
+  outline shadedDark (#00607D against #005F7D). Dark themes swap them: front shadedDark (#1F2AFF exact),
+  outline tintedLight (#ECEDFF exact). The back reads a little darker under its 0 → 0.36 shade (midTone #8389FF
+  shows #797FEF). Cra had a translucent white front on dark themes (white 0.14 over the sidebar; an X report on
+  4 Nov said the open folder looked see-through next to light mode) and cream on both light panels.
+  Palette fits (`SpaceTheme.midTone` / `tintedLight`, Arc's three palettes within 2/255): midTone = the theme
+  colour with its OKLab lightness clamped to 0.68…0.794, at the nearer bound the gamut edge of its HSB hue;
+  tintedLight = that colour (floored at 0.68) mixed toward white in sRGB to OKLab 0.95. Cra: FolderTones.
 - [O] Sidebar glyphs (29 Oct, 1x and 2x captures, fitted pixel by pixel): the tab row's hover ✕ is two 2 pt
   round-capped strokes 4.25 pt out from a centre on a whole point, white 0.6 over the hover fill; at 1x it is
   perfectly symmetric (176/142/85), which no SF Symbol size reproduces (xmark 13.5 bold is closest at 2x but

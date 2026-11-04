@@ -255,7 +255,7 @@ final class SpaceListView: NSView, NSDraggingSource {
                 row.content = .folder(FolderRowModel(
                     id: item.id, depth: depth, title: item.title ?? "Folder", renameText: item.title ?? "",
                     editing: renaming == item.id, expanded: expanded, peeked: !peeked.isEmpty, live: item.isLiveFolder,
-                    tint: NSColor(glyph.tint), fill: NSColor(glyph.fill),
+                    tint: NSColor(glyph.tint), fill: NSColor(glyph.fill), back: NSColor(glyph.back),
                     tabCount: expanded ? 0 : store.tabs(under: item.id).count,
                     liveBusy: refreshing.contains(item.id), liveError: item.liveFolder.flatMap(LiveFolderText.warning)?.help,
                     liveSignInURL: item.liveFolder.flatMap(LiveFolderText.warning)?.signInURL,
