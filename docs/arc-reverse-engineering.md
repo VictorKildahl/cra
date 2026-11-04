@@ -2789,3 +2789,39 @@ event with `shiftClickModalEntryPointEnabled` set for the run, AX frames and 60 
   the peeked page on the right. Cra: MainWindowController.closedPeek, LittleWindowController.promoteToSplit.
 - [?] Not measured: the card at other window widths (Cra keeps 80 % of the area), and the Peek with Arc's
   toolbar turned off.
+
+## Capture (Arc 1.171, 4 Nov 2026, X request, Swift metadata + strings + offline Arc at 2x, 120 fps recordings)
+- [O metadata] Module `Capture`: ContentCaptureViewController holds ContentCaptureView (grayscale and darkened layers with
+  shape masks, a lens ShadowView, a camera cursor view, single/double click and pan recognizers, an Esc monitor,
+  `FocusRectAnimator` = a Motion spring on the rect plus `lensOpacity`), ContentCaptureOverlayBubble, CapturedImageView
+  and CapturedImageActionsView (a SwiftUI menu). Actions (`CaptureImageMenuView.Item.ContentType`): easel(String),
+  newEasel, copy, library (toggle), saveAsFile, sendAsMessage, edit, retake. `CaptureType` partialPage / fullWindow
+  (the "pretty screenshot" with wallpaper/tint/watermark is fullWindow). Captures are kept in StorableCaptures.json for
+  the Library's Media.
+- [O strings] Click-to-capture picker (JS, `elementsFromPoint`): score each element under the pointer: −5 if its smaller
+  side < 100, −5 if as wide as the window, −5 if as tall, −5 if over 70 % of the window's area, +5 for IMG/PICTURE/OBJECT,
+  + (w + h) / 2 / 500, −10 if `display: inline`; keep scores ≥ 0, take the best. Live: over a 3-card grid it picked the
+  grid; text, a full-width header and a taller-than-window block got nothing (bubble then says "Drag…").
+- [O live] ⇧⌘2: the page (not the toolbar or sidebar) turns greyscale under a 25 % black veil in ONE frame:
+  value = 0.75 × Rec. 601 luma of the stored sRGB values (243,241,235 → 181; 212,73,76 → 86; 79,155,143 → 98; within 1).
+- [O live] Lens: the element shows in colour 2 pt beyond its edges with 4.5 pt corners, inside a 4 pt ring #161C2F
+  (outer corners 8.5 pt), and a soft shadow outside it (~26 pt falloff, a few pt low). A dragged rectangle gets the ring
+  right outside it (no 2 pt clearance). Moving between elements the rect springs: ~0.15 s to arrive, 0.4 % overshoot,
+  settled by ~0.2 s (≈ stiffness 2000, damping 78, unit mass).
+- [O live] Bubble: white 354 × 65 pt, centred on the page, its bottom 36.5 pt above the page's bottom, ~17 pt corners,
+  a 1 px pink → blue rim, "Click or drag to capture a portion of this page" / "Drag to capture a portion of this page"
+  in 14 pt semibold OverlayBubbleText (#3405 94, reads ~78 %). Around it a dark tinted glow (163 grey → 155,147,148 left,
+  140,143,156 right, gone ~90 pt out), slowly moving. It fades in over ~0.16 s.
+- [O live] Pointers: a dark camera with a white outline over a clickable element; a crosshair with the camera at its
+  top right elsewhere and while dragging.
+- [O live] A first-time tip at the top right: "Next time, hold ⇧⌘ and drag your mouse to capture any time."
+- [O live] After a drag: the capture stays lit with its ring; a menu 273 × 354 pt, 4.5 pt right of the ring, tops level,
+  ~10 pt corners, fill (18,15,44) (Background, dark) even on a light theme: "Send To…" field (13–42.5 pt, white 7 %),
+  rows 40 pt apart (Save to Library ○, Copy, Save…, Send via iMessage…), hairline, Edit, Retake, hairline, New Easel.
+  Symbols 30 % white centred 25 pt in, 14 pt medium text 90 % white from 41 pt; hairlines 10 pt in from both sides.
+  The partial capture does not touch the clipboard by itself. First Esc left the menu up, the second ended the mode.
+- [?] A scripted HID click on an element did not capture (no menu after 0.6 s), so the click result, Copy's toast text
+  and Retake were not observed. Arc's strings have "Confirmation toast when copying a captured image" (text inline).
+- Cra (CaptureOverlay, ContentCapture in CraCore): the same mode over a Page.captureScreenshot picture in a panel over
+  the page; picker run in Cra's isolated world; Copy / Save… / Send via iMessage… / Retake (no Easels, Library Media or
+  Edit in Cra); Copy shows "Screenshot Copied to Clipboard"; the macOS screenshot sound plays when a capture is taken.

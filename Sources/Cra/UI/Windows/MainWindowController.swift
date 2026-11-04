@@ -1439,13 +1439,98 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         b.setZoomLevel(b.zoomLevel() + delta)
     }
 
-    /// Arc's Capture: the visible page as a PNG. Chromium draws it (Page.captureScreenshot), so
-    /// it holds the page whatever display the window is on and whatever is in front of it.
+    /// Arc's Capture (⇧⌘2 again closes it): the page dims, a click takes the element under the
+    /// pointer and a drag a rectangle, then a menu copies, saves or sends it (CaptureOverlay).
+    /// Chromium draws the picture it works on (Page.captureScreenshot), so it holds the page
+    /// whatever display the window is on and whatever is in front of it.
     func capturePage() {
-        guard let b = currentBrowser else { return }
-        b.sendDevToolsMethod("Page.captureScreenshot", params: #"{"format":"png","captureBeyondViewport":false}"#) { [weak self] shot, error in
-            MainActor.assumeIsolated { self?.finishCapture(shot, error: error) }
+        if let open = captureOverlay, open.isOpen { open.close(); return }
+        guard !captureStarting, let rt = browsers.visibleRuntime, rt.browser.isCreated, !rt.browser.isClosed,
+              pageScreenRect(rt) != nil else { return }
+        let b = rt.browser
+        captureStarting = true
+        b.sendDevToolsMethod("Page.captureScreenshot", params: #"{"format":"png","captureBeyondViewport":false}"#) { [weak self, weak b] shot, error in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.captureStarting = false
+                guard let b, let window = self.window, let rt = self.browsers.visibleRuntime, rt.browser === b,
+                      let rect = self.pageScreenRect(rt) else { return }
+                guard let image = Self.screenshotImage(shot) else {
+                    NSLog("Cra: capture failed: %@", error ?? "no data")
+                    self.showToast("Capture Failed")
+                    return
+                }
+                let overlay = CaptureOverlay(over: window, pageRect: rect, shot: image, browser: b)
+                overlay.onFinish = { [weak self] action, png in self?.captureFinished(action, png) }
+                self.captureOverlay = overlay
+            }
         }
+    }
+
+    private var captureOverlay: CaptureOverlay?
+    private var captureStarting = false
+
+    /// The focused page on screen, whether its view is embedded in the card or in its own window.
+    private func pageScreenRect(_ rt: TabRuntime) -> NSRect? {
+        let view = rt.hostWindow.flatMap { EmbeddedPages.pageViews(of: $0)?.last } ?? rt.browser.containerView
+        guard let w = view.window, !view.isHiddenOrHasHiddenAncestor, view.bounds.width > 1, view.bounds.height > 1 else { return nil }
+        return w.convertToScreen(view.convert(view.bounds, to: nil))
+    }
+
+    private static func screenshotImage(_ shot: String?) -> CGImage? {
+        guard let shot, let o = try? JSONSerialization.jsonObject(with: Data(shot.utf8)) as? [String: Any],
+              let b64 = o["data"] as? String, let png = Data(base64Encoded: b64),
+              let source = CGImageSourceCreateWithData(png as CFData, nil) else { return nil }
+        return CGImageSourceCreateImageAtIndex(source, 0, nil)
+    }
+
+    /// The capture menu's choice, once the overlay is down.
+    private func captureFinished(_ action: CaptureOverlay.Action?, _ png: Data?) {
+        captureOverlay = nil
+        if action != nil || NSApp.isActive, window?.isVisible == true {
+            window?.makeKey()
+            currentBrowser?.setFocused(true)
+        }
+        switch action {
+        case .copy?:
+            guard let png else { return }
+            copyCapture(png)
+            showToast("Screenshot Copied to Clipboard")
+        case .save?:
+            if let png { saveCapture(png) }
+        case .message?:
+            if let png { sendCaptureViaMessages(png) }
+        case .retake?:
+            capturePage()
+        case nil:
+            break
+        }
+    }
+
+    private func copyCapture(_ png: Data) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.declareTypes([.png, .tiff], owner: nil)
+        pasteboard.setData(png, forType: .png)
+        if let tiff = NSImage(data: png)?.tiffRepresentation { pasteboard.setData(tiff, forType: .tiff) }
+    }
+
+    /// Arc's "Send via iMessage…": Messages' compose sheet with the capture attached.
+    private func sendCaptureViaMessages(_ png: Data) {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("Cra Captures", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent(Self.captureFileName())
+        guard (try? png.write(to: url)) != nil, let service = NSSharingService(named: .composeMessage),
+              service.canPerform(withItems: [url]) else {
+            showToast("Messages Isn't Available")
+            return
+        }
+        service.perform(withItems: [url])
+    }
+
+    private static func captureFileName() -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
+        return "Cra Capture \(f.string(from: Date())).png"
     }
 
     // MARK: Sidebar
@@ -2123,6 +2208,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// Arc's "Capture the full page": the whole document, beyond the viewport, as a PNG.
     func captureFullPage() {
+        captureOverlay?.close()
         guard let b = currentBrowser else { return }
         showToast("Capture in Progress")
         // Both completions come on the main queue.
@@ -2144,32 +2230,22 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// the toast's Save puts it in a file. Finder stays where it is (GitHub #90).
     private func finishCapture(_ shot: String?, error: String?) {
         guard let shot, let o = try? JSONSerialization.jsonObject(with: Data(shot.utf8)) as? [String: Any],
-              let b64 = o["data"] as? String, let png = Data(base64Encoded: b64), let image = NSImage(data: png) else {
+              let b64 = o["data"] as? String, let png = Data(base64Encoded: b64), NSImage(data: png) != nil else {
             NSLog("Cra: capture failed: %@", error ?? "no data")
             showToast("Capture Failed")
             return
         }
-        let pasteboard = NSPasteboard.general
-        pasteboard.declareTypes([.png, .tiff], owner: nil)
-        pasteboard.setData(png, forType: .png)
-        if let tiff = image.tiffRepresentation { pasteboard.setData(tiff, forType: .tiff) }
-        Self.shutter?.stop()
-        Self.shutter?.play()
+        copyCapture(png)
+        CaptureSound.play()
         showToast("Screenshot Copied to Clipboard", action: ShinyToast.Action(title: "Save") { [weak self] in self?.saveCapture(png) })
     }
-
-    /// macOS's own screenshot sound.
-    private static let shutter = NSSound(contentsOfFile: "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/system/Screen Capture.aif",
-                                         byReference: true)
 
     /// The toast's Save: Arc's "Save Capture Image" panel, in Downloads.
     private func saveCapture(_ png: Data) {
         guard let window else { return }
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
         let panel = NSSavePanel()
         panel.title = "Save Capture Image"
-        panel.nameFieldStringValue = "Cra Capture \(f.string(from: Date())).png"
+        panel.nameFieldStringValue = Self.captureFileName()
         panel.allowedContentTypes = [.png]
         panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
         panel.beginSheetModal(for: window) { [weak self] response in
