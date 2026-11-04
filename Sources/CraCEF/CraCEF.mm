@@ -1201,9 +1201,10 @@ public:
         // A target=_blank link the user clicked (Shift-clicked: a new window) may open in a
         // Peek; window.open with features (a sign-in popup) is CEF_WOD_NEW_POPUP and stays one.
         if (user_gesture && (target_disposition == CEF_WOD_NEW_FOREGROUND_TAB || target_disposition == CEF_WOD_NEW_WINDOW)
-            && [o.delegate respondsToSelector:@selector(browser:opensPeekForURL:shiftClick:)]
+            && [o.delegate respondsToSelector:@selector(browser:opensPeekForURL:shiftClick:newTab:)]
             && [o.delegate browser:o opensPeekForURL:NSStringFromCef(target_url)
-                        shiftClick:target_disposition == CEF_WOD_NEW_WINDOW]) return true;
+                        shiftClick:target_disposition == CEF_WOD_NEW_WINDOW
+                           newTab:target_disposition == CEF_WOD_NEW_FOREGROUND_TAB]) return true;
         BOOL background = (target_disposition == CEF_WOD_NEW_BACKGROUND_TAB);
         CraBrowser* host = [o.delegate browser:o popupHostForURL:NSStringFromCef(target_url) inBackground:background];
         if (!host) return true;  // blocked
@@ -1477,8 +1478,8 @@ public:
         if (!user_gesture || is_redirect) return false;
         cef_transition_type_t tt = request->GetTransitionType();
         if ((tt & TT_SOURCE_MASK) != TT_LINK || (tt & TT_FORWARD_BACK_FLAG)) return false;
-        if (![o.delegate respondsToSelector:@selector(browser:opensPeekForURL:shiftClick:)]) return false;
-        return [o.delegate browser:o opensPeekForURL:NSStringFromCef(request->GetURL()) shiftClick:NO];
+        if (![o.delegate respondsToSelector:@selector(browser:opensPeekForURL:shiftClick:newTab:)]) return false;
+        return [o.delegate browser:o opensPeekForURL:NSStringFromCef(request->GetURL()) shiftClick:NO newTab:NO];
     }
 
     bool OnOpenURLFromTab(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, const CefString& target_url,
@@ -1487,8 +1488,8 @@ public:
         if (!o) return false;
         // Shift-click (Chrome: a new window).
         if (user_gesture && target_disposition == CEF_WOD_NEW_WINDOW
-            && [o.delegate respondsToSelector:@selector(browser:opensPeekForURL:shiftClick:)]
-            && [o.delegate browser:o opensPeekForURL:NSStringFromCef(target_url) shiftClick:YES]) return true;
+            && [o.delegate respondsToSelector:@selector(browser:opensPeekForURL:shiftClick:newTab:)]
+            && [o.delegate browser:o opensPeekForURL:NSStringFromCef(target_url) shiftClick:YES newTab:NO]) return true;
         BOOL background = (target_disposition == CEF_WOD_NEW_BACKGROUND_TAB);
         [o.delegate browser:o requestsNewTabWithURL:NSStringFromCef(target_url) inBackground:background];
         return true;

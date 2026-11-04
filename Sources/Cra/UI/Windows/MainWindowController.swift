@@ -1284,19 +1284,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
     }
 
-    /// Arc's Peek (Settings ▸ Tabs ▸ Links): a link to another site clicked in a favorite or
-    /// pinned tab (any tab with "In every tab" on), or any Shift-clicked link, opens over the
-    /// window and the tab stays put.
-    func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool) -> Bool {
-        guard !isIncognito, SiteKey.site(of: url) != nil else { return false }
-        if shiftClick {
-            guard store.settings.peekOnShiftClick else { return false }
-        } else {
-            // Another host, not another site: Arc peeks from pin.lvh.me to away.lvh.me (GitHub #139).
-            guard store.settings.peekLinksToOtherSites,
-                  store.settings.peekInEveryTab || store.isPinned(tabID),
-                  PinnedNavigation.linkLeavesHost(url, from: pageURL) else { return false }
-        }
+    /// Arc's Peek (PeekTrigger): the link opens over the window and the tab stays put.
+    func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool, newTab: Bool) -> Bool {
+        guard !isIncognito, PeekTrigger.opens(url, from: pageURL, shiftClick: shiftClick, newTab: newTab,
+                                               fromPinned: store.isPinned(tabID), settings: store.settings) else { return false }
         app.openPeek(url: url, over: self, fromTab: tabID)
         return true
     }
@@ -1325,11 +1316,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// Arc fades the page under a Peek to 28 % over the window's background, its sidebar as it is.
-    func setPeekVeil(_ on: Bool, duration: TimeInterval) {
+    func setPeekVeil(_ on: Bool, duration: TimeInterval, timing: CAMediaTimingFunction? = nil) {
         let alpha: CGFloat = on ? PeekLayout.pageAlpha : 1
         let pages = browsers.runtimes.values.compactMap(\.hostWindow).filter { $0.parent === window }
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = duration
+            ctx.timingFunction = timing
             shell.contentContainer.animator().alphaValue = alpha
             for w in pages { w.animator().alphaValue = alpha }
         }
@@ -1346,6 +1338,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     private var peeks: [LittleWindowController] { app.littleWindows.filter { $0.peekParent === self } }
+
+    /// The Peek closed last over this window and the tab it came from: Arc's ⇧⌘T brings it back
+    /// when nothing was archived after it.
+    var closedPeek: (url: String, tabID: UUID?, at: Date)?
 
     // MARK: Tabs
 

@@ -937,7 +937,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // Arc: "Close current tab or window".
             if current != nil { main.closeCurrentTab() } else { main.window?.performClose(nil) }
         case "closeWindow": main.window?.performClose(nil)
-        case "reopenClosedTab": if !main.isIncognito { store.reopenLastArchived() }  // incognito tabs leave nothing to restore
+        case "reopenClosedTab":
+            guard !main.isIncognito else { break }  // incognito tabs leave nothing to restore
+            // Arc: a Peek closed after the last archived tab comes back, over the tab it came from.
+            if let peek = main.closedPeek, peek.at > store.archive.first?.archivedAt ?? .distantPast {
+                main.closedPeek = nil
+                if let id = peek.tabID, store.item(id) != nil { store.selectTab(id, window: main.windowID) }
+                openPeek(url: peek.url, over: main, fromTab: peek.tabID)
+            } else {
+                store.reopenLastArchived()
+            }
         case "copyURL":
             if let url = current.flatMap({ store.item($0)?.tab?.url }) {
                 copy(url)

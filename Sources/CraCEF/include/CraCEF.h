@@ -110,7 +110,7 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 /// Arc's Peek: a link the user clicked (`shiftClick` NO: before it navigates the page or
 /// opens as a target=_blank tab) or Shift-clicked (YES, instead of a new window). Return
 /// YES to show it in a Peek; the page then stays where it is.
-- (BOOL)browser:(CraBrowser *)browser opensPeekForURL:(NSString *)url shiftClick:(BOOL)shiftClick;
+- (BOOL)browser:(CraBrowser *)browser opensPeekForURL:(NSString *)url shiftClick:(BOOL)shiftClick newTab:(BOOL)newTab;
 /// The DevTools frontend shows `panel` ("elements", "console", "network", …): on load, and
 /// on every switch, from Cra or the frontend's own tab bar.
 - (void)browser:(CraBrowser *)browser devToolsShowsPanel:(NSString *)panel;

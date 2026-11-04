@@ -75,7 +75,7 @@ protocol BrowserManagerDelegate: AnyObject {
     func browserManagerActivationRequested(_ tabID: UUID, byPage: Bool)
     /// Arc's Peek: a link the user clicked (or Shift-clicked) in `tabID`, whose page is at
     /// `pageURL`. Return true when it opens in a Peek instead.
-    func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool) -> Bool
+    func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool, newTab: Bool) -> Bool
 }
 
 /// Creates, shows, hides and tears down CEF browsers inside a container view.
@@ -1002,9 +1002,9 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         return host
     }
 
-    func browser(_ browser: CraBrowser, opensPeekForURL url: String, shiftClick: Bool) -> Bool {
+    func browser(_ browser: CraBrowser, opensPeekForURL url: String, shiftClick: Bool, newTab: Bool) -> Bool {
         guard let id = tabID(of: browser), !browser.isIncognito else { return false }
-        return delegate?.browserManagerOpensPeek(url: url, fromTab: id, pageURL: browser.currentURL, shiftClick: shiftClick) ?? false
+        return delegate?.browserManagerOpensPeek(url: url, fromTab: id, pageURL: browser.currentURL, shiftClick: shiftClick, newTab: newTab) ?? false
     }
 
     func devToolsHostView(for browser: CraBrowser) -> NSView? {

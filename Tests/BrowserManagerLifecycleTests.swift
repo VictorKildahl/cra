@@ -749,5 +749,5 @@ private final class Observer: BrowserManagerDelegate {
         activatedTabs.append(tabID)
         activatedByPage.append(byPage)
     }
-    func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool) -> Bool { false }
+    func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool, newTab: Bool) -> Bool { false }
 }
