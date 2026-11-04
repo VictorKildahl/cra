@@ -54,6 +54,18 @@ struct SidebarBackdropTests {
         #expect(SidebarBackdrop.floatingLift(dark: true, reduceTransparency: true, lift: 0.35) == 0.15)
     }
 
+    /// AppKit's material follows its window, not the app (GitHub #156): a window restored from the Dock
+    /// is miniaturized and holds neither key nor main for the whole genie, although the app is active.
+    @Test func activeLookFollowsTheWindowLikeAppKit() {
+        #expect(SidebarBackdrop.windowActive(appActive: true, miniaturized: false, holdsKeyOrMain: true))
+        // Restore from the Dock: the app activates first, the window becomes main at the end.
+        #expect(!SidebarBackdrop.windowActive(appActive: true, miniaturized: true, holdsKeyOrMain: false))
+        // Minimized while the app stays active, or another window of the app in front.
+        #expect(!SidebarBackdrop.windowActive(appActive: true, miniaturized: false, holdsKeyOrMain: false))
+        // Another app in front: the window stays main but the app isn't active.
+        #expect(!SidebarBackdrop.windowActive(appActive: false, miniaturized: false, holdsKeyOrMain: true))
+    }
+
     @Test func logLineNamesTheState() {
         #expect(resolve(solid: true).logLine(active: true, reduceTransparency: false) == "blur, active, dim 0.30")
         #expect(resolve(solid: true, fullscreen: true).logLine(active: true, reduceTransparency: false) == "desktop tint, active, dim 0.30")

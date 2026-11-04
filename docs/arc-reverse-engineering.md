@@ -2189,6 +2189,22 @@ Theme palettes in a hand-built space can be borrowed; only the `background` styl
   capture at all, solid themes rest at dim 1, lift 0.63 active or inactive (Arc's value doesn't move when its
   fullscreen swipe lands, Cra's stepped from the inactive 212), light vibrant themes at their inactive look, and the floating sidebar drops its white lift so the
   dark material's fill shows under the colour like Arc's panel (Cra pinned − floating 45/46/45, Arc 54/46/45); cra.log adds ", reduce transparency" and the diagnostics export names the setting.
+- [O] Activation and fullscreen with Reduce transparency off (4 Nov 2026, issue #156 on 0.1.29; built-in XDR display,
+  120 fps ScreenCaptureKit samples; a probe window with a hudWindow NSVisualEffectView beside a copy of ShellView's
+  backdrop logic, logging both layer trees every 4 ms; an offline Arc 1.171; a Cra test copy with a solid #F25E6B 0.8
+  space). AppKit's material follows its window, not the app: minimizing goes flat as the window resigns main/key, while
+  the app is still active, and a restore from the Dock while another app is active keeps the opaque fill through the
+  genie until the window is main again, 0.41 s after `didBecomeActive`. Cra followed the app, so it re-inserted the live
+  capture at activation, 0.43 s before the window had landed. That's a capture of a window still flying out of the Dock:
+  the reporter's matte (substitute colour) or sharp frames on restore. Cra now uses `SidebarBackdrop.windowActive`: app
+  active, not miniaturized, and the key or main window is this window or one of its child windows (page, DevTools).
+  Measured after the change: Dock restore active at +0.46 s (before: +0.03 s), minimize flat at once, plain activations
+  unchanged (one step at +0.03 s), the command bar's panel keeps the sidebar active. Not reproduced here: a dropout on
+  a plain activation (Arc, AppKit and Cra all switch in one frame, no matte or sharp frame). Fullscreen: AppKit swaps the
+  capture for the desktop tint at `willEnterFullScreen`, the same frame as Cra; Arc's sidebar jumps at the start of the
+  zoom (16/12/31 → 41/33/50 on its default theme) and steps ~2 levels when the Space settles (45/30/43 → 43/30/45), and
+  Cra does the same (189/112/120 → 216/133/137 at the start, 220/124/123 → 218/124/126 at the end), so no fullscreen
+  difference against Arc reproduced on this Mac.
 - [O] Tab list scroller: AppKit overlay scroller (AXScrollBar, 17 pt track) shown while scrolling, then faded;
   the knob is 4 pt wide, 3 pt in from the sidebar edge, white 49 % on a dark theme, no track. Cra:
   `SidebarScroller`, 10 pt wide so it stays in the gutter right of the rows (knob on Arc's exact columns).

@@ -70,6 +70,17 @@ public struct SidebarBackdrop: Equatable, Sendable {
             liftBottom: full ? vibrant.liftBottom : vibrant.liftInactive)
     }
 
+    /// Whether a window's sidebar draws its active look. It is AppKit's `followsWindowActiveState`, and so
+    /// Arc's sidebar: the app is active and the window holds key or main. Cra's page windows are children of
+    /// the window and take key while a page has focus, so they count as the window. Measured on
+    /// NSVisualEffectView (GitHub #156): minimizing goes inactive at once, while the app is still active,
+    /// and a restore from the Dock keeps the flat fill through the genie until the window is main again,
+    /// about 0.4 s after the app became active. Following the app instead asked for a live capture of a
+    /// window still flying out of the Dock, which showed matte or sharp frames as it landed.
+    public static func windowActive(appActive: Bool, miniaturized: Bool, holdsKeyOrMain: Bool) -> Bool {
+        appActive && !miniaturized && holdsKeyOrMain
+    }
+
     /// The white lift over the floating sidebar's material (dark hudWindow), light themes. Under
     /// Reduce transparency that material is its opaque dark fill, 38, which is Arc's floating panel
     /// under the space colour (GitHub #156: 156/64/72 at #F25E6B 0.8), so the lift goes.

@@ -192,11 +192,42 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         shell.onPaneFrames = { [weak self] frames in self?.positionPageWindows(frames) }
         shell.onAnimatePaneFrames = { [weak self] frames, d, timing in self?.animatePageWindows(to: frames, duration: d, timing: timing) }
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.shell.windowActive = true; self?.sidebarUI.appActive = true }
+            Task { @MainActor in self?.refreshMaterialActive(); self?.sidebarUI.appActive = true }
         }
         NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.shell.windowActive = false; self?.sidebarUI.appActive = false }
+            Task { @MainActor in self?.refreshMaterialActive(); self?.sidebarUI.appActive = false }
         }
+        // Any window: key and main move between this window, its page windows and other windows.
+        for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification, NSWindow.didBecomeMainNotification,
+                     NSWindow.didResignMainNotification, NSWindow.didMiniaturizeNotification, NSWindow.didDeminiaturizeNotification] {
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.refreshMaterialActive() }
+            }
+        }
+    }
+
+    /// The sidebar's material follows this window's active state, as AppKit's does for Arc's sidebar
+    /// (SidebarBackdrop.windowActive, GitHub #156). Going inactive waits one turn of the run loop: key
+    /// moving between this window and one of its page windows resigns one before the other takes it,
+    /// and the sidebar must not flash its flat fill in between.
+    private func refreshMaterialActive() {
+        if materialActiveNow() { shell.windowActive = true; return }
+        guard shell.windowActive else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.materialActiveNow() else { return }
+            self.shell.windowActive = false
+        }
+    }
+
+    private func materialActiveNow() -> Bool {
+        guard let window, !isTornDown else { return false }
+        func holds(_ w: NSWindow?) -> Bool {
+            var w = w
+            while let x = w { if x === window { return true }; w = x.parent }
+            return false
+        }
+        return SidebarBackdrop.windowActive(appActive: NSApp.isActive, miniaturized: window.isMiniaturized,
+                                            holdsKeyOrMain: holds(NSApp.keyWindow) || holds(NSApp.mainWindow))
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -2709,7 +2740,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     func windowDidBecomeKey(_ notification: Notification) {
         guard (notification.object as? NSWindow) === window else { return }
-        shell.windowActive = true
+        refreshMaterialActive()
         browsers.windowVisibilityChanged(covered: false)
         reclaimPages()
     }
