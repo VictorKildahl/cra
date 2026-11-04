@@ -289,6 +289,15 @@ enum SidebarMenus {
         let store = list.store, actions = list.actions
         let space = list.spaceID
         let menu = menu()
+        // Arc's sidebar menu starts with the space's look, as the header's does (#170).
+        if let s = store.space(space) {
+            if let header = list.header, !store.hidesSpaceHeader(space) {
+                add(menu, "Change Space Icon…") { [weak header] in if let header { actions.changeSpaceIcon(s, header) } }
+                add(menu, "Rename Space…") { [weak header] in header?.beginRename() }
+            }
+            add(menu, "Edit Theme Color…") { actions.editSpaceTheme(s) }
+            menu.addItem(.separator())
+        }
         add(menu, action: "newTab", "New Tab") { actions.openCommandBar(.newTab) }
         add(menu, action: "newFolder") { actions.performAction("newFolder") }
         add(menu, action: "newGitHubLiveFolder", enabled: store.liveFolder(.github, inSpace: space) == nil) {

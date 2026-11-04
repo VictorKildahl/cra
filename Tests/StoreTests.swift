@@ -34,6 +34,7 @@ enum StoreTests {
         closeSuccessor()
         favoritesEmptyState()
         sharedFavorites()
+        themePreview()
         print("Store: \(checks) checks passed")
     }
 
@@ -361,6 +362,41 @@ enum StoreTests {
         expect(!store.allTabs().contains { $0.tab?.url == "https://example.com/left-behind" }, "rather than landing in a space")
         expect(store.item(secret.id) != nil, "an open incognito window keeps its tabs")
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    /// The theme editor (#170): a change shows at once but goes to disk only when the editor
+    /// commits; Escape or Cancel puts the stored theme back, and a save in between keeps it off disk.
+    @MainActor
+    private static func themePreview() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let id = store.focusedSpace.id, stored = store.focusedSpace.theme
+        let red = SpaceThemeVariants.theme(key: ["#F25E6B"], intensity: 0.8, noise: 0, appearance: "light")
+        func savedTheme() -> SpaceTheme? {
+            store.save()
+            Thread.sleep(forTimeInterval: 2.5)
+            let d = JSONDecoder()
+            d.dateDecodingStrategy = .iso8601
+            let doc = try? d.decode(SidebarDocument.self, from: Data(contentsOf: AppPaths.file("sidebar.json")))
+            return doc?.spaces.first { $0.id == id }?.theme
+        }
+        store.previewTheme(red, forSpace: id)
+        expect(store.space(id)?.theme == red, "a previewed theme shows at once")
+        store.rename(store.createTab(url: "https://example.com/during").id, to: "During")
+        expect(savedTheme() == stored, "a save while the editor is open writes the stored theme")
+        store.endThemePreview(forSpace: id, keep: false)
+        expect(store.space(id)?.theme == stored, "Escape puts the stored theme back")
+        let blue = SpaceThemeVariants.theme(key: ["#6CBAD9"], intensity: 0.8, noise: 0, appearance: "light")
+        store.previewTheme(red, forSpace: id)
+        store.previewTheme(blue, forSpace: id)
+        store.endThemePreview(forSpace: id, keep: false)
+        expect(store.space(id)?.theme == stored, "several changes undo to the theme from before the editor opened")
+        store.previewTheme(blue, forSpace: id)
+        store.endThemePreview(forSpace: id, keep: true)
+        expect(store.space(id)?.theme == blue && savedTheme() == blue, "a commit keeps the theme and writes it")
+        store.previewTheme(red, forSpace: id)
+        if var s = store.space(id) { s.title = "Saved"; s.theme = red; store.updateSpace(s) }
+        store.endThemePreview(forSpace: id, keep: false)
+        expect(store.space(id)?.theme == red && savedTheme() == red, "Save in the sheet writes the theme and ends the preview")
     }
 
     /// Edit Pinned URL… (#54, PR #55 by Anoninz): a new pinned URL keeps the item's

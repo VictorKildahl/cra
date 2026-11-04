@@ -206,11 +206,18 @@ struct SpaceThemeAppearanceTests {
             guard let a, let x = HexColor.components(a), let y = HexColor.components(b) else { return false }
             return max(abs(x.r - y.r), abs(x.g - y.g), abs(x.b - y.b)) * 255 <= 6
         }
-        let theme = SpaceThemeVariants.theme(key: ["#8389FF"], intensity: 0.5, noise: 0, appearance: "auto")
-        #expect(theme.followsSystem && theme.key == ["#8389FF"])
+        let theme = SpaceThemeVariants.theme(key: ["#8389FF", "#FF83C8"], intensity: 0.5, noise: 0, appearance: "auto")
+        #expect(theme.followsSystem && theme.key == ["#8389FF", "#FF83C8"])
         let light = theme.resolved(systemDark: false), dark = theme.resolved(systemDark: true)
-        #expect(light.colors == ["#8389FF"] && !light.isDark)
+        #expect(light.colors == ["#8389FF", "#FF83C8"] && !light.isDark)
         #expect(close(dark.accent, "#01021F") && dark.isDark)
+        // One colour on Auto is Arc's one-dot `single` theme: that colour, flat, on the side it suits (#170).
+        let one = SpaceThemeVariants.theme(key: ["#8389FF"], intensity: 0.5, noise: 0, appearance: "auto")
+        #expect(one.colors == ["#8389FF", "#8389FF"] && one.solid && one.appearance == "light" && one.key == ["#8389FF"])
+        // In Light it is the same flat colour; in Dark one flat colour keeping its hue.
+        #expect(SpaceThemeVariants.theme(key: ["#8389FF"], intensity: 0.5, noise: 0, appearance: "light").solid)
+        let darkOne = SpaceThemeVariants.theme(key: ["#8389FF"], intensity: 0.5, noise: 0, appearance: "dark")
+        #expect(darkOne.isDark && darkOne.colors.count == 2 && darkOne.colors[0] == darkOne.colors[1])
         #expect(SpaceThemeVariants.theme(key: ["#8389FF"], intensity: 0.5, noise: 0, appearance: "dark").dark == nil)
         // A colour too dark for a light theme is lifted to Arc's default light half.
         let lifted = SpaceThemeVariants.light(key: ["#0000F2"], intensity: 0.5, noise: 0)

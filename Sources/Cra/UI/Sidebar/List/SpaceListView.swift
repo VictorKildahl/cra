@@ -45,6 +45,8 @@ final class SpaceListView: NSView, NSDraggingSource {
     }
 
     let spaceID: UUID
+    /// The column's header: the list's menu opens the icon picker on it and renames there.
+    weak var header: SpaceHeaderView?
     let store: SidebarStore
     let ui: SidebarUIState
     let actions: SidebarActions

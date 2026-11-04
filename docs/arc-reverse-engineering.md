@@ -2743,6 +2743,30 @@ that waits 3 s before answering and then serves a page whose image takes 5 s.
 - [?] Not worked out: how Arc's editor maps a picked colour to its halves (the pad's `lightnessRange` and the bias
   value). Cra's halves are fitted to Arc's default theme only.
 
+## The theme editor's presets and commit (Arc 1.171, 4 Nov 2026, issue #170, asset catalog + strings)
+- [O static] The swatches are named colours in `ARCClients_BaseAssets.bundle`'s Assets.car (`assetutil --info`),
+  four groups of nine: ColorPickerBrand1–9, Drab1–9, Pastel1–9, Greyscale1–9, defined in sRGB, extended linear
+  sRGB or Display P3. As sRGB (what Arc writes to StorableSidebar.json; Brand8 saved as 0.4236, 0.7286, 0.8512):
+  Brand #F2EAE4 #F29BBB #A6729D #F25E6B #FF8558 #F8D558 #34E895 #6CBAD9 #666789; Drab #4E3A5A #693558 #8F4042
+  #B16D40 #D7B35D #CDCCA4 #7AA982 #226149 #26456B; Pastel #FEFBFA #FFE9F3 #F1D1EC #FFCBD1 #FFE0D3 #FFF9E5 #DEFDEB
+  #DCF3FC #C5C6E5; Greyscale #FFFFFF #E6E6E6 #CCCCCC #B2B2B2 #808080 #666666 #333333 #1A1A1A #000000. The nine
+  swatches sampled from captures on 1 Nov were these Brand colours as drawn (#E1686F for #F25E6B).
+- [O strings] A swatch is a `colorSet` with `addComplimentary` (the preset view's fields), sent as
+  `didSelectColorSet`; its AX label is "Set space color to Catalog color: … ColorPickerBrandN". The arrows are
+  "Move to previous preset page." / "Move to next preset page." (`didTapPreviousPresetPage`, `presetCount`,
+  `currentPresetPage`, defaults `currentThemeEditorPresetPage`). The editor state has an `undoStack` and a
+  `didKeyDownEscape` action.
+- [O reporter, #170] Five pages: bright singles, bright pairs, pastels, muted pairs, greys (Brand, Brand +
+  complement, Pastel, Drab + complement, Greyscale).
+- Cra: SpaceColorPresets (CraCore) holds the colours and pages; a pair is the colour and the pad's +40° colour
+  (SpaceColorWheel.complement). One colour is saved as Arc's one-dot `single` theme (SpaceTheme.solid, on the side
+  the colour suits); two or three as before. The Edit Space sheet shows the same card as Edit Theme Color…, and
+  the list's right-click menu starts with Change Space Icon…, Rename Space…, Edit Theme Color… like the header's.
+  Both preview every change without writing it (SidebarStore.previewTheme); Save, or a click outside the card,
+  writes it, Cancel or Escape put the stored theme back.
+- [?] Not checked live yet: the exact complement Arc adds for a pair, and whether Escape in Arc's editor reverts
+  (Cra reverts, as Victor chose on #170).
+
 ## Little Arc: Copy URL and Shift-click (Arc 1.171, 3 Nov 2026, X DM, offline Arc)
 
 An offline Arc (fake home, no network) with a Little Arc on a file:// page, ⇧⌘C and a Shift-click sent as HID

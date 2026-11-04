@@ -7,7 +7,6 @@ extension MainWindowController {
     func showSpaceIconPicker(space: Space, anchor: NSView) {
         let popover = NSPopover()
         popover.behavior = .transient
-        popover.appearance = NSAppearance(named: space.theme.palette.isDark ? .darkAqua : .aqua)
         let id = space.id, store = self.store
         let set: (String, String?) -> Void = { [weak popover] emoji, symbol in
             guard var s = store.space(id) else { return }
@@ -32,23 +31,22 @@ extension MainWindowController {
         popover.show(relativeTo: rect, of: content, preferredEdge: content.isFlipped ? .maxY : .minY)
     }
 
-    /// Edit Theme Color…: Arc's editor in a panel against the sidebar's edge at the window's top,
-    /// applying every change at once. Escape or a click outside closes it.
+    /// Edit Theme Color…: Arc's editor in a panel against the sidebar's edge at the window's top.
+    /// Every change shows in the space at once but is written only when the editor commits, as in
+    /// Arc: a click anywhere else keeps it, Escape puts the stored theme back.
     func showSpaceStyleEditor(space: Space, beside anchor: NSView? = nil) {
         guard let window else { return }
         if let open = window.childWindows?.first(where: { $0 is StyleEditorPanel }) { open.close() }
         let store = self.store, id = space.id
-        let editor = SpaceStyleEditor(theme: space.theme) { theme in
-            guard var s = store.space(id) else { return }
-            s.theme = theme
-            store.updateSpace(s)
-        }
+        let editor = SpaceStyleEditor(theme: space.theme) { theme in store.previewTheme(theme, forSpace: id) }
         // The card sits 12 pt into its 382 × 534 pt window (19 pt above the bottom), room for the shadow.
         let size = NSSize(width: 382, height: 534)
         // From a Spaces page card Arc puts it flush with the card's right edge.
         let x = (anchor.flatMap { v in v.window.map { $0.convertToScreen(v.convert(v.bounds, to: nil)).maxX } }
             ?? window.frame.minX + (shell.sidebarVisible ? shell.sidebarWidth : 0)).rounded()
-        let panel = StyleEditorPanel(contentRect: NSRect(x: x, y: window.frame.maxY - size.height, width: size.width, height: size.height))
+        let panel = StyleEditorPanel(contentRect: NSRect(x: x, y: window.frame.maxY - size.height, width: size.width, height: size.height)) { keep in
+            store.endThemePreview(forSpace: id, keep: keep)
+        }
         let host = NSHostingView(rootView: editor.shadow(color: .black.opacity(0.3), radius: 10, y: 4)
             .padding(.top, 12).padding(.horizontal, 13.5).padding(.bottom, 19))
         host.sizingOptions = []
@@ -56,6 +54,7 @@ extension MainWindowController {
         window.addChildWindow(panel, ordered: .above)
         panel.makeKeyAndOrderFront(nil)
     }
+
     /// Set Profile ▸ New Profile…: Arc's dialog over the dimmed window; Next asks which spaces use
     /// the profile (this one ticked) and Create Profile moves them into it (pages already open
     /// reload in it, BrowserManager).
@@ -100,12 +99,17 @@ extension MainWindowController {
     func showManageSpaces() { showLibrary(.spaces) }
 }
 
-/// The theme editor's window: borderless and see-through around its card; closes on Escape or a
-/// click anywhere else in the app.
+/// The theme editor's window: borderless and see-through around its card. Escape closes it and
+/// drops the change; a click anywhere else in the app, or the app going to the background,
+/// closes it and keeps the change.
 final class StyleEditorPanel: NSPanel {
     private var monitor: Any?
+    private var resignObserver: Any?
+    private var parentObserver: Any?
+    private var onClose: ((Bool) -> Void)?
 
-    init(contentRect: NSRect) {
+    init(contentRect: NSRect, onClose: @escaping (_ keep: Bool) -> Void) {
+        self.onClose = onClose
         super.init(contentRect: contentRect, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .clear
@@ -116,20 +120,44 @@ final class StyleEditorPanel: NSPanel {
             if e.type == .keyDown {
                 // Escape closes it wherever the key goes (SwiftUI keeps it from cancelOperation).
                 guard e.keyCode == 53 else { return e }
-                self.close()
+                self.close(keep: false)
                 return nil
             }
-            if e.window !== self { self.close() }
+            if e.window !== self { self.close(keep: true) }
             return e
+        }
+        resignObserver = NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil,
+                                                                queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.close(keep: true) }
+        }
+        // The browser window closing under it commits too.
+        parentObserver = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: nil,
+                                                                queue: .main) { [weak self] note in
+            MainActor.assumeIsolated {
+                guard let self, let w = note.object as? NSWindow, w === self.parent else { return }
+                self.close(keep: true)
+            }
         }
     }
 
     override var canBecomeKey: Bool { true }
-    override func cancelOperation(_ sender: Any?) { close() }
+    override func cancelOperation(_ sender: Any?) { close(keep: false) }
+
+    func close(keep: Bool) {
+        let done = onClose
+        onClose = nil
+        done?(keep)
+        close()
+    }
 
     override func close() {
+        if onClose != nil { close(keep: true); return }
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
+        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
+        resignObserver = nil
+        if let parentObserver { NotificationCenter.default.removeObserver(parentObserver) }
+        parentObserver = nil
         parent?.removeChildWindow(self)
         super.close()
     }

@@ -29,6 +29,7 @@ final class SpaceColumnView: NSView {
         super.init(frame: .zero)
         favorites.onHeightChange = { [weak self] animated in self?.relayout(animated: animated) }
         header.onHiddenChange = { [weak self] in self?.relayout(animated: true) }
+        list.header = header
         addSubview(list)
         addSubview(favorites)
         addSubview(header)

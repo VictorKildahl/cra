@@ -10,6 +10,9 @@ final class SidebarStore {
     // MARK: State
 
     private(set) var spaces: [UUID: Space] = [:]
+    /// The stored theme of a space whose theme an editor is previewing (`previewTheme`): what
+    /// goes to disk until the editor saves, and what Cancel or Escape puts back.
+    @ObservationIgnored private var storedThemes: [UUID: SpaceTheme] = [:]
     private(set) var spaceOrder: [UUID] = []
     /// Profiles besides Default, in the order they were made.
     private(set) var profiles: [BrowserProfile] = []
@@ -621,7 +624,13 @@ final class SidebarStore {
     var document: SidebarDocument {
         var hidden = Set<UUID>()
         for sid in incognitoSpaceIDs { if let s = spaces[sid] { collectSubtree(of: s, into: &hidden) } }
-        return SidebarDocument(version: 1, spaceOrder: spaceOrder, spaces: orderedSpaces,
+        // A theme still being previewed goes to disk as it was stored.
+        let saved = storedThemes.isEmpty ? orderedSpaces : orderedSpaces.map { s in
+            var s = s
+            if let t = storedThemes[s.id] { s.theme = t }
+            return s
+        }
+        return SidebarDocument(version: 1, spaceOrder: spaceOrder, spaces: saved,
                                items: hidden.isEmpty ? Array(items.values) : items.values.filter { !hidden.contains($0.id) },
                                profiles: profiles, profileFavorites: profileFavorites.isEmpty ? nil : profileFavorites)
     }
@@ -1655,8 +1664,29 @@ final class SidebarStore {
 
     func updateSpace(_ space: Space) {
         guard spaces[space.id] != nil else { return }
+        storedThemes[space.id] = nil
         spaces[space.id] = space
         touch()
+    }
+
+    /// A theme editor's change: drawn at once wherever the space shows, not written (Arc writes
+    /// StorableSidebar.json when the editor commits). `endThemePreview` keeps or drops it.
+    func previewTheme(_ theme: SpaceTheme, forSpace id: UUID) {
+        guard var s = spaces[id] else { return }
+        if storedThemes[id] == nil { storedThemes[id] = s.theme }
+        s.theme = theme
+        spaces[id] = s
+    }
+
+    /// The editor closed: `keep` writes the previewed theme, otherwise the stored one comes back.
+    func endThemePreview(forSpace id: UUID, keep: Bool) {
+        guard let stored = storedThemes.removeValue(forKey: id), var s = spaces[id] else { return }
+        if keep {
+            if s.theme != stored { touch() }
+        } else if s.theme != stored {
+            s.theme = stored
+            spaces[id] = s
+        }
     }
 
     func deleteSpace(_ id: UUID) {
@@ -1672,6 +1702,7 @@ final class SidebarStore {
         items[space.pinnedContainerID] = nil
         items[space.todayContainerID] = nil
         spaces[id] = nil
+        storedThemes[id] = nil
         spaceOrder.removeAll { $0 == id }
         var windows = prefs.windows
         for i in windows.indices {

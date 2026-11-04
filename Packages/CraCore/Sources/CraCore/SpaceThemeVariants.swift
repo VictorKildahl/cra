@@ -7,6 +7,11 @@ public enum SpaceThemeVariants {
     public static func theme(key: [String], intensity: Double, noise: Double, appearance: String) -> SpaceTheme {
         var t: SpaceTheme
         switch appearance {
+        // One colour on Auto: Arc saves a picked swatch as one `single` theme in that colour, on the
+        // side the colour suits (an imported one reads the same way, ArcThemeImport).
+        case "auto" where key.count == 1:
+            t = SpaceTheme(colors: [key[0], key[0]], intensity: intensity, noise: noise, appearance: "auto", accent: key[0], solid: true)
+            t.appearance = t.isDark ? "dark" : "light"
         case "light": t = light(key: key, intensity: intensity, noise: noise)
         case "dark": t = dark(key: key, intensity: intensity, noise: noise)
         default: t = SpaceTheme(light: light(key: key, intensity: intensity, noise: noise), dark: dark(key: key, intensity: intensity, noise: noise))
@@ -23,11 +28,13 @@ public enum SpaceThemeVariants {
 
     /// The half shown while macOS is light, from the pad's colours: the colours themselves (Arc
     /// saves a colour picked in Light as that colour), lifted to Arc's default light half (HSL
-    /// lightness 0.9, #8389FF → #C8CAFF) when they would read as a dark theme.
+    /// lightness 0.9, #8389FF → #C8CAFF) when they would read as a dark theme. One colour is Arc's
+    /// one-dot theme (`blendedSingleColor`), a flat fill like an imported one (ArcThemeImport).
     public static func light(key: [String], intensity: Double, noise: Double) -> SpaceTheme {
         var t = SpaceTheme(colors: key, intensity: intensity, noise: noise, appearance: "auto", accent: key.first)
         if t.isDark { t.colors = key.map { shade($0, lightness: 0.9) }; t.accent = t.colors.first }
         t.appearance = "light"
+        if t.colors.count == 1 { t.colors.append(t.colors[0]); t.solid = true }
         return t
     }
 
@@ -41,7 +48,9 @@ public enum SpaceThemeVariants {
             func ch(_ v: Double, _ b: Double) -> Int { Int((v * 255 * 0.27 + b).rounded()) }
             return String(format: "#%02X%02X%02X", ch(k.r, 43), ch(k.g, 38), ch(k.b, 50))
         }
-        return SpaceTheme(colors: colors, intensity: 1, noise: noise, appearance: "dark", accent: base.first)
+        // One colour stays one flat colour, without the gradient a lone stop gets (SpacePalette).
+        return SpaceTheme(colors: colors.count == 1 ? colors + colors : colors, intensity: 1, noise: noise, appearance: "dark",
+                          accent: base.first)
     }
 
     /// The colour's HSL hue and saturation at another lightness.

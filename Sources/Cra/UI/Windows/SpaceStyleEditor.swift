@@ -2,13 +2,15 @@ import AppKit
 import SwiftUI
 
 /// Arc 1.171's theme editor (SpaceStyleEditor), which Edit Theme Color… opens beside the
-/// sidebar. Measured from 2x captures of an offline Arc (1 Nov): a 355 × 503 pt panel, the window
-/// behind it darkened by ~58%; a 340 pt dotted colour pad with Auto / Light / Dark on top and − / +
-/// (one to three colours) at the bottom; nine swatches between paging arrows (single colours, then
-/// two-colour gradients); a wave slider for the intensity and a dotted dial for the grain. Every
-/// change shows in the space at once. Like Arc's editor state it keeps the pad's colours, the
-/// intensity, the grain and Auto / Light / Dark, and builds the theme from them: Auto gets a light
-/// and a dark half and follows macOS, Light and Dark get one (SpaceThemeVariants).
+/// sidebar and the Edit Space sheet shows inline. Measured from 2x captures of an offline Arc
+/// (1 Nov): a 355 × 503 pt card, the window behind it darkened by ~58%; a 340 pt dotted colour pad
+/// with Auto / Light / Dark on top and − / + (one to three colours) at the bottom; nine swatches
+/// between paging arrows, five pages of Arc's catalog colours (SpaceColorPresets); a wave slider
+/// for the intensity and a dotted dial for the grain. Every change goes to `onChange` at once (the
+/// caller previews it); nothing here writes. Like Arc's editor state it keeps the pad's colours,
+/// the intensity, the grain and Auto / Light / Dark, and builds the theme from them
+/// (SpaceThemeVariants): one colour is Arc's one-dot theme, two or three a gradient whose Auto
+/// gets a light and a dark half.
 struct SpaceStyleEditor: View {
     @State private var theme: SpaceTheme
     @State private var pad: PadState
@@ -16,17 +18,18 @@ struct SpaceStyleEditor: View {
 
     init(theme: SpaceTheme, onChange: @escaping (SpaceTheme) -> Void) {
         _theme = State(initialValue: theme)
-        _pad = State(initialValue: PadState(key: theme.key ?? theme.colors, intensity: theme.intensity, noise: theme.noise,
-                                            appearance: theme.appearance))
+        // A one-colour theme stores its colour twice (a flat fill): one handle on the pad.
+        let key = theme.key ?? (theme.solid || Set(theme.colors).count == 1 ? Array(theme.colors.prefix(1)) : theme.colors)
+        _pad = State(initialValue: PadState(key: key, intensity: theme.intensity, noise: theme.noise, appearance: theme.appearance))
+        // The page with the space's colour, else the one shown last (Arc: currentThemeEditorPresetPage).
+        let last = UserDefaults.standard.integer(forKey: Self.pageKey)
+        _swatchPage = State(initialValue: SpaceColorPresets.page(of: key)
+            ?? (SpaceColorPresets.pages.indices.contains(last) ? last : 0))
         self.onChange = onChange
     }
 
-    static let swatchPages: [[[String]]] = [
-        ["#F1EAE5", "#E69FBA", "#9E749B", "#E1686F", "#EF8C62", "#F2D66D", "#73E59C", "#7FB8D6", "#666786"].map { [$0] },
-        [["#DCD2CF", "#C6BBBC"], ["#D397A2", "#BC89A8"], ["#976B86", "#7D617C"], ["#D07E6A", "#BA7087"], ["#DDA361", "#C88274"],
-         ["#CACB6A", "#BB8F61"], ["#71CAAD", "#76B789"], ["#7B8FC2", "#7093A3"], ["#6F5F7F", "#646172"]],
-    ]
-    @State private var swatchPage = 0
+    private static let pageKey = "themeEditorPresetPage"
+    @State private var swatchPage: Int
 
     var body: some View {
         VStack(spacing: 0) {
@@ -34,17 +37,23 @@ struct SpaceStyleEditor: View {
                 .frame(width: 340, height: 340)
                 .padding(.top, 9)
             HStack(spacing: 0) {
-                pageArrow("chevron.left", to: swatchPage - 1)
+                pageArrow("chevron.left", to: swatchPage - 1, label: "Move to previous preset page.")
                 HStack(spacing: 5.5) {
-                    ForEach(Self.swatchPages[swatchPage], id: \.self) { colors in
+                    let page = SpaceColorPresets.pages[swatchPage]
+                    ForEach(Array(page.swatches.enumerated()), id: \.offset) { i, colors in
                         Circle()
                             .fill(LinearGradient(colors: colors.map { Color(hex: $0) }, startPoint: .topLeading, endPoint: .bottomTrailing))
                             .frame(width: 24, height: 24)
                             .contentShape(Circle())
                             .onTapGesture { pad.key = colors }
+                            // Arc: "Set space color to Catalog color: … ColorPickerBrandN".
+                            .accessibilityElement()
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityLabel("Set space color to \(page.name(i))")
+                            .accessibilityAction { pad.key = colors }
                     }
                 }
-                pageArrow("chevron.right", to: swatchPage + 1)
+                pageArrow("chevron.right", to: swatchPage + 1, label: "Move to next preset page.")
             }
             .padding(.top, 16.75)
             HStack(spacing: 0) {
@@ -75,13 +84,18 @@ struct SpaceStyleEditor: View {
         }
     }
 
-    private func pageArrow(_ symbol: String, to page: Int) -> some View {
-        let ok = Self.swatchPages.indices.contains(page)
-        return Button { if ok { swatchPage = page } } label: {
+    private func pageArrow(_ symbol: String, to page: Int, label: String) -> some View {
+        let ok = SpaceColorPresets.pages.indices.contains(page)
+        return Button {
+            guard ok else { return }
+            swatchPage = page
+            UserDefaults.standard.set(page, forKey: Self.pageKey)
+        } label: {
             Image(systemName: symbol).font(.system(size: 15, weight: .medium)).frame(width: 36, height: 30)
         }
         .buttonStyle(.plain)
         .foregroundStyle(.white.opacity(ok ? 0.55 : 0.2))
+        .accessibilityLabel(label)
     }
 }
 
@@ -100,7 +114,6 @@ struct PadState: Equatable {
 private struct ColorPad: View {
     @Binding var pad: PadState
     private static let reach: CGFloat = 153
-    private static let spread: CGFloat = 40
 
     var body: some View {
         GeometryReader { geo in
@@ -173,16 +186,15 @@ private struct ColorPad: View {
         pad.key.append(Self.hex(hue: h + Self.offset(pad.key.count), saturation: s))
     }
 
-    private static func offset(_ i: Int) -> CGFloat { i == 0 ? 0 : (i == 1 ? spread : -spread) }
+    private static func offset(_ i: Int) -> CGFloat { CGFloat(SpaceColorWheel.offset(i)) }
 
     private static func hex(hue: CGFloat, saturation: CGFloat) -> String {
-        let h = (hue.truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360) / 360
-        return Color(nsColor: NSColor(hue: h, saturation: saturation, brightness: 0.95, alpha: 1)).hexString
+        SpaceColorWheel.hex(hue: Double(hue), saturation: Double(saturation), brightness: 0.95)
     }
 
     private static func wheel(_ hex: String) -> (CGFloat, CGFloat) {
-        let c = NSColor(Color(hex: hex)).usingColorSpace(.sRGB) ?? .gray
-        return (c.hueComponent * 360, c.saturationComponent)
+        let w = SpaceColorWheel.hsb(hex)
+        return (CGFloat(w.hue), CGFloat(w.saturation))
     }
 
     static func point(for hex: String, centre c: CGPoint) -> CGPoint {
