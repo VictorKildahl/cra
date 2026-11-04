@@ -472,15 +472,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     /// Creates a little window without showing it (`url` nil = popup host).
-    func makeLittleWindow(url: String?) -> LittleWindowController {
-        let w = LittleWindowController(app: self, url: url)
+    func makeLittleWindow(url: String?, opener: CraBrowser? = nil) -> LittleWindowController {
+        let w = LittleWindowController(app: self, url: url, opener: opener)
         littleWindows.append(w)
         return w
     }
 
     @discardableResult
-    func openLittleWindow(url: String, activate: Bool = true) -> LittleWindowController {
-        let w = makeLittleWindow(url: url)
+    func openLittleWindow(url: String, activate: Bool = true, opener: CraBrowser? = nil) -> LittleWindowController {
+        let w = makeLittleWindow(url: url, opener: opener)
         if activate { w.show() } else { w.window?.orderFront(nil) }
         return w
     }
@@ -488,7 +488,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Arc's Peek: a Little Window over `parent` that closes when a click lands past it.
     func openPeek(url: String, over parent: MainWindowController, fromTab tabID: UUID? = nil) {
         for p in littleWindows where p.peekParent === parent { p.closeWindow() }
-        let w = LittleWindowController(app: self, url: url, peekOver: parent)
+        let w = LittleWindowController(app: self, url: url, peekOver: parent, fromTab: tabID)
         littleWindows.append(w)
         // Arc badges the tab the Peek came from with the peeked page's favicon (modalIcon).
         parent.sidebarUI.peekBadge = tabID.map { .init(tabID: $0, iconKey: FaviconKey.key(for: url)) }
