@@ -632,9 +632,15 @@ public:
         // ad script will do) opens a peer connection. Cra offers no local address at
         // all instead (webrtc.ip_handling_policy, set in OnContextInitialized), so
         // there is nothing to announce and the mDNS responder can stay off.
+        // The WebUI omnibox popups go too. Every page carries Chrome's toolbar, hidden
+        // (CraChromeViewDelegate), and since Chromium 156 its omnibox pre-warms a WebUI popup: a hidden widget with its own compositor plus a
+        // chrome://omnibox-popup document, about 45 MB a tab (GPU surfaces and one shared WebUI
+        // renderer). Cra never shows Chrome's omnibox; the views popup it falls back to is built
+        // only when the omnibox opens.
         std::string disabled = command_line->GetSwitchValue("disable-features");
         command_line->AppendSwitchWithValue("disable-features",
-            (disabled.empty() ? "" : disabled + ",") + "WebRtcHideLocalIpsWithMdns");
+            (disabled.empty() ? "" : disabled + ",") + "WebRtcHideLocalIpsWithMdns,"
+            + "WebUIOmniboxPopup,WebUIOmniboxAimPopup");
         // --load-extension loads after the restored tabs start loading. The first extension
         // with webRequest or declarativeNetRequest makes Chromium reset the profile's URL
         // loader factories (WebRequestAPI::UpdateMayHaveProxies), which strands a navigation
