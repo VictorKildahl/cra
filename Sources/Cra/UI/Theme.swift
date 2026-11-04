@@ -40,6 +40,9 @@ struct SpacePalette {
     /// (dark), the outline in the other one, and the back panel in midTone.
     let folderFill: Color
     let folderBack: Color
+    /// A renamed split's pane count (Arc: the palette's cutoutColor). Arc 1.171 live, 3 Nov: the theme
+    /// colour at ~60% on a dark theme; a light theme takes tintedLight, as the folder front does.
+    let countBadgeFill: Color
     /// Selected row in the command bar (Arc tints it with the space color).
     let commandHighlight: Color
     let noise: Double
@@ -142,6 +145,7 @@ extension SpaceTheme {
             folderTint: Color(folder.outline),
             folderFill: Color(folder.front),
             folderBack: Color(folder.back),
+            countBadgeFill: dark ? Color(hex: self.accent ?? base[0]).opacity(0.6) : Color(folder.front),
             commandHighlight: dark ? accent.opacity(0.55) : SpaceTheme.mix(base[0], towardWhite: false, amount: 0.45).opacity(0.75),
             noise: noise,
             // Calibrated against Arc's rendering of a 0.25-intensity vibrant theme.

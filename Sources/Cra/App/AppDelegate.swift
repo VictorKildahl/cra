@@ -1006,7 +1006,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "pinTab": if let c = current { store.togglePinned(c) }
         case "favoriteTab":
             if let c = current { store.isFavorite(c) ? store.removeFromFavorites(c) : store.addToFavorites(c) }
-        case "renameTab": main.sidebarUI.renamingID = current
+        // A pane has no row of its own: its split's name is edited.
+        case "renameTab": main.sidebarUI.renamingID = current.map { store.splitContaining($0)?.id ?? $0 }
         case "duplicateTab": if let c = current { store.duplicateTab(c) }
         case "resetTab": if let c = current { main.resetPinnedTab(c) }
         case "muteTab":
