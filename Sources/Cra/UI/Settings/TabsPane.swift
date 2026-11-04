@@ -71,12 +71,6 @@ struct TabsPane: View {
                                  isOn: $store.settings.tabSleepOnMemoryPressure)
                 Text(tabSleepNote).font(.system(size: 11)).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                // Arc Max's Tidy Tabs, on the Mac's own model.
-                SettingsCheckbox(title: "Show Tidy to sort Today tabs into groups", isOn: $store.settings.tidyTabs)
-                    .disabled(!tidy.modelAvailable)
-                Text(tidy.unavailableReason ?? "Uses Apple Intelligence on this Mac. Nothing leaves it.")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .sheet(isPresented: $showsAirTrafficControl) {
@@ -85,7 +79,6 @@ struct TabsPane: View {
     }
 
     @State private var showsAirTrafficControl = false
-    private var tidy: TidyTabsService { TidyTabsService.shared }
 
     /// Says what a forced-out tab costs, and which tabs stay, before the user finds out.
     private var tabSleepNote: String {

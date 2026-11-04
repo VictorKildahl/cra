@@ -612,6 +612,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // tidy: the divider's Tidy on the window's space, without hovering it; undoTidy: ⌘Z's.
             if dict["tidy"] != nil { TidyTabsService.shared.tidy(store.focusedSpace(window: main.windowID).id, store: store); return }
             if dict["undoTidy"] != nil { _ = store.undoTidy(); return }
+            // settingsPane=max: Settings opened on that pane.
+            if let p = dict["settingsPane"].flatMap(SettingsPane.init(rawValue:)) {
+                showSettingsWindow()
+                settingsController?.show(p)
+                return
+            }
             // Scenario hooks (scripts/scenario.sh): what a journey needs without a pointer.
             if dict["checkStore"] != nil { logSidebarProblems(); return }
             // A main-thread stall of this many milliseconds, for the performance recorder's tests.

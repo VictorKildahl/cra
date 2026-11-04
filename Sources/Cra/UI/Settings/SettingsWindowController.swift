@@ -12,15 +12,17 @@ struct SettingsActions {
 
 /// The panes in Dia's Settings sidebar (Dia 1.54.2: Account, Tabs, Privacy, Profiles, Skills,
 /// Apps, Shortcuts, Advanced). Cra has no account or AI skills/apps; General
-/// (system integration) and Extensions take rows instead.
+/// (system integration) and Extensions take rows instead. Max is Arc's Max pane, for the
+/// features Cra runs on the Mac's own Apple Intelligence model.
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, tabs, privacy, profiles, extensions, shortcuts, performance, advanced
+    case general, tabs, max, privacy, profiles, extensions, shortcuts, performance, advanced
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .general: return "General"
         case .tabs: return "Tabs"
+        case .max: return "Max"
         case .privacy: return "Privacy"
         case .profiles: return "Profiles"
         case .extensions: return "Extensions"
@@ -35,6 +37,8 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         switch self {
         case .general: return "gearshape"
         case .tabs: return "square.on.square"
+        // macOS 15.1 added Apple's mark; before it, sparkles.
+        case .max: return NSImage(systemSymbolName: "apple.intelligence", accessibilityDescription: nil) != nil ? "apple.intelligence" : "sparkles"
         case .privacy: return "hand.raised"
         case .profiles: return "person"
         case .extensions: return "puzzlepiece.extension"
@@ -82,6 +86,8 @@ final class SettingsNavigation {
 @MainActor
 final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
     private let nav = SettingsNavigation()
+
+    func show(_ pane: SettingsPane) { nav.show(pane) }
 
     init(store: SidebarStore, bindings: KeyBindingRegistry, actions: SettingsActions) {
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: SettingsMetrics.windowSize),
@@ -238,6 +244,7 @@ struct SettingsContent: View {
                 switch nav.pane {
                 case .general: GeneralPane()
                 case .tabs: TabsPane()
+                case .max: MaxPane()
                 case .privacy: PrivacyPane(actions: actions)
                 case .profiles: ProfilesPane(actions: actions)
                 case .extensions: ExtensionsPane(actions: actions)

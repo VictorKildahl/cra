@@ -13,11 +13,39 @@ import FoundationModels
 final class TidyTabsService {
     static let shared = TidyTabsService()
 
-    /// Whether the system model can run now. Read again when Cra comes to the front, so turning
-    /// Apple Intelligence on in System Settings shows the button without a relaunch.
-    private(set) var modelAvailable = false
-    /// Why not, for Settings (nil while available).
-    private(set) var unavailableReason: String? = "Needs macOS 26 and Apple Intelligence."
+    /// Where Apple Intelligence stands on this Mac, as Settings explains it.
+    enum Status: Equatable {
+        case available
+        /// Off in System Settings ▸ Apple Intelligence & Siri.
+        case off
+        /// On, with the model still downloading.
+        case preparing
+        /// An Intel Mac, or one Apple Intelligence doesn't support.
+        case ineligible
+        /// macOS 15 or earlier: no FoundationModels.
+        case needsNewerMacOS
+        case unavailable
+
+        /// What Settings ▸ Max says under its features.
+        var explanation: String {
+            switch self {
+            case .available: return "Max features run on Apple Intelligence on this Mac. Nothing is sent anywhere."
+            case .off: return "Max features run on Apple Intelligence, which is off on this Mac."
+            case .preparing: return "Apple Intelligence is still downloading. Max features turn on once it’s ready."
+            case .ineligible: return "Max features run on Apple Intelligence, which needs a Mac with Apple silicon."
+            case .needsNewerMacOS: return "Max features run on Apple Intelligence, which needs macOS 26 or later."
+            case .unavailable: return "Apple Intelligence isn’t available right now."
+            }
+        }
+
+        /// Whether System Settings can fix it.
+        var canOpenSettings: Bool { self == .off || self == .preparing || self == .unavailable }
+    }
+
+    /// Read again when Cra comes to the front and while Settings shows it, so turning Apple
+    /// Intelligence on in System Settings shows the button without a relaunch.
+    private(set) var status: Status = .needsNewerMacOS
+    var modelAvailable: Bool { status == .available }
 
     @ObservationIgnored private var activation: NSObjectProtocol?
 
@@ -29,33 +57,39 @@ final class TidyTabsService {
     }
 
     func refresh() {
-        // A test copy can stand in a fixed model (CRA_TIDY_FAKE_MODEL=1) where Apple Intelligence is off.
-        if Self.fakeModel {
-            set(available: true, reason: nil)
-            return
+        let now = Self.currentStatus()
+        if now != status { status = now }
+    }
+
+    private static func currentStatus() -> Status {
+        // A test copy can stand in a fixed model (CRA_TIDY_FAKE_MODEL=1) where Apple Intelligence is off,
+        // or show Settings as a Mac without it would (=off, =preparing, =ineligible).
+        switch ProcessInfo.processInfo.environment["CRA_TIDY_FAKE_MODEL"] {
+        case "1": return .available
+        case "off": return .off
+        case "preparing": return .preparing
+        case "ineligible": return .ineligible
+        default: break
         }
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *) {
             switch SystemLanguageModel.default.availability {
-            case .available: set(available: true, reason: nil)
-            case .unavailable(.appleIntelligenceNotEnabled):
-                set(available: false, reason: "Turn on Apple Intelligence in System Settings to use it.")
-            case .unavailable(.deviceNotEligible):
-                set(available: false, reason: "This Mac can’t run Apple Intelligence.")
-            case .unavailable(.modelNotReady):
-                set(available: false, reason: "Apple Intelligence is still getting ready.")
-            case .unavailable:
-                set(available: false, reason: "Apple Intelligence isn’t available right now.")
+            case .available: return .available
+            case .unavailable(.appleIntelligenceNotEnabled): return .off
+            case .unavailable(.modelNotReady): return .preparing
+            case .unavailable(.deviceNotEligible): return .ineligible
+            case .unavailable: return .unavailable
             }
-            return
         }
         #endif
-        set(available: false, reason: "Needs macOS 26 and Apple Intelligence.")
+        return .needsNewerMacOS
     }
 
-    private func set(available: Bool, reason: String?) {
-        if modelAvailable != available { modelAvailable = available }
-        if unavailableReason != reason { unavailableReason = reason }
+    /// System Settings ▸ Apple Intelligence & Siri (the Siri-Settings extension's pane).
+    static let systemSettingsURL = URL(string: "x-apple.systempreferences:com.apple.Siri-Settings.extension")!
+
+    func openSystemSettings() {
+        NSWorkspace.shared.open(Self.systemSettingsURL)
     }
 
     /// Whether the divider may show Tidy for this space now.
