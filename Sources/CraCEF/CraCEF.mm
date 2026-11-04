@@ -2784,13 +2784,50 @@ static BOOL CraIsInPageView(NSView* v) {
     return NO;
 }
 
+// Whether a key is a shortcut that Chromium keeps from pages because it is enabled in System
+// Settings ▸ Keyboard ▸ Shortcuts (EventIsReservedBySystem, content/browser/cocoa/
+// system_hotkey_map.mm): ⌘Space set to switch input sources (#174), ⌘` for the next window.
+// macOS acts on these inside -[NSApplication sendEvent:]. Same set as Chromium's map: the
+// enabled "standard" entries of com.apple.symbolichotkeys, without 80 and 82, plus ⌘` and ⇧⌘`
+// for 27 when the user hasn't changed it. Read live (a few µs) so a changed setting applies.
+static BOOL CraIsSystemHotKey(NSEvent* event) {
+    const NSEventModifierFlags relevant =
+        NSEventModifierFlagCommand | NSEventModifierFlagShift | NSEventModifierFlagOption | NSEventModifierFlagControl;
+    NSEventModifierFlags mods = event.modifierFlags & relevant;
+    NSDictionary* stored = CFBridgingRelease(
+        CFPreferencesCopyAppValue(CFSTR("AppleSymbolicHotKeys"), CFSTR("com.apple.symbolichotkeys")));
+    NSMutableDictionary* hotKeys = [@{@"27": @{@"enabled": @YES,
+                                              @"value": @{@"type": @"standard", @"parameters": @[@96, @50, @(NSEventModifierFlagCommand)]}}}
+                                       mutableCopy];
+    if ([stored isKindOfClass:[NSDictionary class]]) [hotKeys addEntriesFromDictionary:stored];
+    [hotKeys removeObjectsForKeys:@[@"80", @"82"]];
+    for (NSString* identifier in hotKeys) {
+        NSDictionary* hotKey = hotKeys[identifier];
+        if (![hotKey isKindOfClass:[NSDictionary class]] || ![hotKey[@"enabled"] respondsToSelector:@selector(boolValue)] ||
+            ![hotKey[@"enabled"] boolValue])
+            continue;
+        NSDictionary* value = hotKey[@"value"];
+        if (![value isKindOfClass:[NSDictionary class]] || ![value[@"type"] isEqual:@"standard"]) continue;
+        NSArray* parameters = value[@"parameters"];
+        if (![parameters isKindOfClass:[NSArray class]] || parameters.count != 3 ||
+            ![parameters[1] isKindOfClass:[NSNumber class]] || ![parameters[2] isKindOfClass:[NSNumber class]])
+            continue;
+        if ([parameters[1] unsignedShortValue] != event.keyCode) continue;
+        NSEventModifierFlags hotKeyMods = [parameters[2] unsignedIntegerValue] & relevant;
+        if (hotKeyMods == mods) return YES;
+        if ([identifier isEqualToString:@"27"] && hotKeyMods == (mods & ~NSEventModifierFlagShift)) return YES;
+    }
+    return NO;
+}
+
 // Chrome's rule: when a web view has focus, ⌘-shortcuts go to the page
 // first and only reach the menu bar if the page leaves them alone (so ⌘F in
 // Google Docs or ⌘← in a text field keep working). Reserved shortcuts are
 // taken in OnPreKeyEvent, the rest in OnKeyEvent. Keys the page leaves alone
 // come back here from Chromium's CommandDispatcher (redispatchKeyEvent:), and
 // those must take the normal path so the menu bar sees them: ⌘C/⌘V/⌘X/⌘A/⌘Z
-// only exist as Edit menu items sent to the page's first responder.
+// only exist as Edit menu items sent to the page's first responder. Enabled macOS
+// shortcuts (CraIsSystemHotKey) always take the normal path, as in Chrome and Arc.
 - (void)sendEvent:(NSEvent*)event {
     CefScopedSendingEvent sendingEventScoper;
     if ([_forwardedKeyEvents containsObject:event]) {
@@ -2798,7 +2835,7 @@ static BOOL CraIsInPageView(NSView* v) {
         [super sendEvent:event];
         return;
     }
-    if (event.type == NSEventTypeKeyDown && (event.modifierFlags & NSEventModifierFlagCommand)) {
+    if (event.type == NSEventTypeKeyDown && (event.modifierFlags & NSEventModifierFlagCommand) && !CraIsSystemHotKey(event)) {
         NSWindow* key = self.keyWindow;
         NSResponder* fr = key.firstResponder;
         if ([fr isKindOfClass:[NSView class]]) {
