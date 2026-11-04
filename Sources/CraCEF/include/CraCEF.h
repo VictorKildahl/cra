@@ -276,9 +276,11 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 /// for each in the same order the profile folders that load it ("Default|Profile <id>", "*"
 /// for every profile), comma-separated; nil when every one loads in every profile.
 + (void)setExtensionPaths:(NSArray<NSString *> *)paths profiles:(nullable NSString *)profiles;
+/// `locale` is Chromium's application locale ("zh-CN"); nil leaves CEF's en-US.
 + (BOOL)initializeWithCachePath:(NSString *)cachePath
                  userAgentProduct:(NSString *)product
                           logPath:(NSString *)logPath
+                           locale:(nullable NSString *)locale
                    useChromeStyle:(BOOL)useChromeStyle
                   useMockKeychain:(BOOL)useMockKeychain;
 /// Runs the Chromium-integrated AppKit run loop. Returns after -quitMessageLoop.

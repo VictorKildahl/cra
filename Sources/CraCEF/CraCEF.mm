@@ -2536,6 +2536,7 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 + (BOOL)initializeWithCachePath:(NSString*)cachePath
                userAgentProduct:(NSString*)product
                         logPath:(NSString*)logPath
+                         locale:(NSString*)locale
                  useChromeStyle:(BOOL)useChromeStyle
                 useMockKeychain:(BOOL)useMockKeychain {
     if (g_libraryLoader) return YES;
@@ -2565,6 +2566,8 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
     settings.persist_session_cookies = true;
     CefString(&settings.user_agent_product) = CefStringFromNS(product);
     CefString(&settings.log_file) = CefStringFromNS(logPath);
+    // Without it CEF passes --lang=en-US whatever macOS is set to (#167).
+    if (locale.length) CefString(&settings.locale) = CefStringFromNS(locale);
     settings.log_severity = LOGSEVERITY_WARNING;
     settings.background_color = CefColorSetARGB(255, 255, 255, 255);
 
