@@ -118,6 +118,9 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   ~105 / ~175 ms in Cra). Colours come from outside (`ColorSpec`): on one
   gold theme the back was #E9B300, the front #FCEDBC and every edge black at ~26%; how the back colour follows the
   theme was not worked out, so Cra keeps its measured outline over cream. Cra: FolderGlyphView.
+  Dark themes fill both panels with translucent white, so the open back panel's edges showed through the
+  front (reported on X, 4 Nov); Cra masks the back with the front panel's shape (`frontHole`, turned with the
+  front's transform), which is what the opaque light-theme fill does anyway.
 - [O] Sidebar glyphs (29 Oct, 1x and 2x captures, fitted pixel by pixel): the tab row's hover ✕ is two 2 pt
   round-capped strokes 4.25 pt out from a centre on a whole point, white 0.6 over the hover fill; at 1x it is
   perfectly symmetric (176/142/85), which no SF Symbol size reproduces (xmark 13.5 bold is closest at 2x but
@@ -161,6 +164,8 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   favicon; rows 50pt single-line "Title — url"; the completion row comes first, then the typed query, then matches; open
   tabs show "Switch to Tab" + arrow box (other-space tabs show the space name); the selected row is tinted with the
   space color. ⌘L with the toolbar visible edits inline: dropdown hangs under the toolbar across the content width.
+  Arc draws the bar inside the window, so it is light or dark with the space's theme; Cra's bar is a child panel,
+  which takes macOS' appearance unless given the window's (it was dark over light spaces on a dark Mac until 4 Nov).
 
 ## Dia 1.54 (company.thebrowser.dia)
 - [O] ~/Library/Application Support/Dia/StorableProfileContainers.json: containers per profile with `window` or
@@ -668,6 +673,14 @@ already reached the overlay (it activates Cra and acceptsFirstMouse lets it thro
 cursor it only looked dead. Drags are measured from each
 event's own screen location; `cra.log` gets `pip: move`, `pip: resize <edge> from W×H`, `pip: resized
 <edge> W×H → W×H` (with "asked" when Chromium kept another size) and `pip: overlay has no parent window`.
+Swiping (4 Nov, reported on X): Arc's PiP follows two fingers on the trackpad and is thrown into a screen corner;
+its placement enum is `screen(corner) | offscreen | absolute(rect)` with corners topLeft/topRight/bottomLeft/
+bottomRight next to spring presets firm/firmSlow/springy… (strings, Arc 1.171). [U] Its spring and how far a
+throw carries were not measured. Cra (`PictureInPictureThrow`, `PictureInPictureFlight` in CraCore): the window
+follows the scroll deltas (direction from `isDirectionInvertedFromDevice`), the speed of the last 80 ms projects
+the resting point with UIKit's 0.998/ms deceleration, the nearest corner of that screen's visible frame (10 pt
+in) is the target, and a critically damped spring (response 0.4 s) flies it there from the fingers' speed.
+AppKit's momentum events are ignored; a plain wheel moves nothing. `cra.log`: `pip: swipe to <corner> at N pt/s`.
 One residual difference: Chrome paints its origin strip ("File on your device", top gradient)
 inside the compositor layer for about two seconds when the window first appears (present at
 1.5 s, gone at 2.5 s in quarter-second captures); it is drawn whether or not the window is
@@ -717,6 +730,10 @@ isolated test instance; composites in docs/screenshots/compare-*.png.
   a Today split item showing "YouTube | Umami"; a second drop produced "YouTube | Umami | Umami" (copies, not
   moves). While a new pane is still empty the sidebar shows it as a plain "New Tab" row in Today; the split
   cell appears once the pane has a page.
+- [I] The pinned tab a split copied goes to sleep in Arc, so its video doesn't also open in Picture in Picture
+  (a user's report on X, 4 Nov, ⌥Return in the command bar on a pinned YouTube tab; not observed here). Cra discards
+  the pinned tab's page when its copy comes on screen (`BrowserManager.hibernate`, sleep reason `splitCopy`,
+  scenario split-pinned-video).
 - [O] Sidebar split cell: one row, white rounded selected background, child segments (favicon + title) separated
   by hairlines, ✕ per child on hover.
 - Cra status (this session): item model, store operations, multi-pane shell with per-pane toolbars and page

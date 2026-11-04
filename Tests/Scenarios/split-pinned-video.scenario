@@ -1,0 +1,16 @@
+# A pinned tab playing a video, then Add Split View (⌥Return in the command bar takes the same
+# path): the split shows a Today copy of the page and the pinned tab sleeps, as in Arc. Before
+# 4 Nov 2026 the pinned tab's video also opened in Picture in Picture, two videos at once
+# (reported on X).
+cra://open?url=file://${FIXTURES}/Pages/video.html
+expect-log loaded file:
+cra://action/pinTab
+wait 1
+# Auto Picture in Picture asks only for a playing video with sound.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(v=>(v.muted=false,v.volume=1,v.play().then(()=>'playing:'+v.videoWidth)))(document.querySelector('video'))","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"playing:640"
+cra://action/addSplitView
+expect-log sleeps: its split copy shows the page
+expect-log tab sleep discards.* file:
+wait 2
+reject-log enters Picture in Picture

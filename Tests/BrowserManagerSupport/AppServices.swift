@@ -3,13 +3,14 @@ import CraCEF
 
 // Unrelated shell services required to typecheck the complete production manager.
 // The tab store deliberately remains observable so stale callbacks can be asserted.
-struct TestTab { var url: String; var savedTitle = ""; var muted = false; var faviconKey: String?; var themeColor: String? }
+struct TestTab { var url: String; var savedTitle = ""; var muted = false; var faviconKey: String?; var themeColor: String?; var activeTabBeforeCreationID: UUID? }
 struct TestItem {
     let id: UUID
     var tab: TestTab?
     var parentID: UUID?
     var children: [UUID] = []
     var isEmptyTab = false
+    var isSplit = false
     var isTab: Bool { tab != nil }
 }
 enum TestRoot { case today }
@@ -22,6 +23,14 @@ enum TestRoot { case today }
     func profilePath(item: UUID) -> String? { nil }
     func profileDirectoryName(item: UUID) -> String { "Default" }
     func spaceID(ofItem: UUID) -> UUID? { nil }
+    func splitContaining(_ id: UUID) -> TestItem? {
+        guard let p = items[id]?.parentID, let parent = items[p], parent.isSplit else { return nil }
+        return parent
+    }
+    func paneID(for tabID: UUID, in split: TestItem) -> UUID? {
+        if split.children.contains(tabID) { return tabID }
+        return split.children.first { items[$0]?.tab?.activeTabBeforeCreationID == tabID }
+    }
     func rootContainer(of: UUID) -> TestRoot? { nil }
     func updateTab(_ id: UUID, url: String? = nil, title: String? = nil) {
         if let url { items[id]?.tab?.url = url }

@@ -23,6 +23,7 @@
 #   helpers baseline | helpers settle [slack]
 #   relaunch                    cra://debug?relaunch=1, then follow the new process
 #   expect-log <regex>          a line Cra logged (cra.log or stdout)
+#   reject-log <regex>          no such line logged so far
 #   snapshot <View[,n]> <name>  the nth visible view of that class drawn to PNG and compared with
 #                               Tests/Snapshots/<name>.png (CRA_SNAPSHOT_RECORD=1 records it)
 #   fresh                       no seeded settings: onboarding shows, as on a new Mac
@@ -166,6 +167,9 @@ while IFS= read -r raw || [ -n "$raw" ]; do
       shift; re="$*"; found=""
       for _ in $(seq 1 150); do grep -Eq "$re" "$DATA"/cra*.log "$OUT/stdout.log" 2>/dev/null && { found=1; break; }; sleep 0.2; done
       [ -n "$found" ] || problem "no log line matching: $re" ;;
+    reject-log)
+      shift; re="$*"
+      ! grep -Eq "$re" "$DATA"/cra*.log "$OUT/stdout.log" 2>/dev/null || problem "a log line matching: $re" ;;
     snapshot)
       shot="$OUT/snapshots/$3.png"; ref="$ROOT/Tests/Snapshots/$3.png"
       mkdir -p "$OUT/snapshots"; send "cra://debug?snapshot=$2&out=$shot"

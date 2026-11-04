@@ -209,7 +209,12 @@ final class PictureInPictureOverlayView: NSView {
         BackgroundCursor.allow(false)
     }
     override func viewWillMove(toWindow newWindow: NSWindow?) {
-        if newWindow == nil { BackgroundCursor.allow(false) }
+        if newWindow == nil {
+            BackgroundCursor.allow(false)
+            flightLink?.invalidate()
+            flightLink = nil
+            flight = nil
+        }
     }
 
     /// The resize cursor for an edge or corner; AppKit has diagonal ones from macOS 15.
@@ -235,6 +240,7 @@ final class PictureInPictureOverlayView: NSView {
             CraLog.note("pip: overlay has no parent window")
             return
         }
+        land()
         gesture = PictureInPictureGesture(mouse: Self.screenLocation(of: event), frame: target.frame)
     }
 
@@ -302,7 +308,78 @@ final class PictureInPictureOverlayView: NSView {
     }
     override func rightMouseDown(with event: NSEvent) {}
     override func otherMouseDown(with event: NSEvent) {}
-    override func scrollWheel(with event: NSEvent) {}
+
+    // MARK: Swipe to a corner (Arc)
+
+    private var swipe: PictureInPictureThrow?
+    private var flight: PictureInPictureFlight?
+    private var flightLink: CADisplayLink?
+    private var flightTime: CFTimeInterval = 0
+
+    /// Two fingers on the trackpad (or a Magic Mouse) move the window with them, and when they
+    /// lift it flies on into the corner of the screen it was heading for, as Arc's does. A wheel
+    /// without phases (a plain mouse) moves nothing, and AppKit's own momentum after the lift is
+    /// left out: the flight is the momentum.
+    override func scrollWheel(with event: NSEvent) {
+        guard gesture == nil, let target, event.hasPreciseScrollingDeltas, event.momentumPhase.isEmpty else { return }
+        let t = event.timestamp
+        switch event.phase {
+        case .mayBegin, .began:
+            land()
+            swipe = PictureInPictureThrow(frame: target.frame, at: t)
+        case .changed:
+            if swipe == nil {
+                land()
+                swipe = PictureInPictureThrow(frame: target.frame, at: t)
+            }
+            // The window goes where the fingers go: with natural scrolling the deltas already
+            // follow them, without it they're the other way round.
+            let toFingers: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
+            guard let frame = swipe?.move(dx: toFingers * event.scrollingDeltaX, dy: -toFingers * event.scrollingDeltaY, at: t) else { return }
+            target.setFrameOrigin(frame.origin)
+        case .ended, .cancelled:
+            guard let s = swipe else { return }
+            swipe = nil
+            guard s.hasMoved else { return }
+            throwWindow(target, from: s.frame, velocity: event.phase == .ended ? s.velocity(at: t) : .zero)
+        default:
+            break
+        }
+    }
+
+    private func throwWindow(_ target: NSWindow, from frame: NSRect, velocity: CGVector) {
+        let rest = PictureInPictureThrow.restingCentre(of: frame, velocity: velocity)
+        let screen = NSScreen.screens.first { $0.frame.contains(rest) } ?? target.screen ?? NSScreen.main
+        guard let visible = screen?.visibleFrame else { return }
+        let corner = PictureInPictureThrow.corner(for: frame, velocity: velocity, in: visible)
+        let end = PictureInPictureThrow.frame(in: corner, size: frame.size, visible: visible, margin: PictureInPictureChrome.edgeMargin)
+        CraLog.note("pip: swipe to \(corner.rawValue) at \(Int(hypot(velocity.dx, velocity.dy))) pt/s")
+        flight = PictureInPictureFlight(from: frame.origin, velocity: velocity, to: end.origin)
+        flightLink?.invalidate()
+        let link = displayLink(target: self, selector: #selector(flightStep(_:)))
+        link.add(to: .main, forMode: .common)
+        flightLink = link
+        flightTime = 0
+    }
+
+    @objc private func flightStep(_ link: CADisplayLink) {
+        guard let target, var f = flight else { return land() }
+        let dt = flightTime == 0 ? link.targetTimestamp - link.timestamp : link.timestamp - flightTime
+        flightTime = link.timestamp
+        target.setFrameOrigin(f.step(max(dt, 1.0 / 240)))
+        flight = f
+        if f.isSettled { land() }
+    }
+
+    /// Ends a flight where the window is (a new swipe or press catches it mid-air) and keeps the
+    /// spot for the next video.
+    private func land() {
+        guard let link = flightLink else { return }
+        link.invalidate()
+        flightLink = nil
+        flight = nil
+        if let target { PictureInPictureChrome.shared.remember(target.frame) }
+    }
 }
 
 /// Lets Cra set the cursor while another app is in front. macOS only takes the frontmost app's

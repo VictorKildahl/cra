@@ -407,6 +407,13 @@ final class FolderGlyphView: NSView {
     private let frontPanel = CAShapeLayer()
     private let frontShade = CAGradientLayer()
     private let frontShadeMask = CAShapeLayer()
+    /// The back panel shows only outside the front one. Light themes fill both opaquely, so the
+    /// front hides the back's outline anyway; dark themes fill them with translucent white, and
+    /// without this the open folder showed the back's edges through the front (reported on X,
+    /// 4 Nov). The mask is the front panel's shape cut out of a larger square, turned with the
+    /// front's own transform so it moves with it.
+    private let backHolder = CALayer()
+    private let frontHole = CAShapeLayer()
     private let mark = NSImageView()
     /// Arc's peeked folder (FolderPeek): three 2 pt dots on a 4 pt pitch in the closed body.
     private let dots = CAShapeLayer()
@@ -427,11 +434,16 @@ final class FolderGlyphView: NSView {
         back.addSublayer(backShade)
         front.addSublayer(frontPanel)
         front.addSublayer(frontShade)
-        for l in [back, front] as [CALayer] {
+        for l in [back, front, frontHole] as [CALayer] {
             // Hinged on the bottom-left corner.
             l.anchorPoint = CGPoint(x: 0, y: 1)
-            icon.addSublayer(l)
         }
+        frontHole.fillRule = .evenOdd
+        frontHole.fillColor = NSColor.black.cgColor
+        backHolder.addSublayer(back)
+        backHolder.mask = frontHole
+        icon.addSublayer(backHolder)
+        icon.addSublayer(front)
         layer?.addSublayer(icon)
         layer?.addSublayer(dots)
         mark.image = GitHubMark.image
@@ -474,6 +486,7 @@ final class FolderGlyphView: NSView {
         t = CATransform3DRotate(t, open ? 32 * .pi / 180 : 0, 0, 1, 0)
         back.transform = CATransform3DRotate(t, open ? 28 * .pi / 180 : 0, 1, 0, 0)
         front.transform = CATransform3DRotate(t, open ? -30 * .pi / 180 : 0, 1, 0, 0)
+        frontHole.transform = front.transform
         frontShade.opacity = open ? 1 : 0
         backShade.opacity = open ? 1 : 0.2
         CATransaction.commit()
@@ -528,6 +541,15 @@ final class FolderGlyphView: NSView {
         frontShade.frame = front.bounds
         frontShadeMask.frame = front.bounds
         frontShadeMask.path = panel
+        // In the holder's space (the icon's), everything but the front panel; the margin keeps the
+        // turned square over the whole glyph.
+        backHolder.frame = CGRect(x: 0, y: 0, width: w, height: h)
+        frontHole.bounds = front.bounds
+        frontHole.position = front.position
+        let hole = CGMutablePath()
+        hole.addRect(front.bounds.insetBy(dx: -w, dy: -h))
+        hole.addPath(panel)
+        frontHole.path = hole
         // In the front panel, on whole points so each dot is two pixels square at 1x.
         dots.frame = bounds
         let dotPath = CGMutablePath()

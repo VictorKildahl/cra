@@ -97,7 +97,13 @@ final class CommandBarView: NSView {
         }
     }
 
+    /// Colours turned into CGColors resolve against the current drawing appearance, which is the
+    /// app's (macOS') unless set: a light bar on a dark Mac got white fills and hints.
     private func apply() {
+        effectiveAppearance.performAsCurrentDrawingAppearance { applyResolved() }
+    }
+
+    private func applyResolved() {
         let c = controller
         let items = c.result.items
         let dark = self.dark

@@ -228,8 +228,12 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         let started = Perf.now()
         let newSet = Set(tabIDs)
         for previous in visibleTabIDs where !newSet.contains(previous) {
-            leaveTab(previous)
             runtimes[previous]?.hiddenAt = clock.now
+            if tabIDs.contains(where: { !visibleTabIDs.contains($0) && isSplitCopy($0, of: previous) }) {
+                hibernate(previous)
+            } else {
+                leaveTab(previous)
+            }
         }
         let wasVisible = Set(visibleTabIDs)
         var shown: [UUID] = []
@@ -450,11 +454,13 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                 let reply = error == nil ? Self.jsonObject(result) : nil
                 let discarded = reply?["discarded"] as? Bool == true
                 // Chromium keeps a page whose navigation was about to commit; ask again later.
-                if error == nil, !discarded { return self.keepAwake(rt, url, "navigating") }
+                // A split's copy can't wait: the hidden page would play on. It closes instead.
+                if error == nil, !discarded, policy.reason != .splitCopy { return self.keepAwake(rt, url, "navigating") }
                 self.sleptTabs.insert(id)
                 Perf.count(.tabSlept, policy.reason.rawValue)
                 if !rt.browser.isIncognito {
-                    let why = policy.reason == .memoryPressure ? ", the Mac is short of memory" : ""
+                    let why = policy.reason == .memoryPressure ? ", the Mac is short of memory"
+                        : policy.reason == .splitCopy ? ", a split shows its copy" : ""
                     let how = !discarded ? "unloads" : reply?["processEnded"] as? Bool == true ? "discards (its renderer ended)" : "discards"
                     CraLog.note("tab sleep \(how) \(CraLog.host(url)) (hidden \(Int(self.clock.now.timeIntervalSince(rt.hiddenAt ?? self.clock.now) / 60)) min\(why))")
                 }
@@ -664,6 +670,23 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         requestPictureInPicture(tabID, automatic: true)
     }
 
+    /// A split pane that stands in for a pinned tab: the Today copy `createSplit` and
+    /// `addToSplit` make of a pinned or favorite tab, which loads the page anew.
+    private func isSplitCopy(_ paneID: UUID, of tabID: UUID) -> Bool {
+        guard let split = store.splitContaining(paneID), !split.children.contains(tabID) else { return false }
+        return store.paneID(for: tabID, in: split) == paneID
+    }
+
+    /// A pinned tab whose page the split's copy now shows (⌥Return in the command bar on a pinned
+    /// YouTube tab): Arc puts the pinned tab to sleep rather than opening its video in Picture in
+    /// Picture, so one video plays, in the split (reported on X, 4 Nov). The page is discarded in
+    /// place like any sleeping tab, and loads again when the pinned tab is selected.
+    private func hibernate(_ tabID: UUID) {
+        guard let rt = runtimes[tabID], !rt.browser.isInPictureInPicture else { return }
+        log(tabID, "sleeps: its split copy shows the page")
+        discard(tabID, rt, rt.browser.currentURL, .splitCopy)
+    }
+
     /// The window is out of sight: covered by another app, on another desktop or in the Dock.
     private(set) var windowCovered = false
 
@@ -712,6 +735,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         if let np = nowPlaying, np.pictureInPicture.contains(id) != active {
             if active { np.pictureInPicture.insert(id) } else { np.pictureInPicture.remove(id) }
         }
+        log(id, active ? "enters Picture in Picture" : "leaves Picture in Picture")
         if active {
             // The floating window's hover controls act on this tab.
             PictureInPictureChrome.shared.actions = PictureInPictureActions(

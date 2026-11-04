@@ -350,6 +350,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             shell.placeholderHost.layer?.backgroundColor = (palette.isDark ? NSColor.white.withAlphaComponent(0.04) : NSColor.black.withAlphaComponent(0.03)).cgColor
             shell.isDarkTheme = palette.isDark
             window?.appearance = NSAppearance(named: palette.isDark ? .darkAqua : .aqua)
+            commandPanel?.appearance = window?.appearance
             // Vibrant themes see through to the desktop like Arc; others are opaque.
             shell.vibrancy.isHidden = !palette.vibrant
             shell.vibrancyLift.isHidden = !palette.vibrant
@@ -2323,7 +2324,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // Always centred in the window, also when opened from the toolbar.
         commandBar.attached = false
         commandBar.panelWidth = min(CraMetrics.commandBarWidth, window.frame.width - 80)
-        commandPanel.appearance = nil
+        // Light or dark with the space's theme, as the window is: a child panel would otherwise
+        // follow macOS, a dark bar over a light space while the Mac runs dark (reported on X).
+        commandPanel.appearance = window.appearance
         positionCommandPanel()
         if commandPanel.parent == nil { window.addChildWindow(commandPanel, ordered: .above) }
         commandBarOpenedAt = Date()

@@ -5,7 +5,7 @@ import Foundation
 /// change the time, turn the clock off, or close pages while macOS reports memory pressure
 /// (GitHub #153). The probes in BrowserManager still decide whether a candidate may close.
 public struct TabSleepPolicy: Equatable, Sendable {
-    public enum Reason: String, Sendable { case timer, memoryPressure }
+    public enum Reason: String, Sendable { case timer, memoryPressure, splitCopy }
 
     /// A page this long out of sight, and silent as long, is a candidate.
     public var hiddenFor: TimeInterval
@@ -35,6 +35,9 @@ public struct TabSleepPolicy: Equatable, Sendable {
     /// "…when the Mac is short of memory": the 3 pages hidden longest, whatever their rank, but
     /// none left in the last 5 minutes, so a tab just left (or just woken) isn't closed again.
     public static let memoryPressure = TabSleepPolicy(hiddenFor: 5 * 60, keepsRecentTabs: false, limit: 3, reason: .memoryPressure)
+
+    /// A pinned tab that a split pane copied (Arc): its page sleeps at once, the copy shows it.
+    public static let splitCopy = TabSleepPolicy(hiddenFor: 0, keepsRecentTabs: false, limit: 1, reason: .splitCopy)
 
     /// macOS reports a level for a while after pages close, so a sweep waits this long for the
     /// last one to tell before taking more.

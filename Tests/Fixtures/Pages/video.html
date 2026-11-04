@@ -1,0 +1,22 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Video fixture</title>
+<style>body { margin: 0; background: #111; } video { width: 640px; height: 360px; }</style>
+<!-- A playing video with no media file and no network: a canvas drawn 30 times a second, streamed
+     into the element. Muted so it starts on its own; a scenario unmutes it with a user gesture. -->
+<video id="v" muted autoplay playsinline></video>
+<script>
+  const c = Object.assign(document.createElement('canvas'), { width: 640, height: 360 });
+  const g = c.getContext('2d');
+  let n = 0;
+  setInterval(() => {
+    g.fillStyle = `hsl(${(n += 3) % 360} 60% 40%)`;
+    g.fillRect(0, 0, 640, 360);
+    g.fillStyle = '#fff';
+    g.font = '64px system-ui';
+    g.fillText(String(n / 3), 40, 100);
+  }, 33);
+  const v = document.getElementById('v');
+  v.srcObject = c.captureStream(30);
+  v.play();
+</script>

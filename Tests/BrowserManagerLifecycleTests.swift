@@ -96,6 +96,7 @@ enum BrowserManagerLifecycleTests {
         nowPlayingCase()
         await nowPlayingPictureInPictureCase()
         await leaveVideoTabPictureInPictureCase()
+        await splitCopySleepsPinnedTabCase()
         await coveredWindowPictureInPictureCase()
         pageColoursCase()
         extensionPageRetryCase()
@@ -601,6 +602,43 @@ enum BrowserManagerLifecycleTests {
         store.settings.autoPictureInPicture = false
         manager.show(b, focus: false)
         expect(!ra.browser.replies.contains { $0.method == "Runtime.evaluate" }, "with the setting off, leaving the tab asks nothing")
+        manager.closeAll()
+    }
+
+    /// ⌥Return in the command bar (or Add Split View) on a pinned video tab: the split shows a Today
+    /// copy of the page, and the pinned tab goes to sleep instead of opening its video in Picture in
+    /// Picture, so one video plays (Arc; X report, 4 Nov 2026). A plain tab switch still opens it.
+    @MainActor
+    private static func splitCopySleepsPinnedTabCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        store.settings.autoPictureInPicture = true
+        let pinned = store.createTab(url: "https://example.test/video").id
+        let rp = manager.ensureRuntime(for: pinned)!
+        manager.show(pinned, focus: false)
+        var split = TestItem(id: UUID(), tab: nil, isSplit: true)
+        var copy = store.createTab(url: "https://example.test/video")
+        copy.tab?.activeTabBeforeCreationID = pinned
+        copy.parentID = split.id
+        store.items[copy.id] = copy
+        let empty = store.createTab(url: "").id
+        store.items[empty]?.parentID = split.id
+        split.children = [copy.id, empty]
+        store.items[split.id] = split
+        manager.show([copy.id, empty], focused: empty, focus: false)
+        expect(!rp.browser.replies.contains { $0.method == "Runtime.evaluate" }, "the pinned tab's video doesn't open in Picture in Picture")
+        expect(rp.browser.replies.contains { $0.method == "Cra.discard" }, "the pinned tab the split copied goes to sleep")
+        rp.browser.reply(to: "Cra.discard", with: discardedReply)
+        await drainMainQueue()
+        expect(manager.sleptTabs.contains(pinned), "the pinned tab is asleep, its page loads again when selected")
+
+        // A video tab left for another tab (not its copy) still opens Picture in Picture.
+        let video = store.createTab(url: "https://example.test/video2").id
+        let rv = manager.ensureRuntime(for: video)!
+        manager.show(video, focus: false)
+        manager.show(copy.id, focus: false)
+        expect(rv.browser.replies.contains { $0.method == "Runtime.evaluate" }, "leaving another video tab still asks for Picture in Picture")
+        expect(!rv.browser.replies.contains { $0.method == "Cra.discard" }, "and doesn't put it to sleep")
         manager.closeAll()
     }
 
