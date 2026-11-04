@@ -5,9 +5,9 @@ import Testing
 /// Shift + wheel (or a sideways wheel) over the sidebar switches spaces like Arc 1.171 (issue #93).
 struct WheelSpaceSwitchTests {
     /// Feeds `(dx, time)` events and returns the steps they make.
-    private func steps(_ events: [(CGFloat, Double)]) -> [Int] {
+    private func steps(_ events: [(CGFloat, Double)], inverted: Bool = false) -> [Int] {
         var wheel = WheelSpaceSwitch()
-        return events.map { wheel.step(dx: $0.0, at: $0.1) }
+        return events.map { wheel.step(dx: $0.0, inverted: inverted, at: $0.1) }
     }
 
     @Test func oneSlowNotchDoesNothing() {
@@ -28,8 +28,25 @@ struct WheelSpaceSwitchTests {
         #expect(steps([(1, 10), (1, 10.02)]) == [0, -1])
     }
 
-    @Test func aTurnStartsTheCountAfresh() {
+    /// With natural scrolling (macOS's default) the deltas arrive flipped and the event says so;
+    /// the same wheel turn still pages the same way (Arc 1.171 XORs the sign with
+    /// isDirectionInvertedFromDevice; issue #93, reversed in Cra 0.1.27).
+    @Test func naturalScrollingPagesTheSameWay() {
+        #expect(steps([(2, 10)], inverted: true) == [1])
+        #expect(steps([(-2, 10)], inverted: true) == [-1])
+        #expect(steps([(1, 10), (1, 10.02)], inverted: true) == [0, 1])
+    }
+
+    /// A turn subtracts from what had added up rather than starting afresh (Arc keeps one sum).
+    @Test func aTurnCancelsOut() {
         #expect(steps([(-1, 10), (1, 10.02), (-1, 10.04)]) == [0, 0, 0])
+        #expect(steps([(-0.8, 10), (0.5, 10.02), (-0.8, 10.04)]) == [0, 0, 1])
+    }
+
+    /// Arc forgets the sum after 0.05 s without a wheel event.
+    @Test func aPauseForgets() {
+        #expect(steps([(-1, 10), (-1, 10.045)]) == [0, 1])
+        #expect(steps([(-1, 10), (-1, 10.055)]) == [0, 0])
     }
 
     /// One switch per quarter second, however fast the wheel spins (Arc: a 0.245 s burst of

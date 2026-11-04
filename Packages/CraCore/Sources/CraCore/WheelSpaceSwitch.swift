@@ -11,9 +11,9 @@ public struct WheelSpaceSwitch: Sendable {
     /// More than this many lines (AppKit's `scrollingDeltaX` for a wheel) switch: one slow
     /// notch does nothing, a flick does (Arc: 1 line never, 2 lines always).
     public static let distance: CGFloat = 1
-    /// A longer gap between wheel events forgets what had added up (Arc: two notches 35 ms
-    /// apart switch, 45 ms apart half the time, 65 ms apart never).
-    public static let pause: TimeInterval = 0.045
+    /// A longer gap between wheel events forgets what had added up (Arc's constant: 0.05 s;
+    /// two notches 35 ms apart switch, 65 ms apart never).
+    public static let pause: TimeInterval = 0.05
     /// After a switch the wheel does nothing for this long (Arc: one switch for a 0.245 s burst,
     /// two for 0.254 s).
     public static let cooldown: TimeInterval = 0.25
@@ -25,15 +25,20 @@ public struct WheelSpaceSwitch: Sendable {
     public init() {}
 
     /// Feeds one wheel event of `dx` lines at `time`. Returns the page step it makes: +1 toward
-    /// the next space, −1 toward the previous one (a positive `dx`, as two fingers moving right
-    /// go back), 0 none.
-    public mutating func step(dx: CGFloat, at time: TimeInterval) -> Int {
-        defer { lastEventTime = time }
-        guard dx != 0, time - lastTriggerTime >= Self.cooldown else { return 0 }
-        if time - lastEventTime > Self.pause || (dx > 0) != (cumulativeDistance > 0) { cumulativeDistance = 0 }
+    /// the next space, −1 toward the previous one, 0 none. `inverted` is the event's
+    /// `isDirectionInvertedFromDevice` (natural scrolling, on by default in macOS), which flips
+    /// `dx` back to the wheel's own direction. Like Arc 1.171 the direction is the sign of the
+    /// total XOR `inverted`: a negative `dx` from a device that isn't inverted goes to the next
+    /// space, so the same wheel turn pages the same way whatever the scroll direction setting
+    /// (issue #93).
+    public mutating func step(dx: CGFloat, inverted: Bool, at time: TimeInterval) -> Int {
+        // Arc returns before noting the time, so the cooldown's events count for nothing.
+        guard dx != 0, time - lastTriggerTime > Self.cooldown else { return 0 }
+        if time - lastEventTime > Self.pause { cumulativeDistance = 0 }
+        lastEventTime = time
         cumulativeDistance += dx
         guard abs(cumulativeDistance) > Self.distance else { return 0 }
-        let step = cumulativeDistance > 0 ? -1 : 1
+        let step = (cumulativeDistance < 0) != inverted ? 1 : -1
         cumulativeDistance = 0
         lastTriggerTime = time
         return step

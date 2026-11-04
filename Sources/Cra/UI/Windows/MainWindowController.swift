@@ -1829,6 +1829,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         return clip.bounds.minX >= (strip.documentView?.frame.width ?? 0) - clip.bounds.width - 1
     }
 
+    /// Whether the Spaces page's cards under the pointer can still scroll the way a wheel of `dx`
+    /// moves them (a negative `dx` toward the last card, as the scroll view applies it).
+    private func spacesStripCanScroll(_ event: NSEvent, dx: CGFloat) -> Bool {
+        guard let strip = spacesStrip(at: event) else { return false }
+        return dx < 0 ? !spacesStripAtEnd(event) : strip.contentView.bounds.minX > 1
+    }
+
     /// The Spaces page's row of cards under the pointer.
     private func spacesStrip(at event: NSEvent) -> NSScrollView? {
         guard let root = shell.sidebarHost.window?.contentView?.superview else { return nil }
@@ -1846,10 +1853,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         guard shell.sidebarVisible || shell.floatingSidebar, event.window != nil, event.window === host.window,
               host.bounds.contains(host.convert(event.locationInWindow, from: nil)), !isIncognito else { return false }
         let dx = event.scrollingDeltaX
-        // On the Spaces page the cards scroll first; at their end the wheel leaves the Library, and
-        // over the rail it leaves at once (Arc).
-        if sidebarUI.libraryPage == .spaces, spacesStrip(at: event) != nil, dx > 0 || !spacesStripAtEnd(event) { return false }
-        let step = wheelSpaceSwitch.step(dx: dx, at: event.timestamp)
+        // On the Spaces page the cards scroll first; once they can't scroll that way the wheel pages,
+        // which leaves the Library when it heads for the next space, and over the rail it leaves at
+        // once (Arc).
+        if sidebarUI.libraryPage == .spaces, spacesStripCanScroll(event, dx: dx) { return false }
+        let step = wheelSpaceSwitch.step(dx: dx, inverted: event.isDirectionInvertedFromDevice, at: event.timestamp)
         guard step != 0 else { return true }
         let order = store.spaceOrder
         // Where the Library is headed, if it is sliding.

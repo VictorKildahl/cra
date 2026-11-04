@@ -2556,7 +2556,16 @@ tap with a real Shift key held around them; the space read from each window's `s
   one switch per 0.25 s. Ten 1-line events 30 ms apart (first switch at the 2nd event) switched once, so what
   arrives during the cooldown is dropped.
 - [O 120 fps] The switch animates like a space change: the header slides in and the tint follows, ~0.15–0.2 s.
-- Cra: `WheelSpaceSwitch` (CraCore) with distance > 1 line, pause 45 ms, cooldown 0.25 s; the window controller's
+- [O static, 4 Nov 2026, issue #93 follow-up] The handler (arm64 0x100a2193c in Arc 1.171's main binary, called
+  with the event; `CACurrentMediaTime` for the clock): within 0.25 s of the last switch it returns before noting
+  the time; a gap over 0.05 s (the constant is 0.05) zeroes the sum; then time = now, sum += `scrollingDeltaX`,
+  and past |1| it pages, zeroes the sum and notes the switch. One sum: a turn subtracts, it doesn't restart.
+  Direction (0x100a21b00): sum < 0 → next unless `isDirectionInvertedFromDevice`, sum > 0 → previous unless
+  inverted, so the sign is XORed with natural scrolling. The probe above posted synthetic wheels (not inverted),
+  which is why "negative = next" held; a real mouse with natural scrolling on (macOS's default) sends inverted,
+  flipped deltas, and Cra 0.1.27 ignored the flag and paged backwards (reported on #93 by Anoninz). CGEvent field
+  137 = 1 makes a synthetic wheel report `isDirectionInvertedFromDevice`.
+- Cra: `WheelSpaceSwitch` (CraCore) with distance > 1 line, pause 0.05 s, cooldown 0.25 s, direction XOR inverted; the window controller's
   scroll monitor feeds it non-precise horizontal wheels over the sidebar (docked or floating, not incognito). A
   step focuses the space on Cra's usual space-change spring (Dia's 0.4 s, slower than Arc's here), or slides the
   Library in or out like its button. On the Spaces page the cards take the wheel first (10 pt per line, as in Arc)
