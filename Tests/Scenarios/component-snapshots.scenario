@@ -14,6 +14,15 @@ snapshot FolderRowView pinned-folder
 snapshot TabRowView today-tab-row
 snapshot NewTabRowView new-tab-row
 snapshot SpaceDockView space-dock
+# Collapsed, Cra keeps the space icon at rest (Arc shows the chevron; X DM, 4 Nov).
+cra://debug?collapsePinned=1
+wait 1
+snapshot SpaceHeaderView space-header-collapsed
+cra://debug?collapsePinned=0
+wait 1
+# The command bar lists Check for Updates (X DM, 4 Nov).
+cra://debug?suggest=check%20for%20up
+expect-log Cra suggest check for up .*command\("checkForUpdates"\) Check for Updates
 cra://open?url=${PAGE}?n=snap
 wait 3
 snapshot SidebarURLPill url-pill

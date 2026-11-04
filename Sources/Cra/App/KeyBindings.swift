@@ -220,6 +220,8 @@ final class KeyBindingRegistry {
             // Chrome's app menu item and key; Arc has neither, only Settings ▸ Profiles ▸ Clear Browsing Data.
             KeyAction(id: "clearBrowsingData", name: "Clear Browsing Data…", section: .app, shortcuts: [Shortcut(Shortcut.delete, cmdShift)],
                       triggers: ["clear history", "delete history", "clear browsing data", "delete browsing data"], symbol: "trash"),
+            KeyAction(id: "checkForUpdates", name: "Check for Updates…", section: .app, shortcuts: [],
+                      triggers: ["update", "upgrade", "new version"], symbol: "arrow.down.circle"),
         ]
         for n in 1...9 {
             list.append(KeyAction(id: "item\(n)", name: "Go to Tab \(n)", section: .tabs,

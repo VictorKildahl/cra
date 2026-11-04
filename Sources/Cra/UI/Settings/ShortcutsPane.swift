@@ -314,5 +314,6 @@ enum ShortcutDescriptions {
         "importData": "Bring tabs, spaces and extensions over from Arc or Dia.",
         "rebuildArcProfiles": "Put spaces imported from Arc back on their Arc profiles, with their sign-ins and extensions.",
         "clearBrowsingData": "Delete history, cookies and cached files with Chrome’s dialog.",
+        "checkForUpdates": "Look for a newer version of Cra.",
     ]
 }

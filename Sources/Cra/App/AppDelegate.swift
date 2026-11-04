@@ -743,6 +743,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 store.setExpanded(id, f[1] == "1")
                 return
             }
+            // collapsePinned=1 collapses the focused space's pinned tabs, 0 expands them (a header click).
+            if let v = dict["collapsePinned"] {
+                let sid = store.focusedSpaceID
+                if store.isPinnedCollapsed(sid) != (v == "1") { store.togglePinnedCollapsed(sid) }
+                return
+            }
             // Settings ▸ Advanced's search engine picker, by keyword.
             if let keyword = dict["searchEngine"] {
                 if let e = SearchEngines.shared.keywords(profilePath: nil).first(where: { $0.keyword == keyword }) {
@@ -813,6 +819,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "pictureInPicture":
             item.title = main.currentBrowser?.isInPictureInPicture == true ? "Exit Picture in Picture" : "Picture in Picture"
         case "promoteLittleWindow": return keyLittleWindow?.hasPage ?? false
+        case "checkForUpdates": return SoftwareUpdater.shared.validateMenuItem(item)
         case "closeSplitPane", "separateFromSplit", "flipSplitOrientation":
             return store.selectedTabID.flatMap { store.splitContaining($0) } != nil
         case "addSplitView": return store.selectedTabID != nil
@@ -1032,6 +1039,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "importData": main.showImport()
         case "rebuildArcProfiles": ArcProfileRebuilder.run(store: store) { [weak self] in self?.relaunch() }
         case "setDefaultBrowser": Task { await SystemIntegration.shared.makeDefaultBrowser() }
+        case "checkForUpdates": SoftwareUpdater.shared.checkForUpdates(nil)
         case "clearBrowsingData":
             // Chrome's dialog, in a normal window: what it deletes from history leaves the command bar too.
             let normal = useNormalWindow()
@@ -1130,9 +1138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         appMenu.addItem(item("clearBrowsingData"))
         appMenu.addItem(.separator())
         appMenu.addItem(item("importData"))
-        let update = NSMenuItem(title: "Check for Updates…", action: #selector(SoftwareUpdater.checkForUpdates(_:)), keyEquivalent: "")
-        update.target = SoftwareUpdater.shared
-        appMenu.addItem(update)
+        appMenu.addItem(item("checkForUpdates"))
         appMenu.addItem(.separator())
         appMenu.addItem(std("Hide Cra", #selector(NSApplication.hide(_:)), "h"))
         appMenu.addItem(std("Hide Others", #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option]))
