@@ -4,37 +4,42 @@ import Foundation
 /// are named colours in ARCClients_BaseAssets' asset catalog, four groups of nine
 /// (ColorPickerBrand1–9, Drab, Pastel, Greyscale), defined in sRGB, extended linear sRGB or
 /// Display P3; these are their sRGB values, as Arc writes them to StorableSidebar.json (Brand8 →
-/// 0.4236, 0.7286, 0.8512). A two-colour swatch is a catalog colour with its complementary
-/// colour added (Arc: the preset view's `addComplimentary`).
+/// 0.4236, 0.7286, 0.8512). A two-colour swatch is a catalog colour with its analogous colour added
+/// (Arc: the preset view's `addComplimentary`, saved as an `analogous` wheel).
 public enum SpaceColorPresets {
     public static let brand = ["#F2EAE4", "#F29BBB", "#A6729D", "#F25E6B", "#FF8558", "#F8D558", "#34E895", "#6CBAD9", "#666789"]
     public static let drab = ["#4E3A5A", "#693558", "#8F4042", "#B16D40", "#D7B35D", "#CDCCA4", "#7AA982", "#226149", "#26456B"]
     public static let pastel = ["#FEFBFA", "#FFE9F3", "#F1D1EC", "#FFCBD1", "#FFE0D3", "#FFF9E5", "#DEFDEB", "#DCF3FC", "#C5C6E5"]
     public static let greyscale = ["#FFFFFF", "#E6E6E6", "#CCCCCC", "#B2B2B2", "#808080", "#666666", "#333333", "#1A1A1A", "#000000"]
+    /// The second colour Arc saves for each Brand pair (offline Arc 1.171, the page-2 swatches pressed over AX:
+    /// `baseColors[1]` in StorableSidebar.json), 29–46° further round the hue wheel.
+    public static let brandPairs = ["#EFF1E3", "#EFB19B", "#A6727F", "#EAAF5A", "#F0E941", "#A4F454", "#38E5E7", "#7F7EDC", "#7F6589"]
 
-    /// One page of nine: a catalog group, alone or with each colour's complement.
+    /// One page of nine: a catalog group, alone or each colour with a second one.
     public struct Page: Equatable, Sendable {
         /// The catalog group: Brand, Drab, Pastel or Greyscale.
         public let group: String
         public let colors: [String]
-        public let complementary: Bool
+        /// Each swatch's second colour, for a page of pairs.
+        public let seconds: [String]?
 
         /// Arc's asset name of swatch `i` (ColorPickerBrand4), which its accessibility label names.
         public func name(_ i: Int) -> String { "ColorPicker\(group)\(i + 1)" }
 
-        /// What each swatch puts on the pad: one colour, or it and its complement.
+        /// What each swatch puts on the pad: one colour, or two.
         public var swatches: [[String]] {
-            colors.map { complementary ? [$0, SpaceColorWheel.complement(of: $0)] : [$0] }
+            guard let seconds else { return colors.map { [$0] } }
+            return zip(colors, seconds).map { [$0, $1] }
         }
     }
 
-    /// Arc's five pages: bright singles, bright pairs, pastels, muted pairs, greys.
+    /// Arc's five pages (offline Arc 1.171, AX + captures): Brand, Brand pairs, Pastel, Drab, Greyscale.
     public static let pages: [Page] = [
-        Page(group: "Brand", colors: brand, complementary: false),
-        Page(group: "Brand", colors: brand, complementary: true),
-        Page(group: "Pastel", colors: pastel, complementary: false),
-        Page(group: "Drab", colors: drab, complementary: true),
-        Page(group: "Greyscale", colors: greyscale, complementary: false),
+        Page(group: "Brand", colors: brand, seconds: nil),
+        Page(group: "Brand", colors: brand, seconds: brandPairs),
+        Page(group: "Pastel", colors: pastel, seconds: nil),
+        Page(group: "Drab", colors: drab, seconds: nil),
+        Page(group: "Greyscale", colors: greyscale, seconds: nil),
     ]
 
     /// The page that holds a theme's pad colours, so the editor opens where they are; nil when
@@ -51,19 +56,13 @@ public enum SpaceColorPresets {
 }
 
 /// The editor pad's colour wheel: a colour's place is its HSB hue (angle) and saturation
-/// (distance from the centre). A second and third colour sit `spread`° either side of the first.
+/// (distance from the centre). A second and third colour sit `spread`° either side of the first
+/// (Arc's saved pairs sit 29–46° away).
 public enum SpaceColorWheel {
     public static let spread = 40.0
 
     /// The hue offset of pad colour `i`: 0 for the first, then +spread, −spread.
     public static func offset(_ i: Int) -> Double { i == 0 ? 0 : (i == 1 ? spread : -spread) }
-
-    /// The second colour a swatch or + adds next to `hex`: its hue turned by `spread`, the same
-    /// saturation and brightness.
-    public static func complement(of hex: String) -> String {
-        let (h, s, b) = hsb(hex)
-        return self.hex(hue: h + offset(1), saturation: s, brightness: b)
-    }
 
     public static func hsb(_ hex: String) -> (hue: Double, saturation: Double, brightness: Double) {
         let c = HexColor.components(hex) ?? (0.5, 0.5, 0.5)

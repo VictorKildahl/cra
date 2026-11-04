@@ -32,8 +32,8 @@ extension MainWindowController {
     }
 
     /// Edit Theme Color…: Arc's editor in a panel against the sidebar's edge at the window's top.
-    /// Every change shows in the space at once but is written only when the editor commits, as in
-    /// Arc: a click anywhere else keeps it, Escape puts the stored theme back.
+    /// Every change shows in the space at once but is written only when the editor closes, as in
+    /// Arc (offline Arc 1.171: StorableSidebar.json changed on Escape, not on the swatch press).
     func showSpaceStyleEditor(space: Space, beside anchor: NSView? = nil) {
         guard let window else { return }
         if let open = window.childWindows?.first(where: { $0 is StyleEditorPanel }) { open.close() }
@@ -44,8 +44,8 @@ extension MainWindowController {
         // From a Spaces page card Arc puts it flush with the card's right edge.
         let x = (anchor.flatMap { v in v.window.map { $0.convertToScreen(v.convert(v.bounds, to: nil)).maxX } }
             ?? window.frame.minX + (shell.sidebarVisible ? shell.sidebarWidth : 0)).rounded()
-        let panel = StyleEditorPanel(contentRect: NSRect(x: x, y: window.frame.maxY - size.height, width: size.width, height: size.height)) { keep in
-            store.endThemePreview(forSpace: id, keep: keep)
+        let panel = StyleEditorPanel(contentRect: NSRect(x: x, y: window.frame.maxY - size.height, width: size.width, height: size.height)) {
+            store.endThemePreview(forSpace: id, keep: true)
         }
         let host = NSHostingView(rootView: editor.shadow(color: .black.opacity(0.3), radius: 10, y: 4)
             .padding(.top, 12).padding(.horizontal, 13.5).padding(.bottom, 19))
@@ -99,16 +99,16 @@ extension MainWindowController {
     func showManageSpaces() { showLibrary(.spaces) }
 }
 
-/// The theme editor's window: borderless and see-through around its card. Escape closes it and
-/// drops the change; a click anywhere else in the app, or the app going to the background,
-/// closes it and keeps the change.
+/// The theme editor's window: borderless and see-through around its card. Escape, a click anywhere
+/// else in the app, the app going to the background or the browser window closing closes it and
+/// keeps the change, as Arc's editor does.
 final class StyleEditorPanel: NSPanel {
     private var monitor: Any?
     private var resignObserver: Any?
     private var parentObserver: Any?
-    private var onClose: ((Bool) -> Void)?
+    private var onClose: (() -> Void)?
 
-    init(contentRect: NSRect, onClose: @escaping (_ keep: Bool) -> Void) {
+    init(contentRect: NSRect, onClose: @escaping () -> Void) {
         self.onClose = onClose
         super.init(contentRect: contentRect, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isOpaque = false
@@ -120,38 +120,33 @@ final class StyleEditorPanel: NSPanel {
             if e.type == .keyDown {
                 // Escape closes it wherever the key goes (SwiftUI keeps it from cancelOperation).
                 guard e.keyCode == 53 else { return e }
-                self.close(keep: false)
+                self.close()
                 return nil
             }
-            if e.window !== self { self.close(keep: true) }
+            if e.window !== self { self.close() }
             return e
         }
         resignObserver = NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil,
                                                                 queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.close(keep: true) }
+            MainActor.assumeIsolated { self?.close() }
         }
         // The browser window closing under it commits too.
         parentObserver = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: nil,
                                                                 queue: .main) { [weak self] note in
             MainActor.assumeIsolated {
                 guard let self, let w = note.object as? NSWindow, w === self.parent else { return }
-                self.close(keep: true)
+                self.close()
             }
         }
     }
 
     override var canBecomeKey: Bool { true }
-    override func cancelOperation(_ sender: Any?) { close(keep: false) }
-
-    func close(keep: Bool) {
-        let done = onClose
-        onClose = nil
-        done?(keep)
-        close()
-    }
+    override func cancelOperation(_ sender: Any?) { close() }
 
     override func close() {
-        if onClose != nil { close(keep: true); return }
+        let done = onClose
+        onClose = nil
+        done?()
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
         if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }

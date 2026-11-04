@@ -15,12 +15,13 @@ struct SpaceColorPresetsTests {
         #expect(SpaceColorPresets.greyscale.first == "#FFFFFF" && SpaceColorPresets.greyscale.last == "#000000")
     }
 
-    /// Five pages of nine with paging; singles put one colour on the pad, pairs two.
+    /// Five pages of nine as in Arc: Brand, Brand pairs, Pastel, Drab, Greyscale.
     @Test func pages() {
-        #expect(SpaceColorPresets.pages.count == 5)
+        #expect(SpaceColorPresets.pages.map(\.group) == ["Brand", "Brand", "Pastel", "Drab", "Greyscale"])
+        #expect(SpaceColorPresets.pages.map { $0.seconds != nil } == [false, true, false, false, false])
         for page in SpaceColorPresets.pages {
             #expect(page.swatches.count == 9)
-            #expect(page.swatches.allSatisfy { $0.count == (page.complementary ? 2 : 1) })
+            #expect(page.swatches.allSatisfy { $0.count == (page.seconds == nil ? 1 : 2) })
         }
     }
 
@@ -43,14 +44,18 @@ struct SpaceColorPresetsTests {
         #expect(theme.isDark == (HexColor.luminance(hex)! < 0.45))
     }
 
-    /// The wheel's complement keeps saturation and brightness and turns the hue.
-    @Test(arguments: SpaceColorPresets.brand + SpaceColorPresets.drab)
-    func complementTurnsTheHue(hex: String) {
-        let a = SpaceColorWheel.hsb(hex), b = SpaceColorWheel.hsb(SpaceColorWheel.complement(of: hex))
-        #expect(abs(a.saturation - b.saturation) < 0.02 && abs(a.brightness - b.brightness) < 0.01)
+    /// Arc's pairs: each Brand colour with the second colour Arc saved for it, which keeps roughly
+    /// its brightness and lies 29–46° further round the hue wheel.
+    @Test(arguments: 0..<9)
+    func brandPairs(index: Int) {
+        let swatch = SpaceColorPresets.pages[1].swatches[index]
+        #expect(swatch == [SpaceColorPresets.brand[index], SpaceColorPresets.brandPairs[index]])
+        #expect(SpaceColorPresets.brandPairs[3] == "#EAAF5A")
+        let a = SpaceColorWheel.hsb(swatch[0]), b = SpaceColorWheel.hsb(swatch[1])
+        #expect(abs(a.brightness - b.brightness) < 0.06)
         if a.saturation > 0.05 {
             let turn = (b.hue - a.hue + 360).truncatingRemainder(dividingBy: 360)
-            #expect(abs(turn - SpaceColorWheel.spread) < 2)
+            #expect(turn > 25 && turn < 50)
         }
     }
 

@@ -2771,16 +2771,26 @@ that waits 3 s before answering and then serves a page whose image takes 5 s.
   "Move to previous preset page." / "Move to next preset page." (`didTapPreviousPresetPage`, `presetCount`,
   `currentPresetPage`, defaults `currentThemeEditorPresetPage`). The editor state has an `undoStack` and a
   `didKeyDownEscape` action.
-- [O reporter, #170] Five pages: bright singles, bright pairs, pastels, muted pairs, greys (Brand, Brand +
-  complement, Pastel, Drab + complement, Greyscale).
-- Cra: SpaceColorPresets (CraCore) holds the colours and pages; a pair is the colour and the pad's +40° colour
+- [O live] Offline Arc, Spaces ▸ Edit Theme… over AX: all 45 swatches stay in the AX tree whatever page shows, in
+  page order Brand, Brand, Pastel, Drab, Greyscale; the labels read "Set space color to Catalog color:
+  #$assets-arcclients.BaseAssets.resources ColorPickerBrand4" (Pastel, Drab, Greyscale come from
+  `arc.SpaceStyleEditor.resources`). Captures: page 2 is the Brand colours as two-colour gradients, page 4 Drab as
+  single colours (not pairs, as #170 guessed from screenshots).
+- [O live] A page-1 swatch (Brand4) changes the space at once without writing StorableSidebar.json; Escape closes the
+  editor and writes it, keeping the change: one `single` vibrant light `blendedSingleColor` (0.949, 0.369, 0.420),
+  intensity 0.8, noise 0. Closing by deactivating Arc writes it the same way.
+- [O live] A page-2 swatch is saved as a `blendedGradient` with an `analogous` wheel: `baseColors` = [the Brand
+  colour, a second one], `overlayColors` = [clear, a third one the other way round the wheel], vibrant light,
+  intensity 0.8. The second colours for Brand1–9: #EFF1E3 #EFB19B #A6727F #EAAF5A #F0E941 #A4F454 #38E5E7 #7F7EDC
+  #7F6589 (29–46° on in HSB hue, about the same saturation and brightness); Brand9's pair is a `dark` one. The
+  turn isn't one fixed angle in HSB, OKLCH or Lab, so Cra keeps Arc's values (SpaceColorPresets.brandPairs).
+- Cra: SpaceColorPresets (CraCore) holds the colours and pages; a pair is the colour and its complement
   (SpaceColorWheel.complement). One colour is saved as Arc's one-dot `single` theme (SpaceTheme.solid, on the side
   the colour suits); two or three as before. The Edit Space sheet shows the same card as Edit Theme Color…, and
   the list's right-click menu starts with Change Space Icon…, Rename Space…, Edit Theme Color… like the header's.
-  Both preview every change without writing it (SidebarStore.previewTheme); Save, or a click outside the card,
-  writes it, Cancel or Escape put the stored theme back.
-- [?] Not checked live yet: the exact complement Arc adds for a pair, and whether Escape in Arc's editor reverts
-  (Cra reverts, as Victor chose on #170).
+  Both preview every change without writing it (SidebarStore.previewTheme). Edit Theme Color… writes it when it
+  closes (Escape, a click elsewhere, the app deactivating), as Arc does; the sheet writes it on Save and puts the
+  stored theme back on Cancel.
 
 ## Little Arc: Copy URL and Shift-click (Arc 1.171, 3 Nov 2026, X DM, offline Arc)
 
