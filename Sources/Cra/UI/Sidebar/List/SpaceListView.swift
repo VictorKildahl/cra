@@ -303,7 +303,10 @@ final class SpaceListView: NSView, NSDraggingSource {
                 }
                 let selected = children.contains { store.isSelected($0.id, window: window) }
                 row.content = .split(SplitRowModel(
-                    id: item.id, depth: depth, today: !pinned, selected: selected, highlighted: selected && !placeholder,
+                    id: item.id, depth: depth, today: !pinned,
+                    // Arc offers "2 Tabs" to a split with no name yet.
+                    title: item.title, renameText: item.title ?? "\(cells.count) Tabs", editing: renaming == item.id,
+                    selected: selected, highlighted: selected && !placeholder,
                     focusRing: focusID.map { f in children.contains { $0.id == f } } ?? false,
                     cells: cells))
                 out.append(row)

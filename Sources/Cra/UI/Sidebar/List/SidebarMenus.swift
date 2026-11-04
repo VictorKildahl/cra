@@ -255,6 +255,8 @@ enum SidebarMenus {
             paneItems(submenu(menu, c.title), c.id, store: store, actions: actions)
         }
         menu.addItem(.separator())
+        // Arc's way back to the panes from a renamed split.
+        if store.item(id)?.title != nil { add(menu, "Reset Name and Icon") { store.rename(id, to: nil) } }
         add(menu, "Rename…") { ui.renamingID = id }
         menu.addItem(.separator())
         let spaces = submenu(menu, "Move to")

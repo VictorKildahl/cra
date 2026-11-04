@@ -38,3 +38,6 @@ wait 3
 snapshot PaneToolbarView,0 toolbar-split-pane
 snapshot PaneToolbarView,1 toolbar-split-empty-pane
 snapshot SplitRowView split-row
+cra://action/renameTab   # from a pane, the split's name is edited in its row
+wait 1
+snapshot SplitRowView split-row-renaming

@@ -16,6 +16,7 @@ struct SidebarColors: Equatable {
     var selectedFill = NSColor.clear
     var separator = NSColor.separatorColor
     var pillFill = NSColor.clear
+    var countBadgeFill = NSColor.clear
 
     init() {}
 
@@ -28,6 +29,7 @@ struct SidebarColors: Equatable {
         selectedFill = NSColor(p.selectedFill)
         separator = NSColor(p.separator)
         pillFill = NSColor(p.pillFill)
+        countBadgeFill = NSColor(p.countBadgeFill)
     }
 
     /// SidebarIconButton's glyph tone outside the header (no active state).
@@ -295,7 +297,9 @@ final class SidebarGlyphButton: NSView {
 
     override var mouseDownCanMoveWindow: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { takesClickFromChildWindow }
-    override func hitTest(_ point: NSPoint) -> NSView? { frame.contains(point) ? self : nil }
+    // Rows hide their buttons rather than remove them: a hidden one must not take the row's
+    // clicks or run the action it had when it last showed (AppKit's hitTest skips hidden views).
+    override func hitTest(_ point: NSPoint) -> NSView? { !isHiddenOrHasHiddenAncestor && frame.contains(point) ? self : nil }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -1535,22 +1539,32 @@ struct SplitRowModel: Equatable {
     var id: UUID
     var depth: Int
     var today: Bool
+    /// The name given with Rename…; the row shows it in place of the panes.
+    var title: String?
+    var renameText: String
+    var editing: Bool
     var selected: Bool
     /// Filled as the open row; not while the ⌘T bar's New Tab row stands in for it.
     var highlighted: Bool
     var focusRing: Bool
     var cells: [Cell]
+
+    /// Arc's customInfo layout for a renamed split: the pane count and the name, one row.
+    var named: Bool { title != nil || editing }
 }
 
 /// Arc's split cell (SplitViewCellView): the panes side by side, hairlines between them, each
 /// pane a pill while the split is open. Its close buttons follow SidebarClose.split: one at the
 /// row's end for a pinned split or a Today split in the background, one in every pane of an
-/// open Today split (GitHub #139).
-final class SplitRowView: SidebarRowView {
+/// open Today split (GitHub #139). A renamed split shows its name instead of the panes.
+final class SplitRowView: SidebarRowView, NSTextFieldDelegate, ArcTooltipTarget {
     private(set) var model: SplitRowModel?
     private var cells: [SplitCellView] = []
     private var separators: [NSView] = []
     private var focusRing: FocusRingLayer?
+    private let countBadge = SplitCountBadgeView()
+    private let titleLabel = NSTextField.sidebarLabel(size: 14)
+    private var renameField: NSTextField?
     private lazy var closeButton: SidebarGlyphButton = {
         let b = SidebarGlyphButton(symbol: "xmark", size: SplitRowMetrics.button, iconSize: 13, help: "", colors: colors) {}
         b.setCloseMark(minus: false, help: "")
@@ -1560,8 +1574,17 @@ final class SplitRowView: SidebarRowView {
     }()
     private var shownButtons: SidebarClose.SplitButtons?
 
+    override init(key: SpaceListView.RowKey, list: SpaceListView, colors: SidebarColors) {
+        super.init(key: key, list: list, colors: colors)
+        addSubview(countBadge)
+        addSubview(titleLabel)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
     func apply(_ m: SplitRowModel) {
         guard m != model else { return }
+        if m.named != model?.named { needsLayout = true }
         model = m
         if cells.map(\.cellID) != m.cells.map(\.id) {
             cells.forEach { $0.removeFromSuperview() }
@@ -1575,11 +1598,20 @@ final class SplitRowView: SidebarRowView {
             cells.forEach { addSubview($0) }
             separators.forEach { addSubview($0) }
         }
-        for (c, cm) in zip(cells, m.cells) { c.apply(cm, colors: colors, pill: m.highlighted) }
+        for (c, cm) in zip(cells, m.cells) {
+            c.apply(cm, colors: colors, pill: m.highlighted)
+            c.isHidden = m.named
+        }
         for s in separators {
             s.layer?.backgroundColor = colors.separator.cgColor
-            s.isHidden = m.highlighted
+            s.isHidden = m.highlighted || m.named
         }
+        countBadge.show(m.cells.count, colors: colors)
+        countBadge.isHidden = !m.named
+        titleLabel.stringValue = m.title ?? ""
+        titleLabel.textColor = colors.textPrimary
+        titleLabel.isHidden = !m.named || m.editing
+        if m.editing != (renameField != nil) { m.editing ? beginRename(m.renameText) : endRename() }
         if m.focusRing != (focusRing != nil) {
             if m.focusRing {
                 let r = FocusRingLayer()
@@ -1627,7 +1659,9 @@ final class SplitRowView: SidebarRowView {
     /// The buttons show while the row is hovered, as on a tab's row.
     private func refreshButtons() {
         guard let m = model, let list else { return }
-        let buttons: SidebarClose.SplitButtons? = isHovered ? SidebarClose.split(pinned: !m.today, current: m.selected) : nil
+        var buttons: SidebarClose.SplitButtons? = isHovered && !m.editing ? SidebarClose.split(pinned: !m.today, current: m.selected) : nil
+        // A renamed split shows no panes to put them on: one at the row's end archives the whole split.
+        if m.named, case .perPane(let b)? = buttons { buttons = .row(b) }
         guard buttons != shownButtons else { return }
         shownButtons = buttons
         let panes = m.cells.map(\.id)
@@ -1656,7 +1690,7 @@ final class SplitRowView: SidebarRowView {
 
     override func layout() {
         super.layout()
-        guard model != nil, !cells.isEmpty else { return }
+        guard let m = model, !cells.isEmpty else { return }
         let fill = fillRect
         let gap = SplitRowMetrics.cellGap
         let n = CGFloat(cells.count)
@@ -1665,6 +1699,22 @@ final class SplitRowView: SidebarRowView {
             : NSRect(x: fill.maxX - SplitRowMetrics.buttonInset - SplitRowMetrics.button, y: (bounds.height - SplitRowMetrics.button) / 2,
                      width: SplitRowMetrics.button, height: SplitRowMetrics.button)
         if let button { closeButton.frame = button }
+        focusRing?.frame = fillRect
+        if m.named {
+            // Laid out as a tab's row: the badge where the favicon goes, the name 11 pt on.
+            let h = bounds.height
+            var x = CraMetrics.rowLeading + CGFloat(m.depth) * CraMetrics.indent
+            countBadge.frame = NSRect(x: x, y: (h - CraMetrics.favicon) / 2, width: CraMetrics.favicon, height: CraMetrics.favicon)
+            x += CraMetrics.favicon + 11
+            let right = button?.minX ?? bounds.width - 6
+            let th = titleLabel.intrinsicContentSize.height
+            titleLabel.frame = NSRect(x: x - SidebarText.inset, y: (h - th) / 2, width: max(0, right - 4 - x) + 2 * SidebarText.inset, height: th)
+            if let f = renameField {
+                let fh = f.intrinsicContentSize.height
+                f.frame = NSRect(x: x - SidebarText.inset, y: (h - fh) / 2, width: max(0, bounds.width - 6 - x + SidebarText.inset), height: fh)
+            }
+            return
+        }
         var x = fill.minX + SplitRowMetrics.cellInset
         for (i, c) in cells.enumerated() {
             if i > 0 {
@@ -1677,19 +1727,69 @@ final class SplitRowView: SidebarRowView {
             c.frame = NSRect(x: x, y: fill.minY, width: cw, height: fill.height)
             x += w + gap
         }
-        focusRing?.frame = fillRect
     }
 
-    private func cell(at point: NSPoint) -> SplitCellView? { cells.first { $0.frame.contains(point) } }
+    private func cell(at point: NSPoint) -> SplitCellView? {
+        model?.named == true ? nil : cells.first { $0.frame.contains(point) }
+    }
 
     // The split moves as one (into Pinned, a folder, another space); a pane leaves it through
     // the menu or ⌥ on its close button, as in Arc.
-    override func dragItemID(at point: NSPoint) -> UUID? { model?.id }
+    override func dragItemID(at point: NSPoint) -> UUID? { model?.editing == true ? nil : model?.id }
 
     override func click(_ event: NSEvent, at point: NSPoint) {
-        guard let c = cell(at: point), let list else { return }
-        list.store.selectTab(c.cellID, window: list.ui.windowID)
+        guard let m = model, let list else { return }
+        // A click on the row (not the field) ends a rename, so it can never get stuck.
+        if m.editing { commitRename() }
+        // A renamed split opens on the pane that had focus last.
+        let panes = m.cells.map(\.id)
+        let focus = list.store.item(m.id)?.split?.focusTabID.flatMap { panes.contains($0) ? $0 : nil }
+        guard let pane = m.named ? focus ?? panes.first : cell(at: point)?.cellID else { return }
+        list.store.selectTab(pane, window: list.ui.windowID)
     }
+
+    // MARK: Rename (Arc: CustomInfo.isEditingTitle)
+
+    private func beginRename(_ text: String) {
+        let f = NSTextField(string: text)
+        f.isBordered = false
+        f.drawsBackground = false
+        f.focusRingType = .none
+        f.font = .systemFont(ofSize: 14)
+        f.textColor = colors.textPrimary
+        f.delegate = self
+        f.cell?.isScrollable = true
+        renameField = f
+        addSubview(f)
+        needsLayout = true
+        DispatchQueue.main.async { [weak self, weak f] in
+            guard let f, let w = self?.window else { return }
+            w.makeFirstResponder(f)
+        }
+    }
+
+    private func endRename() {
+        guard let f = renameField else { return }
+        renameField = nil
+        f.delegate = nil
+        if let w = window, let editor = f.currentEditor(), w.firstResponder === editor { w.makeFirstResponder(nil) }
+        f.removeFromSuperview()
+    }
+
+    /// An empty name gives the split its panes back.
+    private func commitRename() {
+        guard let m = model, let list, list.ui.renamingID == m.id, let f = renameField else { return }
+        list.store.rename(m.id, to: f.stringValue)
+        list.ui.renamingID = nil
+    }
+
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy sel: Selector) -> Bool {
+        if sel == #selector(NSResponder.cancelOperation(_:)) { list?.ui.renamingID = nil; return true }
+        if sel == #selector(NSResponder.insertNewline(_:)) { commitRename(); return true }
+        return false
+    }
+
+    func controlTextDidEndEditing(_ obj: Notification) { commitRename() }
 
     // Arc shows the split's menu over any pane; each pane's own items are a submenu in it.
     override func contextMenu(at point: NSPoint) -> NSMenu? {
@@ -1697,7 +1797,19 @@ final class SplitRowView: SidebarRowView {
         return SidebarMenus.split(m, list: list)
     }
 
-    override func tooltipTarget(at point: NSPoint) -> (any ArcTooltipTarget)? { cell(at: point) }
+    override func tooltipTarget(at point: NSPoint) -> (any ArcTooltipTarget)? {
+        model?.named == true ? self : cell(at: point)
+    }
+
+    // ArcTooltipTarget, for a renamed split: its name by the pointer (Arc 1.171).
+    var text: String { model.map { $0.editing ? "" : $0.title ?? "" } ?? "" }
+    var keys: [String] { [] }
+    var followsCursor: Bool { true }
+    var subtitle: String? { nil }
+    var optionText: String? { nil }
+    var onShow: (() -> Void)? { nil }
+    var screenFrame: NSRect { window?.convertToScreen(convert(bounds, to: nil)) ?? .zero }
+    var hostWindow: NSWindow? { window }
 }
 
 /// Arc 1.171, measured at 1x (GitHub #139): panes 4 pt inside the fill and 4 pt apart, buttons 24 pt.
@@ -1715,6 +1827,37 @@ enum SplitRowMetrics {
     static let pillRadius: CGFloat = 7
     /// The favicon sits this far into its pane.
     static let favicon: CGFloat = 6
+}
+
+/// A renamed split's icon: how many panes it holds (Arc: SplitViewCellItemCountIconView). Arc 1.171
+/// live: a 16 pt rounded square in the favicon's place, the digit bold, 7.5 pt tall, centred.
+final class SplitCountBadgeView: NSView {
+    private let label = NSTextField.sidebarLabel(size: 10, weight: .bold)
+
+    init() {
+        super.init(frame: NSRect(x: 0, y: 0, width: CraMetrics.favicon, height: CraMetrics.favicon))
+        wantsLayer = true
+        layer?.cornerRadius = CraMetrics.favicon * 0.22
+        layer?.cornerCurve = .continuous
+        label.alignment = .center
+        addSubview(label)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    func show(_ count: Int, colors: SidebarColors) {
+        label.stringValue = "\(count)"
+        label.textColor = colors.textPrimary
+        layer?.backgroundColor = colors.countBadgeFill.cgColor
+    }
+
+    override func layout() {
+        super.layout()
+        let h = label.intrinsicContentSize.height
+        label.frame = NSRect(x: 0, y: (bounds.height - h) / 2, width: bounds.width, height: h)
+    }
 }
 
 /// One pane inside the split row (Arc: SplitViewCellChildItemView).
