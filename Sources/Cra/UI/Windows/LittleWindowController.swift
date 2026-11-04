@@ -152,7 +152,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     /// `url` nil makes a popup host: the browser adopts the next window.open
     /// CEF hands it (see `CraBrowserDelegate.browser:popupHostForURL:`).
-    init(app: AppDelegate, url: String?, peekOver parent: MainWindowController? = nil) {
+    /// `opener` is the page a link or popup came from; `fromTab` the tab a Peek came from.
+    init(app: AppDelegate, url: String?, peekOver parent: MainWindowController? = nil, opener: CraBrowser? = nil, fromTab: UUID? = nil) {
         self.app = app
         isPopupHost = url == nil
         isPeek = parent != nil
@@ -230,7 +231,20 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         commandBar.onClose = { [weak self] in self?.hideCommandPanel() }
         commandBar.spaceName = { [weak self] id in self?.store.space(id)?.title ?? "" }
 
-        let b = CraBrowser(frame: shell.page.bounds, url: url.map { $0.isEmpty ? "about:blank" : $0 }, delegate: self)
+        // The page's sign-ins (#172). Arc's Little Arc takes the profile of the space it opens into
+        // and keeps it; a Peek uses its tab's, so a shared favorite peeks in its list's profile. A
+        // link from a Little Window stays in its page's profile, and a popup has to: Chromium
+        // hosts a popup in its opener's profile. nil is the Default profile.
+        let profilePath: String?
+        if let opener {
+            profilePath = opener.profilePath
+        } else if let fromTab, app.store.item(fromTab) != nil {
+            profilePath = app.store.profilePath(item: fromTab)
+        } else {
+            profilePath = app.store.profilePath(space: state.targetSpaceID)
+        }
+        let b = CraBrowser(frame: shell.page.bounds, url: url.map { $0.isEmpty ? "about:blank" : $0 }, delegate: self,
+                           incognito: false, profilePath: profilePath)
         attach(b)
         state.url = (url == "about:blank" ? "" : url) ?? ""
     }
@@ -933,13 +947,13 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     func browser(_ browser: CraBrowser, requestsNewTabWithURL url: String, inBackground background: Bool) {
         // cra:// is Cra's scripting scheme; a page must not drive it.
         if url.lowercased().hasPrefix("cra:") { return }
-        app.openLittleWindow(url: url, activate: !background)
+        app.openLittleWindow(url: url, activate: !background, opener: browser)
         if background { window?.makeKeyAndOrderFront(nil) }
     }
 
     func browser(_ browser: CraBrowser, popupHostForURL url: String, inBackground background: Bool) -> CraBrowser? {
         if url.lowercased().hasPrefix("cra:") { return nil }
-        let w = app.makeLittleWindow(url: nil)
+        let w = app.makeLittleWindow(url: nil, opener: browser)
         w.state.url = url
         w.show()
         if background { window?.makeKeyAndOrderFront(nil) }
