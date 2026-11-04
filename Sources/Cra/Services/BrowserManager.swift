@@ -117,6 +117,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     }
 
     func runtime(for tabID: UUID) -> TabRuntime? { runtimes[tabID] }
+    /// The tab whose page the download being reported came from (set only during that report).
+    private(set) var downloadSourceTab: UUID?
     var visibleRuntime: TabRuntime? { visibleTabID.flatMap { runtimes[$0] } }
 
     @discardableResult
@@ -1135,7 +1137,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     }
 
     func browser(_ browser: CraBrowser, didUpdateDownload download: CraDownloadInfo) {
+        // The delegate reads it during the call: Tidy Downloads names the file from that tab.
+        downloadSourceTab = tabID(of: browser)
         delegate?.browserManager(download: download)
+        downloadSourceTab = nil
     }
 
     func browser(_ browser: CraBrowser, requestsPermissionForOrigin origin: String, kinds: UInt, completion: @escaping (Bool) -> Void) {

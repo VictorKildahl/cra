@@ -44,6 +44,56 @@ final class SidebarView: NSView {
         player.onCountChange = { [weak self] in self?.needsLayout = true }
         ui.observeLibraryReveal { [weak self] in self?.applyLibraryReveal() }
         observe()
+        observeRenameCard()
+    }
+
+    // MARK: Tidy Downloads' card
+
+    private var renameCard: DownloadRenameCard?
+
+    /// The card for a download this window renamed: in over the bin, out after 8 s or a click.
+    private func observeRenameCard() {
+        let window = ui.windowID
+        observeChanges(of: { TidyDownloadsService.shared.card.flatMap { $0.window == window ? $0 : nil } }) { [weak self] card in
+            self?.showRenameCard(card)
+        }
+    }
+
+    private func showRenameCard(_ mine: TidyDownloadsService.Rename?) {
+        guard mine?.id != renameCard?.rename.id else { return }
+        if let old = renameCard {
+            renameCard = nil
+            old.disappear { old.removeFromSuperview() }
+        }
+        guard let r = mine else { return }
+        let v = DownloadRenameCard(rename: r, colors: SidebarColors(palette))
+        let service = TidyDownloadsService.shared
+        let toast = actions.showToast
+        let ui = self.ui
+        v.onClose = { service.dismiss() }
+        v.onOpen = { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: r.newPath)]) }
+        v.onRevert = {
+            let ok = service.revert(r) { _, back in
+                if var recent = ui.recentDownload, recent.id == r.download {
+                    recent.path = back
+                    ui.recentDownload = recent
+                }
+            }
+            if ok { toast("Download name reverted!") }
+        }
+        tabs.addSubview(v)
+        renameCard = v
+        layoutRenameCard()
+        v.appear()
+    }
+
+    private func layoutRenameCard() {
+        guard let v = renameCard, let anchor = ui.libraryAnchor as? LibraryButtonView else { return }
+        let bin = anchor.convert(anchor.binFrame, to: tabs)
+        // Arc: the tail's tip ends 1 pt above the bin's 38 pt box, ~4 pt above its 32 pt thumbnail.
+        let w = tabs.bounds.width - 16
+        v.frame = NSRect(x: 8, y: bin.minY - 4 - DownloadRenameCard.height, width: w, height: DownloadRenameCard.height)
+        v.tailX = bin.midX - 8
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -218,6 +268,7 @@ final class SidebarView: NSView {
         let trayH = DownloadsTrayMetrics.listHeight(rows: rows) + 4
         trayHost.frame = NSRect(x: 0, y: pager.frame.maxY - trayH, width: b.width, height: trayH)
         updateTrayMask(open: ui.downloadsListOpen, rows: rows)
+        if renameCard?.layer?.animationKeys()?.isEmpty ?? true { layoutRenameCard() }
     }
 }
 
@@ -980,6 +1031,8 @@ final class LibraryButtonView: NSView {
     private var hovering = false { didSet { if hovering != oldValue { refresh() } } }
     var colors = SidebarColors() { didSet { if colors != oldValue { glyph.image = LibraryGlyph.image(dark: colors.isDark); refresh() } } }
     static let binOffset = CGSize(width: 9, height: -12)
+    /// The download bin's frame, for Tidy Downloads' card to point at.
+    var binFrame: NSRect { bin.frame }
 
     init(ui: SidebarUIState, actions: SidebarActions) {
         self.ui = ui

@@ -25,6 +25,12 @@ struct MaxPane: View {
                 } description: {
                     Text("Have your tabs automatically renamed with tidier, shorter titles when you Pin them.")
                 }
+                SettingsCardDivider()
+                MaxFeatureRow(title: "Tidy Downloads", isOn: $store.settings.tidyDownloads, enabled: available) {
+                    TidyDownloadsPicture()
+                } description: {
+                    Text("Keep your many files more organized with smartly renamed downloads — and make them a little easier to find later.")
+                }
             }
             MaxFooter(status: service.status) { service.openSystemSettings() }
                 .padding(.top, 14)
@@ -114,6 +120,29 @@ private struct MaxFooter: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+/// Arc's Tidy Downloads picture: the "Download renamed to:" card on blue.
+private struct TidyDownloadsPicture: View {
+    private let grey = Color(white: 0.55)
+    var body: some View {
+        ZStack {
+            Color(red: 0.16, green: 0.20, blue: 0.93)
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 3) {
+                    Text("Download renamed to:").font(.system(size: 4)).foregroundStyle(grey).lineLimit(1).fixedSize()
+                    Spacer(minLength: 0)
+                    Image(systemName: "arrow.uturn.backward").font(.system(size: 4.5, weight: .semibold)).foregroundStyle(grey)
+                    Image(systemName: "xmark").font(.system(size: 4.5, weight: .semibold)).foregroundStyle(grey)
+                }
+                Text("Navan Itinerary.pdf").font(.system(size: 6, weight: .medium)).foregroundStyle(.black).lineLimit(1).fixedSize()
+                Text("387494875.pdf").font(.system(size: 4.5)).strikethrough().foregroundStyle(grey).lineLimit(1).fixedSize()
+            }
+            .padding(.horizontal, 5).padding(.vertical, 4)
+            .frame(width: 70)
+            .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Color.white))
+        }
     }
 }
 

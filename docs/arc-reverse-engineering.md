@@ -1849,13 +1849,10 @@ iconOffsetXAnimator, iconBounceAnimator, lazy g / vx0 / vy0 / projectileMotionDu
   6 pt high, drops to 12 pt low at ~0.15 s, back to −2 pt, settled by ~0.4 s. Faint grey while Arc's window is in
   the background, white when it is key. It leaves 30 s after the glyph lands (appeared 8.47 s, faded 39.37-39.53 s
   in a 60 fps capture), fading over 0.15 s, the same with Arc in front or behind.
-- With Tidy Downloads on, Arc also shows a "Download renamed to:" card above the bin; Cra has no Tidy Downloads.
+- With Tidy Downloads on, Arc also shows a "Download renamed to:" card above the bin (see "Tidy Downloads").
 - Cra: DownloadFlight (overlay panel, Core Animation keyframes sampled from the same projectile) and DownloadBin in
   SpaceDock. Verified side by side with fixed-source test builds.
-- Tidy Downloads card (only with Arc Max's renaming): in over ~0.2 s once the rename is ready, gone after 8.0 s in
-  under 0.1 s. Prompt and inputs (filename, tab title, domain; JSON `newName`) are in the binary next to
-  beginRename(browserContextID:downloadID:defaultFilename:sourceUrl:webContentsTitle:referrerTitle:). Not built in
-  Cra: Victor doesn't want AI features for now (27 Oct 2026).
+- Tidy Downloads card (only with Arc Max's renaming): see "Tidy Downloads" below (built 4 Nov 2026).
 
 ### Arc's downloads list on hovering the Library button (live, 60 fps, 1728×1084 window)
 
@@ -3095,3 +3092,29 @@ Titles (`renamePinnedTabsEnabled`, AI endpoint `renamePinnedTabs`) gives a tab a
   opt-in).
 - [?] Not seen: whether a drag into Pinned renames (Cra does, every pin counts), a rename whose new name isn't a
   prefix of the old (Cra crossfades in the soft edge), undo.
+
+## Tidy Downloads (Arc 1.171, 4 Nov 2026, strings + Victor's Arc, 60 fps recordings)
+
+Arc Max's renameDownloads: a finished download is renamed on disk and a card above the download bin says so.
+- [O static] beginRename(browserContextID:downloadID:defaultFilename:sourceUrl:webContentsTitle:referrerTitle:) sends
+  the file name, the source tab's title and domain with a prompt ("Rewrite its filename to be helpful, concise and
+  readable. 2-4 words." plus rules and nine examples) and reads JSON `newName`; it refuses an empty name or one
+  starting with ".". The card is SidebarBanner's ("Download renamed to:", "Revert to original name"); the toasts
+  "Download renamed!" / "Download name reverted!" are DownloadRenamedToastContentView in Arc's toast.
+- [O] Live, three GitHub zips from their repo pages: Hello-World-master.zip → "Hello World Repository.zip",
+  Spoon-Knife-main.zip → "Spoon Knife main.zip", git-consortium-master.zip → "Git Consortium Master.zip" (renamed
+  on disk). A second download from the same tab didn't start (Chrome's multiple-download block).
+- [O] Card (dark space, 347 pt sidebar, AX + 2x frames): a button 331 × 74 pt at x 8 (the sidebar less 8 pt a side),
+  body 65 pt with 12 pt corners plus a 9 pt tail at bottom left whose tip ends 1 pt above the bin. Fill #03061F;
+  "Download renamed to:" 12 pt regular #343BD1, 13 pt in, cap top 12.5 pt down; the new name 14 pt semibold white,
+  cap top 31; the old name 12 pt #343BD1, cap top 50, struck through; ↶ and ✕ grey glyphs centred 47 and 21 pt from
+  the right, 17 pt down; four-point sparkles (5–10 pt) twinkling by the label, the names and the bottom left.
+- [O] Timeline: the card comes ~2.6 s after the download starts (with a small zip), springing from the tail's tip:
+  0.55× → 1.0 in 0.18 s, 1.05× at 0.29 s, settled by ~0.55 s, fading in over ~0.1 s; the strike draws left to right
+  0.5 s in, over ~0.15 s. It leaves 7.96 s after it came, shrinking back to the tip and fading in ~0.12 s.
+  ↶ renamed the file back at once (git-consortium-master.zip). Not captured: the reverted toast (Cra shows
+  "Download name reverted!" in its one toast), the card in a light space (Cra: white, from Arc's Max picture), and
+  whether hovering holds it.
+- Cra: TidyDownloads (CraCore: prompt with Cra's own examples, the name's checks, a free name), TidyDownloadsService
+  (FoundationModels, renames the file, DownloadHistory.move, revert), DownloadRenameCard (SidebarView, over the bin).
+  Settings ▸ Max ▸ Tidy Downloads, off by default.

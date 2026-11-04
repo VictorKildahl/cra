@@ -207,6 +207,8 @@ final class SidebarActions {
     var separatePinnedTab: (UUID) -> Void = { _ in }
     var editPinnedURL: (UUID) -> Void = { _ in }
     var openURL: (String) -> Void = { _ in }
+    /// Cra's one toast (ShinyToast) in this window.
+    var showToast: (String) -> Void = { _ in }
     var performAction: (String) -> Void = { _ in }
     /// Double-click on an empty part of the header strip (sidebar title row or toolbar).
     var titleBarDoubleClick: () -> Void = {}

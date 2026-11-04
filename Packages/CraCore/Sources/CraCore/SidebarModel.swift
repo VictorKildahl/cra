@@ -524,6 +524,9 @@ public struct AppSettings: Codable, Equatable {
     /// Arc Max's Tidy Tab Titles (renamePinnedTabsEnabled): a tab you pin gets a shorter name from the
     /// Mac's Apple Intelligence model. Off by default: it renames, where Tidy waits for a click.
     public var tidyTabTitles: Bool = false
+    /// Arc Max's Tidy Downloads (renameDownloadsEnabled): a finished download gets a readable name from
+    /// the Mac's Apple Intelligence model. Off by default, like Arc Max.
+    public var tidyDownloads: Bool = false
 
     public init() {}
 
@@ -688,6 +691,7 @@ extension AppSettings {
         perfHidesSiteNames = try c.decodeIfPresent(Bool.self, forKey: .perfHidesSiteNames) ?? false
         tidyTabs = try c.decodeIfPresent(Bool.self, forKey: .tidyTabs) ?? true
         tidyTabTitles = try c.decodeIfPresent(Bool.self, forKey: .tidyTabTitles) ?? false
+        tidyDownloads = try c.decodeIfPresent(Bool.self, forKey: .tidyDownloads) ?? false
     }
 }
 
