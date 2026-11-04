@@ -75,8 +75,9 @@ the save panel.
 
 [testing.md](testing.md) has the rules, the layers, the gates and how to write a scenario.
 
-CI runs `scripts/test.sh` on every pull request (no CEF download) and the smoke test on the
-app it builds.
+CI runs the same tests on every pull request and push to main (no CEF download), once, through
+`scripts/coverage.py` plus `scripts/lint.py`, and the smoke test on the app it builds. A change
+to Markdown or `docs/` alone runs nothing.
 
 - `Packages/CraCore` (`swift test --package-path Packages/CraCore`): a package of its own, so
   its tests build without `vendor/cef`. Code that decides something without a window or a

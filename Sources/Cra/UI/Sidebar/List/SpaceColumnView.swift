@@ -92,7 +92,9 @@ final class SpaceColumnView: NSView {
 /// The space's emoji and name. Arc 1.171 (live, 1 Nov): a click collapses or expands the pinned
 /// tabs; on hover the fill comes in, the chevron takes the icon's place and the ••• button
 /// (sidebarSpaceEditButton) shows at the trailing edge, all in one frame. The ••• and a
-/// right-click open the same space menu at the pointer. Collapsed, the chevron stays and points right.
+/// right-click open the same space menu at the pointer. Collapsed, the chevron points right. Arc keeps
+/// it in the icon's place while collapsed; Cra shows the icon at rest and the chevron only on hover
+/// (X DM, 4 Nov), except for a space without an icon, where the chevron is all that shows the state.
 final class SpaceHeaderView: NSView, NSTextFieldDelegate {
     private let spaceID: UUID
     private let store: SidebarStore
@@ -181,7 +183,8 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         done.textColor = colors.textTertiary
         chevron.contentTintColor = colors.textSecondary
         more.tint = colors.textSecondary
-        let showsChevron = lit || collapsed
+        let hasIcon = !(emoji.stringValue.isEmpty && symbol.image == nil)
+        let showsChevron = lit || (collapsed && !hasIcon)
         chevron.alphaValue = showsChevron ? 1 : 0
         emoji.alphaValue = showsChevron ? 0 : 1
         symbol.alphaValue = showsChevron ? 0 : 1

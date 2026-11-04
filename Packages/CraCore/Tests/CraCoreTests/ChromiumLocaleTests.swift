@@ -13,7 +13,9 @@ struct ChromiumLocaleTests {
     }()
 
     // Each expectation is what Arc 1.171's bundle resolves for the same macOS languages.
-    @Test(arguments: [
+    // Typed up front: as an untyped literal in @Test(arguments:) the type checker timed out
+    // on Xcode 27.2 (reported in #179).
+    static let languages: [([String], String)] = [
         (["zh-Hans-CN"], "zh-CN"),
         (["zh-Hans"], "zh-CN"),
         (["zh-Hant-TW"], "zh-TW"),
@@ -29,7 +31,9 @@ struct ChromiumLocaleTests {
         // A language Chromium has no translation for falls through to the next one.
         (["is-IS", "de-DE"], "de"),
         (["is-IS"], "en-US"),
-    ])
+    ]
+
+    @Test(arguments: languages)
     func followsMacOS(preferred: [String], locale: String) {
         #expect(ChromiumLocale.pick(available: Self.cef, preferredLanguages: preferred) == locale)
     }

@@ -935,6 +935,8 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
   without the fill).
 - Cra: SpaceHeaderView matches all four states (rest, hover, collapsed, collapsed + hover) to within
   1 px at 2x; the ••• square sits 0.5 pt off so its dots land on Arc's.
+- Cra deviation (4 Nov, X DM): collapsed, Cra keeps the space icon at rest and shows the right-pointing
+  chevron only on hover, so the icon is always visible. A space without an icon keeps Arc's resting chevron.
 
 ### DevTools docking, Arc's way (25 Oct)
 

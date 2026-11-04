@@ -573,6 +573,17 @@ enum StoreTests {
         let reloaded = AppComposition(clock: ManualScheduler()).store
         expect(!reloaded.settings.sharedFavorites && reloaded.space(work)!.favoritesContainerID != reloaded.space(other)!.favoritesContainerID
                && reloaded.integrityProblems().isEmpty, "the lists load as they were saved")
+
+        // A Little Window keeps the profile of the space it opens into (#172).
+        let paths = store.createProfile(name: "Shared Paths")
+        let pathSpace = store.createSpace(title: "Shared Paths", emoji: "🧭", focus: false).id
+        store.setProfile(paths.id, forSpace: pathSpace)
+        let pathTab = store.createTab(url: "https://example.com/paths", in: pathSpace, select: false)
+        expect(store.profileID(item: pathTab.id) == paths.id && store.profilePath(space: pathSpace) == store.profilePath(profile: paths.id)
+               && store.profileID(path: store.profilePath(space: pathSpace)) == paths.id && store.profilePath(space: pathSpace) != nil,
+               "a tab in a space reads back its space's profile and folder (#172)")
+        store.deleteSpace(pathSpace)
+        store.deleteProfile(paths.id)
     }
 
     /// Move Tab to Space N (#86) and the command bar's Move Tab to <space>, like Arc's "Move to
