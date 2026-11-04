@@ -95,6 +95,8 @@ final class ShellView: NSView {
             loadingIndicator.isDark = isDarkTheme
         }
     }
+    /// The ring around the focused split pane: the space's shadedDark (PaneCardView.focusRing).
+    var focusRingColor: NSColor? { didSet { if focusRingColor != oldValue { updateFocusRings() } } }
     /// Each tab's page background ("#RRGGBB"), painted under its page window (PaneCardView.pageColor).
     var pageColors: [UUID: String] = [:] {
         didSet { for c in paneCards where c.pageColor != pageColors[c.tabID] { c.pageColor = pageColors[c.tabID] } }
@@ -339,6 +341,8 @@ final class ShellView: NSView {
         focusedPaneID = focused ?? ids.first
         emptyPaneIDs = empty
         hasTab = !ids.isEmpty
+        // A click into another pane changes only the focus; the ring moves in the same pass.
+        defer { updateFocusRings() }
         for h in handles { h.orientation = orientation }
 
         guard structural else {
@@ -443,6 +447,16 @@ final class ShellView: NSView {
             for c in self.paneCards { c.frozenWebBounds = nil }
             self.needsLayout = true
             self.layoutSubtreeIfNeeded()
+        }
+    }
+
+    /// Arc rings the focused pane while the window shows several; one pane fills the window
+    /// unmarked. A page in full screen has no card around it.
+    private func updateFocusRings() {
+        let ringed = paneCards.count > 1 && !contentFullscreen
+        for c in paneCards {
+            let ring = ringed && c.tabID == focusedPaneID ? focusRingColor : nil
+            if c.focusRing != ring { c.focusRing = ring }
         }
     }
 
@@ -636,6 +650,7 @@ final class ShellView: NSView {
 
     func layoutContentChildren(animated: Bool = false) {
         let cb = contentContainer.bounds
+        updateFocusRings()
         let toolbarVisible = showToolbar && !contentFullscreen
         let layout = paneLayout(in: cb)
         for c in paneCards {

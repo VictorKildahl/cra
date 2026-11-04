@@ -35,7 +35,13 @@ final class PaneCardView: NSView {
             refreshBackground()
         }
     }
-    var cornerRadius: CGFloat = CraMetrics.contentCornerRadius { didSet { layer?.cornerRadius = cornerRadius; needsLayout = true } }
+    var cornerRadius: CGFloat = CraMetrics.contentCornerRadius {
+        didSet {
+            layer?.cornerRadius = cornerRadius
+            ring.layer?.cornerRadius = cornerRadius
+            needsLayout = true
+        }
+    }
     /// White page card, or Arc's tinted translucent empty pane.
     var hasPage = true { didSet { refreshBackground() } }
     var isDark = false { didSet { refreshBackground() } }
@@ -63,6 +69,16 @@ final class PaneCardView: NSView {
     }
     var showsElsewhere = false { didSet { elsewhereView.isHidden = !showsElsewhere } }
     private let elsewhereView = NSView()
+    /// Arc's ring around the focused split pane (its focusBorderLayer, GitHub #178): 2 pt in the
+    /// space's shadedDark, along the card's rounded edge, over the bar and the page. nil = none.
+    var focusRing: NSColor? {
+        didSet {
+            guard focusRing != oldValue else { return }
+            ring.isHidden = focusRing == nil
+            ring.layer?.borderColor = focusRing?.cgColor
+        }
+    }
+    private let ring = FocusRingView()
 
     /// The card shows another tab now (a tab switch with one pane before and after): the same
     /// card and toolbar follow it.
@@ -101,6 +117,9 @@ final class PaneCardView: NSView {
         addSubview(toolbarBackground)
         addSubview(hairline)
         addSubview(toolbarHost)
+        ring.isHidden = true
+        ring.layer?.cornerRadius = cornerRadius
+        addSubview(ring)
         refreshBackground()
         appearanceObservation = NSApp.observe(\.effectiveAppearance) { [weak self] _, _ in
             MainActor.assumeIsolated { self?.refreshBackground() }
@@ -108,6 +127,12 @@ final class PaneCardView: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    /// The ring stays the topmost view: the shell docks DevTools into the focused card later.
+    override func didAddSubview(_ subview: NSView) {
+        super.didAddSubview(subview)
+        if subview !== ring, ring.superview === self { addSubview(ring, positioned: .above, relativeTo: nil) }
+    }
 
     private func refreshBackground() {
         // Measured on Arc 1.170 (Victor theme, 2x): the empty pane is the
@@ -148,6 +173,7 @@ final class PaneCardView: NSView {
         elsewhereView.layer?.maskedCorners = pageBackground.layer?.maskedCorners ?? []
         let wb = frozenWebBounds ?? webArea.bounds
         for sub in webArea.subviews where sub.frame != wb { sub.frame = wb }
+        ring.frame = b
     }
 
     /// The snapshot (the tab switcher's thumbnail of the top of the page), blurred hard enough
@@ -161,4 +187,20 @@ final class PaneCardView: NSView {
               let result = CIContext().createCGImage(output, from: input.extent) else { return nil }
         return result
     }
+}
+
+/// A stroke along its bounds' rounded edge (the layer's border), drawn over the card's other
+/// views. One static layer: a focus change recolours or hides it, nothing redraws per frame.
+private final class FocusRingView: NSView {
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.borderWidth = 2
+        layer?.cornerCurve = .continuous
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    /// Clicks go to the bar and the page under it.
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }

@@ -22,7 +22,6 @@ MIN_SCORE = 70.0
 TARGETS = [
     ("Sources/Cra/Services/DevToolsToggle.swift", ["bash", "scripts/test-policies.sh"]),
     ("Sources/Cra/UI/Windows/ExtensionLaunch.swift", ["bash", "scripts/test-policies.sh"]),
-    ("Sources/Cra/UI/ToolbarComposition.swift", ["bash", "scripts/test-policies.sh"]),
     ("Sources/Cra/Services/SidebarIntegrity.swift", ["bash", "scripts/test-store.sh"]),
     ("Sources/Cra/App/AppComposition.swift", ["bash", "scripts/test-store.sh"]),
     ("Sources/Cra/App/FeatureFlags.swift", ["bash", "scripts/test-policies.sh"]),

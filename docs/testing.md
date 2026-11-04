@@ -9,8 +9,8 @@ Commands for each piece are in [development.md](development.md#tests).
    may sleep, which buttons a toolbar has) is a value type with a table test. What performs
    it (an `NSView`, a CEF call) gets no unit test; scenarios cover it.
 2. **Only test at seams that exist in production.** When logic can only be reached by building
-   a window, move the logic (`ToolbarComposition`, `ExtensionLaunch`, `DevToolsToggle`);
-   don't add a test hook to the window.
+   a window, move the logic (into CraCore like `ToolbarComposition`, or a policy like
+   `ExtensionLaunch`); don't add a test hook to the window.
 3. **No sleeps, no wall clock.** Decisions taken from time use the app's clock
    (`Scheduler`, injected through `AppComposition`); a test passes a `ManualScheduler` and
    advances it, so the 30-minute archive pass runs in a millisecond.

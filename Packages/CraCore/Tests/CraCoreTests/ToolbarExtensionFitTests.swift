@@ -29,3 +29,40 @@ struct ToolbarExtensionFitTests {
         #expect(hidden(pins: 0, space: 10, address: 200) == 0)
     }
 }
+
+/// What a narrow split pane drops, in Arc 1.171's order (GitHub #178).
+struct ToolbarRoomTests {
+    private let pins: [CGFloat] = [34, 34]
+
+    @Test func everythingStaysWhileTheAddressFits() {
+        #expect(ToolbarRoom.plan(pins: pins, reload: 37, settings: 34, needed: 150, room: 200) == .init())
+    }
+
+    @Test func pinsGoBeforeRefresh() {
+        // 120 + one pin = 154 ≥ 150.
+        #expect(ToolbarRoom.plan(pins: pins, reload: 37, settings: 34, needed: 150, room: 120) == .init(hiddenPins: 1))
+    }
+
+    @Test func refreshGoesOnceThePinsAreNotEnough() {
+        // 40 + 68 = 108 < 150: ↻ goes too, and the address, cut short, keeps the sliders.
+        #expect(ToolbarRoom.plan(pins: pins, reload: 37, settings: 34, needed: 150, room: 40)
+                == .init(hiddenPins: 2, hidesReload: true))
+    }
+
+    @Test func theSlidersGoOnlyWhenTheAddressWouldBeSqueezed() {
+        // A 215 pt pane (Arc 1.170): ← → · options · ✕ and the address only.
+        #expect(ToolbarRoom.plan(pins: [], reload: 37, settings: 34, needed: 150, room: 0)
+                == .init(hidesReload: true, hidesSettings: true))
+        #expect(ToolbarRoom.plan(pins: [], reload: 37, settings: 34, needed: 150, room: 50)
+                == .init(hidesReload: true))
+    }
+
+    @Test func aShortAddressNeverCostsTheSliders() {
+        // Needs 60: ↻ makes room (30 + 37 = 67), nothing else goes.
+        #expect(ToolbarRoom.plan(pins: [], reload: 37, settings: 34, needed: 60, room: 30) == .init(hidesReload: true))
+    }
+
+    @Test func missingButtonsAreNotHidden() {
+        #expect(ToolbarRoom.plan(pins: [], reload: nil, settings: nil, needed: 150, room: 0) == .init())
+    }
+}

@@ -715,8 +715,9 @@ isolated test instance; composites in docs/screenshots/compare-*.png.
   frames at 27 fps); the command bar fades in over the new pane, horizontally centred on it but kept inside the
   window (right margin ~80 pt), with Arc's "Search or Enter URL…" new-tab bar, not the edit-URL bar.
 - [O] Pane cards: 10 pt gap, both cards rounded; each pane has its own toolbar with ← → and a close ✕ at the
-  right (no refresh button); the focused pane additionally shows a split-options button (rectangle.split
-  glyph) just before its ✕. The URL is centred; in narrow panes the link glyph is dropped.
+  right; the focused pane additionally shows a split-options button (rectangle.split glyph) just before its ✕.
+  The URL is centred; in narrow panes the link glyph is dropped. (These panes were ~215 pt wide, too narrow for
+  ↻ and the sliders: see "Split pane bars and the focus ring" below, GitHub #178.)
 - [O] The empty pane is the window gradient plus a white veil of about +9/+11/+12 per channel (≈ 0.2 alpha),
   with a hairline under its toolbar.
 - [O] Hovering the gap between panes shows no handle. Dragging from the gap did not resize in our runs: Arc
@@ -741,6 +742,27 @@ isolated test instance; composites in docs/screenshots/compare-*.png.
   the new pane, pinned/favorite anchors become Today copies, sidebar split row with per-child close and
   Option-click to unsplit, drop-on-row-right-half to split. Not yet: the drop-region placeholder over the
   content (CEF page windows receive the drag), the window shrink effect, and a 1:1 divider feel.
+
+### Split pane bars and the focus ring (Arc 1.171, 4 Nov, GitHub #178)
+Offline Arc (fake home, see "One space") with a Today split of two local pages, read over AX (button
+descriptions and frames) at window widths 1400 → 926 (Arc's minimum), plus window captures and real-pointer hover.
+- [O static] The bar's state has `onlyShowEssentialControls`, `isHovered`, a `blueprintType` of `onHover | always`
+  (ContentToolbarInteractionTracker's hover session), and per-item `urlDomainHasRoom`, `numberOfExtensionsThatFit`,
+  `refreshHasRoom`, `copyHasRoom`, `settingsHasRoom`. The ring is a `focusBorderLayer`.
+- [O] Focused pane: Go back, Go forward, Reload this page | address (Copy Current URL, security glyph) | pinned
+  extensions (in the reporter's capture; the offline copy has none), Site Control Center, Split View Menu,
+  Close Split View Pane. Unfocused pane: Go back, Go forward | address | Close Split View Pane only.
+- [O] Pointer over an unfocused pane's bar: Reload, Site Control Center and Split View Menu appear there too (the
+  focused pane's set); the ring stays where it is. Pressing that Reload reloads the pane and moves the focus (and
+  the ring) to it; the other pane drops back to the essentials.
+- [O] Narrow: a 387 pt pane (window 1000) keeps everything; a ~350 pt pane (window 926) drops Reload, cuts the
+  domain short ("....lvh.me") and keeps the Site Control Center; a 215 pt pane (Arc 1.170, above) has neither.
+- [O] Ring: 2 pt (4 px at 2x), solid, along the card's rounded edge and over the bar's edge, in the space's
+  `primaryColorPalette.shadedDark` (#6B5709 measured on Victor's yellow space, P3 capture; #B60222 vs Arc's stored
+  #B70021 on the reporter's red space). None on the unfocused pane or on a lone pane.
+- Cra: ToolbarComposition (`hovered`, essentials only on an unfocused, unhovered pane), ToolbarRoom (pins, then ↻,
+  then the sliders below an 80 pt address, a guess between the two narrow observations), PaneCardView.focusRing
+  (theme.shadedDark). A control on an unfocused pane focuses it first, as Arc's Reload does.
 
 ### Pinned splits and the split menu (Arc 1.171, 30 Oct)
 Observed live on a throwaway Today split (example.com | example.org), archived afterwards.

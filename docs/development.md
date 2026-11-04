@@ -93,7 +93,7 @@ app it builds.
 - `scripts/test-store.sh`: the real `SidebarStore`, `AppComposition` and importers on a
   `ManualScheduler`, against the made-up Arc and Chromium profiles in `Tests/Fixtures`.
 - `scripts/test-policies.sh`: the decisions pulled out of the window controllers
-  (`ToolbarComposition`, `ExtensionLaunch`, `DevToolsToggle`, `FeatureFlags`).
+  (`ExtensionLaunch`, `DevToolsToggle`, `FeatureFlags`).
 - `scripts/test-perf.sh`: the performance recorder on a real main run loop: injected stalls,
   hang files with a `sample` stack, the session marker, ownership, the recording switch
   ([performance.md](performance.md)).

@@ -279,6 +279,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                                      buttonBottomY: self?.store.settings.showToolbar == false ? button?.minY : nil)
         }
         sidebarActions.showExtensionsMenu = { [weak self] in self?.showToolbarExtensionsMenu() }
+        sidebarActions.paneRunExtension = { [weak self] pane, id in
+            guard let self else { return }
+            self.focusPaneNow(pane)
+            self.sidebarActions.runExtension(id)
+        }
+        sidebarActions.paneExtensionsMenu = { [weak self] pane in
+            self?.focusPaneNow(pane)
+            self?.showToolbarExtensionsMenu()
+        }
         // Popups from an extension's shortcut or chrome.action.openPopup() hang where the
         // menu bar's do: under the extension's toolbar button, else at the card's right end.
         // Arc puts every popup in one place, whatever opened it.
@@ -364,6 +373,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             window?.backgroundColor = palette.vibrant ? .clear : NSColor(palette.gradientColors.first ?? .gray)
         }
 
+        let ring = NSColor(space.theme.shadedDark)
+        if shell.focusRingColor != ring { shell.focusRingColor = ring }
         browsers.pruneMissingTabs()
         let selected = selectedTabID
         // Split view: the selected tab's split decides which panes are on screen.
@@ -2153,6 +2164,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             guard let it = store.item(id), let tab = it.tab else { return nil }
             return TabSwitcher.Item(id: id, title: it.displayTitle, iconKey: tab.iconKey, snapshot: browsers.runtime(for: id)?.snapshot)
         })
+    }
+
+    /// Selects a split pane and brings the shell along at once (refresh otherwise runs on the next
+    /// turn), so the focused card, the visible page and the profile are that pane's when the
+    /// caller reads them.
+    private func focusPaneNow(_ id: UUID) {
+        guard selectedTabID != id else { return }
+        store.selectTab(id, window: windowID)
+        refresh()
     }
 
     /// Arc's sliders button (toolbar and URL pill): the Site Control Center, hung under the

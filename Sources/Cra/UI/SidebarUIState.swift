@@ -224,6 +224,10 @@ final class SidebarActions {
     var runExtension: (String) -> Void = { _ in }
     /// Toolbar Extensions button: the extensions menu, under the pointer.
     var showExtensionsMenu: () -> Void = {}
+    /// Split view: a pane's pinned extension or Extensions button. The pane takes the focus
+    /// first, so the action and the Site Control Center describe its page (GitHub #178).
+    var paneRunExtension: (UUID, String) -> Void = { _, _ in }
+    var paneExtensionsMenu: (UUID) -> Void = { _ in }
     /// The developer bar's address field: a typed URL or search, in the selected tab.
     var loadTyped: (String) -> Void = { _ in }
     /// A typed URL or search in a new tab (⌘ + New Tab pastes the clipboard's text).
