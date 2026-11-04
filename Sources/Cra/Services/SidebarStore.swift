@@ -202,6 +202,7 @@ final class SidebarStore {
     }
 
     private func touch() {
+        pruneEmptyGroups()
         revision &+= 1
         save()
     }
@@ -677,12 +678,15 @@ final class SidebarStore {
             return
         }
         let fromParent = it.parentID
+        // A tab group lives at the top of Today and holds tabs and splits only (Arc's tabGroup items).
+        if it.isTabGroup, items[newParent]?.container != .today(spaceID: spaceID(ofItem: id) ?? UUID()) { return }
+        if items[newParent]?.isTabGroup == true, !(it.isTab || it.isSplit) { return }
         // A live folder fills itself: nothing is dropped into it, and it never unpacks into Today.
         if items[newParent]?.isLiveFolder == true, fromParent != newParent { return }
         if it.isLiveFolder, case .today? = rootContainerKind(newParent) { return }
         if fromParent != newParent, let from = fromParent, items[from]?.isLiveFolder == true { hideLiveItem(id, in: from) }
         let oldIndex = fromParent.flatMap { items[$0]?.children.firstIndex(of: id) }
-        if it.isFolder, case .today? = rootContainerKind(newParent) {
+        if it.isFolder, !it.isTabGroup, case .today? = rootContainerKind(newParent) {
             // Unpack: move the folder's tabs instead.
             let kids = it.children
             detach(id)
@@ -1268,9 +1272,9 @@ final class SidebarStore {
     // the item's signal, not on `prefs`, which changes on every tab switch and window move;
     // `notifyItemReaders` signals the items whose state actually changed.
 
+    /// A tab group is always open: it has a header, not a folder's disclosure (Arc's TabGroupHeaderCellView).
     func isExpanded(_ id: UUID) -> Bool {
-        items.observe(id)
-        return _prefs.expandedFolders.contains(id)
+        items[id]?.isTabGroup == true || _prefs.expandedFolders.contains(id)
     }
 
     /// The tabs a closed folder lists under itself (FolderPeek), in sidebar order.
@@ -1290,7 +1294,7 @@ final class SidebarStore {
             if c.isTab { return [c.id] }
             if let s = c.split { return [s.focusTabID.flatMap { c.children.contains($0) ? $0 : nil } ?? c.children.first].compactMap { $0 } }
             guard c.isFolder else { return [] }
-            return _prefs.expandedFolders.contains(c.id) ? shownTabs(under: c.id) : peekedTabs(in: c.id).map(\.id)
+            return c.isTabGroup || _prefs.expandedFolders.contains(c.id) ? shownTabs(under: c.id) : peekedTabs(in: c.id).map(\.id)
         }
     }
 
@@ -1522,6 +1526,8 @@ final class SidebarStore {
 
     func archiveTab(_ id: UUID, reason: ArchiveReason) {
         guard let it = items[id], it.isTab else { return }
+        // ⌘Z now brings this tab back, not the tidy before it (Arc's undo stack).
+        lastTidy = nil
         let sid = spaceID(ofItem: id)
         // Each window and space that has it open, every space sharing it for a favorite.
         let shownIn = spaceIDs(ofItem: id)
@@ -1620,6 +1626,136 @@ final class SidebarStore {
     func clearArchive() {
         archive.removeAll()
         touch()
+    }
+
+    // MARK: Tab groups (Tidy Tabs)
+
+    /// Spaces whose Today tabs the model is sorting: the divider draws its squiggle meanwhile.
+    private(set) var tidyingSpaces: Set<UUID> = []
+    /// Per space, Today's tabs when Tidy last ran: Tidy waits for a new loose tab (TidyTabs.offers).
+    /// Not saved, like Arc's.
+    private(set) var tidiedTabs: [UUID: Set<UUID>] = [:]
+    /// What ⌘Z puts back: the last tidy, until a tab closes or a group's header is used.
+    @ObservationIgnored private var lastTidy: (spaceID: UUID, todayBefore: [UUID], moved: [UUID])?
+
+    /// Today's top-level tabs, outside any group: what Tidy sorts.
+    func looseTodayTabs(_ sid: UUID) -> [SidebarItem] {
+        guard let space = spaces[sid] else { return [] }
+        return children(of: space.todayContainerID).filter(\.isTab)
+    }
+
+    func tabGroups(in sid: UUID) -> [SidebarItem] {
+        guard let space = spaces[sid] else { return [] }
+        return children(of: space.todayContainerID).filter(\.isTabGroup)
+    }
+
+    /// Whether the divider offers Tidy now (the Apple Intelligence check is the caller's).
+    func canTidy(_ sid: UUID) -> Bool {
+        guard let space = spaces[sid], !isIncognito(space: sid) else { return false }
+        return TidyTabs.offers(todayTabs: tabs(under: space.todayContainerID).count,
+                               looseTabs: looseTodayTabs(sid).map(\.id), tidied: tidiedTabs[sid])
+    }
+
+    func setTidying(_ sid: UUID, _ on: Bool) {
+        if on { tidyingSpaces.insert(sid) } else { tidyingSpaces.remove(sid) }
+    }
+
+    /// Sorts `tabIDs` (the loose tabs the model saw, in prompt order) as the plan says: new groups
+    /// under the loose tabs left over, tabs joining groups Today already had. A plan that changes
+    /// nothing still counts as a run, as Arc's did.
+    func applyTidy(_ plan: TidyTabs.Plan, tabIDs: [UUID], in sid: UUID) {
+        guard let space = spaces[sid] else { return }
+        let today = space.todayContainerID
+        let before = items[today]?.children ?? []
+        let groups = tabGroups(in: sid)
+        let loose = Set(looseTodayTabs(sid).map(\.id))
+        func ids(_ indices: [Int]) -> [UUID] {
+            indices.compactMap { tabIDs.indices.contains($0) ? tabIDs[$0] : nil }.filter(loose.contains)
+        }
+        var moved: [UUID] = []
+        for (g, indices) in plan.joins.sorted(by: { $0.key < $1.key }) where groups.indices.contains(g) {
+            let tabs = ids(indices)
+            moveItems(tabs, to: groups[g].id, index: nil)
+            moved += tabs
+        }
+        var newGroups: [UUID] = []
+        for p in plan.newGroups {
+            let tabs = ids(p.tabs)
+            guard tabs.count >= 2 else { continue }
+            var g = SidebarItem.tabGroup(p.name, parent: today)
+            g.createdAt = clock.now
+            items[g.id] = g
+            var t = items[today]!
+            t.children.append(g.id)
+            items[today] = t
+            moveItems(tabs, to: g.id, index: nil)
+            newGroups.append(g.id)
+            moved += tabs
+        }
+        if var t = items[today] {
+            let rest = t.children.filter { !newGroups.contains($0) }
+            t.children = TidyTabs.order(today: rest, isGroup: { self.items[$0]?.isTabGroup == true }, grouped: [], newGroups: newGroups)
+            items[today] = t
+        }
+        lastTidy = moved.isEmpty ? nil : (sid, before, moved)
+        tidiedTabs[sid] = Set(tabs(under: today).map(\.id))
+        touch()
+    }
+
+    /// A run that ended without a plan (the model failed or had nothing to say) still hides Tidy.
+    func markTidied(_ sid: UUID) {
+        guard let space = spaces[sid] else { return }
+        tidiedTabs[sid] = Set(tabs(under: space.todayContainerID).map(\.id))
+    }
+
+    /// ⌘Z after a tidy: the tabs it moved go back where they were, its new groups go with them.
+    func undoTidy() -> Bool {
+        guard let u = lastTidy, let space = spaces[u.spaceID] else { return false }
+        lastTidy = nil
+        let today = space.todayContainerID
+        for id in u.moved where items[id] != nil && items[id]?.parentID != today {
+            moveItem(id, to: today, index: nil)
+        }
+        if var t = items[today] {
+            let old = u.todayBefore.filter(t.children.contains)
+            t.children = t.children.filter { !old.contains($0) } + old
+            items[today] = t
+        }
+        tidiedTabs[u.spaceID] = nil
+        touch()
+        return true
+    }
+
+    /// Arc's "Remove header": the tabs stay where they are, loose.
+    func removeGroupHeader(_ id: UUID) {
+        guard let g = items[id], g.isTabGroup, let p = g.parentID, let at = items[p]?.children.firstIndex(of: id) else { return }
+        lastTidy = nil
+        moveItems(g.children, to: p, index: at)
+        touch()
+    }
+
+    /// Arc's "Create Folder" on a group header: an open folder of that name leads the space's
+    /// pinned tabs, holding the group's tabs (pinned now); the group goes.
+    @discardableResult
+    func folderFromGroup(_ id: UUID) -> SidebarItem? {
+        guard let g = items[id], g.isTabGroup, let sid = spaceID(ofItem: id), let space = spaces[sid] else { return nil }
+        lastTidy = nil
+        let f = createFolder(named: g.title ?? "Folder", in: space.pinnedContainerID, index: 0)
+        moveItems(g.children, to: f.id, index: nil)
+        touch()
+        return items[f.id]
+    }
+
+    /// A group whose last tab closed or moved out goes too (Arc never shows an empty header).
+    private func pruneEmptyGroups() {
+        for space in spaces.values {
+            guard var t = items[space.todayContainerID] else { continue }
+            let empty = t.children.filter { items[$0].map { $0.isTabGroup && $0.children.isEmpty } ?? false }
+            guard !empty.isEmpty else { continue }
+            t.children.removeAll { empty.contains($0) }
+            items[t.id] = t
+            for g in empty { items[g] = nil }
+        }
     }
 
     func clearToday(_ sid: UUID? = nil) {

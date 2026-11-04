@@ -28,7 +28,8 @@ final class SpaceListView: NSView, NSDraggingSource {
         case split(SplitRowModel)
         case liveStatus(LiveStatusModel)
         case placeholder(active: Bool)
-        case divider(hasToday: Bool)
+        case divider(hasToday: Bool, tidy: DividerTidy)
+        case groupHeader(GroupHeaderRowModel)
         case newTab(active: Bool)
     }
 
@@ -248,7 +249,15 @@ final class SpaceListView: NSView, NSDraggingSource {
 
         func add(_ item: SidebarItem, depth: Int, pinned: Bool, parent: UUID, index: Int, peeked: Bool = false) {
             var row = Row(key: .item(item.id), content: .newTab(active: false), decor: decor(item.id), itemID: item.id, parent: parent, index: index, depth: depth)
-            if item.isFolder {
+            if item.isTabGroup {
+                // Arc lists a group's tabs under its header without an indent.
+                row.content = .groupHeader(GroupHeaderRowModel(id: item.id, title: item.title ?? "Untitled"))
+                out.append(row)
+                let kids = item.children
+                for c in store.children(of: item.id) {
+                    add(c, depth: depth, pinned: pinned, parent: item.id, index: kids.firstIndex(of: c.id) ?? 0)
+                }
+            } else if item.isFolder {
                 let expanded = store.isExpanded(item.id)
                 let peeked = expanded ? [] : store.peekedTabs(in: item.id)
                 let glyph = palette.folderColors(item.folderIcon)
@@ -327,7 +336,9 @@ final class SpaceListView: NSView, NSDraggingSource {
         }
         let pinnedCount = out.count
         let todayKids = store.item(space.todayContainerID)?.children ?? []
-        out.append(Row(key: .divider, content: .divider(hasToday: !todayKids.isEmpty)))
+        let tidy: DividerTidy = store.tidyingSpaces.contains(spaceID) ? .running
+            : TidyTabsService.shared.offers(spaceID, store: store) ? .offered : .none
+        out.append(Row(key: .divider, content: .divider(hasToday: !todayKids.isEmpty, tidy: tidy)))
         let atTop = store.settings.newTabButtonAtTop
         if atTop && showsNewTab { out.append(Row(key: .newTab, content: .newTab(active: placeholder))) }
         for item in store.children(of: space.todayContainerID) {
@@ -435,6 +446,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         case .liveStatus: return v is LiveStatusRowView
         case .placeholder: return v is PinPlaceholderRowView
         case .divider: return v is DividerRowView
+        case .groupHeader: return v is GroupHeaderRowView
         case .newTab: return v is NewTabRowView
         }
     }
@@ -447,6 +459,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         case .liveStatus: return LiveStatusRowView(key: row.key, list: self, colors: colors)
         case .placeholder: return PinPlaceholderRowView(key: row.key, list: self, colors: colors)
         case .divider: return DividerRowView(key: row.key, list: self, colors: colors)
+        case .groupHeader: return GroupHeaderRowView(key: row.key, list: self, colors: colors)
         case .newTab: return NewTabRowView(key: row.key, list: self, colors: colors)
         }
     }
@@ -458,7 +471,8 @@ final class SpaceListView: NSView, NSDraggingSource {
         case .split(let m): (v as? SplitRowView)?.apply(m)
         case .liveStatus(let m): (v as? LiveStatusRowView)?.apply(m)
         case .placeholder(let active): (v as? PinPlaceholderRowView)?.apply(active: active)
-        case .divider(let hasToday): (v as? DividerRowView)?.apply(hasToday: hasToday)
+        case .divider(let hasToday, let tidy): (v as? DividerRowView)?.apply(hasToday: hasToday, tidy: tidy)
+        case .groupHeader(let m): (v as? GroupHeaderRowView)?.apply(m)
         case .newTab(let active): (v as? NewTabRowView)?.apply(active: active)
         }
     }
@@ -523,7 +537,7 @@ final class SpaceListView: NSView, NSDraggingSource {
                 pinnedFrame = NSRect(x: CraMetrics.rowInset, y: pinnedTop, width: inner, height: y - pinnedTop)
             }
             if isDivider {
-                afterLine = rows[i].content == .divider(hasToday: true)
+                if case .divider(true, _) = rows[i].content { afterLine = true } else { afterLine = false }
                 let h: CGFloat = afterLine ? 18 : 0
                 rows[i].frame = NSRect(x: 0, y: y, width: width, height: h)
                 y += h
@@ -1050,7 +1064,8 @@ final class SpaceListView: NSView, NSDraggingSource {
         }
         // An empty pinned list shows its own placeholder instead of a line.
         guard let y else { return drop }
-        let depth = items.first { $0.itemID == parent }.map { $0.depth + 1 } ?? 0
+        // A group's tabs sit at its header's depth (Arc doesn't indent them).
+        let depth = items.first { $0.itemID == parent }.map { $0.depth + (store.item(parent)?.isTabGroup == true ? 0 : 1) } ?? 0
         drop.line = .init(y: y, minX: todayFrame.minX + CraMetrics.rowLeading + CGFloat(depth) * CraMetrics.indent, maxX: todayFrame.maxX - 6)
         drop.rowAbove = items.last { $0.frame.maxY <= y + 1 }?.itemID
         drop.rowBelow = items.first { $0.frame.minY >= y - 1 }?.itemID

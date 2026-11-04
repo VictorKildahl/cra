@@ -609,6 +609,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             if let st = dict["status"] { main.browserManager(statusMessage: st); return }
+            // tidy: the divider's Tidy on the window's space, without hovering it; undoTidy: ⌘Z's.
+            if dict["tidy"] != nil { TidyTabsService.shared.tidy(store.focusedSpace(window: main.windowID).id, store: store); return }
+            if dict["undoTidy"] != nil { _ = store.undoTidy(); return }
             // Scenario hooks (scripts/scenario.sh): what a journey needs without a pointer.
             if dict["checkStore"] != nil { logSidebarProblems(); return }
             // A main-thread stall of this many milliseconds, for the performance recorder's tests.
@@ -911,8 +914,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return false
     }
 
-    /// Arc: ⌘Z brings back the tab you closed last (closing registers an undo, GitHub #21),
-    /// unless the keyboard is in something with text to undo: a text field, or an editable
+    /// Arc: ⌘Z brings back the tab you closed last (closing registers an undo, GitHub #21), or undoes
+    /// the last Tidy, unless the keyboard is in something with text to undo: a text field, or an editable
     /// element in a page (Chromium's page view reports its ui::TextInputType, 0 = none).
     private func undoClosedTab(_ event: NSEvent) -> Bool {
         guard Shortcut("z", .command).matches(event) else { return false }
@@ -921,7 +924,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if let view = responder as? NSView, NSStringFromClass(type(of: view)) == "RenderWidgetHostViewCocoa",
            view.responds(to: NSSelectorFromString("textInputType")),
            (view.value(forKey: "textInputType") as? Int ?? 0) != 0 { return false }
-        perform("reopenClosedTab")
+        // The last thing to undo may be a tidy (Arc's "Undo Tidy Tabs"); a tab closed since comes first.
+        if !store.undoTidy() { perform("reopenClosedTab") }
         return true
     }
 

@@ -10,8 +10,9 @@ you can send. Code is welcome too, within the few rules below.
   include a screenshot or clip of both. Arc isn't the only source of truth, though: if
   Arc's way is unintuitive or worse than it could be, open an issue that makes the case,
   and we'll decide it on its merits.
-- **No built-in AI.** Arc Max-style features (tidy tabs, summaries, LLM search) are out
-  of scope.
+- **No cloud AI.** Arc Max-style features (summaries, LLM search, anything that needs an
+  API key or sends pages away) are out of scope. The one exception is Tidy Tabs, which runs
+  on the Mac's own Apple Intelligence model and only shows when that is turned on.
 - **No account, no server, no telemetry.** Everything stays on the user's Mac.
 - **Native first.** The app is AppKit and SwiftUI; web content is Chromium through CEF.
 

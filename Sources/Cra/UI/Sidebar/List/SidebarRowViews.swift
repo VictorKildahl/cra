@@ -2192,16 +2192,28 @@ struct ClipboardPaste: Equatable {
     }
 }
 
-/// The line between pinned and Today; "Clear" shows on hover.
+/// Tidy on the divider: off, offered (shown on hover), or sorting (shown, squiggling).
+enum DividerTidy: Equatable {
+    case none, offered, running
+}
+
+/// The line between pinned and Today; "Clear" shows on hover, and "Tidy" before it once Tidy Tabs
+/// can sort Today (Arc 1.171: UnpinnedSectionHeaderCellView with SidebarTidyButton, a
+/// SquiggleDivider while it works).
 final class DividerRowView: SidebarRowView {
     private let line = NSView()
     private var clear: ClearButton?
+    private var tidyButton: TidyButton?
+    private let squiggle = SquiggleLayer()
     private var hasToday = false
+    private var tidy = DividerTidy.none
 
     override init(key: SpaceListView.RowKey, list: SpaceListView, colors: SidebarColors) {
         super.init(key: key, list: list, colors: colors)
         line.wantsLayer = true
         addSubview(line)
+        layer?.addSublayer(squiggle)
+        squiggle.onFlat = { [weak self] in self?.refresh() }
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -2209,8 +2221,14 @@ final class DividerRowView: SidebarRowView {
     override var mouseDownCanMoveWindow: Bool { true }
     override func mouseDown(with event: NSEvent) { super.mouseDown(with: event) }
 
-    func apply(hasToday: Bool) {
+    func apply(hasToday: Bool, tidy: DividerTidy) {
+        let wasRunning = self.tidy == .running
         self.hasToday = hasToday
+        self.tidy = tidy
+        if (tidy == .running) != wasRunning {
+            squiggle.setRunning(tidy == .running, animated: window != nil)
+            tidyButton?.setSweeping(tidy == .running)
+        }
         refresh()
     }
 
@@ -2223,8 +2241,10 @@ final class DividerRowView: SidebarRowView {
 
     private func refresh() {
         line.layer?.backgroundColor = colors.separator.cgColor
-        line.alphaValue = hasToday ? 1 : 0
-        let show = isHovered && hasToday
+        squiggle.strokeColor = colors.separator.cgColor
+        // The squiggle stands in for the line while Tidy works.
+        line.alphaValue = hasToday && !squiggle.isShowing ? 1 : 0
+        let show = (isHovered || tidy == .running) && hasToday
         if show, clear == nil, let list {
             let b = ClearButton(colors: colors) { [weak list] in
                 guard let list else { return }
@@ -2236,12 +2256,33 @@ final class DividerRowView: SidebarRowView {
             b.animator().alphaValue = 1
         } else if !show, let b = clear {
             clear = nil
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.15
-                b.animator().alphaValue = 0
-            } completionHandler: { b.removeFromSuperview() }
+            fadeOut(b)
         }
+        let showTidy = show && tidy != .none
+        if showTidy, tidyButton == nil, let list {
+            let b = TidyButton(colors: colors) { [weak list] in
+                guard let list else { return }
+                TidyTabsService.shared.tidy(list.spaceID, store: list.store)
+            }
+            b.alphaValue = 0
+            addSubview(b)
+            tidyButton = b
+            b.setSweeping(tidy == .running)
+            b.animator().alphaValue = 1
+        } else if !showTidy, let b = tidyButton {
+            tidyButton = nil
+            fadeOut(b)
+        }
+        clear?.colors = colors
+        tidyButton?.colors = colors
         needsLayout = true
+    }
+
+    private func fadeOut(_ v: NSView) {
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            v.animator().alphaValue = 0
+        } completionHandler: { v.removeFromSuperview() }
     }
 
     override func layout() {
@@ -2252,16 +2293,28 @@ final class DividerRowView: SidebarRowView {
             let s = clear.fittingSize
             clear.frame = NSRect(x: bounds.width - 20 - s.width, y: (bounds.height - s.height) / 2, width: s.width, height: s.height)
             right = clear.frame.minX - 8
+            if let tidy = tidyButton {
+                // Arc 1.171, 2x capture of a 347 pt sidebar: the hairline 11 pt before "Clear", the
+                // line 9.5 pt before the broom.
+                let t = tidy.fittingSize
+                tidy.frame = NSRect(x: clear.frame.minX - TidyButton.trailingGap - t.width, y: (bounds.height - t.height) / 2,
+                                    width: t.width, height: t.height)
+                right = tidy.frame.minX + TidyButton.broomInkInset - 9.5
+            }
         }
-        line.frame = NSRect(x: 18, y: (bounds.height - 1) / 2, width: max(0, right - 18), height: 1)
+        let y = (bounds.height - 1) / 2
+        line.frame = NSRect(x: 18, y: y, width: max(0, right - 18), height: 1)
+        squiggle.place(from: 18, to: max(18, right), midY: y + 0.5)
     }
 
     private final class ClearButton: NSView {
         private let label = NSTextField.sidebarLabel(size: 11, weight: .semibold)
         private let action: () -> Void
+        var colors: SidebarColors { didSet { label.textColor = colors.textSecondary } }
 
         init(colors: SidebarColors, action: @escaping () -> Void) {
             self.action = action
+            self.colors = colors
             super.init(frame: .zero)
             label.stringValue = "Clear"
             label.textColor = colors.textSecondary
@@ -2280,6 +2333,370 @@ final class DividerRowView: SidebarRowView {
         override func mouseUp(with event: NSEvent) {
             if bounds.contains(convert(event.locationInWindow, from: nil)) { action() }
         }
+    }
+}
+
+/// Timings of Tidy on the divider, measured on Arc 1.171 (120 fps capture, 4 Nov 2026).
+enum SidebarTidyMetrics {
+    /// The squiggle: a sine of 12.75 pt period, 3 pt amplitude, travelling left at 5 periods a
+    /// second; the amplitude ramps in and out linearly over 0.4 s (SquiggleDivider's
+    /// amplitudeAnimationDuration).
+    static let period: CGFloat = 12.75
+    static let amplitude: CGFloat = 3
+    static let cyclesPerSecond: Double = 5
+    static let ramp: TimeInterval = 0.4
+    /// One sweep of the broom: tips 31° clockwise from the top of its handle in 0.2 s, holds,
+    /// swings 7° past upright and settles, 0.9 s in all.
+    static let sweep: TimeInterval = 0.9
+    /// A tidy runs at least this long on screen: one sweep and the squiggle's ramp in.
+    static let minimumRun: TimeInterval = 0.9
+}
+
+/// The divider's squiggle (Arc's SquiggleDivider): the line becomes a travelling sine wave
+/// while Tidy works and flattens back when it is done.
+final class SquiggleLayer: CALayer {
+    private let wave = CAShapeLayer()
+    private(set) var isShowing = false
+    /// Called once the wave has flattened and the straight line can come back.
+    var onFlat: (() -> Void)?
+    private var width: CGFloat = 0
+    var strokeColor: CGColor? {
+        get { wave.strokeColor }
+        set { wave.strokeColor = newValue }
+    }
+
+    override init() {
+        super.init()
+        masksToBounds = true
+        isHidden = true
+        actions = ["position": NSNull(), "bounds": NSNull(), "hidden": NSNull()]
+        wave.fillColor = nil
+        wave.lineWidth = 1
+        wave.lineCap = .round
+        wave.actions = ["position": NSNull(), "bounds": NSNull(), "path": NSNull(), "strokeColor": NSNull()]
+        addSublayer(wave)
+    }
+
+    override init(layer: Any) { super.init(layer: layer) }
+    required init?(coder: NSCoder) { fatalError() }
+
+    /// Spans the line's run, centred on it.
+    func place(from x0: CGFloat, to x1: CGFloat, midY: CGFloat) {
+        let h = 2 * SidebarTidyMetrics.amplitude + 4
+        frame = CGRect(x: x0, y: midY - h / 2, width: x1 - x0, height: h)
+        if abs(width - (x1 - x0)) > 0.5 {
+            width = x1 - x0
+            wave.frame = CGRect(x: 0, y: 0, width: width + 2 * SidebarTidyMetrics.period, height: h)
+            if isShowing, wave.animation(forKey: "flatten") == nil { wave.path = path(amplitude: SidebarTidyMetrics.amplitude) }
+        }
+    }
+
+    /// One point per 0.5 pt, the same count flat or waving, so the path animates point by point.
+    private func path(amplitude: CGFloat) -> CGPath {
+        let p = CGMutablePath()
+        let mid = bounds.height / 2
+        let total = width + 2 * SidebarTidyMetrics.period
+        var x: CGFloat = 0
+        p.move(to: CGPoint(x: 0, y: mid))
+        while x <= total {
+            p.addLine(to: CGPoint(x: x, y: mid + amplitude * sin(2 * .pi * x / SidebarTidyMetrics.period)))
+            x += 0.5
+        }
+        return p
+    }
+
+    func setRunning(_ on: Bool, animated: Bool) {
+        let flat = path(amplitude: 0), full = path(amplitude: SidebarTidyMetrics.amplitude)
+        if on {
+            isShowing = true
+            isHidden = false
+            wave.removeAnimation(forKey: "flatten")
+            wave.path = full
+            if animated {
+                let grow = CABasicAnimation(keyPath: "path")
+                grow.fromValue = flat
+                grow.toValue = full
+                grow.duration = SidebarTidyMetrics.ramp
+                wave.add(grow, forKey: "grow")
+            }
+            // Leftward travel: the wave slides one period left, over and over. A translation, so the
+            // line growing shorter as the Tidy button comes in doesn't move it.
+            let travel = CABasicAnimation(keyPath: "transform.translation.x")
+            travel.fromValue = 0
+            travel.toValue = -SidebarTidyMetrics.period
+            travel.duration = 1 / SidebarTidyMetrics.cyclesPerSecond
+            travel.repeatCount = .infinity
+            wave.add(travel, forKey: "travel")
+        } else {
+            guard isShowing else { return }
+            let finish = { [weak self] in
+                guard let self else { return }
+                self.isShowing = false
+                self.isHidden = true
+                self.wave.removeAllAnimations()
+                self.onFlat?()
+            }
+            guard animated else { finish(); return }
+            let flatten = CABasicAnimation(keyPath: "path")
+            flatten.fromValue = wave.presentation()?.path ?? full
+            flatten.toValue = flat
+            flatten.duration = SidebarTidyMetrics.ramp
+            CATransaction.begin()
+            CATransaction.setCompletionBlock { finish() }
+            wave.path = flat
+            wave.add(flatten, forKey: "flatten")
+            CATransaction.commit()
+        }
+    }
+}
+
+/// Arc's SidebarTidyButton: a broom, "Tidy" and a hairline before "Clear". The broom sweeps while
+/// Tidy works.
+final class TidyButton: NSView {
+    /// From the hairline to "Clear"'s frame (Arc: 11 pt from the hairline to its first glyph).
+    static let trailingGap: CGFloat = 7.7
+    /// The broom's box is 14 pt; its ink starts 3 pt in.
+    static let broomInkInset: CGFloat = 3
+    /// Arc: the hairline 8.5 pt after "Tidy"'s last glyph.
+    private static let barOffset: CGFloat = 7
+    private let broom = CALayer()
+    private let broomMask = CALayer()
+    private let label = NSTextField.sidebarLabel(size: 11, weight: .semibold)
+    private let bar = CALayer()
+    private let action: () -> Void
+    private var hovering = false { didSet { tint() } }
+    private var sweeping = false
+    var colors: SidebarColors { didSet { if colors != oldValue { tint() } } }
+
+    init(colors: SidebarColors, action: @escaping () -> Void) {
+        self.colors = colors
+        self.action = action
+        super.init(frame: .zero)
+        wantsLayer = true
+        label.stringValue = "Tidy"
+        label.sizeToFit()
+        addSubview(label)
+        broomMask.contents = BroomGlyph.image
+        broom.mask = broomMask
+        broom.actions = ["backgroundColor": NSNull(), "position": NSNull(), "bounds": NSNull()]
+        bar.actions = ["backgroundColor": NSNull(), "position": NSNull(), "bounds": NSNull()]
+        layer?.addSublayer(broom)
+        layer?.addSublayer(bar)
+        frame.size = fittingSize
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+        setAccessibilityLabel("Tidy")
+        _ = ArcTooltipAnchorView.attach(to: self, help: "Organize Today Tabs")
+        tint()
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    /// Broom box, "Tidy" 5 pt after the broom's ink, then the hairline 8.5 pt after its last glyph.
+    override var fittingSize: NSSize {
+        let l = label.frame.size
+        return NSSize(width: Self.labelX + l.width - SidebarText.inset + Self.barOffset + 1, height: max(14, l.height))
+    }
+
+    /// The broom's ink ends 10.6 pt into its box; "Tidy"'s first glyph 5 pt later (Arc).
+    private static let labelX: CGFloat = 10.6 + 5 - SidebarText.inset
+
+    override func layout() {
+        super.layout()
+        let h = bounds.height
+        let l = label.frame.size
+        // The broom turns about the top of its handle, as a hand holds it.
+        let pivot = BroomGlyph.pivot
+        broom.anchorPoint = pivot
+        broom.bounds = CGRect(x: 0, y: 0, width: 14, height: 14)
+        broom.position = CGPoint(x: 14 * pivot.x, y: (h - 14) / 2 + 14 * (isFlipped ? 1 - pivot.y : pivot.y))
+        broomMask.frame = broom.bounds
+        label.frame = NSRect(x: Self.labelX, y: (h - l.height) / 2, width: l.width, height: l.height)
+        let scale = window?.backingScaleFactor ?? 2
+        bar.frame = CGRect(x: label.frame.maxX - SidebarText.inset + Self.barOffset, y: (h - 12.5) / 2, width: 1 / scale, height: 12.5)
+        broomMask.contentsScale = scale
+    }
+
+    private func tint() {
+        let c = hovering || sweeping ? colors.textPrimary : colors.textSecondary
+        label.textColor = c
+        broom.backgroundColor = c.cgColor
+        bar.backgroundColor = colors.separator.cgColor
+    }
+
+    /// Arc's broom while Tidy works: sweep after sweep until the answer is in.
+    func setSweeping(_ on: Bool) {
+        guard on != sweeping else { return }
+        sweeping = on
+        tint()
+        if on {
+            let a = CAKeyframeAnimation(keyPath: "transform.rotation.z")
+            let tip = -31 * CGFloat.pi / 180, past = 7 * CGFloat.pi / 180
+            a.values = [0, tip, tip, past, 0]
+            a.keyTimes = [0, 0.22, 0.39, 0.72, 1]
+            a.timingFunctions = [CAMediaTimingFunction(name: .easeOut), CAMediaTimingFunction(name: .linear),
+                                 CAMediaTimingFunction(name: .easeInEaseOut), CAMediaTimingFunction(name: .easeInEaseOut)]
+            a.duration = SidebarTidyMetrics.sweep
+            a.repeatCount = .infinity
+            broom.add(a, forKey: "sweep")
+        } else {
+            // Back to upright from wherever the sweep is.
+            let now = (broom.presentation()?.value(forKeyPath: "transform.rotation.z") as? CGFloat) ?? 0
+            broom.removeAnimation(forKey: "sweep")
+            let settle = CABasicAnimation(keyPath: "transform.rotation.z")
+            settle.fromValue = now
+            settle.toValue = 0
+            settle.duration = 0.25
+            settle.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            broom.add(settle, forKey: "settle")
+        }
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for t in trackingAreas where t.owner === self { removeTrackingArea(t) }
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil))
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovering = true }
+    override func mouseExited(with event: NSEvent) { hovering = false }
+    override var mouseDownCanMoveWindow: Bool { false }
+    override func hitTest(_ point: NSPoint) -> NSView? { frame.contains(point) ? self : nil }
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) {
+        if bounds.contains(convert(event.locationInWindow, from: nil)), !sweeping { action() }
+    }
+    override func accessibilityPerformPress() -> Bool {
+        if !sweeping { action() }
+        return true
+    }
+}
+
+/// Cra's own broom for Tidy, drawn after Arc's 14 pt template (2x capture): an almost upright
+/// handle leaning ~18° right, a band, and bristles fanning out to the bottom left, 8.5 × 12 pt of ink.
+enum BroomGlyph {
+    /// The top of the handle, in the image's unit square (y up): where a hand would hold it.
+    static let pivot = CGPoint(x: 9.8 / 14, y: 1 - 1.2 / 14)
+
+    static let image: NSImage = {
+        let img = NSImage(size: NSSize(width: 14, height: 14), flipped: true) { _ in
+            NSColor.black.set()
+            let handle = NSBezierPath()
+            handle.lineWidth = 1.15
+            handle.lineCapStyle = .round
+            handle.move(to: NSPoint(x: 9.8, y: 1.3))
+            handle.line(to: NSPoint(x: 8.1, y: 6.7))
+            handle.stroke()
+            let band = NSBezierPath()
+            band.move(to: NSPoint(x: 5.3, y: 6.9))
+            band.line(to: NSPoint(x: 8.8, y: 6.6))
+            band.line(to: NSPoint(x: 9.0, y: 7.5))
+            band.line(to: NSPoint(x: 5.0, y: 7.8))
+            band.close()
+            band.fill()
+            let head = NSBezierPath()
+            head.move(to: NSPoint(x: 4.6, y: 8.2))
+            head.line(to: NSPoint(x: 9.9, y: 8.0))
+            head.curve(to: NSPoint(x: 10.6, y: 12.3), controlPoint1: NSPoint(x: 10.4, y: 9.6), controlPoint2: NSPoint(x: 10.6, y: 11.0))
+            head.line(to: NSPoint(x: 7.6, y: 12.1))
+            head.curve(to: NSPoint(x: 3.0, y: 10.3), controlPoint1: NSPoint(x: 5.8, y: 11.6), controlPoint2: NSPoint(x: 4.2, y: 11.0))
+            head.curve(to: NSPoint(x: 4.6, y: 8.2), controlPoint1: NSPoint(x: 3.6, y: 9.4), controlPoint2: NSPoint(x: 4.1, y: 8.7))
+            head.close()
+            head.fill()
+            // Gaps between the bristles.
+            NSGraphicsContext.current?.compositingOperation = .clear
+            let cuts = NSBezierPath()
+            cuts.lineWidth = 0.4
+            cuts.move(to: NSPoint(x: 6.3, y: 10.0)); cuts.line(to: NSPoint(x: 7.3, y: 12.4))
+            cuts.move(to: NSPoint(x: 8.2, y: 9.8)); cuts.line(to: NSPoint(x: 8.9, y: 12.5))
+            cuts.stroke()
+            return true
+        }
+        img.isTemplate = true
+        return img
+    }()
+}
+
+// MARK: - Tab group header
+
+struct GroupHeaderRowModel: Equatable {
+    var id: UUID
+    var title: String
+}
+
+/// Arc's TabGroupHeaderCellView: a group's name over its tabs in Today (13 pt semibold in the space
+/// header's tone, at the tabs' icon inset, a tab row's height). Hovered, it offers "Create Folder"
+/// and "Close tab group"; its menu has "Remove header". Arc 1.171, offline copy, 4 Nov 2026.
+final class GroupHeaderRowView: SidebarRowView {
+    private(set) var model: GroupHeaderRowModel?
+    private let titleLabel = NSTextField.sidebarLabel(size: 13, weight: .semibold)
+    private var buttons: [SidebarGlyphButton] = []
+
+    override init(key: SpaceListView.RowKey, list: SpaceListView, colors: SidebarColors) {
+        super.init(key: key, list: list, colors: colors)
+        addSubview(titleLabel)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.staticText)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func apply(_ m: GroupHeaderRowModel) {
+        guard m != model else { return }
+        model = m
+        titleLabel.stringValue = m.title
+        titleLabel.textColor = colors.isDark ? NSColor.white.withAlphaComponent(0.45) : colors.textSecondary
+        setAccessibilityLabel(m.title)
+        needsLayout = true
+    }
+
+    override func setColors(_ c: SidebarColors) {
+        guard c != colors else { return }
+        super.setColors(c)
+        for b in buttons { b.colors = c }
+        if let m = model { model = nil; apply(m) }
+    }
+
+    override func hoverChanged() {
+        super.hoverChanged()
+        if isHovered, buttons.isEmpty, let m = model, let list {
+            let id = m.id
+            let folder = SidebarGlyphButton(symbol: "folder.badge.plus", size: 26, iconSize: 13, weight: .regular,
+                                            help: "Create Folder", colors: colors) { [weak list] in
+                guard let list, let f = list.store.folderFromGroup(id) else { return }
+                list.store.setExpanded(f.id, true)
+            }
+            let close = SidebarGlyphButton(symbol: "xmark", size: 26, iconSize: 13, help: "", colors: colors) { [weak list] in
+                guard let list else { return }
+                list.closeTabs(list.store.tabs(under: id).map(\.id))
+            }
+            close.setCloseMark(minus: false, help: "Close tab group")
+            buttons = [folder, close]
+            buttons.forEach(addSubview)
+            needsLayout = true
+        } else if !isHovered {
+            buttons.forEach { $0.removeFromSuperview() }
+            buttons = []
+        }
+    }
+
+    override func layout() {
+        super.layout()
+        let h = bounds.height
+        // Arc: the ✕ ends 5 pt in from the row, the folder button right before it.
+        var right = bounds.width - 5
+        for b in buttons.reversed() {
+            b.frame = NSRect(x: right - b.size.width, y: (h - b.size.height) / 2, width: b.size.width, height: b.size.height)
+            right = b.frame.minX
+        }
+        let x = CraMetrics.rowLeading
+        let th = titleLabel.intrinsicContentSize.height
+        titleLabel.frame = NSRect(x: x - SidebarText.inset, y: (h - th) / 2, width: max(0, right - 8 - x) + 2 * SidebarText.inset, height: th)
+    }
+
+    override func contextMenu(at point: NSPoint) -> NSMenu? {
+        guard let m = model, let list else { return nil }
+        return SidebarMenus.tabGroup(m.id, list: list)
     }
 }
 

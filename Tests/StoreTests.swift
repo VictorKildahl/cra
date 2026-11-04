@@ -35,6 +35,7 @@ enum StoreTests {
         favoritesEmptyState()
         sharedFavorites()
         themePreview()
+        tidyTabs()
         print("Store: \(checks) checks passed")
     }
 
@@ -844,6 +845,85 @@ enum StoreTests {
 
         _ = store.resetPinnedTab(sibling.id)
         expect(store.peekedTabs(in: outer.id).map(\.id) == [tab.id], "closing a tab (⌘W) takes it out")
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    /// Tidy Tabs (Arc's tab groups in Today): the model's plan applied, undone, and the header's
+    /// actions, on the production store.
+    @MainActor
+    private static func tidyTabs() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        // A space of its own: earlier checks leave tabs in the first one.
+        let sid = store.createSpace(title: "Tidy", emoji: "🧹").id
+        let today = store.focusedSpace.todayContainerID
+        let names = ["Mars", "Baguette", "Saturn", "Croissant", "Python", "Mail"]
+        let tabs = names.map { store.createTab(url: "https://example.org/\($0)", in: sid, select: false) }
+        let byName = Dictionary(uniqueKeysWithValues: zip(names, tabs.map(\.id)))
+        expect(store.tabGroups(in: sid).isEmpty && store.canTidy(sid), "six loose Today tabs offer Tidy")
+        let before = store.item(today)!.children
+        // The model sees the loose tabs in sidebar order (new tabs at the top: Mail first).
+        let loose = store.looseTodayTabs(sid).map(\.id)
+        func at(_ name: String) -> Int { loose.firstIndex(of: byName[name]!)! }
+        let plan = TidyTabs.plan([.init(name: "Planets", tabs: [at("Mars"), at("Saturn")]),
+                                  .init(name: "Bread", tabs: [at("Baguette"), at("Croissant")])],
+                                 tabCount: loose.count, existingGroups: [])
+        store.applyTidy(plan, tabIDs: loose, in: sid)
+        var groups = store.tabGroups(in: sid)
+        expect(groups.map(\.title) == ["Bread", "Planets"], "groups follow their first tab's place")
+        expect(store.item(today)!.children == [byName["Mail"]!, byName["Python"]!] + groups.map(\.id),
+               "tabs left loose stay above the groups")
+        expect(groups[1].children == [byName["Saturn"]!, byName["Mars"]!], "a group keeps its tabs in sidebar order")
+        expect(groups.allSatisfy { store.isExpanded($0.id) } && store.tabs(under: today).count == 6, "groups are always open")
+        expect(!store.canTidy(sid), "after a run Tidy waits for a new tab")
+        expect(store.integrityProblems().isEmpty, "the tidied sidebar is sound")
+
+        expect(store.undoTidy() && store.tabGroups(in: sid).isEmpty && store.item(today)!.children == before,
+               "⌘Z puts every tab back and the groups go")
+        expect(!store.undoTidy() && store.canTidy(sid), "once; then Tidy is offered again")
+
+        store.applyTidy(plan, tabIDs: loose, in: sid)
+        let fresh = store.createTab(url: "https://example.org/Jupiter", in: sid, select: false)
+        expect(store.canTidy(sid), "a new loose tab brings Tidy back")
+        let loose2 = store.looseTodayTabs(sid).map(\.id)
+        let existing = store.tabGroups(in: sid).map { $0.title ?? "" }
+        let join = TidyTabs.plan([.init(name: "planets", tabs: [loose2.firstIndex(of: fresh.id)!])], tabCount: loose2.count, existingGroups: existing)
+        store.applyTidy(join, tabIDs: loose2, in: sid)
+        groups = store.tabGroups(in: sid)
+        expect(groups[1].children.last == fresh.id, "a second run adds a tab to the group the model named")
+
+        // Moves: groups stay at the top of Today and hold tabs.
+        let pinned = store.focusedSpace.pinnedContainerID
+        store.moveItem(groups[0].id, to: pinned, index: 0)
+        expect(store.item(groups[0].id)?.parentID == today, "a group doesn't move into the pinned tabs")
+        let folder = store.createFolder(named: "F", in: pinned)
+        store.moveItem(folder.id, to: groups[0].id, index: 0)
+        expect(store.item(folder.id)?.parentID == pinned, "a folder doesn't go into a group")
+        store.moveItem(byName["Mail"]!, to: groups[0].id, index: 0)
+        expect(store.item(groups[0].id)!.children.first == byName["Mail"], "a tab dropped on a group joins it")
+        store.moveItem(byName["Mail"]!, to: today, index: 0)
+
+        // The header's actions; after one, ⌘Z no longer undoes the tidy.
+        store.removeGroupHeader(groups[0].id)
+        expect(!store.undoTidy(), "a header action since the tidy takes ⌘Z's undo off")
+
+        expect(store.item(groups[0].id) == nil && store.item(today)!.children.prefix(4) == [byName["Mail"]!, byName["Python"]!, byName["Croissant"]!, byName["Baguette"]!],
+               "Remove header leaves the tabs loose where the group was")
+        let made = store.folderFromGroup(groups[1].id)
+        expect(made?.title == "Planets" && store.item(pinned)!.children.first == made?.id && made?.children.count == 3
+               && store.item(groups[1].id) == nil && store.isExpanded(made!.id) && store.isPinned(byName["Mars"]!),
+               "Create Folder makes an open folder at the top of Pinned with the group's tabs, now pinned")
+
+        store.applyTidy(TidyTabs.plan([.init(name: "Bread", tabs: [0, 1])], tabCount: 2, existingGroups: []),
+                        tabIDs: [byName["Baguette"]!, byName["Croissant"]!], in: sid)
+        let bread = store.tabGroups(in: sid)[0]
+        store.archiveTab(byName["Baguette"]!, reason: .manual)
+        expect(store.item(bread.id)?.children == [byName["Croissant"]!], "closing one tab keeps the group")
+        expect(!store.undoTidy(), "a close since the tidy owns ⌘Z")
+        store.saveAll()
+        let restored = AppComposition(clock: ManualScheduler()).store
+        expect(restored.item(bread.id)?.isTabGroup == true && restored.item(bread.id)?.title == "Bread", "a group reads back after a relaunch")
+        store.archiveTab(byName["Croissant"]!, reason: .manual)
+        expect(store.item(bread.id) == nil && !store.item(today)!.children.contains(bread.id), "its last tab takes the header with it")
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 

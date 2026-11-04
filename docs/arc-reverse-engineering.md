@@ -3018,3 +3018,45 @@ Sidebar width via StorableWindows' `sidebarWidth`, window size over AX. Frames f
 - [?] Not measured: whether the switch depends on the host's width (only github.com was tried), the grid
   cells' hover and pressed fills, where a grid pin's popup opens (Cra: under the cell), a space with
   pins but no favorites (Cra: the header follows the grid as it follows tiles).
+
+## Tidy Tabs (Arc 1.171, 4 Nov 2026, Swift metadata + strings, Victor's Arc with Arc Max on, offline Arc at 2x, 120 fps)
+
+Arc Max's "Organize Today Tabs". Arc sends the loose Today tabs to its server (OpenAI) and files them under
+named group headers; Cra asks the Mac's own Apple Intelligence model instead (Victor, 4 Nov 2026: only when
+Apple Intelligence is on, so it's free and nothing leaves the Mac).
+- [O static] `tidyTabsEnabled` (defaults), `canAutoOrganizeTodayTabs`, `createUnpinnedTabGroups()` in
+  WindowData+TabGroups.swift with the request "Here are my tabs, in the format 'id: title':" and "Your array
+  of group assignments, as valid JSON within a ```code block```:" plus a "Tab group of miscellaneous tabs".
+  The answer becomes `SidebarItemData.tabGroup(SidebarTabGroup { title })` items in the unpinned container,
+  the tabs their children: in StorableSidebar, `"data": {"tabGroup": {"title": "Planets"}}` (an empty `{}`
+  fails to decode and Arc drops the item with its tabs). Undo string "Undo prompt for tidying explore tabs".
+- [O static] UnpinnedSectionHeaderCellView: stackView, tidyButton (SidebarTidyButton: imageView "broom-stick",
+  a 14 pt template SVG in ARCClients_BaseAssets, label, divider), clearButton, downArrowImage, borderView,
+  squiggleView. SquiggleDivider (viewModel, height, amplitudeAnimationDuration) over SquiggleViewModel (period,
+  phase, controlPointFraction, amplitudeFunction); window state `dividerSquiggleActiveSpaceIDs`.
+- [O] Shown on hovering the divider once Today holds 6 tabs, grouped ones counted (offline: 5 loose tabs →
+  Clear only; 6 → Tidy; 2 loose + 6 grouped → Tidy). Tooltip "Organize Today Tabs". After a run Tidy is
+  gone until Today changes, even when the run grouped nothing (Arc's server no longer answers: a click gave
+  0.57 s of squiggle and no groups; a second click on that spot did nothing).
+- [O] Layout at 2x on a 347 pt sidebar (dark space): the line ends 239, broom ink 248.5–257, "Tidy"
+  262–282.5 (11 pt semibold, the Clear label's tone, brighter on hover), a 0.5 pt hairline 12.5 pt tall at 291,
+  "Clear" 302–327.5.
+- [O] The squiggle (60 fps, sine fitted per frame): period 12.75 pt, amplitude 3.0 pt the whole length of the
+  line, travelling left at 5 periods a second (phase +0.52 rad per 1/60 s); the amplitude ramps linearly 0 → 3
+  in 0.4 s from the click and back in 0.4 s when the answer is in.
+- [O] The broom turns about the top of its handle: 31° clockwise in ~0.2 s (ease out) at the click, holds
+  ~0.12 s, swings back 7° past upright by ~0.65 s and settles by ~0.9 s. Only one sweep was seen (the run
+  ended); Cra repeats it while the model works.
+- [O] Group header (offline Arc, hand-written tabGroup items): a 41 pt row like a tab's, no icon, the name in
+  13 pt semibold in the space header's tone at the tabs' icon inset (x 17); the tabs below are not indented.
+  Hovered, two 26 pt buttons end 13 pt in: `folder.badge.plus` "Create Folder" and ✕ "Close tab group"; no
+  row fill. Right-click: one item, "Remove header" (the tabs stay where they are, loose). Create Folder: an open
+  folder with the group's name at the top of Pinned, its tabs inside and pinned; the group goes.
+- Cra: TidyTabs (CraCore: when to offer, the prompt, cleaning the model's answer, Today's order),
+  TidyTabsService (FoundationModels guided generation, macOS 26, hidden without Apple Intelligence),
+  SidebarStore tab groups (a folder with `tabGroup: true`, so an older Cra reads the file), DividerRowView's
+  TidyButton + SquiggleLayer + BroomGlyph (Cra's own drawing of the broom), GroupHeaderRowView. ⌘Z undoes the
+  last tidy until a tab closes or a header is used. Measured on Cra: amplitude 2.97 pt, +0.52 rad a frame,
+  ramps 0.38 s.
+- [?] Not seen: Arc's real grouping (the server is gone), what Arc does with a model answer naming an existing
+  group, whether a header can be dragged, and the arrow Arc sometimes draws before "Clear" (offline copy).

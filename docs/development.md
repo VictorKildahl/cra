@@ -155,6 +155,11 @@ swipe (22 trackpad samples of 14 pt) and `cra://debug?scroll=30,30,150,700` scro
 scroll view at x 150, y 700 of the window (from its top left) 30 pt a frame for 30 frames.
 Measure them with `sample <pid> 6 1` and compare the main thread's busy time between builds.
 
+Tidy Tabs needs Apple Intelligence. `CRA_TIDY_FAKE_MODEL=1` stands in a model that groups by
+site (after a 1.6 s pause), so a test instance on any Mac shows the button, the squiggle and the
+groups; `cra://debug?tidy=1` runs Tidy on the window's space without hovering the divider and
+`cra://debug?undoTidy=1` is ⌘Z's undo.
+
 `cra://debug?menuAt=315,24` opens the menu a click at that window point would open (the
 developer-mode ⌄ here), and `&button=right` the context menu, a tab row's for instance.
 `&target=little` aims at the newest Little Window instead (its profile chip, for one).

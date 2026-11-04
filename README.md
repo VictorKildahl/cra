@@ -70,7 +70,7 @@ Embedded Framework, so sites and Chrome extensions work as they do in Chrome.
 | Boosts | Not yet |
 | Peek | ✅ |
 | Notes | Not yet |
-| Arc Max | No, Cra has no built-in AI |
+| Arc Max | Tidy Tabs only, on the Mac's Apple Intelligence; nothing goes to a server |
 
 The [roadmap](https://crabrowser.app/roadmap) lists what's next.
 
