@@ -36,8 +36,9 @@ struct SpacePalette {
     let pillFill: Color
     let toolbarFill: Color
     let folderTint: Color
-    /// Arc's folder glyph (FolderTones): an opaque front in tintedLight (light themes) or shadedDark
-    /// (dark), the outline in the other one, and the back panel in midTone.
+    /// Light themes: Arc's folder glyph (FolderTones), an opaque front in tintedLight, the outline in
+    /// shadedDark and the back panel in midTone. Dark themes keep Cra's own: white at 14 % (fill) and
+    /// 85 % (outline) over the sidebar, flattened onto the sidebar's colour so an open folder is opaque.
     let folderFill: Color
     let folderBack: Color
     /// Selected row in the command bar (Arc tints it with the space color).
@@ -126,6 +127,16 @@ extension SpaceTheme {
 
         let accent = SpaceTheme.mix(base[0], towardWhite: dark, amount: dark ? 0.25 : -0.0)
         let folder = FolderTones(themeColor: self.accent ?? base[0], dark: dark)
+        let alphaTop = solid ? SpacePalette.solidAlpha(intensity: intensity)
+            : vibrant ? (dark ? max(0.35, min(0.9, intensity * 2.2)) : min(0.95, intensity * 1.70)) : 1
+        let alphaBottom = solid ? SpacePalette.solidAlpha(intensity: intensity)
+            : vibrant ? (dark ? max(0.35, min(0.9, intensity * 2.2)) : min(0.95, intensity * 2.35)) : 1
+        // Dark themes: Arc's palette tones (shadedDark front, midTone back) read wrong next to Cra's
+        // dark sidebar (Victor, 4 Nov), so the folder keeps the earlier white-over-sidebar look, made
+        // opaque. Under a translucent theme the sidebar is the top colour over the dark material
+        // (underWindowBackground with ShellView's lift), about 20 % white.
+        let ground = alphaTop < 1 ? Color(white: 0.2).blendedToward(stops[0], alphaTop) : stops[0]
+        let darkFill = ground.blendedToward(.white, 0.14)
         return SpacePalette(
             isDark: dark,
             gradientColors: stops,
@@ -139,9 +150,9 @@ extension SpaceTheme {
             pillFill: dark ? .white.opacity(0.08) : .black.opacity(0.045),
             // Arc: the toolbar is the first theme color at ~46% (dark) / lightened a touch (dark themes).
             toolbarFill: SpaceTheme.toolbarColor(self.accent ?? base[0], dark: dark),
-            folderTint: Color(folder.outline),
-            folderFill: Color(folder.front),
-            folderBack: Color(folder.back),
+            folderTint: dark ? ground.blendedToward(.white, 0.85) : Color(folder.outline),
+            folderFill: dark ? darkFill : Color(folder.front),
+            folderBack: dark ? darkFill : Color(folder.back),
             commandHighlight: dark ? accent.opacity(0.55) : SpaceTheme.mix(base[0], towardWhite: false, amount: 0.45).opacity(0.75),
             noise: noise,
             // Calibrated against Arc's rendering of a 0.25-intensity vibrant theme.
@@ -154,10 +165,8 @@ extension SpaceTheme {
             // 27, passes 52 %) could not reach both, so light vibrant themes now blur through
             // an untinted CABackdropLayer with a 0.19 dim and a 0.16→0.18 lift (ShellView);
             // opacity 0.43 top / 0.59 bottom then matches Arc within ±5 over white and black.
-            gradientAlpha: solid ? SpacePalette.solidAlpha(intensity: intensity)
-                : vibrant ? (dark ? max(0.35, min(0.9, intensity * 2.2)) : min(0.95, intensity * 1.70)) : 1,
-            gradientAlphaBottom: solid ? SpacePalette.solidAlpha(intensity: intensity)
-                : vibrant ? (dark ? max(0.35, min(0.9, intensity * 2.2)) : min(0.95, intensity * 2.35)) : 1,
+            gradientAlpha: alphaTop,
+            gradientAlphaBottom: alphaBottom,
             vibrant: vibrant || solid,
             solid: solid
         )
