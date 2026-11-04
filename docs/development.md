@@ -8,8 +8,14 @@ Notes for working on the code. How to send a change is in
 
     scripts/build.sh          # fetches CEF on first run, builds build/Cra.app
     scripts/build.sh debug    # debug build
-    scripts/run.sh            # build if needed, then open (--rebuild forces a build)
+    scripts/run.sh            # build if needed, then open; --rebuild [debug] forces a build
     scripts/dev.sh            # dev loop: debug CraDev.app, rebuilds + relaunches on save (~4 s)
+    scripts/dev.sh --once     # build and launch CraDev.app once, logs in this terminal
+
+`just` lists all of the scripts below with what each does (`brew install just`; the
+[justfile](../justfile) is one recipe per script). A recipe passes its arguments on, so
+`just build debug` runs `scripts/build.sh debug`. CI calls the scripts directly, and so can
+you.
 
 Requirements: macOS 14+ on Apple silicon, Xcode 16+, CMake (`brew install cmake`), about
 1 GB of disk for CEF and the build products.
@@ -61,9 +67,11 @@ the save panel.
     scripts/test.sh core             # only Packages/CraCore
     Tests/smoke-launch.sh            # launches build/Cra.app three times, about 30 s
     scripts/scenario.sh all          # user journeys in build/Cra.app, about 6 minutes
-    scripts/coverage.py              # line coverage, and the changed-lines gate
+    scripts/scenario.sh sleep-tabs   # one of them (Tests/Scenarios/<name>.scenario)
+    scripts/coverage.py              # line coverage, and the changed-lines gate against origin/main
+    scripts/coverage.py --base <ref> # the same against another base (CI passes the PR's)
     scripts/fuzz.sh                  # mutated importer fixtures under AddressSanitizer
-    scripts/mutate.py                # mutation testing of the pure code, minutes
+    scripts/mutate.py [word]         # mutation testing of the pure code, minutes; a word limits it
 
 [testing.md](testing.md) has the rules, the layers, the gates and how to write a scenario.
 

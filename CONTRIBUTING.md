@@ -23,10 +23,13 @@ the shape before you spend the time.
 
     git clone https://github.com/VictorKildahl/cra.git
     cd cra
-    scripts/build.sh      # first run fetches CEF
-    scripts/dev.sh        # debug CraDev.app, rebuilds + relaunches on save
+    scripts/build.sh          # fetches CEF on first run, builds build/Cra.app
+    scripts/build.sh debug    # debug build
+    scripts/dev.sh            # dev loop: debug CraDev.app, rebuilds + relaunches on save
 
-You need macOS 14+ on Apple silicon, Xcode 16+ and CMake (`brew install cmake`).
+You need macOS 14+ on Apple silicon, Xcode 16+ and CMake (`brew install cmake`). With
+[just](https://just.systems) (`brew install just`), `just` lists every script with what it
+does, and `just build debug` runs `scripts/build.sh debug`.
 [docs/development.md](docs/development.md) has the code layout, the `cra://` scripting
 hooks and how to run a test instance next to your daily Cra.
 
