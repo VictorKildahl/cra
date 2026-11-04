@@ -115,6 +115,10 @@ final class ShellView: NSView {
     /// Settings ▸ "Pages fill the window edge to edge" (GitHub #24): no margin, square cards.
     var edgeToEdge = false { didSet { needsLayout = true } }
     var showToolbar = true { didSet { needsLayout = true } }
+    /// Whether the cards carry their bars. Arc keeps every pane's bar in a split even with the
+    /// toolbar hidden (View ▸ Show Toolbar is disabled while a split is open, GitHub #178).
+    var panesShowBars: Bool { barsShown(panes: paneCards.count, fullscreen: contentFullscreen) }
+    private func barsShown(panes: Int, fullscreen: Bool) -> Bool { !fullscreen && (showToolbar || panes > 1) }
     var hasTab = false { didSet { needsLayout = true } }
     var onEdgeHover: ((Bool) -> Void)?
     /// Set again each time the window becomes key; only a change rebuilds the backdrop.
@@ -374,7 +378,7 @@ final class ShellView: NSView {
                 card.pageColor = pageColors[id]
                 card.toolbarColor = toolbarColors[id]
                 card.transparent = id == ShellView.noTabID
-                card.showToolbar = showToolbar && !contentFullscreen
+                card.showToolbar = barsShown(panes: shownIDs.count, fullscreen: contentFullscreen)
                 card.onToolbarHeightChange = { [weak self] in self?.needsLayout = true }
                 contentContainer.addSubview(card, positioned: .below, relativeTo: placeholderHost)
                 cards.append(card)
@@ -473,7 +477,7 @@ final class ShellView: NSView {
         var out: [UUID: NSRect] = [:]
         for c in paneCards where c.tabID != ShellView.noTabID {
             guard let f = layout.frames[c.tabID] else { continue }
-            let th: CGFloat = (showToolbar && !contentFullscreen) ? c.toolbarHeight : 0
+            let th: CGFloat = panesShowBars ? c.toolbarHeight : 0
             var web = NSRect(x: f.minX, y: f.minY, width: f.width, height: max(0, f.height - th))
             if c.tabID == focusedPaneID, devToolsVisible, !devToolsFrontendDocked, f.width > 640 {
                 web.size.width -= min(max(320, devToolsWidth), f.width * 0.7)
@@ -651,10 +655,12 @@ final class ShellView: NSView {
     func layoutContentChildren(animated: Bool = false) {
         let cb = contentContainer.bounds
         updateFocusRings()
-        let toolbarVisible = showToolbar && !contentFullscreen
+        let toolbarVisible = panesShowBars
         let layout = paneLayout(in: cb)
         for c in paneCards {
             c.showToolbar = toolbarVisible
+            // Arc's cards cast a soft shadow on the window; edge to edge there is no margin for it.
+            c.castsShadow = !edgeToEdge && !contentFullscreen
             // Several panes: every card is rounded; a single card follows the window state (square in fullscreen).
             // Edge to edge every card is square.
             c.cornerRadius = paneCards.count > 1 && !edgeToEdge ? CraMetrics.contentCornerRadius : cardCornerRadius
@@ -759,7 +765,7 @@ final class ShellView: NSView {
             guard let f = targetLayout.frames[c.tabID] else { continue }
             var w = f.width
             if c.tabID == focusedPaneID, devToolsVisible, !devToolsFrontendDocked, f.width > 640 { w -= min(max(320, devToolsWidth), f.width * 0.7) }
-            let toolbarH: CGFloat = (showToolbar && !fullscreen) ? c.toolbarHeight : 0
+            let toolbarH: CGFloat = barsShown(panes: paneCards.count, fullscreen: fullscreen) ? c.toolbarHeight : 0
             c.frozenWebBounds = NSRect(x: 0, y: 0, width: w, height: max(0, f.height - toolbarH))
             webTargets[c.tabID] = convert(NSRect(x: target.content.minX + f.minX, y: target.content.minY + f.minY, width: w, height: max(0, f.height - toolbarH)), to: nil)
         }

@@ -413,6 +413,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             browsers.show(live, focused: liveFocus, focus: !commandBar.isOpen)
         }
         shell.layoutContentChildren()
+        syncRingPanel()
         syncSidebarUI()
         window?.title = selectedTab?.displayTitle ?? space.title
 
@@ -684,6 +685,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// page gets its own panel just its size (the find bar).
     private var overlayPanel: NSPanel?
     private var findPanel: FindBarPanel?
+    /// The focused pane's ring while its page is in a window of its own (DevTools docked in it):
+    /// that window covers the card, and the card's ring with it (GitHub #178).
+    private var ringPanel: NSPanel?
     /// Page area per visible tab, window coordinates (one entry per pane).
     private var lastPaneFrames: [UUID: NSRect] = [:]
     /// While a divider is dragged the page windows follow every mouse move.
@@ -712,10 +716,46 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if overlay.findVisible { window.addChildWindow(find, ordered: .above) }
     }
 
+    /// Shows the focused card's ring above its page window while that page is not in the card.
+    private func syncRingPanel() {
+        guard let window else { return }
+        let card = shell.focusedCard
+        let tab = browsers.visibleTabID
+        let host = tab.flatMap { browsers.runtime(for: $0)?.hostWindow }
+        let pageInOwnWindow = host.map { $0.isVisible && !EmbeddedPages.isHost($0) } ?? false
+        let devTools = tab.flatMap { browsers.visibleDevToolsWindows[$0] }?.isVisible ?? false
+        guard let card, let color = card.focusRing, card.window === window, pageInOwnWindow || devTools else {
+            if let panel = ringPanel, panel.parent != nil { window.removeChildWindow(panel); panel.orderOut(nil) }
+            return
+        }
+        let panel = ringPanel ?? {
+            let p = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+            p.isOpaque = false
+            p.backgroundColor = .clear
+            p.hasShadow = false
+            p.ignoresMouseEvents = true
+            p.hidesOnDeactivate = false
+            p.contentView = FocusRingView(frame: .zero)
+            ringPanel = p
+            return p
+        }()
+        let frame = window.convertToScreen(card.convert(card.bounds, to: nil))
+        if panel.frame != frame { panel.setFrame(frame, display: true) }
+        if let ring = panel.contentView {
+            ring.layer?.borderColor = color.cgColor
+            ring.layer?.cornerRadius = card.cornerRadius
+        }
+        if panel.parent == nil {
+            window.addChildWindow(panel, ordered: .above)
+            raiseOverlayPanels()
+        }
+    }
+
     /// Overlay panel above the page windows (and the floating sidebar), the find bar above it.
     private func raiseOverlayPanels() {
         guard let window else { return }
         var panels: [NSPanel?] = [overlayPanel]
+        if let ringPanel, ringPanel.parent != nil { panels.insert(ringPanel, at: 0) }
         if overlay.findVisible { panels.append(findPanel) }
         // A Peek (and its dimming) stays above everything else in the window.
         let wanted = panels.compactMap { $0 } + peeks.flatMap(\.peekWindows)
@@ -806,6 +846,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             }
         }
         releaseUnfocusedEmbeddedPage()
+        syncRingPanel()
         if browsers.visibleDevToolsWindows.values.contains(where: { $0.parent === window }) {
             raisePageWindows()
         } else {
@@ -918,6 +959,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if shell.frontendPageRect != pr { shell.frontendPageRect = pr }
         let focusOnScreen = window.convertToScreen(focusPage)
         if let panel = overlayPanel, panel.frame != focusOnScreen { panel.setFrame(focusOnScreen, display: true) }
+        syncRingPanel()
         if let find = findPanel, find.frame != findPanelFrame(page: focusOnScreen) { find.setFrame(findPanelFrame(page: focusOnScreen), display: true) }
     }
 
@@ -1046,7 +1088,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             if abs(page.maxX - body.maxX) < 0.5 { corners.insert(bottomRight) }
         }
         // Without the toolbar the page's top edge is the card's top edge too.
-        if !shell.contentFullscreen, !shell.showToolbar, abs(page.maxY - body.maxY) < 0.5 {
+        if !shell.contentFullscreen, !shell.panesShowBars, abs(page.maxY - body.maxY) < 0.5 {
             if abs(page.minX - body.minX) < 0.5 { corners.insert(topLeft) }
             if abs(page.maxX - body.maxX) < 0.5 { corners.insert(topRight) }
         }
@@ -1188,7 +1230,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let selfDock = browsers.runtime(for: tab)?.hostWindow != nil
         let bottom: CACornerMask = cv.isFlipped ? [.layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMinYCorner, .layerMaxXMinYCorner]
         let all: CACornerMask = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
-        layer.maskedCorners = selfDock ? (shell.showToolbar ? bottom : all) : [.layerMaxXMaxYCorner, .layerMaxXMinYCorner]
+        layer.maskedCorners = selfDock ? (shell.panesShowBars ? bottom : all) : [.layerMaxXMaxYCorner, .layerMaxXMinYCorner]
     }
 
     /// "Undock into separate window": the frontend's window becomes a floating window of its own.
@@ -2059,7 +2101,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             ?? shell.convert(shell.contentContainer.frame, to: nil)
         let onScreen = window.convertToScreen(card)
         let bar = shell.focusedCard?.toolbarHeight ?? CraMetrics.toolbarHeight
-        return (onScreen.maxY - (store.settings.showToolbar ? bar : 0), onScreen.maxX)
+        return (onScreen.maxY - (shell.panesShowBars ? bar : 0), onScreen.maxX)
     }
 
     /// Where a popup from a URL-bar button hangs: under the toolbar, or, with the toolbar
@@ -2077,7 +2119,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// toolbar at the card's right end.
     fileprivate func extensionPopupAnchor(_ id: String) -> NSPoint? {
         guard let bar = toolbarBottomOnScreen() else { return nil }
-        if store.settings.showToolbar, let button = (shell.focusedCard?.toolbarHost as? PaneToolbarView)?.extensionButtonFrameOnScreen(id) {
+        if shell.panesShowBars, let button = (shell.focusedCard?.toolbarHost as? PaneToolbarView)?.extensionButtonFrameOnScreen(id) {
             return NSPoint(x: button.maxX, y: bar.y)
         }
         return NSPoint(x: bar.cardMaxX - 8, y: bar.y)
@@ -2182,9 +2224,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Arc's sliders button (toolbar and URL pill): the Site Control Center, hung under the
     /// button that was clicked (buttons are 32 × 28), not wherever the pointer is in it.
     private func showToolbarExtensionsMenu() {
-        guard let window, let content = window.contentView, let y = urlBarBottomOnScreen() else { return }
+        // A split pane's bar has the sliders even with the toolbar hidden: hang under that bar then.
+        let pressed = Self.buttonFrameUnderPointer { $0 is ToolbarGlyphButton }
+        guard let window, let content = window.contentView,
+              let y = pressed != nil && shell.panesShowBars ? toolbarBottomOnScreen()?.y : urlBarBottomOnScreen() else { return }
         ExtensionStore.shared.reload()
-        let midX = Self.buttonFrameUnderPointer { $0 is ToolbarGlyphButton || $0 is SidebarGlyphButton }?.midX ?? NSEvent.mouseLocation.x
+        let midX = (pressed ?? Self.buttonFrameUnderPointer { $0 is SidebarGlyphButton })?.midX ?? NSEvent.mouseLocation.x
         // Arc's popover overlaps the bar by 4 pt (popover top 71 under a bar ending at 75).
         let onScreen = NSRect(x: midX - 16, y: y + 4, width: 32, height: 28)
         let rect = content.convert(window.convertFromScreen(onScreen), from: nil)

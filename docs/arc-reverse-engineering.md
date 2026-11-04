@@ -765,12 +765,25 @@ descriptions and frames) at window widths 1400 → 926 (Arc's minimum), plus win
   the ring) to it; the other pane drops back to the essentials.
 - [O] Narrow: a 387 pt pane (window 1000) keeps everything; a ~350 pt pane (window 926) drops Reload, cuts the
   domain short ("....lvh.me") and keeps the Site Control Center; a 215 pt pane (Arc 1.170, above) has neither.
+  A three-pane split pins it down: Reload at 392 pt, gone at 359; the Site Control Center at 325, gone at 292,
+  where every pane (focused or not) also loses its Copy Current URL glyph.
+- [O] Toolbar hidden (topBarURLEnabled NO, set before launch): a single pane has no bar; a split still shows every
+  pane's full bar and ring, and View ▸ Show Toolbar is disabled while the split is open (Hide Toolbar likewise
+  with the toolbar on). Arc forces the bars in a split.
+- [O] Card shadow, single card and every pane: fitted on 1-px profiles of all four sides (light space, 2x) as a
+  Gaussian edge, black 26 %, sigma 3.6 pt, 0.8 pt low; about 11 % darker beside the card, 17 % below, gone by
+  ~8 pt. Not on an empty pane (not measured).
 - [O] Ring: 2 pt (4 px at 2x), solid, along the card's rounded edge and over the bar's edge, in the space's
   `primaryColorPalette.shadedDark` (#6B5709 measured on Victor's yellow space, P3 capture; #B60222 vs Arc's stored
   #B70021 on the reporter's red space). None on the unfocused pane or on a lone pane.
 - Cra: ToolbarComposition (`hovered`, essentials only on an unfocused, unhovered pane), ToolbarRoom (pins, then ↻,
-  then the sliders below an 80 pt address, a guess between the two narrow observations), PaneCardView.focusRing
-  (theme.shadedDark). A control on an unfocused pane focuses it first, as Arc's Reload does.
+  then the sliders and the copy glyph below a 100 pt address: 114 pt at Arc's 325 pt pane, 82 at 292),
+  PaneCardView.focusRing (theme.shadedDark), and a ring panel over a page that lives in its own window (DevTools
+  docked). A control on an unfocused pane focuses it first, as Arc's Reload does. ShellView.panesShowBars keeps
+  the bars in a split with the toolbar hidden. CardShadowView: a 9-slice image, 31 % with a 6.5 pt Core
+  Graphics blur (CG's blur is softer than its nominal sigma; refitted on Cra's capture to within ~2 % of Arc's
+  profile per side). Pins before ↻ is from the non-split bar (ten pins, ↻ kept); the offline copy loads no
+  extensions (`--load-extension` is ignored).
 
 ### Pinned splits and the split menu (Arc 1.171, 30 Oct)
 Observed live on a throwaway Today split (example.com | example.org), archived afterwards.

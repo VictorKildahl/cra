@@ -377,6 +377,17 @@ final class PaneToolbarView: NSView {
         let pins = trailing.filter { v in m.pinned.contains { buttons["ext:" + $0.id] === v } }
         let reload = left.first { $0 === buttons["reload"] }
         let settings = trailing.first { $0 === buttons["extensions"] }
+        // The copy glyph goes in every pane at the width where a focused pane loses its sliders
+        // (Arc, 3-pane split): judged on that pane's full set, so all panes of a width agree.
+        var showsCopy = true
+        if m.kind == .normal {
+            let fullLeft: CGFloat = 2.5 + 3 * 37 + 6
+            let fullRight: CGFloat = (m.inSplit ? 4 + 30 + 26 : 6 + 34) + 34 + 6
+            let fullRoom = w - fullLeft - fullRight - 2 * (8 + 6)
+            showsCopy = !ToolbarRoom.plan(pins: [], reload: 37, settings: 34, needed: urlButton.idealWidth(withCopy: true),
+                                          room: fullRoom).hidesSettings
+        }
+        urlButton.showsCopy = showsCopy
         var plan = ToolbarRoom.Plan()
         if m.kind == .normal {
             let start: CGFloat = 2.5
@@ -676,6 +687,15 @@ final class ToolbarURLButton: NSView, NSTextFieldDelegate {
     /// own pill, 24 pt tall, starting 20 pt in with the text 7 pt inside it. Each has its own hover;
     /// the pointer picks one where they meet. The developer bar is one piece.
     private var split = false
+    /// Arc drops the copy glyph in a narrow pane, at the width where the sliders go (GitHub #178).
+    var showsCopy = true {
+        didSet {
+            guard showsCopy != oldValue else { return }
+            for v in [icon, copyFill, copyTip] as [NSView] { v.isHidden = !showsCopy || (v === copyTip && !split) }
+            needsLayout = true
+        }
+    }
+    private var lead: CGFloat { showsCopy ? Self.pillStart : 0 }
     private enum Region { case none, copy, address }
     private var region = Region.none { didSet { if region != oldValue { refreshFill() } } }
     private let copyFill = NSView()
@@ -718,9 +738,12 @@ final class ToolbarURLButton: NSView, NSTextFieldDelegate {
     }
 
     /// The text's natural width plus padding; the bar centres and clips the button to it.
-    var idealWidth: CGFloat {
+    var idealWidth: CGFloat { idealWidth(withCopy: showsCopy) }
+
+    func idealWidth(withCopy: Bool) -> CGFloat {
         let text = label.attributedStringValue.size().width
-        return ceil(split ? Self.textStart + text + Self.pillPad : 10 + iconWidth + 7 + text + 10)
+        let start = Self.textStart - (withCopy ? 0 : Self.pillStart)
+        return ceil(split ? start + text + Self.pillPad : 10 + iconWidth + 7 + text + 10)
     }
 
     /// The glyph's own width, as SwiftUI lays an Image out; developer mode boxes it at 14 pt.
@@ -732,7 +755,7 @@ final class ToolbarURLButton: NSView, NSTextFieldDelegate {
         self.hover = hover
         self.copyHover = copyHover
         split = !developer
-        copyTip.isHidden = !split
+        copyTip.isHidden = !split || !showsCopy
         self.url = url
         ink = fg
         field?.textColor = fg
@@ -761,13 +784,14 @@ final class ToolbarURLButton: NSView, NSTextFieldDelegate {
         if split {
             let box = Self.copyBox, y = (h - box) / 2
             copyFill.frame = NSRect(x: 0, y: y, width: box, height: box)
-            addressFill.frame = NSRect(x: Self.pillStart, y: y, width: max(0, bounds.width - Self.pillStart), height: box)
+            addressFill.frame = NSRect(x: lead, y: y, width: max(0, bounds.width - lead), height: box)
             icon.frame = NSRect(x: 0, y: 0, width: box, height: h)
             let lh = label.intrinsicContentSize.height
-            label.frame = NSRect(x: Self.textStart - SidebarText.inset, y: (h - lh) / 2,
-                                 width: max(0, bounds.width - Self.textStart - Self.pillPad) + 2 * SidebarText.inset, height: lh)
-            copyTip.frame = NSRect(x: 0, y: 0, width: Self.pillStart, height: h)
-            tip.frame = NSRect(x: Self.pillStart, y: 0, width: max(0, bounds.width - Self.pillStart), height: h)
+            let textStart = lead + Self.textStart - Self.pillStart
+            label.frame = NSRect(x: textStart - SidebarText.inset, y: (h - lh) / 2,
+                                 width: max(0, bounds.width - textStart - Self.pillPad) + 2 * SidebarText.inset, height: lh)
+            copyTip.frame = NSRect(x: 0, y: 0, width: lead, height: h)
+            tip.frame = NSRect(x: lead, y: 0, width: max(0, bounds.width - lead), height: h)
             return
         }
         tip.frame = bounds
@@ -854,7 +878,7 @@ final class ToolbarURLButton: NSView, NSTextFieldDelegate {
     private func region(at event: NSEvent) -> Region {
         let p = convert(event.locationInWindow, from: nil)
         guard bounds.contains(p) else { return .none }
-        return split && p.x < Self.pillStart ? .copy : .address
+        return split && p.x < lead ? .copy : .address
     }
 
     override func updateTrackingAreas() {

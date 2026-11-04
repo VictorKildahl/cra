@@ -53,8 +53,12 @@ struct ToolbarRoomTests {
         // A 215 pt pane (Arc 1.170): ← → · options · ✕ and the address only.
         #expect(ToolbarRoom.plan(pins: [], reload: 37, settings: 34, needed: 150, room: 0)
                 == .init(hidesReload: true, hidesSettings: true))
-        #expect(ToolbarRoom.plan(pins: [], reload: 37, settings: 34, needed: 150, room: 50)
+        #expect(ToolbarRoom.plan(pins: [], reload: 37, settings: 34, needed: 150, room: 70)
                 == .init(hidesReload: true))
+        // Arc's 3-pane split: a 325 pt pane keeps the sliders (114 pt of address room in Cra's
+        // bar), a 292 pt one doesn't (82 pt).
+        #expect(!ToolbarRoom.plan(pins: [], reload: 37, settings: 34, needed: 150, room: 114 - 37).hidesSettings)
+        #expect(ToolbarRoom.plan(pins: [], reload: 37, settings: 34, needed: 150, room: 82 - 37).hidesSettings)
     }
 
     @Test func aShortAddressNeverCostsTheSliders() {

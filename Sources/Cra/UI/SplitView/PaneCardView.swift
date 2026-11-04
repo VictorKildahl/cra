@@ -40,10 +40,11 @@ final class PaneCardView: NSView {
             layer?.cornerRadius = cornerRadius
             ring.layer?.cornerRadius = cornerRadius
             needsLayout = true
+            syncShadow()
         }
     }
     /// White page card, or Arc's tinted translucent empty pane.
-    var hasPage = true { didSet { refreshBackground() } }
+    var hasPage = true { didSet { refreshBackground(); syncShadow() } }
     var isDark = false { didSet { refreshBackground() } }
     /// The page's own background ("#RRGGBB"; Arc's canvas until it reports one). The page window
     /// trails the card by a frame or more while the window is resized quickly, and a page that is
@@ -56,7 +57,7 @@ final class PaneCardView: NSView {
     /// under a dark bar shows through the bar's anti-aliased left edge as a 1px light line.
     var toolbarColor: String? { didSet { refreshBackground() } }
     /// The no-tab stand-in: toolbar on the gradient, no card at all.
-    var transparent = false { didSet { refreshBackground() } }
+    var transparent = false { didSet { refreshBackground(); syncShadow() } }
     /// While a pane is being dragged open/closed its page keeps its last size.
     var frozenWebBounds: NSRect?
     /// The page is on screen in another window: Arc keeps the tab selected here and shows a
@@ -79,6 +80,34 @@ final class PaneCardView: NSView {
         }
     }
     private let ring = FocusRingView()
+    /// Arc's shadow under a page card (GitHub #178): a sibling behind the card in its superview,
+    /// on the card's frame and alpha. Off for the empty and no-tab cards and square cards.
+    private let shadowView = CardShadowView()
+    var castsShadow = false { didSet { syncShadow() } }
+
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        if let superview {
+            if shadowView.superview !== superview { superview.addSubview(shadowView, positioned: .below, relativeTo: self) }
+        } else {
+            shadowView.removeFromSuperview()
+        }
+        syncShadow()
+    }
+
+    override func setFrameOrigin(_ newOrigin: NSPoint) { super.setFrameOrigin(newOrigin); syncShadow() }
+    override func setFrameSize(_ newSize: NSSize) { super.setFrameSize(newSize); syncShadow() }
+    override var alphaValue: CGFloat { didSet { shadowView.alphaValue = alphaValue } }
+    override var isHidden: Bool { didSet { syncShadow() } }
+
+    private func syncShadow() {
+        let on = castsShadow && hasPage && !transparent && cornerRadius > 0 && !isHidden && superview != nil
+        shadowView.isHidden = !on
+        guard on else { return }
+        shadowView.cornerRadius = cornerRadius
+        let f = frame.insetBy(dx: -CardShadowView.pad, dy: -CardShadowView.pad)
+        if shadowView.frame != f { shadowView.frame = f }
+    }
 
     /// The card shows another tab now (a tab switch with one pane before and after): the same
     /// card and toolbar follow it.
@@ -191,7 +220,7 @@ final class PaneCardView: NSView {
 
 /// A stroke along its bounds' rounded edge (the layer's border), drawn over the card's other
 /// views. One static layer: a focus change recolours or hides it, nothing redraws per frame.
-private final class FocusRingView: NSView {
+final class FocusRingView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
@@ -203,4 +232,72 @@ private final class FocusRingView: NSView {
 
     /// Clicks go to the bar and the page under it.
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+/// Arc's card shadow, fitted to its captures (Arc 1.171, light space, 2x, GitHub #178): a
+/// Gaussian edge of 26 % black, 3.6 pt sigma, 0.8 pt low. Core Graphics' blur came out softer and
+/// lighter than its nominal sigma (fitted on Cra's own capture), hence 31 % and a 6.5 pt blur. Drawn as a
+/// stretchable image, made once per corner radius and scale, so it costs nothing per frame and
+/// stretches with the card while its frame animates. The card's own area is cut out: a card
+/// whose page has not painted yet shows the window behind it, not the shadow.
+final class CardShadowView: NSView {
+    static let alpha: CGFloat = 0.31, blur: CGFloat = 6.5, drop: CGFloat = 0.8, sigma: CGFloat = 3.6
+    /// How far the shadow reaches past the card.
+    static let pad: CGFloat = ceil(3 * sigma + drop)
+    var cornerRadius: CGFloat = 0 { didSet { if cornerRadius != oldValue { refresh() } } }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.contentsGravity = .resize
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func viewDidChangeBackingProperties() { super.viewDidChangeBackingProperties(); refresh() }
+
+    private func refresh() {
+        let scale = window?.backingScaleFactor ?? 2
+        guard let image = Self.image(radius: cornerRadius, scale: scale) else { layer?.contents = nil; return }
+        layer?.contents = image
+        layer?.contentsScale = scale
+        // The middle stretches: one point between the corners on each axis.
+        let side = CGFloat(image.width) / scale, mid = Self.pad + cornerRadius
+        layer?.contentsCenter = CGRect(x: mid / side, y: mid / side, width: 1 / side, height: 1 / side)
+    }
+
+    private static var cache: [String: CGImage] = [:]
+
+    private static func image(radius: CGFloat, scale: CGFloat) -> CGImage? {
+        let key = "\(radius)@\(scale)"
+        if let hit = cache[key] { return hit }
+        // The card is the middle (2·radius + 1 pt square), the shadow pad around it.
+        let card = 2 * radius + 1, side = card + 2 * pad
+        let px = Int(ceil(side * scale))
+        guard let ctx = CGContext(data: nil, width: px, height: px, bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        ctx.scaleBy(x: scale, y: scale)
+        let rect = CGRect(x: pad, y: pad, width: card, height: card)
+        let path = CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil)
+        // The blurred rect: Core Graphics' shadow of a shape drawn far off the canvas, so only its
+        // shadow lands.
+        let far: CGFloat = 10_000
+        ctx.saveGState()
+        ctx.setShadow(offset: CGSize(width: far * scale, height: -drop * scale), blur: blur * scale,
+                      color: NSColor.black.withAlphaComponent(alpha).cgColor)
+        ctx.translateBy(x: -far, y: 0)
+        ctx.addPath(path)
+        ctx.setFillColor(NSColor.black.cgColor)
+        ctx.fillPath()
+        ctx.restoreGState()
+        // Cut the card out.
+        ctx.setBlendMode(.clear)
+        ctx.addPath(path)
+        ctx.fillPath()
+        let image = ctx.makeImage()
+        cache[key] = image
+        return image
+    }
 }

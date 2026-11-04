@@ -19,12 +19,12 @@ public enum ToolbarExtensionFit {
 }
 
 /// What a narrow toolbar leaves out so the address keeps room, after Arc 1.171's `…HasRoom`
-/// flags (`numberOfExtensionsThatFit`, `refreshHasRoom`, `settingsHasRoom`). Measured live on a
-/// split (GitHub #178, 4 Nov 2026): a 387 pt pane keeps ↻ with the address whole; at 350 pt ↻
-/// is gone, the domain is cut short and the Site Control Center stays; at 215 pt (Arc 1.170,
-/// 24 Oct) the sliders are gone too. So the pins go first, from the front; then ↻ while the
-/// address still doesn't fit whole; the sliders only once the address would be squeezed below
-/// `minimum`.
+/// flags (`numberOfExtensionsThatFit`, `refreshHasRoom`, `settingsHasRoom`). Measured live on
+/// two- and three-pane splits (GitHub #178, 4 Nov 2026): ↻ stays at 387–392 pt panes and is gone
+/// at 350–359 pt, with the domain cut short; the Site Control Center stays down to 325 pt and is
+/// gone at 292 pt (and at 215 pt, Arc 1.170). So the pins go first, from the front; then ↻ while
+/// the address still doesn't fit whole; the sliders only once the address would be squeezed
+/// below `minimum`.
 public enum ToolbarRoom {
     public struct Plan: Equatable, Sendable {
         public var hiddenPins: Int
@@ -36,8 +36,9 @@ public enum ToolbarRoom {
         }
     }
 
-    /// Between Arc's two narrow observations: room for the link glyph and a few letters.
-    public static let minimumAddress: CGFloat = 80
+    /// Cra's address room at Arc's last pane with the sliders (325 pt: 114) and its first without
+    /// (292 pt: 82), split down the middle.
+    public static let minimumAddress: CGFloat = 100
 
     /// `room`: the address's space with every button shown; each hidden button adds its width.
     /// `reload` / `settings`: those buttons' widths, nil when the bar has none.
