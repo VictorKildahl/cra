@@ -1555,7 +1555,7 @@ struct SplitRowModel: Equatable {
 /// pane a pill while the split is open. Its close buttons follow SidebarClose.split: one at the
 /// row's end for a pinned split or a Today split in the background, one in every pane of an
 /// open Today split (GitHub #139). A renamed split shows its name instead of the panes.
-final class SplitRowView: SidebarRowView, NSTextFieldDelegate {
+final class SplitRowView: SidebarRowView, NSTextFieldDelegate, ArcTooltipTarget {
     private(set) var model: SplitRowModel?
     private var cells: [SplitCellView] = []
     private var separators: [NSView] = []
@@ -1795,7 +1795,19 @@ final class SplitRowView: SidebarRowView, NSTextFieldDelegate {
         return SidebarMenus.split(m, list: list)
     }
 
-    override func tooltipTarget(at point: NSPoint) -> (any ArcTooltipTarget)? { cell(at: point) }
+    override func tooltipTarget(at point: NSPoint) -> (any ArcTooltipTarget)? {
+        model?.named == true ? self : cell(at: point)
+    }
+
+    // ArcTooltipTarget, for a renamed split: its name by the pointer (Arc 1.171).
+    var text: String { model.map { $0.editing ? "" : $0.title ?? "" } ?? "" }
+    var keys: [String] { [] }
+    var followsCursor: Bool { true }
+    var subtitle: String? { nil }
+    var optionText: String? { nil }
+    var onShow: (() -> Void)? { nil }
+    var screenFrame: NSRect { window?.convertToScreen(convert(bounds, to: nil)) ?? .zero }
+    var hostWindow: NSWindow? { window }
 }
 
 /// Arc 1.171, measured at 1x (GitHub #139): panes 4 pt inside the fill and 4 pt apart, buttons 24 pt.
