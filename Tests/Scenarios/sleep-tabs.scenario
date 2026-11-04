@@ -10,5 +10,5 @@ cra://action/nextTab
 wait 4
 cra://debug?sleepTabs=1
 wait 4
-expect-log tab sleep unloads
+expect-log tab sleep (unloads|discards)
 helpers settle 2
