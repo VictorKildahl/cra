@@ -297,7 +297,9 @@ final class SidebarGlyphButton: NSView {
 
     override var mouseDownCanMoveWindow: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { takesClickFromChildWindow }
-    override func hitTest(_ point: NSPoint) -> NSView? { frame.contains(point) ? self : nil }
+    // Rows hide their buttons rather than remove them: a hidden one must not take the row's
+    // clicks or run the action it had when it last showed (AppKit's hitTest skips hidden views).
+    override func hitTest(_ point: NSPoint) -> NSView? { !isHiddenOrHasHiddenAncestor && frame.contains(point) ? self : nil }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
