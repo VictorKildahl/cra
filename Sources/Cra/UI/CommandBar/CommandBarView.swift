@@ -298,8 +298,8 @@ final class CommandBarView: NSView {
         addSubview(inner, positioned: .above, relativeTo: material)
         innerSplash = inner
         let margin = Self.splashMargin
-        let panel = NSPanel(contentRect: window.frame.insetBy(dx: -margin, dy: -margin), styleMask: [.borderless, .nonactivatingPanel],
-                            backing: .buffered, defer: false)
+        let panel = SplashPanel(contentRect: window.frame.insetBy(dx: -margin, dy: -margin), styleMask: [.borderless, .nonactivatingPanel],
+                                backing: .buffered, defer: false)
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = false
@@ -344,6 +344,14 @@ final class CommandBarView: NSView {
         p.closeSubpath()
         return p
     }
+}
+
+/// The glow's panel reaches 420 pt past the bar, so near the top of the screen it crosses the
+/// menu bar, and AppKit moves a window that does down below it: the glow sat under the bar, not
+/// around it (a Little Window's bar is a third of the way down a small window). Its frame is
+/// left as asked.
+private final class SplashPanel: NSPanel {
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 }
 
 /// Arc's SplashView: `Color(nsColor:)` clipped to a 12 pt continuous rounded rectangle, blurred and
