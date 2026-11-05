@@ -23,6 +23,8 @@ struct SiteControlCenterActions {
     var showCertificate: (() -> Void)?
     /// A WebKit page's "Learn more" (docs/protected-media.md).
     var learnAboutProtectedMedia: () -> Void = {}
+    /// The Safari's Engine switch: true plays the site in WebKit from now on, false in Chromium.
+    var chooseSafariEngine: (Bool) -> Void = { _ in }
 }
 
 enum SiteControlCenterMetrics {
@@ -50,13 +52,16 @@ final class SiteControlCenterView: NSView {
     /// A WebKit page's service ("Spotify"): the card that says why takes the extensions' place,
     /// and the ad blocker's switch goes (it is Chromium's).
     private let protectedMedia: String?
+    /// The Safari's Engine switch's state, nil without the switch (a page that uses no DRM).
+    private let safariEngine: Bool?
     private var extensions: ExtensionStore { .shared }
     /// The tiles by extension ID, whose icons follow the extensions' own changes in place.
     private var extensionTiles: [String: SiteExtensionTile] = [:]
 
     init(url: String, secure: Bool, dark: Bool, profile: String, tab: UUID?, protectedMedia: String? = nil,
-         actions: SiteControlCenterActions, store: SidebarStore) {
+         safariEngine: Bool? = nil, actions: SiteControlCenterActions, store: SidebarStore) {
         self.protectedMedia = protectedMedia
+        self.safariEngine = safariEngine
         self.url = url
         self.secure = secure
         self.profile = profile
@@ -175,6 +180,11 @@ final class SiteControlCenterView: NSView {
         ]
         // Chromium's blocker doesn't see a WebKit page: no switch that does nothing there.
         if protectedMedia != nil { rowsSpec.remove(at: 1) }
+        // A page that plays DRM, or one in WebKit: which engine plays this site (docs/protected-media.md).
+        if let on = safariEngine {
+            let choose = actions.chooseSafariEngine
+            rowsSpec.append(("safari", "Safari’s Engine", on ? "On" : "Off", on, { choose(!on) }))
+        }
         for (i, r) in rowsSpec.enumerated() {
             let row = SiteSettingRow(symbol: r.0, title: r.1, subtitle: r.2, active: r.3, colors: colors, action: r.4)
             row.frame = NSRect(x: 0, y: 27 + CGFloat(i) * 43, width: 208, height: 33)
@@ -714,8 +724,10 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
 
     var isShown: Bool { popover?.isShown == true }
 
-    func show(relativeTo rect: NSRect, of view: NSView, url: String, secure: Bool, dark: Bool, profile: String, tab: UUID?,
-              protectedMedia: String? = nil, store: SidebarStore, actions: SiteControlCenterActions) {
+    /// The sliders button pressed while the popover is up, or by the click that just closed it:
+    /// it closes (and stays closed) instead of opening again. Asked before anything slower than
+    /// the click itself (the page's DRM question), while the click is still the current event.
+    func closesInstead() -> Bool {
         // A transient popover closes on the mouse-down outside it; the button fires on that
         // click's mouse-up. The same click on the sliders button closes it, as in Arc,
         // however long the press took (GitHub #42): the latest mouse-down is the closing one.
@@ -724,8 +736,15 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
                 && abs(ProcessInfo.processInfo.systemUptime - CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .leftMouseDown) - t) < 0.05
         } ?? false
         closingClick = nil
-        if let popover, popover.isShown { popover.performClose(nil); return }
-        if closedByThisClick { return }
+        if let popover, popover.isShown { popover.performClose(nil); return true }
+        return closedByThisClick
+    }
+
+    func show(relativeTo rect: NSRect, of view: NSView, url: String, secure: Bool, dark: Bool, profile: String, tab: UUID?,
+              protectedMedia: String? = nil, safariEngine: Bool? = nil, toggleChecked: Bool = false,
+              store: SidebarStore, actions: SiteControlCenterActions) {
+        if !toggleChecked, closesInstead() { return }
+        if let popover, popover.isShown { popover.performClose(nil) }
         let p = NSPopover()
         p.behavior = .transient
         p.animates = true
@@ -746,8 +765,10 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
         acts.clearCookies = closing(actions.clearCookies)
         acts.showCertificate = actions.showCertificate.map(closing)
         acts.learnAboutProtectedMedia = closing(actions.learnAboutProtectedMedia)
+        // The page opens again in the other engine: the popover's content would be the old page's.
+        acts.chooseSafariEngine = { [weak p] on in p?.performClose(nil); actions.chooseSafariEngine(on) }
         let content = SiteControlCenterView(url: url, secure: secure, dark: dark, profile: profile, tab: tab, protectedMedia: protectedMedia,
-                                            actions: acts, store: store)
+                                            safariEngine: safariEngine, actions: acts, store: store)
         let host = NSViewController()
         host.view = content
         host.preferredContentSize = content.frame.size

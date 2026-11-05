@@ -23,6 +23,12 @@ struct ProtectedMediaTests {
         "https://www.hotstar.com/in",
         "https://www.jiohotstar.com/",
         "https://v.qq.com/x/cover/x.html",
+        "https://www.joyn.de/filme/x",
+        "https://www.rakuten.tv/dk",
+        "https://www.skyshowtime.com/watch",
+        "https://www.nowtv.com/watch/home",
+        "https://www.wowtv.de/",
+        "https://www.showmax.com/",
         "http://www.hulu.com/",
         "https://www.netflix.com./browse",
     ])
@@ -73,6 +79,50 @@ struct ProtectedMediaTests {
         #expect(ProtectedMediaSites.defaultHosts.allSatisfy { ProtectedMediaSites.serviceNames[$0] != nil })
     }
 
+    /// Prime Video where Amazon serves it, and Amazon Music; the rest of Amazon stays in Chromium.
+    @Test func amazon() {
+        #expect(sites.engine(for: "https://www.amazon.com/gp/video/detail/B0X/ref=x?autoplay=1") == .webKit)
+        #expect(sites.engine(for: "https://www.amazon.com/gp/video") == .webKit)
+        #expect(sites.engine(for: "https://www.amazon.co.uk/gp/video/storefront") == .webKit)
+        #expect(sites.engine(for: "https://music.amazon.com/albums/x") == .webKit)
+        #expect(sites.engine(for: "https://music.amazon.de/") == .webKit)
+        #expect(sites.engine(for: "https://www.amazon.com/") == .chromium)
+        #expect(sites.engine(for: "https://www.amazon.com/dp/B0X") == .chromium)
+        #expect(sites.engine(for: "https://www.amazon.com/gp/videogames") == .chromium)
+        #expect(sites.engine(for: "https://www.amazon.com/ap/signin?openid.return_to=x") == .chromium)
+        #expect(sites.engine(for: "https://www.amazon.dk/gp/video") == .chromium)
+        #expect(sites.serviceName(for: "https://www.amazon.com/gp/video/detail/1") == "Prime Video")
+        #expect(sites.serviceName(for: "https://music.amazon.co.uk/") == "Amazon Music")
+        // A Chromium page going to Prime Video moves; Amazon's shopping pages don't.
+        #expect(sites.handoff(from: .chromium, to: "https://www.amazon.com/gp/video/detail/1", method: "GET") == .webKit)
+        #expect(sites.handoff(from: .chromium, to: "https://www.amazon.com/s?k=tv", method: "GET") == nil)
+    }
+
+    /// The Site Control Center's Safari's Engine switch: what Cra keeps after a choice.
+    @Test func choosingPerSite() {
+        // A site off the list goes to WebKit, and back.
+        var r = ProtectedMediaSites.choosing(.webKit, for: "https://www.viaplay.dk/film", added: [], removed: [])
+        #expect(r.added == ["www.viaplay.dk"] && r.removed.isEmpty)
+        #expect(ProtectedMediaSites(extraHosts: r.added).engine(for: "https://www.viaplay.dk/serier") == .webKit)
+        r = ProtectedMediaSites.choosing(.chromium, for: "https://www.viaplay.dk/film", added: r.added, removed: r.removed)
+        #expect(r.added.isEmpty && r.removed.isEmpty)
+        // A listed one taken off goes under the entry it falls under, and comes back.
+        r = ProtectedMediaSites.choosing(.chromium, for: "https://www.netflix.com/browse", added: [], removed: [])
+        #expect(r.added.isEmpty && r.removed == ["netflix.com"])
+        #expect(ProtectedMediaSites(removedHosts: r.removed).engine(for: "https://www.netflix.com/title/1") == .chromium)
+        r = ProtectedMediaSites.choosing(.webKit, for: "https://www.netflix.com/browse", added: r.added, removed: r.removed)
+        #expect(r.added.isEmpty && r.removed.isEmpty)
+        // Path entries too.
+        r = ProtectedMediaSites.choosing(.chromium, for: "https://www.amazon.com/gp/video/detail/1", added: [], removed: [])
+        #expect(r.removed == ["amazon.com/gp/video"])
+        #expect(ProtectedMediaSites(removedHosts: r.removed).engine(for: "https://www.amazon.com/gp/video") == .chromium)
+        // Choosing what already holds changes nothing; a non-web address changes nothing.
+        r = ProtectedMediaSites.choosing(.webKit, for: "https://open.spotify.com/", added: [], removed: [])
+        #expect(r.added.isEmpty && r.removed.isEmpty)
+        r = ProtectedMediaSites.choosing(.webKit, for: "chrome://settings", added: ["a.com"], removed: ["b.com"])
+        #expect(r.added == ["a.com"] && r.removed == ["b.com"])
+    }
+
     @Test func offMeansChromiumEverywhere() {
         let off = ProtectedMediaSites(isEnabled: false)
         #expect(off.engine(for: "https://open.spotify.com/") == .chromium)
@@ -92,9 +142,10 @@ struct ProtectedMediaTests {
     }
 
     @Test func entriesAreCleanedAndDeduplicated() {
-        let custom = ProtectedMediaSites(extraHosts: ["open.spotify.com", "OPEN.SPOTIFY.COM", "", "  ", "a b", "x.com/path"])
+        let custom = ProtectedMediaSites(extraHosts: ["open.spotify.com", "OPEN.SPOTIFY.COM", "", "  ", "a b", "x.com/a b", "x.com/?q"])
         #expect(custom.hosts.filter { $0 == "open.spotify.com" }.count == 1)
         #expect(custom.hosts.count == ProtectedMediaSites.defaultHosts.count)
+        #expect(ProtectedMediaSites(extraHosts: ["X.com/Watch/"]).hosts.last == "x.com/watch")
     }
 
     /// A Chromium page's own navigation to a service moves before the request goes out; a POST

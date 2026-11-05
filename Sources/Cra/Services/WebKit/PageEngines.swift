@@ -9,15 +9,29 @@ enum PageEngines {
     /// it off (every page Chromium's again); `webKitProtectedMediaHosts` and
     /// `webKitProtectedMediaRemovedHosts` (string arrays) change the list. A test instance sets
     /// CRA_WEBKIT_DRM=0|1 and CRA_WEBKIT_HOSTS=<host,host> (the scenarios' 127.0.0.1).
-    static let sites: ProtectedMediaSites = {
+    /// The Site Control Center's Safari's Engine switch writes the two lists (`choose`).
+    private(set) static var sites: ProtectedMediaSites = load()
+
+    private static let addedKey = "webKitProtectedMediaHosts", removedKey = "webKitProtectedMediaRemovedHosts"
+
+    private static func load() -> ProtectedMediaSites {
         let env = ProcessInfo.processInfo.environment
         let defaults = UserDefaults.standard
         let enabled = env["CRA_WEBKIT_DRM"].map { $0 != "0" } ?? (defaults.object(forKey: "webKitProtectedMedia") as? Bool ?? true)
-        let extra = (env["CRA_WEBKIT_HOSTS"] ?? "").split(separator: ",").map(String.init)
-            + (defaults.stringArray(forKey: "webKitProtectedMediaHosts") ?? [])
-        let removed = defaults.stringArray(forKey: "webKitProtectedMediaRemovedHosts") ?? []
+        let extra = (env["CRA_WEBKIT_HOSTS"] ?? "").split(separator: ",").map(String.init) + (defaults.stringArray(forKey: addedKey) ?? [])
+        let removed = defaults.stringArray(forKey: removedKey) ?? []
         return ProtectedMediaSites(isEnabled: enabled, extraHosts: extra, removedHosts: removed)
-    }()
+    }
+
+    /// The user's choice for `url`'s site (ProtectedMediaSites.choosing), kept and in force at once.
+    static func choose(_ engine: PageEngine, for url: String) {
+        let defaults = UserDefaults.standard
+        let r = ProtectedMediaSites.choosing(engine, for: url, added: defaults.stringArray(forKey: addedKey) ?? [],
+                                             removed: defaults.stringArray(forKey: removedKey) ?? [])
+        defaults.set(r.added, forKey: addedKey)
+        defaults.set(r.removed, forKey: removedKey)
+        sites = load()
+    }
 
     static func engine(of browser: CraBrowser) -> PageEngine { browser is WebKitBrowser ? .webKit : .chromium }
 

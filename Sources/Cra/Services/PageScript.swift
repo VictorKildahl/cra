@@ -12,6 +12,9 @@ import Foundation
 ///   player can skip tracks. `setActionHandler` can't be called from outside and its handlers
 ///   live in the page's world, so a small wrapper there keeps them in a closure and answers an
 ///   event whose name is random per launch: nothing in the page's world names Cra.
+/// - `drm`: the page asked for Widevine (navigator.requestMediaKeySystemAccess): the Site Control
+///   Center then offers to play the site in Safari's engine (docs/protected-media.md). A wrapper in
+///   the page's world tells this world through the same per-launch event name.
 /// - `lt`: the top frame's long tasks (50 ms or more) for the performance recorder (GitHub #91):
 ///   a count, the total and the last 100 durations, which Cra reads and resets for the visible
 ///   tab every few seconds. No attribution, no addresses; the observer only runs when a long
@@ -36,6 +39,15 @@ enum PageScript {
         try { handlers[e.detail]?.({ action: e.detail }); } catch {}
       });
     })();
+    (() => {
+      const proto = window.Navigator?.prototype, request = proto?.requestMediaKeySystemAccess;
+      if (!request) return;
+      Object.defineProperty(proto, 'requestMediaKeySystemAccess', { configurable: true, writable: true,
+        value: { requestMediaKeySystemAccess(keySystem, configs) {
+          if (String(keySystem).startsWith('com.widevine')) dispatchEvent(new CustomEvent('\(channel)d'));
+          return request.call(this, keySystem, configs);
+        } }.requestMediaKeySystemAccess });
+    })();
     """
 
     /// Cra's isolated world.
@@ -49,6 +61,7 @@ enum PageScript {
         if (t instanceof Element) cra.typed.set(t, location.href);
       }, true);
       addEventListener('\(channel)r', e => { cra.handlers = String(e.detail || '').split(',').filter(Boolean); });
+      addEventListener('\(channel)d', () => { cra.drm = true; });
       cra.send = action => dispatchEvent(new CustomEvent('\(channel)', { detail: action }));
       cra.query = () => (cra.send('?'), cra.handlers);
       if (window.top === window) try {

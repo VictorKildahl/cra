@@ -2307,6 +2307,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     private func showToolbarExtensionsMenu(from anchor: NSRect? = nil, inToolbar: Bool = false) {
+        // Decided now, while the click is the current event: the page is asked a question below.
+        if siteControlCenter.closesInstead() { return }
         // A split pane's bar has the sliders even with the toolbar hidden: hang under that bar then.
         let pressed = anchor.map { inToolbar ? $0 : nil } ?? Self.buttonFrameUnderPointer { $0 is ToolbarGlyphButton }
         guard let window, let content = window.contentView,
@@ -2337,11 +2339,40 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             self?.openTab("chrome://settings/content/siteDetails?site=" + (origin.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? origin))
         }
         actions.learnAboutProtectedMedia = { [weak self] in self?.openTab(Self.protectedMediaHelp) }
+        actions.chooseSafariEngine = { [weak self] on in self?.chooseSafariEngine(on, for: url) }
         siteControlCenterSpaceID = focusedSpaceID
-        siteControlCenter.show(relativeTo: rect, of: content, url: url, secure: secure, dark: SystemAppearance.shared.isDark,
-                               profile: profileDirectoryName, tab: selectedTabID,
-                               protectedMedia: browsers.visibleTabID.flatMap { sidebarUI.navState(for: $0).protectedMedia },
-                               store: store, actions: actions)
+        let show = { [weak self] (safariEngine: Bool?) in
+            guard let self, let window = self.window, window.isVisible else { return }
+            self.siteControlCenter.show(relativeTo: rect, of: content, url: url, secure: secure, dark: SystemAppearance.shared.isDark,
+                                        profile: self.profileDirectoryName, tab: self.selectedTabID,
+                                        protectedMedia: self.browsers.visibleTabID.flatMap { self.sidebarUI.navState(for: $0).protectedMedia },
+                                        safariEngine: safariEngine, toggleChecked: true, store: self.store, actions: actions)
+        }
+        // The Safari's Engine switch: on for a WebKit page; for a Chromium page only once it asked
+        // for Widevine (PageScript's `drm`), else no switch. Asked in Cra's world; a page that
+        // doesn't answer within 0.3 s opens without it.
+        guard let b = currentBrowser, url.hasPrefix("http") else { return show(nil) }
+        if b is WebKitBrowser { return show(true) }
+        var shown = false
+        let once = { (value: Bool?) in if !shown { shown = true; show(value) } }
+        b.evaluate(inIsolatedWorld: PageScript.world, params: #"{"expression":"window.__cra?.drm === true","returnByValue":true}"#) { result, _ in
+            let drm = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+                .flatMap { $0["result"] as? [String: Any] }?["value"] as? Bool == true
+            DispatchQueue.main.async { once(drm ? false : nil) }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { once(nil) }
+    }
+
+    /// The Site Control Center's Safari's Engine switch: the site plays in WebKit (or Chromium)
+    /// from now on, and the focused page opens again there. Choosing it is knowing about it: no toast.
+    private func chooseSafariEngine(_ on: Bool, for url: String) {
+        PageEngines.choose(on ? .webKit : .chromium, for: url)
+        if on, let service = PageEngines.sites.serviceName(for: url) {
+            let key = "protectedMediaToldServices"
+            let told = UserDefaults.standard.stringArray(forKey: key) ?? []
+            if !told.contains(service) { UserDefaults.standard.set(told + [service], forKey: key) }
+        }
+        if let id = browsers.visibleTabID { browsers.reopenInItsEngine(id) }
     }
 
     /// The help centre's page on why Spotify, Netflix and the others play in Safari's engine.

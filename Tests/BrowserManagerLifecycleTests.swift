@@ -207,6 +207,26 @@ enum BrowserManagerLifecycleTests {
         manager.windowVisibilityChanged(covered: false)
         store.settings.autoPictureInPicture = false
 
+        // The Site Control Center's Safari's Engine switch: a site off the list moves to WebKit, in its
+        // place on screen, and back; the choice holds for the next page of that site.
+        let chosen = store.createTab(url: "https://stream.example.test/film").id
+        manager.show([chosen, other], focused: chosen, focus: false)
+        let before = manager.runtime(for: chosen)!.browser
+        manager.reopenInItsEngine(chosen)
+        expect(manager.runtime(for: chosen)?.browser === before, "without a choice the page stays where it is")
+        PageEngines.choose(.webKit, for: "https://stream.example.test/film")
+        manager.reopenInItsEngine(chosen)
+        await drainMainQueue()
+        expect(manager.runtime(for: chosen)?.browser is WebKitBrowser && manager.visibleTabIDs == [chosen, other] && manager.visibleTabID == chosen,
+               "chosen for Safari's engine, the page opens in WebKit in its pane")
+        expect(PageEngines.sites.engine(for: "https://stream.example.test/other") == .webKit, "the choice holds for the site")
+        PageEngines.choose(.chromium, for: "https://stream.example.test/film")
+        manager.reopenInItsEngine(chosen)
+        await drainMainQueue()
+        expect(!(manager.runtime(for: chosen)?.browser is WebKitBrowser), "chosen back, the page opens in Chromium")
+        UserDefaults.standard.removeObject(forKey: "webKitProtectedMediaHosts")
+        UserDefaults.standard.removeObject(forKey: "webKitProtectedMediaRemovedHosts")
+
         // A late request from a page that already moved changes nothing.
         expect(!manager.browser(chromium, handsOffNavigationToURL: "https://www.netflix.com/", method: "GET"), "a retired page can't move its tab again")
         manager.closeAll()

@@ -29,7 +29,8 @@ public enum PageEngine: String, Equatable, Sendable {
 ///   cookies. Cra's own navigations (the URL bar) pick the engine again.
 public struct ProtectedMediaSites: Equatable, Sendable {
     /// The web players of services that need Verified Media Path in Chromium on a Mac and play
-    /// in Safari. A host matches itself and its subdomains. Players only, not whole domains:
+    /// in Safari. A host matches itself and its subdomains; "host/path" also needs the address's
+    /// path to start with that path (Prime Video on Amazon). Players only, not whole domains:
     /// other sites send their "Sign in with Spotify/Tidal/Deezer" through accounts.spotify.com,
     /// login.tidal.com and connect.deezer.com, and those must finish in the engine they started in.
     public static let defaultHosts: [String] = [
@@ -51,7 +52,20 @@ public struct ProtectedMediaSites: Equatable, Sendable {
         "crunchyroll.com",
         "hotstar.com", "jiohotstar.com",
         "v.qq.com",
-    ]
+        // Seen refusing non-VMP Chromium ("Verified Media Path" errors for Joyn and Rakuten TV,
+        // Nov 2024), and Sky's and Peacock's platforms, which fail as Peacock does (5 Nov 2026).
+        "joyn.de", "joyn.at", "joyn.ch",
+        "rakuten.tv",
+        "skyshowtime.com", "nowtv.com", "wowtv.de", "showmax.com",
+        // Prime Video where Amazon itself serves it (the US, and Amazon's stores that keep it under
+        // /gp/video); the rest of Amazon (shopping, Login with Amazon) stays in Chromium.
+    ] + amazonStores.map { "\($0)/gp/video" } + [
+        // Amazon Music needs production VMP in Chromium (Parachord's tests, castlabs EVS, Nov 2026).
+    ] + amazonStores.map { "music.\($0)" }
+
+    /// Amazon's storefronts with Prime Video and Amazon Music.
+    static let amazonStores = ["amazon.com", "amazon.co.uk", "amazon.de", "amazon.fr", "amazon.it", "amazon.es", "amazon.ca",
+                               "amazon.co.jp", "amazon.com.au", "amazon.in", "amazon.com.mx", "amazon.com.br"]
 
     /// What Cra calls each service when it tells the user why a page is WebKit's (the toast,
     /// the Site Control Center, the extension buttons' tooltips).
@@ -61,11 +75,13 @@ public struct ProtectedMediaSites: Equatable, Sendable {
         "paramountplus.com": "Paramount+", "peacocktv.com": "Peacock", "tv.apple.com": "Apple TV",
         "music.apple.com": "Apple Music", "listen.tidal.com": "Tidal", "www.deezer.com": "Deezer",
         "crunchyroll.com": "Crunchyroll", "hotstar.com": "Hotstar", "jiohotstar.com": "JioHotstar", "v.qq.com": "Tencent Video",
-    ]
+        "joyn.de": "Joyn", "joyn.at": "Joyn", "joyn.ch": "Joyn", "rakuten.tv": "Rakuten TV", "skyshowtime.com": "SkyShowtime",
+        "nowtv.com": "NOW", "wowtv.de": "WOW", "showmax.com": "Showmax",
+    ].merging(amazonStores.flatMap { [("\($0)/gp/video", "Prime Video"), ("music.\($0)", "Amazon Music")] }) { a, _ in a }
 
     /// Off: every page is Chromium's, as before.
     public var isEnabled: Bool
-    /// Lower-cased hosts without a leading dot.
+    /// Lower-cased hosts without a leading dot, some with a path ("amazon.com/gp/video").
     public private(set) var hosts: [String]
 
     /// `extraHosts` add to the list (tests, a user's own entries); `removedHosts` take sites
@@ -83,10 +99,46 @@ public struct ProtectedMediaSites: Equatable, Sendable {
         listedHost(for: url) == nil ? .chromium : .webKit
     }
 
-    /// The listed host `url` falls under, or nil (also while off).
+    /// The listed entry `url` falls under, or nil (also while off).
     public func listedHost(for url: String) -> String? {
         guard isEnabled, let host = Self.webHost(of: url) else { return nil }
-        return hosts.first { host == $0 || host.hasSuffix("." + $0) }
+        let path = URLComponents(string: url.trimmingCharacters(in: .whitespaces))?.path.lowercased() ?? ""
+        return hosts.first { entry in
+            let (h, p) = Self.split(entry)
+            guard host == h || host.hasSuffix("." + h) else { return false }
+            guard let p else { return true }
+            return path == p || path.hasPrefix(p + "/")
+        }
+    }
+
+    /// "amazon.com/gp/video" → ("amazon.com", "/gp/video"); "netflix.com" → ("netflix.com", nil).
+    static func split(_ entry: String) -> (host: String, path: String?) {
+        guard let slash = entry.firstIndex(of: "/") else { return (entry, nil) }
+        return (String(entry[..<slash]), String(entry[slash...]))
+    }
+
+    /// The user's own choice for a site (the Site Control Center's Safari's Engine switch): the
+    /// lists Cra keeps of sites added to WebKit and listed ones taken off, after choosing `engine`
+    /// for `url`'s host. Choosing WebKit lifts a removal (else adds the host); choosing Chromium
+    /// drops an added host, and takes off the listed entry the address falls under.
+    public static func choosing(_ engine: PageEngine, for url: String, added: [String], removed: [String])
+        -> (added: [String], removed: [String]) {
+        guard let host = webHost(of: url) else { return (added, removed) }
+        var added = added.compactMap(normalizedHost), removed = removed.compactMap(normalizedHost)
+        let defaults = ProtectedMediaSites(removedHosts: removed)
+        switch engine {
+        case .webKit:
+            // A listed entry this site falls under, taken off earlier, comes back.
+            let all = ProtectedMediaSites()
+            if let entry = all.listedHost(for: url) { removed.removeAll { $0 == entry } }
+            if ProtectedMediaSites(extraHosts: added, removedHosts: removed).engine(for: url) == .chromium, !added.contains(host) {
+                added.append(host)
+            }
+        case .chromium:
+            added.removeAll { entry in host == split(entry).host || host.hasSuffix("." + split(entry).host) }
+            if let entry = defaults.listedHost(for: url), !removed.contains(entry) { removed.append(entry) }
+        }
+        return (added, removed)
     }
 
     /// The service's name for a page at `url` ("Spotify"); a host someone added names itself.
@@ -110,13 +162,16 @@ public struct ProtectedMediaSites: Equatable, Sendable {
         return host.hasSuffix(".") ? String(host.dropLast()) : host
     }
 
-    /// "Open.Spotify.com", " spotify.com ", ".spotify.com" → "spotify.com"; a URL gives its host.
+    /// "Open.Spotify.com", " spotify.com ", ".spotify.com" → "spotify.com"; a URL gives its host;
+    /// "amazon.com/gp/video/" keeps its path, without the last slash.
     static func normalizedHost(_ entry: String) -> String? {
         var s = entry.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if s.contains("://"), let host = webHost(of: s) { s = host }
-        while s.hasPrefix(".") { s.removeFirst() }
-        while s.hasSuffix(".") { s.removeLast() }
-        guard !s.isEmpty, !s.contains("/"), !s.contains(" ") else { return nil }
-        return s
+        var (host, path) = split(s)
+        while host.hasPrefix(".") { host.removeFirst() }
+        while host.hasSuffix(".") { host.removeLast() }
+        while path?.hasSuffix("/") == true { path?.removeLast() }
+        guard !host.isEmpty, !host.contains(" "), path?.contains(" ") != true, path?.contains("?") != true else { return nil }
+        return path.map { $0.isEmpty ? host : host + $0 } ?? host
     }
 }

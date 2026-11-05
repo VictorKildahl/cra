@@ -1047,6 +1047,16 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         return true
     }
 
+    /// The Site Control Center's Safari's Engine switch: the tab's page opens again at its address
+    /// in the engine it now gets (PageEngines.choose first), in its place on screen.
+    func reopenInItsEngine(_ id: UUID) {
+        guard let rt = runtimes[id] else { return }
+        let url = rt.browser.currentURL
+        guard PageEngines.engine(of: rt.browser) != PageEngines.sites.engine(for: url) else { return }
+        log(id, "moves to \(PageEngines.engine(of: rt.browser) == .webKit ? "Chromium" : "WebKit") for \(site(url, id, rt.browser)), as chosen")
+        reopen(id, at: url, replacing: rt.browser)
+    }
+
     /// The tab's page closes and opens again at `url`, in the engine the address gets, on screen
     /// where it was (its split pane, the focus).
     private func reopen(_ id: UUID, at url: String, replacing old: CraBrowser) {

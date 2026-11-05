@@ -35,7 +35,19 @@ licence, keys usable, 720p playing). That is the whole requirement.
   `primevideo.com`, `hulu.com`, `paramountplus.com`, `peacocktv.com`, `tv.apple.com`,
   `music.apple.com`, `listen.tidal.com`, `www.deezer.com`, `crunchyroll.com`, `hotstar.com`,
   `jiohotstar.com` and `v.qq.com`. The last four come from Ardia, another open-source browser that
-  sends DRM sites to WebKit (its `PROTECTED_VIDEO_SITES`). They are players, not whole domains, except where nothing else signs in through the service (Max sends `play.max.com` on to `www.hbomax.com` and signs in on its own hosts):
+  sends DRM sites to WebKit (its `PROTECTED_VIDEO_SITES`). Joyn (`joyn.de`, `.at`, `.ch`) and Rakuten TV
+  (`rakuten.tv`) were seen refusing non-VMP Chromium with "Verified Media Path" errors; SkyShowtime,
+  NOW (`nowtv.com`), WOW (`wowtv.de`) and Showmax run on Sky's and Peacock's platforms, which fail
+  the same way. Zattoo, Movistar Plus+, Crave, RTL+ and Viaplay had weaker evidence and are left to
+  the switch below. Amazon has path entries: Prime Video at
+  `amazon.<store>/gp/video` (the US and Amazon's other stores that serve it there), and Amazon Music at
+  `music.amazon.<store>`. The rest of Amazon (shopping, Login with Amazon) stays in Chromium.
+- **Any other site, by the user**: when a Chromium page asks for Widevine (PageScript's `drm`, a
+  wrapper around `navigator.requestMediaKeySystemAccess`), the Site Control Center shows a
+  **Safari's Engine** switch. On, the site plays in WebKit from then on and the page reopens there.
+  A WebKit page shows it on, so a listed site can be taken back to Chromium the same way
+  (`ProtectedMediaSites.choosing`, kept in `webKitProtectedMediaHosts` and
+  `webKitProtectedMediaRemovedHosts`). They are players, not whole domains, except where nothing else signs in through the service (Max sends `play.max.com` on to `www.hbomax.com` and signs in on its own hosts):
   other sites send their "Sign in with Spotify/Tidal/Deezer" through `accounts.spotify.com`,
   `login.tidal.com` and `connect.deezer.com`, and those must finish in the engine they started in.
 - **A page Cra opens** (a tab restored or created, a link opened in a new tab, a Little Window, an
