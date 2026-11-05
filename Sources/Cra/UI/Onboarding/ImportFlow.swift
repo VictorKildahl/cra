@@ -127,6 +127,13 @@ final class ImportFlowModel {
 
     // Personalization step.
     private(set) var chosenTheme: Int?
+    var signupEmailDraft = "" {
+        didSet { signupEmailSaveFailed = false }
+    }
+    private(set) var signupEmailSaveFailed = false
+    private(set) var savedSignupEmail: String?
+    private var signupProfileID: UUID? { store.space(importedSpaceID ?? store.focusedSpaceID)?.profileID }
+    var signupProfileName: String { store.profile(signupProfileID)?.name ?? "Default" }
 
     private var faviconCache: [String: NSImage] = [:]
     private let store: SidebarStore
@@ -162,6 +169,10 @@ final class ImportFlowModel {
     }
 
     func go(_ s: ImportStep) {
+        if firstRun && s == .personalization {
+            savedSignupEmail = SignupEmailPreferences.address(profilePath: store.profilePath(profile: signupProfileID))
+            signupEmailDraft = savedSignupEmail ?? ""
+        }
         forward = s > step
         withAnimation(.easeInOut(duration: 0.28)) { step = s }
     }
@@ -640,7 +651,20 @@ final class ImportFlowModel {
         set { store.settings.showToolbar = newValue }
     }
 
-    func continueFromPersonalization() { go(.outro) }
+    func continueFromPersonalization() {
+        guard firstRun, step == .personalization else { return }
+        let draft = signupEmailDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !draft.isEmpty && draft != savedSignupEmail {
+            guard let email = SignupEmail.address(draft) else { return }
+            do {
+                try SignupEmailPreferences.set(email, profilePath: store.profilePath(profile: signupProfileID))
+            } catch {
+                signupEmailSaveFailed = true
+                return
+            }
+        }
+        go(.outro)
+    }
 }
 
 /// Dia shows the import as its own 928×544 window with no title bar.

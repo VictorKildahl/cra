@@ -95,3 +95,10 @@ final class WebKitBrowser: CraBrowser {
     var isContentFullscreen = false
     var serviceName = ""
 }
+@MainActor
+final class SignupEmailSession {
+    func activate(_ browser: CraBrowser?) {}
+    func dismiss() {}
+    func changed(_ json: String?, in browser: CraBrowser) {}
+    func key(_ event: NSEvent, in browser: CraBrowser) -> Bool { false }
+}

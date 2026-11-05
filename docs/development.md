@@ -97,6 +97,8 @@ to Markdown or `docs/` alone runs nothing.
   `ManualScheduler`, against the made-up Arc and Chromium profiles in `Tests/Fixtures`.
 - `scripts/test-policies.sh`: the decisions pulled out of the window controllers
   (`ExtensionLaunch`, `DevToolsToggle`, `FeatureFlags`).
+- `node Tests/test-signup-field.mjs`: exercises signup field detection and acceptance in headless
+  Chromium, including stale fields and password-manager menus. Requires Node 22+ and Chrome.
 - `scripts/test-perf.sh`: the performance recorder on a real main run loop: injected stalls,
   hang files with a `sample` stack, the session marker, ownership, the recording switch
   ([performance.md](performance.md)).

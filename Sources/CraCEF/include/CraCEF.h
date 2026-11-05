@@ -81,6 +81,9 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 - (void)browserDidReceiveFocus:(CraBrowser *)browser;
 - (void)browserDidClose:(CraBrowser *)browser;
 @optional
+/// A user focused an empty signup field in this page's isolated world, or the offer ended (nil).
+- (void)browser:(CraBrowser *)browser signupFieldChanged:(nullable NSString *)metadata
+    NS_SWIFT_NAME(browser(_:signupFieldChanged:));
 /// A video of this page entered or left Chromium's Picture in Picture window
 /// (whether the page, the user or Cra asked for it).
 - (void)browser:(CraBrowser *)browser didChangePictureInPicture:(BOOL)active;
@@ -122,6 +125,8 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 @end
 
 @interface CraBrowser : NSObject
+/// Observe signup email fields for this page. Disabled by default and unavailable in private browsers.
+@property (nonatomic) BOOL signupEmailEnabled;
 @property (nonatomic, weak, nullable) id<CraBrowserDelegate> delegate;
 /// Embedded (Alloy) hosting: a plain NSView that owns the Chromium view. Put
 /// it in your hierarchy and size it; Chromium follows.

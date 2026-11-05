@@ -1,0 +1,25 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Signup field interactions</title>
+<style>
+  input { display: block; margin: 8px 2px; width: 270px; height: 24px; }
+  h1, h2 { font: 16px sans-serif; }
+</style>
+<form id="signup">
+  <h1>Create an account</h1>
+  <input id="email" placeholder="user@example.com">
+  <input id="code" placeholder="Verification Code">
+  <input id="password" type="password" autocomplete="new-password">
+</form>
+<form><h2>Newsletter</h2><input id="news" type="email"></form>
+<form><h2>Invite someone</h2><input id="invite" type="email"></form>
+<form><h2>Sign in</h2><input id="login" type="email"><button type="button">Create account</button></form>
+<iframe title="Embedded form" srcdoc="<form><h1>Create account</h1><input type=email></form>"></iframe>
+<script>
+  window.submits = 0;
+  window.changes = [];
+  document.addEventListener('submit', e => { window.submits++; e.preventDefault(); });
+  for (const name of ['input', 'change']) {
+    document.addEventListener(name, e => window.changes.push(name + ':' + e.target.id));
+  }
+</script>

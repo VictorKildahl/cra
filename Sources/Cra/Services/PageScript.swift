@@ -51,6 +51,11 @@ enum PageScript {
     """
 
     /// Cra's isolated world.
+    private static let signupEmailScript: String = {
+        guard let file = Bundle.main.url(forResource: "signup-email", withExtension: "js", subdirectory: "web") else { return "" }
+        return (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+    }()
+
     static let isolatedWorld = """
     (() => {
       if (window.__cra) return;
@@ -75,5 +80,5 @@ enum PageScript {
         }).observe({ type: 'long-animation-frame' });
       } catch {}
     })();
-    """
+    """ + "\n" + signupEmailScript
 }

@@ -84,6 +84,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     let store: SidebarStore
     let favicons: FaviconCache
     let container: NSView
+    let signupEmail = SignupEmailSession()
     weak var delegate: BrowserManagerDelegate?
     private(set) var runtimes: [UUID: TabRuntime] = [:]
     /// The focused pane's tab (the one toolbar actions and DevTools apply to).
@@ -206,7 +207,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         devToolsViews[tabID] = nil
         devToolsPlaceholders[tabID] = nil
         devToolsDockedState[tabID] = nil
-        if visibleTabID == tabID { visibleTabID = nil }
+        if visibleTabID == tabID {
+            signupEmail.activate(nil)
+            visibleTabID = nil
+        }
         visibleTabIDs.removeAll { $0 == tabID }
         if let host = rt.hostWindow {
             // Embedded page views live in the pane card, outside their host window.
@@ -278,6 +282,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         visibleTabIDs = shown
         if let np = nowPlaying, np.onScreen != Set(shown) { np.onScreen = Set(shown) }
         visibleTabID = focused.flatMap { newSet.contains($0) ? $0 : nil } ?? shown.first
+        signupEmail.activate(visibleRuntime?.browser)
         if wasVisible != Set(shown) {
             HitchMonitor.mark("page-shown")
             if let rt = visibleRuntime {
@@ -898,6 +903,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     func browser(_ browser: CraBrowser, didChangeURL url: String) {
         guard let id = tabID(of: browser) else { return }
+        if id == visibleTabID { signupEmail.dismiss() }
         runtimes[id]?.navigationRevision &+= 1
         // A quiet page that navigates leaves the player; a playlist moving on keeps its card.
         if !browser.isAudible { nowPlaying?.remove(id) }
@@ -1171,7 +1177,11 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     }
 
     func browser(_ browser: CraBrowser, handleKeyEvent event: NSEvent) -> Bool {
-        delegate?.browserManagerHandleKey(event) ?? false
+        signupEmail.key(event, in: browser) || (delegate?.browserManagerHandleKey(event) ?? false)
+    }
+
+    func browser(_ browser: CraBrowser, signupFieldChanged json: String?) {
+        signupEmail.changed(json, in: browser)
     }
 
     func browser(_ browser: CraBrowser, handleUnhandledKeyEvent event: NSEvent) -> Bool {

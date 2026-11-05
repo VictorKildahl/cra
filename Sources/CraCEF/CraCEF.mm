@@ -92,6 +92,7 @@ static NSArray<NSNumber*>* g_linkMenuBackground = @[@NO, @YES];
 /// Page.addScriptToEvaluateOnNewDocument params every page browser gets once it exists
 /// (the page's world, then Cra's isolated world).
 static NSArray<NSString*>* g_documentStartParams = nil;
+static NSString* g_isolatedWorldName = nil;
 
 /// The command picked from a context menu Cra shows; -1 while none is.
 @interface CraMenuPick : NSObject
@@ -1907,7 +1908,22 @@ private:
 /// -sendDevToolsMethod: (one observer per browser, registered on first use).
 class CraDevToolsObserver : public CefDevToolsMessageObserver {
    public:
+    explicit CraDevToolsObserver(CraBrowser* owner) : owner_(owner) {}
     NSMutableDictionary<NSNumber*, void (^)(NSString*, NSString*)>* pending = [NSMutableDictionary dictionary];
+    void OnDevToolsEvent(CefRefPtr<CefBrowser>, const CefString& method, const void* params, size_t size) override {
+        if (method != "Runtime.bindingCalled" || size > 12000) return;
+        CraBrowser* owner = owner_;
+        if (!owner.signupEmailEnabled || owner.isClosed) return;
+        NSDictionary* event = [NSJSONSerialization JSONObjectWithData:[NSData dataWithBytes:params length:size] options:0 error:nil];
+        if (![event[@"name"] isEqual:@"craSignupField"]) return;
+        NSString* payload = event[@"payload"];
+        if (![payload isKindOfClass:NSString.class]) return;
+        // Deliver outside the CDP callback; the delegate can itself send CDP messages.
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (owner.signupEmailEnabled && !owner.isClosed && [owner.delegate respondsToSelector:@selector(browser:signupFieldChanged:)])
+                [owner.delegate browser:owner signupFieldChanged:payload.length ? payload : nil];
+        });
+    }
     void OnDevToolsMethodResult(CefRefPtr<CefBrowser>, int message_id, bool success, const void* result,
                                 size_t result_size) override {
         NSString* json = [[NSString alloc] initWithBytes:result length:result_size encoding:NSUTF8StringEncoding] ?: @"";
@@ -1921,6 +1937,8 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
             if (done) success ? done(json, nil) : done(nil, json);
         });
     }
+private:
+    __weak CraBrowser* owner_;
     IMPLEMENT_REFCOUNTING(CraDevToolsObserver);
 };
 
@@ -1928,6 +1946,7 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     CefRefPtr<CraDevToolsObserver> _cdpObserver;
     CefRefPtr<CefRegistration> _cdpRegistration;
     int _cdpNextID;
+    NSUInteger _signupEmailRevision;
     CefRefPtr<CefBrowser> _devToolsBrowser;
     CefRefPtr<CefBrowser> _browser;
     CefRefPtr<CraClient> _client;
@@ -2027,10 +2046,43 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
                       completion:^(NSString*, NSString* error) {
                           if (error) NSLog(@"Cra: document start script not installed: %@", error);
                       }];
+    if (_signupEmailEnabled) [self configureSignupEmail];
     if (_pendingFocus) {
         _pendingFocus = NO;
         browser->GetHost()->SetFocus(true);
     }
+}
+
+- (void)setSignupEmailEnabled:(BOOL)enabled {
+    enabled = enabled && !self.isIncognito;
+    if (_signupEmailEnabled == enabled) return;
+    _signupEmailEnabled = enabled;
+    if (_browser) [self configureSignupEmail];
+}
+
+// The DevTools binding is restricted to Cra's named world. Page JavaScript cannot call
+// it or see the private field token. Other pages, including incognito, never install it.
+- (void)configureSignupEmail {
+    if (!g_isolatedWorldName.length) return;
+    BOOL enabled = _signupEmailEnabled;
+    NSString* binding = @"craSignupField";
+    if (enabled) {
+        [self sendDevToolsMethod:@"Runtime.enable" params:@"{}" completion:^(NSString*, NSString*) {}];
+        NSData* data = [NSJSONSerialization dataWithJSONObject:@{@"name":binding, @"executionContextName":g_isolatedWorldName}
+                                                       options:0 error:nil];
+        [self sendDevToolsMethod:@"Runtime.addBinding" params:[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]
+                      completion:^(NSString*, NSString*) {}];
+    } else {
+        [self sendDevToolsMethod:@"Runtime.removeBinding" params:@"{\"name\":\"craSignupField\"}" completion:^(NSString*, NSString*) {}];
+        [self sendDevToolsMethod:@"Runtime.disable" params:@"{}" completion:^(NSString*, NSString*) {}];
+    }
+    // add/removeBinding applies to future documents. Update the currently loaded
+    // document as well, including the case where the user changed their preference.
+    NSString* expression = [NSString stringWithFormat:@"window.__cra?.signupConfigure?.(%@,%lu)", enabled ? @"true" : @"false",
+                            (unsigned long)++_signupEmailRevision];
+    NSData* data = [NSJSONSerialization dataWithJSONObject:@{@"expression":expression} options:0 error:nil];
+    [self evaluateInIsolatedWorld:g_isolatedWorldName params:[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]
+                       completion:^(NSString*, NSString*) {}];
 }
 
 - (void)browserClosed {
@@ -2374,7 +2426,7 @@ static NSView* FindRenderWidgetHostView(NSView* root) {
                 completion:(void (^)(NSString* _Nullable, NSString* _Nullable))completion {
     if (!_browser) { completion(nil, @"no browser"); return; }
     if (!_cdpObserver) {
-        _cdpObserver = new CraDevToolsObserver();
+        _cdpObserver = new CraDevToolsObserver(self);
         _cdpRegistration = _browser->GetHost()->AddDevToolsMessageObserver(_cdpObserver);
     }
     int messageID = ++_cdpNextID + 100000;  // clear of ids Chromium's own clients use
@@ -2510,6 +2562,7 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
         if (json) [all addObject:[[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding]];
     }
     g_documentStartParams = all;
+    g_isolatedWorldName = [world copy];
 }
 + (BOOL)chromeHosting { return g_chromeHosting; }
 

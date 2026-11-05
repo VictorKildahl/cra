@@ -364,26 +364,35 @@ struct PersonalizationStep: View {
     @Bindable var model: ImportFlowModel
     let c: ImportColors
     var body: some View {
+        let canContinue = model.signupEmailDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || SignupEmail.address(model.signupEmailDraft) != nil
         ZStack(alignment: .topLeading) {
             StepHeader(title: "Make it yours",
-                       subtitle: "Pick the theme color and layout that feel right for you.", c: c)
-            HStack(spacing: (ImportMetrics.columnWidth - 34 * CGFloat(SpaceTheme.presets.count)) / CGFloat(SpaceTheme.presets.count - 1)) {
-                ForEach(SpaceTheme.presets.indices, id: \.self) { i in
-                    ThemeSwatch(theme: SpaceTheme.presets[i], on: model.chosenTheme == i, c: c) { model.chooseTheme(i) }
+                       subtitle: "Choose a theme, address bar layout, and signup email.", c: c)
+            VStack(alignment: .leading, spacing: 20) {
+                HStack(spacing: (ImportMetrics.columnWidth - 34 * CGFloat(SpaceTheme.presets.count)) / CGFloat(SpaceTheme.presets.count - 1)) {
+                    ForEach(SpaceTheme.presets.indices, id: \.self) { i in
+                        ThemeSwatch(theme: SpaceTheme.presets[i], on: model.chosenTheme == i, c: c) { model.chooseTheme(i) }
+                    }
                 }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Choose where the address bar goes:")
+                        .font(.system(size: 13)).foregroundStyle(c.body)
+                    HStack(spacing: 24) {
+                        LayoutTile(toolbar: false, title: "Sidebar", model: model, c: c)
+                        LayoutTile(toolbar: true, title: "Toolbar", model: model, c: c)
+                    }
+                }
+                SignupEmailDraftField(email: $model.signupEmailDraft, title: "Signup email (optional)",
+                    detail: model.savedSignupEmail != nil && model.signupEmailDraft.isEmpty
+                        ? "Leave blank to keep the saved email for \(model.signupProfileName)."
+                        : "Cra offers this address on signup forms in your \(model.signupProfileName) profile.",
+                    saveFailed: model.signupEmailSaveFailed, showsPreview: false)
             }
             .frame(width: ImportMetrics.columnWidth, alignment: .leading)
-            .offset(y: ImportMetrics.listTop)
-            Text("Choose where the address bar goes:")
-                .font(.system(size: 13))
-                .foregroundStyle(c.body)
-                .offset(y: 228)
-            HStack(spacing: 12) {
-                LayoutTile(toolbar: false, title: "Sidebar", model: model, c: c)
-                LayoutTile(toolbar: true, title: "Toolbar", model: model, c: c)
-            }
-            .offset(y: 252)
-            PrimaryButton(title: "Continue", c: c, enabled: true) { model.continueFromPersonalization() }
+            .offset(y: 148)
+            PrimaryButton(title: "Continue", c: c, enabled: canContinue) { model.continueFromPersonalization() }
+                .disabled(!canContinue)
                 .offset(x: -1, y: ImportMetrics.buttonTop)
         }
     }
@@ -397,7 +406,8 @@ private struct LayoutTile: View {
     @Bindable var model: ImportFlowModel
     let c: ImportColors
 
-    private static let width: CGFloat = (ImportMetrics.columnWidth - 12) / 2
+    // The same layout illustrations fit above the signup address in the 544 pt welcome window.
+    private static let width: CGFloat = 108
 
     var body: some View {
         let selected = model.classicLayout == toolbar

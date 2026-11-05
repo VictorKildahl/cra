@@ -2890,7 +2890,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     func windowDidResignKey(_ notification: Notification) {
-        if (notification.object as? NSWindow) === window { leaveIfCovered() }
+        if (notification.object as? NSWindow) === window {
+            browsers.signupEmail.dismiss()
+            leaveIfCovered()
+        }
         guard (notification.object as? NSWindow) === commandPanel, commandBar.isOpen else { return }
         if Date().timeIntervalSince(commandBarOpenedAt) < 0.6 {
             DispatchQueue.main.async { [weak self] in

@@ -62,7 +62,7 @@ Embedded Framework, so sites and Chrome extensions work as they do in Chrome.
 | Library | ✅ |
 | Air Traffic Control | ✅ |
 | Live folders | ✅ |
-| Profiles | ✅ |
+| Profiles | ✅ · Add an optional signup email during setup or in Settings → Profiles. Pick the suggestion on a signup form to fill the address. |
 | Private windows | ✅ |
 | Arc's keyboard shortcuts | ✅ |
 | Import from Arc | ✅ |

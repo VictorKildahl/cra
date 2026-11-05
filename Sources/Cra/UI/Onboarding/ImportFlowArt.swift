@@ -43,8 +43,8 @@ struct ImportArtPanel: View {
                 EmptyView()
             case .personalization:
                 // A live preview of a Cra window in the picked theme colour and layout.
-                WindowMock(theme: theme, colors: colors, origin: CGPoint(x: 90, y: 80), sidebarWidth: 210,
-                           headerControls: !model.classicLayout) {
+                WindowMock(theme: theme, colors: colors, origin: CGPoint(x: 38, y: 76), sidebarWidth: 106,
+                           fittedSize: CGSize(width: 423, height: 392)) {
                     VStack(alignment: .leading, spacing: 8) {
                         if !model.classicLayout {
                             AddressPreview(theme: theme, inSidebar: true)
@@ -53,9 +53,13 @@ struct ImportArtPanel: View {
                         PlaceholderSidebar(theme: theme)
                     }
                 } pane: {
-                    if model.classicLayout {
-                        AddressPreview(theme: theme, inSidebar: false)
-                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    VStack(spacing: 0) {
+                        if model.classicLayout {
+                            AddressPreview(theme: theme, inSidebar: false)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
+                        SignupPagePreview(draft: model.signupEmailDraft)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
                 .animation(.easeInOut(duration: 0.3), value: theme)
@@ -71,8 +75,8 @@ struct ImportArtPanel: View {
             }
         }
         .frame(width: 477, height: 544, alignment: .topLeading)
-        .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black.opacity(0.6), location: 0.14),
-                                     .init(color: .black, location: 0.3)], startPoint: .leading, endPoint: .trailing))
+        .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black.opacity(0.6), location: model.step == .personalization ? 0.04 : 0.14),
+                                     .init(color: .black, location: model.step == .personalization ? 0.08 : 0.3)], startPoint: .leading, endPoint: .trailing))
         .clipped()
         .animation(.easeInOut(duration: 0.45), value: theme)
     }
@@ -277,8 +281,8 @@ private struct WindowMock<Sidebar: View, Pane: View>: View {
     /// Dia's window enters at (124, 80) of its 448 pt artwork, sidebar 243 pt wide.
     var origin = CGPoint(x: 132, y: 80)
     var sidebarWidth: CGFloat = 236
-    /// The toolbar-hidden title row: sidebar toggle after the traffic lights, ← → ↻ at the right.
-    var headerControls = false
+    /// A complete window for Personalization; the import artwork crops its window at the far edge.
+    var fittedSize: CGSize?
     @ViewBuilder let sidebar: () -> Sidebar
     @ViewBuilder let pane: () -> Pane
 
@@ -295,27 +299,15 @@ private struct WindowMock<Sidebar: View, Pane: View>: View {
                 ForEach(["#FF5F57", "#FEBC2E", "#28C840"], id: \.self) { Circle().fill(Color(hex: $0)).frame(width: 13, height: 13) }
             }
             .offset(x: 19, y: 20)
-            if headerControls {
-                let tone: Color = palette.isDark ? .white.opacity(0.55) : .black.opacity(0.45)
-                HStack(spacing: 2) {
-                    Image(systemName: "sidebar.left").frame(width: 24)
-                    Spacer()
-                    ForEach(["arrow.left", "arrow.right", "arrow.clockwise"], id: \.self) { Image(systemName: $0).frame(width: 24) }
-                }
-                .font(.system(size: 13, weight: .regular))
-                .foregroundStyle(tone)
-                .frame(width: sidebarWidth - 86, height: 26)
-                .offset(x: 80, y: 13.5)
-                .transition(.opacity)
-            }
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(palette.isDark ? Color(white: 0.12) : .white)
                 .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
                 .overlay(alignment: .topLeading) { pane() }
-                .frame(width: 400, height: 500)
+                .frame(width: fittedSize.map { $0.width - sidebarWidth - 12 } ?? 400,
+                       height: fittedSize.map { $0.height - 20 } ?? 500)
                 .offset(x: sidebarWidth + 6, y: 10)
         }
-        .frame(width: 520, height: 520, alignment: .topLeading)
+        .frame(width: fittedSize?.width ?? 520, height: fittedSize?.height ?? 520, alignment: .topLeading)
         .clipShape(shape)
         .overlay(shape.strokeBorder(.white.opacity(colors.dark ? 0.12 : 0.6), lineWidth: 0.5))
         .shadow(color: .black.opacity(colors.dark ? 0.5 : 0.18), radius: 24, y: 10)
@@ -421,6 +413,41 @@ private struct PlaceholderSidebar: View {
     }
 }
 
+/// A sample website inside the live theme/layout illustration. It has no editable web form;
+/// the editable profile address lives in the left column.
+private struct SignupPagePreview: View {
+    let draft: String
+
+    var body: some View {
+        let address = SignupEmail.address(draft)
+        let showOffer = address != nil || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Create an account")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(.primary)
+                .padding(.bottom, 19)
+            Text("Email address")
+                .font(.system(size: 12, weight: .medium))
+                .padding(.bottom, 5)
+            HStack {
+                Text("Enter your email").font(.system(size: 13)).foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 34)
+            .background(.background, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .strokeBorder(Color.accentColor.opacity(0.8), lineWidth: 1.5))
+            .padding(.bottom, 4)
+            SignupEmailPreview(address: address ?? "you@example.com")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .opacity(showOffer ? 1 : 0)
+                .accessibilityHidden(!showOffer)
+        }
+        .padding(.horizontal, 14)
+    }
+}
+
 /// The address bar of the personalization preview: Arc's second sidebar row
 /// (nav buttons and a URL pill), or the toolbar strip above the page.
 private struct AddressPreview: View {
@@ -433,7 +460,7 @@ private struct AddressPreview: View {
             RoundedRectangle(cornerRadius: 9, style: .continuous).fill(p.pillFill)
                 .frame(height: 34)
                 .overlay(alignment: .leading) {
-                    Text("crabrowser.app").font(.system(size: 12.5)).foregroundStyle(p.textPrimary).padding(.leading, 11)
+                    Text("example.com").font(.system(size: 12.5)).foregroundStyle(p.textPrimary).padding(.leading, 11)
                 }
                 .padding(.horizontal, 8)
         } else {
@@ -442,7 +469,7 @@ private struct AddressPreview: View {
                 HStack(spacing: 8) {
                     Image(systemName: "sidebar.left").font(.system(size: 11)).foregroundStyle(ink.opacity(0.45))
                     navButtons(p, ink: ink)
-                    Text("crabrowser.app").font(.system(size: 10.5)).foregroundStyle(ink.opacity(0.6))
+                    Text("example.com").font(.system(size: 10.5)).foregroundStyle(ink.opacity(0.6))
                     Spacer()
                 }
                 .padding(.horizontal, 10)
