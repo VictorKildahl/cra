@@ -98,6 +98,7 @@ enum BrowserManagerLifecycleTests {
         await leaveVideoTabPictureInPictureCase()
         await splitCopySleepsPinnedTabCase()
         await coveredWindowPictureInPictureCase()
+        await callPictureInPictureCase()
         pageColoursCase()
         extensionPageRetryCase()
         await sleepCase("malformed or missing replies cannot authorize sleeping", reply: nil) { _, _ in }
@@ -686,6 +687,9 @@ enum BrowserManagerLifecycleTests {
                                           (nil, 1, "a page whose answer was lost")] as [(String?, Int, String)] {
             let before = ra.browser.automaticPictureInPictureRequests
             manager.show(b, focus: false)
+            expect(ra.browser.lastIsolatedParams.contains(#""userGesture":false"#), "the page is first asked for its own handler, without a gesture")
+            ra.browser.reply(to: "cra:Runtime.evaluate", with: #"{"result":{"type":"string","value":"none"}}"#)
+            await drainMainQueue()
             expect(ra.browser.lastParams.contains(#""userGesture":true"#), "leaving a video tab asks as a user gesture")
             expect(ra.browser.lastParams.contains("})(true)"), "leaving a video tab takes only an audible, playing video")
             let reply = answer.map { #"{"result":{"type":"string","value":"\#($0)"}}"# }
@@ -697,7 +701,7 @@ enum BrowserManagerLifecycleTests {
         }
         store.settings.autoPictureInPicture = false
         manager.show(b, focus: false)
-        expect(!ra.browser.replies.contains { $0.method == "Runtime.evaluate" }, "with the setting off, leaving the tab asks nothing")
+        expect(!ra.browser.replies.contains { $0.method.hasSuffix("Runtime.evaluate") }, "with the setting off, leaving the tab asks nothing")
         manager.closeAll()
     }
 
@@ -733,8 +737,82 @@ enum BrowserManagerLifecycleTests {
         let rv = manager.ensureRuntime(for: video)!
         manager.show(video, focus: false)
         manager.show(copy.id, focus: false)
-        expect(rv.browser.replies.contains { $0.method == "Runtime.evaluate" }, "leaving another video tab still asks for Picture in Picture")
+        expect(rv.browser.replies.contains { $0.method.hasSuffix("Runtime.evaluate") }, "leaving another video tab still asks for Picture in Picture")
         expect(!rv.browser.replies.contains { $0.method == "Cra.discard" }, "and doesn't put it to sleep")
+        manager.closeAll()
+    }
+
+    /// A call (Google Meet with "Automatic picture-in-picture" on) registers its own
+    /// `enterpictureinpicture` media session handler, which opens a Document Picture in Picture
+    /// window of the call. Leaving its tab, or its window going out of sight, runs that handler as a
+    /// user gesture, as Chrome does; coming back closes the window (GitHub #198). The page is asked
+    /// whether it has the handler without a gesture, so a page without one never gets activation
+    /// from an app switch, and a page without one gets the video request as before.
+    @MainActor
+    private static func callPictureInPictureCase() async {
+        let clock = ManualScheduler()
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView(), clock: clock)
+        let a = store.createTab(url: "https://meet.example.test/abc").id, b = store.createTab(url: "https://example.test/other").id
+        let ra = manager.ensureRuntime(for: a)!
+        store.settings.autoPictureInPicture = true
+        manager.show(a, focus: false)
+        let answer = { (value: String) in #"{"result":{"type":"string","value":"\#(value)"}}"# }
+        let evaluations = { ra.browser.replies.filter { $0.method == "Runtime.evaluate" }.count }
+        let isolated = { ra.browser.replies.filter { $0.method == "cra:Runtime.evaluate" }.count }
+
+        manager.show(b, focus: false)
+        expect(ra.browser.lastIsolatedParams.contains("enterpictureinpicture") && ra.browser.lastIsolatedParams.contains(#""userGesture":false"#),
+               "leaving the tab asks the page for its own handler, without a gesture")
+        ra.browser.reply(to: "cra:Runtime.evaluate", with: answer("handler"))
+        await drainMainQueue()
+        expect(isolated() == 1 && ra.browser.lastIsolatedParams.contains("send('enterpictureinpicture')")
+               && ra.browser.lastIsolatedParams.contains(#""userGesture":true"#), "a page with the handler has it run, as a user gesture")
+        ra.browser.reply(to: "cra:Runtime.evaluate", with: nil)
+        expect(evaluations() == 0 && ra.browser.automaticPictureInPictureRequests == 0, "and gets no video request too")
+        clock.advance(by: 30)
+        manager.show(a, focus: false)
+        expect(evaluations() == 1 && ra.browser.lastParams.contains("documentPictureInPicture") && ra.browser.lastParams.contains("})(false)"),
+               "back on the call's tab, its window closes")
+        ra.browser.reply(to: "Runtime.evaluate", with: nil)
+        manager.show(b, focus: false)
+        manager.show(a, focus: false)
+        expect(evaluations() == 0, "coming back again closes nothing: the window it opened is gone")
+        ra.browser.reply(to: "cra:Runtime.evaluate", with: answer("handler"))
+        await drainMainQueue()
+        expect(isolated() == 0, "back before the page answered: the handler isn't run")
+
+        // Back right after the handler ran: a window still opening is closed as it opens.
+        manager.show(b, focus: false)
+        ra.browser.reply(to: "cra:Runtime.evaluate", with: answer("handler"))
+        await drainMainQueue()
+        ra.browser.reply(to: "cra:Runtime.evaluate", with: nil)
+        manager.show(a, focus: false)
+        expect(evaluations() == 1 && ra.browser.lastParams.contains("})(true)"), "a window still opening is closed as it opens")
+        ra.browser.reply(to: "Runtime.evaluate", with: nil)
+
+        // A window the user opened from the call stays when they come back.
+        manager.show(b, focus: false)
+        ra.browser.reply(to: "cra:Runtime.evaluate", with: answer("open"))
+        await drainMainQueue()
+        manager.show(a, focus: false)
+        expect(evaluations() == 0 && isolated() == 0 && ra.browser.automaticPictureInPictureRequests == 0, "a Picture in Picture already open is left alone")
+
+        // The window going out of sight: a silent page runs its handler, but never gets the video
+        // request, which would send it the activation key.
+        manager.windowVisibilityChanged(covered: true)
+        ra.browser.reply(to: "cra:Runtime.evaluate", with: answer("none"))
+        await drainMainQueue()
+        expect(evaluations() == 0, "a silent page without the handler gets no video request on an app switch")
+        manager.windowVisibilityChanged(covered: false)
+        manager.windowVisibilityChanged(covered: true)
+        ra.browser.reply(to: "cra:Runtime.evaluate", with: answer("handler"))
+        await drainMainQueue()
+        expect(ra.browser.lastIsolatedParams.contains(#""userGesture":true"#), "a call whose window goes out of sight runs its handler")
+        ra.browser.reply(to: "cra:Runtime.evaluate", with: nil)
+        manager.windowVisibilityChanged(covered: false)
+        expect(evaluations() == 1 && ra.browser.lastParams.contains("documentPictureInPicture"), "the window back in sight closes the call's window")
+        ra.browser.reply(to: "Runtime.evaluate", with: nil)
         manager.closeAll()
     }
 
@@ -752,11 +830,15 @@ enum BrowserManagerLifecycleTests {
         manager.show(a, focus: false)
 
         manager.windowVisibilityChanged(covered: true)
-        expect(!ra.browser.replies.contains { $0.method == "Runtime.evaluate" }, "a covered window doesn't ask a silent page")
+        ra.browser.reply(to: "cra:Runtime.evaluate", with: #"{"result":{"type":"string","value":"none"}}"#)
+        await drainMainQueue()
+        expect(!ra.browser.replies.contains { $0.method == "Runtime.evaluate" }, "a covered window doesn't send a silent page the video request")
         manager.windowVisibilityChanged(covered: false)
 
         ra.browser.isAudible = true
         manager.windowVisibilityChanged(covered: true)
+        ra.browser.reply(to: "cra:Runtime.evaluate", with: #"{"result":{"type":"string","value":"none"}}"#)
+        await drainMainQueue()
         expect(ra.browser.lastParams.contains(#""userGesture":true"#) && ra.browser.lastParams.contains("})(true)"),
                "a covered window asks its playing page for automatic Picture in Picture")
         ra.browser.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"ok"}}"#)
@@ -771,7 +853,7 @@ enum BrowserManagerLifecycleTests {
         ra.browser.isInPictureInPicture = true
         manager.browser(ra.browser, didChangePictureInPicture: true)
         manager.windowVisibilityChanged(covered: true)
-        expect(!ra.browser.replies.contains { $0.method == "Runtime.evaluate" }, "a page already in Picture in Picture isn't asked again")
+        expect(!ra.browser.replies.contains { $0.method.hasSuffix("Runtime.evaluate") }, "a page already in Picture in Picture isn't asked again")
         manager.windowVisibilityChanged(covered: false)
         expect(ra.browser.isInPictureInPicture, "Picture in Picture the user opened stays when the window shows again")
         PictureInPictureChrome.shared.actions?.close()

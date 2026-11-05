@@ -1229,6 +1229,16 @@ public:
         CEF_REQUIRE_UI_THREAD();
         CraBrowser* o = owner_;
         if (!o || !o.delegate) return true;
+        // Document Picture in Picture (documentPictureInPicture.requestWindow: Google Meet's call
+        // window): CEF always makes Chrome's own Picture in Picture window for it. It is not a
+        // tab, so it gets a client with no CraBrowser rather than a new tab to host it, which
+        // showed up in the sidebar, was selected and took the window off the tab the user picked
+        // (GitHub #198). The page that opened it keeps it, and Chrome closes it with that page.
+        if (target_disposition == CEF_WOD_NEW_PICTURE_IN_PICTURE) {
+            client = new CraClient(nil);
+            CraPageSettings(settings);
+            return false;
+        }
         // A target=_blank link the user clicked (Shift-clicked: a new window) may open in a
         // Peek; window.open with features (a sign-in popup) is CEF_WOD_NEW_POPUP and stays one.
         if (user_gesture && (target_disposition == CEF_WOD_NEW_FOREGROUND_TAB || target_disposition == CEF_WOD_NEW_WINDOW)

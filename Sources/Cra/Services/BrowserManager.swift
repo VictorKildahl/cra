@@ -15,6 +15,9 @@ final class TabRuntime {
     /// auto Picture in Picture); coming back brings the video home.
     var autoPictureInPicture = false
     var pendingAutoPictureInPicture = false
+    /// When Cra last ran the page's own `enterpictureinpicture` handler on leaving the tab (a
+    /// Google Meet call opens its Document Picture in Picture window); coming back closes it.
+    var sessionPictureInPictureAt: Date?
     /// The tab switcher's thumbnail, taken while the page was last on screen.
     var snapshot: NSImage?
     var snapshotWork: DispatchWorkItem?
@@ -667,10 +670,47 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// It goes through the protocol's user gesture like the player's button:
     /// the key press that lends the page activation raced the page going
     /// hidden, and PiP sometimes never opened.
-    private func leaveTab(_ tabID: UUID) {
+    ///
+    /// A page that registered its own `enterpictureinpicture` media session handler is asked
+    /// first, the way Chrome's AutoPictureInPictureTabHelper asks it when such a tab is hidden.
+    /// That is how Google Meet's "Automatic picture-in-picture" works: its handler opens a
+    /// Document Picture in Picture window of the call, which no `<video>` request can (GitHub
+    /// #198). Chrome also wants the camera or microphone in use or sound playing, but CEF doesn't
+    /// report capture for Chrome-style pages (Chrome's own media UI takes the request), so the
+    /// handler, which a site registers to opt in, is the condition. The page is asked whether it
+    /// has one without a user gesture; only a page that does gets one, to run it. `video: false`
+    /// skips the video request (a silent page when the window goes out of sight).
+    private func leaveTab(_ tabID: UUID, video: Bool = true) {
         guard store.settings.autoPictureInPicture, let rt = runtimes[tabID], !rt.browser.isInPictureInPicture else { return }
         rt.pendingAutoPictureInPicture = true
-        requestPictureInPicture(tabID, automatic: true)
+        if rt.browser is WebKitBrowser {
+            if video { requestPictureInPicture(tabID, automatic: true) }
+            return
+        }
+        let query = """
+        (() => {
+          if (window.documentPictureInPicture?.window || document.pictureInPictureElement) return 'open';
+          return window.__cra?.query().includes('enterpictureinpicture') ? 'handler' : 'none';
+        })()
+        """
+        rt.browser.evaluate(inIsolatedWorld: PageScript.world, params: Self.evaluateParams(query, userGesture: false)) { [weak self, weak rt] result, _ in
+            DispatchQueue.main.async {
+                // Back on the tab before the page answered: nothing to open.
+                guard let self, let rt, self.runtimes[tabID] === rt, rt.pendingAutoPictureInPicture else { return }
+                switch Self.stringResult(result) {
+                case "handler":
+                    rt.pendingAutoPictureInPicture = false
+                    rt.sessionPictureInPictureAt = self.clock.now
+                    self.log(tabID, "asks the page for Picture in Picture")
+                    let run = "window.__cra?.send('enterpictureinpicture')"
+                    rt.browser.evaluate(inIsolatedWorld: PageScript.world, params: Self.evaluateParams(run, userGesture: true)) { _, _ in }
+                case "open":
+                    rt.pendingAutoPictureInPicture = false
+                default:
+                    if video { self.requestPictureInPicture(tabID, automatic: true) } else { rt.pendingAutoPictureInPicture = false }
+                }
+            }
+        }
     }
 
     /// A split pane that stands in for a pinned tab: the Today copy `createSplit` and
@@ -695,9 +735,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     /// Arc's presentPipForOccludedWindow: a window out of sight and not key leaves its video tabs
     /// the way a tab switch does (a four-finger swipe to another desktop, another app on top), and
-    /// the video comes back when the window is key again. Only pages playing sound are asked:
-    /// the automatic request wants an unmuted video playing, and a page without one in its main
-    /// frame gets the activation nudge, which an app switch shouldn't send to every page.
+    /// the video comes back when the window is key again. Only pages playing sound get the video
+    /// request: it wants an unmuted video playing, and a page without one in its main frame gets
+    /// the activation nudge, which an app switch shouldn't send to every page. Every page is asked,
+    /// without a gesture, for its own `enterpictureinpicture` handler (a Meet call, #198).
     func windowVisibilityChanged(covered: Bool) {
         guard covered != windowCovered else { return }
         windowCovered = covered
@@ -707,8 +748,9 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                 // A WebKit page's own fullscreen window covers this one: that is the video on
                 // screen, not out of sight. Asked then, WebKit's Picture in Picture got stuck in its
                 // transition and never opened for that video again.
-                if rt.browser.isAudible, !PageEngines.isInOwnFullscreen(rt.browser) { leaveTab(id) }
-            } else if rt.autoPictureInPicture || rt.pendingAutoPictureInPicture {
+                // A silent page is asked only for its own handler (a call: GitHub #198).
+                if !PageEngines.isInOwnFullscreen(rt.browser) { leaveTab(id, video: rt.browser.isAudible) }
+            } else if rt.autoPictureInPicture || rt.pendingAutoPictureInPicture || rt.sessionPictureInPictureAt != nil {
                 returnToTab(rt)
             }
         }
@@ -734,6 +776,28 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     private func returnToTab(_ rt: TabRuntime) {
         rt.pendingAutoPictureInPicture = false
         if rt.browser.isInPictureInPicture { rt.browser.exitPictureInPicture() }
+        if let asked = rt.sessionPictureInPictureAt {
+            rt.sessionPictureInPictureAt = nil
+            closeSessionPictureInPicture(rt, waiting: clock.now.timeIntervalSince(asked) < 2)
+        }
+    }
+
+    /// Chrome closes an automatic Picture in Picture window when its tab is in front again, and
+    /// the page takes its content back as the window goes (Meet's call returns to the tab). A
+    /// window the page is still opening (the user came straight back) is closed as it opens.
+    private func closeSessionPictureInPicture(_ rt: TabRuntime, waiting: Bool) {
+        let js = """
+        ((wait) => {
+          const d = window.documentPictureInPicture;
+          if (!d) return;
+          if (d.window) return d.window.close();
+          if (!wait) return;
+          const opened = e => e.window.close();
+          d.addEventListener('enter', opened, { once: true });
+          setTimeout(() => d.removeEventListener('enter', opened), 2000);
+        })(\(waiting))
+        """
+        rt.browser.sendDevToolsMethod("Runtime.evaluate", params: Self.evaluateParams(js, userGesture: false)) { _, _ in }
     }
 
     func browser(_ browser: CraBrowser, didChangePictureInPicture active: Bool) {

@@ -11,7 +11,8 @@ import Foundation
 /// - `send(action)` / `handlers`: the page's media session handlers (YouTube, Spotify…), so the
 ///   player can skip tracks. `setActionHandler` can't be called from outside and its handlers
 ///   live in the page's world, so a small wrapper there keeps them in a closure and answers an
-///   event whose name is random per launch: nothing in the page's world names Cra.
+///   event whose name is random per launch: nothing in the page's world names Cra. Leaving a
+///   call's tab sends `enterpictureinpicture` with Chrome's details (Google Meet, GitHub #198).
 /// - `drm`: the page asked for Widevine (navigator.requestMediaKeySystemAccess): the Site Control
 ///   Center then offers to play the site in Safari's engine (docs/protected-media.md). A wrapper in
 ///   the page's world tells this world through the same per-launch event name.
@@ -36,7 +37,9 @@ enum PageScript {
         } }.setActionHandler });
       addEventListener('\(channel)', e => {
         if (e.detail === '?') return dispatchEvent(new CustomEvent('\(channel)r', { detail: Object.keys(handlers).join(',') }));
-        try { handlers[e.detail]?.({ action: e.detail }); } catch {}
+        const details = e.detail === 'enterpictureinpicture'
+          ? { action: e.detail, enterPictureInPictureReason: 'contentoccluded' } : { action: e.detail };
+        try { handlers[e.detail]?.(details); } catch {}
       });
     })();
     (() => {
