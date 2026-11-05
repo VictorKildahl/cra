@@ -3182,3 +3182,25 @@ Arc Max's renameDownloads: a finished download is renamed on disk and a card abo
   window under a press key first (installChildClickMonitor), but a Peek's page is a grandchild of the browser window, and a
   Little Window has no such monitor. LittleWindow.sendEvent now does the same for its children. A press while the browser
   window itself was key always worked (its monitor made the Peek key), which is why it looked intermittent.
+
+## Theme editor hover, tab-on-tab drops, Download location (Arc 1.171, static, 5 Nov 2026, #189–#191)
+Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and field names only; no numbers).
+- [O metadata] SpaceStyleEditor module: `ColorPillButtonStyle { colorSet, _isHovered, addComplimentary }` (the preset
+  swatches are a ButtonStyle with a hover state), `SpaceStyleButtonStyle { _isHovered, _isEnabled, hoverColor,
+  hoverStyleEnabled }` (paging arrows, `EditColorButtonsView` − / +, `LightDarkToggleView`, each with
+  `shouldEnableButtonHover`), `PadWheel { _isDraggingKnob, _isKnobHovered, _knobPositionAtDragBegin }`,
+  `SpaceStyleColorPadView { _isPadButtonsHovered, _isDraggingKnob, _isKnobHovered }`.
+  [?] Not measured: the hover/press scales and the hover colour. Cra (#189): swatches and knobs scale 1.08 hovered,
+  0.92 pressed (ease-out 0.12 / 0.10 s, the reporter's estimates); arrows, − / +, Auto / Light / Dark get +0.3 white
+  on hover; pointing hand on the arrows, open hand over a knob, closed hand while dragging one; none with Reduce Motion.
+- [O metadata] Sidebar drops: `SidebarDropTarget = tabList(…) | appTray`, `SidebarDropTargetRegion = left | right`,
+  `SidebarDropOperation = move | copy`, the window action `draggedToCombineSplitCompatibleItems(…)`. No drop makes a
+  folder: `createFolderFromItems` / `createFolderFromSelection` are the menus' "New Folder with N Items". Cra (#191):
+  a tab dropped on the middle of any tab row, pinned or Today, offers the split (the pinned tab stays, the split
+  opens in Today with a copy, `SidebarStore.createSplit`); Cra's own "New Folder" drop on pinned rows is gone.
+  [?] Not observed live: Arc's drop on a pinned row.
+- [O strings/metadata] Settings ▸ Profiles "Download location" is per profile: `DownloadLocationView { store,
+  _selectedTag, _panelOpen }` with tags `arc.folder`, `arc.promptForDownload`, `arc.other` ("Button to confirm
+  selection of directory for file downloads"). [?] The menu's own labels aren't in the strings. Cra (#190):
+  AppSettings.downloadLocations per profile (folder or ask), a Downloads card under Profiles with the folder,
+  "Ask Where to Save Each File" and "Other…"; save panels queue one at a time as sheets on Cra's window.

@@ -312,6 +312,12 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 /// ("Default", "Profile <id>"; nil off the record); Chrome's own window for it is closed.
 /// Popup-type windows (windows.create({type: "popup"})) stay Chrome's windows.
 + (void)setStrayPageHandler:(void (^)(NSString *url, NSString * _Nullable profile))handler;
+/// Where a page's download is saved (GitHub #190): the handler gets the browser's profile folder
+/// (nil for Default and off the record) and the file name Chromium suggests, and calls `completion`
+/// on the main thread with the full path to save to, or nil to cancel the download (a save panel
+/// the user closed). Without a handler downloads go to ~/Downloads.
++ (void)setDownloadDestinationHandler:(void (^)(NSString * _Nullable profilePath, NSString *suggestedName,
+                                                void (^completion)(NSString * _Nullable path)))handler;
 /// Renderer trouble and failed loads, for Cra's performance recorder (GitHub #91): `kind` is
 /// terminated, unresponsive, responsive or loadError; `detail` how it ended or the net error
 /// code; `site` the host (nil for incognito, Cra's own pages or a closed tab). Never a URL.

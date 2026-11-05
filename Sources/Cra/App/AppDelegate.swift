@@ -104,6 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let installed = ExtensionStore.shared.entries.map(\.extensionID)
         let hasNewExtension = !Set(installed).isSubset(of: welcomed)
         try? JSONEncoder().encode(installed.sorted()).write(to: welcomedFile, options: .atomic)
+        DownloadDestinations.install(store: store)
         CraCEFRuntime.setStrayPageHandler { [weak self] url, profile in
             Task { @MainActor in
                 guard let self else { return }

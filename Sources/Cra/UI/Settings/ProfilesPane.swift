@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Dia's Profiles pane (and Arc's Profiles preferences): the profiles and how many spaces
@@ -35,6 +36,17 @@ struct ProfilesPane: View {
             }
             .padding(.top, 7.5)
             SettingsFootnote("Profiles help keep your data separate across Spaces, like logins, cookies and site data. You can use any Profile across one or more Spaces: choose Spaces ▸ Change Profile, or Set Profile on a Space's menu. Spaces on the same Profile share their logins. Only Profiles not assigned to any Spaces can be deleted.")
+            // Arc's per-profile Download location (DownloadLocationView: the folder, Ask
+            // Where to Save, Other…), GitHub #190.
+            SettingsHeader("Downloads").padding(.top, 20)
+            SettingsCard {
+                downloadRow(name: "Default", profileID: nil)
+                ForEach(store.profiles) { p in
+                    SettingsCardDivider()
+                    downloadRow(name: p.name, profileID: p.id)
+                }
+            }
+            SettingsFootnote("Where each Profile saves downloaded files. Choose Ask Where to Save Each File to pick a place every time.")
         }
         .alert("Rename Profile", isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
             TextField("Profile name", text: $name)
@@ -46,6 +58,50 @@ struct ProfilesPane: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Deleting this Profile will permanently remove any cookies, history, preferences, and logins that belong to it.")
+        }
+    }
+
+    private enum DownloadChoice: Hashable { case folder, ask, other }
+
+    private func downloadRow(name: String, profileID: UUID?) -> some View {
+        let location = store.settings.downloadLocation(profileID: profileID)
+        let folder = DownloadDestinations.folder(profileID: profileID)
+        let choice = Binding<DownloadChoice>(
+            get: { location.askWhereToSave ? .ask : .folder },
+            set: { picked in
+                var l = store.settings.downloadLocation(profileID: profileID)
+                switch picked {
+                case .folder: l.askWhereToSave = false
+                case .ask: l.askWhereToSave = true
+                case .other:
+                    let panel = NSOpenPanel()
+                    panel.canChooseDirectories = true
+                    panel.canChooseFiles = false
+                    panel.canCreateDirectories = true
+                    panel.directoryURL = folder
+                    panel.prompt = "Select"
+                    panel.message = "Choose where \(name) saves downloaded files."
+                    guard panel.runModal() == .OK, let url = panel.url else { return }
+                    l.folder = url.standardizedFileURL.path == DownloadDestinations.downloadsFolder.standardizedFileURL.path ? nil : url.path
+                    l.askWhereToSave = false
+                }
+                store.settings.setDownloadLocation(l, profileID: profileID)
+            })
+        return SettingsCardRow {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name).font(.system(size: 13))
+                Text("Download location").font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+        } trailing: {
+            Picker("Download location", selection: choice) {
+                Label(FileManager.default.displayName(atPath: folder.path), systemImage: "folder").tag(DownloadChoice.folder)
+                Text("Ask Where to Save Each File").tag(DownloadChoice.ask)
+                Divider()
+                Text("Other…").tag(DownloadChoice.other)
+            }
+            .labelsHidden()
+            .frame(width: 200)
+            .help(folder.path)
         }
     }
 

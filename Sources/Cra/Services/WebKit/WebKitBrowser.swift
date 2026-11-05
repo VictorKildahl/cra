@@ -987,18 +987,20 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
 
     func download(_ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String,
                   completionHandler: @escaping @MainActor (URL?) -> Void) {
-        let folder = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
-        // Only a file name in Downloads: no path, no "." or "..", no hidden file.
-        var name = suggestedFilename.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
-        while name.hasPrefix(".") { name.removeFirst() }
-        if name.trimmingCharacters(in: .whitespaces).isEmpty { name = "download" }
-        var dest = folder.appendingPathComponent(name)
-        let base = dest.deletingPathExtension().lastPathComponent, ext = dest.pathExtension
-        var n = 1
-        while FileManager.default.fileExists(atPath: dest.path) {
-            dest = folder.appendingPathComponent(ext.isEmpty ? "\(base) (\(n))" : "\(base) (\(n)).\(ext)")
-            n += 1
+        // The profile's Download location, or a save panel when it asks for each file (#190).
+        let profilePath = incognitoPage ? nil : profile
+        let asked = DownloadDestinations.location(profileID: DownloadDestinations.profileID(profilePath: profilePath)).askWhereToSave
+        DownloadDestinations.destination(profilePath: profilePath, suggestedName: suggestedFilename) { [weak self] dest in
+            guard let self, let dest else { return completionHandler(nil) }
+            // A save panel picks a taken name only after the user agreed to replace it, and
+            // WebKit won't write over a file. (Without a panel the name is a free one.)
+            if asked, FileManager.default.fileExists(atPath: dest.path) { try? FileManager.default.trashItem(at: dest, resultingItemURL: nil) }
+            self.startDownload(download, response: response, to: dest, completionHandler: completionHandler)
         }
+    }
+
+    private func startDownload(_ download: WKDownload, response: URLResponse, to dest: URL,
+                               completionHandler: @escaping @MainActor (URL?) -> Void) {
         Self.nextDownloadID &+= 1
         let info = CraDownloadInfo()
         info.identifier = Self.nextDownloadID

@@ -1969,6 +1969,7 @@ final class SidebarStore {
             drop(l.containerID)
         }
         profileFavorites.removeAll { $0.profileID == id }
+        settings.downloadLocations[DownloadLocation.key(profileID: id)] = nil
         ProfileCleanup.schedule(p.directoryName)
         touch()
     }

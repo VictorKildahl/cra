@@ -71,6 +71,9 @@ static NSHashTable<CraBrowser*>* g_allBrowsers = nil;
 /// Closed tabs whose page stays alive until its downloads end (see -[CraBrowser close]).
 static NSMutableSet<CraBrowser*>* g_parkedBrowsers = nil;
 static void (^g_strayPageHandler)(NSString*, NSString*) = nil;
+// Downloads whose save panel was cancelled (#190): cancelled on their next update, never shown.
+static std::set<uint32_t> g_cancelledDownloads;
+static void (^g_downloadDestinationHandler)(NSString*, NSString*, void (^)(NSString*)) = nil;
 static void (^g_processEventHandler)(NSString*, NSString*, NSString*) = nil;
 
 static NSString* NSStringFromCef(const CefString& s) {
@@ -1702,6 +1705,21 @@ public:
                           const CefString& suggested_name, CefRefPtr<CefBeforeDownloadCallback> callback) override {
         NSString* name = NSStringFromCef(suggested_name);
         if (name.length == 0) name = @"download";
+        // Cra picks the profile's folder, or asks with a save panel; the callback waits for it.
+        if (auto handler = g_downloadDestinationHandler) {
+            CraBrowser* o = owner_;
+            NSString* profile = o && !o.isIncognito ? o.profilePath : nil;
+            __block CefRefPtr<CefBeforeDownloadCallback> cb = callback;
+            uint32_t downloadID = download_item->GetId();
+            handler(profile, name, ^(NSString* path) {
+                if (!cb) return;
+                if (path.length) cb->Continue(CefStringFromNS(path), false);
+                // Dropping the callback unanswered cancels in CEF; the next update makes sure.
+                else g_cancelledDownloads.insert(downloadID);
+                cb = nullptr;
+            });
+            return true;
+        }
         NSString* dir = [NSSearchPathForDirectoriesInDomains(NSDownloadsDirectory, NSUserDomainMask, YES) firstObject];
         NSString* path = [dir stringByAppendingPathComponent:name];
         NSFileManager* fm = [NSFileManager defaultManager];
@@ -1720,6 +1738,11 @@ public:
 
     void OnDownloadUpdated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefDownloadItem> item,
                            CefRefPtr<CefDownloadItemCallback> callback) override {
+        if (g_cancelledDownloads.count(item->GetId())) {
+            if (item->IsInProgress()) callback->Cancel();
+            else g_cancelledDownloads.erase(item->GetId());
+            return;
+        }
         CraBrowser* o = owner_;
         if (!o) return;
         CraDownloadInfo* info = [CraDownloadInfo new];
@@ -2626,6 +2649,7 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 + (BOOL)anotherInstanceWasNotified { return g_alreadyRunning; }
 + (void)setRelaunchHandler:(void (^)(NSArray<NSString*>*))handler { g_relaunchHandler = [handler copy]; }
 + (void)setStrayPageHandler:(void (^)(NSString*, NSString*))handler { g_strayPageHandler = [handler copy]; }
++ (void)setDownloadDestinationHandler:(void (^)(NSString*, NSString*, void (^)(NSString*)))handler { g_downloadDestinationHandler = [handler copy]; }
 + (void)setProcessEventHandler:(void (^)(NSString*, NSString*, NSString*))handler { g_processEventHandler = [handler copy]; }
 + (BOOL)isExtensionWindow:(NSWindow*)window { return window && [g_extensionWindows containsObject:window]; }
 + (BOOL)isPageWindow:(NSWindow*)window {
