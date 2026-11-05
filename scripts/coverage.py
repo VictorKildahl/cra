@@ -80,7 +80,7 @@ def core_coverage(failures):
     # other lines kept the 0 of a harness that compiles CraCore without running it.
     codecov = os.path.dirname(run(["swift", "test", "--package-path", pkg, "--show-codecov-path"]).strip())
     bin_path = run(["swift", "build", "--package-path", pkg, "--show-bin-path"]).strip()
-    binary = next(b for b in glob.glob(os.path.join(bin_path, "*PackageTests.xctest/Contents/MacOS/*")) if not b.endswith(".dSYM"))
+    binary = next(b for b in glob.glob(os.path.join(bin_path, "*Tests.xctest/Contents/MacOS/*")) if not b.endswith(".dSYM"))
     return lcov_lines(run(["xcrun", "llvm-cov", "export", "-format=lcov", "-instr-profile",
                            os.path.join(codecov, "default.profdata"), binary]))
 
