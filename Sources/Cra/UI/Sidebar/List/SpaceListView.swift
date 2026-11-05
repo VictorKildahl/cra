@@ -240,9 +240,6 @@ final class SpaceListView: NSView, NSDraggingSource {
             case .split(let t, let leading)? where t == id:
                 d.combine = .split(leading: leading)
                 d.combineDragged = drop.draggedID
-            case .newFolder(let t)? where t == id:
-                d.combine = .folder
-                d.combineDragged = drop.draggedID
             default: break
             }
             return d
@@ -379,7 +376,6 @@ final class SpaceListView: NSView, NSDraggingSource {
         switch target {
         case .insert(let parent, _): lands = isPinnedList(parent) ? .pinned : .today
         case .into(let id): lands = isPinnedList(id) ? .pinned : .today
-        case .newFolder: lands = .pinned
         case .split: lands = .today
         }
         return lands == (isPinnedList(drop.draggedID) ? .pinned : .today) ? nil : lands
@@ -922,7 +918,7 @@ final class SpaceListView: NSView, NSDraggingSource {
             ui.listDrop = drop
             // A tick when a row starts offering to combine, so the change of meaning is felt as well as seen.
             switch drop.target {
-            case .split?, .newFolder?:
+            case .split?:
                 if store.settings.hapticFeedbackOnReorder { NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now) }
             default: break
             }
@@ -971,8 +967,6 @@ final class SpaceListView: NSView, NSDraggingSource {
         switch drop.target {
         case .insert(let parent, let index)?:
             store.moveItems(group, to: parent, index: index)
-        case .newFolder(let tab)?:
-            if let folder = store.createFolder(combining: tab, with: group) { ui.renamingID = folder.id }
         case .split(let tab, let leading)?:
             store.createSplit(with: leading ? [id, tab] : [tab, id], at: tab)
         case .into(let target)?:
@@ -1022,9 +1016,9 @@ final class SpaceListView: NSView, NSDraggingSource {
                 else if f >= 0.75 { target = store.isExpanded(rid) ? .insert(parent: rid, index: 0) : after }
                 else { target = .into(rid) }
             } else if middle && isTab && item.isTab {
-                target = isInside(rid, space.todayContainerID)
-                    ? .split(with: rid, leading: p.x < r.frame.midX)
-                    : .newFolder(with: rid)
+                // Arc combines two tabs into a split wherever the target sits (#191): a pinned
+                // one stays pinned and the split opens in Today with a copy of it.
+                target = .split(with: rid, leading: p.x < r.frame.midX)
             } else if middle && isTab && item.isSplit {
                 target = .into(rid)
             } else {
@@ -1054,7 +1048,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         switch target {
         case .into(let f)? where store.item(f)?.isLiveFolder == true: target = nil
         case .insert(let parent, _)? where store.item(parent)?.isLiveFolder == true && store.item(id)?.parentID != parent: target = nil
-        case .newFolder(let tab)? where store.item(store.item(tab)?.parentID ?? tab)?.isLiveFolder == true: target = nil
+        case .split(let tab, _)? where store.item(store.item(tab)?.parentID ?? tab)?.isLiveFolder == true: target = nil
         default: break
         }
 

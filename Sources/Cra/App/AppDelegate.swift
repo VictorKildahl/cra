@@ -769,7 +769,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let c = dict["combine"], let content = main.window?.contentView {
                 let tabs = store.children(of: store.focusedSpace.todayContainerID).filter { $0.tab != nil }
                 guard tabs.count > 1 else { return }
-                let kind: CombineDropPreview.Kind = c == "folder" ? .folder : .split(leading: c == "leading")
+                let kind = CombineDropPreview.Kind.split(leading: c == "leading")
                 let pal = store.focusedSpace.theme.palette
                 let v = CombineDropPreview(kind: kind, target: tabs[0], dragged: tabs[1], depth: 0, palette: pal, favicons: favicons)
                 v.frame = NSRect(x: 10, y: content.bounds.height - 420, width: 300, height: CraMetrics.rowHeight)
