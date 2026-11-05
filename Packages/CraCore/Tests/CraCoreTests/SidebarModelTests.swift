@@ -151,6 +151,21 @@ struct SidebarModelTests {
         #expect(settings.developerHosts.isEmpty, "no host, nothing to toggle")
     }
 
+    /// #185: Developer Mode from the Site Control Center showed nothing with the toolbar hidden
+    /// (Cra's default). Arc shows its developer bar above that site's pages anyway.
+    @Test func developerBarShowsWithTheToolbarHidden() {
+        var settings = AppSettings()
+        #expect(!settings.showToolbar)
+        #expect(!settings.showsBar(above: "https://example.com/a"))
+        #expect(!settings.showsBar(above: nil), "no tab, no bar")
+        settings.toggleDeveloperMode(url: "https://example.com/")
+        #expect(settings.showsBar(above: "https://example.com/a"))
+        #expect(!settings.showsBar(above: "https://other.org/"), "only the site in Developer Mode")
+        #expect(!settings.showsBar(above: ""), "an empty tab has no site")
+        settings.showToolbar = true
+        #expect(settings.showsBar(above: "https://other.org/") && settings.showsBar(above: nil))
+    }
+
     @Test func toolbarShowsTheHostOnlyUnlessAsked() throws {
         #expect(!AppSettings().toolbarShowsFullURL, "Arc's default: the host only")
         let decode = { (json: String) in try JSONDecoder().decode(AppSettings.self, from: Data(json.utf8)) }

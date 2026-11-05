@@ -26,6 +26,12 @@ expect-log Cra suggest check for up .*command\("checkForUpdates"\) Check for Upd
 cra://open?url=${PAGE}?n=snap
 wait 3
 snapshot SidebarURLPill url-pill
+# Developer Mode brings its bar with the toolbar hidden too, as Arc does (#185).
+cra://action/toggleDeveloperMode
+wait 2
+snapshot PaneToolbarView toolbar-developer
+cra://action/toggleDeveloperMode
+wait 1
 cra://action/toggleToolbar
 wait 1
 snapshot PaneToolbarView toolbar

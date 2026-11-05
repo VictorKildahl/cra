@@ -107,7 +107,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                                             onClose: { [weak self] in self?.hideFindBar() }))
         shell.sidebarWidth = CGFloat(store.prefs.sidebarWidth)
         shell.sidebarVisible = sidebarVisible
-        shell.showToolbar = store.settings.showToolbar
+        shell.showToolbar = store.settings.showsBar(above: selectedTabID.flatMap { store.item($0)?.tab?.url })
         shell.edgeToEdge = store.settings.edgeToEdgeContent
         lastSidebarVisible = sidebarVisible
         window.trafficLightsHidden = !sidebarVisible
@@ -311,10 +311,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // Toolbar buttons are ~34 pt wide and the click lands near the middle: the popup's
         // right edge lines up with the button's (Chrome anchors popups that way).
         sidebarActions.runExtension = { [weak self] id in
+            guard let self else { return }
             let button = Self.extensionButtonUnderPointer()
-            // A pin in the sidebar's grid (toolbar hidden) hangs its popup under its own button.
-            self?.runExtensionAction(id, buttonRightX: button?.maxX ?? NSEvent.mouseLocation.x + 17,
-                                     buttonBottomY: self?.store.settings.showToolbar == false ? button?.minY : nil)
+            // A pin in the sidebar's grid (toolbar hidden) hangs its popup under its own button; one in
+            // a bar above the page (the toolbar, a split pane's, the developer bar) under that bar.
+            let inBar = button.map { self.isInPaneBar($0) } ?? false
+            self.runExtensionAction(id, buttonRightX: button?.maxX ?? NSEvent.mouseLocation.x + 17,
+                                    buttonBottomY: inBar ? self.toolbarBottomOnScreen()?.y
+                                        : self.store.settings.showToolbar == false ? button?.minY : nil)
         }
         sidebarActions.showExtensionsMenu = { [weak self] in self?.showToolbarExtensionsMenu() }
         sidebarActions.paneRunExtension = { [weak self] pane, id in
@@ -430,7 +434,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let split = selected.flatMap { store.splitContaining($0) }
         let factors = SplitPaneLayout.normalizedFactors(ids: panes, stored: split?.split?.widthFactors ?? [:])
         let empty = Set(panes.filter { store.item($0)?.isEmptyTab == true })
-        if shell.showToolbar != store.settings.showToolbar { shell.showToolbar = store.settings.showToolbar }
+        // A lone page's bar: the toolbar, or the developer bar on a Developer Mode site (#185).
+        let loneBar = store.settings.showsBar(above: panes.count == 1 ? store.item(panes[0])?.tab?.url : nil)
+        if shell.showToolbar != loneBar { shell.showToolbar = loneBar }
         if shell.edgeToEdge != store.settings.edgeToEdgeContent { shell.edgeToEdge = store.settings.edgeToEdgeContent }
         // Before setPanes: a pane whose page is not live yet gets its bar colour now, not white.
         let bars = toolbarColors(panes: panes)
@@ -2170,6 +2176,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         return rect.maxY - CraMetrics.titleAreaHeight - 2 - 36
     }
 
+    /// Whether a button (screen rect) sits in a bar above a page rather than in the sidebar.
+    private func isInPaneBar(_ button: NSRect) -> Bool {
+        guard shell.panesShowBars, let window else { return false }
+        let mid = NSPoint(x: button.midX, y: button.midY)
+        return shell.paneCards.contains { card in
+            window.convertToScreen(card.toolbarHost.convert(card.toolbarHost.bounds, to: nil)).contains(mid)
+        }
+    }
+
     /// Under the extension's pinned toolbar button when the toolbar shows one, else under the
     /// toolbar at the card's right end.
     fileprivate func extensionPopupAnchor(_ id: String) -> NSPoint? {
@@ -2189,7 +2204,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let browser = currentBrowser
         let anchor = bar.map { bar in
             // Under the URL bar, or under a grid pin lower down.
-            buttonRightX.map { x in NSPoint(x: x, y: min(buttonBottomY ?? .infinity, urlBarBottomOnScreen() ?? bar.y)) } ?? extensionPopupAnchor(id) ?? NSPoint(x: bar.cardMaxX - 8, y: bar.y)
+            buttonRightX.map { x in NSPoint(x: x, y: buttonBottomY ?? urlBarBottomOnScreen() ?? bar.y) } ?? extensionPopupAnchor(id) ?? NSPoint(x: bar.cardMaxX - 8, y: bar.y)
         }
         let available = profileExtensions
         switch ExtensionLaunch.decide(id, available: available, hasPage: bar != nil && browser != nil) {

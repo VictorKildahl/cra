@@ -543,6 +543,12 @@ public struct AppSettings: Codable, Equatable {
         set { defaultLinkDestination = newValue ? .littleWindow : .mostRecentSpace }
     }
     public func isDeveloperMode(url: String) -> Bool { AppSettings.siteKey(for: url).map(developerHosts.contains) ?? false }
+    /// Whether a page shown alone carries a bar above it: the toolbar while it is shown, and
+    /// Arc's developer bar on a Developer Mode site even with the toolbar hidden (#185). A
+    /// split's panes always carry bars (#178); the shell adds that rule.
+    public func showsBar(above url: String?) -> Bool {
+        showToolbar || url.map(isDeveloperMode) == true
+    }
     public mutating func toggleDeveloperMode(url: String) {
         guard let k = AppSettings.siteKey(for: url) else { return }
         if developerHosts.contains(k) { developerHosts.remove(k) } else { developerHosts.insert(k) }

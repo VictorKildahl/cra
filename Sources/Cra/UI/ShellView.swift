@@ -121,6 +121,8 @@ final class ShellView: NSView {
     var contentFullscreen = false { didSet { needsLayout = true } }
     /// Settings ▸ "Pages fill the window edge to edge" (GitHub #24): no margin, square cards.
     var edgeToEdge = false { didSet { needsLayout = true } }
+    /// Whether a lone page has a bar: the toolbar, or the developer bar on a Developer Mode site
+    /// (AppSettings.showsBar(above:), #185).
     var showToolbar = true { didSet { needsLayout = true } }
     /// Whether the cards carry their bars. Arc keeps every pane's bar in a split even with the
     /// toolbar hidden (View ▸ Show Toolbar is disabled while a split is open, GitHub #178).
