@@ -19,6 +19,10 @@ struct ProtectedMediaTests {
         "https://tv.apple.com/",
         "https://music.apple.com/us/browse",
         "https://listen.tidal.com/",
+        "https://www.crunchyroll.com/watch/x",
+        "https://www.hotstar.com/in",
+        "https://www.jiohotstar.com/",
+        "https://v.qq.com/x/cover/x.html",
         "http://www.hulu.com/",
         "https://www.netflix.com./browse",
     ])
@@ -39,6 +43,8 @@ struct ProtectedMediaTests {
         "https://login.tidal.com/authorize",
         "https://connect.deezer.com/oauth/auth.php",
         "https://www.youtube.com/watch?v=x",
+        "https://qq.com/",
+        "https://mail.qq.com/",
         "about:blank",
         "chrome://settings",
         "view-source:https://open.spotify.com/",
@@ -58,8 +64,10 @@ struct ProtectedMediaTests {
         #expect(sites.serviceName(for: "https://www.disneyplus.com/") == "Disney+")
         #expect(sites.serviceName(for: "https://play.hbomax.com/") == "HBO Max")
         #expect(sites.serviceName(for: "https://music.apple.com/us/browse") == "Apple Music")
+        #expect(sites.serviceName(for: "https://www.crunchyroll.com/") == "Crunchyroll")
+        #expect(sites.serviceName(for: "https://v.qq.com/") == "Tencent Video")
         #expect(sites.serviceName(for: "https://www.google.com/") == nil)
-        #expect(ProtectedMediaSites(extraHosts: ["crunchyroll.com"]).serviceName(for: "https://www.crunchyroll.com/") == "crunchyroll.com")
+        #expect(ProtectedMediaSites(extraHosts: ["stream.example.org"]).serviceName(for: "https://stream.example.org/") == "stream.example.org")
         #expect(ProtectedMediaSites(isEnabled: false).serviceName(for: "https://open.spotify.com/") == nil)
         // Every listed service has a name.
         #expect(ProtectedMediaSites.defaultHosts.allSatisfy { ProtectedMediaSites.serviceNames[$0] != nil })
@@ -72,12 +80,12 @@ struct ProtectedMediaTests {
     }
 
     @Test func listCanGrowAndShrink() {
-        let custom = ProtectedMediaSites(extraHosts: [" 127.0.0.1 ", "https://Stream.Example.org/path", ".crunchyroll.com."],
+        let custom = ProtectedMediaSites(extraHosts: [" 127.0.0.1 ", "https://Stream.Example.org/path", ".videos.example.net."],
                                          removedHosts: ["NETFLIX.com"])
         #expect(custom.engine(for: "http://127.0.0.1:8123/page.html") == .webKit)
         #expect(custom.engine(for: "https://stream.example.org/") == .webKit)
         #expect(custom.engine(for: "https://example.org/") == .chromium)
-        #expect(custom.engine(for: "https://www.crunchyroll.com/") == .webKit)
+        #expect(custom.engine(for: "https://www.videos.example.net/") == .webKit)
         #expect(custom.engine(for: "https://www.netflix.com/") == .chromium)
         #expect(custom.engine(for: "https://open.spotify.com/") == .webKit)
         #expect(custom.engine(for: "https://open.spotify.com.") == .webKit)

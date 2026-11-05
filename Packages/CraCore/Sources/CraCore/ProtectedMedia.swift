@@ -46,6 +46,11 @@ public struct ProtectedMediaSites: Equatable, Sendable {
         "tv.apple.com", "music.apple.com",
         "listen.tidal.com",
         "www.deezer.com",
+        // Also on Ardia's list (another open-source browser that sends DRM sites to WebKit,
+        // apps/browser/src/state/engines/engines.ts, 5 Nov 2026).
+        "crunchyroll.com",
+        "hotstar.com", "jiohotstar.com",
+        "v.qq.com",
     ]
 
     /// What Cra calls each service when it tells the user why a page is WebKit's (the toast,
@@ -55,6 +60,7 @@ public struct ProtectedMediaSites: Equatable, Sendable {
         "max.com": "Max", "hbomax.com": "HBO Max", "primevideo.com": "Prime Video", "hulu.com": "Hulu",
         "paramountplus.com": "Paramount+", "peacocktv.com": "Peacock", "tv.apple.com": "Apple TV",
         "music.apple.com": "Apple Music", "listen.tidal.com": "Tidal", "www.deezer.com": "Deezer",
+        "crunchyroll.com": "Crunchyroll", "hotstar.com": "Hotstar", "jiohotstar.com": "JioHotstar", "v.qq.com": "Tencent Video",
     ]
 
     /// Off: every page is Chromium's, as before.

@@ -33,7 +33,9 @@ licence, keys usable, 720p playing). That is the whole requirement.
 - **Which pages:** the services' web players. Each host matches itself and its subdomains:
   `open.spotify.com`, `netflix.com`, `disneyplus.com`, `max.com`, `hbomax.com`,
   `primevideo.com`, `hulu.com`, `paramountplus.com`, `peacocktv.com`, `tv.apple.com`,
-  `music.apple.com`, `listen.tidal.com` and `www.deezer.com`. They are players, not whole domains, except where nothing else signs in through the service (Max sends `play.max.com` on to `www.hbomax.com` and signs in on its own hosts):
+  `music.apple.com`, `listen.tidal.com`, `www.deezer.com`, `crunchyroll.com`, `hotstar.com`,
+  `jiohotstar.com` and `v.qq.com`. The last four come from Ardia, another open-source browser that
+  sends DRM sites to WebKit (its `PROTECTED_VIDEO_SITES`). They are players, not whole domains, except where nothing else signs in through the service (Max sends `play.max.com` on to `www.hbomax.com` and signs in on its own hosts):
   other sites send their "Sign in with Spotify/Tidal/Deezer" through `accounts.spotify.com`,
   `login.tidal.com` and `connect.deezer.com`, and those must finish in the engine they started in.
 - **A page Cra opens** (a tab restored or created, a link opened in a new tab, a Little Window, an
