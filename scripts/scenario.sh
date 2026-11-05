@@ -27,6 +27,10 @@
 #   snapshot <View[,n]> <name>  the nth visible view of that class drawn to PNG and compared with
 #                               Tests/Snapshots/<name>.png (CRA_SNAPSHOT_RECORD=1 records it)
 #   fresh                       no seeded settings: onboarding shows, as on a new Mac
+#   seed <file> <json>          that data-folder file before launch (a seeded settings.json
+#                               replaces the default one)
+#   env <NAME=value>            passed to Cra
+#   home                        a throwaway home folder, so downloads stay out of ~/Downloads
 #   requires screen
 #   port <n>                    serve ${PAGE} on a fixed port (snapshots show the address)
 # ${FIXTURES}, ${PAGE} (Tests/Fixtures/Pages/page.html from a local server, so it has a host
@@ -68,15 +72,16 @@ LOG="$DATA/cra.log"
 : > "$CMD"
 STARTED="$OUT/started"
 touch "$STARTED"
-# Past onboarding, and nothing taken from this Mac's Arc (its toolbar default) unless asked.
+# The scenario's own data files, environment and home folder.
 app_env=(env)
-if [ "$NAME" = "tidy-downloads" ]; then
-  # Use a disposable Downloads folder as well as a disposable browser profile.
+while read -r _ seed json; do echo "$json" > "$DATA/$seed"; done < <(grep '^seed ' "$FILE")
+while read -r _ kv; do app_env+=("$kv"); done < <(grep '^env ' "$FILE")
+if grep -q '^home$' "$FILE"; then
   mkdir -p "$DATA/home/Downloads"
-  app_env+=(CFFIXED_USER_HOME="$DATA/home" CRA_TIDY_FAKE_MODEL=1)
-  echo '{"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "tidyDownloads": true}' > "$DATA/settings.json"
-  echo '{"sidebarWidth": 266}' > "$DATA/windows.json"
-elif ! grep -q '^fresh' "$FILE"; then
+  app_env+=(CFFIXED_USER_HOME="$DATA/home")
+fi
+# Past onboarding, and nothing taken from this Mac's Arc (its toolbar default) unless asked.
+if ! grep -q '^fresh' "$FILE" && [ ! -f "$DATA/settings.json" ]; then
   echo '{"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}' > "$DATA/settings.json"
 fi
 
@@ -196,7 +201,7 @@ while IFS= read -r raw || [ -n "$raw" ]; do
         [ -x "$OUT/compare-png" ] || xcrun swiftc -O "$ROOT/scripts/compare-png.swift" -o "$OUT/compare-png" 2>"$OUT/compare-png.log"
         verdict=$("$OUT/compare-png" "$ref" "$shot" "$OUT/snapshots/$3.diff.png" 2>&1) || problem "snapshot $3: $verdict"
       fi ;;
-    fresh|requires|port) ;;
+    fresh|requires|port|seed|env|home) ;;
     *) problem "unknown scenario line: $line" ;;
   esac
 done < "$FILE"

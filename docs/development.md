@@ -111,7 +111,8 @@ behave. Check those by hand, and say how in the PR.
 
 Scenario hooks for a command file (`cra://debug?…`): `checkStore=1` logs a fault per broken
 sidebar link, `pageJS=<js>` runs script in the focused page, `installExtension=<folder>` and
-`removeExtension=<id>`, `extensionAction=<id>`, `fullscreen=1|0`, `windowSize=1280x800`,
+`removeExtension=<id>`, `extensionAction=<id>`, `fullscreen=1|0`, `appActive=1|0` (the sidebar drawn as if
+Cra were in front or behind, e.g. the download bin's dimming), `windowSize=1280x800`,
 `snapshot=<ViewClass[,n]>&out=<png>`, `sleepTabs=<seconds>` (the 10 tabs used last too), `memoryPressure=warning|critical` (one
 memory-pressure sweep at that level, if Settings ▸ Tabs has it on), `stall=<ms>` (blocks the main
 thread), `perfReport=<path>` (the recorder's perf.json now), `systemAppearance=light|dark|system`

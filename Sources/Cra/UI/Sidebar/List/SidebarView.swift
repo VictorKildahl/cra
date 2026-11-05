@@ -1071,7 +1071,7 @@ final class LibraryButtonView: NSView {
         binImage.cornerRadius = 8
         binImage.cornerCurve = .continuous
         binImage.masksToBounds = true
-        binImage.contentsGravity = .resizeAspect
+        binImage.contentsGravity = .resizeAspectFill
         bin.layer?.addSublayer(binImage)
         bin.addSubview(binTip)
         bin.isHidden = true

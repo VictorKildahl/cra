@@ -96,7 +96,7 @@ one. Every launch checks the sidebar and logs a fault for each broken link.
     scripts/scenario.sh all             # every one, about 6 minutes
 
 A scenario (`Tests/Scenarios/*.scenario`) is a list of `cra://` commands plus a few
-directives (`wait`, `repeat`, `budget`, `helpers`, `relaunch`, `expect-log`, `snapshot`;
+directives (`wait`, `repeat`, `budget`, `helpers`, `relaunch`, `expect-log`, `snapshot`, `seed`, `env`, `home`;
 the header of `scripts/scenario.sh` lists them). It runs `build/Cra.app` on a throwaway data
 folder, behind your windows (`CRA_TEST_BACKGROUND`), with the fixture pages served from
 127.0.0.1. Logs, hitch log and snapshots land in `build/scenarios/<name>/`. Adding a journey

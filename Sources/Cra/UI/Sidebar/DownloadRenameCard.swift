@@ -66,6 +66,7 @@ final class DownloadRenameCard: NSView {
     override var isFlipped: Bool { true }
 
     /// Arc drew it navy on a dark space; a light space's card is white (Arc's Max picture), not measured.
+    /// Arc's #343BD1 text read at 2.6:1 on the navy card; Cra uses #929BFF there (8:1; Victor, 5 Nov 2026).
     private func style() {
         let blue = NSColor(hex: dark ? "#929BFF" : "#343BD1")
         shape.fillColor = (dark ? NSColor(srgbRed: 0x03 / 255, green: 0x06 / 255, blue: 0x1F / 255, alpha: 1) : .white).cgColor
