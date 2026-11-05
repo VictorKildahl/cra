@@ -61,6 +61,13 @@ final class ShinyToast {
     private let button = CALayer()
     private let buttonLabel = CATextLayer()
     private let buttonGlyph = CALayer()
+    /// A toast that stays until it is closed: an ✕ at its end, a round wash like the text button's.
+    private let closeButton = CALayer()
+    private let closeGlyph = CALayer()
+    private var persistent = false
+    private var onClose: (() -> Void)?
+    static let closeSize: CGFloat = 26
+    static let closeGap: CGFloat = 6
     private var hide: DispatchWorkItem?
     private var action: Action?
     /// The text colour: the button is a wash of it.
@@ -94,6 +101,10 @@ final class ShinyToast {
         buttonGlyph.contentsGravity = .center
         button.addSublayer(buttonGlyph)
         pill.addSublayer(button)
+        closeButton.cornerRadius = Self.closeSize / 2
+        closeGlyph.contentsGravity = .center
+        closeButton.addSublayer(closeGlyph)
+        pill.addSublayer(closeButton)
         view.layer?.addSublayer(pill)
         view.onHover = { [weak self] inside in self?.hovered(inside) }
         view.onClick = { [weak self] point in self?.clicked(at: point) }
@@ -101,15 +112,30 @@ final class ShinyToast {
 
     var isShown: Bool { panel.parent != nil }
 
+    /// A toast that stays (onClose) keeps to the page's top right as the window resizes, sidebar
+    /// toggles included; one that goes on its time isn't moved.
+    func follow(page: NSRect, in window: NSWindow) {
+        guard isShown, persistent, panel.parent === window else { return }
+        let size = pill.bounds.size
+        let local = NSRect(x: page.maxX - Self.trailingInset - size.width, y: page.maxY - Self.topInset - size.height,
+                           width: size.width, height: size.height)
+        panel.setFrame(window.convertToScreen(local.insetBy(dx: -Self.margin, dy: -Self.margin)), display: false)
+    }
+
     /// Shows `text` at the top right of `page` (window coordinates) over `window`'s pages.
     typealias Colors = (top: NSColor, bottom: NSColor, outline: NSColor, text: NSColor)
 
-    func show(_ text: String, action: Action? = nil, page: NSRect, in window: NSWindow, theme: SpaceTheme) {
-        show(text, action: action, page: page, in: window, colors: Self.colors(theme))
+    /// `onClose`: the toast stays until its ✕ is pressed (or its action runs), and this is told
+    /// then; something Cra has to be sure the user saw. Without it, the toast goes on its time.
+    func show(_ text: String, action: Action? = nil, page: NSRect, in window: NSWindow, theme: SpaceTheme, onClose: (() -> Void)? = nil) {
+        show(text, action: action, page: page, in: window, colors: Self.colors(theme), onClose: onClose)
     }
 
-    func show(_ text: String, action: Action? = nil, page: NSRect, in window: NSWindow, colors: Colors) {
+    func show(_ text: String, action: Action? = nil, page: NSRect, in window: NSWindow, colors: Colors, onClose: (() -> Void)? = nil) {
         self.action = action
+        persistent = onClose != nil
+        self.onClose = onClose
+        let closeRoom = persistent ? Self.closeGap + Self.closeSize : 0
         let glyph = action?.symbol
         let textWidth = ceil((text as NSString).size(withAttributes: [.font: Self.font]).width)
         let buttonWidth = glyph != nil ? Self.glyphButton.width
@@ -117,6 +143,7 @@ final class ShinyToast {
         let height = glyph != nil ? Self.glyphHeight : Self.height
         let width = glyph != nil ? Self.glyphPadding + textWidth + Self.glyphGap + Self.glyphButton.width + Self.glyphPadding
             : textWidth + 2 * Self.padding + (buttonWidth.map { $0 + Self.buttonGap - Self.padding + (Self.height - Self.buttonHeight) / 2 } ?? 0)
+                + closeRoom
         let local = NSRect(x: page.maxX - Self.trailingInset - width, y: page.maxY - Self.topInset - height,
                            width: width, height: height)
         panel.setFrame(window.convertToScreen(local.insetBy(dx: -Self.margin, dy: -Self.margin)), display: false)
@@ -157,7 +184,7 @@ final class ShinyToast {
             button.cornerRadius = Self.buttonHeight / 2
             button.borderWidth = 0
             let inset = (Self.height - Self.buttonHeight) / 2
-            button.frame = CGRect(x: width - inset - buttonWidth, y: inset, width: buttonWidth, height: Self.buttonHeight)
+            button.frame = CGRect(x: width - inset - closeRoom - buttonWidth, y: inset, width: buttonWidth, height: Self.buttonHeight)
             buttonTint = colors.text
             button.backgroundColor = colors.text.withAlphaComponent(0.1).cgColor
             buttonLabel.foregroundColor = colors.text.cgColor
@@ -166,9 +193,21 @@ final class ShinyToast {
             let buttonLine = ceil(Self.buttonFont.ascender - Self.buttonFont.descender)
             buttonLabel.frame = CGRect(x: 0, y: (Self.buttonHeight - buttonLine) / 2, width: buttonWidth, height: buttonLine)
         }
+        closeButton.isHidden = !persistent
+        if persistent {
+            let s = Self.closeSize
+            closeButton.frame = CGRect(x: width - (height - s) / 2 - s, y: (height - s) / 2, width: s, height: s)
+            closeButton.backgroundColor = colors.text.withAlphaComponent(0.1).cgColor
+            let config = NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold).applying(.init(paletteColors: [colors.text]))
+            closeGlyph.contents = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close")?.withSymbolConfiguration(config)
+            closeGlyph.contentsScale = scale
+            closeGlyph.frame = CGRect(x: 0, y: 0, width: s, height: s)
+            buttonTint = colors.text
+        }
         CATransaction.commit()
-        panel.ignoresMouseEvents = action == nil
-        view.hitRect = action == nil ? .zero : NSRect(x: Self.margin, y: Self.margin, width: width, height: height)
+        let clickable = action != nil || persistent
+        panel.ignoresMouseEvents = !clickable
+        view.hitRect = !clickable ? .zero : NSRect(x: Self.margin, y: Self.margin, width: width, height: height)
         if !isShown {
             // Opening the tab's page holds the main thread for ~0.1 s, so the toast waits for the
             // next turn, invisible: started now, its first frame showed it most of the way in.
@@ -186,6 +225,8 @@ final class ShinyToast {
 
     private func scheduleHide() {
         hide?.cancel()
+        // A toast that has to be seen stays until it is closed.
+        guard !persistent else { hide = nil; return }
         let work = DispatchWorkItem { [weak self] in self?.dismiss() }
         hide = work
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.visibleFor, execute: work)
@@ -193,7 +234,14 @@ final class ShinyToast {
 
     /// The pointer on a toast with a button holds it up; leaving starts its time again.
     private func hovered(_ inside: Bool) {
-        guard isShown, action != nil else { return }
+        guard isShown, action != nil || persistent else { return }
+        if persistent {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            if action?.symbol == nil { button.backgroundColor = buttonTint.withAlphaComponent(inside ? 0.16 : 0.1).cgColor }
+            CATransaction.commit()
+            return
+        }
         if inside {
             hide?.cancel()
         } else if hide?.isCancelled != false {
@@ -207,8 +255,15 @@ final class ShinyToast {
 
     /// `point` in the content view: the button runs its action and the toast goes.
     private func clicked(at point: NSPoint) {
-        guard let action, isShown else { return }
+        guard isShown else { return }
         let local = NSPoint(x: point.x - Self.margin, y: point.y - Self.margin)
+        if persistent, closeButton.frame.insetBy(dx: -4, dy: -4).contains(local) {
+            let closed = onClose
+            dismiss()
+            closed?()
+            return
+        }
+        guard let action else { return }
         guard button.frame.insetBy(dx: -4, dy: -4).contains(local) else { return }
         if let anchored = action.anchored, let root = view.layer {
             // The menu hangs from the button, the toast stays up under it (Arc), then goes on its time.
@@ -217,7 +272,10 @@ final class ShinyToast {
             scheduleHide()
             return
         }
+        // Pressing the button shows it was seen, as the ✕ does.
+        let closed = persistent ? onClose : nil
         dismiss()
+        closed?()
         action.run()
     }
 
@@ -259,6 +317,8 @@ final class ShinyToast {
     func dismiss() {
         hide?.cancel()
         hide = nil
+        persistent = false
+        onClose = nil
         guard isShown else { return }
         panel.ignoresMouseEvents = true
         CATransaction.begin()

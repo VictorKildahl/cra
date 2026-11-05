@@ -2648,25 +2648,35 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         return url?.isEmpty == false ? url : nil
     }
 
-    /// The first time a service plays in a WebKit page (docs/protected-media.md), once per service
-    /// ever: "Spotify plays with Safari's engine", and Why? opens the Site Control Center, which
-    /// says what that means. A moment after the page shows, so it isn't lost in the tab switch.
+    /// The first time a service plays in a WebKit page (docs/protected-media.md): "Spotify plays
+    /// with Safari's engine", with Why? (the Site Control Center says what that means). It stays
+    /// until its ✕ or Why? is pressed, so Cra knows it was seen; only then is the service told for
+    /// good. Shown once a session per service: one that went unanswered shows again next launch.
     private func tellAboutProtectedMedia(_ service: String) {
         let key = "protectedMediaToldServices"
-        var told = UserDefaults.standard.stringArray(forKey: key) ?? []
-        guard !told.contains(service), window?.isVisible == true else { return }
-        told.append(service)
-        UserDefaults.standard.set(told, forKey: key)
+        guard !(UserDefaults.standard.stringArray(forKey: key) ?? []).contains(service), !offeredProtectedMedia.contains(service),
+              window?.isVisible == true else { return }
+        offeredProtectedMedia.insert(service)
+        let told = {
+            let list = UserDefaults.standard.stringArray(forKey: key) ?? []
+            if !list.contains(service) { UserDefaults.standard.set(list + [service], forKey: key) }
+        }
+        // A moment after the page shows, so it isn't lost in the tab switch.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
-            guard let self, let id = self.browsers.visibleTabID, self.sidebarUI.navState(for: id).protectedMedia == service else {
-                // Gone before it could be said: next time.
-                UserDefaults.standard.set((UserDefaults.standard.stringArray(forKey: key) ?? []).filter { $0 != service }, forKey: key)
+            guard let self, let window = self.window, let id = self.browsers.visibleTabID,
+                  self.sidebarUI.navState(for: id).protectedMedia == service else {
+                self?.offeredProtectedMedia.remove(service)
                 return
             }
-            self.showToast("\(service) plays with Safari's engine",
-                           action: ShinyToast.Action(title: "Why?") { [weak self] in self?.showSiteControlsFromTheirButton() })
+            let page = self.shell.webContainer.convert(self.shell.webContainer.bounds, to: nil)
+            self.toast.show("\(service) plays with Safari's engine",
+                            action: ShinyToast.Action(title: "Why?") { [weak self] in self?.showSiteControlsFromTheirButton() },
+                            page: page, in: window, theme: self.focusedSpace.theme, onClose: told)
         }
     }
+
+    /// Services whose toast was offered this session (they show once a session until answered).
+    private var offeredProtectedMedia: Set<String> = []
 
     /// Arc's toast at the top right of the page (ShinyToast): Cra's confirmations.
     func showToast(_ text: String, action: ShinyToast.Action? = nil) {
@@ -2802,6 +2812,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if commandBar.isOpen { positionCommandPanel() }
         floatingSidebar?.reposition()
         for p in peeks { p.repositionPeek() }
+        // A toast that stays (the protected media one) follows the page's corner, once laid out.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let window = self.window else { return }
+            self.toast.follow(page: self.shell.webContainer.convert(self.shell.webContainer.bounds, to: nil), in: window)
+        }
         saveFrame()
     }
 
