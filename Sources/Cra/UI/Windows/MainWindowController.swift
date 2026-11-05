@@ -2295,13 +2295,24 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// Arc's sliders button (toolbar and URL pill): the Site Control Center, hung under the
     /// button that was clicked (buttons are 32 × 28), not wherever the pointer is in it.
-    private func showToolbarExtensionsMenu() {
+    /// The Site Control Center as if its sliders button was clicked, wherever the request came from
+    /// (the protected media toast's Why?): under the toolbar's button, else under the sidebar's URL
+    /// field at its right end, where that button sits. The arrow shows where to find it next time.
+    private func showSiteControlsFromTheirButton() {
+        if let button = (shell.focusedCard?.toolbarHost as? PaneToolbarView)?.siteControlsButtonFrameOnScreen() {
+            return showToolbarExtensionsMenu(from: button, inToolbar: true)
+        }
+        guard let button = (shell.sidebarHost as? SidebarView)?.siteControlsButtonFrameOnScreen else { return showToolbarExtensionsMenu() }
+        showToolbarExtensionsMenu(from: button, inToolbar: false)
+    }
+
+    private func showToolbarExtensionsMenu(from anchor: NSRect? = nil, inToolbar: Bool = false) {
         // A split pane's bar has the sliders even with the toolbar hidden: hang under that bar then.
-        let pressed = Self.buttonFrameUnderPointer { $0 is ToolbarGlyphButton }
+        let pressed = anchor.map { inToolbar ? $0 : nil } ?? Self.buttonFrameUnderPointer { $0 is ToolbarGlyphButton }
         guard let window, let content = window.contentView,
               let y = pressed != nil && shell.panesShowBars ? toolbarBottomOnScreen()?.y : urlBarBottomOnScreen() else { return }
         ExtensionStore.shared.reload()
-        let midX = (pressed ?? Self.buttonFrameUnderPointer { $0 is SidebarGlyphButton })?.midX ?? NSEvent.mouseLocation.x
+        let midX = (anchor ?? pressed ?? Self.buttonFrameUnderPointer { $0 is SidebarGlyphButton })?.midX ?? NSEvent.mouseLocation.x
         // Arc's popover overlaps the bar by 4 pt (popover top 71 under a bar ending at 75).
         let onScreen = NSRect(x: midX - 16, y: y + 4, width: 32, height: 28)
         let rect = content.convert(window.convertFromScreen(onScreen), from: nil)
@@ -2653,7 +2664,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 return
             }
             self.showToast("\(service) plays with Safari's engine",
-                           action: ShinyToast.Action(title: "Why?") { [weak self] in self?.showToolbarExtensionsMenu() })
+                           action: ShinyToast.Action(title: "Why?") { [weak self] in self?.showSiteControlsFromTheirButton() })
         }
     }
 

@@ -222,8 +222,13 @@ final class PaneToolbarView: NSView {
     }
 
     /// A pinned extension's button (screen rect), for popups opened from the menu bar or a shortcut.
-    func extensionButtonFrameOnScreen(_ id: String) -> NSRect? {
-        guard let b = buttons["ext:" + id], !b.isHiddenOrHasHiddenAncestor, let window else { return nil }
+    func extensionButtonFrameOnScreen(_ id: String) -> NSRect? { buttonFrameOnScreen("ext:" + id) }
+
+    /// The sliders button (screen rect), for the Site Control Center opened from elsewhere (a toast's Why?).
+    func siteControlsButtonFrameOnScreen() -> NSRect? { buttonFrameOnScreen("extensions") }
+
+    private func buttonFrameOnScreen(_ key: String) -> NSRect? {
+        guard let b = buttons[key], !b.isHiddenOrHasHiddenAncestor, b.frame.width > 0, let window else { return nil }
         return window.convertToScreen(b.convert(b.bounds, to: nil))
     }
 

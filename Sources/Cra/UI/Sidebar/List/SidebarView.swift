@@ -11,6 +11,9 @@ final class SidebarView: NSView {
     private let favicons: FaviconCache
     private let tabs = FlippedView()
     private let topBar: SidebarTopBarView
+
+    /// The URL field's sliders button (screen rect), nil while the toolbar has it.
+    var siteControlsButtonFrameOnScreen: NSRect? { topBar.siteControlsButtonFrameOnScreen }
     private let pager: SpacePagerView
     private let trayHost: DownloadsTrayView
     private let player: NowPlayingTrayView
@@ -302,6 +305,14 @@ final class SidebarTopBarView: NSView {
     private var rowButtons: [SidebarGlyphButton] = []
     private var chevron: NSView?
     private let pill = SidebarURLPill()
+
+    /// Where the URL field's sliders button is or appears on hover (screen rect): its last
+    /// accessory, 28 pt ending 5 pt in. nil while the field isn't shown (the toolbar has it).
+    var siteControlsButtonFrameOnScreen: NSRect? {
+        guard !pill.isHiddenOrHasHiddenAncestor, let window else { return nil }
+        let f = window.convertToScreen(pill.convert(pill.bounds, to: nil))
+        return NSRect(x: f.maxX - 5 - 28, y: f.minY + (f.height - 28) / 2, width: 28, height: 28)
+    }
     private var hoverHeader = false { didSet { if hoverHeader != oldValue { pill.showAccessories = hoverHeader } } }
     private var syncQueued = false
 
