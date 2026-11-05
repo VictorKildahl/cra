@@ -46,6 +46,21 @@ struct AdvancedPane: View {
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            SettingsFormRow(label: "MCP:") {
+                SettingsCheckbox(title: "Allow local agents to control Cra", isOn: Binding(
+                    get: { MCPServer.shared.enabled }, set: { MCPServer.shared.setEnabled($0) }))
+                Text("Connected agents can read pages and act using your signed-in sessions.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(MCPServer.shared.status).font(.system(size: 11))
+                if MCPServer.shared.enabled {
+                    Button("Copy MCP Configuration") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(MCPServer.shared.configuration, forType: .string)
+                    }
+                    Text("Last tool: \(MCPServer.shared.lastTool.isEmpty ? "None" : MCPServer.shared.lastTool)")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+            }
             SettingsFormRow(label: "About:") {
                 Text("Cra \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")").font(.system(size: 13))
                 Text("Chromium \(CraCEFRuntime.chromiumVersion()) · CEF \(CraCEFRuntime.cefVersion())")

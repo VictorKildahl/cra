@@ -79,6 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         installKeyFallbackMonitor()
         installCommandFileWatcher()
+        MCPServer.shared.start(app: self)
         composition.startPeriodicWork { [weak self] in self?.sleepIdleTabs() }
         logSidebarProblems()
         LiveFolderManager.shared.start(store: store)
@@ -278,7 +279,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return .terminateNow
     }
 
-    func applicationWillShutdown() { store.saveAll() }
+    func applicationWillShutdown() { MCPServer.shared.stop(); store.saveAll() }
 
     /// Sparkle quits Cra to install an update and starts it again: no quit confirmation.
     func prepareForUpdateRelaunch() {
@@ -800,6 +801,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     let line = "Cra windows: \(w.windowController.map { String(describing: type(of: $0)) } ?? "-") '\(w.title)' frame=\(NSStringFromRect(w.frame)) parent=\(w.parent.map { NSStringFromRect($0.frame) } ?? "-") visible=\(w.isVisible) key=\(w.isKeyWindow) mask=\(w.styleMask.rawValue) class=\(NSStringFromClass(type(of: w))) children=\(w.childWindows?.count ?? 0) contentView=\(w.contentView.map { NSStringFromClass(type(of: $0)) } ?? "-")"
                     NSLog("%@", line)
                 }
+                NSLog("Cra windows: liveBrowsers=%ld", CraCEFRuntime.liveBrowserCount())
                 let summary = "Cra windows: little=\(littleWindows.count) tabs=\(store.allTabs().count) runtimes=\(main.browsers.runtimes.count) hosts=\(main.browsers.runtimes.values.map { $0.browser.hostWindow.map { NSStringFromRect($0.frame) } ?? "nil" })"
                 NSLog("%@", summary)
                 return

@@ -24,6 +24,7 @@ if [ "${1:-}" != core ]; then
   suite "Policies" scripts/test-policies.sh
   suite "Command bar glyph" scripts/test-command-bar-glyph.sh
   suite "Perf recorder" scripts/test-perf.sh
+  suite "MCP transport" scripts/test-mcp-transport.sh
   suite "Lint" scripts/lint.py
 fi
 

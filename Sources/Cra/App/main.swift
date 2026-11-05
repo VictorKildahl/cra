@@ -1,6 +1,10 @@
 import AppKit
 import CraCEF
 
+if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--mcp" {
+    MCPConnection.bridge(path: CommandLine.arguments[2])
+}
+
 MainActor.assumeIsolated {
     // Start-up phases count from here, before AppDelegate decodes the data folder's files.
     Perf.launch()

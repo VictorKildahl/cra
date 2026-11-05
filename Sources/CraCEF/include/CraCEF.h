@@ -142,6 +142,15 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 @property (nonatomic, strong, nullable) id userInfo;
 /// Runs in the shared off-the-record profile (+[CraCEFRuntime endIncognitoSession]).
 @property (nonatomic, readonly) BOOL isIncognito;
+/// Windowless agent page. Shares a normal profile, never creates an AppKit window.
+@property (nonatomic, readonly) BOOL isAgent;
+- (instancetype)initAgentWithURL:(NSString *)url profilePath:(nullable NSString *)profilePath NS_SWIFT_NAME(init(agentURL:profilePath:));
+/// Last native HTML drag payload from DevTools interception. Cleared by each MCP drag.
+@property (nonatomic, copy, nullable) NSString *interceptedDragData;
+/// Explicit download in an agent tab. Site-initiated downloads are blocked in agent tabs.
+- (BOOL)startAgentDownload:(NSString *)url path:(NSString *)path update:(void (^)(CraDownloadInfo *))update;
+- (void)cancelAgentDownload;
+@property (nonatomic, readonly) BOOL agentDownloadReady;
 /// The profile folder this page's cookies, logins and storage live in (a space's own
 /// profile, under the cache root), or nil for the Default profile.
 @property (nonatomic, readonly, copy, nullable) NSString *profilePath;

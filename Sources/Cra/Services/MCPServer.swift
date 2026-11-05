@@ -1,0 +1,334 @@
+import AppKit
+import CraCEF
+import Darwin
+import Observation
+
+@MainActor @Observable
+final class MCPServer {
+    static let shared = MCPServer()
+    private(set) var enabled = false
+    private(set) var status = "Off"
+    private(set) var lastTool = ""
+    @ObservationIgnored private weak var app: AppDelegate?
+    @ObservationIgnored private var endpoint: MCPListener?
+    @ObservationIgnored private var listener: DispatchSourceRead?
+    @ObservationIgnored private var clients: Set<Int32> = []
+    @ObservationIgnored private var generation = UUID()
+    @ObservationIgnored private var busyTabs: [UUID: UUID] = [:]
+    @ObservationIgnored private var pages: [UUID: MCPPage] = [:]
+    @ObservationIgnored private var ownedTabs: [UUID: Set<UUID>] = [:]
+    @ObservationIgnored private var agentTabs: [UUID: (owner: UUID, browser: CraBrowser)] = [:]
+    @ObservationIgnored private var transfers: [UUID: MCPTransfers] = [:]
+    @ObservationIgnored private var pointerPositions: [UUID: CGPoint] = [:]
+    private var path: String { AppPaths.file("mcp.sock").path }
+
+    var configuration: String {
+        let config: [String: Any] = ["mcpServers": ["cra": [
+            "command": Bundle.main.executablePath ?? "", "args": ["--mcp", path]
+        ]]]
+        let data = try! JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted, .sortedKeys])
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    func start(app: AppDelegate) {
+        self.app = app
+        setEnabled(UserDefaults.standard.bool(forKey: "mcpEnabled"))
+    }
+
+    func setEnabled(_ value: Bool) {
+        stop()
+        // Command-line overrides are process-local (also used by isolated scenarios).
+        if UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)["mcpEnabled"] == nil {
+            UserDefaults.standard.set(value, forKey: "mcpEnabled")
+        }
+        guard value else { return }
+        do {
+            let endpoint = try MCPListener(path: path)
+            let fd = try endpoint.bind()
+            MCPTransfers.removeAbandonedUploads()
+            self.endpoint = endpoint
+            let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: .main)
+            source.setEventHandler { [weak self] in self?.acceptClient(fd) }
+            source.setCancelHandler { close(fd) }
+            listener = source
+            enabled = true
+            status = "On — local access to your tabs and signed-in sessions"
+            source.resume()
+        } catch {
+            status = "Could not start: \(error.localizedDescription)"
+        }
+    }
+
+    func stop() {
+        generation = UUID()
+        enabled = false
+        status = "Off"
+        endpoint?.stop()
+        endpoint = nil
+        listener?.cancel()
+        listener = nil
+        for fd in clients { shutdown(fd, SHUT_RDWR) }
+        clients.removeAll()
+        for transfer in transfers.values { transfer.close() }; transfers.removeAll()
+        for tab in agentTabs.values { tab.browser.close() }
+        agentTabs.removeAll()
+        pages.removeAll(); pointerPositions.removeAll(); ownedTabs.removeAll()
+    }
+
+    private func acceptClient(_ fd: Int32) {
+        let client = accept(fd, nil, nil)
+        guard client >= 0 else { return }
+        _ = fcntl(client, F_SETFD, FD_CLOEXEC)
+        _ = fcntl(client, F_SETFL, fcntl(client, F_GETFL) & ~O_NONBLOCK)
+        guard clients.count < 8 else { close(client); return }
+        var uid: uid_t = 0
+        var gid: gid_t = 0
+        guard getpeereid(client, &uid, &gid) == 0, uid == getuid() else { close(client); return }
+        var one: Int32 = 1
+        setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout.size(ofValue: one)))
+        clients.insert(client)
+        let session = generation
+        let protocolSession = MCPSession()
+        let owner = UUID()
+        let state = MCPClientState()
+        let writer = DispatchQueue(label: "cra.mcp.writer")
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let reader = MCPConnection.Reader()
+            let pending = DispatchGroup()
+            let capacity = DispatchSemaphore(value: 32)
+            while let line = reader.next(client) {
+                guard capacity.wait(timeout: .now()) == .success else { break }
+                pending.enter()
+                let reply = MCPReply()
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.enabled, self.generation == session, reply.isPending else { reply.finish(nil); return }
+                    let request = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any]
+                    if request?["jsonrpc"] as? String == "2.0", request?["id"] == nil,
+                       request?["method"] as? String == "notifications/cancelled",
+                       let params = request?["params"] as? [String: Any], let id = params["requestId"], let key = MCPClientState.key(id) {
+                        state.requests[key]?.cancel()
+                        reply.finish(nil)
+                        return
+                    }
+                    let key = request?["id"].flatMap(MCPClientState.key)
+                    if let key, state.requests[key] != nil {
+                        reply.finish(try? JSONSerialization.data(withJSONObject: MCPProtocol.error(id: request!["id"]!, code: -32600, message: "Request ID is already in flight.")))
+                        return
+                    }
+                    if let key { state.requests[key] = reply }
+                    protocolSession.receive(line, perform: { name, arguments, completion in
+                        self.lastTool = name
+                        self.perform(name, arguments: arguments, owner: owner, canContinue: { [weak self] in
+                            self?.enabled == true && self?.generation == session && reply.isPending && !reply.isCancelled
+                                && (!MCPProtocol.inputTools.contains(name) || MCPConnection.peerIsOpen(client))
+                        }, completion: completion)
+                    }) { data in
+                        if let key, state.requests[key] === reply { state.requests.removeValue(forKey: key) }
+                        reply.finish(data)
+                    }
+                }
+                DispatchQueue.global(qos: .utility).async {
+                    if reply.ready.wait(timeout: .now() + MCPProtocol.responseTimeout(line)) != .success {
+                        reply.cancel(); reply.finish(nil)
+                        shutdown(client, SHUT_RDWR)
+                    }
+                    if let data = reply.data {
+                        writer.sync {
+                            if !MCPConnection.write(data + Data([10]), to: client) { shutdown(client, SHUT_RDWR) }
+                        }
+                    }
+                    capacity.signal(); pending.leave()
+                }
+            }
+            // EOF stops input through peerIsOpen, but accepted read-only requests drain.
+            pending.wait()
+            shutdown(client, SHUT_RDWR)
+            Task { @MainActor [weak self] in
+                self?.clients.remove(client)
+                self?.ownedTabs.removeValue(forKey: owner)
+                if let self {
+                    for (id, tab) in self.agentTabs where tab.owner == owner {
+                        self.transfers.removeValue(forKey: id)?.close()
+                        tab.browser.close(); self.agentTabs.removeValue(forKey: id)
+                        self.pages.removeValue(forKey: id); self.pointerPositions.removeValue(forKey: id)
+                    }
+                }
+                close(client)
+            }
+        }
+    }
+
+    private func perform(_ name: String, arguments: [String: Any], owner: UUID, canContinue: @escaping () -> Bool, completion: @escaping ([String: Any]) -> Void) {
+        guard let app else { completion(MCPProtocol.content("Browser is unavailable", failed: true)); return }
+        if name == "tabs_list" {
+            var tabs: [[String: Any]] = app.store.allTabs().filter { app.store.mcpTab($0.id) != nil }.sorted { $0.id.uuidString < $1.id.uuidString }.map {
+                ["id": $0.id.uuidString, "title": $0.displayTitle, "url": $0.tab?.url ?? "", "owned": ownedTabs[owner]?.contains($0.id) == true,
+                 "loaded": app.runtime(for: $0.id)?.browser != nil]
+            }
+            tabs += agentTabs.filter { $0.value.owner == owner }.map { id, tab in
+                ["id": id.uuidString, "title": tab.browser.currentTitle, "url": tab.browser.currentURL,
+                 "owned": true, "loaded": tab.browser.isCreated && !tab.browser.isClosed, "closed": tab.browser.isClosed, "background": true]
+            }
+            completion((try? MCPCDP.content(tabs)) ?? MCPProtocol.content("Could not list tabs", failed: true))
+            return
+        }
+        if name == "tab_open" {
+            guard canContinue(), let url = arguments["url"] as? String, MCPProtocol.navigable(url),
+                  let window = app.mainWindows.first(where: { $0.windowID == app.store.lastNormalWindowID && !$0.isIncognito }) else {
+                completion(MCPProtocol.content("Opening a tab requires an HTTP(S) URL and a normal browser window.", failed: true)); return
+            }
+            if arguments["background"] as? Bool == true {
+                guard agentTabs.count < 8 else { completion(MCPProtocol.content("Eight agent tabs are retained. Use tabs_list and tab_close to release open or timed-out tabs.", failed: true)); return }
+                let id = UUID()
+                let profile = app.store.profilePath(space: app.store.focusedSpaceID(window: window.windowID))
+                let browser = CraBrowser(agentURL: url, profilePath: profile)
+                agentTabs[id] = (owner, browser)
+                completion(try! MCPCDP.content(["tabId": id.uuidString, "status": "opened", "background": true]))
+                return
+            }
+            let tab = app.store.createTab(url: url, window: window.windowID)
+            ownedTabs[owner, default: []].insert(tab.id)
+            window.window?.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            completion(try! MCPCDP.content(["tabId": tab.id.uuidString, "status": "opened"]))
+            return
+        }
+        guard let text = arguments["tabId"] as? String, let id = UUID(uuidString: text), app.store.mcpTab(id) != nil || agentTabs[id]?.owner == owner else {
+            completion(MCPProtocol.content("Normal tab unavailable.", failed: true)); return
+        }
+        guard busyTabs[id] == nil else {
+            completion(MCPProtocol.content("Tab is busy with another MCP action. Inspect its result before continuing.", failed: true)); return
+        }
+        if let agent = agentTabs[id], agent.owner == owner, name == "tab_show" || name == "tab_close" {
+            if name == "tab_show" { completion(MCPProtocol.content("This is a windowless agent tab. Use page_screenshot to inspect it or open its URL in a normal tab.", failed: true)); return }
+            transfers.removeValue(forKey: id)?.close()
+            agent.browser.close(); agentTabs.removeValue(forKey: id); pages.removeValue(forKey: id); pointerPositions.removeValue(forKey: id)
+            completion(try! MCPCDP.content(["status": "closed"])); return
+        }
+        if name == "tab_show" || name == "tab_close" {
+            guard canContinue(), let window = app.mainWindows.first(where: { !$0.isIncognito && $0.browsers.runtime(for: id) != nil })
+                    ?? app.mainWindows.first(where: { $0.windowID == app.store.lastNormalWindowID && !$0.isIncognito }) else {
+                completion(MCPProtocol.content("Normal browser window unavailable.", failed: true)); return
+            }
+            if name == "tab_close" {
+                guard ownedTabs[owner]?.contains(id) == true, !app.store.isPinned(id), app.store.splitContaining(id) == nil else {
+                    completion(MCPProtocol.content("Only an unpinned, unsplit tab opened by this connection can be closed.", failed: true)); return
+                }
+                transfers.removeValue(forKey: id)?.close()
+                window.closeTab(id)
+                ownedTabs[owner]?.remove(id); pages.removeValue(forKey: id); pointerPositions.removeValue(forKey: id)
+            } else {
+                app.store.selectTab(id, window: window.windowID)
+                window.window?.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+            }
+            completion(try! MCPCDP.content(["status": name == "tab_close" ? "closed" : "shown"]))
+            return
+        }
+        if name == "download_status" || name == "download_cancel" {
+            do {
+                guard canContinue(), agentTabs[id]?.owner == owner, let transfer = transfers[id] else { throw MCPCDP.Failure(message: "This connection's agent tab has no downloads.") }
+                completion(try transfer.run(name, arguments: arguments))
+            } catch { completion(MCPProtocol.content(error.localizedDescription, failed: true)) }
+            return
+        }
+        let browser: CraBrowser
+        if let agent = agentTabs[id], agent.owner == owner { browser = agent.browser }
+        else if let runtime = app.runtime(for: id), !runtime.discarded { browser = runtime.browser }
+        else { completion(MCPProtocol.content("Tab has no live page. Use tab_show, then wait for loading.", failed: true)); return }
+        guard browser.isCreated, !browser.isClosed, !browser.isIncognito else {
+            completion(MCPProtocol.content("Page is not ready or has closed.", failed: true)); return
+        }
+        for tabID in Array(transfers.keys) where agentTabs[tabID] == nil && (app.store.mcpTab(tabID) == nil || app.runtime(for: tabID)?.browser !== pages[tabID]?.browser) {
+            transfers.removeValue(forKey: tabID)?.close()
+        }
+        pages = pages.filter { agentTabs[$0.key]?.browser === $0.value.browser || app.store.mcpTab($0.key) != nil && app.runtime(for: $0.key)?.browser === $0.value.browser }
+        if pages[id] == nil { pages[id] = MCPPage(browser) }
+        let page = pages[id]!
+        let lease = UUID()
+        busyTabs[id] = lease
+        let cdp = MCPCDP(browser) { [weak self, weak app] in
+            let agentValid = self?.agentTabs[id]?.owner == owner && self?.agentTabs[id]?.browser === browser
+            let normalValid = app?.store.mcpTab(id) != nil && app?.runtime(for: id)?.browser === browser
+            return canContinue() && (agentValid || normalValid) && !browser.isClosed && !browser.isIncognito
+        }
+        Task { @MainActor in
+            defer { if busyTabs[id] == lease { busyTabs.removeValue(forKey: id) } }
+            do {
+                let result: [String: Any]
+                if name == "page_download" {
+                    guard browser.isAgent else { throw MCPCDP.Failure(message: "Download tools require a background tab opened by this connection.") }
+                    if transfers[id] == nil {
+                        guard transfers.count < 16 else { throw MCPCDP.Failure(message: "File-transfer tab limit reached. Close an existing transfer tab first.") }
+                        transfers[id] = MCPTransfers(browser)
+                    }
+                }
+                if ["page_download", "download_status", "download_cancel"].contains(name) {
+                    try cdp.check()
+                    result = try transfers[id]!.run(name, arguments: arguments)
+                } else if MCPProtocol.inputTools.contains(name) {
+                    let reference: (node: Int, document: String)?
+                    if let ref = arguments["ref"] as? String { reference = try await page.resolve(ref, cdp: cdp) } else { reference = nil }
+                    let input = MCPInput(browser: browser, position: pointerPositions[id] ?? CGPoint(x: 8, y: 8), reference: reference, stageUploads: { [weak server = self] paths in
+                        guard let self = server else { throw MCPCDP.Failure(message: "Upload staging is unavailable.") }
+                        if self.transfers[id] == nil {
+                            guard self.transfers.count < 16 else { throw MCPCDP.Failure(message: "File-transfer tab limit reached.") }
+                            self.transfers[id] = MCPTransfers(browser)
+                        }
+                        let transfer = self.transfers[id]!
+                        do { return try await transfer.stage(paths) }
+                        catch { if transfer.isEmpty, self.transfers[id] === transfer { self.transfers.removeValue(forKey: id) }; throw error }
+                    }, discardUploads: { [weak server = self] paths in
+                        server?.transfers[id]?.discard(paths)
+                        if server?.transfers[id]?.isEmpty == true { server?.transfers.removeValue(forKey: id) }
+                    }, canContinue: cdp.canContinue)
+                    result = await input.run(name: name, arguments: arguments)
+                    pointerPositions[id] = input.position
+                } else if name == "page_evaluate" {
+                    let expression = arguments["expression"] as! String
+                    // Non-input stdio EOF still drains the response, as the bridge contract promises.
+                    let value = try await cdp.call("Runtime.evaluate", ["expression": expression, "returnByValue": true, "awaitPromise": true, "timeout": 10000], timeout: 15, cleanup: true)
+                    result = try MCPCDP.content(value)
+                } else {
+                    result = try await page.run(name, arguments: arguments, cdp: cdp)
+                }
+                completion(result)
+            } catch { completion(MCPProtocol.content(error.localizedDescription, failed: true)) }
+        }
+    }
+
+}
+
+/// Single completion, including asynchronous Chromium replies.
+private final class MCPReply: @unchecked Sendable {
+    let ready = DispatchSemaphore(value: 0)
+    private let lock = NSLock()
+    private(set) var data: Data?
+    private var finished = false
+    private var cancelled = false
+    var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
+    func cancel() { lock.lock(); cancelled = true; lock.unlock() }
+    var isPending: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return !finished
+    }
+    func finish(_ value: Data?) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !finished else { return }
+        finished = true
+        data = value
+        ready.signal()
+    }
+}
+
+@MainActor
+private final class MCPClientState {
+    var requests: [String: MCPReply] = [:]
+    static func key(_ id: Any) -> String? {
+        if let value = id as? String { return "s:" + value }
+        if let value = id as? NSNumber { return "n:" + value.stringValue }
+        return nil
+    }
+}

@@ -28,6 +28,7 @@ enum StoreTests {
         stampsUseTheClock()
         persistenceFaults()
         incognitoStaysOffDisk()
+        mcpExcludesPrivateTabs()
         pinnedURL()
         moveTabToSpace()
         folderPeek()
@@ -329,6 +330,21 @@ enum StoreTests {
         expect(CraLog.faultCount == before + 2, "a value JSON can't hold is a fault, not a silent skip")
         JSONStore<[String]>("missing-folder/x.json").saveNow(["x"])
         expect(CraLog.faultCount == before + 3, "a write that fails is a fault")
+    }
+
+    @MainActor
+    private static func mcpExcludesPrivateTabs() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let normal = store.createTab(url: "https://example.com/public")
+        let privateWindow = store.addIncognitoWindow(frame: nil)
+        let secret = store.createTab(url: "https://example.com/private", window: privateWindow.id)
+        expect(store.mcpTab(normal.id)?.id == normal.id, "MCP accepts a normal tab")
+        expect(store.mcpTab(secret.id) == nil, "MCP refuses private tabs even by known ID")
+        expect(!store.allTabs().filter { store.mcpTab($0.id) != nil }.contains { $0.id == secret.id },
+               "MCP discovery excludes private tabs")
+        expect(store.mcpTab(UUID()) == nil, "MCP refuses unknown IDs")
+        expect(store.spaces.values.allSatisfy { store.mcpTab($0.todayContainerID) == nil },
+               "MCP refuses containers")
     }
 
     /// Incognito tabs never reach sidebar.json (#46's review: updateTab saved every item), and
