@@ -17,7 +17,13 @@ struct PerfProcessSampler {
             let ok = withUnsafeMutablePointer(to: &info) {
                 $0.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) { proc_pid_rusage(pid, RUSAGE_INFO_V4, $0) }
             } == 0
-            let kind = kinds[pid] ?? PerfProcessKind.of(name: Self.name(of: pid), isSelf: pid == me, type: Self.chromiumType(of: pid))
+            let kind: PerfProcessKind
+            if let cached = kinds[pid] { kind = cached }
+            else {
+                let name = pid == me ? "" : Self.name(of: pid)
+                let type = pid != me && PerfProcessKind.needsType(name: name) ? Self.chromiumType(of: pid) : nil
+                kind = PerfProcessKind.of(name: name, isSelf: pid == me, type: type)
+            }
             kinds[pid] = kind
             guard ok else {
                 return PerfProcessReading(pid: pid, kind: kind, cpuNs: nil, footprintBytes: nil, diskReadBytes: nil, diskWriteBytes: nil, wakeups: nil)
@@ -82,8 +88,10 @@ struct PerfSystemSampler {
         let now = Perf.now()
         // The volume's free space changes slowly and costs a file-system call: once a minute.
         if freeDisk.at == 0 || now &- freeDisk.at > 60_000_000_000 {
-            let values = try? dataFolder.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-            freeDisk = (values?.volumeAvailableCapacityForImportantUsage, now)
+            // Foundation's "important usage" capacity asks storage policy about reclaimable
+            // space (6–18 ms CPU here). The recorder needs free space, not a purge estimate.
+            // statfs reads the volume's available blocks directly, in a few microseconds.
+            freeDisk = (Self.availableDisk(dataFolder), now)
         }
         let thermal: String
         switch ProcessInfo.processInfo.thermalState {
@@ -96,6 +104,14 @@ struct PerfSystemSampler {
         return PerfSystemSample(cpuPct: cpu(), memoryPressure: PerfSystemSample.pressure(level: Self.pressureLevel()),
                                 thermalState: thermal, lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled,
                                 freeDiskBytes: freeDisk.bytes)
+    }
+
+    static func availableDisk(_ folder: URL) -> Int64? {
+        var info = statfs()
+        guard statfs(folder.path, &info) == 0, info.f_bsize > 0 else { return nil }
+        let bytes = info.f_bavail.multipliedReportingOverflow(by: UInt64(info.f_bsize))
+        guard !bytes.overflow else { return nil }
+        return Int64(clamping: bytes.partialValue)
     }
 
     /// All cores' user, system, idle and nice ticks since boot; busy share since the last call.
