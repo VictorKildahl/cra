@@ -1155,9 +1155,13 @@ class CraClient : public CefClient,
                   public CefDownloadHandler,
                   public CefFocusHandler,
                   public CefPermissionHandler,
-                  public CefFindHandler {
+                  public CefFindHandler,
+                  public CefJSDialogHandler {
 public:
     CraBrowser* owner() { return owner_; }
+    /// Cra closed this page (-[CraBrowser close]). Kept here rather than read from the owner:
+    /// the CraBrowser can be gone before Chromium asks.
+    void SetCloseRequested() { close_requested_ = true; }
     explicit CraClient(CraBrowser* owner) : owner_(owner) { CraClientRegistry().insert(static_cast<const void*>(static_cast<CefClient*>(this))); }
     ~CraClient() override { CraClientRegistry().erase(static_cast<const void*>(static_cast<CefClient*>(this))); }
 
@@ -1171,6 +1175,21 @@ public:
     CefRefPtr<CefFocusHandler> GetFocusHandler() override { return this; }
     CefRefPtr<CefPermissionHandler> GetPermissionHandler() override { return this; }
     CefRefPtr<CefFindHandler> GetFindHandler() override { return this; }
+    CefRefPtr<CefJSDialogHandler> GetJSDialogHandler() override { return this; }
+
+    // JS dialogs ----------------------------------------------------------
+
+    // Cra closes pages with CloseBrowser(true), which skips beforeunload. With DevTools docked
+    // Chromium still asked "Leave site?" (a shop with something in its cart): DevTools close
+    // first and the page's beforeunload ran anyway. The tab was already gone, so its page window
+    // stayed over the next tab, and after Cancel it never closed. A page Cra closes leaves.
+    // Everything else (reloads, navigations, other dialogs) keeps Chrome's own prompts.
+    bool OnBeforeUnloadDialog(CefRefPtr<CefBrowser> browser, const CefString& message_text, bool is_reload,
+                              CefRefPtr<CefJSDialogCallback> callback) override {
+        if (!close_requested_) return false;
+        callback->Continue(true, CefString());
+        return true;
+    }
 
     // Life span -----------------------------------------------------------
 
@@ -1773,6 +1792,7 @@ private:
     // True while a prompt's answer runs (UI thread only).
     static inline bool answering_prompt_ = false;
     __weak CraBrowser* owner_;
+    bool close_requested_ = false;
     CefRefPtr<FaviconState> favicon_ = new FaviconState();
     CefRefPtr<CefResourceRequestHandler> blocker_ = new CraContentBlockingHandler();
     IMPLEMENT_REFCOUNTING(CraClient);
@@ -2398,6 +2418,7 @@ static NSView* FindRenderWidgetHostView(NSView* root) {
 - (void)close {
     if (_isClosed || _parked) return;
     self.closeRequested = YES;
+    if (CraClient* c = _browser ? AsCraClient(_browser->GetHost()->GetClient().get()) : nullptr) c->SetCloseRequested();
     if (_browser && _activeDownloads.count && !g_quitting) {
         [self park];
     } else if (_browser) {

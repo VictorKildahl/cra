@@ -1,0 +1,17 @@
+# A tab closed while its DevTools are open, on a page that asks "Leave site?" (a shop
+# with something in its cart). Chromium still ran the page's beforeunload despite the forced
+# close, so the closed page and its window stayed over the next tab. The page must close: its
+# renderer (file://, a process of its own) and DevTools' go, back to the baseline.
+budget rss=600 stalls50=5
+cra://open?url=${PAGE}?n=first
+wait 3
+helpers baseline
+cra://open?url=file://${FIXTURES}/Pages/page.html?beforeunload=1
+wait 3
+cra://debug?cdp=Runtime.evaluate&params=%7B%22expression%22%3A%20%22document.body.click%28%29%22%2C%20%22userGesture%22%3A%20true%7D
+wait 1
+cra://action/devTools
+wait 4
+cra://action/closeTab
+wait 3
+helpers settle 0
