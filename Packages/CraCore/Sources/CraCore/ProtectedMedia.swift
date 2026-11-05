@@ -48,6 +48,15 @@ public struct ProtectedMediaSites: Equatable, Sendable {
         "www.deezer.com",
     ]
 
+    /// What Cra calls each service when it tells the user why a page is WebKit's (the toast,
+    /// the Site Control Center, the extension buttons' tooltips).
+    public static let serviceNames: [String: String] = [
+        "open.spotify.com": "Spotify", "netflix.com": "Netflix", "disneyplus.com": "Disney+",
+        "max.com": "Max", "hbomax.com": "HBO Max", "primevideo.com": "Prime Video", "hulu.com": "Hulu",
+        "paramountplus.com": "Paramount+", "peacocktv.com": "Peacock", "tv.apple.com": "Apple TV",
+        "music.apple.com": "Apple Music", "listen.tidal.com": "Tidal", "www.deezer.com": "Deezer",
+    ]
+
     /// Off: every page is Chromium's, as before.
     public var isEnabled: Bool
     /// Lower-cased hosts without a leading dot.
@@ -65,8 +74,18 @@ public struct ProtectedMediaSites: Equatable, Sendable {
 
     /// The engine a page Cra opens at `url` gets.
     public func engine(for url: String) -> PageEngine {
-        guard isEnabled, let host = Self.webHost(of: url) else { return .chromium }
-        return hosts.contains { host == $0 || host.hasSuffix("." + $0) } ? .webKit : .chromium
+        listedHost(for: url) == nil ? .chromium : .webKit
+    }
+
+    /// The listed host `url` falls under, or nil (also while off).
+    public func listedHost(for url: String) -> String? {
+        guard isEnabled, let host = Self.webHost(of: url) else { return nil }
+        return hosts.first { host == $0 || host.hasSuffix("." + $0) }
+    }
+
+    /// The service's name for a page at `url` ("Spotify"); a host someone added names itself.
+    public func serviceName(for url: String) -> String? {
+        listedHost(for: url).map { Self.serviceNames[$0] ?? $0 }
     }
 
     /// A navigation a page started itself: the engine it has to move to, or nil to stay.

@@ -171,6 +171,9 @@ struct TabNavState: Equatable {
     var canGoForward = false
     var isLoading = false
     var themeColor = ""
+    /// The service a WebKit page plays ("Spotify"; docs/protected-media.md), nil for Chromium's:
+    /// its extension buttons dim and the Site Control Center says why.
+    var protectedMedia: String?
 }
 
 /// Where a dragged tab or link would go in the split (Arc: SplitViewControllerLayout.DropTarget).

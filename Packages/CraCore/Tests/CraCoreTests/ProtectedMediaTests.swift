@@ -51,6 +51,20 @@ struct ProtectedMediaTests {
         #expect(sites.engine(for: url) == .chromium)
     }
 
+    /// The name the toast and the Site Control Center use.
+    @Test func serviceNames() {
+        #expect(sites.serviceName(for: "https://open.spotify.com/track/1") == "Spotify")
+        #expect(sites.serviceName(for: "https://www.netflix.com/browse") == "Netflix")
+        #expect(sites.serviceName(for: "https://www.disneyplus.com/") == "Disney+")
+        #expect(sites.serviceName(for: "https://play.hbomax.com/") == "HBO Max")
+        #expect(sites.serviceName(for: "https://music.apple.com/us/browse") == "Apple Music")
+        #expect(sites.serviceName(for: "https://www.google.com/") == nil)
+        #expect(ProtectedMediaSites(extraHosts: ["crunchyroll.com"]).serviceName(for: "https://www.crunchyroll.com/") == "crunchyroll.com")
+        #expect(ProtectedMediaSites(isEnabled: false).serviceName(for: "https://open.spotify.com/") == nil)
+        // Every listed service has a name.
+        #expect(ProtectedMediaSites.defaultHosts.allSatisfy { ProtectedMediaSites.serviceNames[$0] != nil })
+    }
+
     @Test func offMeansChromiumEverywhere() {
         let off = ProtectedMediaSites(isEnabled: false)
         #expect(off.engine(for: "https://open.spotify.com/") == .chromium)

@@ -500,6 +500,7 @@ final class FavoritesGridView: NSView {
         var palette: SpacePalette?
         var dismissed = true
         var pins: [Pin] = []
+        var protectedMedia: String?
         withObservationTracking {
             guard let space = store.space(spaceID) else { return }
             palette = space.theme.palette
@@ -509,6 +510,7 @@ final class FavoritesGridView: NSView {
                 let profile = store.profileDirectoryName(space: spaceID)
                 let entries = ext.entries(inProfile: profile)
                 let tab = store.selectedTabID(in: spaceID, window: ui.windowID)
+                protectedMedia = tab.flatMap { ui.navState(for: $0).protectedMedia }
                 pins = ext.pinnedIDs(inProfile: profile).compactMap { id in
                     entries.first { $0.extensionID == id }.map {
                         Pin(id: id, name: $0.name, icon: ext.toolbarIcon(for: $0, profile: profile, tab: tab),
@@ -546,7 +548,7 @@ final class FavoritesGridView: NSView {
         let showsCard = ids.isEmpty && !dismissed
         // Arc drops the card and moves the list up in one frame, like a first tile coming in.
         let countChanged = ids.count != order.count || showsCard == card.isHidden || pins.count != extensionOrder.count
-        showExtensions(pins, palette: palette)
+        showExtensions(pins, palette: palette, protectedMedia: protectedMedia)
         for (id, t) in tiles where !ids.contains(id) {
             t.removeFromSuperview()
             tiles[id] = nil
@@ -575,7 +577,7 @@ final class FavoritesGridView: NSView {
     /// The pinned extensions' buttons, in pin order; none while the toolbar shows them. Arc 1.171
     /// (4 Nov) draws each cell like a favorite tile, the tile's fill at rest and its hover fill,
     /// the 18 pt icon centred, and names it in a tooltip (its toolbar pins have none, #106).
-    private func showExtensions(_ pins: [Pin], palette: SpacePalette?) {
+    private func showExtensions(_ pins: [Pin], palette: SpacePalette?, protectedMedia: String?) {
         let colors = palette.map(SidebarColors.init) ?? SidebarColors()
         let dark = palette?.isDark ?? false
         let ids = pins.map(\.id)
@@ -591,7 +593,9 @@ final class FavoritesGridView: NSView {
                 addSubview(b)
                 return b
             }()
-            b.configure(symbol: nil, image: ext.badged(p.icon, p.badge, tint: colors.textSecondary), help: p.name, enabled: true,
+            // On a WebKit page they dim and say why (docs/protected-media.md).
+            b.configure(symbol: nil, image: ext.badged(p.icon, p.badge, tint: colors.textSecondary),
+                        help: protectedMedia.map(ExtensionStore.offOnProtectedMedia) ?? p.name, enabled: protectedMedia == nil,
                         width: 28, iconSize: 18, tint: colors.textSecondary,
                         hover: dark ? NSColor.white.withAlphaComponent(0.15) : NSColor.black.withAlphaComponent(0.09))
             b.restFill = palette.map { NSColor($0.pillFill) } ?? .clear

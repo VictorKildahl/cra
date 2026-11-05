@@ -37,6 +37,9 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
     private var audible = false
     private var audibleOff: DispatchWorkItem?
     private var capturing = false
+    /// The service this page opened for ("Spotify"), kept while it signs in elsewhere: what the
+    /// toast, the Site Control Center and the dimmed extension buttons name (PageEngines).
+    var serviceName = ""
     /// WebKit took the page to its own fullscreen window (Chromium's fullscreen is Cra's window).
     private(set) var isContentFullscreen = false
     private var inPictureInPicture = false

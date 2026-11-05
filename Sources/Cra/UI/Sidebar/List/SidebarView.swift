@@ -407,7 +407,7 @@ final class SidebarTopBarView: NSView {
                 }
             }
             pill.show(text: text, url: url, hasTab: tab != nil, colors: colors, active: active,
-                      pinned: pinned, hasExtensions: !entries.isEmpty)
+                      pinned: pinned, hasExtensions: !entries.isEmpty, protectedMedia: tab.flatMap { ui.navState(for: $0.id).protectedMedia })
         }
         needsLayout = true
         if wasCompact != compact { superview?.superview?.needsLayout = true }
@@ -537,7 +537,8 @@ final class SidebarURLPill: NSView {
     override var mouseDownCanMoveWindow: Bool { false }
 
     func show(text: String, url: String, hasTab: Bool, colors: SidebarColors, active: Bool,
-              pinned: [(String, String, NSImage?)], hasExtensions: Bool) {
+              pinned: [(String, String, NSImage?)], hasExtensions: Bool, protectedMedia: String? = nil) {
+        self.protectedMedia = protectedMedia
         self.colors = colors
         self.hasTab = hasTab
         tip.text = url
@@ -555,6 +556,8 @@ final class SidebarURLPill: NSView {
 
     /// Whether the pins go in this field (else in the grid over the favorites), for its width.
     private var pinsInField = true
+    /// A WebKit page's service: the pins dim and say why (docs/protected-media.md).
+    private var protectedMedia: String?
 
     /// Arc's URL-bar accessories: pinned extensions (while they leave the address room), Copy
     /// Link, then the site controls.
@@ -565,8 +568,9 @@ final class SidebarURLPill: NSView {
         pinsInField = PinnedExtensionGrid.fitsInURLField(count: m.pinned.count, fieldWidth: bounds.width)
         for (id, _, icon) in pinsInField ? m.pinned : [] {
             let b = ToolbarGlyphButton()
-            // Arc's pinned extension buttons have no tooltip (#106).
-            b.configure(symbol: nil, image: icon, help: "", enabled: true, width: 28, iconSize: 16, tint: colors.textSecondary)
+            // Arc's pinned extension buttons have no tooltip (#106), unless they can't run here.
+            b.configure(symbol: nil, image: icon, help: protectedMedia.map(ExtensionStore.offOnProtectedMedia) ?? "",
+                        enabled: protectedMedia == nil, width: 28, iconSize: 16, tint: colors.textSecondary)
             b.action = { actions.runExtension(id) }
             b.menuProvider = { ExtensionStore.shared.entries.first { $0.extensionID == id }.map(ExtensionsMenu.iconMenu) }
             accessories.append(b)

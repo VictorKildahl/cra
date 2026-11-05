@@ -76,6 +76,22 @@ Deleting a profile deletes its WebKit store at the next launch, together with it
 folder. The user agent is Safari's (`Version/<Safari's version> Safari/605.1.15`), because the
 services pick their DRM by browser.
 
+## How Cra tells the user
+
+- **Once per service, a toast**: the first time a service's page shows, "Spotify plays with
+  Safari's engine" with a Why? button that opens the Site Control Center. Which services have
+  been announced is kept in the `protectedMediaToldServices` default.
+- **The Site Control Center**: on a WebKit page, a Protected Media card takes the Extensions
+  grid's place. It names the service, says why, and lists what that means here: you sign in once,
+  extensions don't run, and Web Inspector opens instead of DevTools. Learn more opens
+  crabrowser.app/help/protected-media. The Block Ads & Trackers switch is left out there,
+  because Chromium's blocker doesn't see the page.
+- **Extension buttons**: pinned extensions in the toolbar, the sidebar's URL field and the
+  sidebar's grid dim, and their tooltip says "Extensions don't run on Spotify".
+
+All three follow the page's real engine (`TabNavState.protectedMedia`, from the page), not its
+address. A WebKit page signing in on accounts.spotify.com still counts as Spotify's.
+
 ## What a WebKit page doesn't have
 
 - **Chrome extensions**, including password managers' autofill: those services are signed into

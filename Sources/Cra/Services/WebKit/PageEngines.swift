@@ -21,6 +21,13 @@ enum PageEngines {
 
     static func engine(of browser: CraBrowser) -> PageEngine { browser is WebKitBrowser ? .webKit : .chromium }
 
+    /// The service a WebKit page plays ("Spotify"), nil for a Chromium page: Cra tells the user why
+    /// its extensions don't run there and it signs in on its own.
+    static func protectedMediaService(of browser: CraBrowser) -> String? {
+        guard let page = browser as? WebKitBrowser else { return nil }
+        return page.serviceName.isEmpty ? "This site" : page.serviceName
+    }
+
     /// The page is in WebKit's own fullscreen window, which covers Cra's (Chromium's fullscreen
     /// is Cra's window going fullscreen).
     static func isInOwnFullscreen(_ browser: CraBrowser) -> Bool { (browser as? WebKitBrowser)?.isContentFullscreen == true }
@@ -32,7 +39,9 @@ enum PageEngines {
         let engine = url.map { sites.engine(for: $0) } ?? opener.map(engine(of:)) ?? .chromium
         switch engine {
         case .webKit:
-            return WebKitBrowser(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath)
+            let page = WebKitBrowser(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath)
+            page.serviceName = url.flatMap { sites.serviceName(for: $0) } ?? (opener as? WebKitBrowser)?.serviceName ?? ""
+            return page
         case .chromium:
             return CraBrowser(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath)
         }
@@ -49,5 +58,12 @@ enum PageEngines {
             let wanted = sites.engine(for: url)
             return wanted == current ? nil : wanted
         }
+    }
+}
+
+extension ExtensionStore {
+    /// The tooltip of an extension button dimmed on a WebKit page ("Extensions don’t run on Spotify").
+    nonisolated static func offOnProtectedMedia(_ service: String) -> String {
+        "Extensions don’t run on \(service == "This site" ? "this site" : service)"
     }
 }

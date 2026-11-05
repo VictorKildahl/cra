@@ -522,9 +522,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         var nav: [UUID: TabNavState] = [:]
         for id in ids {
             guard let rt = browsers.runtime(for: id) else { continue }
-            nav[id] = TabNavState(canGoBack: rt.browser.canGoBack, canGoForward: rt.browser.canGoForward, isLoading: rt.browser.isLoading, themeColor: rt.themeColor)
+            nav[id] = TabNavState(canGoBack: rt.browser.canGoBack, canGoForward: rt.browser.canGoForward, isLoading: rt.browser.isLoading,
+                                  themeColor: rt.themeColor, protectedMedia: PageEngines.protectedMediaService(of: rt.browser))
         }
         if nav != sidebarUI.navStates { sidebarUI.navStates = nav }
+        if let id = browsers.visibleTabID, let service = nav[id]?.protectedMedia { tellAboutProtectedMedia(service) }
     }
 
     // MARK: Split view
@@ -2323,9 +2325,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             guard let origin = URL(string: url).flatMap({ u in u.host.map { "\(u.scheme ?? "https")://\($0)" } }) else { return }
             self?.openTab("chrome://settings/content/siteDetails?site=" + (origin.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? origin))
         }
+        actions.learnAboutProtectedMedia = { [weak self] in self?.openTab(Self.protectedMediaHelp) }
         siteControlCenterSpaceID = focusedSpaceID
         siteControlCenter.show(relativeTo: rect, of: content, url: url, secure: secure, dark: SystemAppearance.shared.isDark,
-                               profile: profileDirectoryName, tab: selectedTabID, store: store, actions: actions)
+                               profile: profileDirectoryName, tab: selectedTabID,
+                               protectedMedia: browsers.visibleTabID.flatMap { sidebarUI.navState(for: $0).protectedMedia },
+                               store: store, actions: actions)
+    }
+
+    /// The help centre's page on why Spotify, Netflix and the others play in Safari's engine.
+    static let protectedMediaHelp = "https://crabrowser.app/help/protected-media"
+
+    func debugSiteControlsShown() -> Bool { siteControlCenter.isShown
     }
 
     private func openTab(_ url: String) {
@@ -2624,6 +2635,26 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             url = nil
         }
         return url?.isEmpty == false ? url : nil
+    }
+
+    /// The first time a service plays in a WebKit page (docs/protected-media.md), once per service
+    /// ever: "Spotify plays with Safari's engine", and Why? opens the Site Control Center, which
+    /// says what that means. A moment after the page shows, so it isn't lost in the tab switch.
+    private func tellAboutProtectedMedia(_ service: String) {
+        let key = "protectedMediaToldServices"
+        var told = UserDefaults.standard.stringArray(forKey: key) ?? []
+        guard !told.contains(service), window?.isVisible == true else { return }
+        told.append(service)
+        UserDefaults.standard.set(told, forKey: key)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+            guard let self, let id = self.browsers.visibleTabID, self.sidebarUI.navState(for: id).protectedMedia == service else {
+                // Gone before it could be said: next time.
+                UserDefaults.standard.set((UserDefaults.standard.stringArray(forKey: key) ?? []).filter { $0 != service }, forKey: key)
+                return
+            }
+            self.showToast("\(service) plays with Safari's engine",
+                           action: ShinyToast.Action(title: "Why?") { [weak self] in self?.showToolbarExtensionsMenu() })
+        }
     }
 
     /// Arc's toast at the top right of the page (ShinyToast): Cra's confirmations.

@@ -93,4 +93,5 @@ final class PictureInPictureChrome {
 /// is what PageEngines and BrowserManager decide on.
 final class WebKitBrowser: CraBrowser {
     var isContentFullscreen = false
+    var serviceName = ""
 }
