@@ -246,7 +246,8 @@ final class ExtensionStore {
         let options = (m["options_ui"] as? [String: Any])?["page"] as? String ?? m["options_page"] as? String
         // A path or {size: path} (React DevTools' grey "disabled" icon until a page uses React).
         let actionIcons = action?["default_icon"] as? [String: String] ?? (action?["default_icon"] as? String).map { ["16": $0] }
-        return Entry(id: id, name: title.isEmpty ? id : title, version: str("version"), description: str("description"), url: dir,
+        let description = ExtensionImporter.localizedDescription(manifest: m, folder: dir)
+        return Entry(id: id, name: title.isEmpty ? id : title, version: str("version"), description: description, url: dir,
                      extensionID: extensionID ?? chromiumID(key: m["key"] as? String, folder: dir),
                      icon: actionIcons.flatMap { ExtensionImporter.icon(manifest: ["icons": $0], folder: dir, minPixels: 16) }
                         ?? ExtensionImporter.icon(manifest: m, folder: dir, minPixels: 16),
