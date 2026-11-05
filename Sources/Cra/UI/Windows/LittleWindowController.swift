@@ -183,7 +183,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             ?? LittleMetrics.defaultSize
         let window = LittleWindow(contentRect: NSRect(origin: .zero, size: size),
                                   styleMask: parent != nil ? [.borderless]
-                                      : [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+                                      : [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView, .nonactivatingPanel],
                                   backing: .buffered, defer: false)
         shell = LittleShellView(frame: window.contentView!.bounds)
         super.init(window: window)
@@ -230,6 +230,11 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             window.standardWindowButton(.miniaturizeButton)?.isHidden = true
             window.standardWindowButton(.zoomButton)?.isHidden = true
         } else {
+            // Little Arc is a non-activating panel (AX subrole AXSystemDialog), so it opens over
+            // the app in front even when that app is full screen (#186). An ordinary window can't
+            // join another app's full-screen Space: macOS switched to the desktop to show it.
+            // Primary keeps the page's own full screen.
+            window.collectionBehavior = [.fullScreenPrimary, .fullScreenAuxiliary]
             placeWindow()
         }
 
@@ -311,6 +316,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         window.addChildWindow(w, ordered: .above)
         positionHostWindow(shell.convert(shell.page.frame, to: nil))
         w.orderFront(nil)
+        rejoinPage()
         // The command bar and the spaces popup stay above the page window.
         if commandPanel.parent === window { window.removeChildWindow(commandPanel); window.addChildWindow(commandPanel, ordered: .above) }
     }
@@ -335,6 +341,26 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         guard let b = browser else { return }
         if let w = b.hostWindow, w.parent === window { w.makeKey() }
         b.setFocused(true)
+    }
+
+    /// Shows the window without making it key (a link opened in the background).
+    func orderFrontInBackground() {
+        window?.orderFront(nil)
+        rejoinPage()
+    }
+
+    /// The page window is an ordinary window, which can't join another app's full-screen
+    /// Space: shown before this window, or by Chromium before it hands it over, it lands on the
+    /// desktop, and making it key switched Spaces (#186). Ordered in again as this window's
+    /// child, it joins this window's Space.
+    private func rejoinPage() {
+        guard let window, window.isVisible, window.isOnActiveSpace,
+              let host = browser?.hostWindow, host.parent === window, !host.isOnActiveSpace else { return }
+        window.removeChildWindow(host)
+        host.orderOut(nil)
+        window.addChildWindow(host, ordered: .above)
+        host.orderFront(nil)
+        if commandPanel.parent === window { window.removeChildWindow(commandPanel); window.addChildWindow(commandPanel, ordered: .above) }
     }
 
     /// Where the window lands: centred on the screen under the pointer, cascaded
@@ -370,6 +396,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         if let host, host.parent === window { host.alphaValue = 0 }   // orderOut would detach the child
         window.setFrame(start, display: false)
         window.makeKeyAndOrderFront(nil)
+        rejoinPage()
         NSApp.activate(ignoringOtherApps: true)
         // NSWindow frame animation (animationResizeTime is overridden to 120 ms).
         window.setFrame(final, display: true, animate: true)
@@ -1210,7 +1237,9 @@ final class LittleShellView: NSView {
 
 /// Traffic lights at Arc's spots (x 17/39/61, centred on the strip), always in
 /// colour like the main window.
-final class LittleWindow: NSWindow {
+/// A panel like Little Arc's, so it can open on another app's full-screen Space (#186), that
+/// otherwise acts as the window it was: main when titled, Escape left to the page and the app.
+final class LittleWindow: NSPanel {
     /// Window buttons stay coloured while inactive (see CraWindow).
     @objc(_hasActiveAppearanceForStandardWindowButton:)
     func hasActiveAppearance(forStandardWindowButton type: UInt) -> Bool { true }
@@ -1218,6 +1247,21 @@ final class LittleWindow: NSWindow {
     override func animationResizeTime(_ newFrame: NSRect) -> TimeInterval { LittleMetrics.openDuration }
     /// A Peek is borderless (Arc's card has no title bar) but still takes the keyboard.
     override var canBecomeKey: Bool { true }
+    /// A panel never becomes main; a titled window did, and the browser window's active look
+    /// and the page's hover state follow the main window.
+    override var canBecomeMain: Bool { styleMask.contains(.titled) }
+    /// NSPanel closes itself on Escape; a window passes it on.
+    override func cancelOperation(_ sender: Any?) {
+        nextResponder?.tryToPerform(#selector(cancelOperation(_:)), with: sender)
+    }
+    /// A non-activating panel takes clicks without bringing Cra forward; a window brings it.
+    override func sendEvent(_ event: NSEvent) {
+        if styleMask.contains(.nonactivatingPanel), !NSApp.isActive,
+           [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(event.type) {
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        super.sendEvent(event)
+    }
 
     /// macOS's corner radius for this window (16 pt on macOS 26, larger than Arc's
     /// 10), read from the frame view's private `_cornerRadius`.

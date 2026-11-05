@@ -3120,3 +3120,21 @@ Arc Max's renameDownloads: a finished download is renamed on disk and a card abo
 - Cra: TidyDownloads (CraCore: prompt with Cra's own examples, the name's checks, a free name), TidyDownloadsService
   (FoundationModels, renames the file, DownloadHistory.move, revert), DownloadRenameCard (SidebarView, over the bin).
   Settings ▸ Max ▸ Tidy Downloads, off by default.
+
+## Little Arc over a full-screen app (Arc 1.171, 5 Nov 2026, issue #186, Victor's Arc + a test full-screen app)
+
+- [O] With another app full screen on its own Space, `open -a Arc https://example.com/…` (a link from another app)
+  opened Little Arc on that full-screen Space (CGSCopySpacesForWindows: the full-screen Space, type 4), and the
+  active Space stayed there. Cra 0.1.30 switched to the desktop Space (type 0) and opened the Little Window there.
+- [O AX] Little Arc's AX subrole is `AXSystemDialog` at window level 0, with no window buttons among its AX
+  children (an `AXCloseButton` attribute is still there). In AppKit only a titled `NSPanel` with
+  `.nonactivatingPanel` reports that subrole (NSWindow: AXStandardWindow; NSPanel: AXDialog; utility panel:
+  AXFloatingWindow; borderless: AXUnknown).
+- [O, stand-in app] Why it matters: an ordinary window can't join another app's full-screen Space. With `.fullScreenAuxiliary`,
+  `.moveToActiveSpace`, `.canJoinAllApplications` (macOS 13) or no activation at all, a stand-in app's new window
+  still landed on the desktop. A titled non-activating `NSPanel` with `.fullScreenAuxiliary` lands on the full-screen
+  Space, and `NSApp.activate` afterwards doesn't switch Spaces. With `.fullScreenPrimary` added it still enters
+  its own full screen (page video).
+- [O, Cra test copy] Child windows: a child ordered in before its parent is on screen, or shown by its owner before it was
+  attached (Chromium's page window), stays on the desktop Space. Making it key then switches Spaces. Ordering it
+  out and adding it again as a child, after the parent is on screen, puts it on the parent's Space.

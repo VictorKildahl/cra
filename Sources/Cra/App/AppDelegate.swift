@@ -492,7 +492,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @discardableResult
     func openLittleWindow(url: String, activate: Bool = true, opener: CraBrowser? = nil, space: UUID? = nil) -> LittleWindowController {
         let w = makeLittleWindow(url: url, opener: opener, space: space)
-        if activate { w.show() } else { w.window?.orderFront(nil) }
+        if activate { w.show() } else { w.orderFrontInBackground() }
         return w
     }
 
@@ -538,8 +538,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let comps = URLComponents(url: u, resolvingAgainstBaseURL: false)
         func q(_ name: String) -> String? { comps?.queryItems?.first { $0.name == name }?.value }
         // Actions keep their target: a key Little Window stays key (perform routes to it).
-        // A background test instance (CRA_TEST_BACKGROUND) never comes to the front.
-        if (u.host != "action" || keyLittleWindow == nil) && !HitchMonitor.background {
+        // A background test instance (CRA_TEST_BACKGROUND) never comes to the front. A Little
+        // Window opens on the Space in use, so the browser window stays where it is (#186).
+        let little = u.host == "open" && q("little") == "1"
+        if (u.host != "action" || keyLittleWindow == nil) && !little && !HitchMonitor.background {
             main.showWindow(nil)
             NSApp.activate(ignoringOtherApps: true)
         }
@@ -559,7 +561,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // space=<id> (#168): a real, normal space, as Air Traffic Control routes to; an unknown
             // or incognito one opens where it did before, in the space in use.
             let space = q("space").flatMap(UUID.init(uuidString:)).flatMap { store.space($0) != nil && !store.isIncognito(space: $0) ? $0 : nil }
-            if q("little") == "1" {
+            if little {
                 openLittleWindow(url: url, space: space)
             } else if let space {
                 // Held: useNormalWindow(forSpace:) can change which window is main.
