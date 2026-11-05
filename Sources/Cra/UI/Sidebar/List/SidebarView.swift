@@ -71,6 +71,7 @@ final class SidebarView: NSView {
         let toast = actions.showToast
         let ui = self.ui
         v.onClose = { service.dismiss() }
+        v.onHover = { service.hold($0) }
         v.onOpen = { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: r.newPath)]) }
         v.onRevert = {
             let ok = service.revert(r) { _, back in
