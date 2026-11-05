@@ -28,12 +28,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private(set) var littleWindows: [LittleWindowController] = []
 
     /// Shortcuts the app takes before the web page sees them (Chrome calls
-    /// these reserved). Everything else goes to the page first.
+    /// these reserved). Everything else goes to the page first. Copy URL is reserved like Arc:
+    /// Google Docs takes ⇧⌘C for its word count (GitHub #194).
     static let reservedActions: Set<String> = Set([
         "newTab", "newWindow", "newIncognitoWindow", "closeTab", "closeWindow", "reopenClosedTab", "editURL", "toggleSidebar", "toggleToolbar",
         "nextTab", "previousTab", "recentTab", "recentTabBackward", "nextSpace", "previousSpace", "devTools", "jsConsole", "inspectElement",
         "viewArchive", "openLibrary", "settings", "clearToday", "newLittleWindow", "promoteLittleWindow",
-        "addSplitView", "closeSplitPane",
+        "addSplitView", "closeSplitPane", "copyURL", "copyURLMarkdown",
     ] + (1...9).flatMap { ["item\($0)", "space\($0)", "moveTabToSpace\($0)"] })
 
     // MARK: Lifecycle
@@ -893,7 +894,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         perform(id)
     }
 
+    /// Edit → Paste and Match Style (⇧⌘V) sends AppKit's `pasteAsPlainText:`, which text fields and
+    /// WebKit tabs answer themselves. A Chromium page names the same command `pasteAndMatchStyle:`,
+    /// so here, at the end of the responder chain, the menu item reaches it (GitHub #192).
+    private static let chromiumPasteAndMatchStyle = NSSelectorFromString("pasteAndMatchStyle:")
+    private var pageTakingPasteAndMatchStyle: NSResponder? {
+        guard let responder = NSApp.keyWindow?.firstResponder, responder.responds(to: Self.chromiumPasteAndMatchStyle) else { return nil }
+        return responder
+    }
+
+    @objc func pasteAsPlainText(_ sender: Any?) {
+        guard let page = pageTakingPasteAndMatchStyle else { return }
+        NSApp.sendAction(Self.chromiumPasteAndMatchStyle, to: page, from: sender)
+    }
+
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        if item.action == #selector(pasteAsPlainText(_:)) { return pageTakingPasteAndMatchStyle != nil }
         switch item.representedObject as? String {
         case "toggleSidebar": item.title = main.sidebarVisible ? "Hide Sidebar" : "Show Sidebar"
         case "toggleToolbar": item.title = store.settings.showToolbar ? "Hide Toolbar" : "Show Toolbar"
@@ -1253,7 +1269,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         edit.addItem(std("Copy", #selector(NSText.copy(_:)), "c"))
         edit.addItem(item("copyURL")); edit.addItem(item("copyURLMarkdown"))
         edit.addItem(std("Paste", #selector(NSText.paste(_:)), "v"))
-        edit.addItem(std("Paste and Match Style", Selector(("pasteAsPlainText:")), "v", [.command, .shift]))
+        edit.addItem(std("Paste and Match Style", #selector(pasteAsPlainText(_:)), "v", [.command, .shift]))
         edit.addItem(std("Delete", #selector(NSText.delete(_:))))
         edit.addItem(std("Select All", #selector(NSText.selectAll(_:)), "a"))
         edit.addItem(.separator())
