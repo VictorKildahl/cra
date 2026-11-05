@@ -802,7 +802,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         hoverAt(event?.locationInWindow)
     }
 
-    private func refreshHover() {
+    fileprivate func refreshHover() {
         guard let w = window else { return }
         let p = w.mouseLocationOutsideOfEventStream
         let inside = document.visibleRect.contains(document.convert(p, from: nil)) && w.isVisible
@@ -1164,14 +1164,35 @@ final class SpaceListDocument: NSView {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         for t in trackingAreas where t.owner === self { removeTrackingArea(t) }
-        // activeAlways: the key window is often a page, not the sidebar's.
-        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
-                                       owner: self, userInfo: nil))
+        // activeAlways: the key window is often a page, not the sidebar's. A new area under the
+        // pointer gets no mouseEntered, so without assumeInside it never sends the mouseExited
+        // either (SidebarGlyphButton does the same).
+        var options: NSTrackingArea.Options = [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect]
+        if pointerIsOver { options.insert(.assumeInside) }
+        addTrackingArea(NSTrackingArea(rect: .zero, options: options, owner: self, userInfo: nil))
+    }
+
+    /// The pointer is on the list's visible part, and a click there would land in this window.
+    private var pointerIsOver: Bool {
+        guard let w = window, w.isVisible, !NSApp.isHidden,
+              visibleRect.contains(convert(w.mouseLocationOutsideOfEventStream, from: nil)) else { return false }
+        return NSWindow.windowNumber(at: NSEvent.mouseLocation, belowWindowWithWindowNumber: 0) == w.windowNumber
     }
 
     override func mouseEntered(with event: NSEvent) { isMouseInside = true; list?.pointerMoved(event) }
     override func mouseMoved(with event: NSEvent) { isMouseInside = true; list?.pointerMoved(event) }
-    override func mouseExited(with event: NSEvent) { isMouseInside = false; list?.pointerMoved(nil) }
+    override func mouseExited(with event: NSEvent) {
+        // AppKit sends stray exits while the pointer rests on the list, as a row's buttons show
+        // under it. The row lost its hover and hid its ✕ just as the pointer reached it (#196).
+        // Keep the hover, and re-arm the area so the real exit still comes.
+        if pointerIsOver {
+            updateTrackingAreas()
+            list?.refreshHover()
+            return
+        }
+        isMouseInside = false
+        list?.pointerMoved(nil)
+    }
 
     // Right-click on empty list space; rows have their own menus.
     override func menu(for event: NSEvent) -> NSMenu? { list?.listMenu() }
