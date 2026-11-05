@@ -3141,3 +3141,24 @@ Arc Max's renameDownloads: a finished download is renamed on disk and a card abo
 - [O, Cra test copy] Child windows: a child ordered in before its parent is on screen, or shown by its owner before it was
   attached (Chromium's page window), stays on the desktop Space. Making it key then switches Spaces. Ordering it
   out and adding it again as a child, after the parent is on screen, puts it on the parent's Space.
+
+## Little Arc's ⌥⌘N from any app, Capture scrolling, and clicks on a Peek's bar (Arc 1.171, 5 Nov 2026, issue #195)
+
+- [O strings] Arc registers Little Arc's shortcut as a system-wide hot key: `GlobalHotkeyListenerClient.registerLittleBrowserShortcut`,
+  a Carbon `RegisterEventHotKey` (`EventHotKeyID`, "Failed to register hotkey."), behind the setting
+  `globalLittleBrowserHotkeyEnabled` ("Open Little Arc when I press ⌥⌘N", `onToggleGlobalLittleBrowserHotkey`). It is on by
+  default (not in Victor's defaults; Arc's help and guides say ⌥⌘N works from any app). Cra: GlobalHotkey (Carbon, no
+  Accessibility permission) registers New Little Window's binding while Settings ▸ Tabs ▸ Links "Open a Little Window when I
+  press ⌥⌘N in any app" is on (GlobalShortcut in CraCore: only chords with ⌘, ⌃ or ⌥). A background test copy registers none.
+  Checked in a test copy: ⌥⌘N with VS Code in front opened an empty Little Window with its command bar.
+- [reporter] Arc's Capture lets the page scroll under it. Cra's draws over a picture of the page, so while choosing it now
+  sends the wheel to the page (`Input.dispatchMouseEvent` mouseWheel, points to CSS pixels by the page's devicePixelRatio,
+  40 px per wheel line) and takes the picture again as it moves (one at a time, and once more 0.25 s after the last event for
+  smooth scrolling and momentum). Checked: 25 HID wheel steps scrolled a long page 1000 px with the mode on, the grey picture
+  following. WebKit pages don't scroll under it (no Input domain there).
+- [O, Cra test copy] Why a Peek's Back, Forward and Refresh (and Little Window's strip) did nothing: the page is a Chromium child
+  window of the Little Window. With it key, a HID press on the bar reached the button but the release never reached the app (no
+  local monitor saw it), and the buttons act on the release. The main window avoids this for its own children by making the
+  window under a press key first (installChildClickMonitor), but a Peek's page is a grandchild of the browser window, and a
+  Little Window has no such monitor. LittleWindow.sendEvent now does the same for its children. A press while the browser
+  window itself was key always worked (its monitor made the Peek key), which is why it looked intermittent.

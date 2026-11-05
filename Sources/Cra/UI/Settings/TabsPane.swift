@@ -35,6 +35,9 @@ struct TabsPane: View {
             // Arc." with an "Air Traffic Control…" button.
             SettingsFormRow(label: "Links:") {
                 SettingsCheckbox(title: "Links from other apps open in a Little Window", isOn: $store.settings.openExternalLinksInLittleWindow)
+                // Arc's "Open Little Arc when I press ⌥⌘N" (#195): New Little Window's shortcut from any app.
+                SettingsCheckbox(title: "Open a Little Window when I press \(KeyBindingRegistry.shared.action("newLittleWindow")?.primary?.display ?? "⌥⌘N") in any app",
+                                 isOn: $store.settings.littleWindowShortcutEverywhere)
                 SettingsCheckbox(title: "Open a Peek window when clicking on links to other sites", isOn: $store.settings.peekLinksToOtherSites)
                 SettingsCheckbox(title: "In every tab, not only Favorites and Pinned tabs", isOn: $store.settings.peekInEveryTab)
                     .disabled(!store.settings.peekLinksToOtherSites)

@@ -1280,6 +1280,14 @@ final class LittleWindow: NSPanel {
            [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(event.type) {
             NSApp.activate(ignoringOtherApps: true)
         }
+        // The page is a Chromium child window. With it key, a press on the bar reached the button
+        // but its release never came, so Back, Forward, Refresh, the address and "Open in" did
+        // nothing (GitHub #195). The browser window makes the window under a click key first for
+        // its own children (MainWindowController.installChildClickMonitor); this window does too.
+        if [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(event.type), !isKeyWindow, canBecomeKey,
+           NSApp.isActive, NSApp.keyWindow?.parent === self {
+            makeKey()
+        }
         super.sendEvent(event)
     }
 

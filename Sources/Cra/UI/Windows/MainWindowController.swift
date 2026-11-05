@@ -1605,7 +1605,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         return w.convertToScreen(view.convert(view.bounds, to: nil))
     }
 
-    private static func screenshotImage(_ shot: String?) -> CGImage? {
+    static func screenshotImage(_ shot: String?) -> CGImage? {
         guard let shot, let o = try? JSONSerialization.jsonObject(with: Data(shot.utf8)) as? [String: Any],
               let b64 = o["data"] as? String, let png = Data(base64Encoded: b64),
               let source = CGImageSourceCreateWithData(png as CFData, nil) else { return nil }

@@ -475,6 +475,9 @@ public struct AppSettings: Codable, Equatable {
     /// Arc's "Open a Peek window when clicking on links with Shift held"
     /// (shiftClickModalEntryPointEnabled).
     public var peekOnShiftClick: Bool = true
+    /// Arc's "Open Little Arc when I press ⌥⌘N" (globalLittleBrowserHotkeyEnabled, on by default):
+    /// New Little Window's shortcut works from every app, full-screen ones too (GitHub #195).
+    public var littleWindowShortcutEverywhere: Bool = true
     /// GitHub #183, not in Arc (Chrome's way): a page's "Open Link in New Tab" leaves the page in
     /// front and the new tab loading behind it (LinkMenu). Off like Arc, which switches to it.
     public var openLinksInBackground: Bool = false
@@ -684,6 +687,7 @@ extension AppSettings {
         peekLinksToOtherSites = try c.decodeIfPresent(Bool.self, forKey: .peekLinksToOtherSites) ?? true
         peekInEveryTab = try c.decodeIfPresent(Bool.self, forKey: .peekInEveryTab) ?? false
         peekOnShiftClick = try c.decodeIfPresent(Bool.self, forKey: .peekOnShiftClick) ?? true
+        littleWindowShortcutEverywhere = try c.decodeIfPresent(Bool.self, forKey: .littleWindowShortcutEverywhere) ?? true
         openLinksInBackground = try c.decodeIfPresent(Bool.self, forKey: .openLinksInBackground) ?? false
         folderPreviews = try c.decodeIfPresent(Bool.self, forKey: .folderPreviews) ?? true
         hapticFeedbackOnReorder = try c.decodeIfPresent(Bool.self, forKey: .hapticFeedbackOnReorder) ?? true
