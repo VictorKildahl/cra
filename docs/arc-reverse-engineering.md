@@ -910,7 +910,9 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
   in Split View, Duplicate, Move to, New Folder with 2 Items, Archive Tabs…).
 - [?] Not measured: the drag-over fill on a dark theme, coloured dark themes (the star's colour there), 1x.
 - Cra: FavoritesEmptyCard, dismissed per favorites container (WindowPrefs.favoritesEmptyStateDismissed, since
-  Cra's favorites are per space). Badge, title, subtitle and × land within 1 px of Arc's at 2x.
+  Cra's favorites are per space). Badge, title, subtitle and × land within 1 px of Arc's at 2x. The dashed line
+  runs on the fill's outer point, not just outside it: the card sits at the top of the space pager, which clips,
+  so a line outside the fill lost its top edge.
 
 ### Space header row (Arc 1.171, live, 1 Nov, issue #39)
 - [O] At rest: the space icon, then the title; nothing else. A space with an emoji shows it (the issue's

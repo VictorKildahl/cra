@@ -845,7 +845,7 @@ final class FavoritesDropStrip: FavoritesDropTarget {
 /// "Drag to add Favorites" and a line on what they are, in the space's own ink. It takes a dragged
 /// tab, and its × (sidebarFavoritesEmptyStateDismissButton) closes it for good. Measured at 2x:
 /// the fill sits where the first tile would (8 pt in, 12 pt corners) and is 93.5 pt tall; a 1 pt
-/// dashed line (5.5 on, 4.5 off) runs just outside it; the header goes 4 pt further down than
+/// dashed line (5.5 on, 4.5 off) runs just outside it (in Cra, on its edge: see layout); the header goes 4 pt further down than
 /// under a row of tiles. No hover state; a tab dragged over it makes the line solid, lightens the
 /// fill and dims the rest to half.
 final class FavoritesEmptyCard: FavoritesDropTarget {
@@ -927,7 +927,10 @@ final class FavoritesEmptyCard: FavoritesDropTarget {
         fill.frame = bounds
         border.frame = bounds
         fill.path = CGPath(roundedRect: card, cornerWidth: 12, cornerHeight: 12, transform: nil)
-        border.path = CGPath(roundedRect: card.insetBy(dx: -0.5, dy: -0.5), cornerWidth: 12.5, cornerHeight: 12.5, transform: nil)
+        // Arc's line runs just outside the fill, but the card sits at the top of the space pager,
+        // which clips its pages for swipes, so a line outside the fill loses its top edge. It runs
+        // on the fill's outer point instead, 1 pt in from Arc's.
+        border.path = CGPath(roundedRect: card.insetBy(dx: 0.5, dy: 0.5), cornerWidth: 11.5, cornerHeight: 11.5, transform: nil)
         content.frame = card
         // Arc's centres and frames, from the fill's top-left: badge centre 19.75 pt down, title 33.5–49.5,
         // subtitle 53–83 (two 15 pt lines, 150 pt wide), × centred 15 pt in from the top-right corner.
