@@ -67,7 +67,7 @@ final class DownloadRenameCard: NSView {
 
     /// Arc drew it navy on a dark space; a light space's card is white (Arc's Max picture), not measured.
     private func style() {
-        let blue = NSColor(srgbRed: 0x34 / 255, green: 0x3B / 255, blue: 0xD1 / 255, alpha: 1)
+        let blue = NSColor(hex: dark ? "#929BFF" : "#343BD1")
         shape.fillColor = (dark ? NSColor(srgbRed: 0x03 / 255, green: 0x06 / 255, blue: 0x1F / 255, alpha: 1) : .white).cgColor
         shape.shadowColor = NSColor.black.cgColor
         shape.shadowOpacity = dark ? 0 : 0.12
@@ -106,13 +106,14 @@ final class DownloadRenameCard: NSView {
         // ↶ and ✕ centred 47 and 21 pt in from the right, 17 pt down.
         close.frame = NSRect(x: w - 21 - 13, y: 17 - 13, width: 26, height: 26)
         revert.frame = NSRect(x: w - 47 - 13, y: 17 - 13, width: 26, height: 26)
-        // The strike runs through the old name's lower-case middle.
+        // The text field truncates long names. Keep the animated strike inside its text area too.
         let f = oldName.font ?? .systemFont(ofSize: 12)
         let ink = (oldName.stringValue as NSString).size(withAttributes: [.font: f]).width
+        let textFrame = oldName.frame.insetBy(dx: SidebarText.inset, dy: 0)
         let midY = 50 + f.capHeight - f.xHeight / 2
         let line = CGMutablePath()
-        line.move(to: CGPoint(x: 13, y: midY))
-        line.addLine(to: CGPoint(x: 13 + ink, y: midY))
+        line.move(to: CGPoint(x: textFrame.minX, y: midY))
+        line.addLine(to: CGPoint(x: textFrame.minX + min(ink, textFrame.width), y: midY))
         strike.path = line
         strike.frame = bounds
         sparkles.frame = bounds

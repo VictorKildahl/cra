@@ -1057,8 +1057,10 @@ final class LibraryButtonView: NSView {
         binTip = ArcTooltipAnchorView(frame: .zero)
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.cornerRadius = 7
-        layer?.cornerCurve = .continuous
+        // Round the glyph's hover fill. Rounding the button itself clips the overhanging thumbnail.
+        glyph.wantsLayer = true
+        glyph.layer?.cornerRadius = 7
+        glyph.layer?.cornerCurve = .continuous
         glyph.imageScaling = .scaleNone
         glyph.image = LibraryGlyph.image(dark: false)
         addSubview(glyph)
@@ -1069,7 +1071,7 @@ final class LibraryButtonView: NSView {
         binImage.cornerRadius = 8
         binImage.cornerCurve = .continuous
         binImage.masksToBounds = true
-        binImage.contentsGravity = .resizeAspectFill
+        binImage.contentsGravity = .resizeAspect
         bin.layer?.addSublayer(binImage)
         bin.addSubview(binTip)
         bin.isHidden = true
@@ -1115,7 +1117,7 @@ final class LibraryButtonView: NSView {
     }
 
     private func refresh() {
-        layer?.backgroundColor = (hovering ? colors.hoverFill : .clear).cgColor
+        glyph.layer?.backgroundColor = (hovering ? colors.hoverFill : .clear).cgColor
     }
 
     override func layout() {

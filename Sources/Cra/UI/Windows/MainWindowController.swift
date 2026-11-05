@@ -708,10 +708,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                                                    scale: window?.backingScaleFactor ?? 2, representationTypes: .thumbnail)
         let id = download.identifier
         QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { [weak self] thumbnail, _ in
-            guard let image = thumbnail?.nsImage else { return }
+            let image = thumbnail?.nsImage
             DispatchQueue.main.async {
                 guard let self, var recent = self.sidebarUI.recentDownload, recent.id == id else { return }
-                recent.image = image
+                // The first progress update can lack a filename. Use the finished file's Finder
+                // icon if Quick Look has no preview, including after Tidy Downloads renamed it.
+                recent.image = image ?? NSWorkspace.shared.icon(forFile: recent.path)
                 self.sidebarUI.recentDownload = recent
             }
         }
