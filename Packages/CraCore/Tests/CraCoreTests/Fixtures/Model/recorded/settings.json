@@ -42,6 +42,7 @@
   "newTabButtonAtTop" : false,
   "newTabButtonDefaultMigrated" : true,
   "newTabsAtTop" : false,
+  "openLinksInBackground" : true,
   "peekInEveryTab" : true,
   "peekLinksToOtherSites" : false,
   "peekOnShiftClick" : false,

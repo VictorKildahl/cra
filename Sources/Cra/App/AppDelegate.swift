@@ -176,6 +176,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         observeContentBlocking()
         observeHttpsOnly()
+        observeLinkMenu()
         logSecureDNS()
     }
 
@@ -228,6 +229,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             setting.refresh()
             guard let line = setting.inEffect?.line else { return }
             if line != last { last = line; CraLog.note("secure dns: " + line) }
+        }
+    }
+
+    /// Settings ▸ Tabs ▸ "Open links in new tabs in the background" (GitHub #183): the page
+    /// context menu's two open-link items (LinkMenu), read when the next menu opens.
+    private func observeLinkMenu() {
+        observeChanges(of: { [store] in store.settings.openLinksInBackground }) { background in
+            let items = LinkMenu.items(openLinksInBackground: background)
+            CraCEFRuntime.setLinkMenuTitles(items.map(\.title), opensInBackground: items.map { NSNumber(value: $0.opensInBackground) })
         }
     }
 

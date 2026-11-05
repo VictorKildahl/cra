@@ -85,6 +85,9 @@ static CefString CefStringFromNS(NSString* s) {
 
 /// Page context menus shown by Cra (RunContextMenu) instead of Chrome.
 static BOOL g_ownContextMenus = NO;
+// The two "open link" items on a page's context menu, from CraCore's LinkMenu (GitHub #183).
+static NSArray<NSString*>* g_linkMenuTitles = @[@"Open Link in New Tab", @"Open Link in Background Tab"];
+static NSArray<NSNumber*>* g_linkMenuBackground = @[@NO, @YES];
 
 /// Page.addScriptToEvaluateOnNewDocument params every page browser gets once it exists
 /// (the page's world, then Cra's isolated world).
@@ -140,8 +143,8 @@ static NSMenu* CraMenuFromModel(CefRefPtr<CefMenuModel> model, CraMenuPick* pick
 }
 
 enum CraMenuCommand {
-    kMenuOpenLinkInNewTab = MENU_ID_USER_FIRST + 1,
-    kMenuOpenLinkInBackgroundTab,
+    kMenuOpenLinkFirst = MENU_ID_USER_FIRST + 1,
+    kMenuOpenLinkSecond,
     kMenuCopyLink,
     kMenuInspectElement,
     kMenuOpenImageInNewTab,
@@ -1590,8 +1593,11 @@ public:
                              CefRefPtr<CefContextMenuParams> params, CefRefPtr<CefMenuModel> model) override {
         size_t index = 0;
         if (!params->GetLinkUrl().empty()) {
-            model->InsertItemAt(index++, kMenuOpenLinkInNewTab, "Open Link in New Tab");
-            model->InsertItemAt(index++, kMenuOpenLinkInBackgroundTab, "Open Link in Background Tab");
+            model->InsertItemAt(index++, kMenuOpenLinkFirst, g_linkMenuTitles[0].UTF8String);
+            model->InsertItemAt(index++, kMenuOpenLinkSecond, g_linkMenuTitles[1].UTF8String);
+            // Chrome-style menus carry Chrome's own "Open Link in New Tab" further down, which
+            // always opens in the background: one item by that name, the one the setting rules (#183).
+            model->Remove(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB);
             model->InsertItemAt(index++, kMenuCopyLink, "Copy Link");
             model->InsertSeparatorAt(index++);
         }
@@ -1617,11 +1623,10 @@ public:
         CraBrowser* o = owner_;
         if (!o) return false;
         switch (command_id) {
-            case kMenuOpenLinkInNewTab:
-                [o.delegate browser:o requestsNewTabWithURL:NSStringFromCef(params->GetLinkUrl()) inBackground:NO];
-                return true;
-            case kMenuOpenLinkInBackgroundTab:
-                [o.delegate browser:o requestsNewTabWithURL:NSStringFromCef(params->GetLinkUrl()) inBackground:YES];
+            case kMenuOpenLinkFirst:
+            case kMenuOpenLinkSecond:
+                [o.delegate browser:o requestsNewTabWithURL:NSStringFromCef(params->GetLinkUrl())
+                       inBackground:g_linkMenuBackground[command_id - kMenuOpenLinkFirst].boolValue];
                 return true;
             case kMenuOpenImageInNewTab:
                 [o.delegate browser:o requestsNewTabWithURL:NSStringFromCef(params->GetSourceUrl()) inBackground:NO];
@@ -2465,6 +2470,11 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 
 + (void)setChromeHosting:(BOOL)enabled { g_chromeHosting = enabled; }
 + (void)setOwnContextMenus:(BOOL)enabled { g_ownContextMenus = enabled; }
++ (void)setLinkMenuTitles:(NSArray<NSString*>*)titles opensInBackground:(NSArray<NSNumber*>*)background {
+    if (titles.count != 2 || background.count != 2) return;
+    g_linkMenuTitles = [titles copy];
+    g_linkMenuBackground = [background copy];
+}
 + (void)setDocumentStartScript:(NSString*)script isolatedScript:(NSString*)isolatedScript world:(NSString*)world {
     NSMutableArray<NSString*>* all = [NSMutableArray array];
     for (NSDictionary* params in @[@{@"source": script ?: @"", @"runImmediately": @YES},

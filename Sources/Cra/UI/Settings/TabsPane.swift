@@ -40,6 +40,11 @@ struct TabsPane: View {
                     .disabled(!store.settings.peekLinksToOtherSites)
                     .padding(.leading, 20)
                 SettingsCheckbox(title: "Open a Peek window when clicking on links with Shift held", isOn: $store.settings.peekOnShiftClick)
+                // GitHub #183, Chrome's way and not Arc's: the page stays in front.
+                SettingsCheckbox(title: "Open links in new tabs in the background", isOn: $store.settings.openLinksInBackground)
+                Text("“Open Link in New Tab” keeps the page you’re reading in front. “Open Link in Foreground Tab” and ⇧⌘-click still switch to the new tab.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 8) {
                     Button("Air Traffic Control…") { showsAirTrafficControl = true }
                     Text(routesSummary).font(.system(size: 11)).foregroundStyle(.secondary)

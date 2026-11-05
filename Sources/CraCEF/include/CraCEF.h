@@ -236,6 +236,9 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 + (BOOL)chromeHosting;
 /// Page context menus are shown by Cra, not Chrome (pages embedded in their cards).
 + (void)setOwnContextMenus:(BOOL)enabled;
+/// The two "open link" items at the top of a page's context menu, in order: their titles and
+/// whether each opens its tab in the background. Exactly two; read when a menu opens.
++ (void)setLinkMenuTitles:(NSArray<NSString *> *)titles opensInBackground:(NSArray<NSNumber *> *)background;
 /// Run in every frame of every page browser before the page's own scripts (and once in the
 /// document already loaded): `script` in the page's world, `isolatedScript` in the isolated
 /// world named `world` (invisible to the page). Set before browsers are created.
