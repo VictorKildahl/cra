@@ -312,8 +312,11 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
         guard let url = action.request.url else { return decisionHandler(.allow, preferences) }
         let scheme = url.scheme?.lowercased() ?? ""
         // mailto:, zoommtg:, itms-apps: go to their app, only from a click.
-        if !["http", "https", "about", "blob", "data", "file"].contains(scheme) {
-            if action.navigationType == .linkActivated { NSWorkspace.shared.open(url) }
+        // A web page never opens local files (Chromium's rule; Cra's own file:// pages are Chromium's).
+        if scheme == "file" { return decisionHandler(.cancel, preferences) }
+        if !["http", "https", "about", "blob", "data"].contains(scheme) {
+            // mailto:, zoommtg:, itms-apps: go to their app from a click, after Chrome's "Open <app>?".
+            if action.navigationType == .linkActivated { confirmOpeningApp(for: url) }
             return decisionHandler(.cancel, preferences)
         }
         guard action.navigationType == .linkActivated else { return decisionHandler(.allow, preferences) }
@@ -334,6 +337,21 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
             return decisionHandler(.cancel, preferences)
         }
         decisionHandler(.allow, preferences)
+    }
+
+    /// Chrome's external protocol dialog: the app the link wants, named, before macOS opens it.
+    @MainActor
+    private func confirmOpeningApp(for url: URL) {
+        guard let app = NSWorkspace.shared.urlForApplication(toOpen: url), let window = container.window else { return }
+        let name = FileManager.default.displayName(atPath: app.path).replacingOccurrences(of: ".app", with: "")
+        let alert = NSAlert()
+        alert.messageText = "Open \(name)?"
+        alert.informativeText = "\(webView?.url?.host ?? "This site") wants to open this application."
+        alert.addButton(withTitle: "Open \(name)")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { response in
+            if response == .alertFirstButtonReturn { NSWorkspace.shared.open(url) }
+        }
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor response: WKNavigationResponse,
@@ -970,7 +988,10 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
     func download(_ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String,
                   completionHandler: @escaping @MainActor (URL?) -> Void) {
         let folder = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
-        let name = suggestedFilename.isEmpty ? "download" : suggestedFilename.replacingOccurrences(of: "/", with: "-")
+        // Only a file name in Downloads: no path, no "." or "..", no hidden file.
+        var name = suggestedFilename.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
+        while name.hasPrefix(".") { name.removeFirst() }
+        if name.trimmingCharacters(in: .whitespaces).isEmpty { name = "download" }
         var dest = folder.appendingPathComponent(name)
         let base = dest.deletingPathExtension().lastPathComponent, ext = dest.pathExtension
         var n = 1
