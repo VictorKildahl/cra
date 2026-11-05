@@ -202,6 +202,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let settings = store.settings
         for w in mainWindows {
             w.browsers.freezeIdleTabs(hiddenLongerThan: freezeAfter)
+            w.releaseHiddenFrames(now: composition.clock.now)
             if settings.tabSleepTimerEnabled { w.browsers.sleepIdleTabs(.timer(settings.tabSleepAfter)) }
         }
         sweepForMemoryPressure(PerfSystemSample.pressure(level: PerfSystemSampler.pressureLevel()))
@@ -670,6 +671,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // Scenario hooks (scripts/scenario.sh): what a journey needs without a pointer.
             if dict["checkStore"] != nil { logSidebarProblems(); return }
+            // releaseFrames: hidden tabs' page windows release Chromium's evicted frames now (#195).
+            if dict["releaseFrames"] != nil { for w in mainWindows { w.releaseHiddenFrames(now: composition.clock.now) }; return }
             // A main-thread stall of this many milliseconds, for the performance recorder's tests.
             if let ms = dict["stall"].flatMap(Double.init) { usleep(useconds_t(min(max(ms, 0), 30_000) * 1000)); return }
             if let path = dict["perfReport"] {

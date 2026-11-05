@@ -898,6 +898,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // Hidden pages are not kept in step with the panes, so size this one before it shows.
             positionPageWindows(lastPaneFrames)
             w.contentView?.isHidden = false
+            // Shown while drawing for releaseHiddenFrames: opaque and clickable again now.
+            if releasingFrames.remove(id) != nil {
+                w.alphaValue = 1
+                w.ignoresMouseEvents = false
+            }
             embedPage(id, from: w)
             // Ordering a window that is already showing is a window server round trip too.
             if !w.isVisible { w.orderFront(nil) }
@@ -916,6 +921,39 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             raisePageWindows()
         } else {
             raiseOverlayPanels()
+        }
+    }
+
+    /// Page windows drawing once, hidden, so their last frame lets go of an evicted page (#195).
+    private var releasingFrames: Set<UUID> = []
+
+    /// A hidden tab's page window is ordered out with its compositor suspended, and its last frame
+    /// kept the page's surface, and the page's tiles in the GPU process (~15 MB a tab), alive after
+    /// Chromium evicted it: every tab ever shown kept them. Chrome detaches a background tab from its
+    /// one window instead. Ordered in for a moment, transparent and below this window, the page
+    /// window draws a frame without the page and Chromium frees it (HiddenFrameRelease).
+    func releaseHiddenFrames(now: Date) {
+        let visible = Set(browsers.visibleTabIDs)
+        let hidden = browsers.runtimes.values.compactMap { rt -> HiddenFrameRelease.Tab? in
+            guard let at = rt.hiddenAt, rt.hostWindow != nil, !visible.contains(rt.tabID) else { return nil }
+            return .init(id: rt.tabID, hiddenAt: at, releasedFor: rt.hiddenFrameReleasedFor)
+        }
+        guard let window else { return }
+        for id in HiddenFrameRelease.due(hidden, visible: visible.count, now: now) {
+            guard let rt = browsers.runtime(for: id), let w = rt.hostWindow, !w.isVisible, w.parent == nil,
+                  !releasingFrames.contains(id) else { continue }
+            rt.hiddenFrameReleasedFor = rt.hiddenAt
+            releasingFrames.insert(id)
+            w.alphaValue = 0
+            w.ignoresMouseEvents = true
+            w.order(.below, relativeTo: window.windowNumber)
+            // Two or three frames: the compositor unsuspends, paints and commits.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self, weak w] in
+                guard let self, let w, self.releasingFrames.remove(id) != nil else { return }
+                w.alphaValue = 1
+                w.ignoresMouseEvents = false
+                if !self.browsers.visibleTabIDs.contains(id), w.parent == nil { w.orderOut(nil) }
+            }
         }
     }
 

@@ -662,7 +662,12 @@ public:
             (enabled.empty() ? "" : enabled + ",") + "ForceWebRequestProxyForTest,"
             // Tab sleeping discards a page in place (Cra.discard), as Arc's Chromium does: the tab
             // keeps its back/forward list and scroll position, and loads again when shown (#153).
-            + "WebContentsDiscard");
+            + "WebContentsDiscard,"
+            // A hidden page's frame unlocks, so Chromium can evict it past its saved-frame cap or
+            // after 5 minutes, as Chrome does for background tabs (Cra's are never detached from
+            // their window, which is how Chrome gets there). Cra's page windows then let go of
+            // it (MainWindowController.releaseHiddenFrames, #195).
+            + "HideDelegatedFrameHostMac");
         // Kerberos/NTLM single sign-on (ADFS /adfs/ls/wia and the like). Chromium only sends
         // the OS ticket to allowlisted hosts, and IT sets that list as a Chrome or Edge policy,
         // which CEF never reads. Without it those logins fail with ERR_INVALID_AUTH_CREDENTIALS.

@@ -27,6 +27,8 @@ final class TabRuntime {
     var freezeVoted = false
     /// When the page last went off screen (nil while shown); tab sleeping counts from here.
     var hiddenAt: Date?
+    /// The `hiddenAt` its page window last drew for, so Chromium's evicted frame let go (HiddenFrameRelease, #195).
+    var hiddenFrameReleasedFor: Date?
     /// When the page last started or stopped playing sound; tab sleeping waits as long after it.
     var audibleAt: Date?
     /// Tab sleeping discarded the page in place (Cra.discard): Chromium keeps its history and
