@@ -108,6 +108,7 @@ final class ShinyToast {
         view.layer?.addSublayer(pill)
         view.onHover = { [weak self] inside in self?.hovered(inside) }
         view.onClick = { [weak self] point in self?.clicked(at: point) }
+        view.onMove = { [weak self] point in self?.moved(to: point) }
     }
 
     var isShown: Bool { panel.parent != nil }
@@ -197,7 +198,8 @@ final class ShinyToast {
         if persistent {
             let s = Self.closeSize
             closeButton.frame = CGRect(x: width - (height - s) / 2 - s, y: (height - s) / 2, width: s, height: s)
-            closeButton.backgroundColor = colors.text.withAlphaComponent(0.1).cgColor
+            // Only the glyph at rest; the round fill shows under the pointer (moved(to:)).
+            closeButton.backgroundColor = NSColor.clear.cgColor
             let config = NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold).applying(.init(paletteColors: [colors.text]))
             closeGlyph.contents = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close")?.withSymbolConfiguration(config)
             closeGlyph.contentsScale = scale
@@ -239,6 +241,7 @@ final class ShinyToast {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             if action?.symbol == nil { button.backgroundColor = buttonTint.withAlphaComponent(inside ? 0.16 : 0.1).cgColor }
+            if !inside { closeButton.backgroundColor = NSColor.clear.cgColor }
             CATransaction.commit()
             return
         }
@@ -250,6 +253,17 @@ final class ShinyToast {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         if action?.symbol == nil { button.backgroundColor = buttonTint.withAlphaComponent(inside ? 0.16 : 0.1).cgColor }
+        CATransaction.commit()
+    }
+
+    /// The ✕'s round fill follows the pointer onto it and off it.
+    private func moved(to point: NSPoint) {
+        guard isShown, persistent else { return }
+        let local = NSPoint(x: point.x - Self.margin, y: point.y - Self.margin)
+        let over = closeButton.frame.insetBy(dx: -4, dy: -4).contains(local)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        closeButton.backgroundColor = over ? buttonTint.withAlphaComponent(0.12).cgColor : NSColor.clear.cgColor
         CATransaction.commit()
     }
 
@@ -272,10 +286,9 @@ final class ShinyToast {
             scheduleHide()
             return
         }
-        // Pressing the button shows it was seen, as the ✕ does.
-        let closed = persistent ? onClose : nil
+        // A toast that stays keeps standing through its button (Why?): only the ✕ closes it.
+        if persistent { return action.run() }
         dismiss()
-        closed?()
         action.run()
     }
 
@@ -375,6 +388,8 @@ private final class ToastView: NSView {
     var hitRect: NSRect = .zero { didSet { updateTrackingAreas() } }
     var onHover: (Bool) -> Void = { _ in }
     var onClick: (NSPoint) -> Void = { _ in }
+    /// The pointer over the pill, in this view (the ✕ fills only under it).
+    var onMove: (NSPoint) -> Void = { _ in }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
@@ -386,11 +401,12 @@ private final class ToastView: NSView {
         super.updateTrackingAreas()
         for t in trackingAreas where t.owner === self { removeTrackingArea(t) }
         guard !hitRect.isEmpty else { return }
-        addTrackingArea(NSTrackingArea(rect: hitRect, options: [.mouseEnteredAndExited, .activeAlways], owner: self, userInfo: nil))
+        addTrackingArea(NSTrackingArea(rect: hitRect, options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways], owner: self, userInfo: nil))
     }
 
     override func mouseEntered(with event: NSEvent) { onHover(true) }
     override func mouseExited(with event: NSEvent) { onHover(false) }
+    override func mouseMoved(with event: NSEvent) { onMove(convert(event.locationInWindow, from: nil)) }
     override func mouseDown(with event: NSEvent) {}
     override func mouseUp(with event: NSEvent) { onClick(convert(event.locationInWindow, from: nil)) }
 }

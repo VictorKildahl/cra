@@ -2650,8 +2650,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// The first time a service plays in a WebKit page (docs/protected-media.md): "Spotify plays
     /// with Safari's engine", with Why? (the Site Control Center says what that means). It stays
-    /// until its ✕ or Why? is pressed, so Cra knows it was seen; only then is the service told for
-    /// good. Shown once a session per service: one that went unanswered shows again next launch.
+    /// until its ✕ is pressed, Why? included, so Cra knows it was seen; only then is the service told
+    /// for good. Shown once a session per service: one left open shows again next launch.
     private func tellAboutProtectedMedia(_ service: String) {
         let key = "protectedMediaToldServices"
         guard !(UserDefaults.standard.stringArray(forKey: key) ?? []).contains(service), !offeredProtectedMedia.contains(service),

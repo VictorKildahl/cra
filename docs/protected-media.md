@@ -78,9 +78,11 @@ services pick their DRM by browser.
 
 ## How Cra tells the user
 
-- **Once per service, a toast**: the first time a service's page shows, "Spotify plays with
-  Safari's engine" with a Why? button that opens the Site Control Center. Which services have
-  been announced is kept in the `protectedMediaToldServices` default.
+- **Once per service, a toast that stays**: the first time a service's page shows, "Spotify
+  plays with Safari's engine" with a Why? button that opens the Site Control Center. It has no
+  timer and stays through Why?. Only its ✕ closes it, so Cra knows it was seen; the ✕ shows its
+  round fill only under the pointer. Services whose ✕ was pressed are kept in the
+  `protectedMediaToldServices` default. One left open shows again the next session.
 - **The Site Control Center**: on a WebKit page, a Protected Media card takes the Extensions
   grid's place. It names the service, says why, and lists what that means here: you sign in once,
   extensions don't run, and Web Inspector opens instead of DevTools. Learn more opens
