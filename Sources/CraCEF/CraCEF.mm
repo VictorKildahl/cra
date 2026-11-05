@@ -1193,6 +1193,9 @@ class CraClient : public CefClient,
                   public CefDialogHandler {
 public:
     CraBrowser* owner() { return owner_; }
+    /// Cra closed this page (-[CraBrowser close]). Kept here rather than read from the owner:
+    /// the CraBrowser can be gone before Chromium asks.
+    void SetCloseRequested() { close_requested_ = true; }
     explicit CraClient(CraBrowser* owner) : windowless_(owner.isAgent), owner_(owner), blocker_(new CraContentBlockingHandler(!owner.isAgent)) { CraClientRegistry().insert(static_cast<const void*>(static_cast<CefClient*>(this))); }
     ~CraClient() override { CraClientRegistry().erase(static_cast<const void*>(static_cast<CefClient*>(this))); }
 
@@ -1206,6 +1209,21 @@ public:
     CefRefPtr<CefFocusHandler> GetFocusHandler() override { return this; }
     CefRefPtr<CefPermissionHandler> GetPermissionHandler() override { return this; }
     CefRefPtr<CefFindHandler> GetFindHandler() override { return this; }
+    CefRefPtr<CefJSDialogHandler> GetJSDialogHandler() override { return this; }
+
+    // JS dialogs ----------------------------------------------------------
+
+    // Cra closes pages with CloseBrowser(true), which skips beforeunload. With DevTools docked
+    // Chromium still asked "Leave site?" (a shop with something in its cart): DevTools close
+    // first and the page's beforeunload ran anyway. The tab was already gone, so its page window
+    // stayed over the next tab, and after Cancel it never closed. A page Cra closes leaves.
+    // Normal pages keep Chrome's prompts for everything else; windowless agents never show them.
+    bool OnBeforeUnloadDialog(CefRefPtr<CefBrowser> browser, const CefString& message_text, bool is_reload,
+                              CefRefPtr<CefJSDialogCallback> callback) override {
+        if (!windowless_ && !close_requested_) return false;
+        callback->Continue(true, CefString());
+        return true;
+    }
 
     CefRefPtr<CefRenderHandler> GetRenderHandler() override { return windowless_ ? this : nullptr; }
     void GetViewRect(CefRefPtr<CefBrowser>, CefRect& rect) override { rect = CefRect(0, 0, 1280, 800); }
@@ -1213,14 +1231,11 @@ public:
         // Chromium owns the surface; MCP captures it through Page.captureScreenshot.
     }
 
-    CefRefPtr<CefJSDialogHandler> GetJSDialogHandler() override { return windowless_ ? this : nullptr; }
     CefRefPtr<CefDialogHandler> GetDialogHandler() override { return windowless_ ? this : nullptr; }
     bool OnJSDialog(CefRefPtr<CefBrowser>, const CefString&, JSDialogType, const CefString&,
                     const CefString&, CefRefPtr<CefJSDialogCallback>, bool& suppress) override {
-        suppress = true; return false;
-    }
-    bool OnBeforeUnloadDialog(CefRefPtr<CefBrowser>, const CefString&, bool, CefRefPtr<CefJSDialogCallback> callback) override {
-        callback->Continue(true, CefString()); return true;
+        if (windowless_) suppress = true;
+        return false;
     }
     bool OnFileDialog(CefRefPtr<CefBrowser>, FileDialogMode, const CefString&, const CefString&,
                       const std::vector<CefString>&, const std::vector<CefString>&,
@@ -1858,6 +1873,7 @@ private:
     CefRefPtr<CraIgnoreAgentPermission> agent_permission_;
     const bool windowless_;
     __weak CraBrowser* owner_;
+    bool close_requested_ = false;
     CefRefPtr<FaviconState> favicon_ = new FaviconState();
     CefRefPtr<CefResourceRequestHandler> blocker_;
     IMPLEMENT_REFCOUNTING(CraClient);
@@ -2596,6 +2612,7 @@ static NSView* FindRenderWidgetHostView(NSView* root) {
     }
     if (_isClosed || _parked) return;
     self.closeRequested = YES;
+    if (CraClient* c = _browser ? AsCraClient(_browser->GetHost()->GetClient().get()) : nullptr) c->SetCloseRequested();
     if (_browser && _activeDownloads.count && !g_quitting) {
         [self park];
     } else if (_browser) {

@@ -3119,7 +3119,9 @@ Arc Max's renameDownloads: a finished download is renamed on disk and a card abo
   whether hovering holds it.
 - Cra: TidyDownloads (CraCore: prompt with Cra's own examples, the name's checks, a free name), TidyDownloadsService
   (FoundationModels, renames the file, DownloadHistory.move, revert), DownloadRenameCard (SidebarView, over the bin).
-  Settings ▸ Max ▸ Tidy Downloads, off by default.
+  Settings ▸ Max ▸ Tidy Downloads, off by default. Deviations Victor asked for (5 Nov 2026): the body is 71 pt
+  (the old name's baseline as far from the bottom as the label's cap top from the top), and the card stays while the
+  pointer is on it, then for what was left of its 8 s but at least 3 s.
 
 ## Little Arc over a full-screen app (Arc 1.171, 5 Nov 2026, issue #186, Victor's Arc + a test full-screen app)
 

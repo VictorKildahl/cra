@@ -7,8 +7,11 @@
 <input placeholder="Type here">
 <div id="rows"></div>
 <script>
-  const n = new URLSearchParams(location.search).get('n') || '0';
+  const query = new URLSearchParams(location.search);
+  const n = query.get('n') || '0';
   document.title = 'Fixture ' + n;
+  // ?beforeunload=1: asks "Leave site?" like a shop with something in its cart (once the page had a gesture).
+  if (query.get('beforeunload') === '1') addEventListener('beforeunload', e => { e.preventDefault(); e.returnValue = ''; });
   const rows = document.getElementById('rows');
   for (let i = 0; i < 200; i++) { const d = document.createElement('div'); d.className = 'row'; d.textContent = 'Row ' + i; rows.appendChild(d); }
 </script>

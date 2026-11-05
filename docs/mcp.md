@@ -227,7 +227,7 @@ system fonts and no remote assets.
 
 ## Validation of the local contribution (2026-11-05)
 
-The contribution was rebased onto upstream `ca6877c` and rebuilt with its pinned
+The initial contribution was rebased onto upstream `ca6877c` and rebuilt with its pinned
 CEF bundle. Both normal and separate Dev debug builds pass signature verification.
 Existing unrelated compiler/runtime warnings remain.
 
@@ -262,6 +262,13 @@ The unchanged recorder budget is 0.1% of one CPU core. On the final rebased buil
 stall checks. Earlier repeated runs also passed. The optimization reduces callback
 and process-sampling overhead; `freeDiskBytes` now excludes purgeable data (see
 [performance.md](performance.md)).
+
+Upstream `44adb80` was subsequently merged to incorporate its DevTools close fix.
+The combined dialog handler keeps normal-page prompts and suppresses agent dialogs.
+The normal debug build/signature, complete `scripts/test.sh`, 100-check integration
+and 67-check extended suite passed again. Upstream's `devtools-close-tab` scenario
+also passed, including helper cleanup, memory/stall checks and recorder overhead
+of 0.073% against the unchanged 0.1% budget.
 
 The Settings toggle was also tested with an active client and agent tab: client
 EOF, socket removal, new-client rejection, agent closure and staged-upload cleanup.

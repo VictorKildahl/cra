@@ -2,13 +2,14 @@ import AppKit
 
 /// Arc's Tidy Downloads card (SidebarBanner, "Download renamed to:"), over the sidebar's foot with
 /// its tail on the download bin. Measured on Arc 1.171, 4 Nov 2026 (60 fps, a dark space, 347 pt
-/// sidebar): 8 pt from either side, 65 pt tall plus a 9 pt tail; "Download renamed to:" 12 pt in
+/// sidebar): 8 pt from either side, 65 pt tall plus a 9 pt tail (Cra: 71, so the old name's baseline sits as
+/// far from the bottom as the label's cap top from the top; Victor, 5 Nov 2026); "Download renamed to:" 12 pt in
 /// blue, the new name 14 pt semibold, the old name 12 pt in blue, struck through; revert ↶ and close
 /// ✕ at the top right; four-point sparkles twinkling round it. It springs out of the bin (0.55× to
 /// 1.05× at 0.29 s, settled by 0.55 s), the strike draws in 0.5 s later over 0.15 s, and it shrinks
 /// back into the bin in 0.12 s after 8 s.
 final class DownloadRenameCard: NSView {
-    static let bodyHeight: CGFloat = 65
+    static let bodyHeight: CGFloat = 71
     static let tail: CGFloat = 9
     static var height: CGFloat { bodyHeight + tail }
 
@@ -16,6 +17,8 @@ final class DownloadRenameCard: NSView {
     var onRevert: () -> Void = {}
     var onClose: () -> Void = {}
     var onOpen: () -> Void = {}
+    /// The pointer came onto the card or left it: it stays while hovered.
+    var onHover: (Bool) -> Void = { _ in }
     /// Where the tail points, in the card's coordinates (the bin's top centre).
     var tailX: CGFloat = 33 { didSet { needsLayout = true } }
 
@@ -167,6 +170,11 @@ final class DownloadRenameCard: NSView {
     func appear() {
         layoutSubtreeIfNeeded()
         anchorOnTail()
+        // Under a resting pointer no mouseEntered comes: hold it from the start.
+        if let w = window {
+            let p = convert(w.mouseLocationOutsideOfEventStream, from: nil)
+            if p.y >= 0, p.y <= Self.bodyHeight, p.x >= 0, p.x <= bounds.width { onHover(true) }
+        }
         let spring = CASpringAnimation(keyPath: "transform.scale")
         spring.fromValue = 0.55
         spring.toValue = 1
@@ -208,6 +216,15 @@ final class DownloadRenameCard: NSView {
         layer?.add(g, forKey: "out")
         CATransaction.commit()
     }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for t in trackingAreas where t.owner === self { removeTrackingArea(t) }
+        addTrackingArea(NSTrackingArea(rect: NSRect(x: 0, y: 0, width: bounds.width, height: Self.bodyHeight),
+                                       options: [.mouseEnteredAndExited, .activeAlways], owner: self, userInfo: nil))
+    }
+    override func mouseEntered(with event: NSEvent) { onHover(true) }
+    override func mouseExited(with event: NSEvent) { onHover(false) }
 
     override var mouseDownCanMoveWindow: Bool { false }
     override func mouseDown(with event: NSEvent) {}

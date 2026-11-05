@@ -66,18 +66,51 @@ final class TidyDownloadsService {
         }
     }
 
+    /// When the card goes by itself, and the timer that takes it.
+    @ObservationIgnored private var dismissAt = Date.distantFuture
+    @ObservationIgnored private var dismissal: Task<Void, Never>?
+    /// After the pointer leaves, the card stays at least this long (Victor, 5 Nov 2026: it went while
+    /// he was deciding whether to revert; Arc's hover behaviour wasn't seen).
+    static let afterHover: TimeInterval = 3
+
     private func show(_ r: Rename) {
         card = r
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.cardShown) { [weak self] in
-            if self?.card?.id == r.id { self?.card = nil }
+        schedule(after: Self.cardShown)
+    }
+
+    private func schedule(after delay: TimeInterval) {
+        dismissal?.cancel()
+        dismissAt = Date().addingTimeInterval(delay)
+        let id = card?.id
+        dismissal = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled, let self, self.card?.id == id else { return }
+            self.card = nil
         }
     }
 
-    func dismiss() { card = nil }
+    /// The pointer is on the card: it stays until the pointer leaves, then for what was left of its
+    /// time, but at least `afterHover`.
+    func hold(_ hovering: Bool) {
+        guard card != nil else { return }
+        if hovering {
+            let left = dismissAt.timeIntervalSinceNow
+            dismissal?.cancel()
+            dismissal = nil
+            dismissAt = Date().addingTimeInterval(max(left, 0))
+        } else {
+            schedule(after: max(dismissAt.timeIntervalSinceNow, Self.afterHover))
+        }
+    }
+
+    func dismiss() {
+        dismissal?.cancel()
+        card = nil
+    }
 
     /// Arc's "Revert to original name": the file takes its old name back (or the next free one).
     func revert(_ r: Rename, moved: (String, String) -> Void) -> Bool {
-        card = nil
+        dismiss()
         let fm = FileManager.default
         guard fm.fileExists(atPath: r.newPath) else { return false }
         let folder = (r.oldPath as NSString).deletingLastPathComponent
