@@ -69,7 +69,16 @@ LOG="$DATA/cra.log"
 STARTED="$OUT/started"
 touch "$STARTED"
 # Past onboarding, and nothing taken from this Mac's Arc (its toolbar default) unless asked.
-grep -q '^fresh' "$FILE" || echo '{"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}' > "$DATA/settings.json"
+app_env=(env)
+if [ "$NAME" = "tidy-downloads" ]; then
+  # Use a disposable Downloads folder as well as a disposable browser profile.
+  mkdir -p "$DATA/home/Downloads"
+  app_env+=(CFFIXED_USER_HOME="$DATA/home" CRA_TIDY_FAKE_MODEL=1)
+  echo '{"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "tidyDownloads": true}' > "$DATA/settings.json"
+  echo '{"sidebarWidth": 266}' > "$DATA/windows.json"
+elif ! grep -q '^fresh' "$FILE"; then
+  echo '{"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}' > "$DATA/settings.json"
+fi
 
 PIDS=()
 PID=""
@@ -90,7 +99,7 @@ WEBKIT="http://localhost:${PORT}"
 
 CRA_DATA_DIR="$DATA" CRA_COMMAND_FILE="$CMD" CRA_HITCH_LOG="$HITCH" CRA_TEST_BACKGROUND=1 CRA_WEBKIT_HOSTS=localhost \
   CRA_ARC_DIR="$FIXTURES/Arc" CRA_FLAGS="${CRA_FLAGS:-}" \
-  "$APP/Contents/MacOS/Cra" >"$OUT/stdout.log" 2>&1 &
+  "${app_env[@]}" "$APP/Contents/MacOS/Cra" >"$OUT/stdout.log" 2>&1 &
 PID=$!
 PIDS+=("$PID")
 
