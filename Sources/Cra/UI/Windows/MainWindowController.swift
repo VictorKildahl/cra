@@ -410,7 +410,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // alert and popover it presents, and those follow macOS as Arc's do, whatever the
             // space colour (#171).
             shell.appearance = NSAppearance(named: palette.isDark ? .darkAqua : .aqua)
-            commandPanel?.appearance = shell.appearance
+            // The command bar follows macOS (#187); only its highlight is the space's, also when
+            // the space changes under an open bar.
+            commandBar.highlight = palette.commandHighlight
             // Vibrant themes see through to the desktop like Arc; others are opaque.
             shell.vibrancy.isHidden = !palette.vibrant
             shell.vibrancyLift.isHidden = !palette.vibrant
@@ -2453,9 +2455,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // Always centred in the window, also when opened from the toolbar.
         commandBar.attached = false
         commandBar.panelWidth = min(CraMetrics.commandBarWidth, window.frame.width - 80)
-        // Light or dark with the space's theme, as the sidebar is: a child panel would otherwise
-        // follow macOS, a dark bar over a light space while the Mac runs dark (reported on X).
-        commandPanel.appearance = shell.appearance
+        // The panel keeps no appearance of its own, so it follows macOS like the menus, sheets and
+        // popovers (#171): Arc's bar is dark over a light space while the Mac runs dark (#187).
         positionCommandPanel()
         if commandPanel.parent == nil { window.addChildWindow(commandPanel, ordered: .above) }
         commandBarOpenedAt = Date()
