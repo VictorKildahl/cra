@@ -46,8 +46,7 @@ licence, keys usable, 720p playing). That is the whole requirement.
   wrapper around `navigator.requestMediaKeySystemAccess`), the Site Control Center shows a
   **Safari's Engine** switch. On, the site plays in WebKit from then on and the page reopens there.
   A WebKit page shows it on, so a listed site can be taken back to Chromium the same way
-  (`ProtectedMediaSites.choosing`, kept in `webKitProtectedMediaHosts` and
-  `webKitProtectedMediaRemovedHosts`). They are players, not whole domains, except where nothing else signs in through the service (Max sends `play.max.com` on to `www.hbomax.com` and signs in on its own hosts):
+  (`ProtectedMediaSites.choosing`, kept in the data folder's `protected-media.json`). They are players, not whole domains, except where nothing else signs in through the service (Max sends `play.max.com` on to `www.hbomax.com` and signs in on its own hosts):
   other sites send their "Sign in with Spotify/Tidal/Deezer" through `accounts.spotify.com`,
   `login.tidal.com` and `connect.deezer.com`, and those must finish in the engine they started in.
 - **A page Cra opens** (a tab restored or created, a link opened in a new tab, a Little Window, an
@@ -96,7 +95,7 @@ services pick their DRM by browser.
   plays with Safari's engine" with a Why? button that opens the Site Control Center. It has no
   timer and stays through Why?. Only its ✕ closes it, so Cra knows it was seen; the ✕ shows its
   round fill only under the pointer. Services whose ✕ was pressed are kept in the
-  `protectedMediaToldServices` default. One left open shows again the next session.
+  `told` list of `protected-media.json`. One left open shows again the next session.
 - **The Site Control Center**: on a WebKit page, a Protected Media card takes the Extensions
   grid's place. It names the service, says why, and lists what that means here: you sign in once,
   extensions don't run, and Web Inspector opens instead of DevTools. Learn more opens
@@ -132,10 +131,10 @@ address. A WebKit page signing in on accounts.spotify.com still counts as Spotif
 ## Settings
 
     defaults write dk.kildahl.cra webKitProtectedMedia -bool NO        # every page Chromium's again
-    defaults write dk.kildahl.cra webKitProtectedMediaHosts -array crunchyroll.com
-    defaults write dk.kildahl.cra webKitProtectedMediaRemovedHosts -array netflix.com
 
-They are read at launch. A test instance takes `CRA_WEBKIT_DRM=0|1` and
+The Safari's Engine choices and the closed toasts are in the data folder's `protected-media.json`
+(`ProtectedMediaChoices`: `added`, `removed`, `told`), so each test instance (`CRA_DATA_DIR`) keeps
+its own and never writes the daily Cra's. They are read at launch. A test instance takes `CRA_WEBKIT_DRM=0|1` and
 `CRA_WEBKIT_HOSTS=<host,host>` (the scenarios list `localhost`).
 
 ## Testing

@@ -695,6 +695,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let v = dict["banner"] { SoftwareUpdater.shared.debugUpdated(v == "none" ? nil : v); return }
             if let v = dict["bannerReady"] { SoftwareUpdater.shared.debugReady(v == "none" ? nil : v); return }
             if dict["switcher"] != nil { main.debugTabSwitcher(); return }
+            // The Site Control Center's Safari's Engine switch for the focused page, without the pointer.
+            if let v = dict["safariEngine"] { main.debugChooseSafariEngine(v == "on"); return }
+            // Script in Cra's isolated world of the focused page: "Cra isolatedJS → <result>" on stdout.
+            if let js = dict["isolatedJS"] {
+                let params = String(decoding: (try? JSONSerialization.data(withJSONObject: ["expression": js, "returnByValue": true])) ?? Data(), as: UTF8.self)
+                main.currentBrowser?.evaluate(inIsolatedWorld: PageScript.world, params: params) { result, error in
+                    NSLog("Cra isolatedJS → %@", result ?? "error: \(error ?? "?")")
+                }
+                return
+            }
             // The sidebar player without the pointer: play/pause/next/previous/pip on the newest
             // card ("state" only logs), then its cards: "Cra nowPlaying[<label>] <host> playing=… prev=… next=… video=… pip=…".
             if let op = dict["nowPlaying"], let np = main.browsers.nowPlaying {

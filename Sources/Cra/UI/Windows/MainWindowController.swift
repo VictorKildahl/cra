@@ -2363,15 +2363,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { once(nil) }
     }
 
+    func debugChooseSafariEngine(_ on: Bool) {
+        if let url = currentBrowser?.currentURL { chooseSafariEngine(on, for: url) }
+    }
+
     /// The Site Control Center's Safari's Engine switch: the site plays in WebKit (or Chromium)
     /// from now on, and the focused page opens again there. Choosing it is knowing about it: no toast.
     private func chooseSafariEngine(_ on: Bool, for url: String) {
         PageEngines.choose(on ? .webKit : .chromium, for: url)
-        if on, let service = PageEngines.sites.serviceName(for: url) {
-            let key = "protectedMediaToldServices"
-            let told = UserDefaults.standard.stringArray(forKey: key) ?? []
-            if !told.contains(service) { UserDefaults.standard.set(told + [service], forKey: key) }
-        }
+        if on, let service = PageEngines.sites.serviceName(for: url) { PageEngines.told(service) }
         if let id = browsers.visibleTabID { browsers.reopenInItsEngine(id) }
     }
 
@@ -2684,14 +2684,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// until its ✕ is pressed, Why? included, so Cra knows it was seen; only then is the service told
     /// for good. Shown once a session per service: one left open shows again next launch.
     private func tellAboutProtectedMedia(_ service: String) {
-        let key = "protectedMediaToldServices"
-        guard !(UserDefaults.standard.stringArray(forKey: key) ?? []).contains(service), !offeredProtectedMedia.contains(service),
-              window?.isVisible == true else { return }
+        guard !PageEngines.wasTold(service), !offeredProtectedMedia.contains(service), window?.isVisible == true else { return }
         offeredProtectedMedia.insert(service)
-        let told = {
-            let list = UserDefaults.standard.stringArray(forKey: key) ?? []
-            if !list.contains(service) { UserDefaults.standard.set(list + [service], forKey: key) }
-        }
+        let told = { PageEngines.told(service) }
         // A moment after the page shows, so it isn't lost in the tab switch.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
             guard let self, let window = self.window, let id = self.browsers.visibleTabID,

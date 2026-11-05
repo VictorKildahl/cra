@@ -91,6 +91,24 @@ struct ModelFixtureTests {
 
     /// pinned-extensions.json: the one list of before #107 loads as every profile's and stays an
     /// array when saved; per-profile lists keep an emptied profile's empty list.
+    /// protected-media.json (docs/protected-media.md): the Safari's Engine choices and closed toasts,
+    /// kept as written; a file from before a key existed loads with that list empty.
+    @Test func protectedMediaChoicesLoadAsRecorded() throws {
+        let (loaded, recorded) = try Self.load("protected-media.json", as: ProtectedMediaChoices.self)
+        #expect(loaded == recorded)
+        #expect(try Self.roundTrips(loaded))
+        #expect(try Self.encoder.encode(loaded) == Self.data("recorded", "protected-media.json").dropLast(
+            try Self.data("recorded", "protected-media.json").last == 0x0A ? 1 : 0))
+        let sites = ProtectedMediaSites(extraHosts: loaded.added, removedHosts: loaded.removed)
+        #expect(sites.engine(for: "https://www.viaplay.dk/film") == .webKit)
+        #expect(sites.engine(for: "https://stream.example.org/") == .webKit)
+        #expect(sites.engine(for: "https://www.netflix.com/") == .chromium)
+        let empty = try Self.decoder.decode(ProtectedMediaChoices.self, from: Data(#"{"told":["Netflix"]}"#.utf8))
+        #expect(empty == ProtectedMediaChoices(told: ["Netflix"]))
+        #expect(empty.telling("Netflix") == empty && empty.telling("Max").told == ["Netflix", "Max"])
+        #expect(empty.choosing(.webKit, for: "https://www.viaplay.dk/").added == ["www.viaplay.dk"])
+    }
+
     @Test(arguments: ["pinned-extensions.json", "pinned-extensions-profiles.json"])
     func pinnedExtensionsLoadAsRecorded(name: String) throws {
         let (loaded, recorded) = try Self.load(name, as: PinnedExtensions.self)

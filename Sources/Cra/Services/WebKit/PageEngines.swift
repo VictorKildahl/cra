@@ -5,32 +5,36 @@ import CraCEF
 /// (ProtectedMediaSites has the rules; docs/protected-media.md the why).
 @MainActor
 enum PageEngines {
-    /// Read once per launch. `defaults write dk.kildahl.cra webKitProtectedMedia -bool NO` turns
-    /// it off (every page Chromium's again); `webKitProtectedMediaHosts` and
-    /// `webKitProtectedMediaRemovedHosts` (string arrays) change the list. A test instance sets
-    /// CRA_WEBKIT_DRM=0|1 and CRA_WEBKIT_HOSTS=<host,host> (the scenarios' 127.0.0.1).
-    /// The Site Control Center's Safari's Engine switch writes the two lists (`choose`).
+    /// The list, with the user's own choices (protected-media.json) on it. `defaults write
+    /// dk.kildahl.cra webKitProtectedMedia -bool NO` turns it all off (every page Chromium's again).
+    /// A test instance sets CRA_WEBKIT_DRM=0|1 and CRA_WEBKIT_HOSTS=<host,host> (the scenarios' localhost).
     private(set) static var sites: ProtectedMediaSites = load()
 
-    private static let addedKey = "webKitProtectedMediaHosts", removedKey = "webKitProtectedMediaRemovedHosts"
+    /// The Safari's Engine choices and the closed toasts, in the data folder (CRA_DATA_DIR for a test).
+    private static let file = JSONStore<ProtectedMediaChoices>("protected-media.json")
+    private(set) static var choices: ProtectedMediaChoices = file.load(or: { ProtectedMediaChoices() })
 
     private static func load() -> ProtectedMediaSites {
         let env = ProcessInfo.processInfo.environment
-        let defaults = UserDefaults.standard
-        let enabled = env["CRA_WEBKIT_DRM"].map { $0 != "0" } ?? (defaults.object(forKey: "webKitProtectedMedia") as? Bool ?? true)
-        let extra = (env["CRA_WEBKIT_HOSTS"] ?? "").split(separator: ",").map(String.init) + (defaults.stringArray(forKey: addedKey) ?? [])
-        let removed = defaults.stringArray(forKey: removedKey) ?? []
-        return ProtectedMediaSites(isEnabled: enabled, extraHosts: extra, removedHosts: removed)
+        let enabled = env["CRA_WEBKIT_DRM"].map { $0 != "0" } ?? (UserDefaults.standard.object(forKey: "webKitProtectedMedia") as? Bool ?? true)
+        let extra = (env["CRA_WEBKIT_HOSTS"] ?? "").split(separator: ",").map(String.init) + choices.added
+        return ProtectedMediaSites(isEnabled: enabled, extraHosts: extra, removedHosts: choices.removed)
     }
 
-    /// The user's choice for `url`'s site (ProtectedMediaSites.choosing), kept and in force at once.
+    /// The user's choice for `url`'s site (the Site Control Center's switch), kept and in force at once.
     static func choose(_ engine: PageEngine, for url: String) {
-        let defaults = UserDefaults.standard
-        let r = ProtectedMediaSites.choosing(engine, for: url, added: defaults.stringArray(forKey: addedKey) ?? [],
-                                             removed: defaults.stringArray(forKey: removedKey) ?? [])
-        defaults.set(r.added, forKey: addedKey)
-        defaults.set(r.removed, forKey: removedKey)
+        choices = choices.choosing(engine, for: url)
+        file.saveNow(choices)
         sites = load()
+    }
+
+    /// Whether `service`'s "plays with Safari's engine" toast was closed with its ✕.
+    static func wasTold(_ service: String) -> Bool { choices.told.contains(service) }
+
+    static func told(_ service: String) {
+        guard !wasTold(service) else { return }
+        choices = choices.telling(service)
+        file.saveNow(choices)
     }
 
     static func engine(of browser: CraBrowser) -> PageEngine { browser is WebKitBrowser ? .webKit : .chromium }

@@ -175,3 +175,40 @@ public struct ProtectedMediaSites: Equatable, Sendable {
         return path.map { $0.isEmpty ? host : host + $0 } ?? host
     }
 }
+
+/// protected-media.json in the data folder: the user's own choices about which engine plays a
+/// site (the Site Control Center's Safari's Engine switch, `ProtectedMediaSites.choosing`) and the
+/// services whose "plays with Safari's engine" toast was closed. In the data folder, not the
+/// defaults, so each profile folder and test instance (CRA_DATA_DIR) keeps its own.
+public struct ProtectedMediaChoices: Codable, Equatable, Sendable {
+    /// Sites the user sent to WebKit.
+    public var added: [String]
+    /// Listed entries the user took back to Chromium.
+    public var removed: [String]
+    /// Services whose toast was closed with its ✕.
+    public var told: [String]
+
+    public init(added: [String] = [], removed: [String] = [], told: [String] = []) {
+        self.added = added
+        self.removed = removed
+        self.told = told
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        added = try c.decodeIfPresent([String].self, forKey: .added) ?? []
+        removed = try c.decodeIfPresent([String].self, forKey: .removed) ?? []
+        told = try c.decodeIfPresent([String].self, forKey: .told) ?? []
+    }
+
+    /// After choosing `engine` for `url`'s site.
+    public func choosing(_ engine: PageEngine, for url: String) -> ProtectedMediaChoices {
+        let r = ProtectedMediaSites.choosing(engine, for: url, added: added, removed: removed)
+        return ProtectedMediaChoices(added: r.added, removed: r.removed, told: told)
+    }
+
+    /// After the user closed `service`'s toast.
+    public func telling(_ service: String) -> ProtectedMediaChoices {
+        told.contains(service) ? self : ProtectedMediaChoices(added: added, removed: removed, told: told + [service])
+    }
+}

@@ -105,6 +105,24 @@ wait 3
 cra://debug?cdp=Runtime.evaluate&target=little&params={"expression":"[document.title,'userAgentData' in navigator].join()"}
 expect-log Cra cdp Runtime.evaluate .*"value":"Fixture little,false"
 
+# A Chromium page that asks for Widevine is noticed (Cra's world), and the Safari's Engine switch
+# moves its site to WebKit in place, and back.
+cra://open?url=${PAGE}?n=drm
+expect-log loaded 127\.0\.0\.1
+cra://debug?isolatedJS=String(window.__cra.drm===true)
+expect-log Cra isolatedJS → .*"value":"false"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"navigator.requestMediaKeySystemAccess('com.widevine.alpha',[{initDataTypes:['cenc'],videoCapabilities:[{contentType:'video/mp4'}]}]).then(()=>'widevine:asked',()=>'widevine:asked')","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"widevine:asked"
+cra://debug?isolatedJS=String(window.__cra.drm===true)
+expect-log Cra isolatedJS → .*"value":"true"
+cra://debug?safariEngine=on
+expect-log moves to WebKit for 127\.0\.0\.1, as chosen
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"[document.title,'userAgentData' in navigator].join()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"Fixture drm,false"
+cra://debug?safariEngine=off
+expect-log moves to Chromium for 127\.0\.0\.1, as chosen
+
 # Tab sleep: the hidden WebKit page closes (WebKit has no in-place discard) and opens again when shown.
 cra://open?url=${WEBKIT}/page.html?n=sleeper
 expect-log loaded localhost

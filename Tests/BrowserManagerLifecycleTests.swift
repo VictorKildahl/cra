@@ -224,8 +224,7 @@ enum BrowserManagerLifecycleTests {
         manager.reopenInItsEngine(chosen)
         await drainMainQueue()
         expect(!(manager.runtime(for: chosen)?.browser is WebKitBrowser), "chosen back, the page opens in Chromium")
-        UserDefaults.standard.removeObject(forKey: "webKitProtectedMediaHosts")
-        UserDefaults.standard.removeObject(forKey: "webKitProtectedMediaRemovedHosts")
+        expect(PageEngines.choices.added.isEmpty && PageEngines.choices.removed.isEmpty, "chosen back, nothing is left on the lists")
 
         // A late request from a page that already moved changes nothing.
         expect(!manager.browser(chromium, handsOffNavigationToURL: "https://www.netflix.com/", method: "GET"), "a retired page can't move its tab again")
