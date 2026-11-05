@@ -187,6 +187,23 @@ empty, click-through and never key. Pages go back into their window while DevToo
 `CRA_EMBED_PAGES=0` (or `defaults write dk.kildahl.cra embedPages -bool NO`) keeps pages in
 their own child windows, the hosting before 0.1.17, for comparing the two.
 
+### Cleaning up after test copies
+
+A renamed test copy leaves files outside its own folder: a 300 MB–1 GB code sign clone in
+the per-user temp folder when it's killed instead of quit, plus caches, preferences and
+LaunchServices entries under its bundle id. Dozens of them filled a 460 GB disk. Give a
+copy a bundle id starting with `dk.kildahl.cra.test.` (or another `dk.kildahl.cra`,
+`dk.kildahl.test.`, `app.crabrowser.` or `dev.cra.` id), quit it through its menu rather
+than killing it, and delete it when you're done.
+
+`scripts/clean-test-leftovers.sh` removes what's left: clones no process has open, the data
+of test bundle ids that aren't running, Claude Code scratchpads of this repo that haven't
+changed for a day, and LaunchServices entries of deleted Cra bundles. It never touches
+the installed Cra's ids, CraClip, a running app or anything changed in the last hour. Use
+`--dry-run` to see what it would do. In Claude Code it runs in the background at most every
+30 minutes as a Stop hook (`.claude/settings.json`), and the log of the last run is
+`$(getconf DARWIN_USER_TEMP_DIR)cra-clean-test-leftovers.log`.
+
 ## Scripting hooks
 
 Cra registers the `cra://` scheme so it can be driven from a shell:

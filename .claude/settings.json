@@ -12,6 +12,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/clean-test-leftovers.sh --hook",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }
