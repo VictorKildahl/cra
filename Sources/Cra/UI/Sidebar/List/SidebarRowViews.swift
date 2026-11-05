@@ -921,6 +921,8 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
     /// The pointer is on the favicon of a pinned tab away from its page (Arc's icon region):
     /// a click there goes back, and the line under the name says so.
     private var overIcon = false
+    /// Bumped by each hover-subtitle fade, so a finished fade-out only hides the label it faded.
+    private var subtitleFade = 0
     /// ⌘ is down while `overIcon`: a click separates the page from the pinned tab instead.
     private var separating = false
     private var flagsMonitor: Any?
@@ -1132,6 +1134,10 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
 
     private func setOverIcon(_ on: Bool) {
         guard on != overIcon else { return }
+        let hadLine = shownSubtitle != nil, oldText = subtitleLabel.stringValue
+        titleLabel.wantsLayer = true
+        layoutSubtreeIfNeeded()
+        let oldTitle = titleLabel.layer?.position
         overIcon = on
         if on { watchFlags() } else { stopWatchingFlags() }
         refreshIcon()
@@ -1139,6 +1145,48 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         rebuildAccessories()
         refreshBackground()
         needsLayout = true
+        if hadLine != (shownSubtitle != nil) { slideSubtitle(appearing: !hadLine, titleFrom: oldTitle, leavingText: oldText) }
+    }
+
+    /// Arc's hover subtitle comes in as a transition, not a cut (GitHub #189): the title slides
+    /// between its centred and two-line places while "Back to Pinned URL" fades in under it, and
+    /// back out the same way. layout() still sets both end states; the slide is an additive
+    /// offset on the title's layer that settles to zero, so a relayout mid-way can't fight it.
+    private func slideSubtitle(appearing: Bool, titleFrom old: CGPoint?, leavingText: String) {
+        layoutSubtreeIfNeeded()
+        let duration = 0.16
+        guard window != nil, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+              let layer = titleLabel.layer, let old else { return }
+        let move = CABasicAnimation(keyPath: "position")
+        move.isAdditive = true
+        move.fromValue = NSValue(point: NSPoint(x: old.x - layer.position.x, y: old.y - layer.position.y))
+        move.toValue = NSValue(point: .zero)
+        move.duration = duration
+        move.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        layer.add(move, forKey: "hoverSubtitle")
+        subtitleFade += 1
+        let token = subtitleFade
+        if appearing {
+            subtitleLabel.alphaValue = 0
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = duration
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                subtitleLabel.animator().alphaValue = 1
+            }
+        } else {
+            // The label stays where it was, with its text, until it has faded.
+            subtitleLabel.stringValue = leavingText
+            subtitleLabel.isHidden = false
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = duration
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                subtitleLabel.animator().alphaValue = 0
+            }, completionHandler: { [weak self] in
+                guard let self, self.subtitleFade == token else { return }
+                self.subtitleLabel.alphaValue = 1
+                self.refreshSubtitle()
+            })
+        }
     }
 
     private func watchFlags() {
@@ -1209,6 +1257,8 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
     }
 
     private func refreshSubtitle() {
+        // A fade-out still running ends here: the label shows what it should, fully.
+        if subtitleLabel.alphaValue < 1, shownSubtitle != nil { subtitleFade += 1; subtitleLabel.alphaValue = 1 }
         subtitleLabel.stringValue = shownSubtitle ?? ""
         // Arc draws the subtitle bright while the rename sweeps in.
         subtitleLabel.textColor = renameBright ? colors.textPrimary : colors.textTertiary
