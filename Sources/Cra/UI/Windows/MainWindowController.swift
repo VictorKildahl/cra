@@ -203,6 +203,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.refreshMaterialActive(); self?.sidebarUI.appActive = false }
         }
+        shell.activeAppearance.onChange = { [weak self] in self?.refreshMaterialActive() }
         // Any window: key and main move between this window, its page windows and other windows.
         for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification, NSWindow.didBecomeMainNotification,
                      NSWindow.didResignMainNotification, NSWindow.didMiniaturizeNotification, NSWindow.didDeminiaturizeNotification] {
@@ -233,7 +234,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             return false
         }
         return SidebarBackdrop.windowActive(appActive: NSApp.isActive, miniaturized: window.isMiniaturized,
-                                            holdsKeyOrMain: holds(NSApp.keyWindow) || holds(NSApp.mainWindow))
+                                            holdsKeyOrMain: holds(NSApp.keyWindow) || holds(NSApp.mainWindow),
+                                            activeAppearance: shell.activeAppearance.isActive ?? false)
     }
 
     required init?(coder: NSCoder) { fatalError() }

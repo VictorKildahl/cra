@@ -20,6 +20,8 @@ final class ShellView: NSView {
     /// tint (CAChameleonLayer). We do the same (GitHub #83).
     private var desktopTintLayer: CALayer?
     var windowFullscreen = false { didSet { if windowFullscreen != oldValue { refreshLift() } } }
+    /// AppKit's answer to whether the window draws its active look (MainWindowController.materialActiveNow).
+    let activeAppearance = ActiveAppearanceProbe()
     private var loggedBackdrop: String?
     private let dimLayer = CALayer()
     private let liftLayer = CAGradientLayer()
@@ -158,6 +160,18 @@ final class ShellView: NSView {
         return filter
     }
 
+    /// The hudWindow material's capture, as AppKit builds it (probe dump, 5 Nov 2026): an eighth-scale
+    /// capture under SDR normalize, a 30 pt blur and saturate 1.6. Cra's own full-scale 40 pt blur was
+    /// blurrier and greyer than Arc's over a colourful backdrop, and 64 times the pixels for the window
+    /// server to rebuild whenever the capture comes back (the dropout out of Stage Manager, GitHub #156).
+    /// Over the plain white and black backdrops the dim and lift were fitted on, it draws the same.
+    static let backdropScale = 0.125
+    static func makeBackdropFilters() -> [NSObject] {
+        guard let blur = makeBackdropBlur(radius: 30) else { return [] }
+        let tint = makeTintFilters()
+        return tint.count == 2 ? [tint[0], blur, tint[1]] : [blur]
+    }
+
     /// The hudWindow material's filters on its desktop tint: SDR normalize, saturate 1.6.
     static func makeTintFilters() -> [NSObject] {
         guard let cls = NSClassFromString("CAFilter") as? NSObject.Type else { return [] }
@@ -194,15 +208,18 @@ final class ShellView: NSView {
                 vibrant: .init(dim: t.blurDim, liftTop: t.liftActive, liftBottom: t.liftActiveBottom,
                                dimInactive: t.blurDimInactive, liftInactive: t.liftInactive))
             dimLayer.opacity = Float(backdrop.dim)
+            // The desktop tint stays in the tree, as in AppKit's material: at 0.05 windowed, active or not,
+            // and in place of the blur in full screen. Only Reduce transparency takes it out. Inserted
+            // fresh, it drew nothing until the window server had resolved it (GitHub #156). It sits under
+            // the capture and the fill, so at 0.05 it doesn't change the calibrated colours.
+            if let tint = desktopTintLayer {
+                if reduceTransparency { tint.removeFromSuperlayer() } else if tint.superlayer == nil { backdropHost.layer?.insertSublayer(tint, at: 0) }
+                tint.opacity = backdrop.source == .desktopTint ? 1 : 0.05
+            }
             // A capture added back on activation draws the substitute colour until it is live, where
             // one kept under the fill showed the window behind sharp for a frame (GitHub #132).
-            let source: CALayer? = switch backdrop.source {
-            case .none: nil
-            case .blur: backdropLayer
-            case .desktopTint: desktopTintLayer
-            }
-            for l in [backdropLayer, desktopTintLayer].compactMap({ $0 }) where (l === source) != (l.superlayer != nil) {
-                if l === source { backdropHost.layer?.insertSublayer(l, at: 0) } else { l.removeFromSuperlayer() }
+            if let b = backdropLayer, (backdrop.source == .blur) != (b.superlayer != nil) {
+                if backdrop.source == .blur { backdropHost.layer?.insertSublayer(b, at: desktopTintLayer?.superlayer == nil ? 0 : 1) } else { b.removeFromSuperlayer() }
             }
             liftLayer.colors = [NSColor(white: 1, alpha: backdrop.liftTop).cgColor, NSColor(white: 1, alpha: backdrop.liftBottom).cgColor]
             CATransaction.commit()
@@ -238,6 +255,7 @@ final class ShellView: NSView {
         vibrancy.state = .active
         vibrancy.isHidden = true
         addSubview(vibrancy)
+        addSubview(activeAppearance)
         backdropHost.wantsLayer = true
         // A CABackdropLayer only blurs what is behind the window through Core
         // Animation's own filters (private CAFilter "gaussianBlur"); a CIFilter in
@@ -248,9 +266,10 @@ final class ShellView: NSView {
         // without them the blur showed only while the window was redrawing (GitHub #37).
         if FeatureFlags.current.backdrop == .layer,
            let cls = NSClassFromString("CABackdropLayer") as? CALayer.Type,
-           let blur = ShellView.makeBackdropBlur(radius: 40) {
+           case let filters = ShellView.makeBackdropFilters(), !filters.isEmpty {
             let b = cls.init()
-            b.filters = [blur]
+            b.filters = filters
+            b.setValue(ShellView.backdropScale, forKey: "scale")
             b.setValue(true, forKey: "windowServerAware")
             b.setValue("NSCGSWindowBehindWindowCaptureBackdropGroup", forKey: "groupName")
             // While the window server rebuilds the capture (activation, a Space switch) the
