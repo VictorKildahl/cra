@@ -126,6 +126,9 @@ final class KeyBindingRegistry {
             // File
             KeyAction(id: "newTab", name: "New Tab…", section: .file, shortcuts: [Shortcut("t", cmd)], triggers: ["new tab"]),
             KeyAction(id: "newWindow", name: "New Window", section: .file, shortcuts: [Shortcut("n", cmd)], inCommandBar: false),
+            // Arc: File ▸ Blank Window ⌃⌘N, a window with a sidebar of its own (#220).
+            KeyAction(id: "newBlankWindow", name: "Blank Window", section: .file, shortcuts: [Shortcut("n", [.command, .control])],
+                      triggers: ["blank window", "this window"]),
             KeyAction(id: "newIncognitoWindow", name: "New Incognito Window", section: .file, shortcuts: [Shortcut("n", cmdShift)],
                       triggers: ["incognito", "private"]),
             // Arc: File ▸ New Little Arc Window ⌥⌘N.

@@ -155,12 +155,12 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// Take over a live browser from elsewhere (a Little Window being promoted
     /// to a tab): it keeps its history, scroll position and page state.
     @discardableResult
-    func adopt(_ browser: CraBrowser, for tabID: UUID) -> TabRuntime {
+    func adopt(_ browser: CraBrowser, for tabID: UUID, from origin: String = "a Little Window's") -> TabRuntime {
         if let host = browser.hostWindow, let parent = host.parent { parent.removeChildWindow(host) }
         browser.containerView.removeFromSuperview()
         browser.delegate = self
         let rt = register(browser: browser, tabID: tabID)
-        log(tabID, "takes over a Little Window's page")
+        log(tabID, "takes over \(origin) page")
         store.updateTab(tabID, url: browser.currentURL, title: browser.currentTitle)
         return rt
     }

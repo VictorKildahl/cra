@@ -66,6 +66,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     let windowID: UUID
     /// Pages load in the off-the-record profile; nothing is saved (WindowSession.isIncognito).
     let isIncognito: Bool
+    /// Arc's Blank Window (#220): a sidebar of its own, "This Window", in the normal profile.
+    var isBlank: Bool { store.isBlank(window: windowID) }
+    /// Shows only a space of its own (incognito or Blank): no other spaces, no space switching.
+    var isStandalone: Bool { isIncognito || isBlank }
     var focusedSpaceID: UUID { store.focusedSpaceID(window: windowID) }
     var focusedSpace: Space { store.focusedSpace(window: windowID) }
     var selectedTabID: UUID? { store.selectedTabID(window: windowID) }
@@ -252,6 +256,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         sidebarActions.titleBarDoubleClick = { [weak self] in (self?.window as? CraWindow)?.performTitleDoubleClickAction() }
         sidebarActions.openCommandBar = { [weak self] mode in self?.openCommandBar(mode) }
         sidebarActions.closeTab = { [weak self] id in self?.closeTab(id) }
+        sidebarActions.tearOffTab = { [weak self] id, point in
+            guard let self else { return }
+            self.app.tearOffTab(id, at: point, from: self)
+        }
         sidebarActions.goBack = { [weak self] in self?.currentBrowser?.goBack() }
         sidebarActions.goForward = { [weak self] in self?.currentBrowser?.goForward() }
         sidebarActions.reload = { [weak self] in
@@ -490,6 +498,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// The browser window the user is in (AppDelegate follows the key window).
     private var isActiveWindow: Bool { store.activeWindowID == windowID }
+
+    /// `cra://debug?dragEnd`: a drag of a row of this window's list let go at a screen point
+    /// with nothing taking it, as a drag out of the sidebar ends (#219).
+    func testDragEnded(_ id: UUID, at screenPoint: NSPoint) {
+        func list(in v: NSView) -> SpaceListView? {
+            if let l = v as? SpaceListView, l.spaceID == focusedSpaceID { return l }
+            return v.subviews.lazy.compactMap { list(in: $0) }.first
+        }
+        guard let l = window?.contentView.flatMap(list(in:)) else { CraLog.note("dragEnd: no list"); return }
+        l.dragEnded(id, at: screenPoint, operation: [])
+    }
 
     /// The tab's page belongs to another window that has it open: the window in use takes it,
     /// others keep it where it is. Windows restored at launch (none has the page yet, and
@@ -2065,7 +2084,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                     self.swipeY += event.scrollingDeltaY
                     guard max(abs(self.swipeX), abs(self.swipeY)) > 6 else { return event }
                     // One space still swipes into the Library.
-                    guard abs(self.swipeX) > abs(self.swipeY) * 1.2, !self.isIncognito,
+                    guard abs(self.swipeX) > abs(self.swipeY) * 1.2, !self.isStandalone,
                           self.store.spaceOrder.count > 1 || !self.shell.floatingSidebar,
                           // At the Spaces page's end a swipe back along the cards scrolls them.
                           !(self.sidebarUI.libraryPage == .spaces && self.swipeX > 0) else {
@@ -2271,7 +2290,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private func wheelSwitchesSpace(_ event: NSEvent) -> Bool {
         let host = shell.sidebarHost
         guard shell.sidebarVisible || shell.floatingSidebar, event.window != nil, event.window === host.window,
-              host.bounds.contains(host.convert(event.locationInWindow, from: nil)), !isIncognito else { return false }
+              host.bounds.contains(host.convert(event.locationInWindow, from: nil)), !isStandalone else { return false }
         let dx = event.scrollingDeltaX
         // On the Spaces page the cards scroll first; once they can't scroll that way the wheel pages,
         // which leaves the Library when it heads for the next space, and over the rail it leaves at
@@ -2978,7 +2997,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         guard let window else { return }
         let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 651, height: 600), styleMask: [.titled], backing: .buffered, defer: false)
         // Arc's New Space starts on the profile of the space it was opened from.
-        let initialProfile = space == nil && !isIncognito ? SpaceProfiles.forNewSpace(from: store.focusedSpace, profiles: store.profiles) : nil
+        let initialProfile = space == nil && !isStandalone ? SpaceProfiles.forNewSpace(from: store.focusedSpace, profiles: store.profiles) : nil
         let store = self.store
         let view = SpaceEditorView(existing: space, profiles: store.profiles, initialProfile: initialProfile, onSave: { [weak panel] title, icon, theme, profile, newName in
             let id: UUID
@@ -3091,7 +3110,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// A page handed over by a window that is closing.
     func takePage(_ rt: TabRuntime) {
-        browsers.adopt(rt.browser, for: rt.tabID)
+        browsers.adopt(rt.browser, for: rt.tabID, from: "another window's")
         refresh()
     }
 

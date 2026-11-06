@@ -48,6 +48,9 @@ enum StoreTests {
         dropOnPinnedTabSplits()
         reopenClosedTabs()
         windowsShareTheSidebar()
+        blankWindows()
+        blankWindowWithoutItsWindow()
+        tornOffTabMovesToABlankWindow()
         print("Store: \(checks) checks passed")
     }
 
@@ -1267,6 +1270,127 @@ enum StoreTests {
         store.removeWindow(second)
         expect(store.item(tab.id) != nil && store.item(made.id) != nil, "closing a window keeps the tabs")
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    // promise: #220
+    /// Arc's Blank Window (⌃⌘N): a sidebar of its own in the normal profile, in no space list,
+    /// saved and restored with the window, and gone with its tabs when the window closes.
+    @MainActor
+    private static func blankWindows() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let home = store.createSpace(title: "Blank Home", emoji: "🏠").id
+        let main = store.activeWindowID
+        let spaceTab = store.createTab(url: "https://example.com/space-tab", in: home, window: main)
+        let blank = store.addBlankWindow(frame: nil).id
+        let own = store.focusedSpaceID(window: blank)
+        expect(store.isBlank(window: blank) && store.isStandalone(window: blank) && !store.window(blank).isIncognito,
+               "a Blank Window is neither a normal window nor incognito")
+        expect(store.space(own)?.title == "This Window" && !store.orderedSpaces.contains { $0.id == own }
+               && store.pagedSpaces(window: blank).map(\.id) == [own], "its sidebar, This Window, is in no space list")
+        let tab = store.createTab(url: "https://example.com/blank-tab", window: blank)
+        expect(store.spaceID(ofItem: tab.id) == own && !store.isIncognito(item: tab.id) && store.profilePath(item: tab.id) == nil,
+               "a tab opened there is the window's own, in the Default profile")
+        expect(store.profileTabs(window: blank).map(\.id) == [tab.id] && !store.profileTabs(window: main).contains { $0.id == tab.id },
+               "its command bar offers only its tabs, and other windows' never offer them")
+        store.selectTab(spaceTab.id, window: blank)
+        store.focusSpace(home, window: blank)
+        expect(store.selectedTabID(window: blank) == tab.id && store.focusedSpaceID(window: blank) == own,
+               "a space's tab doesn't open in it, and it doesn't switch to a space")
+        let blankSpace = store.space(own)!
+        store.moveItem(tab.id, to: blankSpace.pinnedContainerID, index: 0)
+        store.addToFavorites(tab.id)
+        expect(store.item(tab.id)?.parentID == blankSpace.todayContainerID, "nothing goes into favorites or pinned there")
+        store.activeWindowID = blank
+        expect(store.lastNormalWindowID == main, "links from other apps keep going to the normal window")
+        store.activeWindowID = main
+
+        store.saveAll()
+        let reloaded = AppComposition(clock: ManualScheduler()).store
+        expect(reloaded.isBlank(window: blank) && reloaded.selectedTabID(window: blank) == tab.id
+               && !reloaded.orderedSpaces.contains { $0.id == own }, "a relaunch brings it back with its tabs, still out of the space list")
+        expect(reloaded.integrityProblems().isEmpty, "the reloaded sidebar is sound")
+
+        let archived = store.archive.count
+        store.removeWindow(blank)
+        expect(store.item(tab.id) == nil && store.space(own) == nil && store.archive.count == archived,
+               "closing it takes its tabs, as in Arc (nothing goes to the Archive)")
+        expect(store.item(spaceTab.id) != nil && store.integrityProblems().isEmpty, "and leaves the spaces as they were")
+        store.saveAll()
+    }
+
+    // promise: #220
+    /// A Blank Window's space whose window is missing from windows.json goes at launch rather
+    /// than turning into a space of the sidebar.
+    @MainActor
+    private static func blankWindowWithoutItsWindow() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let blank = store.addBlankWindow(frame: nil).id
+        let own = store.focusedSpaceID(window: blank)
+        let tab = store.createTab(url: "https://example.com/orphan-blank", window: blank)
+        store.prefs.windows.removeAll { $0.id == blank }
+        store.saveAll()
+        let reloaded = AppComposition(clock: ManualScheduler()).store
+        expect(reloaded.space(own) == nil && reloaded.item(tab.id) == nil && !reloaded.spaceOrder.contains(own),
+               "an orphaned Blank Window space goes with its tabs")
+        expect(reloaded.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    // promise: #219
+    /// A tab dragged out of every window moves into a new Blank Window (Arc 1.172): it leaves its
+    /// space, opens there, and the window it left shows no tab. "Move to…" sends it to a space.
+    @MainActor
+    private static func tornOffTabMovesToABlankWindow() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let home = store.createSpace(title: "Tear Home", emoji: "🏠").id
+        let main = store.activeWindowID
+        let stays = store.createTab(url: "https://example.com/stays", in: home, window: main)
+        let torn = store.createTab(url: "https://example.com/torn", in: home, window: main)
+        let pinned = store.createTab(url: "https://example.com/pinned", in: home, pinned: true, select: false, window: main)
+        expect(store.selectedTabID(window: main) == torn.id, "the dragged tab is open")
+        let blank = store.addBlankWindow(frame: nil).id
+        let own = store.focusedSpaceID(window: blank)
+        store.moveToBlankWindow(torn.id, window: blank)
+        expect(store.spaceID(ofItem: torn.id) == own && store.selectedTabID(window: blank) == torn.id,
+               "the tab moves into the new window and opens there")
+        expect(!store.tabs(under: store.space(home)!.todayContainerID).contains { $0.id == torn.id }
+               && store.selectedTabID(window: main) == nil, "it leaves its space, and its old window shows no tab")
+        let second = store.addBlankWindow(frame: nil).id
+        store.moveToBlankWindow(pinned.id, window: second)
+        expect(store.spaceID(ofItem: pinned.id) == store.focusedSpaceID(window: second) && !store.isPinned(pinned.id),
+               "a pinned tab tears off too, out of the pinned section")
+        let folder = store.createFolder(named: "Stays put", in: store.space(home)!.pinnedContainerID, index: 0)
+        store.moveToBlankWindow(folder.id, window: second)
+        expect(store.spaceID(ofItem: folder.id) == home, "a folder doesn't")
+
+        // Dropped on a Blank Window's sidebar from a window that has it open: it leaves that
+        // window and opens in the Blank Window (Arc).
+        store.selectTab(stays.id, window: main)
+        store.moveItem(stays.id, to: store.space(store.focusedSpaceID(window: second))!.todayContainerID, index: 0)
+        store.tookTab(stays.id, into: second)
+        expect(store.selectedTabID(window: main) == nil && store.selectedTabID(window: second) == stays.id,
+               "a tab dropped into a Blank Window from another window opens there and leaves the other window")
+
+        // And back onto the normal window's list: it leaves the Blank Window and opens there.
+        store.moveItem(stays.id, to: store.space(home)!.todayContainerID, index: 0)
+        store.tookTab(stays.id, into: main)
+        expect(store.selectedTabID(window: second) == nil && store.selectedTabID(window: main) == stays.id,
+               "dragged back onto another window's sidebar, it moves into that window")
+        // Two windows on one space both keep a tab open (#4): a drop within the space takes it from neither.
+        let third = store.addWindow(spaceID: home, frame: nil).id
+        store.selectTab(stays.id, window: third)
+        store.tookTab(stays.id, into: third)
+        expect(store.selectedTabID(window: main) == stays.id && store.selectedTabID(window: third) == stays.id,
+               "a window on the same space keeps it open")
+        store.removeWindow(third)
+
+        store.moveBlankWindow(blank, toSpace: home)
+        expect(!store.isBlank(window: blank) && store.focusedSpaceID(window: blank) == home && store.selectedTabID(window: blank) == torn.id
+               && store.children(of: store.space(home)!.todayContainerID).first?.id == torn.id && store.space(own) == nil,
+               "Move to… puts the window's tabs at the top of the space and the window on it")
+        expect(store.item(stays.id) != nil && store.integrityProblems().isEmpty, "and the sidebar stays sound")
+        store.removeWindow(second)
+        store.removeWindow(blank)
+        store.saveAll()
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {

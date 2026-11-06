@@ -38,13 +38,15 @@ final class SidebarStore {
     /// The browser window that menu commands, new tabs and the command bar act on:
     /// the one the user is in (AppDelegate follows the key window).
     @ObservationIgnored var activeWindowID = UUID() {
-        didSet { if !window(activeWindowID).isIncognito { lastNormalWindowID = activeWindowID } }
+        didSet { if !isStandalone(window: activeWindowID) { lastNormalWindowID = activeWindowID } }
     }
     /// The normal window in use last: where links from other apps and the Library go
-    /// while an incognito window is in front.
+    /// while an incognito or Blank Window is in front.
     @ObservationIgnored private(set) var lastNormalWindowID = UUID()
     /// Spaces of incognito windows. Not in `spaceOrder`, never saved.
     private(set) var incognitoSpaceIDs: Set<UUID> = []
+    /// Spaces of Blank Windows (BlankWindow, #220): saved with the window, in no space list.
+    private(set) var blankSpaceIDs: Set<UUID> = []
     /// Per window, the tab shown before the selected one: a close goes back to it (CloseSuccessor).
     /// Not saved: after a relaunch it has no page, so Arc wouldn't go back to it either.
     @ObservationIgnored private var previousTab: [UUID: UUID] = [:]
@@ -71,11 +73,13 @@ final class SidebarStore {
     init(clock: Scheduler? = nil) {
         self.clock = clock ?? LiveScheduler.shared
         let doc = sidebarFile.load(or: SidebarDocument.fresh)
-        for s in doc.spaces { spaces[s.id] = s }
+        for s in doc.spaces {
+            spaces[s.id] = s
+            if s.standaloneWindowID != nil { blankSpaceIDs.insert(s.id) }
+        }
         profiles = doc.profiles ?? []
         profileFavorites = doc.profileFavorites ?? []
-        spaceOrder = doc.spaceOrder.filter { spaces[$0] != nil }
-        for s in doc.spaces where !spaceOrder.contains(s.id) { spaceOrder.append(s.id) }
+        spaceOrder = BlankWindow.spaceOrder(saved: doc.spaceOrder, spaces: doc.spaces)
         for it in doc.items { items[it.id] = it }
         archive = archiveFile.load(or: { [] })
         archiveChanged = false
@@ -85,13 +89,18 @@ final class SidebarStore {
         settings = loaded
         for h in historyFile.load(or: { [] }) { history[h.url] = h }
         ranking = rankingFile.load(or: { RankingData() })
+        // A Blank Window's space without its window goes; repair drops what was in it.
+        for sid in BlankWindow.orphans(spaces: Array(spaces.values), windows: prefs.windows) {
+            spaces[sid] = nil
+            blankSpaceIDs.remove(sid)
+        }
         repair()
         if prefs.windows.isEmpty { prefs.windows = [WindowSession()] }
         for i in prefs.windows.indices where prefs.windows[i].focusedSpaceID.flatMap({ spaces[$0] }) == nil {
             prefs.windows[i].focusedSpaceID = spaceOrder.first
         }
         activeWindowID = prefs.windows[0].id
-        lastNormalWindowID = activeWindowID
+        lastNormalWindowID = prefs.windows.first { !isStandalone(window: $0.id) }?.id ?? activeWindowID
         splitSharedFavorites(doc.favoritesContainerID)
         // Lists as the setting has them, also in a file an older Cra or a hand edit wrote.
         settings.sharedFavorites ? shareFavorites() : unshareFavorites()
@@ -117,7 +126,8 @@ final class SidebarStore {
             if let p = space.profileID, !profiles.contains(where: { $0.id == p }) { space.profileID = nil }
             spaces[id] = space
         }
-        if spaces.isEmpty {
+        // No space a window can list (none, or only Blank Windows' own).
+        if spaceOrder.isEmpty {
             let doc = SidebarDocument.fresh()
             for s in doc.spaces { spaces[s.id] = s }
             spaceOrder = doc.spaceOrder
@@ -262,29 +272,101 @@ final class SidebarStore {
         return out
     }
 
-    /// A new window on `spaceID` with nothing open yet.
+    /// A new window on `spaceID` with nothing open yet (never on another window's own space).
     func addWindow(spaceID: UUID, frame: String?) -> WindowSession {
-        let w = WindowSession(focusedSpaceID: spaceID, frame: frame)
+        let w = WindowSession(focusedSpaceID: isStandalone(space: spaceID) ? spaceOrder.first : spaceID, frame: frame)
         prefs.windows.append(w)
         return w
     }
 
-    /// The last window is never removed: closing it only hides it. An incognito
-    /// window's tabs go with it (not to the Library).
+    /// The last window is never removed: closing it only hides it. An incognito or Blank
+    /// Window's tabs go with it (not to the Library): Arc drops a Blank Window's sidebar.
     func removeWindow(_ id: UUID) {
         guard prefs.windows.count > 1, let gone = prefs.windows.first(where: { $0.id == id }) else { return }
+        let own = isStandalone(window: id) ? gone.focusedSpaceID : nil
         prefs.windows.removeAll { $0.id == id }
         pinnedPeeks[id] = nil
-        if activeWindowID == id { activeWindowID = prefs.windows.first { !$0.isIncognito }?.id ?? prefs.windows[0].id }
-        if gone.isIncognito, let sid = gone.focusedSpaceID, let space = spaces[sid] {
+        if activeWindowID == id { activeWindowID = prefs.windows.first { !isStandalone(window: $0.id) }?.id ?? prefs.windows[0].id }
+        if let sid = own, let space = spaces[sid] {
             var ids = Set<UUID>()
             collectSubtree(of: space, into: &ids)
             for i in ids { items[i] = nil }
             spaces[sid] = nil
             incognitoSpaceIDs.remove(sid)
-            revision &+= 1
+            blankSpaceIDs.remove(sid)
+            touch()
         }
     }
+
+    /// Arc's Blank Window (⌃⌘N, #220): a window in the normal profile with a sidebar of its
+    /// own, "This Window", that none of the spaces' tabs show in. Saved and restored with it.
+    func addBlankWindow(frame: String?) -> WindowSession {
+        var w = WindowSession(frame: frame)
+        let (space, containers) = BlankWindow.space(window: w.id, at: clock.now)
+        for c in containers { items[c.id] = c }
+        spaces[space.id] = space
+        blankSpaceIDs.insert(space.id)
+        w.focusedSpaceID = space.id
+        prefs.windows.append(w)
+        touch()
+        return w
+    }
+
+    /// A torn-off tab (#219) moves into a Blank Window's tabs and opens there; the window it left
+    /// loses it, as in Arc (no other tab opens in its place).
+    func moveToBlankWindow(_ id: UUID, window: UUID) {
+        let sid = focusedSpaceID(window: window)
+        guard isBlank(space: sid), let space = spaces[sid], items[id]?.isTab == true else { return }
+        moveItem(id, to: space.todayContainerID, index: 0)
+        guard items[id]?.parentID == space.todayContainerID else { return }
+        tookTab(id, into: window, open: true)
+    }
+
+    /// A tab that came into a window's list from another window (a tear-off, or a drop on its
+    /// sidebar): windows that had it open in another space let it go, and it opens here if it
+    /// was open there (Arc showed a dropped tab in the window it was dropped on) or `open` says
+    /// so. Windows on the same space keep it open (#4).
+    func tookTab(_ id: UUID, into window: UUID, open: Bool = false) {
+        guard let sid = spaceID(ofItem: id), sid == focusedSpaceID(window: window) else { return }
+        var wasOpen = open
+        for w in prefs.windows where w.id != window {
+            for (s, tab) in w.selectedTabPerSpace where tab == id && s != sid {
+                wasOpen = wasOpen || w.focusedSpaceID == s
+                updateWindow(w.id) { $0.selectedTabPerSpace[s] = nil }
+            }
+        }
+        if wasOpen { selectTab(id, window: window) }
+    }
+
+    /// A Blank Window's "Move to…" (Arc's header button): its tabs go to the top of a space's
+    /// Today and the window becomes a normal window on that space, its open tab still open.
+    func moveBlankWindow(_ window: UUID, toSpace sid: UUID) {
+        let own = focusedSpaceID(window: window)
+        guard isBlank(space: own), let blank = spaces[own], let target = spaces[sid], !isStandalone(space: sid) else { return }
+        let open = self.window(window).selectedTabPerSpace[own]
+        moveItems(children(of: blank.todayContainerID).map(\.id), to: target.todayContainerID, index: 0)
+        updateWindow(window) {
+            $0.focusedSpaceID = sid
+            $0.selectedTabPerSpace[own] = nil
+            if let open, items[open] != nil { $0.selectedTabPerSpace[sid] = open }
+        }
+        var ids = Set<UUID>()
+        collectSubtree(of: blank, into: &ids)
+        for i in ids { items[i] = nil }
+        spaces[own] = nil
+        blankSpaceIDs.remove(own)
+        touch()
+    }
+
+    func isBlank(space id: UUID?) -> Bool { id.map(blankSpaceIDs.contains) ?? false }
+    /// A space only its own window shows: an incognito or Blank Window's.
+    func isStandalone(space id: UUID?) -> Bool { isIncognito(space: id) || isBlank(space: id) }
+    func isBlank(window id: UUID?) -> Bool {
+        guard let w = prefs.windows.first(where: { $0.id == (id ?? activeWindowID) }), let sid = w.focusedSpaceID else { return false }
+        return spaces[sid]?.standaloneWindowID == w.id
+    }
+    /// A window showing only a space of its own (incognito or Blank): no space list, no paging.
+    func isStandalone(window id: UUID?) -> Bool { window(id).isIncognito || isBlank(window: id) }
 
     /// Arc's New Incognito Window: a window with a space of its own whose tabs load
     /// in an off-the-record profile and are never written anywhere.
@@ -305,22 +387,22 @@ final class SidebarStore {
     func isIncognito(space id: UUID?) -> Bool { id.map(incognitoSpaceIDs.contains) ?? false }
     func isIncognito(item id: UUID) -> Bool { isIncognito(space: spaceID(ofItem: id)) }
 
-    /// The spaces a window pages between: an incognito window has only its own.
+    /// The spaces a window pages between: an incognito or Blank Window has only its own.
     func pagedSpaces(window id: UUID?) -> [Space] {
         let w = window(id)
-        if w.isIncognito, let s = w.focusedSpaceID.flatMap({ spaces[$0] }) { return [s] }
+        if isStandalone(window: w.id), let s = w.focusedSpaceID.flatMap({ spaces[$0] }) { return [s] }
         return orderedSpaces
     }
 
-    /// The tabs a window may show and the command bar may offer there: its own
-    /// incognito tabs, or every normal tab.
+    /// The tabs a window may show and the command bar may offer there: an incognito or Blank
+    /// Window's own tabs, or every tab of the spaces.
     func profileTabs(window id: UUID?) -> [SidebarItem] {
         let sid = focusedSpaceID(window: id)
-        if isIncognito(space: sid), let s = spaces[sid] {
+        if isStandalone(space: sid), let s = spaces[sid] {
             return tabs(under: s.favoritesContainerID) + tabs(under: s.pinnedContainerID) + tabs(under: s.todayContainerID)
         }
         // Not the favorites of a profile no space uses (#154): nothing shows them.
-        return allTabs().filter { !isIncognito(item: $0.id) && spaceID(ofItem: $0.id) != nil }
+        return allTabs().filter { spaceID(ofItem: $0.id).map { !isStandalone(space: $0) } ?? false }
     }
 
     private func collectSubtree(of space: Space, into ids: inout Set<UUID>) {
@@ -334,9 +416,9 @@ final class SidebarStore {
     // MARK: Lookup
 
     var orderedSpaces: [Space] { spaceOrder.compactMap { spaces[$0] } }
-    /// Arc's single-space mode: one space and the header turned off. Incognito windows keep theirs.
+    /// Arc's single-space mode: one space and the header turned off. Incognito and Blank Windows keep theirs.
     func hidesSpaceHeader(_ id: UUID) -> Bool {
-        !settings.showSpaceHeaderOnSingleSpace && spaceOrder.count == 1 && !isIncognito(space: id)
+        !settings.showSpaceHeaderOnSingleSpace && spaceOrder.count == 1 && !isStandalone(space: id)
     }
     func focusedSpaceID(window id: UUID?) -> UUID {
         window(id).focusedSpaceID.flatMap { spaces[$0] != nil ? $0 : nil } ?? spaceOrder.first!
@@ -478,9 +560,9 @@ final class SidebarStore {
 
     func selectTab(_ id: UUID?, window: UUID? = nil) {
         var w = self.window(window).id
-        // A normal tab picked while an incognito window is in front (a link from another
-        // app, the Library) opens in the last normal window.
-        if window == nil, let id, self.window(w).isIncognito, !isIncognito(item: id) { w = lastNormalWindowID }
+        // A space's tab picked while an incognito or Blank Window is in front (a link from
+        // another app, the Library) opens in the last normal window.
+        if window == nil, let id, isStandalone(window: w), spaceID(ofItem: id) != focusedSpaceID(window: w) { w = lastNormalWindowID }
         let focused = focusedSpaceID(window: w)
         guard let id, let it = items[id], it.isTab else {
             updateWindow(w) { $0.selectedTabPerSpace[focused] = nil }
@@ -488,8 +570,8 @@ final class SidebarStore {
             return
         }
         let sid = spaceID(ofItem: id, window: w) ?? focused
-        // Incognito pages stay in their own window; normal tabs never open in one.
-        guard self.window(w).isIncognito ? sid == focused : !isIncognito(space: sid) else { return }
+        // Incognito and Blank Windows show only their own tabs, and only there.
+        guard isStandalone(window: w) ? sid == focused : !isStandalone(space: sid) else { return }
         updateWindow(w) {
             $0.focusedSpaceID = sid
             $0.selectedTabPerSpace[sid] = id
@@ -669,7 +751,8 @@ final class SidebarStore {
 
     func touchAfterImport() { touch() }
 
-    /// What goes to disk: everything but incognito windows' spaces and tabs.
+    /// What goes to disk: everything but incognito windows' spaces and tabs. Blank Windows'
+    /// spaces go too, outside `spaceOrder`.
     var document: SidebarDocument {
         var hidden = Set<UUID>()
         for sid in incognitoSpaceIDs { if let s = spaces[sid] { collectSubtree(of: s, into: &hidden) } }
@@ -679,7 +762,8 @@ final class SidebarStore {
             if let t = storedThemes[s.id] { s.theme = t }
             return s
         }
-        return SidebarDocument(version: 1, spaceOrder: spaceOrder, spaces: saved,
+        let blank = blankSpaceIDs.compactMap { spaces[$0] }.sorted { $0.createdAt < $1.createdAt }
+        return SidebarDocument(version: 1, spaceOrder: spaceOrder, spaces: saved + blank,
                                items: hidden.isEmpty ? Array(items.values) : items.values.filter { !hidden.contains($0.id) },
                                profiles: profiles, profileFavorites: profileFavorites.isEmpty ? nil : profileFavorites)
     }
@@ -720,6 +804,10 @@ final class SidebarStore {
         guard var it = items[id], items[newParent] != nil, id != newParent, !isDescendant(newParent, of: id) else { return }
         // A page can't change profile: nothing moves into or out of an incognito window.
         guard isIncognito(item: id) == isIncognito(item: newParent) else { return }
+        // A Blank Window holds tabs only: nothing goes into its (hidden) favorites or pinned section.
+        if isBlank(space: spaceID(ofItem: newParent)) {
+            guard case .today? = rootContainerKind(newParent) else { return }
+        }
         // Only tabs live inside a split; dropping onto a split adds a pane.
         if items[newParent]?.isSplit == true {
             if it.isTab { addToSplit(newParent, tabID: id, at: index) }
@@ -1023,7 +1111,7 @@ final class SidebarStore {
         // A pane brings its whole split: Arc's top apps hold a split as one tile (AppItem.childItems).
         let id = splitContaining(id)?.id ?? id
         guard let it = items[id], it.isTab || it.isSplit else { return }
-        guard let space = spaces[spaceID ?? self.spaceID(ofItem: id) ?? focusedSpaceID] else { return }
+        guard let space = spaces[spaceID ?? self.spaceID(ofItem: id) ?? focusedSpaceID], !isBlank(space: space.id) else { return }
         // A new favorite takes the tile color when every existing one shares it.
         let colors = Set(favoriteTabs(in: space).map { $0.tab?.tileColor })
         moveItem(id, to: space.favoritesContainerID, index: index)
@@ -1455,7 +1543,7 @@ final class SidebarStore {
     @discardableResult
     func createLiveFolder(_ source: LiveFolderSource, inSpace sid: UUID) -> SidebarItem? {
         if let existing = liveFolder(source, inSpace: sid) { return existing }
-        guard let space = spaces[sid], !isIncognito(space: sid) else { return nil }
+        guard let space = spaces[sid], !isStandalone(space: sid) else { return nil }
         let folder = createFolder(named: "Pull Requests", in: space.pinnedContainerID, index: 0)
         items[folder.id]?.liveFolder = LiveFolderData()
         touch()
@@ -1850,7 +1938,7 @@ final class SidebarStore {
         spaces[id] = space
         spaceOrder.append(id)
         if settings.sharedFavorites { shareFavorites() }
-        if focus, !window().isIncognito { updateWindow(nil) { $0.focusedSpaceID = id } }
+        if focus, !isStandalone(window: nil) { updateWindow(nil) { $0.focusedSpaceID = id } }
         touch()
         return spaces[id] ?? space
     }
@@ -2036,7 +2124,7 @@ final class SidebarStore {
     /// (MainWindowController.refresh).
     func focusSpace(_ id: UUID, window: UUID? = nil) {
         let w = self.window(window).id
-        guard spaces[id] != nil, id != focusedSpaceID(window: w), !self.window(w).isIncognito, !isIncognito(space: id) else { return }
+        guard spaces[id] != nil, id != focusedSpaceID(window: w), !isStandalone(window: w), !isStandalone(space: id) else { return }
         updateWindow(w) { $0.focusedSpaceID = id }
         revision &+= 1
     }

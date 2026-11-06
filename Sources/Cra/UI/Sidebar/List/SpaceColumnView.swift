@@ -79,10 +79,13 @@ final class SpaceColumnView: NSView {
         let set = { (v: NSView, f: NSRect) in if v.frame != f { animated ? (v.animator().frame = f) : (v.frame = f) } }
         set(favorites, NSRect(x: 8 + favoritesShift, y: 0, width: w - 16, height: fh))
         let tiles = favorites.tilesBottom(forWidth: w - 16)
-        let base = tiles ?? -8
+        // A Blank Window (Arc 1.172 captures, 6 Nov): its header sits 5 pt higher than a space's
+        // with no favorites, and its tabs 1.5 pt closer under it.
+        let blank = store.isBlank(space: spaceID)
+        let base = tiles ?? (blank ? -13 : -8)
         set(header, NSRect(x: 8, y: base + 8, width: w - 16, height: header.isHidden ? 0 : 36))
         // The list's line sits 11.5 pt into it (3 pt inset, then halfway down the 18 pt divider).
-        let top = base + (!header.isHidden ? 43 : tiles == nil ? 4 : 7)
+        let top = base + (!header.isHidden ? (blank ? 41.5 : 43) : tiles == nil ? 4 : 7)
         set(list, NSRect(x: 0, y: top, width: w, height: max(0, bounds.height - top)))
     }
 }
@@ -95,6 +98,14 @@ final class SpaceColumnView: NSView {
 /// right-click open the same space menu at the pointer. Collapsed, the chevron points right. Arc keeps
 /// it in the icon's place while collapsed; Cra shows the icon at rest and the chevron only on hover
 /// (X DM, 4 Nov), except for a space without an icon, where the chevron is all that shows the state.
+/// A Blank Window's header, Arc 1.172 2x captures (6 Nov): the name's glyphs 16.5 pt from the
+/// window's edge, "Move to…" (grey, 11 pt medium, 49 pt wide) ending 25.5 pt from the sidebar's
+/// edge. The offsets are fitted on Cra's own captures of the same points.
+enum BlankHeader {
+    static let titleX: CGFloat = 16.5 - 10 + 1.5
+    static let moveToEnd: CGFloat = 25.5 - 10.5
+}
+
 final class SpaceHeaderView: NSView, NSTextFieldDelegate {
     private let spaceID: UUID
     private let store: SidebarStore
@@ -114,6 +125,12 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
     /// Rename Space…: the name turns into a field and the ••• into Arc's "Done".
     private let done = NSTextField.sidebarLabel(size: 10, weight: .semibold)
     private var renameField: NSTextField?
+    /// A Blank Window's header (Arc 1.172, #220): "This Window" with no icon or chevron, and
+    /// "Move to…" at its end while the pointer is over the sidebar, which sends the window's tabs
+    /// to a space.
+    private var blank = false
+    private let moveTo = NSTextField.sidebarLabel(size: 11, weight: .medium)
+    private var columnHovering = false { didSet { if columnHovering != oldValue { refresh() } } }
     private var hovering = false { didSet { if hovering != oldValue { refresh() } } }
     /// Arc keeps the hover look while the space menu is open.
     private var menuOpen = false { didSet { if menuOpen != oldValue { refresh() } } }
@@ -140,8 +157,25 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         done.stringValue = "Done"
         done.isHidden = true
         symbol.imageScaling = .scaleNone
-        for v in [emoji, symbol, title, chevronBox, more, done] { addSubview(v) }
+        moveTo.stringValue = "Move to…"
+        moveTo.isHidden = true
+        for v in [emoji, symbol, title, chevronBox, more, done, moveTo] { addSubview(v) }
         sync()
+    }
+
+    private var columnTracking: NSTrackingArea?
+    private weak var trackedColumn: NSView?
+    /// "Move to…" follows the pointer over the whole column, not just the header.
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        if let t = columnTracking { trackedColumn?.removeTrackingArea(t) }
+        columnTracking = nil
+        guard let column = superview else { return }
+        trackedColumn = column
+        let t = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self,
+                               userInfo: ["column": true])
+        column.addTrackingArea(t)
+        columnTracking = t
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -158,6 +192,7 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
             emoji.stringValue = space.emoji
             symbol.image = space.symbol.flatMap { SidebarSymbols.image($0, size: 13, weight: .medium) }
             title.stringValue = space.title
+            blank = space.standaloneWindowID != nil
             colors = SidebarColors(space.theme.palette)
             collapsed = store.isPinnedCollapsed(spaceID)
             hide = store.hidesSpaceHeader(spaceID)
@@ -190,8 +225,16 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         symbol.alphaValue = showsChevron ? 0 : 1
         symbol.contentTintColor = colors.textSecondary
         more.colors = colors
-        more.isHidden = !lit || renameField != nil
+        more.isHidden = !lit || renameField != nil || blank
         done.isHidden = renameField == nil
+        moveTo.textColor = colors.textTertiary
+        moveTo.isHidden = !blank || !(columnHovering || hovering || menuOpen)
+        if blank {
+            chevron.alphaValue = 0
+            layer?.backgroundColor = .clear
+            needsLayout = true
+            return
+        }
         // Arc's dark header fill is white 0.10, a little lighter than its rows' (1 Nov).
         let fill = colors.isDark ? NSColor.white.withAlphaComponent(0.1) : colors.hoverFill
         layer?.backgroundColor = (lit ? fill : .clear).cgColor
@@ -230,8 +273,12 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         let dw = ceil(done.attributedStringValue.size().width) + 2 * SidebarText.inset
         let dh = done.intrinsicContentSize.height
         done.frame = NSRect(x: w - 5.5 - dw + SidebarText.inset, y: (h - dh) / 2, width: dw, height: dh)
-        let x: CGFloat = 36
-        let end = renameField != nil ? done.frame.minX - 6 : (more.isHidden ? w - 8.5 : w - 18.5 - 13 - 2)
+        let mw = ceil(moveTo.attributedStringValue.size().width) + 2 * SidebarText.inset
+        let mh = moveTo.intrinsicContentSize.height
+        moveTo.frame = NSRect(x: w - BlankHeader.moveToEnd - mw + SidebarText.inset, y: (h - mh) / 2, width: mw, height: mh)
+        let x: CGFloat = blank ? BlankHeader.titleX : 36
+        let end = blank ? (moveTo.isHidden ? w - 8.5 : moveTo.frame.minX - 6)
+            : renameField != nil ? done.frame.minX - 6 : (more.isHidden ? w - 8.5 : w - 18.5 - 13 - 2)
         let th = title.intrinsicContentSize.height
         let tw = min(ceil(title.attributedStringValue.size().width), max(0, end - x))
         title.frame = NSRect(x: x - SidebarText.inset, y: (h - th) / 2, width: tw + 2 * SidebarText.inset, height: th)
@@ -247,12 +294,21 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil))
     }
 
-    override func mouseEntered(with event: NSEvent) { hovering = true }
-    override func mouseExited(with event: NSEvent) { hovering = false }
+    override func mouseEntered(with event: NSEvent) {
+        if event.trackingArea === columnTracking { columnHovering = true } else { hovering = true }
+    }
+    override func mouseExited(with event: NSEvent) {
+        if event.trackingArea === columnTracking { columnHovering = false } else { hovering = false }
+    }
     override func mouseDown(with event: NSEvent) {}
     override func mouseUp(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
         guard bounds.contains(p) else { return }
+        // A Blank Window has nothing pinned to collapse; its one button is "Move to…".
+        if blank {
+            if !moveTo.isHidden, moveTo.frame.insetBy(dx: -6, dy: -6).contains(p) { showMenu(event) }
+            return
+        }
         if renameField != nil {
             if done.frame.insetBy(dx: -6, dy: -6).contains(p) { commitRename() }
             return
@@ -284,8 +340,23 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         if let w = window { hovering = bounds.contains(convert(w.mouseLocationOutsideOfEventStream, from: nil)) }
     }
 
+    /// "Move to…": the spaces, in the sidebar's order, each taking this window's tabs (#220).
+    private func moveToMenu() -> NSMenu {
+        let m = NSMenu()
+        for space in store.orderedSpaces {
+            let item = BlockMenuItem(title: space.emoji.isEmpty ? space.title : "\(space.emoji)  \(space.title)") { [store, ui, spaceID] in
+                guard store.isBlank(space: spaceID) else { return }
+                store.moveBlankWindow(ui.windowID, toSpace: space.id)
+            }
+            if let sym = space.symbol { item.image = SidebarSymbols.image(sym, size: 13, weight: .medium) }
+            m.addItem(item)
+        }
+        return m
+    }
+
     private func makeSpaceMenu() -> NSMenu? {
-        SpaceMenu.make(spaceID: spaceID, store: store, ui: ui, actions: actions, anchor: self) { [weak self] in self?.beginRename() }
+        if blank { return moveToMenu() }
+        return SpaceMenu.make(spaceID: spaceID, store: store, ui: ui, actions: actions, anchor: self) { [weak self] in self?.beginRename() }
     }
 
     // MARK: Rename (Arc: isEditingSpaceHeader, "Sidebar space header done button")
@@ -476,7 +547,11 @@ final class FavoritesGridView: NSView {
             return true
         }
         strip.onTargetChange = { [weak self] _ in self?.onHeightChange(true) }
-        strip.accepts = { [weak self] id in self?.isFavorite(id) != true }
+        // A Blank Window has no favorites (Arc, #220).
+        strip.accepts = { [weak self] id in
+            guard let self else { return false }
+            return !self.isFavorite(id) && !self.store.isBlank(space: self.spaceID)
+        }
         card.accepts = strip.accepts
         card.onDrop = strip.onDrop
         card.onDismiss = { [weak self] in
@@ -519,7 +594,7 @@ final class FavoritesGridView: NSView {
                 }
             }
             favoritesID = space.favoritesContainerID
-            dismissed = store.isIncognito(space: spaceID) || store.isFavoritesEmptyStateDismissed(space.favoritesContainerID)
+            dismissed = store.isStandalone(space: spaceID) || store.isFavoritesEmptyStateDismissed(space.favoritesContainerID)
             // A favorite split is one tile with a cell per pane (Arc: AppItem.childItems).
             for item in store.children(of: space.favoritesContainerID) where item.isTab || item.isSplit {
                 let panes = item.isSplit ? store.children(of: item.id).filter(\.isTab) : [item]
@@ -703,7 +778,7 @@ final class FavoritesGridView: NSView {
               let data = info.draggingPasteboard.data(forType: .craSidebarItem),
               let id = (try? JSONDecoder().decode(SidebarDragItem.self, from: data))?.id,
               let item = store.item(id), item.isTab || item.isSplit,
-              store.isIncognito(item: id) == store.isIncognito(space: spaceID) else { return nil }
+              store.isIncognito(item: id) == store.isIncognito(space: spaceID), !store.isBlank(space: spaceID) else { return nil }
         let w = bounds.width
         let top = extensionGrid(forWidth: w).favoritesOffset
         let p = convert(info.draggingLocation, from: nil)

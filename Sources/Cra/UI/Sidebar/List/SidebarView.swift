@@ -686,8 +686,9 @@ final class SpaceDockView: NSView {
             incognito = store.window(ui.windowID).isIncognito
             let f = store.focusedSpaceID(window: ui.windowID)
             focused = f
-            // Arc's single-space mode drops the lone space icon along with the header.
-            spaces = incognito || store.hidesSpaceHeader(f) ? [] : store.orderedSpaces
+            // Arc's single-space mode drops the lone space icon along with the header; incognito and
+            // Blank Windows show no space icons (Arc 1.172 keeps the + in a Blank Window).
+            spaces = store.isStandalone(window: ui.windowID) || store.hidesSpaceHeader(f) ? [] : store.orderedSpaces
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self, !self.syncQueued else { return }

@@ -168,6 +168,12 @@ without Apple Intelligence would. `cra://debug?tidy=1` runs Tidy on the window's
 hovering the divider, `cra://debug?undoTidy=1` is ⌘Z's undo and `cra://debug?settingsPane=max`
 opens Settings on a pane.
 
+`cra://debug?dragEnd=<text>` ends a drag of the window's tab whose URL holds the text, let go
+with nothing taking it, the way a drag out of the sidebar ends: outside every Cra window it opens
+in a new Blank Window (`&at=x,y` picks the point, from the screen's top left).
+`cra://debug?browserWindows=<label>` logs each browser window's kind (normal, blank, incognito),
+space, tabs, open tab and frame; cra.log gets the kinds and counts only.
+
 `cra://debug?menuAt=315,24` opens the menu a click at that window point would open (the
 developer-mode ⌄ here), and `&button=right` the context menu, a tab row's for instance.
 `&target=little` aims at the newest Little Window instead (its profile chip, for one).
