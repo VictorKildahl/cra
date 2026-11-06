@@ -14,7 +14,8 @@ struct ExtensionProxyControlTests {
     static let fixed: [String: Any] = ["mode": "fixed_servers", "server": "proxy.corp.example:3128", "bypass_list": "<local>"]
 
     /// The most recently installed or updated one wins; the other is overridden.
-    @Test func latestInstallWins() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/107"))
+    func latestInstallWins() {
         let settings: [String: Any] = [
             "zeroomega": Self.ext("13400000000000000", proxy: Self.pac),
             "otherproxy": Self.ext("13400000000000500", proxy: Self.fixed),
@@ -28,7 +29,8 @@ struct ExtensionProxyControlTests {
     }
 
     /// A turned-off or uninstalled extension's leftover pref does not count.
-    @Test func onlyEnabledExtensionsCount() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/107"))
+    func onlyEnabledExtensionsCount() {
         let settings: [String: Any] = [
             "a": Self.ext("100", proxy: Self.pac),
             "b": Self.ext("200", proxy: Self.fixed),
@@ -38,19 +40,21 @@ struct ExtensionProxyControlTests {
     }
 
     /// Chromium's map walks IDs in order and a later equal time takes over.
-    @Test func tieGoesToTheLaterID() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/107"))
+    func tieGoesToTheLaterID() {
         let settings: [String: Any] = ["aaa": Self.ext("100", proxy: Self.pac), "bbb": Self.ext("100", proxy: Self.fixed)]
         #expect(ExtensionProxyControl.controllers(settings: settings, enabled: ["aaa", "bbb"]).first?.extensionID == "bbb")
     }
 
     /// chrome.proxy.settings.set with scope "regular_only".
-    @Test func regularOnlyScopeCounts() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/107"))
+    func regularOnlyScopeCounts() {
         let settings: [String: Any] = ["a": Self.ext("100", proxy: Self.fixed, key: "regular_only_preferences"),
                                        "b": Self.ext("50", proxy: Self.pac, key: "incognito_preferences")]
         #expect(ExtensionProxyControl.controllers(settings: settings, enabled: ["a", "b"]).map(\.extensionID) == ["a"])
     }
 
-    @Test(arguments: [
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/107"), arguments: [
         (["mode": "direct"], "direct"),
         (["mode": "system"], "system"),
         (["mode": "auto_detect"], "auto_detect"),

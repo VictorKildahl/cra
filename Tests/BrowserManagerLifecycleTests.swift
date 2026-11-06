@@ -106,6 +106,7 @@ enum BrowserManagerLifecycleTests {
         recentlyAudibleCase()
         await audiblePageStaysAwakeCase()
         devToolsCase()
+        extensionTabActivationCase()
         await beforeUnloadCase()
         nowPlayingCase()
         await nowPlayingPictureInPictureCase()
@@ -607,8 +608,32 @@ enum BrowserManagerLifecycleTests {
         await sleepCase("a page that starts playing while it is asked stays awake") { _, rt in rt.browser.isAudible = true }
     }
 
+    /// #38: an extension's chrome.tabs.update({active: true}) (SwitchyOmega's Options on its open
+    /// settings tab) selects that Cra tab, and only while its page is the tab's live one.
+    // promise: #38
+    @MainActor
+    private static func extensionTabActivationCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let observer = Observer()
+        manager.delegate = observer
+        let options = store.createTab(url: "chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html").id
+        let other = store.createTab(url: "https://example.test/other").id
+        manager.show(options, focus: false)
+        let page = manager.runtime(for: options)!.browser
+        manager.show(other, focus: false)
+        manager.browserRequestsActivation(page, byPage: false)
+        expect(observer.activatedTabs == [options] && observer.activatedByPage == [false],
+               "the extension's activation asks for its options tab, not the one in front")
+        manager.unload(options)
+        manager.browserRequestsActivation(page, byPage: false)
+        expect(observer.activatedTabs == [options], "a page already closing selects nothing")
+        manager.closeAll()
+    }
+
     /// ⌥⌘I pressed again while CEF is still closing DevTools opens them once they are gone,
     /// instead of closing them a second time. Console and Network switch panels on open DevTools.
+    // promise: #138
     @MainActor
     private static func devToolsCase() {
         let store = SidebarStore()

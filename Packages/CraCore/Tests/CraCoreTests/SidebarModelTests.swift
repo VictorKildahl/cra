@@ -155,7 +155,8 @@ struct SidebarModelTests {
 
     /// #185: Developer Mode from the Site Control Center showed nothing with the toolbar hidden
     /// (Cra's default). Arc shows its developer bar above that site's pages anyway.
-    @Test func developerBarShowsWithTheToolbarHidden() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/185"))
+    func developerBarShowsWithTheToolbarHidden() {
         var settings = AppSettings()
         #expect(!settings.showToolbar)
         #expect(!settings.showsBar(above: "https://example.com/a"))

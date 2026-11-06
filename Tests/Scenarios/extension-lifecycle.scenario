@@ -1,5 +1,6 @@
 # An unpacked extension installed, used, turned off in chrome://extensions, clicked while off,
 # turned on and removed. A click must never reach a disabled extension (GitHub #41).
+# promise: #41
 budget rss=600 stalls50=5
 cra://debug?installExtension=${FIXTURES}/Extension
 relaunch

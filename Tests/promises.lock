@@ -1,6 +1,7 @@
 # Tests that pin what a closed issue shipped (scripts/promises.py). Each line: issue, test, hash
 # of its code. Change a test here only when the promise changes on purpose: name the issue and why
 # in the commit, and tell its reporter. Regenerate with scripts/promises.py --update.
+<<<<<<< HEAD
 #82    Tests/FloatingSidebarTests.swift::onlyTheKeyWindowReveals  e03736669b48
 #90    Packages/CraCore/Tests/CraCoreTests/ConnectionSecurityTests.swift::aCertificateErrorIsNotSecure  f7e423ddd42a
 #90    Packages/CraCore/Tests/CraCoreTests/ConnectionSecurityTests.swift::aValidCertificateIsSecure  3b4cecd2fcec
@@ -16,6 +17,56 @@
 #134   Packages/CraCore/Tests/CraCoreTests/PictureInPictureGestureTests.swift::resizeKeepsTheOppositeSideFixed  fba1f3cef683
 #134   Packages/CraCore/Tests/CraCoreTests/PictureInPictureGestureTests.swift::resizeStaysWithinTheLimits  a50c51c99293
 #134   Packages/CraCore/Tests/CraCoreTests/PictureInPictureGestureTests.swift::theMiddleMovesTheWindow  fd4ee818984b
+=======
+#22    Tests/PolicyTests.swift::extensionLaunch  8f21949f730d
+#38    Packages/CraCore/Tests/CraCoreTests/ExtensionPagePlacementTests.swift::openInAnotherSpaceOfTheProfileIsSelected  f9b7280ab4a7
+#38    Packages/CraCore/Tests/CraCoreTests/ExtensionPagePlacementTests.swift::openInThisSpaceWins  d378e29544b8
+#38    Tests/BrowserManagerLifecycleTests.swift::extensionTabActivationCase  49320dcef25f
+#41    Tests/ExtensionStateTests.swift::turnedOffInChromeExtensions  f66fbb7216ee
+#41    Tests/PolicyTests.swift::extensionLaunch  8f21949f730d
+#41    Tests/Scenarios/extension-lifecycle.scenario  a56397340f68
+#42    Packages/CraCore/Tests/CraCoreTests/FirstClickTests.swift::focusInTheWindowOrItsChildren  d9aa0889d8cf
+#42    Packages/CraCore/Tests/CraCoreTests/FirstClickTests.swift::otherwiseTheClickOnlyFocuses  aea902365e1c
+#42    Tests/Scenarios/developer-bar.scenario  7e0621dd18c1
+#43    Tests/ExtensionStateTests.swift::liveSettingsShowAJustLoadedExtension  e067993ed48d
+#87    Packages/CraCore/Tests/CraCoreTests/FirstClickTests.swift::closingAPopupIsAllTheClickDoes  2bbfbd4500d3
+#106   Packages/CraCore/Tests/CraCoreTests/ExtensionActionStateTests.swift::aNavigationThatClearsTheTabFallsBack  ace52cc84f77
+#106   Packages/CraCore/Tests/CraCoreTests/ExtensionActionStateTests.swift::aTabsOwnValueWinsValueByValue  a76ca3e3422d
+#106   Packages/CraCore/Tests/CraCoreTests/ExtensionActionStateTests.swift::anEmptyEveryTabStateGoesBackToTheManifest  97239924822b
+#106   Packages/CraCore/Tests/CraCoreTests/ExtensionActionStateTests.swift::closedTabsAreForgotten  eb65f265665c
+#106   Packages/CraCore/Tests/CraCoreTests/ExtensionActionStateTests.swift::decodesTheEvent  b97d7ef64936
+#106   Packages/CraCore/Tests/CraCoreTests/ExtensionActionStateTests.swift::everyTabEventHasNoTarget  85c9729b57e4
+#106   Packages/CraCore/Tests/CraCoreTests/ExtensionActionStateTests.swift::everyTabValueAppliesToEachTabInItsProfile  279242eefa61
+#106   Packages/CraCore/Tests/CraCoreTests/ExtensionBadgeTests.swift::backgroundIsOpaqueOrTheDefault  61ae7d7d2936
+#106   Packages/CraCore/Tests/CraCoreTests/ExtensionBadgeTests.swift::fortyTwoMatchesArc  80a4b22f4197
+#106   Packages/CraCore/Tests/CraCoreTests/ExtensionBadgeTests.swift::noTextNoBadge  b76de0288933
+#106   Packages/CraCore/Tests/CraCoreTests/ExtensionBadgeTests.swift::textContrastsWithTheBackground  b7f04612d473
+#106   Packages/CraCore/Tests/CraCoreTests/ExtensionBadgeTests.swift::widthAndAlignment  b820c2ebeeb2
+#107   Packages/CraCore/Tests/CraCoreTests/ExtensionPagePlacementTests.swift::anotherProfilesPageGoesToItsSpace  314ef64164d1
+#107   Packages/CraCore/Tests/CraCoreTests/ExtensionPagePlacementTests.swift::anotherProfilesTabIsNeverReused  7bf17f29af57
+#107   Packages/CraCore/Tests/CraCoreTests/ExtensionPagePlacementTests.swift::incognitoKeepsToItsOwnSpace  7074cccd4929
+#107   Packages/CraCore/Tests/CraCoreTests/ExtensionPagePlacementTests.swift::openInAnotherSpaceOfTheProfileIsSelected  f9b7280ab4a7
+#107   Packages/CraCore/Tests/CraCoreTests/ExtensionPagePlacementTests.swift::openInThisSpaceWins  d378e29544b8
+#107   Packages/CraCore/Tests/CraCoreTests/ExtensionPagePlacementTests.swift::otherPagesAlwaysOpenANewTab  bf7863727e71
+#107   Packages/CraCore/Tests/CraCoreTests/ExtensionPagePlacementTests.swift::profileWithoutASpaceUsesTheFocusedOne  7286e677c731
+#107   Packages/CraCore/Tests/CraCoreTests/ExtensionPageRetryTests.swift::extensionThatIsOffIsNotRetried  cac91e89b7ee
+#107   Packages/CraCore/Tests/CraCoreTests/ExtensionPageRetryTests.swift::retriesWithGrowingWaits  f352ef9b57af
+#107   Packages/CraCore/Tests/CraCoreTests/ExtensionProxyControlTests.swift::latestInstallWins  c968246ff873
+#107   Packages/CraCore/Tests/CraCoreTests/ExtensionProxyControlTests.swift::onlyEnabledExtensionsCount  a820044d6e5e
+#107   Packages/CraCore/Tests/CraCoreTests/ExtensionProxyControlTests.swift::regularOnlyScopeCounts  21a1fd0a4c96
+#107   Packages/CraCore/Tests/CraCoreTests/ExtensionProxyControlTests.swift::summaries  06f9a455cea5
+#107   Packages/CraCore/Tests/CraCoreTests/ExtensionProxyControlTests.swift::tieGoesToTheLaterID  d37c90d076aa
+#107   Packages/CraCore/Tests/CraCoreTests/ModelFixtureTests.swift::pinnedExtensionsLoadAsRecorded  fa1bcd77bec3
+#107   Packages/CraCore/Tests/CraCoreTests/PinnedExtensionsTests.swift::moveReordersOneProfile  a98ffa818669
+#107   Packages/CraCore/Tests/CraCoreTests/PinnedExtensionsTests.swift::noChangeKeepsTheSharedList  827acaee7710
+#107   Packages/CraCore/Tests/CraCoreTests/PinnedExtensionsTests.swift::oldListServesEveryProfile  57c4e23cef91
+#107   Packages/CraCore/Tests/CraCoreTests/PinnedExtensionsTests.swift::pinningInOneProfileLeavesTheOthers  30e861449032
+#107   Packages/CraCore/Tests/CraCoreTests/PinnedExtensionsTests.swift::profileListsRoundTrip  7a57b17d2767
+#107   Packages/CraCore/Tests/CraCoreTests/PinnedExtensionsTests.swift::removedExtensionsLeaveEveryList  db169d3fdc84
+#107   Packages/CraCore/Tests/CraCoreTests/PinnedExtensionsTests.swift::unreadableFileMeansNoPins  8a2abe27ded2
+#138   Tests/BrowserManagerLifecycleTests.swift::devToolsCase  76008e9b3836
+#138   Tests/PolicyTests.swift::devToolsToggle  5786fe494c6e
+>>>>>>> eb4646e (Pin the shipped extension and developer-mode issues with locked tests)
 #155   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::autoShowsTheHalfMacOSAsksFor  73a172a01086
 #155   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::everySwatchOnAutoFollowsMacOS  2abd1f76b828
 #155   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::everySwatchOnLightOrDarkKeepsOneLook  95d16ff2c954
@@ -24,6 +75,7 @@
 #155   Tests/Scenarios/auto-theme.scenario  ecf687c1ce39
 #170   Tests/StoreTests.swift::themePreview  d10606ab1689
 #171   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::autoThemeWithOneHalfKeepsItsLook  6162547ce294
+<<<<<<< HEAD
 #172   Tests/StoreTests.swift::littleWindowProfile  cbb20edf1af3
 #178   Packages/CraCore/Tests/CraCoreTests/ShippedWindowsTests.swift::anAutoSpaceRingsTheFocusedPaneInOneColour  8b1715afe8fe
 #178   Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::anEmptyPaneHasGreyedNavigationAndClose  930d3981aac7
@@ -58,3 +110,11 @@
 #204   Packages/CraCore/Tests/CraCoreTests/PeekLayoutTests.swift::opensFromTheLinkAndLandsOnTheCard  3465bf54ca11
 #204   Packages/CraCore/Tests/CraCoreTests/PeekLayoutTests.swift::pageScalesWithTheWidthFromTheTopLeft  17bcf5f398a5
 #204   Packages/CraCore/Tests/CraCoreTests/PeekLayoutTests.swift::withoutALinkItGrowsFromTheArea  700ece5eaa91
+=======
+#185   Packages/CraCore/Tests/CraCoreTests/SidebarModelTests.swift::developerBarShowsWithTheToolbarHidden  20670c4040fc
+#185   Tests/Scenarios/developer-bar.scenario  7e0621dd18c1
+#203   Packages/CraCore/Tests/CraCoreTests/WebStoreInstallsTests.swift::folderStopsLoadingWhereTheStoreHasIt  7dd24962094b
+#203   Packages/CraCore/Tests/CraCoreTests/WebStoreInstallsTests.swift::onlyStoreCopiesNamedAfterTheirID  d8e4376933ca
+#203   Packages/CraCore/Tests/CraCoreTests/WebStoreInstallsTests.swift::pendingWhereTheFolderLoadsAndTheStoreHasNotInstalledIt  d6dfbc04b676
+#203   Packages/CraCore/Tests/CraCoreTests/WebStoreInstallsTests.swift::storeInstallsAreInternalFromTheWebStore  b1b3898613c7
+>>>>>>> eb4646e (Pin the shipped extension and developer-mode issues with locked tests)

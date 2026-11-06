@@ -6,7 +6,8 @@ import Testing
 struct WebStoreInstallsTests {
     let id = "bcjindcccaagfpapjjmafapmmgkkhgoa"
 
-    @Test func onlyStoreCopiesNamedAfterTheirID() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/203"))
+    func onlyStoreCopiesNamedAfterTheirID() {
         let store = WebStoreInstalls.storeUpdateURL
         #expect(WebStoreInstalls.isWebStoreCopy(folder: id, extensionID: id, updateURL: store))
         #expect(WebStoreInstalls.isWebStoreCopy(folder: id, extensionID: id, updateURL: store + "/"))
@@ -19,7 +20,8 @@ struct WebStoreInstallsTests {
         #expect(!WebStoreInstalls.isWebStoreCopy(folder: "x", extensionID: "x", updateURL: store), "not an extension ID")
     }
 
-    @Test func storeInstallsAreInternalFromTheWebStore() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/203"))
+    func storeInstallsAreInternalFromTheWebStore() {
         #expect(WebStoreInstalls.isStoreInstall(settings: ["location": 1, "from_webstore": true]))
         #expect(!WebStoreInstalls.isStoreInstall(settings: ["location": 8, "from_webstore": false]), "--load-extension")
         #expect(!WebStoreInstalls.isStoreInstall(settings: ["location": 4]), "unpacked")
@@ -27,7 +29,8 @@ struct WebStoreInstallsTests {
         #expect(!WebStoreInstalls.isStoreInstall(settings: nil))
     }
 
-    @Test func pendingWhereTheFolderLoadsAndTheStoreHasNotInstalledIt() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/203"))
+    func pendingWhereTheFolderLoadsAndTheStoreHasNotInstalledIt() {
         let profiles = ["Default", "Profile 1", "Profile 2"]
         let settings: [String: [String: Any]] = [
             "Default": [id: ["location": 8]],
@@ -41,7 +44,8 @@ struct WebStoreInstallsTests {
         #expect(scoped.isEmpty, "loads only where the store already has it")
     }
 
-    @Test func folderStopsLoadingWhereTheStoreHasIt() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/203"))
+    func folderStopsLoadingWhereTheStoreHasIt() {
         var scopes = ExtensionProfiles()
         let all: Set<String> = ["Default", "Profile 1"]
         let goneAfterDefault = scopes.movedToWebStore(folder: id, profile: "Default", allProfiles: all)

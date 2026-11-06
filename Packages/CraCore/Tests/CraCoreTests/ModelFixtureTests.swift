@@ -132,7 +132,7 @@ struct ModelFixtureTests {
         #expect(empty.choosing(.webKit, for: "https://www.viaplay.dk/").added == ["www.viaplay.dk"])
     }
 
-    @Test(arguments: ["pinned-extensions.json", "pinned-extensions-profiles.json"])
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/107"), arguments: ["pinned-extensions.json", "pinned-extensions-profiles.json"])
     func pinnedExtensionsLoadAsRecorded(name: String) throws {
         let (loaded, recorded) = try Self.load(name, as: PinnedExtensions.self)
         #expect(loaded == recorded)

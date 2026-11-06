@@ -1,0 +1,8 @@
+{
+  "olderchromiumoffaaaaaaaaaaaaaaaa": {"location": 1, "state": 0, "path": "olderchromiumoffaaaaaaaaaaaaaaaa/1.0_0"},
+  "aaaabbbbccccddddeeeeffffgggghhhh": {"location": 1, "from_webstore": true, "disable_reasons": [1], "path": "aaaabbbbccccddddeeeeffffgggghhhh/1.0_0"},
+  "iiiijjjjkkkkllllmmmmnnnnoooopppp": {"location": 1, "from_webstore": true, "disable_reasons": [], "path": "iiiijjjjkkkkllllmmmmnnnnoooopppp/2.1_0"},
+  "commandlineoffaaaaaaaaaaaaaaaaaa": {"location": 8, "disable_reasons": [1], "path": "/Users/example/Library/Application Support/Cra/Extensions/commandlineoff"},
+  "commandlineonaaaaaaaaaaaaaaaaaaa": {"location": 8, "disable_reasons": [1], "path": "/Users/example/Library/Application Support/Cra/Extensions/commandlineon"},
+  "unpackedjustloadedaaaaaaaaaaaaaa": {"location": 4, "disable_reasons": [], "path": "${FIXTURE}/Unpacked"}
+}

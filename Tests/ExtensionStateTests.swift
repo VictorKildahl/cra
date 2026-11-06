@@ -98,6 +98,50 @@ enum ExtensionStateTests {
         try messages("de", "not JSON")
         check(description("__MSG_extDescription__") == "Manage passwords.", "invalid catalog falls back to English")
         check(description("__MSG_appDesc__").isEmpty, "invalid catalog without a fallback message hides the key")
+        checks += turnedOffInChromeExtensions()
+        checks += liveSettingsShowAJustLoadedExtension()
         print("ExtensionStateTests: \(checks) checks passed")
+    }
+
+    static let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appendingPathComponent("Fixtures/ExtensionState", isDirectory: true)
+    static let store = (off: "aaaabbbbccccddddeeeeffffgggghhhh", on: "iiiijjjjkkkkllllmmmmnnnnoooopppp")
+
+    /// #41: an extension turned off in chrome://extensions reads as off from the profile's files,
+    /// whatever its install location (an older Chromium's state 0, a Web Store install, a
+    /// --load-extension copy), so Cra's toolbar leaves it out and never runs it. A turned-off Web
+    /// Store install stays listed, as off, so its pin comes back when it is turned on again.
+    // promise: #41
+    static func turnedOffInChromeExtensions() -> Int {
+        let profile = fixture.appendingPathComponent("Default", isDirectory: true)
+        let off = ExtensionImporter.disabledIDs(inProfile: profile)
+        precondition(off == ["olderchromiumoffaaaaaaaaaaaaaaaa", "commandlineoffaaaaaaaaaaaaaaaaaa", store.off],
+                     "turned off: \(off.sorted())")
+        let listed = ExtensionImporter.extensions(inProfile: profile).sorted { $0.name < $1.name }
+        precondition(listed.map(\.id) == [store.off, store.on], "the Web Store installs: \(listed.map(\.id))")
+        precondition(listed.map(\.isEnabled) == [false, true] && listed.map(\.name) == ["Store Off", "Store On"],
+                     "listed with whether each is on")
+        return 3
+    }
+
+    /// #43: the settings Chromium holds in memory (it writes the files about 10 s later) read
+    /// like the files, so an extension just loaded unpacked is listed, on, at once, and one just
+    /// turned off reads as off at once.
+    // promise: #43
+    static func liveSettingsShowAJustLoadedExtension() -> Int {
+        let profile = fixture.appendingPathComponent("Default", isDirectory: true)
+        let text = try! String(contentsOf: fixture.appendingPathComponent("live-extensions-settings.json"), encoding: .utf8)
+            .replacingOccurrences(of: "${FIXTURE}", with: fixture.path)
+        let live = try! JSONSerialization.jsonObject(with: Data(text.utf8)) as! [String: Any]
+        let listed = ExtensionImporter.extensions(settings: live, inProfile: profile)
+        let fresh = listed.first { $0.id == "unpackedjustloadedaaaaaaaaaaaaaa" }
+        precondition(fresh?.isEnabled == true && fresh?.name == "Just Loaded"
+                     && fresh?.folder.standardizedFileURL == fixture.appendingPathComponent("Unpacked").standardizedFileURL,
+                     "the extension Load unpacked just added is listed, on, from its own folder")
+        precondition(Set(listed.map(\.id)) == [store.off, store.on, "unpackedjustloadedaaaaaaaaaaaaaa"], "live list: \(listed.map(\.id))")
+        let off = ExtensionImporter.disabledIDs(settings: live)
+        precondition(off == ExtensionImporter.disabledIDs(inProfile: profile).union(["commandlineonaaaaaaaaaaaaaaaaaaa"]),
+                     "the switch the files don't have yet already counts: \(off.sorted())")
+        return 3
     }
 }
