@@ -2930,19 +2930,18 @@ event with `shiftClickModalEntryPointEnabled` set for the run, AX frames and 60 
   250/238/194 on the fake home's yellow space: the space's tooltip fill (shadedDark at 30 %) and its light
   foreground. Their tips are the space's ArcTooltip.
 - [O] The page behind fades to about 28 % over the window's background (233/240/254 → 178/172/151); the sidebar
-  stays. Opening, the card starts at the area's full size and shrinks to its frame as it fades in (~0.12 s), the
-  buttons appearing at the end. Escape closes it backwards: out to the full area, fading, as the page comes back
-  (~0.22 s).
+  stays. Opening and closing: see "Peek grows out of the link" below. This run's page was one big link, so the
+  card seemed to start at the area's full size and to go back out to it.
 - [O] "Copied Current URL" carries a Share glyph button in browser windows too (AX `square.and.arrow.up`, "Share",
   31 × 27). The toast is 195 × 47 pt: text 13 pt in, 14.5 pt to a 29 × 27 pt button 13 pt from the end, 10 pt from
   top and bottom. The button is a white wash over the pill (≈ 60 % on the light toast, 15 % on Little Arc's dark
   one) with an outline. A click opens the macOS share menu (AirDrop, Notes…) from the button; the toast stays.
-- [O] The motion, frame by frame at 60 fps (card edges on one row, the card's and the page's luminance): opening,
-  the card's opacity reaches 1 in ~0.075 s, and its scale goes from the whole area (1.25, centred) to 1 on an
-  ease-out cubic over ~0.205 s (scale − 1 per frame: .168, .127, .092, .063, .041, .025, .015, .008, .002). The
-  buttons appear with it and ride its top-right corner. The page fades on an ease-out cubic over ~0.18 s.
-  Closing: the card grows to ~1.19 in ~0.09 s (near linear), fading from ~0.07 s, gone by ~0.16 s; the page is
-  back after ~0.2 s.
+- [O] The motion from that page-sized link, frame by frame at 60 fps (card edges on one row, the card's and the
+  page's luminance): opening, what read as the card's opacity reaching 1 in ~0.075 s was the link's picture (the
+  whole page) fading out over it; its scale went from the whole area (1.25, centred) to 1 on an ease-out cubic
+  over ~0.205 s (scale − 1 per frame: .168, .127, .092, .063, .041, .025, .015, .008, .002). The page fades on an
+  ease-out cubic over ~0.18 s. Closing: the card grew to ~1.19 in ~0.09 s (near linear), "fading" from ~0.07 s
+  (the link's picture coming back), gone by ~0.16 s; the page is back after ~0.2 s.
 - Cra draws the motion on Core Animation (PeekTransition): pictures of the card (with Chromium's screenshot of
   the page when closing) and of the buttons in a panel over the window, the real card and buttons invisible at
   their places until it lands. Animating the windows' frames (the first version) resized and laid out the card
@@ -2964,6 +2963,36 @@ event with `shiftClickModalEntryPointEnabled` set for the run, AX frames and 60 
   the peeked page on the right. Cra: MainWindowController.closedPeek, LittleWindowController.promoteToSplit.
 - [?] Not measured: the card at other window widths (Cra keeps 80 % of the area), and the Peek with Arc's
   toolbar turned off.
+
+### Peek grows out of the link (Arc 1.171, 6 Nov 2026, GitHub #204, offline Arc)
+The reporter recorded Arc 1.172.1 growing the card out of the clicked link. 1.172.0/1.172.1 only moved Chromium
+(appcast notes: "no other changes"), so this was measured on 1.171 with a lab page on 127.0.0.1: two 68 × 31 pt
+links, A near the top left and B near the bottom right, real HID Shift-clicks (`modalEnabled` and
+`shiftClickModalEntryPointEnabled` set for the run), Escape to close, an app-only ScreenCaptureKit recording at
+60 fps, the card's frame and a black box inside the peeked page measured per frame.
+- [O] Opening: a picture of the link fills the moving frame (stretched, opaque) and fades out over the card on an
+  ease-out over ~0.075 s (red over blue reads 0.40, 0.21, 0.065, 0.02 a frame apart). The frame goes from the
+  link's rect to the card's: its centre (x and y) and width on an ease-out cubic over ~0.205 s, the height
+  lagging on an ease-out cubic over ~0.21 s about 12 ms later (when the width was 60 % of the way the height
+  was 48 %; frames from link B gave the same pairs). The page inside is a picture scaled by the frame's width
+  against the card's, pinned to the frame's top-left; the frame (8 pt corners) clips the rest.
+- [O] The buttons ride the frame's top-right corner, scaled like the page, 7 pt below its top, and fade in once
+  the link's picture is gone (none at ~0.055 s after the motion starts, faint at ~0.08, full by ~0.13).
+- [O] Closing from link B: the frame goes back to the link's rect on the same near-linear curve as before, over
+  ~0.16 s (fit on 6 frames: .13, .31, .49, .64, .80, .88), the card opaque, the link's picture fading back in
+  over it from ~0.07 s (≈ 0.3 at 80 % of the way, 0.55 at 88 %); then only the real link. The buttons go in
+  ~0.05 s.
+- [O] Closing from link A went back into link A the same way (.09, .26, .44, .66, .78, .86, .92 a frame apart,
+  the link's red fading in over the blue). Only the very first Peek after launch (Arc's toolbar grew 8 pt during
+  that run) shrank about its own centre instead and faded out in ~0.07 s; taken as a first-run glitch.
+- Cra: PeekLayout.opening / closing / content / column (CraCore) sample the motion; PeekTransition plays it as
+  Core Animation keyframes at 120 Hz. MainWindowController.peekSource finds the link under the pointer (else
+  the focused link) with a script in Cra's isolated world and cuts its picture out of Chromium's screenshot,
+  within 90 ms; without one (or in a WebKit tab) the card grows from the whole area and fades itself, as from
+  Arc's page-sized link. Closing asks where the link is now (the page may have scrolled) and goes back there;
+  out to the whole area when it's gone. Recorded the same way in a test copy: the card's left edge went .65,
+  .77, .84, .91, .93, .98 of the way a frame apart (Arc .60, .77, .85, .91, .95, .97), its bottom edge .34,
+  .59, .71, .80, .87, .91 (Arc .31, .54, .73, .82, .89, .94), and it closed back into the link.
 
 ## Capture (Arc 1.171, 4 Nov 2026, X request, Swift metadata + strings + offline Arc at 2x, 120 fps recordings)
 - [O metadata] Module `Capture`: ContentCaptureViewController holds ContentCaptureView (grayscale and darkened layers with

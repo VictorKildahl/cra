@@ -183,23 +183,69 @@ final class PeekControlButton: NSView {
     }
 }
 
-/// Arc's Peek opening and closing, on Core Animation. A picture of the card and of its buttons
-/// rides in a panel over the browser window while the real ones wait, invisible, at their places:
-/// the window server draws every frame, nothing is resized or laid out while it runs, and the
-/// page window (which can't follow a frame animation) is never moved. Curves from PeekLayout.
+/// The link a Peek came from: where it is in the browser window (window coordinates) and a picture
+/// of it, at the window's scale (MainWindowController.peekSource).
+struct PeekSource {
+    let tabID: UUID
+    let rect: NSRect
+    let image: CGImage?
+    /// How long a Peek waits for Chromium's answers before it opens or closes without them.
+    static let wait: TimeInterval = 0.09
+
+    /// A Runtime.evaluate result's value (returnByValue), when it is an object.
+    static func value(_ result: String?) -> [String: Any]? {
+        result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+            .flatMap { ($0["result"] as? [String: Any])?["value"] as? [String: Any] }
+    }
+
+    /// Page.captureScreenshot's picture.
+    static func image(fromScreenshot shot: String?) -> CGImage? {
+        shot.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+            .flatMap { $0["data"] as? String }.flatMap { Data(base64Encoded: $0) }
+            .flatMap { CGImageSourceCreateWithData($0 as CFData, nil) }.flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) }
+    }
+
+    /// The part of a viewport picture at `fraction` (y down, as the page measures).
+    static func crop(_ image: CGImage, to fraction: CGRect) -> CGImage? {
+        let w = CGFloat(image.width), h = CGFloat(image.height)
+        let r = CGRect(x: fraction.minX * w, y: fraction.minY * h, width: fraction.width * w, height: fraction.height * h)
+            .integral.intersection(CGRect(x: 0, y: 0, width: w, height: h))
+        return r.isEmpty ? nil : image.cropping(to: r)
+    }
+}
+
+/// Arc's Peek opening and closing, on Core Animation (GitHub #204). The card grows out of the
+/// link it came from and closes back into it: a picture of the card and of its buttons rides in a
+/// panel over the browser window while the real ones wait, invisible, at their places. A picture of
+/// the link fills the moving frame and fades out over the card as it opens, back in as it closes.
+/// Without a link (no pointer over one, a WebKit tab) the card grows from the whole area and fades
+/// itself, as Arc does from a link that covers the page. The window server draws every frame,
+/// nothing is resized or laid out while it runs, and the page window (which can't follow a frame
+/// animation) is never moved. Every frame comes from PeekLayout, sampled at 120 Hz.
 @MainActor
 final class PeekTransition {
     private let panel: NSPanel
+    /// The card's shadow and its clipped picture, faded together when there is no link picture.
     private let group = CALayer()
     private let shadow = CALayer()
+    private let clip = CALayer()
     private let card = CALayer()
+    private let link = CALayer()
     private let buttons = CALayer()
-    /// Arc's ease-out on the card's scale, and the near-linear way back out.
+    private let cardFrame: NSRect
+    private let columnFrame: NSRect
+    private let source: NSRect
+    private let hasLinkPicture: Bool
     static let easeOutCubic = CAMediaTimingFunction(controlPoints: 0.215, 0.61, 0.355, 1)
-    static let closeCurve = CAMediaTimingFunction(controlPoints: 0.25, 0.25, 0.5, 1)
 
-    /// `card` and `column` in `window`'s coordinates; the pictures at the window's scale.
-    init(over window: NSWindow, card frame: NSRect, cardImage: CGImage?, column: NSRect, columnImage: CGImage?) {
+    /// `card`, `column` and `source` (the link, or the whole area) in `window`'s coordinates; the
+    /// pictures at the window's scale.
+    init(over window: NSWindow, card frame: NSRect, cardImage: CGImage?, column: NSRect, columnImage: CGImage?,
+         source: NSRect, sourceImage: CGImage?) {
+        cardFrame = frame
+        columnFrame = column
+        self.source = source
+        hasLinkPicture = sourceImage != nil
         panel = NSPanel(contentRect: window.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -214,28 +260,31 @@ final class PeekTransition {
         let scale = window.backingScaleFactor
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        group.frame = frame
-        shadow.frame = group.bounds
-        shadow.shadowPath = CGPath(roundedRect: group.bounds, cornerWidth: PeekLayout.cornerRadius, cornerHeight: PeekLayout.cornerRadius, transform: nil)
+        group.frame = view.bounds
         shadow.shadowColor = NSColor.black.cgColor
         shadow.shadowOpacity = 0.35
         shadow.shadowRadius = 14
         shadow.shadowOffset = CGSize(width: 0, height: -6)
-        card.frame = group.bounds
-        card.cornerRadius = PeekLayout.cornerRadius
-        card.cornerCurve = .continuous
-        card.masksToBounds = true
+        clip.cornerRadius = PeekLayout.cornerRadius
+        clip.cornerCurve = .continuous
+        clip.masksToBounds = true
         card.contents = cardImage
         card.contentsGravity = .resize
         card.contentsScale = scale
-        group.addSublayer(shadow)
-        group.addSublayer(card)
-        buttons.frame = column
+        link.contents = sourceImage
+        link.contentsGravity = .resize
+        link.contentsScale = scale
+        link.opacity = 0
         buttons.contents = columnImage
         buttons.contentsGravity = .resize
         buttons.contentsScale = scale
+        clip.addSublayer(card)
+        clip.addSublayer(link)
+        group.addSublayer(shadow)
+        group.addSublayer(clip)
         view.layer?.addSublayer(group)
         view.layer?.addSublayer(buttons)
+        place(PeekLayout.Moment(frame: frame, sourceOpacity: 0, buttonsOpacity: 1))
         // Nothing shows until open() or close() animates it: the panel reaches the screen before
         // the animations do, and its first frame showed the card at its final size.
         group.opacity = 0
@@ -245,78 +294,99 @@ final class PeekTransition {
         panel.orderFront(nil)
     }
 
-    /// From the whole area to the card's frame, fading in; `done` once it has landed.
+    /// The layers' places at one moment, without animation.
+    private func place(_ m: PeekLayout.Moment) {
+        let v = values(m)
+        for (layer, frame) in [(shadow, v.frame), (clip, v.frame), (card, v.content), (link, v.linkFrame), (buttons, v.column)] {
+            layer.bounds = CGRect(origin: .zero, size: frame.size)
+            layer.position = CGPoint(x: frame.midX, y: frame.midY)
+        }
+        shadow.shadowPath = v.shadowPath
+    }
+
+    private struct Values {
+        var frame: CGRect, content: CGRect, linkFrame: CGRect, column: CGRect, shadowPath: CGPath
+    }
+
+    private func values(_ m: PeekLayout.Moment) -> Values {
+        let f = m.frame
+        let r = min(PeekLayout.cornerRadius, f.width / 2, f.height / 2)
+        return Values(frame: f, content: PeekLayout.content(in: f, card: cardFrame),
+                      linkFrame: CGRect(origin: .zero, size: f.size),
+                      column: PeekLayout.column(columnFrame, card: cardFrame, frame: f),
+                      shadowPath: CGPath(roundedRect: CGRect(origin: .zero, size: f.size), cornerWidth: r, cornerHeight: r, transform: nil))
+    }
+
+    /// Runs `moments` (sampled every 1/120 s over `duration`) on every layer, starting `lead` ahead.
+    private func run(_ moments: [PeekLayout.Moment], duration: Double, keepEnd: Bool, done: @escaping () -> Void) {
+        let begin = CACurrentMediaTime() + Self.lead
+        let times = moments.indices.map { NSNumber(value: Double($0) / Double(max(1, moments.count - 1))) }
+        let all = moments.map(values)
+        func animate(_ layer: CALayer, _ keyPath: String, _ vals: [Any]) {
+            let a = CAKeyframeAnimation(keyPath: keyPath)
+            a.values = vals
+            a.keyTimes = times
+            a.calculationMode = .linear
+            a.beginTime = begin
+            a.duration = duration
+            a.fillMode = keepEnd ? .both : .backwards
+            a.isRemovedOnCompletion = !keepEnd
+            layer.add(a, forKey: keyPath)
+        }
+        func frames(_ layer: CALayer, _ pick: (Values) -> CGRect) {
+            animate(layer, "bounds", all.map { NSValue(rect: CGRect(origin: .zero, size: pick($0).size)) })
+            animate(layer, "position", all.map { NSValue(point: CGPoint(x: pick($0).midX, y: pick($0).midY)) })
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        CATransaction.setCompletionBlock { MainActor.assumeIsolated { done() } }
+        frames(shadow) { $0.frame }
+        frames(clip) { $0.frame }
+        frames(card) { $0.content }
+        frames(link) { $0.linkFrame }
+        frames(buttons) { $0.column }
+        animate(shadow, "shadowPath", all.map(\.shadowPath))
+        let linkOpacity = moments.map { Float($0.sourceOpacity) }
+        if hasLinkPicture {
+            animate(link, "opacity", linkOpacity)
+            animate(group, "opacity", moments.map { _ in Float(1) })
+        } else {
+            // No picture of the link: the card fades in its place.
+            animate(group, "opacity", linkOpacity.map { 1 - $0 })
+        }
+        animate(buttons, "opacity", moments.map { Float($0.buttonsOpacity) })
+        let end = moments.last!
+        place(end)
+        link.opacity = hasLinkPicture ? Float(end.sourceOpacity) : 0
+        group.opacity = hasLinkPicture ? 1 : Float(1 - end.sourceOpacity)
+        buttons.opacity = Float(end.buttonsOpacity)
+        CATransaction.commit()
+    }
+
+    private static func samples(_ duration: Double, _ moment: (Double) -> PeekLayout.Moment) -> [PeekLayout.Moment] {
+        let n = max(2, Int((duration * 120).rounded(.up)) + 1)
+        return (0..<n).map { moment(duration * Double($0) / Double(n - 1)) }
+    }
+
     /// A new panel reaches the screen a frame or two after it is ordered in, and the main thread
     /// still has the page to focus: animations clocked from now lost their first 60 ms. They start
     /// this far ahead instead, held at their first frame until then.
     static let lead: CFTimeInterval = 0.03
 
+    /// Out of the link (or the area) to the card's frame; `done` once it has landed.
     func open(done: @escaping () -> Void) {
-        let k = PeekLayout.areaScale
-        let shift = PeekLayout.cornerShift(card: group.frame, scale: k)
-        let now = CACurrentMediaTime() + Self.lead
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        CATransaction.setCompletionBlock { MainActor.assumeIsolated { done() } }
-        for layer in [group, buttons] {
-            layer.opacity = 1
-            let fade = CABasicAnimation(keyPath: "opacity")
-            fade.fromValue = 0
-            fade.toValue = 1
-            fade.duration = PeekLayout.openFadeDuration
-            fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            fade.beginTime = now
-            fade.fillMode = .backwards
-            layer.add(fade, forKey: "fade")
-        }
-        let grow = CABasicAnimation(keyPath: "transform.scale")
-        grow.fromValue = k
-        grow.toValue = 1
-        let ride = CABasicAnimation(keyPath: "position")
-        ride.fromValue = NSValue(point: NSPoint(x: buttons.position.x + shift.dx, y: buttons.position.y + shift.dy))
-        ride.toValue = NSValue(point: buttons.position)
-        for (layer, a) in [(group, grow), (buttons, ride)] as [(CALayer, CABasicAnimation)] {
-            a.beginTime = now + PeekLayout.openScaleDelay
-            a.duration = PeekLayout.openScaleDuration
-            a.timingFunction = Self.easeOutCubic
-            a.fillMode = .backwards
-            layer.add(a, forKey: "move")
-        }
-        CATransaction.commit()
+        let d = PeekLayout.openDuration
+        run(Self.samples(d) { PeekLayout.opening(from: self.source, to: self.cardFrame, at: $0) }, duration: d, keepEnd: false, done: done)
     }
 
-    /// Back out to the whole area, fading partway; `done` once it is gone.
+    /// Back into the link (or out to the area, fading); `done` once it is gone.
     func close(done: @escaping () -> Void) {
-        let k = PeekLayout.areaScale
-        let shift = PeekLayout.cornerShift(card: group.frame, scale: k)
-        let now = CACurrentMediaTime() + Self.lead
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        CATransaction.setCompletionBlock { MainActor.assumeIsolated { done() } }
-        let grow = CABasicAnimation(keyPath: "transform.scale")
-        grow.fromValue = 1
-        grow.toValue = k
-        let ride = CABasicAnimation(keyPath: "position")
-        ride.fromValue = NSValue(point: buttons.position)
-        ride.toValue = NSValue(point: NSPoint(x: buttons.position.x + shift.dx, y: buttons.position.y + shift.dy))
-        for (layer, a) in [(group, grow), (buttons, ride)] as [(CALayer, CABasicAnimation)] {
-            a.beginTime = now
-            a.duration = PeekLayout.closeScaleDuration
-            a.timingFunction = Self.closeCurve
-            a.fillMode = .both
-            a.isRemovedOnCompletion = false
-            layer.add(a, forKey: "move")
-            let fade = CABasicAnimation(keyPath: "opacity")
-            fade.fromValue = 1
-            fade.toValue = 0
-            fade.beginTime = now + PeekLayout.closeFadeDelay
-            fade.duration = PeekLayout.closeFadeDuration
-            fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            fade.fillMode = .backwards
-            layer.add(fade, forKey: "fade")
-            layer.opacity = 0
-        }
-        CATransaction.commit()
+        let target = source
+        let scale = hasLinkPicture ? PeekLayout.closeScaleDuration : PeekLayout.closeToAreaDuration
+        let d = PeekLayout.closeDuration(scale: scale)
+        // The panel goes at the end, and the real link is under the picture.
+        run(Self.samples(d) { PeekLayout.closing(from: self.cardFrame, to: target, at: $0, duration: scale) },
+            duration: d, keepEnd: true, done: done)
     }
 
     func remove() {

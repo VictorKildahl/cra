@@ -536,7 +536,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         littleWindows.append(w)
         // Arc badges the tab the Peek came from with the peeked page's favicon (modalIcon).
         parent.sidebarUI.peekBadge = tabID.map { .init(tabID: $0, iconKey: FaviconKey.key(for: url)) }
-        w.showAsPeek()
+        w.showAsPeek(fromTab: tabID)
     }
 
     func removeLittleWindow(_ w: LittleWindowController) {

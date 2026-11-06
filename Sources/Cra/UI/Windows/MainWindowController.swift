@@ -1489,6 +1489,80 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         return PeekLayout.buttons(beside: PeekLayout.card(in: peekAreaInWindow())).map { window.convertToScreen($0) }
     }
 
+    /// The link a Peek opens from (GitHub #204): Arc grows the card out of it and closes it back in.
+    /// The link under the pointer in `tabID`'s page, else the page's focused link, found by
+    /// PeekLayout's script in Cra's isolated world, with a picture of it cut from Chromium's
+    /// screenshot. Answers within `PeekSource.wait` whatever Chromium does: nil without a link (the
+    /// Peek then grows from the whole area), no picture when the screenshot is late.
+    func peekSource(fromTab tabID: UUID?, completion: @escaping (PeekSource?) -> Void) {
+        guard let tabID, let window, let rt = browsers.runtimes[tabID], let host = rt.hostWindow, host.parent === window,
+              host.isVisible, rt.browser.isCreated, !rt.browser.isClosed else {
+            CraLog.note("peek: from the whole area (no page to find the link in)")
+            completion(nil)
+            return
+        }
+        let completion: (PeekSource?) -> Void = { source in
+            CraLog.note(source.map { "peek: from a link at \(Int($0.rect.minX)),\(Int($0.rect.minY)) \(Int($0.rect.width))×\(Int($0.rect.height))\($0.image == nil ? ", no picture" : "")" }
+                ?? "peek: from the whole area (no link under the pointer or focused)")
+            completion(source)
+        }
+        let pageFrame = host.frame
+        let m = NSEvent.mouseLocation
+        let pointer = pageFrame.contains(m)
+            ? CGPoint(x: (m.x - pageFrame.minX) / pageFrame.width, y: (pageFrame.maxY - m.y) / pageFrame.height) : nil
+        var fraction: CGRect??
+        var picture: CGImage??
+        var answered = false
+        let finish: (Bool) -> Void = { [weak window] timedOut in
+            guard !answered, let window else { return }
+            guard case .some(let found) = fraction else {
+                if timedOut { answered = true; completion(nil) }
+                return
+            }
+            if picture == nil, !timedOut { return }
+            answered = true
+            guard let found, let rect = PeekLayout.source(fraction: found, in: window.convertFromScreen(pageFrame)) else { completion(nil); return }
+            let image = (picture ?? nil).flatMap { PeekSource.crop($0, to: found) }
+            completion(PeekSource(tabID: tabID, rect: rect, image: image))
+        }
+        let script = PeekLayout.sourceScript(pointer: pointer)
+        let params = (try? JSONSerialization.data(withJSONObject: ["expression": script, "returnByValue": true]))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        rt.browser.evaluate(inIsolatedWorld: PageScript.world, params: params) { result, _ in
+            let found = PeekSource.value(result).flatMap(PeekLayout.fraction(fromScript:))
+            DispatchQueue.main.async { if fraction == nil { fraction = .some(found) }; finish(false) }
+        }
+        rt.browser.sendDevToolsMethod("Page.captureScreenshot", params: #"{"format":"png","optimizeForSpeed":true}"#) { shot, _ in
+            let image = PeekSource.image(fromScreenshot: shot)
+            DispatchQueue.main.async { if picture == nil { picture = .some(image) }; finish(false) }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + PeekSource.wait) { finish(true) }
+    }
+
+    /// Where the link a Peek came from is now (the page may have scrolled), in this window's
+    /// coordinates; nil when it's gone, off the page or Chromium doesn't answer in time.
+    func peekSourceAgain(_ source: PeekSource, completion: @escaping (NSRect?) -> Void) {
+        guard let window, let rt = browsers.runtimes[source.tabID], let host = rt.hostWindow, host.parent === window,
+              host.isVisible, rt.browser.isCreated, !rt.browser.isClosed else { completion(nil); return }
+        var answered = false
+        let params = (try? JSONSerialization.data(withJSONObject: ["expression": PeekLayout.sourceAgainScript, "returnByValue": true]))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        rt.browser.evaluate(inIsolatedWorld: PageScript.world, params: params) { [weak window, weak host] result, _ in
+            let found = PeekSource.value(result).flatMap(PeekLayout.fraction(fromScript:))
+            DispatchQueue.main.async {
+                guard !answered else { return }
+                answered = true
+                guard let window, let host, let found else { completion(nil); return }
+                completion(PeekLayout.source(fraction: found, in: window.convertFromScreen(host.frame)))
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + PeekSource.wait) {
+            guard !answered else { return }
+            answered = true
+            completion(nil)
+        }
+    }
+
     /// Arc fades the page under a Peek to 28 % over the window's background, its sidebar as it is.
     func setPeekVeil(_ on: Bool, duration: TimeInterval, timing: CAMediaTimingFunction? = nil) {
         let alpha: CGFloat = on ? PeekLayout.pageAlpha : 1

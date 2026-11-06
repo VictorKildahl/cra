@@ -145,6 +145,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private var openingPeek = false
     /// The pictures moving while the Peek opens or closes.
     private var transition: PeekTransition?
+    /// The link the Peek grew out of, which it closes back into (nil: the whole area).
+    private var peekSource: PeekSource?
     private var commandPanel: CommandBarPanel!
     private var commandHost: CommandBarView!
     private var commandBarOpenedAt = Date.distantPast
@@ -415,11 +417,12 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// The click catcher, the Peek and its buttons, in their order above the parent's other children.
     var peekWindows: [NSWindow] { [dim, window, controls].compactMap { $0 } }
 
-    /// Arc's Peek: the card shrinks from the whole area right of the sidebar to its own frame as
-    /// it fades in, its buttons riding its corner, while the page behind fades to 28 %. The motion
-    /// is PeekTransition's pictures on Core Animation; the real card and buttons wait at their
-    /// places, invisible, and take over when it lands.
-    func showAsPeek() {
+    /// Arc's Peek: the card grows out of the link clicked in `tabID`'s page (without one, from the
+    /// whole area right of the sidebar) to its own frame, its buttons riding its corner, while the
+    /// page behind fades to 28 % (GitHub #204). The motion is PeekTransition's pictures on Core
+    /// Animation; the real card and buttons wait at their places, invisible, and take over when it
+    /// lands.
+    func showAsPeek(fromTab tabID: UUID?) {
         guard let window, let parent = peekParent, let pw = parent.window else { return }
         let dim = PeekDimPanel(covering: pw) { [weak self] in self?.closeWindow() }
         self.dim = dim
@@ -444,17 +447,24 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         openingPeek = true
         // Hidden, not transparent: Chromium sets its page window's alpha back to 1 as it shows it.
         if let host = browser?.hostWindow, host.parent === window { host.contentView?.isHidden = true }
-        let t = PeekTransition(over: pw, card: pw.convertFromScreen(window.frame), cardImage: PeekTransition.picture(of: shell),
-                               column: pw.convertFromScreen(controls.frame), columnImage: controls.contentView.flatMap { PeekTransition.picture(of: $0) })
-        transition = t
         if hasPage || isPopupHost { focusPage() } else { openCommandBar() }
-        // Next turn, with the page focused and the panel on its way to the screen.
-        DispatchQueue.main.async { [weak self, weak t] in
-            guard let self, let t, self.transition === t, !self.closingPeek else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + PeekTransition.lead) {
-                parent.setPeekVeil(true, duration: PeekLayout.openVeilDuration, timing: PeekTransition.easeOutCubic)
+        // The card waits, invisible at its place, for the link it grows out of (at most
+        // PeekSource.wait); a close meanwhile ends it unseen (closePeekAnimated).
+        parent.peekSource(fromTab: tabID) { [weak self] source in
+            guard let self, let window = self.window, let controls = self.controls, self.openingPeek, !self.closingPeek else { return }
+            self.peekSource = source
+            let t = PeekTransition(over: pw, card: pw.convertFromScreen(window.frame), cardImage: PeekTransition.picture(of: self.shell),
+                                   column: pw.convertFromScreen(controls.frame), columnImage: controls.contentView.flatMap { PeekTransition.picture(of: $0) },
+                                   source: source?.rect ?? pw.convertFromScreen(parent.peekArea()), sourceImage: source?.image)
+            self.transition = t
+            // Next turn, with the panel on its way to the screen.
+            DispatchQueue.main.async { [weak self, weak t] in
+                guard let self, let t, self.transition === t, !self.closingPeek else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + PeekTransition.lead) {
+                    parent.setPeekVeil(true, duration: PeekLayout.openVeilDuration, timing: PeekTransition.easeOutCubic)
+                }
+                self.landPeek(t)
             }
-            self.landPeek(t)
         }
     }
 
@@ -480,24 +490,40 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         controls?.place(parent.peekButtonFrames(), theme: parent.focusedSpace.theme)
     }
 
-    /// Arc closes a Peek the way it opened, backwards: out to the whole area, fading, as the page
-    /// behind comes back. A picture of the card with its page (Chromium's own screenshot, waited
-    /// for at most 80 ms) takes over from the real one. Expand and Add To Split don't animate.
+    /// Arc closes a Peek the way it opened, backwards: into the link it came from, where the page
+    /// has it now (out to the whole area, fading, without one), as the page behind comes back. A
+    /// picture of the card with its page (Chromium's own screenshot, waited for at most 80 ms)
+    /// takes over from the real one. Expand and Add To Split don't animate.
     private func closePeekAnimated(then finish: @escaping () -> Void) {
         guard let window, let parent = peekParent, let pw = parent.window else { finish(); return }
+        let neverShown = openingPeek && transition == nil
         closingPeek = true
         transition?.remove()
         transition = nil
+        // Closed while it was still finding its link: it goes without having been seen.
+        if neverShown { finish(); return }
         var started = false
+        // The card's screenshot and the link's place now, asked together.
+        var shot: CGImage??
+        var linkNow: NSRect?? = peekSource == nil ? .some(nil) : nil
         let start: (CGImage?) -> Void = { [weak self] page in
             guard let self, !started else { return }
             started = true
             let card = pw.convertFromScreen(window.frame)
             let pageRect = self.shell.page.frame
+            // Into the link where the page has it now; where it was when Chromium is late; out to
+            // the whole area, fading, when it's gone.
+            let area = pw.convertFromScreen(parent.peekArea())
+            let back: (rect: NSRect, image: CGImage?) = switch linkNow {
+            case .none: (self.peekSource?.rect ?? area, self.peekSource?.image)
+            case .some(.some(let r)): (r, self.peekSource?.image)
+            case .some(.none): (area, nil)
+            }
             let t = PeekTransition(over: pw, card: card,
                                    cardImage: PeekTransition.picture(of: self.shell, page: page, pageRect: pageRect),
                                    column: self.controls.map { pw.convertFromScreen($0.frame) } ?? .zero,
-                                   columnImage: self.controls?.contentView.flatMap { PeekTransition.picture(of: $0) })
+                                   columnImage: self.controls?.contentView.flatMap { PeekTransition.picture(of: $0) },
+                                   source: back.rect, sourceImage: back.image)
             self.transition = t
             t.close {
                 finish()
@@ -511,14 +537,25 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
                 parent.setPeekVeil(false, duration: PeekLayout.closeVeilDuration, timing: PeekTransition.easeOutCubic)
             }
         }
-        guard let b = browser, hasPage else { start(nil); return }
-        b.sendDevToolsMethod("Page.captureScreenshot", params: #"{"format":"jpeg","quality":85,"optimizeForSpeed":true}"#) { shot, _ in
-            let image = shot.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
-                .flatMap { $0["data"] as? String }.flatMap { Data(base64Encoded: $0) }
-                .flatMap { CGImageSourceCreateWithData($0 as CFData, nil) }.flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) }
-            DispatchQueue.main.async { start(image) }
+        let ready: (Bool) -> Void = { timedOut in
+            guard !started, timedOut || (shot != nil && linkNow != nil) else { return }
+            start(shot ?? nil)
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { start(nil) }
+        if let source = peekSource {
+            parent.peekSourceAgain(source) { r in
+                if linkNow == nil { linkNow = .some(r) }
+                ready(false)
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { ready(true) }
+        guard let b = browser, hasPage else { shot = .some(nil); ready(false); return }
+        b.sendDevToolsMethod("Page.captureScreenshot", params: #"{"format":"jpeg","quality":85,"optimizeForSpeed":true}"#) { result, _ in
+            let image = PeekSource.image(fromScreenshot: result)
+            DispatchQueue.main.async {
+                if shot == nil { shot = .some(image) }
+                ready(false)
+            }
+        }
     }
 
     private func endPeek() {

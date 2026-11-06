@@ -29,12 +29,102 @@ struct PeekLayoutTests {
         #expect(card.width == (Self.window.width * 0.8).rounded())
     }
 
-    @Test func openStartsAtTheAreasWidth() {
+    @Test func withoutALinkItGrowsFromTheArea() {
+        // Arc from a link that covers the page (3 Nov): the card starts as the whole area.
         let area = PeekLayout.area(window: Self.window, contentMinX: 347)
         let card = PeekLayout.card(in: area)
-        #expect(abs(card.width * PeekLayout.areaScale - area.width) <= 1)
-        // Arc's first measured frame (scale 1.1675): the corner 93 pt right and 89 pt up of its place.
-        let shift = PeekLayout.cornerShift(card: card, scale: 1.1675)
-        #expect(abs(shift.dx - 92.5) < 0.5 && abs(shift.dy - 88.8) < 0.5)
+        #expect(PeekLayout.opening(from: area, to: card, at: 0).frame == area)
+        #expect(PeekLayout.opening(from: area, to: card, at: PeekLayout.openDuration).frame == card)
+        #expect(PeekLayout.closing(from: card, to: area, at: PeekLayout.closeToAreaDuration, duration: PeekLayout.closeToAreaDuration).frame == area)
+    }
+
+    // MARK: Growing out of the link (Arc 1.171, small links, 60 fps, 6 Nov 2026, GitHub #204)
+
+    static let card = PeekLayout.card(in: PeekLayout.area(window: window, contentMinX: 347))
+    /// Link A of the run: x 407, 132 pt under the window's top, 68 × 31.
+    static let link = CGRect(x: 407, y: 1084 - 132 - 31, width: 68, height: 31)
+
+    @Test func curvesRunFromZeroToOne() {
+        for c in [PeekLayout.Curve.easeOut, .easeOutCubic, .close] {
+            #expect(c(0) == 0 && c(1) == 1 && c(-1) == 0 && c(2) == 1)
+            #expect(c(0.25) < c(0.5) && c(0.5) < c(0.75))
+        }
+        // The ease-out cubic's own value, 1 − (1 − u)³, within a hair.
+        #expect(abs(PeekLayout.Curve.easeOutCubic(0.5) - 0.875) < 0.02)
+    }
+
+    @Test func opensFromTheLinkAndLandsOnTheCard() {
+        let start = PeekLayout.opening(from: Self.link, to: Self.card, at: 0)
+        #expect(start.frame == Self.link)
+        #expect(start.sourceOpacity == 1 && start.buttonsOpacity == 0)
+        let end = PeekLayout.opening(from: Self.link, to: Self.card, at: PeekLayout.openDuration)
+        #expect(end.frame == Self.card)
+        #expect(end.sourceOpacity == 0 && end.buttonsOpacity == 1)
+    }
+
+    @Test func heightLagsWidthAsInArc() {
+        // Arc, run A: when the width was 60.3 % of the way, the height was 47.9 %.
+        var t = 0.0
+        while PeekLayout.opening(from: Self.link, to: Self.card, at: t).frame.width < Self.link.width + 0.603 * (Self.card.width - Self.link.width) { t += 0.0005 }
+        let f = PeekLayout.opening(from: Self.link, to: Self.card, at: t).frame
+        let q = (f.height - Self.link.height) / (Self.card.height - Self.link.height)
+        #expect(abs(q - 0.479) < 0.05)
+        // The centre goes with the width.
+        let p = (f.midX - Self.link.midX) / (Self.card.midX - Self.link.midX)
+        #expect(abs(p - 0.603) < 0.01)
+        // The link's picture was mostly gone by then (Arc: 0.065).
+        #expect(PeekLayout.opening(from: Self.link, to: Self.card, at: t).sourceOpacity < 0.12)
+    }
+
+    @Test func closesBackIntoTheLink() {
+        let start = PeekLayout.closing(from: Self.card, to: Self.link, at: 0)
+        #expect(start.frame == Self.card && start.sourceOpacity == 0 && start.buttonsOpacity == 1)
+        let end = PeekLayout.closing(from: Self.card, to: Self.link, at: PeekLayout.closeScaleDuration)
+        #expect(end.frame == Self.link && end.buttonsOpacity == 0)
+        // Arc, run B: the link picture at about a third when the frame was 80 % of the way.
+        var t = 0.0
+        while PeekLayout.closing(from: Self.card, to: Self.link, at: t).frame.width > Self.card.width - 0.8 * (Self.card.width - Self.link.width) { t += 0.0005 }
+        let a = PeekLayout.closing(from: Self.card, to: Self.link, at: t).sourceOpacity
+        #expect(a > 0.15 && a < 0.5)
+    }
+
+    @Test func pageScalesWithTheWidthFromTheTopLeft() {
+        let frame = PeekLayout.frame(from: Self.link, to: Self.card, p: 0.6, q: 0.48)
+        let c = PeekLayout.content(in: frame, card: Self.card)
+        #expect(abs(c.width - frame.width) < 0.001)
+        #expect(abs(c.maxY - frame.height) < 0.001 && c.minX == 0)
+        #expect(abs(c.height / Self.card.height - frame.width / Self.card.width) < 0.001)
+        #expect(PeekLayout.content(in: Self.card, card: Self.card) == CGRect(origin: .zero, size: Self.card.size))
+    }
+
+    @Test func columnRidesTheCorner() {
+        let column = PeekLayout.column(beside: Self.card)
+        #expect(PeekLayout.column(column, card: Self.card, frame: Self.card) == column)
+        let half = CGRect(x: 600, y: 300, width: Self.card.width / 2, height: 400)
+        let c = PeekLayout.column(column, card: Self.card, frame: half)
+        #expect(abs(c.width - column.width / 2) < 0.001)
+        #expect(abs(half.maxY - c.maxY - PeekLayout.buttonTop) < 0.5)
+        #expect(abs(c.minX - half.maxX - PeekLayout.buttonGap / 2) < 0.001)
+    }
+
+    @Test func linkFractionsMapOntoThePage() {
+        let page = CGRect(x: 347, y: 0, width: 1371, height: 1032)
+        // Run A's link: 60, 90, 68 × 31 CSS px in a 1371 × 1032 view.
+        let f = CGRect(x: 60.0 / 1371, y: 90.0 / 1032, width: 68.0 / 1371, height: 31.0 / 1032)
+        let r = PeekLayout.source(fraction: f, in: page)!
+        #expect(abs(r.minX - 407) < 0.001 && abs(r.maxY - (1032 - 90)) < 0.001 && abs(r.width - 68) < 0.001)
+        // Off the page, empty or not a number: no source.
+        #expect(PeekLayout.source(fraction: CGRect(x: 2, y: 0, width: 0.1, height: 0.1), in: page) == nil)
+        #expect(PeekLayout.source(fraction: CGRect(x: 0, y: 0, width: 0, height: 0.1), in: page) == nil)
+        #expect(PeekLayout.source(fraction: CGRect(x: .nan, y: 0, width: 0.1, height: 0.1), in: page) == nil)
+        // Partly scrolled out: the part on the page.
+        #expect(PeekLayout.source(fraction: CGRect(x: 0.5, y: -0.02, width: 0.1, height: 0.05), in: page)?.maxY == page.maxY)
+    }
+
+    @Test func scriptAnswersParse() {
+        #expect(PeekLayout.fraction(fromScript: ["x": 0.1, "y": 0.2, "width": 0.05, "height": 0.03]) == CGRect(x: 0.1, y: 0.2, width: 0.05, height: 0.03))
+        #expect(PeekLayout.fraction(fromScript: ["x": "0.1", "y": 0.2, "width": 0.05, "height": 0.03]) == nil)
+        #expect(!PeekLayout.sourceScript(pointer: nil).contains("nan"))
+        #expect(PeekLayout.sourceScript(pointer: CGPoint(x: 0.25, y: 0.5)).contains("0.25 * vv.width"))
     }
 }
