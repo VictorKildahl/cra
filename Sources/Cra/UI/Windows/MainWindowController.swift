@@ -1901,12 +1901,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             target.makeKey()
             return event
         }
-        // Middle-click on a sidebar tab closes it, like Arc and Chrome (SwiftUI has no
-        // gesture for the middle button; rows report the hovered tab instead).
+        // Middle-click on a sidebar tab closes it, like Arc and Chrome. Anywhere else, a page
+        // included, the click goes on to whatever is under it. The row is found under the click
+        // itself: a remembered hover outlived its row when the tab joined a split, and a middle
+        // click inside a split pane closed that tab (GitHub #208).
         middleClickMonitor = NSEvent.addLocalMonitorForEvents(matching: .otherMouseUp) { [weak self] event in
             guard let self, event.buttonNumber == 2, let window = self.window, let target = event.window,
-                  target === window || target.parent === window, !CraCEFRuntime.isPageWindow(target),
-                  let id = self.sidebarUI.hoveredTabID else { return event }
+                  target === window || target.parent === window,
+                  let id = SpaceListView.tabID(under: event) else { return event }
             self.middleClickClose(id)
             return nil
         }

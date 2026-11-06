@@ -14,7 +14,6 @@ final class SidebarUIState {
     /// filled like the selected tab, which loses its fill (Arc: isCommandBarNewTabPlaceholderActive).
     var newTabPlaceholderActive = false
     var draggingID: UUID?
-    var hoveredTabID: UUID?
     /// Loading progress per tab (0...1), fed by the browser manager.
     var progress: [UUID: Double] = [:]
     var loadedTabIDs: Set<UUID> = []

@@ -820,11 +820,6 @@ final class SpaceListView: NSView, NSDraggingSource {
             hovered?.isHovered = false
             hovered = target
             target?.isHovered = true
-            if let t = target as? TabRowView, let id = t.model?.id {
-                if ui.hoveredTabID != id { ui.hoveredTabID = id }
-            } else if let h = ui.hoveredTabID, views[.item(h)] != nil {
-                ui.hoveredTabID = nil
-            }
             FolderPreviewController.shared.hover(target, in: self)
         }
         target?.hoverMoved(to: local)
@@ -835,6 +830,15 @@ final class SpaceListView: NSView, NSDraggingSource {
     }
 
     // MARK: Clicks
+
+    /// The tab whose sidebar row is under a mouse event, if any: a split row's panes, a page and
+    /// everything else that isn't a tab row give nil.
+    static func tabID(under event: NSEvent) -> UUID? {
+        guard let content = event.window?.contentView else { return nil }
+        let root = content.superview ?? content
+        guard let hit = root.hitTest(root.convert(event.locationInWindow, from: nil)) else { return nil }
+        return sequence(first: hit, next: \.superview).lazy.compactMap { ($0 as? TabRowView)?.model?.id }.first
+    }
 
     func clickTab(_ id: UUID, event: NSEvent) {
         let flags = event.modifierFlags.intersection([.command, .shift])
