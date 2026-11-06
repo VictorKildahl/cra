@@ -1,10 +1,12 @@
 import AppKit
+import CraCEF
 import SwiftUI
 
 /// Dia's Profiles pane (and Arc's Profiles preferences): the profiles and how many spaces
 /// use each, "Create Profile…" under the card. A space picks its profile in Edit Space.
 /// Arc only deletes profiles no space uses, and never Default.
 struct ProfilesPane: View {
+    let nav: SettingsNavigation
     let actions: SettingsActions
     @Environment(SidebarStore.self) private var store
     @State private var naming: BrowserProfile?
@@ -47,6 +49,17 @@ struct ProfilesPane: View {
                 }
             }
             SettingsFootnote("Where each Profile saves downloaded files. Choose Ask Where to Save Each File to pick a place every time.")
+            // Chromium's per-profile website languages (#209); Arc leaves them to arc://settings/languages.
+            SettingsHeader("Languages").padding(.top, 20)
+            SettingsCard {
+                languageRow(name: "Default", profileID: nil)
+                ForEach(store.profiles) { p in
+                    SettingsCardDivider()
+                    languageRow(name: p.name, profileID: p.id)
+                }
+            }
+            .id(nav.shown)  // read again each time Settings comes up: Chromium's page may have changed them
+            SettingsFootnote("The languages websites show their pages in for each Profile, most wanted first. Change opens Chromium’s language settings for that Profile. Cra itself stays in English.")
         }
         .alert("Rename Profile", isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
             TextField("Profile name", text: $name)
@@ -103,6 +116,35 @@ struct ProfilesPane: View {
             .frame(width: 200)
             .help(folder.path)
         }
+    }
+
+    private func languageRow(name: String, profileID: UUID?) -> some View {
+        let summary = BrowserLanguages.summary(languages(profileID: profileID))
+        let hasSpace = !store.spaces(usingProfile: profileID).isEmpty
+        return SettingsCardRow {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name).font(.system(size: 13))
+                Text(summary.isEmpty ? "Chromium’s default languages" : summary)
+                    .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                    .help(summary)
+            }
+        } trailing: {
+            Button("Change…") { actions.openProfilePage(BrowserLanguages.settingsPage, profileID) }
+                .disabled(!hasSpace)
+                .help(hasSpace ? "Open Chromium’s language settings for \(name)." : "Set \(name) on a Space first.")
+        }
+    }
+
+    /// What Chromium holds for the profile now, else what its Preferences file saved (a profile no
+    /// page has loaded in since launch).
+    private func languages(profileID: UUID?) -> [String] {
+        let path = store.profilePath(profile: profileID)
+        if let json = CraCEFRuntime.preference(BrowserLanguages.pref, forProfile: path) {
+            return BrowserLanguages.codes(json)
+        }
+        let folder = path.map { URL(fileURLWithPath: $0) } ?? AppPaths.chromiumCache.appendingPathComponent("Default")
+        return (try? Data(contentsOf: folder.appendingPathComponent("Preferences")))
+            .flatMap(BrowserLanguages.codes(preferencesFile:)) ?? []
     }
 
     private var trimmed: String { name.trimmingCharacters(in: .whitespaces) }

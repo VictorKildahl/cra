@@ -1,0 +1,23 @@
+# GitHub #209: the languages websites see (Accept-Language, navigator.languages) are each profile's
+# chrome://settings/languages, as in Chrome and Arc. Language Settings in the command bar opens that
+# page; a language added there reaches the open page at once and new pages too. Icelandic, which
+# neither this Mac's nor CI's macOS languages bring in.
+cra://open?url=${PAGE}
+expect-log loaded 127.0.0.1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'before:'+navigator.languages.includes('is')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"before:false"
+cra://action/languageSettings
+wait 4
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'page:'+location.href"}
+expect-log Cra cdp Runtime.evaluate .*"value":"page:chrome://settings/languages"
+# What the page's Add languages and Move to the top do.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(r=>{chrome.languageSettingsPrivate.enableLanguage('is');chrome.languageSettingsPrivate.moveLanguage('is','TOP');setTimeout(()=>chrome.settingsPrivate.getPref('intl.accept_languages',p=>r('pref:'+p.value)),500)})","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"pref:is,
+cra://action/previousTab
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'open:'+location.host+'|'+navigator.languages[0]"}
+expect-log Cra cdp Runtime.evaluate .*"value":"open:127.0.0.1:[0-9]+\|is"
+cra://open?url=${PAGE}?n=2
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'new:'+navigator.language"}
+expect-log Cra cdp Runtime.evaluate .*"value":"new:is"

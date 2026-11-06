@@ -386,7 +386,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// A page an extension opens as a tab. Its options page stays one tab, as in Chrome and
     /// Arc: opening it again selects the open one (GitHub #38).
     /// `profile` is the Chromium profile folder whose extension asked, nil for the focused page's.
-    func openExtensionPage(_ url: String, window: UUID, profile: String? = nil) {
+    /// `singleton`: an open tab with the page in that profile is selected instead of a new one.
+    func openExtensionPage(_ url: String, window: UUID, profile: String? = nil, singleton: Bool = false) {
         // Extensions run in the normal profile, so Chrome opens their pages in a normal window:
         // in an incognito one the page can't load (#107). Incognito is Default's off the record.
         var window = window, profile = profile
@@ -407,7 +408,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let target = ExtensionPagePlacement.target(
             focused: space(store.focusedSpaceID(window: window)),
             spaces: store.orderedSpaces.filter { !store.isIncognito(space: $0.id) }.map { space($0.id) },
-            profile: profile, openTabs: open, singleton: ExtensionStore.shared.optionsPageOwner(url) != nil)
+            profile: profile, openTabs: open, singleton: singleton || ExtensionStore.shared.optionsPageOwner(url) != nil)
         switch target {
         case .select(let tab): store.selectTab(tab, window: window)
         case .create(let sid): store.createTab(url: url, in: sid, select: true, window: window)
@@ -1152,6 +1153,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "rebuildArcProfiles": ArcProfileRebuilder.run(store: store) { [weak self] in self?.relaunch() }
         case "setDefaultBrowser": Task { await SystemIntegration.shared.makeDefaultBrowser() }
         case "checkForUpdates": SoftwareUpdater.shared.checkForUpdates(nil)
+        case "languageSettings":
+            // Chromium's page edits the profile of the space it opens in.
+            let normal = useNormalWindow()
+            _ = store.createTab(url: BrowserLanguages.settingsPage, select: true)
+            normal.showWindow(nil)
         case "clearBrowsingData":
             // Chrome's dialog, in a normal window: what it deletes from history leaves the command bar too.
             let normal = useNormalWindow()
@@ -1208,6 +1214,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     self.settingsWindow?.close()
                     self.main.showWindow(nil)
                 },
+                openProfilePage: { [weak self] url, profileID in
+                    guard let self else { return }
+                    let window = self.useNormalWindow()
+                    self.openExtensionPage(url, window: window.windowID,
+                                           profile: self.store.profile(profileID)?.directoryName ?? "Default", singleton: true)
+                    self.settingsWindow?.close()
+                    window.showWindow(nil)
+                },
                 exportDiagnostics: { [weak self] in self?.exportDiagnostics() },
                 newProfile: { [weak self] in
                     guard let self, let w = self.settingsWindow else { return }
@@ -1217,6 +1231,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             settingsController = c
             settingsWindow = c.window
         }
+        settingsController?.didShow()
         settingsWindow?.makeKeyAndOrderFront(nil)
     }
 
