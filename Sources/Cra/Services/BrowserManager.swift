@@ -1098,10 +1098,16 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     func browser(_ browser: CraBrowser, didLoadFavicon image: NSImage, forURL iconURL: String) {
         guard let id = tabID(of: browser), let tab = store.item(id)?.tab else { return }
-        let key = FaviconKey.key(for: tab.url) ?? tab.faviconKey
-        guard let key else { return }
-        favicons.store(image, forKey: key, persist: !browser.isIncognito)
-        if tab.faviconKey != key { store.updateTab(id, url: tab.url) }
+        // The tab shows its own page's icon; the site key keeps the latest for suggestions and
+        // pages not loaded yet. Tabs on one host (AWS, localhost) no longer share one (#211).
+        guard let site = FaviconKey.key(for: tab.url) ?? tab.faviconKey.map(FaviconKey.siteKey(of:)) else { return }
+        let key = FaviconKey.key(site: site, iconURL: iconURL)
+        let persist = !browser.isIncognito
+        favicons.store(image, forKey: site, persist: persist)
+        // A page that draws its icon (data:, an unread badge) would leave a file per count.
+        let fetched = iconURL.hasPrefix("https:") || iconURL.hasPrefix("http:")
+        if key != site { favicons.store(image, forKey: key, persist: persist && fetched) }
+        store.setFaviconKey(id, key)
     }
 
     func browser(_ browser: CraBrowser, didReportThemeColor hex: String) {

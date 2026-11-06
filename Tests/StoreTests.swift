@@ -30,6 +30,7 @@ enum StoreTests {
         persistenceFaults()
         incognitoStaysOffDisk()
         pinnedURL()
+        tabFavicons()
         moveTabToSpace()
         folderPeek()
         closeSuccessor()
@@ -419,6 +420,26 @@ enum StoreTests {
         if var s = store.space(id) { s.title = "Saved"; s.theme = red; store.updateSpace(s) }
         store.endThemePreview(forSpace: id, keep: false)
         expect(store.space(id)?.theme == red && savedTheme() == red, "Save in the sheet writes the theme and ends the preview")
+    }
+
+    /// Tabs on one host keep their own icons (GitHub #211: every AWS console or localhost tab
+    /// took the icon the last one loaded).
+    @MainActor
+    private static func tabFavicons() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let rds = store.createTab(url: "https://console.aws.amazon.com/rds/home", select: false)
+        let eks = store.createTab(url: "https://console.aws.amazon.com/eks/home", select: false)
+        let rdsIcon = FaviconKey.key(for: "https://console.aws.amazon.com/rds/home", iconURL: "https://console.aws.amazon.com/rds/favicon.ico")!
+        let eksIcon = FaviconKey.key(for: "https://console.aws.amazon.com/eks/home", iconURL: "https://console.aws.amazon.com/eks/favicon.ico")!
+        store.setFaviconKey(rds.id, rdsIcon)
+        store.setFaviconKey(eks.id, eksIcon)
+        expect(store.item(rds.id)?.tab?.iconKey == rdsIcon && store.item(eks.id)?.tab?.iconKey == eksIcon && rdsIcon != eksIcon,
+               "two tabs on one host show their own icons")
+        store.updateTab(rds.id, url: "https://console.aws.amazon.com/rds/home#databases", title: "Databases")
+        expect(store.item(rds.id)?.tab?.faviconKey == rdsIcon, "a page on the same host keeps the tab's icon until its own loads")
+        store.updateTab(rds.id, url: "https://example.org/")
+        expect(store.item(rds.id)?.tab?.faviconKey == "example.org", "another host shows that site's icon")
+        expect(store.item(eks.id)?.tab?.faviconKey == eksIcon, "and the other tab never changes")
     }
 
     /// Edit Pinned URL… (#54, PR #55 by Anoninz): a new pinned URL keeps the item's

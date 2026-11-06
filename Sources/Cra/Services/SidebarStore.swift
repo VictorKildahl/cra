@@ -499,7 +499,7 @@ final class SidebarStore {
             t.url = url
             // A pinned tab that never had a page (a new pane of a pinned split) takes its first one as home.
             if !isPinned(id) || t.savedURL.isEmpty || t.savedURL == "about:blank" { t.savedURL = url }
-            if let key = FaviconKey.key(for: url) { t.faviconKey = key }
+            t.faviconKey = FaviconKey.key(after: t.faviconKey, goingTo: url)
         }
         // A live folder's tab keeps the pull request's title (Arc shows that, not the page's).
         if let title, !(t.liveItemURL.map { t.url.hasPrefix($0) } ?? false) { t.noteTitle(title, pinned: isPinned(id)) }
@@ -513,6 +513,16 @@ final class SidebarStore {
         // empty pane; the rows and the toolbar observe the tab themselves.
         if it.isEmptyTab != wasEmpty { revision &+= 1 }
         // The document leaves incognito windows' tabs out.
+        sidebarFile.save(document, delay: 2)
+    }
+
+    /// The tab's page loaded its own icon, cached under `key` (#211).
+    func setFaviconKey(_ id: UUID, _ key: String) {
+        guard var it = items[id], var t = it.tab, t.faviconKey != key else { return }
+        t.faviconKey = key
+        it.data = .tab(t)
+        items[id] = it
+        // Rows and the toolbar observe the tab; the window's layout doesn't change.
         sidebarFile.save(document, delay: 2)
     }
 

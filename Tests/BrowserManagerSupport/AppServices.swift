@@ -37,6 +37,7 @@ enum TestRoot { case today }
         if let title { items[id]?.tab?.savedTitle = title }
     }
     func setThemeColor(_ id: UUID, _ hex: String) { items[id]?.tab?.themeColor = hex }
+    func setFaviconKey(_ id: UUID, _ key: String) { items[id]?.tab?.faviconKey = key }
     func recordVisit(url: String, title: String) {}
     func clearHistory(_ range: BrowsingDataClear.Range) {}
     func selectTab(_ id: UUID, window: UUID?) {}
@@ -60,7 +61,11 @@ enum TestRoot { case today }
     var webStoreProfiles: [String] = []
     func installFromWebStore(using browser: CraBrowser, profile: String) { webStoreProfiles.append(profile) }
 }
-enum FaviconKey { static func key(for url: String) -> String? { url } }
+enum FaviconKey {
+    static func key(for url: String) -> String? { url }
+    static func key(site: String, iconURL: String) -> String { site + "#" + iconURL }
+    static func siteKey(of key: String) -> String { key }
+}
 enum BrowsingDataClear {
     enum Range { case allTime }
     static func historyRange(messageJSON: String, now: Date) -> Range? { nil }

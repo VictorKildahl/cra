@@ -64,7 +64,7 @@ public struct TabData: Codable, Equatable {
     public var muted: Bool = false
     public var timeLastActiveAt: Date?
     public var activeTabBeforeCreationID: UUID?
-    /// Host used as favicon cache key.
+    /// Favicon cache key: the host, then the page's own icon once it loads (FaviconKey, #211).
     public var faviconKey: String?
     /// Favicon cache key of an image the user picked; wins over the site's favicon.
     public var customIconKey: String?
@@ -103,7 +103,7 @@ public struct TabData: Codable, Equatable {
         guard url != savedURL else { return }
         url = savedURL
         if let homeTitle { savedTitle = homeTitle }
-        if let key = FaviconKey.key(for: savedURL) { faviconKey = key }
+        faviconKey = FaviconKey.key(after: faviconKey, goingTo: savedURL)
     }
 
     public init(url: String, title: String = "") {

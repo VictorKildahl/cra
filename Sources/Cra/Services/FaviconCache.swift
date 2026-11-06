@@ -1,7 +1,7 @@
 import AppKit
 import Observation
 
-/// Favicons keyed by host (FaviconKey). Chromium hands us PNG bytes through the bridge;
+/// Favicons keyed by host or by a tab's own icon (FaviconKey). Chromium hands us PNG bytes through the bridge;
 /// we keep them in memory and on disk so the sidebar is populated on launch
 /// before any tab has loaded (Arc: SidebarItemsFaviconCache).
 @MainActor
@@ -24,7 +24,9 @@ final class FaviconCache {
                 return img
             }
         }
-        return nil
+        // A tab's own icon not on disk (cleared, or saved by an incognito page): the site's (#211).
+        let site = FaviconKey.siteKey(of: key)
+        return site == key ? nil : image(forKey: site)
     }
 
     func image(for urlString: String) -> NSImage? { image(forKey: FaviconKey.key(for: urlString)) }
