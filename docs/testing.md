@@ -17,7 +17,11 @@ Commands for each piece are in [development.md](development.md#tests).
 4. **Fixtures over dictionaries.** Every format Cra reads from another browser has a made-up
    profile in that browser's own format under `Tests/Fixtures/<Browser>` (no real browsing
    data). Parsers are tested on those files, and the fuzzer mutates them.
-5. **A bug fix comes with the test that would have caught it.**
+5. **A bug fix comes with the test that would have caught it**, written first and seen failing
+   on the unfixed code. That holds for every bug, with or without an issue; one with an issue is
+   also locked (rule 8). If no test can reach it, the fix moves the decision into CraCore or adds
+   the debug readout a scenario needs; only what takes a real site, the GPU or a person's eye
+   becomes a line in [release-checklist.md](release-checklist.md).
 6. **Never assert on a fake's bookkeeping alone.** A test whose only check is "the fake
    recorded a call" tests the fake.
 7. **A flaky test is rewritten on the clock or deleted**, never retried or given a sleep.
