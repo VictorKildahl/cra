@@ -71,9 +71,10 @@ built release app with a test profile. Note anything that fails in the release's
   Window over it, and doesn't when Settings ▸ Tabs ▸ Links is off.
 - **#202:** in a Peek, ⌘-click a `target=_blank` link: a background tab opens and the Peek
   stays. A plain click on it closes the Peek and selects the new tab below the source tab.
-- With Peek open, the main window keeps its full shadow when clicking inside Peek, as in Arc.
-  Dragging and resizing from every edge and corner work; Peek follows the window's size,
-  and clicking the background closes it.
+- **PR #222:** with a Peek open, the browser window keeps its full shadow and coloured traffic
+  lights, also after a click in the Peek, as in Arc. A drag from every edge and corner resizes the
+  window with the Peek open and the card follows; a click on the background 4 pt or more inside
+  the window closes it.
 - **#186:** send a link from a full-screen app. The Little Window opens centred on that Space
   with no switch to the desktop, and a video in it can still go full screen.
 - **#172:** with a space on its own profile, a Little Window from that space and a Peek from its

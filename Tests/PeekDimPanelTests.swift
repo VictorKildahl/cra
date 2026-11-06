@@ -79,6 +79,11 @@ enum PeekDimPanelTests {
             }
         }
         expect(panel.frame.contains(NSPoint(x: frame.midX, y: frame.midY)), "the panel still catches clicks inside the parent")
+        // Arc: 4 pt in, a click closes the Peek.
+        for p in [NSPoint(x: frame.maxX - 4, y: frame.midY), NSPoint(x: frame.minX + 4, y: frame.midY),
+                  NSPoint(x: frame.midX, y: frame.maxY - 4), NSPoint(x: frame.midX, y: frame.minY + 4)] {
+            expect(panel.frame.contains(p), "a click 4 pt inside an edge closes the Peek, as in Arc")
+        }
         expect(frame.contains(panel.frame), "the dismiss panel stays inside the parent")
     }
 
