@@ -1104,14 +1104,26 @@ static NSString* HexFromCSSColor(const std::string& css) {
     "if(!c){var d=document.createElement('div');d.style.color='Canvas';r.appendChild(d);c=getComputedStyle(d).color;d.remove();}" \
     "return c;}"
 
-// Answers through OnConsoleMessage ("__cra_bg:"); installed once per document, re-run on
-// load, after late stylesheets and when the OS appearance flips.
+// Runs a page script through Cra Helper's renderer handler (Sources/CraHelper/main.cc), never
+// through the page's console: Cra writes nothing to a site's DevTools and adds no globals.
+// `script` is a function expression that takes `send(string)`, whose strings come back as
+// "Cra.page" messages (CraClient::HandlePageMessage). A named script runs once per document:
+// later runs call the function it returned instead, if it returned one.
+static void RunPageScript(CefRefPtr<CefFrame> frame, const std::string& name, const CefString& script) {
+    if (!frame || !frame->IsValid()) return;
+    CefRefPtr<CefProcessMessage> message = CefProcessMessage::Create("Cra.run");
+    message->GetArgumentList()->SetString(0, name);
+    message->GetArgumentList()->SetString(1, script);
+    frame->SendProcessMessage(PID_RENDERER, message);
+}
+
+// Answers "bg:<css colour>"; installed once per document, re-run on load, after late
+// stylesheets and when the OS appearance flips.
 static const char kBackgroundProbe[] =
-    "(function(){if(!window.__craBg){var color=" CRA_PAGE_BACKGROUND_FN ";"
-    "window.__craBg=function(){try{var c=color();if(c)console.log('__cra_bg:'+c);}catch(e){}};"
-    "matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){setTimeout(window.__craBg,50);});"
-    "setTimeout(window.__craBg,1500);}"
-    "window.__craBg();})();";
+    "(function(send){var color=" CRA_PAGE_BACKGROUND_FN ";"
+    "var probe=function(){try{var c=color();if(c)send('bg:'+c);}catch(e){}};"
+    "matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){setTimeout(probe,50);});"
+    "setTimeout(probe,1500);probe();return probe;})";
 
 // While a page is parsed, the same colour on every frame (only changes are sent). CEF draws a
 // new renderer's first page transparent (chromiumembedded/cef#3891), so the view's canvas showed
@@ -1119,10 +1131,10 @@ static const char kBackgroundProbe[] =
 // a slow image loaded. Frames wait for render-blocking stylesheets, so the first answer already
 // has the page's styles; the probe above takes over once the document is parsed.
 static const char kLoadingBackgroundProbe[] =
-    "(function(){var color=" CRA_PAGE_BACKGROUND_FN ",last='',n=0;"
-    "function tick(){try{var c=color();if(c&&c!==last){last=c;console.log('__cra_bg:'+c);}}catch(e){}"
+    "(function(send){var color=" CRA_PAGE_BACKGROUND_FN ",last='',n=0;"
+    "function tick(){try{var c=color();if(c&&c!==last){last=c;send('bg:'+c);}}catch(e){}"
     "if(document.readyState==='loading'&&++n<600)requestAnimationFrame(tick);}"
-    "requestAnimationFrame(tick);})();";
+    "requestAnimationFrame(tick);})";
 
 // MARK: - Content blocking and app links
 
@@ -1336,7 +1348,7 @@ public:
         if (CefRefPtr<CefBrowserView> view = CefBrowserView::GetForBrowser(browser)) view->SetBackgroundColor(o.pageFill);
         if ([o.delegate respondsToSelector:@selector(browser:didReportBackgroundColor:)])
             [o.delegate browser:o didReportBackgroundColor:@""];
-        frame->ExecuteJavaScript(kLoadingBackgroundProbe, frame->GetURL(), 0);
+        RunPageScript(frame, "", kLoadingBackgroundProbe);
         SetCommittedLoad(o, YES);
     }
 
@@ -1349,41 +1361,39 @@ public:
 
     void OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int httpStatusCode) override {
         // Every frame reports Picture in Picture changes (the events don't bubble, hence capture).
-        frame->ExecuteJavaScript(
-            "(function(){if(window.__craPip)return;window.__craPip=1;"
-            "var cur=null;function playing(v){console.log('__cra_pip:play'+(v.paused||v.ended?0:1));}"
+        // Every frame reports Picture in Picture changes (the events don't bubble, hence capture).
+        RunPageScript(frame, "pip",
+            "(function(send){"
+            "var cur=null;function playing(v){send('pip:play'+(v.paused||v.ended?0:1));}"
             "function watch(v){cur=v;playing(v);v.addEventListener('play',function(){if(cur===v)playing(v);});"
             "v.addEventListener('pause',function(){if(cur===v)playing(v);});v.addEventListener('ended',function(){if(cur===v)playing(v);});}"
-            "document.addEventListener('enterpictureinpicture',function(e){console.log('__cra_pip:1');watch(e.target);},true);"
-            "document.addEventListener('leavepictureinpicture',function(){cur=null;console.log('__cra_pip:0');},true);"
-            "if(document.pictureInPictureElement){console.log('__cra_pip:1');watch(document.pictureInPictureElement);}})();",
-            frame->GetURL(), 0);
+            "document.addEventListener('enterpictureinpicture',function(e){send('pip:1');watch(e.target);},true);"
+            "document.addEventListener('leavepictureinpicture',function(){cur=null;send('pip:0');},true);"
+            "if(document.pictureInPictureElement){send('pip:1');watch(document.pictureInPictureElement);}})");
         if (!frame->IsMain()) return;
         CraBrowser* o = owner_;
         if (!o) return;
         [o.delegate browser:o didFinishLoadingURL:NSStringFromCef(frame->GetURL()) title:o.currentTitle
                  statusCode:httpStatusCode];
-        // Ask the page for its theme colour; the answer comes back through OnConsoleMessage.
-        frame->ExecuteJavaScript(
-            "(function(){function probe(){try{var c='';var ms=document.querySelectorAll('meta[name=\"theme-color\"]');"
+        // Ask the page for its theme colour; the answer comes back as "theme:<css colour>".
+        RunPageScript(frame, "",
+            "(function(send){function probe(){try{var c='';var ms=document.querySelectorAll('meta[name=\"theme-color\"]');"
             "for(var i=0;i<ms.length;i++){if(!ms[i].getAttribute('media')){c=ms[i].getAttribute('content')||'';if(c)break;}}"
             "if(!c&&document.body){var b=getComputedStyle(document.body).backgroundColor;if(b&&b!=='rgba(0, 0, 0, 0)'&&b!=='transparent'){c=b;}}"
             "if(!c){var h=getComputedStyle(document.documentElement).backgroundColor;if(h&&h!=='rgba(0, 0, 0, 0)'&&h!=='transparent'){c=h;}}"
             "if(!c){c='rgb(255, 255, 255)';}"
             "var d=document.createElement('div');d.style.color=c;document.body.appendChild(d);"
-            "var rgb=getComputedStyle(d).color;d.remove();console.log('__cra_theme:'+rgb);}catch(e){}}"
-            "probe();setTimeout(probe,1500);})();",
-            frame->GetURL(), 0);
-        frame->ExecuteJavaScript(kBackgroundProbe, frame->GetURL(), 0);
+            "var rgb=getComputedStyle(d).color;d.remove();send('theme:'+rgb);}catch(e){}}"
+            "probe();setTimeout(probe,1500);})");
+        RunPageScript(frame, "bg", kBackgroundProbe);
     }
 
-    bool OnConsoleMessage(CefRefPtr<CefBrowser> browser, cef_log_severity_t level, const CefString& message,
-                          const CefString& source, int line) override {
-        std::string m = message.ToString();
-        if (m.compare(0, 10, "__cra_pip:") == 0) {
+    // What the page scripts above send(): "pip:…", "bg:<css colour>" or "theme:<css colour>".
+    void HandlePageMessage(CefRefPtr<CefBrowser> browser, const std::string& m) {
+        if (m.compare(0, 4, "pip:") == 0) {
             CraBrowser* o = owner_;
-            if (!o) return true;
-            std::string v = m.substr(10);
+            if (!o) return;
+            std::string v = m.substr(4);
             if (v == "1" || v == "0") {
                 BOOL active = (v == "1");
                 if (o.isInPictureInPicture != active) {
@@ -1400,9 +1410,9 @@ public:
             } else if (v.compare(0, 3, "err") == 0) {
                 NSLog(@"CraCEF: Picture in Picture %s", v.c_str());
             }
-            return true;
+            return;
         }
-        const std::string bgPrefix = "__cra_bg:";
+        const std::string bgPrefix = "bg:";
         if (m.compare(0, bgPrefix.size(), bgPrefix) == 0) {
             CraBrowser* o = owner_;
             NSString* hex = HexFromCSSColor(m.substr(bgPrefix.size()));
@@ -1414,16 +1424,15 @@ public:
             }
             if (o && hex.length && [o.delegate respondsToSelector:@selector(browser:didReportBackgroundColor:)])
                 [o.delegate browser:o didReportBackgroundColor:hex];
-            return true;
+            return;
         }
-        const std::string prefix = "__cra_theme:";
-        if (m.compare(0, prefix.size(), prefix) != 0) return false;
+        const std::string prefix = "theme:";
+        if (m.compare(0, prefix.size(), prefix) != 0) return;
         CraBrowser* o = owner_;
-        if (!o) return true;
+        if (!o) return;
         std::string rgb = m.substr(prefix.size());  // "rgb(r, g, b)", "rgba(…)" or "none"
         NSString* hex = rgb == "none" ? @"none" : HexFromCSSColor(rgb);
         [o.delegate browser:o didReportThemeColor:hex];
-        return true;  // keep it out of the console
     }
 
     void OnLoadError(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, ErrorCode errorCode,
@@ -1491,6 +1500,10 @@ public:
     // or with true the page did (scripts/cef-patches/page-activate.patch).
     bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
                                   CefProcessId source_process, CefRefPtr<CefProcessMessage> message) override {
+        if (source_process == PID_RENDERER && message->GetName() == "Cra.page") {
+            HandlePageMessage(browser, message->GetArgumentList()->GetString(0).ToString());
+            return true;
+        }
         if (source_process != PID_BROWSER) return false;
         CraBrowser* o = owner_;
         if (message->GetName() == "Cra.audible") {
@@ -2343,18 +2356,18 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 // (YouTube's thumbnails play muted on hover) or GIF-like loops.
 static NSString* PictureInPictureScript(BOOL automatic, int x, int y) {
     return [NSString stringWithFormat:
-        @"(function(auto,x,y){try{"
+        @"(function(send){var auto=%d,x=%d,y=%d;try{"
         "if(document.pictureInPictureElement){if(!auto){document.exitPictureInPicture().catch(function(){});}return;}"
         "var area=function(v){var r=v.getBoundingClientRect();return r.width*r.height;};"
         "var c=Array.prototype.slice.call(document.querySelectorAll('video')).filter(function(v){return !v.disablePictureInPicture&&v.readyState>=1&&v.videoWidth>0;});"
         "if(auto){c=c.filter(function(v){return !v.paused&&!v.ended&&!v.muted&&v.volume>0&&area(v)>=20000;});}"
-        "if(!c.length){console.log('__cra_pip:none');return;}"
+        "if(!c.length){send('pip:none');return;}"
         "var v=null;"
         "if(x>=0){v=c.filter(function(e){var r=e.getBoundingClientRect();return x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom;}).sort(function(a,b){return area(a)-area(b);})[0]||null;}"
         "if(!v){c.sort(function(a,b){return ((b.paused?0:1)-(a.paused?0:1))||(area(b)-area(a));});v=c[0];}"
-        "var go=function(){v.requestPictureInPicture().then(function(){console.log('__cra_pip:ok');}).catch(function(e){console.log('__cra_pip:err '+e.name+': '+e.message);});};"
+        "var go=function(){v.requestPictureInPicture().then(function(){send('pip:ok');}).catch(function(e){send('pip:err '+e.name+': '+e.message);});};"
         "var n=0;var t=setInterval(function(){if((navigator.userActivation&&navigator.userActivation.isActive)||++n>20){clearInterval(t);go();}},50);"
-        "}catch(e){console.log('__cra_pip:err '+e);}})(%d,%d,%d);", automatic ? 1 : 0, x, y];
+        "}catch(e){send('pip:err '+e);}})", automatic ? 1 : 0, x, y];
 }
 
 // Chromium's own NSView for the page (RenderWidgetHostViewCocoa), the one
@@ -2411,16 +2424,13 @@ static NSView* FindRenderWidgetHostView(NSView* root) {
     NSString* any = PictureInPictureScript(automatic, -1, -1);
     if (frame) {
         // Click coordinates are relative to the top-level view, so only the main frame can hit-test.
-        frame->ExecuteJavaScript(CefStringFromNS(frame->IsMain() ? hit : any), frame->GetURL(), 0);
+        RunPageScript(frame, "", CefStringFromNS(frame->IsMain() ? hit : any));
         return;
     }
     // Every frame looks for a video: embedded players live in iframes.
     std::vector<CefString> ids;
     _browser->GetFrameIdentifiers(ids);
-    for (const auto& id : ids) {
-        CefRefPtr<CefFrame> f = _browser->GetFrameByIdentifier(id);
-        if (f && f->IsValid()) f->ExecuteJavaScript(CefStringFromNS(any), f->GetURL(), 0);
-    }
+    for (const auto& id : ids) RunPageScript(_browser->GetFrameByIdentifier(id), "", CefStringFromNS(any));
 }
 
 - (void)requestPictureInPictureAutomatic:(BOOL)automatic {
@@ -2475,7 +2485,7 @@ static NSView* FindRenderWidgetHostView(NSView* root) {
 - (cef_color_t)pageFill { return _pageBackgroundColor ?: CraCanvasColor(); }
 + (NSColor*)pageCanvasColor { return PagesAreDark() ? NSColor.blackColor : NSColor.whiteColor; }
 - (void)probeBackgroundColor {
-    if (_browser) _browser->GetMainFrame()->ExecuteJavaScript(kBackgroundProbe, _browser->GetMainFrame()->GetURL(), 0);
+    if (_browser) RunPageScript(_browser->GetMainFrame(), "bg", kBackgroundProbe);
 }
 - (void)sendDevToolsMethod:(NSString*)method params:(NSString*)params
                 completion:(void (^)(NSString* _Nullable, NSString* _Nullable))completion {
