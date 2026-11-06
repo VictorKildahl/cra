@@ -1574,15 +1574,62 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
     }
 
-    /// Arc fades the page under a Peek to 28 % over the window's background, its sidebar as it is.
-    func setPeekVeil(_ on: Bool, duration: TimeInterval, timing: CAMediaTimingFunction? = nil) {
-        let alpha: CGFloat = on ? PeekLayout.pageAlpha : 1
+    /// Arc fades the page under a Peek to 28 % over the window's background, its sidebar as it is;
+    /// Cra also draws it back a little unless it fills the window edge to edge (PR #221).
+    /// `PeekVeil` says which Peek it is veiled for, so a Peek that ended early never veils it and
+    /// one whose close already fades it back doesn't snap that fade.
+    private var peekVeil = PeekVeil()
+
+    /// `peek` is opening over this window.
+    func showPeekVeil(for peek: UUID) {
+        guard peekVeil.show(for: peek) else { return }
+        applyPeekVeil(duration: PeekLayout.openVeilDuration, timing: PeekTransition.easeOutCubic)
+    }
+
+    /// `peek` is closing: the page comes back over Arc's 0.2 s while the card lands.
+    func hidePeekVeil(for peek: UUID) {
+        guard peekVeil.hide(for: peek) else { return }
+        applyPeekVeil(duration: PeekLayout.closeVeilDuration, timing: PeekTransition.easeOutCubic)
+    }
+
+    /// `peek`'s window is gone (Expand and Add To Split don't animate): the page snaps back.
+    func endPeekVeil(for peek: UUID) {
+        guard peekVeil.end(for: peek) else { return }
+        applyPeekVeil(duration: 0)
+    }
+
+    /// cra://debug?peekShown: the page behind a Peek as it is set now (the peek-backdrop scenario).
+    func peekBackdropShown() -> String {
+        func scale(_ v: NSView?) -> String {
+            String(format: "%.3f", v?.layer.map { CATransform3DGetAffineTransform($0.sublayerTransform).a } ?? 1)
+        }
+        let content = shell.contentContainer
+        // Pages in their own windows (DevTools docked, or CRA_EMBED_PAGES=0); embedded ones go with the content.
+        let pages = browsers.runtimes.values.compactMap(\.hostWindow).filter { $0.parent === window && !EmbeddedPages.isHost($0) }
+        return String(format: "veiled=%d alpha=%.2f scale=%@ windows=%@", peekVeil.isOn ? 1 : 0, content.alphaValue, scale(content),
+                      pages.map { String(format: "%.2f@", $0.alphaValue) + scale($0.contentView) }.joined(separator: ","))
+    }
+
+    private func applyPeekVeil(duration: TimeInterval, timing: CAMediaTimingFunction? = nil) {
+        let look = PeekLayout.backdrop(veiled: peekVeil.isOn, edgeToEdge: shell.edgeToEdge)
+        let content = shell.contentContainer
+        let center = CGPoint(x: content.bounds.midX, y: content.bounds.midY)
+        PeekTransition.scaleBackdrop(content, around: center, to: look.scale, duration: duration, timing: timing)
         let pages = browsers.runtimes.values.compactMap(\.hostWindow).filter { $0.parent === window }
+        if let window {
+            // Each page window shrinks around the same point on screen as the page's card.
+            let screenCenter = window.convertPoint(toScreen: content.convert(center, to: nil))
+            for page in pages where !EmbeddedPages.isHost(page) {
+                guard let view = page.contentView else { continue }
+                let pageCenter = view.convert(page.convertPoint(fromScreen: screenCenter), from: nil)
+                PeekTransition.scaleBackdrop(view, around: pageCenter, to: look.scale, duration: duration, timing: timing)
+            }
+        }
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = duration
             ctx.timingFunction = timing
-            shell.contentContainer.animator().alphaValue = alpha
-            for w in pages { w.animator().alphaValue = alpha }
+            content.animator().alphaValue = look.alpha
+            for w in pages { w.animator().alphaValue = look.alpha }
         }
     }
 
@@ -3003,6 +3050,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // A toast that stays (the protected media one) follows the page's corner, once laid out.
         DispatchQueue.main.async { [weak self] in
             guard let self, let window = self.window else { return }
+            // The page behind a Peek shrinks around its new centre.
+            if self.peekVeil.isOn { self.applyPeekVeil(duration: 0) }
             self.toast.follow(page: self.shell.webContainer.convert(self.shell.webContainer.bounds, to: nil), in: window)
         }
         saveFrame()

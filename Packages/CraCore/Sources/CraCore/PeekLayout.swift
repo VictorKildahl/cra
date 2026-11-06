@@ -27,6 +27,27 @@ public enum PeekLayout {
     public static let buttonCount = 3
     /// The page under a Peek (Arc: 233/240/254 → 178/172/151 over the window's background).
     public static let pageAlpha: CGFloat = 0.28
+    /// The page under a Peek also draws back a little, its margins widening, unless pages fill the
+    /// window edge to edge (no margins to widen) (PR #221).
+    public static let pageScale: CGFloat = 0.985
+
+    public struct Backdrop: Sendable, Equatable {
+        public let alpha: CGFloat
+        public let scale: CGFloat
+        public init(alpha: CGFloat, scale: CGFloat) { (self.alpha, self.scale) = (alpha, scale) }
+    }
+
+    /// How the page behind looks with a Peek over it (`veiled`) or without.
+    public static func backdrop(veiled: Bool, edgeToEdge: Bool) -> Backdrop {
+        .init(alpha: veiled ? pageAlpha : 1, scale: veiled && !edgeToEdge ? pageScale : 1)
+    }
+
+    /// A sublayer transform (applied about the layer's anchor) that scales by `scale` around
+    /// `center`, both in the layer's own coordinates.
+    public static func backdropTransform(scale: CGFloat, around center: CGPoint, anchor: CGPoint) -> CGAffineTransform {
+        CGAffineTransform(a: scale, b: 0, c: 0, d: scale,
+                          tx: (center.x - anchor.x) * (1 - scale), ty: (center.y - anchor.y) * (1 - scale))
+    }
     /// Arc's open, frame by frame at 60 fps, from the start of the link picture's fade: the picture
     /// fades out on an ease-out over 0.075 s (0.40, 0.21, 0.065 a frame apart). The frame's centre
     /// and width go from the link's to the card's on an ease-out cubic over 0.205 s from 0.016 s;

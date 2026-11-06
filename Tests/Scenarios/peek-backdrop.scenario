@@ -1,0 +1,29 @@
+# The page behind a Peek fades to 28 % and, unless pages fill the window edge to edge, draws back
+# to 98.5 % around its centre; it comes back whole however the Peek goes, closed or expanded (PR #221).
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "peekInEveryTab": true}
+
+cra://open?url=${PAGE}?n=under
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+# window.open from a click (the cdp script counts as one) peeks from any tab with peekInEveryTab.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=peek'))","userGesture":true}
+expect-log peek: from
+wait 1.5
+cra://debug?peekShown=open
+expect-log Cra peek shown open: veiled=1 alpha=0\.28 scale=0\.985
+cra://action/closeTab
+wait 1
+cra://debug?peekShown=closed
+expect-log Cra peek shown closed: veiled=0 alpha=1\.00 scale=1\.000
+
+# Expand ends the Peek without its close: the page snaps back.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=expand'))","userGesture":true}
+wait 1.5
+cra://debug?peekShown=reopened
+expect-log Cra peek shown reopened: veiled=1 alpha=0\.28 scale=0\.985
+cra://action/promoteLittleWindow
+wait 1
+cra://debug?peekShown=expanded
+expect-log Cra peek shown expanded: veiled=0 alpha=1\.00 scale=1\.000

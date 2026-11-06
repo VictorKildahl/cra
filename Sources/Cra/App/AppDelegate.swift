@@ -750,6 +750,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
+            // peekShown=<label>: the page behind a Peek in each window, faded and drawn back or whole (PR #221).
+            if let label = dict["peekShown"] {
+                for m in mainWindows { NSLog("Cra peek shown %@: %@", label, m.peekBackdropShown()) }
+                return
+            }
             if dict["relaunch"] != nil { relaunch(); return }
             if dict["quit"] != nil { NSApp.terminate(nil); return }
             if let t = dict["selectTab"].flatMap(UUID.init(uuidString:)) { store.selectTab(t, window: main.windowID); return }

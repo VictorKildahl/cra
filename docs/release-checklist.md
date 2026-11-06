@@ -61,6 +61,10 @@ built release app with a test profile. Note anything that fails in the release's
 
 ### Peek, Little Window, Picture in Picture, split view, Capture
 
+- **PR #221:** opening a Peek fades the page behind and draws it back a little, its margins widening
+  while the sidebar stays still, and closing brings it back in one smooth motion with no jump at the
+  end. With "Pages fill the window edge to edge" on, the page only fades. (The values are checked
+  by the peek-backdrop scenario; this is the motion.)
 - **#195:** in a Peek and a Little Window, click in the page, then Back, Forward, Refresh, the
   address and "Open in": each works on the first click. Capture and scroll: the page moves and
   the grey picture and the lens follow. With another app full screen, ⌥⌘N opens a Little
