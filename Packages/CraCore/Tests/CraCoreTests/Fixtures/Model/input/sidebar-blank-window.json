@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "spaceOrder": ["A0000000-0000-0000-0000-000000000001"],
+  "spaces": [
+    {
+      "id": "A0000000-0000-0000-0000-000000000001", "title": "Personal", "emoji": "🌱",
+      "theme": {"colors": ["#1C242B", "#3A3660"], "intensity": 0.85, "noise": 0.18, "appearance": "dark"},
+      "favoritesContainerID": "C0000000-0000-0000-0000-000000000001",
+      "pinnedContainerID": "C0000000-0000-0000-0000-000000000002",
+      "todayContainerID": "C0000000-0000-0000-0000-000000000003",
+      "createdAt": "2026-11-06T08:00:00Z"
+    },
+    {
+      "id": "B0000000-0000-0000-0000-000000000001", "title": "This Window", "emoji": "",
+      "theme": {"colors": ["#313146", "#534B5D"], "intensity": 0.9, "noise": 0.08, "appearance": "dark"},
+      "favoritesContainerID": "C0000000-0000-0000-0000-000000000011",
+      "pinnedContainerID": "C0000000-0000-0000-0000-000000000012",
+      "todayContainerID": "C0000000-0000-0000-0000-000000000013",
+      "createdAt": "2026-11-06T09:00:00Z",
+      "standaloneWindowID": "D0000000-0000-0000-0000-000000000002"
+    }
+  ],
+  "items": [
+    {"id": "C0000000-0000-0000-0000-000000000001", "children": [], "isUnread": false, "createdAt": "2026-11-06T08:00:00Z",
+     "data": {"container": {"_0": {"favorites": {"spaceID": "A0000000-0000-0000-0000-000000000001"}}}}},
+    {"id": "C0000000-0000-0000-0000-000000000002", "children": [], "isUnread": false, "createdAt": "2026-11-06T08:00:00Z",
+     "data": {"container": {"_0": {"pinned": {"spaceID": "A0000000-0000-0000-0000-000000000001"}}}}},
+    {"id": "C0000000-0000-0000-0000-000000000003", "children": [], "isUnread": false, "createdAt": "2026-11-06T08:00:00Z",
+     "data": {"container": {"_0": {"today": {"spaceID": "A0000000-0000-0000-0000-000000000001"}}}}},
+    {"id": "C0000000-0000-0000-0000-000000000011", "children": [], "isUnread": false, "createdAt": "2026-11-06T09:00:00Z",
+     "data": {"container": {"_0": {"favorites": {"spaceID": "B0000000-0000-0000-0000-000000000001"}}}}},
+    {"id": "C0000000-0000-0000-0000-000000000012", "children": [], "isUnread": false, "createdAt": "2026-11-06T09:00:00Z",
+     "data": {"container": {"_0": {"pinned": {"spaceID": "B0000000-0000-0000-0000-000000000001"}}}}},
+    {"id": "C0000000-0000-0000-0000-000000000013", "children": ["E0000000-0000-0000-0000-000000000001"], "isUnread": false, "createdAt": "2026-11-06T09:00:00Z",
+     "data": {"container": {"_0": {"today": {"spaceID": "B0000000-0000-0000-0000-000000000001"}}}}},
+    {"id": "E0000000-0000-0000-0000-000000000001", "parentID": "C0000000-0000-0000-0000-000000000013", "children": [], "isUnread": false,
+     "createdAt": "2026-11-06T09:00:00Z", "data": {"tab": {"_0": {"url": "https://example.com/", "savedTitle": "Example Domain"}}}}
+  ]
+}

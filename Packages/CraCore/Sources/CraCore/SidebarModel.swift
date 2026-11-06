@@ -267,9 +267,12 @@ public struct Space: Identifiable, Codable, Equatable {
     public var profileID: UUID?
     /// An SF Symbol from the Icon tab of Arc's icon picker, shown instead of `emoji` (then empty).
     public var symbol: String? = nil
+    /// The Blank Window this space belongs to (Arc: a `standalone` sidebar container keyed by its
+    /// window). Such a space is in no window's space list and goes when its window closes (BlankWindow).
+    public var standaloneWindowID: UUID? = nil
 
     public init(id: UUID, title: String, emoji: String, theme: SpaceTheme, favoritesContainerID: UUID, pinnedContainerID: UUID,
-                todayContainerID: UUID, createdAt: Date, profileID: UUID? = nil, symbol: String? = nil) {
+                todayContainerID: UUID, createdAt: Date, profileID: UUID? = nil, symbol: String? = nil, standaloneWindowID: UUID? = nil) {
         self.id = id
         self.title = title
         self.emoji = emoji
@@ -280,6 +283,7 @@ public struct Space: Identifiable, Codable, Equatable {
         self.createdAt = createdAt
         self.profileID = profileID
         self.symbol = symbol
+        self.standaloneWindowID = standaloneWindowID
     }
 }
 
@@ -770,6 +774,7 @@ extension Space {
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         profileID = try c.decodeIfPresent(UUID.self, forKey: .profileID)
         symbol = try c.decodeIfPresent(String.self, forKey: .symbol)
+        standaloneWindowID = try c.decodeIfPresent(UUID.self, forKey: .standaloneWindowID)
         // Edit Space… → Save in 0.1.31 and older wrote 🌱 beside a space's symbol, and the sidebar
         // drew both stacked (#205). The symbol was the space's icon, so the emoji beside it goes.
         if symbol?.isEmpty == false { emoji = "" }

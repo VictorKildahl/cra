@@ -186,6 +186,9 @@ enum SplitDropTarget: Equatable {
 final class SidebarActions {
     var openCommandBar: (CommandBarMode) -> Void = { _ in }
     var closeTab: (UUID) -> Void = { _ in }
+    /// A tab dragged out of every Cra window and let go there (screen point): Arc opens it in a
+    /// Blank Window where it was dropped (GitHub #219).
+    var tearOffTab: (UUID, NSPoint) -> Void = { _, _ in }
     var goBack: () -> Void = {}
     var goForward: () -> Void = {}
     var reload: () -> Void = {}

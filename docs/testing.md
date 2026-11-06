@@ -57,7 +57,8 @@ no page content), so it checks geometry, ink and fills.
 - **CraCore ≥ 85 % of lines.** There is no target for the whole repo: one would be met by
   testing the easy files.
 - **Mutation score ≥ 70 %** (`scripts/mutate.py`, weekly): one operator flipped at a time in
-  the pure code must fail a test.
+  the pure code must fail a test. About a thousand mutants are more than the CI job's hour, so
+  it tests a shuffled sample for 70 minutes (`CRA_MUTATION_MINUTES`), a new order each ISO week.
 - **Scenario invariants**, the same for every scenario: the app is still running at the end,
   no new crash report for its processes, no `fault:` line in `cra.log`, the sidebar sound
   (`SidebarIntegrity`), main-thread stalls inside the scenario's budget, Cra's memory inside
