@@ -105,6 +105,12 @@ enum ExtensionImporter {
         }
     }
 
+    /// Descriptions are optional: Settings omits an unresolved message key instead of displaying it.
+    static func localizedDescription(manifest: [String: Any], folder: URL) -> String {
+        let value = localized(manifest["description"] as? String ?? "", manifest: manifest, folder: folder)
+        return value.hasPrefix("__MSG_") && value.hasSuffix("__") ? "" : value
+    }
+
     /// Resolves `__MSG_key__` from the extension's default locale.
     static func localized(_ value: String, manifest: [String: Any], folder: URL) -> String {
         guard value.hasPrefix("__MSG_"), value.hasSuffix("__") else { return value }
