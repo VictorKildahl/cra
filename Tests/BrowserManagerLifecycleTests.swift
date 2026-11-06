@@ -318,6 +318,7 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #136
     /// A tab shown while its page loads is neither captured nor probed until the load is over
     /// (#136): both ask the renderer for work in the busiest second of the page.
     @MainActor
@@ -384,6 +385,7 @@ enum BrowserManagerLifecycleTests {
         manager.runtime(for: id).map(\.discarded) ?? true
     }
 
+    // promise: #136
     /// Like Arc, the 10 tabs used last keep their pages however long they have been hidden (#136).
     @MainActor
     private static func recentTabsCase() {
@@ -400,6 +402,7 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #136
     /// Like Arc, a page out of sight past the threshold is voted to freeze unless it is one of
     /// the 10 tabs used last; showing it drops the vote (#136).
     @MainActor
@@ -423,6 +426,7 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #32
     /// A page that refused isn't probed again every minute, only after the back-off or once shown again.
     @MainActor
     private static func refusalBackoffCase() async {
@@ -443,6 +447,7 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #32
     /// Tab sleeping on the manager's clock: an hour's threshold and the 10-minute back-off run
     /// in no time, and nothing is asked a second early.
     @MainActor
@@ -471,6 +476,7 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #153
     /// Under memory pressure (#153) the 3 pages hidden longest are asked, the 10 tabs used last
     /// included; a page refusing inside its back-off doesn't take one of the 3, and a page left
     /// less than 5 minutes ago isn't asked.
@@ -501,6 +507,7 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #153
     /// Sleeping discards the page in place (#153): the runtime stays with Chromium's history and
     /// scroll position, showing the tab loads it now, and it holds none of the 10 recent places.
     /// A call with camera and microphone off, or a device, keeps the page awake; a CEF without
@@ -546,6 +553,7 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #153
     /// "Force tabs out of memory after:" below Arc's 4 hours closes the 10 tabs used last too;
     /// 4 hours and more keep them (#153).
     @MainActor
@@ -564,6 +572,7 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #153
     /// A page that played sound counts as in use: tab sleeping waits as long after it went quiet
     /// as after it went out of sight (#153).
     @MainActor
@@ -663,6 +672,7 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #32
     /// The page's own onbeforeunload, asked in its world after the isolated probe, keeps it awake.
     @MainActor
     private static func beforeUnloadCase() async {

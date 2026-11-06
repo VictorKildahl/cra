@@ -65,7 +65,9 @@ fi
 
 OUT="$ROOT/build/scenarios/$NAME${CRA_FLAGS:+-${CRA_FLAGS//[^a-z]/}}"
 rm -rf "$OUT" && mkdir -p "$OUT"
-DATA="$(mktemp -d /tmp/cra-scenario.XXXXXX)"
+# The physical path: /tmp is a link to /private/tmp, and CEF takes a profile's folder for one
+# outside root_cache_path through it (in-memory storage instead), so spaces on a profile need it.
+DATA="$(cd "$(mktemp -d /tmp/cra-scenario.XXXXXX)" && pwd -P)"
 CMD="$OUT/commands"
 HITCH="$OUT/hitch.log"
 LOG="$DATA/cra.log"

@@ -6,19 +6,19 @@ import Testing
 struct PerfSessionTests {
     let start = Date(timeIntervalSince1970: 1_793_000_000)
 
-    @Test(arguments: [(true, [:], true), (false, [:], false), (true, ["CRA_PERF": "0"], false), (true, ["CRA_PERF": "1"], true)]
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/91"), arguments: [(true, [:], true), (false, [:], false), (true, ["CRA_PERF": "0"], false), (true, ["CRA_PERF": "1"], true)]
           as [(Bool, [String: String], Bool)])
     func recordingFollowsTheSettingUnlessTheEnvironmentTurnsItOff(setting: Bool, env: [String: String], on: Bool) {
         #expect(PerfSessionRules.recording(setting: setting, environment: env) == on)
     }
 
-    @Test func onlyTheOwnerWritesAndOnlyWhileRecording() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/91")) func onlyTheOwnerWritesAndOnlyWhileRecording() {
         #expect(PerfSessionRules.writesFiles(owner: true, recording: true))
         #expect(!PerfSessionRules.writesFiles(owner: false, recording: true))
         #expect(!PerfSessionRules.writesFiles(owner: true, recording: false))
     }
 
-    @Test func aMarkerLeftBehindIsAnAbnormalEnd() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/91")) func aMarkerLeftBehindIsAnAbnormalEnd() {
         let marker = PerfSessionMarker(id: "abc", launch: 3, startedAt: start, pid: 42, craVersion: "0.1.26")
         var history = PerfHistory()
         history.lastSession = PerfPreviousSession(id: "old", launch: 2, startedAt: start, craVersion: "0.1.25", abnormal: false, endedAt: start)

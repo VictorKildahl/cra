@@ -1,0 +1,49 @@
+# promise: #81 #131
+# Each space's pages load in its profile's Chromium folder, with that profile's cookies, and a
+# space on Default stays on Default after a relaunch whichever profile was used last (#81:
+# Chromium otherwise started on Local State's profile.last_used). Personal is on Default,
+# Random on the profile Hobbies, as in the report.
+# A relaunched Cra's stdout isn't kept, so after the relaunch the page reports what it sees by
+# going to <answer>.localhost, a host cra.log names. Only the name counts: the run lists localhost
+# as a WebKit host, so that page moves to WebKit and fails to load there.
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Personal","emoji":"🏠","favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}},{"id":"A0000000-0000-0000-0000-000000000002","title":"Random","emoji":"🎲","favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z","profileID":"B0000000-0000-0000-0000-000000000001","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}}],"profiles":[{"id":"B0000000-0000-0000-0000-000000000001","name":"Hobbies"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+pace 0.5
+
+# Random (Hobbies): its own folder, and a cookie only it has.
+cra://open?url=${PAGE}?n=random&space=A0000000-0000-0000-0000-000000000002
+expect-log loaded 127\.0\.0\.1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.cookie='who=random; max-age=86400','random:'+document.cookie"}
+expect-log Cra cdp Runtime.evaluate .*"value":"random:who=random"
+cra://open?url=chrome://version&space=A0000000-0000-0000-0000-000000000002
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'path:'+document.getElementById('profile_path').innerText.split('/').pop()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"path:Profile B0000000-0000-0000-0000-000000000001"
+
+# Personal (Default): the Default folder, without Random's cookie.
+cra://open?url=${PAGE}?n=personal&space=A0000000-0000-0000-0000-000000000001
+expect-log loaded 127\.0\.0\.1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.cookie='who=personal; max-age=86400','personal:'+document.cookie"}
+expect-log Cra cdp Runtime.evaluate .*"value":"personal:who=personal"
+cra://open?url=chrome://version&space=A0000000-0000-0000-0000-000000000001
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'path:'+document.getElementById('profile_path').innerText.split('/').pop()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"path:Default"
+
+# Random used last, then a relaunch: a new page in Personal still has Personal's cookie.
+cra://open?url=${PAGE}?n=random-last&space=A0000000-0000-0000-0000-000000000002
+expect-log loaded 127\.0\.0\.1
+wait 2
+relaunch
+cra://open?url=${PAGE}?n=after&space=A0000000-0000-0000-0000-000000000001
+wait 3
+cra://debug?pageJS=location.href=location.href.replace('127.0.0.1','after-'+(document.cookie.replace(/[^a-z0-9]+/g,'-')||'none')+'.localhost')
+expect-log for after-[a-z0-9-]+\.localhost
+expect-log for after-who-personal\.localhost
+# And Random still has its own, kept on disk in its profile's folder.
+cra://open?url=${PAGE}?n=again&space=A0000000-0000-0000-0000-000000000002
+wait 3
+cra://debug?pageJS=location.href=location.href.replace('127.0.0.1','again-'+(document.cookie.replace(/[^a-z0-9]+/g,'-')||'none')+'.localhost')
+expect-log for again-[a-z0-9-]+\.localhost
+expect-log for again-who-random\.localhost

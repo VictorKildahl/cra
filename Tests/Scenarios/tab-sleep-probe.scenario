@@ -1,0 +1,34 @@
+# promise: #32
+# Tab sleeping asks a hidden page whether it is in use, and only the user's own typing or the
+# page's own onbeforeunload says yes (#32). A field a script fills (with its input event) and a
+# beforeunload listener added with addEventListener don't keep a page awake; text typed into a
+# field does, and the log says why. Typing comes from DevTools' Input.insertText, a trusted input
+# event as a key press's is, so no keys reach the Mac.
+budget rss=800 stalls50=30
+pace 0.5
+
+# A page whose framework fills a field and listens for beforeunload: it sleeps.
+cra://open?url=${PAGE}?n=scripted
+expect-log loaded 127\.0\.0\.1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(i=>{i.value='set by the page';i.dispatchEvent(new Event('input',{bubbles:true}));addEventListener('beforeunload',e=>{e.preventDefault()});return 'scripted:'+i.value})(document.querySelector('input'))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"scripted:set by the page"
+cra://open?url=${PAGE}?n=front
+expect-log loaded 127\.0\.0\.1
+wait 2
+cra://debug?sleepTabs=1
+expect-log tab sleep (unloads|discards) 127\.0\.0\.1
+reject-log tab sleep keeps 127\.0\.0\.1 awake
+
+# A page with text the user typed: it stays awake, and the log names the reason once.
+cra://open?url=${PAGE}?n=typed
+expect-log loaded 127\.0\.0\.1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.querySelector('input').focus(),'focused:'+(document.activeElement.tagName)"}
+expect-log Cra cdp Runtime.evaluate .*"value":"focused:INPUT"
+cra://debug?cdp=Input.insertText&params={"text":"a draft"}
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'typed:'+document.querySelector('input').value"}
+expect-log Cra cdp Runtime.evaluate .*"value":"typed:a draft"
+cra://open?url=${PAGE}?n=front2
+expect-log loaded 127\.0\.0\.1
+wait 2
+cra://debug?sleepTabs=1
+expect-log tab sleep keeps 127\.0\.0\.1 awake: typed

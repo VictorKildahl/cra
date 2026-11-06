@@ -1,3 +1,4 @@
+# promise: #209
 # GitHub #209: the languages websites see (Accept-Language, navigator.languages) are each profile's
 # chrome://settings/languages, as in Chrome and Arc. Language Settings in the command bar opens that
 # page; a language added there reaches the open page at once and new pages too. Icelandic, which

@@ -24,7 +24,7 @@ struct ExtensionProfilesTests {
         #expect(p.folders.isEmpty)
     }
 
-    @Test func commandLineFollowsTheLoadExtensionOrder() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/131")) func commandLineFollowsTheLoadExtensionOrder() {
         let p = ExtensionProfiles(folders: ["b": ["Profile 2", "Default"]])
         #expect(p.commandLineValue(forFolders: ["a", "b", "c"]) == "*,Default|Profile 2,*")
         #expect(p.commandLineValue(forFolders: ["a", "c"]) == nil, "no switch when every folder loads everywhere")
@@ -37,7 +37,7 @@ struct ExtensionProfilesTests {
         #expect(try JSONDecoder().decode(ExtensionProfiles.self, from: Data("{}".utf8)) == ExtensionProfiles())
     }
 
-    @Test func arcSpaceProfiles() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/131")) func arcSpaceProfiles() throws {
         func parse(_ json: String) throws -> String? {
             ImportProfileMap.arcProfileFolder(try JSONSerialization.jsonObject(with: Data(json.utf8)))
         }
@@ -48,7 +48,7 @@ struct ExtensionProfilesTests {
         #expect(try parse(#"{"custom": {"_0": {"directoryBasename": "Profile 2/../../x"}}}"#) == nil, "never a path out of User Data")
     }
 
-    @Test func importedExtensionsGoWhereTheirProfilesWent() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/131")) func importedExtensionsGoWhereTheirProfilesWent() {
         let map = ImportProfileMap(folders: ["Profile 2": "Profile A", "Profile 7": "Profile B"])
         let all: Set<String> = ["Default", "Profile A", "Profile B"]
         #expect(map.craFolder(forSource: "Profile 2") == "Profile A")
@@ -62,7 +62,7 @@ struct ExtensionProfilesTests {
                 "an import that bound no profiles changes nothing")
     }
 
-    @Test func importedPinsSeedOnlyNewLists() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/131")) func importedPinsSeedOnlyNewLists() {
         var pins = PinnedExtensions(shared: ["a"])
         pins.seed(["b", "c"], inProfile: "Profile A")
         pins.seed(["a"], inProfile: "Profile B")
@@ -72,7 +72,7 @@ struct ExtensionProfilesTests {
     }
 
     /// Rebuild from Arc (#131): spaces an older import left on Default go back to their Arc profiles.
-    @Test func rebuildMatchesSpacesByName() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/131")) func rebuildMatchesSpacesByName() {
         let home = UUID(), work = UUID(), client = UUID(), mine = UUID(), twin1 = UUID(), twin2 = UUID(), shared = UUID()
         let cra = [
             ArcProfileRebuild.CraSpace(id: home, title: "Home", movable: true),
@@ -94,7 +94,7 @@ struct ExtensionProfilesTests {
         #expect(moves.first?.folder == "Profile 2" && moves.first?.profileName == "Work" && moves.first?.spaceTitle == "work")
     }
 
-    @Test func rebuildKeepsExtensionsInProfilesMadeInCra() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/131")) func rebuildKeepsExtensionsInProfilesMadeInCra() {
         let map = ImportProfileMap(folders: ["Default": "Default", "Profile 2": "Profile W"])
         let all: Set<String> = ["Default", "Profile W", "Profile Mine"]
         #expect(map.extensionProfiles(sources: ["Profile 2"], allFolders: all, keepUnmapped: true) == ["Profile W", "Profile Mine"])

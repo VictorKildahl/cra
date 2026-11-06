@@ -62,6 +62,7 @@ enum PerfTests {
         if x < 0 { print(x) }
     }
 
+    // promise: #91
     @MainActor static func stallsAreRecordedWithTheirBreadcrumbs() {
         let c = config("stall")
         start(c)
@@ -119,6 +120,7 @@ enum PerfTests {
         PerfRecorder.quit()
     }
 
+    // promise: #91
     @MainActor static func aHangIsWrittenWhileItLastsWithItsStack() {
         let c = config("hang", hangMs: 600, stacks: 1)
         start(c)
@@ -152,6 +154,7 @@ enum PerfTests {
         PerfRecorder.quit()
     }
 
+    // promise: #91
     @MainActor static func aSessionThatNeverQuitIsAbnormalNextLaunch() {
         let c = config("abnormal")
         start(c)
@@ -181,6 +184,7 @@ enum PerfTests {
         PerfRecorder.quit()
     }
 
+    // promise: #91
     @MainActor static func aSecondCraWritesNothing() {
         let c = config("second")
         start(c, owner: false)
@@ -191,6 +195,7 @@ enum PerfTests {
         expect(!FileManager.default.fileExists(atPath: c.folder.path), "not even when it quits")
     }
 
+    // promise: #91
     @MainActor static func recordingOffStopsSamplingAndWriting() {
         let c = config("off")
         start(c, recording: false)
@@ -258,6 +263,7 @@ enum PerfTests {
         PerfRecorder.quit()
     }
 
+    // promise: #135
     /// GitHub #135: a timer and a queued block that run in one turn of the loop, with no sleep
     /// or commit between them, are one 300 ms pass. Split at before-timers they were two 150 ms
     /// halves and no stall at all. The timer queues the block: queued side by side, the block could
@@ -283,6 +289,7 @@ enum PerfTests {
         PerfRecorder.quit()
     }
 
+    // promise: #135
     /// GitHub #135: the first pass that lasts `slowStackMs` gets one `sample`, in memory, while the
     /// watchdog goes on watching; the report says how long the pass was in the end.
     @MainActor static func theFirstSlowPassGetsAStack() {

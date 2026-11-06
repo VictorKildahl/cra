@@ -23,6 +23,7 @@ enum StoreTests {
         chromiumProfile()
         autoArchive()
         tabSleepCadence()
+        tabRestTimes()
         integrity()
         liveFolderExpiry()
         liveFolderSignIn()
@@ -75,6 +76,7 @@ enum StoreTests {
         arcProfiles(plan: plan, store: composition.store)
     }
 
+    // promise: #131
     /// Arc's spaces keep their profiles (GitHub #131): Work is on "Profile 2", named Client.
     @MainActor
     private static func arcProfiles(plan: ImportPlan, store: SidebarStore) {
@@ -110,6 +112,7 @@ enum StoreTests {
         rebuildFromArc(plan: plan)
     }
 
+    // promise: #131
     /// Rebuild from Arc (#131): a sidebar imported before profiles came over gets them afterwards.
     @MainActor
     private static func rebuildFromArc(plan: ImportPlan) {
@@ -128,6 +131,7 @@ enum StoreTests {
         expect(store.arcProfileMoves(plan).isEmpty, "a second rebuild finds nothing to move")
     }
 
+    // promise: #131
     /// A profile Chromium hasn't opened gets its sign-in databases with Default's schema (#131).
     private static func newProfileDatabases() {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("cra-db-\(UUID().uuidString)", isDirectory: true)
@@ -234,6 +238,7 @@ enum StoreTests {
         expect(!archived(later.id), "with auto-archive off nothing is archived")
     }
 
+    // promise: #136
     /// Tab sleeping asks the windows once a minute; like Arc, it has no switch.
     @MainActor
     private static func tabSleepCadence() {
@@ -249,6 +254,17 @@ enum StoreTests {
         expect(passes == 10, "ten passes in ten minutes")
         composition.startPeriodicWork { passes += 100 }
         expect(clock.pendingCount == 2, "starting again replaces the timers instead of adding to them")
+    }
+
+    // promise: #136
+    /// Tabs rest on Arc 1.171's own numbers (#136): a page out of sight 30 minutes is voted to
+    /// freeze, one out of sight 4 hours sleeps, and the 10 tabs used last are never touched.
+    private static func tabRestTimes() {
+        expect(AppComposition.tabFreezeAfter == 30 * 60, "a hidden page is voted to freeze after 30 minutes, Arc's timeToFreezeTab")
+        expect(TabSleepPolicy.timer(AppSettings().tabSleepAfter).hiddenFor == 4 * 3600 && AppSettings().tabSleepTimerEnabled,
+               "a hidden page sleeps after 4 hours, with no setting to turn on, Arc's timeToDiscardTab")
+        expect(TabSleepPolicy.protectedRecentTabs == 10 && TabSleepPolicy.timer(AppSettings().tabSleepAfter).keepsRecentTabs,
+               "the 10 tabs used last keep their pages, Arc's protectedLRUTabCount")
     }
 
     /// The integrity check stays quiet through ordinary changes and names a broken link.

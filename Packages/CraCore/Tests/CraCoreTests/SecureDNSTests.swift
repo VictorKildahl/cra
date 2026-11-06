@@ -3,7 +3,7 @@ import Testing
 
 /// Chromium's secure DNS setting as the log and Export Diagnostics show it (#110).
 struct SecureDNSTests {
-    @Test(arguments: [
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/110"), arguments: [
         // Chromium's default, and Arc's: no provider, so the system resolver.
         ("automatic", "", "automatic, no provider (system resolver)"),
         // What Chromium writes when Google is picked in chrome://settings/security.
@@ -17,24 +17,24 @@ struct SecureDNSTests {
         #expect(SecureDNS(mode: mode, templates: templates).line == line)
     }
 
-    @Test func customTemplatesKeepOnlyTheirHost() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/110")) func customTemplatesKeepOnlyTheirHost() {
         let dns = SecureDNS(mode: "secure", templates: "https://dns.nextdns.io/a1b2c3/MacBook")
         #expect(dns.servers == ["dns.nextdns.io"])
         #expect(!dns.line.contains("a1b2c3"))
     }
 
-    @Test func severalTemplatesAreOneServerEach() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/110")) func severalTemplatesAreOneServerEach() {
         let dns = SecureDNS(mode: "secure", templates: "https://dns.google/dns-query{?dns}\nhttps://DNS.google/resolve  https://dns.quad9.net/dns-query")
         #expect(dns.servers == ["dns.google", "dns.quad9.net"])
     }
 
-    @Test func aTemplateWithoutAHostIsNamedButNotShown() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/110")) func aTemplateWithoutAHostIsNamedButNotShown() {
         #expect(SecureDNS(mode: "secure", templates: "not a url/secret").line == "secure via a custom server")
     }
 
     // Settings ▸ Privacy ▸ Secure DNS (#133).
 
-    @Test func eachRowWritesWhatChromeWrites() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/133")) func eachRowWritesWhatChromeWrites() {
         #expect(SecureDNSPrefs(.automatic) == SecureDNSPrefs(mode: "automatic", templates: ""))
         #expect(SecureDNSPrefs(.off) == SecureDNSPrefs(mode: "off", templates: ""))
         let google = SecureDNSProvider.all[0]
@@ -44,7 +44,7 @@ struct SecureDNSTests {
         #expect(SecureDNSPrefs(.custom, custom: "http://dns.example/dns-query") == nil)
     }
 
-    @Test func whatChromiumHoldsShowsAsItsRow() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/133")) func whatChromiumHoldsShowsAsItsRow() {
         #expect(SecureDNSPrefs(mode: "", templates: "").choice == .automatic)
         #expect(SecureDNSPrefs(mode: "automatic", templates: "").choice == .automatic)
         #expect(SecureDNSPrefs(mode: "automatic", templates: "https://dns.google/dns-query{?dns}").choice == .automatic)
@@ -57,14 +57,14 @@ struct SecureDNSTests {
         #expect(SecureDNSPrefs(mode: "secure", templates: "").choice == .custom)
     }
 
-    @Test func everyProviderRoundTrips() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/133")) func everyProviderRoundTrips() {
         for p in SecureDNSProvider.all {
             #expect(SecureDNSPrefs(.provider(p))?.choice == .provider(p))
             #expect(SecureDNSPrefs.validTemplates(p.template) == p.template)
         }
     }
 
-    @Test(arguments: [
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/133"), arguments: [
         ("https://dns.google/dns-query{?dns}", "https://dns.google/dns-query{?dns}"),
         ("https://dns.nextdns.io/a1b2c3/My%20Mac", "https://dns.nextdns.io/a1b2c3/My%20Mac"),
         ("HTTPS://dns.example:8443/q", "HTTPS://dns.example:8443/q"),
@@ -74,7 +74,7 @@ struct SecureDNSTests {
         #expect(SecureDNSPrefs.validTemplates(text) == templates)
     }
 
-    @Test(arguments: [
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/133"), arguments: [
         "", "   ", "dns.google", "http://dns.google/dns-query", "tls://dns.google", "https://",
         "https:///dns-query", "https://user:pw@dns.example/q", "https://dns.example/q{?dns",
         "https://dns.example/q}", "https://dns.google/dns-query http://plain.example/q",
@@ -83,7 +83,7 @@ struct SecureDNSTests {
         #expect(SecureDNSPrefs.validTemplates(text) == nil)
     }
 
-    @Test func summaryNamesTheServerInEffect() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/133")) func summaryNamesTheServerInEffect() {
         #expect(SecureDNS(mode: "secure", templates: "https://dns.google/dns-query{?dns}").summary.contains("dns.google"))
         #expect(SecureDNS(mode: "automatic", templates: "").summary.hasPrefix("Automatic uses the network’s own resolver"))
         #expect(SecureDNS(mode: "off", templates: "").summary.contains("plain text"))

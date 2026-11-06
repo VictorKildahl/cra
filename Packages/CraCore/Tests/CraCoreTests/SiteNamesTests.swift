@@ -12,7 +12,7 @@ struct SiteNamesTests {
         "tab sleep keeps NEWS.EXAMPLE.ORG awake: typed",
     ]
 
-    @Test func everyHostOfTheSessionBecomesASiteNumber() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/91")) func everyHostOfTheSessionBecomesASiteNumber() {
         var names = SiteNames(hosts: ["mail.example.com", "news.example.org", "intranet", "192.168.1.20"])
         let out = Self.files.map { names.apply($0) }.joined(separator: "\n")
         for host in ["mail.example.com", "news.example.org", "NEWS.EXAMPLE.ORG", "intranet", "192.168.1.20", "unknown.example.net"] {
@@ -28,7 +28,7 @@ struct SiteNamesTests {
         #expect(out.contains("net::ERR_NAME_NOT_RESOLVED"))
     }
 
-    @Test func theSameSiteKeepsItsNameAcrossFiles() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/91")) func theSameSiteKeepsItsNameAcrossFiles() {
         var names = SiteNames(hosts: ["example.com"])
         #expect(names.apply("a example.com") == "a site-1")
         #expect(names.apply("b www.example.com.") == "b site-1.")

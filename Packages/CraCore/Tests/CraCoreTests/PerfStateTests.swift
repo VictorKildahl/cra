@@ -59,7 +59,7 @@ struct PerfStateTests {
                              storage: .init(profileBytes: 500 << 20, cacheBytes: 200 << 20))
     }
 
-    @Test func stallsAreCountedByKindAndHeldMenusAreNotFreezes() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/91"), .bug("https://github.com/VictorKildahl/cra/issues/135")) func stallsAreCountedByKindAndHeldMenusAreNotFreezes() {
         let r = Self.sampleReport()
         let m = r.mainThread
         #expect(m.freezes == 2)
@@ -132,7 +132,7 @@ struct PerfStateTests {
 
     /// The schema as it ships: a change that moves or renames a field shows up here. Re-record with
     /// CRA_RECORD_GOLDEN=1 swift test --package-path Packages/CraCore, then say why in the PR.
-    @Test func reportMatchesTheGoldenFile() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/91"), .bug("https://github.com/VictorKildahl/cra/issues/135")) func reportMatchesTheGoldenFile() throws {
         let json = String(decoding: try PerfReport.encoder().encode(Self.sampleReport()), as: UTF8.self) + "\n"
         if ProcessInfo.processInfo.environment["CRA_RECORD_GOLDEN"] == "1" {
             let source = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Perf/perf-golden.json")
@@ -199,7 +199,7 @@ struct PerfInsightTests {
             .insights.map(\.id) == ["stalls"])
     }
 
-    @Test func aShortIdleOrACheapRecorderSaysNothing() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/135")) func aShortIdleOrACheapRecorderSaysNothing() {
         #expect(report { $0.idle = PerfReport.Idle(samples: 11, cpuPct: 80); $0.selfCost.cpuPct = 0.1 }.insights.isEmpty)
         #expect(report { $0.idle = PerfReport.Idle(samples: 100, cpuPct: 9) }.insights.isEmpty)
     }
