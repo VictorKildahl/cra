@@ -140,12 +140,19 @@ enum ArcImporter {
     static func plan() throws -> ImportPlan {
         let url = supportDir.appendingPathComponent("StorableSidebar.json")
         guard let data = try? Data(contentsOf: url) else { throw ImportError.notFound("Arc") }
+        return try plan(sidebar: data)
+    }
+
+    /// The plan from a StorableSidebar.json's contents (favicons and profiles still come from
+    /// `supportDir`).
+    static func plan(sidebar data: Data) throws -> ImportPlan {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let sidebar = root["sidebar"] as? [String: Any],
               let containers = sidebar["containers"] as? [[String: Any]] else { throw ImportError.unreadable("Arc's sidebar") }
         var plan = ImportPlan(source: "Arc")
         guard let main = containers.first(where: { $0["spaces"] != nil }) else { return plan }
-        let items = Dictionary(uniqueKeysWithValues: pairs(main["items"]).map { ($0.0, $0.1) })
+        // A damaged file can list an id twice: the later entry wins, as when Arc decodes it.
+        let items = Dictionary(pairs(main["items"]), uniquingKeysWith: { _, later in later })
         var spaceTitleByID: [String: String] = [:]
 
         func convert(_ id: String) -> ImportedItem? {

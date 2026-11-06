@@ -39,6 +39,7 @@ enum StoreTests {
         sharedFavorites()
         themePreview()
         try arcSpacesWithoutAThemeShareOneDefault()
+        try arcItemListedTwice()
         littleWindowProfile()
         tidyTabs()
         pinHook()
@@ -406,6 +407,33 @@ enum StoreTests {
         expect(!store.allTabs().contains { $0.tab?.url == "https://example.com/left-behind" }, "rather than landing in a space")
         expect(store.item(secret.id) != nil, "an open incognito window keeps its tabs")
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    /// An Arc sidebar that lists an item's id twice imports as if it were listed once, the later
+    /// entry winning as in a dictionary decoded from Arc's key-value array. The nightly fuzzer
+    /// found the importer trapping on such a file ("Duplicate values for key") every night from
+    /// 3 Nov 2026.
+    @MainActor
+    private static func arcItemListedTwice() throws {
+        let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Arc/StorableSidebar.json")
+        let data = try Data(contentsOf: fixture)
+        var root = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        var sidebar = root["sidebar"] as! [String: Any]
+        var containers = sidebar["containers"] as! [[String: Any]]
+        let main = containers.firstIndex { $0["spaces"] != nil }!
+        var items = containers[main]["items"] as! [Any]
+        let id = items.firstIndex { $0 is String }!
+        // A stale copy of the first item, listed before the real one: the real one must win.
+        var stale = items[id + 1] as! [String: Any]
+        stale["title"] = "Stale copy"
+        items.insert(contentsOf: [items[id], stale], at: id)
+        containers[main]["items"] = items
+        sidebar["containers"] = containers
+        root["sidebar"] = sidebar
+        let twice = try JSONSerialization.data(withJSONObject: root)
+        let once = try ArcImporter.plan(sidebar: data), listedTwice = try ArcImporter.plan(sidebar: twice)
+        expect(String(describing: listedTwice) == String(describing: once),
+               "an item listed twice imports once, as its later entry")
     }
 
     // promise: #30
