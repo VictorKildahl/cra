@@ -39,7 +39,7 @@ MainActor.assumeIsolated {
 
     NativeMessagingHosts.link(into: AppPaths.chromiumCache)
 
-    let extensions = ExtensionStore.loadList()
+    let extensions = ExtensionStore.loadList(profileIsFree: profileIsFree)
     CraCEFRuntime.setExtensionPaths(extensions.paths, profiles: extensions.profiles)
     if let p = extensions.profiles { CraLog.note("extension profiles: \(p)") }
 

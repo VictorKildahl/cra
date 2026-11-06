@@ -8,8 +8,9 @@ import Foundation
 /// into an UNPACKED one (location 4), which Chromium turns off without developer mode. A copy
 /// of a Web Store extension is installed again from the store in each profile it loads in, the
 /// way the store's "Add to Chrome" does (Cra.installFromWebStore): the signed CRX, location 1
-/// (INTERNAL), from the Web Store, updated by Chromium. Once a profile has that install, the
-/// folder stops loading there, and the folder goes when no profile loads it any more. A copy
+/// (INTERNAL), from the Web Store, updated by Chromium. Once a profile has that install on disk,
+/// the folder stops loading there from the next launch, and the folder goes when no profile
+/// loads it any more (never while Chromium runs, which may still read it). A copy
 /// the store doesn't take (offline, delisted, asks for more permissions) keeps loading from
 /// the folder; the next launch asks again.
 public enum WebStoreInstalls {
@@ -36,6 +37,19 @@ public enum WebStoreInstalls {
     public static func isStoreInstall(settings entry: [String: Any]?) -> Bool {
         guard let entry else { return false }
         return (entry["location"] as? Int) == internalLocation && (entry["from_webstore"] as? Bool) == true
+    }
+
+    /// The folder a store install of `extensionID` lives in: Extensions/<id>/<version> in
+    /// `profileDirectory`, from the entry's relative or absolute path. nil for anything else,
+    /// such as an imported copy whose entry claims the store.
+    public static func storeInstallDirectory(settings entry: [String: Any]?, extensionID: String, profileDirectory: URL) -> URL? {
+        guard isStoreInstall(settings: entry), isExtensionID(extensionID),
+              let path = entry?["path"] as? String, !path.isEmpty else { return nil }
+        let extensions = profileDirectory.appendingPathComponent("Extensions", isDirectory: true).standardizedFileURL
+        let installed = (path.hasPrefix("/") ? URL(fileURLWithPath: path, isDirectory: true)
+            : extensions.appendingPathComponent(path, isDirectory: true)).standardizedFileURL
+        guard installed.deletingLastPathComponent() == extensions.appendingPathComponent(extensionID, isDirectory: true) else { return nil }
+        return installed
     }
 
     /// The profiles a Web Store copy in `folder` still loads in from the folder, where Chromium

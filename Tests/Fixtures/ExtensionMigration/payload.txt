@@ -1,0 +1,1 @@
+Extension resource that must remain readable while Chromium uses the imported folder.
