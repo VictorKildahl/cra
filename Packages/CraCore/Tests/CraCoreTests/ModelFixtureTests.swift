@@ -48,11 +48,19 @@ struct ModelFixtureTests {
         try decoder.decode(T.self, from: encoder.encode(value)) == value
     }
 
-    @Test(arguments: ["sidebar.json", "sidebar-legacy.json"])
+    @Test(arguments: ["sidebar.json", "sidebar-legacy.json", "sidebar-stacked-icon.json"])
     func sidebarLoadsAsRecorded(name: String) throws {
         let (loaded, recorded) = try Self.load(name, as: SidebarDocument.self)
         #expect(loaded == recorded)
         #expect(try Self.roundTrips(loaded))
+    }
+
+    /// 0.1.31's Edit Space… → Save wrote 🌱 beside an imported space's symbol (#205): the symbol
+    /// stays and the emoji goes, so the sidebar draws one icon again.
+    @Test func stackedSpaceIconLoadsAsItsSymbol() throws {
+        let (loaded, _) = try Self.load("sidebar-stacked-icon.json", as: SidebarDocument.self)
+        #expect(loaded.spaces.map(\.emoji) == [""])
+        #expect(loaded.spaces.map(\.icon) == [.symbol("square.on.square.fill")])
     }
 
     @Test(arguments: ["settings.json", "settings-legacy.json", "settings-empty.json", "settings-bad-routes.json"])

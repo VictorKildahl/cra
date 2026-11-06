@@ -1,0 +1,83 @@
+{
+  "items" : [
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2026-11-05T08:00:00Z",
+      "data" : {
+        "container" : {
+          "_0" : {
+            "favorites" : {
+              "spaceID" : "A0000000-0000-0000-0000-000000000001"
+            }
+          }
+        }
+      },
+      "id" : "C0000000-0000-0000-0000-000000000001",
+      "isUnread" : false
+    },
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2026-11-05T08:00:00Z",
+      "data" : {
+        "container" : {
+          "_0" : {
+            "pinned" : {
+              "spaceID" : "A0000000-0000-0000-0000-000000000001"
+            }
+          }
+        }
+      },
+      "id" : "C0000000-0000-0000-0000-000000000002",
+      "isUnread" : false
+    },
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2026-11-05T08:00:00Z",
+      "data" : {
+        "container" : {
+          "_0" : {
+            "today" : {
+              "spaceID" : "A0000000-0000-0000-0000-000000000001"
+            }
+          }
+        }
+      },
+      "id" : "C0000000-0000-0000-0000-000000000003",
+      "isUnread" : false
+    }
+  ],
+  "spaceOrder" : [
+    "A0000000-0000-0000-0000-000000000001"
+  ],
+  "spaces" : [
+    {
+      "createdAt" : "2026-11-05T08:00:00Z",
+      "emoji" : "",
+      "favoritesContainerID" : "C0000000-0000-0000-0000-000000000001",
+      "id" : "A0000000-0000-0000-0000-000000000001",
+      "pinnedContainerID" : "C0000000-0000-0000-0000-000000000002",
+      "symbol" : "square.on.square.fill",
+      "theme" : {
+        "accent" : "#2861B3",
+        "appearance" : "dark",
+        "colors" : [
+          "#2861B3",
+          "#2861B3"
+        ],
+        "intensity" : 1,
+        "noise" : 0,
+        "solid" : true,
+        "vibrant" : true
+      },
+      "title" : "Imported",
+      "todayContainerID" : "C0000000-0000-0000-0000-000000000003"
+    }
+  ],
+  "version" : 1
+}

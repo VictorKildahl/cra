@@ -770,6 +770,9 @@ extension Space {
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         profileID = try c.decodeIfPresent(UUID.self, forKey: .profileID)
         symbol = try c.decodeIfPresent(String.self, forKey: .symbol)
+        // Edit Space… → Save in 0.1.31 and older wrote 🌱 beside a space's symbol, and the sidebar
+        // drew both stacked (#205). The symbol was the space's icon, so the emoji beside it goes.
+        if symbol?.isEmpty == false { emoji = "" }
     }
 }
 

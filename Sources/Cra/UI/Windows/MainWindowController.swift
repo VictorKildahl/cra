@@ -2893,14 +2893,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // Arc's New Space starts on the profile of the space it was opened from.
         let initialProfile = space == nil && !isIncognito ? SpaceProfiles.forNewSpace(from: store.focusedSpace, profiles: store.profiles) : nil
         let store = self.store
-        let view = SpaceEditorView(existing: space, profiles: store.profiles, initialProfile: initialProfile, onSave: { [weak panel] title, emoji, theme, profile, newName in
+        let view = SpaceEditorView(existing: space, profiles: store.profiles, initialProfile: initialProfile, onSave: { [weak panel] title, icon, theme, profile, newName in
             let id: UUID
             if let sid = space?.id, var s = store.space(sid) {
-                s.title = title; s.emoji = emoji; s.theme = theme
+                s.title = title; s.icon = icon; s.theme = theme
                 store.updateSpace(s)
                 id = s.id
             } else {
-                id = store.createSpace(title: title, emoji: emoji, theme: theme).id
+                id = store.createSpace(title: title, emoji: icon.emoji, symbol: icon.symbol, theme: theme).id
             }
             switch profile {
             case .existing(let p): store.setProfile(p, forSpace: id)
