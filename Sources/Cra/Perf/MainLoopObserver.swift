@@ -27,6 +27,7 @@ final class MainLoopObserver: @unchecked Sendable {
         var callbacks = 0
         var sampledNs: UInt64 = 0
         var sampled = 0
+        var stallReportNs: UInt64 = 0
         var reportedPass: UInt64 = 0
         var reportedSlow: UInt64 = 0
         /// Until the run loop first sleeps: AppKit finishes launching (Cra's bootstrap) inside
@@ -38,6 +39,11 @@ final class MainLoopObserver: @unchecked Sendable {
 
     private let shared = OSAllocatedUnfairLock(initialState: Shared())
     private var observers: [CFRunLoopObserver] = []
+    /// Main thread only: callbacks until the next timed one.
+    private var untilTimed = MainLoopObserver.timedEvery
+    /// One callback in this many is timed, for the self-cost estimate. Odd: the loop alternates
+    /// wake-ups and commits, and one in 256 only ever timed the same kind.
+    static let timedEvery = 255
     private let stallMs: Double
     private let slowMs: Double
     private let hangMs: Double
@@ -96,19 +102,23 @@ final class MainLoopObserver: @unchecked Sendable {
     func drain() -> Drained {
         shared.withLock { s in
             let estimate = s.sampled > 0 ? s.sampledNs / UInt64(s.sampled) * UInt64(s.callbacks) : 0
-            let d = Drained(passes: s.passes, callbacks: s.callbacks, observerNs: estimate, watchdogNs: s.watchdogNs)
+            let d = Drained(passes: s.passes, callbacks: s.callbacks, observerNs: estimate &+ s.stallReportNs, watchdogNs: s.watchdogNs)
             s.passes = LogHistogram()
             s.callbacks = 0
             s.sampledNs = 0
             s.sampled = 0
+            s.stallReportNs = 0
             s.watchdogNs = 0
             return d
         }
     }
 
     private func callback(_ activity: CFRunLoopActivity) {
+        untilTimed -= 1
+        let timed = untilTimed == 0
+        if timed { untilTimed = Self.timedEvery }
         let now = Perf.now()
-        let (ended, launch, timed): (Double?, Bool, Bool) = shared.withLock { s in
+        let (ended, launch): (Double?, Bool) = shared.withLock { s in
             s.callbacks += 1
             var ms: Double?
             let launch = s.launching
@@ -126,13 +136,20 @@ final class MainLoopObserver: @unchecked Sendable {
                 s.passStart = activity == .beforeWaiting ? 0 : now
                 if activity == .beforeWaiting { s.launching = false }
             }
-            // One callback in 256 is timed, for the self-cost estimate.
-            return (ms, launch, s.callbacks & 255 == 0)
+            return (ms, launch)
         }
-        if let ended { onStall(ended, now, launch ? "launch" : Self.currentMode()) }
+        // Timed and multiplied out: the bookkeeping every callback does, a clock read and a lock.
         if timed {
             let cost = Perf.now() &- now
             shared.withLock { $0.sampledNs += cost; $0.sampled += 1 }
+        }
+        // A stall's report is rare and costs more, so it is counted in full, never multiplied
+        // out, and by the thread's CPU clock: time spent waiting or preempted in it is no cost.
+        if let ended {
+            let cpu = Self.threadCPU()
+            onStall(ended, now, launch ? "launch" : Self.currentMode())
+            let cost = Self.threadCPU() &- cpu
+            shared.withLock { $0.stallReportNs += cost }
         }
     }
 
