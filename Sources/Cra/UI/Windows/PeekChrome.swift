@@ -373,14 +373,14 @@ final class PeekTransition {
     /// this far ahead instead, held at their first frame until then.
     static let lead: CFTimeInterval = 0.03
 
+    /// The page behind a Peek drawn back to `scale` around `center` (the view's coordinates),
+    /// animated from wherever it is now.
     static func scaleBackdrop(_ view: NSView, around center: CGPoint, to scale: CGFloat,
                               duration: TimeInterval, timing: CAMediaTimingFunction?) {
         guard let layer = view.layer else { return }
         let anchor = CGPoint(x: layer.bounds.minX + layer.bounds.width * layer.anchorPoint.x,
                              y: layer.bounds.minY + layer.bounds.height * layer.anchorPoint.y)
-        let transform = CATransform3DMakeAffineTransform(CGAffineTransform(
-            a: scale, b: 0, c: 0, d: scale,
-            tx: (center.x - anchor.x) * (1 - scale), ty: (center.y - anchor.y) * (1 - scale)))
+        let transform = CATransform3DMakeAffineTransform(PeekLayout.backdropTransform(scale: scale, around: center, anchor: anchor))
         let from = layer.presentation()?.sublayerTransform ?? layer.sublayerTransform
         CATransaction.begin()
         CATransaction.setDisableActions(true)

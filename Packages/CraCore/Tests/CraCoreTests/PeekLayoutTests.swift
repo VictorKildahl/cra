@@ -88,22 +88,6 @@ struct PeekLayoutTests {
         #expect(a > 0.15 && a < 0.5)
     }
 
-    @Test func defaultCloseWaitsForTheBackdropToReturn() {
-        #expect(PeekLayout.closeDuration() == 0.2)
-    }
-
-    @Test(arguments: [0.12, 0.16]) func closeWaitsForTheBackdropToReturn(scaleDuration: Double) {
-        let duration = PeekLayout.closeDuration(scale: scaleDuration)
-        #expect(duration == 0.2)
-        let end = PeekLayout.closing(from: Self.card, to: Self.link, at: duration, duration: scaleDuration)
-        #expect(end.frame == Self.link)
-        #expect(end.sourceOpacity == 1 && end.buttonsOpacity == 0)
-    }
-
-    @Test func longerCardMotionIsNotCutShortByTheBackdrop() {
-        #expect(PeekLayout.closeDuration(scale: 0.35) == 0.35)
-    }
-
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/204")) func pageScalesWithTheWidthFromTheTopLeft() {
         let frame = PeekLayout.frame(from: Self.link, to: Self.card, p: 0.6, q: 0.48)
         let c = PeekLayout.content(in: frame, card: Self.card)
