@@ -46,7 +46,7 @@ struct PeekTriggerTests {
     }
 
     /// Inside the Peek (GitHub #202).
-    @Test func aNewTabLinkInsideThePeekLeavesIt() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/202")) func aNewTabLinkInsideThePeekLeavesIt() {
         #expect(PeekTrigger.leavesPeek(Self.other, shiftClick: false, newTab: true))
         #expect(PeekTrigger.leavesPeek(Self.same, shiftClick: false, newTab: true))
         #expect(PeekTrigger.leavesPeek("HTTPS://example.org/", shiftClick: false, newTab: true))

@@ -29,7 +29,7 @@ struct PeekLayoutTests {
         #expect(card.width == (Self.window.width * 0.8).rounded())
     }
 
-    @Test func withoutALinkItGrowsFromTheArea() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/204")) func withoutALinkItGrowsFromTheArea() {
         // Arc from a link that covers the page (3 Nov): the card starts as the whole area.
         let area = PeekLayout.area(window: Self.window, contentMinX: 347)
         let card = PeekLayout.card(in: area)
@@ -53,7 +53,7 @@ struct PeekLayoutTests {
         #expect(abs(PeekLayout.Curve.easeOutCubic(0.5) - 0.875) < 0.02)
     }
 
-    @Test func opensFromTheLinkAndLandsOnTheCard() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/204")) func opensFromTheLinkAndLandsOnTheCard() {
         let start = PeekLayout.opening(from: Self.link, to: Self.card, at: 0)
         #expect(start.frame == Self.link)
         #expect(start.sourceOpacity == 1 && start.buttonsOpacity == 0)
@@ -62,7 +62,7 @@ struct PeekLayoutTests {
         #expect(end.sourceOpacity == 0 && end.buttonsOpacity == 1)
     }
 
-    @Test func heightLagsWidthAsInArc() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/204")) func heightLagsWidthAsInArc() {
         // Arc, run A: when the width was 60.3 % of the way, the height was 47.9 %.
         var t = 0.0
         while PeekLayout.opening(from: Self.link, to: Self.card, at: t).frame.width < Self.link.width + 0.603 * (Self.card.width - Self.link.width) { t += 0.0005 }
@@ -76,7 +76,7 @@ struct PeekLayoutTests {
         #expect(PeekLayout.opening(from: Self.link, to: Self.card, at: t).sourceOpacity < 0.12)
     }
 
-    @Test func closesBackIntoTheLink() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/204")) func closesBackIntoTheLink() {
         let start = PeekLayout.closing(from: Self.card, to: Self.link, at: 0)
         #expect(start.frame == Self.card && start.sourceOpacity == 0 && start.buttonsOpacity == 1)
         let end = PeekLayout.closing(from: Self.card, to: Self.link, at: PeekLayout.closeScaleDuration)
@@ -88,7 +88,7 @@ struct PeekLayoutTests {
         #expect(a > 0.15 && a < 0.5)
     }
 
-    @Test func pageScalesWithTheWidthFromTheTopLeft() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/204")) func pageScalesWithTheWidthFromTheTopLeft() {
         let frame = PeekLayout.frame(from: Self.link, to: Self.card, p: 0.6, q: 0.48)
         let c = PeekLayout.content(in: frame, card: Self.card)
         #expect(abs(c.width - frame.width) < 0.001)
@@ -97,7 +97,7 @@ struct PeekLayoutTests {
         #expect(PeekLayout.content(in: Self.card, card: Self.card) == CGRect(origin: .zero, size: Self.card.size))
     }
 
-    @Test func columnRidesTheCorner() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/204")) func columnRidesTheCorner() {
         let column = PeekLayout.column(beside: Self.card)
         #expect(PeekLayout.column(column, card: Self.card, frame: Self.card) == column)
         let half = CGRect(x: 600, y: 300, width: Self.card.width / 2, height: 400)
@@ -107,7 +107,7 @@ struct PeekLayoutTests {
         #expect(abs(c.minX - half.maxX - PeekLayout.buttonGap / 2) < 0.001)
     }
 
-    @Test func linkFractionsMapOntoThePage() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/204")) func linkFractionsMapOntoThePage() {
         let page = CGRect(x: 347, y: 0, width: 1371, height: 1032)
         // Run A's link: 60, 90, 68 × 31 CSS px in a 1371 × 1032 view.
         let f = CGRect(x: 60.0 / 1371, y: 90.0 / 1032, width: 68.0 / 1371, height: 31.0 / 1032)

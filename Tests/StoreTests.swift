@@ -38,6 +38,7 @@ enum StoreTests {
         sharedFavorites()
         themePreview()
         try arcSpacesWithoutAThemeShareOneDefault()
+        littleWindowProfile()
         tidyTabs()
         pinHook()
         dropOnPinnedTabSplits()
@@ -399,6 +400,35 @@ enum StoreTests {
         let plan = try ArcImporter.plan()
         expect(plan.spaces.count == 2 && plan.spaces.allSatisfy { $0.theme == SpaceTheme.presets[0] },
                "every themeless Arc space gets the same default theme")
+    }
+
+    // promise: #172
+    /// A Little Window loads in the profile of the space it opens into and a Peek in its tab's
+    /// (#172): the store answers both with that profile's Chromium folder, nil for Default, and
+    /// the Little Window's profile chip names the page's profile from that folder.
+    @MainActor
+    private static func littleWindowProfile() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let home = store.createSpace(title: "Little Home", emoji: "🏠", focus: false).id
+        store.setProfile(nil, forSpace: home)
+        let homeTab = store.createTab(url: "https://example.com/home", in: home, select: false)
+        expect(store.profilePath(space: home) == nil && store.profilePath(item: homeTab.id) == nil && store.profileID(item: homeTab.id) == nil,
+               "a space on the Default profile gives its Little Windows and Peeks no profile folder (#172)")
+
+        let work = store.createProfile(name: "Little Work")
+        let space = store.createSpace(title: "Little Work", emoji: "💼", focus: false).id
+        store.setProfile(work.id, forSpace: space)
+        let tab = store.createTab(url: "https://example.com/work", in: space, select: false)
+        let folder = store.profilePath(space: space)
+        expect(folder != nil && folder == store.profilePath(profile: work.id) && store.profilePath(item: tab.id) == folder,
+               "a Little Window opened into a space and a Peek from its tab load in that space's profile folder (#172)")
+        expect(store.profileID(item: tab.id) == work.id && store.profileID(path: folder) == work.id,
+               "the page's profile reads back from its folder, for the Little Window's profile chip (#172)")
+        expect(store.profileID(path: nil) == nil && store.profilePath(profile: UUID()) == nil,
+               "Default, and a profile that is gone, have no folder (#172)")
+        store.deleteSpace(space)
+        store.deleteSpace(home)
+        store.deleteProfile(work.id)
     }
 
     // promise: #170

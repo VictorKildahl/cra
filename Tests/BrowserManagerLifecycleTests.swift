@@ -812,6 +812,7 @@ enum BrowserManagerLifecycleTests {
     /// going out of sight, drives Chrome's automatic Picture in Picture (`Cra.autoPictureInPicture`),
     /// as Chrome's tab strip and Arc do; coming back has Chrome close the window (GitHub #198).
     /// A page Chrome doesn't ask gets the video request.
+    // promise: #198
     @MainActor
     private static func callPictureInPictureCase() async {
         let clock = ManualScheduler()

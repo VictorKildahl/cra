@@ -16,7 +16,7 @@ struct PictureInPictureGestureTests {
         return (gesture.edge, gesture.frame(mouse: CGPoint(x: start.x + dx, y: start.y + dy), minSize: minSize, maxSize: maxSize))
     }
 
-    @Test func edgesAndCorners() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/134")) func edgesAndCorners() {
         let size = window.size
         let expected: [(CGFloat, CGFloat, PictureInPictureGesture.Edge)] = [
             (391, 220, .none), (100, 30, .none), (2, 220, .left), (780, 220, .right),
@@ -32,14 +32,14 @@ struct PictureInPictureGestureTests {
 
     /// A click carries a little drift; under 3 pt it moves and resizes nothing, from the middle
     /// or from an edge.
-    @Test func aClickThatDriftsMovesNothing() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/134")) func aClickThatDriftsMovesNothing() {
         #expect(drag(at: 391, 220, by: 2, -2).1 == nil)
         #expect(drag(at: 780, 2, by: 2, -2).1 == nil)
         #expect(drag(at: 391, 220, by: 3, 0).1 == window.offsetBy(dx: 3, dy: 0))
     }
 
     /// Past the threshold the press stays a drag, even back near where it started.
-    @Test func aDragStaysADrag() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/134")) func aDragStaysADrag() {
         let start = CGPoint(x: window.midX, y: window.midY)
         var gesture = PictureInPictureGesture(mouse: start, frame: window)
         #expect(gesture.frame(mouse: CGPoint(x: start.x + 1, y: start.y), minSize: minSize, maxSize: maxSize) == nil)
@@ -48,13 +48,13 @@ struct PictureInPictureGestureTests {
         #expect(gesture.frame(mouse: CGPoint(x: start.x + 1, y: start.y), minSize: minSize, maxSize: maxSize) == window.offsetBy(dx: 1, dy: 0))
     }
 
-    @Test func theMiddleMovesTheWindow() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/134")) func theMiddleMovesTheWindow() {
         #expect(drag(at: 391, 220, by: -40, 25).1 == window.offsetBy(dx: -40, dy: 25))
     }
 
     /// Each edge and corner grows the window toward the pointer and keeps the opposite one put,
     /// so the grabbed edge stays under the pointer.
-    @Test func resizeKeepsTheOppositeSideFixed() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/134")) func resizeKeepsTheOppositeSideFixed() throws {
         // 16:9, 782 → 960 wide is 540 high.
         let cases: [(CGFloat, CGFloat, CGFloat, CGFloat, (CGRect) -> Bool)] = [
             (780, 220, 178, 0, { $0.minX == window.minX && $0.maxY == window.maxY }),   // right
@@ -74,13 +74,13 @@ struct PictureInPictureGestureTests {
         }
     }
 
-    @Test func aCornerFollowsTheLongerWay() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/134")) func aCornerFollowsTheLongerWay() throws {
         // Mostly down on the bottom-right corner: the height leads.
         let f = try #require(drag(at: 780, 2, by: 10, -100).1)
         #expect(f.height == 540 && f.width == 960)
     }
 
-    @Test func resizeStaysWithinTheLimits() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/134")) func resizeStaysWithinTheLimits() throws {
         let small = try #require(drag(at: 780, 220, by: -700, 0).1)
         #expect(small.width == 284 && small.height == 160)
         let big = try #require(drag(at: 780, 220, by: 2000, 0).1)

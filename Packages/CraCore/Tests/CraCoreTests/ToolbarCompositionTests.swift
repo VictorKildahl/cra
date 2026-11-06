@@ -34,21 +34,21 @@ struct ToolbarCompositionTests {
         #expect(bar(.developer, sidebar: true).left.isEmpty)
     }
 
-    @Test func theFocusedPaneHasEverythingButTheToggleAndSplitView() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/178")) func theFocusedPaneHasEverythingButTheToggleAndSplitView() {
         // Arc 1.171 (#178): ← → ↻ · address · pinned extensions · Extensions · options · close.
         let pane = bar(.normal, split: true, back: true, loading: true, pinned: ["a"], extensions: true)
         #expect(pane.left == [.back(enabled: true), .forward(enabled: false), .reload(loading: true, enabled: true)])
         #expect(pane.right == [.pinnedExtension("a"), .extensions, .splitOptions, .closePane])
     }
 
-    @Test func anUnfocusedPaneShowsOnlyTheEssentials() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/178")) func anUnfocusedPaneShowsOnlyTheEssentials() {
         // Arc's onlyShowEssentialControls: ← →, the address and close.
         let pane = bar(.normal, split: true, focused: false, back: true, pinned: ["a"], extensions: true)
         #expect(pane.left == [.back(enabled: true), .forward(enabled: false)])
         #expect(pane.right == [.closePane])
     }
 
-    @Test func hoveringAnUnfocusedPaneRevealsItsControls() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/178")) func hoveringAnUnfocusedPaneRevealsItsControls() {
         // Arc's onHover blueprint: the focused pane's set, so a click that focuses it moves nothing.
         let pane = bar(.normal, split: true, focused: false, hovered: true, pinned: ["a"], extensions: true)
         #expect(pane.left == [.back(enabled: false), .forward(enabled: false), .reload(loading: false, enabled: true)])
@@ -56,13 +56,13 @@ struct ToolbarCompositionTests {
         #expect(pane == bar(.normal, split: true, pinned: ["a"], extensions: true))
     }
 
-    @Test func hoverChangesNothingOutsideASplit() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/178")) func hoverChangesNothingOutsideASplit() {
         let a = bar(.normal, pinned: ["a"], extensions: true)
         #expect(bar(.normal, hovered: true, pinned: ["a"], extensions: true) == a)
         #expect(bar(.normal, focused: false, pinned: ["a"], extensions: true) == a)
     }
 
-    @Test func anEmptyPaneHasGreyedNavigationAndClose() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/178")) func anEmptyPaneHasGreyedNavigationAndClose() {
         for focused in [true, false] {
             for hovered in [true, false] {
                 let pane = bar(.emptyPane, split: true, focused: focused, hovered: hovered, pinned: ["a"], extensions: true)
