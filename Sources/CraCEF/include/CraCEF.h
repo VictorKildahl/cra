@@ -327,6 +327,9 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 + (BOOL)isExtensionWindow:(NSWindow *)window;
 /// YES for the Chrome-style window hosting one of Cra's own browsers.
 + (BOOL)isPageWindow:(NSWindow *)window;
+/// Lets one of Chromium's Picture in Picture windows show over another app's full-screen Space,
+/// as Arc's non-activating PiP panel does (GitHub #206). Chromium only makes it join every desktop Space.
++ (void)floatOverFullScreenSpaces:(NSWindow *)window;
 + (NSString *)chromiumVersion;
 + (NSString *)cefVersion;
 /// YES when the browser-level DevTools pipe is up (it needs fds 3/4 free at start-up).

@@ -685,8 +685,8 @@ area over the same zones (cursor rects only work in a key window, and the overla
 while the pointer is over the window Cra sets "SetsCursorInBackground" on its WindowServer
 connection, so the resize cursors show with another app in front too (verified with `screencapture
 -C` over each edge and corner, Finder in front and Cra in front). A press with Cra in the background
-already reached the overlay (it activates Cra and acceptsFirstMouse lets it through); without the
-cursor it only looked dead. Drags are measured from each
+already reached the overlay (acceptsFirstMouse lets it through; since #206 it no longer activates Cra);
+without the cursor it only looked dead. Drags are measured from each
 event's own screen location; `cra.log` gets `pip: move`, `pip: resize <edge> from W×H`, `pip: resized
 <edge> W×H → W×H` (with "asked" when Chromium kept another size) and `pip: overlay has no parent window`.
 Swiping (4 Nov, reported on X): Arc's PiP follows two fingers on the trackpad and is thrown into a screen corner;
@@ -697,6 +697,30 @@ follows the scroll deltas (direction from `isDirectionInvertedFromDevice`), the 
 the resting point with UIKit's 0.998/ms deceleration, the nearest corner of that screen's visible frame (10 pt
 in) is the target, and a critically damped spring (response 0.4 s) flies it there from the fingers' speed.
 AppKit's momentum events are ignored; a plain wheel moves nothing. `cra.log`: `pip: swipe to <corner> at N pt/s`.
+Over another app's full-screen Space (6 Nov, GitHub #206):
+- [O static] Arc's `PictureInPicture.PIPWindowController` subclasses `ARCUI.MovableWindowController`, and
+  `ARCUI.MovableWindow` subclasses `NSPanel` (`otool -ov`, Arc 1.171). Its AXSystemDialog subrole (above) means
+  `.nonactivatingPanel`, the same kind of window as Little Arc (see "Little Arc over a full-screen app").
+  [U] Arc's collection behaviour, and Arc on screen over a full-screen app.
+- [O, Chromium source] Chromium's video PiP (`VideoOverlayWindowViews::Create`) and Document PiP (`BrowserWidget`,
+  TYPE_PICTURE_IN_PICTURE) are ordinary NativeWidgetMacNSWindows at kFloatingWindow with
+  `visible_on_all_workspaces`, which is `.canJoinAllSpaces` only. Chromium floats Glic's panel and the
+  screen-share picker over full-screen apps with `Widget::SetActivationIndependence` (NativeWidgetMacNSWindow
+  `setActivationIndependence:`, which answers `_isNonactivatingPanel` and turns canHide off) plus
+  `SetCanAppearInExistingFullscreenSpaces` (adds `.fullScreenAuxiliary`).
+- [O, stand-in app + Spaces probe] With another app full screen, a background app's floating `.canJoinAllSpaces`
+  window is missing from that Space. It is still missing with only `.fullScreenAuxiliary` added, or only
+  `_isNonactivatingPanel`. With both it is there, and so is a borderless `.nonactivatingPanel` NSPanel with
+  `.fullScreenAuxiliary`; canHide doesn't matter. `.managed` keeps it off whatever else is set, and Chromium makes
+  every top-level window managed (Document PiP's had 37: canJoinAllSpaces, managed, participatesInCycle). Flags
+  changed while the window is on screen take effect at the next Space switch. If the full-screen Space is already
+  in front, they take effect only once the window is ordered again (`orderFrontRegardless`).
+- Cra (`CraCEFRuntime.floatOverFullScreenSpaces`): Chromium's recipe without `.managed` on its video PiP window
+  (from `PictureInPictureChrome.style`) and its Document PiP window (found from the ownerless CraClient's
+  OnAfterCreated), with canHide kept on so ⌘H still hides it. The window is ordered again when visible, and the
+  overlay is a borderless non-activating NSPanel. Measured on a test copy with a full-screen stand-in app in
+  front: main had video and Document PiP off that Space. Now both are on it, so is a video PiP opened while that
+  Space is in front, and a click and a drag on it keep the full-screen app frontmost and its Space active.
 One residual difference: Chrome paints its origin strip ("File on your device", top gradient)
 inside the compositor layer for about two seconds when the window first appears (present at
 1.5 s, gone at 2.5 s in quarter-second captures); it is drawn whether or not the window is

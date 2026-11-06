@@ -233,6 +233,50 @@ static CraClient* AsCraClient(CefClient* c) {
 // and popups a plain titled window, which is how they are told apart here.
 static NSHashTable<NSWindow*>* g_extensionWindows = nil;
 
+// NativeWidgetMacNSWindow's switch for acting as a non-activating panel (Widget::SetActivationIndependence).
+@protocol CraActivationIndependentWindow
+- (void)setActivationIndependence:(BOOL)independence;
+@end
+
+// Chromium makes a Picture in Picture window (a video's, or Document PiP's) an ordinary window that
+// joins every desktop Space, so it went missing over another app's full-screen Space (GitHub #206).
+// Only a non-activating panel joins that Space (#186); Arc's PiP is one (an NSPanel, AXSystemDialog).
+// This is Chromium's own recipe for such windows (Glic's floating panel, the screen-share picker):
+// activation independence, which makes NativeWidgetMacNSWindow answer _isNonactivatingPanel, and
+// SetCanAppearInExistingFullscreenSpaces' collection behaviour.
+static void FloatOverFullScreenSpaces(NSWindow* window) {
+    if (!window) return;
+    if ([window respondsToSelector:@selector(setActivationIndependence:)]) {
+        [(id<CraActivationIndependentWindow>)window setActivationIndependence:YES];
+        // It also turns canHide off; Chrome's PiP has always hidden with the app (⌘H), so it still does.
+        window.canHide = YES;
+    }
+    // Chromium also makes every top-level window `.managed` (Document PiP is one), and a managed
+    // window stays off another app's full-screen Space whatever else it says.
+    NSWindowCollectionBehavior behavior = window.collectionBehavior;
+    behavior &= ~(NSWindowCollectionBehaviorPrimary | NSWindowCollectionBehaviorFullScreenPrimary
+                  | NSWindowCollectionBehaviorManaged);
+    behavior |= NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorFullScreenAuxiliary;
+    window.collectionBehavior = behavior;
+    // Shown while a full-screen Space is in front (Document PiP, or a video's from a tab left for it),
+    // the window only moves onto that Space once it is ordered again.
+    if (window.isVisible) [window orderFrontRegardless];
+}
+
+// Document Picture in Picture's window comes from Chrome after the browser exists; it is
+// usually there by the next turn of the run loop.
+static void FloatDocumentPictureInPicture(CefRefPtr<CefBrowser> browser, int attempt) {
+    NSView* view = (__bridge NSView*)browser->GetHost()->GetWindowHandle();
+    if (NSWindow* window = view.window) {
+        FloatOverFullScreenSpaces(window);
+        return;
+    }
+    if (attempt >= 40) return;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 50 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+        FloatDocumentPictureInPicture(browser, attempt + 1);
+    });
+}
+
 // Chrome shows a new tabbed window at the end of Navigate(), after this first navigation
 // has started, so ordering it out here is not enough: shown, it pulled a full-screen Cra
 // onto the desktop and back (GitHub #38). It is made unseeable instead: transparent, no
@@ -1175,7 +1219,7 @@ public:
     /// Cra closed this page (-[CraBrowser close]). Kept here rather than read from the owner:
     /// the CraBrowser can be gone before Chromium asks.
     void SetCloseRequested() { close_requested_ = true; }
-    explicit CraClient(CraBrowser* owner) : owner_(owner) { CraClientRegistry().insert(static_cast<const void*>(static_cast<CefClient*>(this))); }
+    explicit CraClient(CraBrowser* owner) : owner_(owner), ownerless_(owner == nil) { CraClientRegistry().insert(static_cast<const void*>(static_cast<CefClient*>(this))); }
     ~CraClient() override { CraClientRegistry().erase(static_cast<const void*>(static_cast<CefClient*>(this))); }
 
     CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
@@ -1210,6 +1254,7 @@ public:
         CEF_REQUIRE_UI_THREAD();
         g_liveBrowsers++;
         if (CraBrowser* o = owner_) [o adoptBrowser:browser];
+        if (ownerless_) FloatDocumentPictureInPicture(browser, 0);
     }
 
     bool DoClose(CefRefPtr<CefBrowser> browser) override { return false; }
@@ -1849,6 +1894,8 @@ private:
     // True while a prompt's answer runs (UI thread only).
     static inline bool answering_prompt_ = false;
     __weak CraBrowser* owner_;
+    // Made without a CraBrowser: Document Picture in Picture's client (owner_ is weak, so it can't say).
+    const bool ownerless_;
     bool close_requested_ = false;
     CefRefPtr<FaviconState> favicon_ = new FaviconState();
     CefRefPtr<CefResourceRequestHandler> blocker_ = new CraContentBlockingHandler();
@@ -2693,6 +2740,8 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
     for (CraBrowser* b in g_allBrowsers) if (window && b.hostWindow == window) return YES;
     return NO;
 }
+
++ (void)floatOverFullScreenSpaces:(NSWindow*)window { FloatOverFullScreenSpaces(window); }
 
 + (void)runMessageLoop { CefRunMessageLoop(); }
 + (void)quitMessageLoop { CraQuitMessageLoop(); }
