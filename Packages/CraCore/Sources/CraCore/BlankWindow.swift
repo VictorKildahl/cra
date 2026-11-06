@@ -5,16 +5,22 @@ import Foundation
 /// (`sidebarContext: standalone` in StorableWindows.json, `{standalone: <window id>}` in
 /// StorableSidebar.json) beside the global one every other window shares. Seen in Arc 1.172
 /// (6 Nov 2026): the header reads "This Window", there are no favorites, no pinned section and no
-/// space icons, the command bar opens, and closing the window removes its container.
+/// space icons, the command bar opens, and closing the window removes its container. Its + does
+/// nothing. "Move to…" lists the spaces; picking one moves the window's tabs to the top of that
+/// space's Today, opens its open tab in the main window and closes the Blank Window.
 /// Cra gives the window a space of its own that no space list shows (`Space.standaloneWindowID`).
 public enum BlankWindow {
     /// The sidebar header, Arc's words.
     public static let title = "This Window"
 
-    /// Arc's theme-less window, a plain grey-violet. Fitted on window captures (dark mode, inactive):
-    /// Arc's sidebar is #313246 at the top and #363247 at the bottom, Cra draws this as #303145 and
-    /// #363548. (Arc's empty page area is lighter than Cra's, #4F4B5D against #3A3B4E.)
-    public static let theme = SpaceTheme(colors: ["#222337", "#2B273A"], intensity: 0.9, noise: 0.08, appearance: "dark")
+    /// Arc's theme-less window: grey-violet while macOS is dark, lavender-white while it is light
+    /// (Arc follows the system). Fitted on window captures (inactive): dark, Arc's sidebar is #313246
+    /// at the top and #363247 at the bottom, Cra draws #303145 and #363548; light, Arc's is #E3E3F4 and
+    /// #E9E7F1, Cra draws #E5E5F3 and #EAE9F3. (Arc's empty page area differs from Cra's: #4F4B5D
+    /// against #3A3B4E dark, #F8F7FA against #E0DFEE light.)
+    public static let theme = SpaceTheme(
+        light: SpaceTheme(colors: ["#DCDBF3", "#E6E3EF"], intensity: 0.9, noise: 0.08, appearance: "light"),
+        dark: SpaceTheme(colors: ["#222337", "#2B273A"], intensity: 0.9, noise: 0.08, appearance: "dark"))
 
     /// The space a new Blank Window shows, with its three containers.
     public static func space(window: UUID, at date: Date, id: UUID = UUID()) -> (space: Space, containers: [SidebarItem]) {

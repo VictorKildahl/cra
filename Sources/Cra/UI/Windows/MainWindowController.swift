@@ -256,6 +256,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         sidebarActions.titleBarDoubleClick = { [weak self] in (self?.window as? CraWindow)?.performTitleDoubleClickAction() }
         sidebarActions.openCommandBar = { [weak self] mode in self?.openCommandBar(mode) }
         sidebarActions.closeTab = { [weak self] id in self?.closeTab(id) }
+        sidebarActions.moveBlankWindow = { [weak self] space in
+            guard let self else { return }
+            self.app.moveBlankWindow(self, toSpace: space)
+        }
         sidebarActions.tearOffTab = { [weak self] id, point in
             guard let self else { return }
             self.app.tearOffTab(id, at: point, from: self)

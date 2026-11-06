@@ -27,6 +27,17 @@ struct TabTearOffTests {
     }
 
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/219"))
+    func arcsDropsInTheOpenCentreOnThePointer() {
+        // Arc 1.172: a 926 × 500 window's tab let go at (1100, 700) and (500, 820) from the top left
+        // opened at (637, 450) and (37, 570) from the top left.
+        let size = CGSize(width: 926, height: 500)
+        for (drop, origin) in [(CGPoint(x: 1100, y: 700), CGPoint(x: 637, y: 450)), (CGPoint(x: 500, y: 820), CGPoint(x: 37, y: 570))] {
+            let f = TabTearOff.frame(size: size, droppedAt: CGPoint(x: drop.x, y: 1117 - drop.y), visible: visible)
+            #expect(f == CGRect(x: origin.x, y: 1117 - origin.y - 500, width: 926, height: 500))
+        }
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/219"))
     func inTheOpenTheWindowCentresOnThePointer() {
         let f = TabTearOff.frame(size: CGSize(width: 700, height: 500), droppedAt: CGPoint(x: 900, y: 500), visible: visible)
         #expect(f == CGRect(x: 550, y: 250, width: 700, height: 500))

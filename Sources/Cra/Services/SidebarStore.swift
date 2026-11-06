@@ -338,24 +338,18 @@ final class SidebarStore {
         if wasOpen { selectTab(id, window: window) }
     }
 
-    /// A Blank Window's "Move to…" (Arc's header button): its tabs go to the top of a space's
-    /// Today and the window becomes a normal window on that space, its open tab still open.
-    func moveBlankWindow(_ window: UUID, toSpace sid: UUID) {
+    /// A Blank Window's "Move to…" (Arc 1.172): its tabs go to the top of the space's Today in
+    /// their order and the window lets them go. Returns the tab it had open, which AppDelegate
+    /// opens in the main window before it closes the Blank Window.
+    @discardableResult
+    func moveBlankWindowTabs(_ window: UUID, toSpace sid: UUID) -> UUID? {
         let own = focusedSpaceID(window: window)
-        guard isBlank(space: own), let blank = spaces[own], let target = spaces[sid], !isStandalone(space: sid) else { return }
-        let open = self.window(window).selectedTabPerSpace[own]
+        guard isBlank(space: own), let blank = spaces[own], let target = spaces[sid], !isStandalone(space: sid) else { return nil }
+        let open = selectedTabID(in: own, window: window)
         moveItems(children(of: blank.todayContainerID).map(\.id), to: target.todayContainerID, index: 0)
-        updateWindow(window) {
-            $0.focusedSpaceID = sid
-            $0.selectedTabPerSpace[own] = nil
-            if let open, items[open] != nil { $0.selectedTabPerSpace[sid] = open }
-        }
-        var ids = Set<UUID>()
-        collectSubtree(of: blank, into: &ids)
-        for i in ids { items[i] = nil }
-        spaces[own] = nil
-        blankSpaceIDs.remove(own)
+        updateWindow(window) { $0.selectedTabPerSpace[own] = nil }
         touch()
+        return open
     }
 
     func isBlank(space id: UUID?) -> Bool { id.map(blankSpaceIDs.contains) ?? false }

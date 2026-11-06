@@ -14,6 +14,9 @@ struct BlankWindowTests {
         #expect(space.emoji.isEmpty && space.symbol == nil)
         #expect(space.standaloneWindowID == window)
         #expect(space.profileID == nil)  // the normal Default profile, not incognito
+        // It follows macOS, as Arc's does: lavender-white while light, grey-violet while dark.
+        #expect(space.theme.followsSystem)
+        #expect(!space.theme.resolved(systemDark: false).isDark && space.theme.resolved(systemDark: true).isDark)
         #expect(containers.map(\.id) == [space.favoritesContainerID, space.pinnedContainerID, space.todayContainerID])
         #expect(containers.map(\.container) == [.favorites(spaceID: space.id), .pinned(spaceID: space.id), .today(spaceID: space.id)])
     }
