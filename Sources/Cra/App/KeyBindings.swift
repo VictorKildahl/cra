@@ -12,34 +12,24 @@ extension Shortcut {
 
     var flags: NSEvent.ModifierFlags { NSEvent.ModifierFlags(rawValue: modifiers) }
 
-    /// Shift turns "[" into "{" in charactersIgnoringModifiers; undo that.
-    /// ⇧Tab arrives as backtab (U+0019), the Delete key as U+007F.
-    private static let unshift: [String: String] = ["\u{19}": Shortcut.tab, "\u{7F}": Shortcut.delete, "{": "[", "}": "]", "<": ",", ">": ".", "?": "/", "+": "=", "_": "-", "~": "`", ":": ";", "\"": "'", "|": "\\"]
+    /// The key press an event is, for CraCore's matching (KeyChord.match). Nil for anything but a
+    /// key-down: charactersIgnoringModifiers throws on flagsChanged events, which Chromium
+    /// forwards as raw key-downs for modifier keys.
+    static func press(_ event: NSEvent) -> KeyChord.Press? {
+        guard event.type == .keyDown, let chars = event.charactersIgnoringModifiers, !chars.isEmpty else { return nil }
+        return KeyChord.Press(characters: chars, keyCode: event.keyCode,
+                              modifiers: event.modifierFlags.intersection(.deviceIndependentFlagsMask).rawValue)
+    }
 
-    /// Physical-key fallbacks so ⌘[ / ⌘] work on layouts (Danish, German...)
-    /// where those characters live on other keys. Key codes are ANSI positions.
-    private static let keyCodeFor: [String: UInt16] = ["[": 33, "]": 30, "=": 24, "-": 27, ",": 43, ".": 47, "/": 44, ";": 41, "'": 39, "`": 50, "\\": 42]
-
-    func matches(_ event: NSEvent) -> Bool {
-        // charactersIgnoringModifiers throws on flagsChanged events, which
-        // Chromium forwards as raw key-downs for modifier keys.
-        guard event.type == .keyDown else { return false }
-        let evFlags = event.modifierFlags.intersection([.command, .shift, .option, .control])
-        guard evFlags == flags.intersection([.command, .shift, .option, .control]) else { return false }
-        guard var chars = event.charactersIgnoringModifiers, !chars.isEmpty else { return false }
-        chars = chars.lowercased()
-        if let u = Self.unshift[chars] { chars = u }
-        if chars == key { return true }
-        if let code = Self.keyCodeFor[key], event.keyCode == code { return true }
-        return false
+    @MainActor func matches(_ event: NSEvent) -> Bool {
+        guard let press = Self.press(event) else { return false }
+        return match(press, typable: KeyboardLayoutCharacters.types) != nil
     }
 
     /// Build a shortcut from a recorded key press (nil for bare letters without ⌘/⌃/⌥).
     static func from(event e: NSEvent) -> Shortcut? {
-        guard e.type == .keyDown, var chars = e.charactersIgnoringModifiers, !chars.isEmpty else { return nil }
+        guard let chars = press(e)?.key else { return nil }
         let flags = e.modifierFlags.intersection([.command, .shift, .option, .control])
-        chars = chars.lowercased()
-        if let u = unshift[chars] { chars = u }
         let special = [tab, left, right, up, down].contains(chars) || (chars.unicodeScalars.first.map { $0.value >= 0xF704 && $0.value <= 0xF71F } ?? false)
         guard special || !flags.intersection([.command, .control, .option]).isEmpty else { return nil }
         return Shortcut(chars, flags)
@@ -115,10 +105,11 @@ final class KeyBindingRegistry {
         NotificationCenter.default.post(name: .craKeyBindingsChanged, object: nil)
     }
 
-    /// First action whose shortcut matches the key event.
+    /// The action a key press runs: the first one whose shortcut it types, else the first one
+    /// whose key sits where the press's does (KeyChord.first).
     func action(for event: NSEvent) -> KeyAction? {
-        for a in actions where a.shortcuts.contains(where: { $0.matches(event) }) { return a }
-        return nil
+        guard let press = Shortcut.press(event) else { return nil }
+        return KeyChord.first(in: actions, chords: \.shortcuts, press: press, typable: KeyboardLayoutCharacters.types)
     }
 
     func actions(in section: MenuSection) -> [KeyAction] { actions.filter { $0.section == section } }

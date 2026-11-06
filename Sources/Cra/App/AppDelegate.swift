@@ -678,6 +678,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             if let st = dict["status"] { main.browserManager(statusMessage: st); return }
+            // key=<characters>,<key code>,<modifier bits>: a key press as a layout reports it
+            // (Turkish Q's ⌘- is "-",24,1048576), through the app's event queue (#212); the
+            // characters are percent-encoded. zoomLevel logs the page's zoom.
+            if let k = dict["key"]?.split(separator: ",", omittingEmptySubsequences: false), k.count == 3,
+               let code = UInt16(k[1]), let mods = UInt(k[2]), let w = main.window {
+                TestGesture.key(String(k[0]), keyCode: code, modifiers: NSEvent.ModifierFlags(rawValue: mods), in: w)
+                return
+            }
+            if dict["zoomLevel"] != nil {
+                let keys = main.window?.firstResponder.map { NSStringFromClass(type(of: $0)) } ?? "nothing"
+                CraLog.note("zoom level \(main.currentBrowser?.zoomLevel() ?? .nan), keys go to \(keys)")
+                return
+            }
             // tidy: the divider's Tidy on the window's space, without hovering it; undoTidy: ⌘Z's.
             if dict["tidy"] != nil { TidyTabsService.shared.tidy(store.focusedSpace(window: main.windowID).id, store: store); return }
             if dict["undoTidy"] != nil { _ = store.undoTidy(); return }
@@ -1035,16 +1048,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// returning false lets CEF pass the key on to the menu bar (⌘Q, ⌘H…).
     func handleUnhandledKey(_ event: NSEvent) -> Bool {
         if undoClosedTab(event) { return true }
+        // Chromium hands a ⌘-key the page left alone back to the menu bar through its own
+        // window's command dispatcher (⌘C, ⌘V, ⌘A, ⌘Z exist only as Edit menu items). An
+        // embedded page sits in Cra's window, which has none, so it goes to the menu bar here,
+        // first: the menu runs the keys it shows, which AppKit fits to the keyboard layout
+        // (Turkish Q: Zoom In ⌘., Stop ⌘ç, Back ⌘ğ), the way the sidebar's keys go (GitHub #212).
+        if event.modifierFlags.contains(.command), let key = NSApp.keyWindow,
+           !key.responds(to: NSSelectorFromString("commandDispatcher")),
+           NSApp.mainMenu?.performKeyEquivalent(with: event) == true {
+            return true
+        }
         if let action = bindings.action(for: event) {
             perform(action.id)
             return true
-        }
-        // Chromium hands a ⌘-key the page left alone back to the menu bar through its own
-        // window's command dispatcher (⌘C, ⌘V, ⌘A, ⌘Z exist only as Edit menu items). An
-        // embedded page sits in Cra's window, which has none: the key was dropped.
-        if event.modifierFlags.contains(.command), let key = NSApp.keyWindow,
-           !key.responds(to: NSSelectorFromString("commandDispatcher")) {
-            return NSApp.mainMenu?.performKeyEquivalent(with: event) ?? false
         }
         return false
     }

@@ -31,6 +31,18 @@ enum TestGesture {
         }
     }
 
+    /// A key press through the app's event queue, routed as the keyboard's are (key equivalents,
+    /// the page, then Cra's own keys), with the characters a layout gives: the test picks the
+    /// layout's characters while the menu bar's key equivalents follow the selected one.
+    static func key(_ characters: String, keyCode: UInt16, modifiers: NSEvent.ModifierFlags, in window: NSWindow) {
+        for type in [NSEvent.EventType.keyDown, .keyUp] {
+            guard let e = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: modifiers, timestamp: ProcessInfo.processInfo.systemUptime,
+                                           windowNumber: window.windowNumber, context: nil, characters: characters,
+                                           charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode) else { return }
+            NSApp.postEvent(e, atStart: false)
+        }
+    }
+
     /// Opens the menu a click (or a right-click) at a point of the window would open, without
     /// the pointer: the hit view gets the mouse-down, or the nearest view with a menu(for:)
     /// pops its menu. The menu tracks until Esc or a pick, so tests read it through AX.
