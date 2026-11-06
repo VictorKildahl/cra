@@ -38,6 +38,16 @@ public enum WebStoreInstalls {
         return (entry["location"] as? Int) == internalLocation && (entry["from_webstore"] as? Bool) == true
     }
 
+    public static func storeInstallDirectory(settings entry: [String: Any]?, extensionID: String, profileDirectory: URL) -> URL? {
+        guard isStoreInstall(settings: entry), isExtensionID(extensionID),
+              let path = entry?["path"] as? String, !path.isEmpty else { return nil }
+        let extensions = profileDirectory.appendingPathComponent("Extensions", isDirectory: true).standardizedFileURL
+        let installed = (path.hasPrefix("/") ? URL(fileURLWithPath: path, isDirectory: true)
+            : extensions.appendingPathComponent(path, isDirectory: true)).standardizedFileURL
+        guard installed.deletingLastPathComponent() == extensions.appendingPathComponent(extensionID, isDirectory: true) else { return nil }
+        return installed
+    }
+
     /// The profiles a Web Store copy in `folder` still loads in from the folder, where Chromium
     /// has no store install of it yet, in `profiles` order.
     public static func pendingProfiles(folder: String, extensionID: String, scopes: ExtensionProfiles,
