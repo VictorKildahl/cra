@@ -16,6 +16,14 @@ enum GitHubMark {
     }()
 }
 
+enum GitLabMark {
+    static let image: NSImage = {
+        let svg = ##"<svg width="16" height="16" viewBox="0 0 25 24" xmlns="http://www.w3.org/2000/svg"><path d="m24.507 9.5-.034-.09L21.082.562a.896.896 0 0 0-1.694.091l-2.29 7.01H7.825L5.535.653a.898.898 0 0 0-1.694-.09L.451 9.411.416 9.5a6.297 6.297 0 0 0 2.09 7.278l.012.01.03.022 5.16 3.867 2.56 1.935 1.554 1.176a1.051 1.051 0 0 0 1.268 0l1.555-1.176 2.56-1.935 5.197-3.89.014-.01A6.297 6.297 0 0 0 24.507 9.5Z" fill="#E24329"/><path d="m24.507 9.5-.034-.09a11.44 11.44 0 0 0-4.56 2.051l-7.447 5.632 4.742 3.584 5.197-3.89.014-.01A6.297 6.297 0 0 0 24.507 9.5Z" fill="#FC6D26"/><path d="m7.707 20.677 2.56 1.935 1.555 1.176a1.051 1.051 0 0 0 1.268 0l1.555-1.176 2.56-1.935-4.743-3.584-4.755 3.584Z" fill="#FCA326"/><path d="M5.01 11.461a11.43 11.43 0 0 0-4.56-2.05L.416 9.5a6.297 6.297 0 0 0 2.09 7.278l.012.01.03.022 5.16 3.867 4.745-3.584-7.444-5.632Z" fill="#FC6D26"/></svg>"##
+        let image = NSImage(data: Data(svg.utf8)) ?? NSImage()
+        return image
+    }()
+}
+
 enum LiveFolderText {
     private static let relative: RelativeDateTimeFormatter = {
         let f = RelativeDateTimeFormatter()
@@ -24,7 +32,7 @@ enum LiveFolderText {
     }()
 
     static func lastUpdate(_ live: LiveFolderData) -> String {
-        if let error = live.lastError { return status(error) }
+        if let error = live.lastError { return status(error, source: live.source) }
         guard let last = live.lastFetch else { return "Not updated yet" }
         if Date().timeIntervalSince(last) < 60 { return "Updated just now" }
         return "Updated \(relative.localizedString(for: last, relativeTo: Date()))"
@@ -38,20 +46,20 @@ enum LiveFolderText {
     /// The folder's warning button: Arc's tip, and where a click signs in (nil: it tries again).
     static func warning(_ live: LiveFolderData) -> (help: String, signInURL: String?)? {
         switch live.lastError {
-        case .notSignedIn?: return ("Sign back in to GitHub.", live.signInURL)
-        case let error?: return ("\(status(error)). Click to try again.", nil)
+        case .notSignedIn?: return ("Sign back in to \(live.source.title).", live.signInURL)
+        case let error?: return ("\(status(error, source: live.source)). Click to try again.", nil)
         case nil:
             guard let org = live.ssoOrganizations.first else { return nil }
             return ("Login with SSO to unlock this folder", "https://github.com/orgs/\(org)/sso")
         }
     }
 
-    static func status(_ error: LiveFolderError) -> String {
+    static func status(_ error: LiveFolderError, source: LiveFolderSource = .github) -> String {
         switch error {
-        case .notSignedIn: return "Not signed in to GitHub"
-        case .rateLimited: return "GitHub rate limit exceeded"
-        case .unexpectedPage: return "Failed to update: unexpected GitHub page"
-        case .network: return "Failed to update: GitHub can’t be reached"
+        case .notSignedIn: return "Not signed in to \(source.title)"
+        case .rateLimited: return "\(source.title) rate limit exceeded"
+        case .unexpectedPage: return "Failed to update: unexpected \(source.title) response"
+        case .network: return "Failed to update: \(source.title) can’t be reached"
         }
     }
 }

@@ -117,3 +117,33 @@ Legend: [O] observed, [I] inference, [U] unknown.
   pull request was moved into the folder without a duplicate; no fetch for 2.5 minutes in the background,
   one within a second of the window taking focus.
 - Not verified: the review trigger (`#pullrequestreview-` anchor) with a real review.
+
+## GitLab live folders
+
+The sidebar menu offers **New GitLab Live Folder…**. Enter the server's base URL (GitLab.com
+or a self-managed instance, including a port or installation subpath). Requests use the
+space's Chromium profile and its GitLab session cookie, without a separate access token.
+The client reads `/api/v4/user` and paginated `/api/v4/merge_requests`; the folder menu shows
+the last HTTP status when a request fails. Each space supports one folder per GitLab server;
+different servers have independent filters, category layouts and hidden lists. Default names
+include the server address, for example **GitLab · gitlab.com**. Ports and installation
+subpaths are included when present. Names can be changed from the folder menu.
+
+The folder menu controls **My Merge Requests**, **Review Requests**, and **Assigned to Me**,
+plus which projects are included. **Separate by Category** puts the enabled categories in
+automatic subfolders. Each MR has one tab: when categories overlap, the first enabled match
+wins in the order above. Changing layout moves existing tabs rather than recreating them.
+If a filter removes a selected tab, it moves to Today so its page stays open.
+
+Closing or dragging out an MR hides it for the whole live folder, including every category.
+The last 200 manually closed or extracted URLs stay excluded across refreshes. Both GitHub
+and GitLab folders offer **Restore Hidden**: clear all exclusions and immediately reload from
+the service, without restoring cached tabs or presenting a separate list. Closed or deleted
+requests do not return. The ordinary Reopen Closed Tab command can undo an accidental close.
+Automatic removal of an MR from the results never adds it to the exclusions.
+
+Manual refresh bypasses the automatic refresh cooldown and keeps its busy indicator visible
+for at least 450 ms. A configuration change during a request queues a fresh request.
+
+The full-colour GitLab mark is from the official
+[GitLab SVG assets](https://gitlab.com/gitlab-org/gitlab-svgs/-/blob/main/illustrations/gitlab_logo.svg).

@@ -27,6 +27,20 @@ enum StoreTests {
         integrity()
         liveFolderExpiry()
         liveFolderSignIn()
+        gitLabFolderCategories()
+        gitLabHiddenItems()
+        gitLabFolderExpiryAndDeletion()
+        gitLabMultipleServers()
+        liveFoldersRejectStandaloneSpaces()
+        gitLabManagedFoldersKeepOrdinaryTabs()
+        gitLabProfileChangeClearsResults()
+        gitLabFolderMovesRejectDuplicateServers()
+        gitLabResetHiddenRequestsFreshResults()
+        githubResetHiddenRequestsFreshResults()
+        gitLabProfileChangeKeepsNavigatedPages()
+        gitLabGroupedMoveRepairsSelection()
+        liveFolderArchiveRestoresNavigatedPages()
+        liveFolderArchiveDoesNotMergeDifferentPages()
         stampsUseTheClock()
         persistenceFaults()
         incognitoStaysOffDisk()
@@ -344,6 +358,398 @@ enum StoreTests {
         store.expireLiveItems(olderThan: 3600)
         expect(store.children(of: folder.id).map(\.tab?.liveItemURL) == [one.url], "and goes when it ends")
         expect(store.integrityProblems().isEmpty, "live folder changes keep the sidebar sound")
+    }
+
+    private static func gitLabRequest(_ number: Int, categories: Set<GitLabLiveCategory>) -> LivePullRequest {
+        var request = LivePullRequest(owner: "company/team", repo: "app", number: number, title: "Merge request \(number)",
+                                      createdByMe: categories.contains(.authored), isAwaitingMyReview: categories.contains(.review))
+        request.webURL = "https://git.example.test/company/team/app/-/merge_requests/\(number)"
+        request.gitLabCategories = categories
+        return request
+    }
+
+    @MainActor
+    private static func liveFoldersRejectStandaloneSpaces() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let windows = [store.addBlankWindow(frame: nil), store.addIncognitoWindow(frame: nil)]
+        for window in windows {
+            let space = store.focusedSpaceID(window: window.id)
+            for source in [LiveFolderSource.github, .gitlab] {
+                expect(store.createLiveFolder(source, inSpace: space, serverURL: source == .gitlab ? "https://gitlab.com" : nil) == nil,
+                       "neither provider creates live folders inside Blank or Incognito windows")
+            }
+        }
+        expect(store.integrityProblems().isEmpty, "rejected live folders leave standalone windows unchanged")
+    }
+
+    @MainActor
+    private static func liveFolderArchiveRestoresNavigatedPages() {
+        for source in [LiveFolderSource.github, .gitlab] {
+            for resetHidden in [false, true] {
+                let store = AppComposition(clock: ManualScheduler()).store
+                let space = store.createSpace(title: "Archive navigated page", emoji: "G", focus: true)
+                guard let folder = store.createLiveFolder(source, inSpace: space.id,
+                                                           serverURL: source == .gitlab ? "https://git.example.test" : nil) else {
+                    return expect(false, "a live folder exists")
+                }
+                let request = source == .gitlab ? gitLabRequest(70, categories: [.authored])
+                    : LivePullRequest(owner: "team", repo: "app", number: 70, title: "Request")
+                if source == .gitlab { store.updateLiveFolder(folder.id) { $0.separateByCategory = true } }
+                store.applyLiveResults([request], to: folder.id, ssoOrganizations: [])
+                guard let tab = store.tabs(under: folder.id).first else { return expect(false, "a live tab exists") }
+                store.updateTab(tab.id, url: "https://docs.example.test/guide", title: "Guide")
+                store.archiveTab(tab.id, reason: .manual)
+                guard let archived = store.archive.first(where: { $0.item.id == tab.id }) else { return expect(false, "the page was archived") }
+                if resetHidden {
+                    store.resetHiddenLiveItems(folder.id)
+                    store.applyLiveResults([request], to: folder.id, ssoOrganizations: [])
+                }
+                let managedIDs = store.tabs(under: folder.id).map(\.id)
+                let restored = store.restoreArchived(archived.id)
+                expect(restored?.id == tab.id && restored?.tab?.url == "https://docs.example.test/guide" && restored?.tab?.savedTitle == "Guide",
+                       "Reopen Closed Tab restores the actual archived page for either provider")
+                expect(restored?.parentID == space.todayContainerID && restored?.tab?.liveItemURL == nil
+                       && restored?.tab?.liveFolderID == nil && restored?.tab?.liveCategory == nil,
+                       "a navigated archived page returns to Today without live-folder metadata")
+                expect(store.tabs(under: folder.id).map(\.id) == managedIDs && store.selectedTabID == tab.id,
+                       "restoring a navigated page leaves the managed MR or PR untouched")
+                expect(store.item(folder.id)?.liveFolder?.hiddenItems.contains(request.url) == !resetHidden,
+                       "reopening an ordinary page does not unhide its original request")
+                expect(!store.archive.contains { $0.id == archived.id } && store.integrityProblems().isEmpty,
+                       "archive restore consumes its entry without losing a page or corrupting the tree")
+            }
+        }
+    }
+
+    @MainActor
+    private static func liveFolderArchiveDoesNotMergeDifferentPages() {
+        for source in [LiveFolderSource.github, .gitlab] {
+            let store = AppComposition(clock: ManualScheduler()).store
+            let space = store.createSpace(title: "Archive distinct URLs", emoji: "G", focus: true)
+            guard let folder = store.createLiveFolder(source, inSpace: space.id,
+                                                       serverURL: source == .gitlab ? "https://git.example.test" : nil) else {
+                return expect(false, "a live folder exists")
+            }
+            let request = source == .gitlab ? gitLabRequest(71, categories: [.authored])
+                : LivePullRequest(owner: "team", repo: "app", number: 71, title: "Request")
+            store.applyLiveResults([request], to: folder.id, ssoOrganizations: [])
+            guard let original = store.tabs(under: folder.id).first else { return expect(false, "a live tab exists") }
+            store.archiveTab(original.id, reason: .manual)
+            guard let archived = store.archive.first(where: { $0.item.id == original.id }) else { return expect(false, "the request was archived") }
+            store.resetHiddenLiveItems(folder.id)
+            store.applyLiveResults([request], to: folder.id, ssoOrganizations: [])
+            guard let existing = store.tabs(under: folder.id).first else { return expect(false, "the request returned") }
+            store.updateTab(existing.id, url: "https://docs.example.test/other", title: "Other page")
+            let restored = store.restoreArchived(archived.id)
+            expect(restored?.id == original.id && restored?.tab?.url == request.url && restored?.parentID == space.todayContainerID,
+                   "an archived request restores separately when the existing live tab is now on another page")
+            expect(restored?.tab?.liveItemURL == nil && store.item(existing.id)?.tab?.url == "https://docs.example.test/other",
+                   "different current URLs never merge or overwrite the existing page")
+            expect(store.integrityProblems().isEmpty, "restoring distinct pages keeps the sidebar sound")
+        }
+    }
+
+    @MainActor
+    private static func githubResetHiddenRequestsFreshResults() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let space = store.createSpace(title: "GitHub reset hidden", emoji: "G", focus: true)
+        guard let folder = store.createLiveFolder(.github, inSpace: space.id) else { return expect(false, "a GitHub folder exists") }
+        let open = LivePullRequest(owner: "team", repo: "app", number: 1, title: "Open PR")
+        let closed = LivePullRequest(owner: "team", repo: "app", number: 2, title: "Closed PR")
+        store.applyLiveResults([open, closed], to: folder.id, ssoOrganizations: [])
+        for tab in store.tabs(under: folder.id) { store.archiveTab(tab.id, reason: .manual) }
+        let oldContext = store.liveRequestContext(folder.id)
+        store.resetHiddenLiveItems(folder.id)
+        expect(store.item(folder.id)?.liveFolder?.hiddenItems.isEmpty == true && store.tabs(under: folder.id).isEmpty,
+               "GitHub Restore Hidden clears exclusions without recreating old PR tabs")
+        store.applyLiveResults([open, closed], to: folder.id, ssoOrganizations: [], context: oldContext)
+        expect(store.tabs(under: folder.id).isEmpty, "GitHub ignores requests started before clearing exclusions")
+        store.applyLiveResults([open], to: folder.id, ssoOrganizations: [], context: store.liveRequestContext(folder.id))
+        expect(store.tabs(under: folder.id).map(\.tab?.liveItemURL) == [open.url] && store.integrityProblems().isEmpty,
+               "only PRs in the fresh GitHub results return")
+    }
+
+    @MainActor
+    private static func gitLabProfileChangeKeepsNavigatedPages() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let space = store.createSpace(title: "GitLab navigated pages", emoji: "G", focus: true)
+        guard let folder = store.createLiveFolder(.gitlab, inSpace: space.id, serverURL: "https://git.example.test") else { return expect(false, "a GitLab folder exists") }
+        store.updateLiveFolder(folder.id) { $0.separateByCategory = true }
+        store.applyLiveResults([gitLabRequest(60, categories: [.authored])], to: folder.id, ssoOrganizations: [])
+        guard let tab = store.tabs(under: folder.id).first else { return expect(false, "an MR tab exists") }
+        store.selectTab(tab.id)
+        store.updateTab(tab.id, url: "https://example.test/reading", title: "Reading")
+        let profile = store.createProfile(name: "Other account")
+        store.setProfile(profile.id, forSpace: space.id)
+        expect(store.item(tab.id)?.tab?.url == "https://example.test/reading" && store.item(tab.id)?.tab?.savedTitle == "Reading",
+               "a profile change keeps the page a live tab navigated to")
+        expect(store.item(tab.id)?.parentID == space.todayContainerID && store.selectedTabID == tab.id,
+               "the navigated page remains selected as an ordinary Today tab")
+        expect(store.item(tab.id)?.tab?.liveItemURL == nil && store.integrityProblems().isEmpty,
+               "the preserved page is no longer controlled by the live folder")
+    }
+
+    @MainActor
+    private static func gitLabGroupedMoveRepairsSelection() {
+        for wrapped in [false, true] {
+            let store = AppComposition(clock: ManualScheduler()).store
+            let a = store.createSpace(title: "Grouped move A", emoji: "A", focus: true)
+            let b = store.createSpace(title: "Grouped move B", emoji: "B", focus: false)
+            guard let folder = store.createLiveFolder(.gitlab, inSpace: a.id, serverURL: "https://git.example.test") else { return expect(false, "a GitLab folder exists") }
+            store.updateLiveFolder(folder.id) { $0.separateByCategory = true }
+            store.applyLiveResults([gitLabRequest(61, categories: [.review])], to: folder.id, ssoOrganizations: [])
+            guard let tab = store.tabs(under: folder.id).first else { return expect(false, "an MR tab exists") }
+            let moving: UUID
+            if wrapped {
+                let wrapper = store.createFolder(named: "Work", in: a.pinnedContainerID)
+                store.moveItem(folder.id, to: wrapper.id, index: nil)
+                moving = wrapper.id
+            } else {
+                moving = folder.id
+            }
+            store.selectTab(tab.id)
+            store.moveTab(moving, toSpace: b.id)
+            expect(store.spaceID(ofItem: tab.id) == b.id, "a grouped or wrapped live folder moves with all its MR tabs")
+            expect(store.window().selectedTabPerSpace[a.id] != tab.id && store.integrityProblems().isEmpty,
+                   "moving nested MR tabs repairs the source window selection")
+        }
+    }
+
+    @MainActor
+    private static func gitLabManagedFoldersKeepOrdinaryTabs() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let space = store.createSpace(title: "GitLab duplicates", emoji: "G", focus: true)
+        guard let folder = store.createLiveFolder(.gitlab, inSpace: space.id, serverURL: "https://git.example.test") else { return expect(false, "a GitLab folder exists") }
+        let request = gitLabRequest(40, categories: [.authored])
+        store.updateLiveFolder(folder.id) { $0.separateByCategory = true }
+        store.applyLiveResults([request], to: folder.id, ssoOrganizations: [])
+        guard let original = store.tabs(under: folder.id).first, let section = original.parentID,
+              let duplicate = store.duplicateTab(original.id) else { return expect(false, "the MR can be duplicated") }
+        expect(store.item(duplicate.id)?.parentID == space.todayContainerID, "a duplicate of a managed MR opens as an ordinary Today tab")
+        let legacy = SidebarItem.tab("https://example.test/legacy", title: "Keep this page", parent: section)
+        store.insertItem(legacy, into: section, at: nil)
+        store.selectTab(legacy.id)
+        store.applyLiveResults([request], to: folder.id, ssoOrganizations: [])
+        expect(store.item(legacy.id)?.parentID == space.todayContainerID && store.selectedTabID == legacy.id, "refresh evacuates ordinary tabs left inside automatic subfolders")
+        store.updateLiveFolder(folder.id) { $0.separateByCategory = false }
+        store.reapplyLiveResults(folder.id)
+        expect(store.item(duplicate.id) != nil && store.item(legacy.id) != nil && store.integrityProblems().isEmpty,
+               "flattening never loses ordinary or selected pages")
+    }
+
+    @MainActor
+    private static func gitLabProfileChangeClearsResults() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let space = store.createSpace(title: "GitLab profiles", emoji: "G", focus: true)
+        guard let folder = store.createLiveFolder(.gitlab, inSpace: space.id, serverURL: "https://git.example.test") else { return expect(false, "a GitLab folder exists") }
+        store.applyLiveResults([gitLabRequest(41, categories: [.authored])], to: folder.id, ssoOrganizations: [])
+        let oldContext = store.liveRequestContext(folder.id)
+        store.updateLiveFolder(folder.id) { $0.hiddenItems = ["https://git.example.test/private/mr"] }
+        let profile = store.createProfile(name: "Other GitLab account")
+        store.setProfile(profile.id, forSpace: space.id)
+        expect(store.tabs(under: folder.id).isEmpty, "changing profile clears the previous account's MR tabs")
+        expect(store.item(folder.id)?.liveFolder?.cachedResults == nil && store.item(folder.id)?.liveFolder?.lastFetch == nil,
+               "changing profile invalidates cached results and makes the folder refresh immediately")
+        expect(store.item(folder.id)?.liveFolder?.hiddenItems.isEmpty == true, "the new profile does not inherit another account's exclusions")
+        store.applyLiveResults([gitLabRequest(41, categories: [.authored])], to: folder.id, ssoOrganizations: [], context: oldContext)
+        store.applyLiveFailure(.notSignedIn, to: folder.id, context: oldContext)
+        expect(store.tabs(under: folder.id).isEmpty && store.item(folder.id)?.liveFolder?.lastError == nil,
+               "late successes and failures from the previous profile are ignored")
+        store.setProfile(nil, forSpace: space.id)
+        expect(store.liveRequestContext(folder.id) != oldContext, "switching away and back still invalidates the original request")
+        store.applyLiveResults([gitLabRequest(41, categories: [.authored])], to: folder.id, ssoOrganizations: [], context: oldContext)
+        expect(store.tabs(under: folder.id).isEmpty, "returning to the original profile cannot revive an obsolete response")
+        expect(store.integrityProblems().isEmpty, "profile invalidation keeps the tree sound")
+    }
+
+    @MainActor
+    private static func gitLabFolderMovesRejectDuplicateServers() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let a = store.createSpace(title: "GitLab A", emoji: "A", focus: true)
+        let b = store.createSpace(title: "GitLab B", emoji: "B", focus: false)
+        guard let one = store.createLiveFolder(.gitlab, inSpace: a.id, serverURL: "https://git.example.test"),
+              let two = store.createLiveFolder(.gitlab, inSpace: b.id, serverURL: "https://git.example.test") else { return expect(false, "both spaces have a server folder") }
+        store.moveTab(one.id, toSpace: b.id)
+        expect(store.spaceID(ofItem: one.id) == a.id && store.spaceID(ofItem: two.id) == b.id, "a folder move cannot create a duplicate server in the destination")
+        let wrapper = store.createFolder(named: "Work", in: a.pinnedContainerID)
+        store.moveItem(one.id, to: wrapper.id, index: nil)
+        store.moveTab(wrapper.id, toSpace: b.id)
+        expect(store.spaceID(ofItem: wrapper.id) == a.id, "wrapping a live folder does not bypass server uniqueness")
+        let c = store.createSpace(title: "GitLab C", emoji: "C", focus: false)
+        let profile = store.createProfile(name: "GitLab C account")
+        store.setProfile(profile.id, forSpace: c.id)
+        store.applyLiveResults([gitLabRequest(42, categories: [.authored])], to: one.id, ssoOrganizations: [])
+        let context = store.liveRequestContext(one.id)
+        store.moveTab(wrapper.id, toSpace: c.id)
+        expect(store.spaceID(ofItem: one.id) == c.id && store.tabs(under: one.id).isEmpty,
+               "moving a wrapper to a different profile invalidates its live folder results")
+        store.applyLiveResults([gitLabRequest(42, categories: [.authored])], to: one.id, ssoOrganizations: [], context: context)
+        expect(store.tabs(under: one.id).isEmpty, "a pre-move response cannot cross into the new profile")
+        expect(store.integrityProblems().isEmpty, "rejected moves keep both spaces sound")
+    }
+
+    @MainActor
+    private static func gitLabResetHiddenRequestsFreshResults() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let space = store.createSpace(title: "GitLab reset hidden", emoji: "G", focus: true)
+        guard let folder = store.createLiveFolder(.gitlab, inSpace: space.id, serverURL: "https://git.example.test") else { return expect(false, "a GitLab folder exists") }
+        let open = gitLabRequest(50, categories: [.authored]), closed = gitLabRequest(51, categories: [.review])
+        store.applyLiveResults([open, closed], to: folder.id, ssoOrganizations: [])
+        for tab in store.tabs(under: folder.id) { store.archiveTab(tab.id, reason: .manual) }
+        let oldContext = store.liveRequestContext(folder.id)
+        store.resetHiddenLiveItems(folder.id)
+        expect(store.item(folder.id)?.liveFolder?.hiddenItems.isEmpty == true, "Restore Hidden clears every exclusion")
+        store.reapplyLiveResults(folder.id)
+        expect(store.tabs(under: folder.id).isEmpty && store.item(folder.id)?.liveFolder?.cachedResults == nil,
+               "Restore Hidden never recreates a tab from the old cache")
+        store.applyLiveResults([open, closed], to: folder.id, ssoOrganizations: [], context: oldContext)
+        expect(store.tabs(under: folder.id).isEmpty, "a request started before Restore Hidden cannot refill the folder")
+        store.applyLiveResults([open], to: folder.id, ssoOrganizations: [], context: store.liveRequestContext(folder.id))
+        expect(store.tabs(under: folder.id).map(\.tab?.liveItemURL) == [open.url], "only MRs from the fresh open-MR response return")
+        expect(store.integrityProblems().isEmpty, "resetting exclusions keeps the sidebar sound")
+    }
+
+    @MainActor
+    private static func gitLabMultipleServers() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let space = store.createSpace(title: "GitLab servers", emoji: "G", focus: true)
+        guard let one = store.createLiveFolder(.gitlab, inSpace: space.id, serverURL: "https://git.example.test"),
+              let two = store.createLiveFolder(.gitlab, inSpace: space.id, serverURL: "https://gitlab.com") else {
+            return expect(false, "folders for two GitLab servers can be created")
+        }
+        expect(one.id != two.id && one.title == "GitLab · git.example.test" && two.title == "GitLab · gitlab.com", "different servers have distinct folders and names")
+        let duplicate = store.createLiveFolder(.gitlab, inSpace: space.id, serverURL: "HTTPS://GIT.EXAMPLE.TEST:443/")
+        expect(duplicate?.id == one.id, "equivalent server URLs reuse the existing folder")
+        expect(store.liveFolder(.gitlab, inSpace: space.id, serverURL: "gitlab.com/")?.id == two.id, "server lookup identifies the right folder")
+        var request = gitLabRequest(30, categories: [.authored])
+        store.applyLiveResults([request], to: one.id, ssoOrganizations: [])
+        request.webURL = "https://gitlab.com/company/team/app/-/merge_requests/30"
+        store.applyLiveResults([request], to: two.id, ssoOrganizations: [])
+        if let tab = store.tabs(under: one.id).first { store.archiveTab(tab.id, reason: .manual) }
+        expect(store.item(one.id)?.liveFolder?.hiddenItems.count == 1 && store.item(two.id)?.liveFolder?.hiddenItems.isEmpty == true,
+               "hidden lists are independent even for matching project names and MR numbers")
+        store.rename(one.id, to: "GitLab Merge Requests")
+        store.rename(two.id, to: "Personal reviews")
+        let three = store.createLiveFolder(.gitlab, inSpace: space.id, serverURL: "https://git.example.test:8443/gitlab")
+        expect(three?.id != one.id && three?.title == "GitLab · git.example.test:8443/gitlab", "ports and installation paths distinguish GitLab instances")
+        expect(store.item(one.id)?.title == "GitLab · git.example.test" && store.item(two.id)?.title == "Personal reviews",
+               "adding a server disambiguates the legacy default name without changing custom names")
+        expect(store.createLiveFolder(.gitlab, inSpace: space.id, serverURL: "file:///etc") == nil, "invalid servers are rejected even when folders exist")
+        let github = store.createLiveFolder(.github, inSpace: space.id)
+        expect(store.createLiveFolder(.github, inSpace: space.id)?.id == github?.id, "GitHub still has one folder per space")
+        store.deleteFolder(one.id)
+        expect(store.item(two.id) != nil && store.tabs(under: two.id).count == 1, "deleting a server folder leaves the other server untouched")
+        expect(store.integrityProblems().isEmpty, "multiple server folders keep the sidebar sound")
+    }
+
+    @MainActor
+    private static func gitLabFolderCategories() {
+        let clock = ManualScheduler()
+        let store = AppComposition(clock: clock).store
+        let space = store.createSpace(title: "GitLab categories", emoji: "G", focus: true)
+        guard let folder = store.createLiveFolder(.gitlab, inSpace: space.id, serverURL: "https://git.example.test") else {
+            return expect(false, "a GitLab live folder is made")
+        }
+        let requests = [gitLabRequest(1, categories: [.authored, .assigned]), gitLabRequest(2, categories: [.review]), gitLabRequest(3, categories: [.assigned])]
+        store.updateLiveFolder(folder.id) { $0.filter.attributes = [.authored, .reviewRequests, .assigned] }
+        store.applyLiveResults(requests, to: folder.id, ssoOrganizations: [])
+        let original = store.tabs(under: folder.id)
+        guard let review = original.first(where: { $0.tab?.liveItemURL == requests[1].url }) else { return expect(false, "the review tab exists") }
+        store.selectTab(review.id)
+        store.updateLiveFolder(folder.id) { $0.separateByCategory = true }
+        store.reapplyLiveResults(folder.id)
+        let sections = store.children(of: folder.id)
+        expect(sections.compactMap(\.liveFolderCategory) == [.authored, .review, .assigned], "one subfolder per enabled category")
+        expect(Set(store.tabs(under: folder.id).map(\.id)) == Set(original.map(\.id)), "grouping keeps tab identities and does not duplicate overlapping categories")
+        expect(store.selectedTabID == review.id, "grouping preserves the open tab")
+        expect(store.children(of: sections[0].id).map(\.tab?.liveItemURL) == [requests[0].url], "an authored and assigned MR is shown once under My Merge Requests")
+        let outsider = store.createTab(url: "https://example.test/outside")
+        store.moveItem(outsider.id, to: sections[0].id, index: nil)
+        expect(store.item(outsider.id)?.parentID == space.todayContainerID, "automatic subfolders reject dropped tabs")
+        store.moveItem(sections[0].id, to: space.pinnedContainerID, index: nil)
+        store.deleteFolder(sections[0].id)
+        expect(store.item(sections[0].id)?.parentID == folder.id, "automatic subfolders cannot be moved or deleted independently")
+        store.selectTab(review.id)
+        clock.advance(by: 2)
+        store.applyLiveFailure(.network, to: folder.id)
+        let lastFetch = store.item(folder.id)?.liveFolder?.lastFetch
+        store.updateLiveFolder(folder.id) { $0.separateByCategory = false }
+        store.reapplyLiveResults(folder.id)
+        expect(store.children(of: folder.id).allSatisfy(\.isTab), "turning grouping off returns a flat list")
+        expect(Set(store.tabs(under: folder.id).map(\.id)) == Set(original.map(\.id)) && store.selectedTabID == review.id, "flattening keeps the open tab and its identity")
+        expect(sections.allSatisfy { store.item($0.id) == nil }, "obsolete subfolders leave no items behind")
+        expect(store.item(folder.id)?.liveFolder?.lastError == .network && store.item(folder.id)?.liveFolder?.lastFetch == lastFetch,
+               "rearranging cached items does not claim a successful network update")
+        store.updateLiveFolder(folder.id) { $0.filter.attributes.remove(.reviewRequests) }
+        store.reapplyLiveResults(folder.id)
+        expect(store.item(review.id)?.parentID == space.todayContainerID && store.selectedTabID == review.id, "disabling a category keeps its selected page open in Today")
+        expect(store.item(review.id)?.tab?.liveItemURL == nil && store.item(folder.id)?.liveFolder?.hiddenItems.isEmpty == true,
+               "filtering out an open page is not a manual hide")
+        store.updateLiveFolder(folder.id) { $0.filter.attributes.insert(.reviewRequests) }
+        store.reapplyLiveResults(folder.id)
+        expect(store.item(review.id)?.parentID == folder.id, "reenabling the category adopts the existing Today tab")
+        expect(store.integrityProblems().isEmpty, "category changes keep the sidebar sound")
+    }
+
+    @MainActor
+    private static func gitLabHiddenItems() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let space = store.createSpace(title: "GitLab hidden", emoji: "G", focus: true)
+        guard let folder = store.createLiveFolder(.gitlab, inSpace: space.id, serverURL: "https://git.example.test") else {
+            return expect(false, "a GitLab live folder is made")
+        }
+        let requests = [gitLabRequest(10, categories: [.authored]), gitLabRequest(11, categories: [.review])]
+        store.updateLiveFolder(folder.id) { $0.separateByCategory = true }
+        store.applyLiveResults(requests, to: folder.id, ssoOrganizations: [])
+        for tab in store.tabs(under: folder.id) { store.archiveTab(tab.id, reason: .manual) }
+        expect(Set(store.item(folder.id)?.liveFolder?.hiddenItems ?? []) == Set(requests.map(\.url)), "closing tabs in subfolders hides them at the root")
+        store.applyLiveResults(requests, to: folder.id, ssoOrganizations: [])
+        expect(store.tabs(under: folder.id).isEmpty, "refreshing does not restore hidden merge requests")
+        if let archived = store.archive.first(where: { $0.item.tab?.liveItemURL == requests[1].url }) { store.restoreArchived(archived.id, select: false) }
+        expect(store.tabs(under: folder.id).map(\.tab?.liveItemURL) == [requests[1].url], "ordinary archive restore returns the selected MR")
+        expect(store.item(folder.id)?.liveFolder?.hiddenItems == [requests[0].url], "the other MR remains hidden")
+        if let archived = store.archive.first(where: { $0.item.tab?.liveItemURL == requests[0].url }) { store.restoreArchived(archived.id, select: false) }
+        expect(store.tabs(under: folder.id).count == 2 && store.item(folder.id)?.liveFolder?.hiddenItems.isEmpty == true, "archive restore clears only the restored exclusions")
+        guard let moved = store.tabs(under: folder.id).first else { return expect(false, "a tab can be moved out") }
+        store.moveItem(moved.id, to: space.todayContainerID, index: 0)
+        let hidden = store.item(folder.id)?.liveFolder?.hiddenItems ?? []
+        expect(hidden.count == 1 && store.item(moved.id)?.tab?.liveItemURL == nil, "dragging out of a category hides the MR for the entire live folder")
+        store.updateLiveFolder(folder.id) { $0.separateByCategory = false }
+        store.reapplyLiveResults(folder.id)
+        expect(store.tabs(under: folder.id).count == 1, "changing layout preserves hidden items")
+        guard let archivedTab = store.tabs(under: folder.id).first else { return expect(false, "a tab exists to archive") }
+        store.updateLiveFolder(folder.id) { $0.separateByCategory = true }
+        store.reapplyLiveResults(folder.id)
+        store.archiveTab(archivedTab.id, reason: .manual)
+        store.updateLiveFolder(folder.id) { $0.separateByCategory = false }
+        store.reapplyLiveResults(folder.id)
+        if let entry = store.archive.first(where: { $0.item.id == archivedTab.id }) { store.restoreArchived(entry.id, select: false) }
+        expect(store.item(archivedTab.id)?.parentID == folder.id && store.item(folder.id)?.liveFolder?.hiddenItems == hidden,
+               "reopening from the archive still works after its category folder was removed")
+        expect(store.integrityProblems().isEmpty, "hide and restore keep the sidebar sound")
+    }
+
+    @MainActor
+    private static func gitLabFolderExpiryAndDeletion() {
+        let clock = ManualScheduler()
+        let store = AppComposition(clock: clock).store
+        let space = store.createSpace(title: "GitLab expiry", emoji: "G", focus: true)
+        guard let folder = store.createLiveFolder(.gitlab, inSpace: space.id, serverURL: "https://git.example.test") else {
+            return expect(false, "a GitLab live folder is made")
+        }
+        let requests = [gitLabRequest(20, categories: [.authored]), gitLabRequest(21, categories: [.review])]
+        store.updateLiveFolder(folder.id) { $0.separateByCategory = true }
+        store.applyLiveResults(requests, to: folder.id, ssoOrganizations: [])
+        store.applyLiveResults([requests[0]], to: folder.id, ssoOrganizations: [])
+        clock.advance(by: 121)
+        store.expireLiveItems(olderThan: 120)
+        expect(store.tabs(under: folder.id).map(\.tab?.liveItemURL) == [requests[0].url], "merged MRs expire inside category folders")
+        expect(store.item(folder.id)?.liveFolder?.hiddenItems.isEmpty == true, "automatic expiry never hides an MR")
+        store.applyLiveResults(requests, to: folder.id, ssoOrganizations: [])
+        let descendants = store.children(of: folder.id).map(\.id) + store.tabs(under: folder.id).map(\.id)
+        store.deleteFolder(folder.id)
+        expect(store.item(folder.id) == nil && descendants.allSatisfy { store.item($0) == nil }, "deleting a grouped live folder deletes its entire managed tree")
+        expect(store.integrityProblems().isEmpty, "deleting a grouped live folder leaves no orphan tabs")
     }
 
     /// Every date the store writes comes from its clock.

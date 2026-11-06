@@ -145,6 +145,18 @@ enum SidebarMenus {
         let store = list.store, ui = list.ui
         let id = item.id
         let menu = menu()
+        if let category = item.liveFolderCategory, let root = store.liveFolder(containing: id) {
+            note(menu, "Managed by \(root.displayTitle)")
+            add(menu, "Refresh", enabled: !LiveFolderManager.shared.refreshing.contains(root.id)) {
+                LiveFolderManager.shared.refresh(root.id, manual: true)
+            }
+            add(menu, "Hide This Category") {
+                store.updateLiveFolder(root.id) { $0.filter.attributes.remove(category.attribute) }
+                store.reapplyLiveResults(root.id)
+                LiveFolderManager.shared.refresh(root.id, force: true)
+            }
+            return menu
+        }
         add(menu, "Rename…") { ui.renamingID = id }
         add(menu, "New Folder Inside") {
             let f = store.createFolder(named: "New Folder", in: id, index: 0)
@@ -165,23 +177,41 @@ enum SidebarMenus {
         let live = item.liveFolder ?? LiveFolderData()
         let menu = menu()
         note(menu, manager.refreshing.contains(id) ? "Updating…" : LiveFolderText.lastUpdate(live))
-        add(menu, "Refresh") { manager.refresh(id) }
+        if live.source == .gitlab {
+            if let server = live.serverURL { note(menu, server) }
+            if let status = manager.gitLabStatus[id] { note(menu, status) }
+        }
+        add(menu, "Refresh", enabled: !manager.refreshing.contains(id)) { manager.refresh(id, manual: true) }
         menu.addItem(.separator())
-        for (title, attribute) in [("My Pull Requests", GitHubLiveFilter.Attributes.authored),
-                                   ("Review Requests", .reviewRequests),
-                                   ("Team Review Requests", .teamReviewRequests)] {
+        let filters: [(String, GitHubLiveFilter.Attributes)] = live.source == .gitlab
+            ? GitLabLiveCategory.allCases.map { ($0.title, $0.attribute) }
+            : [("My Pull Requests", .authored), ("Review Requests", .reviewRequests), ("Team Review Requests", .teamReviewRequests)]
+        let filterMenu = live.source == .gitlab ? submenu(menu, "Show Merge Requests") : menu
+        for (title, attribute) in filters {
             let on = live.filter.attributes.contains(attribute)
-            add(menu, title, on: on) {
+            add(filterMenu, title, on: on) {
                 store.updateLiveFolder(id) { l in
                     if on { l.filter.attributes.remove(attribute) } else { l.filter.attributes.insert(attribute) }
                 }
+                store.reapplyLiveResults(id)
                 manager.refresh(id, force: true)
             }
         }
+        if live.source == .gitlab {
+            add(menu, "Separate by Category", on: live.separateByCategory == true) {
+                store.updateLiveFolder(id) { $0.separateByCategory = $0.separateByCategory != true }
+                store.reapplyLiveResults(id)
+                if store.item(id)?.liveFolder?.cachedResults == nil { manager.refresh(id, force: true) }
+            }
+        }
+        add(menu, "Restore Hidden", enabled: !live.hiddenItems.isEmpty) {
+            store.resetHiddenLiveItems(id)
+            manager.refresh(id, force: true, manual: true)
+        }
         let repos = manager.repositories[id] ?? live.filter.hiddenRepositories
         if !repos.isEmpty {
-            let sub = submenu(menu, "Repositories")
-            note(sub, "This list is generated based on your currently active pull requests.")
+            let sub = submenu(menu, live.source == .gitlab ? "Projects" : "Repositories")
+            note(sub, live.source == .gitlab ? "Projects with active merge requests." : "This list is generated based on your currently active pull requests.")
             sub.addItem(.separator())
             for repo in repos {
                 let shown = !live.filter.hiddenRepositories.contains(repo)
@@ -190,13 +220,14 @@ enum SidebarMenus {
                         l.filter.hiddenRepositories.removeAll { $0 == repo }
                         if shown { l.filter.hiddenRepositories.append(repo) }
                     }
+                    store.reapplyLiveResults(id)
                     manager.refresh(id, force: true)
                 }
             }
         }
         if live.lastError == .notSignedIn {
             menu.addItem(.separator())
-            add(menu, "Sign In to GitHub…") { actions.openURL(live.signInURL) }
+            add(menu, "Sign In to \(live.source.title)…") { actions.openURL(live.signInURL) }
         } else if !live.ssoOrganizations.isEmpty {
             menu.addItem(.separator())
             note(menu, "SSO ensures all of your organizations’ PRs appear")
@@ -208,7 +239,7 @@ enum SidebarMenus {
         add(menu, "Rename…") { ui.renamingID = id }
         iconColor(menu, item, list: list)
         add(menu, "Copy All Links as Markdown", enabled: !item.children.isEmpty) {
-            let lines = store.children(of: id).compactMap { c in c.tab.map { "- [\(c.displayTitle)](\($0.liveItemURL ?? $0.url))" } }
+            let lines = store.tabs(under: id).compactMap { c in c.tab.map { "- [\(c.displayTitle)](\($0.liveItemURL ?? $0.url))" } }
             copy(lines.joined(separator: "\n"))
         }
         menu.addItem(.separator())
@@ -220,7 +251,9 @@ enum SidebarMenus {
     static func confirmDeleteLiveFolder(_ item: SidebarItem, store: SidebarStore) {
         let alert = NSAlert()
         alert.messageText = "Delete your \(item.title ?? "Pull Requests") Live Folder?"
-        alert.informativeText = "You can add it again with New GitHub Live Folder in the sidebar’s menu or the command bar."
+        alert.informativeText = item.liveFolder?.source == .gitlab
+            ? "You can add it again with New GitLab Live Folder in the sidebar’s menu."
+            : "You can add it again with New GitHub Live Folder in the sidebar’s menu or the command bar."
         alert.addButton(withTitle: "Delete")
         alert.addButton(withTitle: "Cancel")
         alert.buttons.first?.hasDestructiveAction = true
@@ -233,6 +266,41 @@ enum SidebarMenus {
     }
 
     // MARK: Splits
+
+    private static func newGitLabFolder(_ list: SpaceListView) {
+        let alert = NSAlert()
+        alert.messageText = "New GitLab Live Folder"
+        alert.informativeText = "Enter your GitLab server URL, or leave it blank for GitLab.com. Sign in using this space’s browser profile, then refresh the folder."
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 360, height: 24))
+        field.placeholderString = "https://gitlab.com"
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Create")
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = field
+        let space = list.spaceID
+        let create: (NSApplication.ModalResponse) -> Void = { response in
+            guard response == .alertFirstButtonReturn else { return }
+            let address = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let server = GitLabLiveClient.serverURL(address.isEmpty ? "https://gitlab.com" : address) else {
+                let error = NSAlert()
+                error.messageText = "Invalid GitLab server URL"
+                error.informativeText = "Enter an HTTP or HTTPS server URL without credentials, a query or a fragment."
+                error.runModal()
+                return
+            }
+            if let existing = list.store.liveFolder(.gitlab, inSpace: space, serverURL: server) {
+                let duplicate = NSAlert()
+                duplicate.messageText = "This GitLab server already has a live folder"
+                duplicate.informativeText = "Use \(existing.displayTitle) to change its filters or category layout."
+                duplicate.runModal()
+                return
+            }
+            guard let folder = list.store.createLiveFolder(.gitlab, inSpace: space, serverURL: server) else { return }
+            LiveFolderManager.shared.refresh(folder.id, force: true)
+        }
+        if let window = list.window { alert.beginSheetModal(for: window, completionHandler: create) }
+        else { create(alert.runModal()) }
+    }
 
     /// Arc 1.171's split menu, item for item where Cra has the feature (no Share or Change Icon).
     /// It is pinned by dragging it into Pinned or with Pin Tab (⌘D), not from here.
@@ -313,6 +381,9 @@ enum SidebarMenus {
         add(menu, action: "newFolder") { actions.performAction("newFolder") }
         add(menu, action: "newGitHubLiveFolder", enabled: store.liveFolder(.github, inSpace: space) == nil) {
             actions.performAction("newGitHubLiveFolder")
+        }
+        add(menu, "New GitLab Live Folder…", enabled: !store.isStandalone(space: space)) {
+            newGitLabFolder(list)
         }
         menu.addItem(.separator())
         if let s = store.space(space), !store.children(of: s.todayContainerID).isEmpty {
