@@ -108,6 +108,23 @@ built release app with a test profile. Note anything that fails in the release's
   and Refresh, Clear Cache and Refresh, View Source ⌥⌘U and Developer Tools ⌥⌘I. Tab row
   context menus show their shortcuts.
 
+### Profiles, privacy, media and the engine
+
+- **#111:** reset Cra's camera access (`tccutil reset Camera <bundle id>`), open Meet, click "Use
+  microphone and camera" and Allow. One Cra prompt shows, then macOS's own dialog, and nothing
+  crashes.
+- **#36:** on a new data folder, finish onboarding with an Arc import that brings extensions and
+  passwords, so Cra relaunches. The quitting process leaves no crash report.
+- **#5:** with Cra running, `ps -axo args | grep 'Cra Helper'`: the renderer, GPU, network,
+  storage and audio helpers carry `--seatbelt-client`; only video capture runs without it.
+- **#66:** signed in, a Disney+ title and a Prime Video title both play, in Safari's engine.
+- **#167:** on a Mac whose first language is Simplified Chinese, cra.log says `chromium locale:
+  zh-CN` and chrome://version shows `--lang=zh-CN`.
+- **#133:** pick Google in Settings ▸ Privacy ▸ Secure DNS. Without a relaunch, cra.log says
+  `secure dns: secure via dns.google` and chrome://settings/security shows the same choice.
+- **#190:** with Ask Where to Save Each File on, the save panel is a sheet on Cra's window, and
+  Cancel cancels the download.
+
 ## Not pinned yet
 
 Each of these needs a change to production code before a test can pin it: a move into
@@ -138,3 +155,5 @@ issue when a change touches that code anyway.
 | #9 | Move `IconStyle` into CraCore with a fixture; or `pinExtension` and `extensionIconStyle` hooks plus a toolbar snapshot |
 | #89 | A `menuItemsAt=x,y` hook logging each item's title and shortcut |
 | #8 | Move `ExtensionPopupWindow.placement(anchor:width:)` and the drag offset into CraCore |
+| #137 | A cra.log line when the permission sheet shows (`permission sheet <host>: <kinds> (tab\|little)`), so a scenario can show a Little Window asks for notifications |
+| #5 | A `processes` hook logging each helper's `--type=` and whether it runs under the sandbox |
