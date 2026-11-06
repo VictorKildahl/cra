@@ -1065,6 +1065,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         log(id, "loaded \(site(url, id, browser)) (HTTP \(statusCode))")
         if statusCode != 0 { runtimes[id]?.extensionPageRetries = 0 }
         guard !browser.isIncognito else { return }
+        // The profile's extensions are up: imported Web Store copies become store installs (#203).
+        ExtensionStore.shared.installFromWebStore(using: browser, profile: store.profileDirectoryName(item: id))
         if url.hasPrefix("chrome://settings") { watchClearBrowsingData(browser) }
         store.recordVisit(url: url, title: title.isEmpty ? (store.item(id)?.tab?.savedTitle ?? "") : title)
     }

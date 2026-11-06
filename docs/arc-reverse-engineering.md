@@ -1317,6 +1317,17 @@ opened from Dia ▸ Import from Another Browser… (stopped before "Begin Import
   Cra copies the version folder to `<data dir>/Extensions/<id>` (location 8 in Cra's prefs);
   verified: 21 of Arc's extensions load with Arc's IDs. [U] Extension storage (Local Extension
   Settings) is not copied, so sign-ins inside extensions start fresh.
+- [O] Since GitHub #203 a copy of a Web Store extension (the store's `update_url`, folder named
+  after the ID its `key` gives) becomes the store's own install in each profile it loads in, as
+  Dia's `ExtensionsController` installs from the store: the first page a profile loads sends
+  `Cra.installFromWebStore` (scripts/cef-patches/freezing-vote.patch, WebstoreInstaller, the
+  signed CRX), which lands as location 1 with `from_webstore`; the copy then stops loading there
+  and is deleted once no profile loads it. The store's version may not ask for more permissions
+  than the copy. Before, a copy that reloaded itself (`chrome.runtime.reload()`) came back as
+  location 4 (UNPACKED), which Chromium turns off without developer mode
+  (DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION, 1 << 24), and the reason stuck after the next launch
+  loaded it as location 8 again; extension-reload-location.patch keeps such a reload at location
+  8 and clears that reason.
 - Not reproduced: the Arc space step and the extensions step were not opened in Dia (the menu flow
   goes browser → "Unlock your data" → import; the space and extension steps belong to first-run
   onboarding), so their layout follows the reflection metadata and the measured browser step.

@@ -11,22 +11,26 @@ index dd0a558c0..a54f79de4 100644
      "//components/pref_registry",
      "//components/printing/browser",
 diff --git a/cef/libcef/browser/devtools/devtools_controller.cc b/cef/libcef/browser/devtools/devtools_controller.cc
-index c60f22d..3be66a2 100644
+index c60f22d..da94ae0 100644
 --- a/cef/libcef/browser/devtools/devtools_controller.cc
 +++ b/cef/libcef/browser/devtools/devtools_controller.cc
-@@ -5,10 +5,268 @@
+@@ -5,10 +5,416 @@
  #include "cef/libcef/browser/devtools/devtools_controller.h"
  
  #include "base/json/json_reader.h"
 +#include "base/feature_list.h"
 +#include "base/functional/callback_helpers.h"
  #include "base/json/json_writer.h"
++#include "base/memory/ref_counted.h"
++#include "base/strings/string_number_conversions.h"
 +#include "base/supports_user_data.h"
 +#include "base/task/sequenced_task_runner.h"
  #include "cef/libcef/browser/devtools/devtools_util.h"
  #include "cef/libcef/browser/thread_util.h"
 +#include "chrome/browser/picture_in_picture/auto_picture_in_picture_tab_helper.h"
 +#include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
++#include "chrome/browser/profiles/profile.h"
++#include "components/crx_file/id_util.h"
 +#include "components/performance_manager/freezing/freezing_policy.h"
 +#include "components/performance_manager/public/freezing/freezing.h"
 +#include "components/performance_manager/public/performance_manager.h"
@@ -37,6 +41,11 @@ index c60f22d..3be66a2 100644
 +#include "content/public/browser/render_process_host.h"
 +#include "content/public/browser/web_contents.h"
 +#include "content/public/common/content_features.h"
++#include "extensions/browser/extension_registry.h"
++#include "extensions/browser/install_approval.h"
++#include "extensions/browser/webstore_installer.h"
++#include "extensions/common/extension.h"
++#include "extensions/common/mojom/manifest.mojom-shared.h"
 +
 +namespace {
 +
@@ -181,6 +190,145 @@ index c60f22d..3be66a2 100644
 +                     std::string_view message,
 +                     int* message_id,
 +                     base::DictValue* result,
++                     std::string* error);
++
++// A reply to a Cra.* method, in the protocol's shape. "id" comes first:
++// CEF's ProtocolParser only reads a result that starts with {"id":, and
++// JSONWriter would sort "error" ahead of it, so error replies never arrived.
++std::string CraReplyJson(int message_id,
++                         base::DictValue result,
++                         const std::string& error) {
++  std::string body;
++  if (error.empty()) {
++    base::JSONWriter::Write(result, &body);
++  } else {
++    base::DictValue error_dict;
++    error_dict.Set("code", -32000);
++    error_dict.Set("message", error);
++    base::JSONWriter::Write(error_dict, &body);
++  }
++  return "{\"id\":" + base::NumberToString(message_id) +
++         (error.empty() ? ",\"result\":" : ",\"error\":") + body + "}";
++}
++
++// The page that downloads the store's CRX, as WebstoreInstallWithPrompt has
++// one: never shown, so the download stays out of every window's UI. It lives
++// until the install is over.
++struct CraWebStoreInstallPage
++    : public base::RefCountedThreadSafe<CraWebStoreInstallPage> {
++  explicit CraWebStoreInstallPage(Profile* profile)
++      : contents(content::WebContents::Create(
++            content::WebContents::CreateParams(profile))) {}
++  std::unique_ptr<content::WebContents> contents;
++
++ private:
++  friend class base::RefCountedThreadSafe<CraWebStoreInstallPage>;
++  ~CraWebStoreInstallPage() = default;
++};
++
++// Cra (GitHub #203): {"id":N,"method":"Cra.installFromWebStore","params":
++// {"id":extension id,"manifest":{...}}} installs a Chrome Web Store item in
++// this page's profile the way the store's "Add to Chrome" does
++// (webstorePrivate.completeInstall): WebstoreInstaller fetches the signed CRX
++// from the store's update service and CrxInstaller checks it carries the
++// store's signature. It lands as INTERNAL and from the Web Store, updates and
++// is verified like any store install, which an unpacked copy (Arc's, Dia's,
++// Chrome's, loaded with --load-extension) never is. `manifest` is the copy
++// the person picked; the store's version may not ask for more permissions
++// (a loose check). No prompt: the client asks only for extensions the person
++// chose to bring over. Replies {"installed":true} once the extension is
++// installed, else an error; the download can take a while.
++// Returns false for any other message.
++bool StartCraWebStoreInstall(
++    content::WebContents* contents,
++    std::string_view message,
++    base::OnceCallback<void(std::string json)> send) {
++  if (message.find("\"Cra.installFromWebStore\"") == std::string_view::npos) {
++    return false;
++  }
++  std::optional<base::DictValue> dict =
++      base::JSONReader::ReadDict(message, base::JSON_PARSE_RFC);
++  if (!dict) {
++    return false;
++  }
++  const std::string* method = dict->FindString("method");
++  std::optional<int> message_id = dict->FindInt("id");
++  if (!method || !message_id || *method != "Cra.installFromWebStore") {
++    return false;
++  }
++  auto fail = [&](const std::string& error) {
++    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, base::BindOnce(std::move(send),
++                                  CraReplyJson(*message_id, base::DictValue(),
++                                               error)));
++    return true;
++  };
++  const base::DictValue* params = dict->FindDict("params");
++  const std::string* id = params ? params->FindString("id") : nullptr;
++  const base::DictValue* manifest =
++      params ? params->FindDict("manifest") : nullptr;
++  if (!id || !crx_file::id_util::IdIsValid(*id) || !manifest) {
++    return fail("needs a valid extension id and its manifest");
++  }
++  Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
++  if (!profile || profile->IsOffTheRecord()) {
++    return fail("not in an off-the-record profile");
++  }
++  const extensions::Extension* installed =
++      extensions::ExtensionRegistry::Get(profile)->GetInstalledExtension(*id);
++  if (installed &&
++      installed->location() == extensions::mojom::ManifestLocation::kInternal &&
++      installed->from_webstore()) {
++    base::DictValue result;
++    result.Set("installed", true);
++    result.Set("already", true);
++    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, base::BindOnce(std::move(send),
++                                  CraReplyJson(*message_id, std::move(result),
++                                               std::string())));
++    return true;
++  }
++  std::unique_ptr<extensions::InstallApproval> approval =
++      extensions::InstallApproval::CreateWithNoInstallPrompt(
++          profile, *id, manifest->Clone(), /*strict_manifest_check=*/false);
++  approval->skip_post_install_ui = true;
++  approval->use_app_installed_bubble = false;
++  auto page = base::MakeRefCounted<CraWebStoreInstallPage>(profile);
++  // One of the two callbacks runs; both hold the page and the reply.
++  auto split = base::SplitOnceCallback(std::move(send));
++  auto installer = base::MakeRefCounted<extensions::WebstoreInstaller>(
++      profile,
++      base::BindOnce(
++          [](scoped_refptr<CraWebStoreInstallPage>, int message_id,
++             base::OnceCallback<void(std::string)> send, const std::string&) {
++            base::DictValue result;
++            result.Set("installed", true);
++            std::move(send).Run(CraReplyJson(message_id, std::move(result),
++                                             std::string()));
++          },
++          page, *message_id, std::move(split.first)),
++      base::BindOnce(
++          [](scoped_refptr<CraWebStoreInstallPage>, int message_id,
++             base::OnceCallback<void(std::string)> send, const std::string& id,
++             const std::string& error,
++             extensions::WebstoreInstaller::FailureReason) {
++            LOG(WARNING) << "Cra: Web Store install of " << id
++                         << " failed: " << error;
++            std::move(send).Run(CraReplyJson(
++                message_id, base::DictValue(),
++                error.empty() ? std::string("install failed") : error));
++          },
++          page, *message_id, std::move(split.second)),
++      page->contents.get(), *id, std::move(approval),
++      extensions::WebstoreInstaller::INSTALL_SOURCE_OTHER);
++  installer->Start();
++  return true;
++}
++
++bool HandleCraMethod(content::WebContents* contents,
++                     std::string_view message,
++                     int* message_id,
++                     base::DictValue* result,
 +                     std::string* error) {
 +  if (message.find("\"Cra.") == std::string_view::npos) {
 +    return false;
@@ -283,28 +431,30 @@ index c60f22d..3be66a2 100644
  
  CefDevToolsController::CefDevToolsController(
      content::WebContents* inspected_contents)
-@@ -30,6 +288,36 @@ CefDevToolsController::~CefDevToolsController() {
+@@ -30,6 +436,38 @@ CefDevToolsController::~CefDevToolsController() {
  bool CefDevToolsController::SendDevToolsMessage(
      const std::string_view& message) {
    CEF_REQUIRE_UIT();
++  if (StartCraWebStoreInstall(
++          inspected_contents_, message,
++          base::BindOnce(
++              [](base::WeakPtr<CefDevToolsController> self, std::string json) {
++                if (self) {
++                  self->DispatchProtocolMessage(
++                      nullptr, base::as_bytes(base::span(json)));
++                }
++              },
++              weak_ptr_factory_.GetWeakPtr()))) {
++    return true;
++  }
 +  int cra_message_id = 0;
 +  base::DictValue cra_result;
 +  std::string cra_error;
 +  if (HandleCraMethod(inspected_contents_, message, &cra_message_id,
 +                      &cra_result, &cra_error)) {
 +    // Answered like a protocol method, after the caller has returned.
-+    base::DictValue reply;
-+    reply.Set("id", cra_message_id);
-+    if (cra_error.empty()) {
-+      reply.Set("result", std::move(cra_result));
-+    } else {
-+      base::DictValue error;
-+      error.Set("code", -32000);
-+      error.Set("message", cra_error);
-+      reply.Set("error", std::move(error));
-+    }
-+    std::string json;
-+    base::JSONWriter::Write(reply, &json);
++    std::string json =
++        CraReplyJson(cra_message_id, std::move(cra_result), cra_error);
 +    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
 +        FROM_HERE,
 +        base::BindOnce(

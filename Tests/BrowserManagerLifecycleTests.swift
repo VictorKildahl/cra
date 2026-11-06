@@ -965,7 +965,10 @@ enum BrowserManagerLifecycleTests {
         manager.browser(rt.browser, didFailLoadingURL: url, errorCode: -20)
         clock.advance(by: 60)
         expect(rt.browser.loads.count == ExtensionPageRetry.attempts, "after the last attempt the error page stays")
+        ExtensionStore.shared.webStoreProfiles = []
         manager.browser(rt.browser, didFinishLoadingURL: url, title: "Options", statusCode: 200)
+        expect(ExtensionStore.shared.webStoreProfiles == ["Default"],
+               "a loaded page lets its profile's imported Web Store copies install from the store (#203)")
         manager.browser(rt.browser, didFailLoadingURL: url, errorCode: -20)
         clock.advance(by: 0.25)
         expect(rt.browser.loads.count == ExtensionPageRetry.attempts + 1, "a page that loaded starts counting again")
