@@ -112,5 +112,9 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
+      # About a thousand mutants are more than the job's hour: a shuffled sample (a new order each
+      # ISO week) runs until the time is up, and the score is over the ones it reached.
       - name: Mutants of the pure code (70 % must be caught)
+        env:
+          CRA_MUTATION_MINUTES: "70"
         run: scripts/mutate.py

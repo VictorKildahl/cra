@@ -73,7 +73,7 @@ the save panel.
     scripts/coverage.py              # line coverage, and the changed-lines gate against origin/main
     scripts/coverage.py --base <ref> # the same against another base (CI passes the PR's)
     scripts/fuzz.sh                  # mutated importer fixtures under AddressSanitizer
-    scripts/mutate.py [word]         # mutation testing of the pure code, minutes; a word limits it
+    scripts/mutate.py [word]         # mutation testing of the pure code, about an hour; a word limits it
 
 [testing.md](testing.md) has the rules, the layers, the gates and how to write a scenario.
 
