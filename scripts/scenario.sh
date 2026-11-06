@@ -58,7 +58,7 @@ fi
 NAME="${1:?usage: scripts/scenario.sh <name>|all}"
 FILE="Tests/Scenarios/$NAME.scenario"
 [ -f "$FILE" ] || { echo "No scenario $FILE"; exit 2; }
-[ -x "$APP/Contents/MacOS/Cra" ] || { echo "No Cra at $APP (scripts/build.sh debug)"; exit 2; }
+[ -x "$APP/Contents/MacOS/Cra" ] || { echo "No Cra at $APP (scripts/build.sh; budgets are a release build's)"; exit 2; }
 if grep -q '^requires screen' "$FILE" && [ "${CRA_SCENARIO_SCREEN:-}" != "1" ]; then
   echo "$NAME: skipped (takes over the screen; CRA_SCENARIO_SCREEN=1 runs it)"; exit 0
 fi
@@ -96,9 +96,19 @@ problem() { PROBLEMS+=("$1"); echo "  ✗ $1"; }
 
 # The fixture pages over http on a free port: a real host, no network.
 FIXED_PORT=$(sed -n 's/^port \([0-9]*\).*/\1/p' "$FILE" | head -1)
-python3 -I -u -m http.server --bind 127.0.0.1 --directory "$FIXTURES/Pages" "${FIXED_PORT:-0}" >"$OUT/server.log" 2>&1 &
+# Not `python3 -m http.server`: it looks up 127.0.0.1's name before it says its port, and on a CI
+# runner that lookup outlasted the wait for every scenario after the first (nightly, 3–6 Nov).
+python3 -I -u -c '
+import functools, http.server, socketserver, sys
+class Server(http.server.ThreadingHTTPServer):
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = "127.0.0.1", self.server_address[1]
+s = Server(("127.0.0.1", int(sys.argv[2])), functools.partial(http.server.SimpleHTTPRequestHandler, directory=sys.argv[1]))
+print(f"Serving HTTP on 127.0.0.1 port {s.server_address[1]}", flush=True)
+s.serve_forever()' "$FIXTURES/Pages" "${FIXED_PORT:-0}" >"$OUT/server.log" 2>&1 &
 SERVER=$!
-for _ in $(seq 1 50); do PORT=$(sed -n 's/.*port \([0-9]*\).*/\1/p' "$OUT/server.log" | head -1); [ -n "$PORT" ] && break; sleep 0.1; done
+for _ in $(seq 1 300); do PORT=$(sed -n 's/.*port \([0-9]*\).*/\1/p' "$OUT/server.log" | head -1); [ -n "$PORT" ] && break; sleep 0.1; done
 PAGE="http://127.0.0.1:${PORT:?http server did not start}/page.html"
 # The same server under another host, which the run lists as a DRM service (CRA_WEBKIT_HOSTS):
 # its pages open in WebKit, the way Spotify and Netflix do (ProtectedMediaSites).

@@ -64,6 +64,9 @@ no page content), so it checks geometry, ink and fills.
   its budget, helper processes back to baseline five seconds after tabs close, the performance
   recorder under 0.1 % of a core (`selfCost.cpuPct` in its perf.json, `budget perfcpu=`) with its
   count of 250 ms stalls within a few of HitchMonitor's, and a quit within 20 seconds.
+  The budgets are for a release build (`scripts/build.sh`), which is what the nightly runs: a
+  debug build's recorder costs about six times as much (0.16–0.22 % against 0.03–0.04 %, 6 Nov
+  2026), so on a debug build the recorder line fails and means nothing.
 
 Stall budgets are set from what the app does today, so they catch regressions rather than
 describe a goal. The count of stalls over 50 ms is steady from run to run and carries the

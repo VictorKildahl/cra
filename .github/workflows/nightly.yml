@@ -35,8 +35,10 @@ jobs:
           path: vendor/cef
           key: cef-${{ runner.arch }}-${{ steps.cef.outputs.version }}-${{ hashFiles('scripts/fetch-cef.sh') }}
 
-      - name: Build (debug, ad-hoc signed)
-        run: scripts/build.sh debug
+      # Release, as users run it: the scenario budgets (the recorder's 0.1 % of a core above all)
+      # are a release build's. A debug build's recorder alone costs 0.16–0.22 %.
+      - name: Build (release, ad-hoc signed)
+        run: scripts/build.sh
 
       - name: Scenarios
         env:
@@ -49,6 +51,10 @@ jobs:
             echo "| Scenario | Result | Longest stall / over 50 ms | Memory | Problems |"
             echo "|---|---|---|---|---|"
           } >> "$GITHUB_STEP_SUMMARY"
+          # A fresh runner's first Cra launch pages CEF in from disk on the main thread (1.1–2.7 s
+          # at start-up, 3–6 Nov) whatever the scenario; one throwaway run first, so the start-up
+          # budget measures Cra, not the runner's cold disk.
+          scripts/scenario.sh solid-spaces > /dev/null 2>&1 || true
           scripts/scenario.sh all
 
       - name: Keep logs
