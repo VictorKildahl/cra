@@ -329,3 +329,4 @@
 #209   Tests/Scenarios/accept-languages.scenario  6ca3402ebe15
 #211   Packages/CraCore/Tests/CraCoreTests/FaviconKeyTests.swift::tabsOnOneHostKeepTheirOwnIcons  21d360f30e94
 #215   Tests/StoreTests.swift::arcLiveFolderImportsLive  a5c462b3a9c7
+#218   Tests/Scenarios/extension-popup-download.scenario  ffb6285b0eee

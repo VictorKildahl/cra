@@ -628,6 +628,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         updateRecentDownload(download)
         if download.state == .complete, !download.fullPath.isEmpty, finishedDownloads.insert(download.identifier).inserted {
             DownloadHistory.shared.add(path: download.fullPath)
+            // The address's scheme only, never the file: scenarios wait for this line.
+            CraLog.note("Download finished from a \(URL(string: download.url)?.scheme ?? "unknown"): address")
             let id = download.identifier
             TidyDownloadsService.shared.finished(id, path: download.fullPath, downloadURL: download.url, window: windowID, store: store) { [weak self] path in
                 guard let self, var recent = self.sidebarUI.recentDownload, recent.id == id else { return }

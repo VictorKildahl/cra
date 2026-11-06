@@ -1,0 +1,108 @@
+diff --git a/cef/libcef/browser/download_manager_delegate_impl.cc b/cef/libcef/browser/download_manager_delegate_impl.cc
+index e5363cc46..4af0a70c3 100644
+--- a/cef/libcef/browser/download_manager_delegate_impl.cc
++++ b/cef/libcef/browser/download_manager_delegate_impl.cc
+@@ -14,6 +14,8 @@
+ #include "base/strings/utf_string_conversions.h"
+ #include "cef/include/cef_download_handler.h"
+ #include "cef/libcef/browser/browser_host_base.h"
++#include "cef/libcef/browser/browser_info.h"
++#include "cef/libcef/browser/browser_info_manager.h"
+ #include "cef/libcef/browser/context.h"
+ #include "cef/libcef/browser/download_item_impl.h"
+ #include "cef/libcef/browser/thread_util.h"
+@@ -27,6 +29,63 @@
+ #include "net/http/http_response_headers.h"
+ #include "third_party/blink/public/mojom/choosers/file_chooser.mojom.h"
+ 
++namespace {
++
++// Cra (GitHub #203): the CRX a Web Store install downloads (WebstoreInstaller,
++// from the store page's "Add to Chrome" or Cra.installFromWebStore) is Chrome's
++// own: it goes to the path WebstoreInstaller set, under the profile's "Webstore
++// Downloads", and CrxInstaller takes it from there. The client's download
++// handler never sees it, so no save panel asks where to put it and it never
++// lands in the Downloads folder; and one from a page with no CefBrowser
++// (Cra.installFromWebStore's) isn't cancelled.
++bool IsCraExtensionInstall(download::DownloadItem* item) {
++  return item->GetDownloadSource() ==
++         download::DownloadSource::EXTENSION_INSTALLER;
++}
++
++
++// Cra (GitHub #218): a download started where CEF made no browser, from
++// Chrome's own extension popup bubble, side panel or DevTools (a WebContents
++// with no CefBrowser) or from an extension's service worker through
++// chrome.downloads (no WebContents at all), was cancelled before the client's
++// download handler saw it. It goes to the page used last in the same profile
++// instead: the handler only needs a browser of that profile to pick the
++// folder, ask where to save and list the download.
++CefRefPtr<CefBrowserHostBase> CraBrowserForUnownedDownload(
++    download::DownloadItem* item,
++    content::WebContents* contents) {
++  if (!contents && item->GetDownloadSource() !=
++                       download::DownloadSource::EXTENSION_API) {
++    return nullptr;
++  }
++  content::BrowserContext* context =
++      content::DownloadItemUtils::GetBrowserContext(item);
++  if (!context) {
++    return nullptr;
++  }
++  CefRefPtr<CefBrowserHostBase> best;
++  base::TimeTicks best_active;
++  for (const auto& browser_info :
++       CefBrowserInfoManager::GetInstance()->GetBrowserInfoList()) {
++    auto browser = browser_info->browser();
++    if (!browser || browser->GetBrowserContext() != context) {
++      continue;
++    }
++    content::WebContents* web_contents = browser->GetWebContents();
++    if (!web_contents) {
++      continue;
++    }
++    base::TimeTicks active = web_contents->GetLastActiveTimeTicks();
++    if (!best || active > best_active) {
++      best = browser;
++      best_active = active;
++    }
++  }
++  return best;
++}
++
++}  // namespace
++
+ using content::DownloadManager;
+ using content::WebContents;
+ using download::DownloadItem;
+@@ -379,6 +438,9 @@ void CefDownloadManagerDelegateImpl::OnDownloadCreated(DownloadManager* manager,
+   // This callback may arrive after DetermineDownloadTarget, so we allow
+   // association from either method.
+   CefRefPtr<CefBrowserHostBase> browser = GetOrAssociateBrowser(item);
++  if (!browser && IsCraExtensionInstall(item)) {
++    return;
++  }
+   if (!browser) {
+     // If the download is rejected (e.g. ALT+click on an invalid protocol link)
+     // then an "interrupted" download will be started via DownloadManagerImpl::
+@@ -487,13 +549,19 @@ CefDownloadManagerDelegateImpl::GetOrAssociateBrowser(
+   if (it != item_browser_map_.end()) {
+     return it->second.get();
+   }
++  if (IsCraExtensionInstall(item)) {
++    return nullptr;
++  }
+ 
+   CefRefPtr<CefBrowserHostBase> browser;
+   content::WebContents* contents =
+       content::DownloadItemUtils::GetWebContents(item);
+   if (contents) {
+     browser = CefBrowserHostBase::GetBrowserForContents(contents);
+-    LOG_IF(WARNING, !browser) << "No CefBrowser for download item";
++  }
++  if (!browser) {
++    browser = CraBrowserForUnownedDownload(item, contents);
++    LOG_IF(WARNING, !browser && contents) << "No CefBrowser for download item";
+   }
+   if (!browser) {
+     return nullptr;
