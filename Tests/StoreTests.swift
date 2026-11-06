@@ -40,6 +40,7 @@ enum StoreTests {
         themePreview()
         try arcSpacesWithoutAThemeShareOneDefault()
         try arcItemListedTwice()
+        try arcLiveFolderImportsLive()
         littleWindowProfile()
         tidyTabs()
         pinHook()
@@ -434,6 +435,73 @@ enum StoreTests {
         let once = try ArcImporter.plan(sidebar: data), listedTwice = try ArcImporter.plan(sidebar: twice)
         expect(String(describing: listedTwice) == String(describing: once),
                "an item listed twice imports once, as its later entry")
+    }
+
+    // promise: #215
+    /// Arc's GitHub live folder (a `list` with `automaticLiveFolderData`, Arc 1.170's shape) imports
+    /// as a Cra live folder with its filter, hidden repositories and closed pull requests, so it
+    /// refreshes and has the live folder's menu. It used to arrive as a plain folder holding the
+    /// pull requests of import day, which never changed again (#215).
+    @MainActor
+    private static func arcLiveFolderImportsLive() throws {
+        let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Arc/StorableSidebar.json")
+        var root = try JSONSerialization.jsonObject(with: Data(contentsOf: fixture)) as! [String: Any]
+        var sidebar = root["sidebar"] as! [String: Any]
+        var containers = sidebar["containers"] as! [[String: Any]]
+        let main = containers.firstIndex { $0["spaces"] != nil }!
+        var items = containers[main]["items"] as! [Any]
+        func item(_ id: String, parent: String, children: [String] = [], data: [String: Any], title: String? = nil) -> [Any] {
+            [id, ["id": id, "title": title as Any, "parentID": parent, "childrenIds": children, "isUnread": false,
+                  "originatingDevice": "FIXTURE", "createdAt": 800000000.0, "data": data] as [String: Any]]
+        }
+        func pr(_ n: Int) -> String { "https://github.com/example/app/pull/\(n)" }
+        let live: [String: Any] = ["list": [
+            "customInfo": ["iconType": ["icon": "github"]],
+            "automaticLiveFolderData": [
+                "dataSource": ["github": [String: Any]()],
+                "filter": ["github": ["_0": ["attributes": 3, "hiddenRepositories": [["owner": "example", "name": "old", "provider": "github"]]]]],
+                "hiddenItems": [["url": ["_0": pr(9)]]],
+                "lastFetch": ["timestamp": 800000000.0, "status": ["success": [String: Any]()]],
+            ] as [String: Any],
+        ]]
+        func prTab(_ n: Int) -> [String: Any] {
+            ["tab": ["savedURL": pr(n), "savedTitle": "Pull \(n)", "liveItemID": ["url": ["_0": pr(n)]]]]
+        }
+        items += item("work-prs", parent: "work-pinned", children: ["work-pr1", "work-pr2"], data: live, title: "Pull Requests")
+        items += item("work-pr1", parent: "work-prs", data: prTab(1))
+        items += item("work-pr2", parent: "work-prs", data: prTab(2))
+        let pinned = items.firstIndex { ($0 as? String) == "work-pinned" }! + 1
+        var container = items[pinned] as! [String: Any]
+        container["childrenIds"] = ["work-prs"]
+        items[pinned] = container
+        containers[main]["items"] = items
+        sidebar["containers"] = containers
+        root["sidebar"] = sidebar
+        let plan = try ArcImporter.plan(sidebar: JSONSerialization.data(withJSONObject: root))
+
+        let folder = plan.spaces[1].pinned.first
+        expect(folder?.liveFolder?.filter == GitHubLiveFilter(attributes: [.authored, .reviewRequests], hiddenRepositories: ["example/old"])
+               && folder?.liveFolder?.hiddenItems == [pr(9)], "Arc's live folder keeps its filter and hidden pull requests")
+        expect(folder?.children.map(\.liveItemURL) == [pr(1), pr(2)], "its tabs keep the pull requests they stand for")
+
+        let clock = ManualScheduler()
+        let store = AppComposition(clock: clock).store
+        let result = store.apply(plan, includeArchive: false, includeSettings: false)
+        guard let work = result.spaceIDs.last, let imported = store.liveFolder(.github, inSpace: work) else {
+            return expect(false, "the Work space has a GitHub live folder after the import")
+        }
+        expect(imported.title == "Pull Requests" && imported.liveFolder?.lastFetch == nil,
+               "it keeps its title and is due for a refresh at once")
+        expect(store.children(of: imported.id).map(\.tab?.liveItemURL) == [pr(1), pr(2)], "its tabs are the folder's live items")
+        store.applyLiveResults([LivePullRequest(owner: "example", repo: "app", number: 2, title: "Pull 2, renamed"),
+                                LivePullRequest(owner: "example", repo: "app", number: 3, title: "Pull 3")], to: imported.id, ssoOrganizations: [])
+        let kids = store.children(of: imported.id)
+        expect(kids.count == 3 && kids.filter { $0.tab?.liveItemURL == pr(2) }.count == 1,
+               "the first refresh updates the imported tabs instead of adding them again")
+        expect(kids.first { $0.tab?.liveItemURL == pr(1) }?.tab?.liveGoneAt == clock.now,
+               "an imported pull request that left the results goes like any other")
+        expect(kids.allSatisfy { !$0.isUnread }, "nothing the first refresh brings is marked unread")
+        expect(store.integrityProblems().isEmpty, "the imported live folder keeps the sidebar sound")
     }
 
     // promise: #30

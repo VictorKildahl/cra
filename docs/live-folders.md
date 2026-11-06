@@ -92,6 +92,10 @@ Legend: [O] observed, [I] inference, [U] unknown.
   45 s after a tab goes from a repository's compare page to a pull request (one was just created) or to a
   `#pullrequestreview-` anchor (a review was submitted). One GitHub folder per space ("New GitHub Live
   Folder" in the sidebar menus and command bar). Not copied: Dia's realtime updates (see below).
+- Import: Arc's live folder (`automaticLiveFolderData` with `dataSource.github`) comes over as a Cra live
+  folder with its `attributes`, `hiddenRepositories` and `hiddenItems`; its tabs keep `liveItemID.url` as
+  `liveItemURL`. Arc's `lastFetch` stays behind, so the first refresh runs at once and marks nothing unread.
+  Before #215 it arrived as a plain folder of import day's pull requests that never refreshed.
 
 ## Verified (27 Oct 2026)
 - GitHub's answers when signed out: `/pulls` with the JSON headers returns 404 `{"error":"Couldn’t authenticate you"}`;

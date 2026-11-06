@@ -14,6 +14,10 @@ struct ImportedItem {
     var createdAt = Date()
     /// Cached favicon file in the source browser, if any.
     var faviconPath: String?
+    /// A live folder's source and filter (Arc's GitHub live folder, #215): it keeps refreshing.
+    var liveFolder: LiveFolderData?
+    /// The live item a tab in a live folder stands for (Arc: `liveItemID.url`).
+    var liveItemURL: String?
 }
 
 struct ImportedSpace {
@@ -115,6 +119,11 @@ private func pairs(_ list: Any?) -> [(String, [String: Any])] {
     return out
 }
 
+/// Arc wraps an enum case's value as `{case: {_0: value}}`.
+private func tagged<T>(_ value: Any?, _ key: String) -> T? {
+    ((value as? [String: Any])?[key] as? [String: Any])?["_0"] as? T
+}
+
 // MARK: - Arc
 
 enum ArcImporter {
@@ -163,11 +172,12 @@ enum ArcImporter {
             if let tab = dataDict["tab"] as? [String: Any] {
                 guard let u = tab["savedURL"] as? String, !u.isEmpty else { return nil }
                 return ImportedItem(customTitle: custom, pageTitle: tab["savedTitle"] as? String ?? "", url: u, createdAt: created,
-                                    faviconPath: faviconFile(forItemID: id))
+                                    faviconPath: faviconFile(forItemID: id), liveItemURL: tagged(tab["liveItemID"], "url"))
             }
-            if dataDict["list"] != nil {
+            if let list = dataDict["list"] as? [String: Any] {
                 return ImportedItem(customTitle: custom, pageTitle: custom ?? "Folder", url: nil, isFolder: true,
-                                    children: childIDs.compactMap(convert), createdAt: created)
+                                    children: childIDs.compactMap(convert), createdAt: created,
+                                    liveFolder: liveFolder(list["automaticLiveFolderData"]))
             }
             if dataDict["splitView"] != nil || dataDict["tabGroup"] != nil {
                 // Flatten split views into their tabs.
@@ -254,6 +264,23 @@ enum ArcImporter {
             plan.settings.linkRoutes = (lroot["rules"] as? [[String: Any]] ?? []).compactMap { linkRoute($0, spaceTitles: spaceTitleByID) }
         }
         return plan
+    }
+
+    /// Arc's `automaticLiveFolderData` for a GitHub folder: `dataSource {github: {}}`, `filter
+    /// {github: {_0: {attributes, hiddenRepositories [{owner, name}]}}}`, `hiddenItems [{url: {_0}}]`.
+    /// Its `lastFetch` stays behind, so the folder refreshes as soon as Cra runs (#215).
+    static func liveFolder(_ value: Any?) -> LiveFolderData? {
+        guard let data = value as? [String: Any], (data["dataSource"] as? [String: Any])?["github"] != nil else { return nil }
+        var live = LiveFolderData()
+        if let filter: [String: Any] = tagged(data["filter"], "github") {
+            if let bits = filter["attributes"] as? Int { live.filter.attributes = GitHubLiveFilter.Attributes(rawValue: bits).intersection(.all) }
+            live.filter.hiddenRepositories = (filter["hiddenRepositories"] as? [[String: Any]] ?? []).compactMap { r in
+                guard let owner = r["owner"] as? String, let name = r["name"] as? String else { return nil }
+                return "\(owner)/\(name)"
+            }
+        }
+        live.hiddenItems = (data["hiddenItems"] as? [Any] ?? []).compactMap { tagged($0, "url") }
+        return live
     }
 
     /// One Air Traffic Control rule: `sourceComponents[0].componentType.urlMatch` is
@@ -447,7 +474,9 @@ extension SidebarStore {
         func insert(_ items: [ImportedItem], into parent: UUID, skip: Set<String>, pinned: Bool) {
             var skip = skip
             for it in items {
-                if it.isFolder {
+                if let live = it.liveFolder {
+                    insertLiveFolder(it, live, into: parent, pinned: pinned)
+                } else if it.isFolder {
                     let name = it.customTitle ?? it.pageTitle
                     // Re-importing must not duplicate folders: reuse one with the same name.
                     let folder: SidebarItem
@@ -466,11 +495,30 @@ extension SidebarStore {
                     tab.createdAt = it.createdAt
                     // An open tab was alive in the other browser: auto-archive counts from the import,
                     // not from when the tab was made (Dia keeps tabs for weeks with auto-clean off).
-                    if var t = tab.tab { t.timeLastActiveAt = pinned ? it.createdAt : clock.now; tab.data = .tab(t) }
+                    if var t = tab.tab {
+                        t.timeLastActiveAt = pinned ? it.createdAt : clock.now
+                        if self.items[parent]?.isLiveFolder == true { t.liveItemURL = it.liveItemURL }
+                        tab.data = .tab(t)
+                    }
                     insertItem(tab, into: parent, at: nil)
                     result.tabs += 1
                 }
             }
+        }
+
+        // A space has one GitHub live folder: importing again fills the one it has.
+        func insertLiveFolder(_ it: ImportedItem, _ live: LiveFolderData, into parent: UUID, pinned: Bool) {
+            guard let sid = self.spaceID(ofItem: parent), !isIncognito(space: sid) else { return }
+            let folder: SidebarItem
+            if let existing = self.liveFolder(live.source, inSpace: sid) {
+                folder = existing
+            } else {
+                folder = createFolder(named: it.customTitle ?? it.pageTitle, in: parent)
+                self.items[folder.id]?.liveFolder = live
+                setExpanded(folder.id, false)
+                result.folders += 1
+            }
+            insert(it.children.filter { $0.liveItemURL != nil }, into: folder.id, skip: existingURLs(under: folder.id), pinned: pinned)
         }
 
         let current = focusedSpace.favoritesContainerID
