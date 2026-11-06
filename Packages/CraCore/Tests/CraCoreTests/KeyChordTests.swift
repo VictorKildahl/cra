@@ -45,7 +45,7 @@ struct KeyChordTests {
     }
 
     /// ⌘Return opens the command bar's row in a background tab (GitHub #85).
-    @Test(arguments: [
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/85"), arguments: [
         (UInt16(36), command, true),                      // ⌘Return
         (76, command, true),                              // ⌘Enter on the keypad
         (36, command | 0x10000 | 0x800000, true),         // Caps Lock and the function-key bit don't count

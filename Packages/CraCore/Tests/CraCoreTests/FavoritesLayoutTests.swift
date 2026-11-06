@@ -7,7 +7,7 @@ import Testing
 struct FavoritesLayoutTests {
     /// Arc 1.170, 29 Oct: four favorites, sidebar width → columns and the tile width Arc's AX
     /// frames report (whole points; nil where it wasn't written down).
-    @Test(arguments: [
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/12"), arguments: [
         (347, 4, 76), (300, 4, nil), (260, 4, 55), (230, 4, 47),
         (227, 2, 101), (225, 2, 100), (220, 2, 98), (212, 2, 94), (205, 2, 90), (200, 2, 88),
         (170, 2, 73), (140, 2, 58), (100, 1, 84),
@@ -21,7 +21,7 @@ struct FavoritesLayoutTests {
     /// Arc 1.171, 31 Oct: 1–9 favorites at five sidebar widths. The widest grid keeps tiles at
     /// least 47 pt (4 at 347 and 230, 3 at 200, 2 at 140, 1 at 100), then takes the fewest
     /// columns that need no more rows: 5 → 3 + 2, 6 → 3 × 2, 7 → 4 + 3, 9 → 3 × 3, 4 at 200 → 2 × 2.
-    @Test(arguments: [
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/29"), arguments: [
         (347, [1, 2, 3, 4, 3, 3, 4, 4, 3]),
         (230, [1, 2, 3, 4, 3, 3, 4, 4, 3]),
         (200, [1, 2, 3, 2, 3, 3, 3, 3, 3]),
@@ -59,7 +59,8 @@ struct FavoritesLayoutTests {
     }
 
     /// #176: the slot under the pointer, across rows, with gaps going to the nearer tile.
-    @Test func slotUnderThePointer() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/176"))
+    func slotUnderThePointer() {
         let grid = FavoritesLayout(count: 5, width: 331)  // 3 + 2, tiles 105 wide, 55 pt row pitch
         #expect(grid.slot(at: CGPoint(x: 10, y: 10)) == 0)
         #expect(grid.slot(at: CGPoint(x: 120, y: 10)) == 1)
@@ -74,7 +75,8 @@ struct FavoritesLayoutTests {
         #expect(FavoritesLayout(count: 0, width: 331).slot(at: .zero) == 0)
     }
 
-    @Test func tilesMoveAlongPastTheOpenSlot() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/176"))
+    func tilesMoveAlongPastTheOpenSlot() {
         #expect((0..<4).map { FavoritesLayout.slot(ofTile: $0, opening: nil) } == [0, 1, 2, 3])
         #expect((0..<4).map { FavoritesLayout.slot(ofTile: $0, opening: 0) } == [1, 2, 3, 4])
         #expect((0..<4).map { FavoritesLayout.slot(ofTile: $0, opening: 2) } == [0, 1, 3, 4])

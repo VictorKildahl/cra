@@ -40,6 +40,9 @@ enum StoreTests {
         try arcSpacesWithoutAThemeShareOneDefault()
         tidyTabs()
         pinHook()
+        dropOnPinnedTabSplits()
+        reopenClosedTabs()
+        windowsShareTheSidebar()
         print("Store: \(checks) checks passed")
     }
 
@@ -454,6 +457,7 @@ enum StoreTests {
         expect(store.item(eks.id)?.tab?.faviconKey == eksIcon, "and the other tab never changes")
     }
 
+    // promise: #54
     /// Edit Pinned URL… (#54, PR #55 by Anoninz): a new pinned URL keeps the item's
     /// name, icon, colour and place, and survives a relaunch.
     @MainActor
@@ -508,6 +512,7 @@ enum StoreTests {
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 
+    // promise: #157
     /// Arc's "Drag to add Favorites" card (#157): its × closes it for that space's favorites only,
     /// for good, and readers see the change.
     @MainActor
@@ -530,6 +535,7 @@ enum StoreTests {
                "and it stays closed after a relaunch")
     }
 
+    // promise: #154
     /// Settings ▸ Tabs ▸ Share Favorites (#154): Arc's one favorites list per profile.
     @MainActor
     private static func sharedFavorites() {
@@ -641,6 +647,7 @@ enum StoreTests {
         store.deleteProfile(paths.id)
     }
 
+    // promise: #86
     /// Move Tab to Space N (#86) and the command bar's Move Tab to <space>, like Arc's "Move to
     /// Today in <space>": the tab goes to the top of the other space's Today, the window follows
     /// it there with the tab selected, and the space it left opens another tab.
@@ -718,6 +725,7 @@ enum StoreTests {
         expect(store.integrityProblems().isEmpty, "the sidebar stays sound")
     }
 
+    // promise: #105
     /// The tab shown after ⌘W (Arc 1.171, GitHub #105): the one shown before while its page is
     /// loaded, else the Today neighbour above (below at the top), else nothing; it reads as read.
     @MainActor
@@ -863,6 +871,7 @@ enum StoreTests {
         expect(store.closeSuccessor(ofPinned: pl.id, window: main) == nil, "a pinned split hands over to nothing (Arc)")
     }
 
+    // promise: #85
     /// A closed folder keeps its open tab in sight (Arc, GitHub #85): picking a tab two closed
     /// folders down lists it under the outer one without opening either.
     @MainActor
@@ -1002,6 +1011,81 @@ enum StoreTests {
         store.unpinTab(a.id)
         store.togglePinned(a.id)
         expect(heard == [a.id, a.id], "pinning it again does")
+    }
+
+    // promise: #191
+    /// A tab dropped on a pinned tab makes a split, as on a Today tab (Arc, #191): the pinned tab
+    /// stays pinned where it was, and the split opens at the top of Today with the dropped tab on
+    /// the side it was dropped and a copy of the pinned page beside it.
+    @MainActor
+    private static func dropOnPinnedTabSplits() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let sid = store.createSpace(title: "Drop", emoji: "🪂").id
+        guard let space = store.space(sid) else { return expect(false, "the space is made") }
+        let pinned = store.createTab(url: "https://example.com/pinned", title: "Pinned", in: sid, pinned: true, select: false)
+        let older = store.createTab(url: "https://example.com/older", in: sid, select: false)
+        let dragged = store.createTab(url: "https://example.com/dragged", in: sid, select: false)
+        let pinnedOrder = store.children(of: space.pinnedContainerID).map(\.id)
+        // What the list does with a drop on the left half of the pinned row: .split(with: pinned, leading: true).
+        guard let split = store.createSplit(with: [dragged.id, pinned.id], at: pinned.id) else { return expect(false, "the drop makes a split") }
+        expect(store.isPinned(pinned.id) && store.children(of: space.pinnedContainerID).map(\.id) == pinnedOrder,
+               "the pinned tab stays pinned, in its place")
+        expect(store.children(of: space.todayContainerID).map(\.id) == [split.id, older.id], "the split opens at the top of Today")
+        let panes = store.children(of: split.id)
+        expect(panes.count == 2 && panes[0].id == dragged.id && panes[1].id != pinned.id
+               && panes[1].tab?.url == "https://example.com/pinned" && store.paneID(for: pinned.id, in: split) == panes[1].id,
+               "the dropped tab takes the side it was dropped on, a copy of the pinned page the other")
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    // promise: #21
+    /// ⌘Z (Arc, #21) brings back the tab closed last, open, then the one closed before it, each
+    /// where it was: a pinned tab closed with its ✕ comes back pinned.
+    @MainActor
+    private static func reopenClosedTabs() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let sid = store.createSpace(title: "Undo", emoji: "↩️").id
+        guard let space = store.space(sid) else { return expect(false, "the space is made") }
+        let pinned = store.createTab(url: "https://example.com/undo-pinned", in: sid, pinned: true, select: false)
+        let first = store.createTab(url: "https://example.com/undo-first", in: sid)
+        let second = store.createTab(url: "https://example.com/undo-second", in: sid)
+        store.archiveTab(pinned.id, reason: .manual)
+        store.archiveTab(first.id, reason: .manual)
+        store.archiveTab(second.id, reason: .manual)
+        expect(store.reopenLastArchived()?.id == second.id && store.selectedTabID == second.id
+               && store.spaceID(ofItem: second.id) == sid && !store.isPinned(second.id),
+               "⌘Z brings back the tab closed last, in its space's Today, open")
+        expect(store.reopenLastArchived()?.id == first.id && store.selectedTabID == first.id, "again: the one closed before it")
+        expect(store.reopenLastArchived()?.id == pinned.id && store.isPinned(pinned.id)
+               && store.children(of: space.pinnedContainerID).map(\.id) == [pinned.id], "a pinned tab comes back pinned")
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    // promise: #2 #4
+    /// ⌘N (#2): a new window opens on the space in use, every window lists the same tabs, and
+    /// each window shows a space of its own. A tab open in two windows stays selected in both (#4).
+    @MainActor
+    private static func windowsShareTheSidebar() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let home = store.createSpace(title: "Windows Home", emoji: "🏠").id
+        let work = store.createSpace(title: "Windows Work", emoji: "💼", focus: false).id
+        let first = store.activeWindowID
+        let tab = store.createTab(url: "https://example.com/both-windows", in: home, window: first)
+        let second = store.addWindow(spaceID: store.focusedSpaceID(window: first), frame: nil).id
+        expect(store.focusedSpaceID(window: second) == home, "a new window opens on the space in use")
+        let made = store.createTab(url: "https://example.com/second-window", window: second)
+        let today = store.space(home)!.todayContainerID
+        expect(store.spaceID(ofItem: made.id) == home && store.tabs(under: today).map(\.id).contains(made.id),
+               "a tab opened in the new window is in the space's Today, which the first window shows too")
+        store.selectTab(tab.id, window: second)
+        expect(store.selectedTabID(in: home, window: second) == tab.id && store.selectedTabID(in: home, window: first) == tab.id,
+               "a tab opened in the second window stays selected in the first (#4)")
+        store.focusSpace(work, window: second)
+        expect(store.focusedSpaceID(window: second) == work && store.focusedSpaceID(window: first) == home
+               && store.selectedTabID(in: home, window: first) == tab.id, "each window shows a space of its own")
+        store.removeWindow(second)
+        expect(store.item(tab.id) != nil && store.item(made.id) != nil, "closing a window keeps the tabs")
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {

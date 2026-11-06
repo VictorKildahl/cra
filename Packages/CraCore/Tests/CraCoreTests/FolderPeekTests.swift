@@ -6,14 +6,16 @@ struct FolderPeekTests {
     // Pinned: outer ▸ inner ▸ tab, both closed unless a test opens them.
     let outer = "outer", inner = "inner", tab = "tab", other = "other"
 
-    @Test func outermostClosedFolderHostsTheTab() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/85"))
+    func outermostClosedFolderHostsTheTab() {
         #expect(FolderPeek.host(folders: [outer, inner], isExpanded: { _ in false }) == outer)
         #expect(FolderPeek.host(folders: [outer, inner], isExpanded: { $0 == outer }) == inner)
         #expect(FolderPeek.host(folders: [outer, inner], isExpanded: { _ in true }) == nil)
         #expect(FolderPeek.host(folders: [String](), isExpanded: { _ in false }) == nil)
     }
 
-    @Test func openingATabInClosedFoldersPeeksItUnderTheOutermost() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/85"))
+    func openingATabInClosedFoldersPeeksItUnderTheOutermost() {
         let peeks = FolderPeek.opening(tab, folders: [outer, inner], isExpanded: { _ in false }, peeks: [:])
         #expect(peeks == [outer: [tab]])
         // Again: nothing changes. Another tab joins the same peek, the first one stays (Arc).
@@ -21,12 +23,14 @@ struct FolderPeekTests {
         #expect(FolderPeek.opening(other, folders: [outer], isExpanded: { _ in false }, peeks: peeks) == [outer: [tab, other]])
     }
 
-    @Test func openingATabInOpenFoldersPeeksNothing() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/85"))
+    func openingATabInOpenFoldersPeeksNothing() {
         #expect(FolderPeek.opening(tab, folders: [outer, inner], isExpanded: { _ in true }, peeks: [:]).isEmpty)
         #expect(FolderPeek.opening(tab, folders: [String](), isExpanded: { _ in false }, peeks: [:]).isEmpty)
     }
 
-    @Test func openingTheFolderDropsItsPeekClosingKeepsTheOpenTab() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/85"))
+    func openingTheFolderDropsItsPeekClosingKeepsTheOpenTab() {
         let peeks = [outer: [tab, other]]
         #expect(FolderPeek.expanding(outer, true, openTabInside: tab, peeks: peeks).isEmpty)
         #expect(FolderPeek.expanding(outer, false, openTabInside: tab, peeks: [:]) == [outer: [tab]])
@@ -35,7 +39,8 @@ struct FolderPeekTests {
         #expect(FolderPeek.expanding(inner, true, openTabInside: nil, peeks: peeks) == peeks)
     }
 
-    @Test func aClickOnAPeekedFolderClosesIt() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/85"))
+    func aClickOnAPeekedFolderClosesIt() {
         #expect(FolderPeek.clickOpens(expanded: false, peeked: false))
         #expect(!FolderPeek.clickOpens(expanded: true, peeked: false))
         #expect(!FolderPeek.clickOpens(expanded: false, peeked: true))
@@ -44,13 +49,15 @@ struct FolderPeekTests {
         #expect(FolderPeek.expanding(outer, false, openTabInside: tab, peeks: [outer: [tab, other]]) == [outer: [tab]])
     }
 
-    @Test func closingATabDropsItFromEveryPeek() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/85"))
+    func closingATabDropsItFromEveryPeek() {
         let peeks = [outer: [tab, other], inner: [tab]]
         #expect(FolderPeek.removing(tab, peeks: peeks) == [outer: [other]])
         #expect(FolderPeek.removing(other, peeks: [outer: [other]]).isEmpty)
     }
 
-    @Test func listedRowsFollowTheSidebarAndSkipTabsThatLeft() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/85"))
+    func listedRowsFollowTheSidebarAndSkipTabsThatLeft() {
         let peeks = [outer: [other, tab, "moved away"]]
         #expect(FolderPeek.listed(in: outer, peeks: peeks, tabsInside: ["a", tab, other]) == [tab, other])
         #expect(FolderPeek.listed(in: inner, peeks: peeks, tabsInside: [tab]).isEmpty)

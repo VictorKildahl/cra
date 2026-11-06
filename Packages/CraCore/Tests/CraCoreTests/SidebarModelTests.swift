@@ -48,7 +48,7 @@ struct SidebarModelTests {
     /// The line under a tab's title (GitHub #88, #139): Arc's TabCellState.subtitle is a
     /// developer-mode site's host (and port), else a pull request's author. Leaving a pinned
     /// page shows none.
-    @Test(.bug("https://github.com/VictorKildahl/cra/issues/88"))
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/88"), .bug("https://github.com/VictorKildahl/cra/issues/139"))
     func sidebarSubtitle() {
         var tab = TabData(url: "https://www.youtube.com/watch?v=1", title: "Video")
         #expect(tab.sidebarSubtitle(developerMode: false) == nil)
@@ -65,7 +65,8 @@ struct SidebarModelTests {
 
     /// GitHub #139: a pinned tab that goes back to its page shows that page's name and favicon,
     /// not the last page's, before it loads again.
-    @Test func returningHomeShowsTheHomesNameAndIcon() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/139"))
+    func returningHomeShowsTheHomesNameAndIcon() throws {
         var tab = TabData(url: "https://github.com/", title: "")
         tab.noteTitle("GitHub", pinned: true)
         #expect(tab.homeTitle == "GitHub")

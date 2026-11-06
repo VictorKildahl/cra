@@ -104,10 +104,12 @@ enum BrowserManagerLifecycleTests {
         await discardCase()
         shortTimerCase()
         recentlyAudibleCase()
+        await audiblePageStaysAwakeCase()
         devToolsCase()
         await beforeUnloadCase()
         nowPlayingCase()
         await nowPlayingPictureInPictureCase()
+        nowPlayingSkipsPictureInPictureCase()
         await leaveVideoTabPictureInPictureCase()
         await splitCopySleepsPinnedTabCase()
         await coveredWindowPictureInPictureCase()
@@ -247,6 +249,9 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #2 #4
+    /// A tab open in another window moves its page over without reloading it (#2), and back to the
+    /// first window when that one is used again (#4): the same runtime, its views reattached.
     @MainActor
     private static func embeddedPageHandoffCase() {
         _ = NSApplication.shared
@@ -581,6 +586,27 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #28
+    /// A tab playing sound, Web Audio included (Chromium's own audible state, #28), is never put
+    /// to sleep, however long it has been out of sight, and one that starts playing while it is
+    /// being asked stays awake too.
+    @MainActor
+    private static func audiblePageStaysAwakeCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.protectedRecentTabs = 0
+        let id = store.createTab(url: "https://example.test/playing").id
+        let runtime = manager.ensureRuntime(for: id)!
+        runtime.hiddenAt = Date.distantPast
+        runtime.browser.isAudible = true
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
+        manager.sleepIdleTabs(.memoryPressure)
+        expect(!runtime.browser.replies.contains { $0.method == isolatedProbe } && !asleep(manager, id),
+               "a page playing sound is never asked to sleep, on the timer or under memory pressure")
+        manager.closeAll()
+        await sleepCase("a page that starts playing while it is asked stays awake") { _, rt in rt.browser.isAudible = true }
+    }
+
     /// ⌥⌘I pressed again while CEF is still closing DevTools opens them once they are gone,
     /// instead of closing them a second time. Console and Network switch panels on open DevTools.
     @MainActor
@@ -630,6 +656,7 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #33
     /// The sidebar player lists pages that played sound, keeps paused ones, hides the one on
     /// screen, and drops a page that navigates while quiet or closes.
     @MainActor
@@ -659,6 +686,30 @@ enum BrowserManagerLifecycleTests {
         expect(np.entries.map(\.id) == [b], "a playing page that navigates (a playlist) keeps its card")
         manager.unload(b)
         expect(np.entries.isEmpty, "closing the page removes its card")
+        manager.closeAll()
+    }
+
+    // promise: #33
+    /// The sidebar player (#33) has no card for a tab whose video is in Picture in Picture; the
+    /// card comes back when the video leaves it.
+    @MainActor
+    private static func nowPlayingSkipsPictureInPictureCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let np = NowPlaying()
+        manager.nowPlaying = np
+        let a = store.createTab(url: "https://example.test/video").id, b = store.createTab(url: "https://example.test/other").id
+        let ra = manager.ensureRuntime(for: a)!
+        manager.show(b, focus: false)
+        ra.browser.isAudible = true
+        manager.browser(ra.browser, didChangeAudible: true)
+        expect(np.shown.map(\.id) == [a], "a tab playing out of sight has a card")
+        ra.browser.isInPictureInPicture = true
+        manager.browser(ra.browser, didChangePictureInPicture: true)
+        expect(np.shown.isEmpty && np.entries.map(\.id) == [a], "its video in Picture in Picture: no card")
+        ra.browser.isInPictureInPicture = false
+        manager.browser(ra.browser, didChangePictureInPicture: false)
+        expect(np.shown.map(\.id) == [a], "back from Picture in Picture, the card is back")
         manager.closeAll()
     }
 
@@ -840,6 +891,7 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #33
     /// The sidebar player in a Chromium tab: Chromium runs the page's media session handlers
     /// (`Cra.mediaSession`, like Arc's media actions) and reports which it has, however early the
     /// page registered them; a page without a play/pause handler has its media elements played or
