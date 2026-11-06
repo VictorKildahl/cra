@@ -53,6 +53,9 @@ download page all carry both paths; keep them in step.
 
 ## Cutting a release
 
+Run the manual checks in [release-checklist.md](release-checklist.md) for every area the
+release touched first.
+
 ```sh
 # 1. Add the release to the website's src/content/releases.ts and bump CRA_VERSION defaults if needed.
 # 2. Tag and push. The Release workflow builds, signs, notarizes, packages and publishes.

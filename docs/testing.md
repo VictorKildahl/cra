@@ -28,6 +28,7 @@ Commands for each piece are in [development.md](development.md#tests).
    do that only when the issue's behaviour is meant to change, say why in the commit and tell the
    reporter. 0.1.30 rewrote the #155 test together with the change that broke it, and nothing
    failed until the reporter wrote back.
+   What no test can pin yet is a manual check in [release-checklist.md](release-checklist.md).
 
 ## Layers
 
