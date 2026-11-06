@@ -170,6 +170,46 @@ final class ExtensionStore {
         return true
     }
 
+    /// Web Store copies whose store install was live this session ("<profile>/<id>"). The copy
+    /// keeps its folder until the next launch, when the store install is on disk.
+    @ObservationIgnored private var liveStoreInstalls: Set<String> = []
+
+    /// A store install seen this session that has left its profile's live settings was removed
+    /// (chrome://extensions deletes an INTERNAL extension's entry), so its copy stops loading
+    /// there, or the next launch would bring the extension back. The copy goes once no profile
+    /// loads it; Chromium stopped reading it when the store install replaced it.
+    private func dropRemovedStoreInstalls(profiles: [String], live: [String: [String: Any]]) {
+        var scopes = Self.loadProfiles()
+        var changed = false
+        for copy in Self.webStoreCopies() {
+            for profile in profiles where scopes.loads(folder: copy.folder, inProfile: profile) {
+                guard let settings = live[profile] else { continue }
+                let key = "\(profile)/\(copy.folder)"
+                if Self.hasStoreInstall(copy.folder, inProfile: profile, settings: settings) {
+                    liveStoreInstalls.insert(key)
+                    continue
+                }
+                guard liveStoreInstalls.contains(key), settings[copy.folder] == nil else { continue }
+                var next = scopes
+                if next.movedToWebStore(folder: copy.folder, profile: profile, allProfiles: Set(profiles)) {
+                    do { try FileManager.default.removeItem(at: Self.directory.appendingPathComponent(copy.folder, isDirectory: true)) }
+                    catch {
+                        CraLog.note("extension \(copy.folder): could not remove its copy (\(error.localizedDescription))")
+                        continue
+                    }
+                }
+                liveStoreInstalls.remove(key)
+                scopes = next
+                changed = true
+                CraLog.note("extension \(copy.folder) was removed from \(profile) after its Web Store install; its copy stops loading there")
+            }
+        }
+        if changed {
+            do { try Self.saveProfiles(scopes) }
+            catch { CraLog.note("extension migration: could not save profile scopes (\(error.localizedDescription))") }
+        }
+    }
+
     /// Extension IDs asked of the store in a profile this session ("<profile>/<id>"), each once.
     @ObservationIgnored private var webStoreAsked: Set<String> = []
 
@@ -226,7 +266,11 @@ final class ExtensionStore {
         try? fm.createDirectory(at: ExtensionStore.directory, withIntermediateDirectories: true)
         let root = AppPaths.chromiumCache
         let profiles = Self.chromiumProfiles()
-        let settings = Dictionary(uniqueKeysWithValues: profiles.map { ($0, Self.extensionSettings(inProfile: $0)) })
+        let live = Dictionary(uniqueKeysWithValues: profiles.compactMap { p in Self.liveExtensionSettings(inProfile: p).map { (p, $0) } })
+        let settings = Dictionary(uniqueKeysWithValues: profiles.map {
+            ($0, live[$0] ?? ExtensionImporter.settings(inProfile: root.appendingPathComponent($0, isDirectory: true)))
+        })
+        dropRemovedStoreInstalls(profiles: profiles, live: live)
         let names = (try? fm.contentsOfDirectory(atPath: ExtensionStore.directory.path)) ?? []
         let disabled = settings.mapValues(ExtensionImporter.disabledIDs(settings:))
         let scopes = Self.loadProfiles()
@@ -325,12 +369,16 @@ final class ExtensionStore {
     /// or a switch, so a profile that has loaded answers from memory (and says when it changes);
     /// the files only for one no space has opened yet, where nothing can have changed.
     private static func extensionSettings(inProfile name: String) -> [String: Any] {
+        liveExtensionSettings(inProfile: name)
+            ?? ExtensionImporter.settings(inProfile: AppPaths.chromiumCache.appendingPathComponent(name, isDirectory: true))
+    }
+
+    /// A loaded profile's extensions.settings from Chromium's memory; nil before it loads or
+    /// once it has shut down.
+    private static func liveExtensionSettings(inProfile name: String) -> [String: Any]? {
         let dir = AppPaths.chromiumCache.appendingPathComponent(name, isDirectory: true)
-        if let json = CraCEFRuntime.extensionSettings(forProfile: name == "Default" ? nil : dir.path),
-           let live = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] {
-            return live
-        }
-        return ExtensionImporter.settings(inProfile: dir)
+        guard let json = CraCEFRuntime.extensionSettings(forProfile: name == "Default" ? nil : dir.path) else { return nil }
+        return try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
     }
 
     /// The extension whose options page `url` is (its options_ui/options_page, or Chrome's

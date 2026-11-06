@@ -21,7 +21,7 @@ if [ "${1:-}" != core ]; then
   suite "Floating sidebar" scripts/test-floating-sidebar.sh
   suite "Extension popup candidate" scripts/test-extension-popup-candidate.sh
   suite "Extension state" scripts/test-extension-state.sh
-  suite "Extension store migration" bash scripts/test-extension-store-migration.sh
+  suite "Extension store migration" scripts/test-extension-store-migration.sh
   suite "Store and importers" scripts/test-store.sh
   suite "Policies" scripts/test-policies.sh
   suite "Command bar glyph" scripts/test-command-bar-glyph.sh

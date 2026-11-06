@@ -179,6 +179,47 @@ enum ExtensionStoreMigrationTests {
                   "resources remain available after an interrupted shutdown with unavailable live preferences")
         }
 
+        try run("store-install-removed-before-restart") { install in
+            let store = ExtensionStore()
+            try install.installStoreCopy()
+            try install.liveSettings(install.settings())
+            store.reload()
+            check(FileManager.default.fileExists(atPath: install.copy.path), "the copy waits for the next launch while the store install is live")
+            try install.liveSettings([:])
+            store.reload()
+            check(!FileManager.default.fileExists(atPath: install.copy.path),
+                  "removing the store install in chrome://extensions also retires the copy that waited for the next launch")
+            check(ExtensionStore.loadList().paths.isEmpty, "an extension removed after its store install does not come back at the next launch")
+            check(store.entries.isEmpty, "the removed extension leaves the list at once")
+        }
+
+        try run("store-install-removed-in-one-profile") { install in
+            let other = AppPaths.chromiumCache.appendingPathComponent("Profile 1", isDirectory: true)
+            try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
+            let store = ExtensionStore()
+            try install.installStoreCopy()
+            try install.liveSettings(install.settings())
+            try install.liveSettings([install.id: ["location": 8, "path": install.copy.path]], profile: "Profile 1")
+            store.reload()
+            try install.liveSettings([:])
+            store.reload()
+            check(FileManager.default.fileExists(atPath: install.copy.appendingPathComponent("payload.txt").path),
+                  "a copy another profile still loads stays when the store install is removed in one profile")
+            check(ExtensionStore.loadProfiles().profiles(ofFolder: install.id) == ["Profile 1"],
+                  "only the profile it was removed from stops loading the copy")
+        }
+
+        try run("live-settings-gone-after-store-install") { install in
+            let store = ExtensionStore()
+            try install.installStoreCopy()
+            try install.liveSettings(install.settings())
+            store.reload()
+            CraCEFRuntime.settingsByProfile = [:]
+            store.reload()
+            check(FileManager.default.fileExists(atPath: install.copy.appendingPathComponent("payload.txt").path),
+                  "live settings going away (shutdown) is not a removal of the store install")
+        }
+
         try run("one-profile-still-imported") { install in
             try install.installStoreCopy()
             try install.writeSettings(install.settings())
