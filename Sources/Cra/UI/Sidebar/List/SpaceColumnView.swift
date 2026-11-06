@@ -130,6 +130,9 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
     /// to a space.
     private var blank = false
     private let moveTo = NSTextField.sidebarLabel(size: 11, weight: .medium)
+    /// Arc's pressed "Move to…": a pill behind it while its menu is open (white 10 % over the dark
+    /// sidebar, 27.5 pt tall, 11 pt before the text and 12.5 pt after it).
+    private let moveToPill = NSView()
     private var columnHovering = false { didSet { if columnHovering != oldValue { refresh() } } }
     private var hovering = false { didSet { if hovering != oldValue { refresh() } } }
     /// Arc keeps the hover look while the space menu is open.
@@ -159,7 +162,10 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         symbol.imageScaling = .scaleNone
         moveTo.stringValue = "Move to…"
         moveTo.isHidden = true
-        for v in [emoji, symbol, title, chevronBox, more, done, moveTo] { addSubview(v) }
+        moveToPill.wantsLayer = true
+        moveToPill.layer?.cornerRadius = 8
+        moveToPill.isHidden = true
+        for v in [emoji, symbol, title, chevronBox, more, done, moveToPill, moveTo] { addSubview(v) }
         sync()
     }
 
@@ -229,6 +235,8 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         done.isHidden = renameField == nil
         moveTo.textColor = colors.textTertiary
         moveTo.isHidden = !blank || !(columnHovering || hovering || menuOpen)
+        moveToPill.isHidden = !blank || !menuOpen
+        moveToPill.layer?.backgroundColor = (colors.isDark ? NSColor.white.withAlphaComponent(0.1) : colors.hoverFill).cgColor
         if blank {
             chevron.alphaValue = 0
             layer?.backgroundColor = .clear
@@ -276,6 +284,8 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         let mw = ceil(moveTo.attributedStringValue.size().width) + 2 * SidebarText.inset
         let mh = moveTo.intrinsicContentSize.height
         moveTo.frame = NSRect(x: w - BlankHeader.moveToEnd - mw + SidebarText.inset, y: (h - mh) / 2, width: mw, height: mh)
+        let glyphs = moveTo.frame.insetBy(dx: SidebarText.inset, dy: 0)
+        moveToPill.frame = NSRect(x: glyphs.minX - 11, y: (h - 27.5) / 2, width: glyphs.width + 23.5, height: 27.5)
         let x: CGFloat = blank ? BlankHeader.titleX : 36
         let end = blank ? (moveTo.isHidden ? w - 8.5 : moveTo.frame.minX - 6)
             : renameField != nil ? done.frame.minX - 6 : (more.isHidden ? w - 8.5 : w - 18.5 - 13 - 2)
@@ -344,9 +354,9 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
     private func moveToMenu() -> NSMenu {
         let m = NSMenu()
         for space in store.orderedSpaces {
-            let item = BlockMenuItem(title: space.emoji.isEmpty ? space.title : "\(space.emoji)  \(space.title)") { [store, ui, spaceID] in
+            let item = BlockMenuItem(title: space.emoji.isEmpty ? space.title : "\(space.emoji)  \(space.title)") { [store, actions, spaceID] in
                 guard store.isBlank(space: spaceID) else { return }
-                store.moveBlankWindow(ui.windowID, toSpace: space.id)
+                actions.moveBlankWindow(space.id)
             }
             if let sym = space.symbol { item.image = SidebarSymbols.image(sym, size: 13, weight: .medium) }
             m.addItem(item)

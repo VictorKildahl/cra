@@ -1383,13 +1383,19 @@ enum StoreTests {
                "a window on the same space keeps it open")
         store.removeWindow(third)
 
-        store.moveBlankWindow(blank, toSpace: home)
-        expect(!store.isBlank(window: blank) && store.focusedSpaceID(window: blank) == home && store.selectedTabID(window: blank) == torn.id
-               && store.children(of: store.space(home)!.todayContainerID).first?.id == torn.id && store.space(own) == nil,
-               "Move to… puts the window's tabs at the top of the space and the window on it")
+        // Arc 1.172's Move to…: the tabs go to the top of the space's Today, the window lets go of
+        // the open one (AppDelegate opens it in the main window), and closing it leaves them there.
+        let extra = store.createTab(url: "https://example.com/blank-second", window: blank)
+        store.selectTab(torn.id, window: blank)
+        let open = store.moveBlankWindowTabs(blank, toSpace: home)
+        expect(open == torn.id && store.selectedTabID(window: blank) == nil
+               && store.children(of: store.space(home)!.todayContainerID).prefix(2).map(\.id).sorted() == [torn.id, extra.id].sorted(),
+               "Move to… puts the window's tabs at the top of the space and hands over its open tab")
+        store.removeWindow(blank)
+        expect(store.item(torn.id) != nil && store.item(extra.id) != nil && store.space(own) == nil,
+               "and the Blank Window closing afterwards leaves them in the space")
         expect(store.item(stays.id) != nil && store.integrityProblems().isEmpty, "and the sidebar stays sound")
         store.removeWindow(second)
-        store.removeWindow(blank)
         store.saveAll()
     }
 

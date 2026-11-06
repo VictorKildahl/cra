@@ -667,7 +667,11 @@ final class SpaceDockView: NSView {
         self.ui = ui
         self.actions = actions
         library = LibraryButtonView(ui: ui, actions: actions)
-        plus = SidebarGlyphButton(symbol: "plus", size: 28, iconSize: 13, help: "New Space", colors: SidebarColors()) { actions.editSpace(nil) }
+        // Arc 1.172: a Blank Window's + shows but does nothing.
+        plus = SidebarGlyphButton(symbol: "plus", size: 28, iconSize: 13, help: "New Space", colors: SidebarColors()) { [store, ui] in
+            guard !store.isBlank(window: ui.windowID) else { return }
+            actions.editSpace(nil)
+        }
         super.init(frame: .zero)
         addSubview(library)
         addSubview(plus)

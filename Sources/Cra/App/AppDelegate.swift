@@ -476,6 +476,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return c
     }
 
+    /// A Blank Window's "Move to…" (Arc 1.172): its tabs go to the top of the space's Today, the one
+    /// it had open opens in the main window with its page as it was, and the Blank Window closes.
+    func moveBlankWindow(_ c: MainWindowController, toSpace sid: UUID) {
+        guard c.isBlank, store.space(sid) != nil, !store.isStandalone(space: sid) else { return }
+        let open = store.moveBlankWindowTabs(c.windowID, toSpace: sid)
+        let target = useNormalWindow(forSpace: sid)
+        if let open {
+            store.selectTab(open, window: target.windowID)
+            if let rt = c.browsers.release(open) { target.takePage(rt) }
+        } else {
+            store.focusSpace(sid, window: target.windowID)
+        }
+        c.window?.close()
+        target.showWindow(nil)
+    }
+
     /// A tab dragged out of every Cra window and let go (GitHub #219): as in Arc, it moves into
     /// a new Blank Window placed where it was dropped, with its page as it was (no reload).
     /// `screenPoint` is where the pointer let go; the window takes the size of the one it came from.
@@ -952,6 +968,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     CraLog.note("browser windows \(label): kind=\(m.isBlank ? "blank" : m.isIncognito ? "incognito" : "normal") "
                         + "listed=\(store.orderedSpaces.contains { $0.id == space.id } ? 1 : 0) tabs=\(tabs.count) open=\(open == "-" ? 0 : 1)")
                 }
+                return
+            }
+            // blankMoveTo=<n>: a Blank Window's "Move to…" picking the nth space, as its menu does (#220).
+            if let n = dict["blankMoveTo"].flatMap(Int.init) {
+                guard main.isBlank, store.spaceOrder.indices.contains(n - 1) else { CraLog.note("blankMoveTo: no Blank Window or space \(n)"); return }
+                moveBlankWindow(main, toSpace: store.spaceOrder[n - 1])
                 return
             }
             // dragEnd=<text>&at=x,y: the window's tab whose URL holds the text dragged and let go there
