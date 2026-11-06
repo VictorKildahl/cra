@@ -2137,7 +2137,10 @@ final class LiveStatusRowView: SidebarRowView {
         let l = NSTextField(wrappingLabelWithString: "")
         l.font = .systemFont(ofSize: 12)
         l.maximumNumberOfLines = 3
-        l.lineBreakMode = .byTruncatingTail
+        // Truncating the tail would make the field one line high inside a row measured for
+        // the wrapped text; the last of the three lines gets the ellipsis instead.
+        l.lineBreakMode = .byWordWrapping
+        l.cell?.truncatesLastVisibleLine = true
         return l
     }()
 

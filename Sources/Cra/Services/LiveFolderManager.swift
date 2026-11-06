@@ -110,12 +110,7 @@ final class LiveFolderManager {
         guard old != url, let store, !store.liveFolders.isEmpty else { return }
         let folders = store.liveFolders
         guard let page = URL(string: url), page.host == "github.com" else { return }
-        // GitHub sends a signed-out Enterprise Managed User to /enterprises/<slug>/sso (JYSK, 29 Oct 2026).
-        let parts = page.path.split(separator: "/")
-        if parts.count == 3, parts[0] == "enterprises", parts[2] == "sso" {
-            let slug = String(parts[1])
-            for f in folders where f.liveFolder?.enterprise != slug { store.updateLiveFolder(f.id) { $0.enterprise = slug } }
-        }
+        learnEnterprise(from: url)
         if folders.contains(where: { $0.liveFolder.map(Self.needsSignIn) ?? false }) { checkSignIn() }
         guard let pr = GitHubLiveClient.pullPath(url) else { return }
         let oldPath = old.flatMap { URL(string: $0)?.path } ?? ""
@@ -127,6 +122,13 @@ final class LiveFolderManager {
                 for f in self?.store?.liveFolders ?? [] { self?.refresh(f.id, force: true) }
             }
         }
+    }
+
+    /// GitHub sends a signed-out Enterprise Managed User to /enterprises/<slug>/sso (JYSK, 29 Oct
+    /// 2026), a tab and the folder's own requests alike: the folder's sign-in goes there too.
+    private func learnEnterprise(from url: String) {
+        guard let slug = GitHubLiveClient.enterprise(inSSO: url), let store else { return }
+        for f in store.liveFolders where f.liveFolder?.enterprise != slug { store.updateLiveFolder(f.id) { $0.enterprise = slug } }
     }
 
     /// Signing in ends on a GitHub page, and so does an SSO session that renews by itself (an
@@ -158,8 +160,9 @@ final class LiveFolderManager {
 
     private func get(_ url: String, profile: String?, label: String) async -> Result<GitHubLiveClient.Page, GitHubLiveClient.Failure> {
         await withCheckedContinuation { continuation in
-            CraCEFRuntime.fetchURL(url, headers: GitHubLiveClient.jsonHeaders, profilePath: profile) { status, finalURL, mime, body in
+            CraCEFRuntime.fetchURL(url, headers: GitHubLiveClient.jsonHeaders, profilePath: profile) { [weak self] status, finalURL, mime, body in
                 if Self.debug { Self.dump(label: label, url: url, status: status, finalURL: finalURL, mime: mime, body: body) }
+                MainActor.assumeIsolated { self?.learnEnterprise(from: finalURL) }
                 continuation.resume(returning: GitHubLiveClient.read(status: status, finalURL: finalURL, body: body))
             }
         }
