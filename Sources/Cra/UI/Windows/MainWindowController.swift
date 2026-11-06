@@ -85,7 +85,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                                styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                                backing: .buffered, defer: false)
         super.init(window: window)
-        window.delegate = self
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true
@@ -93,7 +92,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         window.isReleasedWhenClosed = false
         window.tabbingMode = .disallowed
         window.title = "Cra"
-        if session.frame == nil { window.center() }
+        // The initializer can shift a saved global frame onto the current screen.
+        // Apply it after construction so a window on another display stays there.
+        if session.frame != nil, NSScreen.screens.contains(where: { $0.visibleFrame.intersects(frame) }) {
+            window.setFrame(frame, display: false)
+        } else {
+            window.center()
+        }
+        window.delegate = self
         sidebarUI.windowID = session.id
 
         let store = app.store
@@ -2998,14 +3004,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// it is stored once a resize or move settles, not on every step of it.
     private func saveFrame() {
         frameSaveWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            guard let self, let window = self.window, !window.styleMask.contains(.fullScreen) else { return }
-            self.store.updateWindow(self.windowID) { $0.frame = NSStringFromRect(window.frame) }
-        }
+        let work = DispatchWorkItem { [weak self] in self?.saveFrameNow() }
         frameSaveWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
     }
     private var frameSaveWork: DispatchWorkItem?
+
+    /// Quit can arrive before the move/resize debounce fires.
+    func saveFrameNow() {
+        frameSaveWork?.cancel()
+        frameSaveWork = nil
+        guard let window, !window.styleMask.contains(.fullScreen) else { return }
+        store.updateWindow(windowID) { $0.frame = NSStringFromRect(window.frame) }
+    }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         if sender === window { commandBar.close() }

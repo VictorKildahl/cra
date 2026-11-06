@@ -302,6 +302,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if store.settings.warnBeforeQuitting, !isRelaunching, !confirmQuit() { return .terminateCancel }
         // Little Windows are not in the sidebar; keep their pages in the Library.
         for w in littleWindows { w.archivePage() }
+        for w in mainWindows { w.saveFrameNow() }
         store.saveAll()
         return .terminateNow
     }
@@ -311,6 +312,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Sparkle quits Cra to install an update and starts it again: no quit confirmation.
     func prepareForUpdateRelaunch() {
         isRelaunching = true
+        for w in mainWindows { w.saveFrameNow() }
         store.saveAll()
     }
 
