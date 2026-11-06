@@ -44,6 +44,9 @@ jobs:
         env:
           CRA_FLAGS: backdrop=${{ matrix.backdrop }}
           CRA_SCENARIO_SCREEN: "1"
+          # Budgets and snapshots were set on a Mac; on this VM they go in the summary, and only
+          # what the app does fails the job (scripts/scenario.sh).
+          CRA_BUDGETS: report
         run: |
           {
             echo "## Scenarios, backdrop=${{ matrix.backdrop }}"
