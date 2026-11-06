@@ -138,7 +138,7 @@ def promises(rev=None):
                 sys.exit(f"promises: {rel}: a `// promise:` line with no func right below it")
             body_end = balanced(s, s.index("{", fn.end()), "{", "}")
             # A harness runs only what its main() calls: a promise nobody calls proves nothing.
-            if len(re.findall(r"\b%s\s*\(" % fn.group(1), s)) < 2:
+            if len(re.findall(r"\b%s\s*\(" % fn.group(1), re.sub(r"//[^\n]*", "", s))) < 2:
                 sys.exit(f"promises: {rel}::{fn.group(1)} is a promise that nothing calls")
             for issue in sorted({int(n) for n in re.findall(r"\d+", m.group(1))}):
                 found.append((issue, f"{rel}::{fn.group(1)}", digest(s[fn.start():body_end])))
