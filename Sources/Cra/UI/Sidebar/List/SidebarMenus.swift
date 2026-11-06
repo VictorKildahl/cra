@@ -179,7 +179,6 @@ enum SidebarMenus {
         note(menu, manager.refreshing.contains(id) ? "Updating…" : LiveFolderText.lastUpdate(live))
         if live.source == .gitlab {
             if let server = live.serverURL { note(menu, server) }
-            if let status = manager.gitLabStatus[id] { note(menu, status) }
         }
         add(menu, "Refresh", enabled: !manager.refreshing.contains(id)) { manager.refresh(id, manual: true) }
         menu.addItem(.separator())

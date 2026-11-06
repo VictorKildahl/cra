@@ -16,7 +16,6 @@ final class LiveFolderManager {
     /// Repositories in each folder's last results plus the hidden ones: the folder menu's list
     /// (Arc: "This list is generated based on your currently active pull requests.").
     private(set) var repositories: [UUID: [String]] = [:]
-    private(set) var gitLabStatus: [UUID: String] = [:]
     @ObservationIgnored private var pendingRefresh: Set<UUID> = []
     @ObservationIgnored private var manualStartedAt: [UUID: Date] = [:]
     @ObservationIgnored private var feedbackWork: [UUID: ScheduledWork] = [:]
@@ -46,7 +45,6 @@ final class LiveFolderManager {
         self.store = store
         store.liveFolderChanged = { [weak self] id in
             self?.repositories[id] = nil
-            self?.gitLabStatus[id] = nil
             self?.refresh(id, force: true)
         }
         timer = store.clock.every(15) { [weak self] in
@@ -85,7 +83,8 @@ final class LiveFolderManager {
             return
         }
         let trigger: LiveFolderRefreshPolicy.Trigger = manual ? .manual : force ? .configuration : .automatic
-        guard LiveFolderRefreshPolicy.shouldStart(lastFetch: live.lastFetch, lastError: live.lastError, now: store.clock.now, trigger: trigger) else { return }
+        guard LiveFolderRefreshPolicy.shouldStart(source: live.source, lastFetch: live.lastFetch, lastError: live.lastError,
+                                                  now: store.clock.now, trigger: trigger) else { return }
         if manual { manualStartedAt[id] = store.clock.now }
         if live.source == .gitlab {
             refreshGitLab(id, live: live, profile: store.profilePath(item: id), context: context)
@@ -226,7 +225,6 @@ final class LiveFolderManager {
                     return a == b ? $0.url < $1.url : a > b
                 }
                 repositories[id] = Array(Set(requests.map(\.repository) + current.filter.hiddenRepositories)).sorted()
-                gitLabStatus[id] = "GitLab API: \(requests.count) merge requests"
                 store.applyLiveResults(requests, to: id, ssoOrganizations: [], context: context)
             } catch {
                 guard acceptsResponse(id, context: context) else { return }
@@ -242,7 +240,6 @@ final class LiveFolderManager {
             }
         }
         guard acceptsResponse(folder, context: context) else { throw CancellationError() }
-        gitLabStatus[folder] = "GitLab API: HTTP \(status) · \(URL(string: url)?.lastPathComponent ?? "request")"
         try GitLabLiveClient.validate(status: status, finalURL: finalURL, requestedURL: url)
         return body
     }

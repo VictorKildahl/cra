@@ -4,8 +4,10 @@ public enum LiveFolderRefreshPolicy {
     public enum Trigger { case automatic, manual, configuration }
     public static let minimumInterval: TimeInterval = 10
 
-    public static func shouldStart(lastFetch: Date?, lastError: LiveFolderError?, now: Date, trigger: Trigger) -> Bool {
-        if trigger != .automatic || lastError != nil { return true }
+    public static func shouldStart(source: LiveFolderSource = .github, lastFetch: Date?, lastError: LiveFolderError?,
+                                   now: Date, trigger: Trigger) -> Bool {
+        if trigger != .automatic { return true }
+        if lastError != nil { return source != .gitlab }
         return lastFetch.map { now.timeIntervalSince($0) >= minimumInterval } ?? true
     }
 

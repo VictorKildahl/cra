@@ -88,7 +88,7 @@ Legend: [O] observed, [I] inference, [U] unknown.
   (a tab open in a window stays until it isn't). Closing or dragging a tab out adds it to `hiddenItems`.
   Nothing can be dropped into a live folder.
 - Refresh, on Dia's schedule: at most every 120 s and only while Cra is the active app; when any Cra window
-  becomes key; from the folder's button and menu (10 s apart); forced when a filter changes; forced 5 s and
+  becomes key; immediately from the folder's button and menu; forced when a filter changes; forced 5 s and
   45 s after a tab goes from a repository's compare page to a pull request (one was just created) or to a
   `#pullrequestreview-` anchor (a review was submitted). One GitHub folder per space ("New GitHub Live
   Folder" in the sidebar menus and command bar). Not copied: Dia's realtime updates (see below).
@@ -126,11 +126,10 @@ server has its own checked entry, with **Add GitLab Server…** below them. Ente
 base URL (GitLab.com or a self-managed instance, including a port or installation subpath).
 Leave the address blank to use the suggested `https://gitlab.com`. Requests use the
 space's Chromium profile and its GitLab session cookie, without a separate access token.
-The client reads `/api/v4/user` and paginated `/api/v4/merge_requests`; the folder menu shows
-the last HTTP status when a request fails. Each space supports one folder per GitLab server;
-different servers have independent filters, category layouts and hidden lists. Default names
-include the server address, for example **GitLab · gitlab.com**. Ports and installation
-subpaths are included when present. Names can be changed from the folder menu.
+The client reads `/api/v4/user` and paginated `/api/v4/merge_requests`. Each space supports
+one folder per GitLab server; different servers have independent filters, category layouts
+and hidden lists. Default names include the server address, for example **GitLab · gitlab.com**.
+Ports and installation subpaths are included when present. Names can be changed from the folder menu.
 
 The folder menu controls **My Merge Requests**, **Review Requests**, and **Assigned to Me**,
 plus which projects are included. **Separate by Category** puts the enabled categories in
@@ -147,6 +146,10 @@ Automatic removal of an MR from the results never adds it to the exclusions.
 
 Manual refresh bypasses the automatic refresh cooldown and keeps its busy indicator visible
 for at least 450 ms. A configuration change during a request queues a fresh request.
+Requests keep Chromium's default timeout. A failed GitLab refresh shows the existing error
+indicator and pauses automatic updates until a manual refresh or configuration change. There are no automatic
+retries for GitLab; successful folders continue updating every two minutes while Cra is active.
+GitHub's retry and sign-in behaviour is unchanged.
 
 The full-colour GitLab mark is from the official
 [GitLab SVG assets](https://gitlab.com/gitlab-org/gitlab-svgs/-/blob/main/illustrations/gitlab_logo.svg).
