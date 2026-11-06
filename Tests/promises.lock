@@ -327,3 +327,4 @@
 #209   Packages/CraCore/Tests/CraCoreTests/BrowserLanguagesTests.swift::readsAProfilesPreferencesFile  1c42ec3c75b3
 #209   Packages/CraCore/Tests/CraCoreTests/BrowserLanguagesTests.swift::readsThePrefAsChromiumListsIt  d7fa1a3f36a4
 #209   Tests/Scenarios/accept-languages.scenario  6ca3402ebe15
+#211   Packages/CraCore/Tests/CraCoreTests/FaviconKeyTests.swift::tabsOnOneHostKeepTheirOwnIcons  21d360f30e94
