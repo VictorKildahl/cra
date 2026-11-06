@@ -137,6 +137,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// covers; a click on it, Escape or the close button ends the Peek.
     let isPeek: Bool
     private(set) weak var peekParent: MainWindowController?
+    /// The tab the Peek came from: links that leave the Peek open as tabs placed from it.
+    private let peekSourceTab: UUID?
     private var dim: PeekDimPanel?
     private var controls: PeekControlsPanel?
     /// The Peek is on its way out (closePeekAnimated).
@@ -173,6 +175,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         isPopupHost = url == nil
         isPeek = parent != nil
         peekParent = parent
+        peekSourceTab = parent == nil ? nil : fromTab
         requestedSpaceID = parent == nil ? space : nil
         // Little Windows are normal browsing: they target the last normal window's space
         // (a Peek: the space of the window it covers; a cra://open: the space it names).
@@ -1095,22 +1098,46 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     /// A Shift-clicked link opens in this window: Arc's Little Arc has no Peek of its own, so its
     /// Shift-click is a plain click (1.171, 3 Nov 2026).
+    /// In a Peek, a target=_blank link leaves it for a tab (PeekTrigger.leavesPeek, #202).
     func browser(_ browser: CraBrowser, opensPeekForURL url: String, shiftClick: Bool, newTab: Bool) -> Bool {
-        guard shiftClick, !url.lowercased().hasPrefix("cra:") else { return false }
+        if url.lowercased().hasPrefix("cra:") { return false }
+        if isPeek, PeekTrigger.leavesPeek(url, shiftClick: shiftClick, newTab: newTab) {
+            openTabFromPeek(url, inBackground: false)
+            return true
+        }
+        guard shiftClick else { return false }
         browser.loadURL(url)
         return true
     }
 
-    /// Links that want a new tab open another little window (Arc does the same).
+    /// Links that want a new tab open another little window (Arc does the same); a Peek's open
+    /// as tabs in its window's space.
     func browser(_ browser: CraBrowser, requestsNewTabWithURL url: String, inBackground background: Bool) {
         // cra:// is Cra's scripting scheme; a page must not drive it.
         if url.lowercased().hasPrefix("cra:") { return }
+        if isPeek { openTabFromPeek(url, inBackground: background); return }
         app.openLittleWindow(url: url, activate: !background, opener: browser)
         if background { window?.makeKeyAndOrderFront(nil) }
     }
 
+    /// Arc 1.171 (#202): a link from a Peek that asks for a new tab is a Today tab in the space,
+    /// placed as a link from the tab under the Peek would be, and the Peek closes for it. A
+    /// background one (⌘-click) leaves the Peek open, as the click left the page in a tab.
+    private func openTabFromPeek(_ url: String, inBackground background: Bool) {
+        guard let parent = peekParent else { return }
+        parent.browsers.openLinkTab(url, from: peekSourceTab, inBackground: background)
+        // Not from inside Chromium's popup callback: the Peek's page closes a turn later.
+        if !background { DispatchQueue.main.async { [weak self] in self?.closeWindow() } }
+    }
+
+    /// A popup that needs its opener (a sign-in window) stays a Little Window, over a Peek too:
+    /// closing the Peek for a tab would close the page waiting on it.
     func browser(_ browser: CraBrowser, popupHostForURL url: String, inBackground background: Bool) -> CraBrowser? {
         if url.lowercased().hasPrefix("cra:") { return nil }
+        if isPeek, background {
+            openTabFromPeek(url, inBackground: true)
+            return nil
+        }
         let w = app.makeLittleWindow(url: nil, opener: browser)
         w.state.url = url
         w.show()

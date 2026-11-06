@@ -1126,17 +1126,23 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     }
 
     func browser(_ browser: CraBrowser, requestsNewTabWithURL url: String, inBackground background: Bool) {
+        openLinkTab(url, from: tabID(of: browser), inBackground: background)
+    }
+
+    /// A link that asks for a new tab, from `source`'s page or from a Peek over it (#202): a
+    /// Today tab in `source`'s space, else the window's.
+    func openLinkTab(_ url: String, from source: UUID?, inBackground background: Bool) {
         // cra:// is Cra's scripting scheme (DevTools Protocol, key presses); a page must not drive it.
         if url.lowercased().hasPrefix("cra:") { return }
-        let sourceSpace = tabID(of: browser).flatMap { store.spaceID(ofItem: $0) }
-        let parentIndex = tabID(of: browser).flatMap { id -> Int? in
+        let sourceSpace = source.flatMap { store.spaceID(ofItem: $0) }
+        let parentIndex = source.flatMap { id -> Int? in
             guard let it = store.item(id), let p = it.parentID, store.rootContainer(of: id) != nil,
                   case .today = store.rootContainer(of: id)! else { return nil }
             return (store.item(p)?.children.firstIndex(of: id) ?? -1) + 1
         }
         // Links from a today tab open right below it (Arc); otherwise at the top.
         let tab = store.createTab(url: url, in: sourceSpace, select: !background,
-                                  parent: parentIndex != nil ? store.item(tabID(of: browser)!)?.parentID : nil,
+                                  parent: parentIndex != nil ? source.flatMap { store.item($0)?.parentID } : nil,
                                   index: parentIndex, window: windowID)
         if background {
             store.markUnread(tab.id, true)

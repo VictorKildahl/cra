@@ -2971,6 +2971,14 @@ event with `shiftClickModalEntryPointEnabled` set for the run, AX frames and 60 
   the peeked page on the right. Cra: MainWindowController.closedPeek, LittleWindowController.promoteToSplit.
 - [?] Not measured: the card at other window widths (Cra keeps 80 % of the area), and the Peek with Arc's
   toolbar turned off.
+- [O, 6 Nov, GitHub #202] A target=_blank link clicked inside a Peek (HID click, offline Arc, Peek opened by a
+  Shift-click from a Today tab on a 127.0.0.1 lab page) closed the Peek and opened the page as a new Today tab
+  in the same space, selected, right below the tab the Peek came from. No second Little Arc or Peek, and the
+  peeked page was not kept as a tab. Cra (0.1.31) opened another Little Window. Cra: PeekTrigger.leavesPeek,
+  LittleWindowController.openTabFromPeek → BrowserManager.openLinkTab (the placement links from a tab get, so
+  from a pinned tab the top of Today). Not observed in Arc: a ⌘-click inside the Peek (Cra: a background tab,
+  the Peek stays) and window.open with features (Cra: still a Little Window over the Peek, which keeps the
+  opener alive for sign-ins).
 
 ### Peek grows out of the link (Arc 1.171, 6 Nov 2026, GitHub #204, offline Arc)
 The reporter recorded Arc 1.172.1 growing the card out of the clicked link. 1.172.0/1.172.1 only moved Chromium

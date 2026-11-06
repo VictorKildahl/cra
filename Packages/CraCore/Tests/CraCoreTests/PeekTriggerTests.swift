@@ -41,4 +41,20 @@ struct PeekTriggerTests {
         #expect(!Self.opens("file:///tmp/a.html", newTab: true))
         #expect(!Self.opens("cra://settings", shift: true))
     }
+
+    /// Inside the Peek (GitHub #202).
+    @Test func aNewTabLinkInsideThePeekLeavesIt() {
+        #expect(PeekTrigger.leavesPeek(Self.other, shiftClick: false, newTab: true))
+        #expect(PeekTrigger.leavesPeek(Self.same, shiftClick: false, newTab: true))
+        #expect(PeekTrigger.leavesPeek("HTTPS://example.org/", shiftClick: false, newTab: true))
+        #expect(PeekTrigger.leavesPeek("file:///tmp/a.html", shiftClick: false, newTab: true))
+        // A plain link loads in the Peek, and so does a Shift-click.
+        #expect(!PeekTrigger.leavesPeek(Self.other, shiftClick: false, newTab: false))
+        #expect(!PeekTrigger.leavesPeek(Self.other, shiftClick: true, newTab: false))
+        // Pages a tab can't take without the opener, or that a page must not open.
+        #expect(!PeekTrigger.leavesPeek("about:blank", shiftClick: false, newTab: true))
+        #expect(!PeekTrigger.leavesPeek("", shiftClick: false, newTab: true))
+        #expect(!PeekTrigger.leavesPeek("cra://settings", shiftClick: false, newTab: true))
+        #expect(!PeekTrigger.leavesPeek("javascript:alert(1)", shiftClick: false, newTab: true))
+    }
 }
