@@ -48,6 +48,9 @@ final class SidebarStore {
     /// Per window, the tab shown before the selected one: a close goes back to it (CloseSuccessor).
     /// Not saved: after a relaunch it has no page, so Arc wouldn't go back to it either.
     @ObservationIgnored private var previousTab: [UUID: UUID] = [:]
+    /// Per window and space, the pinned row a collapsed pinned section keeps in sight (PinnedPeek).
+    /// Not saved, like Arc's peekedPinnedSidebarItemID. Observed: the collapsed list draws it.
+    private var pinnedPeeks: [UUID: [UUID: UUID]] = [:]
     /// Whether a tab's page is loaded; AppDelegate asks the windows' browser managers.
     @ObservationIgnored var hasPage: (UUID) -> Bool = { _ in true }
     /// A tab came into a space's pinned tabs from elsewhere (⌘D, a drag, a menu): Tidy Tab Titles
@@ -229,7 +232,34 @@ final class SidebarStore {
         // showed is the one a close goes back to (CloseSuccessor; Arc counts space switches too).
         let shown = { (s: WindowSession) in s.focusedSpaceID.flatMap { s.selectedTabPerSpace[$0] } }
         if shown(w) != shown(prefs.windows[i]) { previousTab[w.id] = shown(prefs.windows[i]) }
+        // A pinned tab coming on screen is the one its collapsed section keeps in sight; a
+        // favorite or a Today tab leaves the one before (Arc's peekedPinnedSidebarItemID).
+        var peeks = pinnedPeeks[w.id] ?? [:]
+        for (sid, tab) in w.selectedTabPerSpace where prefs.windows[i].selectedTabPerSpace[sid] != tab {
+            peeks[sid] = PinnedPeek.showing(pinnedRow: pinnedRow(of: tab, in: sid), peek: peeks[sid])
+        }
+        if peeks != (pinnedPeeks[w.id] ?? [:]) { pinnedPeeks[w.id] = peeks }
         prefs.windows[i] = w
+    }
+
+    /// The row a tab draws in a space's pinned section (the tab, or the split holding it); nil
+    /// when it isn't pinned there.
+    private func pinnedRow(of tab: UUID, in sid: UUID) -> UUID? {
+        guard let row = splitContaining(tab) ?? items[tab], rootContainer(of: row.id) == .pinned(spaceID: sid) else { return nil }
+        return row.id
+    }
+
+    /// Every row a space's pinned section can draw, in sidebar order: tabs and splits, the ones
+    /// in folders included.
+    private func pinnedRows(in space: Space) -> [UUID] {
+        var out: [UUID] = []
+        func walk(_ id: UUID) {
+            for c in children(of: id) {
+                if c.isTab || c.isSplit { out.append(c.id) } else { walk(c.id) }
+            }
+        }
+        walk(space.pinnedContainerID)
+        return out
     }
 
     /// A new window on `spaceID` with nothing open yet.
@@ -244,6 +274,7 @@ final class SidebarStore {
     func removeWindow(_ id: UUID) {
         guard prefs.windows.count > 1, let gone = prefs.windows.first(where: { $0.id == id }) else { return }
         prefs.windows.removeAll { $0.id == id }
+        pinnedPeeks[id] = nil
         if activeWindowID == id { activeWindowID = prefs.windows.first { !$0.isIncognito }?.id ?? prefs.windows[0].id }
         if gone.isIncognito, let sid = gone.focusedSpaceID, let space = spaces[sid] {
             var ids = Set<UUID>()
@@ -350,12 +381,13 @@ final class SidebarStore {
         return out
     }
 
-    /// The top-level pinned rows a space's list draws. Collapsed, only the
-    /// pinned item holding the open tab stays.
+    /// The top-level pinned rows a space's list draws. Collapsed, only the pinned row of the open
+    /// tab stays, and the one last open after a favorite or a Today tab is picked (PinnedPeek).
     func listedPinnedItems(in space: Space, window: UUID? = nil) -> [SidebarItem] {
         guard isPinnedCollapsed(space.id) else { return children(of: space.pinnedContainerID) }
-        let selected = selectedTabID(in: space.id, window: window).flatMap { splitContaining($0) ?? item($0) }
-        return selected.flatMap { rootContainer(of: $0.id) == .pinned(spaceID: space.id) ? [$0] : nil } ?? []
+        let open = selectedTabID(in: space.id, window: window).flatMap { pinnedRow(of: $0, in: space.id) }
+        let peek = pinnedPeeks[self.window(window).id]?[space.id]
+        return PinnedPeek.listed(open: open, peek: peek, pinnedRows: pinnedRows(in: space)).compactMap { items[$0] }
     }
 
     /// Favorites + pinned + today for a space, in sidebar order. This is what
@@ -565,9 +597,12 @@ final class SidebarStore {
         t.returnHome()
         it.data = .tab(t)
         items[id] = it
-        // Closed, it no longer shows under a closed folder (Arc).
+        // Closed, it no longer shows under a closed folder or a collapsed pinned section (Arc).
         let peeks = FolderPeek.removing(id, peeks: _prefs.peekedFolders)
         if peeks != _prefs.peekedFolders { prefs.peekedFolders = peeks }
+        let row = splitContaining(id)?.id
+        let pinned = pinnedPeeks.mapValues { $0.compactMapValues { PinnedPeek.closing(id, rowOfClosed: row, peek: $0) } }
+        if pinned != pinnedPeeks { pinnedPeeks = pinned }
         touch()
         return t.savedURL
     }
@@ -1376,7 +1411,13 @@ final class SidebarStore {
         return _prefs.collapsedPinnedSpaces.contains(spaceID)
     }
     func togglePinnedCollapsed(_ spaceID: UUID) {
-        if prefs.collapsedPinnedSpaces.remove(spaceID) == nil { prefs.collapsedPinnedSpaces.insert(spaceID) }
+        guard prefs.collapsedPinnedSpaces.remove(spaceID) == nil else { return }
+        prefs.collapsedPinnedSpaces.insert(spaceID)
+        // Collapsed, each window keeps only its open tab's row in sight, as a closed folder does.
+        for w in prefs.windows {
+            let open = w.selectedTabPerSpace[spaceID].flatMap { pinnedRow(of: $0, in: spaceID) }
+            pinnedPeeks[w.id, default: [:]][spaceID] = PinnedPeek.collapsing(openPinnedRow: open)
+        }
     }
 
     /// Arc's topAppsEmptyStateDismissedForProfiles: the × on the empty Favorites card closes it

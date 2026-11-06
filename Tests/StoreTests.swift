@@ -34,6 +34,7 @@ enum StoreTests {
         tabFavicons()
         moveTabToSpace()
         folderPeek()
+        collapsedPinnedPeek()
         closeSuccessor()
         favoritesEmptyState()
         sharedFavorites()
@@ -1050,6 +1051,44 @@ enum StoreTests {
 
         _ = store.resetPinnedTab(sibling.id)
         expect(store.peekedTabs(in: outer.id).map(\.id) == [tab.id], "closing a tab (⌘W) takes it out")
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    /// A collapsed pinned section keeps the pinned tab you were last on in sight once you pick a
+    /// favorite or a Today tab (Arc's peekedPinnedSidebarItemID; X DM 6 Nov 2026: Reddit vanished
+    /// from under the space name as soon as YouTube was picked).
+    @MainActor
+    private static func collapsedPinnedPeek() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let space = store.focusedSpace
+        let favorite = store.createTab(url: "https://youtube.com/", pinned: true, select: false, parent: space.favoritesContainerID)
+        let reddit = store.createTab(url: "https://reddit.com/", pinned: true, select: false, parent: space.pinnedContainerID)
+        let mail = store.createTab(url: "https://mail.example/", pinned: true, select: false, parent: space.pinnedContainerID)
+        let today = store.createTab(url: "https://example.net/", select: true)
+        store.togglePinnedCollapsed(space.id)
+        let listed = { store.listedPinnedItems(in: store.focusedSpace).map(\.id) }
+        expect(listed().isEmpty, "a collapsed section on a Today tab lists nothing")
+
+        store.selectTab(reddit.id)
+        expect(listed() == [reddit.id], "picking a pinned tab lists it")
+        store.selectTab(favorite.id)
+        expect(listed() == [reddit.id], "it stays in sight when a favorite is picked")
+        store.selectTab(today.id)
+        expect(listed() == [reddit.id], "and when a Today tab is picked")
+        store.selectTab(mail.id)
+        store.selectTab(favorite.id)
+        expect(listed() == [mail.id], "only the last pinned tab stays, not every one you were on")
+
+        let other = store.addWindow(spaceID: space.id, frame: nil)
+        expect(store.listedPinnedItems(in: store.focusedSpace, window: other.id).isEmpty, "another window keeps its own")
+
+        store.togglePinnedCollapsed(space.id)
+        store.togglePinnedCollapsed(space.id)
+        expect(listed().isEmpty, "collapsing again keeps only the open tab's row, as a closed folder does")
+        store.selectTab(reddit.id)
+        store.selectTab(today.id)
+        _ = store.resetPinnedTab(reddit.id)
+        expect(listed().isEmpty, "closing it (⌘W) takes it out")
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 
