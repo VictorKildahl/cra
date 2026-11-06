@@ -3284,3 +3284,29 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
   selection of directory for file downloads"). [?] The menu's own labels aren't in the strings. Cra (#190):
   AppSettings.downloadLocations per profile (folder or ask), a Downloads card under Profiles with the folder,
   "Ask Where to Save Each File" and "Other…"; save panels queue one at a time as sheets on Cra's window.
+
+## Page context menus (Arc 1.172, 6 Nov 2026, Victor's Arc, Little Arc at 2x, AX menu dumps)
+
+- [O] Arc shows Chromium's own Mac menu (MenuControllerCocoa): extension items carry the extension's icon (one
+  item: its own title; several: a submenu named after the extension), and AppKit adds Look Up, Speech, Writing
+  Tools, Services and AutoFill as it does for Chrome. System items are British ("Summarise"): Arc's bundle has
+  en-GB.lproj and Victor's macOS is en-DK. Chromium items are Chrome's, with these changes:
+- [O] Page: Back, Forward, Reload | Save As…, Print…, Cast…, Translate to <language> | extensions | View Page
+  Source, Inspect. No "Create QR code for this page", no separate Inspect Element.
+- [O] Link: Open Link in New Tab, Open Link in New Window, Open Link in Little Arc, Open Link in Incognito Window |
+  Save Link As…, Copy Link Address | Copy, Copy link to highlight, Search Google for "…", Print… (the link text is
+  selected) | extensions | Inspect.
+- [O] Selected text: Look up '…' | Search Google for "…", Copy, Copy link to highlight, Print… (search first).
+- [O] Image: Open Image in New Tab, Save Image As…, Capture Image…, Copy Image, Copy Image Address, Search Google
+  for Image. Video: Loop, Show all controls | Open Video in New Tab, Save Video Frame As…, Save Video As…, Copy
+  Video Frame, Copy Video Address, Picture-in-Picture, Cast… (no frame search). Text field: Emoji and symbols |
+  Select password | Undo, Redo | Cut, Copy, Paste, Paste and Match Style, Select All | Language Settings, Writing
+  direction ▸.
+- [O] Capture Image… greys the page at once, and the image (its size on the page) moves to the middle in the 4 pt
+  #161C2F ring with no clearance, the capture menu 10 pt right of the ring, top level with it; its own place stays
+  grey. On a 1688 × 963 pt page a 160 × 100 pt image's ring ran 623.5…791.5 pt, the 273 pt menu 801.5…1074.5.
+- Cra: Chromium 156 shows the same menu once cef-patches/context-menu-embedded-view.patch lets it show in Cra's
+  window. CraCEF's MakeArcMenu drops the QR code and video-frame search items, joins Translate to Save As…'s group,
+  puts Search first for a selection, turns Lens's "Search image with Google" into "Search Google for Image", adds
+  Open Link in Little Window and Capture Image… (ContentCapture.liftedLayout), and opens New Window / Incognito /
+  Inspect in Cra's own windows and DevTools. Kept on purpose: Open Link in Background Tab under New Tab (#183).

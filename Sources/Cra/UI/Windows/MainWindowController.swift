@@ -1466,6 +1466,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         return true
     }
 
+    func browserManagerCaptureImage(at point: NSPoint, tabID: UUID) {
+        guard tabID == browsers.visibleTabID else { return }
+        capturePage(liftImageAt: point)
+    }
+
+    func browserManagerOpenLink(_ url: String, in kind: CraLinkWindow, space: UUID?, fromIncognito: Bool) {
+        app.openLink(url, in: kind, space: space, fromIncognito: fromIncognito)
+    }
+
     /// The area Arc's Peek is centred on (window coordinates): right of the sidebar to the
     /// window's edge, top to bottom; the whole window with the sidebar out of the way.
     private func peekAreaInWindow() -> NSRect {
@@ -1691,12 +1700,38 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// pointer and a drag a rectangle, then a menu copies, saves or sends it (CaptureOverlay).
     /// Chromium draws the picture it works on (Page.captureScreenshot), so it holds the page
     /// whatever display the window is on and whatever is in front of it.
-    func capturePage() {
-        if let open = captureOverlay, open.isOpen { open.close(); return }
+    /// `liftImageAt` (Capture Image… on an image, page points from its top left): the image there
+    /// is taken at once and moves to the middle of the page with the menu beside it, as in Arc.
+    func capturePage(liftImageAt point: NSPoint? = nil) {
+        if let open = captureOverlay, open.isOpen {
+            open.close()
+            if point == nil { return }
+        }
         guard !captureStarting, let rt = browsers.visibleRuntime, rt.browser.isCreated, !rt.browser.isClosed,
               pageScreenRect(rt) != nil else { return }
         let b = rt.browser
         captureStarting = true
+        guard let point else { takeCapture(b, liftImageAt: nil); return }
+        // Where the image is first: the picture is taken with the menu already closed.
+        let scale = window?.backingScaleFactor ?? 2
+        let script = ContentCapture.imageRectScript(x: point.x * scale, y: point.y * scale)
+        let params = (try? JSONSerialization.data(withJSONObject: ["expression": script, "returnByValue": true]))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        b.evaluate(inIsolatedWorld: PageScript.world, params: params) { [weak self, weak b] result, _ in
+            MainActor.assumeIsolated {
+                guard let self, let b else { return }
+                let value = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+                    .flatMap { ($0["result"] as? [String: Any])?["value"] as? [String: Any] }
+                guard let value, let rt = self.browsers.visibleRuntime, rt.browser === b, let page = self.pageScreenRect(rt),
+                      let rect = ContentCapture.elementRect(fromPicker: value, scale: scale, pageBounds: CGRect(origin: .zero, size: page.size))
+                else { self.captureStarting = false; return }
+                self.takeCapture(b, liftImageAt: rect)
+            }
+        }
+    }
+
+    private func takeCapture(_ b: CraBrowser, liftImageAt image: CGRect?) {
+        let lift = image
         b.sendDevToolsMethod("Page.captureScreenshot", params: #"{"format":"png","captureBeyondViewport":false}"#) { [weak self, weak b] shot, error in
             MainActor.assumeIsolated {
                 guard let self else { return }
@@ -1711,6 +1746,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 let overlay = CaptureOverlay(over: window, pageRect: rect, shot: image, browser: b)
                 overlay.onFinish = { [weak self] action, png in self?.captureFinished(action, png) }
                 self.captureOverlay = overlay
+                if let lift { overlay.lift(lift) }
             }
         }
     }

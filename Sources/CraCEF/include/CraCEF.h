@@ -13,6 +13,13 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
     CraDownloadStateInterrupted = 3,
 };
 
+/// Where a page's context menu opens a link that isn't for a tab.
+typedef NS_ENUM(NSInteger, CraLinkWindow) {
+    CraLinkWindowNew = 0,
+    CraLinkWindowIncognito = 1,
+    CraLinkWindowLittle = 2,
+};
+
 @interface CraDownloadInfo : NSObject
 @property (nonatomic) uint32_t identifier;
 @property (nonatomic, copy) NSString *url;
@@ -81,6 +88,11 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 - (void)browserDidReceiveFocus:(CraBrowser *)browser;
 - (void)browserDidClose:(CraBrowser *)browser;
 @optional
+/// The page's context menu: Open Link in New Window, Little Window or Incognito Window.
+- (void)browser:(CraBrowser *)browser requestsWindowWithURL:(NSString *)url kind:(CraLinkWindow)kind;
+/// The page's context menu on an image: Capture Image… at `point` (page points from the top
+/// left). Without it the menu has no such item.
+- (void)browser:(CraBrowser *)browser requestsCaptureOfImageAt:(NSPoint)point;
 /// A video of this page entered or left Chromium's Picture in Picture window
 /// (whether the page, the user or Cra asked for it).
 - (void)browser:(CraBrowser *)browser didChangePictureInPicture:(BOOL)active;
@@ -239,8 +251,6 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 /// DevTools) instead of embedded Alloy views. Set before any browser exists.
 + (void)setChromeHosting:(BOOL)enabled;
 + (BOOL)chromeHosting;
-/// Page context menus are shown by Cra, not Chrome (pages embedded in their cards).
-+ (void)setOwnContextMenus:(BOOL)enabled;
 /// The two "open link" items at the top of a page's context menu, in order: their titles and
 /// whether each opens its tab in the background. Exactly two; read when a menu opens.
 + (void)setLinkMenuTitles:(NSArray<NSString *> *)titles opensInBackground:(NSArray<NSNumber *> *)background;

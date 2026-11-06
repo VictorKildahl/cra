@@ -49,7 +49,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         installURLEventHandler()
         PerfCEF.install(app: self)
         CraCEFRuntime.setChromeHosting(store.settings.chromeEngine)
-        CraCEFRuntime.setOwnContextMenus(EmbeddedPages.isEnabled)
         CraCEFRuntime.setDocumentStartScript(PageScript.mainWorld, isolatedScript: PageScript.isolatedWorld, world: PageScript.world)
         startContentBlocking()
         observeGlobalShortcut()
@@ -443,11 +442,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Arc's New Window (⌘N): another window on the space in use, cascaded from the
     /// current one, with the command bar up. With every window closed it brings the
     /// hidden one back instead. New Incognito Window (⇧⌘N) always opens a new one.
-    func openNewWindow(incognito: Bool = false) {
+    /// With `url` (a page's Open Link in New Window) the window opens on that page instead.
+    func openNewWindow(incognito: Bool = false, url: String? = nil) {
         if !incognito, let hidden = mainWindows.first(where: { !$0.isIncognito }),
            !mainWindows.contains(where: { $0.window?.isVisible == true || $0.window?.isMiniaturized == true }) {
             hidden.showWindow(nil)
             NSApp.activate(ignoringOtherApps: true)
+            if let url { store.createTab(url: url, select: true, window: hidden.windowID) }
             return
         }
         var frame: String?
@@ -465,7 +466,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         store.activeWindowID = c.windowID
         c.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
-        c.openCommandBar(.newTab)
+        if let url { store.createTab(url: url, select: true, window: c.windowID) } else { c.openCommandBar(.newTab) }
+    }
+
+    /// A page's context menu: Arc's Open Link in New Window, Little Arc (Little Window here)
+    /// and Incognito Window. From an incognito page a new window is incognito too, as in Chrome,
+    /// and nothing opens in a Little Window, whose pages load in the normal profile.
+    func openLink(_ url: String, in kind: CraLinkWindow, space: UUID?, fromIncognito: Bool) {
+        // cra:// is Cra's scripting scheme; a page must not drive it.
+        if url.lowercased().hasPrefix("cra:") { return }
+        switch kind {
+        case .little where !fromIncognito: openLittleWindow(url: url, space: space)
+        case .incognito: openNewWindow(incognito: true, url: url)
+        default: openNewWindow(incognito: fromIncognito, url: url)
+        }
     }
 
     /// Closing one of several windows ends it; the last normal one stays around hidden,

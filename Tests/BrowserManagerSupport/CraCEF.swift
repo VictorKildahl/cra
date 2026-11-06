@@ -11,6 +11,8 @@ public protocol CraBrowserDelegate: AnyObject {
 
 public final class CraDownloadInfo {}
 
+@objc public enum CraLinkWindow: Int { case new, incognito, little }
+
 /// `open`: the app subclasses it (WebKitBrowser, faked in AppServices.swift).
 @MainActor
 open class CraBrowser {

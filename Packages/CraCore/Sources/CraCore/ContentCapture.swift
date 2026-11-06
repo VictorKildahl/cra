@@ -79,6 +79,53 @@ public enum ContentCapture {
         return CGRect(x: max(bounds.minX + menuMargin, x), y: max(bounds.minY + menuMargin, y), width: size.width, height: size.height)
     }
 
+    // MARK: Capture Image… (a page's context menu on an image)
+
+    /// Arc 1.172 (Little Arc, 2x window capture, 6 Nov 2026): Capture Image… greys the page and
+    /// moves the image, at its size on the page, to the middle of the page in the 4 pt ring with no
+    /// clearance; the menu sits 10 pt right of the ring, top level with it, and image, ring and menu
+    /// are centred on the page together, the menu counted 10 pt narrower than it draws (on a
+    /// 1688 pt page a 160 pt image's ring starts at 623.5). The image's own place stays grey.
+    public static let liftedMenuGap: CGFloat = 10
+    static let liftedMenuCentringInset: CGFloat = 10
+
+    /// The image (inside the ring) and the menu. An image too big for the page shrinks to fit;
+    /// where the menu has no room beside it, it goes where `menuFrame` puts it.
+    public static func liftedLayout(image: CGSize, menu: CGSize, in bounds: CGRect) -> (image: CGRect, menu: CGRect) {
+        let room = bounds.insetBy(dx: menuMargin + lensRing, dy: menuMargin + lensRing)
+        var size = image
+        if size.width > room.width || size.height > room.height, size.width > 0, size.height > 0 {
+            let k = min(room.width / size.width, room.height / size.height)
+            size = CGSize(width: (size.width * k).rounded(.down), height: (size.height * k).rounded(.down))
+        }
+        let fits = size.width + 2 * lensRing + liftedMenuGap + menu.width <= bounds.width - 2 * menuMargin
+        let centred = size.width + 2 * lensRing + liftedMenuGap + menu.width - liftedMenuCentringInset
+        let x = fits ? bounds.midX - centred / 2 + lensRing : bounds.midX - size.width / 2
+        // To the half point, as Arc's 2x captures land.
+        let half = { (v: CGFloat) in (v * 2).rounded() / 2 }
+        let rect = CGRect(x: half(x), y: half(bounds.midY - size.height / 2), width: size.width, height: size.height)
+        let ring = lensFrame(around: rect)
+        let beside = CGRect(x: ring.maxX + liftedMenuGap, y: ring.minY, width: menu.width, height: menu.height)
+        let menuRect = fits && beside.maxY <= bounds.maxY - menuMargin ? beside : menuFrame(size: menu, besideLens: ring, in: bounds)
+        return (rect, menuRect)
+    }
+
+    /// The image the context menu was opened on: the topmost image, picture, canvas or SVG image
+    /// under the point, else the topmost element. Takes and returns device pixels, as the picker does.
+    public static func imageRectScript(x: CGFloat, y: CGFloat) -> String {
+        """
+        (() => {
+          const vv = visualViewport, dpr = devicePixelRatio, k = vv.scale;
+          const px = \(Double(x)) / dpr / k + vv.offsetLeft, py = \(Double(y)) / dpr / k + vv.offsetTop;
+          const all = document.elementsFromPoint(px, py);
+          const el = all.find(e => ['IMG', 'PICTURE', 'CANVAS', 'image'].includes(e.tagName)) || all[0];
+          if (!el) return null;
+          const r = el.getBoundingClientRect();
+          return {x: (r.left - vv.offsetLeft) * k * dpr, y: (r.top - vv.offsetTop) * k * dpr, width: r.width * k * dpr, height: r.height * k * dpr};
+        })()
+        """
+    }
+
     private static func number(_ v: Any?) -> CGFloat? {
         if let d = v as? Double { return CGFloat(d) }
         if let n = v as? NSNumber { return CGFloat(truncating: n) }

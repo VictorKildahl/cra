@@ -87,8 +87,6 @@ static CefString CefStringFromNS(NSString* s) {
     return CefString(std::string(s.UTF8String ?: ""));
 }
 
-/// Page context menus shown by Cra (RunContextMenu) instead of Chrome.
-static BOOL g_ownContextMenus = NO;
 // The two "open link" items on a page's context menu, from CraCore's LinkMenu (GitHub #183).
 static NSArray<NSString*>* g_linkMenuTitles = @[@"Open Link in New Tab", @"Open Link in Background Tab"];
 static NSArray<NSNumber*>* g_linkMenuBackground = @[@NO, @YES];
@@ -97,58 +95,31 @@ static NSArray<NSNumber*>* g_linkMenuBackground = @[@NO, @YES];
 /// (the page's world, then Cra's isolated world).
 static NSArray<NSString*>* g_documentStartParams = nil;
 
-/// The command picked from a context menu Cra shows; -1 while none is.
-@interface CraMenuPick : NSObject
-@property (nonatomic) int commandID;
-- (void)choose:(NSMenuItem*)item;
-@end
-
-@implementation CraMenuPick
-- (instancetype)init {
-    if ((self = [super init])) _commandID = -1;
-    return self;
-}
-- (void)choose:(NSMenuItem*)item { self.commandID = (int)item.tag; }
-@end
-
-/// Chrome's labels mark mnemonics with "&" ("&&" is a literal ampersand).
-static NSString* CraMenuLabel(CefRefPtr<CefMenuModel> model, size_t i) {
-    NSString* s = NSStringFromCef(model->GetLabelAt(i));
-    s = [s stringByReplacingOccurrencesOfString:@"&&" withString:@"\u0001"];
-    s = [s stringByReplacingOccurrencesOfString:@"&" withString:@""];
-    return [s stringByReplacingOccurrencesOfString:@"\u0001" withString:@"&"];
-}
-
-static NSMenu* CraMenuFromModel(CefRefPtr<CefMenuModel> model, CraMenuPick* pick) {
-    NSMenu* menu = [[NSMenu alloc] initWithTitle:@""];
-    menu.autoenablesItems = NO;
-    for (size_t i = 0; i < model->GetCount(); i++) {
-        cef_menu_item_type_t type = model->GetTypeAt(i);
-        if (type == MENUITEMTYPE_SEPARATOR) {
-            if (menu.numberOfItems > 0 && !menu.itemArray.lastObject.isSeparatorItem) [menu addItem:[NSMenuItem separatorItem]];
-            continue;
-        }
-        if (type == MENUITEMTYPE_NONE) continue;
-        NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:CraMenuLabel(model, i) action:nil keyEquivalent:@""];
-        if (type == MENUITEMTYPE_SUBMENU) {
-            item.submenu = CraMenuFromModel(model->GetSubMenuAt(i), pick);
+/// Removes separators a removed item left at either end or next to another one. Hidden items
+/// don't count: Chrome's model keeps some it doesn't show.
+static void CraTidySeparators(CefRefPtr<CefMenuModel> model) {
+    bool separatorAfter = true;  // walking back from the end, which counts as one
+    for (size_t i = model->GetCount(); i-- > 0;) {
+        if (model->GetTypeAt(i) != MENUITEMTYPE_SEPARATOR) {
+            if (model->IsVisibleAt(i)) separatorAfter = false;
+        } else if (separatorAfter) {
+            model->RemoveAt(i);
         } else {
-            item.action = @selector(choose:);
-            item.target = pick;
-            item.tag = model->GetCommandIdAt(i);
-            if (model->IsCheckedAt(i)) item.state = NSControlStateValueOn;
+            separatorAfter = true;
         }
-        item.enabled = model->IsEnabledAt(i);
-        item.hidden = !model->IsVisibleAt(i);
-        [menu addItem:item];
     }
-    while (menu.itemArray.lastObject.isSeparatorItem) [menu removeItem:menu.itemArray.lastObject];
-    return menu;
+    for (size_t i = 0; i < model->GetCount();) {
+        if (model->GetTypeAt(i) == MENUITEMTYPE_SEPARATOR) model->RemoveAt(i);
+        else if (model->IsVisibleAt(i)) break;
+        else i++;
+    }
 }
 
 enum CraMenuCommand {
     kMenuOpenLinkFirst = MENU_ID_USER_FIRST + 1,
     kMenuOpenLinkSecond,
+    kMenuOpenLinkLittleWindow,
+    kMenuCaptureImage,
     kMenuCopyLink,
     kMenuInspectElement,
     kMenuOpenImageInNewTab,
@@ -1687,34 +1658,72 @@ public:
 
     // Context menu --------------------------------------------------------
 
-    // Embedded pages (EmbeddedPages.swift): Chrome shows the menu through the views widget that
-    // owns the page's view, found through the view's window, which is now Cra's: it showed
-    // nothing. Cra shows the menu itself and hands the pick back.
-    bool RunContextMenu(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
-                        CefRefPtr<CefContextMenuParams> params, CefRefPtr<CefMenuModel> model,
-                        CefRefPtr<CefRunContextMenuCallback> callback) override {
-        if (!g_ownContextMenus || model->GetCount() == 0) return false;
-        CraMenuPick* pick = [CraMenuPick new];
-        NSMenu* menu = CraMenuFromModel(model, pick);
-        NSPoint at = [NSEvent mouseLocation];
-        CefRefPtr<CefRunContextMenuCallback> done = callback;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [menu popUpMenuPositioningItem:nil atLocation:at inView:nil];
-            if (pick.commandID >= 0) done->Continue(pick.commandID, EVENTFLAG_NONE);
-            else done->Cancel();
-        });
-        return true;
-    }
-
+    // Chrome-style pages get Chrome's own context menu, shown by Chrome as in Chrome and Arc:
+    // extension icons, Look Up, Speech, Services, Writing Tools and AutoFill come with it. A page
+    // embedded in Cra's window (EmbeddedPages.swift) got none until
+    // cef-patches/context-menu-embedded-view.patch, so Cra drew its own from the model then.
+    // Alloy-style pages (Chrome engine off) get CEF's short menu with Cra's few items added.
     void OnBeforeContextMenu(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
                              CefRefPtr<CefContextMenuParams> params, CefRefPtr<CefMenuModel> model) override {
+        if (browser->GetHost()->GetRuntimeStyle() == CEF_RUNTIME_STYLE_CHROME) MakeArcMenu(params, model);
+        else AddAlloyItems(params, model);
+    }
+
+    // Arc's page menus are Chrome's with a few changes (Arc 1.172, 6 Nov 2026):
+    // - link: Open Link in New Tab, New Window, Little Arc, Incognito Window. Cra's New Tab item
+    //   follows the background-links setting, with the other kind of tab under it (LinkMenu, #183).
+    // - page: no QR code item; Translate sits with Save As…, Print… and Cast….
+    // - selected text: Search <engine> for "…" comes before Copy (not with a link).
+    // - image: Capture Image… after Save Image As…, and Search <engine> for Image where Chromium
+    //   156 has Google Lens's "Search image with <engine>"; video: no frame search.
+    void MakeArcMenu(CefRefPtr<CefContextMenuParams> params, CefRefPtr<CefMenuModel> model) {
+        int newTab = model->GetIndexOf(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB);
+        if (newTab >= 0) {
+            model->RemoveAt(newTab);
+            model->InsertItemAt(newTab, kMenuOpenLinkFirst, g_linkMenuTitles[0].UTF8String);
+            model->InsertItemAt(newTab + 1, kMenuOpenLinkSecond, g_linkMenuTitles[1].UTF8String);
+        }
+        // Little Windows load in the normal profile: none from an incognito page.
+        CraBrowser* o = owner_;
+        int newWindow = model->GetIndexOf(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW);
+        if (newWindow >= 0 && !o.isIncognito) model->InsertItemAt(newWindow + 1, kMenuOpenLinkLittleWindow, "Open Link in Little Window");
+        for (int id : {IDC_CONTENT_CONTEXT_GENERATE_QR_CODE, IDC_CONTENT_CONTEXT_OPENLINKINPROFILE,
+                       IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW, IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP,
+                       IDC_CONTENT_CONTEXT_SEARCHLENSFORVIDEOFRAME, IDC_CONTENT_CONTEXT_SEARCHWEBFORVIDEOFRAME}) {
+            while (model->Remove(id)) {}
+        }
+        CraTidySeparators(model);  // the QR code item's group is gone: one separator before Translate
+        int translate = model->GetIndexOf(IDC_CONTENT_CONTEXT_TRANSLATE);
+        int before = translate - 1;
+        while (before >= 0 && model->GetTypeAt(before) != MENUITEMTYPE_SEPARATOR && !model->IsVisibleAt(before)) before--;
+        if (translate > 0 && before >= 0 && model->GetTypeAt(before) == MENUITEMTYPE_SEPARATOR) model->RemoveAt(before);
+        int search = model->GetIndexOf(IDC_CONTENT_CONTEXT_SEARCHWEBFOR), copy = model->GetIndexOf(IDC_CONTENT_CONTEXT_COPY);
+        if (params->GetLinkUrl().empty() && !params->IsEditable() && search > copy && copy >= 0) {
+            CefString label = model->GetLabelAt(search);
+            model->RemoveAt(search);
+            model->InsertItemAt(copy, IDC_CONTENT_CONTEXT_SEARCHWEBFOR, label);
+        }
+        int lens = model->GetIndexOf(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE);
+        if (lens >= 0) {
+            // "Search image with Google" → "Search Google for Image", Chrome's own item for it.
+            std::string label = model->GetLabelAt(lens).ToString(), with = "Search image with ";
+            std::string engine = label.rfind(with, 0) == 0 ? label.substr(with.size()) : "Google";
+            model->RemoveAt(lens);
+            model->InsertItemAt(lens, IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE, "Search " + engine + " for Image");
+        }
+        int saveImage = model->GetIndexOf(IDC_CONTENT_CONTEXT_SAVEIMAGEAS);
+        if (saveImage >= 0 && params->GetMediaType() == CM_MEDIATYPE_IMAGE &&
+            [o.delegate respondsToSelector:@selector(browser:requestsCaptureOfImageAt:)]) {
+            model->InsertItemAt(saveImage + 1, kMenuCaptureImage, "Capture Image…");
+        }
+        CraTidySeparators(model);
+    }
+
+    static void AddAlloyItems(CefRefPtr<CefContextMenuParams> params, CefRefPtr<CefMenuModel> model) {
         size_t index = 0;
         if (!params->GetLinkUrl().empty()) {
             model->InsertItemAt(index++, kMenuOpenLinkFirst, g_linkMenuTitles[0].UTF8String);
             model->InsertItemAt(index++, kMenuOpenLinkSecond, g_linkMenuTitles[1].UTF8String);
-            // Chrome-style menus carry Chrome's own "Open Link in New Tab" further down, which
-            // always opens in the background: one item by that name, the one the setting rules (#183).
-            model->Remove(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB);
             model->InsertItemAt(index++, kMenuCopyLink, "Copy Link");
             model->InsertSeparatorAt(index++);
         }
@@ -1723,9 +1732,7 @@ public:
             model->InsertItemAt(index++, kMenuCopyImageURL, "Copy Image Address");
             model->InsertSeparatorAt(index++);
         }
-        // Chrome-style menus already carry Chrome's own "Picture in picture" item.
-        if (params->GetMediaType() == CM_MEDIATYPE_VIDEO && (params->GetMediaStateFlags() & CM_MEDIAFLAG_CAN_PICTURE_IN_PICTURE) &&
-            model->GetIndexOf(IDC_CONTENT_CONTEXT_PICTUREINPICTURE) < 0) {
+        if (params->GetMediaType() == CM_MEDIATYPE_VIDEO && (params->GetMediaStateFlags() & CM_MEDIAFLAG_CAN_PICTURE_IN_PICTURE)) {
             bool inPiP = params->GetMediaStateFlags() & CM_MEDIAFLAG_PICTURE_IN_PICTURE;
             model->InsertItemAt(index++, kMenuPictureInPicture, inPiP ? "Exit Picture in Picture" : "Picture in Picture");
             model->InsertSeparatorAt(index++);
@@ -1757,6 +1764,26 @@ public:
                 [pb setString:s forType:NSPasteboardTypeString];
                 return true;
             }
+            // Chrome's New Window and Incognito Window items would open Chrome windows: Cra's own.
+            case IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW:
+            case IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD:
+            case kMenuOpenLinkLittleWindow: {
+                NSString* url = NSStringFromCef(params->GetLinkUrl());
+                if (![o.delegate respondsToSelector:@selector(browser:requestsWindowWithURL:kind:)]) {
+                    [o.delegate browser:o requestsNewTabWithURL:url inBackground:NO];
+                    return true;
+                }
+                CraLinkWindow kind = command_id == kMenuOpenLinkLittleWindow ? CraLinkWindowLittle
+                    : command_id == IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD ? CraLinkWindowIncognito : CraLinkWindowNew;
+                [o.delegate browser:o requestsWindowWithURL:url kind:kind];
+                return true;
+            }
+            case kMenuCaptureImage:
+                if ([o.delegate respondsToSelector:@selector(browser:requestsCaptureOfImageAt:)])
+                    [o.delegate browser:o requestsCaptureOfImageAt:NSMakePoint(params->GetXCoord(), params->GetYCoord())];
+                return true;
+            // Chrome's Inspect: Cra's DevTools (docked in the card, DevToolsToggle) on that element.
+            case IDC_CONTENT_CONTEXT_INSPECTELEMENT:
             case kMenuInspectElement:
                 [o showDevToolsInspectingPoint:NSMakePoint(params->GetXCoord(), params->GetYCoord())];
                 return true;
@@ -2615,7 +2642,6 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 @implementation CraCEFRuntime
 
 + (void)setChromeHosting:(BOOL)enabled { g_chromeHosting = enabled; }
-+ (void)setOwnContextMenus:(BOOL)enabled { g_ownContextMenus = enabled; }
 + (void)setLinkMenuTitles:(NSArray<NSString*>*)titles opensInBackground:(NSArray<NSNumber*>*)background {
     if (titles.count != 2 || background.count != 2) return;
     g_linkMenuTitles = [titles copy];

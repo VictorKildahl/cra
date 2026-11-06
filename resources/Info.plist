@@ -4,6 +4,13 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
+	<!-- British English for the system's own menu items (Summarise, Colours) where macOS
+	     prefers it, as in Arc; Cra's own words stay as they are. -->
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>en-GB</string>
+	</array>
 	<key>CFBundleExecutable</key>
 	<string>Cra</string>
 	<key>CFBundleIdentifier</key>

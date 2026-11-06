@@ -48,6 +48,9 @@ final class CaptureOverlay {
 
     func close() { finish(nil, nil) }
 
+    /// Capture Image…: takes the image at `rect` (page points) straight away (CaptureView.lift).
+    func lift(_ rect: CGRect) { view.lift(rect) }
+
     private func finish(_ action: Action?, _ png: Data?) {
         guard !closed else { return }
         closed = true
@@ -126,6 +129,9 @@ final class CaptureView: NSView {
     private let ring = CAShapeLayer()
     private let ringShadow = CAShapeLayer()
     private let ringShadowMask = CAShapeLayer()
+    /// Capture Image…: the image, moved off its place on the page to the middle (`lift`).
+    private let liftLayer = CALayer()
+    private var lifted = false
     private let bubble = CaptureBubble()
     private var actionsMenu: CaptureMenu?
 
@@ -192,6 +198,12 @@ final class CaptureView: NSView {
         ring.fillColor = CaptureStyle.ring.cgColor
         ring.fillRule = .evenOdd
         ring.opacity = 0
+        liftLayer.isHidden = true
+        liftLayer.contentsGravity = .resize
+        liftLayer.contentsScale = scale
+        liftLayer.cornerRadius = ContentCapture.lensInnerRadius
+        liftLayer.masksToBounds = true
+        root.addSublayer(liftLayer)
         root.addSublayer(ringShadow)
         root.addSublayer(ring)
         CATransaction.commit()
@@ -281,6 +293,11 @@ final class CaptureView: NSView {
             if let actionsMenu, actionsMenu.frame.contains(p) { return }
             // A press beside the capture starts over, from this press.
             dropMenu()
+            if lifted {
+                lifted = false
+                liftLayer.isHidden = true
+                snapLens(to: nil)
+            }
             mode = .selecting
             bubble.show(true)
         }
@@ -463,6 +480,36 @@ final class CaptureView: NSView {
         NSCursor.arrow.set()
     }
 
+    /// Capture Image… (a page's context menu, Arc's): `rect`, an image on the page, is taken at once
+    /// and springs from its place to the middle of the grey page, the menu beside it
+    /// (ContentCapture.liftedLayout). Its place on the page stays grey.
+    func lift(_ rect: CGRect) {
+        let px = ContentCapture.pixelRect(for: rect, pageSize: bounds.size, imageSize: CGSize(width: shot.width, height: shot.height))
+        guard let cropped = shot.cropping(to: px), let png = Self.png(cropped) else { finish?(nil, nil); return }
+        let menu = makeMenu(png: png)
+        let layout = ContentCapture.liftedLayout(image: rect.size, menu: menu.intrinsicContentSize, in: bounds)
+        mode = .captured(layout.image)
+        element = nil
+        pressedOnElement = nil
+        lifted = true
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        liftLayer.contents = cropped
+        liftLayer.isHidden = false
+        CATransaction.commit()
+        snapLens(to: rect)
+        lensTarget = layout.image
+        run()
+        CaptureSound.play()
+        bubble.show(false)
+        dropMenu()
+        menu.frame = layout.menu
+        addSubview(menu)
+        menu.appear()
+        actionsMenu = menu
+        NSCursor.arrow.set()
+    }
+
     static func png(_ image: CGImage) -> Data? {
         let data = NSMutableData()
         guard let dest = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else { return nil }
@@ -470,9 +517,8 @@ final class CaptureView: NSView {
         return CGImageDestinationFinalize(dest) ? data as Data : nil
     }
 
-    private func showMenu(png: Data) {
-        dropMenu()
-        let m = CaptureMenu { [weak self] action in
+    private func makeMenu(png: Data) -> CaptureMenu {
+        CaptureMenu { [weak self] action in
             guard let self else { return }
             self.isSettled = false
             if action == .retake {
@@ -481,6 +527,11 @@ final class CaptureView: NSView {
                 self.finish?(action, png)
             }
         }
+    }
+
+    private func showMenu(png: Data) {
+        dropMenu()
+        let m = makeMenu(png: png)
         let lensFrame = ContentCapture.lensFrame(around: lens ?? .zero)
         m.frame = ContentCapture.menuFrame(size: m.intrinsicContentSize, besideLens: lensFrame, in: bounds)
         addSubview(m)
@@ -610,6 +661,8 @@ final class CaptureView: NSView {
             ring.opacity = Float(lensAlpha)
             ringShadow.opacity = Float(lensAlpha)
             greyFull.opacity = Float(1 - lensAlpha)
+            // A lifted image covers the hole exactly: the page under it stays out of sight.
+            if lifted { liftLayer.frame = r }
         } else {
             holeMask.path = full
             ring.opacity = 0
