@@ -312,6 +312,11 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 /// ("Default", "Profile <id>"; nil off the record); Chrome's own window for it is closed.
 /// Popup-type windows (windows.create({type: "popup"})) stay Chrome's windows.
 + (void)setStrayPageHandler:(void (^)(NSString *url, NSString * _Nullable profile))handler;
+/// A new tab or window a page asks for (target=_blank, window.open) at another app's address
+/// (spotify:): the handler gets the page's browser, the address and whether a click asked, and
+/// returns YES when it took it (Cra's "Open <app>?"); then no tab opens (GitHub #207). On the
+/// main thread, before Peek and the delegate's popupHostForURL.
++ (void)setAppLinkHandler:(BOOL (^)(CraBrowser *browser, NSString *url, BOOL userGesture))handler;
 /// Where a page's download is saved (GitHub #190): the handler gets the browser's profile folder
 /// (nil for Default and off the record) and the file name Chromium suggests, and calls `completion`
 /// on the main thread with the full path to save to, or nil to cancel the download (a save panel

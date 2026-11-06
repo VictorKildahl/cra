@@ -71,6 +71,7 @@ static NSHashTable<CraBrowser*>* g_allBrowsers = nil;
 /// Closed tabs whose page stays alive until its downloads end (see -[CraBrowser close]).
 static NSMutableSet<CraBrowser*>* g_parkedBrowsers = nil;
 static void (^g_strayPageHandler)(NSString*, NSString*) = nil;
+static BOOL (^g_appLinkHandler)(CraBrowser*, NSString*, BOOL) = nil;
 // Downloads whose save panel was cancelled (#190): cancelled on their next update, never shown.
 static std::set<uint32_t> g_cancelledDownloads;
 static void (^g_downloadDestinationHandler)(NSString*, NSString*, void (^)(NSString*)) = nil;
@@ -1306,6 +1307,8 @@ public:
             CraPageSettings(settings);
             return false;
         }
+        // Another app's address (spotify:) opens no tab: Cra asks "Open <app>?" over this page.
+        if (g_appLinkHandler && g_appLinkHandler(o, NSStringFromCef(target_url), user_gesture)) return true;
         // A target=_blank link the user clicked (Shift-clicked: a new window) may open in a
         // Peek; window.open with features (a sign-in popup) is CEF_WOD_NEW_POPUP and stays one.
         if (user_gesture && (target_disposition == CEF_WOD_NEW_FOREGROUND_TAB || target_disposition == CEF_WOD_NEW_WINDOW)
@@ -2743,6 +2746,7 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 + (BOOL)anotherInstanceWasNotified { return g_alreadyRunning; }
 + (void)setRelaunchHandler:(void (^)(NSArray<NSString*>*))handler { g_relaunchHandler = [handler copy]; }
 + (void)setStrayPageHandler:(void (^)(NSString*, NSString*))handler { g_strayPageHandler = [handler copy]; }
++ (void)setAppLinkHandler:(BOOL (^)(CraBrowser*, NSString*, BOOL))handler { g_appLinkHandler = [handler copy]; }
 + (void)setDownloadDestinationHandler:(void (^)(NSString*, NSString*, void (^)(NSString*)))handler { g_downloadDestinationHandler = [handler copy]; }
 + (void)setProcessEventHandler:(void (^)(NSString*, NSString*, NSString*))handler { g_processEventHandler = [handler copy]; }
 + (BOOL)isExtensionWindow:(NSWindow*)window { return window && [g_extensionWindows containsObject:window]; }
