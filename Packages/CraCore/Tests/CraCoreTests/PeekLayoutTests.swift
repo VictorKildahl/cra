@@ -23,6 +23,24 @@ struct PeekLayoutTests {
         #expect(PeekLayout.column(beside: card) == CGRect(x: 1603, y: buttons[2].minY, width: 34, height: buttons[0].maxY - buttons[2].minY))
     }
 
+    @Test func clicksNearTheEdgeResizeLikeArc() {
+        // Arc 1.172.1, a 1100 × 760 pt window: 1–3 pt inside an edge resize and keep the Peek, 4 pt
+        // in closes it.
+        let window = CGRect(x: 100, y: 80, width: 1100, height: 760)
+        let area = PeekLayout.dismissArea(covering: window)
+        for d: CGFloat in [1, 2, 3 - 0.01] {
+            for p in [CGPoint(x: window.maxX - d, y: window.midY), CGPoint(x: window.minX + d, y: window.midY),
+                      CGPoint(x: window.midX, y: window.maxY - d), CGPoint(x: window.midX, y: window.minY + d)] {
+                #expect(!area.contains(p), "\(d) pt in")
+            }
+        }
+        for p in [CGPoint(x: window.maxX - 4, y: window.midY), CGPoint(x: window.minX + 4, y: window.midY),
+                  CGPoint(x: window.midX, y: window.maxY - 4), CGPoint(x: window.midX, y: window.minY + 4)] {
+            #expect(area.contains(p))
+        }
+        #expect(window.contains(area))
+    }
+
     @Test func hiddenSidebarCentresOnTheWindow() {
         let card = PeekLayout.card(in: PeekLayout.area(window: Self.window, contentMinX: 0))
         #expect(card.midX == Self.window.width / 2)

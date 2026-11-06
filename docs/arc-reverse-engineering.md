@@ -3050,6 +3050,29 @@ links, A near the top left and B near the bottom right, real HID Shift-clicks (`
   .77, .84, .91, .93, .98 of the way a frame apart (Arc .60, .77, .85, .91, .95, .97), its bottom edge .34,
   .59, .71, .80, .87, .91 (Arc .31, .54, .73, .82, .89, .94), and it closed back into the link.
 
+### Peek, the window's shadow and its edges (Arc 1.172.1, 6 Nov 2026, PR #222, offline Arc)
+Offline Arc (fake home, network blocked) in a 1100 × 760 pt window at 100,80, a Peek opened by a HID
+Shift-click on a lab page's link, then HID clicks and drags; Peek open or closed read from AX (its Close button,
+`confirmCloseModal`), the window's state from AX and `screencapture -l` with the shadow.
+- [O] The Peek is a card inside the browser window: no second CGWindow or AX window while it shows (the
+  `ModalContent.ModalWindow` class is a plain NSWindow subclass with no focus overrides, but none was on
+  screen). The browser window stays main and keeps its full shadow, before and after a click into the
+  Peek's page (capture 2424 × 1744 px both times).
+- [O] Clicks near the edge, outside the card: 1–3 pt inside the right or bottom edge and 1–2 pt inside the
+  top keep the Peek (macOS's resize band takes them); 4 pt in (3 at the top) closes it. Left: the sidebar
+  is there, and 1–6 pt in kept it.
+- [O] A drag from 2 pt inside the right edge, or 2 pt below the bottom edge, resizes the window with the
+  Peek open, and the card grows with the window.
+- [O, Cra] 0.1.32 lost the browser window's active look as soon as a Peek opened (grey traffic lights,
+  capture 2336 × 1656 px): Chromium keeps only the child windows it made itself from becoming main
+  (-[NativeWidgetMacNSWindow canBecomeMainWindow]), and the Peek's page window hangs on Cra's window
+  through AppKit. Its click catcher covered the whole window, so every click 1–12 pt in closed the Peek
+  and a drag from 2 pt inside closed it instead of resizing (from outside it resized).
+- Cra: ChromiumChildFocus keeps a Peek's or Little Window's page from becoming main; PeekDimPanel covers
+  PeekLayout.dismissArea, the window minus a 3 pt band. Checked on a test copy like Arc above: full shadow
+  and coloured traffic lights after a click in the Peek, edge clicks 1–3 pt in keep it and 4 pt in close it,
+  and a drag from 2 pt inside resizes with the Peek open.
+
 ## Capture (Arc 1.171, 4 Nov 2026, X request, Swift metadata + strings + offline Arc at 2x, 120 fps recordings)
 - [O metadata] Module `Capture`: ContentCaptureViewController holds ContentCaptureView (grayscale and darkened layers with
   shape masks, a lens ShadowView, a camera cursor view, single/double click and pan recognizers, an Esc monitor,

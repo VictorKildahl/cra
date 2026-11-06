@@ -31,6 +31,18 @@ public enum PeekLayout {
     /// window edge to edge (no margins to widen) (PR #221).
     public static let pageScale: CGFloat = 0.985
 
+    /// Arc's Peek is a card inside the browser window, so the window's own resize band beats the click
+    /// that closes it. Arc 1.172.1 (offline Arc, HID clicks on a 1100 × 760 pt window, 6 Nov 2026, PR
+    /// #222): a click 1–3 pt inside the right or bottom edge (1–2 at the top) keeps the Peek and a drag
+    /// from there resizes the window, the card following; 4 pt in (3 at the top), a click closes it.
+    public static let dismissInset: CGFloat = 3
+
+    /// The part of a browser window (`window`, its frame) where a click closes the Peek over it: all
+    /// of it but the band along its edges that macOS keeps for resizing.
+    public static func dismissArea(covering window: CGRect) -> CGRect {
+        window.insetBy(dx: dismissInset, dy: dismissInset)
+    }
+
     public struct Backdrop: Sendable, Equatable {
         public let alpha: CGFloat
         public let scale: CGFloat
