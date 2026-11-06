@@ -35,8 +35,7 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
     private var lastLoadingState: [Bool] = []
     private var observations: [NSKeyValueObservation] = []
     private var observesPlayingAudio = false
-    private var playing = false
-    private var audible = false
+    private var audibleHold = AudibleHold()
     private var audibleOff: DispatchWorkItem?
     private var capturing = false
     /// The service this page opened for ("Spotify"), kept while it signs in elsewhere: what the
@@ -221,7 +220,7 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
     override var isInPictureInPicture: Bool { inPictureInPicture }
     override var isPictureInPicturePlaying: Bool { pictureInPicturePlaying }
     override var isCapturingMedia: Bool { capturing }
-    override var isAudible: Bool { audible }
+    override var isAudible: Bool { audibleHold.audible }
 
     /// Once per change of the three, as CEF's OnLoadingStateChange (each of them is observed).
     @MainActor
@@ -242,26 +241,25 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
         delegate?.browser?(self, didChangeMediaCapture: now)
     }
 
-    /// Chrome's audible state: on as sound starts, off 2 s after it stops.
+    /// Chrome's audible state: on as sound starts, off 2 s after it stops (AudibleHold).
     @MainActor
     private func setPlaying(_ now: Bool) {
-        playing = now
         audibleOff?.cancel()
         audibleOff = nil
-        if now {
-            guard !audible else { return }
-            audible = true
+        switch audibleHold.setPlaying(now) {
+        case .announce:
             delegate?.browser?(self, didChangeAudible: true)
-        } else if audible {
+        case .holdThenQuiet:
             let work = DispatchWorkItem { [weak self] in
                 MainActor.assumeIsolated {
-                    guard let self, !self.playing, self.audible, !self.closed else { return }
-                    self.audible = false
+                    guard let self, !self.closed, self.audibleHold.quietEnded() else { return }
                     self.delegate?.browser?(self, didChangeAudible: false)
                 }
             }
             audibleOff = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: work)
+            DispatchQueue.main.asyncAfter(deadline: .now() + AudibleHold.quiet, execute: work)
+        case .nothing:
+            break
         }
     }
 
