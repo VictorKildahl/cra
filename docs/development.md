@@ -243,3 +243,7 @@ zip into `build/dist`. Pushing a `v*` tag runs the same through GitHub Actions a
 publishes a release. Releases with UI changes get short clips on the release notes first
 (`scripts/clips`, `.claude/skills/release-clips`). See [release.md](release.md) for the
 one-time certificate setup.
+
+## MCP
+
+See [Local MCP access](mcp.md) for setup, tools and access boundaries.

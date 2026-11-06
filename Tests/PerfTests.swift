@@ -91,6 +91,8 @@ enum PerfTests {
                "uptime from Cra's start on the same clock (\(r.session.uptimeSeconds) s)")
         expect(r.mainThread.passes.count > 2 && r.mainThread.passes.maxMs >= 500, "every pass in the histogram")
         expect(r.processes.contains { $0.kind == .browser && $0.count == 1 && $0.footprintBytes > 0 }, "libproc read this process")
+        expect((r.system?.freeDiskBytes ?? -1) > 0, "available filesystem blocks sampled")
+        expect(PerfSystemSampler.availableDisk(c.folder.appendingPathComponent("absent-volume-path")) == nil, "missing filesystem path has unknown capacity")
         expect(r.system?.memoryPressure != nil && r.system?.thermalState.isEmpty == false, "the Mac sampled")
         expect(r.selfCost.cpuPct < 5 && r.selfCost.observerCallbacks > 0, "self-cost reported (\(r.selfCost.cpuPct) %)")
         expect(r.session.launch == 1 && r.session.previous == nil && r.session.writesFiles, "a first launch, writing")

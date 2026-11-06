@@ -36,7 +36,11 @@ final class MainLoopObserver: @unchecked Sendable {
         var stopped = false
     }
 
-    private let shared = OSAllocatedUnfairLock(initialState: Shared())
+    /// `state` is guarded by `lock`. Both are allocated, so the lock never moves, and the callback
+    /// takes it directly: in a debug build a generic `withLock` returning a tuple costs more than
+    /// the work under it.
+    private let lock = os_unfair_lock_t.allocate(capacity: 1)
+    private let state = UnsafeMutablePointer<Shared>.allocate(capacity: 1)
     private var observers: [CFRunLoopObserver] = []
     private let stallMs: Double
     private let slowMs: Double
@@ -59,6 +63,21 @@ final class MainLoopObserver: @unchecked Sendable {
         self.onSlow = onSlow
         self.onHang = onHang
         self.onWatch = onWatch
+        lock.initialize(to: os_unfair_lock())
+        state.initialize(to: Shared())
+    }
+
+    deinit {
+        state.deinitialize(count: 1)
+        state.deallocate()
+        lock.deinitialize(count: 1)
+        lock.deallocate()
+    }
+
+    private func withLock<R>(_ body: (inout Shared) -> R) -> R {
+        os_unfair_lock_lock(lock)
+        defer { os_unfair_lock_unlock(lock) }
+        return body(&state.pointee)
     }
 
     func start() {
@@ -78,7 +97,7 @@ final class MainLoopObserver: @unchecked Sendable {
         }
         // From here (main.swift, before the run loop starts) the main thread is busy launching.
         let now = Perf.now()
-        shared.withLock { $0.passStart = now }
+        withLock { $0.passStart = now }
         let thread = Thread { [weak self] in self?.watch() }
         thread.name = "PerfWatchdog"
         thread.qualityOfService = .utility
@@ -89,12 +108,12 @@ final class MainLoopObserver: @unchecked Sendable {
     func stop() {
         for o in observers { CFRunLoopObserverInvalidate(o); CFRunLoopRemoveObserver(CFRunLoopGetMain(), o, .commonModes) }
         observers = []
-        shared.withLock { $0.stopped = true; $0.passStart = 0 }
+        withLock { $0.stopped = true; $0.passStart = 0 }
     }
 
     /// What was measured since the last call.
     func drain() -> Drained {
-        shared.withLock { s in
+        withLock { s in
             let estimate = s.sampled > 0 ? s.sampledNs / UInt64(s.sampled) * UInt64(s.callbacks) : 0
             let d = Drained(passes: s.passes, callbacks: s.callbacks, observerNs: estimate, watchdogNs: s.watchdogNs)
             s.passes = LogHistogram()
@@ -108,31 +127,37 @@ final class MainLoopObserver: @unchecked Sendable {
 
     private func callback(_ activity: CFRunLoopActivity) {
         let now = Perf.now()
-        let (ended, launch, timed): (Double?, Bool, Bool) = shared.withLock { s in
-            s.callbacks += 1
-            var ms: Double?
-            let launch = s.launching
-            switch activity {
-            case .afterWaiting:
-                if s.passStart == 0 { s.passStart = now }
-            default:
-                // Before waiting or exit: the pass ends. After an exit AppKit goes on to handle
-                // the event the loop returned for, which is the next pass; asleep, nothing is.
-                if s.passStart != 0 {
-                    let pass = Double(now &- s.passStart) / 1e6
-                    s.passes.record(pass)
-                    if pass >= stallMs { ms = pass }
-                }
-                s.passStart = activity == .beforeWaiting ? 0 : now
-                if activity == .beforeWaiting { s.launching = false }
+        let raw = activity.rawValue
+        var pass = 0.0, stalled = false
+        os_unfair_lock_lock(lock)
+        let s = state
+        s.pointee.callbacks += 1
+        let launch = s.pointee.launching
+        // One callback in 256 is timed, for the self-cost estimate.
+        let timed = s.pointee.callbacks & 255 == 0
+        if raw == CFRunLoopActivity.afterWaiting.rawValue {
+            if s.pointee.passStart == 0 { s.pointee.passStart = now }
+        } else {
+            // Before waiting or exit: the pass ends. After an exit AppKit goes on to handle
+            // the event the loop returned for, which is the next pass; asleep, nothing is.
+            let start = s.pointee.passStart
+            if start != 0 {
+                pass = Double(now &- start) / 1e6
+                s.pointee.passes.record(pass)
+                stalled = pass >= stallMs
             }
-            // One callback in 256 is timed, for the self-cost estimate.
-            return (ms, launch, s.callbacks & 255 == 0)
+            let asleep = raw == CFRunLoopActivity.beforeWaiting.rawValue
+            s.pointee.passStart = asleep ? 0 : now
+            if asleep { s.pointee.launching = false }
         }
-        if let ended { onStall(ended, now, launch ? "launch" : Self.currentMode()) }
+        os_unfair_lock_unlock(lock)
+        if stalled { onStall(pass, now, launch ? "launch" : Self.currentMode()) }
         if timed {
             let cost = Perf.now() &- now
-            shared.withLock { $0.sampledNs += cost; $0.sampled += 1 }
+            os_unfair_lock_lock(lock)
+            s.pointee.sampledNs += cost
+            s.pointee.sampled += 1
+            os_unfair_lock_unlock(lock)
         }
     }
 
@@ -140,7 +165,7 @@ final class MainLoopObserver: @unchecked Sendable {
         while true {
             usleep(500_000)
             let start = Self.threadCPU()
-            let (passStart, stopped, reported, slow, launch) = shared.withLock {
+            let (passStart, stopped, reported, slow, launch) = withLock {
                 ($0.passStart, $0.stopped, $0.reportedPass, $0.reportedSlow, $0.launching)
             }
             if stopped { return }
@@ -148,16 +173,16 @@ final class MainLoopObserver: @unchecked Sendable {
                 let ms = Double(Perf.now() &- passStart) / 1e6
                 let mode = { launch ? "launch" : Self.currentMode() }
                 if ms >= hangMs {
-                    shared.withLock { $0.reportedPass = passStart; $0.reportedSlow = passStart }
+                    withLock { $0.reportedPass = passStart; $0.reportedSlow = passStart }
                     onHang(ms, passStart, mode())
                 } else if ms >= slowMs, passStart != slow {
-                    shared.withLock { $0.reportedSlow = passStart }
+                    withLock { $0.reportedSlow = passStart }
                     onSlow(ms, passStart, mode())
                 }
             }
             onWatch()
             let cost = Self.threadCPU() &- start
-            shared.withLock { $0.watchdogNs += cost + 2_000 }   // + the wakeup itself, about 2 µs
+            withLock { $0.watchdogNs += cost + 2_000 }   // + the wakeup itself, about 2 µs
         }
     }
 
