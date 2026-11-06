@@ -89,6 +89,14 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   `siteSearchSpaceTriggerEnabled` show Space was a trigger once and Tab is the only one now. Cra's "%" tab scope
   (#49, Zen's idea) reuses all of it: "%" offers "Search Tabs  Tab", the pill takes the space's colour (Arc has no
   colour for a scope that isn't a site), rows are the bar's own tab rows. Cra: TabSearchScope, CommandBarScope.
+- [O] Actions scope (6 Nov, Arc 1.171, ⌘T then Tab posted to the main window, AX + window captures; GitHub #195):
+  Tab on the EMPTY field enters `typeTravel` ("title for scoped search of browser actions in Arc"): an "Actions"
+  pill in the space's colour before the field, placeholder "Search…", no "Search …  Tab" hint before it. Rows are
+  actions only, each with its shortcut (Archive Tab ⌘W, an extension, Close Window ⇧⌘W, Hide Sidebar ⌘S, Next Tab
+  ⌥⌘↓: recently used, from typeTravelUsage); typing narrows them ("spl": Add Split View, Add Top/Left/Right/Bottom
+  Split) and the glyph before the field becomes the row's. Backspace on the empty field leaves it, Escape returns
+  to how the bar opened, a second Escape closes. Neither New Tab nor the command bar itself is listed. Cra:
+  ActionSearchScope, CommandBarScope.actions (most used first, then menu order: Cra keeps counts, not times).
 - [O] Entering and leaving a scope (3 Nov, Arc 1.171, disassembly of `CommandBar.CommandBarContainer` + a 120 fps
   recording of Little Arc, "youtube" Tab): the container's layer gets `arc_commandBarBounce`, a CASpringAnimation on
   `transform` toward scale 0.95 about the centre (damping ratio 0.9, response 0.7: stiffness ≈ 80.57, damping ≈ 16.16,

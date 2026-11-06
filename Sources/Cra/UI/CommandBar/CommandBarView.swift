@@ -134,7 +134,8 @@ final class CommandBarView: NSView {
             pill.layer?.shadowColor = color.cgColor
             pillLabel.stringValue = scope.name
         }
-        let offered = scope == nil && c.previewText == nil ? c.result.scope : nil
+        // Arc shows no hint for the actions Tab offers on the empty field.
+        let offered = scope == nil && c.previewText == nil && c.result.scope != .actions ? c.result.scope : nil
         hint.isHidden = offered == nil
         keycap.isHidden = offered == nil
         if let offered {
@@ -149,8 +150,9 @@ final class CommandBarView: NSView {
         let row = previewing ? items[c.selectedIndex] : items.first
         let typed = c.query.trimmingCharacters(in: .whitespaces)
         let glyph = CommandBarGlyph.resolve(
-            editingURL: c.mode == .editURL, untouched: !previewing && (typed.isEmpty || typed == c.openedPrefill),
-            scoped: scope != nil, pageFaviconKey: c.openedPrefill.flatMap(FaviconKey.key(for:)),
+            editingURL: c.mode == .editURL && scope == nil, untouched: !previewing && (typed.isEmpty || typed == c.openedPrefill),
+            // Actions run the row, not a search: Arc shows the row's glyph once something is typed.
+            scoped: scope != nil && scope != .actions, pageFaviconKey: c.openedPrefill.flatMap(FaviconKey.key(for:)),
             row: row.map { ($0.faviconKey, $0.symbol) }, hasFavicon: { [favicons] in favicons.image(forKey: $0) != nil })
         if case .favicon(let key) = glyph, let img = favicons.image(forKey: key) {
             leadingIcon.imageScaling = .scaleProportionallyUpOrDown
