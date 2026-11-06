@@ -19,6 +19,18 @@ enum TestGesture {
         }
     }
 
+    /// A click at a point of the window, through the app's event queue: AppKit routes it as it
+    /// routes the pointer's (the window's sendEvent, first-click rules, hit testing), so a test
+    /// sees what a real click there does, while the pointer and the front app stay put.
+    static func click(at point: NSPoint, in window: NSWindow) {
+        for (type, pressure) in [(NSEvent.EventType.leftMouseDown, Float(1)), (.leftMouseUp, 0)] {
+            guard let e = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                             windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1,
+                                             pressure: pressure) else { return }
+            NSApp.postEvent(e, atStart: false)
+        }
+    }
+
     /// Opens the menu a click (or a right-click) at a point of the window would open, without
     /// the pointer: the hit view gets the mouse-down, or the nearest view with a menu(for:)
     /// pops its menu. The menu tracks until Esc or a pick, so tests read it through AX.

@@ -6,19 +6,21 @@ enum SpaceProfileChoice: Hashable {
     case new
 }
 
-/// Create or edit a space: name, emoji, profile and, beside them, Arc's theme editor (the same
+/// Create or edit a space: name, icon, profile and, beside them, Arc's theme editor (the same
 /// card Edit Theme Color… opens: pad, presets, intensity, grain, Auto / Light / Dark). An existing
 /// space shows each change at once (`onPreview`); Cancel puts its theme back, Save writes it.
 struct SpaceEditorView: View {
     let existing: Space?
     let profiles: [BrowserProfile]
-    /// Title, emoji, theme, profile; a new profile comes with its name.
-    let onSave: (String, String, SpaceTheme, SpaceProfileChoice, String) -> Void
+    /// Title, icon, theme, profile; a new profile comes with its name.
+    let onSave: (String, SpaceIcon, SpaceTheme, SpaceProfileChoice, String) -> Void
     let onCancel: () -> Void
     let onPreview: (SpaceTheme) -> Void
 
     @State private var title: String
-    @State private var emoji: String
+    /// Saved as it is: an untouched symbol or empty icon stays what it was (#205).
+    @State private var icon: SpaceIcon
+    @State private var pickingIcon = false
     @State private var theme: SpaceTheme
     @State private var profile: SpaceProfileChoice
     @State private var newProfileName = ""
@@ -28,7 +30,7 @@ struct SpaceEditorView: View {
 
     /// `initialProfile` is a new space's starting profile (Arc: the focused space's).
     init(existing: Space?, profiles: [BrowserProfile], initialProfile: UUID? = nil,
-         onSave: @escaping (String, String, SpaceTheme, SpaceProfileChoice, String) -> Void, onCancel: @escaping () -> Void,
+         onSave: @escaping (String, SpaceIcon, SpaceTheme, SpaceProfileChoice, String) -> Void, onCancel: @escaping () -> Void,
          onPreview: @escaping (SpaceTheme) -> Void = { _ in }) {
         self.existing = existing
         self.profiles = profiles
@@ -37,7 +39,7 @@ struct SpaceEditorView: View {
         self.onCancel = onCancel
         self.onPreview = onPreview
         _title = State(initialValue: existing?.title ?? "")
-        _emoji = State(initialValue: existing?.emoji ?? "🌱")
+        _icon = State(initialValue: existing?.icon ?? .newSpace)
         _theme = State(initialValue: existing?.theme ?? SpaceColorPresets.newSpaceTheme())
     }
 
@@ -47,18 +49,16 @@ struct SpaceEditorView: View {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 12) {
                     preview
-                    TextField("Name", text: $title).textFieldStyle(.roundedBorder)
+                    HStack(spacing: 6) {
+                        iconButton
+                        TextField("Name", text: $title).textFieldStyle(.roundedBorder)
+                    }
                     LazyVGrid(columns: Array(repeating: GridItem(.fixed(28), spacing: 4), count: 8), spacing: 4) {
                         ForEach(Self.emojis, id: \.self) { e in
                             Text(e).font(.system(size: 16)).frame(width: 28, height: 28)
-                                .background(RoundedRectangle(cornerRadius: 6).fill(e == emoji ? Color.accentColor.opacity(0.25) : .clear))
-                                .onTapGesture { emoji = e }
+                                .background(RoundedRectangle(cornerRadius: 6).fill(icon == .emoji(e) ? Color.accentColor.opacity(0.25) : .clear))
+                                .onTapGesture { icon = .emoji(e) }
                         }
-                    }
-                    HStack {
-                        Text("Custom emoji").font(.system(size: 11)).foregroundStyle(.secondary)
-                        TextField("", text: $emoji).textFieldStyle(.roundedBorder).frame(width: 50)
-                            .onChange(of: emoji) { _, v in if v.count > 2 { emoji = String(v.suffix(2)) } }
                     }
                     Divider()
                     profileSection
@@ -74,7 +74,7 @@ struct SpaceEditorView: View {
                 Button("Cancel") { onCancel() }.keyboardShortcut(.cancelAction)
                 Spacer()
                 Button(existing == nil ? "Create Space" : "Save") {
-                    onSave(title.isEmpty ? "Space" : title, emoji.isEmpty ? "🌱" : emoji, theme, profile, trimmedProfileName)
+                    onSave(title.isEmpty ? "Space" : title, icon, theme, profile, trimmedProfileName)
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled((title.trimmingCharacters(in: .whitespaces).isEmpty && existing == nil) || (profile == .new && trimmedProfileName.isEmpty))
@@ -90,7 +90,7 @@ struct SpaceEditorView: View {
             SpaceBackground(palette: theme.palette)
             VStack(spacing: 6) {
                 HStack(spacing: 6) {
-                    Text(emoji).font(.system(size: 15))
+                    glyph(size: 15, color: theme.palette.textPrimary)
                     Text(title.isEmpty ? "Space" : title).font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.palette.textPrimary)
                     Spacer(minLength: 0)
                 }
@@ -101,6 +101,42 @@ struct SpaceEditorView: View {
         }
         .frame(width: 260, height: 104)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    /// Arc's icon picker (Emoji / Icon / Remove Icon) in a popover, as Change Space Icon… opens
+    /// it; the grid below keeps a few emoji one click away.
+    private var iconButton: some View {
+        Button { pickingIcon = true } label: {
+            Group {
+                if icon == .none {
+                    Image(systemName: "face.dashed").font(.system(size: 14)).foregroundStyle(.secondary)
+                } else {
+                    glyph(size: 16, color: .primary)
+                }
+            }
+            .frame(width: 28, height: 22)
+            .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(pickingIcon ? 0.14 : 0.07)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Change Icon")
+        .accessibilityLabel("Change Icon")
+        .popover(isPresented: $pickingIcon, arrowEdge: .bottom) {
+            SpaceIconPicker(current: icon.emoji, currentSymbol: icon.symbol,
+                            onPick: { icon = .emoji($0); pickingIcon = false },
+                            onPickSymbol: { icon = .symbol($0); pickingIcon = false },
+                            onRemove: { icon = .none; pickingIcon = false })
+        }
+    }
+
+    /// The icon as the sidebar draws it: an emoji, or a symbol in the space's text colour.
+    @ViewBuilder
+    private func glyph(size: CGFloat, color: Color) -> some View {
+        switch icon {
+        case .emoji(let e): Text(e).font(.system(size: size))
+        case .symbol(let name): Image(systemName: name).font(.system(size: size - 2, weight: .medium)).foregroundStyle(color)
+        case .none: EmptyView()
+        }
     }
 
     private var trimmedProfileName: String { newProfileName.trimmingCharacters(in: .whitespaces) }

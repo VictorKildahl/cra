@@ -33,6 +33,8 @@ issue when a newer stable CEF is out; `scripts/update-cef.sh` moves the pin.
   view, windows, settings, onboarding)
 - `Sources/CraCEF` — Objective-C++ bridge between Swift and CEF
 - `Sources/CraHelper` — Chromium subprocess executable
+- `Sources/Cra/Services/WebKit` — the WebKit page that DRM services open in
+  ([protected-media.md](protected-media.md))
 - `Packages/CraCore` — models and decisions with no AppKit or Chromium (the sidebar model,
   settings and the other data-folder files, Air Traffic Control, live folder data, key chords,
   space themes, Arc theme import, the favorites grid), visible in every `Sources/Cra` file.
@@ -109,12 +111,15 @@ behave. Check those by hand, and say how in the PR.
 
 Scenario hooks for a command file (`cra://debug?…`): `checkStore=1` logs a fault per broken
 sidebar link, `pageJS=<js>` runs script in the focused page, `installExtension=<folder>` and
-`removeExtension=<id>`, `extensionAction=<id>`, `fullscreen=1|0`, `windowSize=1280x800`,
+`removeExtension=<id>`, `extensionAction=<id>`, `fullscreen=1|0`, `appActive=1|0` (the sidebar drawn as if
+Cra were in front or behind, e.g. the download bin's dimming), `windowSize=1280x800`,
 `snapshot=<ViewClass[,n]>&out=<png>`, `sleepTabs=<seconds>` (the 10 tabs used last too), `memoryPressure=warning|critical` (one
 memory-pressure sweep at that level, if Settings ▸ Tabs has it on), `stall=<ms>` (blocks the main
 thread), `perfReport=<path>` (the recorder's perf.json now), `systemAppearance=light|dark|system`
 (the appearance Auto space themes follow, without changing the Mac's), `themeEditor=1` (Edit
-Theme Color… for the focused space), `relaunch=1` and `quit=1`.
+Theme Color… for the focused space), `relaunch=1`, `quit=1`, and `nowPlaying=state|toggle|next|previous|pip|dismiss` (the sidebar player's
+newest card, then a `Cra nowPlaying[<label>] <host> playing=… prev=… next=… video=… pip=…` line per card
+on stdout; `&label=` tells checks apart).
 
 ## Running a test instance
 
@@ -182,6 +187,23 @@ from their Chrome window into the card, like Arc and Dia, and the Chrome window 
 empty, click-through and never key. Pages go back into their window while DevTools is open.
 `CRA_EMBED_PAGES=0` (or `defaults write dk.kildahl.cra embedPages -bool NO`) keeps pages in
 their own child windows, the hosting before 0.1.17, for comparing the two.
+
+### Cleaning up after test copies
+
+A renamed test copy leaves files outside its own folder: a 300 MB–1 GB code sign clone in
+the per-user temp folder when it's killed instead of quit, plus caches, preferences and
+LaunchServices entries under its bundle id. Dozens of them filled a 460 GB disk. Give a
+copy a bundle id starting with `dk.kildahl.cra.test.` (or another `dk.kildahl.cra`,
+`dk.kildahl.test.`, `app.crabrowser.` or `dev.cra.` id), quit it through its menu rather
+than killing it, and delete it when you're done.
+
+`scripts/clean-test-leftovers.sh` removes what's left: clones no process has open, the data
+of test bundle ids that aren't running, Claude Code scratchpads of this repo that haven't
+changed for a day, and LaunchServices entries of deleted Cra bundles. It never touches
+the installed Cra's ids, CraClip, a running app or anything changed in the last hour. Use
+`--dry-run` to see what it would do. In Claude Code it runs in the background at most every
+30 minutes as a Stop hook (`.claude/settings.json`), and the log of the last run is
+`$(getconf DARWIN_USER_TEMP_DIR)cra-clean-test-leftovers.log`.
 
 ## Scripting hooks
 

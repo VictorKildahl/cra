@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import CraCEF
 import SwiftUI
 
@@ -27,12 +28,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private(set) var littleWindows: [LittleWindowController] = []
 
     /// Shortcuts the app takes before the web page sees them (Chrome calls
-    /// these reserved). Everything else goes to the page first.
+    /// these reserved). Everything else goes to the page first. Copy URL is reserved like Arc:
+    /// Google Docs takes ⇧⌘C for its word count (GitHub #194).
     static let reservedActions: Set<String> = Set([
         "newTab", "newWindow", "newIncognitoWindow", "closeTab", "closeWindow", "reopenClosedTab", "editURL", "toggleSidebar", "toggleToolbar",
         "nextTab", "previousTab", "recentTab", "recentTabBackward", "nextSpace", "previousSpace", "devTools", "jsConsole", "inspectElement",
         "viewArchive", "openLibrary", "settings", "clearToday", "newLittleWindow", "promoteLittleWindow",
-        "addSplitView", "closeSplitPane",
+        "addSplitView", "closeSplitPane", "copyURL", "copyURLMarkdown",
     ] + (1...9).flatMap { ["item\($0)", "space\($0)", "moveTabToSpace\($0)"] })
 
     // MARK: Lifecycle
@@ -50,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         CraCEFRuntime.setOwnContextMenus(EmbeddedPages.isEnabled)
         CraCEFRuntime.setDocumentStartScript(PageScript.mainWorld, isolatedScript: PageScript.isolatedWorld, world: PageScript.world)
         startContentBlocking()
+        observeGlobalShortcut()
         SoftwareUpdater.shared.start(app: self)
         buildMenus()
         store.hasPage = { [unowned self] in self.runtime(for: $0).map { !$0.discarded } ?? false }
@@ -103,6 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let installed = ExtensionStore.shared.entries.map(\.extensionID)
         let hasNewExtension = !Set(installed).isSubset(of: welcomed)
         try? JSONEncoder().encode(installed.sorted()).write(to: welcomedFile, options: .atomic)
+        DownloadDestinations.install(store: store)
         CraCEFRuntime.setStrayPageHandler { [weak self] url, profile in
             Task { @MainActor in
                 guard let self else { return }
@@ -199,6 +203,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let settings = store.settings
         for w in mainWindows {
             w.browsers.freezeIdleTabs(hiddenLongerThan: freezeAfter)
+            w.releaseHiddenFrames(now: composition.clock.now)
             if settings.tabSleepTimerEnabled { w.browsers.sleepIdleTabs(.timer(settings.tabSleepAfter)) }
         }
         sweepForMemoryPressure(PerfSystemSample.pressure(level: PerfSystemSampler.pressureLevel()))
@@ -242,6 +247,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
     }
 
+    /// Arc's "Open Little Arc when I press ⌥⌘N" (#195): New Little Window's shortcut from any app,
+    /// following the setting, the shortcut's binding and the keyboard layout. A test copy in the
+    /// background leaves the shortcut to the installed Cra.
+    private func observeGlobalShortcut() {
+        guard !HitchMonitor.background else { return }
+        let hotkey = GlobalHotkey { [weak self] in self?.perform("newLittleWindow") }
+        globalHotkey = hotkey
+        let chord = { [store, bindings] in
+            GlobalShortcut.registrable(bindings.action("newLittleWindow")?.shortcuts ?? [], enabled: store.settings.littleWindowShortcutEverywhere)
+        }
+        observeChanges(of: chord) { hotkey.set($0) }
+        // The same chord on another layout can be another key.
+        DistributedNotificationCenter.default().addObserver(forName: NSNotification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
+                                                            object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated {
+                hotkey.set(nil)
+                hotkey.set(chord())
+            }
+        }
+    }
+
+    private var globalHotkey: GlobalHotkey?
+
     private func observeContentBlocking() {
         observeChanges(of: { [store] in store.settings.blockAdsAndTrackers }, apply: CraCEFRuntime.setContentBlockingEnabled)
     }
@@ -275,6 +303,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if store.settings.warnBeforeQuitting, !isRelaunching, !confirmQuit() { return .terminateCancel }
         // Little Windows are not in the sidebar; keep their pages in the Library.
         for w in littleWindows { w.archivePage() }
+        for w in mainWindows { w.saveFrameNow() }
         store.saveAll()
         return .terminateNow
     }
@@ -284,6 +313,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Sparkle quits Cra to install an update and starts it again: no quit confirmation.
     func prepareForUpdateRelaunch() {
         isRelaunching = true
+        for w in mainWindows { w.saveFrameNow() }
         store.saveAll()
     }
 
@@ -445,7 +475,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         mainWindows.removeAll { $0 === c }
         c.tearDown()
         store.removeWindow(c.windowID)
-        if c.isIncognito, !mainWindows.contains(where: \.isIncognito) { CraCEFRuntime.endIncognitoSession() }
+        if c.isIncognito, !mainWindows.contains(where: \.isIncognito) {
+            CraCEFRuntime.endIncognitoSession()
+            WebKitStores.endIncognitoSession()
+        }
         // AppKit makes the next window key on its own; until then actions go to the frontmost.
         if let front = NSApp.orderedWindows.compactMap({ w in mainWindows.first { $0.window === w } }).first {
             store.activeWindowID = front.windowID
@@ -504,7 +537,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         littleWindows.append(w)
         // Arc badges the tab the Peek came from with the peeked page's favicon (modalIcon).
         parent.sidebarUI.peekBadge = tabID.map { .init(tabID: $0, iconKey: FaviconKey.key(for: url)) }
-        w.showAsPeek()
+        w.showAsPeek(fromTab: tabID)
     }
 
     func removeLittleWindow(_ w: LittleWindowController) {
@@ -622,6 +655,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 TestGesture.openMenu(at: NSPoint(x: g[0], y: w.frame.height - g[1]), in: w, right: dict["button"] == "right")
                 return
             }
+            // clickAt=x,y: a click there through the event queue, as the pointer's would go (#195);
+            // target=little as for menuAt.
+            if let g = dict["clickAt"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2,
+               let w = dict["target"] == "little" ? littleWindows.last?.window : main.window {
+                TestGesture.click(at: NSPoint(x: g[0], y: w.frame.height - g[1]), in: w)
+                return
+            }
             if let st = dict["status"] { main.browserManager(statusMessage: st); return }
             // tidy: the divider's Tidy on the window's space, without hovering it; undoTidy: ⌘Z's.
             if dict["tidy"] != nil { TidyTabsService.shared.tidy(store.focusedSpace(window: main.windowID).id, store: store); return }
@@ -634,6 +674,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // Scenario hooks (scripts/scenario.sh): what a journey needs without a pointer.
             if dict["checkStore"] != nil { logSidebarProblems(); return }
+            // releaseFrames: hidden tabs' page windows release Chromium's evicted frames now (#195).
+            if dict["releaseFrames"] != nil { for w in mainWindows { w.releaseHiddenFrames(now: composition.clock.now) }; return }
             // A main-thread stall of this many milliseconds, for the performance recorder's tests.
             if let ms = dict["stall"].flatMap(Double.init) { usleep(useconds_t(min(max(ms, 0), 30_000) * 1000)); return }
             if let path = dict["perfReport"] {
@@ -690,9 +732,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // Opens what normally needs a pointer or a held key, for screenshots.
             if let v = dict["downloads"] { main.sidebarUI.downloadsListOpen = v == "1"; return }
+            // The sidebar as if Cra were in front (1) or behind (0), until the app's next activation change:
+            // a background test copy is in either state depending on what it was sent.
+            if let v = dict["appActive"] { main.sidebarUI.appActive = v == "1"; return }
             if let v = dict["banner"] { SoftwareUpdater.shared.debugUpdated(v == "none" ? nil : v); return }
             if let v = dict["bannerReady"] { SoftwareUpdater.shared.debugReady(v == "none" ? nil : v); return }
             if dict["switcher"] != nil { main.debugTabSwitcher(); return }
+            // The Site Control Center's Safari's Engine switch for the focused page, without the pointer.
+            if let v = dict["safariEngine"] { main.debugChooseSafariEngine(v == "on"); return }
+            // Script in Cra's isolated world of the focused page: "Cra isolatedJS → <result>" on stdout.
+            if let js = dict["isolatedJS"] {
+                let params = String(decoding: (try? JSONSerialization.data(withJSONObject: ["expression": js, "returnByValue": true])) ?? Data(), as: UTF8.self)
+                main.currentBrowser?.evaluate(inIsolatedWorld: PageScript.world, params: params) { result, error in
+                    NSLog("Cra isolatedJS → %@", result ?? "error: \(error ?? "?")")
+                }
+                return
+            }
+            // The sidebar player without the pointer: play/pause/next/previous/pip on the newest
+            // card ("state" only logs), then its cards: "Cra nowPlaying[<label>] <host> playing=… prev=… next=… video=… pip=…".
+            if let op = dict["nowPlaying"], let np = main.browsers.nowPlaying {
+                let label = dict["label"].map { "[\($0)]" } ?? ""
+                let actions: [String: NowPlaying.Action] = ["toggle": .togglePlayback, "next": .next, "previous": .previous,
+                                                           "pip": .pictureInPicture, "dismiss": .dismiss]
+                if let action = actions[op], let id = np.entries.last?.id { main.browsers.performNowPlaying(id, action) }
+                for e in np.entries {
+                    let host = CraLog.host(main.browsers.runtime(for: e.id)?.browser.currentURL ?? "")
+                    NSLog("Cra nowPlaying%@ %@ playing=%d prev=%d next=%d video=%d pip=%d", label, host, e.playing ? 1 : 0, e.hasPrevious ? 1 : 0,
+                          e.hasNext ? 1 : 0, e.hasVideo ? 1 : 0, np.pictureInPicture.contains(e.id) ? 1 : 0)
+                }
+                if np.entries.isEmpty { NSLog("Cra nowPlaying%@ none", label) }
+                return
+            }
             if dict["themeEditor"] != nil { main.showSpaceStyleEditor(space: store.focusedSpace); return }
             if dict["jumpPill"] != nil { SpaceListView.jumpToSelected(for: main.sidebarUI, space: store.focusedSpaceID); return }
             if let f = dict["folderPreview"] {
@@ -707,7 +777,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let c = dict["combine"], let content = main.window?.contentView {
                 let tabs = store.children(of: store.focusedSpace.todayContainerID).filter { $0.tab != nil }
                 guard tabs.count > 1 else { return }
-                let kind: CombineDropPreview.Kind = c == "folder" ? .folder : .split(leading: c == "leading")
+                let kind = CombineDropPreview.Kind.split(leading: c == "leading")
                 let pal = store.focusedSpace.theme.palette
                 let v = CombineDropPreview(kind: kind, target: tabs[0], dragged: tabs[1], depth: 0, palette: pal, favicons: favicons)
                 v.frame = NSRect(x: 10, y: content.bounds.height - 420, width: 300, height: CraMetrics.rowHeight)
@@ -831,7 +901,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         perform(id)
     }
 
+    /// Edit → Paste and Match Style (⇧⌘V) sends AppKit's `pasteAsPlainText:`, which text fields and
+    /// WebKit tabs answer themselves. A Chromium page names the same command `pasteAndMatchStyle:`,
+    /// so here, at the end of the responder chain, the menu item reaches it (GitHub #192).
+    private static let chromiumPasteAndMatchStyle = NSSelectorFromString("pasteAndMatchStyle:")
+    private var pageTakingPasteAndMatchStyle: NSResponder? {
+        guard let responder = NSApp.keyWindow?.firstResponder, responder.responds(to: Self.chromiumPasteAndMatchStyle) else { return nil }
+        return responder
+    }
+
+    @objc func pasteAsPlainText(_ sender: Any?) {
+        guard let page = pageTakingPasteAndMatchStyle else { return }
+        NSApp.sendAction(Self.chromiumPasteAndMatchStyle, to: page, from: sender)
+    }
+
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        if item.action == #selector(pasteAsPlainText(_:)) { return pageTakingPasteAndMatchStyle != nil }
         switch item.representedObject as? String {
         case "toggleSidebar": item.title = main.sidebarVisible ? "Hide Sidebar" : "Show Sidebar"
         case "toggleToolbar": item.title = store.settings.showToolbar ? "Hide Toolbar" : "Show Toolbar"
@@ -1191,7 +1276,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         edit.addItem(std("Copy", #selector(NSText.copy(_:)), "c"))
         edit.addItem(item("copyURL")); edit.addItem(item("copyURLMarkdown"))
         edit.addItem(std("Paste", #selector(NSText.paste(_:)), "v"))
-        edit.addItem(std("Paste and Match Style", Selector(("pasteAsPlainText:")), "v", [.command, .shift]))
+        edit.addItem(std("Paste and Match Style", #selector(pasteAsPlainText(_:)), "v", [.command, .shift]))
         edit.addItem(std("Delete", #selector(NSText.delete(_:))))
         edit.addItem(std("Select All", #selector(NSText.selectAll(_:)), "a"))
         edit.addItem(.separator())

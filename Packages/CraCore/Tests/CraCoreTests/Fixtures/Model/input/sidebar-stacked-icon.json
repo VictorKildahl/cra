@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "spaceOrder": ["A0000000-0000-0000-0000-000000000001"],
+  "spaces": [
+    {
+      "id": "A0000000-0000-0000-0000-000000000001", "title": "Imported", "emoji": "🌱", "symbol": "square.on.square.fill",
+      "theme": {"colors": ["#2861B3", "#2861B3"], "intensity": 1, "noise": 0, "appearance": "dark", "vibrant": true, "accent": "#2861B3", "solid": true},
+      "favoritesContainerID": "C0000000-0000-0000-0000-000000000001",
+      "pinnedContainerID": "C0000000-0000-0000-0000-000000000002",
+      "todayContainerID": "C0000000-0000-0000-0000-000000000003",
+      "createdAt": "2026-11-05T08:00:00Z"
+    }
+  ],
+  "items": [
+    {"id": "C0000000-0000-0000-0000-000000000001", "children": [], "isUnread": false, "createdAt": "2026-11-05T08:00:00Z",
+     "data": {"container": {"_0": {"favorites": {"spaceID": "A0000000-0000-0000-0000-000000000001"}}}}},
+    {"id": "C0000000-0000-0000-0000-000000000002", "children": [], "isUnread": false, "createdAt": "2026-11-05T08:00:00Z",
+     "data": {"container": {"_0": {"pinned": {"spaceID": "A0000000-0000-0000-0000-000000000001"}}}}},
+    {"id": "C0000000-0000-0000-0000-000000000003", "children": [], "isUnread": false, "createdAt": "2026-11-05T08:00:00Z",
+     "data": {"container": {"_0": {"today": {"spaceID": "A0000000-0000-0000-0000-000000000001"}}}}}
+  ]
+}

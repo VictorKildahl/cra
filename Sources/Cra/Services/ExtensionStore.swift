@@ -55,6 +55,10 @@ final class ExtensionStore {
     /// which profiles load each (CraCEFRuntime.setExtensionPaths).
     nonisolated static func loadList() -> (paths: [String], profiles: String?) {
         let fm = FileManager.default
+        // Before Chromium starts: a copy the store already installed in a profile must not load
+        // there again, or --load-extension would put the copy back over the store's install.
+        let profiles = chromiumProfiles()
+        dropWebStoreCopies(profiles: profiles) { ExtensionImporter.settings(inProfile: AppPaths.chromiumCache.appendingPathComponent($0, isDirectory: true)) }
         let names = ((try? fm.contentsOfDirectory(atPath: directory.path)) ?? []).sorted()
             .filter { fm.fileExists(atPath: directory.appendingPathComponent($0).appendingPathComponent("manifest.json").path) }
         return (names.map { directory.appendingPathComponent($0, isDirectory: true).path }, loadProfiles().commandLineValue(forFolders: names))
@@ -97,6 +101,73 @@ final class ExtensionStore {
         try fm.moveItem(at: staging, to: dest)
     }
 
+    /// Cra's Chromium profile folders ("Default", "Profile <id>"), sorted.
+    nonisolated static func chromiumProfiles() -> [String] {
+        ((try? FileManager.default.contentsOfDirectory(atPath: AppPaths.chromiumCache.path)) ?? [])
+            .filter { $0 == "Default" || $0.hasPrefix("Profile ") }.sorted()
+    }
+
+    // MARK: Web Store installs (GitHub #203)
+
+    /// The folders in Extensions/ that hold a Web Store extension (an import from Arc, Dia or
+    /// Chrome), with their manifest.
+    nonisolated static func webStoreCopies() -> [(folder: String, manifest: [String: Any])] {
+        let names = ((try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []).sorted()
+        return names.compactMap { name in
+            let dir = directory.appendingPathComponent(name, isDirectory: true)
+            guard let data = try? Data(contentsOf: dir.appendingPathComponent("manifest.json")),
+                  let m = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  WebStoreInstalls.isWebStoreCopy(folder: name, extensionID: chromiumID(key: m["key"] as? String, folder: dir),
+                                                  updateURL: m["update_url"] as? String) else { return nil }
+            return (name, m)
+        }
+    }
+
+    /// Each profile where the store has installed a copy's extension stops loading the copy;
+    /// a copy no profile loads any more is deleted. True when anything changed.
+    @discardableResult
+    nonisolated static func dropWebStoreCopies(profiles: [String], settings: (String) -> [String: Any]) -> Bool {
+        var scopes = loadProfiles()
+        var changed = false
+        for copy in webStoreCopies() {
+            for profile in profiles where scopes.loads(folder: copy.folder, inProfile: profile)
+                && WebStoreInstalls.isStoreInstall(settings: settings(profile)[copy.folder] as? [String: Any]) {
+                changed = true
+                CraLog.note("extension \(copy.folder) is the Web Store's install in \(profile) now")
+                if scopes.movedToWebStore(folder: copy.folder, profile: profile, allProfiles: Set(profiles)) {
+                    try? FileManager.default.removeItem(at: directory.appendingPathComponent(copy.folder, isDirectory: true))
+                    break
+                }
+            }
+        }
+        if changed { try? saveProfiles(scopes) }
+        return changed
+    }
+
+    /// Extension IDs asked of the store in a profile this session ("<profile>/<id>"), each once.
+    @ObservationIgnored private var webStoreAsked: Set<String> = []
+
+    /// A page in `profile` has loaded, so the profile's extensions are up: its Web Store copies
+    /// are installed from the store there (Cra.installFromWebStore, the store's own install).
+    /// The store's version may not ask for more permissions than the copy the person picked.
+    func installFromWebStore(using browser: CraBrowser, profile: String) {
+        let scopes = Self.loadProfiles()
+        let live = Self.extensionSettings(inProfile: profile)
+        for copy in Self.webStoreCopies() where !webStoreAsked.contains("\(profile)/\(copy.folder)") {
+            guard !WebStoreInstalls.pendingProfiles(folder: copy.folder, extensionID: copy.folder, scopes: scopes,
+                                                    profiles: [profile], settings: { _ in live }).isEmpty,
+                  let params = try? JSONSerialization.data(withJSONObject: ["id": copy.folder, "manifest": copy.manifest]) else { continue }
+            webStoreAsked.insert("\(profile)/\(copy.folder)")
+            CraLog.note("extension \(copy.folder): installing from the Web Store in \(profile)")
+            browser.sendDevToolsMethod("Cra.installFromWebStore", params: String(decoding: params, as: UTF8.self)) { [weak self] _, error in
+                DispatchQueue.main.async {
+                    if let error { CraLog.note("extension \(copy.folder): Web Store install in \(profile) failed (\(error)); it keeps loading from its folder") }
+                    self?.reload()
+                }
+            }
+        }
+    }
+
     // MARK: Profiles of the Extensions/ folders (GitHub #131)
 
     nonisolated private static var profilesFile: URL { AppPaths.file("extension-profiles.json") }
@@ -127,13 +198,15 @@ final class ExtensionStore {
     func reload() {
         let fm = FileManager.default
         try? fm.createDirectory(at: ExtensionStore.directory, withIntermediateDirectories: true)
-        let names = (try? fm.contentsOfDirectory(atPath: ExtensionStore.directory.path)) ?? []
         let root = AppPaths.chromiumCache
-        let profiles = ((try? fm.contentsOfDirectory(atPath: root.path)) ?? []).filter { $0 == "Default" || $0.hasPrefix("Profile ") }.sorted()
+        let profiles = Self.chromiumProfiles()
         let settings = Dictionary(uniqueKeysWithValues: profiles.map { ($0, Self.extensionSettings(inProfile: $0)) })
+        // A copy the store just installed (Cra.installFromWebStore) gives way to the store's install.
+        Self.dropWebStoreCopies(profiles: profiles) { settings[$0] ?? [:] }
+        let names = (try? fm.contentsOfDirectory(atPath: ExtensionStore.directory.path)) ?? []
         let disabled = settings.mapValues(ExtensionImporter.disabledIDs(settings:))
         let scopes = Self.loadProfiles()
-        let list = names.sorted().compactMap { name -> Entry? in
+        var list = names.sorted().compactMap { name -> Entry? in
             guard var entry = Self.entry(id: name, folder: ExtensionStore.directory.appendingPathComponent(name, isDirectory: true),
                                          extensionID: nil) else { return nil }
             entry.profiles = scopes.profiles(ofFolder: name)
@@ -145,8 +218,14 @@ final class ExtensionStore {
         var managed: [Entry] = []
         for profile in profiles {
             // Turned-off ones stay listed (as off) so their pins come back with them.
-            for e in ExtensionImporter.extensions(settings: settings[profile] ?? [:], inProfile: root.appendingPathComponent(profile, isDirectory: true))
-            where !loaded.contains(e.id) {
+            for e in ExtensionImporter.extensions(settings: settings[profile] ?? [:], inProfile: root.appendingPathComponent(profile, isDirectory: true)) {
+                // The store's install of a copy that still loads from its folder in other profiles.
+                if loaded.contains(e.id) {
+                    guard let i = list.firstIndex(where: { $0.extensionID == e.id }), list[i].profiles?.contains(profile) == false else { continue }
+                    list[i].profiles?.insert(profile)
+                    if !e.isEnabled { list[i].disabledProfiles.insert(profile) }
+                    continue
+                }
                 var i = managed.firstIndex(where: { $0.extensionID == e.id })
                 if i == nil, var entry = Self.entry(id: e.id, folder: e.folder, extensionID: e.id) {
                     entry.managedByChrome = true
@@ -246,7 +325,8 @@ final class ExtensionStore {
         let options = (m["options_ui"] as? [String: Any])?["page"] as? String ?? m["options_page"] as? String
         // A path or {size: path} (React DevTools' grey "disabled" icon until a page uses React).
         let actionIcons = action?["default_icon"] as? [String: String] ?? (action?["default_icon"] as? String).map { ["16": $0] }
-        return Entry(id: id, name: title.isEmpty ? id : title, version: str("version"), description: str("description"), url: dir,
+        let description = ExtensionImporter.localizedDescription(manifest: m, folder: dir)
+        return Entry(id: id, name: title.isEmpty ? id : title, version: str("version"), description: description, url: dir,
                      extensionID: extensionID ?? chromiumID(key: m["key"] as? String, folder: dir),
                      icon: actionIcons.flatMap { ExtensionImporter.icon(manifest: ["icons": $0], folder: dir, minPixels: 16) }
                         ?? ExtensionImporter.icon(manifest: m, folder: dir, minPixels: 16),
@@ -255,7 +335,7 @@ final class ExtensionStore {
 
     /// Chromium's ID: the first 128 bits of SHA-256 over the manifest key (or the
     /// unpacked folder's path), each hex digit mapped 0-f → a-p.
-    static func chromiumID(key: String?, folder: URL) -> String {
+    nonisolated static func chromiumID(key: String?, folder: URL) -> String {
         let input = key.flatMap { Data(base64Encoded: $0) } ?? Data(folder.path.utf8)
         let digest = SHA256.hash(data: input).prefix(16)
         let a = UInt8(ascii: "a")

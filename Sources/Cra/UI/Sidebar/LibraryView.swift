@@ -459,8 +459,10 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         menu.autoenablesItems = false
         switch page {
         case .downloads:
+            // The folder the window's profile downloads to (#190).
+            let profile = (window?.windowController as? MainWindowController)?.profileDirectoryName
             MenuItems.add(menu, "Open Downloads Folder") {
-                NSWorkspace.shared.open(FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0])
+                NSWorkspace.shared.open(DownloadDestinations.folder(profileID: DownloadDestinations.profileID(profilePath: profile)))
             }
         case .archive:
             let store = store

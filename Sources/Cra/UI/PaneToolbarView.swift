@@ -33,6 +33,8 @@ final class PaneToolbarView: NSView {
         var sidebarVisible = true
         var pinned: [Ext] = []
         var hasExtensions = false
+        /// A WebKit page's service: its extension buttons dim (none run there).
+        var protectedMedia: String?
         var fill = NSColor.clear
         var fg = NSColor.labelColor
         var fgDim = NSColor.secondaryLabelColor
@@ -169,6 +171,7 @@ final class PaneToolbarView: NSView {
             // Arc shows the host only unless "Show Full URL" is on (#88).
             m.path = store.settings.toolbarShowsFullURL && human.hasPrefix(m.host) ? String(human.dropFirst(m.host.count)) : ""
         }
+        m.protectedMedia = m.tabID.flatMap { ui.navState(for: $0).protectedMedia }
         let extensions = ExtensionStore.shared
         let profile = item.map { store.profileDirectoryName(item: $0.id) }
             ?? store.profileDirectoryName(space: store.focusedSpaceID(window: ui.windowID))
@@ -219,8 +222,13 @@ final class PaneToolbarView: NSView {
     }
 
     /// A pinned extension's button (screen rect), for popups opened from the menu bar or a shortcut.
-    func extensionButtonFrameOnScreen(_ id: String) -> NSRect? {
-        guard let b = buttons["ext:" + id], !b.isHiddenOrHasHiddenAncestor, let window else { return nil }
+    func extensionButtonFrameOnScreen(_ id: String) -> NSRect? { buttonFrameOnScreen("ext:" + id) }
+
+    /// The sliders button (screen rect), for the Site Control Center opened from elsewhere (a toast's Why?).
+    func siteControlsButtonFrameOnScreen() -> NSRect? { buttonFrameOnScreen("extensions") }
+
+    private func buttonFrameOnScreen(_ key: String) -> NSRect? {
+        guard let b = buttons[key], !b.isHiddenOrHasHiddenAncestor, b.frame.width > 0, let window else { return nil }
         return window.convertToScreen(b.convert(b.bounds, to: nil))
     }
 
@@ -292,8 +300,10 @@ final class PaneToolbarView: NSView {
             case .pinnedExtension(let id):
                 let e = m.pinned.first { $0.id == id }
                 let b = button("ext:" + id) { ToolbarGlyphButton() }
-                // Arc: the 16 pt action icon with its badge, and no tooltip (Arc 1.171, #106).
-                b.configure(symbol: nil, image: ExtensionStore.shared.badged(e?.icon, e?.badge, tint: m.fgDim), help: "", enabled: true,
+                // Arc: the 16 pt action icon with its badge, and no tooltip (Arc 1.171, #106). On a WebKit
+                // page it dims and says why (docs/protected-media.md).
+                b.configure(symbol: nil, image: ExtensionStore.shared.badged(e?.icon, e?.badge, tint: m.fgDim),
+                            help: m.protectedMedia.map(ExtensionStore.offOnProtectedMedia) ?? "", enabled: m.protectedMedia == nil,
                             width: 34, iconSize: 16, tint: m.fgDim, hover: m.hover)
                 let pane = paneTabID
                 b.action = { [weak self] in
@@ -603,6 +613,8 @@ final class ToolbarGlyphButton: NSView {
                 // A monochrome extension icon (ExtensionStore.toolbarIcon) is a template: the bar's ink.
                 imageView.contentTintColor = image == nil || image?.isTemplate == true ? tint : nil
             }
+            // An icon in its own colours can't be tinted grey: a disabled one fades instead.
+            imageView.alphaValue = symbol == nil && !enabled ? 0.35 : 1
         }
         iconBox = symbol == nil ? NSSize(width: iconSize, height: iconSize) : nil
         needsLayout = true

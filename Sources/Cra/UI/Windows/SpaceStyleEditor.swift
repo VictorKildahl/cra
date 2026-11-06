@@ -41,16 +41,15 @@ struct SpaceStyleEditor: View {
                 HStack(spacing: 5.5) {
                     let page = SpaceColorPresets.pages[swatchPage]
                     ForEach(Array(page.swatches.enumerated()), id: \.offset) { i, colors in
-                        Circle()
-                            .fill(LinearGradient(colors: colors.map { Color(hex: $0) }, startPoint: .topLeading, endPoint: .bottomTrailing))
-                            .frame(width: 24, height: 24)
-                            .contentShape(Circle())
-                            .onTapGesture { pad.key = colors }
-                            // Arc: "Set space color to Catalog color: … ColorPickerBrandN".
-                            .accessibilityElement()
-                            .accessibilityAddTraits(.isButton)
-                            .accessibilityLabel("Set space color to \(page.name(i))")
-                            .accessibilityAction { pad.key = colors }
+                        Button { pad.key = colors } label: {
+                            Circle()
+                                .fill(LinearGradient(colors: colors.map { Color(hex: $0) }, startPoint: .topLeading, endPoint: .bottomTrailing))
+                                .frame(width: 24, height: 24)
+                                .contentShape(Circle())
+                        }
+                        .buttonStyle(ColorPillButtonStyle())
+                        // Arc: "Set space color to Catalog color: … ColorPickerBrandN".
+                        .accessibilityLabel("Set space color to \(page.name(i))")
                     }
                 }
                 pageArrow("chevron.right", to: swatchPage + 1, label: "Move to next preset page.")
@@ -86,16 +85,37 @@ struct SpaceStyleEditor: View {
 
     private func pageArrow(_ symbol: String, to page: Int, label: String) -> some View {
         let ok = SpaceColorPresets.pages.indices.contains(page)
-        return Button {
-            guard ok else { return }
+        return PageArrow(symbol: symbol, enabled: ok, label: label) {
             swatchPage = page
             UserDefaults.standard.set(page, forKey: Self.pageKey)
-        } label: {
-            Image(systemName: symbol).font(.system(size: 15, weight: .medium)).frame(width: 36, height: 30)
         }
-        .buttonStyle(.plain)
-        .foregroundStyle(.white.opacity(ok ? 0.55 : 0.2))
-        .accessibilityLabel(label)
+    }
+}
+
+/// A paging arrow: white 0.55, brighter under the pointer with a pointing hand (Arc's
+/// SpaceStyleButtonStyle); the arrow past the last page is 0.2 and does neither. Not a SwiftUI
+/// Button: a Button keeps the plain arrow pointer whatever pointer style it's given.
+private struct PageArrow: View {
+    let symbol: String
+    let enabled: Bool
+    let label: String
+    let action: () -> Void
+    @State private var isHovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let hot = enabled && isHovered
+        Image(systemName: symbol).font(.system(size: 15, weight: .medium)).frame(width: 36, height: 30)
+            .contentShape(Rectangle())
+            .foregroundStyle(.white.opacity(enabled ? (hot ? 0.85 : 0.55) : 0.2))
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: hot)
+            .onHover { isHovered = $0 }
+            .onTapGesture { if enabled { action() } }
+            .editorPointer(enabled ? .link : nil)
+            .accessibilityElement()
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel(label)
+            .accessibilityAction { if enabled { action() } }
     }
 }
 
@@ -113,6 +133,9 @@ struct PadState: Equatable {
 /// colour follow the first 40° either side; dragging any handle turns the set.
 private struct ColorPad: View {
     @Binding var pad: PadState
+    @State private var hoveredKnob: Int?
+    @State private var draggingKnob: Int?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private static let reach: CGFloat = 153
 
     var body: some View {
@@ -145,8 +168,25 @@ private struct ColorPad: View {
                         .overlay(Circle().strokeBorder(.white, lineWidth: main ? 4.5 : 2.5))
                         .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
                         .frame(width: main ? 44 : 27, height: main ? 44 : 27)
+                        // Arc's PadWheel knob: grows under the pointer, shrinks while held (the
+                        // swatches' scales); an open hand over it, a closed one while dragging.
+                        .scaleEffect(draggingKnob == i ? ColorPillButtonStyle.pressed : hoveredKnob == i ? ColorPillButtonStyle.hovered : 1)
+                        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: hoveredKnob == i)
+                        .animation(reduceMotion ? nil : .easeOut(duration: 0.10), value: draggingKnob == i)
+                        .onHover { inside in
+                            if inside { hoveredKnob = i } else if hoveredKnob == i { hoveredKnob = nil }
+                        }
+                        // Arc: an open hand over a knob, a closed one while dragging it.
+                        .editorPointer(draggingKnob == i ? .grabbing : .grab)
                         .position(Self.point(for: hex, centre: centre))
-                        .gesture(DragGesture(minimumDistance: 0).onChanged { g in place(handle: i, at: g.location, centre: centre) })
+                        .gesture(DragGesture(minimumDistance: 0)
+                            .onChanged { g in
+                                // SwiftUI re-reads pointer styles on moves, not drags: hold the closed hand.
+                                if #available(macOS 15, *) { NSCursor.closedHand.set() }
+                                draggingKnob = i
+                                place(handle: i, at: g.location, centre: centre)
+                            }
+                            .onEnded { _ in draggingKnob = nil })
                 }
                 VStack {
                     AppearanceToggles(appearance: $pad.appearance).padding(.top, 24)
@@ -164,9 +204,9 @@ private struct ColorPad: View {
     private func padButton(_ symbol: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol).font(.system(size: 15, weight: .medium)).frame(width: 24, height: 24)
+                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .foregroundStyle(.white.opacity(enabled ? 0.55 : 0.18))
+        .buttonStyle(SpaceStyleButtonStyle(opacity: enabled ? 0.55 : 0.18, enabled: enabled))
         .disabled(!enabled)
     }
 
@@ -222,9 +262,9 @@ private struct AppearanceToggles: View {
                 .font(.system(size: 15, weight: .medium))
                 .frame(width: 32, height: 32)
                 .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.white.opacity(appearance == value ? 0.12 : 0)))
+                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .foregroundStyle(.white.opacity(appearance == value ? 0.8 : 0.55))
+        .buttonStyle(SpaceStyleButtonStyle(opacity: appearance == value ? 0.8 : 0.55, enabled: appearance != value))
     }
 }
 
@@ -297,5 +337,59 @@ private struct NoiseDisc: View {
     let amount: Double
     var body: some View {
         Rectangle().fill(ImagePaint(image: Image(nsImage: NoiseTexture.image), scale: 0.5)).opacity(0.15 + 0.6 * amount)
+    }
+}
+
+/// Arc's ColorPillButtonStyle for the preset swatches: a circle grows a little under the pointer and
+/// shrinks while pressed, both eased; scaled, never resized, so the row keeps its 29.5 pt pitch.
+/// The pad's knobs use the same scales (GitHub #189).
+struct ColorPillButtonStyle: ButtonStyle {
+    static let hovered: CGFloat = 1.08
+    static let pressed: CGFloat = 0.92
+    @State private var isHovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? Self.pressed : isHovered ? Self.hovered : 1)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isHovered)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.10), value: configuration.isPressed)
+            .onHover { isHovered = $0 }
+    }
+}
+
+/// Arc's SpaceStyleButtonStyle (paging arrows, − / +, Auto / Light / Dark): white at `opacity`,
+/// brighter under the pointer while it can be pressed.
+struct SpaceStyleButtonStyle: ButtonStyle {
+    var opacity: Double
+    var enabled = true
+    @State private var isHovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        let hot = enabled && isHovered
+        return configuration.label
+            .foregroundStyle(.white.opacity(hot ? min(1, opacity + 0.3) : opacity))
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: hot)
+            .onHover { isHovered = $0 }
+    }
+}
+
+/// The pointer Arc shows over the editor: a pointing hand on a paging arrow, an open hand over a
+/// pad knob and a closed one while dragging it. SwiftUI's pointer styles (macOS 15 and later; on 14
+/// the arrow stays).
+enum EditorPointer { case link, grab, grabbing }
+
+extension View {
+    @ViewBuilder func editorPointer(_ pointer: EditorPointer?) -> some View {
+        if #available(macOS 15, *), let pointer {
+            switch pointer {
+            case .link: self.pointerStyle(.link)
+            case .grab: self.pointerStyle(.grabIdle)
+            case .grabbing: self.pointerStyle(.grabActive)
+            }
+        } else {
+            self
+        }
     }
 }

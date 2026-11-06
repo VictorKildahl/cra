@@ -98,10 +98,13 @@ enum BrowserManagerLifecycleTests {
         await leaveVideoTabPictureInPictureCase()
         await splitCopySleepsPinnedTabCase()
         await coveredWindowPictureInPictureCase()
+        await callPictureInPictureCase()
+        await playerMediaSessionCase()
         pageColoursCase()
         extensionPageRetryCase()
         await sleepCase("malformed or missing replies cannot authorize sleeping", reply: nil) { _, _ in }
         await pageProbeCase()
+        await pageEngineCase()
         print("Browser manager lifecycle: \(checks) checks passed")
     }
 
@@ -132,6 +135,101 @@ enum BrowserManagerLifecycleTests {
         defer { window.close() }
         window.contentView!.addSubview(runtime.browser.containerView)
         expect(PageProbe.viewState(runtime).hasSuffix(" display=none"), "the view state names the display the page's window is on")
+        manager.closeAll()
+    }
+
+    /// DRM services open in WebKit (ProtectedMediaSites); a popup keeps its opener's engine; a
+    /// navigation the other engine has to show reopens the tab's page there, in its place on screen.
+    @MainActor
+    private static func pageEngineCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let observer = Observer()
+        manager.delegate = observer
+        let player = store.createTab(url: "https://open.spotify.com/").id
+        let site = store.createTab(url: "https://example.test/a").id
+        let other = store.createTab(url: "https://example.test/b").id
+        manager.show([site, other], focused: other, focus: false)
+        expect(manager.ensureRuntime(for: player)?.browser is WebKitBrowser, "a DRM service's tab opens in WebKit")
+        let chromium = manager.runtime(for: site)!.browser
+        expect(!(chromium is WebKitBrowser), "any other site opens in Chromium")
+
+        // window.open keeps its opener's engine: WebKit can only fill a web view it made.
+        let fromWebKit = manager.browser(manager.runtime(for: player)!.browser, popupHostForURL: "https://example.test/signin", inBackground: true)
+        expect(fromWebKit is WebKitBrowser, "a WebKit page's popup host is a WebKit page, whatever its address")
+        let fromChromium = manager.browser(chromium, popupHostForURL: "https://open.spotify.com/", inBackground: true)
+        expect(fromChromium.map { !($0 is WebKitBrowser) } == true, "a Chromium page's popup host is Chromium's, whatever its address")
+
+        // A POST, or a site Chromium shows: the navigation goes on in Chromium.
+        expect(!manager.browser(chromium, handsOffNavigationToURL: "https://www.netflix.com/login", method: "POST"),
+               "a POST to a service stays: its body can't move")
+        expect(!manager.browser(chromium, handsOffNavigationToURL: "https://example.test/c", method: "GET"), "a Chromium site stays in Chromium")
+        await drainMainQueue()
+        expect(manager.runtime(for: site)?.browser === chromium, "nothing moved")
+
+        // A link in the left pane to Netflix: the pane's page reopens in WebKit, same split, same focus.
+        expect(manager.browser(chromium, handsOffNavigationToURL: "https://www.netflix.com/browse", method: "GET"),
+               "Chromium's navigation to a service stops before its request goes out")
+        expect(manager.runtime(for: site)?.browser === chromium, "the page moves a turn later, not inside Chromium's callback")
+        await drainMainQueue()
+        let moved = manager.runtime(for: site)?.browser
+        expect(moved is WebKitBrowser && moved?.currentURL == "https://www.netflix.com/browse", "the pane's page opens in WebKit at the address")
+        expect(chromium.closeRequested && store.item(site)?.tab?.url == "https://www.netflix.com/browse", "the Chromium page closes; the tab has the new address")
+        expect(manager.visibleTabIDs == [site, other] && manager.visibleTabID == other, "the split keeps its panes, order and focus")
+        chromium.finishClose()
+
+        // Cra's own navigation in a WebKit page (the URL bar) to another site goes back to Chromium.
+        expect(manager.browser(moved!, handsOffNavigationToURL: "https://example.test/typed", method: "GET"),
+               "a typed address WebKit doesn't show moves to Chromium")
+        expect(!manager.browser(moved!, handsOffNavigationToURL: "https://www.netflix.com/title/1", method: "GET"),
+               "a typed address of a service stays in WebKit")
+        await drainMainQueue()
+        expect(!(manager.runtime(for: site)?.browser is WebKitBrowser) && manager.visibleTabIDs == [site, other], "back in Chromium, in its pane")
+
+        // A tab out of sight gets its page in the other engine at once, so its title and favicon fill in.
+        let hidden = manager.ensureRuntime(for: store.createTab(url: "https://t.example.test/x").id)!
+        expect(manager.browser(hidden.browser, handsOffNavigationToURL: "https://www.disneyplus.com/", method: "GET"), "a background redirect moves too")
+        await drainMainQueue()
+        expect(manager.runtime(for: hidden.tabID)?.browser is WebKitBrowser && !manager.visibleTabIDs.contains(hidden.tabID),
+               "a hidden tab is reopened in WebKit and stays hidden")
+
+        // WebKit's own fullscreen window covers Cra's: the video is on screen, so no Picture in Picture.
+        store.settings.autoPictureInPicture = true
+        let player2 = store.createTab(url: "https://www.netflix.com/watch/1").id
+        manager.show(player2, focus: false)
+        let fullscreen = manager.runtime(for: player2)!.browser as! WebKitBrowser
+        fullscreen.isAudible = true
+        fullscreen.isContentFullscreen = true
+        manager.windowVisibilityChanged(covered: true)
+        expect(!fullscreen.replies.contains { $0.method == "Runtime.evaluate" }, "a WebKit page in its own fullscreen isn't sent to Picture in Picture")
+        manager.windowVisibilityChanged(covered: false)
+        fullscreen.isContentFullscreen = false
+        manager.windowVisibilityChanged(covered: true)
+        expect(fullscreen.replies.contains { $0.method == "Runtime.evaluate" }, "out of fullscreen, a covered window's playing WebKit page is asked as before")
+        manager.windowVisibilityChanged(covered: false)
+        store.settings.autoPictureInPicture = false
+
+        // The Site Control Center's Safari's Engine switch: a site off the list moves to WebKit, in its
+        // place on screen, and back; the choice holds for the next page of that site.
+        let chosen = store.createTab(url: "https://stream.example.test/film").id
+        manager.show([chosen, other], focused: chosen, focus: false)
+        let before = manager.runtime(for: chosen)!.browser
+        manager.reopenInItsEngine(chosen)
+        expect(manager.runtime(for: chosen)?.browser === before, "without a choice the page stays where it is")
+        PageEngines.choose(.webKit, for: "https://stream.example.test/film")
+        manager.reopenInItsEngine(chosen)
+        await drainMainQueue()
+        expect(manager.runtime(for: chosen)?.browser is WebKitBrowser && manager.visibleTabIDs == [chosen, other] && manager.visibleTabID == chosen,
+               "chosen for Safari's engine, the page opens in WebKit in its pane")
+        expect(PageEngines.sites.engine(for: "https://stream.example.test/other") == .webKit, "the choice holds for the site")
+        PageEngines.choose(.chromium, for: "https://stream.example.test/film")
+        manager.reopenInItsEngine(chosen)
+        await drainMainQueue()
+        expect(!(manager.runtime(for: chosen)?.browser is WebKitBrowser), "chosen back, the page opens in Chromium")
+        expect(PageEngines.choices.added.isEmpty && PageEngines.choices.removed.isEmpty, "chosen back, nothing is left on the lists")
+
+        // A late request from a page that already moved changes nothing.
+        expect(!manager.browser(chromium, handsOffNavigationToURL: "https://www.netflix.com/", method: "GET"), "a retired page can't move its tab again")
         manager.closeAll()
     }
 
@@ -590,6 +688,7 @@ enum BrowserManagerLifecycleTests {
                                           (nil, 1, "a page whose answer was lost")] as [(String?, Int, String)] {
             let before = ra.browser.automaticPictureInPictureRequests
             manager.show(b, focus: false)
+            expect(!ra.browser.replies.contains { $0.method == "Cra.autoPictureInPicture" }, "a page that isn't capturing goes straight to the video request")
             expect(ra.browser.lastParams.contains(#""userGesture":true"#), "leaving a video tab asks as a user gesture")
             expect(ra.browser.lastParams.contains("})(true)"), "leaving a video tab takes only an audible, playing video")
             let reply = answer.map { #"{"result":{"type":"string","value":"\#($0)"}}"# }
@@ -601,7 +700,7 @@ enum BrowserManagerLifecycleTests {
         }
         store.settings.autoPictureInPicture = false
         manager.show(b, focus: false)
-        expect(!ra.browser.replies.contains { $0.method == "Runtime.evaluate" }, "with the setting off, leaving the tab asks nothing")
+        expect(!ra.browser.replies.contains { $0.method.hasSuffix("Runtime.evaluate") }, "with the setting off, leaving the tab asks nothing")
         manager.closeAll()
     }
 
@@ -637,8 +736,142 @@ enum BrowserManagerLifecycleTests {
         let rv = manager.ensureRuntime(for: video)!
         manager.show(video, focus: false)
         manager.show(copy.id, focus: false)
-        expect(rv.browser.replies.contains { $0.method == "Runtime.evaluate" }, "leaving another video tab still asks for Picture in Picture")
+        expect(rv.browser.replies.contains { $0.method.hasSuffix("Runtime.evaluate") }, "leaving another video tab still asks for Picture in Picture")
         expect(!rv.browser.replies.contains { $0.method == "Cra.discard" }, "and doesn't put it to sleep")
+        manager.closeAll()
+    }
+
+    /// A call (Google Meet with "Automatic picture-in-picture" on) registers its own
+    /// `enterpictureinpicture` media session handler, which opens a Document Picture in Picture
+    /// window of the call. Leaving its tab while it uses the camera or microphone, or its window
+    /// going out of sight, drives Chrome's automatic Picture in Picture (`Cra.autoPictureInPicture`),
+    /// as Chrome's tab strip and Arc do; coming back has Chrome close the window (GitHub #198).
+    /// A page Chrome doesn't ask gets the video request.
+    @MainActor
+    private static func callPictureInPictureCase() async {
+        let clock = ManualScheduler()
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView(), clock: clock)
+        let a = store.createTab(url: "https://meet.example.test/abc").id, b = store.createTab(url: "https://example.test/other").id
+        let ra = manager.ensureRuntime(for: a)!
+        store.settings.autoPictureInPicture = true
+        ra.browser.isCapturingMedia = true
+        manager.show(a, focus: false)
+        let asked = #"{"asked":true,"pictureInPicture":false}"#, notAsked = #"{"asked":false,"pictureInPicture":false}"#
+        let hidden = #"{"tab":"hidden"}"#, shown = #"{"tab":"shown"}"#
+        let evaluations = { ra.browser.replies.filter { $0.method == "Runtime.evaluate" }.count }
+        let calls = { ra.browser.replies.filter { $0.method == "Cra.autoPictureInPicture" }.count }
+        let settle = { while ra.browser.replies.contains(where: { $0.method == "Cra.autoPictureInPicture" }) {
+            ra.browser.reply(to: "Cra.autoPictureInPicture", with: "{}") } }
+
+        manager.show(b, focus: false)
+        expect(calls() == 1 && ra.browser.lastParams == hidden, "leaving a call's tab drives Chrome's automatic Picture in Picture")
+        ra.browser.reply(to: "Cra.autoPictureInPicture", with: asked)
+        await drainMainQueue()
+        expect(evaluations() == 0 && ra.browser.automaticPictureInPictureRequests == 0, "the page was asked: no video request too")
+        clock.advance(by: 30)
+        manager.show(a, focus: false)
+        expect(calls() == 1 && ra.browser.lastParams == shown, "back on the call's tab, Chrome closes its window")
+        settle()
+        clock.advance(by: 2)
+        expect(calls() == 0, "once: the window was up long before")
+        manager.show(b, focus: false)
+        manager.show(a, focus: false)
+        expect(calls() == 1 && ra.browser.lastParams == hidden, "coming back again closes nothing: the window it opened is gone")
+        ra.browser.reply(to: "Cra.autoPictureInPicture", with: asked)
+        await drainMainQueue()
+        expect(calls() == 1 && ra.browser.lastParams == shown, "back before Chromium answered: the window is closed")
+        settle()
+        clock.advance(by: 1)
+        expect(calls() == 1 && ra.browser.lastParams == shown, "and again a second later, in case it was still opening")
+        settle()
+
+        // A Picture in Picture window this page already has stays when the user comes back.
+        manager.show(b, focus: false)
+        ra.browser.reply(to: "Cra.autoPictureInPicture", with: #"{"asked":false,"pictureInPicture":true}"#)
+        await drainMainQueue()
+        manager.show(a, focus: false)
+        expect(calls() == 0 && evaluations() == 0 && ra.browser.automaticPictureInPictureRequests == 0, "a Picture in Picture already open is left alone")
+
+        // A page Chrome doesn't ask (no handler, no permission), or a Chromium without the method,
+        // gets the video request.
+        for reply in [notAsked, nil] {
+            manager.show(b, focus: false)
+            if let reply { ra.browser.reply(to: "Cra.autoPictureInPicture", with: reply) } else { ra.browser.fail("Cra.autoPictureInPicture", with: "not found") }
+            await drainMainQueue()
+            expect(evaluations() == 1 && ra.browser.lastParams.contains("})(true)"), "leaving its tab falls back to the video request")
+            ra.browser.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"none"}}"#)
+            await drainMainQueue()
+            manager.show(a, focus: false)
+        }
+
+        // The window going out of sight: a silent call is asked through Chrome, and never gets the
+        // video request, which would send the page the activation key.
+        manager.windowVisibilityChanged(covered: true)
+        ra.browser.reply(to: "Cra.autoPictureInPicture", with: notAsked)
+        await drainMainQueue()
+        expect(evaluations() == 0, "a silent call Chrome didn't ask gets no video request on an app switch")
+        manager.windowVisibilityChanged(covered: false)
+        manager.windowVisibilityChanged(covered: true)
+        ra.browser.reply(to: "Cra.autoPictureInPicture", with: asked)
+        await drainMainQueue()
+        clock.advance(by: 30)
+        manager.windowVisibilityChanged(covered: false)
+        expect(calls() == 1 && ra.browser.lastParams == shown, "the window back in sight closes the call's window")
+        settle()
+
+        ra.browser.isCapturingMedia = false
+        manager.show(b, focus: false)
+        expect(calls() == 0, "a page not using the camera or microphone isn't driven through Chrome")
+        manager.closeAll()
+    }
+
+    /// The sidebar player in a Chromium tab: Chromium runs the page's media session handlers
+    /// (`Cra.mediaSession`, like Arc's media actions) and reports which it has, however early the
+    /// page registered them; a page without a play/pause handler has its media elements played or
+    /// paused.
+    @MainActor
+    private static func playerMediaSessionCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let np = NowPlaying()
+        manager.nowPlaying = np
+        let a = store.createTab(url: "https://music.example.test/").id, b = store.createTab(url: "https://example.test/other").id
+        let ra = manager.ensureRuntime(for: a)!
+        manager.show(b, focus: false)
+        ra.browser.isAudible = true
+        manager.browser(ra.browser, didChangeAudible: true)
+        expect(ra.browser.replies.contains { $0.method == "Cra.mediaSession" } && ra.browser.lastParams == "{}",
+               "a page that starts playing is asked which media session actions it has")
+        ra.browser.reply(to: "Cra.mediaSession", with: #"{"actions":["play","pause","nexttrack"],"pictureInPicture":false}"#)
+        await drainMainQueue()
+        expect(np.entries.first?.hasNext == true && np.entries.first?.hasPrevious == false, "the card offers the track buttons the page answers")
+        ra.browser.replies.removeAll()
+
+        manager.performNowPlaying(a, .next)
+        expect(ra.browser.lastParams == #"{"action":"nexttrack"}"#, "next track runs the page's handler")
+        ra.browser.reply(to: "Cra.mediaSession", with: #"{"handled":true,"pictureInPicture":false}"#)
+        await drainMainQueue()
+        expect(!ra.browser.replies.contains { $0.method == "cra:Runtime.evaluate" }, "and nothing else")
+
+        manager.performNowPlaying(a, .togglePlayback)
+        expect(ra.browser.lastIsolatedParams.contains(#"(\"state\")"#), "play/pause first reads whether the page plays")
+        ra.browser.reply(to: "cra:Runtime.evaluate", with: #"{"result":{"type":"string","value":"playing"}}"#)
+        await drainMainQueue()
+        expect(ra.browser.lastParams == #"{"action":"pause"}"#, "a playing page is paused through its handler")
+        ra.browser.reply(to: "Cra.mediaSession", with: #"{"handled":true,"pictureInPicture":false}"#)
+        await drainMainQueue()
+        expect(np.entries.first?.playing == false && ra.browser.replies.isEmpty, "the card shows it paused")
+
+        manager.performNowPlaying(a, .togglePlayback)
+        ra.browser.reply(to: "cra:Runtime.evaluate", with: #"{"result":{"type":"string","value":"paused"}}"#)
+        await drainMainQueue()
+        ra.browser.reply(to: "Cra.mediaSession", with: #"{"handled":false,"pictureInPicture":false}"#)
+        await drainMainQueue()
+        expect(ra.browser.lastIsolatedParams.contains(#"(\"play\")"#), "without a handler the page's media elements play")
+        ra.browser.reply(to: "cra:Runtime.evaluate", with: #"{"result":{"type":"string","value":"playing"}}"#)
+        await drainMainQueue()
+        expect(np.entries.first?.playing == true, "the card shows it playing")
         manager.closeAll()
     }
 
@@ -656,7 +889,7 @@ enum BrowserManagerLifecycleTests {
         manager.show(a, focus: false)
 
         manager.windowVisibilityChanged(covered: true)
-        expect(!ra.browser.replies.contains { $0.method == "Runtime.evaluate" }, "a covered window doesn't ask a silent page")
+        expect(ra.browser.replies.isEmpty, "a covered window doesn't ask a silent page")
         manager.windowVisibilityChanged(covered: false)
 
         ra.browser.isAudible = true
@@ -675,7 +908,7 @@ enum BrowserManagerLifecycleTests {
         ra.browser.isInPictureInPicture = true
         manager.browser(ra.browser, didChangePictureInPicture: true)
         manager.windowVisibilityChanged(covered: true)
-        expect(!ra.browser.replies.contains { $0.method == "Runtime.evaluate" }, "a page already in Picture in Picture isn't asked again")
+        expect(!ra.browser.replies.contains { $0.method.hasSuffix("Runtime.evaluate") }, "a page already in Picture in Picture isn't asked again")
         manager.windowVisibilityChanged(covered: false)
         expect(ra.browser.isInPictureInPicture, "Picture in Picture the user opened stays when the window shows again")
         PictureInPictureChrome.shared.actions?.close()
@@ -732,7 +965,10 @@ enum BrowserManagerLifecycleTests {
         manager.browser(rt.browser, didFailLoadingURL: url, errorCode: -20)
         clock.advance(by: 60)
         expect(rt.browser.loads.count == ExtensionPageRetry.attempts, "after the last attempt the error page stays")
+        ExtensionStore.shared.webStoreProfiles = []
         manager.browser(rt.browser, didFinishLoadingURL: url, title: "Options", statusCode: 200)
+        expect(ExtensionStore.shared.webStoreProfiles == ["Default"],
+               "a loaded page lets its profile's imported Web Store copies install from the store (#203)")
         manager.browser(rt.browser, didFailLoadingURL: url, errorCode: -20)
         clock.advance(by: 0.25)
         expect(rt.browser.loads.count == ExtensionPageRetry.attempts + 1, "a page that loaded starts counting again")

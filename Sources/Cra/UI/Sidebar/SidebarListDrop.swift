@@ -7,10 +7,8 @@ struct SidebarListDrop: Equatable {
     enum Target: Equatable {
         /// Before the child at `index` of `parent` (`index == count` appends).
         case insert(parent: UUID, index: Int)
-        /// A new folder holding this tab and the dragged one (a pinned tab).
-        case newFolder(with: UUID)
-        /// A split of this tab and the dragged one (a Today tab); the dragged
-        /// tab takes the left pane when `leading`, else the right.
+        /// A split of this tab and the dragged one (Arc's drag-to-combine, pinned or Today, #191);
+        /// the dragged tab takes the left pane when `leading`, else the right.
         case split(with: UUID, leading: Bool)
         /// Into a folder or a split row.
         case into(UUID)
@@ -89,16 +87,12 @@ final class DragAutoscroller {
     }
 }
 
-/// A tab row while another tab hovers over its middle, drawn as the row the
-/// drop makes: in Today the row splits open and the dragged tab slides into a
-/// dashed pane on the side it will take (the split row's own layout), moving
-/// across when the pointer crosses the row's middle; in Pinned it becomes a
-/// "New Folder" row with both tabs' icons dropping into a stack.
-/// What dropping a row onto another would make, drawn over the target row: a split with the
-/// dragged tab sliding in beside it under a dashed outline, or a new folder with both icons.
+/// A tab row while another tab hovers over its middle, drawn as the split the drop makes:
+/// the row splits open and the dragged tab slides into a dashed pane on the side it will take
+/// (the split row's own layout), moving across when the pointer crosses the row's middle.
 @MainActor
 final class CombineDropPreview: NSView {
-    enum Kind: Equatable { case split(leading: Bool), folder }
+    enum Kind: Equatable { case split(leading: Bool) }
 
     private let kind: Kind
     private let target: SidebarItem
@@ -168,7 +162,6 @@ final class CombineDropPreview: NSView {
         }
         switch kind {
         case .split(let leading): buildSplit(leading: leading)
-        case .folder: buildFolder()
         }
         CATransaction.commit()
     }
@@ -231,71 +224,5 @@ final class CombineDropPreview: NSView {
         line.layer?.backgroundColor = colors.separator.cgColor
         addSubview(line)
         Self.spring(line.layer, "opacity", from: 0.0, to: 1.0)
-    }
-
-    // MARK: Folder
-
-    private func buildFolder() {
-        let x0 = CraMetrics.rowLeading + CGFloat(depth) * CraMetrics.indent
-        let h = bounds.height
-        let tones = palette.folderColors(nil)
-        // The folder: its outline over its fill, popping from 40%.
-        let folder = CALayer()
-        folder.frame = NSRect(x: x0, y: (h - 16) / 2, width: CraMetrics.favicon, height: 16)
-        for (name, color) in [("folder.fill", NSColor(tones.fill)), ("folder", NSColor(tones.tint))] {
-            let l = CALayer()
-            l.frame = folder.bounds
-            l.contentsGravity = .center
-            l.contentsScale = window?.backingScaleFactor ?? 2
-            l.contents = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
-                .withSymbolConfiguration(.init(pointSize: 15, weight: .regular).applying(.init(paletteColors: [color])))
-            folder.addSublayer(l)
-        }
-        layer?.addSublayer(folder)
-        Self.spring(folder, "transform.scale", from: 0.4, to: 1.0)
-        Self.spring(folder, "opacity", from: 0.0, to: 1.0)
-        let label = NSTextField.sidebarLabel(size: 14, weight: .medium)
-        label.stringValue = "New Folder"
-        label.textColor = colors.textPrimary
-        let lx = x0 + CraMetrics.favicon + 11
-        label.frame = NSRect(x: lx - SidebarText.inset, y: (h - 17) / 2, width: max(0, bounds.width - lx - 60) + 2 * SidebarText.inset, height: 17)
-        addSubview(label)
-        // Both icons stacked 14 pt from the trailing edge, fanning out.
-        let cx = bounds.width - 6 - 14 - 10
-        let back = stackedIcon(target, centre: CGPoint(x: cx, y: h / 2))
-        let front = stackedIcon(dragged, centre: CGPoint(x: cx, y: h / 2))
-        // SwiftUI's angles and offsets as they are: this view is flipped, y grows down like SwiftUI's.
-        back.transform = CATransform3DConcat(CATransform3DMakeRotation(-6 * .pi / 180, 0, 0, 1), CATransform3DMakeTranslation(-5, 0, 0))
-        front.transform = CATransform3DConcat(CATransform3DMakeRotation(7 * .pi / 180, 0, 0, 1), CATransform3DMakeTranslation(6, 0, 0))
-        Self.spring(back, "transform", from: CATransform3DIdentity, to: back.transform)
-        Self.spring(front, "transform", from: CATransform3DMakeTranslation(22, -8, 0), to: front.transform)
-        Self.spring(front, "opacity", from: 0.0, to: 1.0)
-    }
-
-    private func stackedIcon(_ item: SidebarItem, centre: CGPoint) -> CALayer {
-        let l = CALayer()
-        l.bounds = CGRect(x: 0, y: 0, width: 20, height: 20)
-        l.position = centre
-        l.cornerRadius = 5
-        l.cornerCurve = .continuous
-        l.backgroundColor = (palette.isDark ? NSColor(white: 0.22, alpha: 1) : .white).cgColor
-        l.shadowColor = NSColor.black.cgColor
-        l.shadowOpacity = 0.15
-        l.shadowRadius = 1.5
-        l.shadowOffset = CGSize(width: 0, height: 0.5)
-        let icon = SidebarFaviconView(size: 14)
-        icon.show(favicons.image(forKey: item.tab?.iconKey), flip: favicons.glyphIsDark(forKey: item.tab?.iconKey) == palette.isDark, colors: colors)
-        let face = CALayer()
-        face.frame = CGRect(x: 3, y: 3, width: 14, height: 14)
-        face.contentsGravity = .resizeAspect
-        face.contentsScale = window?.backingScaleFactor ?? 2
-        face.cornerRadius = 14 * 0.22
-        face.masksToBounds = true
-        if let image = icon.image {
-            face.contents = image.layerContents(forContentsScale: face.contentsScale)
-        }
-        l.addSublayer(face)
-        layer?.addSublayer(l)
-        return l
     }
 }

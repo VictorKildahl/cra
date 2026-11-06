@@ -74,6 +74,8 @@ final class SuggestionEngine {
         var result = SuggestionResult(query: query)
         if q.isEmpty {
             result.items = Array(recentSuggestions(excluding: currentTabID).prefix(Self.maxRows))
+            // Tab on the empty field lists the actions (Arc's typeTravel), with no hint at the end of it.
+            result.scope = .actions
             return result
         }
 
@@ -153,6 +155,23 @@ final class SuggestionEngine {
             Suggestion(id: "tab:\(tab.id)", kind: .switchToTab(tab.id), title: tab.displayTitle, subtitle: Self.humanURL(tab.tab?.url ?? ""),
                        url: tab.tab?.url, faviconKey: tab.tab?.faviconKey, symbol: nil, trailing: "Switch to Tab", score: 0, spaceID: spaceID)
         }
+        return result
+    }
+
+    /// The bar scoped to actions (Tab on the empty field, Arc's typeTravel): commands, space
+    /// switches and moves, the most used first, narrowed by what is typed.
+    func suggestions(forActionsMatching rawQuery: String, currentTabID: UUID?) -> SuggestionResult {
+        let query = rawQuery.trimmingCharacters(in: .whitespaces)
+        let q = query.lowercased()
+        var result = SuggestionResult(query: query)
+        let rows = actionRows(q, currentTabID: currentTabID).filter { row in
+            if case .command(let id) = row.suggestion.kind { return ActionSearchScope.lists(actionID: id) }
+            return true
+        }
+        let ranked = ActionSearchScope.rank(rows.indices.map {
+            ActionSearchScope.Candidate(id: $0, score: rows[$0].suggestion.score, uses: rows[$0].uses)
+        }, typed: !q.isEmpty)
+        result.items = ranked.prefix(Self.maxRows).map { rows[$0].suggestion }
         return result
     }
 
@@ -343,7 +362,17 @@ final class SuggestionEngine {
 
     private func commandSuggestions(_ q: String, currentTabID: UUID?) -> [Suggestion] {
         guard q.count >= 2 else { return [] }
-        var out: [Suggestion] = []
+        return actionRows(q, currentTabID: currentTabID).map { row in
+            var s = row.suggestion
+            s.score += Double(min(row.uses, 10)) * 2
+            return s
+        }
+    }
+
+    /// Commands, space switches and moves the text names (all of them with nothing typed), each
+    /// scored by its name alone, with how often it was run from the bar.
+    private func actionRows(_ q: String, currentTabID: UUID?) -> [(suggestion: Suggestion, uses: Int)] {
+        var out: [(suggestion: Suggestion, uses: Int)] = []
         func nameScore(_ name: String, triggers: [String]) -> Double {
             let n = name.lowercased()
             if n.hasPrefix(q) { return 80 }
@@ -353,23 +382,23 @@ final class SuggestionEngine {
             return 0
         }
         for a in bindings.actions where a.inCommandBar {
-            var s = nameScore(a.name, triggers: a.triggers)
+            let s = nameScore(a.name, triggers: a.triggers)
             guard s > 0 else { continue }
-            s += Double(min(store.ranking.commandUsage[a.id] ?? 0, 10)) * 2
-            out.append(Suggestion(id: "cmd:\(a.id)", kind: .command(a.id), title: a.name, subtitle: "Command",
-                                  url: nil, faviconKey: nil, symbol: a.symbol ?? "command", trailing: a.primary?.display, score: s))
+            out.append((Suggestion(id: "cmd:\(a.id)", kind: .command(a.id), title: a.name, subtitle: "Command",
+                                   url: nil, faviconKey: nil, symbol: a.symbol ?? "command", trailing: a.primary?.display, score: s),
+                        store.ranking.commandUsage[a.id] ?? 0))
         }
         for space in incognito ? [] : store.orderedSpaces {
             let s = nameScore("Switch to \(space.title)", triggers: [space.title.lowercased()])
             if s > 0 && space.id != store.focusedSpaceID {
-                out.append(Suggestion(id: "space:\(space.id)", kind: .switchSpace(space.id), title: "Switch to \(space.title)",
-                                      subtitle: "Space", url: nil, faviconKey: nil, symbol: nil, trailing: space.emoji, score: s))
+                out.append((Suggestion(id: "space:\(space.id)", kind: .switchSpace(space.id), title: "Switch to \(space.title)",
+                                       subtitle: "Space", url: nil, faviconKey: nil, symbol: nil, trailing: space.emoji, score: s), 0))
             }
             if currentTabID != nil, space.id != store.focusedSpaceID {
                 let m = nameScore("Move Tab to \(space.title)", triggers: ["move"])
                 if m > 0 {
-                    out.append(Suggestion(id: "move:\(space.id)", kind: .moveToSpace(space.id), title: "Move Tab to \(space.title)",
-                                          subtitle: "Space", url: nil, faviconKey: nil, symbol: "arrow.right.square", trailing: space.emoji, score: m - 5))
+                    out.append((Suggestion(id: "move:\(space.id)", kind: .moveToSpace(space.id), title: "Move Tab to \(space.title)",
+                                           subtitle: "Space", url: nil, faviconKey: nil, symbol: "arrow.right.square", trailing: space.emoji, score: m - 5), 0))
                 }
             }
         }
@@ -378,8 +407,8 @@ final class SuggestionEngine {
                 let name = f.title ?? "Folder"
                 let m = nameScore("Move Tab to Folder \(name)", triggers: [name.lowercased()])
                 if m > 0 {
-                    out.append(Suggestion(id: "folder:\(f.id)", kind: .moveToFolder(f.id), title: "Move Tab to \(name)",
-                                          subtitle: "Folder", url: nil, faviconKey: nil, symbol: "folder", trailing: nil, score: m - 5))
+                    out.append((Suggestion(id: "folder:\(f.id)", kind: .moveToFolder(f.id), title: "Move Tab to \(name)",
+                                           subtitle: "Folder", url: nil, faviconKey: nil, symbol: "folder", trailing: nil, score: m - 5), 0))
                 }
             }
         }
@@ -525,11 +554,14 @@ enum CommandBarScope: Equatable {
     case site(SiteSearch)
     /// The open tabs of the window's space (#49).
     case tabs
+    /// Arc's typeTravel: Tab on the empty field lists the browser's actions (#195).
+    case actions
 
     var name: String {
         switch self {
         case .site(let site): return site.name
         case .tabs: return TabSearchScope.name
+        case .actions: return ActionSearchScope.name
         }
     }
 }

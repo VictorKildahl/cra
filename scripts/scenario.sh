@@ -27,10 +27,15 @@
 #   snapshot <View[,n]> <name>  the nth visible view of that class drawn to PNG and compared with
 #                               Tests/Snapshots/<name>.png (CRA_SNAPSHOT_RECORD=1 records it)
 #   fresh                       no seeded settings: onboarding shows, as on a new Mac
+#   seed <file> <json>          that data-folder file before launch (a seeded settings.json
+#                               replaces the default one)
+#   env <NAME=value>            passed to Cra
+#   home                        a throwaway home folder, so downloads stay out of ~/Downloads
 #   requires screen
 #   port <n>                    serve ${PAGE} on a fixed port (snapshots show the address)
 # ${FIXTURES}, ${PAGE} (Tests/Fixtures/Pages/page.html from a local server, so it has a host
-# for developer mode and tab sleep), ${EXTENSION_ID} (Tests/Fixtures/Extension) and
+# for developer mode and tab sleep), ${WEBKIT} (that server as http://localhost:<port>, a host the
+# run treats as a DRM service, so its pages open in WebKit), ${EXTENSION_ID} (Tests/Fixtures/Extension) and
 # ${SIDE_PANEL_EXTENSION_ID} (Tests/Fixtures/SidePanelExtension) expand.
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -67,8 +72,18 @@ LOG="$DATA/cra.log"
 : > "$CMD"
 STARTED="$OUT/started"
 touch "$STARTED"
+# The scenario's own data files, environment and home folder.
+app_env=(env)
+while read -r _ seed json; do echo "$json" > "$DATA/$seed"; done < <(grep '^seed ' "$FILE")
+while read -r _ kv; do app_env+=("$kv"); done < <(grep '^env ' "$FILE")
+if grep -q '^home$' "$FILE"; then
+  mkdir -p "$DATA/home/Downloads"
+  app_env+=(CFFIXED_USER_HOME="$DATA/home")
+fi
 # Past onboarding, and nothing taken from this Mac's Arc (its toolbar default) unless asked.
-grep -q '^fresh' "$FILE" || echo '{"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}' > "$DATA/settings.json"
+if ! grep -q '^fresh' "$FILE" && [ ! -f "$DATA/settings.json" ]; then
+  echo '{"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}' > "$DATA/settings.json"
+fi
 
 PIDS=()
 PID=""
@@ -83,10 +98,13 @@ python3 -I -u -m http.server --bind 127.0.0.1 --directory "$FIXTURES/Pages" "${F
 SERVER=$!
 for _ in $(seq 1 50); do PORT=$(sed -n 's/.*port \([0-9]*\).*/\1/p' "$OUT/server.log" | head -1); [ -n "$PORT" ] && break; sleep 0.1; done
 PAGE="http://127.0.0.1:${PORT:?http server did not start}/page.html"
+# The same server under another host, which the run lists as a DRM service (CRA_WEBKIT_HOSTS):
+# its pages open in WebKit, the way Spotify and Netflix do (ProtectedMediaSites).
+WEBKIT="http://localhost:${PORT}"
 
-CRA_DATA_DIR="$DATA" CRA_COMMAND_FILE="$CMD" CRA_HITCH_LOG="$HITCH" CRA_TEST_BACKGROUND=1 \
+CRA_DATA_DIR="$DATA" CRA_COMMAND_FILE="$CMD" CRA_HITCH_LOG="$HITCH" CRA_TEST_BACKGROUND=1 CRA_WEBKIT_HOSTS=localhost \
   CRA_ARC_DIR="$FIXTURES/Arc" CRA_FLAGS="${CRA_FLAGS:-}" \
-  "$APP/Contents/MacOS/Cra" >"$OUT/stdout.log" 2>&1 &
+  "${app_env[@]}" "$APP/Contents/MacOS/Cra" >"$OUT/stdout.log" 2>&1 &
 PID=$!
 PIDS+=("$PID")
 
@@ -122,7 +140,7 @@ sleep 2
 PACE=0.2
 RSS_BUDGET=1500 MAXSTALL=1500 STALLS50=10 LAUNCHSTALL=1000 PERFCPU=0.1
 BASELINE=""
-expand() { local s="$1"; s="${s//\$\{FIXTURES\}/$FIXTURES}"; s="${s//\$\{PAGE\}/$PAGE}"; s="${s//\$\{EXTENSION_ID\}/$EXTENSION_ID}"; s="${s//\$\{SIDE_PANEL_EXTENSION_ID\}/$SIDE_PANEL_EXTENSION_ID}"; printf '%s' "$s"; }
+expand() { local s="$1"; s="${s//\$\{FIXTURES\}/$FIXTURES}"; s="${s//\$\{PAGE\}/$PAGE}"; s="${s//\$\{WEBKIT\}/$WEBKIT}"; s="${s//\$\{EXTENSION_ID\}/$EXTENSION_ID}"; s="${s//\$\{SIDE_PANEL_EXTENSION_ID\}/$SIDE_PANEL_EXTENSION_ID}"; printf '%s' "$s"; }
 
 echo "$NAME (pid $PID, logs in ${OUT#$ROOT/})"
 while IFS= read -r raw || [ -n "$raw" ]; do
@@ -183,7 +201,7 @@ while IFS= read -r raw || [ -n "$raw" ]; do
         [ -x "$OUT/compare-png" ] || xcrun swiftc -O "$ROOT/scripts/compare-png.swift" -o "$OUT/compare-png" 2>"$OUT/compare-png.log"
         verdict=$("$OUT/compare-png" "$ref" "$shot" "$OUT/snapshots/$3.diff.png" 2>&1) || problem "snapshot $3: $verdict"
       fi ;;
-    fresh|requires|port) ;;
+    fresh|requires|port|seed|env|home) ;;
     *) problem "unknown scenario line: $line" ;;
   esac
 done < "$FILE"

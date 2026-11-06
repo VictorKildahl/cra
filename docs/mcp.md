@@ -196,7 +196,11 @@ is disabled. Both use the selected normal profile; neither is an isolated login 
 
 ## Development checks
 
-Run `scripts/test.sh`, then build the app and run:
+Run `scripts/test.sh` for the normal unit and contract checks. The live suites below
+are manual integration checks, not part of `scripts/test.sh` or the PR workflow.
+Use them for changes to MCP input, transfers, CEF integration or browser lifecycle;
+the extended suite briefly opens a real Document Picture-in-Picture window.
+Build the app, then run:
 
 ```sh
 python3 Tests/mcp_extended.py --app build/CraDev.app
@@ -269,6 +273,19 @@ The normal debug build/signature, complete `scripts/test.sh`, 100-check integrat
 and 67-check extended suite passed again. Upstream's `devtools-close-tab` scenario
 also passed, including helper cleanup, memory/stall checks and recorder overhead
 of 0.073% against the unchanged 0.1% budget.
+
+Upstream `c33b736` was merged on 6 November 2026 with its pinned CEF codecs14 build.
+The conflict resolution preserves intentionally ownerless Document PiP clients while
+still closing tabs whose weak owner disappeared. Agent download updates are handled
+before ordinary save-panel cancellation tracking. Three real-browser regressions
+check that PiP stays alive without a sidebar tab, closes explicitly, and closes when
+its opener navigates; the suite also waits for agent shutdown before measuring PiP.
+The integrated build/signature, 487 Core tests in 84 suites and all harnesses/lint
+passed. Coverage passed at 770/787 measured changed lines (97.8%) and 99.4% Core.
+The final live suites passed 100 integration and 70 extended checks, following an
+earlier successful run. Two focused Claude source reviews found no blockers.
+The targeted `devtools-close-tab` scenario passed cleanup, memory and stall checks,
+with recorder overhead of 0.056% against the unchanged 0.1% budget.
 
 The Settings toggle was also tested with an active client and agent tab: client
 EOF, socket removal, new-client rejection, agent closure and staged-upload cleanup.

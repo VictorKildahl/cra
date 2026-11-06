@@ -75,6 +75,9 @@ static NSHashTable<CraBrowser*>* g_allBrowsers = nil;
 /// Closed tabs whose page stays alive until its downloads end (see -[CraBrowser close]).
 static NSMutableSet<CraBrowser*>* g_parkedBrowsers = nil;
 static void (^g_strayPageHandler)(NSString*, NSString*) = nil;
+// Downloads whose save panel was cancelled (#190): cancelled on their next update, never shown.
+static std::set<uint32_t> g_cancelledDownloads;
+static void (^g_downloadDestinationHandler)(NSString*, NSString*, void (^)(NSString*)) = nil;
 static void (^g_processEventHandler)(NSString*, NSString*, NSString*) = nil;
 
 static NSString* NSStringFromCef(const CefString& s) {
@@ -191,6 +194,11 @@ static CraClient* AsCraClient(CefClient* c) {
 @property (nonatomic) BOOL isInPictureInPicture;
 @property (nonatomic) BOOL isPictureInPicturePlaying;
 @property (nonatomic) BOOL isCapturingMedia;
+/// Media access CEF's own permission flow granted (OnMediaAccessChange), and the camera or
+/// microphone Chrome's tab recording indicator counts ("Cra.capture"); isCapturingMedia is either.
+@property (nonatomic) BOOL cefMediaAccess;
+@property (nonatomic) BOOL chromeCapture;
+- (void)updateCapture;
 @property (nonatomic) BOOL isAudible;
 - (void)audibleChanged:(BOOL)audible;
 - (void)requestPictureInPictureInFrame:(CefRefPtr<CefFrame>)frame automatic:(BOOL)automatic x:(int)x y:(int)y;
@@ -230,6 +238,50 @@ static CraClient* AsCraClient(CefClient* c) {
 // view under a transparent title bar (BrowserNativeWidgetMac::PopulateCreateWindowParams)
 // and popups a plain titled window, which is how they are told apart here.
 static NSHashTable<NSWindow*>* g_extensionWindows = nil;
+
+// NativeWidgetMacNSWindow's switch for acting as a non-activating panel (Widget::SetActivationIndependence).
+@protocol CraActivationIndependentWindow
+- (void)setActivationIndependence:(BOOL)independence;
+@end
+
+// Chromium makes a Picture in Picture window (a video's, or Document PiP's) an ordinary window that
+// joins every desktop Space, so it went missing over another app's full-screen Space (GitHub #206).
+// Only a non-activating panel joins that Space (#186); Arc's PiP is one (an NSPanel, AXSystemDialog).
+// This is Chromium's own recipe for such windows (Glic's floating panel, the screen-share picker):
+// activation independence, which makes NativeWidgetMacNSWindow answer _isNonactivatingPanel, and
+// SetCanAppearInExistingFullscreenSpaces' collection behaviour.
+static void FloatOverFullScreenSpaces(NSWindow* window) {
+    if (!window) return;
+    if ([window respondsToSelector:@selector(setActivationIndependence:)]) {
+        [(id<CraActivationIndependentWindow>)window setActivationIndependence:YES];
+        // It also turns canHide off; Chrome's PiP has always hidden with the app (⌘H), so it still does.
+        window.canHide = YES;
+    }
+    // Chromium also makes every top-level window `.managed` (Document PiP is one), and a managed
+    // window stays off another app's full-screen Space whatever else it says.
+    NSWindowCollectionBehavior behavior = window.collectionBehavior;
+    behavior &= ~(NSWindowCollectionBehaviorPrimary | NSWindowCollectionBehaviorFullScreenPrimary
+                  | NSWindowCollectionBehaviorManaged);
+    behavior |= NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorFullScreenAuxiliary;
+    window.collectionBehavior = behavior;
+    // Shown while a full-screen Space is in front (Document PiP, or a video's from a tab left for it),
+    // the window only moves onto that Space once it is ordered again.
+    if (window.isVisible) [window orderFrontRegardless];
+}
+
+// Document Picture in Picture's window comes from Chrome after the browser exists; it is
+// usually there by the next turn of the run loop.
+static void FloatDocumentPictureInPicture(CefRefPtr<CefBrowser> browser, int attempt) {
+    NSView* view = (__bridge NSView*)browser->GetHost()->GetWindowHandle();
+    if (NSWindow* window = view.window) {
+        FloatOverFullScreenSpaces(window);
+        return;
+    }
+    if (attempt >= 40) return;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 50 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+        FloatDocumentPictureInPicture(browser, attempt + 1);
+    });
+}
 
 // Chrome shows a new tabbed window at the end of Navigate(), after this first navigation
 // has started, so ordering it out here is not enough: shown, it pulled a full-screen Cra
@@ -660,7 +712,12 @@ public:
             (enabled.empty() ? "" : enabled + ",") + "ForceWebRequestProxyForTest,"
             // Tab sleeping discards a page in place (Cra.discard), as Arc's Chromium does: the tab
             // keeps its back/forward list and scroll position, and loads again when shown (#153).
-            + "WebContentsDiscard");
+            + "WebContentsDiscard,"
+            // A hidden page's frame unlocks, so Chromium can evict it past its saved-frame cap or
+            // after 5 minutes, as Chrome does for background tabs (Cra's are never detached from
+            // their window, which is how Chrome gets there). Cra's page windows then let go of
+            // it (MainWindowController.releaseHiddenFrames, #195).
+            + "HideDelegatedFrameHostMac");
         // Kerberos/NTLM single sign-on (ADFS /adfs/ls/wia and the like). Chromium only sends
         // the OS ticket to allowlisted hosts, and IT sets that list as a Chrome or Edge policy,
         // which CEF never reads. Without it those logins fail with ERR_INVALID_AUTH_CREDENTIALS.
@@ -1196,7 +1253,7 @@ public:
     /// Cra closed this page (-[CraBrowser close]). Kept here rather than read from the owner:
     /// the CraBrowser can be gone before Chromium asks.
     void SetCloseRequested() { close_requested_ = true; }
-    explicit CraClient(CraBrowser* owner) : windowless_(owner.isAgent), owner_(owner), blocker_(new CraContentBlockingHandler(!owner.isAgent)) { CraClientRegistry().insert(static_cast<const void*>(static_cast<CefClient*>(this))); }
+    explicit CraClient(CraBrowser* owner) : windowless_(owner.isAgent), owner_(owner), ownerless_(owner == nil), blocker_(new CraContentBlockingHandler(!owner.isAgent)) { CraClientRegistry().insert(static_cast<const void*>(static_cast<CefClient*>(this))); }
     ~CraClient() override { CraClientRegistry().erase(static_cast<const void*>(static_cast<CefClient*>(this))); }
 
     CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
@@ -1249,7 +1306,9 @@ public:
         CEF_REQUIRE_UI_THREAD();
         g_liveBrowsers++;
         if (CraBrowser* o = owner_) [o adoptBrowser:browser];
-        else browser->GetHost()->CloseBrowser(true);
+        // Document PiP deliberately has no owner; a tab whose weak owner vanished must close.
+        else if (!ownerless_) browser->GetHost()->CloseBrowser(true);
+        if (ownerless_) FloatDocumentPictureInPicture(browser, 0);
     }
 
     void FinishAgentPermission() {
@@ -1286,6 +1345,16 @@ public:
         CEF_REQUIRE_UI_THREAD();
         CraBrowser* o = owner_;
         if (!o || !o.delegate) return true;
+        // Document Picture in Picture (documentPictureInPicture.requestWindow: Google Meet's call
+        // window): CEF always makes Chrome's own Picture in Picture window for it. It is not a
+        // tab, so it gets a client with no CraBrowser rather than a new tab to host it, which
+        // showed up in the sidebar, was selected and took the window off the tab the user picked
+        // (GitHub #198). The page that opened it keeps it, and Chrome closes it with that page.
+        if (target_disposition == CEF_WOD_NEW_PICTURE_IN_PICTURE) {
+            client = new CraClient(nil);
+            CraPageSettings(settings);
+            return false;
+        }
         // A target=_blank link the user clicked (Shift-clicked: a new window) may open in a
         // Peek; window.open with features (a sign-in popup) is CEF_WOD_NEW_POPUP and stays one.
         if (user_gesture && (target_disposition == CEF_WOD_NEW_FOREGROUND_TAB || target_disposition == CEF_WOD_NEW_WINDOW)
@@ -1473,11 +1542,8 @@ public:
     void OnMediaAccessChange(CefRefPtr<CefBrowser> browser, bool has_video_access, bool has_audio_access) override {
         CraBrowser* o = owner_;
         if (!o) return;
-        BOOL capturing = has_video_access || has_audio_access;
-        if (capturing == o.isCapturingMedia) return;
-        o.isCapturingMedia = capturing;
-        if ([o.delegate respondsToSelector:@selector(browser:didChangeMediaCapture:)])
-            [o.delegate browser:o didChangeMediaCapture:capturing];
+        o.cefMediaAccess = has_video_access || has_audio_access;
+        [o updateCapture];
     }
 
     // Chromium's audible state, which CEF has no callback for: the engine sends it as a
@@ -1490,6 +1556,18 @@ public:
         CraBrowser* o = owner_;
         if (message->GetName() == "Cra.audible") {
             if (o) [o audibleChanged:message->GetArgumentList()->GetBool(0)];
+            return true;
+        }
+        // Camera and microphone use as Chrome's tab recording indicator counts it, which a
+        // Chrome-style page's media never reaches OnMediaAccessChange with (Arc's
+        // didChangeCameraState / didChangeMicrophoneState; scripts/cef-patches/
+        // media-capture-and-session.patch).
+        if (message->GetName() == "Cra.capture") {
+            CefRefPtr<CefListValue> args = message->GetArgumentList();
+            if (o) {
+                o.chromeCapture = (args->GetSize() > 0 && args->GetBool(0)) || (args->GetSize() > 1 && args->GetBool(1));
+                [o updateCapture];
+            }
             return true;
         }
         if (message->GetName() == "Cra.activate") {
@@ -1557,6 +1635,11 @@ public:
         CraBrowser* o = owner_;
         if (!o || !frame->IsMain()) return false;
         if (OpensPeek(o, request, user_gesture, is_redirect)) return true;
+        // A page Cra shows in another engine (ProtectedMediaSites, WebKit for DRM services):
+        // cancelled before the request goes out, so a sign-in's one-time code isn't spent here.
+        if ([o.delegate respondsToSelector:@selector(browser:handsOffNavigationToURL:method:)]
+            && [o.delegate browser:o handsOffNavigationToURL:NSStringFromCef(request->GetURL())
+                            method:NSStringFromCef(request->GetMethod())]) return true;
         // A new page, also one started while the last is still loading: the loading bar waits
         // for its answer again.
         if (!is_redirect) SetCommittedLoad(o, NO);
@@ -1763,6 +1846,21 @@ public:
         }
         NSString* name = NSStringFromCef(suggested_name);
         if (name.length == 0) name = @"download";
+        // Cra picks the profile's folder, or asks with a save panel; the callback waits for it.
+        if (auto handler = g_downloadDestinationHandler) {
+            CraBrowser* o = owner_;
+            NSString* profile = o && !o.isIncognito ? o.profilePath : nil;
+            __block CefRefPtr<CefBeforeDownloadCallback> cb = callback;
+            uint32_t downloadID = download_item->GetId();
+            handler(profile, name, ^(NSString* path) {
+                if (!cb) return;
+                if (path.length) cb->Continue(CefStringFromNS(path), false);
+                // Dropping the callback unanswered cancels in CEF; the next update makes sure.
+                else g_cancelledDownloads.insert(downloadID);
+                cb = nullptr;
+            });
+            return true;
+        }
         NSString* dir = [NSSearchPathForDirectoriesInDomains(NSDownloadsDirectory, NSUserDomainMask, YES) firstObject];
         NSString* path = [dir stringByAppendingPathComponent:name];
         NSFileManager* fm = [NSFileManager defaultManager];
@@ -1785,6 +1883,12 @@ public:
         if (windowless_) {
             if (o) [o agentDownloadUpdated:item callback:callback];
             else callback->Cancel();
+            return;
+        }
+        // Save-panel cancellations belong to ordinary downloads, never agent transfers.
+        if (g_cancelledDownloads.count(item->GetId())) {
+            if (item->IsInProgress()) callback->Cancel();
+            else g_cancelledDownloads.erase(item->GetId());
             return;
         }
         if (!o) return;
@@ -1873,6 +1977,8 @@ private:
     CefRefPtr<CraIgnoreAgentPermission> agent_permission_;
     const bool windowless_;
     __weak CraBrowser* owner_;
+    // Made without a CraBrowser: Document Picture in Picture's client (owner_ is weak, so it can't say).
+    const bool ownerless_;
     bool close_requested_ = false;
     CefRefPtr<FaviconState> favicon_ = new FaviconState();
     CefRefPtr<CefResourceRequestHandler> blocker_;
@@ -2117,6 +2223,14 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 
 - (CefRefPtr<CefRequestContext>)requestContext {
     return _isIncognito ? IncognitoContext() : ProfileContext(_profilePath);
+}
+
+- (void)updateCapture {
+    BOOL capturing = self.cefMediaAccess || self.chromeCapture;
+    if (capturing == self.isCapturingMedia) return;
+    self.isCapturingMedia = capturing;
+    if ([self.delegate respondsToSelector:@selector(browser:didChangeMediaCapture:)])
+        [self.delegate browser:self didChangeMediaCapture:capturing];
 }
 
 - (CefRefPtr<CefBrowser>)cefBrowser { return _browser; }
@@ -2816,12 +2930,15 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 + (BOOL)anotherInstanceWasNotified { return g_alreadyRunning; }
 + (void)setRelaunchHandler:(void (^)(NSArray<NSString*>*))handler { g_relaunchHandler = [handler copy]; }
 + (void)setStrayPageHandler:(void (^)(NSString*, NSString*))handler { g_strayPageHandler = [handler copy]; }
++ (void)setDownloadDestinationHandler:(void (^)(NSString*, NSString*, void (^)(NSString*)))handler { g_downloadDestinationHandler = [handler copy]; }
 + (void)setProcessEventHandler:(void (^)(NSString*, NSString*, NSString*))handler { g_processEventHandler = [handler copy]; }
 + (BOOL)isExtensionWindow:(NSWindow*)window { return window && [g_extensionWindows containsObject:window]; }
 + (BOOL)isPageWindow:(NSWindow*)window {
     for (CraBrowser* b in g_allBrowsers) if (window && b.hostWindow == window) return YES;
     return NO;
 }
+
++ (void)floatOverFullScreenSpaces:(NSWindow*)window { FloatOverFullScreenSpaces(window); }
 
 + (void)runMessageLoop { CefRunMessageLoop(); }
 + (void)quitMessageLoop { CraQuitMessageLoop(); }

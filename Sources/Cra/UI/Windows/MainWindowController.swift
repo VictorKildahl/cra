@@ -85,7 +85,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                                styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                                backing: .buffered, defer: false)
         super.init(window: window)
-        window.delegate = self
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true
@@ -93,7 +92,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         window.isReleasedWhenClosed = false
         window.tabbingMode = .disallowed
         window.title = "Cra"
-        if session.frame == nil { window.center() }
+        // The initializer can shift a saved global frame onto the current screen.
+        // Apply it after construction so a window on another display stays there.
+        if session.frame != nil, NSScreen.screens.contains(where: { $0.visibleFrame.intersects(frame) }) {
+            window.setFrame(frame, display: false)
+        } else {
+            window.center()
+        }
+        window.delegate = self
         sidebarUI.windowID = session.id
 
         let store = app.store
@@ -203,6 +209,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.refreshMaterialActive(); self?.sidebarUI.appActive = false }
         }
+        shell.activeAppearance.onChange = { [weak self] in self?.refreshMaterialActive() }
         // Any window: key and main move between this window, its page windows and other windows.
         for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification, NSWindow.didBecomeMainNotification,
                      NSWindow.didResignMainNotification, NSWindow.didMiniaturizeNotification, NSWindow.didDeminiaturizeNotification] {
@@ -233,7 +240,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             return false
         }
         return SidebarBackdrop.windowActive(appActive: NSApp.isActive, miniaturized: window.isMiniaturized,
-                                            holdsKeyOrMain: holds(NSApp.keyWindow) || holds(NSApp.mainWindow))
+                                            holdsKeyOrMain: holds(NSApp.keyWindow) || holds(NSApp.mainWindow),
+                                            activeAppearance: shell.activeAppearance.isActive ?? false)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -522,9 +530,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         var nav: [UUID: TabNavState] = [:]
         for id in ids {
             guard let rt = browsers.runtime(for: id) else { continue }
-            nav[id] = TabNavState(canGoBack: rt.browser.canGoBack, canGoForward: rt.browser.canGoForward, isLoading: rt.browser.isLoading, themeColor: rt.themeColor)
+            nav[id] = TabNavState(canGoBack: rt.browser.canGoBack, canGoForward: rt.browser.canGoForward, isLoading: rt.browser.isLoading,
+                                  themeColor: rt.themeColor, protectedMedia: PageEngines.protectedMediaService(of: rt.browser))
         }
         if nav != sidebarUI.navStates { sidebarUI.navStates = nav }
+        if let id = browsers.visibleTabID, let service = nav[id]?.protectedMedia { tellAboutProtectedMedia(service) }
     }
 
     // MARK: Split view
@@ -706,10 +716,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                                                    scale: window?.backingScaleFactor ?? 2, representationTypes: .thumbnail)
         let id = download.identifier
         QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { [weak self] thumbnail, _ in
-            guard let image = thumbnail?.nsImage else { return }
+            let image = thumbnail?.nsImage
             DispatchQueue.main.async {
                 guard let self, var recent = self.sidebarUI.recentDownload, recent.id == id else { return }
-                recent.image = image
+                // The first progress update can lack a filename. Use the finished file's Finder
+                // icon if Quick Look has no preview, including after Tidy Downloads renamed it.
+                recent.image = image ?? NSWorkspace.shared.icon(forFile: recent.path)
                 self.sidebarUI.recentDownload = recent
             }
         }
@@ -892,6 +904,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // Hidden pages are not kept in step with the panes, so size this one before it shows.
             positionPageWindows(lastPaneFrames)
             w.contentView?.isHidden = false
+            // Shown while drawing for releaseHiddenFrames: opaque and clickable again now.
+            if releasingFrames.remove(id) != nil {
+                w.alphaValue = 1
+                w.ignoresMouseEvents = false
+            }
             embedPage(id, from: w)
             // Ordering a window that is already showing is a window server round trip too.
             if !w.isVisible { w.orderFront(nil) }
@@ -910,6 +927,39 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             raisePageWindows()
         } else {
             raiseOverlayPanels()
+        }
+    }
+
+    /// Page windows drawing once, hidden, so their last frame lets go of an evicted page (#195).
+    private var releasingFrames: Set<UUID> = []
+
+    /// A hidden tab's page window is ordered out with its compositor suspended, and its last frame
+    /// kept the page's surface, and the page's tiles in the GPU process (~15 MB a tab), alive after
+    /// Chromium evicted it: every tab ever shown kept them. Chrome detaches a background tab from its
+    /// one window instead. Ordered in for a moment, transparent and below this window, the page
+    /// window draws a frame without the page and Chromium frees it (HiddenFrameRelease).
+    func releaseHiddenFrames(now: Date) {
+        let visible = Set(browsers.visibleTabIDs)
+        let hidden = browsers.runtimes.values.compactMap { rt -> HiddenFrameRelease.Tab? in
+            guard let at = rt.hiddenAt, rt.hostWindow != nil, !visible.contains(rt.tabID) else { return nil }
+            return .init(id: rt.tabID, hiddenAt: at, releasedFor: rt.hiddenFrameReleasedFor)
+        }
+        guard let window else { return }
+        for id in HiddenFrameRelease.due(hidden, visible: visible.count, now: now) {
+            guard let rt = browsers.runtime(for: id), let w = rt.hostWindow, !w.isVisible, w.parent == nil,
+                  !releasingFrames.contains(id) else { continue }
+            rt.hiddenFrameReleasedFor = rt.hiddenAt
+            releasingFrames.insert(id)
+            w.alphaValue = 0
+            w.ignoresMouseEvents = true
+            w.order(.below, relativeTo: window.windowNumber)
+            // Two or three frames: the compositor unsuspends, paints and commits.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self, weak w] in
+                guard let self, let w, self.releasingFrames.remove(id) != nil else { return }
+                w.alphaValue = 1
+                w.ignoresMouseEvents = false
+                if !self.browsers.visibleTabIDs.contains(id), w.parent == nil { w.orderOut(nil) }
+            }
         }
     }
 
@@ -1439,6 +1489,80 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         return PeekLayout.buttons(beside: PeekLayout.card(in: peekAreaInWindow())).map { window.convertToScreen($0) }
     }
 
+    /// The link a Peek opens from (GitHub #204): Arc grows the card out of it and closes it back in.
+    /// The link under the pointer in `tabID`'s page, else the page's focused link, found by
+    /// PeekLayout's script in Cra's isolated world, with a picture of it cut from Chromium's
+    /// screenshot. Answers within `PeekSource.wait` whatever Chromium does: nil without a link (the
+    /// Peek then grows from the whole area), no picture when the screenshot is late.
+    func peekSource(fromTab tabID: UUID?, completion: @escaping (PeekSource?) -> Void) {
+        guard let tabID, let window, let rt = browsers.runtimes[tabID], let host = rt.hostWindow, host.parent === window,
+              host.isVisible, rt.browser.isCreated, !rt.browser.isClosed else {
+            CraLog.note("peek: from the whole area (no page to find the link in)")
+            completion(nil)
+            return
+        }
+        let completion: (PeekSource?) -> Void = { source in
+            CraLog.note(source.map { "peek: from a link at \(Int($0.rect.minX)),\(Int($0.rect.minY)) \(Int($0.rect.width))×\(Int($0.rect.height))\($0.image == nil ? ", no picture" : "")" }
+                ?? "peek: from the whole area (no link under the pointer or focused)")
+            completion(source)
+        }
+        let pageFrame = host.frame
+        let m = NSEvent.mouseLocation
+        let pointer = pageFrame.contains(m)
+            ? CGPoint(x: (m.x - pageFrame.minX) / pageFrame.width, y: (pageFrame.maxY - m.y) / pageFrame.height) : nil
+        var fraction: CGRect??
+        var picture: CGImage??
+        var answered = false
+        let finish: (Bool) -> Void = { [weak window] timedOut in
+            guard !answered, let window else { return }
+            guard case .some(let found) = fraction else {
+                if timedOut { answered = true; completion(nil) }
+                return
+            }
+            if picture == nil, !timedOut { return }
+            answered = true
+            guard let found, let rect = PeekLayout.source(fraction: found, in: window.convertFromScreen(pageFrame)) else { completion(nil); return }
+            let image = (picture ?? nil).flatMap { PeekSource.crop($0, to: found) }
+            completion(PeekSource(tabID: tabID, rect: rect, image: image))
+        }
+        let script = PeekLayout.sourceScript(pointer: pointer)
+        let params = (try? JSONSerialization.data(withJSONObject: ["expression": script, "returnByValue": true]))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        rt.browser.evaluate(inIsolatedWorld: PageScript.world, params: params) { result, _ in
+            let found = PeekSource.value(result).flatMap(PeekLayout.fraction(fromScript:))
+            DispatchQueue.main.async { if fraction == nil { fraction = .some(found) }; finish(false) }
+        }
+        rt.browser.sendDevToolsMethod("Page.captureScreenshot", params: #"{"format":"png","optimizeForSpeed":true}"#) { shot, _ in
+            let image = PeekSource.image(fromScreenshot: shot)
+            DispatchQueue.main.async { if picture == nil { picture = .some(image) }; finish(false) }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + PeekSource.wait) { finish(true) }
+    }
+
+    /// Where the link a Peek came from is now (the page may have scrolled), in this window's
+    /// coordinates; nil when it's gone, off the page or Chromium doesn't answer in time.
+    func peekSourceAgain(_ source: PeekSource, completion: @escaping (NSRect?) -> Void) {
+        guard let window, let rt = browsers.runtimes[source.tabID], let host = rt.hostWindow, host.parent === window,
+              host.isVisible, rt.browser.isCreated, !rt.browser.isClosed else { completion(nil); return }
+        var answered = false
+        let params = (try? JSONSerialization.data(withJSONObject: ["expression": PeekLayout.sourceAgainScript, "returnByValue": true]))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        rt.browser.evaluate(inIsolatedWorld: PageScript.world, params: params) { [weak window, weak host] result, _ in
+            let found = PeekSource.value(result).flatMap(PeekLayout.fraction(fromScript:))
+            DispatchQueue.main.async {
+                guard !answered else { return }
+                answered = true
+                guard let window, let host, let found else { completion(nil); return }
+                completion(PeekLayout.source(fraction: found, in: window.convertFromScreen(host.frame)))
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + PeekSource.wait) {
+            guard !answered else { return }
+            answered = true
+            completion(nil)
+        }
+    }
+
     /// Arc fades the page under a Peek to 28 % over the window's background, its sidebar as it is.
     func setPeekVeil(_ on: Bool, duration: TimeInterval, timing: CAMediaTimingFunction? = nil) {
         let alpha: CGFloat = on ? PeekLayout.pageAlpha : 1
@@ -1601,7 +1725,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         return w.convertToScreen(view.convert(view.bounds, to: nil))
     }
 
-    private static func screenshotImage(_ shot: String?) -> CGImage? {
+    static func screenshotImage(_ shot: String?) -> CGImage? {
         guard let shot, let o = try? JSONSerialization.jsonObject(with: Data(shot.utf8)) as? [String: Any],
               let b64 = o["data"] as? String, let png = Data(base64Encoded: b64),
               let source = CGImageSourceCreateWithData(png as CFData, nil) else { return nil }
@@ -2293,13 +2417,26 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// Arc's sliders button (toolbar and URL pill): the Site Control Center, hung under the
     /// button that was clicked (buttons are 32 × 28), not wherever the pointer is in it.
-    private func showToolbarExtensionsMenu() {
+    /// The Site Control Center as if its sliders button was clicked, wherever the request came from
+    /// (the protected media toast's Why?): under the toolbar's button, else under the sidebar's URL
+    /// field at its right end, where that button sits. The arrow shows where to find it next time.
+    private func showSiteControlsFromTheirButton() {
+        if let button = (shell.focusedCard?.toolbarHost as? PaneToolbarView)?.siteControlsButtonFrameOnScreen() {
+            return showToolbarExtensionsMenu(from: button, inToolbar: true)
+        }
+        guard let button = (shell.sidebarHost as? SidebarView)?.siteControlsButtonFrameOnScreen else { return showToolbarExtensionsMenu() }
+        showToolbarExtensionsMenu(from: button, inToolbar: false)
+    }
+
+    private func showToolbarExtensionsMenu(from anchor: NSRect? = nil, inToolbar: Bool = false) {
+        // Decided now, while the click is the current event: the page is asked a question below.
+        if siteControlCenter.closesInstead() { return }
         // A split pane's bar has the sliders even with the toolbar hidden: hang under that bar then.
-        let pressed = Self.buttonFrameUnderPointer { $0 is ToolbarGlyphButton }
+        let pressed = anchor.map { inToolbar ? $0 : nil } ?? Self.buttonFrameUnderPointer { $0 is ToolbarGlyphButton }
         guard let window, let content = window.contentView,
               let y = pressed != nil && shell.panesShowBars ? toolbarBottomOnScreen()?.y : urlBarBottomOnScreen() else { return }
         ExtensionStore.shared.reload()
-        let midX = (pressed ?? Self.buttonFrameUnderPointer { $0 is SidebarGlyphButton })?.midX ?? NSEvent.mouseLocation.x
+        let midX = (anchor ?? pressed ?? Self.buttonFrameUnderPointer { $0 is SidebarGlyphButton })?.midX ?? NSEvent.mouseLocation.x
         // Arc's popover overlaps the bar by 4 pt (popover top 71 under a bar ending at 75).
         let onScreen = NSRect(x: midX - 16, y: y + 4, width: 32, height: 28)
         let rect = content.convert(window.convertFromScreen(onScreen), from: nil)
@@ -2323,9 +2460,47 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             guard let origin = URL(string: url).flatMap({ u in u.host.map { "\(u.scheme ?? "https")://\($0)" } }) else { return }
             self?.openTab("chrome://settings/content/siteDetails?site=" + (origin.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? origin))
         }
+        actions.learnAboutProtectedMedia = { [weak self] in self?.openTab(Self.protectedMediaHelp) }
+        actions.chooseSafariEngine = { [weak self] on in self?.chooseSafariEngine(on, for: url) }
         siteControlCenterSpaceID = focusedSpaceID
-        siteControlCenter.show(relativeTo: rect, of: content, url: url, secure: secure, dark: SystemAppearance.shared.isDark,
-                               profile: profileDirectoryName, tab: selectedTabID, store: store, actions: actions)
+        let show = { [weak self] (safariEngine: Bool?) in
+            guard let self, let window = self.window, window.isVisible else { return }
+            self.siteControlCenter.show(relativeTo: rect, of: content, url: url, secure: secure, dark: SystemAppearance.shared.isDark,
+                                        profile: self.profileDirectoryName, tab: self.selectedTabID,
+                                        protectedMedia: self.browsers.visibleTabID.flatMap { self.sidebarUI.navState(for: $0).protectedMedia },
+                                        safariEngine: safariEngine, toggleChecked: true, store: self.store, actions: actions)
+        }
+        // The Safari's Engine switch: on for a WebKit page; for a Chromium page only once it asked
+        // for Widevine (PageScript's `drm`), else no switch. Asked in Cra's world; a page that
+        // doesn't answer within 0.3 s opens without it.
+        guard let b = currentBrowser, url.hasPrefix("http") else { return show(nil) }
+        if b is WebKitBrowser { return show(true) }
+        var shown = false
+        let once = { (value: Bool?) in if !shown { shown = true; show(value) } }
+        b.evaluate(inIsolatedWorld: PageScript.world, params: #"{"expression":"window.__cra?.drm === true","returnByValue":true}"#) { result, _ in
+            let drm = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+                .flatMap { $0["result"] as? [String: Any] }?["value"] as? Bool == true
+            DispatchQueue.main.async { once(drm ? false : nil) }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { once(nil) }
+    }
+
+    func debugChooseSafariEngine(_ on: Bool) {
+        if let url = currentBrowser?.currentURL { chooseSafariEngine(on, for: url) }
+    }
+
+    /// The Site Control Center's Safari's Engine switch: the site plays in WebKit (or Chromium)
+    /// from now on, and the focused page opens again there. Choosing it is knowing about it: no toast.
+    private func chooseSafariEngine(_ on: Bool, for url: String) {
+        PageEngines.choose(on ? .webKit : .chromium, for: url)
+        if on, let service = PageEngines.sites.serviceName(for: url) { PageEngines.told(service) }
+        if let id = browsers.visibleTabID { browsers.reopenInItsEngine(id) }
+    }
+
+    /// The help centre's page on why Spotify, Netflix and the others play in Safari's engine.
+    static let protectedMediaHelp = "https://crabrowser.app/help/protected-media"
+
+    func debugSiteControlsShown() -> Bool { siteControlCenter.isShown
     }
 
     private func openTab(_ url: String) {
@@ -2626,6 +2801,31 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         return url?.isEmpty == false ? url : nil
     }
 
+    /// The first time a service plays in a WebKit page (docs/protected-media.md): "Spotify plays
+    /// with Safari's engine", with Why? (the Site Control Center says what that means). It stays
+    /// until its ✕ is pressed, Why? included, so Cra knows it was seen; only then is the service told
+    /// for good. Shown once a session per service: one left open shows again next launch.
+    private func tellAboutProtectedMedia(_ service: String) {
+        guard !PageEngines.wasTold(service), !offeredProtectedMedia.contains(service), window?.isVisible == true else { return }
+        offeredProtectedMedia.insert(service)
+        let told = { PageEngines.told(service) }
+        // A moment after the page shows, so it isn't lost in the tab switch.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+            guard let self, let window = self.window, let id = self.browsers.visibleTabID,
+                  self.sidebarUI.navState(for: id).protectedMedia == service else {
+                self?.offeredProtectedMedia.remove(service)
+                return
+            }
+            let page = self.shell.webContainer.convert(self.shell.webContainer.bounds, to: nil)
+            self.toast.show("\(service) plays with Safari's engine",
+                            action: ShinyToast.Action(title: "Why?") { [weak self] in self?.showSiteControlsFromTheirButton() },
+                            page: page, in: window, theme: self.focusedSpace.theme, onClose: told)
+        }
+    }
+
+    /// Services whose toast was offered this session (they show once a session until answered).
+    private var offeredProtectedMedia: Set<String> = []
+
     /// Arc's toast at the top right of the page (ShinyToast): Cra's confirmations.
     func showToast(_ text: String, action: ShinyToast.Action? = nil) {
         guard let window else { return }
@@ -2693,14 +2893,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // Arc's New Space starts on the profile of the space it was opened from.
         let initialProfile = space == nil && !isIncognito ? SpaceProfiles.forNewSpace(from: store.focusedSpace, profiles: store.profiles) : nil
         let store = self.store
-        let view = SpaceEditorView(existing: space, profiles: store.profiles, initialProfile: initialProfile, onSave: { [weak panel] title, emoji, theme, profile, newName in
+        let view = SpaceEditorView(existing: space, profiles: store.profiles, initialProfile: initialProfile, onSave: { [weak panel] title, icon, theme, profile, newName in
             let id: UUID
             if let sid = space?.id, var s = store.space(sid) {
-                s.title = title; s.emoji = emoji; s.theme = theme
+                s.title = title; s.icon = icon; s.theme = theme
                 store.updateSpace(s)
                 id = s.id
             } else {
-                id = store.createSpace(title: title, emoji: emoji, theme: theme).id
+                id = store.createSpace(title: title, emoji: icon.emoji, symbol: icon.symbol, theme: theme).id
             }
             switch profile {
             case .existing(let p): store.setProfile(p, forSpace: id)
@@ -2760,6 +2960,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if commandBar.isOpen { positionCommandPanel() }
         floatingSidebar?.reposition()
         for p in peeks { p.repositionPeek() }
+        // A toast that stays (the protected media one) follows the page's corner, once laid out.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let window = self.window else { return }
+            self.toast.follow(page: self.shell.webContainer.convert(self.shell.webContainer.bounds, to: nil), in: window)
+        }
         saveFrame()
     }
 
@@ -2873,14 +3078,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// it is stored once a resize or move settles, not on every step of it.
     private func saveFrame() {
         frameSaveWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            guard let self, let window = self.window, !window.styleMask.contains(.fullScreen) else { return }
-            self.store.updateWindow(self.windowID) { $0.frame = NSStringFromRect(window.frame) }
-        }
+        let work = DispatchWorkItem { [weak self] in self?.saveFrameNow() }
         frameSaveWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
     }
     private var frameSaveWork: DispatchWorkItem?
+
+    /// Quit can arrive before the move/resize debounce fires.
+    func saveFrameNow() {
+        frameSaveWork?.cancel()
+        frameSaveWork = nil
+        guard let window, !window.styleMask.contains(.fullScreen) else { return }
+        store.updateWindow(windowID) { $0.frame = NSStringFromRect(window.frame) }
+    }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         if sender === window { commandBar.close() }

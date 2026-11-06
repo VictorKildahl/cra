@@ -8,9 +8,16 @@
 <section class="card"><div class="eyebrow">02 / Pointer movement</div><h2>Slide from left to right.</h2><div class="track"><div class="handle" id="pointer-source" role="slider" aria-label="Sample slider" tabindex="0"></div><div id="pointer-target" class="end"></div></div><output id="pointer-result">Waiting for a drag</output></section>
 <section class="card"><div class="eyebrow">03 / Upload</div><h2>Files, chosen explicitly.</h2><form id="upload-form"><label for="upload">Choose local sample files</label><input type="file" id="upload" multiple><input type="file" id="hidden-upload" style="display:none" aria-label="Hidden file input"><input type="file" id="disabled-upload" disabled hidden><button id="send-files">Send to this local server</button><output id="upload-result">No files sent</output></form></section>
 <section class="card"><div class="eyebrow">04 / Session & download</div><h2>Your existing browser session.</h2><label for="name">A short note</label><input id="name" type="text" autocomplete="off"><button id="alert" type="button">Try a dialog</button><output id="dialog-result">No dialog opened</output><a id="download" href="/download/auth.txt">Download a session-protected sample</a><output id="session">Session checked by the test server</output></section></div><p class="foot">Synthetic files only. Downloads are created on this Mac. No external fonts, images or scripts.</p>
+<button id="document-pip" type="button">Open Document Picture in Picture</button>
 <button id="permission" type="button">Try a notification request</button><output id="permission-result">Not requested</output><button id="permission-navigate" type="button">Request and navigate</button>
 <script>
 window.transferEvents=[];
+document.querySelector('#document-pip').onclick=async()=>{
+    try {
+        window.testPiP=await documentPictureInPicture.requestWindow({width:320,height:200});
+        testPiP.document.body.textContent='Cra Document PiP fixture';
+    } catch(error) { window.testPiPError=String(error); }
+};
 document.querySelector('#permission-navigate').onclick=()=>{Notification.requestPermission();location.href="/agent?permission="+Date.now()};
 document.querySelector('#permission').onclick=async()=>{document.querySelector('#permission-result').textContent=await Notification.requestPermission();window.permissionRequests=(window.permissionRequests||0)+1};
 document.querySelector('#alert').onclick=()=>{alert('Synthetic agent dialog');document.querySelector('#dialog-result').textContent='Alert dismissed'};

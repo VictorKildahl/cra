@@ -240,9 +240,6 @@ final class SpaceListView: NSView, NSDraggingSource {
             case .split(let t, let leading)? where t == id:
                 d.combine = .split(leading: leading)
                 d.combineDragged = drop.draggedID
-            case .newFolder(let t)? where t == id:
-                d.combine = .folder
-                d.combineDragged = drop.draggedID
             default: break
             }
             return d
@@ -379,7 +376,6 @@ final class SpaceListView: NSView, NSDraggingSource {
         switch target {
         case .insert(let parent, _): lands = isPinnedList(parent) ? .pinned : .today
         case .into(let id): lands = isPinnedList(id) ? .pinned : .today
-        case .newFolder: lands = .pinned
         case .split: lands = .today
         }
         return lands == (isPinnedList(drop.draggedID) ? .pinned : .today) ? nil : lands
@@ -802,7 +798,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         hoverAt(event?.locationInWindow)
     }
 
-    private func refreshHover() {
+    fileprivate func refreshHover() {
         guard let w = window else { return }
         let p = w.mouseLocationOutsideOfEventStream
         let inside = document.visibleRect.contains(document.convert(p, from: nil)) && w.isVisible
@@ -922,7 +918,7 @@ final class SpaceListView: NSView, NSDraggingSource {
             ui.listDrop = drop
             // A tick when a row starts offering to combine, so the change of meaning is felt as well as seen.
             switch drop.target {
-            case .split?, .newFolder?:
+            case .split?:
                 if store.settings.hapticFeedbackOnReorder { NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now) }
             default: break
             }
@@ -971,8 +967,6 @@ final class SpaceListView: NSView, NSDraggingSource {
         switch drop.target {
         case .insert(let parent, let index)?:
             store.moveItems(group, to: parent, index: index)
-        case .newFolder(let tab)?:
-            if let folder = store.createFolder(combining: tab, with: group) { ui.renamingID = folder.id }
         case .split(let tab, let leading)?:
             store.createSplit(with: leading ? [id, tab] : [tab, id], at: tab)
         case .into(let target)?:
@@ -1022,9 +1016,9 @@ final class SpaceListView: NSView, NSDraggingSource {
                 else if f >= 0.75 { target = store.isExpanded(rid) ? .insert(parent: rid, index: 0) : after }
                 else { target = .into(rid) }
             } else if middle && isTab && item.isTab {
-                target = isInside(rid, space.todayContainerID)
-                    ? .split(with: rid, leading: p.x < r.frame.midX)
-                    : .newFolder(with: rid)
+                // Arc combines two tabs into a split wherever the target sits (#191): a pinned
+                // one stays pinned and the split opens in Today with a copy of it.
+                target = .split(with: rid, leading: p.x < r.frame.midX)
             } else if middle && isTab && item.isSplit {
                 target = .into(rid)
             } else {
@@ -1054,7 +1048,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         switch target {
         case .into(let f)? where store.item(f)?.isLiveFolder == true: target = nil
         case .insert(let parent, _)? where store.item(parent)?.isLiveFolder == true && store.item(id)?.parentID != parent: target = nil
-        case .newFolder(let tab)? where store.item(store.item(tab)?.parentID ?? tab)?.isLiveFolder == true: target = nil
+        case .split(let tab, _)? where store.item(store.item(tab)?.parentID ?? tab)?.isLiveFolder == true: target = nil
         default: break
         }
 
@@ -1164,14 +1158,35 @@ final class SpaceListDocument: NSView {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         for t in trackingAreas where t.owner === self { removeTrackingArea(t) }
-        // activeAlways: the key window is often a page, not the sidebar's.
-        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
-                                       owner: self, userInfo: nil))
+        // activeAlways: the key window is often a page, not the sidebar's. A new area under the
+        // pointer gets no mouseEntered, so without assumeInside it never sends the mouseExited
+        // either (SidebarGlyphButton does the same).
+        var options: NSTrackingArea.Options = [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect]
+        if pointerIsOver { options.insert(.assumeInside) }
+        addTrackingArea(NSTrackingArea(rect: .zero, options: options, owner: self, userInfo: nil))
+    }
+
+    /// The pointer is on the list's visible part, and a click there would land in this window.
+    private var pointerIsOver: Bool {
+        guard let w = window, w.isVisible, !NSApp.isHidden,
+              visibleRect.contains(convert(w.mouseLocationOutsideOfEventStream, from: nil)) else { return false }
+        return NSWindow.windowNumber(at: NSEvent.mouseLocation, belowWindowWithWindowNumber: 0) == w.windowNumber
     }
 
     override func mouseEntered(with event: NSEvent) { isMouseInside = true; list?.pointerMoved(event) }
     override func mouseMoved(with event: NSEvent) { isMouseInside = true; list?.pointerMoved(event) }
-    override func mouseExited(with event: NSEvent) { isMouseInside = false; list?.pointerMoved(nil) }
+    override func mouseExited(with event: NSEvent) {
+        // AppKit sends stray exits while the pointer rests on the list, as a row's buttons show
+        // under it. The row lost its hover and hid its ✕ just as the pointer reached it (#196).
+        // Keep the hover, and re-arm the area so the real exit still comes.
+        if pointerIsOver {
+            updateTrackingAreas()
+            list?.refreshHover()
+            return
+        }
+        isMouseInside = false
+        list?.pointerMoved(nil)
+    }
 
     // Right-click on empty list space; rows have their own menus.
     override func menu(for event: NSEvent) -> NSMenu? { list?.listMenu() }

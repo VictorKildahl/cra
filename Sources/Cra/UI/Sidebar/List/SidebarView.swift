@@ -11,6 +11,9 @@ final class SidebarView: NSView {
     private let favicons: FaviconCache
     private let tabs = FlippedView()
     private let topBar: SidebarTopBarView
+
+    /// The URL field's sliders button (screen rect), nil while the toolbar has it.
+    var siteControlsButtonFrameOnScreen: NSRect? { topBar.siteControlsButtonFrameOnScreen }
     private let pager: SpacePagerView
     private let trayHost: DownloadsTrayView
     private let player: NowPlayingTrayView
@@ -302,6 +305,14 @@ final class SidebarTopBarView: NSView {
     private var rowButtons: [SidebarGlyphButton] = []
     private var chevron: NSView?
     private let pill = SidebarURLPill()
+
+    /// Where the URL field's sliders button is or appears on hover (screen rect): its last
+    /// accessory, 28 pt ending 5 pt in. nil while the field isn't shown (the toolbar has it).
+    var siteControlsButtonFrameOnScreen: NSRect? {
+        guard !pill.isHiddenOrHasHiddenAncestor, let window else { return nil }
+        let f = window.convertToScreen(pill.convert(pill.bounds, to: nil))
+        return NSRect(x: f.maxX - 5 - 28, y: f.minY + (f.height - 28) / 2, width: 28, height: 28)
+    }
     private var hoverHeader = false { didSet { if hoverHeader != oldValue { pill.showAccessories = hoverHeader } } }
     private var syncQueued = false
 
@@ -407,7 +418,7 @@ final class SidebarTopBarView: NSView {
                 }
             }
             pill.show(text: text, url: url, hasTab: tab != nil, colors: colors, active: active,
-                      pinned: pinned, hasExtensions: !entries.isEmpty)
+                      pinned: pinned, hasExtensions: !entries.isEmpty, protectedMedia: tab.flatMap { ui.navState(for: $0.id).protectedMedia })
         }
         needsLayout = true
         if wasCompact != compact { superview?.superview?.needsLayout = true }
@@ -537,7 +548,8 @@ final class SidebarURLPill: NSView {
     override var mouseDownCanMoveWindow: Bool { false }
 
     func show(text: String, url: String, hasTab: Bool, colors: SidebarColors, active: Bool,
-              pinned: [(String, String, NSImage?)], hasExtensions: Bool) {
+              pinned: [(String, String, NSImage?)], hasExtensions: Bool, protectedMedia: String? = nil) {
+        self.protectedMedia = protectedMedia
         self.colors = colors
         self.hasTab = hasTab
         tip.text = url
@@ -555,6 +567,8 @@ final class SidebarURLPill: NSView {
 
     /// Whether the pins go in this field (else in the grid over the favorites), for its width.
     private var pinsInField = true
+    /// A WebKit page's service: the pins dim and say why (docs/protected-media.md).
+    private var protectedMedia: String?
 
     /// Arc's URL-bar accessories: pinned extensions (while they leave the address room), Copy
     /// Link, then the site controls.
@@ -565,8 +579,9 @@ final class SidebarURLPill: NSView {
         pinsInField = PinnedExtensionGrid.fitsInURLField(count: m.pinned.count, fieldWidth: bounds.width)
         for (id, _, icon) in pinsInField ? m.pinned : [] {
             let b = ToolbarGlyphButton()
-            // Arc's pinned extension buttons have no tooltip (#106).
-            b.configure(symbol: nil, image: icon, help: "", enabled: true, width: 28, iconSize: 16, tint: colors.textSecondary)
+            // Arc's pinned extension buttons have no tooltip (#106), unless they can't run here.
+            b.configure(symbol: nil, image: icon, help: protectedMedia.map(ExtensionStore.offOnProtectedMedia) ?? "",
+                        enabled: protectedMedia == nil, width: 28, iconSize: 16, tint: colors.textSecondary)
             b.action = { actions.runExtension(id) }
             b.menuProvider = { ExtensionStore.shared.entries.first { $0.extensionID == id }.map(ExtensionsMenu.iconMenu) }
             accessories.append(b)
@@ -1042,8 +1057,10 @@ final class LibraryButtonView: NSView {
         binTip = ArcTooltipAnchorView(frame: .zero)
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.cornerRadius = 7
-        layer?.cornerCurve = .continuous
+        // Round the glyph's hover fill. Rounding the button itself clips the overhanging thumbnail.
+        glyph.wantsLayer = true
+        glyph.layer?.cornerRadius = 7
+        glyph.layer?.cornerCurve = .continuous
         glyph.imageScaling = .scaleNone
         glyph.image = LibraryGlyph.image(dark: false)
         addSubview(glyph)
@@ -1100,7 +1117,7 @@ final class LibraryButtonView: NSView {
     }
 
     private func refresh() {
-        layer?.backgroundColor = (hovering ? colors.hoverFill : .clear).cgColor
+        glyph.layer?.backgroundColor = (hovering ? colors.hoverFill : .clear).cgColor
     }
 
     override func layout() {

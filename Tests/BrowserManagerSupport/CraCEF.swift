@@ -11,8 +11,9 @@ public protocol CraBrowserDelegate: AnyObject {
 
 public final class CraDownloadInfo {}
 
+/// `open`: the app subclasses it (WebKitBrowser, faked in AppServices.swift).
 @MainActor
-public final class CraBrowser {
+open class CraBrowser {
     public weak var delegate: CraBrowserDelegate?
     public let containerView: NSView
     public var hostWindow: NSWindow?
@@ -71,8 +72,10 @@ public final class CraBrowser {
         lastParams = params
         replies.append((method, completion))
     }
+    public private(set) var lastIsolatedParams = ""
     /// Recorded as "<world>:Runtime.evaluate".
     public func evaluate(inIsolatedWorld world: String, params: String, completion: @escaping (String?, String?) -> Void) {
+        lastIsolatedParams = params
         replies.append(("\(world):Runtime.evaluate", completion))
     }
     public func reply(to method: String, with result: String?) {

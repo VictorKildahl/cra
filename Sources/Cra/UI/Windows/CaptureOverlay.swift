@@ -113,7 +113,8 @@ final class CaptureView: NSView {
     enum Mode { case selecting, dragging(start: CGPoint), captured(CGRect) }
 
     var finish: ((CaptureOverlay.Action?, Data?) -> Void)?
-    private let shot: CGImage
+    /// The page as shown: taken again while it scrolls under the mode (#195).
+    private var shot: CGImage
     private weak var browser: CraBrowser?
     private let scale: CGFloat
     private var mode: Mode = .selecting
@@ -142,6 +143,13 @@ final class CaptureView: NSView {
     private var probing = false
     private var pendingProbe: CGPoint?
     private var pointer: CGPoint?
+
+    // Scrolling under the mode (#195): the page's devicePixelRatio (its zoom times the display's
+    // scale), and one new picture at a time, the latest wish waiting.
+    private var pageRatio: CGFloat?
+    private var refreshing = false
+    private var refreshAgain = false
+    private var settleRefresh: DispatchWorkItem?
 
     /// While a choice made in the menu is being carried out, losing the keys isn't a cancel.
     private(set) var isSettled = true
@@ -198,6 +206,11 @@ final class CaptureView: NSView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     func start() {
+        browser?.evaluate(inIsolatedWorld: PageScript.world, params: #"{"expression":"devicePixelRatio","returnByValue":true}"#) { [weak self] result, _ in
+            let ratio = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+                .flatMap { ($0["result"] as? [String: Any])?["value"] as? Double }
+            DispatchQueue.main.async { if let ratio, ratio > 0 { self?.pageRatio = ratio } }
+        }
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeAlways, .inVisibleRect, .cursorUpdate, .mouseEnteredAndExited], owner: self))
         bubble.appear()
         if let p = window?.mouseLocationOutsideOfEventStream, bounds.contains(convert(p, from: nil)) {
@@ -209,6 +222,8 @@ final class CaptureView: NSView {
     func stop() {
         link?.invalidate()
         link = nil
+        settleRefresh?.cancel()
+        settleRefresh = nil
     }
 
     /// Greyscale by Rec. 601 luma in the image's own (gamma) values, times `CaptureStyle.dim`, which
@@ -305,7 +320,61 @@ final class CaptureView: NSView {
         }
     }
 
-    override func scrollWheel(with event: NSEvent) {}
+    // MARK: Scrolling
+
+    /// Arc scrolls the page under the mode: the wheel goes to the page, as a wheel over it would,
+    /// and the picture is taken again as it moves (#195). Not while dragging or once captured.
+    override func scrollWheel(with event: NSEvent) {
+        guard case .selecting = mode, let browser, browser.isCreated, !browser.isClosed else { return }
+        let p = convert(event.locationInWindow, from: nil)
+        // Points to CSS pixels: the page's zoom is its devicePixelRatio over the display's scale.
+        let css = scale / (pageRatio ?? scale)
+        // A wheel's lines are Chrome's 40 px each; a trackpad's deltas are points.
+        let line: CGFloat = event.hasPreciseScrollingDeltas ? 1 : 40
+        let dx = -event.scrollingDeltaX * line * css, dy = -event.scrollingDeltaY * line * css
+        guard dx != 0 || dy != 0 else { return }
+        let params: [String: Any] = ["type": "mouseWheel", "x": p.x * css, "y": p.y * css, "deltaX": dx, "deltaY": dy, "pointerType": "mouse"]
+        guard let json = (try? JSONSerialization.data(withJSONObject: params)).flatMap({ String(data: $0, encoding: .utf8) }) else { return }
+        browser.sendDevToolsMethod("Input.dispatchMouseEvent", params: json) { [weak self] _, _ in
+            DispatchQueue.main.async { self?.refreshShot() }
+        }
+        // Smooth scrolling and momentum keep the page moving after the last event.
+        settleRefresh?.cancel()
+        let settle = DispatchWorkItem { [weak self] in self?.refreshShot() }
+        settleRefresh = settle
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: settle)
+    }
+
+    /// A new picture of the page for the grey page, the lens and the capture.
+    private func refreshShot() {
+        guard let browser, browser.isCreated, !browser.isClosed, case .selecting = mode else { return }
+        if refreshing { refreshAgain = true; return }
+        refreshing = true
+        browser.sendDevToolsMethod("Page.captureScreenshot", params: #"{"format":"png","captureBeyondViewport":false,"optimizeForSpeed":true}"#) { [weak self] shot, _ in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.refreshing = false
+                if case .selecting = self.mode, let image = MainWindowController.screenshotImage(shot) { self.show(image) }
+                if self.refreshAgain {
+                    self.refreshAgain = false
+                    self.refreshShot()
+                }
+            }
+        }
+    }
+
+    private func show(_ image: CGImage) {
+        shot = image
+        let grey = Self.dimmed(image)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        colourLayer.contents = image
+        greyFull.contents = grey
+        greyHoled.contents = grey
+        CATransaction.commit()
+        // What is under the pointer moved with the page.
+        if let pointer { probe(pointer) }
+    }
 
     // MARK: Keys
 

@@ -77,8 +77,16 @@ public struct SidebarBackdrop: Equatable, Sendable {
     /// and a restore from the Dock keeps the flat fill through the genie until the window is main again,
     /// about 0.4 s after the app became active. Following the app instead asked for a live capture of a
     /// window still flying out of the Dock, which showed matte or sharp frames as it landed.
-    public static func windowActive(appActive: Bool, miniaturized: Bool, holdsKeyOrMain: Bool) -> Bool {
-        appActive && !miniaturized && holdsKeyOrMain
+    ///
+    /// `activeAppearance` is AppKit's own answer for the window, read from a material that follows it. A full
+    /// screen window keeps its active appearance while its Space slides away and the app resigns active, so
+    /// Arc's sidebar keeps the desktop tint through a ⌃← / ⌃→ round trip (probe, 5 Nov 2026). Cra's own rule
+    /// dropped to the flat fill there and stepped back about 5 frames after the slide had landed. The rule
+    /// above still counts on its own, because AppKit's answer doesn't know about Cra's child page windows.
+    public static func windowActive(
+        appActive: Bool, miniaturized: Bool, holdsKeyOrMain: Bool, activeAppearance: Bool = false
+    ) -> Bool {
+        !miniaturized && (appActive && holdsKeyOrMain || activeAppearance)
     }
 
     /// The white lift over the floating sidebar's material (dark hudWindow), light themes. Under

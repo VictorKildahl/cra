@@ -9,12 +9,16 @@ enum ProfileCleanup {
         file.saveNow(Array(Set(file.load(or: { [] }) + [directoryName])))
     }
 
+    /// Told each folder name removed (WebKit's data for that profile goes too).
+    nonisolated(unsafe) static var removed: ((String) -> Void)?
+
     /// Call before Chromium initializes.
     static func run() {
         let names = file.load(or: { [] })
         guard !names.isEmpty else { return }
         for name in names where name.hasPrefix("Profile ") {
             try? FileManager.default.removeItem(at: AppPaths.chromiumCache.appendingPathComponent(name, isDirectory: true))
+            removed?(name)
         }
         file.saveNow([])
     }

@@ -66,6 +66,17 @@ struct SidebarBackdropTests {
         #expect(!SidebarBackdrop.windowActive(appActive: false, miniaturized: false, holdsKeyOrMain: true))
     }
 
+    /// A full screen window keeps AppKit's active appearance while its Space slides away (GitHub #156):
+    /// the app resigns active and the window loses key and main, but the material stays active.
+    @Test func fullScreenWindowKeepsAppKitsActiveAppearance() {
+        #expect(SidebarBackdrop.windowActive(appActive: false, miniaturized: false, holdsKeyOrMain: false, activeAppearance: true))
+        // A page window holding key: AppKit's answer for the parent may be off, Cra's rule still counts.
+        #expect(SidebarBackdrop.windowActive(appActive: true, miniaturized: false, holdsKeyOrMain: true, activeAppearance: false))
+        // Minimized wins.
+        #expect(!SidebarBackdrop.windowActive(appActive: true, miniaturized: true, holdsKeyOrMain: true, activeAppearance: true))
+        #expect(!SidebarBackdrop.windowActive(appActive: false, miniaturized: false, holdsKeyOrMain: false, activeAppearance: false))
+    }
+
     @Test func logLineNamesTheState() {
         #expect(resolve(solid: true).logLine(active: true, reduceTransparency: false) == "blur, active, dim 0.30")
         #expect(resolve(solid: true, fullscreen: true).logLine(active: true, reduceTransparency: false) == "desktop tint, active, dim 0.30")

@@ -21,6 +21,10 @@ struct SiteControlCenterActions {
     var siteSettings: () -> Void = {}
     /// The lock: the page's certificate. nil without one (http, Chromium's pages).
     var showCertificate: (() -> Void)?
+    /// A WebKit page's "Learn more" (docs/protected-media.md).
+    var learnAboutProtectedMedia: () -> Void = {}
+    /// The Safari's Engine switch: true plays the site in WebKit from now on, false in Chromium.
+    var chooseSafariEngine: (Bool) -> Void = { _ in }
 }
 
 enum SiteControlCenterMetrics {
@@ -45,11 +49,19 @@ final class SiteControlCenterView: NSView {
     private let profile: String
     /// The page's tab, whose extension icons the tiles show.
     private let tab: UUID?
+    /// A WebKit page's service ("Spotify"): the card that says why takes the extensions' place,
+    /// and the ad blocker's switch goes (it is Chromium's).
+    private let protectedMedia: String?
+    /// The Safari's Engine switch's state, nil without the switch (a page that uses no DRM).
+    private let safariEngine: Bool?
     private var extensions: ExtensionStore { .shared }
     /// The tiles by extension ID, whose icons follow the extensions' own changes in place.
     private var extensionTiles: [String: SiteExtensionTile] = [:]
 
-    init(url: String, secure: Bool, dark: Bool, profile: String, tab: UUID?, actions: SiteControlCenterActions, store: SidebarStore) {
+    init(url: String, secure: Bool, dark: Bool, profile: String, tab: UUID?, protectedMedia: String? = nil,
+         safariEngine: Bool? = nil, actions: SiteControlCenterActions, store: SidebarStore) {
+        self.protectedMedia = protectedMedia
+        self.safariEngine = safariEngine
         self.url = url
         self.secure = secure
         self.profile = profile
@@ -120,50 +132,65 @@ final class SiteControlCenterView: NSView {
             addSubview(b)
         }
         y += M.tile.height + 11
-        // Extensions: a 4-column grid of tiles, then "+".
-        let ext = SiteSectionView(title: "Extensions", hoverText: "Manage", colors: colors, onHeaderClick: actions.manageExtensions)
-        extensionTiles = [:]
-        var tiles: [NSView] = orderedExtensions.map { e in
-            let tile = SiteExtensionTile(entry: e, pinned: extensions.isPinned(e.extensionID, inProfile: profile), colors: colors,
-                                         run: { [actions] in actions.runExtension(e.extensionID) },
-                                         togglePin: { [profile] in
-                                             ExtensionStore.shared.setPinned(e.extensionID, !ExtensionStore.shared.isPinned(e.extensionID, inProfile: profile), inProfile: profile)
-                                         })
-            tile.show(icon: liveIcon(e))
-            extensionTiles[e.extensionID] = tile
-            return tile
+        if let service = protectedMedia {
+            // A WebKit page: no extensions run in it, so the card says why instead (Arc has none).
+            let card = SiteProtectedMediaCard(service: service, width: w, colors: colors, learnMore: actions.learnAboutProtectedMedia)
+            card.frame.origin = NSPoint(x: x, y: y)
+            addSubview(card)
+            y += card.frame.height + 15
+        } else {
+            // Extensions: a 4-column grid of tiles, then "+".
+            let ext = SiteSectionView(title: "Extensions", hoverText: "Manage", colors: colors, onHeaderClick: actions.manageExtensions)
+            extensionTiles = [:]
+            var tiles: [NSView] = orderedExtensions.map { e in
+                let tile = SiteExtensionTile(entry: e, pinned: extensions.isPinned(e.extensionID, inProfile: profile), colors: colors,
+                                             run: { [actions] in actions.runExtension(e.extensionID) },
+                                             togglePin: { [profile] in
+                                                 ExtensionStore.shared.setPinned(e.extensionID, !ExtensionStore.shared.isPinned(e.extensionID, inProfile: profile), inProfile: profile)
+                                             })
+                tile.show(icon: liveIcon(e))
+                extensionTiles[e.extensionID] = tile
+                return tile
+            }
+            let add = SiteTile(colors: colors, help: "Add Extension", action: actions.addExtension)
+            add.setGlyph(SidebarSymbols.image("plus", size: 14, weight: .medium), tint: colors.text)
+            tiles.append(add)
+            for (i, t) in tiles.enumerated() {
+                t.frame = NSRect(x: CGFloat(i % 4) * (M.tile.width + M.gap), y: 27 + CGFloat(i / 4) * (M.tile.height + M.gap),
+                                 width: M.tile.width, height: M.tile.height)
+                ext.addSubview(t)
+            }
+            for case let t as SiteExtensionTile in tiles { ext.addSubview(t.badge) }
+            let rows = (tiles.count + 3) / 4
+            let extH = 27 + CGFloat(rows) * M.tile.height + CGFloat(rows - 1) * M.gap
+            ext.frame = NSRect(x: x, y: y, width: w, height: extH)
+            addSubview(ext)
+            y += extH + 15
         }
-        let add = SiteTile(colors: colors, help: "Add Extension", action: actions.addExtension)
-        add.setGlyph(SidebarSymbols.image("plus", size: 14, weight: .medium), tint: colors.text)
-        tiles.append(add)
-        for (i, t) in tiles.enumerated() {
-            t.frame = NSRect(x: CGFloat(i % 4) * (M.tile.width + M.gap), y: 27 + CGFloat(i / 4) * (M.tile.height + M.gap),
-                             width: M.tile.width, height: M.tile.height)
-            ext.addSubview(t)
-        }
-        for case let t as SiteExtensionTile in tiles { ext.addSubview(t.badge) }
-        let rows = (tiles.count + 3) / 4
-        let extH = 27 + CGFloat(rows) * M.tile.height + CGFloat(rows - 1) * M.gap
-        ext.frame = NSRect(x: x, y: y, width: w, height: extH)
-        addSubview(ext)
-        y += extH + 15
         // Settings: three switch rows.
         let settings = SiteSectionView(title: "Settings", hoverText: nil, colors: colors, onHeaderClick: {})
         let developer = store.settings.isDeveloperMode(url: url)
         let store = store, url = url
-        let rowsSpec: [(String, String, String, Bool, () -> Void)] = [
+        var rowsSpec: [(String, String, String, Bool, () -> Void)] = [
             ("hammer.fill", "Developer Mode", developer ? "On" : "Off", developer, { store.settings.toggleDeveloperMode(url: url) }),
             ("shield.fill", "Block Ads & Trackers", store.settings.blockAdsAndTrackers ? "On" : "Off",
              store.settings.blockAdsAndTrackers, { store.settings.blockAdsAndTrackers.toggle() }),
             ("gearshape.fill", "Automatic Picture-In-Picture", store.settings.autoPictureInPicture ? "Allowed" : "Disabled",
              store.settings.autoPictureInPicture, { store.settings.autoPictureInPicture.toggle() }),
         ]
+        // Chromium's blocker doesn't see a WebKit page: no switch that does nothing there.
+        if protectedMedia != nil { rowsSpec.remove(at: 1) }
+        // A page that plays DRM, or one in WebKit: which engine plays this site (docs/protected-media.md).
+        if let on = safariEngine {
+            let choose = actions.chooseSafariEngine
+            rowsSpec.append(("safari", "Safari’s Engine", on ? "On" : "Off", on, { choose(!on) }))
+        }
         for (i, r) in rowsSpec.enumerated() {
             let row = SiteSettingRow(symbol: r.0, title: r.1, subtitle: r.2, active: r.3, colors: colors, action: r.4)
             row.frame = NSRect(x: 0, y: 27 + CGFloat(i) * 43, width: 208, height: 33)
             settings.addSubview(row)
         }
-        let setH = 27 + 3 * 33 + 2 * 10
+        let setH = 27 + rowsSpec.count * 33 + (rowsSpec.count - 1) * 10
         settings.frame = NSRect(x: x, y: y, width: w, height: CGFloat(setH))
         addSubview(settings)
         y += CGFloat(setH) + 13
@@ -511,6 +538,86 @@ private final class SiteSettingRow: SiteHoverView {
     override func refresh() { alphaValue = hovered ? 0.85 : 1 }
 }
 
+/// A WebKit page's place for the extensions: which engine plays it, and what that means here
+/// (docs/protected-media.md). Header like the other sections, a line of text, three facts with
+/// their glyphs, then "Learn more".
+private final class SiteProtectedMediaCard: NSView {
+    init(service: String, width: CGFloat, colors: SiteControlCenterColors, learnMore: @escaping () -> Void) {
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 10))
+        let header = NSTextField.sidebarLabel(size: 14, weight: .bold)
+        header.stringValue = "Protected Media"
+        header.textColor = colors.header
+        header.frame = NSRect(x: -SidebarText.inset, y: 0, width: width + SidebarText.inset, height: 17)
+        addSubview(header)
+        var y: CGFloat = 25
+        let body = NSTextField(wrappingLabelWithString: "\(service) plays with Safari’s engine, which has the DRM it needs. Here, that means:")
+        body.font = .systemFont(ofSize: 13)
+        body.textColor = colors.text
+        body.isSelectable = false
+        body.preferredMaxLayoutWidth = width
+        let bodyH = ceil(body.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: width, height: 400)).height ?? 34)
+        body.frame = NSRect(x: 0, y: y, width: width, height: bodyH)
+        addSubview(body)
+        y += bodyH + 9
+        for (symbol, text) in [("person.crop.circle", "You sign in here once"), ("puzzlepiece.extension", "Extensions don’t run here"),
+                               ("hammer", "Web Inspector instead of DevTools")] {
+            let glyph = NSImageView(frame: NSRect(x: 0, y: y, width: 18, height: 18))
+            glyph.image = SidebarSymbols.image(symbol, size: 13, weight: .medium)
+            glyph.contentTintColor = colors.secondary
+            glyph.imageScaling = .scaleNone
+            addSubview(glyph)
+            // Wraps rather than truncates: the popover is narrow (236 pt) and the facts must read whole.
+            let label = NSTextField(wrappingLabelWithString: text)
+            label.font = .systemFont(ofSize: 13)
+            label.textColor = colors.text
+            label.isSelectable = false
+            let textW = width - 26
+            let h = ceil(label.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: textW, height: 200)).height ?? 16)
+            label.frame = NSRect(x: 26, y: y + 1, width: textW, height: h)
+            addSubview(label)
+            y += max(24, h + 8)
+        }
+        let link = SiteLinkLabel(text: "Learn more", colors: colors, action: learnMore)
+        link.frame = NSRect(x: 0, y: y + 2, width: 90, height: 18)
+        addSubview(link)
+        y += 22
+        setFrameSize(NSSize(width: width, height: y))
+        setAccessibilityElement(true)
+        setAccessibilityRole(.group)
+        setAccessibilityLabel("Protected Media. \(service) plays with Safari’s engine. You sign in here once, extensions don’t run here, Web Inspector instead of DevTools.")
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var isFlipped: Bool { true }
+}
+
+/// "Learn more": secondary text that turns the text colour under the pointer.
+private final class SiteLinkLabel: SiteHoverView {
+    private let label = NSTextField.sidebarLabel(size: 13, weight: .semibold)
+    private let colors: SiteControlCenterColors
+
+    init(text: String, colors: SiteControlCenterColors, action: @escaping () -> Void) {
+        self.colors = colors
+        super.init(frame: .zero)
+        onClick = action
+        label.stringValue = text
+        label.textColor = colors.secondary
+        addSubview(label)
+        setAccessibilityLabel(text)
+        setAccessibilityRole(.link)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        super.layout()
+        label.frame = NSRect(x: -SidebarText.inset, y: 0, width: bounds.width + 2 * SidebarText.inset, height: bounds.height)
+    }
+
+    override func refresh() { label.textColor = hovered ? colors.text : colors.secondary }
+}
+
 /// Pressed, it shows the page's certificate (Arc closes the control center and opens it).
 private final class SiteSecurityPill: SiteHoverView {
     private let colors: SiteControlCenterColors
@@ -617,8 +724,10 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
 
     var isShown: Bool { popover?.isShown == true }
 
-    func show(relativeTo rect: NSRect, of view: NSView, url: String, secure: Bool, dark: Bool, profile: String, tab: UUID?,
-              store: SidebarStore, actions: SiteControlCenterActions) {
+    /// The sliders button pressed while the popover is up, or by the click that just closed it:
+    /// it closes (and stays closed) instead of opening again. Asked before anything slower than
+    /// the click itself (the page's DRM question), while the click is still the current event.
+    func closesInstead() -> Bool {
         // A transient popover closes on the mouse-down outside it; the button fires on that
         // click's mouse-up. The same click on the sliders button closes it, as in Arc,
         // however long the press took (GitHub #42): the latest mouse-down is the closing one.
@@ -627,8 +736,15 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
                 && abs(ProcessInfo.processInfo.systemUptime - CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .leftMouseDown) - t) < 0.05
         } ?? false
         closingClick = nil
-        if let popover, popover.isShown { popover.performClose(nil); return }
-        if closedByThisClick { return }
+        if let popover, popover.isShown { popover.performClose(nil); return true }
+        return closedByThisClick
+    }
+
+    func show(relativeTo rect: NSRect, of view: NSView, url: String, secure: Bool, dark: Bool, profile: String, tab: UUID?,
+              protectedMedia: String? = nil, safariEngine: Bool? = nil, toggleChecked: Bool = false,
+              store: SidebarStore, actions: SiteControlCenterActions) {
+        if !toggleChecked, closesInstead() { return }
+        if let popover, popover.isShown { popover.performClose(nil) }
         let p = NSPopover()
         p.behavior = .transient
         p.animates = true
@@ -648,7 +764,11 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
         acts.clearCache = closing(actions.clearCache)
         acts.clearCookies = closing(actions.clearCookies)
         acts.showCertificate = actions.showCertificate.map(closing)
-        let content = SiteControlCenterView(url: url, secure: secure, dark: dark, profile: profile, tab: tab, actions: acts, store: store)
+        acts.learnAboutProtectedMedia = closing(actions.learnAboutProtectedMedia)
+        // The page opens again in the other engine: the popover's content would be the old page's.
+        acts.chooseSafariEngine = { [weak p] on in p?.performClose(nil); actions.chooseSafariEngine(on) }
+        let content = SiteControlCenterView(url: url, secure: secure, dark: dark, profile: profile, tab: tab, protectedMedia: protectedMedia,
+                                            safariEngine: safariEngine, actions: acts, store: store)
         let host = NSViewController()
         host.view = content
         host.preferredContentSize = content.frame.size

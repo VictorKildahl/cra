@@ -56,6 +56,9 @@ enum TestRoot { case today }
     var entries: [Entry] = []
     func entries(inProfile name: String) -> [Entry] { entries }
     func proxyLine(inProfile name: String) -> String { "not set by an extension" }
+    /// The profiles a loaded page asked for Web Store installs in (#203), in order.
+    var webStoreProfiles: [String] = []
+    func installFromWebStore(using browser: CraBrowser, profile: String) { webStoreProfiles.append(profile) }
 }
 enum FaviconKey { static func key(for url: String) -> String? { url } }
 enum BrowsingDataClear {
@@ -88,4 +91,10 @@ final class PictureInPictureChrome {
     var isPlaying = false
     func videoEntered() {}
     func videoLeft() {}
+}
+/// The WebKit page (Sources/Cra/Services/WebKit/WebKitBrowser.swift): here only its type, which
+/// is what PageEngines and BrowserManager decide on.
+final class WebKitBrowser: CraBrowser {
+    var isContentFullscreen = false
+    var serviceName = ""
 }

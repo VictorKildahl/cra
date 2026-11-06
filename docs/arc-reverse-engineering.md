@@ -89,6 +89,14 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   `siteSearchSpaceTriggerEnabled` show Space was a trigger once and Tab is the only one now. Cra's "%" tab scope
   (#49, Zen's idea) reuses all of it: "%" offers "Search Tabs  Tab", the pill takes the space's colour (Arc has no
   colour for a scope that isn't a site), rows are the bar's own tab rows. Cra: TabSearchScope, CommandBarScope.
+- [O] Actions scope (6 Nov, Arc 1.171, ⌘T then Tab posted to the main window, AX + window captures; GitHub #195):
+  Tab on the EMPTY field enters `typeTravel` ("title for scoped search of browser actions in Arc"): an "Actions"
+  pill in the space's colour before the field, placeholder "Search…", no "Search …  Tab" hint before it. Rows are
+  actions only, each with its shortcut (Archive Tab ⌘W, an extension, Close Window ⇧⌘W, Hide Sidebar ⌘S, Next Tab
+  ⌥⌘↓: recently used, from typeTravelUsage); typing narrows them ("spl": Add Split View, Add Top/Left/Right/Bottom
+  Split) and the glyph before the field becomes the row's. Backspace on the empty field leaves it, Escape returns
+  to how the bar opened, a second Escape closes. Neither New Tab nor the command bar itself is listed. Cra:
+  ActionSearchScope, CommandBarScope.actions (most used first, then menu order: Cra keeps counts, not times).
 - [O] Entering and leaving a scope (3 Nov, Arc 1.171, disassembly of `CommandBar.CommandBarContainer` + a 120 fps
   recording of Little Arc, "youtube" Tab): the container's layer gets `arc_commandBarBounce`, a CASpringAnimation on
   `transform` toward scale 0.95 about the centre (damping ratio 0.9, response 0.7: stiffness ≈ 80.57, damping ≈ 16.16,
@@ -677,8 +685,8 @@ area over the same zones (cursor rects only work in a key window, and the overla
 while the pointer is over the window Cra sets "SetsCursorInBackground" on its WindowServer
 connection, so the resize cursors show with another app in front too (verified with `screencapture
 -C` over each edge and corner, Finder in front and Cra in front). A press with Cra in the background
-already reached the overlay (it activates Cra and acceptsFirstMouse lets it through); without the
-cursor it only looked dead. Drags are measured from each
+already reached the overlay (acceptsFirstMouse lets it through; since #206 it no longer activates Cra);
+without the cursor it only looked dead. Drags are measured from each
 event's own screen location; `cra.log` gets `pip: move`, `pip: resize <edge> from W×H`, `pip: resized
 <edge> W×H → W×H` (with "asked" when Chromium kept another size) and `pip: overlay has no parent window`.
 Swiping (4 Nov, reported on X): Arc's PiP follows two fingers on the trackpad and is thrown into a screen corner;
@@ -689,6 +697,30 @@ follows the scroll deltas (direction from `isDirectionInvertedFromDevice`), the 
 the resting point with UIKit's 0.998/ms deceleration, the nearest corner of that screen's visible frame (10 pt
 in) is the target, and a critically damped spring (response 0.4 s) flies it there from the fingers' speed.
 AppKit's momentum events are ignored; a plain wheel moves nothing. `cra.log`: `pip: swipe to <corner> at N pt/s`.
+Over another app's full-screen Space (6 Nov, GitHub #206):
+- [O static] Arc's `PictureInPicture.PIPWindowController` subclasses `ARCUI.MovableWindowController`, and
+  `ARCUI.MovableWindow` subclasses `NSPanel` (`otool -ov`, Arc 1.171). Its AXSystemDialog subrole (above) means
+  `.nonactivatingPanel`, the same kind of window as Little Arc (see "Little Arc over a full-screen app").
+  [U] Arc's collection behaviour, and Arc on screen over a full-screen app.
+- [O, Chromium source] Chromium's video PiP (`VideoOverlayWindowViews::Create`) and Document PiP (`BrowserWidget`,
+  TYPE_PICTURE_IN_PICTURE) are ordinary NativeWidgetMacNSWindows at kFloatingWindow with
+  `visible_on_all_workspaces`, which is `.canJoinAllSpaces` only. Chromium floats Glic's panel and the
+  screen-share picker over full-screen apps with `Widget::SetActivationIndependence` (NativeWidgetMacNSWindow
+  `setActivationIndependence:`, which answers `_isNonactivatingPanel` and turns canHide off) plus
+  `SetCanAppearInExistingFullscreenSpaces` (adds `.fullScreenAuxiliary`).
+- [O, stand-in app + Spaces probe] With another app full screen, a background app's floating `.canJoinAllSpaces`
+  window is missing from that Space. It is still missing with only `.fullScreenAuxiliary` added, or only
+  `_isNonactivatingPanel`. With both it is there, and so is a borderless `.nonactivatingPanel` NSPanel with
+  `.fullScreenAuxiliary`; canHide doesn't matter. `.managed` keeps it off whatever else is set, and Chromium makes
+  every top-level window managed (Document PiP's had 37: canJoinAllSpaces, managed, participatesInCycle). Flags
+  changed while the window is on screen take effect at the next Space switch. If the full-screen Space is already
+  in front, they take effect only once the window is ordered again (`orderFrontRegardless`).
+- Cra (`CraCEFRuntime.floatOverFullScreenSpaces`): Chromium's recipe without `.managed` on its video PiP window
+  (from `PictureInPictureChrome.style`) and its Document PiP window (found from the ownerless CraClient's
+  OnAfterCreated), with canHide kept on so ⌘H still hides it. The window is ordered again when visible, and the
+  overlay is a borderless non-activating NSPanel. Measured on a test copy with a full-screen stand-in app in
+  front: main had video and Document PiP off that Space. Now both are on it, so is a video PiP opened while that
+  Space is in front, and a click and a drag on it keep the full-screen app frontmost and its Space active.
 One residual difference: Chrome paints its origin strip ("File on your device", top gradient)
 inside the compositor layer for about two seconds when the window first appears (present at
 1.5 s, gone at 2.5 s in quarter-second captures); it is drawn whether or not the window is
@@ -1309,6 +1341,17 @@ opened from Dia ▸ Import from Another Browser… (stopped before "Begin Import
   Cra copies the version folder to `<data dir>/Extensions/<id>` (location 8 in Cra's prefs);
   verified: 21 of Arc's extensions load with Arc's IDs. [U] Extension storage (Local Extension
   Settings) is not copied, so sign-ins inside extensions start fresh.
+- [O] Since GitHub #203 a copy of a Web Store extension (the store's `update_url`, folder named
+  after the ID its `key` gives) becomes the store's own install in each profile it loads in, as
+  Dia's `ExtensionsController` installs from the store: the first page a profile loads sends
+  `Cra.installFromWebStore` (scripts/cef-patches/freezing-vote.patch, WebstoreInstaller, the
+  signed CRX), which lands as location 1 with `from_webstore`; the copy then stops loading there
+  and is deleted once no profile loads it. The store's version may not ask for more permissions
+  than the copy. Before, a copy that reloaded itself (`chrome.runtime.reload()`) came back as
+  location 4 (UNPACKED), which Chromium turns off without developer mode
+  (DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION, 1 << 24), and the reason stuck after the next launch
+  loaded it as location 8 again; extension-reload-location.patch keeps such a reload at location
+  8 and clears that reason.
 - Not reproduced: the Arc space step and the extensions step were not opened in Dia (the menu flow
   goes browser → "Unlock your data" → import; the space and extension steps belong to first-run
   onboarding), so their layout follows the reflection metadata and the measured browser step.
@@ -2206,6 +2249,26 @@ Theme palettes in a hand-built space can be borrowed; only the `background` styl
   zoom (16/12/31 → 41/33/50 on its default theme) and steps ~2 levels when the Space settles (45/30/43 → 43/30/45), and
   Cra does the same (189/112/120 → 216/133/137 at the start, 220/124/123 → 218/124/126 at the end), so no fullscreen
   difference against Arc reproduced on this Mac.
+- [O] Space switches, Stage Manager and AppKit's capture settings (5 Nov 2026, issue #156 on 0.1.30; built-in XDR
+  display; a probe app with a hudWindow NSVisualEffectView logging every 4 ms and on each notification: app active,
+  key, main, `NSWindow._hasActiveAppearance`, the view's `_shouldUseActiveAppearance` and its layer tree; ⌃← / ⌃→
+  posted as HID events). A full screen window keeps its active appearance when its Space slides away: the app resigns
+  active and the window loses key and main, but `_hasActiveAppearance` and the material stay active, the desktop tint
+  at opacity 1 throughout. So Arc's sidebar never leaves its active look on a ⌃← / ⌃→ round trip, while Cra's rule (app
+  active and key or main) went to the flat fill and came back at `didBecomeActive`, ~4 ms after the Space change, which
+  is after the slide: the reporter's lighter frames, ~5 frames past the animation. Windowed, the material goes inactive
+  as the window resigns main, as before. AppKit tells its views through `-[NSView _windowChangedKeyState]`. Cra now asks
+  a zero-size NSVisualEffectView that follows its window (`ActiveAppearanceProbe`) and ORs that answer into
+  `SidebarBackdrop.windowActive`. The rule's own half stays, because AppKit's answer doesn't count Cra's page windows.
+  Layer dump of the windowed hudWindow material: `CABackdropLayer` scale 0.125, `windowServerAware`, group
+  `NSCGSWindowBehindWindowCaptureBackdropGroup`, `allowsSubstituteColor` 1, `substituteColor` nil, filters
+  `sdrNormalize`, `gaussianBlur` (radius 30, normalize edges), `colorSaturate` 1.6; then the fill (0.157 grey at 0.4),
+  the tone (0.08 grey, lighten) and the `CAChameleonLayer` at 0.05. Inactive it drops only the capture, the fill and
+  tone go opaque, and the chameleon stays in at 0.05. Side by side over a stripe window, AppKit's settings on a bare
+  layer blur like the material and Cra's full-scale 40 pt blur spread a 20 pt band about twice as wide and greyer. Cra
+  now builds the capture with AppKit's settings (an eighth of the pixels for the window server to rebuild when a window
+  comes back, the dropout the reporter saw out of Stage Manager on an M1) and keeps the desktop tint in the tree at 0.05
+  under the capture, at 1 in full screen, out only with Reduce transparency. Stage Manager itself was not tested here.
 - [O] Tab list scroller: AppKit overlay scroller (AXScrollBar, 17 pt track) shown while scrolling, then faded;
   the knob is 4 pt wide, 3 pt in from the sidebar edge, white 49 % on a dark theme, no track. Cra:
   `SidebarScroller`, 10 pt wide so it stays in the gutter right of the rows (knob on Arc's exact columns).
@@ -2910,19 +2973,18 @@ event with `shiftClickModalEntryPointEnabled` set for the run, AX frames and 60 
   250/238/194 on the fake home's yellow space: the space's tooltip fill (shadedDark at 30 %) and its light
   foreground. Their tips are the space's ArcTooltip.
 - [O] The page behind fades to about 28 % over the window's background (233/240/254 → 178/172/151); the sidebar
-  stays. Opening, the card starts at the area's full size and shrinks to its frame as it fades in (~0.12 s), the
-  buttons appearing at the end. Escape closes it backwards: out to the full area, fading, as the page comes back
-  (~0.22 s).
+  stays. Opening and closing: see "Peek grows out of the link" below. This run's page was one big link, so the
+  card seemed to start at the area's full size and to go back out to it.
 - [O] "Copied Current URL" carries a Share glyph button in browser windows too (AX `square.and.arrow.up`, "Share",
   31 × 27). The toast is 195 × 47 pt: text 13 pt in, 14.5 pt to a 29 × 27 pt button 13 pt from the end, 10 pt from
   top and bottom. The button is a white wash over the pill (≈ 60 % on the light toast, 15 % on Little Arc's dark
   one) with an outline. A click opens the macOS share menu (AirDrop, Notes…) from the button; the toast stays.
-- [O] The motion, frame by frame at 60 fps (card edges on one row, the card's and the page's luminance): opening,
-  the card's opacity reaches 1 in ~0.075 s, and its scale goes from the whole area (1.25, centred) to 1 on an
-  ease-out cubic over ~0.205 s (scale − 1 per frame: .168, .127, .092, .063, .041, .025, .015, .008, .002). The
-  buttons appear with it and ride its top-right corner. The page fades on an ease-out cubic over ~0.18 s.
-  Closing: the card grows to ~1.19 in ~0.09 s (near linear), fading from ~0.07 s, gone by ~0.16 s; the page is
-  back after ~0.2 s.
+- [O] The motion from that page-sized link, frame by frame at 60 fps (card edges on one row, the card's and the
+  page's luminance): opening, what read as the card's opacity reaching 1 in ~0.075 s was the link's picture (the
+  whole page) fading out over it; its scale went from the whole area (1.25, centred) to 1 on an ease-out cubic
+  over ~0.205 s (scale − 1 per frame: .168, .127, .092, .063, .041, .025, .015, .008, .002). The page fades on an
+  ease-out cubic over ~0.18 s. Closing: the card grew to ~1.19 in ~0.09 s (near linear), "fading" from ~0.07 s
+  (the link's picture coming back), gone by ~0.16 s; the page is back after ~0.2 s.
 - Cra draws the motion on Core Animation (PeekTransition): pictures of the card (with Chromium's screenshot of
   the page when closing) and of the buttons in a panel over the window, the real card and buttons invisible at
   their places until it lands. Animating the windows' frames (the first version) resized and laid out the card
@@ -2944,6 +3006,44 @@ event with `shiftClickModalEntryPointEnabled` set for the run, AX frames and 60 
   the peeked page on the right. Cra: MainWindowController.closedPeek, LittleWindowController.promoteToSplit.
 - [?] Not measured: the card at other window widths (Cra keeps 80 % of the area), and the Peek with Arc's
   toolbar turned off.
+- [O, 6 Nov, GitHub #202] A target=_blank link clicked inside a Peek (HID click, offline Arc, Peek opened by a
+  Shift-click from a Today tab on a 127.0.0.1 lab page) closed the Peek and opened the page as a new Today tab
+  in the same space, selected, right below the tab the Peek came from. No second Little Arc or Peek, and the
+  peeked page was not kept as a tab. Cra (0.1.31) opened another Little Window. Cra: PeekTrigger.leavesPeek,
+  LittleWindowController.openTabFromPeek → BrowserManager.openLinkTab (the placement links from a tab get, so
+  from a pinned tab the top of Today). Not observed in Arc: a ⌘-click inside the Peek (Cra: a background tab,
+  the Peek stays) and window.open with features (Cra: still a Little Window over the Peek, which keeps the
+  opener alive for sign-ins).
+
+### Peek grows out of the link (Arc 1.171, 6 Nov 2026, GitHub #204, offline Arc)
+The reporter recorded Arc 1.172.1 growing the card out of the clicked link. 1.172.0/1.172.1 only moved Chromium
+(appcast notes: "no other changes"), so this was measured on 1.171 with a lab page on 127.0.0.1: two 68 × 31 pt
+links, A near the top left and B near the bottom right, real HID Shift-clicks (`modalEnabled` and
+`shiftClickModalEntryPointEnabled` set for the run), Escape to close, an app-only ScreenCaptureKit recording at
+60 fps, the card's frame and a black box inside the peeked page measured per frame.
+- [O] Opening: a picture of the link fills the moving frame (stretched, opaque) and fades out over the card on an
+  ease-out over ~0.075 s (red over blue reads 0.40, 0.21, 0.065, 0.02 a frame apart). The frame goes from the
+  link's rect to the card's: its centre (x and y) and width on an ease-out cubic over ~0.205 s, the height
+  lagging on an ease-out cubic over ~0.21 s about 12 ms later (when the width was 60 % of the way the height
+  was 48 %; frames from link B gave the same pairs). The page inside is a picture scaled by the frame's width
+  against the card's, pinned to the frame's top-left; the frame (8 pt corners) clips the rest.
+- [O] The buttons ride the frame's top-right corner, scaled like the page, 7 pt below its top, and fade in once
+  the link's picture is gone (none at ~0.055 s after the motion starts, faint at ~0.08, full by ~0.13).
+- [O] Closing from link B: the frame goes back to the link's rect on the same near-linear curve as before, over
+  ~0.16 s (fit on 6 frames: .13, .31, .49, .64, .80, .88), the card opaque, the link's picture fading back in
+  over it from ~0.07 s (≈ 0.3 at 80 % of the way, 0.55 at 88 %); then only the real link. The buttons go in
+  ~0.05 s.
+- [O] Closing from link A went back into link A the same way (.09, .26, .44, .66, .78, .86, .92 a frame apart,
+  the link's red fading in over the blue). Only the very first Peek after launch (Arc's toolbar grew 8 pt during
+  that run) shrank about its own centre instead and faded out in ~0.07 s; taken as a first-run glitch.
+- Cra: PeekLayout.opening / closing / content / column (CraCore) sample the motion; PeekTransition plays it as
+  Core Animation keyframes at 120 Hz. MainWindowController.peekSource finds the link under the pointer (else
+  the focused link) with a script in Cra's isolated world and cuts its picture out of Chromium's screenshot,
+  within 90 ms; without one (or in a WebKit tab) the card grows from the whole area and fades itself, as from
+  Arc's page-sized link. Closing asks where the link is now (the page may have scrolled) and goes back there;
+  out to the whole area when it's gone. Recorded the same way in a test copy: the card's left edge went .65,
+  .77, .84, .91, .93, .98 of the way a frame apart (Arc .60, .77, .85, .91, .95, .97), its bottom edge .34,
+  .59, .71, .80, .87, .91 (Arc .31, .54, .73, .82, .89, .94), and it closed back into the link.
 
 ## Capture (Arc 1.171, 4 Nov 2026, X request, Swift metadata + strings + offline Arc at 2x, 120 fps recordings)
 - [O metadata] Module `Capture`: ContentCaptureViewController holds ContentCaptureView (grayscale and darkened layers with
@@ -3121,7 +3221,8 @@ Arc Max's renameDownloads: a finished download is renamed on disk and a card abo
   (FoundationModels, renames the file, DownloadHistory.move, revert), DownloadRenameCard (SidebarView, over the bin).
   Settings ▸ Max ▸ Tidy Downloads, off by default. Deviations Victor asked for (5 Nov 2026): the body is 71 pt
   (the old name's baseline as far from the bottom as the label's cap top from the top), and the card stays while the
-  pointer is on it, then for what was left of its 8 s but at least 3 s.
+  pointer is on it, then for what was left of its 8 s but at least 3 s. On a dark space the label and the old name are #929BFF, not
+  Arc's #343BD1, which reads at 2.6:1 on the card (PR #197, Quinn Battersby; Victor, 5 Nov 2026).
 
 ## Little Arc over a full-screen app (Arc 1.171, 5 Nov 2026, issue #186, Victor's Arc + a test full-screen app)
 
@@ -3140,3 +3241,46 @@ Arc Max's renameDownloads: a finished download is renamed on disk and a card abo
 - [O, Cra test copy] Child windows: a child ordered in before its parent is on screen, or shown by its owner before it was
   attached (Chromium's page window), stays on the desktop Space. Making it key then switches Spaces. Ordering it
   out and adding it again as a child, after the parent is on screen, puts it on the parent's Space.
+
+## Little Arc's ⌥⌘N from any app, Capture scrolling, and clicks on a Peek's bar (Arc 1.171, 5 Nov 2026, issue #195)
+
+- [O strings] Arc registers Little Arc's shortcut as a system-wide hot key: `GlobalHotkeyListenerClient.registerLittleBrowserShortcut`,
+  a Carbon `RegisterEventHotKey` (`EventHotKeyID`, "Failed to register hotkey."), behind the setting
+  `globalLittleBrowserHotkeyEnabled` ("Open Little Arc when I press ⌥⌘N", `onToggleGlobalLittleBrowserHotkey`). It is on by
+  default (not in Victor's defaults; Arc's help and guides say ⌥⌘N works from any app). Cra: GlobalHotkey (Carbon, no
+  Accessibility permission) registers New Little Window's binding while Settings ▸ Tabs ▸ Links "Open a Little Window when I
+  press ⌥⌘N in any app" is on (GlobalShortcut in CraCore: only chords with ⌘, ⌃ or ⌥). A background test copy registers none.
+  Checked in a test copy: ⌥⌘N with VS Code in front opened an empty Little Window with its command bar.
+- [reporter] Arc's Capture lets the page scroll under it. Cra's draws over a picture of the page, so while choosing it now
+  sends the wheel to the page (`Input.dispatchMouseEvent` mouseWheel, points to CSS pixels by the page's devicePixelRatio,
+  40 px per wheel line) and takes the picture again as it moves (one at a time, and once more 0.25 s after the last event for
+  smooth scrolling and momentum). Checked: 25 HID wheel steps scrolled a long page 1000 px with the mode on, the grey picture
+  following. WebKit pages don't scroll under it (no Input domain there).
+- [O, Cra test copy] Why a Peek's Back, Forward and Refresh (and Little Window's strip) did nothing: the page is a Chromium child
+  window of the Little Window. With it key, a HID press on the bar reached the button but the release never reached the app (no
+  local monitor saw it), and the buttons act on the release. The main window avoids this for its own children by making the
+  window under a press key first (installChildClickMonitor), but a Peek's page is a grandchild of the browser window, and a
+  Little Window has no such monitor. LittleWindow.sendEvent now does the same for its children. A press while the browser
+  window itself was key always worked (its monitor made the Peek key), which is why it looked intermittent.
+
+## Theme editor hover, tab-on-tab drops, Download location (Arc 1.171, static, 5 Nov 2026, #189–#191)
+Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and field names only; no numbers).
+- [O metadata] SpaceStyleEditor module: `ColorPillButtonStyle { colorSet, _isHovered, addComplimentary }` (the preset
+  swatches are a ButtonStyle with a hover state), `SpaceStyleButtonStyle { _isHovered, _isEnabled, hoverColor,
+  hoverStyleEnabled }` (paging arrows, `EditColorButtonsView` − / +, `LightDarkToggleView`, each with
+  `shouldEnableButtonHover`), `PadWheel { _isDraggingKnob, _isKnobHovered, _knobPositionAtDragBegin }`,
+  `SpaceStyleColorPadView { _isPadButtonsHovered, _isDraggingKnob, _isKnobHovered }`.
+  [?] Not measured: the hover/press scales and the hover colour. Cra (#189): swatches and knobs scale 1.08 hovered,
+  0.92 pressed (ease-out 0.12 / 0.10 s, the reporter's estimates); arrows, − / +, Auto / Light / Dark get +0.3 white
+  on hover; pointing hand on the arrows, open hand over a knob, closed hand while dragging one; none with Reduce Motion.
+- [O metadata] Sidebar drops: `SidebarDropTarget = tabList(…) | appTray`, `SidebarDropTargetRegion = left | right`,
+  `SidebarDropOperation = move | copy`, the window action `draggedToCombineSplitCompatibleItems(…)`. No drop makes a
+  folder: `createFolderFromItems` / `createFolderFromSelection` are the menus' "New Folder with N Items". Cra (#191):
+  a tab dropped on the middle of any tab row, pinned or Today, offers the split (the pinned tab stays, the split
+  opens in Today with a copy, `SidebarStore.createSplit`); Cra's own "New Folder" drop on pinned rows is gone.
+  [?] Not observed live: Arc's drop on a pinned row.
+- [O strings/metadata] Settings ▸ Profiles "Download location" is per profile: `DownloadLocationView { store,
+  _selectedTag, _panelOpen }` with tags `arc.folder`, `arc.promptForDownload`, `arc.other` ("Button to confirm
+  selection of directory for file downloads"). [?] The menu's own labels aren't in the strings. Cra (#190):
+  AppSettings.downloadLocations per profile (folder or ask), a Downloads card under Profiles with the folder,
+  "Ask Where to Save Each File" and "Other…"; save panels queue one at a time as sheets on Cra's window.

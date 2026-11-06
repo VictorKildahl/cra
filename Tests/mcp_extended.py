@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real-app MCP regression suite. Uses only a temporary profile and local HTTP fixture."""
+"""Real-app MCP regressions with a temporary profile and localhost; briefly opens visible PiP."""
 import argparse
 import http.server
 import json
@@ -341,11 +341,33 @@ try:
         check('permission navigation '+str(attempt+1)+' leaves the normal profile unblocked',js(client,normal,'Notification.permission')=='default')
     staged=[p for p in agent_staged if p.is_file()]
     check('upload copies have private permissions',bool(staged) and all(p.stat().st_mode&0o777==0o600 for p in staged))
+    baseline=live_count()-1
     value(client.tool('tab_close',{'tabId':agent}))
+    eventually(lambda:live_count()==baseline)
     eventually(lambda:all(not p.exists() for p in staged))
     check('closing agent removes staged upload files',True)
     check('completed download persists after close',output.exists())
-    baseline=live_count()
+    # Document PiP intentionally has no CraBrowser owner. Keep it alive, while the
+    # immediate-close tests below must still reclaim tabs whose weak owner vanished.
+    value(client.tool('tab_show',{'tabId':normal}))
+    tab_ids={t['id'] for t in tabs(client)}
+    value(client.tool('page_click',{'tabId':normal,'selector':'#document-pip'}))
+    eventually(lambda:js(client,normal,'!!window.testPiP && !testPiP.closed'))
+    eventually(lambda:live_count()==baseline+1)
+    check('Document PiP stays alive without a sidebar tab',
+          {t['id'] for t in tabs(client)}==tab_ids and
+          js(client,normal,'testPiP.document.body.textContent')=='Cra Document PiP fixture')
+    js(client,normal,'testPiP.close()')
+    eventually(lambda:live_count()==baseline)
+    check('closing Document PiP releases its browser',js(client,normal,'testPiP.closed'))
+    value(client.tool('tab_show',{'tabId':normal}))
+    value(client.tool('page_click',{'tabId':normal,'selector':'#document-pip'}))
+    eventually(lambda:js(client,normal,'!!window.testPiP && !testPiP.closed'))
+    eventually(lambda:live_count()==baseline+1)
+    value(client.tool('page_navigate',{'tabId':normal,'url':url+'/normal?pip-cleanup'}))
+    ready(client,normal)
+    eventually(lambda:live_count()==baseline)
+    check('navigating the opener closes Document PiP',js(client,normal,'!window.testPiP'))
     # Immediate close races asynchronous CEF creation; no orphan agent pages may remain.
     for _ in range(8):
         quick=value(client.tool('tab_open',{'url':url+'/quick','background':True}))['tabId']

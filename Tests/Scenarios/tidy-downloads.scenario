@@ -1,0 +1,26 @@
+home
+env CRA_TIDY_FAKE_MODEL=1
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "tidyDownloads": true}
+seed windows.json {"sidebarWidth": 266}
+# A long original name is truncated in a narrow sidebar. Its animated strike must end
+# inside the card's right padding; the short name below should only be struck through its text.
+cra://open?url=file://${FIXTURES}/Pages/downloads.html
+expect-log loaded file:
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mousePressed","x":36,"y":24,"button":"left","clickCount":1}
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseReleased","x":36,"y":24,"button":"left","clickCount":1}
+expect-log Tidy Downloads: renamed a download
+wait 1
+snapshot DownloadRenameCard download-rename-long
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mousePressed","x":36,"y":56,"button":"left","clickCount":1}
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseReleased","x":36,"y":56,"button":"left","clickCount":1}
+expect-log Tidy Downloads: renamed a download \(11
+wait 1
+snapshot DownloadRenameCard download-rename-short
+# After the rename card leaves, the download preview still sits over the Library button.
+# The Library button must not clip it: the bin reaches past the glyph's top and right edges.
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mousePressed","x":36,"y":88,"button":"left","clickCount":1}
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseReleased","x":36,"y":88,"button":"left","clickCount":1}
+wait 9
+# A background copy may or may not have been made active: draw the bin as in front (not dimmed).
+cra://debug?appActive=1
+snapshot SpaceDockView download-preview-dock

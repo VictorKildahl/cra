@@ -1,4 +1,5 @@
 import AppKit
+import CraCEF
 
 /// What the hover controls do; set by BrowserManager for the tab whose video is out.
 struct PictureInPictureActions {
@@ -97,6 +98,8 @@ final class PictureInPictureChrome {
         if window.responds(to: NSSelectorFromString("setPreventKeyWindow:")) {
             window.setValue(true, forKey: "preventKeyWindow")
         }
+        // Over another app's full-screen Space too, like Arc's (#206). The overlay copies this below.
+        CraCEFRuntime.floatOverFullScreenSpaces(window)
         if let cv = window.contentView {
             cv.wantsLayer = true
             cv.layer?.cornerRadius = Self.cornerRadius
@@ -145,9 +148,13 @@ final class PictureInPictureChrome {
 /// Transparent window over Chromium's PiP window: swallows the pointer so
 /// Chrome's controls never show, and turns drags into moves and edge drags
 /// into aspect-locked resizes of the window underneath.
-final class PictureInPictureOverlay: NSWindow {
+///
+/// A non-activating panel, like Arc's PiP: it stays on another app's full-screen
+/// Space with Chromium's window (#206), and a click on it doesn't bring Cra
+/// forward (which would leave that Space). Back to tab activates Cra itself.
+final class PictureInPictureOverlay: NSPanel {
     init(over target: NSWindow) {
-        super.init(contentRect: target.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        super.init(contentRect: target.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .clear
         hasShadow = false

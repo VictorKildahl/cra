@@ -111,6 +111,11 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 /// opens as a target=_blank tab) or Shift-clicked (YES, instead of a new window). Return
 /// YES to show it in a Peek; the page then stays where it is.
 - (BOOL)browser:(CraBrowser *)browser opensPeekForURL:(NSString *)url shiftClick:(BOOL)shiftClick newTab:(BOOL)newTab;
+/// A main-frame navigation (a link, a redirect, history, an address Cra loaded) before its request
+/// goes out; `method` is its HTTP method. Return YES to cancel it here because Cra shows `url` in
+/// another engine (ProtectedMediaSites: WebKit for DRM services). Called on the main thread from
+/// inside Chromium: don't close the browser before returning.
+- (BOOL)browser:(CraBrowser *)browser handsOffNavigationToURL:(NSString *)url method:(NSString *)method;
 /// The DevTools frontend shows `panel` ("elements", "console", "network", …): on load, and
 /// on every switch, from Cra or the frontend's own tab bar.
 - (void)browser:(CraBrowser *)browser devToolsShowsPanel:(NSString *)panel;
@@ -200,7 +205,7 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 @property (nonatomic, readonly) BOOL isInPictureInPicture;
 /// YES while that video is playing.
 @property (nonatomic, readonly) BOOL isPictureInPicturePlaying;
-/// The page is using the camera or microphone (Chromium's media access state).
+/// The page is using the camera or microphone, as Chrome's tab recording indicator counts it.
 @property (nonatomic, readonly) BOOL isCapturingMedia;
 /// The page is playing sound, in any frame (Chromium's audible state). Like Chrome's tab
 /// speaker it stays YES for 2 s after the page goes quiet. Muting the tab doesn't change it.
@@ -316,6 +321,12 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 /// ("Default", "Profile <id>"; nil off the record); Chrome's own window for it is closed.
 /// Popup-type windows (windows.create({type: "popup"})) stay Chrome's windows.
 + (void)setStrayPageHandler:(void (^)(NSString *url, NSString * _Nullable profile))handler;
+/// Where a page's download is saved (GitHub #190): the handler gets the browser's profile folder
+/// (nil for Default and off the record) and the file name Chromium suggests, and calls `completion`
+/// on the main thread with the full path to save to, or nil to cancel the download (a save panel
+/// the user closed). Without a handler downloads go to ~/Downloads.
++ (void)setDownloadDestinationHandler:(void (^)(NSString * _Nullable profilePath, NSString *suggestedName,
+                                                void (^completion)(NSString * _Nullable path)))handler;
 /// Renderer trouble and failed loads, for Cra's performance recorder (GitHub #91): `kind` is
 /// terminated, unresponsive, responsive or loadError; `detail` how it ended or the net error
 /// code; `site` the host (nil for incognito, Cra's own pages or a closed tab). Never a URL.
@@ -325,6 +336,9 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 + (BOOL)isExtensionWindow:(NSWindow *)window;
 /// YES for the Chrome-style window hosting one of Cra's own browsers.
 + (BOOL)isPageWindow:(NSWindow *)window;
+/// Lets one of Chromium's Picture in Picture windows show over another app's full-screen Space,
+/// as Arc's non-activating PiP panel does (GitHub #206). Chromium only makes it join every desktop Space.
++ (void)floatOverFullScreenSpaces:(NSWindow *)window;
 + (NSString *)chromiumVersion;
 + (NSString *)cefVersion;
 /// YES when the browser-level DevTools pipe is up (it needs fds 3/4 free at start-up).

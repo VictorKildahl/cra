@@ -15,6 +15,9 @@ final class TabRuntime {
     /// auto Picture in Picture); coming back brings the video home.
     var autoPictureInPicture = false
     var pendingAutoPictureInPicture = false
+    /// When Cra last ran the page's own `enterpictureinpicture` handler on leaving the tab (a
+    /// Google Meet call opens its Document Picture in Picture window); coming back closes it.
+    var sessionPictureInPictureAt: Date?
     /// The tab switcher's thumbnail, taken while the page was last on screen.
     var snapshot: NSImage?
     var snapshotWork: DispatchWorkItem?
@@ -24,6 +27,8 @@ final class TabRuntime {
     var freezeVoted = false
     /// When the page last went off screen (nil while shown); tab sleeping counts from here.
     var hiddenAt: Date?
+    /// The `hiddenAt` its page window last drew for, so Chromium's evicted frame let go (HiddenFrameRelease, #195).
+    var hiddenFrameReleasedFor: Date?
     /// When the page last started or stopped playing sound; tab sleeping waits as long after it.
     var audibleAt: Date?
     /// Tab sleeping discarded the page in place (Cra.discard): Chromium keeps its history and
@@ -135,9 +140,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         }
         log(tabID, "opens a page for \(site(tab.url, tabID))")
         if sleptTabs.remove(tabID) != nil { Perf.begin(.tabWake, tabID.uuidString) }
+        // Chromium, or WebKit for a DRM service (ProtectedMediaSites).
         let browser = Perf.time(.pageCreate) {
-            CraBrowser(frame: container.bounds, url: tab.url, delegate: self, incognito: store.isIncognito(item: tabID),
-                       profilePath: store.profilePath(item: tabID))
+            PageEngines.makeBrowser(frame: container.bounds, url: tab.url, delegate: self, incognito: store.isIncognito(item: tabID),
+                                    profilePath: store.profilePath(item: tabID))
         }
         return register(browser: browser, tabID: tabID)
     }
@@ -155,10 +161,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         return rt
     }
 
-    /// Popup host: a browser shell CEF will fill with window.open content.
-    func makePopupHost(for tabID: UUID) -> CraBrowser {
-        let browser = CraBrowser(frame: container.bounds, url: nil, delegate: self, incognito: store.isIncognito(item: tabID),
-                                 profilePath: store.profilePath(item: tabID))
+    /// Popup host: a browser shell its opener's engine will fill with window.open content.
+    func makePopupHost(for tabID: UUID, opener: CraBrowser) -> CraBrowser {
+        let browser = PageEngines.makeBrowser(frame: container.bounds, url: nil, delegate: self, incognito: store.isIncognito(item: tabID),
+                                              profilePath: store.profilePath(item: tabID), opener: opener)
         register(browser: browser, tabID: tabID)
         return browser
     }
@@ -666,10 +672,43 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// It goes through the protocol's user gesture like the player's button:
     /// the key press that lends the page activation raced the page going
     /// hidden, and PiP sometimes never opened.
-    private func leaveTab(_ tabID: UUID) {
+    ///
+    /// A call goes first through Chrome's own automatic Picture in Picture
+    /// (AutoPictureInPictureTabHelper, which Arc uses for Google Meet), driven by Cra's tab switch
+    /// since CEF has no tab strip for it to watch (`Cra.autoPictureInPicture`). A page that uses
+    /// the camera or microphone and registered an `enterpictureinpicture` media session handler
+    /// has it run, and Chromium lets it open its Picture in Picture window without a gesture:
+    /// Meet's "Automatic picture-in-picture" opens a Document Picture in Picture window of the
+    /// call, which no `<video>` request can (GitHub #198). Chrome's per-site permission for
+    /// automatic picture-in-picture applies. Any other page gets the video request; `video: false`
+    /// skips that (a silent page when the window goes out of sight).
+    private func leaveTab(_ tabID: UUID, video: Bool = true) {
         guard store.settings.autoPictureInPicture, let rt = runtimes[tabID], !rt.browser.isInPictureInPicture else { return }
         rt.pendingAutoPictureInPicture = true
-        requestPictureInPicture(tabID, automatic: true)
+        guard rt.browser.isCapturingMedia, !(rt.browser is WebKitBrowser) else {
+            if video { requestPictureInPicture(tabID, automatic: true) }
+            return
+        }
+        let asked = clock.now
+        rt.browser.sendDevToolsMethod("Cra.autoPictureInPicture", params: #"{"tab":"hidden"}"#) { [weak self, weak rt] result, _ in
+            DispatchQueue.main.async {
+                guard let self, let rt, self.runtimes[tabID] === rt else { return }
+                let answer = Self.jsonObject(result) ?? [:]
+                if answer["asked"] as? Bool == true {
+                    self.log(tabID, "asks the page for Picture in Picture")
+                    rt.sessionPictureInPictureAt = asked
+                    // Back on the tab before Chromium answered.
+                    if !rt.pendingAutoPictureInPicture { self.returnToTab(rt) }
+                    rt.pendingAutoPictureInPicture = false
+                } else if answer["pictureInPicture"] as? Bool == true {
+                    rt.pendingAutoPictureInPicture = false
+                } else if video, rt.pendingAutoPictureInPicture {
+                    self.requestPictureInPicture(tabID, automatic: true)
+                } else {
+                    rt.pendingAutoPictureInPicture = false
+                }
+            }
+        }
     }
 
     /// A split pane that stands in for a pinned tab: the Today copy `createSplit` and
@@ -694,17 +733,23 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     /// Arc's presentPipForOccludedWindow: a window out of sight and not key leaves its video tabs
     /// the way a tab switch does (a four-finger swipe to another desktop, another app on top), and
-    /// the video comes back when the window is key again. Only pages playing sound are asked:
-    /// the automatic request wants an unmuted video playing, and a page without one in its main
-    /// frame gets the activation nudge, which an app switch shouldn't send to every page.
+    /// the video comes back when the window is key again. Only pages playing sound get the video
+    /// request: it wants an unmuted video playing, and a page without one in its main frame gets
+    /// the activation nudge, which an app switch shouldn't send to every page. A call (camera or
+    /// microphone in use) has its own `enterpictureinpicture` handler run (Meet, #198).
     func windowVisibilityChanged(covered: Bool) {
         guard covered != windowCovered else { return }
         windowCovered = covered
         for id in visibleTabIDs {
             guard let rt = runtimes[id] else { continue }
             if covered {
-                if rt.browser.isAudible { leaveTab(id) }
-            } else if rt.autoPictureInPicture || rt.pendingAutoPictureInPicture {
+                // A WebKit page's own fullscreen window covers this one: that is the video on
+                // screen, not out of sight. Asked then, WebKit's Picture in Picture got stuck in its
+                // transition and never opened for that video again.
+                if rt.browser.isAudible || rt.browser.isCapturingMedia, !PageEngines.isInOwnFullscreen(rt.browser) {
+                    leaveTab(id, video: rt.browser.isAudible)
+                }
+            } else if rt.autoPictureInPicture || rt.pendingAutoPictureInPicture || rt.sessionPictureInPictureAt != nil {
                 returnToTab(rt)
             }
         }
@@ -730,6 +775,23 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     private func returnToTab(_ rt: TabRuntime) {
         rt.pendingAutoPictureInPicture = false
         if rt.browser.isInPictureInPicture { rt.browser.exitPictureInPicture() }
+        if let asked = rt.sessionPictureInPictureAt {
+            rt.sessionPictureInPictureAt = nil
+            closeAutomaticPictureInPicture(rt, again: clock.now.timeIntervalSince(asked) < 2)
+        }
+    }
+
+    /// Chrome closes the window automatic Picture in Picture opened when its tab is in front
+    /// again, and the page takes its content back as the window goes (Meet's call returns to the
+    /// tab). A window the page was still opening (the user came straight back) is closed once it
+    /// is up, a second later, if the tab is still in front.
+    private func closeAutomaticPictureInPicture(_ rt: TabRuntime, again: Bool) {
+        rt.browser.sendDevToolsMethod("Cra.autoPictureInPicture", params: #"{"tab":"shown"}"#) { _, _ in }
+        guard again else { return }
+        clock.after(1) { [weak self, weak rt] in
+            guard let self, let rt, self.visibleTabIDs.contains(rt.tabID), !self.windowCovered else { return }
+            rt.browser.sendDevToolsMethod("Cra.autoPictureInPicture", params: #"{"tab":"shown"}"#) { _, _ in }
+        }
     }
 
     func browser(_ browser: CraBrowser, didChangePictureInPicture active: Bool) {
@@ -738,7 +800,9 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
             if active { np.pictureInPicture.insert(id) } else { np.pictureInPicture.remove(id) }
         }
         log(id, active ? "enters Picture in Picture" : "leaves Picture in Picture")
-        if active {
+        // WebKit's video goes to the system's own Picture in Picture window, with its own controls.
+        if browser is WebKitBrowser {
+        } else if active {
             // The floating window's hover controls act on this tab.
             PictureInPictureChrome.shared.actions = PictureInPictureActions(
                 backToTab: { [weak self] in self?.bringToFront(id) },
@@ -771,6 +835,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     func browser(_ browser: CraBrowser, didChangeMediaCapture capturing: Bool) {
         guard let id = tabID(of: browser) else { return }
+        log(id, capturing ? "uses the camera or microphone" : "stopped using the camera and microphone")
         delegate?.browserManagerDidUpdate(id)
     }
 
@@ -791,8 +856,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     // MARK: Now playing
 
     /// Play/pause, previous and next for the sidebar player. The page's own media session
-    /// handlers go first (PageScript keeps them; YouTube, Spotify and SoundCloud skip tracks
-    /// that way), else the page's media elements. Runs as a user gesture so play() is allowed.
+    /// handlers go first (YouTube, Spotify and SoundCloud skip tracks that way), else the page's
+    /// media elements.
     func performNowPlaying(_ id: UUID, _ action: NowPlaying.Action) {
         let op: String
         switch action {
@@ -811,6 +876,51 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         case .toggleMute, .show: return
         }
         guard let rt = runtimes[id] else { nowPlaying?.remove(id); return }
+        if rt.browser is WebKitBrowser { return performWebKitNowPlaying(id, rt, op) }
+        // Chromium routes the page's own media session handlers (YouTube, Spotify and SoundCloud
+        // skip tracks that way), as Arc does: `Cra.mediaSession` runs the handler the way
+        // Chrome's media keys do, and a page without one has its media elements played or paused.
+        let run = { [weak self, weak rt] (op: String) in
+            guard let rt else { return }
+            rt.browser.sendDevToolsMethod("Cra.mediaSession", params: Self.jsonObjectString(["action": op])) { result, _ in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    if Self.jsonObject(result)?["handled"] as? Bool == true {
+                        if op == "play" || op == "pause" { self.nowPlaying?.update(id) { $0.playing = op == "play" } }
+                    } else if op == "play" || op == "pause" {
+                        self.mediaElements(id, rt, op)
+                    }
+                }
+            }
+        }
+        guard op == "toggle" else { return run(op) }
+        mediaElements(id, rt, "state") { playing in run(playing ? "pause" : "play") }
+    }
+
+    /// The page's media elements: "state" reads whether any plays, "play" plays the one that
+    /// played last (or the first), "pause" pauses them all. No user gesture: the page has been
+    /// playing, so it already has its activation.
+    private func mediaElements(_ id: UUID, _ rt: TabRuntime, _ op: String, then: ((Bool) -> Void)? = nil) {
+        let js = """
+        ((op) => {
+          const media = [...document.querySelectorAll('video,audio')];
+          const playing = media.some(m => !m.paused && !m.ended);
+          if (op === 'pause') media.forEach(m => m.pause());
+          else if (op === 'play') (media.find(m => m.currentTime > 0 && !m.ended) ?? media[0])?.play();
+          return op === 'pause' ? 'paused' : op === 'play' || playing ? 'playing' : 'paused';
+        })(\(Self.jsonString(op)))
+        """
+        rt.browser.evaluate(inIsolatedWorld: PageScript.world, params: Self.evaluateParams(js, userGesture: false)) { [weak self] result, _ in
+            DispatchQueue.main.async {
+                guard let state = Self.stringResult(result) else { return }
+                if let then { return then(state == "playing") }
+                self?.nowPlaying?.update(id) { $0.playing = state == "playing" }
+            }
+        }
+    }
+
+    /// A WebKit page: its media session handlers through PageScript's wrapper.
+    private func performWebKitNowPlaying(_ id: UUID, _ rt: TabRuntime, _ op: String) {
         let js = """
         ((op) => {
           const cra = window.__cra, has = cra ? cra.query() : [];
@@ -861,18 +971,34 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         }
     }
 
-    /// Which track buttons the page answers (media session handlers).
+    /// Which track buttons the page answers (media session handlers), and whether it has a video.
     private func refreshMediaControls(_ id: UUID) {
+        guard let browser = runtimes[id]?.browser else { return }
+        let webKit = browser is WebKitBrowser
         let js = """
-        (() => { const has = window.__cra?.query() ?? [];
+        (() => { const has = \(webKit ? "window.__cra?.query() ?? []" : "[]");
           return (has.includes('previoustrack') ? 'p' : '') + (has.includes('nexttrack') ? 'n' : '') + (document.querySelector('video') ? 'v' : ''); })()
         """
-        runtimes[id]?.browser.evaluate(inIsolatedWorld: PageScript.world, params: Self.evaluateParams(js, userGesture: false)) { [weak self] result, _ in
+        browser.evaluate(inIsolatedWorld: PageScript.world, params: Self.evaluateParams(js, userGesture: false)) { [weak self] result, _ in
             DispatchQueue.main.async {
                 guard let has = Self.stringResult(result) else { return }
-                self?.nowPlaying?.update(id) { $0.hasPrevious = has.contains("p"); $0.hasNext = has.contains("n"); $0.hasVideo = has.contains("v") }
+                self?.nowPlaying?.update(id) {
+                    $0.hasVideo = has.contains("v")
+                    if webKit { $0.hasPrevious = has.contains("p"); $0.hasNext = has.contains("n") }
+                }
             }
         }
+        guard !webKit else { return }
+        browser.sendDevToolsMethod("Cra.mediaSession", params: "{}") { [weak self] result, _ in
+            DispatchQueue.main.async {
+                guard let actions = Self.jsonObject(result)?["actions"] as? [String] else { return }
+                self?.nowPlaying?.update(id) { $0.hasPrevious = actions.contains("previoustrack"); $0.hasNext = actions.contains("nexttrack") }
+            }
+        }
+    }
+
+    private static func jsonObjectString(_ object: [String: Any]) -> String {
+        String(data: try! JSONSerialization.data(withJSONObject: object), encoding: .utf8)!
     }
 
     private static func evaluateParams(_ js: String, userGesture: Bool) -> String {
@@ -939,6 +1065,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         log(id, "loaded \(site(url, id, browser)) (HTTP \(statusCode))")
         if statusCode != 0 { runtimes[id]?.extensionPageRetries = 0 }
         guard !browser.isIncognito else { return }
+        // The profile's extensions are up: imported Web Store copies become store installs (#203).
+        ExtensionStore.shared.installFromWebStore(using: browser, profile: store.profileDirectoryName(item: id))
         if url.hasPrefix("chrome://settings") { watchClearBrowsingData(browser) }
         store.recordVisit(url: url, title: title.isEmpty ? (store.item(id)?.tab?.savedTitle ?? "") : title)
     }
@@ -1000,17 +1128,23 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     }
 
     func browser(_ browser: CraBrowser, requestsNewTabWithURL url: String, inBackground background: Bool) {
+        openLinkTab(url, from: tabID(of: browser), inBackground: background)
+    }
+
+    /// A link that asks for a new tab, from `source`'s page or from a Peek over it (#202): a
+    /// Today tab in `source`'s space, else the window's.
+    func openLinkTab(_ url: String, from source: UUID?, inBackground background: Bool) {
         // cra:// is Cra's scripting scheme (DevTools Protocol, key presses); a page must not drive it.
         if url.lowercased().hasPrefix("cra:") { return }
-        let sourceSpace = tabID(of: browser).flatMap { store.spaceID(ofItem: $0) }
-        let parentIndex = tabID(of: browser).flatMap { id -> Int? in
+        let sourceSpace = source.flatMap { store.spaceID(ofItem: $0) }
+        let parentIndex = source.flatMap { id -> Int? in
             guard let it = store.item(id), let p = it.parentID, store.rootContainer(of: id) != nil,
                   case .today = store.rootContainer(of: id)! else { return nil }
             return (store.item(p)?.children.firstIndex(of: id) ?? -1) + 1
         }
         // Links from a today tab open right below it (Arc); otherwise at the top.
         let tab = store.createTab(url: url, in: sourceSpace, select: !background,
-                                  parent: parentIndex != nil ? store.item(tabID(of: browser)!)?.parentID : nil,
+                                  parent: parentIndex != nil ? source.flatMap { store.item($0)?.parentID } : nil,
                                   index: parentIndex, window: windowID)
         if background {
             store.markUnread(tab.id, true)
@@ -1023,9 +1157,45 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         let sourceSpace = tabID(of: browser).flatMap { store.spaceID(ofItem: $0) }
         let tab = store.createTab(url: url, in: sourceSpace, select: !background, window: windowID)
         if background { store.markUnread(tab.id, true) }
-        let host = makePopupHost(for: tab.id)
+        let host = makePopupHost(for: tab.id, opener: browser)
         if !background { show(tab.id, focus: true) }
         return host
+    }
+
+    /// A page about to navigate where the other engine has to show it (ProtectedMediaSites): the
+    /// navigation stops here and the tab's page opens again in that engine, at that address.
+    func browser(_ browser: CraBrowser, handsOffNavigationToURL url: String, method: String) -> Bool {
+        guard let id = tabID(of: browser), let engine = PageEngines.handoffTarget(from: browser, to: url, method: method) else { return false }
+        log(id, "moves to \(engine == .webKit ? "WebKit" : "Chromium") for \(site(url, id, browser))")
+        // Not from inside Chromium's navigation callback: the page closes a turn later.
+        DispatchQueue.main.async { [weak self, weak browser] in
+            guard let self, let browser else { return }
+            self.reopen(id, at: url, replacing: browser)
+        }
+        return true
+    }
+
+    /// The Site Control Center's Safari's Engine switch: the tab's page opens again at its address
+    /// in the engine it now gets (PageEngines.choose first), in its place on screen.
+    func reopenInItsEngine(_ id: UUID) {
+        guard let rt = runtimes[id] else { return }
+        let url = rt.browser.currentURL
+        guard PageEngines.engine(of: rt.browser) != PageEngines.sites.engine(for: url) else { return }
+        log(id, "moves to \(PageEngines.engine(of: rt.browser) == .webKit ? "Chromium" : "WebKit") for \(site(url, id, rt.browser)), as chosen")
+        reopen(id, at: url, replacing: rt.browser)
+    }
+
+    /// The tab's page closes and opens again at `url`, in the engine the address gets, on screen
+    /// where it was (its split pane, the focus).
+    private func reopen(_ id: UUID, at url: String, replacing old: CraBrowser) {
+        guard runtimes[id]?.browser === old, store.item(id)?.isTab == true else { return }
+        let visible = visibleTabIDs
+        let focused = visibleTabID
+        let hadFocus = old.containerView.window?.firstResponder.map { r in (r as? NSView)?.isDescendant(of: old.containerView) ?? false } ?? false
+        store.updateTab(id, url: url)
+        unload(id)
+        ensureRuntime(for: id)
+        if visible.contains(id) { show(visible, focused: focused, focus: hadFocus || focused == id) }
     }
 
     func browser(_ browser: CraBrowser, opensPeekForURL url: String, shiftClick: Bool, newTab: Bool) -> Bool {

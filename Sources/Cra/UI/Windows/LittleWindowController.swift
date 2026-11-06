@@ -137,6 +137,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// covers; a click on it, Escape or the close button ends the Peek.
     let isPeek: Bool
     private(set) weak var peekParent: MainWindowController?
+    /// The tab the Peek came from: links that leave the Peek open as tabs placed from it.
+    private let peekSourceTab: UUID?
     private var dim: PeekDimPanel?
     private var controls: PeekControlsPanel?
     /// The Peek is on its way out (closePeekAnimated).
@@ -145,6 +147,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private var openingPeek = false
     /// The pictures moving while the Peek opens or closes.
     private var transition: PeekTransition?
+    /// The link the Peek grew out of, which it closes back into (nil: the whole area).
+    private var peekSource: PeekSource?
     private var commandPanel: CommandBarPanel!
     private var commandHost: CommandBarView!
     private var commandBarOpenedAt = Date.distantPast
@@ -171,6 +175,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         isPopupHost = url == nil
         isPeek = parent != nil
         peekParent = parent
+        peekSourceTab = parent == nil ? nil : fromTab
         requestedSpaceID = parent == nil ? space : nil
         // Little Windows are normal browsing: they target the last normal window's space
         // (a Peek: the space of the window it covers; a cra://open: the space it names).
@@ -265,8 +270,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             let sid = state.targetSpaceID
             state.profileID = app.store.isIncognito(space: sid) ? nil : app.store.profile(app.store.space(sid)?.profileID)?.id
         }
-        let b = CraBrowser(frame: shell.page.bounds, url: url.map { $0.isEmpty ? "about:blank" : $0 }, delegate: self,
-                           incognito: false, profilePath: app.store.profilePath(profile: state.profileID))
+        // Chromium, or WebKit for a DRM service; a popup host takes its opener's engine.
+        let b = PageEngines.makeBrowser(frame: shell.page.bounds, url: url.map { $0.isEmpty ? "about:blank" : $0 }, delegate: self,
+                                        incognito: false, profilePath: app.store.profilePath(profile: state.profileID), opener: opener)
         attach(b)
         state.url = (url == "about:blank" ? "" : url) ?? ""
     }
@@ -414,11 +420,12 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// The click catcher, the Peek and its buttons, in their order above the parent's other children.
     var peekWindows: [NSWindow] { [dim, window, controls].compactMap { $0 } }
 
-    /// Arc's Peek: the card shrinks from the whole area right of the sidebar to its own frame as
-    /// it fades in, its buttons riding its corner, while the page behind fades to 28 %. The motion
-    /// is PeekTransition's pictures on Core Animation; the real card and buttons wait at their
-    /// places, invisible, and take over when it lands.
-    func showAsPeek() {
+    /// Arc's Peek: the card grows out of the link clicked in `tabID`'s page (without one, from the
+    /// whole area right of the sidebar) to its own frame, its buttons riding its corner, while the
+    /// page behind fades to 28 % (GitHub #204). The motion is PeekTransition's pictures on Core
+    /// Animation; the real card and buttons wait at their places, invisible, and take over when it
+    /// lands.
+    func showAsPeek(fromTab tabID: UUID?) {
         guard let window, let parent = peekParent, let pw = parent.window else { return }
         let dim = PeekDimPanel(covering: pw) { [weak self] in self?.closeWindow() }
         self.dim = dim
@@ -443,17 +450,24 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         openingPeek = true
         // Hidden, not transparent: Chromium sets its page window's alpha back to 1 as it shows it.
         if let host = browser?.hostWindow, host.parent === window { host.contentView?.isHidden = true }
-        let t = PeekTransition(over: pw, card: pw.convertFromScreen(window.frame), cardImage: PeekTransition.picture(of: shell),
-                               column: pw.convertFromScreen(controls.frame), columnImage: controls.contentView.flatMap { PeekTransition.picture(of: $0) })
-        transition = t
         if hasPage || isPopupHost { focusPage() } else { openCommandBar() }
-        // Next turn, with the page focused and the panel on its way to the screen.
-        DispatchQueue.main.async { [weak self, weak t] in
-            guard let self, let t, self.transition === t, !self.closingPeek else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + PeekTransition.lead) {
-                parent.setPeekVeil(true, duration: PeekLayout.openVeilDuration, timing: PeekTransition.easeOutCubic)
+        // The card waits, invisible at its place, for the link it grows out of (at most
+        // PeekSource.wait); a close meanwhile ends it unseen (closePeekAnimated).
+        parent.peekSource(fromTab: tabID) { [weak self] source in
+            guard let self, let window = self.window, let controls = self.controls, self.openingPeek, !self.closingPeek else { return }
+            self.peekSource = source
+            let t = PeekTransition(over: pw, card: pw.convertFromScreen(window.frame), cardImage: PeekTransition.picture(of: self.shell),
+                                   column: pw.convertFromScreen(controls.frame), columnImage: controls.contentView.flatMap { PeekTransition.picture(of: $0) },
+                                   source: source?.rect ?? pw.convertFromScreen(parent.peekArea()), sourceImage: source?.image)
+            self.transition = t
+            // Next turn, with the panel on its way to the screen.
+            DispatchQueue.main.async { [weak self, weak t] in
+                guard let self, let t, self.transition === t, !self.closingPeek else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + PeekTransition.lead) {
+                    parent.setPeekVeil(true, duration: PeekLayout.openVeilDuration, timing: PeekTransition.easeOutCubic)
+                }
+                self.landPeek(t)
             }
-            self.landPeek(t)
         }
     }
 
@@ -479,24 +493,40 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         controls?.place(parent.peekButtonFrames(), theme: parent.focusedSpace.theme)
     }
 
-    /// Arc closes a Peek the way it opened, backwards: out to the whole area, fading, as the page
-    /// behind comes back. A picture of the card with its page (Chromium's own screenshot, waited
-    /// for at most 80 ms) takes over from the real one. Expand and Add To Split don't animate.
+    /// Arc closes a Peek the way it opened, backwards: into the link it came from, where the page
+    /// has it now (out to the whole area, fading, without one), as the page behind comes back. A
+    /// picture of the card with its page (Chromium's own screenshot, waited for at most 80 ms)
+    /// takes over from the real one. Expand and Add To Split don't animate.
     private func closePeekAnimated(then finish: @escaping () -> Void) {
         guard let window, let parent = peekParent, let pw = parent.window else { finish(); return }
+        let neverShown = openingPeek && transition == nil
         closingPeek = true
         transition?.remove()
         transition = nil
+        // Closed while it was still finding its link: it goes without having been seen.
+        if neverShown { finish(); return }
         var started = false
+        // The card's screenshot and the link's place now, asked together.
+        var shot: CGImage??
+        var linkNow: NSRect?? = peekSource == nil ? .some(nil) : nil
         let start: (CGImage?) -> Void = { [weak self] page in
             guard let self, !started else { return }
             started = true
             let card = pw.convertFromScreen(window.frame)
             let pageRect = self.shell.page.frame
+            // Into the link where the page has it now; where it was when Chromium is late; out to
+            // the whole area, fading, when it's gone.
+            let area = pw.convertFromScreen(parent.peekArea())
+            let back: (rect: NSRect, image: CGImage?) = switch linkNow {
+            case .none: (self.peekSource?.rect ?? area, self.peekSource?.image)
+            case .some(.some(let r)): (r, self.peekSource?.image)
+            case .some(.none): (area, nil)
+            }
             let t = PeekTransition(over: pw, card: card,
                                    cardImage: PeekTransition.picture(of: self.shell, page: page, pageRect: pageRect),
                                    column: self.controls.map { pw.convertFromScreen($0.frame) } ?? .zero,
-                                   columnImage: self.controls?.contentView.flatMap { PeekTransition.picture(of: $0) })
+                                   columnImage: self.controls?.contentView.flatMap { PeekTransition.picture(of: $0) },
+                                   source: back.rect, sourceImage: back.image)
             self.transition = t
             t.close {
                 finish()
@@ -510,14 +540,25 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
                 parent.setPeekVeil(false, duration: PeekLayout.closeVeilDuration, timing: PeekTransition.easeOutCubic)
             }
         }
-        guard let b = browser, hasPage else { start(nil); return }
-        b.sendDevToolsMethod("Page.captureScreenshot", params: #"{"format":"jpeg","quality":85,"optimizeForSpeed":true}"#) { shot, _ in
-            let image = shot.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
-                .flatMap { $0["data"] as? String }.flatMap { Data(base64Encoded: $0) }
-                .flatMap { CGImageSourceCreateWithData($0 as CFData, nil) }.flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) }
-            DispatchQueue.main.async { start(image) }
+        let ready: (Bool) -> Void = { timedOut in
+            guard !started, timedOut || (shot != nil && linkNow != nil) else { return }
+            start(shot ?? nil)
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { start(nil) }
+        if let source = peekSource {
+            parent.peekSourceAgain(source) { r in
+                if linkNow == nil { linkNow = .some(r) }
+                ready(false)
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { ready(true) }
+        guard let b = browser, hasPage else { shot = .some(nil); ready(false); return }
+        b.sendDevToolsMethod("Page.captureScreenshot", params: #"{"format":"jpeg","quality":85,"optimizeForSpeed":true}"#) { result, _ in
+            let image = PeekSource.image(fromScreenshot: result)
+            DispatchQueue.main.async {
+                if shot == nil { shot = .some(image) }
+                ready(false)
+            }
+        }
     }
 
     private func endPeek() {
@@ -825,16 +866,35 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     /// A page can't move between profiles: a new browser in the other one loads its address.
     private func reload(inProfile id: UUID?) {
-        guard let old = browser else { return }
-        let url = hasPage ? currentURL : "about:blank"
+        guard browser != nil else { return }
         state.profileID = id
+        replacePage(at: hasPage ? currentURL : "about:blank")
+    }
+
+    /// A new page at `url` in place of this window's, in the engine the address gets (a profile
+    /// change, or a navigation the other engine has to show).
+    private func replacePage(at url: String) {
+        guard let old = browser else { return }
         old.delegate = nil
         if let w = old.hostWindow, w.parent === window { window?.removeChildWindow(w); w.orderOut(nil) }
         old.containerView.removeFromSuperview()
-        let b = CraBrowser(frame: shell.page.bounds, url: url, delegate: self, incognito: false, profilePath: store.profilePath(profile: id))
+        let b = PageEngines.makeBrowser(frame: shell.page.bounds, url: url, delegate: self, incognito: false,
+                                        profilePath: store.profilePath(profile: state.profileID))
         attach(b)
         old.close()
         if window?.isKeyWindow == true { focusPage() }
+    }
+
+    /// A navigation the other engine has to show (ProtectedMediaSites): this window's page opens
+    /// again there, a turn later (not from inside Chromium's navigation callback).
+    func browser(_ browser: CraBrowser, handsOffNavigationToURL url: String, method: String) -> Bool {
+        guard browser === self.browser, PageEngines.handoffTarget(from: browser, to: url, method: method) != nil else { return false }
+        DispatchQueue.main.async { [weak self, weak browser] in
+            guard let self, let browser, browser === self.browser else { return }
+            self.state.url = url
+            self.replacePage(at: url)
+        }
+        return true
     }
 
     /// Archive the page to the Library (Arc keeps closed Little Arcs there too).
@@ -1038,22 +1098,46 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     /// A Shift-clicked link opens in this window: Arc's Little Arc has no Peek of its own, so its
     /// Shift-click is a plain click (1.171, 3 Nov 2026).
+    /// In a Peek, a target=_blank link leaves it for a tab (PeekTrigger.leavesPeek, #202).
     func browser(_ browser: CraBrowser, opensPeekForURL url: String, shiftClick: Bool, newTab: Bool) -> Bool {
-        guard shiftClick, !url.lowercased().hasPrefix("cra:") else { return false }
+        if url.lowercased().hasPrefix("cra:") { return false }
+        if isPeek, PeekTrigger.leavesPeek(url, shiftClick: shiftClick, newTab: newTab) {
+            openTabFromPeek(url, inBackground: false)
+            return true
+        }
+        guard shiftClick else { return false }
         browser.loadURL(url)
         return true
     }
 
-    /// Links that want a new tab open another little window (Arc does the same).
+    /// Links that want a new tab open another little window (Arc does the same); a Peek's open
+    /// as tabs in its window's space.
     func browser(_ browser: CraBrowser, requestsNewTabWithURL url: String, inBackground background: Bool) {
         // cra:// is Cra's scripting scheme; a page must not drive it.
         if url.lowercased().hasPrefix("cra:") { return }
+        if isPeek { openTabFromPeek(url, inBackground: background); return }
         app.openLittleWindow(url: url, activate: !background, opener: browser)
         if background { window?.makeKeyAndOrderFront(nil) }
     }
 
+    /// Arc 1.171 (#202): a link from a Peek that asks for a new tab is a Today tab in the space,
+    /// placed as a link from the tab under the Peek would be, and the Peek closes for it. A
+    /// background one (⌘-click) leaves the Peek open, as the click left the page in a tab.
+    private func openTabFromPeek(_ url: String, inBackground background: Bool) {
+        guard let parent = peekParent else { return }
+        parent.browsers.openLinkTab(url, from: peekSourceTab, inBackground: background)
+        // Not from inside Chromium's popup callback: the Peek's page closes a turn later.
+        if !background { DispatchQueue.main.async { [weak self] in self?.closeWindow() } }
+    }
+
+    /// A popup that needs its opener (a sign-in window) stays a Little Window, over a Peek too:
+    /// closing the Peek for a tab would close the page waiting on it.
     func browser(_ browser: CraBrowser, popupHostForURL url: String, inBackground background: Bool) -> CraBrowser? {
         if url.lowercased().hasPrefix("cra:") { return nil }
+        if isPeek, background {
+            openTabFromPeek(url, inBackground: true)
+            return nil
+        }
         let w = app.makeLittleWindow(url: nil, opener: browser)
         w.state.url = url
         w.show()
@@ -1259,6 +1343,14 @@ final class LittleWindow: NSPanel {
         if styleMask.contains(.nonactivatingPanel), !NSApp.isActive,
            [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(event.type) {
             NSApp.activate(ignoringOtherApps: true)
+        }
+        // The page is a Chromium child window. With it key, a press on the bar reached the button
+        // but its release never came, so Back, Forward, Refresh, the address and "Open in" did
+        // nothing (GitHub #195). The browser window makes the window under a click key first for
+        // its own children (MainWindowController.installChildClickMonitor); this window does too.
+        if [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(event.type), !isKeyWindow, canBecomeKey,
+           NSApp.isActive, NSApp.keyWindow?.parent === self {
+            makeKey()
         }
         super.sendEvent(event)
     }

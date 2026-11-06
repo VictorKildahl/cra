@@ -29,7 +29,8 @@ final class CommandBarController {
     var focusedSpaceID: UUID?
     var spaceName: (UUID) -> String = { _ in "" }
     /// Arc's scoped search: Tab on "youtube" scopes the bar to YouTube, on "%" to the space's open
-    /// tabs (a pill before the field) until Backspace on an empty field or Escape.
+    /// tabs, on the empty field to the browser's actions (a pill before the field) until Backspace
+    /// on an empty field or Escape.
     private(set) var scope: CommandBarScope?
     /// What was typed when Tab entered the scope; Backspace puts it back.
     private var scopeTyped = ""
@@ -91,6 +92,8 @@ final class CommandBarController {
                 result = engine.suggestions(for: newQuery, in: site)
             case .tabs:
                 result = engine.suggestions(for: newQuery, inTabsOf: focusedSpaceID ?? store.focusedSpaceID, currentTabID: store.selectedTabID)
+            case .actions:
+                result = engine.suggestions(forActionsMatching: newQuery, currentTabID: store.selectedTabID)
             }
             selectedIndex = 0
             previewText = nil
@@ -150,7 +153,7 @@ final class CommandBarController {
         }
     }
 
-    /// Tab on text that starts a site search's host, or on "%": scope the bar to it.
+    /// Tab on text that starts a site search's host, on "%", or on the empty field: scope the bar to it.
     func enterScope() -> Bool {
         guard scope == nil, previewText == nil, let offered = result.scope else { return false }
         scopeTyped = query
@@ -215,8 +218,8 @@ final class CommandBarController {
 
     private func committed() -> (Suggestion?, String)? {
         let selected = result.items.indices.contains(selectedIndex) ? result.items[selectedIndex] : nil
-        // No tab matched: Return has nowhere to go, and the tabs scope never searches the web.
-        if scope == .tabs, selected == nil { return nil }
+        // No tab or action matched: Return has nowhere to go, and neither scope searches the web.
+        if scope == .tabs || scope == .actions, selected == nil { return nil }
         var typed = query
         // Enter on the typed row with an inline completion goes to the completion.
         if selectedIndex == 0, let c = result.inlineCompletion, selected?.id == "typed" { typed = c }
