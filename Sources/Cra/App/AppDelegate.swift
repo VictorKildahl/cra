@@ -1349,7 +1349,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                              ("Report an Issue…", "https://github.com/VictorKildahl/cra/issues"), ("Support Cra…", "https://crabrowser.app/support")] {
             let link = NSMenuItem(title: title, action: #selector(openHelpLink(_:)), keyEquivalent: "")
             link.target = self
-            link.representedObject = url
+            link.representedObject = SiteLinks.tagged(url, from: .helpMenu)
             help.addItem(link)
         }
         help.addItem(.separator())

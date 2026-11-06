@@ -2498,7 +2498,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// The help centre's page on why Spotify, Netflix and the others play in Safari's engine.
-    static let protectedMediaHelp = "https://crabrowser.app/help/protected-media"
+    static let protectedMediaHelp = SiteLinks.tagged("https://crabrowser.app/help/protected-media", from: .protectedMedia)
 
     func debugSiteControlsShown() -> Bool { siteControlCenter.isShown
     }
