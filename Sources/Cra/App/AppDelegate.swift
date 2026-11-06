@@ -31,7 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// these reserved). Everything else goes to the page first. Copy URL is reserved like Arc:
     /// Google Docs takes ⇧⌘C for its word count (GitHub #194).
     static let reservedActions: Set<String> = Set([
-        "newTab", "newWindow", "newIncognitoWindow", "closeTab", "closeWindow", "reopenClosedTab", "editURL", "toggleSidebar", "toggleToolbar",
+        "newTab", "newWindow", "newBlankWindow", "newIncognitoWindow", "closeTab", "closeWindow", "reopenClosedTab", "editURL", "toggleSidebar", "toggleToolbar",
         "nextTab", "previousTab", "recentTab", "recentTabBackward", "nextSpace", "previousSpace", "devTools", "jsConsole", "inspectElement",
         "viewArchive", "openLibrary", "settings", "clearToday", "newLittleWindow", "promoteLittleWindow",
         "addSplitView", "closeSplitPane", "copyURL", "copyURLMarkdown",
@@ -415,11 +415,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     /// The window links from other apps, the Library and Little Windows go to: the
-    /// normal window in use last, never an incognito one.
+    /// normal window in use last, never an incognito or Blank Window.
     @discardableResult
     func useNormalWindow() -> MainWindowController {
-        if main.isIncognito, let normal = mainWindows.first(where: { $0.windowID == store.lastNormalWindowID })
-            ?? mainWindows.first(where: { !$0.isIncognito }) {
+        if main.isStandalone, let normal = mainWindows.first(where: { $0.windowID == store.lastNormalWindowID })
+            ?? mainWindows.first(where: { !$0.isStandalone }) {
             store.activeWindowID = normal.windowID
         }
         return main
@@ -430,10 +430,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @discardableResult
     func useNormalWindow(forSpace spaceID: UUID) -> MainWindowController {
         let last = useNormalWindow()
-        guard !last.isIncognito else { return last }
+        guard !last.isStandalone else { return last }
         var seen = Set<UUID>()
         let normal = NSApp.orderedWindows.compactMap { w in mainWindows.first { $0.window === w } }
-            .filter { !$0.isIncognito && seen.insert($0.windowID).inserted }
+            .filter { !$0.isStandalone && seen.insert($0.windowID).inserted }
             .map { (id: $0.windowID, space: store.focusedSpaceID(window: $0.windowID)) }
         store.activeWindowID = SpaceWindow.window(for: spaceID, windows: normal, lastUsed: last.windowID)
         return main
@@ -441,10 +441,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// Arc's New Window (⌘N): another window on the space in use, cascaded from the
     /// current one, with the command bar up. With every window closed it brings the
-    /// hidden one back instead. New Incognito Window (⇧⌘N) always opens a new one.
-    /// With `url` (a page's Open Link in New Window) the window opens on that page instead.
-    func openNewWindow(incognito: Bool = false, url: String? = nil) {
-        if !incognito, let hidden = mainWindows.first(where: { !$0.isIncognito }),
+    /// hidden one back instead. New Incognito Window (⇧⌘N) and Blank Window (⌃⌘N) always open
+    /// a new one. With `url` (a page's Open Link in New Window) the window opens on that page instead.
+    func openNewWindow(incognito: Bool = false, blank: Bool = false, url: String? = nil) {
+        if !incognito, !blank, let hidden = mainWindows.first(where: { !$0.isStandalone }),
            !mainWindows.contains(where: { $0.window?.isVisible == true || $0.window?.isMiniaturized == true }) {
             hidden.showWindow(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -460,13 +460,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             frame = NSStringFromRect(f)
         }
         let session = incognito ? store.addIncognitoWindow(frame: frame)
+            : blank ? store.addBlankWindow(frame: frame)
             : store.addWindow(spaceID: store.focusedSpaceID(window: store.lastNormalWindowID), frame: frame)
+        let c = showNewWindow(session)
+        if let url { store.createTab(url: url, select: true, window: c.windowID) } else { c.openCommandBar(.newTab) }
+    }
+
+    @discardableResult
+    private func showNewWindow(_ session: WindowSession) -> MainWindowController {
         let c = MainWindowController(app: self, session: session)
         mainWindows.append(c)
         store.activeWindowID = c.windowID
         c.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
-        if let url { store.createTab(url: url, select: true, window: c.windowID) } else { c.openCommandBar(.newTab) }
+        return c
+    }
+
+    /// A tab dragged out of every Cra window and let go (GitHub #219): as in Arc, it moves into
+    /// a new Blank Window placed where it was dropped, with its page as it was (no reload).
+    /// `screenPoint` is where the pointer let go; the window takes the size of the one it came from.
+    func tearOffTab(_ id: UUID, at screenPoint: NSPoint, from source: MainWindowController) {
+        guard store.item(id)?.isTab == true, !store.isIncognito(item: id) else { return }
+        let size = source.window?.frame.size ?? NSSize(width: 1200, height: 800)
+        let screen = NSScreen.screens.first { NSMouseInRect(screenPoint, $0.frame, false) } ?? source.window?.screen ?? NSScreen.main
+        let frame = TabTearOff.frame(size: size, droppedAt: screenPoint, visible: screen?.visibleFrame ?? .zero)
+        let session = store.addBlankWindow(frame: NSStringFromRect(frame))
+        store.moveToBlankWindow(id, window: session.id)
+        let c = showNewWindow(session)
+        // Handed over now, not left for whichever window is in use next to claim it.
+        if let rt = source.browsers.release(id) { c.takePage(rt) }
     }
 
     /// A page's context menu: Arc's Open Link in New Window, Little Arc (Little Window here)
@@ -483,10 +505,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     /// Closing one of several windows ends it; the last normal one stays around hidden,
-    /// so a Dock click brings the browser back as it was. Incognito windows always end,
-    /// and with the last of them the off-the-record profile goes too.
+    /// so a Dock click brings the browser back as it was. Incognito and Blank Windows always end
+    /// (a Blank Window's tabs with it, as in Arc), and with the last incognito window the
+    /// off-the-record profile goes too.
     func mainWindowWillClose(_ c: MainWindowController) {
-        guard !isRelaunching, c.isIncognito || mainWindows.contains(where: { $0 !== c && !$0.isIncognito }) else { return }
+        guard !isRelaunching, c.isStandalone || mainWindows.contains(where: { $0 !== c && !$0.isStandalone }) else { return }
         mainWindows.removeAll { $0 === c }
         c.tearDown()
         store.removeWindow(c.windowID)
@@ -750,6 +773,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
+            // peekShown=<label>: the page behind a Peek in each window, faded and drawn back or whole (PR #221).
+            if let label = dict["peekShown"] {
+                for m in mainWindows { NSLog("Cra peek shown %@: %@", label, m.peekBackdropShown()) }
+                return
+            }
             if dict["relaunch"] != nil { relaunch(); return }
             if dict["quit"] != nil { NSApp.terminate(nil); return }
             if let t = dict["selectTab"].flatMap(UUID.init(uuidString:)) { store.selectTab(t, window: main.windowID); return }
@@ -909,6 +937,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
+            // browserWindows=<label>: each browser window's kind, space, tabs (URLs), open tab and frame (#219, #220).
+            if let label = dict["browserWindows"] {
+                for m in mainWindows {
+                    let space = m.focusedSpace
+                    let tabs = (store.tabs(under: space.pinnedContainerID) + store.tabs(under: space.todayContainerID)).compactMap { $0.tab?.url }
+                    let open = store.selectedTabID(window: m.windowID).flatMap { store.item($0)?.tab?.url } ?? "-"
+                    NSLog("Cra browser windows %@: kind=%@ space=%@ listed=%d tabs=[%@] open=%@ page=%d frame=%@", label,
+                          m.isBlank ? "blank" : m.isIncognito ? "incognito" : "normal", space.title,
+                          store.orderedSpaces.contains { $0.id == space.id } ? 1 : 0, tabs.joined(separator: " "), open,
+                          store.selectedTabID(window: m.windowID).flatMap { m.browsers.runtime(for: $0) } != nil ? 1 : 0,
+                          m.window.map { NSStringFromRect($0.frame) } ?? "-")
+                    // cra.log (which a relaunch keeps) gets no addresses or names: kinds and counts.
+                    CraLog.note("browser windows \(label): kind=\(m.isBlank ? "blank" : m.isIncognito ? "incognito" : "normal") "
+                        + "listed=\(store.orderedSpaces.contains { $0.id == space.id } ? 1 : 0) tabs=\(tabs.count) open=\(open == "-" ? 0 : 1)")
+                }
+                return
+            }
+            // dragEnd=<text>&at=x,y: the window's tab whose URL holds the text dragged and let go there
+            // (from the screen's top left) with nothing taking it, as a drag out of the sidebar ends
+            // (#219). Without at: a point of the screen no Cra window covers.
+            if let text = dict["dragEnd"], let screen = main.window?.screen ?? NSScreen.main {
+                let space = main.focusedSpace
+                let tab = (store.tabs(under: space.pinnedContainerID) + store.tabs(under: space.todayContainerID))
+                    .first { $0.tab?.url.contains(text) == true }
+                guard let tab else { CraLog.note("dragEnd: no tab with \(text)"); return }
+                var point: NSPoint?
+                if let g = dict["at"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2 {
+                    point = NSPoint(x: screen.frame.minX + g[0], y: screen.frame.maxY - g[1])
+                } else {
+                    let v = screen.visibleFrame.insetBy(dx: 40, dy: 40)
+                    point = [NSPoint(x: v.maxX, y: v.minY), NSPoint(x: v.minX, y: v.minY), NSPoint(x: v.maxX, y: v.maxY), NSPoint(x: v.minX, y: v.maxY)]
+                        .first { !SpaceListView.isOverAppWindow($0) }
+                }
+                guard let point else { CraLog.note("dragEnd: no point outside Cra's windows"); return }
+                CraLog.note("dragEnd: let go at \(NSStringFromPoint(point))")
+                main.testDragEnded(tab.id, at: point)
+                return
+            }
             if dict["windows"] != nil {
                 for w in NSApp.windows {
                     let line = "Cra windows: \(w.windowController.map { String(describing: type(of: $0)) } ?? "-") '\(w.title)' frame=\(NSStringFromRect(w.frame)) parent=\(w.parent.map { NSStringFromRect($0.frame) } ?? "-") visible=\(w.isVisible) key=\(w.isKeyWindow) mask=\(w.styleMask.rawValue) class=\(NSStringFromClass(type(of: w))) children=\(w.childWindows?.count ?? 0) contentView=\(w.contentView.map { NSStringFromClass(type(of: $0)) } ?? "-")"
@@ -965,7 +1031,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "toggleDeveloperMode":
             let on = store.selectedTab?.tab.map { store.settings.isDeveloperMode(url: $0.url) } ?? false
             item.title = on ? "Turn off Developer Mode for this Site" : "Turn on Developer Mode for this Site"
-        case "pinTab": item.title = store.selectedTabID.map { store.isPinned($0) ? "Unpin Tab" : "Pin Tab" } ?? "Pin/Unpin Tab"
+        case "pinTab":
+            item.title = store.selectedTabID.map { store.isPinned($0) ? "Unpin Tab" : "Pin Tab" } ?? "Pin/Unpin Tab"
+            return !main.isBlank  // a Blank Window has no pinned section (Arc)
         case "setDefaultBrowser":
             SystemIntegration.shared.refresh()
             return !SystemIntegration.shared.isDefaultBrowser
@@ -976,7 +1044,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "closeSplitPane", "separateFromSplit", "flipSplitOrientation":
             return store.selectedTabID.flatMap { store.splitContaining($0) } != nil
         case "addSplitView": return store.selectedTabID != nil
-        case "editSpace", "deleteSpace", "nextSpace", "previousSpace", "manageSpaces": return !main.isIncognito
+        case "editSpace", "deleteSpace", "nextSpace", "previousSpace", "manageSpaces", "changeProfile": return !main.isStandalone
+        // A Blank Window has no favorites or pinned section to put a tab in (Arc).
+        case "favoriteTab", "newFolder", "newGitHubLiveFolder", "resetTab": return !main.isBlank
         case "closeLittleWindows": return !littleWindows.isEmpty
         case let id? where id.hasPrefix("moveTabToSpace"):
             guard let n = Int(id.dropFirst(14)), n >= 1, n <= store.spaceOrder.count else { return false }
@@ -1098,22 +1168,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "newTab": main.openCommandBar(.newTab)
         case "newWindow": openNewWindow()
         case "newIncognitoWindow": openNewWindow(incognito: true)
+        case "newBlankWindow": openNewWindow(blank: true)
         case "editURL": main.openCommandBar(.editURL)
         case "newFolder":
+            guard !main.isBlank else { break }
             let f = store.createFolder(named: "New Folder", in: store.focusedSpace.pinnedContainerID, index: 0)
             main.sidebarUI.renamingID = f.id
         case "newGitHubLiveFolder":
-            guard !main.isIncognito else { break }
+            guard !main.isStandalone else { break }
             let sid = store.focusedSpace.id
             let isNew = store.liveFolder(.github, inSpace: sid) == nil
             guard let f = store.createLiveFolder(.github, inSpace: sid) else { break }
             store.setExpanded(f.id, true)
             if isNew { LiveFolderManager.shared.refresh(f.id) }
         case "newSpace": main.showSpaceEditor(space: nil)
-        case "editSpace": if !main.isIncognito { main.showSpaceEditor(space: store.focusedSpace) }
-        case "changeProfile": if !main.isIncognito { main.showChangeProfileDialog(forSpace: store.focusedSpace.id) }
-        case "deleteSpace": if !main.isIncognito { confirmDeleteSpace(store.focusedSpace) }
-        case "manageSpaces": if !main.isIncognito { main.showManageSpaces() }
+        case "editSpace": if !main.isStandalone { main.showSpaceEditor(space: store.focusedSpace) }
+        case "changeProfile": if !main.isStandalone { main.showChangeProfileDialog(forSpace: store.focusedSpace.id) }
+        case "deleteSpace": if !main.isStandalone { confirmDeleteSpace(store.focusedSpace) }
+        case "manageSpaces": if !main.isStandalone { main.showManageSpaces() }
         case "closeTab":
             // Arc: "Close current tab or window".
             if current != nil { main.closeCurrentTab() } else { main.window?.performClose(nil) }
@@ -1167,9 +1239,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "viewDownloads": main.showLibrary(.downloads)
         case "goBack": main.currentBrowser?.goBack()
         case "goForward": main.currentBrowser?.goForward()
-        case "pinTab": if let c = current { store.togglePinned(c) }
+        case "pinTab": if let c = current, !main.isBlank { store.togglePinned(c) }
         case "favoriteTab":
-            if let c = current { store.isFavorite(c) ? store.removeFromFavorites(c) : store.addToFavorites(c) }
+            if let c = current, !main.isBlank { store.isFavorite(c) ? store.removeFromFavorites(c) : store.addToFavorites(c) }
         // A pane has no row of its own: its split's name is edited.
         case "renameTab": main.sidebarUI.renamingID = current.map { store.splitContaining($0)?.id ?? $0 }
         case "duplicateTab": if let c = current { store.duplicateTab(c) }
@@ -1320,7 +1392,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         menubar.addItem(submenu: appMenu, title: "Cra")
 
         let file = NSMenu(title: "File")
-        for id in ["newTab", "newWindow", "newIncognitoWindow", "newLittleWindow", "reopenClosedTab", "editURL", "newFolder", "newSpace"] { file.addItem(item(id)) }
+        for id in ["newTab", "newWindow", "newBlankWindow", "newIncognitoWindow", "newLittleWindow", "reopenClosedTab", "editURL", "newFolder", "newSpace"] { file.addItem(item(id)) }
         file.addItem(.separator())
         file.addItem(item("closeWindow")); file.addItem(item("closeTab"))
         file.addItem(.separator())

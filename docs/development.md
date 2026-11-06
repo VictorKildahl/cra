@@ -73,7 +73,7 @@ the save panel.
     scripts/coverage.py              # line coverage, and the changed-lines gate against origin/main
     scripts/coverage.py --base <ref> # the same against another base (CI passes the PR's)
     scripts/fuzz.sh                  # mutated importer fixtures under AddressSanitizer
-    scripts/mutate.py [word]         # mutation testing of the pure code, minutes; a word limits it
+    scripts/mutate.py [word]         # mutation testing of the pure code, about an hour; a word limits it
 
 [testing.md](testing.md) has the rules, the layers, the gates and how to write a scenario.
 
@@ -167,6 +167,12 @@ download's file name by hand; `CRA_TIDY_FAKE_MODEL=off` (or `preparing`, `inelig
 without Apple Intelligence would. `cra://debug?tidy=1` runs Tidy on the window's space without
 hovering the divider, `cra://debug?undoTidy=1` is ⌘Z's undo and `cra://debug?settingsPane=max`
 opens Settings on a pane.
+
+`cra://debug?dragEnd=<text>` ends a drag of the window's tab whose URL holds the text, let go
+with nothing taking it, the way a drag out of the sidebar ends: outside every Cra window it opens
+in a new Blank Window (`&at=x,y` picks the point, from the screen's top left).
+`cra://debug?browserWindows=<label>` logs each browser window's kind (normal, blank, incognito),
+space, tabs, open tab and frame; cra.log gets the kinds and counts only.
 
 `cra://debug?menuAt=315,24` opens the menu a click at that window point would open (the
 developer-mode ⌄ here), and `&button=right` the context menu, a tab row's for instance.

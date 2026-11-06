@@ -3315,3 +3315,30 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
   puts Search first for a selection, turns Lens's "Search image with Google" into "Search Google for Image", adds
   Open Link in Little Window and Capture Image… (ContentCapture.liftedLayout), and opens New Window / Incognito /
   Inspect in Cra's own windows and DevTools. Kept on purpose: Open Link in Background Tab under New Tab (#183).
+
+## Blank Window and dragging a tab out (Arc 1.172, 6 Nov 2026, #219 #220, offline Arc on a fake home, AX + 2x window captures)
+
+- [O static] Window styles in StorableWindows.json: `standard { sidebarContext: global | standalone }`, `little`, and the
+  kinds `standard | global | incognito | littleArc | blank`. A Blank Window is `standard` with a `standalone` sidebar:
+  StorableSidebar.json keeps `{standalone: <window id>}` beside `global`, holding one space of its own (Default
+  profile, `customInfo` empty, no pinned container, no top apps). Strings: `newBlankWindow`, `onCreateNewBlankWindow`,
+  "Creates a new blank window.", "Title for Explore tabs in a standalone-sidebar window."; AX id
+  `standaloneBrowserWindow-<id>`.
+- [O] File ▸ Blank Window ⌃⌘N (AX mods 4), between New Window and New Incognito Window. It opens cascaded from the
+  window in use with the command bar up. Sidebar: "This Window" (13 pt semibold, glyphs 16.5 pt in, cap top 51.5 pt
+  from the window's top with the toolbar on), then New Tab (text 20 pt in, top 90 pt): no favorites or empty card, no
+  pinned section, no line, no space icons; the Library button and + stay. Colours (window captures, dark, inactive):
+  sidebar #313246 → #363247, the empty page area #4F4B5D → #584A5D.
+- [O] With the pointer over its sidebar the header shows "Move to…" (grey #7A7A86, glyphs 153.5–202.5 pt of a 228 pt
+  sidebar) in place of the space's •••. [U] What its menu offers: not opened (the button is hover-only and AX
+  presses didn't open it).
+- [O] Closing a Blank Window drops its standalone container and its tabs: nothing went to StorableArchive.json.
+- [O] A sidebar tab dragged out and let go over another app (real HID drags, slow steps; a fast cliclick drag reads as
+  a click, a press on a non-key window drags the window): the tab leaves the global sidebar and opens alone in a new
+  Blank Window the size of the window it came from; that window then showed no tab (the drag had selected it). Let go
+  at (350, 300) from the top left with a 1000 × 760 window, the new one sat at (20, 53): 20 pt inside the visible frame
+  on both sides. [U] Placement in the open (both later tries read as clicks); Cra centres on the pointer, which fits.
+- [O] A tab dropped on a Blank Window's sidebar moved there out of the global sidebar.
+- Cra: BlankWindow (Space.standaloneWindowID, saved in sidebar.json outside spaceOrder), SidebarStore.addBlankWindow /
+  isStandalone, TabTearOff (decision + frame), SpaceListView.dragEnded, AppDelegate.tearOffTab. "Move to…" lists the
+  spaces; picking one moves the window's tabs to the top of its Today and puts the window on it (Cra's choice, see [U]).

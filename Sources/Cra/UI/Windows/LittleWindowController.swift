@@ -137,6 +137,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// covers; a click on it, Escape or the close button ends the Peek.
     let isPeek: Bool
     private(set) weak var peekParent: MainWindowController?
+    /// This Peek to its window's veil (MainWindowController.showPeekVeil).
+    private let peekID = UUID()
     /// The tab the Peek came from: links that leave the Peek open as tabs placed from it.
     private let peekSourceTab: UUID?
     private var dim: PeekDimPanel?
@@ -465,8 +467,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             // Next turn, with the panel on its way to the screen.
             DispatchQueue.main.async { [weak self, weak t] in
                 guard let self, let t, self.transition === t, !self.closingPeek else { return }
-                DispatchQueue.main.asyncAfter(deadline: .now() + PeekTransition.lead) {
-                    parent.setPeekVeil(true, duration: PeekLayout.openVeilDuration, timing: PeekTransition.easeOutCubic)
+                // A Peek gone by then (Expand, Add To Split, a close) never veils the page.
+                let peek = self.peekID
+                DispatchQueue.main.asyncAfter(deadline: .now() + PeekTransition.lead) { [weak parent] in
+                    parent?.showPeekVeil(for: peek)
                 }
                 self.landPeek(t)
             }
@@ -539,7 +543,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
                 window.alphaValue = 0
                 if let host = self.browser?.hostWindow { host.alphaValue = 0 }
                 self.controls?.alphaValue = 0
-                parent.setPeekVeil(false, duration: PeekLayout.closeVeilDuration, timing: PeekTransition.easeOutCubic)
+                parent.hidePeekVeil(for: self.peekID)
             }
         }
         let ready: (Bool) -> Void = { timedOut in
@@ -576,7 +580,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             self.controls = nil
         }
         if let window, let p = window.parent { p.removeChildWindow(window) }
-        peekParent?.setPeekVeil(false, duration: 0)
+        peekParent?.endPeekVeil(for: peekID)
         if !promoted, let pw = peekParent?.window, NSApp.isActive { pw.makeKeyAndOrderFront(nil) }
     }
 

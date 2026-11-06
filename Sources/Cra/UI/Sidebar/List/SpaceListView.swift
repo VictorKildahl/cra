@@ -326,8 +326,10 @@ final class SpaceListView: NSView, NSDraggingSource {
             }
         }
 
-        let pinnedKids = store.item(space.pinnedContainerID)?.children ?? []
-        let pinnedItems = store.listedPinnedItems(in: space, window: window)
+        // A Blank Window's sidebar is its tabs only: no pinned section, no line (Arc, #220).
+        let blank = store.isBlank(space: spaceID)
+        let pinnedKids = blank ? [] : store.item(space.pinnedContainerID)?.children ?? []
+        let pinnedItems = blank ? [] : store.listedPinnedItems(in: space, window: window)
         for item in pinnedItems {
             add(item, depth: 0, pinned: true, parent: space.pinnedContainerID, index: pinnedKids.firstIndex(of: item.id) ?? 0)
         }
@@ -335,14 +337,14 @@ final class SpaceListView: NSView, NSDraggingSource {
         // With nothing pinned the list takes no room; a drag opens a real target. Not when
         // collapsed: the placeholder would claim an empty list and open under the pointer,
         // taking drops meant for the top of Today.
-        if pinnedKids.isEmpty && drop != nil {
+        if pinnedKids.isEmpty && drop != nil && !blank {
             out.append(Row(key: .placeholder, content: .placeholder(active: section == .pinned)))
         }
         let pinnedCount = out.count
         let todayKids = store.item(space.todayContainerID)?.children ?? []
-        let tidy: DividerTidy = store.tidyingSpaces.contains(spaceID) ? .running
+        let tidy: DividerTidy = blank ? .none : store.tidyingSpaces.contains(spaceID) ? .running
             : TidyTabsService.shared.offers(spaceID, store: store) ? .offered : .none
-        out.append(Row(key: .divider, content: .divider(hasToday: !todayKids.isEmpty, tidy: tidy)))
+        out.append(Row(key: .divider, content: .divider(hasToday: !todayKids.isEmpty && !blank, tidy: tidy)))
         let atTop = store.settings.newTabButtonAtTop
         if atTop && showsNewTab { out.append(Row(key: .newTab, content: .newTab(active: placeholder))) }
         for item in store.children(of: space.todayContainerID) {
@@ -898,8 +900,30 @@ final class SpaceListView: NSView, NSDraggingSource {
         context == .withinApplication ? [.move, .copy, .generic, .private] : []
     }
 
+    /// Outside every Cra window a tab doesn't slide back to its row: let go, it opens there (#219).
+    func draggingSession(_ session: NSDraggingSession, movedTo screenPoint: NSPoint) {
+        let back = Self.isOverAppWindow(screenPoint)
+        if session.animatesToStartingPositionsOnCancelOrFail != back { session.animatesToStartingPositionsOnCancelOrFail = back }
+    }
+
+    /// Whether the window under a screen point, any app's, is one of Cra's.
+    static func isOverAppWindow(_ point: NSPoint) -> Bool {
+        let n = NSWindow.windowNumber(at: point, belowWindowWithWindowNumber: 0)
+        return n > 0 && NSApp.window(withWindowNumber: n) != nil
+    }
+
     func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+        dragEnded(ui.draggingID, at: screenPoint, operation: operation)
+    }
+
+    /// A row's drag is over (`cra://debug?dragEnd` ends one the same way).
+    func dragEnded(_ dragged: UUID?, at screenPoint: NSPoint, operation: NSDragOperation) {
         autoscroller.stop()
+        // Let go outside every Cra window where nothing took it: Arc opens the tab in a Blank Window there.
+        if let id = dragged, TabTearOff.tearsOff(isTab: store.item(id)?.isTab == true, incognito: store.isIncognito(item: id),
+                                                       dropAccepted: !operation.isEmpty, overAppWindow: Self.isOverAppWindow(screenPoint)) {
+            actions.tearOffTab(id, screenPoint)
+        }
         ui.draggingID = nil
         // The drag switched spaces; picks don't outlive leaving their space.
         if store.focusedSpaceID(window: ui.windowID) != spaceID { ui.clearPicks() }
@@ -949,6 +973,12 @@ final class SpaceListView: NSView, NSDraggingSource {
         let drop = ui.listDrop ?? resolve(dragged: id, at: point)
         ui.listDrop = nil
         applyDrop(drop)
+        // From another window's space (a Blank Window's, or across windows and spaces): the tab
+        // leaves the window that showed it and opens here; this window comes forward, so its page
+        // moves in at once.
+        let before = store.selectedTabID(window: ui.windowID)
+        for t in ui.group(for: id, in: store) where store.item(t)?.isTab == true { store.tookTab(t, into: ui.windowID) }
+        if store.selectedTabID(window: ui.windowID) != before { window?.makeKeyAndOrderFront(nil) }
         // A click whose pointer slipped 3 pt became a drag; let go on its own row it is still a
         // click, so the tab opens (GitHub #7: "a single click on a tab sometimes did nothing").
         if drop.target == nil, store.item(id)?.isTab == true, ui.multiSelection.count <= 1,
@@ -1030,7 +1060,7 @@ final class SpaceListView: NSView, NSDraggingSource {
             }
         } else {
             // Between sections or past the last row: the divider splits pinned from today.
-            if p.y < (pinnedFrame.maxY + todayFrame.minY) / 2 {
+            if p.y < (pinnedFrame.maxY + todayFrame.minY) / 2, !store.isBlank(space: spaceID) {
                 target = .insert(parent: space.pinnedContainerID, index: p.y < pinnedFrame.minY ? 0 : store.children(of: space.pinnedContainerID).count)
             } else {
                 // The New Tab row may lead Today, so its first tab, not the section, marks the top.
