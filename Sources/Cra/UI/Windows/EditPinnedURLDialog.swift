@@ -10,9 +10,6 @@ struct EditPinnedURLDialog: View {
     @State private var text: String
     @FocusState private var focused: Bool
 
-    private static let card = Color(hex: "#161C2F")
-    private static let body = Color(hex: "#B8B9C4")
-
     init(url: String, onSave: @escaping (String) -> Void, onCancel: @escaping () -> Void) {
         self.onSave = onSave
         self.onCancel = onCancel
@@ -32,7 +29,7 @@ struct EditPinnedURLDialog: View {
             Text("This is what opens first when you click this tab or its favicon.")
                 .font(.system(size: 14))
                 .lineSpacing(0.8)
-                .foregroundStyle(Self.body)
+                .foregroundStyle(DialogTheme.body)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(width: 304, height: 35, alignment: .topLeading)
                 .padding(.top, 16)
@@ -62,8 +59,7 @@ struct EditPinnedURLDialog: View {
             Spacer(minLength: 0)
         }
         .frame(width: 393, height: 265)
-        .background(Self.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .environment(\.colorScheme, .dark)
+        .modifier(DialogSurface())
         .onAppear { focused = true }
     }
 }

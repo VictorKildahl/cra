@@ -210,11 +210,9 @@ struct PerformancePane: View {
     }
 
     private func confirmClear() {
-        let alert = NSAlert()
-        alert.messageText = "Clear the performance recording?"
-        alert.informativeText = "This session's numbers, the last 24 hours and saved freezes are deleted."
-        alert.addButton(withTitle: "Clear")
-        alert.addButton(withTitle: "Cancel")
+        let alert = AppDialog(title: "Clear the performance recording?",
+                              message: "This session's numbers, the last 24 hours and saved freezes are deleted.",
+                              actions: [DialogAction("Clear", role: .destructive), .cancel])
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         PerfRecorder.clear()
         report = nil

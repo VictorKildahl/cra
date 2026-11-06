@@ -48,8 +48,7 @@ struct ProfileSpacesStep: View {
         }
         .padding(.horizontal, 38.5)
         .frame(width: 450, height: 506)
-        .background(NewProfileDialog.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .environment(\.colorScheme, .dark)
+        .modifier(DialogSurface())
     }
 }
 
@@ -135,7 +134,7 @@ struct ChangeProfileDialog: View {
 
     private func showMenu() {
         // The dialog's own window, which needn't be key (Cra may be in the background).
-        guard let content = NSApp.windows.last(where: { $0 is DialogOverlayWindow && $0.isVisible })?.contentView else { return }
+        guard let content = NSApp.windows.last(where: { $0 is DialogPanel && $0.isVisible })?.contentView else { return }
         let m = NSMenu()
         m.autoenablesItems = false
         MenuItems.add(m, "Default") { choice = .existing(nil) }
@@ -211,8 +210,7 @@ struct ChangeProfileDialog: View {
         }
         .padding(.horizontal, 38.5)
         .frame(width: 450, height: 338)
-        .background(NewProfileDialog.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .environment(\.colorScheme, .dark)
+        .modifier(DialogSurface())
     }
 }
 

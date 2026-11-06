@@ -1,6 +1,11 @@
 import AppKit
 import CraCEF
 
+@MainActor final class AppDialog {
+    init(title: String, actions: [DialogAction]) {}
+    func present(over window: NSWindow, completion: @escaping (NSApplication.ModalResponse) -> Void) { completion(.abort) }
+}
+
 // Unrelated shell services required to typecheck the complete production manager.
 // The tab store deliberately remains observable so stale callbacks can be asserted.
 struct TestTab { var url: String; var savedTitle = ""; var muted = false; var faviconKey: String?; var themeColor: String?; var activeTabBeforeCreationID: UUID? }

@@ -212,21 +212,19 @@ enum SidebarMenus {
             copy(lines.joined(separator: "\n"))
         }
         menu.addItem(.separator())
-        add(menu, "Delete Live Folder") { confirmDeleteLiveFolder(item, store: store) }
+        let window = list.window
+        add(menu, "Delete Live Folder") { confirmDeleteLiveFolder(item, store: store, in: window) }
         return menu
     }
 
     /// Arc asks first ("Delete your %@ Live Folder?") and says how to get it back.
-    static func confirmDeleteLiveFolder(_ item: SidebarItem, store: SidebarStore) {
-        let alert = NSAlert()
-        alert.messageText = "Delete your \(item.title ?? "Pull Requests") Live Folder?"
-        alert.informativeText = "You can add it again with New GitHub Live Folder in the sidebar’s menu or the command bar."
-        alert.addButton(withTitle: "Delete")
-        alert.addButton(withTitle: "Cancel")
-        alert.buttons.first?.hasDestructiveAction = true
+    static func confirmDeleteLiveFolder(_ item: SidebarItem, store: SidebarStore, in window: NSWindow? = nil) {
+        let alert = AppDialog(title: "Delete your \(item.title ?? "Pull Requests") Live Folder?",
+                              message: "You can add it again with New GitHub Live Folder in the sidebar’s menu or the command bar.",
+                              actions: [DialogAction("Delete Folder", role: .destructive), .cancel])
         let id = item.id
-        if let window = NSApp.keyWindow {
-            alert.beginSheetModal(for: window) { if $0 == .alertFirstButtonReturn { store.deleteFolder(id) } }
+        if let window = window ?? AppDialog.parentWindow {
+            alert.present(over: window) { if $0 == .alertFirstButtonReturn { store.deleteFolder(id) } }
         } else if alert.runModal() == .alertFirstButtonReturn {
             store.deleteFolder(id)
         }

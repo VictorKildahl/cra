@@ -1334,12 +1334,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     }
 
     func browser(_ browser: CraBrowser, requestsPermissionForOrigin origin: String, kinds: UInt, completion: @escaping (Bool) -> Void) {
-        let alert = NSAlert()
-        alert.messageText = PermissionPrompt.message(origin: origin, kinds: kinds)
-        alert.addButton(withTitle: "Allow")
-        alert.addButton(withTitle: "Block")
+        let alert = AppDialog(title: PermissionPrompt.message(origin: origin, kinds: kinds),
+                              actions: [DialogAction("Allow"), DialogAction("Block", role: .cancel)])
         guard let window = container.window else { completion(false); return }
-        alert.beginSheetModal(for: window) { resp in completion(resp == .alertFirstButtonReturn) }
+        alert.present(over: window) { resp in completion(resp == .alertFirstButtonReturn) }
     }
 
     func browserDidReceiveFocus(_ browser: CraBrowser) {
