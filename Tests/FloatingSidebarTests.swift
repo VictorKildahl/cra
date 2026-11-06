@@ -117,6 +117,9 @@ enum FloatingSidebarTests {
         print("Floating sidebar: \(checks) checks passed")
     }
 
+    // promise: #24
+    /// Where the pointer reveals and hides the floating sidebar; edge to edge, with no margin, only
+    /// Arc's 5 pt strip over the page reveals it (#24).
     private static func geometry() {
         // Nonzero bounds also check that both paths use shell-local geometry.
         let bounds = CGRect(x: 20, y: 10, width: 1400, height: 880)

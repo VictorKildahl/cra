@@ -71,7 +71,8 @@ struct ModelFixtureTests {
 
     /// 0.1.31's Edit Space… → Save wrote 🌱 beside an imported space's symbol (#205): the symbol
     /// stays and the emoji goes, so the sidebar draws one icon again.
-    @Test func stackedSpaceIconLoadsAsItsSymbol() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/205"))
+    func stackedSpaceIconLoadsAsItsSymbol() throws {
         let (loaded, _) = try Self.load("sidebar-stacked-icon.json", as: SidebarDocument.self)
         #expect(loaded.spaces.map(\.emoji) == [""])
         #expect(loaded.spaces.map(\.icon) == [.symbol("square.on.square.fill")])

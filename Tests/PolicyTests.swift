@@ -36,6 +36,8 @@ enum PolicyTests {
                "neither: Chrome's details page for it")
     }
 
+    // promise: #88
+    /// DevTools' toggle, and the developer bar's Console, Network and Inspect as Chrome runs them (#88).
     private static func devToolsToggle() {
         var t = DevToolsToggle()
         expect(t.toggle() == .show && t.state == .opening, "closed: a press opens")

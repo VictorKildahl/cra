@@ -48,7 +48,8 @@ struct SidebarModelTests {
     /// The line under a tab's title (GitHub #88, #139): Arc's TabCellState.subtitle is a
     /// developer-mode site's host (and port), else a pull request's author. Leaving a pinned
     /// page shows none.
-    @Test func sidebarSubtitle() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/88"))
+    func sidebarSubtitle() {
         var tab = TabData(url: "https://www.youtube.com/watch?v=1", title: "Video")
         #expect(tab.sidebarSubtitle(developerMode: false) == nil)
         #expect(tab.sidebarSubtitle(developerMode: true) == "youtube.com", "developer mode: the host, without www.")
@@ -166,7 +167,9 @@ struct SidebarModelTests {
         #expect(settings.showsBar(above: "https://other.org/") && settings.showsBar(above: nil))
     }
 
-    @Test func toolbarShowsTheHostOnlyUnlessAsked() throws {
+    /// The toolbar shows the host only, Arc's default, unless Show Full URL is on (#88).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/88"))
+    func toolbarShowsTheHostOnlyUnlessAsked() throws {
         #expect(!AppSettings().toolbarShowsFullURL, "Arc's default: the host only")
         let decode = { (json: String) in try JSONDecoder().decode(AppSettings.self, from: Data(json.utf8)) }
         #expect(try !decode("{}").toolbarShowsFullURL, "settings from before the option keep Arc's default")

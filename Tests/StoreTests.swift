@@ -37,6 +37,7 @@ enum StoreTests {
         favoritesEmptyState()
         sharedFavorites()
         themePreview()
+        try arcSpacesWithoutAThemeShareOneDefault()
         tidyTabs()
         pinHook()
         print("Store: \(checks) checks passed")
@@ -385,6 +386,16 @@ enum StoreTests {
         expect(!store.allTabs().contains { $0.tab?.url == "https://example.com/left-behind" }, "rather than landing in a space")
         expect(store.item(secret.id) != nil, "an open incognito window keeps its tabs")
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    // promise: #30
+    /// Arc spaces without a `windowTheme` (both in the made-up profile) import with one fixed
+    /// default, not the next preset each, which shifted every later space's colour (#30).
+    @MainActor
+    private static func arcSpacesWithoutAThemeShareOneDefault() throws {
+        let plan = try ArcImporter.plan()
+        expect(plan.spaces.count == 2 && plan.spaces.allSatisfy { $0.theme == SpaceTheme.presets[0] },
+               "every themeless Arc space gets the same default theme")
     }
 
     // promise: #170

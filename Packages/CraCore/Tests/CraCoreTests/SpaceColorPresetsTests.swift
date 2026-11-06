@@ -5,7 +5,8 @@ import Testing
 struct SpaceColorPresetsTests {
     /// Arc's ColorPicker colours as Arc writes them (sRGB): Brand4 is the CloudDev red, Brand8 is
     /// the 0.4236, 0.7286, 0.8512 Arc saved for a picked swatch.
-    @Test func catalogColours() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/170"))
+    func catalogColours() {
         for group in [SpaceColorPresets.brand, SpaceColorPresets.drab, SpaceColorPresets.pastel, SpaceColorPresets.greyscale] {
             #expect(group.count == 9 && Set(group).count == 9)
             #expect(group.allSatisfy { HexColor.components($0) != nil })
@@ -16,7 +17,8 @@ struct SpaceColorPresetsTests {
     }
 
     /// Five pages of nine as in Arc: Brand, Brand pairs, Pastel, Drab, Greyscale.
-    @Test func pages() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/170"))
+    func pages() {
         #expect(SpaceColorPresets.pages.map(\.group) == ["Brand", "Brand", "Pastel", "Drab", "Greyscale"])
         #expect(SpaceColorPresets.pages.map { $0.seconds != nil } == [false, true, false, false, false])
         for page in SpaceColorPresets.pages {
@@ -26,7 +28,8 @@ struct SpaceColorPresetsTests {
     }
 
     /// The editor opens on the page holding the space's colours.
-    @Test func pageOfAKey() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/170"))
+    func pageOfAKey() {
         for (i, page) in SpaceColorPresets.pages.enumerated() {
             for swatch in page.swatches { #expect(SpaceColorPresets.page(of: swatch) == i) }
         }
@@ -49,7 +52,7 @@ struct SpaceColorPresetsTests {
 
     /// Arc's pairs: each Brand colour with the second colour Arc saved for it, which keeps roughly
     /// its brightness and lies 29–46° further round the hue wheel.
-    @Test(arguments: 0..<9)
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/170"), arguments: 0..<9)
     func brandPairs(index: Int) {
         let swatch = SpaceColorPresets.pages[1].swatches[index]
         #expect(swatch == [SpaceColorPresets.brand[index], SpaceColorPresets.brandPairs[index]])

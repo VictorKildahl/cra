@@ -121,6 +121,7 @@ enum BrowserManagerLifecycleTests {
         print("Browser manager lifecycle: \(checks) checks passed")
     }
 
+    // promise: #80
     /// The line cra.log gets about a page on screen (#80): how many frames the page was asked
     /// for, and which display's refresh rate its window follows.
     @MainActor
@@ -930,6 +931,7 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #46 #84
     /// A woken page's toolbar starts in the colour its page last reported (Arc, #46), and a tab
     /// coming on screen asks its page for its background again unless the page is still loading.
     @MainActor

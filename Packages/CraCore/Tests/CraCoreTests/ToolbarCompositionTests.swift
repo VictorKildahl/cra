@@ -12,7 +12,9 @@ struct ToolbarCompositionTests {
           canGoForward: forward, isLoading: loading, pinnedExtensions: pinned, hasExtensions: extensions)
     }
 
-    @Test func theFullBar() {
+    /// The full bar with the sidebar hidden: the toggle first, then ← → ↻ (#50).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/50"))
+    func theFullBar() {
         let full = bar(.normal, back: true, loading: true, pinned: ["a", "b"], extensions: true)
         // Toggle, ← → and ↻ (an ✕ while loading); pinned extensions, Extensions, Split View.
         #expect(full.left == [.toggleSidebar, .back(enabled: true), .forward(enabled: false), .reload(loading: true, enabled: true)])
@@ -23,7 +25,9 @@ struct ToolbarCompositionTests {
         #expect(bar(.normal).right == [.addSplit])
     }
 
-    @Test func theShownSidebarCarriesTheToggle() {
+    /// With the sidebar shown its header carries the toggle and the bar has none (#50).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/50"))
+    func theShownSidebarCarriesTheToggle() {
         // Arc 1.171, #50: the sidebar's header has the toggle, the bar none.
         #expect(bar(.normal, sidebar: true).left == [.back(enabled: false), .forward(enabled: false), .reload(loading: false, enabled: true)])
         #expect(bar(.noTab, sidebar: true).left.first == .back(enabled: false))
@@ -74,7 +78,9 @@ struct ToolbarCompositionTests {
         #expect(noTab.right == [.pinnedExtension("a"), .extensions, .addSplit])
     }
 
-    @Test func theDeveloperBar() {
+    /// The developer bar: Copy, a divider, then Console, Network and Inspect (#88).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/88"))
+    func theDeveloperBar() {
         // Copy · divider · Console, Network, Inspect before the right end (Arc 1.170, #88).
         let dev = bar(.developer, pinned: ["a"])
         #expect(dev.left == [.toggleSidebar])

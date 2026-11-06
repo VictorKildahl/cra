@@ -18,7 +18,7 @@ struct ArcThemeImportTests {
 
     /// A one-colour Arc theme (blendedSingleColor) stays that colour, flat, whatever its vibrancy
     /// and text appearance (0.1.22 imported it as a gradient of another colour, #30).
-    @Test(arguments: [
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/30"), arguments: [
         ("solidRedDark", "#E63333", 1.0, "dark"),
         ("solidWhiteDark", "#FFFFFF", 1.0, "dark"),
         ("solidWhiteLight", "#FFFFFF", 1.0, "light"),
@@ -56,7 +56,7 @@ struct ArcThemeImportTests {
 
     /// Arc's `single` theme never follows macOS: one without `contentOverBackgroundAppearance` takes
     /// the side its colours suit instead of Auto, so it is never swapped for a derived half (#171).
-    @Test(arguments: [("solidRedDark", "dark"), ("solidWhiteLight", "light"), ("gradientVibrantLight", "light")])
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/171"), arguments: [("solidRedDark", "dark"), ("solidWhiteLight", "light"), ("gradientVibrantLight", "light")])
     func singleWithoutAppearanceKeepsItsSide(name: String, appearance: String) throws {
         let theme = try #require(ArcThemeImport.theme(from: Self.withoutAppearanceKey(Self.spaces[name]!)))
         #expect(theme.appearance == appearance && !theme.followsSystem)
@@ -74,7 +74,8 @@ struct ArcThemeImportTests {
     }
 
     /// An appearance-based theme with one half shows that half whatever macOS shows.
-    @Test func appearanceBasedWithOneHalfKeepsIt() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/171"))
+    func appearanceBasedWithOneHalfKeepsIt() throws {
         var space = Self.spaces["gradientAppearanceBasedDark"]!
         var info = space["customInfo"] as! [String: Any], wt = info["windowTheme"] as! [String: Any]
         var bg = wt["background"] as! [String: Any], ab = bg["appearanceBased"] as! [String: Any]
@@ -85,7 +86,8 @@ struct ArcThemeImportTests {
     }
 
     /// A style Cra can't read falls back to the mid tone of Arc's derived palette, which keeps the hue.
-    @Test func unknownStyleFallsBackToThePalettesMidTone() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/30"))
+    func unknownStyleFallsBackToThePalettesMidTone() throws {
         let theme = try #require(Self.theme("unknownStyleWithPalette"))
         #expect(theme.solid && theme.colors == ["#8389FF", "#8389FF"])
     }

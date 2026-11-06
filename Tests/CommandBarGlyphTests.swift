@@ -6,6 +6,14 @@ enum CommandBarGlyphTests {
     private static var checks = 0
 
     static func main() {
+        leadingGlyph()
+        print("CommandBarGlyph: \(checks) checks passed")
+    }
+
+    // promise: #50
+    /// The glyph is the highlighted row's icon; with nothing typed ⌘L shows the page's favicon and
+    /// ⌘T a magnifier (#50).
+    private static func leadingGlyph() {
         let cached: Set<String> = ["github.com", "youtube.com", "x.com"]
         func glyph(editingURL: Bool = false, untouched: Bool = false, site: Bool = false, page: String? = nil,
                    row: (String?, String?)?) -> CommandBarGlyph {
@@ -29,8 +37,6 @@ enum CommandBarGlyphTests {
         }
         expect(glyph(site: true, row: ("youtube.com", nil)) == .symbol("magnifyingglass"), "site search or the tabs scope")
         expect(glyph(row: nil) == .symbol("magnifyingglass"), "no rows")
-
-        print("CommandBarGlyph: \(checks) checks passed")
     }
 
     private static func expect(_ ok: Bool, _ what: String) {
