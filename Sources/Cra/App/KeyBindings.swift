@@ -220,6 +220,9 @@ final class KeyBindingRegistry {
             // Chrome's app menu item and key; Arc has neither, only Settings ▸ Profiles ▸ Clear Browsing Data.
             KeyAction(id: "clearBrowsingData", name: "Clear Browsing Data…", section: .app, shortcuts: [Shortcut(Shortcut.delete, cmdShift)],
                       triggers: ["clear history", "delete history", "clear browsing data", "delete browsing data"], symbol: "trash"),
+            // Arc's Translate bubble item "Language Settings": Chromium's page, in the space's profile (#209).
+            KeyAction(id: "languageSettings", name: "Language Settings", section: .app, shortcuts: [],
+                      triggers: ["language", "languages", "preferred language", "accept language"], symbol: "globe"),
             KeyAction(id: "checkForUpdates", name: "Check for Updates…", section: .app, shortcuts: [],
                       triggers: ["update", "upgrade", "new version"], symbol: "arrow.down.circle"),
         ]

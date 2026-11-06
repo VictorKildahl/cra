@@ -1,0 +1,51 @@
+Cra: show Chrome's own page context menu when the page's view sits in a window
+that is no views widget (Cra's embedded pages), instead of showing nothing.
+Gives Cra the same menu as Chrome and Arc: extension icons, Look Up, Speech,
+Services, Writing Tools and AutoFill.
+
+--- a/chrome/browser/ui/cocoa/renderer_context_menu/render_view_context_menu_mac_cocoa.mm	2026-11-06 11:20:36
++++ b/chrome/browser/ui/cocoa/renderer_context_menu/render_view_context_menu_mac_cocoa.mm	2026-11-06 11:20:36
+@@ -82,12 +82,29 @@
+   views::Widget* widget = views::Widget::GetTopLevelWidgetForNativeView(
+       source_web_contents_->GetNativeView());
+ 
+-  if (!widget || headless::IsHeadlessMode()) {
++  if (headless::IsHeadlessMode()) {
+     return;
+   }
+ 
++  // Cra: the embedder can move the page's view into a window of its own,
++  // which is no views widget. Show the menu there all the same (Chrome's
++  // native menu, with extension icons and the system's items), with fixed
++  // badge colours, instead of not at all.
++  remote_cocoa::mojom::MenuControllerParamsPtr menu_params;
++  if (widget) {
++    menu_params = MenuControllerParamsForWidget(widget);
++  } else {
++    menu_params = remote_cocoa::mojom::MenuControllerParams::New();
++    menu_params->badge_color = SkColorSetRGB(0x0B, 0x57, 0xD0);
++    menu_params->badge_text_color = SK_ColorWHITE;
++    menu_params->badge_horizontal_margin = 4;
++    menu_params->badge_internal_padding = 4;
++    menu_params->badge_min_height = 14;
++    menu_params->badge_radius = 4;
++    menu_params->iph_dot_color = SkColorSetRGB(0x0B, 0x57, 0xD0);
++  }
+   menu_controller_delegate_ = [[MenuControllerCocoaDelegateImpl alloc]
+-      initWithParams:MenuControllerParamsForWidget(widget)];
++      initWithParams:std::move(menu_params)];
+   menu_controller_ =
+       [[MenuControllerCocoa alloc] initWithModel:&menu_model_
+                                    isContextMenu:YES
+@@ -101,7 +118,10 @@
+ 
+   ui::ShowContextMenu(menu_controller_.menu, clickEvent, parent_view_,
+                       /*allow_nested_tasks=*/true,
+-                      views::ElementTrackerViews::GetContextForWidget(widget));
++                      widget
++                          ? views::ElementTrackerViews::GetContextForWidget(
++                                widget)
++                          : ui::ElementContext());
+ }
+ 
+ bool RenderViewContextMenuMacCocoa::IsRunning() {

@@ -1120,6 +1120,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         if background { window?.makeKeyAndOrderFront(nil) }
     }
 
+    func browser(_ browser: CraBrowser, requestsWindowWithURL url: String, kind: CraLinkWindow) {
+        app.openLink(url, in: kind, space: state.targetSpaceID, fromIncognito: browser.isIncognito)
+    }
+
     /// Arc 1.171 (#202): a link from a Peek that asks for a new tab is a Today tab in the space,
     /// placed as a link from the tab under the Peek would be, and the Peek closes for it. A
     /// background one (⌘-click) leaves the Peek open, as the click left the page in a tab.

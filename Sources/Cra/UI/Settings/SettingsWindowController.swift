@@ -6,6 +6,8 @@ struct SettingsActions {
     var importData: () -> Void = {}
     var rebuildArcProfiles: () -> Void = {}
     var openURL: (String) -> Void = { _ in }
+    /// A page in a space on that profile (nil is Default), e.g. its chrome://settings/languages.
+    var openProfilePage: (String, UUID?) -> Void = { _, _ in }
     var exportDiagnostics: () -> Void = {}
     var newProfile: () -> Void = {}
 }
@@ -58,6 +60,10 @@ final class SettingsNavigation {
     private(set) var forward: [SettingsPane] = []
     /// The window is on screen: panes that refresh (Performance) stop while it is closed or covered.
     var isOpen = false
+    /// Counts each time Settings is brought up: panes showing what changed elsewhere (a profile's
+    /// languages, set on Chromium's page) read it again.
+    private(set) var shown = 0
+    func didShow() { shown += 1 }
 
     func show(_ p: SettingsPane) {
         guard p != pane else { return }
@@ -88,6 +94,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
     private let nav = SettingsNavigation()
 
     func show(_ pane: SettingsPane) { nav.show(pane) }
+    func didShow() { nav.didShow() }
 
     init(store: SidebarStore, bindings: KeyBindingRegistry, actions: SettingsActions) {
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: SettingsMetrics.windowSize),
@@ -246,7 +253,7 @@ struct SettingsContent: View {
                 case .tabs: TabsPane()
                 case .max: MaxPane()
                 case .privacy: PrivacyPane(actions: actions)
-                case .profiles: ProfilesPane(actions: actions)
+                case .profiles: ProfilesPane(nav: nav, actions: actions)
                 case .extensions: ExtensionsPane(actions: actions)
                 case .shortcuts: ShortcutsPane()
                 case .performance: PerformancePane(nav: nav, actions: actions)

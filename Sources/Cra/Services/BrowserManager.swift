@@ -81,6 +81,10 @@ protocol BrowserManagerDelegate: AnyObject {
     /// Arc's Peek: a link the user clicked (or Shift-clicked) in `tabID`, whose page is at
     /// `pageURL`. Return true when it opens in a Peek instead.
     func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool, newTab: Bool) -> Bool
+    /// The page's context menu: Open Link in New Window, Little Window or Incognito Window.
+    func browserManagerOpenLink(_ url: String, in kind: CraLinkWindow, space: UUID?, fromIncognito: Bool)
+    /// The page's context menu on an image: Capture Image… (page points from the top left).
+    func browserManagerCaptureImage(at point: NSPoint, tabID: UUID)
 }
 
 /// Creates, shows, hides and tears down CEF browsers inside a container view.
@@ -1129,6 +1133,16 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     func browser(_ browser: CraBrowser, requestsNewTabWithURL url: String, inBackground background: Bool) {
         openLinkTab(url, from: tabID(of: browser), inBackground: background)
+    }
+
+    func browser(_ browser: CraBrowser, requestsCaptureOfImageAt point: NSPoint) {
+        guard let id = tabID(of: browser) else { return }
+        delegate?.browserManagerCaptureImage(at: point, tabID: id)
+    }
+
+    func browser(_ browser: CraBrowser, requestsWindowWithURL url: String, kind: CraLinkWindow) {
+        guard let id = tabID(of: browser) else { return }
+        delegate?.browserManagerOpenLink(url, in: kind, space: store.spaceID(ofItem: id), fromIncognito: browser.isIncognito)
     }
 
     /// A link that asks for a new tab, from `source`'s page or from a Peek over it (#202): a

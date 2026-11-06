@@ -75,6 +75,7 @@ static NSHashTable<CraBrowser*>* g_allBrowsers = nil;
 /// Closed tabs whose page stays alive until its downloads end (see -[CraBrowser close]).
 static NSMutableSet<CraBrowser*>* g_parkedBrowsers = nil;
 static void (^g_strayPageHandler)(NSString*, NSString*) = nil;
+static BOOL (^g_appLinkHandler)(CraBrowser*, NSString*, BOOL) = nil;
 // Downloads whose save panel was cancelled (#190): cancelled on their next update, never shown.
 static std::set<uint32_t> g_cancelledDownloads;
 static void (^g_downloadDestinationHandler)(NSString*, NSString*, void (^)(NSString*)) = nil;
@@ -90,8 +91,6 @@ static CefString CefStringFromNS(NSString* s) {
     return CefString(std::string(s.UTF8String ?: ""));
 }
 
-/// Page context menus shown by Cra (RunContextMenu) instead of Chrome.
-static BOOL g_ownContextMenus = NO;
 // The two "open link" items on a page's context menu, from CraCore's LinkMenu (GitHub #183).
 static NSArray<NSString*>* g_linkMenuTitles = @[@"Open Link in New Tab", @"Open Link in Background Tab"];
 static NSArray<NSNumber*>* g_linkMenuBackground = @[@NO, @YES];
@@ -100,58 +99,31 @@ static NSArray<NSNumber*>* g_linkMenuBackground = @[@NO, @YES];
 /// (the page's world, then Cra's isolated world).
 static NSArray<NSString*>* g_documentStartParams = nil;
 
-/// The command picked from a context menu Cra shows; -1 while none is.
-@interface CraMenuPick : NSObject
-@property (nonatomic) int commandID;
-- (void)choose:(NSMenuItem*)item;
-@end
-
-@implementation CraMenuPick
-- (instancetype)init {
-    if ((self = [super init])) _commandID = -1;
-    return self;
-}
-- (void)choose:(NSMenuItem*)item { self.commandID = (int)item.tag; }
-@end
-
-/// Chrome's labels mark mnemonics with "&" ("&&" is a literal ampersand).
-static NSString* CraMenuLabel(CefRefPtr<CefMenuModel> model, size_t i) {
-    NSString* s = NSStringFromCef(model->GetLabelAt(i));
-    s = [s stringByReplacingOccurrencesOfString:@"&&" withString:@"\u0001"];
-    s = [s stringByReplacingOccurrencesOfString:@"&" withString:@""];
-    return [s stringByReplacingOccurrencesOfString:@"\u0001" withString:@"&"];
-}
-
-static NSMenu* CraMenuFromModel(CefRefPtr<CefMenuModel> model, CraMenuPick* pick) {
-    NSMenu* menu = [[NSMenu alloc] initWithTitle:@""];
-    menu.autoenablesItems = NO;
-    for (size_t i = 0; i < model->GetCount(); i++) {
-        cef_menu_item_type_t type = model->GetTypeAt(i);
-        if (type == MENUITEMTYPE_SEPARATOR) {
-            if (menu.numberOfItems > 0 && !menu.itemArray.lastObject.isSeparatorItem) [menu addItem:[NSMenuItem separatorItem]];
-            continue;
-        }
-        if (type == MENUITEMTYPE_NONE) continue;
-        NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:CraMenuLabel(model, i) action:nil keyEquivalent:@""];
-        if (type == MENUITEMTYPE_SUBMENU) {
-            item.submenu = CraMenuFromModel(model->GetSubMenuAt(i), pick);
+/// Removes separators a removed item left at either end or next to another one. Hidden items
+/// don't count: Chrome's model keeps some it doesn't show.
+static void CraTidySeparators(CefRefPtr<CefMenuModel> model) {
+    bool separatorAfter = true;  // walking back from the end, which counts as one
+    for (size_t i = model->GetCount(); i-- > 0;) {
+        if (model->GetTypeAt(i) != MENUITEMTYPE_SEPARATOR) {
+            if (model->IsVisibleAt(i)) separatorAfter = false;
+        } else if (separatorAfter) {
+            model->RemoveAt(i);
         } else {
-            item.action = @selector(choose:);
-            item.target = pick;
-            item.tag = model->GetCommandIdAt(i);
-            if (model->IsCheckedAt(i)) item.state = NSControlStateValueOn;
+            separatorAfter = true;
         }
-        item.enabled = model->IsEnabledAt(i);
-        item.hidden = !model->IsVisibleAt(i);
-        [menu addItem:item];
     }
-    while (menu.itemArray.lastObject.isSeparatorItem) [menu removeItem:menu.itemArray.lastObject];
-    return menu;
+    for (size_t i = 0; i < model->GetCount();) {
+        if (model->GetTypeAt(i) == MENUITEMTYPE_SEPARATOR) model->RemoveAt(i);
+        else if (model->IsVisibleAt(i)) break;
+        else i++;
+    }
 }
 
 enum CraMenuCommand {
     kMenuOpenLinkFirst = MENU_ID_USER_FIRST + 1,
     kMenuOpenLinkSecond,
+    kMenuOpenLinkLittleWindow,
+    kMenuCaptureImage,
     kMenuCopyLink,
     kMenuInspectElement,
     kMenuOpenImageInNewTab,
@@ -1110,14 +1082,26 @@ static NSString* HexFromCSSColor(const std::string& css) {
     "if(!c){var d=document.createElement('div');d.style.color='Canvas';r.appendChild(d);c=getComputedStyle(d).color;d.remove();}" \
     "return c;}"
 
-// Answers through OnConsoleMessage ("__cra_bg:"); installed once per document, re-run on
-// load, after late stylesheets and when the OS appearance flips.
+// Runs a page script through Cra Helper's renderer handler (Sources/CraHelper/main.cc), never
+// through the page's console: Cra writes nothing to a site's DevTools and adds no globals.
+// `script` is a function expression that takes `send(string)`, whose strings come back as
+// "Cra.page" messages (CraClient::HandlePageMessage). A named script runs once per document:
+// later runs call the function it returned instead, if it returned one.
+static void RunPageScript(CefRefPtr<CefFrame> frame, const std::string& name, const CefString& script) {
+    if (!frame || !frame->IsValid()) return;
+    CefRefPtr<CefProcessMessage> message = CefProcessMessage::Create("Cra.run");
+    message->GetArgumentList()->SetString(0, name);
+    message->GetArgumentList()->SetString(1, script);
+    frame->SendProcessMessage(PID_RENDERER, message);
+}
+
+// Answers "bg:<css colour>"; installed once per document, re-run on load, after late
+// stylesheets and when the OS appearance flips.
 static const char kBackgroundProbe[] =
-    "(function(){if(!window.__craBg){var color=" CRA_PAGE_BACKGROUND_FN ";"
-    "window.__craBg=function(){try{var c=color();if(c)console.log('__cra_bg:'+c);}catch(e){}};"
-    "matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){setTimeout(window.__craBg,50);});"
-    "setTimeout(window.__craBg,1500);}"
-    "window.__craBg();})();";
+    "(function(send){var color=" CRA_PAGE_BACKGROUND_FN ";"
+    "var probe=function(){try{var c=color();if(c)send('bg:'+c);}catch(e){}};"
+    "matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){setTimeout(probe,50);});"
+    "setTimeout(probe,1500);probe();return probe;})";
 
 // While a page is parsed, the same colour on every frame (only changes are sent). CEF draws a
 // new renderer's first page transparent (chromiumembedded/cef#3891), so the view's canvas showed
@@ -1125,10 +1109,10 @@ static const char kBackgroundProbe[] =
 // a slow image loaded. Frames wait for render-blocking stylesheets, so the first answer already
 // has the page's styles; the probe above takes over once the document is parsed.
 static const char kLoadingBackgroundProbe[] =
-    "(function(){var color=" CRA_PAGE_BACKGROUND_FN ",last='',n=0;"
-    "function tick(){try{var c=color();if(c&&c!==last){last=c;console.log('__cra_bg:'+c);}}catch(e){}"
+    "(function(send){var color=" CRA_PAGE_BACKGROUND_FN ",last='',n=0;"
+    "function tick(){try{var c=color();if(c&&c!==last){last=c;send('bg:'+c);}}catch(e){}"
     "if(document.readyState==='loading'&&++n<600)requestAnimationFrame(tick);}"
-    "requestAnimationFrame(tick);})();";
+    "requestAnimationFrame(tick);})";
 
 // MARK: - Content blocking and app links
 
@@ -1355,6 +1339,8 @@ public:
             CraPageSettings(settings);
             return false;
         }
+        // Another app's address (spotify:) opens no tab: Cra asks "Open <app>?" over this page.
+        if (g_appLinkHandler && g_appLinkHandler(o, NSStringFromCef(target_url), user_gesture)) return true;
         // A target=_blank link the user clicked (Shift-clicked: a new window) may open in a
         // Peek; window.open with features (a sign-in popup) is CEF_WOD_NEW_POPUP and stays one.
         if (user_gesture && (target_disposition == CEF_WOD_NEW_FOREGROUND_TAB || target_disposition == CEF_WOD_NEW_WINDOW)
@@ -1397,7 +1383,7 @@ public:
         if (CefRefPtr<CefBrowserView> view = CefBrowserView::GetForBrowser(browser)) view->SetBackgroundColor(o.pageFill);
         if ([o.delegate respondsToSelector:@selector(browser:didReportBackgroundColor:)])
             [o.delegate browser:o didReportBackgroundColor:@""];
-        frame->ExecuteJavaScript(kLoadingBackgroundProbe, frame->GetURL(), 0);
+        RunPageScript(frame, "", kLoadingBackgroundProbe);
         SetCommittedLoad(o, YES);
     }
 
@@ -1410,41 +1396,39 @@ public:
 
     void OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int httpStatusCode) override {
         // Every frame reports Picture in Picture changes (the events don't bubble, hence capture).
-        frame->ExecuteJavaScript(
-            "(function(){if(window.__craPip)return;window.__craPip=1;"
-            "var cur=null;function playing(v){console.log('__cra_pip:play'+(v.paused||v.ended?0:1));}"
+        // Every frame reports Picture in Picture changes (the events don't bubble, hence capture).
+        RunPageScript(frame, "pip",
+            "(function(send){"
+            "var cur=null;function playing(v){send('pip:play'+(v.paused||v.ended?0:1));}"
             "function watch(v){cur=v;playing(v);v.addEventListener('play',function(){if(cur===v)playing(v);});"
             "v.addEventListener('pause',function(){if(cur===v)playing(v);});v.addEventListener('ended',function(){if(cur===v)playing(v);});}"
-            "document.addEventListener('enterpictureinpicture',function(e){console.log('__cra_pip:1');watch(e.target);},true);"
-            "document.addEventListener('leavepictureinpicture',function(){cur=null;console.log('__cra_pip:0');},true);"
-            "if(document.pictureInPictureElement){console.log('__cra_pip:1');watch(document.pictureInPictureElement);}})();",
-            frame->GetURL(), 0);
+            "document.addEventListener('enterpictureinpicture',function(e){send('pip:1');watch(e.target);},true);"
+            "document.addEventListener('leavepictureinpicture',function(){cur=null;send('pip:0');},true);"
+            "if(document.pictureInPictureElement){send('pip:1');watch(document.pictureInPictureElement);}})");
         if (!frame->IsMain()) return;
         CraBrowser* o = owner_;
         if (!o) return;
         [o.delegate browser:o didFinishLoadingURL:NSStringFromCef(frame->GetURL()) title:o.currentTitle
                  statusCode:httpStatusCode];
-        // Ask the page for its theme colour; the answer comes back through OnConsoleMessage.
-        frame->ExecuteJavaScript(
-            "(function(){function probe(){try{var c='';var ms=document.querySelectorAll('meta[name=\"theme-color\"]');"
+        // Ask the page for its theme colour; the answer comes back as "theme:<css colour>".
+        RunPageScript(frame, "",
+            "(function(send){function probe(){try{var c='';var ms=document.querySelectorAll('meta[name=\"theme-color\"]');"
             "for(var i=0;i<ms.length;i++){if(!ms[i].getAttribute('media')){c=ms[i].getAttribute('content')||'';if(c)break;}}"
             "if(!c&&document.body){var b=getComputedStyle(document.body).backgroundColor;if(b&&b!=='rgba(0, 0, 0, 0)'&&b!=='transparent'){c=b;}}"
             "if(!c){var h=getComputedStyle(document.documentElement).backgroundColor;if(h&&h!=='rgba(0, 0, 0, 0)'&&h!=='transparent'){c=h;}}"
             "if(!c){c='rgb(255, 255, 255)';}"
             "var d=document.createElement('div');d.style.color=c;document.body.appendChild(d);"
-            "var rgb=getComputedStyle(d).color;d.remove();console.log('__cra_theme:'+rgb);}catch(e){}}"
-            "probe();setTimeout(probe,1500);})();",
-            frame->GetURL(), 0);
-        frame->ExecuteJavaScript(kBackgroundProbe, frame->GetURL(), 0);
+            "var rgb=getComputedStyle(d).color;d.remove();send('theme:'+rgb);}catch(e){}}"
+            "probe();setTimeout(probe,1500);})");
+        RunPageScript(frame, "bg", kBackgroundProbe);
     }
 
-    bool OnConsoleMessage(CefRefPtr<CefBrowser> browser, cef_log_severity_t level, const CefString& message,
-                          const CefString& source, int line) override {
-        std::string m = message.ToString();
-        if (m.compare(0, 10, "__cra_pip:") == 0) {
+    // What the page scripts above send(): "pip:…", "bg:<css colour>" or "theme:<css colour>".
+    void HandlePageMessage(CefRefPtr<CefBrowser> browser, const std::string& m) {
+        if (m.compare(0, 4, "pip:") == 0) {
             CraBrowser* o = owner_;
-            if (!o) return true;
-            std::string v = m.substr(10);
+            if (!o) return;
+            std::string v = m.substr(4);
             if (v == "1" || v == "0") {
                 BOOL active = (v == "1");
                 if (o.isInPictureInPicture != active) {
@@ -1461,9 +1445,9 @@ public:
             } else if (v.compare(0, 3, "err") == 0) {
                 NSLog(@"CraCEF: Picture in Picture %s", v.c_str());
             }
-            return true;
+            return;
         }
-        const std::string bgPrefix = "__cra_bg:";
+        const std::string bgPrefix = "bg:";
         if (m.compare(0, bgPrefix.size(), bgPrefix) == 0) {
             CraBrowser* o = owner_;
             NSString* hex = HexFromCSSColor(m.substr(bgPrefix.size()));
@@ -1475,16 +1459,15 @@ public:
             }
             if (o && hex.length && [o.delegate respondsToSelector:@selector(browser:didReportBackgroundColor:)])
                 [o.delegate browser:o didReportBackgroundColor:hex];
-            return true;
+            return;
         }
-        const std::string prefix = "__cra_theme:";
-        if (m.compare(0, prefix.size(), prefix) != 0) return false;
+        const std::string prefix = "theme:";
+        if (m.compare(0, prefix.size(), prefix) != 0) return;
         CraBrowser* o = owner_;
-        if (!o) return true;
+        if (!o) return;
         std::string rgb = m.substr(prefix.size());  // "rgb(r, g, b)", "rgba(…)" or "none"
         NSString* hex = rgb == "none" ? @"none" : HexFromCSSColor(rgb);
         [o.delegate browser:o didReportThemeColor:hex];
-        return true;  // keep it out of the console
     }
 
     void OnLoadError(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, ErrorCode errorCode,
@@ -1552,6 +1535,10 @@ public:
     // or with true the page did (scripts/cef-patches/page-activate.patch).
     bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
                                   CefProcessId source_process, CefRefPtr<CefProcessMessage> message) override {
+        if (source_process == PID_RENDERER && message->GetName() == "Cra.page") {
+            HandlePageMessage(browser, message->GetArgumentList()->GetString(0).ToString());
+            return true;
+        }
         if (source_process != PID_BROWSER) return false;
         CraBrowser* o = owner_;
         if (message->GetName() == "Cra.audible") {
@@ -1733,35 +1720,81 @@ public:
 
     // Context menu --------------------------------------------------------
 
-    // Embedded pages (EmbeddedPages.swift): Chrome shows the menu through the views widget that
-    // owns the page's view, found through the view's window, which is now Cra's: it showed
-    // nothing. Cra shows the menu itself and hands the pick back.
-    bool RunContextMenu(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
-                        CefRefPtr<CefContextMenuParams> params, CefRefPtr<CefMenuModel> model,
+    // Windowless agents must never open native menus; normal pages use Chromium's menu.
+    bool RunContextMenu(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>,
+                        CefRefPtr<CefContextMenuParams>, CefRefPtr<CefMenuModel>,
                         CefRefPtr<CefRunContextMenuCallback> callback) override {
-        if (windowless_) { callback->Cancel(); return true; }
-        if (!g_ownContextMenus || model->GetCount() == 0) return false;
-        CraMenuPick* pick = [CraMenuPick new];
-        NSMenu* menu = CraMenuFromModel(model, pick);
-        NSPoint at = [NSEvent mouseLocation];
-        CefRefPtr<CefRunContextMenuCallback> done = callback;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [menu popUpMenuPositioningItem:nil atLocation:at inView:nil];
-            if (pick.commandID >= 0) done->Continue(pick.commandID, EVENTFLAG_NONE);
-            else done->Cancel();
-        });
+        if (!windowless_) return false;
+        callback->Cancel();
         return true;
     }
 
+    // Chrome-style pages get Chrome's own context menu, shown by Chrome as in Chrome and Arc:
+    // extension icons, Look Up, Speech, Services, Writing Tools and AutoFill come with it. A page
+    // embedded in Cra's window (EmbeddedPages.swift) got none until
+    // cef-patches/context-menu-embedded-view.patch, so Cra drew its own from the model then.
+    // Alloy-style pages (Chrome engine off) get CEF's short menu with Cra's few items added.
     void OnBeforeContextMenu(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
                              CefRefPtr<CefContextMenuParams> params, CefRefPtr<CefMenuModel> model) override {
+        if (browser->GetHost()->GetRuntimeStyle() == CEF_RUNTIME_STYLE_CHROME) MakeArcMenu(params, model);
+        else AddAlloyItems(params, model);
+    }
+
+    // Arc's page menus are Chrome's with a few changes (Arc 1.172, 6 Nov 2026):
+    // - link: Open Link in New Tab, New Window, Little Arc, Incognito Window. Cra's New Tab item
+    //   follows the background-links setting, with the other kind of tab under it (LinkMenu, #183).
+    // - page: no QR code item; Translate sits with Save As…, Print… and Cast….
+    // - selected text: Search <engine> for "…" comes before Copy (not with a link).
+    // - image: Capture Image… after Save Image As…, and Search <engine> for Image where Chromium
+    //   156 has Google Lens's "Search image with <engine>"; video: no frame search.
+    void MakeArcMenu(CefRefPtr<CefContextMenuParams> params, CefRefPtr<CefMenuModel> model) {
+        int newTab = model->GetIndexOf(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB);
+        if (newTab >= 0) {
+            model->RemoveAt(newTab);
+            model->InsertItemAt(newTab, kMenuOpenLinkFirst, g_linkMenuTitles[0].UTF8String);
+            model->InsertItemAt(newTab + 1, kMenuOpenLinkSecond, g_linkMenuTitles[1].UTF8String);
+        }
+        // Little Windows load in the normal profile: none from an incognito page.
+        CraBrowser* o = owner_;
+        int newWindow = model->GetIndexOf(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW);
+        if (newWindow >= 0 && !o.isIncognito) model->InsertItemAt(newWindow + 1, kMenuOpenLinkLittleWindow, "Open Link in Little Window");
+        for (int id : {IDC_CONTENT_CONTEXT_GENERATE_QR_CODE, IDC_CONTENT_CONTEXT_OPENLINKINPROFILE,
+                       IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW, IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP,
+                       IDC_CONTENT_CONTEXT_SEARCHLENSFORVIDEOFRAME, IDC_CONTENT_CONTEXT_SEARCHWEBFORVIDEOFRAME}) {
+            while (model->Remove(id)) {}
+        }
+        CraTidySeparators(model);  // the QR code item's group is gone: one separator before Translate
+        int translate = model->GetIndexOf(IDC_CONTENT_CONTEXT_TRANSLATE);
+        int before = translate - 1;
+        while (before >= 0 && model->GetTypeAt(before) != MENUITEMTYPE_SEPARATOR && !model->IsVisibleAt(before)) before--;
+        if (translate > 0 && before >= 0 && model->GetTypeAt(before) == MENUITEMTYPE_SEPARATOR) model->RemoveAt(before);
+        int search = model->GetIndexOf(IDC_CONTENT_CONTEXT_SEARCHWEBFOR), copy = model->GetIndexOf(IDC_CONTENT_CONTEXT_COPY);
+        if (params->GetLinkUrl().empty() && !params->IsEditable() && search > copy && copy >= 0) {
+            CefString label = model->GetLabelAt(search);
+            model->RemoveAt(search);
+            model->InsertItemAt(copy, IDC_CONTENT_CONTEXT_SEARCHWEBFOR, label);
+        }
+        int lens = model->GetIndexOf(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE);
+        if (lens >= 0) {
+            // "Search image with Google" → "Search Google for Image", Chrome's own item for it.
+            std::string label = model->GetLabelAt(lens).ToString(), with = "Search image with ";
+            std::string engine = label.rfind(with, 0) == 0 ? label.substr(with.size()) : "Google";
+            model->RemoveAt(lens);
+            model->InsertItemAt(lens, IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE, "Search " + engine + " for Image");
+        }
+        int saveImage = model->GetIndexOf(IDC_CONTENT_CONTEXT_SAVEIMAGEAS);
+        if (saveImage >= 0 && params->GetMediaType() == CM_MEDIATYPE_IMAGE &&
+            [o.delegate respondsToSelector:@selector(browser:requestsCaptureOfImageAt:)]) {
+            model->InsertItemAt(saveImage + 1, kMenuCaptureImage, "Capture Image…");
+        }
+        CraTidySeparators(model);
+    }
+
+    static void AddAlloyItems(CefRefPtr<CefContextMenuParams> params, CefRefPtr<CefMenuModel> model) {
         size_t index = 0;
         if (!params->GetLinkUrl().empty()) {
             model->InsertItemAt(index++, kMenuOpenLinkFirst, g_linkMenuTitles[0].UTF8String);
             model->InsertItemAt(index++, kMenuOpenLinkSecond, g_linkMenuTitles[1].UTF8String);
-            // Chrome-style menus carry Chrome's own "Open Link in New Tab" further down, which
-            // always opens in the background: one item by that name, the one the setting rules (#183).
-            model->Remove(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB);
             model->InsertItemAt(index++, kMenuCopyLink, "Copy Link");
             model->InsertSeparatorAt(index++);
         }
@@ -1770,9 +1803,7 @@ public:
             model->InsertItemAt(index++, kMenuCopyImageURL, "Copy Image Address");
             model->InsertSeparatorAt(index++);
         }
-        // Chrome-style menus already carry Chrome's own "Picture in picture" item.
-        if (params->GetMediaType() == CM_MEDIATYPE_VIDEO && (params->GetMediaStateFlags() & CM_MEDIAFLAG_CAN_PICTURE_IN_PICTURE) &&
-            model->GetIndexOf(IDC_CONTENT_CONTEXT_PICTUREINPICTURE) < 0) {
+        if (params->GetMediaType() == CM_MEDIATYPE_VIDEO && (params->GetMediaStateFlags() & CM_MEDIAFLAG_CAN_PICTURE_IN_PICTURE)) {
             bool inPiP = params->GetMediaStateFlags() & CM_MEDIAFLAG_PICTURE_IN_PICTURE;
             model->InsertItemAt(index++, kMenuPictureInPicture, inPiP ? "Exit Picture in Picture" : "Picture in Picture");
             model->InsertSeparatorAt(index++);
@@ -1804,6 +1835,26 @@ public:
                 [pb setString:s forType:NSPasteboardTypeString];
                 return true;
             }
+            // Chrome's New Window and Incognito Window items would open Chrome windows: Cra's own.
+            case IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW:
+            case IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD:
+            case kMenuOpenLinkLittleWindow: {
+                NSString* url = NSStringFromCef(params->GetLinkUrl());
+                if (![o.delegate respondsToSelector:@selector(browser:requestsWindowWithURL:kind:)]) {
+                    [o.delegate browser:o requestsNewTabWithURL:url inBackground:NO];
+                    return true;
+                }
+                CraLinkWindow kind = command_id == kMenuOpenLinkLittleWindow ? CraLinkWindowLittle
+                    : command_id == IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD ? CraLinkWindowIncognito : CraLinkWindowNew;
+                [o.delegate browser:o requestsWindowWithURL:url kind:kind];
+                return true;
+            }
+            case kMenuCaptureImage:
+                if ([o.delegate respondsToSelector:@selector(browser:requestsCaptureOfImageAt:)])
+                    [o.delegate browser:o requestsCaptureOfImageAt:NSMakePoint(params->GetXCoord(), params->GetYCoord())];
+                return true;
+            // Chrome's Inspect: Cra's DevTools (docked in the card, DevToolsToggle) on that element.
+            case IDC_CONTENT_CONTEXT_INSPECTELEMENT:
             case kMenuInspectElement:
                 [o showDevToolsInspectingPoint:NSMakePoint(params->GetXCoord(), params->GetYCoord())];
                 return true;
@@ -2477,18 +2528,18 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 // (YouTube's thumbnails play muted on hover) or GIF-like loops.
 static NSString* PictureInPictureScript(BOOL automatic, int x, int y) {
     return [NSString stringWithFormat:
-        @"(function(auto,x,y){try{"
+        @"(function(send){var auto=%d,x=%d,y=%d;try{"
         "if(document.pictureInPictureElement){if(!auto){document.exitPictureInPicture().catch(function(){});}return;}"
         "var area=function(v){var r=v.getBoundingClientRect();return r.width*r.height;};"
         "var c=Array.prototype.slice.call(document.querySelectorAll('video')).filter(function(v){return !v.disablePictureInPicture&&v.readyState>=1&&v.videoWidth>0;});"
         "if(auto){c=c.filter(function(v){return !v.paused&&!v.ended&&!v.muted&&v.volume>0&&area(v)>=20000;});}"
-        "if(!c.length){console.log('__cra_pip:none');return;}"
+        "if(!c.length){send('pip:none');return;}"
         "var v=null;"
         "if(x>=0){v=c.filter(function(e){var r=e.getBoundingClientRect();return x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom;}).sort(function(a,b){return area(a)-area(b);})[0]||null;}"
         "if(!v){c.sort(function(a,b){return ((b.paused?0:1)-(a.paused?0:1))||(area(b)-area(a));});v=c[0];}"
-        "var go=function(){v.requestPictureInPicture().then(function(){console.log('__cra_pip:ok');}).catch(function(e){console.log('__cra_pip:err '+e.name+': '+e.message);});};"
+        "var go=function(){v.requestPictureInPicture().then(function(){send('pip:ok');}).catch(function(e){send('pip:err '+e.name+': '+e.message);});};"
         "var n=0;var t=setInterval(function(){if((navigator.userActivation&&navigator.userActivation.isActive)||++n>20){clearInterval(t);go();}},50);"
-        "}catch(e){console.log('__cra_pip:err '+e);}})(%d,%d,%d);", automatic ? 1 : 0, x, y];
+        "}catch(e){send('pip:err '+e);}})", automatic ? 1 : 0, x, y];
 }
 
 // Chromium's own NSView for the page (RenderWidgetHostViewCocoa), the one
@@ -2545,16 +2596,13 @@ static NSView* FindRenderWidgetHostView(NSView* root) {
     NSString* any = PictureInPictureScript(automatic, -1, -1);
     if (frame) {
         // Click coordinates are relative to the top-level view, so only the main frame can hit-test.
-        frame->ExecuteJavaScript(CefStringFromNS(frame->IsMain() ? hit : any), frame->GetURL(), 0);
+        RunPageScript(frame, "", CefStringFromNS(frame->IsMain() ? hit : any));
         return;
     }
     // Every frame looks for a video: embedded players live in iframes.
     std::vector<CefString> ids;
     _browser->GetFrameIdentifiers(ids);
-    for (const auto& id : ids) {
-        CefRefPtr<CefFrame> f = _browser->GetFrameByIdentifier(id);
-        if (f && f->IsValid()) f->ExecuteJavaScript(CefStringFromNS(any), f->GetURL(), 0);
-    }
+    for (const auto& id : ids) RunPageScript(_browser->GetFrameByIdentifier(id), "", CefStringFromNS(any));
 }
 
 - (void)requestPictureInPictureAutomatic:(BOOL)automatic {
@@ -2609,7 +2657,7 @@ static NSView* FindRenderWidgetHostView(NSView* root) {
 - (cef_color_t)pageFill { return _pageBackgroundColor ?: CraCanvasColor(); }
 + (NSColor*)pageCanvasColor { return PagesAreDark() ? NSColor.blackColor : NSColor.whiteColor; }
 - (void)probeBackgroundColor {
-    if (_browser) _browser->GetMainFrame()->ExecuteJavaScript(kBackgroundProbe, _browser->GetMainFrame()->GetURL(), 0);
+    if (_browser) RunPageScript(_browser->GetMainFrame(), "bg", kBackgroundProbe);
 }
 - (void)sendDevToolsMethod:(NSString*)method params:(NSString*)params
                 completion:(void (^)(NSString* _Nullable, NSString* _Nullable))completion {
@@ -2798,7 +2846,6 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 @implementation CraCEFRuntime
 
 + (void)setChromeHosting:(BOOL)enabled { g_chromeHosting = enabled; }
-+ (void)setOwnContextMenus:(BOOL)enabled { g_ownContextMenus = enabled; }
 + (void)setLinkMenuTitles:(NSArray<NSString*>*)titles opensInBackground:(NSArray<NSNumber*>*)background {
     if (titles.count != 2 || background.count != 2) return;
     g_linkMenuTitles = [titles copy];
@@ -2930,6 +2977,7 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 + (BOOL)anotherInstanceWasNotified { return g_alreadyRunning; }
 + (void)setRelaunchHandler:(void (^)(NSArray<NSString*>*))handler { g_relaunchHandler = [handler copy]; }
 + (void)setStrayPageHandler:(void (^)(NSString*, NSString*))handler { g_strayPageHandler = [handler copy]; }
++ (void)setAppLinkHandler:(BOOL (^)(CraBrowser*, NSString*, BOOL))handler { g_appLinkHandler = [handler copy]; }
 + (void)setDownloadDestinationHandler:(void (^)(NSString*, NSString*, void (^)(NSString*)))handler { g_downloadDestinationHandler = [handler copy]; }
 + (void)setProcessEventHandler:(void (^)(NSString*, NSString*, NSString*))handler { g_processEventHandler = [handler copy]; }
 + (BOOL)isExtensionWindow:(NSWindow*)window { return window && [g_extensionWindows containsObject:window]; }

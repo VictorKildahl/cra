@@ -1,0 +1,18 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="theme-color" content="#123456">
+<title>Console fixture</title>
+<style>html, body { background: #123456; color: #fff; font: 15px -apple-system, sans-serif; margin: 40px; }</style>
+<h1>Console fixture</h1>
+<p>Counts every console call the page sees, and every time something adds to the body (Cra's theme
+probe does, briefly), so a scenario can tell that Cra's probes ran without writing to the console.</p>
+<script>
+  var calls = [], probes = 0;
+  ['log', 'info', 'debug', 'warn', 'error'].forEach(function (k) {
+    var f = console[k];
+    console[k] = function () { calls.push(k + ' ' + Array.prototype.join.call(arguments, ' ')); return f.apply(console, arguments); };
+  });
+  new MutationObserver(function (records) {
+    records.forEach(function (r) { if (r.addedNodes.length) probes++; });
+  }).observe(document.body, { childList: true });
+</script>

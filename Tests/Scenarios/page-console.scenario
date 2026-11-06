@@ -1,0 +1,10 @@
+# Cra's page probes (theme and background colour, Picture in Picture) answer through Cra Helper,
+# never through the page's console: a site's DevTools showed __cra_bg:, __cra_theme: and
+# __cra_pip: lines on every load. The fixture counts console calls and sees the theme probe run.
+cra://open?url=file://${FIXTURES}/Pages/console.html
+expect-log loaded file:
+wait 3
+cra://action/pictureInPicture
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"calls.length+':'+(probes>0)+':'+calls.join('|')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"0:true:"

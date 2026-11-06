@@ -96,4 +96,29 @@ struct ContentCaptureTests {
         #expect(s.contains("456.0 / dpr"))
         #expect(s.contains("elementsFromPoint"))
     }
+
+    @Test func capturedImageMovesToTheMiddleWithTheMenuBesideIt() {
+        // Arc 1.172's Little Arc: a 1688 × 963 pt page, a 160 × 100 pt image, the 273 pt menu.
+        let page = CGRect(x: 0, y: 0, width: 1688, height: 963)
+        let l = ContentCapture.liftedLayout(image: CGSize(width: 160, height: 100), menu: CGSize(width: 273, height: 300), in: page)
+        #expect(l.image == CGRect(x: 627.5, y: 431.5, width: 160, height: 100))
+        // Ring 623.5…791.5, the menu 10 pt on, level with the ring's top.
+        #expect(l.menu == CGRect(x: 801.5, y: 427.5, width: 273, height: 300))
+    }
+
+    @Test func capturedImageTooBigShrinksAndTheMenuFindsRoom() {
+        let l = ContentCapture.liftedLayout(image: CGSize(width: 2000, height: 1000), menu: CGSize(width: 273, height: 300), in: Self.page)
+        // Fits inside the ring and margins, aspect kept.
+        #expect(l.image.width == 976 && l.image.height == 488)
+        #expect(Self.page.contains(ContentCapture.lensFrame(around: l.image)))
+        // No room beside it: menuFrame's place, inside the page.
+        #expect(Self.page.insetBy(dx: ContentCapture.menuMargin, dy: ContentCapture.menuMargin).contains(l.menu))
+    }
+
+    @Test func imageScriptLooksForTheImageUnderThePoint() {
+        let js = ContentCapture.imageRectScript(x: 120, y: 80)
+        #expect(js.contains("elementsFromPoint(px, py)"))
+        #expect(js.contains("120.0 / dpr / k"))
+        #expect(js.contains("'IMG'"))
+    }
 }

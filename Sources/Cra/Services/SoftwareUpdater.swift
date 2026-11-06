@@ -73,7 +73,8 @@ final class SoftwareUpdater: NSObject {
     /// This launch came from an automatic restart, so it should not take focus.
     private(set) var launchedByAutoUpdate = false
 
-    static let releaseNotesURL = "https://crabrowser.app/release-notes"
+    /// What's new on the "Cra updated!" card, tagged so the site can count visits from it.
+    static let releaseNotesURL = SiteLinks.tagged("https://crabrowser.app/release-notes", from: .whatsNew)
     static let downloadURL = "https://github.com/VictorKildahl/cra/releases/latest"
 
     @ObservationIgnored private var updater: SPUUpdater?

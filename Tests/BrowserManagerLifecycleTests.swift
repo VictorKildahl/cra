@@ -40,6 +40,19 @@ enum BrowserManagerLifecycleTests {
         expect(observer.activatedTabs == [id, id] && observer.activatedByPage == [false, true],
                "a page's own focus request (a notification click) arrives marked as the page's")
 
+        // The page's context menu: Open Link in New Window / Little Window / Incognito Window and
+        // Capture Image… go to the window, with the tab's space; a closed page's requests don't.
+        manager.browser(replacement.browser, requestsWindowWithURL: "https://example.test/link", kind: .little)
+        manager.browser(old.browser, requestsWindowWithURL: "https://example.test/stale", kind: .new)
+        expect(observer.openedLinks.map(\.url) == ["https://example.test/link"] && observer.openedLinks.first?.kind == .little
+               && observer.openedLinks.first?.space == store.spaceID(ofItem: id) && observer.openedLinks.first?.incognito == false,
+               "Open Link in Little Window reaches the window with the tab's space")
+        manager.browser(replacement.browser, requestsCaptureOfImageAt: NSPoint(x: 12, y: 34))
+        manager.browser(old.browser, requestsCaptureOfImageAt: NSPoint(x: 1, y: 1))
+        expect(observer.capturedImages.count == 1 && observer.capturedImages.first?.tab == id
+               && observer.capturedImages.first?.point == NSPoint(x: 12, y: 34),
+               "Capture Image… reaches the window for the live page's tab only")
+
         let retainedID = store.createTab(url: "https://example.test/retained").id
         weak var retainedBrowser = manager.ensureRuntime(for: retainedID)?.browser
         manager.unload(retainedID)
@@ -1024,4 +1037,10 @@ private final class Observer: BrowserManagerDelegate {
         activatedByPage.append(byPage)
     }
     func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool, newTab: Bool) -> Bool { false }
+    var openedLinks: [(url: String, kind: CraLinkWindow, space: UUID?, incognito: Bool)] = []
+    var capturedImages: [(point: NSPoint, tab: UUID)] = []
+    func browserManagerOpenLink(_ url: String, in kind: CraLinkWindow, space: UUID?, fromIncognito: Bool) {
+        openedLinks.append((url, kind, space, fromIncognito))
+    }
+    func browserManagerCaptureImage(at point: NSPoint, tabID: UUID) { capturedImages.append((point, tabID)) }
 }

@@ -1,0 +1,40 @@
+# A link or window.open to another app's scheme (spotify:, zoommtg:) opens no tab: the page that
+# asked shows "Open <app>?" and macOS opens the app, as in Arc (GitHub #207, Spotify's "Open in
+# Desktop app"). macappstore: has an app on every Mac and is asked about (Chrome opens mailto:
+# without asking); the prompt is never answered. ${WEBKIT} pages run in WebKit
+# (ProtectedMediaSites), ${PAGE} in Chromium.
+budget rss=900 stalls50=40
+pace 0.5
+
+# WebKit: window.open from a click (the cdp script counts as one) asks over the page, no tab.
+cra://open?url=${WEBKIT}/page.html?n=webkit
+expect-log loaded localhost \(HTTP 200\)
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(window.open('macappstore://apps.apple.com/app/id1?n=open'))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"null"
+expect-log page localhost asks to open .* for macappstore:
+# A target=_blank link while that question is up: one at a time.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='macappstore://apps.apple.com/app/id1?n=blank',a.target='_blank',document.body.append(a),a.click(),'clicked'))(document.createElement('a'))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"clicked"
+expect-log page localhost asks for .* again, already asking
+# The page's own redirect asks once per page it loads; a second gets nothing.
+cra://debug?pageJS=location.href='macappstore://apps.apple.com/app/id1?n=redirect1'
+wait 1
+cra://debug?pageJS=location.href='macappstore://apps.apple.com/app/id1?n=redirect2'
+expect-log page localhost can't open macappstore: \(no click\)
+# Cra's own scheme never goes to an app (it would reach the installed Cra).
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(window.open('cra://action/closeTab'))"}
+expect-log page localhost can't open cra: \(refused\)
+
+# Chromium, in a Little Window (the main window's question is still up): the same.
+cra://open?url=${PAGE}?n=little&little=1
+wait 3
+cra://debug?cdp=Runtime.evaluate&target=little&params={"expression":"String(window.open('macappstore://apps.apple.com/app/id1?n=copen'))","userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"null"
+expect-log page 127\.0\.0\.1 asks to open .* for macappstore:
+cra://debug?cdp=Runtime.evaluate&target=little&params={"expression":"(a=>(a.href='macappstore://apps.apple.com/app/id1?n=cblank',a.target='_blank',document.body.append(a),a.click(),'clicked'))(document.createElement('a'))","userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"clicked"
+expect-log page 127\.0\.0\.1 asks for .* again, already asking
+wait 1
+cra://debug?checkStore=1
+reject-log opens a page for macappstore:
+reject-log shown: \(no page\)
