@@ -15,6 +15,7 @@ suite() {
 }
 
 suite "CraCore" swift test --package-path Packages/CraCore
+suite "Shipped-issue tests" scripts/promises.py
 if [ "${1:-}" != core ]; then
   suite "Browser manager" Tests/test-browser-manager.sh
   suite "Floating sidebar" scripts/test-floating-sidebar.sh

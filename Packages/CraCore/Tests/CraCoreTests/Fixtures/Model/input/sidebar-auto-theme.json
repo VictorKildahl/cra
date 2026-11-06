@@ -1,0 +1,228 @@
+{
+  "version": 1,
+  "spaceOrder": [
+    "A0000000-0000-0000-0000-000000000001",
+    "A0000000-0000-0000-0000-000000000002",
+    "A0000000-0000-0000-0000-000000000003"
+  ],
+  "spaces": [
+    {
+      "id": "A0000000-0000-0000-0000-000000000001",
+      "title": "Editor Auto",
+      "emoji": "🌗",
+      "theme": {
+        "colors": [
+          "#8389FF",
+          "#8389FF"
+        ],
+        "intensity": 0.5,
+        "noise": 0,
+        "appearance": "auto",
+        "accent": "#8389FF",
+        "solid": true,
+        "key": [
+          "#8389FF"
+        ],
+        "dark": {
+          "colors": [
+            "#2B2734",
+            "#2B2734"
+          ],
+          "intensity": 1,
+          "noise": 0,
+          "vibrant": false,
+          "accent": "#01021F",
+          "solid": false
+        }
+      },
+      "favoritesContainerID": "C0000000-0000-0000-0000-000000000011",
+      "pinnedContainerID": "C0000000-0000-0000-0000-000000000012",
+      "todayContainerID": "C0000000-0000-0000-0000-000000000013",
+      "createdAt": "2026-11-06T08:00:00Z"
+    },
+    {
+      "id": "A0000000-0000-0000-0000-000000000002",
+      "title": "Short half",
+      "emoji": "🌓",
+      "theme": {
+        "colors": [
+          "#F8D558",
+          "#FFF1B8"
+        ],
+        "intensity": 0.6,
+        "noise": 0,
+        "appearance": "auto",
+        "accent": "#F8D558",
+        "dark": {
+          "colors": [
+            "#101A3A",
+            "#1E2C5C"
+          ],
+          "intensity": 0.9
+        }
+      },
+      "favoritesContainerID": "C0000000-0000-0000-0000-000000000021",
+      "pinnedContainerID": "C0000000-0000-0000-0000-000000000022",
+      "todayContainerID": "C0000000-0000-0000-0000-000000000023",
+      "createdAt": "2026-11-06T08:00:00Z"
+    },
+    {
+      "id": "A0000000-0000-0000-0000-000000000003",
+      "title": "Broken half",
+      "emoji": "🌑",
+      "theme": {
+        "colors": [
+          "#2861B3",
+          "#2861B3"
+        ],
+        "intensity": 1,
+        "noise": 0,
+        "appearance": "auto",
+        "dark": {
+          "colors": 5
+        }
+      },
+      "favoritesContainerID": "C0000000-0000-0000-0000-000000000031",
+      "pinnedContainerID": "C0000000-0000-0000-0000-000000000032",
+      "todayContainerID": "C0000000-0000-0000-0000-000000000033",
+      "createdAt": "2026-11-06T08:00:00Z"
+    }
+  ],
+  "items": [
+    {
+      "id": "C0000000-0000-0000-0000-000000000011",
+      "children": [],
+      "isUnread": false,
+      "createdAt": "2026-11-06T08:00:00Z",
+      "data": {
+        "container": {
+          "_0": {
+            "favorites": {
+              "spaceID": "A0000000-0000-0000-0000-000000000001"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "C0000000-0000-0000-0000-000000000012",
+      "children": [],
+      "isUnread": false,
+      "createdAt": "2026-11-06T08:00:00Z",
+      "data": {
+        "container": {
+          "_0": {
+            "pinned": {
+              "spaceID": "A0000000-0000-0000-0000-000000000001"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "C0000000-0000-0000-0000-000000000013",
+      "children": [],
+      "isUnread": false,
+      "createdAt": "2026-11-06T08:00:00Z",
+      "data": {
+        "container": {
+          "_0": {
+            "today": {
+              "spaceID": "A0000000-0000-0000-0000-000000000001"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "C0000000-0000-0000-0000-000000000021",
+      "children": [],
+      "isUnread": false,
+      "createdAt": "2026-11-06T08:00:00Z",
+      "data": {
+        "container": {
+          "_0": {
+            "favorites": {
+              "spaceID": "A0000000-0000-0000-0000-000000000002"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "C0000000-0000-0000-0000-000000000022",
+      "children": [],
+      "isUnread": false,
+      "createdAt": "2026-11-06T08:00:00Z",
+      "data": {
+        "container": {
+          "_0": {
+            "pinned": {
+              "spaceID": "A0000000-0000-0000-0000-000000000002"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "C0000000-0000-0000-0000-000000000023",
+      "children": [],
+      "isUnread": false,
+      "createdAt": "2026-11-06T08:00:00Z",
+      "data": {
+        "container": {
+          "_0": {
+            "today": {
+              "spaceID": "A0000000-0000-0000-0000-000000000002"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "C0000000-0000-0000-0000-000000000031",
+      "children": [],
+      "isUnread": false,
+      "createdAt": "2026-11-06T08:00:00Z",
+      "data": {
+        "container": {
+          "_0": {
+            "favorites": {
+              "spaceID": "A0000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "C0000000-0000-0000-0000-000000000032",
+      "children": [],
+      "isUnread": false,
+      "createdAt": "2026-11-06T08:00:00Z",
+      "data": {
+        "container": {
+          "_0": {
+            "pinned": {
+              "spaceID": "A0000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "C0000000-0000-0000-0000-000000000033",
+      "children": [],
+      "isUnread": false,
+      "createdAt": "2026-11-06T08:00:00Z",
+      "data": {
+        "container": {
+          "_0": {
+            "today": {
+              "spaceID": "A0000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

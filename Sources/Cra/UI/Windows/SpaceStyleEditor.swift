@@ -9,8 +9,8 @@ import SwiftUI
 /// for the intensity and a dotted dial for the grain. Every change goes to `onChange` at once (the
 /// caller previews it); nothing here writes. Like Arc's editor state it keeps the pad's colours,
 /// the intensity, the grain and Auto / Light / Dark, and builds the theme from them
-/// (SpaceThemeVariants): one colour is Arc's one-dot theme, two or three a gradient whose Auto
-/// gets a light and a dark half.
+/// (SpaceThemeVariants): one colour is Arc's one-dot fill, two or three a gradient, and Auto
+/// always gets a light and a dark half (#155).
 struct SpaceStyleEditor: View {
     @State private var theme: SpaceTheme
     @State private var pad: PadState

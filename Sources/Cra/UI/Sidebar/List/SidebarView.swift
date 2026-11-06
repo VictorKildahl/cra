@@ -21,7 +21,8 @@ final class SidebarView: NSView {
     private let bannerHost = UpdateBannerView()
     private let dock: SpaceDockView
     private var libraryHost: LibraryView?
-    private var palette: SpacePalette
+    /// The palette drawn now; the theme-shown scenario hook reads it (#155).
+    private(set) var palette: SpacePalette
     private var lastSpaceID: UUID?
     private var shownTheme: SpaceTheme?
     private var shownLibrary: LibraryPage?

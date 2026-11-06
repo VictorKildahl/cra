@@ -722,6 +722,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 NSApp.appearance = v == "system" ? nil : NSAppearance(named: v == "dark" ? .darkAqua : .aqua)
                 return
             }
+            // themeShown=<label>: which half each window draws now (the space's theme, the window content
+            // and the sidebar), without redrawing first, so a missed macOS switch shows (#155).
+            if let label = dict["themeShown"] {
+                func sidebar(in v: NSView) -> SidebarView? {
+                    v as? SidebarView ?? v.subviews.lazy.compactMap { sidebar(in: $0) }.first
+                }
+                func side(_ dark: Bool) -> String { dark ? "dark" : "light" }
+                for m in mainWindows {
+                    let space = m.focusedSpace
+                    let drawn = m.window?.contentView.flatMap(sidebar(in:)).map { side($0.palette.isDark) } ?? "-"
+                    NSLog("Cra theme shown %@: space=%@ follows=%d theme=%@ shell=%@ sidebar=%@", label, space.title, space.theme.followsSystem ? 1 : 0,
+                          side(space.theme.shown.isDark), side(m.shell.isDarkTheme), drawn)
+                }
+                return
+            }
             if dict["relaunch"] != nil { relaunch(); return }
             if dict["quit"] != nil { NSApp.terminate(nil); return }
             if let t = dict["selectTab"].flatMap(UUID.init(uuidString:)) { store.selectTab(t, window: main.windowID); return }

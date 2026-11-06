@@ -34,14 +34,17 @@ struct SpaceColorPresetsTests {
         #expect(SpaceColorPresets.page(of: ["#123456"]) == nil)
     }
 
-    /// A new space starts on one colour, saved as Arc's one-dot (solid) theme, not a gradient.
-    @Test(arguments: 0..<9)
-    func newSpaceIsOneColour(index: Int) {
-        let theme = SpaceColorPresets.newSpaceTheme(index: index)
-        #expect(theme.key == [SpaceColorPresets.brand[index]])
+    /// A new space starts on one colour (#170) on Auto, so it follows macOS like every Auto space
+    /// (#155): the colour, flat, while macOS is light (a pastel of it when it reads dark) and the
+    /// colour's hue, dark, while macOS is dark.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/155"), arguments: 0..<9)
+    func newSpaceIsOneColourOnAuto(index: Int) {
         let hex = SpaceColorPresets.brand[index]
-        #expect(theme.solid && theme.colors == [hex, hex] && theme.dark == nil && !theme.followsSystem)
-        #expect(theme.isDark == (HexColor.luminance(hex)! < 0.45))
+        let theme = SpaceColorPresets.newSpaceTheme(index: index)
+        #expect(theme.key == [hex] && theme.appearance == "auto" && theme.dark != nil)
+        let light = theme.resolved(systemDark: false), dark = theme.resolved(systemDark: true)
+        #expect(light.solid && light.colors.count == 2 && light.colors[0] == light.colors[1] && !light.isDark)
+        #expect(dark.colors.count == 2 && dark.colors[0] == dark.colors[1] && dark.isDark)
     }
 
     /// Arc's pairs: each Brand colour with the second colour Arc saved for it, which keeps roughly

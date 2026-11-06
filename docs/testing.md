@@ -21,6 +21,13 @@ Commands for each piece are in [development.md](development.md#tests).
 6. **Never assert on a fake's bookkeeping alone.** A test whose only check is "the fake
    recorded a call" tests the fake.
 7. **A flaky test is rewritten on the clock or deleted**, never retried or given a sleep.
+8. **What a closed issue shipped is pinned.** The test that proves an issue's fix carries
+   `.bug("https://github.com/VictorKildahl/cra/issues/<n>")`, and `Tests/promises.lock` holds a
+   hash of each such test (`scripts/promises.py`, run by `scripts/test.sh` and by a hook before
+   every `git push`). Changing, renaming or deleting one fails until `scripts/promises.py --update`;
+   do that only when the issue's behaviour is meant to change, say why in the commit and tell the
+   reporter. 0.1.30 rewrote the #155 test together with the change that broke it, and nothing
+   failed until the reporter wrote back.
 
 ## Layers
 
@@ -101,6 +108,10 @@ the header of `scripts/scenario.sh` lists them). It runs `build/Cra.app` on a th
 folder, behind your windows (`CRA_TEST_BACKGROUND`), with the fixture pages served from
 127.0.0.1. Logs, hitch log and snapshots land in `build/scenarios/<name>/`. Adding a journey
 is a text file; the invariants come for free.
+
+`auto-theme` flips the app between light and dark (`cra://debug?systemAppearance=`) and reads
+which half each window draws (`cra://debug?themeShown=<label>`): an Auto space must switch its
+window content and sidebar both ways, and a Light one must not (#155).
 
 `fullscreen` takes over a Space and runs only with `CRA_SCENARIO_SCREEN=1` (CI does).
 `CRA_FLAGS=backdrop=material` runs any scenario on the sidebar's `NSVisualEffectView` path
