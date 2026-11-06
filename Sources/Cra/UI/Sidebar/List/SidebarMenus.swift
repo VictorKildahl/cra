@@ -251,10 +251,8 @@ enum SidebarMenus {
     static func confirmDeleteLiveFolder(_ item: SidebarItem, store: SidebarStore) {
         let alert = NSAlert()
         alert.messageText = "Delete your \(item.title ?? "Pull Requests") Live Folder?"
-        alert.informativeText = item.liveFolder?.source == .gitlab
-            ? "You can add it again with New GitLab Live Folder in the sidebar’s menu."
-            : "You can add it again with New GitHub Live Folder in the sidebar’s menu or the command bar."
-        alert.addButton(withTitle: "Delete")
+        alert.informativeText = "You can restore this folder at any time by right-clicking the sidebar."
+        alert.addButton(withTitle: "Delete Folder")
         alert.addButton(withTitle: "Cancel")
         alert.buttons.first?.hasDestructiveAction = true
         let id = item.id
@@ -379,10 +377,20 @@ enum SidebarMenus {
         }
         add(menu, action: "newTab", "New Tab") { actions.openCommandBar(.newTab) }
         add(menu, action: "newFolder") { actions.performAction("newFolder") }
-        add(menu, action: "newGitHubLiveFolder", enabled: store.liveFolder(.github, inSpace: space) == nil) {
-            actions.performAction("newGitHubLiveFolder")
+        let liveFolders = submenu(menu, "Live Folders")
+        let github = store.liveFolder(.github, inSpace: space)
+        add(liveFolders, action: "newGitHubLiveFolder", "GitHub",
+            enabled: !store.isStandalone(space: space), on: github != nil) {
+            if let github { confirmDeleteLiveFolder(github, store: store) }
+            else { actions.performAction("newGitHubLiveFolder") }
         }
-        add(menu, "New GitLab Live Folder…", enabled: !store.isStandalone(space: space)) {
+        let gitlabs = store.liveFolders.filter { $0.liveFolder?.source == .gitlab && store.isInSpace($0.id, space) }
+            .sorted { ($0.liveFolder?.serverURL ?? "") < ($1.liveFolder?.serverURL ?? "") }
+        for folder in gitlabs {
+            add(liveFolders, folder.displayTitle, on: true) { confirmDeleteLiveFolder(folder, store: store) }
+        }
+        if !gitlabs.isEmpty { liveFolders.addItem(.separator()) }
+        add(liveFolders, gitlabs.isEmpty ? "GitLab…" : "Add GitLab Server…", enabled: !store.isStandalone(space: space)) {
             newGitLabFolder(list)
         }
         menu.addItem(.separator())

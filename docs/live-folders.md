@@ -120,8 +120,11 @@ Legend: [O] observed, [I] inference, [U] unknown.
 
 ## GitLab live folders
 
-The sidebar menu offers **New GitLab Live Folder…**. Enter the server's base URL (GitLab.com
-or a self-managed instance, including a port or installation subpath). Requests use the
+The sidebar's **Live Folders** submenu offers **GitHub** and **GitLab…**. A checkmark marks
+an existing folder; clicking it asks for confirmation before deleting the folder. Each GitLab
+server has its own checked entry, with **Add GitLab Server…** below them. Enter the server's
+base URL (GitLab.com or a self-managed instance, including a port or installation subpath).
+Leave the address blank to use the suggested `https://gitlab.com`. Requests use the
 space's Chromium profile and its GitLab session cookie, without a separate access token.
 The client reads `/api/v4/user` and paginated `/api/v4/merge_requests`; the folder menu shows
 the last HTTP status when a request fails. Each space supports one folder per GitLab server;
