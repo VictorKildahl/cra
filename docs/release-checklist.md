@@ -61,6 +61,11 @@ built release app with a test profile. Note anything that fails in the release's
 
 ### Peek, Little Window, Picture in Picture, split view, Capture
 
+- Opening a Peek gently shrinks the underlying page and widens its surrounding margins while
+  the sidebar stays still. Closing restores the page smoothly, including an immediate close
+  during opening; Expand and Add To Split leave no scale or dimming behind.
+  With "Pages fill the window edge to edge" on, the underlying page fades without shrinking
+  or gaining margins; the Peek card still animates.
 - **#195:** in a Peek and a Little Window, click in the page, then Back, Forward, Refresh, the
   address and "Open in": each works on the first click. Capture and scroll: the page moves and
   the grey picture and the lens follow. With another app full screen, ⌥⌘N opens a Little

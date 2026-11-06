@@ -1577,7 +1577,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Arc fades the page under a Peek to 28 % over the window's background, its sidebar as it is.
     func setPeekVeil(_ on: Bool, duration: TimeInterval, timing: CAMediaTimingFunction? = nil) {
         let alpha: CGFloat = on ? PeekLayout.pageAlpha : 1
+        let scale: CGFloat = on && !shell.edgeToEdge ? PeekLayout.pageScale : 1
+        let content = shell.contentContainer
+        let center = CGPoint(x: content.bounds.midX, y: content.bounds.midY)
+        PeekTransition.scaleBackdrop(content, around: center, to: scale, duration: duration, timing: timing)
         let pages = browsers.runtimes.values.compactMap(\.hostWindow).filter { $0.parent === window }
+        if let window {
+            let screenCenter = window.convertPoint(toScreen: content.convert(center, to: nil))
+            for page in pages where !EmbeddedPages.isHost(page) {
+                guard let view = page.contentView else { continue }
+                let pageCenter = view.convert(page.convertPoint(fromScreen: screenCenter), from: nil)
+                PeekTransition.scaleBackdrop(view, around: pageCenter, to: scale, duration: duration, timing: timing)
+            }
+        }
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = duration
             ctx.timingFunction = timing

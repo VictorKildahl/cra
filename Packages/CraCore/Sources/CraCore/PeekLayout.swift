@@ -27,6 +27,7 @@ public enum PeekLayout {
     public static let buttonCount = 3
     /// The page under a Peek (Arc: 233/240/254 → 178/172/151 over the window's background).
     public static let pageAlpha: CGFloat = 0.28
+    public static let pageScale: CGFloat = 0.985
     /// Arc's open, frame by frame at 60 fps, from the start of the link picture's fade: the picture
     /// fades out on an ease-out over 0.075 s (0.40, 0.21, 0.065 a frame apart). The frame's centre
     /// and width go from the link's to the card's on an ease-out cubic over 0.205 s from 0.016 s;
@@ -121,7 +122,7 @@ public enum PeekLayout {
     }
 
     /// How long the whole close runs.
-    public static func closeDuration(scale: Double = closeScaleDuration) -> Double { max(scale, closeFadeDelay + closeFadeDuration) }
+    public static func closeDuration(scale: Double = closeScaleDuration) -> Double { max(scale, closeFadeDelay + closeFadeDuration, closeVeilDuration) }
 
     /// The page's picture inside `frame` (in the frame's own coordinates, y up): Arc scales it by the
     /// frame's width against the card's and pins it to the frame's top-left; the frame clips the rest.

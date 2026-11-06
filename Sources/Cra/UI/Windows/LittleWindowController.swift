@@ -463,7 +463,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             // Next turn, with the panel on its way to the screen.
             DispatchQueue.main.async { [weak self, weak t] in
                 guard let self, let t, self.transition === t, !self.closingPeek else { return }
-                DispatchQueue.main.asyncAfter(deadline: .now() + PeekTransition.lead) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + PeekTransition.lead) { [weak self] in
+                    guard let self, self.transition === t, !self.closingPeek else { return }
                     parent.setPeekVeil(true, duration: PeekLayout.openVeilDuration, timing: PeekTransition.easeOutCubic)
                 }
                 self.landPeek(t)

@@ -373,6 +373,31 @@ final class PeekTransition {
     /// this far ahead instead, held at their first frame until then.
     static let lead: CFTimeInterval = 0.03
 
+    static func scaleBackdrop(_ view: NSView, around center: CGPoint, to scale: CGFloat,
+                              duration: TimeInterval, timing: CAMediaTimingFunction?) {
+        guard let layer = view.layer else { return }
+        let anchor = CGPoint(x: layer.bounds.minX + layer.bounds.width * layer.anchorPoint.x,
+                             y: layer.bounds.minY + layer.bounds.height * layer.anchorPoint.y)
+        let transform = CATransform3DMakeAffineTransform(CGAffineTransform(
+            a: scale, b: 0, c: 0, d: scale,
+            tx: (center.x - anchor.x) * (1 - scale), ty: (center.y - anchor.y) * (1 - scale)))
+        let from = layer.presentation()?.sublayerTransform ?? layer.sublayerTransform
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.sublayerTransform = transform
+        if duration > 0 {
+            let animation = CABasicAnimation(keyPath: "sublayerTransform")
+            animation.fromValue = NSValue(caTransform3D: from)
+            animation.toValue = NSValue(caTransform3D: transform)
+            animation.duration = duration
+            animation.timingFunction = timing
+            layer.add(animation, forKey: "peekBackdropScale")
+        } else {
+            layer.removeAnimation(forKey: "peekBackdropScale")
+        }
+        CATransaction.commit()
+    }
+
     /// Out of the link (or the area) to the card's frame; `done` once it has landed.
     func open(done: @escaping () -> Void) {
         let d = PeekLayout.openDuration
