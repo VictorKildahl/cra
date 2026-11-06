@@ -2667,7 +2667,9 @@ was frontmost, 1x region captures and 100 fps recordings; test tabs archived aft
   closed with the tab listed (two clicks), with another tab open it closes for good and drops the peek and the
   dots. A folder without a peek opens as usual. Arc's window state then has no entry for it. So a click on a
   closed folder that keeps tabs in sight means "close", keeping only the open tab (as the 29 Oct folder-peek
-  notes found). Cra: FolderPeek.clickOpens.
+  notes found). Cra copied this until GitHub #213 (6 Nov 2026): a click on a closed folder now always opens it,
+  peek or not (FolderPeek.clickOpens), since Arc's way left the rest of the folder out of reach while one of its
+  tabs was open. Closing it still keeps the open tab in sight.
 
 ## Secure DNS (Arc 1.171, 2 Nov 2026, issue #110, live net log)
 - [O] Arc leaves Chromium's default. Victor's Arc `Local State` has no `dns_over_https` key, and a net log of Arc

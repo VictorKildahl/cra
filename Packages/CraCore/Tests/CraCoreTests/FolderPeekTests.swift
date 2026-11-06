@@ -39,11 +39,17 @@ struct FolderPeekTests {
         #expect(FolderPeek.expanding(inner, true, openTabInside: nil, peeks: peeks) == peeks)
     }
 
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/213"))
+    func aClickOpensAClosedFolderEvenWithItsOpenTabInSight() {
+        #expect(FolderPeek.clickOpens(expanded: false))
+        #expect(!FolderPeek.clickOpens(expanded: true))
+        // Opened, the folder shows all of it; closed again, only the open tab stays in sight.
+        #expect(FolderPeek.expanding(outer, true, openTabInside: tab, peeks: [outer: [tab]]).isEmpty)
+        #expect(FolderPeek.expanding(outer, false, openTabInside: tab, peeks: [:]) == [outer: [tab]])
+    }
+
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/85"))
-    func aClickOnAPeekedFolderClosesIt() {
-        #expect(FolderPeek.clickOpens(expanded: false, peeked: false))
-        #expect(!FolderPeek.clickOpens(expanded: true, peeked: false))
-        #expect(!FolderPeek.clickOpens(expanded: false, peeked: true))
+    func closingAFolderKeepsOnlyTheOpenTab() {
         // Closing it keeps only the open tab: a peek of another tab goes, the open tab's stays.
         #expect(FolderPeek.expanding(outer, false, openTabInside: nil, peeks: [outer: [other]]).isEmpty)
         #expect(FolderPeek.expanding(outer, false, openTabInside: tab, peeks: [outer: [tab, other]]) == [outer: [tab]])

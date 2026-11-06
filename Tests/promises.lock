@@ -66,7 +66,7 @@
 #83    Packages/CraCore/Tests/CraCoreTests/SidebarBackdropTests.swift::logLineNamesTheState  16b128ce2bbf
 #84    Packages/CraCore/Tests/CraCoreTests/ToolbarColorTests.swift::reportedThenRememberedThenWhite  ab391410bce9
 #84    Tests/BrowserManagerLifecycleTests.swift::pageColoursCase  ac9d2aee01ca
-#85    Packages/CraCore/Tests/CraCoreTests/FolderPeekTests.swift::aClickOnAPeekedFolderClosesIt  24a4f57dacd5
+#85    Packages/CraCore/Tests/CraCoreTests/FolderPeekTests.swift::closingAFolderKeepsOnlyTheOpenTab  d8fed1fd838b
 #85    Packages/CraCore/Tests/CraCoreTests/FolderPeekTests.swift::closingATabDropsItFromEveryPeek  ec91340a5580
 #85    Packages/CraCore/Tests/CraCoreTests/FolderPeekTests.swift::listedRowsFollowTheSidebarAndSkipTabsThatLeft  225937730d3a
 #85    Packages/CraCore/Tests/CraCoreTests/FolderPeekTests.swift::openingATabInClosedFoldersPeeksItUnderTheOutermost  1350dd0a01f0
@@ -328,5 +328,6 @@
 #209   Packages/CraCore/Tests/CraCoreTests/BrowserLanguagesTests.swift::readsThePrefAsChromiumListsIt  d7fa1a3f36a4
 #209   Tests/Scenarios/accept-languages.scenario  6ca3402ebe15
 #211   Packages/CraCore/Tests/CraCoreTests/FaviconKeyTests.swift::tabsOnOneHostKeepTheirOwnIcons  21d360f30e94
+#213   Packages/CraCore/Tests/CraCoreTests/FolderPeekTests.swift::aClickOpensAClosedFolderEvenWithItsOpenTabInSight  70f9e64eb96b
 #215   Tests/StoreTests.swift::arcLiveFolderImportsLive  a5c462b3a9c7
 #218   Tests/Scenarios/extension-popup-download.scenario  ffb6285b0eee

@@ -1687,7 +1687,7 @@ final class FolderRowView: SidebarRowView, NSTextFieldDelegate {
     override func click(_ event: NSEvent, at point: NSPoint) {
         guard let m = model, let list else { return }
         if m.editing { commitRename() }
-        list.store.setExpanded(m.id, FolderPeek.clickOpens(expanded: m.expanded, peeked: m.peeked))
+        list.store.setExpanded(m.id, FolderPeek.clickOpens(expanded: m.expanded))
     }
 
     override func contextMenu(at point: NSPoint) -> NSMenu? {
