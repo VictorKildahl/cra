@@ -88,7 +88,7 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
         }
         // A popup's configuration is its opener's copy: it gets its own scripts and handler.
         let content = WKUserContentController()
-        content.addUserScript(WKUserScript(source: PageScript.mainWorld, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .page))
+        content.addUserScript(WKUserScript(source: PageScript.mediaSessionWrapper + PageScript.mainWorld, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .page))
         content.addUserScript(WKUserScript(source: PageScript.isolatedWorld + Self.isolatedAddOn, injectionTime: .atDocumentStart,
                                            forMainFrameOnly: false, in: Self.world))
         let proxy = ScriptMessageProxy(owner: self)

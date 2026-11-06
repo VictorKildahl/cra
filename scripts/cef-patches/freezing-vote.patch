@@ -11,10 +11,10 @@ index dd0a558c0..a54f79de4 100644
      "//components/pref_registry",
      "//components/printing/browser",
 diff --git a/cef/libcef/browser/devtools/devtools_controller.cc b/cef/libcef/browser/devtools/devtools_controller.cc
-index c60f22d1a..d06000302 100644
+index c60f22d..3be66a2 100644
 --- a/cef/libcef/browser/devtools/devtools_controller.cc
 +++ b/cef/libcef/browser/devtools/devtools_controller.cc
-@@ -5,10 +5,149 @@
+@@ -5,10 +5,268 @@
  #include "cef/libcef/browser/devtools/devtools_controller.h"
  
  #include "base/json/json_reader.h"
@@ -25,9 +25,12 @@ index c60f22d1a..d06000302 100644
 +#include "base/task/sequenced_task_runner.h"
  #include "cef/libcef/browser/devtools/devtools_util.h"
  #include "cef/libcef/browser/thread_util.h"
++#include "chrome/browser/picture_in_picture/auto_picture_in_picture_tab_helper.h"
++#include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
 +#include "components/performance_manager/freezing/freezing_policy.h"
 +#include "components/performance_manager/public/freezing/freezing.h"
 +#include "components/performance_manager/public/performance_manager.h"
++#include "content/browser/media/session/media_session_impl.h"
  #include "content/public/browser/devtools_agent_host.h"
 +#include "content/public/browser/navigation_controller.h"
 +#include "content/public/browser/render_frame_host.h"
@@ -58,6 +61,112 @@ index c60f22d1a..d06000302 100644
 +  return list;
 +}
 +
++// Cra: the page's media session as Chromium routes it (the frame whose
++// navigator.mediaSession handlers answer), like Arc's media actions. Unlike a
++// wrapper around setActionHandler in the page, this sees every handler however
++// early the page registered it.
++struct CraMediaSessionActionName {
++  media_session::mojom::MediaSessionAction action;
++  const char* name;
++};
++constexpr CraMediaSessionActionName kCraMediaSessionActions[] = {
++    {media_session::mojom::MediaSessionAction::kPlay, "play"},
++    {media_session::mojom::MediaSessionAction::kPause, "pause"},
++    {media_session::mojom::MediaSessionAction::kPreviousTrack, "previoustrack"},
++    {media_session::mojom::MediaSessionAction::kNextTrack, "nexttrack"},
++    {media_session::mojom::MediaSessionAction::kSeekBackward, "seekbackward"},
++    {media_session::mojom::MediaSessionAction::kSeekForward, "seekforward"},
++    {media_session::mojom::MediaSessionAction::kSkipAd, "skipad"},
++    {media_session::mojom::MediaSessionAction::kStop, "stop"},
++    {media_session::mojom::MediaSessionAction::kToggleMicrophone,
++     "togglemicrophone"},
++    {media_session::mojom::MediaSessionAction::kToggleCamera, "togglecamera"},
++    {media_session::mojom::MediaSessionAction::kHangUp, "hangup"},
++    {media_session::mojom::MediaSessionAction::kPreviousSlide,
++     "previousslide"},
++    {media_session::mojom::MediaSessionAction::kNextSlide, "nextslide"},
++};
++
++// {"id":N,"method":"Cra.mediaSession"}: {"actions":[names],
++// "pictureInPicture":bool}, the actions the page has handlers for and whether
++// this page has the Picture in Picture window.
++// {"id":N,"method":"Cra.mediaSession","params":{"action":name}}: runs the
++// page's handler for it, as Chrome's media keys and global media controls do;
++// "handled" is false when the page has none.
++void HandleCraMediaSession(content::WebContents* contents,
++                           const base::DictValue* params,
++                           base::DictValue* result,
++                           std::string* error) {
++  auto* session = static_cast<content::MediaSessionImpl*>(
++      content::MediaSession::GetIfExists(contents));
++  auto* pip = PictureInPictureWindowManager::GetInstance();
++  const bool has_pip = pip->GetWebContents() == contents;
++  result->Set("pictureInPicture", has_pip);
++  const std::string* name = params ? params->FindString("action") : nullptr;
++  if (!name) {
++    base::ListValue actions;
++    for (const auto& entry : kCraMediaSessionActions) {
++      if (session && session->ShouldRouteAction(entry.action)) {
++        actions.Append(entry.name);
++      }
++    }
++    result->Set("actions", std::move(actions));
++    return;
++  }
++  const CraMediaSessionActionName* found = nullptr;
++  for (const auto& entry : kCraMediaSessionActions) {
++    if (*name == entry.name) {
++      found = &entry;
++    }
++  }
++  if (!found) {
++    *error = "unknown media session action";
++    return;
++  }
++  const bool routed = session && session->ShouldRouteAction(found->action);
++  if (routed) {
++    session->DidReceiveAction(found->action);
++  }
++  result->Set("handled", routed);
++}
++
++// Cra: Chrome's automatic Picture in Picture (AutoPictureInPictureTabHelper),
++// which a tab strip drives in Chrome and the client drives here.
++// {"id":N,"method":"Cra.autoPictureInPicture","params":{"tab":"hidden"}}: the
++// tab went out of sight. A page that registered an enterpictureinpicture media
++// session handler and uses the camera or microphone (a Google Meet call) has it
++// run, with the reason "contentoccluded" and the browser's authorization to
++// open its Picture in Picture window; {"asked":bool}. Chrome's per-site
++// automatic picture-in-picture permission applies, and nothing replaces a
++// Picture in Picture window that is already open ({"pictureInPicture":true}
++// when this page has it).
++// {"id":N,"method":"Cra.autoPictureInPicture","params":{"tab":"shown"}}: the
++// tab is in front again, which closes the window automatic Picture in Picture
++// opened, as Chrome does.
++void HandleCraAutoPictureInPicture(content::WebContents* contents,
++                                   const base::DictValue* params,
++                                   base::DictValue* result,
++                                   std::string* error) {
++  auto* helper = AutoPictureInPictureTabHelper::FromWebContents(contents);
++  const std::string* tab = params ? params->FindString("tab") : nullptr;
++  if (!helper) {
++    *error = "no automatic Picture in Picture for this page";
++    return;
++  }
++  if (tab && *tab == "shown") {
++    helper->OnTabBecameActive();
++    return;
++  }
++  if (!tab || *tab != "hidden") {
++    *error = "tab must be hidden or shown";
++    return;
++  }
++  result->Set("pictureInPicture",
++              PictureInPictureWindowManager::GetInstance()->GetWebContents() ==
++                  contents);
++  result->Set("asked", helper->CraOnTabHidden());
++}
++
 +// {"id":N,"method":"Cra.setFreezingVote","params":{"vote":true|false}}: sets
 +// or drops the vote. {"id":N,"method":"Cra.getFreezingState"}: whether the
 +// page has Cra's vote, is frozen, and why the policy won't freeze it.
@@ -85,10 +194,20 @@ index c60f22d1a..d06000302 100644
 +  std::optional<int> id = dict->FindInt("id");
 +  if (!method || !id ||
 +      (*method != "Cra.setFreezingVote" && *method != "Cra.getFreezingState" &&
-+       *method != "Cra.discard" && *method != "Cra.load")) {
++       *method != "Cra.discard" && *method != "Cra.load" &&
++       *method != "Cra.mediaSession" && *method != "Cra.autoPictureInPicture")) {
 +    return false;
 +  }
 +  *message_id = *id;
++  if (*method == "Cra.autoPictureInPicture") {
++    HandleCraAutoPictureInPicture(contents, dict->FindDict("params"), result,
++                                  error);
++    return true;
++  }
++  if (*method == "Cra.mediaSession") {
++    HandleCraMediaSession(contents, dict->FindDict("params"), result, error);
++    return true;
++  }
 +  if (*method == "Cra.load") {
 +    // Does nothing unless the page was discarded and hasn't loaded since.
 +    contents->GetController().LoadIfNecessary();
@@ -164,7 +283,7 @@ index c60f22d1a..d06000302 100644
  
  CefDevToolsController::CefDevToolsController(
      content::WebContents* inspected_contents)
-@@ -30,6 +169,36 @@ CefDevToolsController::~CefDevToolsController() {
+@@ -30,6 +288,36 @@ CefDevToolsController::~CefDevToolsController() {
  bool CefDevToolsController::SendDevToolsMessage(
      const std::string_view& message) {
    CEF_REQUIRE_UIT();

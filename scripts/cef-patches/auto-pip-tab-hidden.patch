@@ -1,0 +1,41 @@
+diff --git a/chrome/browser/picture_in_picture/auto_picture_in_picture_tab_helper.cc b/chrome/browser/picture_in_picture/auto_picture_in_picture_tab_helper.cc
+index 359dba00ed..0cf13e37c8 100644
+--- a/chrome/browser/picture_in_picture/auto_picture_in_picture_tab_helper.cc
++++ b/chrome/browser/picture_in_picture/auto_picture_in_picture_tab_helper.cc
+@@ -1063,6 +1063,18 @@ void AutoPictureInPictureTabHelper::OnUserClosedWindow() {
+ #endif  // !BUILDFLAG(IS_ANDROID)
+ }
+ 
++bool AutoPictureInPictureTabHelper::CraOnTabHidden() {
++  // Only what qualifies now (a call: the camera or microphone in use). A page
++  // that only plays sound waits for a Safe Browsing check in Chrome; the
++  // embedder asks its video instead.
++  if (!IsEligibleForAutoPictureInPicture(
++          /*should_record_blocking_metrics=*/false)) {
++    return false;
++  }
++  MaybeEnterAutoPictureInPicture();
++  return true;
++}
++
+ void AutoPictureInPictureTabHelper::OnTabBecameActive() {
+ #if BUILDFLAG(IS_ANDROID)
+   if (hide_button_clicked_time_) {
+diff --git a/chrome/browser/picture_in_picture/auto_picture_in_picture_tab_helper.h b/chrome/browser/picture_in_picture/auto_picture_in_picture_tab_helper.h
+index 6510bdeb1b..fb9a719852 100644
+--- a/chrome/browser/picture_in_picture/auto_picture_in_picture_tab_helper.h
++++ b/chrome/browser/picture_in_picture/auto_picture_in_picture_tab_helper.h
+@@ -162,6 +162,13 @@ class AutoPictureInPictureTabHelper
+   // any auto-pip window we have open, though there might also not be one.
+   void OnTabBecameActive();
+ 
++  // Cra: the embedder hid this tab (CEF has no tab strip for this helper to
++  // observe). Does what a tab switch away from it does: if the tab is eligible,
++  // opens the window in which the browser authorizes the page's Picture in
++  // Picture and sends the page the enterpictureinpicture media session action.
++  // Returns whether the page was asked. OnTabBecameActive() closes the window.
++  bool CraOnTabHidden();
++
+   void set_clock_for_testing(const base::TickClock* testing_clock) {
+     clock_ = testing_clock;
+   }

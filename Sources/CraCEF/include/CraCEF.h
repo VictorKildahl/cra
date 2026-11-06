@@ -196,7 +196,7 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
 @property (nonatomic, readonly) BOOL isInPictureInPicture;
 /// YES while that video is playing.
 @property (nonatomic, readonly) BOOL isPictureInPicturePlaying;
-/// The page is using the camera or microphone (Chromium's media access state).
+/// The page is using the camera or microphone, as Chrome's tab recording indicator counts it.
 @property (nonatomic, readonly) BOOL isCapturingMedia;
 /// The page is playing sound, in any frame (Chromium's audible state). Like Chrome's tab
 /// speaker it stays YES for 2 s after the page goes quiet. Muting the tab doesn't change it.

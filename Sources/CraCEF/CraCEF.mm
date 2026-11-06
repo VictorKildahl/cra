@@ -190,6 +190,11 @@ static CraClient* AsCraClient(CefClient* c) {
 @property (nonatomic) BOOL isInPictureInPicture;
 @property (nonatomic) BOOL isPictureInPicturePlaying;
 @property (nonatomic) BOOL isCapturingMedia;
+/// Media access CEF's own permission flow granted (OnMediaAccessChange), and the camera or
+/// microphone Chrome's tab recording indicator counts ("Cra.capture"); isCapturingMedia is either.
+@property (nonatomic) BOOL cefMediaAccess;
+@property (nonatomic) BOOL chromeCapture;
+- (void)updateCapture;
 @property (nonatomic) BOOL isAudible;
 - (void)audibleChanged:(BOOL)audible;
 - (void)requestPictureInPictureInFrame:(CefRefPtr<CefFrame>)frame automatic:(BOOL)automatic x:(int)x y:(int)y;
@@ -1426,11 +1431,8 @@ public:
     void OnMediaAccessChange(CefRefPtr<CefBrowser> browser, bool has_video_access, bool has_audio_access) override {
         CraBrowser* o = owner_;
         if (!o) return;
-        BOOL capturing = has_video_access || has_audio_access;
-        if (capturing == o.isCapturingMedia) return;
-        o.isCapturingMedia = capturing;
-        if ([o.delegate respondsToSelector:@selector(browser:didChangeMediaCapture:)])
-            [o.delegate browser:o didChangeMediaCapture:capturing];
+        o.cefMediaAccess = has_video_access || has_audio_access;
+        [o updateCapture];
     }
 
     // Chromium's audible state, which CEF has no callback for: the engine sends it as a
@@ -1443,6 +1445,18 @@ public:
         CraBrowser* o = owner_;
         if (message->GetName() == "Cra.audible") {
             if (o) [o audibleChanged:message->GetArgumentList()->GetBool(0)];
+            return true;
+        }
+        // Camera and microphone use as Chrome's tab recording indicator counts it, which a
+        // Chrome-style page's media never reaches OnMediaAccessChange with (Arc's
+        // didChangeCameraState / didChangeMicrophoneState; scripts/cef-patches/
+        // media-capture-and-session.patch).
+        if (message->GetName() == "Cra.capture") {
+            CefRefPtr<CefListValue> args = message->GetArgumentList();
+            if (o) {
+                o.chromeCapture = (args->GetSize() > 0 && args->GetBool(0)) || (args->GetSize() > 1 && args->GetBool(1));
+                [o updateCapture];
+            }
             return true;
         }
         if (message->GetName() == "Cra.activate") {
@@ -2036,6 +2050,14 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 
 - (CefRefPtr<CefRequestContext>)requestContext {
     return _isIncognito ? IncognitoContext() : ProfileContext(_profilePath);
+}
+
+- (void)updateCapture {
+    BOOL capturing = self.cefMediaAccess || self.chromeCapture;
+    if (capturing == self.isCapturingMedia) return;
+    self.isCapturingMedia = capturing;
+    if ([self.delegate respondsToSelector:@selector(browser:didChangeMediaCapture:)])
+        [self.delegate browser:self didChangeMediaCapture:capturing];
 }
 
 - (CefRefPtr<CefBrowser>)cefBrowser { return _browser; }

@@ -75,10 +75,12 @@ It also answers the DevTools Protocol methods Cra calls from WebKit's own API:
 | `Storage.clearDataForOrigin`, `Network.clearBrowserCache` | the profile's `WKWebsiteDataStore` |
 | `Cra.setFreezingVote`, `Cra.load` | accepted; WebKit throttles hidden pages itself |
 | `Cra.discard`, `Cra.getFreezingState`, `Target.*` | an error. Tab sleeping then closes the page, and it loads again when shown; extension actions don't apply. |
+| `Cra.mediaSession`, `Cra.autoPictureInPicture` | never sent: a WebKit page's media session handlers go through PageScript's wrapper, and leaving its tab asks its video for Picture in Picture |
 
-PageScript's two scripts run in WebKit as user scripts, in the page world and in a `cra`
-content world. With them come Cra's typed-text and long-task tracking, the sidebar player's
-media session buttons and its volume. A small addition in the `cra` world reports what Chromium
+PageScript's scripts run in WebKit as user scripts, in the page world and in a `cra` content
+world. With them come Cra's typed-text and long-task tracking, the sidebar player's media session
+buttons (through a wrapper around `setActionHandler` that only WebKit pages get; Chromium routes a
+page's handlers itself) and its volume. A small addition in the `cra` world reports what Chromium
 tells CraCEF natively: media playing, Picture in Picture and link hovers (the status bubble).
 WebKit's `_isPlayingAudio` drives the speaker when this macOS has it.
 

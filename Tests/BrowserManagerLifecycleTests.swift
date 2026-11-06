@@ -99,6 +99,7 @@ enum BrowserManagerLifecycleTests {
         await splitCopySleepsPinnedTabCase()
         await coveredWindowPictureInPictureCase()
         await callPictureInPictureCase()
+        await playerMediaSessionCase()
         pageColoursCase()
         extensionPageRetryCase()
         await sleepCase("malformed or missing replies cannot authorize sleeping", reply: nil) { _, _ in }
@@ -687,9 +688,7 @@ enum BrowserManagerLifecycleTests {
                                           (nil, 1, "a page whose answer was lost")] as [(String?, Int, String)] {
             let before = ra.browser.automaticPictureInPictureRequests
             manager.show(b, focus: false)
-            expect(ra.browser.lastIsolatedParams.contains(#""userGesture":false"#), "the page is first asked for its own handler, without a gesture")
-            ra.browser.reply(to: "cra:Runtime.evaluate", with: #"{"result":{"type":"string","value":"none"}}"#)
-            await drainMainQueue()
+            expect(!ra.browser.replies.contains { $0.method == "Cra.autoPictureInPicture" }, "a page that isn't capturing goes straight to the video request")
             expect(ra.browser.lastParams.contains(#""userGesture":true"#), "leaving a video tab asks as a user gesture")
             expect(ra.browser.lastParams.contains("})(true)"), "leaving a video tab takes only an audible, playing video")
             let reply = answer.map { #"{"result":{"type":"string","value":"\#($0)"}}"# }
@@ -744,10 +743,10 @@ enum BrowserManagerLifecycleTests {
 
     /// A call (Google Meet with "Automatic picture-in-picture" on) registers its own
     /// `enterpictureinpicture` media session handler, which opens a Document Picture in Picture
-    /// window of the call. Leaving its tab, or its window going out of sight, runs that handler as a
-    /// user gesture, as Chrome does; coming back closes the window (GitHub #198). The page is asked
-    /// whether it has the handler without a gesture, so a page without one never gets activation
-    /// from an app switch, and a page without one gets the video request as before.
+    /// window of the call. Leaving its tab while it uses the camera or microphone, or its window
+    /// going out of sight, drives Chrome's automatic Picture in Picture (`Cra.autoPictureInPicture`),
+    /// as Chrome's tab strip and Arc do; coming back has Chrome close the window (GitHub #198).
+    /// A page Chrome doesn't ask gets the video request.
     @MainActor
     private static func callPictureInPictureCase() async {
         let clock = ManualScheduler()
@@ -756,63 +755,123 @@ enum BrowserManagerLifecycleTests {
         let a = store.createTab(url: "https://meet.example.test/abc").id, b = store.createTab(url: "https://example.test/other").id
         let ra = manager.ensureRuntime(for: a)!
         store.settings.autoPictureInPicture = true
+        ra.browser.isCapturingMedia = true
         manager.show(a, focus: false)
-        let answer = { (value: String) in #"{"result":{"type":"string","value":"\#(value)"}}"# }
+        let asked = #"{"asked":true,"pictureInPicture":false}"#, notAsked = #"{"asked":false,"pictureInPicture":false}"#
+        let hidden = #"{"tab":"hidden"}"#, shown = #"{"tab":"shown"}"#
         let evaluations = { ra.browser.replies.filter { $0.method == "Runtime.evaluate" }.count }
-        let isolated = { ra.browser.replies.filter { $0.method == "cra:Runtime.evaluate" }.count }
+        let calls = { ra.browser.replies.filter { $0.method == "Cra.autoPictureInPicture" }.count }
+        let settle = { while ra.browser.replies.contains(where: { $0.method == "Cra.autoPictureInPicture" }) {
+            ra.browser.reply(to: "Cra.autoPictureInPicture", with: "{}") } }
 
         manager.show(b, focus: false)
-        expect(ra.browser.lastIsolatedParams.contains("enterpictureinpicture") && ra.browser.lastIsolatedParams.contains(#""userGesture":false"#),
-               "leaving the tab asks the page for its own handler, without a gesture")
-        ra.browser.reply(to: "cra:Runtime.evaluate", with: answer("handler"))
+        expect(calls() == 1 && ra.browser.lastParams == hidden, "leaving a call's tab drives Chrome's automatic Picture in Picture")
+        ra.browser.reply(to: "Cra.autoPictureInPicture", with: asked)
         await drainMainQueue()
-        expect(isolated() == 1 && ra.browser.lastIsolatedParams.contains("send('enterpictureinpicture')")
-               && ra.browser.lastIsolatedParams.contains(#""userGesture":true"#), "a page with the handler has it run, as a user gesture")
-        ra.browser.reply(to: "cra:Runtime.evaluate", with: nil)
-        expect(evaluations() == 0 && ra.browser.automaticPictureInPictureRequests == 0, "and gets no video request too")
+        expect(evaluations() == 0 && ra.browser.automaticPictureInPictureRequests == 0, "the page was asked: no video request too")
         clock.advance(by: 30)
         manager.show(a, focus: false)
-        expect(evaluations() == 1 && ra.browser.lastParams.contains("documentPictureInPicture") && ra.browser.lastParams.contains("})(false)"),
-               "back on the call's tab, its window closes")
-        ra.browser.reply(to: "Runtime.evaluate", with: nil)
+        expect(calls() == 1 && ra.browser.lastParams == shown, "back on the call's tab, Chrome closes its window")
+        settle()
+        clock.advance(by: 2)
+        expect(calls() == 0, "once: the window was up long before")
         manager.show(b, focus: false)
         manager.show(a, focus: false)
-        expect(evaluations() == 0, "coming back again closes nothing: the window it opened is gone")
-        ra.browser.reply(to: "cra:Runtime.evaluate", with: answer("handler"))
+        expect(calls() == 1 && ra.browser.lastParams == hidden, "coming back again closes nothing: the window it opened is gone")
+        ra.browser.reply(to: "Cra.autoPictureInPicture", with: asked)
         await drainMainQueue()
-        expect(isolated() == 0, "back before the page answered: the handler isn't run")
+        expect(calls() == 1 && ra.browser.lastParams == shown, "back before Chromium answered: the window is closed")
+        settle()
+        clock.advance(by: 1)
+        expect(calls() == 1 && ra.browser.lastParams == shown, "and again a second later, in case it was still opening")
+        settle()
 
-        // Back right after the handler ran: a window still opening is closed as it opens.
+        // A Picture in Picture window this page already has stays when the user comes back.
         manager.show(b, focus: false)
-        ra.browser.reply(to: "cra:Runtime.evaluate", with: answer("handler"))
-        await drainMainQueue()
-        ra.browser.reply(to: "cra:Runtime.evaluate", with: nil)
-        manager.show(a, focus: false)
-        expect(evaluations() == 1 && ra.browser.lastParams.contains("})(true)"), "a window still opening is closed as it opens")
-        ra.browser.reply(to: "Runtime.evaluate", with: nil)
-
-        // A window the user opened from the call stays when they come back.
-        manager.show(b, focus: false)
-        ra.browser.reply(to: "cra:Runtime.evaluate", with: answer("open"))
+        ra.browser.reply(to: "Cra.autoPictureInPicture", with: #"{"asked":false,"pictureInPicture":true}"#)
         await drainMainQueue()
         manager.show(a, focus: false)
-        expect(evaluations() == 0 && isolated() == 0 && ra.browser.automaticPictureInPictureRequests == 0, "a Picture in Picture already open is left alone")
+        expect(calls() == 0 && evaluations() == 0 && ra.browser.automaticPictureInPictureRequests == 0, "a Picture in Picture already open is left alone")
 
-        // The window going out of sight: a silent page runs its handler, but never gets the video
-        // request, which would send it the activation key.
+        // A page Chrome doesn't ask (no handler, no permission), or a Chromium without the method,
+        // gets the video request.
+        for reply in [notAsked, nil] {
+            manager.show(b, focus: false)
+            if let reply { ra.browser.reply(to: "Cra.autoPictureInPicture", with: reply) } else { ra.browser.fail("Cra.autoPictureInPicture", with: "not found") }
+            await drainMainQueue()
+            expect(evaluations() == 1 && ra.browser.lastParams.contains("})(true)"), "leaving its tab falls back to the video request")
+            ra.browser.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"none"}}"#)
+            await drainMainQueue()
+            manager.show(a, focus: false)
+        }
+
+        // The window going out of sight: a silent call is asked through Chrome, and never gets the
+        // video request, which would send the page the activation key.
         manager.windowVisibilityChanged(covered: true)
-        ra.browser.reply(to: "cra:Runtime.evaluate", with: answer("none"))
+        ra.browser.reply(to: "Cra.autoPictureInPicture", with: notAsked)
         await drainMainQueue()
-        expect(evaluations() == 0, "a silent page without the handler gets no video request on an app switch")
+        expect(evaluations() == 0, "a silent call Chrome didn't ask gets no video request on an app switch")
         manager.windowVisibilityChanged(covered: false)
         manager.windowVisibilityChanged(covered: true)
-        ra.browser.reply(to: "cra:Runtime.evaluate", with: answer("handler"))
+        ra.browser.reply(to: "Cra.autoPictureInPicture", with: asked)
         await drainMainQueue()
-        expect(ra.browser.lastIsolatedParams.contains(#""userGesture":true"#), "a call whose window goes out of sight runs its handler")
-        ra.browser.reply(to: "cra:Runtime.evaluate", with: nil)
+        clock.advance(by: 30)
         manager.windowVisibilityChanged(covered: false)
-        expect(evaluations() == 1 && ra.browser.lastParams.contains("documentPictureInPicture"), "the window back in sight closes the call's window")
-        ra.browser.reply(to: "Runtime.evaluate", with: nil)
+        expect(calls() == 1 && ra.browser.lastParams == shown, "the window back in sight closes the call's window")
+        settle()
+
+        ra.browser.isCapturingMedia = false
+        manager.show(b, focus: false)
+        expect(calls() == 0, "a page not using the camera or microphone isn't driven through Chrome")
+        manager.closeAll()
+    }
+
+    /// The sidebar player in a Chromium tab: Chromium runs the page's media session handlers
+    /// (`Cra.mediaSession`, like Arc's media actions) and reports which it has, however early the
+    /// page registered them; a page without a play/pause handler has its media elements played or
+    /// paused.
+    @MainActor
+    private static func playerMediaSessionCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let np = NowPlaying()
+        manager.nowPlaying = np
+        let a = store.createTab(url: "https://music.example.test/").id, b = store.createTab(url: "https://example.test/other").id
+        let ra = manager.ensureRuntime(for: a)!
+        manager.show(b, focus: false)
+        ra.browser.isAudible = true
+        manager.browser(ra.browser, didChangeAudible: true)
+        expect(ra.browser.replies.contains { $0.method == "Cra.mediaSession" } && ra.browser.lastParams == "{}",
+               "a page that starts playing is asked which media session actions it has")
+        ra.browser.reply(to: "Cra.mediaSession", with: #"{"actions":["play","pause","nexttrack"],"pictureInPicture":false}"#)
+        await drainMainQueue()
+        expect(np.entries.first?.hasNext == true && np.entries.first?.hasPrevious == false, "the card offers the track buttons the page answers")
+        ra.browser.replies.removeAll()
+
+        manager.performNowPlaying(a, .next)
+        expect(ra.browser.lastParams == #"{"action":"nexttrack"}"#, "next track runs the page's handler")
+        ra.browser.reply(to: "Cra.mediaSession", with: #"{"handled":true,"pictureInPicture":false}"#)
+        await drainMainQueue()
+        expect(!ra.browser.replies.contains { $0.method == "cra:Runtime.evaluate" }, "and nothing else")
+
+        manager.performNowPlaying(a, .togglePlayback)
+        expect(ra.browser.lastIsolatedParams.contains(#"(\"state\")"#), "play/pause first reads whether the page plays")
+        ra.browser.reply(to: "cra:Runtime.evaluate", with: #"{"result":{"type":"string","value":"playing"}}"#)
+        await drainMainQueue()
+        expect(ra.browser.lastParams == #"{"action":"pause"}"#, "a playing page is paused through its handler")
+        ra.browser.reply(to: "Cra.mediaSession", with: #"{"handled":true,"pictureInPicture":false}"#)
+        await drainMainQueue()
+        expect(np.entries.first?.playing == false && ra.browser.replies.isEmpty, "the card shows it paused")
+
+        manager.performNowPlaying(a, .togglePlayback)
+        ra.browser.reply(to: "cra:Runtime.evaluate", with: #"{"result":{"type":"string","value":"paused"}}"#)
+        await drainMainQueue()
+        ra.browser.reply(to: "Cra.mediaSession", with: #"{"handled":false,"pictureInPicture":false}"#)
+        await drainMainQueue()
+        expect(ra.browser.lastIsolatedParams.contains(#"(\"play\")"#), "without a handler the page's media elements play")
+        ra.browser.reply(to: "cra:Runtime.evaluate", with: #"{"result":{"type":"string","value":"playing"}}"#)
+        await drainMainQueue()
+        expect(np.entries.first?.playing == true, "the card shows it playing")
         manager.closeAll()
     }
 
@@ -830,15 +889,11 @@ enum BrowserManagerLifecycleTests {
         manager.show(a, focus: false)
 
         manager.windowVisibilityChanged(covered: true)
-        ra.browser.reply(to: "cra:Runtime.evaluate", with: #"{"result":{"type":"string","value":"none"}}"#)
-        await drainMainQueue()
-        expect(!ra.browser.replies.contains { $0.method == "Runtime.evaluate" }, "a covered window doesn't send a silent page the video request")
+        expect(ra.browser.replies.isEmpty, "a covered window doesn't ask a silent page")
         manager.windowVisibilityChanged(covered: false)
 
         ra.browser.isAudible = true
         manager.windowVisibilityChanged(covered: true)
-        ra.browser.reply(to: "cra:Runtime.evaluate", with: #"{"result":{"type":"string","value":"none"}}"#)
-        await drainMainQueue()
         expect(ra.browser.lastParams.contains(#""userGesture":true"#) && ra.browser.lastParams.contains("})(true)"),
                "a covered window asks its playing page for automatic Picture in Picture")
         ra.browser.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"ok"}}"#)
