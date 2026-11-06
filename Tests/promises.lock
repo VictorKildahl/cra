@@ -6,4 +6,6 @@
 #155   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::everySwatchOnLightOrDarkKeepsOneLook  95d16ff2c954
 #155   Packages/CraCore/Tests/CraCoreTests/ModelFixtureTests.swift::autoSpacesKeepBothHalves  89e5047a5e96
 #155   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::newSpaceIsOneColourOnAuto  32095d76196a
+#155   Tests/Scenarios/auto-theme.scenario  ecf687c1ce39
+#170   Tests/StoreTests.swift::themePreview  d10606ab1689
 #171   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::autoThemeWithOneHalfKeepsItsLook  6162547ce294

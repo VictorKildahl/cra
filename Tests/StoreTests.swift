@@ -387,6 +387,7 @@ enum StoreTests {
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 
+    // promise: #170
     /// The theme editor (#170): a change shows at once but goes to disk only when the editor
     /// commits; Escape or Cancel puts the stored theme back, and a save in between keeps it off disk.
     @MainActor

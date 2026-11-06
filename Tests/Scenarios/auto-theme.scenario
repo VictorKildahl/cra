@@ -1,3 +1,4 @@
+# promise: #155
 # An Auto space follows macOS live, both ways, in the window content and the sidebar; a Light
 # space keeps its look (#155). 0.1.30-0.1.32 saved the editor's one-colour Auto as a fixed theme.
 # systemAppearance flips the app's appearance without touching the Mac's own setting.

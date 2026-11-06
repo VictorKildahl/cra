@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """What a closed issue shipped stays shipped, unless someone changes it on purpose (GitHub #155).
 
-A test that pins a shipped issue's behaviour carries Swift Testing's bug trait:
+A test that pins a shipped issue's behaviour is marked with the issue:
 
-    @Test(.bug("https://github.com/VictorKildahl/cra/issues/155"), arguments: ...)
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/155"), arguments: ...)   Swift Testing
+    // promise: #155 #171                                     a harness func (Tests/*.swift), the
+    private static func themePreview() { ... }               line right above it (or its attributes)
+    # promise: #155                                           a scenario (Tests/Scenarios): the file
 
 Tests/promises.lock records each such test with its issue and a hash of its code (comments and
 whitespace left out). A tagged test that changes, is renamed or is deleted fails this check, and so
@@ -93,18 +96,25 @@ def normalise(code: str) -> str:
     return " ".join(code.split())
 
 
-def files(rev):
-    """(repo-relative path, text) of every Swift test file, in the working tree or at a commit."""
+def files(rev, suffixes=(".swift", ".scenario")):
+    """(repo-relative path, text) of every test file, in the working tree or at a commit."""
     if rev is None:
         for base in SOURCES:
-            for path in sorted((ROOT / base).rglob("*.swift")):
-                if ".build" not in path.parts:
+            for path in sorted((ROOT / base).rglob("*")):
+                if path.suffix in suffixes and path.is_file() and ".build" not in path.parts:
                     yield path.relative_to(ROOT).as_posix(), path.read_text()
         return
     names = git("ls-tree", "-r", "--name-only", rev, "--", *SOURCES).splitlines()
     for name in sorted(names):
-        if name.endswith(".swift") and "/.build/" not in name:
+        if name.endswith(suffixes) and "/.build/" not in name:
             yield name, git("show", f"{rev}:{name}")
+
+
+MARK = re.compile(r"^[ \t]*(?://|#)[ \t]*promise:[ \t]*((?:#\d+[ \t,]*)+)$", re.M)
+
+
+def digest(code: str) -> str:
+    return hashlib.sha256(normalise(code).encode()).hexdigest()[:12]
 
 
 def git(*args):
@@ -115,18 +125,36 @@ def promises(rev=None):
     """(issue, test id, hash) for every tagged test."""
     found = []
     for rel, s in files(rev):
+        marks = list(MARK.finditer(s))
+        if rel.endswith(".scenario"):
+            # The whole journey is the promise; `#` lines are comments.
+            body = re.sub(r"^\s*#.*$", "", s, flags=re.M)
+            for issue in sorted({int(n) for m in marks for n in re.findall(r"\d+", m.group(1))}):
+                found.append((issue, rel, digest(body)))
+            continue
+        for m in marks:
+            fn = re.compile(r"(?:\s*(?://[^\n]*|@\w+(?:\([^)]*\))?))*\s*(?:(?:private|fileprivate|static|public|internal|nonisolated)\s+)*func\s+(\w+)").match(s, m.end())
+            if not fn:
+                sys.exit(f"promises: {rel}: a `// promise:` line with no func right below it")
+            body_end = balanced(s, s.index("{", fn.end()), "{", "}")
+            # A harness runs only what its main() calls: a promise nobody calls proves nothing.
+            if len(re.findall(r"\b%s\s*\(" % fn.group(1), s)) < 2:
+                sys.exit(f"promises: {rel}::{fn.group(1)} is a promise that nothing calls")
+            for issue in sorted({int(n) for n in re.findall(r"\d+", m.group(1))}):
+                found.append((issue, f"{rel}::{fn.group(1)}", digest(s[fn.start():body_end])))
         for m in re.finditer(r"@Test\s*\(", s):
             attr_end = balanced(s, m.end() - 1, "(", ")")
             issues = sorted({int(n) for n in ISSUE.findall(s[m.start():attr_end])})
             if ".bug(" not in s[m.start():attr_end] or not issues:
                 continue
+            if re.search(r"\.disabled\b", s[m.start():attr_end]):
+                sys.exit(f"promises: {rel}: a .bug test is .disabled; a shipped promise runs or is changed on purpose")
             fn = re.compile(r"\s*func\s+(\w+)").match(s, attr_end)
             if not fn:
                 sys.exit(f"promises: {rel}: a .bug test whose func doesn't follow its @Test(...)")
             body_end = balanced(s, s.index("{", fn.end()), "{", "}")
-            digest = hashlib.sha256(normalise(s[m.start():body_end]).encode()).hexdigest()[:12]
             for issue in issues:
-                found.append((issue, f"{rel}::{fn.group(1)}", digest))
+                found.append((issue, f"{rel}::{fn.group(1)}", digest(s[m.start():body_end])))
     return found
 
 
@@ -151,17 +179,17 @@ def main():
     rev = args[args.index("--rev") + 1] if "--rev" in args else None
     current = promises(rev)
     if "--update" in args:
-        lines = [f"#{issue:<5} {test}  {digest}" for issue, test, digest in sorted(current)]
+        lines = [f"#{issue:<5} {test}  {value}" for issue, test, value in sorted(current)]
         LOCK.write_text(HEADER + "\n".join(lines) + "\n")
         print(f"promises: {len(current)} tests pinned for {len({i for i, _, _ in current})} issues")
         return 0
     locked = read_lock(rev)
-    now = {(issue, test): digest for issue, test, digest in current}
+    now = {(issue, test): value for issue, test, value in current}
     problems = []
-    for key, digest in sorted(now.items()):
+    for key, value in sorted(now.items()):
         if key not in locked:
             problems.append(f"#{key[0]} {key[1]} is new: lock it with scripts/promises.py --update")
-        elif locked[key] != digest:
+        elif locked[key] != value:
             problems.append(f"#{key[0]} {key[1]} changed")
     for key in sorted(set(locked) - set(now)):
         problems.append(f"#{key[0]} {key[1]} is gone (deleted, renamed or untagged)")
