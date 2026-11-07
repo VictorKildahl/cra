@@ -127,6 +127,11 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   gold theme the back was #E9B300, the front #FCEDBC and every edge black at ~26%; how the back colour follows the
   theme is worked out in the next entry. Cra: FolderGlyphView. Cra masks the back with the front panel's shape
   (`frontHole`, turned with the front's transform) for the translucent White and Black icon styles.
+  The live folder's mark (7 Nov, PR #234, Arc 1.171's ivars and disassembly): `customIconImage` sets
+  `_customIconLayer`, which is inserted at index 0 of the front path layer (`insertSublayer:atIndex:0`), so it
+  turns with the front panel and sits under the front shading. Arc's other fields there: `frontContainerLayer`,
+  `frontPathLayer`, `_frontMaskLayer`, `frontShadingLayer`, `backLayer`, `_backMaskLayer`,
+  `backShadingMaskLayer`, `backShadingLayer`, `_badgeLayer`, `_ellipsisLayer`.
 - [O] Folder glyph colours (4 Nov, offline Arc 1.171, 2x window captures in sRGB of the default dark theme, a
   dark gold and a light blue, folders opened over AX `AXDisclosing`): every panel is opaque and comes from the
   theme's primaryColorPalette. Back = midTone on every theme. Light themes: front tintedLight (#E4F2F8 exact),

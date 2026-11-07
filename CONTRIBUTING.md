@@ -46,6 +46,8 @@ hooks and how to run a test instance next to your daily Cra.
 4. Don't touch the release pipeline, signing or the CEF pin unless that's the point of
    the PR. Releases are cut by the maintainer.
 
+[docs/reviewing.md](docs/reviewing.md) lists what a review checks, so you can check it first.
+
 ## Chromium and CEF
 
 The CEF version is pinned in `scripts/fetch-cef.sh`, which downloads Cra's own CEF build
