@@ -47,6 +47,46 @@ final class BoostEditorController {
         p.orderFront(nil)
         panel = p
         model = m
+        growIn(p, host)
+    }
+
+    private static var easeOut: CAMediaTimingFunction {
+        let (x1, y1, x2, y2) = BoostEditorMotion.easeOut
+        return CAMediaTimingFunction(controlPoints: Float(x1), Float(y1), Float(x2), Float(y2))
+    }
+
+    /// Arc's opening (BoostEditorMotion): drawn at 85 % and grown to full size about the middle of
+    /// its right edge. The window's shadow can't scale, so the content carries one meanwhile.
+    private func growIn(_ panel: NSPanel, _ view: NSView) {
+        view.wantsLayer = true
+        guard let layer = view.layer, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+        let b = view.bounds
+        let s = BoostEditorMotion.openScale
+        // The layer scales about its anchor point; move the pivot to the right edge's middle.
+        let dx = b.width * (BoostEditorMotion.openAnchor.x - layer.anchorPoint.x)
+        let dy = b.height * (BoostEditorMotion.openAnchor.y - layer.anchorPoint.y)
+        var t = CATransform3DMakeTranslation(dx, dy, 0)
+        t = CATransform3DScale(t, s, s, 1)
+        t = CATransform3DTranslate(t, -dx, -dy, 0)
+        panel.hasShadow = false
+        layer.shadowPath = CGPath(roundedRect: b, cornerWidth: 12, cornerHeight: 12, transform: nil)
+        layer.shadowColor = NSColor.black.cgColor
+        layer.shadowOpacity = 0.25
+        layer.shadowRadius = 10
+        layer.shadowOffset = CGSize(width: 0, height: -3)
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { [weak panel, weak layer] in
+            layer?.shadowOpacity = 0
+            panel?.hasShadow = true
+            panel?.invalidateShadow()
+        }
+        let a = CABasicAnimation(keyPath: "transform")
+        a.fromValue = NSValue(caTransform3D: t)
+        a.toValue = NSValue(caTransform3D: CATransform3DIdentity)
+        a.duration = BoostEditorMotion.openDuration
+        a.timingFunction = Self.easeOut
+        layer.add(a, forKey: "craBoostGrow")
+        CATransaction.commit()
     }
 
     func close() {
@@ -75,9 +115,16 @@ final class BoostEditorController {
     private func resize(width: CGFloat) {
         guard let panel else { return }
         var f = panel.frame
+        let duration = BoostEditorMotion.resizeDuration(fromWidth: f.width, to: width)
         f.origin.x = f.maxX - width
         f.size.width = width
-        panel.setFrame(f, display: true, animate: true)
+        // Arc: Code widens the panel in 0.35 s, Back narrows it in 0.13 s, both easing out.
+        guard duration > 0, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { panel.setFrame(f, display: true); return }
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = duration
+            ctx.timingFunction = Self.easeOut
+            panel.animator().setFrame(f, display: true)
+        }
     }
 }
 
@@ -168,33 +215,46 @@ private struct BoostEditorView: View {
             Divider().opacity(0.4)
             if model.showingCode { code } else { controls }
         }
+        // Arc lays the panel out at its final width and keeps it centred while the window
+        // widens or narrows, so both sides are clipped meanwhile.
+        .frame(width: model.showingCode ? 480 : 183)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(BoostStyle.panel))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .environment(\.colorScheme, .light)
     }
 
-    private var header: some View {
-        HStack(spacing: 0) {
-            if model.showingCode {
-                Button { model.setCode(false) } label: {
-                    Label("Back", systemImage: "arrow.left").font(.system(size: 13, weight: .semibold))
-                }
-                .buttonStyle(.plain).foregroundStyle(BoostStyle.ink).padding(.leading, 10)
-                Spacer()
+    /// The code panel's header is only Back and the CSS / JS switch, centred (Arc 1.172.1).
+    @ViewBuilder private var header: some View {
+        if model.showingCode {
+            ZStack {
                 Picker("", selection: $model.codeIsJS) {
                     Text("CSS").tag(false)
                     Text("JS").tag(true)
                 }
                 .pickerStyle(.segmented).labelsHidden().frame(width: 92)
-                Spacer()
-            } else {
-                Button { model.onClose() } label: {
-                    Image(systemName: "xmark.circle.fill").font(.system(size: 18)).foregroundStyle(Color(white: 0.6))
-                        .frame(width: 40, height: 40)
+                HStack {
+                    Button { model.setCode(false) } label: {
+                        Label("Back", systemImage: "arrow.left").font(.system(size: 13, weight: .semibold))
+                    }
+                    .buttonStyle(.plain).foregroundStyle(BoostStyle.ink).padding(.leading, 10)
+                    Spacer()
                 }
-                .buttonStyle(.plain).help("Done")
-                Spacer(minLength: 0)
             }
+            .frame(height: 40)
+        } else {
+            boostHeader
+        }
+    }
+
+    private var boostHeader: some View {
+        HStack(spacing: 0) {
+            Button { model.onClose() } label: {
+                Image(systemName: "xmark.circle.fill").font(.system(size: 18)).foregroundStyle(Color(white: 0.6))
+                    .frame(width: 40, height: 40)
+            }
+            .buttonStyle(.plain).help("Done")
+            Spacer(minLength: 0)
             Menu {
                 Button("Rename this Boost…") { rename() }
                 Button("Shuffle") { model.shuffle() }

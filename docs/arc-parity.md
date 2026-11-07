@@ -94,6 +94,13 @@ gains "New Profile".
 - Command bar (⌘T / File ▸ New Tab…), 7 Nov 2026, 57 fps region recordings of both apps: Arc's bar is
   there complete from one frame to the next, no fade or scale; Cra's too. Matches.
 
+- Boost editor, 7 Nov 2026, 60 fps recordings of both apps (BoostEditorMotion): Arc draws the panel at
+  85 % on its first frame and grows it to full size in 0.28 s about the middle of its right edge, no fade;
+  it closes from one frame to the next. Code widens it 183 → 480 pt in 0.35 s with the 480 pt layout
+  centred and clipped on both sides meanwhile; Back narrows it in 0.13 s. Ease-out throughout. Cra
+  matches after this sweep (it had no opening animation and resized with AppKit's default). Arc's code
+  header is only Back and a centred CSS / JS switch; Cra had the boost's name and Undo there too.
+
 Not re-measured in this sweep: earlier sessions measured the sidebar, command bar, split view,
 Peek, Little Arc, PiP, folders, space dock, Library swipe, dialogs, toasts and toolbar against Arc
 (docs/arc-reverse-engineering.md). New surfaces built from this list are matched to captures taken

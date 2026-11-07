@@ -110,3 +110,23 @@ public struct Boost: Codable, Equatable, Identifiable, Sendable {
 
     private func fmt(_ v: Double) -> String { String(format: "%.3g", v) }
 }
+
+/// How Arc 1.172.1's Boost editor moves (60 fps screen recordings of Victor's Arc, 7 Nov 2026).
+/// Opening: the panel is there at 85 % on the first frame and grows to full size in 0.28 s about
+/// the middle of its right edge, with no fade. Closing: gone from one frame to the next. Code
+/// widens it (183 → 480 pt, the left edge moving) in 0.35 s; Back narrows it in 0.13 s. All three
+/// follow an ease-out close to quadratic.
+public enum BoostEditorMotion {
+    public static let openScale = 0.85
+    public static let openDuration = 0.28
+    public static let widenDuration = 0.35
+    public static let narrowDuration = 0.13
+    /// The quadratic ease-out as a cubic Bézier's control points (x1, y1, x2, y2).
+    public static let easeOut = (0.25, 0.46, 0.45, 0.94)
+    /// The panel's anchor while it grows, in its own unit square from the bottom left.
+    public static let openAnchor = (x: 1.0, y: 0.5)
+
+    public static func resizeDuration(fromWidth old: Double, to new: Double) -> Double {
+        new == old ? 0 : new > old ? widenDuration : narrowDuration
+    }
+}

@@ -45,3 +45,17 @@ struct BoostTests {
         #expect(Boost.fonts.count == 20 && Set(Boost.fonts).count == 20)
     }
 }
+
+/// Arc's Boost editor motion, from 60 fps recordings of Arc 1.172.1.
+struct BoostEditorMotionTests {
+    @Test func opensByGrowingFromItsRightEdge() {
+        #expect(BoostEditorMotion.openScale == 0.85 && BoostEditorMotion.openDuration == 0.28)
+        #expect(BoostEditorMotion.openAnchor.x == 1 && BoostEditorMotion.openAnchor.y == 0.5)
+    }
+
+    @Test func codeWidensSlowlyAndBackNarrowsQuickly() {
+        #expect(BoostEditorMotion.resizeDuration(fromWidth: 183, to: 480) == 0.35)
+        #expect(BoostEditorMotion.resizeDuration(fromWidth: 480, to: 183) == 0.13)
+        #expect(BoostEditorMotion.resizeDuration(fromWidth: 183, to: 183) == 0)
+    }
+}
