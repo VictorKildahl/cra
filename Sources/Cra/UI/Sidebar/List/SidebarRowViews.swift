@@ -387,10 +387,10 @@ final class SidebarFaviconView: NSImageView {
         }
     }
 
-    func showGitHubMark(colors: SidebarColors, color: NSColor? = nil) {
+    func showGitHubMark(colors: SidebarColors, color: NSColor? = nil, source: LiveFolderSource = .github) {
         shown = nil
         imageScaling = .scaleProportionallyUpOrDown
-        image = GitHubMark.image
+        image = source == .gitlab ? GitLabMark.image : GitHubMark.image
         contentTintColor = color ?? colors.monoGlyph
         layer?.masksToBounds = false
     }
@@ -461,13 +461,15 @@ final class FolderGlyphView: NSView {
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    func show(expanded: Bool, peeked: Bool = false, live: Bool, tint: NSColor, fillColor: NSColor, backColor: NSColor? = nil, animated: Bool = false) {
+    func show(expanded: Bool, peeked: Bool = false, live: Bool, tint: NSColor, fillColor: NSColor, backColor: NSColor? = nil, animated: Bool = false,
+              source: LiveFolderSource = .github) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         back.fillColor = (backColor ?? fillColor).cgColor
         frontPanel.fillColor = fillColor.cgColor
         for l in [back, frontPanel] { l.strokeColor = tint.cgColor }
         mark.isHidden = !live
+        mark.image = source == .gitlab ? GitLabMark.image : GitHubMark.image
         mark.contentTintColor = tint
         dots.isHidden = !peeked || expanded || live
         dots.fillColor = tint.cgColor
@@ -907,6 +909,7 @@ struct TabRowModel: Equatable {
     var peekIcon: NSImage?
     /// Tidy Tab Titles just renamed it: the row plays Arc's rename once.
     var tidyRename: TidyTitlesService.Effect? = nil
+    var gitlabMark: Bool = false
 }
 
 final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
@@ -1222,8 +1225,8 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         guard let m = model else { return }
         if overIcon && !separating {
             favicon.show(m.homeIcon, flip: m.homeFlipIcon, colors: colors)
-        } else if m.githubMark {
-            favicon.showGitHubMark(colors: colors)
+        } else if m.githubMark || m.gitlabMark {
+            favicon.showGitHubMark(colors: colors, source: m.gitlabMark ? .gitlab : .github)
         } else {
             favicon.show(m.icon, flip: m.flipIcon, colors: colors)
         }
@@ -1525,6 +1528,7 @@ struct FolderRowModel: Equatable {
     /// Where the warning button signs in, when GitHub asked for that (else it tries again).
     var liveSignInURL: String?
     var liveHelp: String
+    var liveSource: LiveFolderSource? = nil
 }
 
 final class FolderRowView: SidebarRowView, NSTextFieldDelegate {
@@ -1549,7 +1553,8 @@ final class FolderRowView: SidebarRowView, NSTextFieldDelegate {
         // The same folder opening or closing turns its glyph; a row taking another folder doesn't.
         let toggled = model.map { $0.id == m.id && $0.expanded != m.expanded } ?? false
         model = m
-        glyph.show(expanded: m.expanded, peeked: m.peeked, live: m.live, tint: m.tint, fillColor: m.fill, backColor: m.back, animated: toggled && window != nil)
+        glyph.show(expanded: m.expanded, peeked: m.peeked, live: m.live,
+                   tint: m.tint, fillColor: m.fill, backColor: m.back, animated: toggled && window != nil, source: m.liveSource ?? .github)
         titleLabel.stringValue = m.title
         titleLabel.textColor = colors.textPrimary
         setAccessibilityLabel(m.title)

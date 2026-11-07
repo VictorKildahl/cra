@@ -16,6 +16,9 @@ final class LiveFolderManager {
     /// Repositories in each folder's last results plus the hidden ones: the folder menu's list
     /// (Arc: "This list is generated based on your currently active pull requests.").
     private(set) var repositories: [UUID: [String]] = [:]
+    /// Folders whose filters, profile or server changed while a refresh was out: they refresh again
+    /// once it's back (its answer is for the old settings and is dropped).
+    @ObservationIgnored private var pendingRefresh: Set<UUID> = []
     @ObservationIgnored private var timer: ScheduledWork?
     /// The last address each tab reported, to tell what a page came from.
     @ObservationIgnored private var lastURL: [UUID: String] = [:]
@@ -40,6 +43,10 @@ final class LiveFolderManager {
 
     func start(store: SidebarStore) {
         self.store = store
+        store.liveFolderChanged = { [weak self] id in
+            self?.repositories[id] = nil
+            self?.refresh(id, force: true)
+        }
         timer = store.clock.every(15) { [weak self] in
             self?.store?.expireLiveItems(olderThan: Self.retention)
             self?.refreshStale()
@@ -70,13 +77,22 @@ final class LiveFolderManager {
 
     /// `force` skips the gap between refreshes: the folder's filters just changed.
     func refresh(_ id: UUID, force: Bool = false) {
-        guard let store, let live = store.item(id)?.liveFolder, !refreshing.contains(id) else { return }
+        guard let store, let live = store.item(id)?.liveFolder, let context = store.liveRequestContext(id) else { return }
+        if refreshing.contains(id) {
+            if force { pendingRefresh.insert(id) }
+            return
+        }
         if !force, let last = live.lastFetch, store.clock.now.timeIntervalSince(last) < Self.minimumInterval, live.lastError == nil { return }
+        if live.source == .gitlab {
+            refreshGitLab(id, live: live, profile: store.profilePath(item: id), context: context)
+            return
+        }
         let attributes: [GitHubLiveFilter.Attributes] = [.authored, .reviewRequests, .teamReviewRequests]
             .filter { live.filter.attributes.contains($0) }
         refreshing.insert(id)
         let profile = store.profilePath(item: id)
         Task { @MainActor in
+            defer { finishRefresh(id) }
             var pages: [(GitHubLiveFilter.Attributes, GitHubLiveClient.Page)] = []
             var failure: GitHubLiveClient.Failure?
             for a in attributes {
@@ -85,19 +101,32 @@ final class LiveFolderManager {
                 case .failure(let f): failure = failure == .notSignedIn ? failure : f
                 }
             }
-            refreshing.remove(id)
-            guard let store = self.store, store.item(id)?.isLiveFolder == true else { return }
+            guard acceptsResponse(id, context: context), let store = self.store else { return }
             // A partial update would empty the folder of whatever the failed search found.
             if let failure {
-                store.applyLiveFailure(failure.asLiveFolderError, to: id)
+                store.applyLiveFailure(failure.asLiveFolderError, to: id, context: context)
                 return
             }
             let prs = Self.merge(pages)
             let hidden = store.item(id)?.liveFolder?.filter.hiddenRepositories ?? []
             repositories[id] = Array(Set(prs.map(\.repository) + hidden)).sorted { $0.lowercased() < $1.lowercased() }
             let sso = Array(Set(pages.flatMap { $0.1.ssoOrganizations })).sorted()
-            store.applyLiveResults(prs, to: id, ssoOrganizations: sso)
+            store.applyLiveResults(prs, to: id, ssoOrganizations: sso, context: context)
         }
+    }
+
+    private func acceptsResponse(_ id: UUID, context: SidebarStore.LiveRequestContext) -> Bool {
+        guard let current = store?.liveRequestContext(id) else { return false }
+        guard current == context else {
+            pendingRefresh.insert(id)
+            return false
+        }
+        return true
+    }
+
+    private func finishRefresh(_ id: UUID) {
+        refreshing.remove(id)
+        if pendingRefresh.remove(id) != nil { refresh(id, force: true) }
     }
 
     /// A page in a tab moved (BrowserManager). Creating a pull request (compare page → pull page)
@@ -108,7 +137,7 @@ final class LiveFolderManager {
         lastURL[tab] = url
         if lastURL.count > 500 { lastURL = [tab: url] }
         guard old != url, let store, !store.liveFolders.isEmpty else { return }
-        let folders = store.liveFolders
+        let folders = store.liveFolders.filter { $0.liveFolder?.source == .github }
         guard let page = URL(string: url), page.host == "github.com" else { return }
         learnEnterprise(from: url)
         if folders.contains(where: { $0.liveFolder.map(Self.needsSignIn) ?? false }) { checkSignIn() }
@@ -119,7 +148,7 @@ final class LiveFolderManager {
         guard created || reviewed else { return }
         for delay in Self.triggerDelays {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                for f in self?.store?.liveFolders ?? [] { self?.refresh(f.id, force: true) }
+                for f in self?.store?.liveFolders ?? [] where f.liveFolder?.source == .github { self?.refresh(f.id, force: true) }
             }
         }
     }
@@ -128,7 +157,7 @@ final class LiveFolderManager {
     /// 2026), a tab and the folder's own requests alike: the folder's sign-in goes there too.
     private func learnEnterprise(from url: String) {
         guard let slug = GitHubLiveClient.enterprise(inSSO: url), let store else { return }
-        for f in store.liveFolders where f.liveFolder?.enterprise != slug { store.updateLiveFolder(f.id) { $0.enterprise = slug } }
+        for f in store.liveFolders where f.liveFolder?.source == .github && f.liveFolder?.enterprise != slug { store.updateLiveFolder(f.id) { $0.enterprise = slug } }
     }
 
     /// Signing in ends on a GitHub page, and so does an SSO session that renews by itself (an
@@ -145,6 +174,59 @@ final class LiveFolderManager {
         }
         signInCheck = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: work)
+    }
+
+    private func refreshGitLab(_ id: UUID, live: LiveFolderData, profile: String?, context: SidebarStore.LiveRequestContext) {
+        guard let server = live.serverURL.flatMap(GitLabLiveClient.serverURL) else {
+            store?.applyLiveFailure(.unexpectedPage, to: id)
+            return
+        }
+        refreshing.insert(id)
+        Task { @MainActor in
+            defer { finishRefresh(id) }
+            do {
+                let user = try await getGitLab(GitLabLiveClient.userURL(server: server), profile: profile, folder: id, context: context)
+                let userID = try GitLabLiveClient.userID(in: user)
+                var results: [String: LivePullRequest] = [:]
+                for category in live.gitLabCategories {
+                    for page in 1...50 {
+                        let url = GitLabLiveClient.mergeRequestsURL(server: server, category: category, userID: userID, page: page)
+                        let body = try await getGitLab(url, profile: profile, folder: id, context: context)
+                        let requests = try GitLabLiveClient.mergeRequests(in: body, server: server, category: category)
+                        for var request in requests {
+                            if let previous = results[request.url] {
+                                request.createdByMe = request.createdByMe || previous.createdByMe
+                                request.isAwaitingMyReview = request.isAwaitingMyReview || previous.isAwaitingMyReview
+                            }
+                            results[request.url] = request
+                        }
+                        if requests.count < GitLabLiveClient.pageSize { break }
+                        if page == 50 { throw LiveFolderError.unexpectedPage }
+                    }
+                }
+                guard acceptsResponse(id, context: context), let store, let current = store.item(id)?.liveFolder else { return }
+                let requests = results.values.sorted {
+                    let a = $0.createdAt ?? .distantPast, b = $1.createdAt ?? .distantPast
+                    return a == b ? $0.url < $1.url : a > b
+                }
+                repositories[id] = Array(Set(requests.map(\.repository) + current.filter.hiddenRepositories)).sorted()
+                store.applyLiveResults(requests, to: id, ssoOrganizations: [], context: context)
+            } catch {
+                guard acceptsResponse(id, context: context) else { return }
+                store?.applyLiveFailure(error as? LiveFolderError ?? .unexpectedPage, to: id, context: context)
+            }
+        }
+    }
+
+    private func getGitLab(_ url: String, profile: String?, folder: UUID, context: SidebarStore.LiveRequestContext) async throws -> String {
+        let (status, finalURL, body): (Int, String, String) = await withCheckedContinuation { continuation in
+            CraCEFRuntime.fetchURL(url, headers: ["Accept": "application/json"], profilePath: profile) { status, finalURL, _, body in
+                continuation.resume(returning: (Int(status), finalURL, body))
+            }
+        }
+        guard acceptsResponse(folder, context: context) else { throw CancellationError() }
+        try GitLabLiveClient.validate(status: status, finalURL: finalURL, requestedURL: url)
+        return body
     }
 
     /// One search: the pulls page first (what Arc and Dia read), then GitHub's search page

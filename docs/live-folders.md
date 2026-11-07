@@ -117,3 +117,26 @@ Legend: [O] observed, [I] inference, [U] unknown.
   pull request was moved into the folder without a duplicate; no fetch for 2.5 minutes in the background,
   one within a second of the window taking focus.
 - Not verified: the review trigger (`#pullrequestreview-` anchor) with a real review.
+
+## GitLab live folders (Cra only; contributed by STRENCH0, #223)
+
+Arc has no GitLab source (only `dataSource.github`), so Cra's GitLab folder is Arc's GitHub folder with
+GitLab as the source: the same folder row, menus, dialogs, refresh schedule and hidden items.
+- Live Folders ▸ (space and sidebar menus, Arc's submenu): **GitHub** ✓ while the space has one, then
+  **GitLab (host)** ✓ per GitLab folder, then **GitLab…**. A ✓ item asks Arc's "Delete your %@ Live Folder?"
+  ("You can restore this folder at any time by right-clicking the sidebar.", Delete Folder `↩`).
+- GitLab… asks for the instance in Arc's text-input dialog; empty means `https://gitlab.com`. Self-managed
+  addresses keep their port and subpath (`GitLabLiveClient.serverURL`). One folder per instance per space,
+  named "Merge Requests" (Arc's GitHub one is "Pull Requests").
+- Requests go through `+[CraCEFRuntime fetchURL:…]` on the space's profile, like GitHub's: GitLab takes its
+  session cookie on `GET /api/v4`, so no token. `/api/v4/user` for the user id, then one paged
+  `/api/v4/merge_requests?state=opened` per filter: `scope=created_by_me` (My Merge Requests),
+  `scope=all&reviewer_id=<id>` (Review Requests), `scope=assigned_to_me` (Assigned to Me). All three on by
+  default, as Arc's GitHub filters are. A redirect to another page (a sign-in) reads as signed out.
+- The folder menu is the GitHub one: last update, the instance, Refresh, the three filters, Projects
+  (Arc's Repositories), Sign In to GitLab… when signed out, Rename…, Icon Color, Copy All Links as Markdown,
+  Delete Live Folder. The mark is GitLab's tanuki in one colour, drawn in the folder's ink like GitHub's.
+- A space moving to another profile empties its live folders and fetches again with the new profile;
+  an answer to a request made for the old profile, server or filters is dropped.
+- Left out of #223 as not Arc: category subfolders ("Separate by Category"), "Restore Hidden", a minimum
+  450 ms refresh spinner and manual refreshes without Arc's 10 s gap.

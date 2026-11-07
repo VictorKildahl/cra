@@ -266,7 +266,7 @@ final class SpaceListView: NSView, NSDraggingSource {
                     tabCount: expanded ? 0 : store.tabs(under: item.id).count,
                     liveBusy: refreshing.contains(item.id), liveError: item.liveFolder.flatMap(LiveFolderText.warning)?.help,
                     liveSignInURL: item.liveFolder.flatMap(LiveFolderText.warning)?.signInURL,
-                    liveHelp: LiveFolderText.refreshHelp(item.liveFolder)))
+                    liveHelp: LiveFolderText.refreshHelp(item.liveFolder), liveSource: item.liveFolder?.source))
                 out.append(row)
                 guard expanded else {
                     // Arc keeps the open tab of a closed folder in sight, one level in (FolderPeek).
@@ -280,7 +280,7 @@ final class SpaceListView: NSView, NSDraggingSource {
                 for c in store.children(of: item.id) {
                     add(c, depth: depth + 1, pinned: pinned, parent: item.id, index: kids.firstIndex(of: c.id) ?? 0)
                 }
-                if item.isLiveFolder, let m = Self.liveStatus(item) {
+                if item.isLiveFolder, let m = Self.liveStatus(item, hasTabs: !store.tabs(under: item.id).isEmpty) {
                     out.append(Row(key: .liveStatus(item.id), content: .liveStatus(LiveStatusModel(text: m.text, url: m.url, depth: depth + 1))))
                 }
             } else if let tab = item.tab {
@@ -294,10 +294,11 @@ final class SpaceListView: NSView, NSDraggingSource {
                 let subtitle = tidyRename != nil ? TidyTitlesService.subtitle : tab.sidebarSubtitle(developerMode: developerMode)
                 // Arc's tidy titles: a known site's page shows a shorter title unless the tab has a name.
                 let title = item.title == nil ? TidyTitleRules.arc.tidy(item.displayTitle, url: tab.url) : item.displayTitle
+                let liveSource = tab.liveItemURL != nil && tab.customIconKey == nil ? store.liveFolder(containing: parent)?.liveFolder?.source : nil
                 row.content = .tab(TabRowModel(
                     id: item.id, depth: depth, pinned: pinned, title: title, customTitle: item.title != nil,
                     renameText: item.title ?? title, subtitle: subtitle,
-                    icon: img, flipIcon: flip, githubMark: tab.liveItemURL != nil && tab.customIconKey == nil,
+                    icon: img, flipIcon: flip, githubMark: liveSource == .github,
                     editing: renaming == item.id, selected: selected,
                     highlighted: picks.isEmpty ? selected && !placeholder : picks.contains(item.id),
                     capturing: capturing.contains(item.id), audible: audible.contains(item.id), muted: tab.muted, unread: item.isUnread,
@@ -305,7 +306,7 @@ final class SpaceListView: NSView, NSDraggingSource {
                     focusRing: focusID == item.id, developerMode: developerMode, peeked: peeked,
                     homeIcon: homeImg, homeFlipIcon: homeFlip,
                     peekIcon: ui.peekBadge?.tabID == item.id ? icon(ui.peekBadge?.iconKey).0 : nil,
-                    tidyRename: tidyRename))
+                    tidyRename: tidyRename, gitlabMark: liveSource == .gitlab))
                 out.append(row)
             } else if item.isSplit {
                 let children = store.children(of: item.id).filter(\.isTab)
@@ -358,8 +359,17 @@ final class SpaceListView: NSView, NSDraggingSource {
 
     /// A line inside the open live folder when there are no pull requests to show, or GitHub
     /// can't be read (Arc: "Sign back in to GitHub.", "Login with SSO to unlock this folder").
-    private static func liveStatus(_ item: SidebarItem) -> (text: String, url: String?)? {
-        guard let live = item.liveFolder, item.children.isEmpty else { return nil }
+    private static func liveStatus(_ item: SidebarItem, hasTabs: Bool) -> (text: String, url: String?)? {
+        guard let live = item.liveFolder, !hasTabs else { return nil }
+        // GitLab: the GitHub folder's lines, in GitLab's words.
+        if live.source == .gitlab {
+            switch live.lastError {
+            case .notSignedIn?: return ("Sign back in to GitLab.", live.signInURL)
+            case .some: return ("We’re having trouble connecting to GitLab; click here to see your Merge Requests.",
+                                live.serverURL.map { "\($0)/dashboard/merge_requests" })
+            case nil: return live.lastFetch == nil ? nil : ("Merge requests from you and your team will show up here automatically", nil)
+            }
+        }
         switch live.lastError {
         case .notSignedIn?: return ("Sign back in to GitHub.", live.signInURL)
         case .some: return ("We’re having trouble connecting to GitHub; click here to see your Pull Requests.", "https://github.com/pulls")
@@ -1081,9 +1091,9 @@ final class SpaceListView: NSView, NSDraggingSource {
 
         // A live folder fills itself: nothing goes into it from outside, and its tabs make no new folders.
         switch target {
-        case .into(let f)? where store.item(f)?.isLiveFolder == true: target = nil
-        case .insert(let parent, _)? where store.item(parent)?.isLiveFolder == true && store.item(id)?.parentID != parent: target = nil
-        case .split(let tab, _)? where store.item(store.item(tab)?.parentID ?? tab)?.isLiveFolder == true: target = nil
+        case .into(let f)? where store.liveFolder(containing: f) != nil: target = nil
+        case .insert(let parent, _)? where store.liveFolder(containing: parent) != nil && store.item(id)?.parentID != parent: target = nil
+        case .split(let tab, _)? where store.liveFolder(containing: tab) != nil: target = nil
         default: break
         }
 
