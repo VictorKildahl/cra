@@ -21,6 +21,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var spaceEditor: NSWindow?
     private var importWindow: ImportWindowController?
     private var scrollMonitor: Any?
+    private var pageTopDragMonitor: Any?
+    private var replayingPageClick = false
     private var childClickMonitor: Any?
     private var middleClickMonitor: Any?
     private enum SwipeAxis { case undecided, horizontal, vertical }
@@ -198,6 +200,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
         installSwipeMonitor()
         installChildClickMonitor()
+        installPageTopDragMonitor()
         installFloatingSidebar()
         observeStore()
         refresh()
@@ -2083,6 +2086,61 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
     }
 
+    /// Arc's "Allow window dragging from the top of webpages" (PageTopDrag): with no bar above the
+    /// page, a plain click in its top 56 pt waits. Moved past the slop, the window moves with the
+    /// pointer; let go first, the page gets the click as it was, from the press on.
+    private func installPageTopDragMonitor() {
+        pageTopDragMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            guard let self, !self.replayingPageClick, let window = self.window, let target = event.window,
+                  !window.styleMask.contains(.fullScreen), let depth = self.depthIntoPage(event, in: target, of: window) else { return event }
+            let modifiers = !event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty
+            guard PageTopDrag.holds(enabled: self.store.settings.pageTopWindowDrag,
+                                    barAbovePage: self.store.settings.showToolbar || self.shell.panesShowBars,
+                                    depthIntoPage: depth, clickCount: event.clickCount, modifiers: modifiers) else { return event }
+            self.trackPageTopPress(event, page: target, owner: window)
+            return nil
+        }
+    }
+
+    /// How far below the top of the page under it a press is, or nil when it isn't on a page:
+    /// a Chrome-style page's own child window, or a page view inside this window.
+    private func depthIntoPage(_ event: NSEvent, in target: NSWindow, of window: NSWindow) -> Double? {
+        if target.parent === window {
+            return CraCEFRuntime.isPageWindow(target) ? target.frame.height - event.locationInWindow.y : nil
+        }
+        guard target === window, let content = window.contentView,
+              var view = content.hitTest(content.convert(event.locationInWindow, from: nil)) else { return nil }
+        // Chromium's page view, reparented into the pane card (Chrome-style hosting): its
+        // WebContentsViewCocoa is the page's frame.
+        while NSStringFromClass(type(of: view)) != "WebContentsViewCocoa" {
+            guard let up = view.superview else { return nil }
+            view = up
+        }
+        return view.convert(view.bounds, to: nil).maxY - event.locationInWindow.y
+    }
+
+    private func trackPageTopPress(_ down: NSEvent, page: NSWindow, owner: NSWindow) {
+        let start = NSEvent.mouseLocation
+        var last = start, dragging = false
+        var up: NSEvent?
+        page.trackEvents(matching: [.leftMouseDragged, .leftMouseUp], timeout: NSEvent.foreverDuration, mode: .eventTracking) { event, stop in
+            guard let event else { stop.pointee = true; return }
+            if event.type == .leftMouseUp { up = event; stop.pointee = true; return }
+            let now = NSEvent.mouseLocation
+            if !dragging, PageTopDrag.isDrag(dx: now.x - start.x, dy: now.y - start.y) { dragging = true }
+            if dragging { owner.setFrameOrigin(NSPoint(x: owner.frame.minX + now.x - last.x, y: owner.frame.minY + now.y - last.y)) }
+            last = now
+        }
+        CraLog.note("page-top press: \(dragging ? "moved the window" : "a click for the page")")
+        guard !dragging else { return }
+        // A click after all: the page gets the press and the release, in its own window.
+        replayingPageClick = true
+        if !page.isKeyWindow, page.canBecomeKey { page.makeKey() }
+        page.sendEvent(down)
+        if let up { page.sendEvent(up) }
+        replayingPageClick = false
+    }
+
     /// What the row's hover button does: close every picked tab when this is one of them;
     /// the open pinned tab unloads and stays pinned, another pinned tab is archived.
     private func middleClickClose(_ id: UUID) {
@@ -3465,7 +3523,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             other.takePage(rt)
         }
         browsers.closeAll()
-        for monitor in [scrollMonitor, childClickMonitor, middleClickMonitor].compactMap({ $0 }) { NSEvent.removeMonitor(monitor) }
+        for monitor in [scrollMonitor, childClickMonitor, middleClickMonitor, pageTopDragMonitor].compactMap({ $0 }) { NSEvent.removeMonitor(monitor) }
+        pageTopDragMonitor = nil
         scrollMonitor = nil
         childClickMonitor = nil
         middleClickMonitor = nil

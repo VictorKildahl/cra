@@ -35,6 +35,8 @@ struct AdvancedPane: View {
             SettingsFormRow(label: "Websites:") {
                 // Arc: Settings ▸ Advanced "Allow websites to get your theme data" (--arc-palette-* variables).
                 SettingsCheckbox(title: "Allow websites to get your theme data", isOn: $store.settings.shareThemeWithWebsites)
+                // Arc: "Allow window dragging from the top of webpages" (with the toolbar hidden).
+                SettingsCheckbox(title: "Allow window dragging from the top of webpages", isOn: $store.settings.pageTopWindowDrag)
             }
             SettingsFormRow(label: "When quitting Cra:") {
                 SettingsCheckbox(title: "Warn before quitting", isOn: $store.settings.warnBeforeQuitting)

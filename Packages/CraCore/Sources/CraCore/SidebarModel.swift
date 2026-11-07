@@ -527,6 +527,8 @@ public struct AppSettings: Codable, Equatable {
     public var blockCookieBanners: Bool = false
     /// Arc's View ▸ Developer ▸ "Allow JavaScript from Apple Events": AppleScript's `execute`, off by default.
     public var allowAppleEventsJavaScript: Bool = false
+    /// Arc's Settings ▸ Advanced "Allow window dragging from the top of webpages" (PageTopDrag), on by default.
+    public var pageTopWindowDrag: Bool = true
     /// Arc's searchSuggestEnabled: the command bar asks the search engine for suggestions
     /// as you type and fills its rows with them.
     public var searchSuggestions: Bool = true
@@ -739,6 +741,7 @@ extension AppSettings {
         shareThemeWithWebsites = try c.decodeIfPresent(Bool.self, forKey: .shareThemeWithWebsites) ?? true
         blockCookieBanners = try c.decodeIfPresent(Bool.self, forKey: .blockCookieBanners) ?? false
         allowAppleEventsJavaScript = try c.decodeIfPresent(Bool.self, forKey: .allowAppleEventsJavaScript) ?? false
+        pageTopWindowDrag = try c.decodeIfPresent(Bool.self, forKey: .pageTopWindowDrag) ?? true
         searchSuggestions = try c.decodeIfPresent(Bool.self, forKey: .searchSuggestions) ?? true
         showSpaceHeaderOnSingleSpace = try c.decodeIfPresent(Bool.self, forKey: .showSpaceHeaderOnSingleSpace) ?? true
         sharedFavorites = try c.decodeIfPresent(Bool.self, forKey: .sharedFavorites) ?? false

@@ -30,7 +30,7 @@ or Arc-only service), per CONTRIBUTING.md.
 | Find and Replace, Use Selection to Find, Jump to Selection | Edit ▸ Find | partial | Use Selection to Find and Jump to Selection (⌘J) done; Find and Replace is for Arc's Notes/Easels text, which Cra doesn't have. |
 | Sound effects | Settings ▸ Advanced "Play Arc sound effects" | done | Settings ▸ Advanced ▸ Play Cra sound effects gates the capture shutter. |
 | Theme data for websites | Settings ▸ Advanced "Allow websites to get your theme data" | done | `--arc-palette-*` and `--arc-background-*` as #RRGGBBAA, from the space's theme (ArcThemeData; fitted to Arc's stored palette, checked live). |
-| Window dragging from the top of webpages | Settings ▸ Advanced | measured | With the toolbar hidden, Arc drags the window from the top 56 pt of the page (66 pt below the window's top); 58 pt in, the page gets the drag. Cra's strip reaches 4 pt into the page. Needs clicks in that band held until the pointer moves, across Chromium's page windows. |
+| Window dragging from the top of webpages | Settings ▸ Advanced | done | With the toolbar hidden, a drag from the top 56 pt of a page moves the window; a click there still reaches the page (PageTopDrag). Settings ▸ Advanced, on by default as in Arc. |
 | Restore windows from previous session | Settings ▸ Advanced | done | Settings ▸ Advanced; off keeps the window in use last. |
 | Block Cookie Banners | Settings ▸ General | done | Settings ▸ Privacy; hides the common consent managers' banners (CookieBanners), off by default as in Arc. |
 | Archive Little Arcs after | Settings ▸ Links (6 hours default) | done | Settings ▸ Tabs ▸ Links; a Little Window left alone that long closes into the archive. |
@@ -86,7 +86,7 @@ gains "New Profile".
 | General | Previews Settings… (Block Cookie Banners done, under Privacy) |
 | Profiles | "New documents" app (Arc's Notes/Easels); Privacy, Passwords, Credit Cards and Notifications done |
 | Links | "Open Little Arc when clicking on links with ⌥⌘ held"; Archive Little Windows after done |
-| Advanced | window dragging from the top of webpages (measured), Shared Quotes (arc.net), Enable Boosts (sound effects, restore windows and theme data done) |
+| Advanced | Shared Quotes (arc.net), Enable Boosts (the rest done) |
 | Icon | Cra has its own icon picker |
 
 ## 5. Animations and styling
@@ -126,6 +126,7 @@ in this sweep (Essential Shortcuts window, Library pages).
   measured live in Arc (names, #RRGGBBAA format, no trace in the page's markup) and fitted to the
   semantic palette Arc stores per space.
 - Edit ▸ Find ▸ Use Selection to Find and Jump to Selection (⌘J).
+- Window dragging from the top of webpages (Victor's choice, 7 Nov: on, as in Arc).
 - AppleScript, Arc's dictionary (Victor's choice, 7 Nov: like Arc, JavaScript off by default).
 - Settings ▸ Privacy ▸ Block cookie banners (Arc's "Block Cookie Banners", off by default).
 - Easels, first version: File ▸ New Easel (⌃⇧E) opens a canvas in the tab (EaselBrowser, a page
@@ -150,5 +151,4 @@ in this sweep (Essential Shortcuts window, Library pages).
 - Boosts: the offline Arc has no network and a local server is blocked in this session, so its Boost
   editor couldn't be put on screen to copy. Needs a site in Arc (Victor's OK to run the real Arc, or
   a localhost server).
-- Window dragging from the top of pages (measured, above), Previews and
-  Join Meeting: not started.
+- Previews and Join Meeting: not started (they need a live Google session in Arc to measure).
