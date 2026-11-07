@@ -32,6 +32,7 @@ final class EaselCanvasView: NSView {
         addSubview(toolbar)
         sheet.onChange = { [weak self] doc in self?.changed(doc) }
         sheet.onToolDone = { [weak self] in self?.toolbar.tool = .pointer; self?.sheet.tool = .pointer }
+        toolbar.onDuplicate = { [weak self] in self?.sheet.duplicateSelected() }
         toolbar.onPick = { [weak self] tool in
             guard let self else { return }
             if tool == .image { self.sheet.addPictureFromFile(); return }
@@ -61,7 +62,7 @@ final class EaselCanvasView: NSView {
         scroll.frame = bounds
         sheet.frame = NSRect(x: 0, y: 0, width: max(bounds.width - (scroll.verticalScroller?.frame.width ?? 0) * 0, 300),
                              height: Easel.canvasHeight)
-        let n = CGFloat(Easel.Tool.allCases.count)
+        let n = CGFloat(Easel.Tool.allCases.count + 1)  // the tools, then Duplicate
         let w = 4 + n * 38 - 2 + 4
         toolbar.frame = NSRect(x: 16, y: bounds.height - 16 - 44, width: w, height: 44)
     }
@@ -74,9 +75,11 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
     var tool: Easel.Tool = .pointer { didSet { window?.invalidateCursorRects(for: self) } }
     var onChange: (Easel) -> Void = { _ in }
     var onToolDone: () -> Void = {}
-    private let title = NSTextField()
+    private let title = EaselTextField()
     private var texts: [UUID: NSTextField] = [:]
-    private var selected: UUID? { didSet { needsDisplay = true; placeSizePill() } }
+    private var selected: UUID? { didSet { if selected != nil { titlePicked = false }; needsDisplay = true; placeSizePill() } }
+    /// The title box is being typed in: the pill acts on it.
+    private var titlePicked = false { didSet { placeSizePill() } }
     /// Arc's black pill beside a picked text box: +, Aa, − (text size).
     private let sizePill = EaselSizePill()
     private var dragStart: Easel.Point?
@@ -96,13 +99,15 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
         title.drawsBackground = false
         title.focusRingType = .none
         title.alignment = .center
-        title.font = .systemFont(ofSize: 34, weight: .bold)
+        title.font = Self.font(document.titleStyle, size: document.titleSize ?? 34, title: true)
         title.textColor = .white
         title.placeholderString = "Untitled Easel"
         title.delegate = self
+        title.onFocus = { [weak self] in self?.selected = nil; self?.titlePicked = true }
         addSubview(title)
         sizePill.isHidden = true
         sizePill.onStep = { [weak self] step in self?.resizeSelectedText(by: step) }
+        sizePill.onStyle = { [weak self] in self?.cycleSelectedStyle() }
         addSubview(sizePill)
         for item in document.items { if case .text = item.kind { addTextField(for: item) } }
         registerForDraggedTypes([.fileURL, .png, .tiff])
@@ -296,6 +301,11 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
     /// The pill sits 20 pt left of the picked text box, level with its top (Arc: buttons 24 pt,
     /// 44 pt left of the title box).
     private func placeSizePill() {
+        if titlePicked {
+            sizePill.isHidden = false
+            sizePill.frame = NSRect(x: title.frame.minX - 44, y: title.frame.minY, width: 24, height: 72)
+            return
+        }
         guard let id = selected, let item = document.items.first(where: { $0.id == id }), case .text = item.kind else {
             sizePill.isHidden = true
             return
@@ -304,7 +314,52 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
         sizePill.frame = NSRect(x: item.frame.x - 44, y: item.frame.y, width: 24, height: 72)
     }
 
+    /// Arc's four looks for the Aa button (Easel.FontStyle) in macOS's own designs.
+    static func font(_ style: Easel.FontStyle?, size: Double, title: Bool) -> NSFont {
+        let base = NSFont.systemFont(ofSize: size, weight: title ? .bold : .medium)
+        switch style ?? .standard {
+        case .standard: return base
+        case .serif:
+            let regular = NSFont.systemFont(ofSize: size, weight: .regular)
+            return regular.fontDescriptor.withDesign(.serif).flatMap { NSFont(descriptor: $0, size: size) } ?? regular
+        case .wide: return NSFont.systemFont(ofSize: size, weight: .heavy, width: .expanded)
+        case .mono: return NSFont.monospacedSystemFont(ofSize: size, weight: .bold)
+        }
+    }
+
+    private func cycleSelectedStyle() {
+        if titlePicked {
+            commit { $0.titleStyle = ($0.titleStyle ?? .standard).next }
+            title.font = Self.font(document.titleStyle, size: document.titleSize ?? 34, title: true)
+            return
+        }
+        guard let id = selected, let i = document.items.firstIndex(where: { $0.id == id }), case .text(_, let size) = document.items[i].kind else { return }
+        commit { $0.items[i].style = ($0.items[i].style ?? .standard).next }
+        texts[id]?.font = Self.font(document.items[i].style, size: size, title: false)
+    }
+
+    /// Arc's Duplicate button: a copy of the picked item, 20 pt down and right, picked.
+    func duplicateSelected() {
+        guard let id = selected, let item = document.items.first(where: { $0.id == id }) else { return }
+        var copy = item.moved(by: .init(20, 20))
+        copy.id = UUID()
+        if case .image(let file) = item.kind {
+            let pics = EaselFiles.pictures(document.id), name = UUID().uuidString + ".png"
+            try? FileManager.default.copyItem(at: pics.appendingPathComponent(file), to: pics.appendingPathComponent(name))
+            copy.kind = .image(file: name)
+        }
+        commit { $0.items.append(copy) }
+        if case .text = copy.kind { addTextField(for: copy) }
+        selected = copy.id
+    }
+
     private func resizeSelectedText(by step: Double) {
+        if titlePicked {
+            let new = min(96, max(14, (document.titleSize ?? 34) + step))
+            commit { $0.titleSize = new }
+            title.font = Self.font(document.titleStyle, size: new, title: true)
+            return
+        }
         guard let id = selected, let i = document.items.firstIndex(where: { $0.id == id }),
               case .text(let string, let size) = document.items[i].kind else { return }
         let new = min(96, max(10, size + step))
@@ -313,18 +368,20 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
             $0.items[i].kind = .text(string, size: new)
             $0.items[i].frame.height = height
         }
-        texts[id]?.font = .systemFont(ofSize: new, weight: .medium)
+        texts[id]?.font = Self.font(document.items[i].style, size: new, title: false)
         texts[id]?.frame = rect(document.items[i].frame)
         placeSizePill()
     }
 
     private func addTextField(for item: Easel.Item) {
         guard case .text(let string, let size) = item.kind else { return }
-        let f = NSTextField(string: string)
+        let f = EaselTextField(string: string)
+        let id = item.id
+        f.onFocus = { [weak self] in self?.selected = id }
         f.isBordered = false
         f.drawsBackground = false
         f.focusRingType = .none
-        f.font = .systemFont(ofSize: size, weight: .medium)
+        f.font = Self.font(item.style, size: size, title: false)
         f.textColor = .white
         f.placeholderString = "Type something"
         f.delegate = self
@@ -336,7 +393,9 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
 
     /// A text box being typed in is the picked one: its size pill shows.
     func controlTextDidBeginEditing(_ obj: Notification) {
-        guard let f = obj.object as? NSTextField, f !== title, let id = f.identifier.flatMap({ UUID(uuidString: $0.rawValue) }) else { return }
+        guard let f = obj.object as? NSTextField else { return }
+        if f === title { selected = nil; titlePicked = true; return }
+        guard let id = f.identifier.flatMap({ UUID(uuidString: $0.rawValue) }) else { return }
         selected = id
     }
 
@@ -361,10 +420,22 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
     }
 }
 
+/// A text field that says when it takes the keyboard: clicking a text box picks it, and its
+/// pill comes up before anything is typed.
+final class EaselTextField: NSTextField {
+    var onFocus: () -> Void = {}
+    override func becomeFirstResponder() -> Bool {
+        let took = super.becomeFirstResponder()
+        if took { onFocus() }
+        return took
+    }
+}
+
 /// Arc's text-size pill (AX "add", "FontIcon", "remove", 24 pt buttons on black).
 @MainActor
 final class EaselSizePill: NSView {
     var onStep: (Double) -> Void = { _ in }
+    var onStyle: () -> Void = {}
     override var isFlipped: Bool { true }
     override var mouseDownCanMoveWindow: Bool { false }
 
@@ -383,6 +454,7 @@ final class EaselSizePill: NSView {
         let y = convert(event.locationInWindow, from: nil).y
         switch Int(y / 24) {
         case 0: onStep(4)
+        case 1: onStyle()
         case 2: onStep(-4)
         default: break
         }
@@ -393,6 +465,8 @@ final class EaselSizePill: NSView {
 @MainActor
 final class EaselToolbar: NSView {
     var onPick: (Easel.Tool) -> Void = { _ in }
+    /// Arc's eighth button, Duplicate (AX "Duplicate"), after the tools.
+    var onDuplicate: () -> Void = {}
     var tool: Easel.Tool = .pointer { didSet { needsDisplay = true } }
 
     private static let symbols: [Easel.Tool: String] = [
@@ -427,11 +501,17 @@ final class EaselToolbar: NSView {
                 .withSymbolConfiguration(config) else { continue }
             img.draw(in: NSRect(x: r.midX - img.size.width / 2, y: r.midY - img.size.height / 2, width: img.size.width, height: img.size.height))
         }
+        let dr = buttonRect(Easel.Tool.allCases.count)
+        let config = NSImage.SymbolConfiguration(pointSize: 17, weight: .semibold).applying(.init(paletteColors: [Self.glyph]))
+        if let img = NSImage(systemSymbolName: "square.on.square", accessibilityDescription: "Duplicate")?.withSymbolConfiguration(config) {
+            img.draw(in: NSRect(x: dr.midX - img.size.width / 2, y: dr.midY - img.size.height / 2, width: img.size.width, height: img.size.height))
+        }
     }
 
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
         for (i, t) in Easel.Tool.allCases.enumerated() where buttonRect(i).contains(p) { onPick(t) }
+        if buttonRect(Easel.Tool.allCases.count).contains(p) { onDuplicate() }
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }

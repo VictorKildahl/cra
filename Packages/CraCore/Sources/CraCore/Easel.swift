@@ -12,6 +12,19 @@ public struct Easel: Codable, Equatable, Sendable {
     public var id: UUID
     public var title: String
     public var items: [Item]
+    /// The title box's Aa style and size (nil: Arc's default bold, 34 pt).
+    public var titleStyle: FontStyle?
+    public var titleSize: Double?
+
+    /// Arc's Aa on the text pill cycles four looks: its bold sans, EB Garamond, Söhne Breit (wide)
+    /// and a bold mono. Cra draws them with macOS's own designs (Söhne is a paid font).
+    public enum FontStyle: String, Codable, CaseIterable, Sendable {
+        case standard, serif, wide, mono
+        public var next: FontStyle {
+            let all = Self.allCases
+            return all[(all.firstIndex(of: self)! + 1) % all.count]
+        }
+    }
 
     public init(id: UUID = UUID(), title: String = "Untitled Easel", items: [Item] = []) {
         (self.id, self.title, self.items) = (id, title, items)
@@ -59,6 +72,8 @@ public struct Easel: Codable, Equatable, Sendable {
         public var id: UUID
         public var kind: Kind
         public var frame: Rect
+        /// A text's Aa style (nil: standard).
+        public var style: FontStyle?
         /// #RRGGBB; nil draws in the palette's foreground.
         public var color: String?
 

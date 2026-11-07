@@ -42,6 +42,21 @@ struct EaselTests {
         #expect(try JSONDecoder().decode(Easel.self, from: JSONEncoder().encode(e)) == e)
     }
 
+    /// Arc's Aa on the text pill (Arc 1.172.1): bold sans → serif → wide → mono → back.
+    @Test func aaCyclesArcsFourStyles() {
+        #expect(Easel.FontStyle.allCases.count == 4)
+        var f = Easel.FontStyle.standard
+        var seen: [Easel.FontStyle] = []
+        for _ in 0..<4 { seen.append(f); f = f.next }
+        #expect(seen == [.standard, .serif, .wide, .mono] && f == .standard)
+    }
+
+    @Test func easelsSavedBeforeStylesLoadAsStandard() throws {
+        let old = #"{"id":"6B1C6C2E-3E9A-4D2B-9D7E-1A2B3C4D5E6F","title":"Old","items":[{"id":"7B1C6C2E-3E9A-4D2B-9D7E-1A2B3C4D5E6F","kind":{"text":{"_0":"Hi","size":18}},"frame":{"x":0,"y":0,"width":10,"height":10}}]}"#
+        let e = try JSONDecoder().decode(Easel.self, from: Data(old.utf8))
+        #expect(e.titleStyle == nil && e.titleSize == nil && e.items[0].style == nil)
+    }
+
     @Test func itsTabHoldsItsAddress() {
         let e = Easel()
         #expect(Easel.id(fromURL: e.url) == e.id)
