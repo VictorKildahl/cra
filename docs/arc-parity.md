@@ -91,6 +91,9 @@ gains "New Profile".
 
 ## 5. Animations and styling
 
+- Command bar (⌘T / File ▸ New Tab…), 7 Nov 2026, 57 fps region recordings of both apps: Arc's bar is
+  there complete from one frame to the next, no fade or scale; Cra's too. Matches.
+
 Not re-measured in this sweep: earlier sessions measured the sidebar, command bar, split view,
 Peek, Little Arc, PiP, folders, space dock, Library swipe, dialogs, toasts and toolbar against Arc
 (docs/arc-reverse-engineering.md). New surfaces built from this list are matched to captures taken
