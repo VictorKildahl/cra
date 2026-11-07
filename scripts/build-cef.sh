@@ -68,9 +68,31 @@ automate() {
 
 PATCHES="$PWD/scripts/cef-patches"
 cd "$CEF_BUILD_DIR"
-# 1. Check out Chromium + CEF and apply CEF's own patches.
+# 0. A CEF update on the same branch (Chromium 156.0.8078.80 → .88): automate-git with
+#    --no-chromium-history never moves an existing checkout, and gclient sync skips
+#    src as an unmanaged solution, so move it here. Reverting src and the repos CEF
+#    patches drops CEF's and Cra's patches; steps 2 and 3 put them back.
+CHROMIUM_VERSION="${CEF_VERSION##*chromium-}"
+if [ -f chromium/src/chrome/VERSION ] &&
+   [ "$(cut -d= -f2 chromium/src/chrome/VERSION | paste -sd. -)" != "$CHROMIUM_VERSION" ]; then
+  echo "Moving the Chromium checkout to $CHROMIUM_VERSION"
+  for repo in . $(sed -nE "s/.*'path': '([^']+)'.*/\1/p" chromium/src/cef/patch/patch.cfg | sort -u); do
+    [ -d "chromium/src/$repo" ] && git -C "chromium/src/$repo" checkout -- .
+  done
+  sed -i '' -E "s#(src\.git@)[0-9.]+#\1$CHROMIUM_VERSION#" chromium/.gclient
+  git -C chromium/src fetch --depth 1 origin "refs/tags/$CHROMIUM_VERSION:refs/tags/$CHROMIUM_VERSION"
+  git -C chromium/src checkout "$CHROMIUM_VERSION"
+  (cd chromium && gclient sync --nohooks --no-history && gclient runhooks)
+fi
+# 1. Check out Chromium + CEF.
 automate --no-build --no-distrib
-# 2. Cra's Chromium fixes on top (skipped when already applied).
+# 2. CEF's hook: applies CEF's own patches (patcher.py) and writes the GN projects
+#    from GN_DEFINES. It has to run before Cra's patches, not after them:
+#    gcm-enabled.patch reverses CEF's components_gcm_disable.patch, and every
+#    patcher run re-applies that one. automate --force-build runs this hook right
+#    before ninja, which is why the build below calls autoninja itself.
+(cd chromium/src/cef && python3 tools/gclient_hook.py)
+# 3. Cra's Chromium fixes on top (skipped when already applied).
 for p in "$PATCHES"/*.patch; do
   if git -C chromium/src apply --check "$p" 2>/dev/null; then
     git -C chromium/src apply "$p" && echo "Applied $(basename "$p")"
@@ -78,9 +100,12 @@ for p in "$PATCHES"/*.patch; do
     git -C chromium/src apply --check --reverse "$p" || { echo "$(basename "$p") does not apply" >&2; exit 1; }
   fi
 done
-# 3. Build without touching the checkout again.
-automate --no-update --force-build --no-distrib
-# 4. Package. automate-git does not pass --no-symbols on for branches after 7151,
+# 4. Build. make_distrib takes the framework from cefclient.app.
+(cd chromium/src && autoninja -C out/Release_GN_arm64 cefclient)
+LC_ALL=C grep -c -a GCM.RegistrationCacheStatus \
+  "chromium/src/out/Release_GN_arm64/cefclient.app/Contents/Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework" >/dev/null \
+  || { echo "GCM is stubbed out (components_gcm_disable.patch won over gcm-enabled.patch)" >&2; exit 1; }
+# 5. Package. automate-git does not pass --no-symbols on for branches after 7151,
 #    and without dSYMs (enable_dsyms=false) make_distrib then fails.
 rm -rf chromium/src/cef/binary_distrib
 (cd chromium/src/cef/tools && python3 make_distrib.py --output-dir=../binary_distrib --allow-partial \

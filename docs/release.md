@@ -246,8 +246,9 @@ macOS runners are too small (3 cores, 14 GB disk, 6 hour jobs) and larger ones a
 
     scripts/update-cef.sh <cef_version>   # build, publish, pin, rebuild Cra
 
-A same-major update reuses the checkout (1–2 hours); a new Chromium major compiles
-everything again. Then test `build/Cra.app`, commit `scripts/fetch-cef.sh`, close the
+A same-major update reuses the checkout: `build-cef.sh` moves it to the new Chromium tag
+itself, and ninja recompiles nearly everything (about 2½ hours on the M2 Max). A new Chromium
+major needs a fresh checkout as well. Then test `build/Cra.app`, commit `scripts/fetch-cef.sh`, close the
 issue and tag a release.
 
 ## Later
