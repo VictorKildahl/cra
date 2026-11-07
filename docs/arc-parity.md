@@ -73,8 +73,8 @@ gains "New Profile".
 
 | Where | Arc items Cra lacks |
 |---|---|
-| Today tab | Share ▸, Change Icon… (Open in Split View and Archive Tabs Below done) |
-| Pinned tab | Share ▸, Change Icon…, Edit Pinned Page ▸ (Cra lists them flat on purpose, PR #55), Remove Pin (Add Split View done) |
+| Today tab | all done (Share ▸, Change Icon…, Open in Split View, Archive Tabs Below) |
+| Pinned tab | Edit Pinned Page ▸ (Cra lists them flat on purpose, PR #55), Remove Pin (Share ▸, Change Icon… and Add Split View done) |
 | Space header / empty sidebar | Share Space… (*skip*), New Folder, Manage Spaces…, Delete Space (check order) |
 | Toolbar address | Share ▸ (in the Site Control Center), Disable Shared Quotes (arc.net); the rest done |
 | Library button | Show media ▸ Documents, Desktop, Screenshots, Arc Captures, Downloads |

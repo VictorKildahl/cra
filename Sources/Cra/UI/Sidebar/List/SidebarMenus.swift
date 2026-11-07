@@ -75,6 +75,25 @@ enum SidebarMenus {
             add(menu, action: "favoriteTab", "Add to Favorites") { store.addToFavorites(id) }
         }
         menu.addItem(.separator())
+        // Arc's Today and pinned tab menus: Change Icon…, as Favorites have it.
+        let favicons = list.favicons
+        add(menu, "Change Icon…") {
+            let panel = NSOpenPanel()
+            panel.allowedContentTypes = [.image]
+            panel.prompt = "Use Icon"
+            panel.message = "Choose an image for \(item.displayTitle)."
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            guard let key = favicons.importCustomIcon(from: url) else { NSSound.beep(); return }
+            let old = store.item(id)?.tab?.customIconKey
+            store.setCustomIcon(key, for: id)
+            if let old { favicons.removeCustomIcon(old) }
+        }
+        if let key = tab.customIconKey {
+            add(menu, "Use Site Icon") {
+                store.setCustomIcon(nil, for: id)
+                favicons.removeCustomIcon(key)
+            }
+        }
         add(menu, action: "renameTab", "Rename…") { ui.renamingID = id }
         if item.title != nil { add(menu, "Use Page Title") { store.rename(id, to: nil) } }
         if m.pinned, tab.liveItemURL == nil { pinnedURLItems(menu, id, navigatedAway: m.navigatedAway, store: store, actions: actions) }
@@ -86,6 +105,9 @@ enum SidebarMenus {
         }
         add(menu, action: "duplicateTab", "Duplicate") { _ = store.duplicateTab(id) }
         add(menu, action: "copyURL", "Copy Link") { copy(CleanURL.withoutTrackers(tab.url)) }
+        if let url = URL(string: CleanURL.withoutTrackers(tab.url)), url.scheme?.hasPrefix("http") == true {
+            SharePicker.addMenu(to: menu, url: url)
+        }
         add(menu, action: "muteTab", tab.muted ? "Unmute" : "Mute") {
             store.setMuted(id, !tab.muted)
             actions.performAction("muteTab:\(id)")
