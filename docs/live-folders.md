@@ -78,6 +78,13 @@ Legend: [O] observed, [I] inference, [U] unknown.
   "Delete your %@ Live Folder?". Not in Arc's menu bar (only a debug menu "Automatic Live Folders").
 
 ## What Cra does
+
+- Arc follow-up (7 Nov 2026): refresh, category filters and Repositories are in the **Pull Requests**
+  submenu; the author filter is named **Created by Me**. Excluding or including a repository refreshes
+  the folder and removes or restores its PRs without the closed-request grace period. A live tab
+  navigated away from its PR stays in the folder; returning to an excluded PR removes it on the next
+  refresh. A PR closed on GitHub was observed with a **Closed** subtitle and remained for at least a
+  couple of minutes; its exact retention is still unknown. Cra keeps its existing closed-request delay.
 - Fetch: `+[CraCEFRuntime fetchURL:headers:profilePath:completion:]`, a browser-side `CefURLRequest` on the
   space's profile, so it carries that profile's cookies. GitHubLiveClient runs one search per enabled
   filter: `/pulls?q=…` with the JSON headers first, `/search?type=pullrequests` when that gives nothing it
@@ -133,9 +140,12 @@ GitLab as the source: the same folder row, menus, dialogs, refresh schedule and 
   `/api/v4/merge_requests?state=opened` per filter: `scope=created_by_me` (My Merge Requests),
   `scope=all&reviewer_id=<id>` (Review Requests), `scope=assigned_to_me` (Assigned to Me). All three on by
   default, as Arc's GitHub filters are. A redirect to another page (a sign-in) reads as signed out.
-- The folder menu is the GitHub one: last update, the instance, Refresh, the three filters, Projects
-  (Arc's Repositories), Sign In to GitLab… when signed out, Rename…, Icon Color, Copy All Links as Markdown,
-  Delete Live Folder. The mark is GitLab's tanuki in one colour, drawn in the folder's ink like GitHub's.
+- The folder menu follows GitHub: a **Merge Requests** submenu contains last update, the instance,
+  Refresh, the three filters, Projects (Arc's Repositories), and Sign In to GitLab… when signed out.
+  Move to, Icon Color, Rename…, Copy All Links as Markdown and Delete Live Folder stay outside it.
+  Repository lists fall back to saved live tabs before the first successful refresh, including after
+  relaunch; excluded projects stay in the list so they can be enabled again. The mark is GitLab's tanuki
+  in one colour, drawn in the folder's ink like GitHub's.
 - A space moving to another profile empties its live folders and fetches again with the new profile;
   an answer to a request made for the old profile, server or filters is dropped.
 - Left out of #223 as not Arc: category subfolders ("Separate by Category"), "Restore Hidden", a minimum

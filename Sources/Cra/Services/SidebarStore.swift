@@ -1672,6 +1672,16 @@ final class SidebarStore {
         touch()
     }
 
+    func liveRepositories(_ id: UUID, fetched: [String]? = nil) -> [String] {
+        guard let live = items[id]?.liveFolder else { return [] }
+        let known = fetched ?? children(of: id).compactMap { $0.tab?.liveItemURL.flatMap(live.repository) }
+        var repositories: [String: String] = [:]
+        for repository in known + live.filter.hiddenRepositories where repositories[repository.lowercased()] == nil {
+            repositories[repository.lowercased()] = repository
+        }
+        return repositories.values.sorted { $0.lowercased() < $1.lowercased() }
+    }
+
     private func removeLiveTree(_ id: UUID) {
         for child in items[id]?.children ?? [] { removeLiveTree(child) }
         detach(id)
@@ -1689,8 +1699,7 @@ final class SidebarStore {
         if let context, liveRequestContext(folderID) != context { return }
         guard var folder = items[folderID], var live = folder.liveFolder else { return }
         let hidden = Set(live.hiddenItems)
-        let hiddenRepos = Set(live.filter.hiddenRepositories.map { $0.lowercased() })
-        let wanted = prs.filter { !hidden.contains($0.url) && !hiddenRepos.contains($0.repository.lowercased()) }
+        let wanted = prs.filter { !hidden.contains($0.url) && !live.filter.isRepositoryHidden($0.repository) }
         var existing: [String: UUID] = [:]
         for c in children(of: folderID) { if let u = c.tab?.liveItemURL { existing[u] = c.id } }
         // Nothing in it yet from a refresh that worked: what arrives now isn't news.
@@ -1729,7 +1738,21 @@ final class SidebarStore {
         // An organization whose SSO session lapsed only hid its pull requests: those stay as they are.
         let ssoHidden = Set(ssoOrganizations.map { $0.lowercased() })
         for id in existing.values {
-            guard var it = items[id], var t = it.tab, t.liveGoneAt == nil else { continue }
+            guard var it = items[id], var t = it.tab else { continue }
+            if let url = t.liveItemURL, let repository = live.repository(for: url), live.filter.isRepositoryHidden(repository) {
+                if t.url == url {
+                    removeLiveTree(id)
+                    for window in prefs.windows where window.selectedTabPerSpace.values.contains(id) {
+                        updateWindow(window.id) { $0.selectedTabPerSpace = $0.selectedTabPerSpace.filter { $0.value != id } }
+                    }
+                } else if t.liveGoneAt != nil {
+                    t.liveGoneAt = nil
+                    it.data = .tab(t)
+                    items[id] = it
+                }
+                continue
+            }
+            guard t.liveGoneAt == nil else { continue }
             if let url = t.liveItemURL, let p = GitHubLiveClient.pullPath(url), ssoHidden.contains(p.owner.lowercased()) { continue }
             t.liveGoneAt = clock.now
             it.data = .tab(t)
@@ -1752,7 +1775,8 @@ final class SidebarStore {
         var changed = false
         for folder in liveFolders {
             for c in tabs(under: folder.id) where !open.contains(c.id) {
-                guard let goneAt = c.tab?.liveGoneAt, clock.now.timeIntervalSince(goneAt) >= age else { continue }
+                guard let tab = c.tab, tab.url == tab.liveItemURL,
+                      let goneAt = tab.liveGoneAt, clock.now.timeIntervalSince(goneAt) >= age else { continue }
                 detach(c.id)
                 items[c.id] = nil
                 changed = true

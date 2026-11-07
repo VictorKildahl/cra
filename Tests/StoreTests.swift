@@ -26,6 +26,9 @@ enum StoreTests {
         tabRestTimes()
         integrity()
         liveFolderExpiry()
+        liveRepositoryFiltering()
+        liveRepositoryMenus()
+        liveFolderExpiryKeepsNavigatedPages()
         liveFolderSignIn()
         gitLabHiddenItems()
         gitLabFolderExpiryAndDeletion()
@@ -354,6 +357,101 @@ enum StoreTests {
         store.expireLiveItems(olderThan: 3600)
         expect(store.children(of: folder.id).map(\.tab?.liveItemURL) == [one.url], "and goes when it ends")
         expect(store.integrityProblems().isEmpty, "live folder changes keep the sidebar sound")
+    }
+
+    @MainActor
+    private static func liveRepositoryFiltering() {
+        for source in [LiveFolderSource.github, .gitlab] {
+            let clock = ManualScheduler()
+            let store = AppComposition(clock: clock).store
+            let space = store.createSpace(title: "Repository filters", emoji: "R", focus: true)
+            let server = "https://git.example.test:8443/gitlab"
+            guard let folder = store.createLiveFolder(source, inSpace: space.id, serverURL: source == .gitlab ? server : nil) else {
+                return expect(false, "a live folder exists for repository filtering")
+            }
+            let one = source == .gitlab ? gitLabRequest(70, server: server) : LivePullRequest(owner: "company", repo: "app", number: 70, title: "One")
+            let two = source == .gitlab ? gitLabRequest(71, server: server) : LivePullRequest(owner: "company", repo: "app", number: 71, title: "Two")
+            var other = LivePullRequest(owner: "company", repo: "other", number: 72, title: "Other")
+            if source == .gitlab { other.webURL = "\(server)/company/other/-/merge_requests/72" }
+            let requests = [one, two, other]
+            store.applyLiveResults(requests, to: folder.id, ssoOrganizations: [])
+            guard let selected = store.children(of: folder.id).first(where: { $0.tab?.liveItemURL == one.url }),
+                  let navigated = store.children(of: folder.id).first(where: { $0.tab?.liveItemURL == two.url }) else {
+                return expect(false, "the repository's request tabs exist")
+            }
+            store.selectTab(selected.id)
+            store.updateTab(navigated.id, url: "https://example.test/reading", title: "Reading")
+            store.updateLiveFolder(folder.id) { $0.filter.hiddenRepositories = [one.repository.uppercased()] }
+            store.applyLiveResults(requests, to: folder.id, ssoOrganizations: [])
+            expect(store.item(selected.id) == nil, "excluding a repository removes its request immediately after refresh, even when selected")
+            expect(store.selectedTabID == nil, "excluding the selected request clears the window's selection")
+            expect(Set(store.children(of: folder.id).compactMap { $0.tab?.liveItemURL }) == [two.url, other.url],
+                   "excluding one repository keeps other repositories and a tab navigated away from its request")
+            expect(store.item(navigated.id)?.tab?.url == "https://example.test/reading" && store.item(navigated.id)?.tab?.liveGoneAt == nil,
+                   "the navigated tab stays in its live folder without an expiry timer")
+            clock.advance(by: 600)
+            store.expireLiveItems(olderThan: 120)
+            expect(store.item(navigated.id) != nil, "the expiry pass does not remove a navigated request tab")
+            store.updateLiveFolder(folder.id) { $0.filter.hiddenRepositories = [] }
+            store.applyLiveResults(requests, to: folder.id, ssoOrganizations: [])
+            expect(store.children(of: folder.id).count == 3 && store.item(navigated.id)?.tab?.url == "https://example.test/reading",
+                   "including the repository restores its requests without replacing a navigated tab")
+            store.updateLiveFolder(folder.id) { $0.filter.hiddenRepositories = [one.repository] }
+            store.applyLiveResults([other], to: folder.id, ssoOrganizations: [])
+            expect(store.item(navigated.id) != nil, "a navigated tab survives even when its excluded request is absent from the response")
+            store.updateTab(navigated.id, url: two.url, title: "Two")
+            store.applyLiveResults([other], to: folder.id, ssoOrganizations: [])
+            expect(store.item(navigated.id) == nil, "returning to the excluded request removes it on the next refresh")
+            expect(store.item(folder.id)?.liveFolder?.hiddenItems.isEmpty == true,
+                   "excluding a repository does not permanently hide individual requests")
+            expect(store.integrityProblems().isEmpty, "repository filtering keeps the sidebar sound")
+        }
+    }
+
+    @MainActor
+    private static func liveRepositoryMenus() {
+        for source in [LiveFolderSource.github, .gitlab] {
+            let store = AppComposition(clock: ManualScheduler()).store
+            let space = store.createSpace(title: "Repository menu", emoji: "R", focus: true)
+            let server = "https://git.example.test/gitlab"
+            guard let folder = store.createLiveFolder(source, inSpace: space.id, serverURL: source == .gitlab ? server : nil) else {
+                return expect(false, "a live folder exists for the repository menu")
+            }
+            let request = source == .gitlab ? gitLabRequest(80, server: server) : LivePullRequest(owner: "company", repo: "app", number: 80, title: "One")
+            store.applyLiveResults([request], to: folder.id, ssoOrganizations: [])
+            expect(store.liveRepositories(folder.id) == [request.repository],
+                   "the repository menu can use saved live tabs before the manager has fetched anything")
+            store.updateLiveFolder(folder.id) { $0.filter.hiddenRepositories = [request.repository.uppercased(), "company/hidden"] }
+            let repositories = store.liveRepositories(folder.id)
+            expect(repositories.count == 2 && repositories.contains(request.repository) && repositories.contains("company/hidden"),
+                   "the repository menu includes hidden repositories without case-only duplicates")
+            expect(store.liveRepositories(folder.id, fetched: []).map { $0.lowercased() }.sorted() == [request.repository, "company/hidden"].sorted(),
+                   "hidden repositories stay available to reenable even after empty results")
+            store.updateLiveFolder(folder.id) { $0.filter.hiddenRepositories = [] }
+            expect(store.liveRepositories(folder.id, fetched: ["company/new"]) == ["company/new"],
+                   "fresh results replace the saved-tab fallback")
+            expect(store.liveRepositories(UUID()).isEmpty, "a deleted folder has no repository menu")
+        }
+    }
+
+    @MainActor
+    private static func liveFolderExpiryKeepsNavigatedPages() {
+        let clock = ManualScheduler()
+        let store = AppComposition(clock: clock).store
+        let space = store.createSpace(title: "Navigated live request", emoji: "R", focus: true)
+        guard let folder = store.createLiveFolder(.github, inSpace: space.id) else { return expect(false, "a live folder exists") }
+        let request = LivePullRequest(owner: "company", repo: "app", number: 90, title: "One")
+        store.applyLiveResults([request], to: folder.id, ssoOrganizations: [])
+        guard let tab = store.children(of: folder.id).first else { return expect(false, "a live request tab exists") }
+        store.applyLiveResults([], to: folder.id, ssoOrganizations: [])
+        store.updateTab(tab.id, url: "https://example.test/reading", title: "Reading")
+        clock.advance(by: 600)
+        store.expireLiveItems(olderThan: 120)
+        expect(store.item(tab.id)?.tab?.url == "https://example.test/reading", "expiry preserves the page a closed request navigated to")
+        store.updateTab(tab.id, url: request.url, title: "One")
+        store.expireLiveItems(olderThan: 120)
+        expect(store.item(tab.id) == nil, "a closed request can expire once the tab is back on its request page")
+        expect(store.integrityProblems().isEmpty, "expiry of a navigated live request keeps the sidebar sound")
     }
 
     private static func gitLabRequest(_ number: Int, server: String = "https://git.example.test") -> LivePullRequest {

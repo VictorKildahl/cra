@@ -27,9 +27,10 @@ enum SidebarMenus {
         menu.addItem(item)
     }
 
-    private static func submenu(_ menu: NSMenu, _ title: String) -> NSMenu {
+    private static func submenu(_ menu: NSMenu, _ title: String, image: NSImage? = nil) -> NSMenu {
         let sub = Self.menu()
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.image = image
         item.submenu = sub
         menu.addItem(item)
         return sub
@@ -169,51 +170,61 @@ enum SidebarMenus {
         let id = item.id
         let live = item.liveFolder ?? LiveFolderData()
         let menu = menu()
-        note(menu, manager.refreshing.contains(id) ? "Updating…" : LiveFolderText.lastUpdate(live))
-        if live.source == .gitlab, let server = live.serverURL { note(menu, GitLabLiveClient.serverLabel(server)) }
-        add(menu, "Refresh") { manager.refresh(id) }
-        menu.addItem(.separator())
+        let requests = submenu(menu, live.source == .gitlab ? "Merge Requests" : "Pull Requests",
+                               image: live.source == .gitlab ? GitLabMark.image : GitHubMark.image)
+        note(requests, manager.refreshing.contains(id) ? "Updating…" : LiveFolderText.lastUpdate(live))
+        if live.source == .gitlab, let server = live.serverURL { note(requests, GitLabLiveClient.serverLabel(server)) }
+        add(requests, "Refresh") { manager.refresh(id) }
+        requests.addItem(.separator())
         let filters: [(String, GitHubLiveFilter.Attributes)] = live.source == .gitlab
             ? GitLabLiveCategory.allCases.map { ($0.title, $0.attribute) }
-            : [("My Pull Requests", .authored), ("Review Requests", .reviewRequests), ("Team Review Requests", .teamReviewRequests)]
+            : [("Created by Me", .authored), ("Review Requests", .reviewRequests), ("Team Review Requests", .teamReviewRequests)]
         for (title, attribute) in filters {
             let on = live.filter.attributes.contains(attribute)
-            add(menu, title, on: on) {
+            add(requests, title, on: on) {
                 store.updateLiveFolder(id) { l in
                     if on { l.filter.attributes.remove(attribute) } else { l.filter.attributes.insert(attribute) }
                 }
                 manager.refresh(id, force: true)
             }
         }
-        let repos = manager.repositories[id] ?? live.filter.hiddenRepositories
+        let repos = store.liveRepositories(id, fetched: manager.repositories[id])
         if !repos.isEmpty {
-            let sub = submenu(menu, live.source == .gitlab ? "Projects" : "Repositories")
+            requests.addItem(.separator())
+            let sub = submenu(requests, live.source == .gitlab ? "Projects" : "Repositories")
             note(sub, live.source == .gitlab ? "Projects with active merge requests." : "This list is generated based on your currently active pull requests.")
             sub.addItem(.separator())
             for repo in repos {
-                let shown = !live.filter.hiddenRepositories.contains(repo)
+                let shown = !live.filter.isRepositoryHidden(repo)
                 add(sub, repo, on: shown) {
                     store.updateLiveFolder(id) { l in
-                        l.filter.hiddenRepositories.removeAll { $0 == repo }
-                        if shown { l.filter.hiddenRepositories.append(repo) }
+                        l.filter.setRepository(repo, hidden: shown)
                     }
                     manager.refresh(id, force: true)
                 }
             }
         }
         if live.lastError == .notSignedIn {
-            menu.addItem(.separator())
-            add(menu, "Sign In to \(live.source.title)…") { actions.openURL(live.signInURL) }
+            requests.addItem(.separator())
+            add(requests, "Sign In to \(live.source.title)…") { actions.openURL(live.signInURL) }
         } else if !live.ssoOrganizations.isEmpty {
-            menu.addItem(.separator())
-            note(menu, "SSO ensures all of your organizations’ PRs appear")
+            requests.addItem(.separator())
+            note(requests, "SSO ensures all of your organizations’ PRs appear")
             for org in live.ssoOrganizations {
-                add(menu, "Sign In to \(org) with SSO…") { actions.openURL("https://github.com/orgs/\(org)/sso") }
+                add(requests, "Sign In to \(org) with SSO…") { actions.openURL("https://github.com/orgs/\(org)/sso") }
             }
         }
         menu.addItem(.separator())
-        add(menu, "Rename…") { ui.renamingID = id }
+        let spaces = submenu(menu, "Move to")
+        for space in store.orderedSpaces {
+            let current = store.isInSpace(id, space.id)
+            add(spaces, "\(space.emoji) \(space.title)", on: current) {
+                if !current { store.moveTab(id, toSpace: space.id, window: ui.windowID) }
+            }
+        }
+        menu.addItem(.separator())
         iconColor(menu, item, list: list)
+        add(menu, "Rename…") { ui.renamingID = id }
         add(menu, "Copy All Links as Markdown", enabled: !item.children.isEmpty) {
             let lines = store.tabs(under: id).compactMap { c in c.tab.map { "- [\(c.displayTitle)](\($0.liveItemURL ?? $0.url))" } }
             copy(lines.joined(separator: "\n"))

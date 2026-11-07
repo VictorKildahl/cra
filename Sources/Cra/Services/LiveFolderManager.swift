@@ -108,8 +108,7 @@ final class LiveFolderManager {
                 return
             }
             let prs = Self.merge(pages)
-            let hidden = store.item(id)?.liveFolder?.filter.hiddenRepositories ?? []
-            repositories[id] = Array(Set(prs.map(\.repository) + hidden)).sorted { $0.lowercased() < $1.lowercased() }
+            repositories[id] = store.liveRepositories(id, fetched: prs.map(\.repository))
             let sso = Array(Set(pages.flatMap { $0.1.ssoOrganizations })).sorted()
             store.applyLiveResults(prs, to: id, ssoOrganizations: sso, context: context)
         }
@@ -204,12 +203,12 @@ final class LiveFolderManager {
                         if page == 50 { throw LiveFolderError.unexpectedPage }
                     }
                 }
-                guard acceptsResponse(id, context: context), let store, let current = store.item(id)?.liveFolder else { return }
+                guard acceptsResponse(id, context: context), let store else { return }
                 let requests = results.values.sorted {
                     let a = $0.createdAt ?? .distantPast, b = $1.createdAt ?? .distantPast
                     return a == b ? $0.url < $1.url : a > b
                 }
-                repositories[id] = Array(Set(requests.map(\.repository) + current.filter.hiddenRepositories)).sorted()
+                repositories[id] = store.liveRepositories(id, fetched: requests.map(\.repository))
                 store.applyLiveResults(requests, to: id, ssoOrganizations: [], context: context)
             } catch {
                 guard acceptsResponse(id, context: context) else { return }
