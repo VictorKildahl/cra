@@ -1008,7 +1008,10 @@ enum CaptureSound {
         return AudioServicesCreateSystemSoundID(url as CFURL, &id) == noErr ? id : nil
     }()
 
+    /// Settings ▸ Advanced "Play Cra sound effects" (Arc's "Play Arc sound effects").
+    static var enabled = true
+
     static func play() {
-        if let id { AudioServicesPlaySystemSound(id) }
+        if enabled, let id { AudioServicesPlaySystemSound(id) }
     }
 }

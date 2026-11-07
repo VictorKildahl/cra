@@ -180,6 +180,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         observeContentBlocking()
         observeHttpsOnly()
+        observeChanges(of: { [store] in store.settings.websiteAppearance }) { CraCEFRuntime.setWebsiteAppearance($0.chromiumMode) }
+        observeChanges(of: { [store] in store.settings.soundEffects }) { CaptureSound.enabled = $0 }
         observeLinkMenu()
         logSecureDNS()
     }
@@ -1070,6 +1072,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             item.title = store.isPinnedCollapsed(main.focusedSpaceID) ? "Expand Pinned Tabs" : "Collapse Pinned Tabs"
             return !main.isStandalone
         case "stayOnTop": item.state = main.staysOnTop ? .on : .off
+        case "appearanceAutomatic", "appearanceLight", "appearanceDark":
+            item.state = "appearance" + store.settings.websiteAppearance.title == item.representedObject as? String ? .on : .off
         case "copyURLQuote", "savePageAs", "captureFullPage", "revealTab": return store.selectedTabID != nil
         case "clearArchive": return !store.archive.isEmpty
         case "resetSpaceTabs": return !main.isStandalone
@@ -1272,6 +1276,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "showArchive": main.showLibrary(.archive)
         case "clearArchive": store.clearArchive()
         case "stayOnTop": main.toggleStayOnTop()
+        case "appearanceAutomatic": store.settings.websiteAppearance = .automatic
+        case "appearanceLight": store.settings.websiteAppearance = .light
+        case "appearanceDark": store.settings.websiteAppearance = .dark
         case "revealData": NSWorkspace.shared.activateFileViewerSelecting([AppPaths.supportDir])
         case "copyAppInfo": copy(appInfo())
         case "print": main.currentBrowser?.print()
@@ -1492,6 +1499,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         menubar.addItem(submenu: edit, title: "Edit")
 
         let view = NSMenu(title: "View")
+        // Arc: View ▸ Appearance ▸ "Websites, Easels, and Notes will use:" Automatic / Light / Dark.
+        let appearance = NSMenu(title: "Appearance")
+        appearance.addItem(withTitle: "Websites will use:", action: nil, keyEquivalent: "").isEnabled = false
+        for a in WebsiteAppearance.allCases {
+            let m = item("appearance" + a.title)
+            m.title = a.title
+            appearance.addItem(m)
+        }
+        view.addItem(submenu: appearance, title: "Appearance")
+        view.addItem(.separator())
         view.addItem(item("toggleSidebar")); view.addItem(item("toggleToolbar")); view.addItem(item("collapsePinned"))
         view.addItem(.separator())
         view.addItem(item("stop")); view.addItem(item("reload")); view.addItem(item("hardReload"))

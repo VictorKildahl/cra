@@ -28,6 +28,10 @@ struct AdvancedPane: View {
                 SearchEnginePicker(store: store, openURL: actions.openURL)
                 SettingsCheckbox(title: "Show search suggestions", isOn: $store.settings.searchSuggestions)
             }
+            SettingsFormRow(label: "Sounds:") {
+                // Arc: Settings ▸ Advanced "Play Arc sound effects".
+                SettingsCheckbox(title: "Play Cra sound effects", isOn: $store.settings.soundEffects)
+            }
             SettingsFormRow(label: "When quitting Cra:") {
                 SettingsCheckbox(title: "Warn before quitting", isOn: $store.settings.warnBeforeQuitting)
             }

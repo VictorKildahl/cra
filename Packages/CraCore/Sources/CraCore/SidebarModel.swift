@@ -509,6 +509,10 @@ public struct AppSettings: Codable, Equatable {
     public var tabSleepOnMemoryPressure: Bool = false
     /// Privacy ▸ "Always use secure connections": Chrome's HTTPS-Only Mode.
     public var httpsOnly: Bool = false
+    /// Arc's View ▸ Appearance: what websites see as the colour scheme.
+    public var websiteAppearance: WebsiteAppearance = .automatic
+    /// Arc's Settings ▸ Advanced "Play Arc sound effects" (the capture shutter), on by default.
+    public var soundEffects: Bool = true
     /// Arc's searchSuggestEnabled: the command bar asks the search engine for suggestions
     /// as you type and fills its rows with them.
     public var searchSuggestions: Bool = true
@@ -712,6 +716,8 @@ extension AppSettings {
         tabSleepAfter = (try? c.decodeIfPresent(TabSleepThreshold.self, forKey: .tabSleepAfter)) ?? .fourHours
         tabSleepOnMemoryPressure = try c.decodeIfPresent(Bool.self, forKey: .tabSleepOnMemoryPressure) ?? false
         httpsOnly = try c.decodeIfPresent(Bool.self, forKey: .httpsOnly) ?? false
+        websiteAppearance = (try? c.decodeIfPresent(WebsiteAppearance.self, forKey: .websiteAppearance)) ?? .automatic
+        soundEffects = try c.decodeIfPresent(Bool.self, forKey: .soundEffects) ?? true
         searchSuggestions = try c.decodeIfPresent(Bool.self, forKey: .searchSuggestions) ?? true
         showSpaceHeaderOnSingleSpace = try c.decodeIfPresent(Bool.self, forKey: .showSpaceHeaderOnSingleSpace) ?? true
         sharedFavorites = try c.decodeIfPresent(Bool.self, forKey: .sharedFavorites) ?? false
@@ -800,3 +806,25 @@ extension TabData {
         homeTitle = try c.decodeIfPresent(String.self, forKey: .homeTitle)
     }
 }
+
+/// Arc's View ▸ Appearance ("Websites, Easels, and Notes will use:"): Automatic follows the Mac.
+public enum WebsiteAppearance: String, Codable, CaseIterable, Sendable {
+    case automatic, light, dark
+
+    public var title: String {
+        switch self {
+        case .automatic: "Automatic"
+        case .light: "Light"
+        case .dark: "Dark"
+        }
+    }
+    /// What Chromium's colour mode takes: 0 the system's, 1 light, 2 dark.
+    public var chromiumMode: Int {
+        switch self {
+        case .automatic: 0
+        case .light: 1
+        case .dark: 2
+        }
+    }
+}
+

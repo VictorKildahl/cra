@@ -435,6 +435,8 @@ static void HideDownloadBubble(CefRefPtr<CefRequestContext> context) {
 }
 
 static bool g_httpsOnly = false;
+/// Arc's View ▸ Appearance for websites: 0 follows the Mac, 1 light, 2 dark.
+static NSInteger g_websiteAppearance = 0;
 static bool g_incognitoReady = false;
 
 /// Chrome's "Always use secure connections" (Settings ▸ Privacy in Cra).
@@ -448,7 +450,16 @@ static void ApplyHttpsOnly(CefRefPtr<CefRequestContext> context) {
     }
 }
 
+/// Chrome's colour mode for the profile, which is what its pages' prefers-color-scheme follows.
+static void ApplyWebsiteAppearance(CefRefPtr<CefRequestContext> context) {
+    if (!context) return;
+    cef_color_variant_t mode = g_websiteAppearance == 1 ? CEF_COLOR_VARIANT_LIGHT
+        : g_websiteAppearance == 2 ? CEF_COLOR_VARIANT_DARK : CEF_COLOR_VARIANT_SYSTEM;
+    if (context->GetChromeColorSchemeMode() != mode) context->SetChromeColorScheme(mode, 0);
+}
+
 static void ApplyProfilePreferences(CefRefPtr<CefRequestContext> context) {
+    ApplyWebsiteAppearance(context);
     ApplyWebRTCPolicy(context);
     HideDownloadBubble(context);
     ApplyHttpsOnly(context);
@@ -1049,6 +1060,7 @@ private:
 /// are dark and white while they are light (measured on Arc 1.171, also for a tab it restores
 /// unloaded). Pages follow the app's appearance; Cra sets no colour scheme of its own.
 static BOOL PagesAreDark() {
+    if (g_websiteAppearance) return g_websiteAppearance == 2;
     return [[NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:@[NSAppearanceNameAqua, NSAppearanceNameDarkAqua]]
         isEqualToString:NSAppearanceNameDarkAqua];
 }
@@ -2666,6 +2678,17 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 /// the rest get it from ApplyProfilePreferences when they load. Every settings write calls
 /// this, so an unchanged value does nothing. Once quitting starts the global context goes
 /// away (GetGlobalContext returns null, #36); the setting is applied again at the next start.
++ (void)setWebsiteAppearance:(NSInteger)mode {
+    if (mode == g_websiteAppearance) return;
+    g_websiteAppearance = mode;
+    if (!g_contextInitialized || g_quitting) return;
+    ApplyWebsiteAppearance(CefRequestContext::GetGlobalContext());
+    for (auto& [path, context] : g_profileContexts) {
+        if ([g_readyProfiles containsObject:@(path.c_str())]) ApplyWebsiteAppearance(context);
+    }
+    if (g_incognitoContext && g_incognitoReady) ApplyWebsiteAppearance(g_incognitoContext);
+}
++ (NSInteger)websiteAppearance { return g_websiteAppearance; }
 + (void)setHttpsOnlyModeEnabled:(BOOL)enabled {
     if (enabled == g_httpsOnly) return;
     g_httpsOnly = enabled;

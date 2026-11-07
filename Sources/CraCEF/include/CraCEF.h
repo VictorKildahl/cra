@@ -268,6 +268,11 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
 /// http:// navigations are upgraded, and a site without HTTPS shows Chrome's warning
 /// page before it loads. Profiles that load later get it too. Off until enabled.
 + (void)setHttpsOnlyModeEnabled:(BOOL)enabled;
+/// Arc's View ▸ Appearance ("Websites, Easels, and Notes will use:"): 0 Automatic (the Mac's),
+/// 1 Light, 2 Dark. Chrome's colour mode in every profile, which pages' prefers-color-scheme and
+/// Chrome's own pages follow; profiles that load later get it too.
++ (void)setWebsiteAppearance:(NSInteger)mode;
+@property (class, nonatomic, readonly) NSInteger websiteAppearance;
 /// Chromium's secure DNS setting (chrome://settings/security), app-wide in Local State:
 /// `dns_over_https.mode` and `dns_over_https.templates` as Chromium holds them now. nil
 /// before Chromium is ready and once quitting starts.
