@@ -39,6 +39,15 @@ public struct GitHubLiveFilter: Codable, Equatable {
         self.attributes = attributes
         self.hiddenRepositories = hiddenRepositories
     }
+
+    public func isRepositoryHidden(_ repository: String) -> Bool {
+        hiddenRepositories.contains { $0.lowercased() == repository.lowercased() }
+    }
+
+    public mutating func setRepository(_ repository: String, hidden: Bool) {
+        hiddenRepositories.removeAll { $0.lowercased() == repository.lowercased() }
+        if hidden { hiddenRepositories.append(repository) }
+    }
 }
 
 public enum LiveFolderError: String, Codable, Equatable, Error {
@@ -94,6 +103,21 @@ public struct LiveFolderData: Codable, Equatable {
 
     public var gitLabCategories: [GitLabLiveCategory] {
         GitLabLiveCategory.allCases.filter { filter.attributes.contains($0.attribute) }
+    }
+
+    public func repository(for url: String) -> String? {
+        if source == .gitlab {
+            guard let server = serverURL.flatMap(GitLabLiveClient.serverURL), url.hasPrefix(server + "/"),
+                  let boundary = url.range(of: "/-/merge_requests/", options: .backwards) else { return nil }
+            let project = String(url[..<boundary.lowerBound].dropFirst(server.count + 1))
+            guard project.split(separator: "/").count >= 2 else { return nil }
+            return project
+        }
+        guard let components = URLComponents(string: url), components.host?.lowercased() == "github.com",
+              ["http", "https"].contains(components.scheme?.lowercased() ?? "") else { return nil }
+        let parts = components.path.split(separator: "/")
+        guard parts.count >= 4, parts[2] == "pull", let number = Int(parts[3]), number > 0 else { return nil }
+        return "\(parts[0])/\(parts[1])"
     }
 
     public init(from decoder: Decoder) throws {
