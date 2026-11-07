@@ -246,6 +246,7 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
     private func setPlaying(_ now: Bool) {
         audibleOff?.cancel()
         audibleOff = nil
+        delegate?.browser?(self, didChangeSoundPlaying: now)
         switch audibleHold.setPlaying(now) {
         case .announce:
             delegate?.browser?(self, didChangeAudible: true)

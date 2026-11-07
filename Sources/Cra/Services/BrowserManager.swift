@@ -882,6 +882,16 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         delegate?.browserManagerDidUpdate(id)
     }
 
+    /// The page's sound starting or stopping as it happens, before the 2 s hold `didChangeAudible`
+    /// waits out. Sound starting marks the tab's card playing: paused from the card and played
+    /// again on the page within the hold, the tab never went quiet, so `didChangeAudible` doesn't
+    /// come. Cards come and go only with the held state.
+    func browser(_ browser: CraBrowser, didChangeSoundPlaying playing: Bool) {
+        guard playing, let id = tabID(of: browser), nowPlaying?.entries.contains(where: { $0.id == id && !$0.playing }) == true else { return }
+        nowPlaying?.update(id) { $0.playing = true }
+        delegate?.browserManagerDidUpdate(id)
+    }
+
     // MARK: Now playing
 
     /// Play/pause, previous and next for the sidebar player. The page's own media session

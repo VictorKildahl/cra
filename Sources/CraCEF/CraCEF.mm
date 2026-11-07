@@ -2371,6 +2371,8 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 // gap between two tracks doesn't blink the speaker.
 - (void)audibleChanged:(BOOL)audible {
     NSUInteger change = ++_audibleChanges;
+    if ([self.delegate respondsToSelector:@selector(browser:didChangeSoundPlaying:)])
+        [self.delegate browser:self didChangeSoundPlaying:audible];
     if (audible) { [self updateAudible:YES]; return; }
     __weak CraBrowser* weakSelf = self;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{

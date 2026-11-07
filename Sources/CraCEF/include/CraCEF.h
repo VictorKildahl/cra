@@ -110,6 +110,9 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
 - (void)browser:(CraBrowser *)browser didChangeMediaCapture:(BOOL)capturing;
 /// The page started or stopped playing sound (see `isAudible`).
 - (void)browser:(CraBrowser *)browser didChangeAudible:(BOOL)audible;
+/// The page's sound started or stopped as it happened, before the 2 s that `isAudible` and
+/// `browser:didChangeAudible:` hold a quiet page audible.
+- (void)browser:(CraBrowser *)browser didChangeSoundPlaying:(BOOL)playing;
 /// `hasCommittedLoad` changed: the main frame committed, or a new navigation started.
 - (void)browser:(CraBrowser *)browser didChangeCommittedLoad:(BOOL)committed;
 /// The page's main-frame load failed with a net error (ERR_ABORTED, a navigation cut off,

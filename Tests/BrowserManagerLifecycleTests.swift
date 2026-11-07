@@ -112,6 +112,7 @@ enum BrowserManagerLifecycleTests {
         extensionTabActivationCase()
         await beforeUnloadCase()
         nowPlayingCase()
+        await nowPlayingResumeWithinHoldCase()
         await nowPlayingPictureInPictureCase()
         nowPlayingSkipsPictureInPictureCase()
         await leaveVideoTabPictureInPictureCase()
@@ -823,6 +824,38 @@ enum BrowserManagerLifecycleTests {
         expect(np.entries.map(\.id) == [b], "a playing page that navigates (a playlist) keeps its card")
         manager.unload(b)
         expect(np.entries.isEmpty, "closing the page removes its card")
+        manager.closeAll()
+    }
+
+    /// Paused from the sidebar's card, then played again on the page within the 2 s the engine
+    /// holds a quiet tab audible: the tab never went quiet, so only its sound starting tells the
+    /// card. Before, the card stayed on paused while the page played (Chromium and WebKit, 7 Nov 2026).
+    @MainActor
+    private static func nowPlayingResumeWithinHoldCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let np = NowPlaying()
+        manager.nowPlaying = np
+        let a = store.createTab(url: "https://music.example.test/").id, b = store.createTab(url: "https://example.test/other").id
+        let ra = manager.ensureRuntime(for: a)!, rb = manager.ensureRuntime(for: b)!
+        manager.show(b, focus: false)
+        ra.browser.isAudible = true
+        manager.browser(ra.browser, didChangeSoundPlaying: true)
+        manager.browser(ra.browser, didChangeAudible: true)
+        ra.browser.reply(to: "Cra.mediaSession", with: #"{"actions":["play","pause"],"pictureInPicture":false}"#)
+        await drainMainQueue()
+        ra.browser.replies.removeAll()
+        manager.performNowPlaying(a, .togglePlayback)
+        ra.browser.reply(to: "cra:Runtime.evaluate", with: #"{"result":{"type":"string","value":"playing"}}"#)
+        await drainMainQueue()
+        ra.browser.reply(to: "Cra.mediaSession", with: #"{"handled":true,"pictureInPicture":false}"#)
+        await drainMainQueue()
+        expect(np.entries.first?.playing == false, "paused from the card, the card shows paused")
+        manager.browser(ra.browser, didChangeSoundPlaying: false)
+        manager.browser(ra.browser, didChangeSoundPlaying: true)
+        expect(np.entries.first?.playing == true, "the page playing again within the hold shows on the card")
+        manager.browser(rb.browser, didChangeSoundPlaying: true)
+        expect(np.entries.map(\.id) == [a], "sound alone doesn't make a card: the held audible state does")
         manager.closeAll()
     }
 
