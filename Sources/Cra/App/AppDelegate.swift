@@ -1318,6 +1318,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "find": main.showFindBar()
         case "findNext": main.findNext(forward: true)
         case "findPrevious": main.findNext(forward: false)
+        case "useSelectionForFind": main.useSelectionForFind()
+        case "jumpToSelection": main.jumpToSelection()
         case "toggleSidebar": main.toggleSidebar()
         case "toggleToolbar": store.settings.showToolbar.toggle()
         case "toggleDeveloperMode": if let url = store.selectedTab?.tab?.url { store.settings.toggleDeveloperMode(url: url) }
@@ -1527,7 +1529,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         edit.addItem(std("Select All", #selector(NSText.selectAll(_:)), "a"))
         edit.addItem(.separator())
         let find = NSMenu(title: "Find")
-        find.addItem(item("find")); find.addItem(item("findNext")); find.addItem(item("findPrevious"))
+        for id in ["find", "findNext", "findPrevious", "useSelectionForFind", "jumpToSelection"] { find.addItem(item(id)) }
         edit.addItem(submenu: find, title: "Find")
         menubar.addItem(submenu: edit, title: "Edit")
 

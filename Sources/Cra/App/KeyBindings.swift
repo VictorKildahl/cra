@@ -155,6 +155,9 @@ final class KeyBindingRegistry {
             KeyAction(id: "find", name: "Find…", section: .edit, shortcuts: [Shortcut("f", cmd)], triggers: ["find", "search page"]),
             KeyAction(id: "findNext", name: "Find Next", section: .edit, shortcuts: [Shortcut("g", cmd)], inCommandBar: false),
             KeyAction(id: "findPrevious", name: "Find Previous", section: .edit, shortcuts: [Shortcut("g", cmdShift)], inCommandBar: false),
+            // Arc: Edit ▸ Find ▸ Use Selection to Find (no key: ⌘E opens extensions) and Jump to Selection ⌘J.
+            KeyAction(id: "useSelectionForFind", name: "Use Selection to Find", section: .edit, shortcuts: [], inCommandBar: false),
+            KeyAction(id: "jumpToSelection", name: "Jump to Selection", section: .edit, shortcuts: [Shortcut("j", cmd)], inCommandBar: false),
             // View
             KeyAction(id: "toggleSidebar", name: "Hide Sidebar", section: .view, shortcuts: [Shortcut("s", cmd)], triggers: ["sidebar", "hide sidebar", "show sidebar"]),
             KeyAction(id: "toggleToolbar", name: "Hide Toolbar", section: .view, shortcuts: [Shortcut("d", cmdShift)], triggers: ["toolbar"]),

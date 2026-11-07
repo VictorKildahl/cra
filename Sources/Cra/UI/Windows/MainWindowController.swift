@@ -3128,6 +3128,31 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         currentBrowser?.setFocused(true)
     }
 
+    /// Arc's (and Chrome's) Edit ▸ Find ▸ Use Selection to Find: the page's selection becomes the
+    /// search, on the find pasteboard too as macOS apps share it, and the bar finds it.
+    func useSelectionForFind() {
+        guard let b = currentBrowser else { return }
+        b.sendDevToolsMethod("Runtime.evaluate", params: #"{"expression":"getSelection().toString()","returnByValue":true}"#) { [weak self] result, _ in
+            MainActor.assumeIsolated {
+                let o = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+                let text = ((o?["result"] as? [String: Any])?["value"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                guard let self, !text.isEmpty else { return }
+                let pb = NSPasteboard(name: .find)
+                pb.clearContents()
+                pb.setString(text, forType: .string)
+                self.overlay.findQuery = text
+                self.showFindBar()
+                self.find(text, forward: true)
+            }
+        }
+    }
+
+    /// Arc's (and Chrome's) Edit ▸ Find ▸ Jump to Selection (⌘J): the page scrolls its selection into view.
+    func jumpToSelection() {
+        currentBrowser?.executeJavaScript("(()=>{const s=getSelection();if(!s.rangeCount)return;const n=s.getRangeAt(0).startContainer;"
+            + "(n.nodeType===1?n:n.parentElement)?.scrollIntoView({block:'center'});})()")
+    }
+
     func findNext(forward: Bool) {
         if !overlay.findVisible { showFindBar(); return }
         find(overlay.findQuery, forward: forward)

@@ -1,0 +1,13 @@
+# Arc's Edit ▸ Find ▸ Jump to Selection (⌘J) and Use Selection to Find (Arc 1.172.1, also Chrome's):
+# a selection far down the page comes into view, and becomes the find bar's search.
+budget rss=700 stalls50=10
+cra://open?url=${PAGE}?n=jump
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const d=document.createElement('div');d.style.marginTop='4000px';d.textContent='far away words';document.body.append(d);scrollTo(0,0);const r=document.createRange();r.selectNodeContents(d);getSelection().removeAllRanges();getSelection().addRange(r);return 'sel-'+scrollY})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"sel-0"
+cra://action/jumpToSelection
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'jumped-'+(scrollY>1000)"}
+expect-log Cra cdp Runtime.evaluate .*"value":"jumped-true"
+cra://action/useSelectionForFind
+wait 1

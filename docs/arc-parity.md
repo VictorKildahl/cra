@@ -27,7 +27,7 @@ or Arc-only service), per CONTRIBUTING.md.
 | Copy URL as Quote | Edit ▸ ⌃⇧⌘C, "Enable Shared Quotes when highlighting text" | done | Arc links to arc.net (cloud); Cra copies a text-fragment link. |
 | AppleScript dictionary | Arc.sdef, View ▸ Developer ▸ Allow JavaScript from Apple Events | missing | Raycast and other launchers script Arc through it. |
 | Cast | View ▸ Cast | done | Chrome's Cast bubble (IDC_ROUTE_MEDIA). |
-| Find and Replace, Use Selection to Find, Jump to Selection | Edit ▸ Find | missing | |
+| Find and Replace, Use Selection to Find, Jump to Selection | Edit ▸ Find | partial | Use Selection to Find and Jump to Selection (⌘J) done; Find and Replace is for Arc's Notes/Easels text, which Cra doesn't have. |
 | Sound effects | Settings ▸ Advanced "Play Arc sound effects" | done | Settings ▸ Advanced ▸ Play Cra sound effects gates the capture shutter. |
 | Theme data for websites | Settings ▸ Advanced "Allow websites to get your theme data" | done | `--arc-palette-*` and `--arc-background-*` as #RRGGBBAA, from the space's theme (ArcThemeData; fitted to Arc's stored palette, checked live). |
 | Window dragging from the top of webpages | Settings ▸ Advanced | measured | With the toolbar hidden, Arc drags the window from the top 56 pt of the page (66 pt below the window's top); 58 pt in, the page gets the drag. Cra's strip reaches 4 pt into the page. Needs clicks in that band held until the pointer moves, across Chromium's page windows. |
@@ -122,6 +122,7 @@ in this sweep (Essential Shortcuts window, Library pages).
 - Settings ▸ Advanced ▸ "Allow websites to get your theme data": Arc's `--arc-palette-*` variables,
   measured live in Arc (names, #RRGGBBAA format, no trace in the page's markup) and fitted to the
   semantic palette Arc stores per space.
+- Edit ▸ Find ▸ Use Selection to Find and Jump to Selection (⌘J).
 
 ## Left for later, and why
 
@@ -130,5 +131,5 @@ in this sweep (Essential Shortcuts window, Library pages).
   a localhost server).
 - Easels and Notes: whole document types with their own editors; same approach once Boosts is in.
 - AppleScript dictionary (a new way for other apps to drive Cra; worth a decision on what it may do,
-  as for cra:// URLs), Find and Replace, cookie banner blocking, window dragging from the top of pages (measured, above), Previews and
+  as for cra:// URLs), cookie banner blocking, window dragging from the top of pages (measured, above), Previews and
   Join Meeting: not started.
