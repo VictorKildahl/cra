@@ -2530,7 +2530,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// The Site Control Center as if its sliders button was clicked, wherever the request came from
     /// (the protected media toast's Why?): under the toolbar's button, else under the sidebar's URL
     /// field at its right end, where that button sits. The arrow shows where to find it next time.
-    private func showSiteControlsFromTheirButton() {
+    func showSiteControlsFromTheirButton() {
         if let button = (shell.focusedCard?.toolbarHost as? PaneToolbarView)?.siteControlsButtonFrameOnScreen() {
             return showToolbarExtensionsMenu(from: button, inToolbar: true)
         }
@@ -2665,6 +2665,90 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// Arc's "Capture the full page": the whole document, beyond the viewport, as a PNG.
+    // MARK: Arc parity (docs/arc-parity.md)
+
+    /// Arc's Window ▸ Stay On Top: the window floats over other apps' windows.
+    var staysOnTop: Bool { window?.level == .floating }
+    func toggleStayOnTop() { window?.level = staysOnTop ? .normal : .floating }
+
+    /// Arc's Reveal Tab in Sidebar / Reveal Current Tab (⌃Space): the sidebar comes out with the
+    /// open tab's folders and pinned section open, and scrolls to it.
+    func revealSelectedTab() {
+        guard let id = selectedTabID else { return }
+        store.revealInSidebar(store.splitContaining(id)?.id ?? id)
+        if sidebarUI.libraryPage != nil { closeLibrary() }
+        if !sidebarVisible { toggleSidebar() }
+        let ui = sidebarUI, space = focusedSpaceID
+        DispatchQueue.main.async { SpaceListView.jumpToSelected(for: ui, space: space) }
+    }
+
+    /// Arc's Switch to Split View 1–4 (⌃⇧1…4): the n-th pane of the open split.
+    func selectSplitPane(_ n: Int) {
+        guard let current = selectedTabID else { return }
+        let panes = store.paneTabIDs(for: current)
+        guard panes.count > 1, n >= 1, n <= panes.count else { return }
+        store.selectTab(panes[n - 1], window: windowID)
+    }
+
+    /// Arc's Open Extensions (⌘E): the Site Control Center, as if its sliders were clicked.
+    func openSiteControls() { showSiteControlsFromTheirButton() }
+
+    /// Arc's Tabs ▸ Reset all tabs in this Space: every pinned tab away from its page goes back.
+    func resetAllPinnedTabs() {
+        guard !isStandalone else { return }
+        let space = store.focusedSpace(window: windowID)
+        for t in store.tabs(under: space.pinnedContainerID) where t.tab.map({ $0.url != $0.savedURL }) == true {
+            resetPinnedTab(t.id)
+        }
+    }
+
+    /// Arc's Edit ▸ Copy URL as Quote (⌃⇧⌘C): the page's selection in quotes with a link that
+    /// scrolls to it (CleanURL.quote; Arc's own link goes through arc.net).
+    func copyURLAsQuote() {
+        guard let b = currentBrowser, let url = selectedTabID.flatMap({ store.item($0)?.tab?.url }) else { return }
+        b.sendDevToolsMethod("Runtime.evaluate", params: #"{"expression":"getSelection().toString()","returnByValue":true}"#) { [weak self] result, _ in
+            MainActor.assumeIsolated {
+                let value = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+                let text = (value?["result"] as? [String: Any])?["value"] as? String ?? ""
+                guard let quote = CleanURL.quote(text, url: url) else { self?.showToast("Select Text to Copy as a Quote"); return }
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(quote, forType: .string)
+                self?.showToast("Copied URL as Quote")
+            }
+        }
+    }
+
+    /// Arc's File ▸ Save Page As (⇧⌘S): Chrome's two formats, a single-file web archive or the
+    /// page's HTML.
+    func savePageAs() {
+        guard let b = currentBrowser, let window, let tab = selectedTabID.flatMap({ store.item($0) }) else { return }
+        let panel = NSSavePanel()
+        let format = SavePageFormat(panel: panel)
+        panel.accessoryView = format.view
+        let base = tab.displayTitle.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
+        panel.nameFieldStringValue = (base.isEmpty ? "Page" : base) + ".mhtml"
+        panel.canCreateDirectories = true
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let dest = panel.url else { return }
+            let single = format.singleFile
+            let (method, params) = single
+                ? ("Page.captureSnapshot", #"{"format":"mhtml"}"#)
+                : ("Runtime.evaluate", #"{"expression":"'<!DOCTYPE html>\n'+document.documentElement.outerHTML","returnByValue":true}"#)
+            b.sendDevToolsMethod(method, params: params) { result, error in
+                MainActor.assumeIsolated {
+                    let o = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+                    let text = single ? o?["data"] as? String : (o?["result"] as? [String: Any])?["value"] as? String
+                    guard let text, (try? Data(text.utf8).write(to: dest, options: .atomic)) != nil else {
+                        NSLog("Cra: save page failed: %@", error ?? "no data")
+                        self?.showToast("Couldn’t Save the Page")
+                        return
+                    }
+                    self?.showToast("Page Saved")
+                }
+            }
+        }
+    }
+
     func captureFullPage() {
         captureOverlay?.close()
         guard let b = currentBrowser else { return }
@@ -3377,5 +3461,33 @@ final class CraWindow: NSWindow {
                 b.setFrameOrigin(target)
             }
         }
+    }
+}
+
+/// Save Page As's Format pop-up (Chrome's "Web Page, Single File" and "Web Page, HTML Only");
+/// switching it swaps the name's extension.
+@MainActor
+private final class SavePageFormat: NSObject {
+    let view: NSView
+    private let popup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private weak var panel: NSSavePanel?
+    var singleFile: Bool { popup.indexOfSelectedItem == 0 }
+
+    init(panel: NSSavePanel) {
+        self.panel = panel
+        let label = NSTextField(labelWithString: "Format:")
+        popup.addItems(withTitles: ["Web Page, Single File", "Web Page, HTML Only"])
+        let row = NSStackView(views: [label, popup])
+        row.edgeInsets = NSEdgeInsets(top: 10, left: 20, bottom: 10, right: 20)
+        view = row
+        super.init()
+        popup.target = self
+        popup.action = #selector(changed)
+    }
+
+    @objc private func changed() {
+        guard let panel else { return }
+        let name = (panel.nameFieldStringValue as NSString).deletingPathExtension
+        panel.nameFieldStringValue = name + (singleFile ? ".mhtml" : ".html")
     }
 }

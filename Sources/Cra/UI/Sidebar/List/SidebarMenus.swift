@@ -79,7 +79,7 @@ enum SidebarMenus {
         if item.title != nil { add(menu, "Use Page Title") { store.rename(id, to: nil) } }
         if m.pinned, tab.liveItemURL == nil { pinnedURLItems(menu, id, navigatedAway: m.navigatedAway, store: store, actions: actions) }
         add(menu, action: "duplicateTab", "Duplicate") { _ = store.duplicateTab(id) }
-        add(menu, action: "copyURL", "Copy Link") { copy(tab.url) }
+        add(menu, action: "copyURL", "Copy Link") { copy(CleanURL.withoutTrackers(tab.url)) }
         add(menu, action: "muteTab", tab.muted ? "Unmute" : "Mute") {
             store.setMuted(id, !tab.muted)
             actions.performAction("muteTab:\(id)")
@@ -102,6 +102,11 @@ enum SidebarMenus {
             add(menu, "Archive Tab") { store.archiveTab(id, reason: .manual) }
         } else {
             add(menu, action: "closeTab", "Archive") { actions.closeTab(id) }
+            // Arc's Today tab menu: Archive Tab, Archive Tabs Below.
+            if let parent = item.parentID, let rows = store.item(parent)?.children, rows.last != id,
+               store.spaceID(ofItem: id).flatMap(store.space)?.todayContainerID == parent {
+                add(menu, "Archive Tabs Below") { store.archiveTabsBelow(id) }
+            }
         }
         return menu
     }

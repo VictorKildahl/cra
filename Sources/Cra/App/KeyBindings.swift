@@ -142,16 +142,23 @@ final class KeyBindingRegistry {
             KeyAction(id: "closeWindow", name: "Close Window", section: .file, shortcuts: [Shortcut("w", cmdShift)], inCommandBar: false),
             KeyAction(id: "closeTab", name: "Close Tab", section: .file, shortcuts: [Shortcut("w", cmd)], triggers: ["close", "archive tab"]),
             KeyAction(id: "capturePage", name: "Capture…", section: .file, shortcuts: [Shortcut("2", cmdShift)], triggers: ["capture", "screenshot"]),
+            // Arc: File ▸ Capture Full Page, Save Page As ⇧⌘S.
+            KeyAction(id: "captureFullPage", name: "Capture Full Page", section: .file, shortcuts: [], triggers: ["full page", "screenshot"]),
+            KeyAction(id: "savePageAs", name: "Save Page As…", section: .file, shortcuts: [Shortcut("s", cmdShift)], triggers: ["save page", "download page"]),
             KeyAction(id: "print", name: "Print", section: .file, shortcuts: [Shortcut("p", cmd)]),
             // Edit
             KeyAction(id: "copyURL", name: "Copy URL", section: .edit, shortcuts: [Shortcut("c", cmdShift)], triggers: ["copy link"]),
             KeyAction(id: "copyURLMarkdown", name: "Copy URL as Markdown", section: .edit, shortcuts: [Shortcut("c", cmdOptShift)], triggers: ["markdown"]),
+            // Arc: Edit ▸ Copy URL as Quote ⌃⇧⌘C, the selection with a link to it.
+            KeyAction(id: "copyURLQuote", name: "Copy URL as Quote", section: .edit, shortcuts: [Shortcut("c", [.command, .shift, .control])], triggers: ["quote", "highlight"]),
             KeyAction(id: "find", name: "Find…", section: .edit, shortcuts: [Shortcut("f", cmd)], triggers: ["find", "search page"]),
             KeyAction(id: "findNext", name: "Find Next", section: .edit, shortcuts: [Shortcut("g", cmd)], inCommandBar: false),
             KeyAction(id: "findPrevious", name: "Find Previous", section: .edit, shortcuts: [Shortcut("g", cmdShift)], inCommandBar: false),
             // View
             KeyAction(id: "toggleSidebar", name: "Hide Sidebar", section: .view, shortcuts: [Shortcut("s", cmd)], triggers: ["sidebar", "hide sidebar", "show sidebar"]),
             KeyAction(id: "toggleToolbar", name: "Hide Toolbar", section: .view, shortcuts: [Shortcut("d", cmdShift)], triggers: ["toolbar"]),
+            // Arc: View ▸ Collapse Pinned Tabs / Expand Pinned Tabs.
+            KeyAction(id: "collapsePinned", name: "Collapse Pinned Tabs", section: .view, shortcuts: [], triggers: ["collapse pinned", "expand pinned"]),
             KeyAction(id: "stop", name: "Stop Loading", section: .view, shortcuts: [Shortcut(".", cmd)], inCommandBar: false),
             KeyAction(id: "reload", name: "Refresh the Page", section: .view, shortcuts: [Shortcut("r", cmd)], triggers: ["refresh", "reload"]),
             KeyAction(id: "hardReload", name: "Force Refresh the Page", section: .view, shortcuts: [Shortcut("r", cmdShift)]),
@@ -164,7 +171,7 @@ final class KeyBindingRegistry {
             KeyAction(id: "zoomIn", name: "Zoom In", section: .view, shortcuts: [Shortcut("=", cmd), Shortcut("=", cmdShift)]),
             KeyAction(id: "zoomOut", name: "Zoom Out", section: .view, shortcuts: [Shortcut("-", cmd)]),
             KeyAction(id: "viewSource", name: "View Source", section: .view, shortcuts: [Shortcut("u", cmdOpt)]),
-            KeyAction(id: "devTools", name: "Developer Tools", section: .view, shortcuts: [Shortcut("i", cmdOpt)], triggers: ["devtools", "inspect", "console"]),
+            KeyAction(id: "devTools", name: "Developer Tools", section: .view, shortcuts: [Shortcut("i", cmdOpt), Shortcut(Shortcut.f12, [])], triggers: ["devtools", "inspect", "console"]),
             KeyAction(id: "inspectElement", name: "Inspect Elements", section: .view, shortcuts: [Shortcut("c", cmdOpt)], inCommandBar: false),
             KeyAction(id: "jsConsole", name: "JavaScript Console", section: .view, shortcuts: [Shortcut("j", cmdOpt)], inCommandBar: false),
             // Arc: Extensions ▸ Picture in Picture (no shortcut); "Open Picture in Picture" in the command bar.
@@ -185,8 +192,11 @@ final class KeyBindingRegistry {
             KeyAction(id: "manageSpaces", name: "Manage Spaces…", section: .spaces, shortcuts: [], triggers: ["manage spaces", "reorder spaces"]),
             // Tabs
             KeyAction(id: "pinTab", name: "Pin/Unpin Tab", section: .tabs, shortcuts: [Shortcut("d", cmd)], triggers: ["pin", "unpin"]),
-            KeyAction(id: "nextTab", name: "Next Tab", section: .tabs, shortcuts: [Shortcut(Shortcut.down, cmdOpt)], inCommandBar: false),
-            KeyAction(id: "previousTab", name: "Previous Tab", section: .tabs, shortcuts: [Shortcut(Shortcut.up, cmdOpt)], inCommandBar: false),
+            // Arc: Next Tab ⌥⌘↓ and ⌘}, Previous Tab ⌥⌘↑ and ⌘{ (Settings ▸ Shortcuts).
+            KeyAction(id: "nextTab", name: "Next Tab", section: .tabs, shortcuts: [Shortcut(Shortcut.down, cmdOpt), Shortcut("]", cmdShift)], inCommandBar: false),
+            KeyAction(id: "previousTab", name: "Previous Tab", section: .tabs, shortcuts: [Shortcut(Shortcut.up, cmdOpt), Shortcut("[", cmdShift)], inCommandBar: false),
+            // Arc: Tabs ▸ Reveal Tab in Sidebar; Reveal Current Tab ⌃Space.
+            KeyAction(id: "revealTab", name: "Reveal Tab in Sidebar", section: .tabs, shortcuts: [Shortcut(Shortcut.space, .control)], triggers: ["reveal", "find tab"]),
             KeyAction(id: "recentTab", name: "Next Recent Tab", section: .tabs, shortcuts: [Shortcut(Shortcut.tab, .control)], inCommandBar: false),
             KeyAction(id: "recentTabBackward", name: "Previous Recent Tab", section: .tabs, shortcuts: [Shortcut(Shortcut.tab, [.control, .shift])], inCommandBar: false),
             KeyAction(id: "clearToday", name: "Clear Today", section: .tabs, shortcuts: [Shortcut("k", cmdShift)], triggers: ["clear", "tidy"]),
@@ -195,13 +205,23 @@ final class KeyBindingRegistry {
             KeyAction(id: "duplicateTab", name: "Duplicate Tab", section: .tabs, shortcuts: [], triggers: ["duplicate"]),
             KeyAction(id: "resetTab", name: "Reset Pinned Tab", section: .tabs, shortcuts: [], triggers: ["reset", "home"]),
             KeyAction(id: "muteTab", name: "Mute / Unmute Tab", section: .tabs, shortcuts: [], triggers: ["mute"]),
+            KeyAction(id: "resetSpaceTabs", name: "Reset all tabs in this Space", section: .tabs, shortcuts: [], triggers: ["reset all", "reset pinned"]),
+            // Arc lists these in Settings ▸ Shortcuts and the command bar only.
+            KeyAction(id: "collapseAllFolders", name: "Collapse All Folders", section: .none, shortcuts: [], triggers: ["collapse folders", "close folders"]),
+            KeyAction(id: "expandAllFolders", name: "Expand All Folders", section: .none, shortcuts: [], triggers: ["expand folders", "open folders"]),
+            KeyAction(id: "openExtensions", name: "Open Extensions", section: .none, shortcuts: [Shortcut("e", cmd)], triggers: ["extensions", "site controls"]),
             // Archive
             KeyAction(id: "goBack", name: "Go Back", section: .archive, shortcuts: [Shortcut("[", cmd), Shortcut(Shortcut.left, cmd)]),
             KeyAction(id: "goForward", name: "Go Forward", section: .archive, shortcuts: [Shortcut("]", cmd), Shortcut(Shortcut.right, cmd)]),
             KeyAction(id: "viewArchive", name: "View History", section: .archive, shortcuts: [Shortcut("y", cmd)], triggers: ["archive", "history", "closed tabs"]),
+            // Arc: Archive ▸ View Archive…, Clear Archive.
+            KeyAction(id: "showArchive", name: "View Archive…", section: .archive, shortcuts: [], triggers: ["archive", "archived tabs"]),
+            KeyAction(id: "clearArchive", name: "Clear Archive", section: .archive, shortcuts: [], triggers: ["clear archive"], symbol: "trash"),
             // Window
             KeyAction(id: "openLibrary", name: "Open Library…", section: .window, shortcuts: [Shortcut("l", cmdShift)], triggers: ["library"]),
             KeyAction(id: "viewDownloads", name: "View Downloads…", section: .window, shortcuts: [Shortcut("j", cmdShift)], triggers: ["downloads"]),
+            // Arc: Window ▸ Stay On Top.
+            KeyAction(id: "stayOnTop", name: "Stay On Top", section: .window, shortcuts: [], triggers: ["stay on top", "float", "always on top", "pin window"]),
             // Arc's Little Arc "Open in Space" button (LittleBrowserMoveButton) and "Close Little Arc Windows".
             KeyAction(id: "promoteLittleWindow", name: "Open Little Window in Space", section: .window, shortcuts: [Shortcut("o", cmd)], inCommandBar: false),
             KeyAction(id: "closeLittleWindows", name: "Close Little Windows", section: .window, shortcuts: [], triggers: ["close little"]),
@@ -219,9 +239,18 @@ final class KeyBindingRegistry {
                       triggers: ["language", "languages", "preferred language", "accept language"], symbol: "globe"),
             KeyAction(id: "checkForUpdates", name: "Check for Updates…", section: .app, shortcuts: [],
                       triggers: ["update", "upgrade", "new version"], symbol: "arrow.down.circle"),
+            // Arc: Help ▸ Troubleshooting ▸ Reveal Arc Data, Copy Arc Info.
+            KeyAction(id: "revealData", name: "Reveal Cra Data", section: .help, shortcuts: [], triggers: ["data folder", "reveal data"]),
+            KeyAction(id: "copyAppInfo", name: "Copy Cra Info", section: .help, shortcuts: [], triggers: ["version", "copy info"]),
         ]
+        // Arc: Switch to Split View 1–4 (⌃⇧1…4), the panes of the open split.
+        for n in 1...4 {
+            list.append(KeyAction(id: "splitPane\(n)", name: "Switch to Split View \(n)", section: .none,
+                                  shortcuts: [Shortcut("\(n)", [.control, .shift])], inCommandBar: false))
+        }
         for n in 1...9 {
-            list.append(KeyAction(id: "item\(n)", name: "Go to Tab \(n)", section: .tabs,
+            // Arc: ⌘9 is "Go to last Sidebar Item", as in Chrome.
+            list.append(KeyAction(id: "item\(n)", name: n == 9 ? "Go to Last Tab" : "Go to Tab \(n)", section: .tabs,
                                   shortcuts: [Shortcut("\(n)", cmd)], triggers: ["\(n). tab", "\(n). item"], inCommandBar: false))
             list.append(KeyAction(id: "space\(n)", name: "Go to Space \(n)", section: .spaces,
                                   shortcuts: [Shortcut("\(n)", .control)], inCommandBar: false))

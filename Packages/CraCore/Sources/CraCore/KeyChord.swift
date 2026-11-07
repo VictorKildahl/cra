@@ -53,6 +53,11 @@ public struct KeyChord: Codable, Hashable {
         }
     }
 
+    /// The digit row's virtual key codes (the same on ANSI and ISO keyboards).
+    static let digitKeyCode: [UInt16: String] = [
+        18: "1", 19: "2", 20: "3", 21: "4", 23: "5", 22: "6", 26: "7", 28: "8", 25: "9", 29: "0",
+    ]
+
     static let unshift: [String: String] = [
         "\u{19}": tab, "\u{7F}": delete, "{": "[", "}": "]", "<": ",", ">": ".", "?": "/", "+": "=", "_": "-",
         "~": "`", ":": ";", "\"": "'", "|": "\\",
@@ -77,6 +82,9 @@ public struct KeyChord: Codable, Hashable {
         // Turkish Q types "-" on the ANSI "=" key, and "=" itself as ⇧0: matching "=" by place
         // turned ⌘- into Zoom In (GitHub #212).
         if let code = Self.ansiKeyCode[key], press.keyCode == code, !typable(key) { return .position }
+        // ⇧ on the digit row types "!", "@", "\"" and so on, which differ by layout: a chord of
+        // ⇧ and a digit (Arc's ⌃⇧1, Switch to Split View 1) takes the key in that digit's place.
+        if keys.contains(.shift), Self.digitKeyCode[press.keyCode] == key { return .position }
         return nil
     }
 
@@ -104,6 +112,10 @@ public struct KeyChord: Codable, Hashable {
     /// The Delete key as a menu's key equivalent wants it (NSBackspaceCharacter), shown ⌫.
     /// Its key events carry U+007F, which the app reads as this.
     public static let delete = "\u{8}"
+    /// F12 (NSF12FunctionKey): Arc's second Developer Tools key.
+    public static let f12 = "\u{F70F}"
+    /// The space bar: Arc's Reveal Current Tab is ⌃Space, shown ⌃⎵.
+    public static let space = " "
 
     /// How menus and the command bar show it: ⌃⌥⇧⌘ in Apple's order, then the key.
     public var display: String { caps.joined() }
@@ -122,6 +134,8 @@ public struct KeyChord: Codable, Hashable {
         case Self.up: s.append("↑")
         case Self.down: s.append("↓")
         case Self.delete: s.append("⌫")
+        case Self.f12: s.append("F12")
+        case Self.space: s.append("⎵")
         default: s.append(key.uppercased())
         }
         return s

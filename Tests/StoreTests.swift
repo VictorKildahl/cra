@@ -58,6 +58,9 @@ enum StoreTests {
         blankWindows()
         blankWindowWithoutItsWindow()
         tornOffTabMovesToABlankWindow()
+        archiveTabsBelow()
+        allFoldersExpanded()
+        revealInSidebar()
         print("Store: \(checks) checks passed")
     }
 
@@ -1584,6 +1587,67 @@ enum StoreTests {
         expect(store.item(stays.id) != nil && store.integrityProblems().isEmpty, "and the sidebar stays sound")
         store.removeWindow(second)
         store.saveAll()
+    }
+
+    /// Arc's Today tab menu: "Archive Tabs Below" archives every Today row under the one clicked.
+    @MainActor
+    private static func archiveTabsBelow() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let sid = store.createSpace(title: "Below", emoji: "⬇️").id
+        let today = store.space(sid)!.todayContainerID
+        let a = store.createTab(url: "https://a.example/", in: sid, select: false, parent: today, index: 0)
+        let b = store.createTab(url: "https://b.example/", in: sid, select: false, parent: today, index: 1)
+        let c = store.createTab(url: "https://c.example/", in: sid, select: false, parent: today, index: 2)
+        let d = store.createTab(url: "https://d.example/", in: sid, select: false, parent: today, index: 3)
+        let split = store.createSplit(with: [c.id, d.id])!
+        let pinned = store.createTab(url: "https://p.example/", in: sid, pinned: true, select: false)
+        expect(store.children(of: today).map(\.id) == [a.id, b.id, split.id], "set up: two tabs and a split in Today")
+        store.archiveTabsBelow(a.id)
+        expect(store.children(of: today).map(\.id) == [a.id], "the tabs and the split below it are archived")
+        expect(Set(store.archive.prefix(3).compactMap(\.item.tab?.url)) == ["https://b.example/", "https://c.example/", "https://d.example/"],
+               "and land in the archive")
+        store.archiveTabsBelow(pinned.id)
+        expect(store.item(pinned.id) != nil, "a pinned tab archives nothing below it (Arc offers it on Today tabs only)")
+        expect(store.integrityProblems().isEmpty, "the sidebar stays sound")
+    }
+
+    /// Arc's Shortcuts list: Collapse All Folders / Expand All Folders, nested folders included.
+    @MainActor
+    private static func allFoldersExpanded() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let sid = store.createSpace(title: "Folders", emoji: "📁").id
+        let pinned = store.space(sid)!.pinnedContainerID
+        let outer = store.createFolder(named: "Outer", in: pinned)
+        let inner = store.createFolder(named: "Inner", in: outer.id)
+        let other = store.createSpace(title: "Other", emoji: "🗂️", focus: false).id
+        let elsewhere = store.createFolder(named: "Elsewhere", in: store.space(other)!.pinnedContainerID)
+        store.setExpanded(elsewhere.id, false)
+        store.setAllFoldersExpanded(false, inSpace: sid)
+        expect(!store.isExpanded(outer.id) && !store.isExpanded(inner.id), "every folder in the space closes, nested ones too")
+        store.setAllFoldersExpanded(true, inSpace: sid)
+        expect(store.isExpanded(outer.id) && store.isExpanded(inner.id), "and they all open again")
+        expect(!store.isExpanded(elsewhere.id), "another space's folders stay as they were")
+    }
+
+    /// Arc's Reveal Tab in Sidebar (⌃Space): the folders around the tab open, and a collapsed
+    /// pinned section opens when the tab is in it.
+    @MainActor
+    private static func revealInSidebar() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let sid = store.createSpace(title: "Reveal", emoji: "🔦").id
+        let pinned = store.space(sid)!.pinnedContainerID
+        let outer = store.createFolder(named: "Outer", in: pinned)
+        let inner = store.createFolder(named: "Inner", in: outer.id)
+        let tab = store.createTab(url: "https://deep.example/", in: sid, pinned: true, select: false, parent: inner.id)
+        store.setAllFoldersExpanded(false, inSpace: sid)
+        store.togglePinnedCollapsed(sid)
+        store.revealInSidebar(tab.id)
+        expect(store.isExpanded(outer.id) && store.isExpanded(inner.id), "both folders around the tab open")
+        expect(!store.isPinnedCollapsed(sid), "and the collapsed pinned section opens")
+        let today = store.createTab(url: "https://today.example/", in: sid, select: false)
+        store.togglePinnedCollapsed(sid)
+        store.revealInSidebar(today.id)
+        expect(store.isPinnedCollapsed(sid), "a Today tab leaves the pinned section as it is")
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {

@@ -966,11 +966,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     let space = m.focusedSpace
                     let tabs = (store.tabs(under: space.pinnedContainerID) + store.tabs(under: space.todayContainerID)).compactMap { $0.tab?.url }
                     let open = store.selectedTabID(window: m.windowID).flatMap { store.item($0)?.tab?.url } ?? "-"
-                    NSLog("Cra browser windows %@: kind=%@ space=%@ listed=%d tabs=[%@] open=%@ page=%d frame=%@", label,
+                    let folders = (store.children(of: space.pinnedContainerID) + store.children(of: space.todayContainerID)).filter { $0.isFolder && !$0.isTabGroup }
+                    NSLog("Cra browser windows %@: kind=%@ space=%@ listed=%d tabs=[%@] open=%@ page=%d frame=%@ onTop=%d pinnedCollapsed=%d openFolders=%d/%d", label,
                           m.isBlank ? "blank" : m.isIncognito ? "incognito" : "normal", space.title,
                           store.orderedSpaces.contains { $0.id == space.id } ? 1 : 0, tabs.joined(separator: " "), open,
                           store.selectedTabID(window: m.windowID).flatMap { m.browsers.runtime(for: $0) } != nil ? 1 : 0,
-                          m.window.map { NSStringFromRect($0.frame) } ?? "-")
+                          m.window.map { NSStringFromRect($0.frame) } ?? "-", m.staysOnTop ? 1 : 0,
+                          store.isPinnedCollapsed(space.id) ? 1 : 0, folders.filter { store.isExpanded($0.id) }.count, folders.count)
                     // cra.log (which a relaunch keeps) gets no addresses or names: kinds and counts.
                     CraLog.note("browser windows \(label): kind=\(m.isBlank ? "blank" : m.isIncognito ? "incognito" : "normal") "
                         + "listed=\(store.orderedSpaces.contains { $0.id == space.id } ? 1 : 0) tabs=\(tabs.count) open=\(open == "-" ? 0 : 1)")
@@ -1064,6 +1066,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         switch item.representedObject as? String {
         case "toggleSidebar": item.title = main.sidebarVisible ? "Hide Sidebar" : "Show Sidebar"
         case "toggleToolbar": item.title = store.settings.showToolbar ? "Hide Toolbar" : "Show Toolbar"
+        case "collapsePinned":
+            item.title = store.isPinnedCollapsed(main.focusedSpaceID) ? "Expand Pinned Tabs" : "Collapse Pinned Tabs"
+            return !main.isStandalone
+        case "stayOnTop": item.state = main.staysOnTop ? .on : .off
+        case "copyURLQuote", "savePageAs", "captureFullPage", "revealTab": return store.selectedTabID != nil
+        case "clearArchive": return !store.archive.isEmpty
+        case "resetSpaceTabs": return !main.isStandalone
         case "toggleDeveloperMode":
             let on = store.selectedTab?.tab.map { store.settings.isDeveloperMode(url: $0.url) } ?? false
             item.title = on ? "Turn off Developer Mode for this Site" : "Turn on Developer Mode for this Site"
@@ -1241,15 +1250,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 store.reopenLastArchived()
             }
         case "copyURL":
-            if let url = current.flatMap({ store.item($0)?.tab?.url }) {
+            // Arc: "Copy the current tab's URL without trackers".
+            if let url = current.flatMap({ store.item($0)?.tab?.url }).map(CleanURL.withoutTrackers) {
                 copy(url)
                 main.showToast("Copied Current URL", action: .share(url))
             }
         case "copyURLMarkdown":
             if let c = current, let it = store.item(c), let url = it.tab?.url {
-                copy("[\(it.displayTitle)](\(url))")
+                copy("[\(it.displayTitle)](\(CleanURL.withoutTrackers(url)))")
                 main.showToast("Copied URL as Markdown")
             }
+        case "copyURLQuote": main.copyURLAsQuote()
+        case "savePageAs": main.savePageAs()
+        case "captureFullPage": main.captureFullPage()
+        case "collapsePinned": if !main.isStandalone { store.togglePinnedCollapsed(main.focusedSpaceID) }
+        case "revealTab": main.revealSelectedTab()
+        case "resetSpaceTabs": main.resetAllPinnedTabs()
+        case "collapseAllFolders": store.setAllFoldersExpanded(false, inSpace: main.focusedSpaceID)
+        case "expandAllFolders": store.setAllFoldersExpanded(true, inSpace: main.focusedSpaceID)
+        case "openExtensions": main.showSiteControlsFromTheirButton()
+        case "showArchive": main.showLibrary(.archive)
+        case "clearArchive": store.clearArchive()
+        case "stayOnTop": main.toggleStayOnTop()
+        case "revealData": NSWorkspace.shared.activateFileViewerSelecting([AppPaths.supportDir])
+        case "copyAppInfo": copy(appInfo())
         case "print": main.currentBrowser?.print()
         case "capturePage": main.capturePage()
         case "find": main.showFindBar()
@@ -1323,13 +1347,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         default:
             if id.hasPrefix("item"), let n = Int(id.dropFirst(4)) {
                 let tabs = store.visibleTabs(in: store.focusedSpaceID)
-                if n - 1 < tabs.count { store.selectTab(tabs[n - 1].id) }
+                // ⌘9 is the last one (Arc's "Go to last Sidebar Item").
+                if n == 9, let last = tabs.last { store.selectTab(last.id) } else if n - 1 < tabs.count { store.selectTab(tabs[n - 1].id) }
+            } else if id.hasPrefix("splitPane"), let n = Int(id.dropFirst(9)) {
+                main.selectSplitPane(n)
             } else if id.hasPrefix("space"), let n = Int(id.dropFirst(5)) {
                 if n - 1 < store.spaceOrder.count { store.focusSpace(store.spaceOrder[n - 1]) }
             } else if id.hasPrefix("moveTabToSpace"), let n = Int(id.dropFirst(14)) {
                 if let c = current, n - 1 < store.spaceOrder.count { store.moveTabAndFollow(c, toSpace: store.spaceOrder[n - 1]) }
             }
         }
+    }
+
+    /// Help ▸ Troubleshooting ▸ Copy Cra Info: what a bug report needs about this copy.
+    private func appInfo() -> String {
+        let info = Bundle.main.infoDictionary
+        let os = ProcessInfo.processInfo.operatingSystemVersion
+        return """
+        Cra \(info?["CFBundleShortVersionString"] as? String ?? "") (\(info?["CFBundleVersion"] as? String ?? ""))
+        Chromium \(CraCEFRuntime.chromiumVersion()) · CEF \(CraCEFRuntime.cefVersion())
+        macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion)
+        """
     }
 
     private func copy(_ s: String) {
@@ -1432,7 +1470,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         file.addItem(.separator())
         file.addItem(item("closeWindow")); file.addItem(item("closeTab"))
         file.addItem(.separator())
-        file.addItem(item("capturePage")); file.addItem(item("print"))
+        // Arc: Capture…, Capture Full Page, Save Page As, Print.
+        for id in ["capturePage", "captureFullPage", "savePageAs", "print"] { file.addItem(item(id)) }
         menubar.addItem(submenu: file, title: "File")
 
         let edit = NSMenu(title: "Edit")
@@ -1441,7 +1480,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         edit.addItem(.separator())
         edit.addItem(std("Cut", #selector(NSText.cut(_:)), "x"))
         edit.addItem(std("Copy", #selector(NSText.copy(_:)), "c"))
-        edit.addItem(item("copyURL")); edit.addItem(item("copyURLMarkdown"))
+        edit.addItem(item("copyURL")); edit.addItem(item("copyURLMarkdown")); edit.addItem(item("copyURLQuote"))
         edit.addItem(std("Paste", #selector(NSText.paste(_:)), "v"))
         edit.addItem(std("Paste and Match Style", #selector(pasteAsPlainText(_:)), "v", [.command, .shift]))
         edit.addItem(std("Delete", #selector(NSText.delete(_:))))
@@ -1453,7 +1492,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         menubar.addItem(submenu: edit, title: "Edit")
 
         let view = NSMenu(title: "View")
-        view.addItem(item("toggleSidebar")); view.addItem(item("toggleToolbar"))
+        view.addItem(item("toggleSidebar")); view.addItem(item("toggleToolbar")); view.addItem(item("collapsePinned"))
         view.addItem(.separator())
         view.addItem(item("stop")); view.addItem(item("reload")); view.addItem(item("hardReload"))
         // Arc's View menu order: cookies, then cache.
@@ -1485,7 +1524,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         menubar.addItem(submenu: spaces, title: "Spaces")
 
         let tabs = NSMenu(title: "Tabs")
-        for id in ["newTab", "pinTab", "nextTab", "previousTab", "recentTab", "clearToday"] { tabs.addItem(item(id)) }
+        for id in ["newTab", "pinTab", "nextTab", "previousTab", "revealTab", "recentTab", "clearToday", "resetSpaceTabs"] { tabs.addItem(item(id)) }
         tabs.addItem(.separator())
         for id in ["favoriteTab", "renameTab", "duplicateTab", "resetTab", "muteTab"] { tabs.addItem(item(id)) }
         tabs.addItem(.separator())
@@ -1493,13 +1532,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         menubar.addItem(submenu: tabs, title: "Tabs")
 
         let archive = NSMenu(title: "Archive")
-        archive.addItem(item("goBack")); archive.addItem(item("goForward")); archive.addItem(item("viewArchive"))
+        archive.addItem(item("goBack")); archive.addItem(item("goForward"))
+        archive.addItem(.separator())
+        for id in ["viewArchive", "showArchive", "clearArchive"] { archive.addItem(item(id)) }
         menubar.addItem(submenu: archive, title: "Archive")
 
         // Dia: Extensions sits just before Window.
         menubar.addItem(submenu: extensionsMenu.makeMenu(), title: "Extensions")
 
         let window = NSMenu(title: "Window")
+        window.addItem(item("stayOnTop"))
         window.addItem(std("Minimize Window", #selector(NSWindow.performMiniaturize(_:)), "m"))
         window.addItem(std("Zoom", #selector(NSWindow.performZoom(_:))))
         window.addItem(.separator())
@@ -1522,7 +1564,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             help.addItem(link)
         }
         help.addItem(.separator())
-        help.addItem(withTitle: "Export Diagnostics…", action: #selector(exportDiagnostics), keyEquivalent: "").target = self
+        // Arc: Help ▸ Troubleshooting.
+        let trouble = NSMenu(title: "Troubleshooting")
+        trouble.addItem(withTitle: "Export Diagnostics…", action: #selector(exportDiagnostics), keyEquivalent: "").target = self
+        trouble.addItem(.separator())
+        trouble.addItem(item("revealData")); trouble.addItem(item("copyAppInfo"))
+        help.addItem(submenu: trouble, title: "Troubleshooting")
         menubar.addItem(submenu: help, title: "Help")
         NSApp.helpMenu = help
 

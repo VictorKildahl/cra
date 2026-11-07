@@ -124,4 +124,24 @@ struct KeyChordTests {
         #expect(KeyChord.Press(characters: "\u{19}", keyCode: 48, modifiers: 0).key == KeyChord.tab)
         #expect(KeyChord.Press(characters: "T", keyCode: 17, modifiers: 0).key == "t")
     }
+
+    /// Arc's Shortcuts list shows Developer Tools F12 and Reveal Current Tab ⌃⎵.
+    @Test func showsFunctionKeysAndSpace() {
+        #expect(KeyChord(key: KeyChord.f12, modifiers: 0).display == "F12")
+        #expect(KeyChord(key: KeyChord.space, modifiers: KeyChord.Modifiers.control.rawValue).display == "⌃⎵")
+        let press = KeyChord.Press(characters: "\u{F70F}", keyCode: 111, modifiers: 1 << 23)
+        #expect(KeyChord(key: KeyChord.f12, modifiers: 0).match(press, typable: { _ in true }) == .character,
+                "the function-key bit a press carries doesn't count")
+    }
+
+    /// Arc's Switch to Split View 1 is ⌃⇧1: ⇧1 types "!" (US) or "!" and ⇧2 types "\"" (Danish).
+    @Test(arguments: [("!", UInt16(18), "1"), ("\"", UInt16(19), "2"), ("@", UInt16(19), "2"), ("¤", UInt16(21), "4")])
+    func shiftedDigitsAreTheirDigit(chars: String, code: UInt16, digit: String) {
+        let mods = KeyChord.Modifiers([.control, .shift]).rawValue
+        let press = KeyChord.Press(characters: chars, keyCode: code, modifiers: mods)
+        #expect(KeyChord(key: digit, modifiers: mods).match(press, typable: { _ in true }) == .position)
+        let ctrl = KeyChord.Modifiers.control.rawValue
+        #expect(KeyChord(key: digit, modifiers: ctrl).match(KeyChord.Press(characters: chars, keyCode: code, modifiers: ctrl),
+                                                            typable: { _ in true }) == nil, "without ⇧ in the chord, the character counts")
+    }
 }

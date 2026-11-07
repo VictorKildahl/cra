@@ -1533,6 +1533,25 @@ final class SidebarStore {
         if p != prefs { prefs = p }
     }
 
+    /// Arc's Collapse All Folders / Expand All Folders: every folder in the space, nested ones too.
+    func setAllFoldersExpanded(_ expanded: Bool, inSpace sid: UUID) {
+        guard let space = spaces[sid] else { return }
+        var folders: [UUID] = []
+        func walk(_ id: UUID) {
+            for c in children(of: id) where c.isFolder && !c.isTabGroup { folders.append(c.id); walk(c.id) }
+        }
+        walk(space.pinnedContainerID)
+        walk(space.todayContainerID)
+        for f in folders { setExpanded(f, expanded) }
+    }
+
+    /// Arc's Reveal Tab in Sidebar (⌃Space): open the folders the tab sits in, and its space's
+    /// pinned section when that is collapsed and the tab is in it.
+    func revealInSidebar(_ id: UUID) {
+        for f in folderChain(of: id) where !isExpanded(f) { setExpanded(f, true) }
+        if isPinned(id), let sid = spaceID(ofItem: id), isPinnedCollapsed(sid) { togglePinnedCollapsed(sid) }
+    }
+
     /// Arc's spacesWithCollapsedPinnedSections: clicking the space name hides its pinned tabs.
     func isPinnedCollapsed(_ spaceID: UUID) -> Bool {
         items.observe(spaceID)
@@ -2007,6 +2026,18 @@ final class SidebarStore {
             t.children.removeAll { empty.contains($0) }
             items[t.id] = t
             for g in empty { items[g] = nil }
+        }
+    }
+
+    /// Arc's Today tab menu "Archive Tabs Below": every Today row under this one (splits and
+    /// groups with all their tabs). Pinned and favorite tabs don't offer it.
+    func archiveTabsBelow(_ id: UUID) {
+        guard let item = items[id], let parent = item.parentID, let sid = spaceID(ofItem: id),
+              spaces[sid]?.todayContainerID == parent,
+              let rows = items[parent]?.children, let i = rows.firstIndex(of: id) else { return }
+        for row in rows[(i + 1)...] {
+            guard let r = items[row] else { continue }
+            for t in r.isTab ? [r] : tabs(under: row) { archiveTab(t.id, reason: .manual) }
         }
     }
 
