@@ -764,7 +764,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if dict["tidy"] != nil { TidyTabsService.shared.tidy(store.focusedSpace(window: main.windowID).id, store: store); return }
             if dict["undoTidy"] != nil { _ = store.undoTidy(); return }
             // captureToEasel=1: the page's screenshot, then the capture menu's New Easel.
-            if dict["captureToEasel"] != nil { main.debugCaptureToEasel(); return }
+            if let how = dict["captureToEasel"] { main.debugCaptureToEasel(send: how == "send"); return }
             // settingsPane=max: Settings opened on that pane.
             if let p = dict["settingsPane"].flatMap(SettingsPane.init(rawValue:)) {
                 showSettingsWindow()

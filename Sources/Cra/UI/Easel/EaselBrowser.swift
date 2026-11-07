@@ -129,6 +129,20 @@ enum EaselFiles {
     }
     static func load(_ id: UUID) -> Easel { store(id).load(or: { Easel(id: id) }) }
 
+    /// Arc's capture menu ▸ Send To…: the capture added below what the easel holds.
+    static func add(picture png: Data, to id: UUID) -> Bool {
+        guard let image = NSImage(data: png) else { return false }
+        var easel = load(id)
+        let name = UUID().uuidString + ".png"
+        guard (try? png.write(to: pictures(id).appendingPathComponent(name))) != nil else { return false }
+        let scale = min(1, 640 / max(image.size.width, image.size.height, 1))
+        let bottom = easel.items.map { $0.frame.y + $0.frame.height }.max() ?? 160
+        easel.items.append(Easel.Item(kind: .image(file: name), frame: .init(x: 120, y: bottom + 40, width: image.size.width * scale,
+                                                                             height: image.size.height * scale)))
+        store(id).saveNow(easel)
+        return true
+    }
+
     /// Arc's capture menu ▸ New Easel: an easel with the capture on it, under the title.
     static func create(withPicture png: Data) -> Easel? {
         guard let image = NSImage(data: png) else { return nil }

@@ -17,7 +17,7 @@ import UniformTypeIdentifiers
 /// capture is exactly what was on screen. Decisions (picker, geometry) are in CraCore's ContentCapture.
 @MainActor
 final class CaptureOverlay {
-    enum Action { case copy, save, message, newEasel, retake }
+    enum Action { case copy, save, message, newEasel, sendToEasel, retake }
 
     private let panel: CapturePanel
     private let view: CaptureView
@@ -779,8 +779,8 @@ final class CaptureBubble: NSView {
 /// Arc's CapturedImageActionsView, dark whatever the theme: 273 pt wide, 10 pt corners, fill
 /// (18,15,46); 40 pt rows with a 13 pt symbol centred 25 pt in at white 30 % and 14 pt medium text
 /// from 41 pt at white 90 %; sections apart by 9 pt with a hairline 10 pt in from both sides.
-/// Arc's New Easel row starts an easel with the capture on it; its other rows (Send To… an easel,
-/// Save to Library, Edit) Cra doesn't have yet.
+/// Arc's Send To… puts the capture on an easel you pick, New Easel starts one with it; its other
+/// rows (Save to Library, Edit) Cra doesn't have yet.
 final class CaptureMenu: NSView {
     struct Row {
         let title: String
@@ -797,7 +797,8 @@ final class CaptureMenu: NSView {
         [Row(title: "Copy", symbol: "doc.on.doc.fill", action: .copy),
          Row(title: "Save...", symbol: "square.and.arrow.down.fill", action: .save),
          Row(title: "Send via iMessage...", symbol: "message.fill", action: .message)],
-        [Row(title: "New Easel", symbol: "pencil.and.scribble", action: .newEasel)],
+        [Row(title: "Send To…", symbol: "paperplane.fill", action: .sendToEasel),
+         Row(title: "New Easel", symbol: "pencil.and.scribble", action: .newEasel)],
         [Row(title: "Retake", symbol: "arrow.counterclockwise", action: .retake)],
     ]
 

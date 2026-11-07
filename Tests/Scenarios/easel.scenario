@@ -19,3 +19,8 @@ cra://debug?captureToEasel=1
 wait 2
 cra://debug?browserWindows=captured
 expect-log browser windows captured: kind=normal listed=1 tabs=3 open=1
+# Send To… an easel: the capture lands on the easel edited last, next to the first one.
+cra://open?url=${PAGE}?n=sent
+wait 2
+cra://debug?captureToEasel=send
+expect-log capture sent to an easel, which now holds 2 items

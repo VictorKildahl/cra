@@ -1853,13 +1853,30 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         return CGImageSourceCreateImageAtIndex(source, 0, nil)
     }
 
+    /// Send To… an easel: the capture goes on it, under what is there, and its tab comes forward
+    /// (a new one when it has none open).
+    private func sendCapture(_ png: Data, toEasel id: UUID) {
+        guard EaselFiles.add(picture: png, to: id) else { return }
+        CraLog.note("capture sent to an easel, which now holds \(EaselFiles.load(id).items.count) items")
+        let url = Easel(id: id).url
+        if let tab = store.allTabs().first(where: { $0.tab?.url == url }) {
+            browsers.unload(tab.id)  // opened again from the file, picture included
+            store.selectTab(tab.id, window: windowID)
+            refresh()
+        } else {
+            _ = store.createTab(url: url, title: EaselFiles.load(id).title, select: true, window: windowID)
+        }
+    }
+
     /// Testing without the pointer (cra://debug?captureToEasel=1): the visible page captured and
     /// the capture menu's New Easel chosen.
-    func debugCaptureToEasel() {
+    func debugCaptureToEasel(send: Bool = false) {
         currentBrowser?.sendDevToolsMethod("Page.captureScreenshot", params: #"{"format":"png"}"#) { [weak self] shot, _ in
             MainActor.assumeIsolated {
                 let o = shot.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
                 let png = (o?["data"] as? String).flatMap { Data(base64Encoded: $0) }
+                // send: Send To… the easel edited last, as if picked from its menu.
+                if send, let png, let last = EaselFiles.all().first { self?.sendCapture(png, toEasel: last.id); return }
                 self?.captureFinished(.newEasel, png)
             }
         }
@@ -1884,6 +1901,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         case .newEasel?:
             guard let png, let easel = EaselFiles.create(withPicture: png) else { return }
             _ = store.createTab(url: easel.url, title: easel.title, select: true, window: windowID)
+        case .sendToEasel?:
+            guard let png else { return }
+            let easels = EaselFiles.all()
+            guard !easels.isEmpty else {
+                if let easel = EaselFiles.create(withPicture: png) { _ = store.createTab(url: easel.url, title: easel.title, select: true, window: windowID) }
+                return
+            }
+            let menu = NSMenu()
+            for e in easels {
+                MenuItems.add(menu, e.title) { [weak self] in self?.sendCapture(png, toEasel: e.id) }
+            }
+            menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
         case .retake?:
             capturePage()
         case nil:
