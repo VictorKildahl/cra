@@ -7,17 +7,28 @@ import SwiftUI
 /// Boosts…), Undo. Then a 147 pt colour wheel, three 42 × 38 buttons (Invert lightness, Advanced
 /// colour controls: Contrast, Brightness, Original Saturation; Reset to original colours), a white
 /// card of 20 "Aa" fonts, Size and Case, Zap ⚡ and Code {} (which widens the panel to 480 pt with a
-/// CSS / JS switch). Every change shows on the page at once.
+/// CSS / JS switch; under the code, the eyedropper (Show Selector Picker), the hammer (Show
+/// Developer Tools) and, for JavaScript, Refresh this Page). Every change shows on the page at once.
 @MainActor
 final class BoostEditorController {
     static let shared = BoostEditorController()
     private var panel: NSPanel?
     private var model: BoostEditorModel?
 
-    func open(_ boost: Boost, over window: NSWindow, zap: @escaping (Bool) -> Void) {
+    /// What the editor does to the page beside it.
+    struct PageActions {
+        var zap: (Bool) -> Void
+        var pick: (Bool) -> Void
+        var toggleDevTools: () -> Void
+        var devToolsOpen: () -> Bool
+        var reload: () -> Void
+    }
+
+    func open(_ boost: Boost, over window: NSWindow, page: PageActions) {
         close()
         let m = BoostEditorModel(boost: boost)
-        m.zap = zap
+        m.page = page
+        m.devToolsOpen = page.devToolsOpen()
         m.onClose = { [weak self] in self?.close() }
         m.onWidth = { [weak self] w in self?.resize(width: w) }
         let p = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -40,12 +51,19 @@ final class BoostEditorController {
 
     func close() {
         model?.finishZap()
+        model?.finishPicking()
         if let panel { panel.parent?.removeChildWindow(panel); panel.orderOut(nil) }
         panel = nil
         model = nil
     }
 
     var isOpen: Bool { panel != nil }
+
+    /// The picker ends (its page went to the back).
+    func stopPicking() { model?.finishPicking() }
+
+    /// DevTools opened or closed (the hammer, ⌥⌘I or their own close button).
+    func devToolsChanged() { if let model { model.devToolsOpen = model.page.devToolsOpen() } }
 
     /// What Zap hid, into the boost being edited.
     func addZapped(_ selectors: [String]) {
@@ -71,7 +89,9 @@ final class BoostEditorModel {
     var showingCode = false
     var codeIsJS = false
     var zapping = false
-    @ObservationIgnored var zap: (Bool) -> Void = { _ in }
+    var picking = false
+    var devToolsOpen = false
+    @ObservationIgnored var page = BoostEditorController.PageActions(zap: { _ in }, pick: { _ in }, toggleDevTools: {}, devToolsOpen: { false }, reload: {})
     @ObservationIgnored var onClose: () -> Void = {}
     @ObservationIgnored var onWidth: (CGFloat) -> Void = { _ in }
 
@@ -103,13 +123,29 @@ final class BoostEditorModel {
     }
 
     func toggleZap() {
+        finishPicking()
         zapping.toggle()
-        zap(zapping)
+        page.zap(zapping)
     }
 
-    func finishZap() { if zapping { zapping = false; zap(false) } }
+    func finishZap() { if zapping { zapping = false; page.zap(false) } }
+
+    /// The eyedropper: outline elements on the page; a click offers their selectors.
+    func togglePicker() {
+        finishZap()
+        picking.toggle()
+        page.pick(picking)
+    }
+
+    func finishPicking() { if picking { picking = false; page.pick(false) } }
+
+    func toggleDevTools() {
+        page.toggleDevTools()
+        devToolsOpen.toggle()
+    }
 
     func setCode(_ on: Bool) {
+        if !on { finishPicking() }
         showingCode = on
         onWidth(on ? 480 : 183)
     }
@@ -254,14 +290,14 @@ private struct BoostEditorView: View {
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.white).shadow(color: .black.opacity(0.08), radius: 4, y: 1))
     }
 
-    private func square(_ symbol: String, on: Bool, help: String, _ action: @escaping () -> Void) -> some View {
+    private func square(_ symbol: String, on: Bool, help: String, size: CGFloat = 42, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol).font(.system(size: 15))
                 .foregroundStyle(on ? .white : BoostStyle.ink)
-                .frame(width: 42, height: 38)
+                .frame(width: size, height: 38)
                 .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(on ? BoostStyle.ink : BoostStyle.button))
         }
-        .buttonStyle(.plain).help(help)
+        .buttonStyle(.plain).help(help).accessibilityLabel(help)
     }
 
     private func wide(_ title: String, trailing: String?, on: Bool = false) -> some View {
@@ -280,7 +316,21 @@ private struct BoostEditorView: View {
         VStack(spacing: 0) {
             CodeEditor(text: Binding(get: { model.codeIsJS ? model.boost.js : model.boost.css },
                                      set: { v in if model.codeIsJS { model.boost.js = v } else { model.boost.css = v } }))
-            HStack { Spacer() }.frame(height: 60).background(BoostStyle.panel)
+            // Arc: 38 pt squares 15 pt in, in a 69 pt strip under the 479 pt editor.
+            HStack(spacing: 10) {
+                square("eyedropper", on: model.picking, help: model.picking ? "Hide Selector Picker" : "Show Selector Picker", size: 38) {
+                    model.togglePicker()
+                }
+                square("hammer", on: model.devToolsOpen, help: model.devToolsOpen ? "Hide Developer Tools" : "Show Developer Tools", size: 38) {
+                    model.toggleDevTools()
+                }
+                if model.codeIsJS {
+                    square("arrow.clockwise", on: false, help: "Refresh this Page", size: 38) { model.page.reload() }
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 15)
+            .frame(height: 69).background(BoostStyle.panel)
         }
         .frame(width: 480)
     }

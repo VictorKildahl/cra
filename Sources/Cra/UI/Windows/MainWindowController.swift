@@ -1280,6 +1280,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// over the placeholder it reports. Alloy pages keep the shell's own split with CEF's
     /// window on the right, for the focused tab only.
     func browserManagerDevToolsChanged() {
+        BoostEditorController.shared.devToolsChanged()
         guard let window else { return }
         let visible = browsers.visibleDevToolsWindow
         let shown = browsers.visibleDevToolsWindows
@@ -2805,7 +2806,82 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func openBoostEditor() {
         guard let window, let url = selectedTabID.flatMap({ store.item($0)?.tab?.url }),
               let boost = BoostStore.shared.boostForSite(of: url) else { showToast("Boosts Work on Websites"); return }
-        BoostEditorController.shared.open(boost, over: window) { [weak self] on in self?.setZapping(on) }
+        BoostEditorController.shared.open(boost, over: window, page: .init(
+            zap: { [weak self] on in self?.setZapping(on) },
+            pick: { [weak self] on in self?.setPicking(on) },
+            toggleDevTools: { [weak self] in self?.browsers.runDevTools(.toggle) },
+            devToolsOpen: { [weak self] in self?.browsers.visibleTabHasDevTools ?? false },
+            reload: { [weak self] in self?.currentBrowser?.reload() }))
+    }
+
+    /// The code panel's eyedropper (BoostPicker): the page outlines the element under the pointer
+    /// and the ones like it, and holds a click; Cra polls for it and offers Arc's menu there. The
+    /// poll puts the picker back after a navigation.
+    /// Testing without the pointer (cra://debug?boostPick=1|0|copyThis|copyRelated|zapRelated):
+    /// on (answering the menu with that action) or off.
+    func debugPick(_ value: String) {
+        pickAnswer = BoostPicker.Action(rawValue: value)
+        setPicking(value != "0")
+    }
+
+    private func setPicking(_ on: Bool) {
+        pickTimer?.invalidate()
+        pickTimer = nil
+        pickBrowser?.executeJavaScript(BoostPicker.stopExpression)
+        pickBrowser = nil
+        guard on, let b = currentBrowser else { return }
+        pickBrowser = b
+        b.executeJavaScript(BoostPicker.script)
+        let t = Timer(timeInterval: 0.15, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.pollPick() } }
+        RunLoop.main.add(t, forMode: .common)
+        pickTimer = t
+    }
+
+    private func pollPick() {
+        guard let b = pickBrowser else { return }
+        guard b === currentBrowser else { setPicking(false); BoostEditorController.shared.stopPicking(); return }
+        let expression = BoostPicker.script + ";" + BoostPicker.takeExpression
+        guard let data = try? JSONSerialization.data(withJSONObject: ["expression": expression, "returnByValue": true]),
+              let params = String(data: data, encoding: .utf8) else { return }
+        b.sendDevToolsMethod("Runtime.evaluate", params: params) { [weak self, weak b] result, _ in
+            MainActor.assumeIsolated {
+                let o = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+                guard let self, let b, b === self.pickBrowser,
+                      let pick = BoostPicker.parse((o?["result"] as? [String: Any])?["value"] as? String ?? "") else { return }
+                self.offerPick(pick, on: b)
+            }
+        }
+    }
+
+    /// Arc's menu after a click with the picker: copy this element's selector, or the related
+    /// ones', or zap them all.
+    private func offerPick(_ pick: BoostPicker.Pick, on b: CraBrowser) {
+        CraLog.note("boost pick this=\(pick.this) related=\(pick.related) (\(pick.relatedCount))")
+        defer { b.executeJavaScript(BoostPicker.resumeExpression) }
+        if let answer = pickAnswer { runPick(answer, pick); return }
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        for action in BoostPicker.Action.allCases {
+            let item = BlockMenuItem(title: action.title) { [weak self] in self?.runPick(action, pick) }
+            item.isEnabled = action.isEnabled(for: pick)
+            menu.addItem(item)
+        }
+        let view = b.containerView
+        let p = pick.point(inViewWidth: view.bounds.width)
+        menu.popUp(positioning: nil, at: NSPoint(x: p.x, y: view.isFlipped ? p.y : view.bounds.height - p.y), in: view)
+    }
+
+    private func runPick(_ action: BoostPicker.Action, _ pick: BoostPicker.Pick) {
+        guard action.isEnabled(for: pick) else { return }
+        let selector = action.selector(for: pick)
+        switch action {
+        case .copyThis, .copyRelated:
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(selector, forType: .string)
+            CraLog.note("boost pick copied \(selector)")
+        case .zapRelated:
+            BoostEditorController.shared.addZapped([selector])
+        }
     }
 
     /// Zap: the page outlines what's under the pointer, and a click hides it and keeps a selector
@@ -2825,6 +2901,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             }
         }
     }
+
+    private var pickTimer: Timer?
+    private weak var pickBrowser: CraBrowser?
+    private var pickAnswer: BoostPicker.Action?
 
     static let zapScript = """
     (()=>{if(window.__craZap)return;const hidden=[];let over=null;

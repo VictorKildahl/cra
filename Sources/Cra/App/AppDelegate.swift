@@ -902,6 +902,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let n = dict["gmailPreview"].flatMap(Int.init), let w = main.window { GmailPreviewCard.shared.demo(unread: n, in: w); return }
             // boostZap=1|0: Boost editor's Zap on or off for the open page.
             if let z = dict["boostZap"] { main.debugZap(z == "1"); return }
+            // boostPick=1|0|copyThis|copyRelated|zapRelated: the code panel's eyedropper on (the
+            // menu answered with that action) or off.
+            if let p = dict["boostPick"] { main.debugPick(p); return }
             // captureToEasel=1: the page's screenshot, then the capture menu's New Easel.
             if let how = dict["captureToEasel"] { main.debugCaptureToEasel(send: how == "send"); return }
             // settingsPane=max: Settings opened on that pane.

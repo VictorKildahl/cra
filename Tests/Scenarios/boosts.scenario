@@ -18,3 +18,22 @@ cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{document.body.click
 expect-log Cra cdp Runtime.evaluate .*"value":"zz-none-body-block"
 cra://debug?boostZap=0
 expect-log zap kept 1 selector$
+# The code panel's eyedropper (BoostPicker): a click is held, and Arc's menu copies the selector for the
+# element or zaps it and the ones like it.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const u=document.createElement('ul');u.className='list';u.innerHTML='<li class=item>a</li><li class=item id=second>b</li><li class=item>c</li>';document.body.append(u);window.pickClick=()=>{const e=document.getElementById('second'),r=e.getBoundingClientRect();return e.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,clientX:r.left+2,clientY:r.top+2}))};return 'list'})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"list"
+cra://debug?boostPick=copyThis
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'followed-'+window.pickClick()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"followed-false"
+expect-log boost pick this=#second related=li\.item \(3\)
+expect-log boost pick copied #second$
+cra://debug?boostPick=zapRelated
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(window.pickClick(),'zap-sent')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"zap-sent"
+expect-log boost pick this=#second
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'items-'+[...document.querySelectorAll('li.item')].map(e=>getComputedStyle(e).display).join(',')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"items-none,none,none"
+cra://debug?boostPick=0
