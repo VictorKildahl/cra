@@ -109,7 +109,10 @@ final class JSONStore<T: Codable> {
             try? fm.removeItem(at: bak)
             try? fm.copyItem(at: url, to: bak)
         }
-        do { try data.write(to: url, options: .atomic) } catch {
+        do {
+            try data.write(to: url, options: .atomic)
+            Perf.count(.fileSaved, url.lastPathComponent)
+        } catch {
             CraLog.fault("\(url.lastPathComponent) not saved: \(error.localizedDescription)")
         }
     }

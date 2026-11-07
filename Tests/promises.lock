@@ -331,6 +331,10 @@
 #211   Packages/CraCore/Tests/CraCoreTests/FaviconKeyTests.swift::tabsOnOneHostKeepTheirOwnIcons  21d360f30e94
 #212   Packages/CraCore/Tests/CraCoreTests/KeyChordTests.swift::turkishQZoomKeys  840de09abff1
 #213   Packages/CraCore/Tests/CraCoreTests/FolderPeekTests.swift::aClickOpensAClosedFolderEvenWithItsOpenTabInSight  70f9e64eb96b
+#214   Packages/CraCore/Tests/CraCoreTests/ItemTableTests.swift::tabCountFollowsWrites  549f222462af
+#214   Packages/CraCore/Tests/CraCoreTests/TabSleepPolicyTests.swift::holds  d2bd0269d879
+#214   Tests/BrowserManagerLifecycleTests.swift::discardedPageLoadCase  4c91d8a1d9df
+#214   Tests/BrowserManagerLifecycleTests.swift::sleepCountsCase  ea4c379bd476
 #215   Tests/StoreTests.swift::arcLiveFolderImportsLive  a5c462b3a9c7
 #218   Tests/Scenarios/extension-popup-download.scenario  ffb6285b0eee
 #219   Packages/CraCore/Tests/CraCoreTests/TabTearOffTests.swift::aWindowLargerThanTheScreenShrinksToFit  bb6acd6907ac

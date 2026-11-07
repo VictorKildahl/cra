@@ -40,6 +40,9 @@ final class TabRuntime {
     var sleepProbeAfter: Date?
     /// Why the page last refused to sleep ("" when it didn't), so the log says it once.
     var sleepRefusal: String?
+    /// Why tab sleeping last passed the page over without asking it (nil: it didn't), so the log
+    /// and the recorder say it once (#214).
+    var sleepHold: TabSleepPolicy.Hold?
     /// Whether this page's DevTools are open, closing or asked for (DevToolsToggle).
     var devTools = DevToolsToggle()
     /// Loads of an extension's page Chromium blocked because the extension wasn't up yet
@@ -422,7 +425,13 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         let cutoff = now.addingTimeInterval(-policy.hiddenFor)
         var asked = 0
         for id in policy.candidates(sleepPages, visible: visibleTabIDs, protectedRecent: protectedRecentTabs, now: now) {
-            guard let rt = runtimes[id], canSleep(rt, before: cutoff), rt.sleepProbeAfter.map({ $0 <= now }) ?? true else { continue }
+            guard let rt = runtimes[id] else { continue }
+            if let hold = sleepHold(rt, before: cutoff) {
+                passOver(rt, hold)
+                continue
+            }
+            rt.sleepHold = nil
+            guard rt.sleepProbeAfter.map({ $0 <= now }) ?? true else { continue }
             if let limit = policy.limit, asked >= limit { break }
             asked += 1
             let b = rt.browser
@@ -478,6 +487,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                 }
                 guard discarded else { return self.unload(id) }
                 rt.discarded = true
+                rt.sleepRefusal = nil
                 if rt.freezeVoted { self.setFreezingVote(rt, false) }
                 self.delegate?.browserManagerDidUpdate(id)
             }
@@ -508,12 +518,23 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         runtimes[id] === rt && rt.navigationRevision == revision && rt.browser.currentURL == url && canSleep(rt, before: cutoff)
     }
 
-    /// Asked again after the back-off; the log names the site once per reason (never an incognito one).
+    /// Asked again after the back-off; the log names the site once per reason (never an incognito
+    /// one), and the recorder counts the page once per reason and its later refusals as retries (#214).
     private func keepAwake(_ rt: TabRuntime, _ url: String, _ refusal: String) {
         rt.sleepProbeAfter = clock.now.addingTimeInterval(Self.refusalBackoff)
+        guard rt.sleepRefusal != refusal else { return Perf.count(.sleepRetry, refusal) }
         Perf.count(.sleepRefusal, refusal)
-        if rt.sleepRefusal != refusal, !rt.browser.isIncognito { CraLog.note("tab sleep keeps \(CraLog.host(url)) awake: \(refusal)") }
+        if !rt.browser.isIncognito { CraLog.note("tab sleep keeps \(CraLog.host(url)) awake: \(refusal)") }
         rt.sleepRefusal = refusal
+    }
+
+    /// A candidate held awake before its page is asked (loading, DevTools…): said once per reason,
+    /// so a sweep that comes late can be explained from cra.log and the recorder (#214).
+    private func passOver(_ rt: TabRuntime, _ hold: TabSleepPolicy.Hold) {
+        guard rt.sleepHold != hold else { return }
+        rt.sleepHold = hold
+        Perf.count(.sleepSkip, hold.rawValue)
+        if !rt.browser.isIncognito { CraLog.note("tab sleep passes over \(CraLog.host(rt.browser.currentURL)): \(hold.rawValue)") }
     }
 
     static let refusalBackoff: TimeInterval = 10 * 60
@@ -562,11 +583,15 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         TabSleepPolicy.recentlyShown(sleepPages, visible: visibleTabIDs, count: protectedRecentTabs)
     }
 
-    private func canSleep(_ rt: TabRuntime, before cutoff: Date) -> Bool {
+    private func canSleep(_ rt: TabRuntime, before cutoff: Date) -> Bool { sleepHold(rt, before: cutoff) == nil }
+
+    private func sleepHold(_ rt: TabRuntime, before cutoff: Date) -> TabSleepPolicy.Hold? {
         let b = rt.browser
-        return !rt.discarded && rt.hiddenAt.map { $0 < cutoff } == true && rt.audibleAt.map { $0 < cutoff } != false
-            && !visibleTabIDs.contains(rt.tabID) && b.isCreated && !b.isClosed && !b.isLoading && !b.isInPictureInPicture
-            && !b.isCapturingMedia && !b.isAudible && !b.hasDevTools
+        return TabSleepPolicy.hold(.init(discarded: rt.discarded, hiddenAt: rt.hiddenAt, audibleAt: rt.audibleAt,
+                                         visible: visibleTabIDs.contains(rt.tabID), created: b.isCreated, closed: b.isClosed,
+                                         loading: b.isLoading, pictureInPicture: b.isInPictureInPicture,
+                                         capturing: b.isCapturingMedia, audible: b.isAudible, devTools: b.hasDevTools),
+                                   before: cutoff)
     }
 
     /// In Cra's isolated world: "" when the page has nothing to lose, else why it must stay:
@@ -1065,7 +1090,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     }
 
     func browser(_ browser: CraBrowser, didFinishLoadingURL url: String, title: String, statusCode: Int) {
-        guard let id = tabID(of: browser) else { return }
+        // CEF ends the load of the page a discard just closed: nothing loaded, and nothing was visited (#214).
+        guard let id = tabID(of: browser), runtimes[id]?.discarded != true else { return }
         log(id, "loaded \(site(url, id, browser)) (HTTP \(statusCode))")
         if statusCode != 0 { runtimes[id]?.extensionPageRetries = 0 }
         guard !browser.isIncognito else { return }
