@@ -351,3 +351,4 @@
 #220   Tests/Scenarios/blank-window.scenario  cac94fd094a6
 #220   Tests/StoreTests.swift::blankWindowWithoutItsWindow  0de383e3d544
 #220   Tests/StoreTests.swift::blankWindows  2703cb42812a
+#227   Tests/Scenarios/quit-during-web-store-install.scenario  a3e3b0c8eb2b

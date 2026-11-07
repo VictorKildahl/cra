@@ -1,0 +1,14 @@
+# Cra quits while it is still installing an imported extension from the Web Store. The install's
+# hidden page outlived Chromium's profile, and CefShutdown stopped on Chromium's check that every
+# page closes first ("BrowserContext is getting destroyed without first closing all WebContents"):
+# a crash report on each quit while an install ran or hung (GitHub #227).
+# promise: #227
+budget rss=600
+extension ${FIXTURES}/WebStoreCopy/${WEB_STORE_COPY_ID}
+# The store's download goes to an address that never answers, so the install is still running
+# when the scenario quits.
+arg --apps-gallery-download-url=${STALL}/%s.crx
+cra://open?url=${PAGE}?n=store
+expect-log extension ${WEB_STORE_COPY_ID}: installing from the Web Store in Default
+wait 2
+reject-log Web Store install in Default failed
