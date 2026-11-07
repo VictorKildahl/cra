@@ -243,6 +243,9 @@ final class KeyBindingRegistry {
                       triggers: ["language", "languages", "preferred language", "accept language"], symbol: "globe"),
             KeyAction(id: "checkForUpdates", name: "Check for Updates…", section: .app, shortcuts: [],
                       triggers: ["update", "upgrade", "new version"], symbol: "arrow.down.circle"),
+            // Arc: Help ▸ Essential Keyboard Shortcuts.
+            KeyAction(id: "essentialShortcuts", name: "Essential Keyboard Shortcuts", section: .help, shortcuts: [],
+                      triggers: ["shortcuts", "keyboard shortcuts", "hotkeys"], symbol: "keyboard"),
             // Arc: Help ▸ Troubleshooting ▸ Reveal Arc Data, Copy Arc Info.
             KeyAction(id: "revealData", name: "Reveal Cra Data", section: .help, shortcuts: [], triggers: ["data folder", "reveal data"]),
             KeyAction(id: "copyAppInfo", name: "Copy Cra Info", section: .help, shortcuts: [], triggers: ["version", "copy info"]),

@@ -1279,6 +1279,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "appearanceAutomatic": store.settings.websiteAppearance = .automatic
         case "appearanceLight": store.settings.websiteAppearance = .light
         case "appearanceDark": store.settings.websiteAppearance = .dark
+        case "essentialShortcuts":
+            EssentialShortcutsWindow.shared.show(bindings: bindings) { [weak self] in
+                self?.showSettingsWindow()
+                self?.settingsController?.show(.shortcuts)
+            }
         case "revealData": NSWorkspace.shared.activateFileViewerSelecting([AppPaths.supportDir])
         case "copyAppInfo": copy(appInfo())
         case "print": main.currentBrowser?.print()
@@ -1573,6 +1578,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let help = NSMenu(title: "Help")
         help.addItem(withTitle: "Chromium \(CraCEFRuntime.chromiumVersion()) · CEF \(CraCEFRuntime.cefVersion())", action: nil, keyEquivalent: "")
         help.addItem(.separator())
+        help.addItem(item("essentialShortcuts"))
         for (title, url) in [("Cra Help", "https://crabrowser.app/help"), ("Release Notes", "https://crabrowser.app/release-notes"),
                              ("Report an Issue…", "https://github.com/VictorKildahl/cra/issues"), ("Support Cra…", "https://crabrowser.app/support")] {
             let link = NSMenuItem(title: title, action: #selector(openHelpLink(_:)), keyEquivalent: "")
