@@ -67,6 +67,7 @@ the save panel.
 
     scripts/test.sh                  # everything below except the smoke test, in seconds
     scripts/test.sh core             # only Packages/CraCore
+    scripts/test-folder-glyph.sh      # folder emblems: layer projection, colors and Retina resolution
     Tests/smoke-launch.sh            # launches build/Cra.app three times, about 30 s
     scripts/scenario.sh all          # user journeys in build/Cra.app, about 6 minutes
     scripts/scenario.sh sleep-tabs   # one of them (Tests/Scenarios/<name>.scenario)
@@ -97,6 +98,9 @@ to Markdown or `docs/` alone runs nothing.
   `ManualScheduler`, against the made-up Arc and Chromium profiles in `Tests/Fixtures`.
 - `scripts/test-policies.sh`: the decisions pulled out of the window controllers
   (`ExtensionLaunch`, `DevToolsToggle`, `FeatureFlags`).
+- `scripts/test-folder-glyph.sh`: the standalone folder component's real AppKit layers and image
+  pixels: emblems follow the front panel's perspective, keep their colors and proportions, and
+  update at 1x/Retina. No CEF or visible window; coverage uses the same harness as `scripts/test.sh`.
 - `scripts/test-perf.sh`: the performance recorder on a real main run loop: injected stalls,
   hang files with a `sample` stack, the session marker, ownership, the recording switch
   ([performance.md](performance.md)).
