@@ -17,12 +17,12 @@ or Arc-only service), per CONTRIBUTING.md.
 | Boosts (per-site CSS/JS, colours, fonts, Zap) | URL bar ✎, Library ▸ Boosts, Settings ▸ Advanced "Enable Boosts" | missing | Biggest local feature still absent. |
 | Easels | File ▸ New Easel ⌃⇧E, Library ▸ Easels | missing | Canvas of captures, text and live page clips. |
 | Notes | File ▸ New Note ⌃⇧N, ⌃⌥N in split, Help ▸ Export Arc Notes | missing | Rich-text documents as sidebar items. |
-| Library ▸ Media | Window ▸ View Media…, Library rail | missing | Images/videos from Documents, Desktop, Screenshots, Arc Captures, Downloads; right-click "Show media" picks folders. |
+| Library ▸ Media | Window ▸ View Media…, Library rail | done | Off until Show Media; ⋯ picks the folders (Cra has no captures folder). |
 | Essential Keyboard Shortcuts window | Help ▸ Essential Keyboard Shortcuts, Settings ▸ Shortcuts | done | 475×462 floating dark panel, five rows of key caps, "View All ↗". |
 | Website appearance | View ▸ Appearance ▸ Automatic / Light / Dark ("Websites, Easels, and Notes will use:") | done | Forces prefers-color-scheme for pages. |
 | Stay On Top | Window ▸ Stay On Top | done | Floats the window above other apps. |
 | Save Page As | File ▸ Save Page As ⇧⌘S | done | |
-| Capture Full Page / Portrait Mode | File, URL-bar menu | partial | Capture Full Page done; Portrait Mode missing. |
+| Capture Full Page / Portrait Mode | File, URL-bar menu | done | Portrait: 390 × 844 pt at 3x. |
 | Copy URL without trackers | Copy URL ⇧⌘C ("Copy the current tab's URL without trackers") | done | utm_* and click ids dropped (CleanURL). |
 | Copy URL as Quote | Edit ▸ ⌃⇧⌘C, "Enable Shared Quotes when highlighting text" | done | Arc links to arc.net (cloud); Cra copies a text-fragment link. |
 | AppleScript dictionary | Arc.sdef, View ▸ Developer ▸ Allow JavaScript from Apple Events | missing | Raycast and other launchers script Arc through it. |
@@ -76,7 +76,7 @@ gains "New Profile".
 | Today tab | Share ▸, Change Icon…, Open in Split View, Archive Tabs Below |
 | Pinned tab | Share ▸, Change Icon…, Edit Pinned Page ▸ (submenu), Add Split View, Remove Pin |
 | Space header / empty sidebar | Share Space… (*skip*), New Folder, Manage Spaces…, Delete Space (check order) |
-| Toolbar address | Share ▸, Capture…, Capture Full Page, Manage Extensions…, Hide Toolbar, Disable Shared Quotes |
+| Toolbar address | Share ▸ (in the Site Control Center), Disable Shared Quotes (arc.net); the rest done |
 | Library button | Show media ▸ Documents, Desktop, Screenshots, Arc Captures, Downloads |
 
 ## 4. Settings
@@ -110,3 +110,5 @@ in this sweep (Essential Shortcuts window, Library pages).
 - Help ▸ Essential Keyboard Shortcuts (Arc's card, checked side by side at 2x); Help ▸
   Troubleshooting with Export Diagnostics…, Reveal Cra Data, Copy Cra Info.
 - Settings ▸ Advanced ▸ Play Cra sound effects.
+- Library ▸ Media and Window ▸ View Media…; File ▸ Capture in Portrait Mode; the toolbar address
+  menu's Capture…, Capture Full Page, Manage Extensions… and Hide Toolbar.
