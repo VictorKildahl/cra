@@ -1197,28 +1197,46 @@ enum StoreTests {
         expect(heard == [a.id, a.id], "pinning it again does")
     }
 
-    // promise: #191
-    /// A tab dropped on a pinned tab makes a split, as on a Today tab (Arc, #191): the pinned tab
-    /// stays pinned where it was, and the split opens at the top of Today with the dropped tab on
-    /// the side it was dropped and a copy of the pinned page beside it.
+    // promise: #191 #180
+    /// A tab dropped on the middle of a pinned tab makes a split, not a folder (#191), in the
+    /// pinned tab's place, as Arc 1.172 does (#180, observed live): a Today tab becomes a pinned
+    /// split with it, two pinned tabs combine where the target was, inside its folder if it has
+    /// one. Both tabs move into the split (no copies), the dropped one on the side it was dropped,
+    /// its pane focused.
     @MainActor
     private static func dropOnPinnedTabSplits() {
         let store = AppComposition(clock: ManualScheduler()).store
         let sid = store.createSpace(title: "Drop", emoji: "🪂").id
         guard let space = store.space(sid) else { return expect(false, "the space is made") }
+        let first = store.createTab(url: "https://example.com/first", title: "First", in: sid, pinned: true, select: false)
         let pinned = store.createTab(url: "https://example.com/pinned", title: "Pinned", in: sid, pinned: true, select: false)
+        let last = store.createTab(url: "https://example.com/last", title: "Last", in: sid, pinned: true, select: false)
         let older = store.createTab(url: "https://example.com/older", in: sid, select: false)
         let dragged = store.createTab(url: "https://example.com/dragged", in: sid, select: false)
-        let pinnedOrder = store.children(of: space.pinnedContainerID).map(\.id)
-        // What the list does with a drop on the left half of the pinned row: .split(with: pinned, leading: true).
-        guard let split = store.createSplit(with: [dragged.id, pinned.id], at: pinned.id) else { return expect(false, "the drop makes a split") }
-        expect(store.isPinned(pinned.id) && store.children(of: space.pinnedContainerID).map(\.id) == pinnedOrder,
-               "the pinned tab stays pinned, in its place")
-        expect(store.children(of: space.todayContainerID).map(\.id) == [split.id, older.id], "the split opens at the top of Today")
-        let panes = store.children(of: split.id)
-        expect(panes.count == 2 && panes[0].id == dragged.id && panes[1].id != pinned.id
-               && panes[1].tab?.url == "https://example.com/pinned" && store.paneID(for: pinned.id, in: split) == panes[1].id,
-               "the dropped tab takes the side it was dropped on, a copy of the pinned page the other")
+
+        // A Today tab on the left half of the pinned row: .split(with: pinned, leading: true).
+        guard let split = store.combineIntoSplit(dragged.id, onto: pinned.id, leading: true) else {
+            return expect(false, "the drop makes a split")
+        }
+        expect(store.children(of: space.pinnedContainerID).map(\.id) == [first.id, split.id, last.id],
+               "the split is pinned, in the pinned tab's place")
+        expect(store.children(of: space.todayContainerID).map(\.id) == [older.id], "the dropped tab left Today; nothing opened there")
+        expect(store.children(of: split.id).map(\.id) == [dragged.id, pinned.id],
+               "both tabs are the panes, the dropped one on the side it was dropped")
+        expect(store.isPinned(dragged.id) && store.item(dragged.id)?.tab?.savedURL == "https://example.com/dragged",
+               "the dropped tab is pinned, its page its home")
+        expect(store.item(split.id)?.split?.focusTabID == dragged.id, "the dropped tab's pane is focused")
+
+        // Pinned on pinned (the reporter's case), inside a folder, on the right half.
+        let folder = store.createFolder(named: "F", in: space.pinnedContainerID)
+        let a = store.createTab(url: "https://example.com/a", in: sid, pinned: true, select: false, parent: folder.id)
+        let b = store.createTab(url: "https://example.com/b", in: sid, pinned: true, select: false, parent: folder.id)
+        guard let inner = store.combineIntoSplit(last.id, onto: b.id, leading: false) else {
+            return expect(false, "the second drop makes a split")
+        }
+        expect(store.children(of: folder.id).map(\.id) == [a.id, inner.id] && store.children(of: inner.id).map(\.id) == [b.id, last.id],
+               "two pinned tabs combine in the target's folder, with no new folder and no copy")
+        expect(store.children(of: space.pinnedContainerID).map(\.id) == [first.id, split.id, folder.id], "the dropped tab left its slot")
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 

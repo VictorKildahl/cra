@@ -3304,9 +3304,17 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
 - [O metadata] Sidebar drops: `SidebarDropTarget = tabList(…) | appTray`, `SidebarDropTargetRegion = left | right`,
   `SidebarDropOperation = move | copy`, the window action `draggedToCombineSplitCompatibleItems(…)`. No drop makes a
   folder: `createFolderFromItems` / `createFolderFromSelection` are the menus' "New Folder with N Items". Cra (#191):
-  a tab dropped on the middle of any tab row, pinned or Today, offers the split (the pinned tab stays, the split
-  opens in Today with a copy, `SidebarStore.createSplit`); Cra's own "New Folder" drop on pinned rows is gone.
-  [?] Not observed live: Arc's drop on a pinned row.
+  a tab dropped on the middle of any tab row, pinned or Today, offers the split; Cra's own "New Folder" drop on
+  pinned rows is gone.
+- [O] Tab-on-tab drops, live (Arc 1.172, offline copy, 7 Nov 2026, discussion #180): the split takes the TARGET's
+  place and both tabs move into it, no copies. A Today tab dropped on the left of pinned "pina" made a pinned split
+  "todaya | pina" in pina's slot (minus button, gone from Today); pinned "pinb" dropped on the right of Today
+  "todayb" made a Today split "todayb | pinb" in todayb's slot (gone from Pinned). The reporter's capture shows
+  pinned on pinned the same way. Arc opens the tab a drag picks up, so the split ends up open with the dropped
+  tab's pane focused (ring and full toolbar on it). Cra (#180): `SidebarStore.combineIntoSplit` moves the dropped
+  tab beside the target (pinning or unpinning it like any drop there), then `createSplit(inPlace:)`; the list
+  selects the dropped tab. Other ways into a split (⌥Return, a drop on the page, Add Split View) keep the Today
+  copy of a pinned tab observed on 24 Oct.
 - [O strings/metadata] Settings ▸ Profiles "Download location" is per profile: `DownloadLocationView { store,
   _selectedTag, _panelOpen }` with tags `arc.folder`, `arc.promptForDownload`, `arc.other` ("Button to confirm
   selection of directory for file downloads"). [?] The menu's own labels aren't in the strings. Cra (#190):
