@@ -30,7 +30,7 @@ or Arc-only service), per CONTRIBUTING.md.
 | Find and Replace, Use Selection to Find, Jump to Selection | Edit ▸ Find | missing | |
 | Sound effects | Settings ▸ Advanced "Play Arc sound effects" | done | Settings ▸ Advanced ▸ Play Cra sound effects gates the capture shutter. |
 | Theme data for websites | Settings ▸ Advanced "Allow websites to get your theme data" | missing | Arc exposes the space's palette to pages. |
-| Window dragging from the top of webpages | Settings ▸ Advanced | missing | |
+| Window dragging from the top of webpages | Settings ▸ Advanced | measured | With the toolbar hidden, Arc drags the window from the top 56 pt of the page (66 pt below the window's top); 58 pt in, the page gets the drag. Cra's strip reaches 4 pt into the page. Needs clicks in that band held until the pointer moves, across Chromium's page windows. |
 | Restore windows from previous session | Settings ▸ Advanced | done | Settings ▸ Advanced; off keeps the window in use last. |
 | Block Cookie Banners | Settings ▸ General | missing | Cra blocks ads and trackers only. |
 | Archive Little Arcs after | Settings ▸ Links (6 hours default) | done | Settings ▸ Tabs ▸ Links; a Little Window left alone that long closes into the archive. |
@@ -126,5 +126,8 @@ in this sweep (Essential Shortcuts window, Library pages).
   editor couldn't be put on screen to copy. Needs a site in Arc (Victor's OK to run the real Arc, or
   a localhost server).
 - Easels and Notes: whole document types with their own editors; same approach once Boosts is in.
-- AppleScript dictionary, Find and Replace, cookie banner blocking, theme data for websites,
-  window dragging from the top of pages, Previews and Join Meeting: not started.
+- AppleScript dictionary (a new way for other apps to drive Cra; worth a decision on what it may do,
+  as for cra:// URLs), Find and Replace, cookie banner blocking, theme data for websites (Arc injects
+  `--arc-palette-*` and `--arc-background-*` variables; names confirmed, values not measured: Little Arc
+  on a file page injects none), window dragging from the top of pages (measured, above), Previews and
+  Join Meeting: not started.
