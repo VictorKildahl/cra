@@ -169,7 +169,8 @@ final class PaneCardView: NSView {
         layer?.backgroundColor = transparent || hasPage ? NSColor.clear.cgColor : NSColor(white: 1, alpha: isDark ? 0.08 : 0.2).cgColor
         let bar = developerBar ?? toolbarColor.map { NSColor(Color(hex: $0)) } ?? .white
         toolbarBackground.layer?.backgroundColor = (hasPage && !transparent ? bar : NSColor.clear).cgColor
-        let page = pageColor.map { NSColor(Color(hex: $0)) } ?? CraBrowser.pageCanvasColor
+        // "clear": a page of Cra's own that lets the window's backdrop through (an Easel, as in Arc).
+        let page = pageColor == "clear" ? NSColor.clear : pageColor.map { NSColor(Color(hex: $0)) } ?? CraBrowser.pageCanvasColor
         pageBackground.layer?.backgroundColor = (hasPage && !transparent ? page : NSColor.clear).cgColor
         hairline.isHidden = hasPage || transparent || !showToolbar
         hairline.layer?.backgroundColor = NSColor(white: isDark ? 1 : 0, alpha: 0.08).cgColor

@@ -23,6 +23,7 @@ final class EaselCanvasView: NSView {
         sheet = EaselSheetView(document: document)
         super.init(frame: .zero)
         wantsLayer = true
+        layer?.backgroundColor = NSColor(white: 0, alpha: 0.5).cgColor
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true

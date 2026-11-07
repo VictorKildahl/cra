@@ -41,6 +41,9 @@ final class EaselBrowser: CraBrowser, NativePage {
             self.delegate?.browser?(self, didChangeCommittedLoad: true)
             self.delegate?.browser(self, didChangeLoading: false, canGoBack: false, canGoForward: false)
             self.delegate?.browser(self, didFinishLoadingURL: self.address, title: title, statusCode: 200)
+            // Arc's canvas is the window's backdrop under a 50 % black veil (#63614B over a gold
+            // space's #C6BE96 sidebar): the card lets the backdrop through, the canvas veils it.
+            self.delegate?.browser?(self, didReportBackgroundColor: "clear")
         }
     }
 
