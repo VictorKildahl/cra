@@ -118,4 +118,31 @@ struct TabSleepPolicyTests {
     @Test func pressureLevels() {
         #expect([PerfSystemSample.Pressure.normal, .warning, .critical, .unknown].map(\.isShort) == [false, true, true, false])
     }
+
+    /// Why a candidate stays awake without being asked, the first that holds (#214).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/214")) func holds() {
+        let now = Date(timeIntervalSince1970: 10_000), cutoff = now.addingTimeInterval(-900)
+        let idle = TabSleepPolicy.PageState(hiddenAt: now.addingTimeInterval(-3600))
+        #expect(TabSleepPolicy.hold(idle, before: cutoff) == nil)
+        func with(_ change: (inout TabSleepPolicy.PageState) -> Void) -> TabSleepPolicy.Hold? {
+            var p = idle
+            change(&p)
+            return TabSleepPolicy.hold(p, before: cutoff)
+        }
+        #expect(with { $0.discarded = true } == .discarded)
+        #expect(with { $0.visible = true } == .shown)
+        #expect(with { $0.hiddenAt = nil } == .shown)
+        #expect(with { $0.hiddenAt = now.addingTimeInterval(-60) } == .shown)
+        #expect(with { $0.audibleAt = now.addingTimeInterval(-60) } == .sound)
+        #expect(with { $0.audibleAt = now.addingTimeInterval(-3600) } == nil)
+        #expect(with { $0.created = false } == .notCreated)
+        #expect(with { $0.closed = true } == .closing)
+        #expect(with { $0.loading = true } == .loading)
+        #expect(with { $0.pictureInPicture = true } == .pictureInPicture)
+        #expect(with { $0.capturing = true } == .capturing)
+        #expect(with { $0.audible = true } == .audible)
+        #expect(with { $0.devTools = true } == .devTools)
+        #expect(with { $0.loading = true; $0.devTools = true } == .loading, "the first that holds is the one said")
+        #expect(TabSleepPolicy.Hold.loading.rawValue == "loading", "the key in perf.json and the word in cra.log")
+    }
 }

@@ -43,7 +43,9 @@ enum TestRoot { case today }
     }
     func setThemeColor(_ id: UUID, _ hex: String) { items[id]?.tab?.themeColor = hex }
     func setFaviconKey(_ id: UUID, _ key: String) { items[id]?.tab?.faviconKey = key }
-    func recordVisit(url: String, title: String) {}
+    /// The URLs a finished load counted as visits, in order.
+    var visits: [String] = []
+    func recordVisit(url: String, title: String) { visits.append(url) }
     func clearHistory(_ range: BrowsingDataClear.Range) {}
     func selectTab(_ id: UUID, window: UUID?) {}
     func markUnread(_ id: UUID, _ unread: Bool) {}

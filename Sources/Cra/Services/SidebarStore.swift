@@ -897,9 +897,10 @@ final class SidebarStore {
     }
 
     /// Put tabs into a new split, panes in the given order, at the place of
-    /// `anchorID` (default: the first tab) in the sidebar.
+    /// `anchorID` (default: the first tab) in the sidebar. `inPlace` keeps a pinned anchor's split
+    /// where the anchor is, with the tabs themselves as panes (a sidebar drop, `combineIntoSplit`).
     @discardableResult
-    func createSplit(with tabIDs: [UUID], at anchorID: UUID? = nil) -> SidebarItem? {
+    func createSplit(with tabIDs: [UUID], at anchorID: UUID? = nil, inPlace: Bool = false) -> SidebarItem? {
         let tabs = tabIDs.compactMap { items[$0] }.filter { $0.isTab }
         guard let first = anchorID.flatMap({ a in tabs.first { $0.id == a } }) ?? tabs.first else { return nil }
         if let existing = splitContaining(first.id) {
@@ -911,7 +912,7 @@ final class SidebarStore {
         // tab moves into the split at its own slot.
         var parentID = first.parentID ?? focusedSpace.todayContainerID
         var at = items[parentID]?.children.firstIndex(of: first.id) ?? 0
-        if isPinned(first.id) {
+        if isPinned(first.id), !inPlace {
             parentID = (spaceID(ofItem: first.id).flatMap { spaces[$0] } ?? focusedSpace).todayContainerID
             at = 0
         }
@@ -927,7 +928,7 @@ final class SidebarStore {
         var anchorPane: UUID?
         for t in tabs {
             let paneID: UUID
-            if isPinned(t.id), let data = t.tab {
+            if isPinned(t.id), !inPlace, let data = t.tab {
                 // Keep the pinned tab; the pane is a Today copy of its page.
                 var copy = SidebarItem.tab(data.url, title: data.savedTitle, parent: split.id)
                 copy.data = .tab({ var c = TabData(url: data.url, title: data.savedTitle); c.faviconKey = data.faviconKey; c.activeTabBeforeCreationID = t.id; return c }())
@@ -949,6 +950,30 @@ final class SidebarStore {
             sp.data = .split(sd)
             items[split.id] = sp
         }
+        touch()
+        return items[split.id]
+    }
+
+    /// A tab dropped on the middle of another tab's row (Arc: `draggedToCombineSplitCompatibleItems`,
+    /// GitHub #191, #180): the two become one split in the target's place, so a drop on a pinned tab
+    /// makes a pinned split, inside its folder if it has one. Both tabs move into it, the dropped
+    /// one on the side it was dropped; nothing is copied. The dropped tab first moves next to the
+    /// target the way any drop there would move it (pinning or unpinning it).
+    @discardableResult
+    func combineIntoSplit(_ draggedID: UUID, onto targetID: UUID, leading: Bool) -> SidebarItem? {
+        guard draggedID != targetID, items[draggedID]?.isTab == true, let target = items[targetID], target.isTab,
+              let parentID = target.parentID, items[parentID]?.isSplit == false, !isFavorite(targetID) else {
+            return createSplit(with: leading ? [draggedID, targetID] : [targetID, draggedID], at: targetID)
+        }
+        if items[draggedID]?.parentID != parentID {
+            moveItem(draggedID, to: parentID, index: items[parentID]?.children.firstIndex(of: targetID))
+            guard items[draggedID]?.parentID == parentID else { return nil }
+        }
+        guard let split = createSplit(with: leading ? [draggedID, targetID] : [targetID, draggedID], at: targetID, inPlace: true),
+              var sd = split.split else { return nil }
+        // Arc focuses the dropped tab's pane (the ring and the full toolbar are on it).
+        sd.focusTabID = draggedID
+        items[split.id]?.data = .split(sd)
         touch()
         return items[split.id]
     }

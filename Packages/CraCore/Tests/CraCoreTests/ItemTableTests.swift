@@ -57,4 +57,25 @@ struct ItemTableTests {
         #expect(fired.value)
         #expect(ItemSignal().version == 0)
     }
+
+    /// The recorder's tab count, kept as items change instead of counted every sample (#214).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/214")) func tabCountFollowsWrites() {
+        let table = ItemTable()
+        let folder = SidebarItem.folder("F", parent: nil)
+        var tabs = (0..<3).map { SidebarItem.tab("https://example.com/\($0)", parent: folder.id) }
+        table[folder.id] = folder
+        for t in tabs { table[t.id] = t }
+        #expect(table.tabCount == 3)
+        tabs[0].title = "renamed"
+        table[tabs[0].id] = tabs[0]
+        table[tabs[1].id] = tabs[1]
+        #expect(table.tabCount == 3, "a tab written again is still one tab")
+        table[tabs[2].id] = nil
+        table[UUID()] = nil
+        #expect(table.tabCount == 2)
+        table[tabs[1].id] = SidebarItem(id: tabs[1].id, parentID: nil, title: "F2", children: [], isUnread: false,
+                                        createdAt: folder.createdAt, data: folder.data)
+        #expect(table.tabCount == 1, "a tab turned folder stops counting")
+        #expect(table.tabCount == table.values.filter(\.isTab).count)
+    }
 }

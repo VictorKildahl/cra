@@ -68,6 +68,60 @@ public struct TabSleepPolicy: Equatable, Sendable {
         return Set((visible + hidden).prefix(count))
     }
 
+    /// A candidate's page as BrowserManager sees it before asking it anything.
+    public struct PageState: Equatable, Sendable {
+        public var discarded = false
+        public var hiddenAt: Date?
+        public var audibleAt: Date?
+        public var visible = false
+        public var created = true
+        public var closed = false
+        public var loading = false
+        public var pictureInPicture = false
+        public var capturing = false
+        public var audible = false
+        public var devTools = false
+
+        public init(discarded: Bool = false, hiddenAt: Date?, audibleAt: Date? = nil, visible: Bool = false, created: Bool = true,
+                    closed: Bool = false, loading: Bool = false, pictureInPicture: Bool = false, capturing: Bool = false,
+                    audible: Bool = false, devTools: Bool = false) {
+            self.discarded = discarded
+            self.hiddenAt = hiddenAt
+            self.audibleAt = audibleAt
+            self.visible = visible
+            self.created = created
+            self.closed = closed
+            self.loading = loading
+            self.pictureInPicture = pictureInPicture
+            self.capturing = capturing
+            self.audible = audible
+            self.devTools = devTools
+        }
+    }
+
+    /// Why a page stays awake without being asked, the first that holds (GitHub #214: a sweep
+    /// that came 27 passes late could not say which). The raw values are `sleepSkip`'s keys in
+    /// perf.json and the words in cra.log.
+    public enum Hold: String, CaseIterable, Sendable {
+        case discarded, shown, sound, notCreated, closing, loading, pictureInPicture, capturing, audible, devTools
+    }
+
+    /// nil when the page may be asked to sleep: out of sight and silent since before `cutoff`, made,
+    /// not loading, and in no Picture in Picture, capture or DevTools.
+    public static func hold(_ p: PageState, before cutoff: Date) -> Hold? {
+        if p.discarded { return .discarded }
+        if p.visible || p.hiddenAt.map({ $0 < cutoff }) != true { return .shown }
+        if p.audibleAt.map({ $0 < cutoff }) == false { return .sound }
+        if !p.created { return .notCreated }
+        if p.closed { return .closing }
+        if p.loading { return .loading }
+        if p.pictureInPicture { return .pictureInPicture }
+        if p.capturing { return .capturing }
+        if p.audible { return .audible }
+        if p.devTools { return .devTools }
+        return nil
+    }
+
     /// Chromium's freezing policy sees what Cra's page probes can't: a call with the camera and
     /// microphone off (an open RTCPeerConnection), a USB, Bluetooth, HID or serial device, a
     /// mirrored or captured tab. `reasons` are its CannotFreezeReasonToString names for the page
