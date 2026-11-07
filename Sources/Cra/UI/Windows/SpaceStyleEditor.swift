@@ -276,9 +276,9 @@ private struct WaveSlider: View {
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width, h = geo.size.height
-            let x = 8 + (w - 16) * value
+            let x = 8 + (w - 16) * CGFloat(value)
             let wave = Path { p in
-                let amp = 3 + (h / 2 - 12) * value
+                let amp = 3 + (h / 2 - 12) * CGFloat(value)
                 for px in stride(from: 8.0, through: w - 8, by: 1) {
                     let y = h / 2 - amp * sin((px - 8) / (w - 16) * CGFloat.pi * 14)
                     px == 8 ? p.move(to: CGPoint(x: px, y: y)) : p.addLine(to: CGPoint(x: px, y: y))
