@@ -3,12 +3,13 @@ import SwiftUI
 
 /// The Library's pages Cra has, in the order of Arc's rail (which also lists Easels and Boosts).
 enum LibraryPage: String, CaseIterable {
-    case media, downloads, spaces, archive
+    case media, downloads, easels, spaces, archive
 
     var title: String {
         switch self {
         case .media: "Media"
         case .downloads: "Downloads"
+        case .easels: "Easels"
         case .spaces: "Spaces"
         case .archive: "Archived Tabs"
         }
@@ -17,15 +18,23 @@ enum LibraryPage: String, CaseIterable {
         switch self {
         case .media: "photo.on.rectangle"
         case .downloads: "arrow.down.circle"
+        case .easels: "pencil.and.scribble"
         case .spaces: "square.on.square"
         case .archive: "archivebox"
         }
     }
-    var selectedSymbol: String { self == .media ? "photo.fill.on.rectangle.fill" : symbol + ".fill" }
+    var selectedSymbol: String {
+        switch self {
+        case .media: "photo.fill.on.rectangle.fill"
+        case .easels: symbol
+        default: symbol + ".fill"
+        }
+    }
     var searchPrompt: String {
         switch self {
         case .media: "Search Media…"
         case .downloads: "Search Downloads…"
+        case .easels: "Search Easels…"
         default: "Search Archive…"
         }
     }
@@ -276,6 +285,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
     enum Row {
         case header(String)
         case media([MediaLibrary.File])
+        case easel(id: UUID, title: String, edited: Date)
         case download(DownloadHistory.Entry)
         case archived(ArchivedItem)
     }
@@ -406,6 +416,16 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
             }
             empty.show(symbol: "arrow.down.circle", title: all.isEmpty ? "Nothing here yet!" : "No matches",
                        detail: all.isEmpty ? "Files you download show up here." : nil)
+        case .easels:
+            let all = EaselFiles.all()
+            let shown = needle.isEmpty ? all : all.filter { $0.title.lowercased().contains(needle) }
+            for (label, entries) in Self.grouped(shown, date: \.edited) {
+                out.append(.header(label))
+                out += entries.map { .easel(id: $0.id, title: $0.title, edited: $0.edited) }
+            }
+            // Arc's empty Easels page: "Out of ideas!"
+            empty.show(symbol: "pencil.and.scribble", title: all.isEmpty ? "Out of ideas!" : "No matches",
+                       detail: all.isEmpty ? "Choose File ▸ New Easel to create a new Easel." : nil)
         case .spaces:
             break
         case .archive:
@@ -529,6 +549,8 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         case .archive:
             let store = store
             MenuItems.add(menu, "Clear Archive", enabled: !store.archive.isEmpty) { store.clearArchive() }
+        case .easels:
+            MenuItems.add(menu, "New Easel") { [weak self] in self?.actions.performAction("newEasel") }
         case .spaces:
             return
         }
@@ -551,6 +573,16 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
             let v = tableView.makeView(withIdentifier: .init("header"), owner: nil) as? LibraryHeaderCell ?? LibraryHeaderCell()
             v.identifier = .init("header")
             v.show(label, ink: colors.isDark ? .white : .black)
+            return v
+        case .easel(let id, let title, let edited):
+            let v = tableView.makeView(withIdentifier: .init("item"), owner: nil) as? LibraryItemCell ?? LibraryItemCell()
+            v.identifier = .init("item")
+            v.showEasel(title: title, edited: edited, colors: colors) { [store, actions] in
+                let url = Easel(id: id).url
+                if let tab = store.allTabs().first(where: { $0.tab?.url == url }) { store.selectTab(tab.id) }
+                else { _ = store.createTab(url: url, title: title, select: true) }
+                actions.closeLibrary()
+            }
             return v
         case .media(let files):
             let v = tableView.makeView(withIdentifier: .init("media"), owner: nil) as? MediaRowCell ?? MediaRowCell()
@@ -585,7 +617,7 @@ extension LibraryListView: NSMenuDelegate {
         let row = table.clickedRow
         guard rows.indices.contains(row) else { return }
         switch rows[row] {
-        case .header, .media: break
+        case .header, .media, .easel: break
         case .archived(let e):
             let actions = actions, store = store
             MenuItems.add(menu, "Restore") { actions.restoreArchived(e.id) }
@@ -690,6 +722,25 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
         let url = e.item.tab?.url ?? ""
         if let tip { (tip.text, tip.keys) = (url, []) } else if !url.isEmpty { tip = ArcTooltipAnchorView.attach(to: self, help: url) }
         tip?.text = url
+        apply(ink: ink)
+    }
+
+    /// An easel on Library ▸ Easels: its glyph, its title, when it was last edited.
+    func showEasel(title text: String, edited: Date, colors: SidebarColors, open: @escaping () -> Void) {
+        self.colors = colors
+        download = nil
+        restore = open
+        let ink: NSColor = colors.isDark ? .white : .black
+        tile.layer?.contents = nil
+        tile.layer?.backgroundColor = ink.withAlphaComponent(0.04).cgColor
+        icon.isHidden = false
+        icon.image = NSImage(systemSymbolName: "pencil.and.scribble", accessibilityDescription: "Easel")
+        title.stringValue = text
+        title.lineBreakMode = .byTruncatingTail
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .full
+        detail.stringValue = "Edited " + f.localizedString(for: edited, relativeTo: Date())
+        tip?.text = text
         apply(ink: ink)
     }
 

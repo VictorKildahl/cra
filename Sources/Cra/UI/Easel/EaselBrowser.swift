@@ -123,6 +123,17 @@ enum EaselFiles {
         return JSONStore<Easel>("Easels/\(id.uuidString).json")
     }
     static func load(_ id: UUID) -> Easel { store(id).load(or: { Easel(id: id) }) }
+
+    /// Every easel on disk, newest edit first, for Library ▸ Easels.
+    static func all() -> [(id: UUID, title: String, edited: Date)] {
+        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+        let decoder = JSONDecoder()
+        return files.filter { $0.pathExtension == "json" }.compactMap { url -> (id: UUID, title: String, edited: Date)? in
+            guard let data = try? Data(contentsOf: url), let e = try? decoder.decode(Easel.self, from: data) else { return nil }
+            let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            return (e.id, e.title, date)
+        }.sorted { $0.edited > $1.edited }
+    }
     static func pictures(_ id: UUID) -> URL {
         let u = folder.appendingPathComponent(id.uuidString, isDirectory: true)
         try? FileManager.default.createDirectory(at: u, withIntermediateDirectories: true)

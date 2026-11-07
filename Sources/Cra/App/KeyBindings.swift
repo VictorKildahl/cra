@@ -235,6 +235,8 @@ final class KeyBindingRegistry {
             // Window
             KeyAction(id: "openLibrary", name: "Open Library…", section: .window, shortcuts: [Shortcut("l", cmdShift)], triggers: ["library"]),
             KeyAction(id: "viewDownloads", name: "View Downloads…", section: .window, shortcuts: [Shortcut("j", cmdShift)], triggers: ["downloads"]),
+            // Arc: Window ▸ View Easels….
+            KeyAction(id: "viewEasels", name: "View Easels…", section: .window, shortcuts: [], triggers: ["easels"]),
             // Arc: Window ▸ View Media….
             KeyAction(id: "viewMedia", name: "View Media…", section: .window, shortcuts: [], triggers: ["media", "screenshots", "photos"]),
             // Arc: Window ▸ Stay On Top.

@@ -18,6 +18,8 @@ final class EaselCanvasView: NSView {
     init(document: Easel) {
         self.document = document
         store = EaselFiles.store(document.id)
+        // A new easel is on disk from the start, so Library ▸ Easels lists it.
+        if !FileManager.default.fileExists(atPath: store.url.path) { store.saveNow(document) }
         sheet = EaselSheetView(document: document)
         super.init(frame: .zero)
         wantsLayer = true

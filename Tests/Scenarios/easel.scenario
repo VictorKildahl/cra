@@ -9,3 +9,5 @@ relaunch
 wait 4
 cra://debug?browserWindows=relaunched
 expect-log browser windows relaunched: kind=normal listed=1 tabs=1 open=1
+cra://action/viewEasels
+wait 1

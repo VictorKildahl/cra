@@ -15,7 +15,7 @@ or Arc-only service), per CONTRIBUTING.md.
 | Arc feature | Where in Arc | Cra | Notes |
 |---|---|---|---|
 | Boosts (per-site CSS/JS, colours, fonts, Zap) | URL bar ✎, Library ▸ Boosts, Settings ▸ Advanced "Enable Boosts" | missing | Biggest local feature still absent. |
-| Easels | File ▸ New Easel ⌃⇧E, Library ▸ Easels | partial | File ▸ New Easel (⌃⇧E): canvas, title, Pointer/Image/Text/Ellipse/Rectangle/Arrow/Freehand, pictures by file, paste or drop, saved per easel. Missing: Library ▸ Easels, the canvas's backdrop colour (Cra's is black), the text-size pill, captures into an easel; sharing is *skip* (cloud). |
+| Easels | File ▸ New Easel ⌃⇧E, Library ▸ Easels | partial | File ▸ New Easel (⌃⇧E): canvas, title, Pointer/Image/Text/Ellipse/Rectangle/Arrow/Freehand, pictures by file, paste or drop, saved per easel. Library ▸ Easels and Window ▸ View Easels… done. Missing: the canvas's backdrop colour (Cra's is black), the text-size pill, captures into an easel; sharing is *skip* (cloud). |
 | Notes | File ▸ New Note ⌃⇧N, ⌃⌥N in split, Help ▸ Export Arc Notes | *skip* | Arc 1.172.1 no longer creates Notes: New Note is gone from the File menu and ⌃⇧N does nothing; only Help ▸ Export Arc Notes is left. |
 | Library ▸ Media | Window ▸ View Media…, Library rail | done | Off until Show Media; ⋯ picks the folders (Cra has no captures folder). |
 | Essential Keyboard Shortcuts window | Help ▸ Essential Keyboard Shortcuts, Settings ▸ Shortcuts | done | 475×462 floating dark panel, five rows of key caps, "View All ↗". |
@@ -125,7 +125,7 @@ in this sweep (Essential Shortcuts window, Library pages).
 - Edit ▸ Find ▸ Use Selection to Find and Jump to Selection (⌘J).
 - Easels, first version: File ▸ New Easel (⌃⇧E) opens a canvas in the tab (EaselBrowser, a page
   engine of its own like WebKitBrowser, so sidebar.json is unchanged: the tab's address is
-  easel://<id>, the drawing Easels/<id>.json).
+  easel://<id>, the drawing Easels/<id>.json); Library ▸ Easels and Window ▸ View Easels….
 
 ## Easels, measured (Arc 1.172.1, offline copy, 7 Nov 2026)
 

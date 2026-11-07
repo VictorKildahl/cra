@@ -1349,6 +1349,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "viewArchive": main.showLibrary(.archive)
         case "viewDownloads": main.showLibrary(.downloads)
         case "viewMedia": main.showLibrary(.media)
+        case "viewEasels": main.showLibrary(.easels)
         case "goBack": main.currentBrowser?.goBack()
         case "goForward": main.currentBrowser?.goForward()
         case "pinTab": if let c = current, !main.isBlank { store.togglePinned(c) }
@@ -1603,7 +1604,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         window.addItem(std("Minimize Window", #selector(NSWindow.performMiniaturize(_:)), "m"))
         window.addItem(std("Zoom", #selector(NSWindow.performZoom(_:))))
         window.addItem(.separator())
-        window.addItem(item("openLibrary")); window.addItem(item("viewDownloads")); window.addItem(item("viewMedia"))
+        window.addItem(item("openLibrary")); window.addItem(item("viewDownloads")); window.addItem(item("viewEasels")); window.addItem(item("viewMedia"))
         window.addItem(.separator())
         window.addItem(item("promoteLittleWindow")); window.addItem(item("littleWindowOpenInMenu")); window.addItem(item("closeLittleWindows"))
         window.addItem(.separator())
