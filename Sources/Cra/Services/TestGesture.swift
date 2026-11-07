@@ -31,6 +31,13 @@ enum TestGesture {
         }
     }
 
+    /// An other-button release at a point of the window, as the window's event monitors see it
+    /// (its button number is AppKit's, not the one a test means).
+    static func otherMouseUp(at point: NSPoint, in window: NSWindow) -> NSEvent? {
+        NSEvent.mouseEvent(with: .otherMouseUp, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                           windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0)
+    }
+
     /// A key press through the app's event queue, routed as the keyboard's are (key equivalents,
     /// the page, then Cra's own keys), with the characters a layout gives: the test picks the
     /// layout's characters while the menu bar's key equivalents follow the selected one.

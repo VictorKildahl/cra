@@ -740,10 +740,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             // clickAt=x,y: a click there through the event queue, as the pointer's would go (#195);
-            // target=little as for menuAt.
+            // target=little as for menuAt. button=back|forward: that mouse button released there,
+            // handed to what the window's otherMouseUp monitor runs (#233); AppKit can't make a
+            // window's event with button 3 or 4.
             if let g = dict["clickAt"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2,
                let w = dict["target"] == "little" ? littleWindows.last?.window : main.window {
-                TestGesture.click(at: NSPoint(x: g[0], y: w.frame.height - g[1]), in: w)
+                let point = NSPoint(x: g[0], y: w.frame.height - g[1])
+                if let b = dict["button"], let button = ["back": MouseButtonSpaceSwitch.back, "forward": MouseButtonSpaceSwitch.forward][b] {
+                    let taken = TestGesture.otherMouseUp(at: point, in: w).map { main.mouseButtonSwitchesSpace(button, $0) } ?? false
+                    CraLog.note("mouse \(b) at \(Int(g[0])),\(Int(g[1])): \(taken ? "switched space" : "passed on")")
+                    return
+                }
+                TestGesture.click(at: point, in: w)
                 return
             }
             if let st = dict["status"] { main.browserManager(statusMessage: st); return }

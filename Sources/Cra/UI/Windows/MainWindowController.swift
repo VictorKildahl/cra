@@ -2066,12 +2066,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             target.makeKey()
             return event
         }
+        // A mouse's back and forward buttons over the sidebar switch spaces, like Arc's
+        // SidebarView (issue #233); over a page they stay Chromium's history back and forward.
         // Middle-click on a sidebar tab closes it, like Arc and Chrome. Anywhere else, a page
         // included, the click goes on to whatever is under it. The row is found under the click
         // itself: a remembered hover outlived its row when the tab joined a split, and a middle
         // click inside a split pane closed that tab (GitHub #208).
         middleClickMonitor = NSEvent.addLocalMonitorForEvents(matching: .otherMouseUp) { [weak self] event in
-            guard let self, event.buttonNumber == 2, let window = self.window, let target = event.window,
+            guard let self else { return event }
+            if self.mouseButtonSwitchesSpace(event.buttonNumber, event) { return nil }
+            guard event.buttonNumber == 2, let window = self.window, let target = event.window,
                   target === window || target.parent === window,
                   let id = SpaceListView.tabID(under: event) else { return event }
             self.middleClickClose(id)
@@ -2344,14 +2348,29 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         return v as? NSScrollView
     }
 
+    /// A mouse's back or forward button released over the sidebar: the previous or next space,
+    /// wrapping as Spaces ▸ Previous/Next Space do (Arc's SidebarView, issue #233). Returns false
+    /// for any other button, or one released anywhere else.
+    func mouseButtonSwitchesSpace(_ button: Int, _ event: NSEvent) -> Bool {
+        guard let offset = MouseButtonSpaceSwitch.offset(buttonNumber: button), isOverSidebar(event) else { return false }
+        store.focusSpace(offset: offset, window: windowID)
+        return true
+    }
+
+    /// Whether `event` is over this window's sidebar, docked or floating, in a window that has
+    /// spaces to switch (not a Little Window).
+    private func isOverSidebar(_ event: NSEvent) -> Bool {
+        let host = shell.sidebarHost
+        return (shell.sidebarVisible || shell.floatingSidebar) && event.window != nil && event.window === host.window
+            && host.bounds.contains(host.convert(event.locationInWindow, from: nil)) && !isStandalone
+    }
+
     /// Shift + wheel, or a sideways wheel, over the sidebar: past a flick the next or previous
     /// space comes in on the space change's spring, and before the first space the Library
     /// slides in, as a swipe would bring it (Arc 1.171, WheelSpaceSwitch). Returns false for a
     /// wheel the sidebar doesn't take.
     private func wheelSwitchesSpace(_ event: NSEvent) -> Bool {
-        let host = shell.sidebarHost
-        guard shell.sidebarVisible || shell.floatingSidebar, event.window != nil, event.window === host.window,
-              host.bounds.contains(host.convert(event.locationInWindow, from: nil)), !isStandalone else { return false }
+        guard isOverSidebar(event) else { return false }
         let dx = event.scrollingDeltaX
         // On the Spaces page the cards scroll first; once they can't scroll that way the wheel pages,
         // which leaves the Library when it heads for the next space, and over the rail it leaves at

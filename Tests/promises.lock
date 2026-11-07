@@ -355,3 +355,6 @@
 #226   Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::theURLFieldHasTheSlidersWithoutExtensions  a7173c578717
 #226   Tests/Scenarios/site-controls-no-extensions.scenario  c1c5b5365539
 #227   Tests/Scenarios/quit-during-web-store-install.scenario  a3e3b0c8eb2b
+#233   Packages/CraCore/Tests/CraCoreTests/MouseButtonSpaceSwitchTests.swift::backGoesToThePreviousSpaceAndForwardToTheNext  10b4dc8a4a65
+#233   Packages/CraCore/Tests/CraCoreTests/MouseButtonSpaceSwitchTests.swift::otherButtonsDoNotSwitch  07b725a8e6f5
+#233   Tests/Scenarios/mouse-buttons-switch-spaces.scenario  79148e8b3ebb

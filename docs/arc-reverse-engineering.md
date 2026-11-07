@@ -2733,6 +2733,24 @@ tap with a real Shift key held around them; the space read from each window's `s
   Library in or out like its button. On the Spaces page the cards take the wheel first (10 pt per line, as in Arc)
   and the wheel leaves the Library only at their end.
 
+## Mouse back and forward buttons (Arc 1.172.1, 7 Nov 2026, issue #233, static: main binary arm64)
+
+Reported on #233: in Arc a mouse's back and forward buttons over the sidebar switch spaces.
+- [O static] `Arc.SidebarView` implements `otherMouseUp:` (method list 0x1036918e0, with `hitTest:`, `mouseDown:`,
+  `menuForEvent:`; imp 0x100313594 → 0x1003134a0). Behind a Bool stored property being true (not identified),
+  `buttonNumber` 3 sends the spaces reducer's empty case 3 and 4 sends case 2. That enum's empty cases, in order
+  (`__swift5_fieldmd`): `didTriggerCreateSpaceGesture`, `didTapCreateSpaceButton`, `focusNextSpace`,
+  `focusPreviousSpace`, `iconPickerWillClose`. So back (3) = `focusPreviousSpace`, forward (4) = `focusNextSpace`, on
+  the button's release; the press does nothing there. No `otherMouseUp:` on the page, where Chromium's own
+  back/forward runs.
+- [O static] NSEvent helpers next to `PageSwipeController` (0x100a0d608…0x100a0d6b8): `otherMouseDown` with button
+  2, `otherMouseUp` with button 3 and with button 4.
+- [U] Whether `focusNextSpace` wraps at the last space or opens the Library before the first; what the Bool gate is.
+  Not checked live (Victor was using the Mac).
+- Cra: `MouseButtonSpaceSwitch` (CraCore) maps 3 → −1 and 4 → +1. The window's `otherMouseUp` monitor, over the
+  sidebar (docked or floating, not a Little Window), calls `focusSpace(offset:)` like Spaces ▸ Previous/Next Space
+  (which wrap) and swallows the event; anywhere else the event goes on. Scenario `mouse-buttons-switch-spaces`.
+
 ### Extension action icons, badges and tooltips (Arc 1.171, 2 Nov 2026, issue #106, offline Arc + probe)
 - [O live] Offline Arc (fake home with the Storable*.json files minus both sync states, `--load-extension` with
   a probe, pinned through the fake profile's `extensions.pinned_extensions`). Probe: red top-level `icons`, blue
