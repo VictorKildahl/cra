@@ -898,6 +898,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
+            // gmailPreview=<unread>: the Gmail favorite's preview card for a sample inbox.
+            if let n = dict["gmailPreview"].flatMap(Int.init), let w = main.window { GmailPreviewCard.shared.demo(unread: n, in: w); return }
             // boostZap=1|0: Boost editor's Zap on or off for the open page.
             if let z = dict["boostZap"] { main.debugZap(z == "1"); return }
             // captureToEasel=1: the page's screenshot, then the capture menu's New Easel.

@@ -1258,9 +1258,27 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         ArcTooltipController.shared.mouseMoved(in: self)
     }
 
-    override func mouseEntered(with event: NSEvent) { hovering = true; trackPointer(event) }
+    override func mouseEntered(with event: NSEvent) {
+        hovering = true
+        trackPointer(event)
+        if let url = previewURL, let store = grid?.store {
+            GmailPreviewCard.shared.hover(self, favoriteURL: url, profilePath: store.profilePath(item: itemID))
+        }
+    }
     override func mouseMoved(with event: NSEvent) { trackPointer(event) }
-    override func mouseExited(with event: NSEvent) { hovering = false; hoveredCell = nil; ArcTooltipController.shared.mouseExited(self) }
+    override func mouseExited(with event: NSEvent) {
+        hovering = false
+        hoveredCell = nil
+        ArcTooltipController.shared.mouseExited(self)
+        GmailPreviewCard.shared.leave(self)
+    }
+
+    /// A Gmail favorite with Previews on: Arc shows its unread mail instead of the name tooltip.
+    private var previewURL: String? {
+        guard let store = grid?.store, store.settings.favoritePreviews, let url = store.item(itemID)?.tab?.url,
+              GmailPreview.feedURL(for: url) != nil else { return nil }
+        return url
+    }
 
     override func mouseDown(with event: NSEvent) { press = event }
     override func mouseDragged(with event: NSEvent) {
@@ -1420,7 +1438,7 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
 
     // ArcTooltipTarget: the title by the pointer.
     var text: String {
-        guard let m = model else { return "" }
+        guard let m = model, previewURL == nil else { return "" }
         if let i = hoveredCell, m.cells.count > 1, m.cells.indices.contains(i) { return m.cells[i].title }
         return m.title
     }

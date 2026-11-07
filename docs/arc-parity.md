@@ -34,8 +34,8 @@ or Arc-only service), per CONTRIBUTING.md.
 | Restore windows from previous session | Settings ▸ Advanced | done | Settings ▸ Advanced; off keeps the window in use last. |
 | Block Cookie Banners | Settings ▸ General | done | Settings ▸ Privacy; hides the common consent managers' banners (CookieBanners), off by default as in Arc. |
 | Archive Little Arcs after | Settings ▸ Links (6 hours default) | done | Settings ▸ Tabs ▸ Links; a Little Window left alone that long closes into the archive. |
-| Previews (Gmail, Calendar on Favorites) | Settings ▸ General ▸ Previews Settings… | missing | Fetches through the browser session; nothing leaves the Mac. |
-| Join Meeting ⌃⌘J | Shortcuts | missing | Needs calendar previews first. |
+| Previews (Gmail, Calendar on Favorites) | Settings ▸ General ▸ Previews Settings… | partial | Gmail done: hovering a Gmail favorite shows its unread mail from Gmail's Atom feed (the space's own sign-in), Arc's card and empty state measured on Victor's Arc. Calendar not measured: Victor has no Calendar favorite. |
+| Join Meeting ⌃⌘J | Shortcuts | missing | Needs Calendar previews, which couldn't be measured (no Calendar favorite in Victor's Arc). |
 | Troubleshooting menu | Help ▸ Troubleshooting: Record Trace, Open Task Manager, Reveal Arc Data, Copy Arc Info | done | Export Diagnostics…, Open Task Manager (Chrome's), Reveal Cra Data, Copy Cra Info; Record Trace is Arc-internal. |
 | Help menu | Getting Started, Release Notes, Contact the Team, Visit Help Center, Restore Data | partial | |
 | Ad blocker upsell card, Sync, Account, Membership card, Share Arc, Sign Out, Send to Dia, Share Space | | *skip* | Account/cloud. |
@@ -83,7 +83,7 @@ gains "New Profile".
 
 | Arc tab | Rows Cra lacks |
 |---|---|
-| General | Previews Settings… (Block Cookie Banners done, under Privacy) |
+| General | (Previews: Gmail done, Tabs pane; Block Cookie Banners done, under Privacy) |
 | Profiles | "New documents" app (Arc's Notes/Easels); Privacy, Passwords, Credit Cards and Notifications done |
 | Links | "Open Little Arc when clicking on links with ⌥⌘ held"; Archive Little Windows after done |
 | Advanced | Shared Quotes (arc.net) (the rest done) |
@@ -126,6 +126,7 @@ in this sweep (Essential Shortcuts window, Library pages).
   measured live in Arc (names, #RRGGBBAA format, no trace in the page's markup) and fitted to the
   semantic palette Arc stores per space.
 - Edit ▸ Find ▸ Use Selection to Find and Jump to Selection (⌘J).
+- Previews for a Gmail favorite: unread mail in Arc's card on hover (Settings ▸ Tabs).
 - Boosts: New Boost, the editor, Zap, CSS/JS code, Library ▸ Boosts, Window ▸ View Boosts…, the Advanced switch.
 - Window dragging from the top of webpages (Victor's choice, 7 Nov: on, as in Arc).
 - AppleScript, Arc's dictionary (Victor's choice, 7 Nov: like Arc, JavaScript off by default).
@@ -160,4 +161,4 @@ in this sweep (Essential Shortcuts window, Library pages).
 
 ## Left for later, and why
 
-- Previews and Join Meeting: not started (they need a live Google session in Arc to measure).
+- Calendar previews and Join Meeting: Arc shows them for a Google Calendar favorite, which Victor's Arc doesn't have.

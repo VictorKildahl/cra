@@ -534,6 +534,8 @@ public struct AppSettings: Codable, Equatable {
     public var pageTopWindowDrag: Bool = true
     /// Arc's Settings ▸ Advanced "Enable Boosts on websites you visit", on by default.
     public var boostsEnabled: Bool = true
+    /// Arc's Settings ▸ General ▸ Previews: hovering a Gmail favorite shows its unread mail.
+    public var favoritePreviews: Bool = true
     /// Arc's searchSuggestEnabled: the command bar asks the search engine for suggestions
     /// as you type and fills its rows with them.
     public var searchSuggestions: Bool = true
@@ -749,6 +751,7 @@ extension AppSettings {
         allowAppleEventsJavaScript = try c.decodeIfPresent(Bool.self, forKey: .allowAppleEventsJavaScript) ?? false
         pageTopWindowDrag = try c.decodeIfPresent(Bool.self, forKey: .pageTopWindowDrag) ?? true
         boostsEnabled = try c.decodeIfPresent(Bool.self, forKey: .boostsEnabled) ?? true
+        favoritePreviews = try c.decodeIfPresent(Bool.self, forKey: .favoritePreviews) ?? true
         searchSuggestions = try c.decodeIfPresent(Bool.self, forKey: .searchSuggestions) ?? true
         showSpaceHeaderOnSingleSpace = try c.decodeIfPresent(Bool.self, forKey: .showSpaceHeaderOnSingleSpace) ?? true
         sharedFavorites = try c.decodeIfPresent(Bool.self, forKey: .sharedFavorites) ?? false
