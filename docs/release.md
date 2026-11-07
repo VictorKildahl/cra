@@ -237,6 +237,16 @@ from a different source. To change the build without a CEF version bump, bump th
 `codecsN` suffix of `CEF_RELEASE` and publish again. Needs Xcode's Metal toolchain
 (`xcodebuild -downloadComponent MetalToolchain`).
 
+**Patch rounds and Intel.** Once `build-cef.sh` has built a version, a new or changed
+patch goes through `rebuild-cef.sh`, which builds from that checkout for both CPUs
+(minutes each) and never reruns CEF's patcher (rerunning it compiles Web Push out). The
+Intel (`macosx64`) build is cross-compiled on the same Mac from the same sources, in its
+own `out/Release_GN_x64` (~12 GB; the first one compiles everything):
+
+    scripts/rebuild-cef.sh [arm64] [x64]           # both when no CPU is given
+    scripts/publish-cef.sh                         # arm64 asset
+    CEF_ARCH=macosx64 scripts/publish-cef.sh       # Intel asset, same release
+
 **Staying current.** Chromium only ships security fixes for its newest version. The
 "CEF updates" workflow (`.github/workflows/cef-updates.yml`, daily, free Linux runner)
 runs `scripts/check-cef-update.sh`: when Spotify's index lists a newer stable CEF for
@@ -244,7 +254,7 @@ macOS arm64, it opens one "Chromium engine update available" issue, assigned to 
 owner, with the exact command. The build itself runs on the Mac, because GitHub's free
 macOS runners are too small (3 cores, 14 GB disk, 6 hour jobs) and larger ones are billed:
 
-    scripts/update-cef.sh <cef_version>   # build, publish, pin, rebuild Cra
+    scripts/update-cef.sh <cef_version>   # build + publish arm64 and x64, pin, rebuild Cra
 
 A same-major update reuses the checkout: `build-cef.sh` moves it to the new Chromium tag
 itself, and ninja recompiles nearly everything (about 2½ hours on the M2 Max). A new Chromium
@@ -255,5 +265,6 @@ issue and tag a release.
 
 - **Homebrew.** A cask (`brew install --cask cra`) pointing at the DMG and
   `SHA256SUMS.txt`.
-- **Intel.** The CEF fetch pins `macosarm64`; a universal build needs both CEF
-  distributions and `lipo`.
+- **Intel.** CEF is published for `macosx64` too (above). Still missing: an x86_64
+  `swift build` in `scripts/build.sh`, a separate Intel DMG from the release workflow
+  and its own Sparkle feed.

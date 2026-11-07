@@ -20,9 +20,16 @@ eval "$(grep -E '^CEF_VERSION=' scripts/fetch-cef.sh)"
 # 154.0.34+g14c5a08+chromium-154.0.8037.98: CEF commit 14c5a08 on branch 8037.
 CEF_COMMIT="$(sed -E 's/.*\+g([0-9a-f]+)\+.*/\1/' <<<"$CEF_VERSION")"
 CEF_BRANCH="$(sed -E 's/.*chromium-[0-9]+\.[0-9]+\.([0-9]+)\..*/\1/' <<<"$CEF_VERSION")"
-# Build for the host CPU by default (automate-git/make_distrib take --arm64-build /
-# --x86-build); CEF_TARGET_ARCH (arm64 / x86) overrides.
-CEF_TARGET_ARCH="${CEF_TARGET_ARCH:-$([ "$(uname -m)" = arm64 ] && echo arm64 || echo x86)}"
+# Builds for the host CPU; CEF_TARGET_ARCH=x64 (or arm64) cross-compiles. automate-git
+# and make_distrib take --arm64-build / --x64-build, and CEF's gn_args.py only writes
+# out/Release_GN_<cpu> for the other CPU when CEF_ENABLE_AMD64 / CEF_ENABLE_ARM64 is set.
+# For a second CPU on a checkout that is already built, scripts/rebuild-cef.sh is faster.
+CEF_TARGET_ARCH="${CEF_TARGET_ARCH:-$([ "$(uname -m)" = arm64 ] && echo arm64 || echo x64)}"
+case "$CEF_TARGET_ARCH" in
+  arm64) export CEF_ENABLE_ARM64=1 ;;
+  x64)   export CEF_ENABLE_AMD64=1 ;;
+  *) echo "CEF_TARGET_ARCH must be arm64 or x64, not $CEF_TARGET_ARCH" >&2; exit 1 ;;
+esac
 ARCH_FLAG="--${CEF_TARGET_ARCH}-build"
 echo "Building CEF $CEF_VERSION (branch $CEF_BRANCH, commit $CEF_COMMIT, $CEF_TARGET_ARCH)"
 # .noindex keeps Spotlight out of ~40 GB of sources.
@@ -105,12 +112,13 @@ for p in "$PATCHES"/*.patch; do
   fi
 done
 # 4. Build. make_distrib takes the framework from cefclient.app.
-(cd chromium/src && autoninja -C out/Release_GN_arm64 cefclient)
+(cd chromium/src && autoninja -C "out/Release_GN_$CEF_TARGET_ARCH" cefclient)
 LC_ALL=C grep -c -a GCM.RegistrationCacheStatus \
-  "chromium/src/out/Release_GN_arm64/cefclient.app/Contents/Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework" >/dev/null \
+  "chromium/src/out/Release_GN_$CEF_TARGET_ARCH/cefclient.app/Contents/Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework" >/dev/null \
   || { echo "GCM is stubbed out (components_gcm_disable.patch won over gcm-enabled.patch)" >&2; exit 1; }
 # 5. Package. automate-git does not pass --no-symbols on for branches after 7151,
 #    and without dSYMs (enable_dsyms=false) make_distrib then fails.
-rm -rf chromium/src/cef/binary_distrib
+# Only this CPU's package: the other CPU's may not be published yet.
+rm -rf chromium/src/cef/binary_distrib/cef_binary_"${CEF_VERSION}"_macos"$([ "$CEF_TARGET_ARCH" = x64 ] && echo x64 || echo arm64)"_minimal*
 (cd chromium/src/cef/tools && python3 make_distrib.py --output-dir=../binary_distrib --allow-partial \
   --ninja-build "$ARCH_FLAG" --minimal --no-docs --no-symbols)
