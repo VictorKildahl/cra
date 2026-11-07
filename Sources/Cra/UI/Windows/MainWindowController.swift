@@ -380,7 +380,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             }
         }
         sidebarActions.performAction = { [weak self] id in
-            if id.hasPrefix("muteTab:"), let uuid = UUID(uuidString: String(id.dropFirst(8))) {
+            if id.hasPrefix("openInSplit:"), let uuid = UUID(uuidString: String(id.dropFirst(12))) {
+                self?.openTabInSplit(uuid)
+            } else if id.hasPrefix("muteTab:"), let uuid = UUID(uuidString: String(id.dropFirst(8))) {
                 let muted = self?.store.item(uuid)?.tab?.muted ?? false
                 self?.app.runtime(for: uuid)?.browser.setAudioMuted(muted)
             } else {
@@ -573,6 +575,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         guard store.addEmptyPane(nextTo: current) != nil else { return }
         refresh()
         openCommandBar(.editURL)
+    }
+
+    /// Arc's "Open in Split View" on a sidebar tab: that tab joins the open one in a split, as the
+    /// command bar's split row does with a tab it lists.
+    func openTabInSplit(_ id: UUID) {
+        guard let current = selectedTabID, current != id, store.item(current)?.isEmptyTab == false else { return }
+        if store.paneTabIDs(for: current).contains(id) { store.selectTab(id, window: windowID); return }
+        guard store.paneTabIDs(for: current).count < 4 else { showToast("Cannot Add New Pane"); return }
+        let split = store.splitContaining(current).map { sp in store.addToSplit(sp.id, tabID: id, at: nil); return store.item(sp.id) }
+            ?? store.createSplit(with: [current, id], at: current)
+        store.selectTab(split.flatMap { store.paneID(for: id, in: $0) } ?? id, window: windowID)
     }
 
     /// Arc's "Close this Split Pane" (⌃⇧-): the pane's tab closes like any tab;

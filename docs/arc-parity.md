@@ -73,8 +73,8 @@ gains "New Profile".
 
 | Where | Arc items Cra lacks |
 |---|---|
-| Today tab | Share ▸, Change Icon…, Open in Split View, Archive Tabs Below |
-| Pinned tab | Share ▸, Change Icon…, Edit Pinned Page ▸ (submenu), Add Split View, Remove Pin |
+| Today tab | Share ▸, Change Icon… (Open in Split View and Archive Tabs Below done) |
+| Pinned tab | Share ▸, Change Icon…, Edit Pinned Page ▸ (Cra lists them flat on purpose, PR #55), Remove Pin (Add Split View done) |
 | Space header / empty sidebar | Share Space… (*skip*), New Folder, Manage Spaces…, Delete Space (check order) |
 | Toolbar address | Share ▸ (in the Site Control Center), Disable Shared Quotes (arc.net); the rest done |
 | Library button | Show media ▸ Documents, Desktop, Screenshots, Arc Captures, Downloads |
@@ -114,6 +114,7 @@ in this sweep (Essential Shortcuts window, Library pages).
   menu's Capture…, Capture Full Page, Manage Extensions… and Hide Toolbar.
 - Settings ▸ Tabs ▸ Archive Little Windows after (1 hour, 6 hours, 12 hours); Settings ▸ Profiles ▸
   Your Data and Settings (Chromium's privacy, passwords, cards and notifications pages per profile).
+- Sidebar tab menu: Add Split View on the open tab, Open in Split View on any other.
 
 ## Left for later, and why
 

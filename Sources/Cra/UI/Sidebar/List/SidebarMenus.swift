@@ -78,6 +78,12 @@ enum SidebarMenus {
         add(menu, action: "renameTab", "Rename…") { ui.renamingID = id }
         if item.title != nil { add(menu, "Use Page Title") { store.rename(id, to: nil) } }
         if m.pinned, tab.liveItemURL == nil { pinnedURLItems(menu, id, navigatedAway: m.navigatedAway, store: store, actions: actions) }
+        // Arc: "Add Split View" on the open tab, "Open in Split View" on any other.
+        if store.isSelected(id, window: ui.windowID) {
+            add(menu, action: "addSplitView", "Add Split View") { actions.performAction("addSplitView") }
+        } else if store.selectedTabID(window: ui.windowID) != nil, store.spaceID(ofItem: id) == store.focusedSpaceID(window: ui.windowID) {
+            add(menu, "Open in Split View") { actions.performAction("openInSplit:\(id.uuidString)") }
+        }
         add(menu, action: "duplicateTab", "Duplicate") { _ = store.duplicateTab(id) }
         add(menu, action: "copyURL", "Copy Link") { copy(CleanURL.withoutTrackers(tab.url)) }
         add(menu, action: "muteTab", tab.muted ? "Unmute" : "Mute") {
