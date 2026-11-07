@@ -426,6 +426,9 @@ final class SidebarStore {
     /// Arc's "Allow websites to get your theme data": the `:root` rule a tab's pages get, from its
     /// space's theme in the scheme pages see (View ▸ Appearance, else the Mac's); nil when off or
     /// incognito.
+    /// Arc's "Block Cookie Banners": the stylesheet a tab's pages get, nil while it's off.
+    func cookieBannerCSS(item id: UUID) -> String? { settings.blockCookieBanners ? CookieBanners.css : nil }
+
     func themeDataCSS(item id: UUID, systemDark: Bool) -> String? {
         guard settings.shareThemeWithWebsites, !isIncognito(item: id),
               let theme = spaceID(ofItem: id).flatMap({ spaces[$0]?.theme }) else { return nil }

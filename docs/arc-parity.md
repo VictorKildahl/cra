@@ -32,7 +32,7 @@ or Arc-only service), per CONTRIBUTING.md.
 | Theme data for websites | Settings ▸ Advanced "Allow websites to get your theme data" | done | `--arc-palette-*` and `--arc-background-*` as #RRGGBBAA, from the space's theme (ArcThemeData; fitted to Arc's stored palette, checked live). |
 | Window dragging from the top of webpages | Settings ▸ Advanced | measured | With the toolbar hidden, Arc drags the window from the top 56 pt of the page (66 pt below the window's top); 58 pt in, the page gets the drag. Cra's strip reaches 4 pt into the page. Needs clicks in that band held until the pointer moves, across Chromium's page windows. |
 | Restore windows from previous session | Settings ▸ Advanced | done | Settings ▸ Advanced; off keeps the window in use last. |
-| Block Cookie Banners | Settings ▸ General | missing | Cra blocks ads and trackers only. |
+| Block Cookie Banners | Settings ▸ General | done | Settings ▸ Privacy; hides the common consent managers' banners (CookieBanners), off by default as in Arc. |
 | Archive Little Arcs after | Settings ▸ Links (6 hours default) | done | Settings ▸ Tabs ▸ Links; a Little Window left alone that long closes into the archive. |
 | Previews (Gmail, Calendar on Favorites) | Settings ▸ General ▸ Previews Settings… | missing | Fetches through the browser session; nothing leaves the Mac. |
 | Join Meeting ⌃⌘J | Shortcuts | missing | Needs calendar previews first. |
@@ -83,7 +83,7 @@ gains "New Profile".
 
 | Arc tab | Rows Cra lacks |
 |---|---|
-| General | Previews Settings…, Block Cookie Banners |
+| General | Previews Settings… (Block Cookie Banners done, under Privacy) |
 | Profiles | "New documents" app (Arc's Notes/Easels); Privacy, Passwords, Credit Cards and Notifications done |
 | Links | "Open Little Arc when clicking on links with ⌥⌘ held"; Archive Little Windows after done |
 | Advanced | window dragging from the top of webpages (measured), Shared Quotes (arc.net), Enable Boosts (sound effects, restore windows and theme data done) |
@@ -123,6 +123,7 @@ in this sweep (Essential Shortcuts window, Library pages).
   measured live in Arc (names, #RRGGBBAA format, no trace in the page's markup) and fitted to the
   semantic palette Arc stores per space.
 - Edit ▸ Find ▸ Use Selection to Find and Jump to Selection (⌘J).
+- Settings ▸ Privacy ▸ Block cookie banners (Arc's "Block Cookie Banners", off by default).
 - Easels, first version: File ▸ New Easel (⌃⇧E) opens a canvas in the tab (EaselBrowser, a page
   engine of its own like WebKitBrowser, so sidebar.json is unchanged: the tab's address is
   easel://<id>, the drawing Easels/<id>.json); Library ▸ Easels and Window ▸ View Easels….
@@ -146,5 +147,5 @@ in this sweep (Essential Shortcuts window, Library pages).
   editor couldn't be put on screen to copy. Needs a site in Arc (Victor's OK to run the real Arc, or
   a localhost server).
 - AppleScript dictionary (a new way for other apps to drive Cra; worth a decision on what it may do,
-  as for cra:// URLs), cookie banner blocking, window dragging from the top of pages (measured, above), Previews and
+  as for cra:// URLs), window dragging from the top of pages (measured, above), Previews and
   Join Meeting: not started.

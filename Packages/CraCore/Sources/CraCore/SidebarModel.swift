@@ -523,6 +523,8 @@ public struct AppSettings: Codable, Equatable {
     public var restoreWindows: Bool = true
     /// Arc's Settings ▸ Advanced "Allow websites to get your theme data" (ArcThemeData), on by default.
     public var shareThemeWithWebsites: Bool = true
+    /// Arc's Settings ▸ General "Block Cookie Banners" (CookieBanners), off by default as in Arc.
+    public var blockCookieBanners: Bool = false
     /// Arc's searchSuggestEnabled: the command bar asks the search engine for suggestions
     /// as you type and fills its rows with them.
     public var searchSuggestions: Bool = true
@@ -733,6 +735,7 @@ extension AppSettings {
         littleWindowArchiveAfter = (try? c.decodeIfPresent(LittleWindowArchive.self, forKey: .littleWindowArchiveAfter)) ?? .sixHours
         restoreWindows = try c.decodeIfPresent(Bool.self, forKey: .restoreWindows) ?? true
         shareThemeWithWebsites = try c.decodeIfPresent(Bool.self, forKey: .shareThemeWithWebsites) ?? true
+        blockCookieBanners = try c.decodeIfPresent(Bool.self, forKey: .blockCookieBanners) ?? false
         searchSuggestions = try c.decodeIfPresent(Bool.self, forKey: .searchSuggestions) ?? true
         showSpaceHeaderOnSingleSpace = try c.decodeIfPresent(Bool.self, forKey: .showSpaceHeaderOnSingleSpace) ?? true
         sharedFavorites = try c.decodeIfPresent(Bool.self, forKey: .sharedFavorites) ?? false

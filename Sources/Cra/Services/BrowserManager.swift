@@ -1080,7 +1080,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         guard let id = tabID(of: browser) else { return }
         // Start-up phases: firstPageShown, then the page's navigation committed, then loaded.
         if committed, id == visibleTabID { Perf.phase("firstPageCommitted") }
-        if committed { shareTheme(id, with: browser) }
+        if committed {
+            shareTheme(id, with: browser)
+            if let css = store.cookieBannerCSS(item: id) { adopt(css, as: "__craCookieBanners", in: browser) }
+        }
         delegate?.browserManagerDidUpdate(id)
     }
 
@@ -1090,8 +1093,14 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     private func shareTheme(_ id: UUID, with browser: CraBrowser) {
         let systemDark = NSApp?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         guard let css = store.themeDataCSS(item: id, systemDark: systemDark) else { return }
+        adopt(css, as: "__craArcTheme", in: browser)
+    }
+
+    /// A stylesheet adopted by the page's document from Cra's world, kept under `name` there so a
+    /// later commit of the same document replaces it.
+    private func adopt(_ css: String, as name: String, in browser: CraBrowser) {
         guard let literal = String(data: (try? JSONSerialization.data(withJSONObject: [css], options: [])) ?? Data(), encoding: .utf8) else { return }
-        let script = "(()=>{let s=window.__craArcTheme;if(!s){s=window.__craArcTheme=new CSSStyleSheet();"
+        let script = "(()=>{let s=window.\(name);if(!s){s=window.\(name)=new CSSStyleSheet();"
             + "document.adoptedStyleSheets=[...document.adoptedStyleSheets,s];}s.replaceSync(\(literal)[0]);})()"
         guard let params = try? JSONSerialization.data(withJSONObject: ["expression": script]),
               let json = String(data: params, encoding: .utf8) else { return }

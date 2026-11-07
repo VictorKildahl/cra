@@ -23,7 +23,9 @@ enum TestRoot { case today }
     struct Settings {
         var autoPictureInPicture = false
         var shareThemeWithWebsites = true
+        var blockCookieBanners = false
     }
+    func cookieBannerCSS(item: UUID) -> String? { settings.blockCookieBanners ? "#onetrust-banner-sdk { display: none !important; }" : nil }
     func themeDataCSS(item: UUID, systemDark: Bool) -> String? {
         settings.shareThemeWithWebsites ? ":root { --arc-palette-title: #211A00FF; }" : nil
     }

@@ -360,6 +360,11 @@ enum BrowserManagerLifecycleTests {
         store.settings.shareThemeWithWebsites = false
         manager.browser(rt.browser, didChangeCommittedLoad: true)
         expect(themed() == before + 1, "with the setting off, pages get none")
+        // Arc's "Block Cookie Banners", off by default: on, a committed page gets the banner rules.
+        store.settings.blockCookieBanners = true
+        manager.browser(rt.browser, didChangeCommittedLoad: true)
+        expect(themed() == before + 2 && rt.browser.lastIsolatedParams.contains("__craCookieBanners")
+               && rt.browser.lastIsolatedParams.contains("#onetrust-banner-sdk"), "blocking cookie banners hides them on every committed page")
         manager.closeAll()
     }
 

@@ -25,8 +25,19 @@ struct PrivacyPane: View {
                     Toggle("Block ads and trackers", isOn: $store.settings.blockAdsAndTrackers)
                         .toggleStyle(.switch).labelsHidden()
                 }
+                SettingsCardDivider()
+                // Arc: Settings ▸ General "Block Cookie Banners", off by default.
+                SettingsCardRow {
+                    HStack(spacing: 5.5) {
+                        SettingsGlyph(symbol: "eye.slash.fill", color: Color(nsColor: .systemOrange))
+                        Text("Block cookie banners").font(.system(size: 13))
+                    }
+                } trailing: {
+                    Toggle("Block cookie banners", isOn: $store.settings.blockCookieBanners)
+                        .toggleStyle(.switch).labelsHidden()
+                }
             }
-            SettingsFootnote("Requests to known ad and tracker domains are cancelled unless they are first-party to the page.")
+            SettingsFootnote("Requests to known ad and tracker domains are cancelled unless they are first-party to the page. Cookie banners from the common consent tools are hidden; pages load again with the change.")
 
             SettingsHeader("Connections").padding(.top, 20)
             SettingsCard {
