@@ -181,6 +181,9 @@ final class KeyBindingRegistry {
             KeyAction(id: "resetZoom", name: "Zoom to Actual Size", section: .view, shortcuts: [Shortcut("0", cmd)], triggers: ["reset zoom"]),
             KeyAction(id: "zoomIn", name: "Zoom In", section: .view, shortcuts: [Shortcut("=", cmd), Shortcut("=", cmdShift)]),
             KeyAction(id: "zoomOut", name: "Zoom Out", section: .view, shortcuts: [Shortcut("-", cmd)]),
+            // Arc: View ▸ Developer ▸ Allow JavaScript from Apple Events (AppleScript's `execute`).
+            KeyAction(id: "allowAppleEventsJavaScript", name: "Allow JavaScript from Apple Events", section: .none, shortcuts: [],
+                      triggers: ["applescript", "apple events"], inCommandBar: false),
             KeyAction(id: "viewSource", name: "View Source", section: .view, shortcuts: [Shortcut("u", cmdOpt)]),
             KeyAction(id: "devTools", name: "Developer Tools", section: .view, shortcuts: [Shortcut("i", cmdOpt), Shortcut(Shortcut.f12, [])], triggers: ["devtools", "inspect", "console"]),
             KeyAction(id: "inspectElement", name: "Inspect Elements", section: .view, shortcuts: [Shortcut("c", cmdOpt)], inCommandBar: false),

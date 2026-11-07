@@ -25,7 +25,7 @@ or Arc-only service), per CONTRIBUTING.md.
 | Capture Full Page / Portrait Mode | File, URL-bar menu | done | Portrait: 390 × 844 pt at 3x. |
 | Copy URL without trackers | Copy URL ⇧⌘C ("Copy the current tab's URL without trackers") | done | utm_* and click ids dropped (CleanURL). |
 | Copy URL as Quote | Edit ▸ ⌃⇧⌘C, "Enable Shared Quotes when highlighting text" | done | Arc links to arc.net (cloud); Cra copies a text-fragment link. |
-| AppleScript dictionary | Arc.sdef, View ▸ Developer ▸ Allow JavaScript from Apple Events | missing | Raycast and other launchers script Arc through it. |
+| AppleScript dictionary | Arc.sdef, View ▸ Developer ▸ Allow JavaScript from Apple Events | done | Arc's terms and codes (resources/Cra.sdef); `execute javascript` only after View ▸ Developer ▸ Allow JavaScript from Apple Events (off by default, as in Arc). |
 | Cast | View ▸ Cast | done | Chrome's Cast bubble (IDC_ROUTE_MEDIA). |
 | Find and Replace, Use Selection to Find, Jump to Selection | Edit ▸ Find | partial | Use Selection to Find and Jump to Selection (⌘J) done; Find and Replace is for Arc's Notes/Easels text, which Cra doesn't have. |
 | Sound effects | Settings ▸ Advanced "Play Arc sound effects" | done | Settings ▸ Advanced ▸ Play Cra sound effects gates the capture shutter. |
@@ -126,6 +126,7 @@ in this sweep (Essential Shortcuts window, Library pages).
   measured live in Arc (names, #RRGGBBAA format, no trace in the page's markup) and fitted to the
   semantic palette Arc stores per space.
 - Edit ▸ Find ▸ Use Selection to Find and Jump to Selection (⌘J).
+- AppleScript, Arc's dictionary (Victor's choice, 7 Nov: like Arc, JavaScript off by default).
 - Settings ▸ Privacy ▸ Block cookie banners (Arc's "Block Cookie Banners", off by default).
 - Easels, first version: File ▸ New Easel (⌃⇧E) opens a canvas in the tab (EaselBrowser, a page
   engine of its own like WebKitBrowser, so sidebar.json is unchanged: the tab's address is
@@ -149,6 +150,5 @@ in this sweep (Essential Shortcuts window, Library pages).
 - Boosts: the offline Arc has no network and a local server is blocked in this session, so its Boost
   editor couldn't be put on screen to copy. Needs a site in Arc (Victor's OK to run the real Arc, or
   a localhost server).
-- AppleScript dictionary (a new way for other apps to drive Cra; worth a decision on what it may do,
-  as for cra:// URLs), window dragging from the top of pages (measured, above), Previews and
+- Window dragging from the top of pages (measured, above), Previews and
   Join Meeting: not started.

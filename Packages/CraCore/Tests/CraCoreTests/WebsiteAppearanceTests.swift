@@ -11,6 +11,7 @@ struct WebsiteAppearanceTests {
         #expect(s.websiteAppearance == .automatic)
         #expect(s.soundEffects)
         #expect(s.restoreWindows, "Arc restores windows unless told not to")
+        #expect(!s.allowAppleEventsJavaScript, "AppleScript runs no JavaScript until it is turned on, as in Arc")
     }
 
     @Test func aChoiceSurvivesASave() throws {

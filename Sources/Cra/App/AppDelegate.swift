@@ -763,6 +763,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // tidy: the divider's Tidy on the window's space, without hovering it; undoTidy: ⌘Z's.
             if dict["tidy"] != nil { TidyTabsService.shared.tidy(store.focusedSpace(window: main.windowID).id, store: store); return }
             if dict["undoTidy"] != nil { _ = store.undoTidy(); return }
+            // applescript=<source>: an AppleScript run inside Cra (raw «class …» codes address its own
+            // dictionary), its result or error logged; no other app, so no Automation prompt.
+            // Off the main thread, as a script from another app would be: commands that wait for a
+            // page (execute javascript) answer on the main thread.
+            if let source = dict["applescript"] {
+                Thread.detachNewThread {
+                    var error: NSDictionary?
+                    let result = NSAppleScript(source: source)?.executeAndReturnError(&error)
+                    NSLog("Cra applescript → %@", result?.stringValue ?? result.map { "\($0)" } ?? "error \(error?[NSAppleScript.errorNumber] ?? "") \(error?[NSAppleScript.errorMessage] ?? "")")
+                }
+                return
+            }
             // captureToEasel=1: the page's screenshot, then the capture menu's New Easel.
             if let how = dict["captureToEasel"] { main.debugCaptureToEasel(send: how == "send"); return }
             // settingsPane=max: Settings opened on that pane.
@@ -1099,6 +1111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             item.title = store.isPinnedCollapsed(main.focusedSpaceID) ? "Expand Pinned Tabs" : "Collapse Pinned Tabs"
             return !main.isStandalone
         case "stayOnTop": item.state = main.staysOnTop ? .on : .off
+        case "allowAppleEventsJavaScript": item.state = store.settings.allowAppleEventsJavaScript ? .on : .off
         case "appearanceAutomatic", "appearanceLight", "appearanceDark":
             item.state = "appearance" + store.settings.websiteAppearance.title == item.representedObject as? String ? .on : .off
         case "copyURLQuote", "savePageAs", "captureFullPage", "capturePortrait", "revealTab": return store.selectedTabID != nil
@@ -1311,6 +1324,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "showArchive": main.showLibrary(.archive)
         case "clearArchive": store.clearArchive()
         case "stayOnTop": main.toggleStayOnTop()
+        case "allowAppleEventsJavaScript": store.settings.allowAppleEventsJavaScript.toggle()
         case "appearanceAutomatic": store.settings.websiteAppearance = .automatic
         case "appearanceLight": store.settings.websiteAppearance = .light
         case "appearanceDark": store.settings.websiteAppearance = .dark
@@ -1567,6 +1581,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         view.addItem(.separator())
         let dev = NSMenu(title: "Developer")
         for id in ["viewSource", "devTools", "inspectElement", "jsConsole"] { dev.addItem(item(id)) }
+        dev.addItem(item("allowAppleEventsJavaScript"))
         dev.addItem(.separator())
         dev.addItem(item("toggleDeveloperMode"))
         view.addItem(submenu: dev, title: "Developer")
