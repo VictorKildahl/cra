@@ -281,6 +281,16 @@ final class SidebarStore {
         return w
     }
 
+    /// Arc's "When opening Arc, restore windows from previous session" turned off: launch keeps
+    /// one window, the one in use last (a normal one when that was a Blank or incognito window).
+    func keepOnlyActiveWindow() {
+        let keep = prefs.windows.first { $0.id == activeWindowID && !isStandalone(window: $0.id) }
+            ?? prefs.windows.first { !isStandalone(window: $0.id) } ?? prefs.windows.first
+        guard let keep else { return }
+        for w in prefs.windows where w.id != keep.id { removeWindow(w.id) }
+        activeWindowID = keep.id
+    }
+
     /// The last window is never removed: closing it only hides it. An incognito or Blank
     /// Window's tabs go with it (not to the Library): Arc drops a Blank Window's sidebar.
     func removeWindow(_ id: UUID) {

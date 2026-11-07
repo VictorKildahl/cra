@@ -61,6 +61,7 @@ enum StoreTests {
         archiveTabsBelow()
         allFoldersExpanded()
         revealInSidebar()
+        oneWindowAtLaunch()
         print("Store: \(checks) checks passed")
     }
 
@@ -1627,6 +1628,22 @@ enum StoreTests {
         store.setAllFoldersExpanded(true, inSpace: sid)
         expect(store.isExpanded(outer.id) && store.isExpanded(inner.id), "and they all open again")
         expect(!store.isExpanded(elsewhere.id), "another space's folders stay as they were")
+    }
+
+    /// Arc's Settings ▸ Advanced "When opening Arc, restore windows from previous session", off:
+    /// launch keeps one window, the one in use last; a Blank Window's own space goes with it.
+    @MainActor
+    private static func oneWindowAtLaunch() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let sid = store.focusedSpace.id
+        let second = store.addWindow(spaceID: sid, frame: nil)
+        let blank = store.addBlankWindow(frame: nil)
+        let blankSpace = store.window(blank.id).focusedSpaceID!
+        store.activeWindowID = second.id
+        store.keepOnlyActiveWindow()
+        expect(store.prefs.windows.map(\.id) == [second.id], "only the window in use last stays")
+        expect(store.space(blankSpace) == nil, "the Blank Window's own space goes with it")
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 
     /// Arc's Reveal Tab in Sidebar (⌃Space): the folders around the tab open, and a collapsed

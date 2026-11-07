@@ -10,6 +10,7 @@ struct WebsiteAppearanceTests {
         let s = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"httpsOnly": true}"#.utf8))
         #expect(s.websiteAppearance == .automatic)
         #expect(s.soundEffects)
+        #expect(s.restoreWindows, "Arc restores windows unless told not to")
     }
 
     @Test func aChoiceSurvivesASave() throws {

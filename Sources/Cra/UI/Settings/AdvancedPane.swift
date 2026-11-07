@@ -34,6 +34,8 @@ struct AdvancedPane: View {
             }
             SettingsFormRow(label: "When quitting Cra:") {
                 SettingsCheckbox(title: "Warn before quitting", isOn: $store.settings.warnBeforeQuitting)
+                // Arc: Settings ▸ Advanced "When opening Arc, restore windows from previous session".
+                SettingsCheckbox(title: "When opening Cra, restore windows from previous session", isOn: $store.settings.restoreWindows)
             }
             SettingsFormRow(label: "Import:") {
                 Button("Import from Another Browser…") { actions.importData() }

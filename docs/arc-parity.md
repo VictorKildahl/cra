@@ -31,7 +31,7 @@ or Arc-only service), per CONTRIBUTING.md.
 | Sound effects | Settings ▸ Advanced "Play Arc sound effects" | done | Settings ▸ Advanced ▸ Play Cra sound effects gates the capture shutter. |
 | Theme data for websites | Settings ▸ Advanced "Allow websites to get your theme data" | missing | Arc exposes the space's palette to pages. |
 | Window dragging from the top of webpages | Settings ▸ Advanced | missing | |
-| Restore windows from previous session | Settings ▸ Advanced | partial | Cra has "Quit and Keep Windows" only. |
+| Restore windows from previous session | Settings ▸ Advanced | done | Settings ▸ Advanced; off keeps the window in use last. |
 | Block Cookie Banners | Settings ▸ General | missing | Cra blocks ads and trackers only. |
 | Archive Little Arcs after | Settings ▸ Links (6 hours default) | done | Settings ▸ Tabs ▸ Links; a Little Window left alone that long closes into the archive. |
 | Previews (Gmail, Calendar on Favorites) | Settings ▸ General ▸ Previews Settings… | missing | Fetches through the browser session; nothing leaves the Mac. |
@@ -86,7 +86,7 @@ gains "New Profile".
 | General | Previews Settings…, Block Cookie Banners |
 | Profiles | "New documents" app (Arc's Notes/Easels); Privacy, Passwords, Credit Cards and Notifications done |
 | Links | "Open Little Arc when clicking on links with ⌥⌘ held"; Archive Little Windows after done |
-| Advanced | Play sound effects, restore windows from previous session, window dragging from the top of webpages, Shared Quotes, websites get theme data, Enable Boosts |
+| Advanced | window dragging from the top of webpages, Shared Quotes (arc.net), websites get theme data, Enable Boosts (sound effects and restore windows done) |
 | Icon | Cra has its own icon picker |
 
 ## 5. Animations and styling
@@ -116,6 +116,8 @@ in this sweep (Essential Shortcuts window, Library pages).
   Your Data and Settings (Chromium's privacy, passwords, cards and notifications pages per profile).
 - Sidebar tab menu: Add Split View on the open tab, Open in Split View on any other.
 - View ▸ Cast… and Help ▸ Troubleshooting ▸ Open Task Manager, Chrome's own (ExecuteChromeCommand).
+- Sidebar tab menu: Change Icon… and Share ▸.
+- Settings ▸ Advanced ▸ "When opening Cra, restore windows from previous session".
 
 ## Left for later, and why
 

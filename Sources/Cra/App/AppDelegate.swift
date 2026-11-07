@@ -72,6 +72,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NotificationCenter.default.addObserver(forName: .craKeyBindingsChanged, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.buildMenus() }
         }
+        // Arc's "When opening Arc, restore windows from previous session", off: one window comes back.
+        if !store.settings.restoreWindows { store.keepOnlyActiveWindow() }
         mainWindows = store.prefs.windows.map { MainWindowController(app: self, session: $0) }
         followKeyWindow()
         // First launch: the default browser step and the import are the onboarding and
@@ -984,6 +986,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // browserWindows=<label>: each browser window's kind, space, tabs (URLs), open tab and frame (#219, #220).
             if let label = dict["browserWindows"] {
+                CraLog.note("browser windows \(label): count=\(mainWindows.filter { $0.window?.isVisible == true }.count)")
                 for m in mainWindows {
                     let space = m.focusedSpace
                     let tabs = (store.tabs(under: space.pinnedContainerID) + store.tabs(under: space.todayContainerID)).compactMap { $0.tab?.url }
