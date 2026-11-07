@@ -992,7 +992,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     point = [NSPoint(x: v.maxX, y: v.minY), NSPoint(x: v.minX, y: v.minY), NSPoint(x: v.maxX, y: v.maxY), NSPoint(x: v.minX, y: v.maxY)]
                         .first { !SpaceListView.isOverAppWindow($0) }
                 }
-                guard let point else { CraLog.note("dragEnd: no point outside Cra's windows"); return }
+                guard let point else { CraLog.note("dragEnd: no point outside Cra's windows on screen \(NSStringFromRect(screen.visibleFrame))"); return }
                 CraLog.note("dragEnd: let go at \(NSStringFromPoint(point))")
                 main.testDragEnded(tab.id, at: point)
                 return

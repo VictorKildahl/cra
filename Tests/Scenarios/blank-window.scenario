@@ -6,7 +6,7 @@
 # page as it was, and closes the Blank Window. File ▸ Blank Window (⌃⌘N, #220) opens an empty one,
 # and a relaunch brings it back.
 budget rss=700 stalls50=10
-cra://debug?windowSize=1000x700
+cra://debug?windowSize=900x500
 cra://open?url=${PAGE}?n=stays
 expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
 cra://open?url=${PAGE}?n=torn
