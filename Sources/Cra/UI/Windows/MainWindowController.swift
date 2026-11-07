@@ -418,7 +418,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     func refresh() {
-        guard !isTornDown else { return }
+        guard !isTornDown, !isPutAway else { return }
         let space = focusedSpace
         let palette = space.theme.palette
         // Its extensions belong to the space's profile.
@@ -3506,6 +3506,50 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         guard (notification.object as? NSWindow) === window else { return }
         tabSwitcher.cancel()
         app.mainWindowWillClose(self)
+    }
+
+    override func showWindow(_ sender: Any?) {
+        app.browserWindowWillShow(self)
+        super.showWindow(sender)
+    }
+
+    /// ⌘Q put Cra in the menu bar (#231): the window is out of sight and its pages are closed, as
+    /// on a quit; the tabs stay. No page opens until `bringBack`.
+    private(set) var isPutAway = false
+
+    func putAway() {
+        guard !isPutAway else { return }
+        isPutAway = true
+        dismissTransientUI()
+        sidePanel.hide()
+        for p in peeks { p.closeWindow() }
+        browsers.closeAll()
+        guard let window else { return }
+        // Out of full screen first: a full-screen window ordered out leaves its Space behind.
+        if window.styleMask.contains(.fullScreen) {
+            fullScreenExit = NotificationCenter.default.addObserver(forName: NSWindow.didExitFullScreenNotification, object: window,
+                                                                    queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.orderOutPutAway() }
+            }
+            window.toggleFullScreen(nil)
+        } else {
+            window.orderOut(nil)
+        }
+    }
+
+    private var fullScreenExit: NSObjectProtocol?
+
+    private func orderOutPutAway() {
+        if let fullScreenExit { NotificationCenter.default.removeObserver(fullScreenExit) }
+        fullScreenExit = nil
+        if isPutAway { window?.orderOut(nil) }
+    }
+
+    /// Back from the menu bar: the open tab's page loads again, as after a launch.
+    func bringBack() {
+        guard isPutAway else { return }
+        isPutAway = false
+        refresh()
     }
 
     /// The window closed while others stay open: its pages close (the tabs stay in

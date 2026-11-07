@@ -355,6 +355,12 @@
 #226   Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::theURLFieldHasTheSlidersWithoutExtensions  a7173c578717
 #226   Tests/Scenarios/site-controls-no-extensions.scenario  c1c5b5365539
 #227   Tests/Scenarios/quit-during-web-store-install.scenario  a3e3b0c8eb2b
+#231   Packages/CraCore/Tests/CraCoreTests/MenuBarModeTests.swift::incognitoWindowsCloseTheRestArePutAway  017bb7d06672
+#231   Packages/CraCore/Tests/CraCoreTests/MenuBarModeTests.swift::offEveryQuitQuits  f494762d7992
+#231   Packages/CraCore/Tests/CraCoreTests/MenuBarModeTests.swift::onlyCrasOwnQuitStaysInTheMenuBar  93aebb57b7ca
+#231   Packages/CraCore/Tests/CraCoreTests/MenuBarModeTests.swift::theDockIconGoesOnlyWhileNothingIsOpen  ec75d372a707
+#231   Packages/CraCore/Tests/CraCoreTests/MenuBarModeTests.swift::withoutRestoringWindowsOnlyTheOneInUseIsKept  0f137ea8ee8d
+#231   Tests/Scenarios/menu-bar-mode.scenario  13a0ab0aae03
 #233   Packages/CraCore/Tests/CraCoreTests/MouseButtonSpaceSwitchTests.swift::backGoesToThePreviousSpaceAndForwardToTheNext  10b4dc8a4a65
 #233   Packages/CraCore/Tests/CraCoreTests/MouseButtonSpaceSwitchTests.swift::otherButtonsDoNotSwitch  07b725a8e6f5
 #233   Tests/Scenarios/mouse-buttons-switch-spaces.scenario  79148e8b3ebb

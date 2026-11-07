@@ -55,6 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         CraCEFRuntime.setDocumentStartScript(PageScript.mainWorld, isolatedScript: PageScript.isolatedWorld, world: PageScript.world)
         startContentBlocking()
         observeGlobalShortcut()
+        observeMenuBarMode()
         SoftwareUpdater.shared.start(app: self)
         buildMenus()
         store.hasPage = { [unowned self] in self.runtime(for: $0).map { !$0.discarded } ?? false }
@@ -303,12 +304,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        leaveMenuBarForWindow()
         if main?.raiseImport() == true { return true }
         main?.showWindow(nil)
         return true
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if MenuBarMode.outcome(enabled: store.settings.keepInMenuBar, source: quitSource()) == .stayInMenuBar {
+            stayInMenuBar()
+            return .terminateCancel
+        }
         // Dia: Advanced ▸ "Warn before quitting". Engine relaunches skip it.
         if store.settings.warnBeforeQuitting, !isRelaunching, !confirmQuit() { return .terminateCancel }
         // Little Windows are not in the sidebar; keep their pages in the Library.
@@ -376,6 +382,101 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         main.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    // MARK: Menu bar (#231)
+
+    /// Settings ▸ Advanced ▸ "Keep Cra in the menu bar": the item is there while the setting is
+    /// on. A test copy in the background leaves the menu bar to the installed Cra.
+    private func observeMenuBarMode() {
+        observeChanges(of: { [store] in store.settings.keepInMenuBar }) { [weak self] on in
+            guard let self else { return }
+            if on, menuBarItem == nil, !HitchMonitor.background {
+                menuBarItem = MenuBarItem { [weak self] menu in self?.buildMenuBarItemMenu(menu) }
+            } else if !on {
+                menuBarItem?.remove()
+                menuBarItem = nil
+                // Turned off from Settings opened in the menu bar: the windows come back, or
+                // nothing of Cra would be left to click.
+                if inMenuBar { main.showWindow(nil) }
+            }
+        }
+    }
+
+    private func buildMenuBarItemMenu(_ menu: NSMenu) {
+        for id in ["newWindow", "newIncognitoWindow", "newLittleWindow"] { menu.addItem(item(id)) }
+        menu.addItem(.separator())
+        menu.addItem(item("settings"))
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Quit Cra", action: #selector(quitFromMenuBar), keyEquivalent: "").target = self
+    }
+
+    /// The menu bar item's Quit, and `cra://debug?quit=1`: Cra quits for real.
+    @objc func quitFromMenuBar() {
+        quittingFromMenuBar = true
+        NSApp.terminate(nil)
+    }
+
+    private var menuBarItem: MenuBarItem?
+    private var quittingFromMenuBar = false
+    /// ⌘Q put Cra in the menu bar, and no browser window has been opened since.
+    private(set) var inMenuBar = false
+
+    private func quitSource() -> MenuBarMode.QuitSource {
+        if isRelaunching { return .relaunch }
+        if quittingFromMenuBar { return .menuBarItem }
+        if let e = NSAppleEventManager.shared().currentAppleEvent,
+           e.eventClass == AEEventClass(kCoreEventClass), e.eventID == AEEventID(kAEQuitApplication) { return .appleEvent }
+        return .appMenu
+    }
+
+    /// ⌘Q with the setting on: what a quit would close closes (Little Windows into the Library,
+    /// incognito windows with their session, every page), the browser windows a relaunch would
+    /// bring back are put away, and Cra leaves the Dock. Chromium keeps running, so ⌥⌘N and the
+    /// menu bar item open a window at once.
+    private func stayInMenuBar() {
+        CraLog.note("menu bar: quit keeps Cra in the menu bar")
+        closeLittleWindows()
+        settingsWindow?.close()
+        let plan = MenuBarMode.windowsOnQuit(mainWindows.map { .init(id: $0.windowID, kind: $0.isIncognito ? .incognito : $0.isBlank ? .blank : .normal) },
+                                            active: store.activeWindowID, restoreWindows: store.settings.restoreWindows)
+        for c in mainWindows where plan.close.contains(c.windowID) { c.window?.close() }
+        for c in mainWindows {
+            c.saveFrameNow()
+            c.putAway()
+        }
+        store.saveAll()
+        inMenuBar = true
+        settleDockIcon()
+    }
+
+    /// A browser window is about to show: the ones put away come back with it, as after a launch.
+    func browserWindowWillShow(_ c: MainWindowController) {
+        guard inMenuBar else { return c.bringBack() }
+        inMenuBar = false
+        leaveMenuBarForWindow()
+        CraLog.note("menu bar: browser windows back")
+        for w in mainWindows {
+            w.bringBack()
+            if w !== c { w.window?.orderFront(nil) }
+        }
+    }
+
+    /// Any window of Cra's about to show: the Dock icon and the app menu come back first, or the
+    /// window would come up in an app macOS treats as menu-bar-only.
+    private func leaveMenuBarForWindow() {
+        guard NSApp.activationPolicy() != .regular else { return }
+        NSApp.setActivationPolicy(.regular)
+        if NSApp.isHidden { NSApp.unhide(nil) }
+    }
+
+    /// In the menu bar with nothing open: no Dock icon, and the app in front before ⌘Q gets the keyboard.
+    private func settleDockIcon() {
+        let open = littleWindows.contains { $0.window?.isVisible == true } || settingsWindow?.isVisible == true
+            || mainWindows.contains { $0.window?.isVisible == true }
+        guard !MenuBarMode.showsInDock(inMenuBar: inMenuBar, windowsOpen: open), NSApp.activationPolicy() == .regular else { return }
+        NSApp.hide(nil)
+        NSApp.setActivationPolicy(.accessory)
     }
 
     // MARK: Browser windows
@@ -587,6 +688,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// Creates a little window without showing it (`url` nil = popup host).
     func makeLittleWindow(url: String?, opener: CraBrowser? = nil, space: UUID? = nil) -> LittleWindowController {
+        leaveMenuBarForWindow()
         let w = LittleWindowController(app: self, url: url, opener: opener, space: space)
         littleWindows.append(w)
         return w
@@ -611,6 +713,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     func removeLittleWindow(_ w: LittleWindowController) {
         littleWindows.removeAll { $0 === w }
+        if inMenuBar { DispatchQueue.main.async { [weak self] in self?.settleDockIcon() } }
         if let parent = w.peekParent, !littleWindows.contains(where: { $0.peekParent === parent }) { parent.sidebarUI.peekBadge = nil }
     }
 
@@ -847,7 +950,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             if dict["relaunch"] != nil { relaunch(); return }
-            if dict["quit"] != nil { NSApp.terminate(nil); return }
+            // quit=1 quits for real, as the menu bar item's Quit; quit=menu is ⌘Q (#231).
+            if let q = dict["quit"] { q == "menu" ? NSApp.terminate(nil) : quitFromMenuBar(); return }
             if let t = dict["selectTab"].flatMap(UUID.init(uuidString:)) { store.selectTab(t, window: main.windowID); return }
             // Tab freezing with a short threshold (seconds) from now on, so it can be tried without
             // waiting: the minute's pass would otherwise take the votes back.
@@ -1494,7 +1598,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             let c = SettingsWindowController(store: store, bindings: bindings, actions: actions)
             settingsController = c
             settingsWindow = c.window
+            // Settings opened from the menu bar item: closing it puts Cra back in the menu bar.
+            NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: c.window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard self?.inMenuBar == true else { return }
+                    DispatchQueue.main.async { self?.settleDockIcon() }
+                }
+            }
         }
+        leaveMenuBarForWindow()
         settingsController?.didShow()
         settingsWindow?.makeKeyAndOrderFront(nil)
     }

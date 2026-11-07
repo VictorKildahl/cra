@@ -497,6 +497,9 @@ public struct AppSettings: Codable, Equatable {
     public var hapticFeedbackOnReorder: Bool = true
     /// Dia's Advanced ▸ "Warn before quitting" (shouldWarnBeforeQuitting, off by default).
     public var warnBeforeQuitting: Bool = false
+    /// GitHub #231, not in Arc (Arc quits on ⌘Q): ⌘Q puts the pages away and Cra stays in the menu
+    /// bar, so ⌥⌘N opens a Little Window without a launch. Off, ⌘Q quits as in Arc (MenuBarMode).
+    public var keepInMenuBar: Bool = false
     /// Dia's Tabs ▸ "Clean up tabs I haven't used in:" checkbox; `autoArchive` keeps the
     /// threshold while this is off.
     public var autoArchiveEnabled: Bool = true
@@ -727,6 +730,7 @@ extension AppSettings {
         folderPreviews = try c.decodeIfPresent(Bool.self, forKey: .folderPreviews) ?? true
         hapticFeedbackOnReorder = try c.decodeIfPresent(Bool.self, forKey: .hapticFeedbackOnReorder) ?? true
         warnBeforeQuitting = try c.decodeIfPresent(Bool.self, forKey: .warnBeforeQuitting) ?? false
+        keepInMenuBar = try c.decodeIfPresent(Bool.self, forKey: .keepInMenuBar) ?? false
         autoArchiveEnabled = try c.decodeIfPresent(Bool.self, forKey: .autoArchiveEnabled) ?? true
         tabSleepTimerEnabled = try c.decodeIfPresent(Bool.self, forKey: .tabSleepTimerEnabled) ?? true
         tabSleepAfter = (try? c.decodeIfPresent(TabSleepThreshold.self, forKey: .tabSleepAfter)) ?? .fourHours

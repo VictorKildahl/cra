@@ -1,0 +1,27 @@
+# Settings ▸ Advanced ▸ "Keep Cra in the menu bar" (GitHub #231): ⌘Q closes the incognito window and
+# every page and puts the browser window away, and Cra keeps running. New Window brings the window
+# back with its tab, whose page loads again; the incognito window stays closed. The scenario's own
+# quit at the end (cra://debug?quit=1, the menu bar item's Quit) still quits.
+# promise: #231
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "keepInMenuBar": true}
+cra://open?url=${PAGE}?n=kept
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://action/newIncognitoWindow
+wait 2
+cra://debug?browserWindows=before
+expect-log browser windows before: count=2
+cra://debug?quit=menu
+wait 2
+expect-log menu bar: quit keeps Cra in the menu bar
+cra://debug?browserWindows=away
+expect-log browser windows away: count=0
+expect-log Cra browser windows away: kind=normal .*open=\S*n=kept page=0
+reject-log Cra browser windows away: kind=incognito
+cra://action/newWindow
+wait 3
+expect-log menu bar: browser windows back
+cra://debug?browserWindows=back
+expect-log browser windows back: count=1
+expect-log Cra browser windows back: kind=normal .*open=\S*n=kept page=1
+reject-log Cra browser windows back: kind=incognito
