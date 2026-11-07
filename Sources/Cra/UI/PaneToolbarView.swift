@@ -402,7 +402,10 @@ final class PaneToolbarView: NSView {
         if m.kind == .normal {
             let start: CGFloat = 2.5
             let leftEnd = left.isEmpty ? 0 : start + left.reduce(0) { $0 + widthOf($1) }
-            let room = rx - trailing.reduce(0) { $0 + widthOf($1) } - 6 - (leftEnd + (left.isEmpty ? 0 : 6)) - 2 * (8 + 6)
+            // Broken into sub-expressions: newer Swift type-checkers time out on the one-liner.
+            let trailingWidth: CGFloat = trailing.reduce(0) { $0 + widthOf($1) }
+            let leftWidth: CGFloat = leftEnd + (left.isEmpty ? 0 : 6)
+            let room = rx - trailingWidth - 6 - leftWidth - 2 * (8 + 6)
             plan = ToolbarRoom.plan(pins: pins.map(widthOf), reload: reload.map(widthOf), settings: settings.map(widthOf),
                                     needed: urlButton.idealWidth, room: room)
         }
