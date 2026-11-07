@@ -11,7 +11,7 @@
 # scripts/cef-patches/ change. Needs ~80 GB free and several hours on an M2 Max.
 # Re-running resumes: the checkout is kept and ninja only rebuilds what changed.
 #
-# Output: $CEF_BUILD_DIR/chromium/src/cef/binary_distrib/cef_binary_<ver>_macosarm64_minimal.tar.bz2
+# Output: $CEF_BUILD_DIR/chromium/src/cef/binary_distrib/cef_binary_<ver>_<arch>_minimal.tar.bz2
 # Publish it with scripts/publish-cef.sh.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -20,7 +20,11 @@ eval "$(grep -E '^CEF_VERSION=' scripts/fetch-cef.sh)"
 # 154.0.34+g14c5a08+chromium-154.0.8037.98: CEF commit 14c5a08 on branch 8037.
 CEF_COMMIT="$(sed -E 's/.*\+g([0-9a-f]+)\+.*/\1/' <<<"$CEF_VERSION")"
 CEF_BRANCH="$(sed -E 's/.*chromium-[0-9]+\.[0-9]+\.([0-9]+)\..*/\1/' <<<"$CEF_VERSION")"
-echo "Building CEF $CEF_VERSION (branch $CEF_BRANCH, commit $CEF_COMMIT)"
+# Build for the host CPU by default (automate-git/make_distrib take --arm64-build /
+# --x86-build); CEF_TARGET_ARCH (arm64 / x86) overrides.
+CEF_TARGET_ARCH="${CEF_TARGET_ARCH:-$([ "$(uname -m)" = arm64 ] && echo arm64 || echo x86)}"
+ARCH_FLAG="--${CEF_TARGET_ARCH}-build"
+echo "Building CEF $CEF_VERSION (branch $CEF_BRANCH, commit $CEF_COMMIT, $CEF_TARGET_ARCH)"
 # .noindex keeps Spotlight out of ~40 GB of sources.
 CEF_BUILD_DIR="${CEF_BUILD_DIR:-$HOME/cef-build.noindex}"
 
@@ -57,7 +61,7 @@ automate() {
     --depot-tools-dir="$CEF_BUILD_DIR/depot_tools" \
     --branch="$CEF_BRANCH" \
     --checkout="$CEF_COMMIT" \
-    --arm64-build \
+    "$ARCH_FLAG" \
     --no-chromium-history \
     --no-depot-tools-update \
     --with-pgo-profiles \
@@ -84,4 +88,4 @@ automate --no-update --force-build --no-distrib
 #    and without dSYMs (enable_dsyms=false) make_distrib then fails.
 rm -rf chromium/src/cef/binary_distrib
 (cd chromium/src/cef/tools && python3 make_distrib.py --output-dir=../binary_distrib --allow-partial \
-  --ninja-build --arm64-build --minimal --no-docs --no-symbols)
+  --ninja-build "$ARCH_FLAG" --minimal --no-docs --no-symbols)
