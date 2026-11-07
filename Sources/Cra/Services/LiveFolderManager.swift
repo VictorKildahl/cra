@@ -197,7 +197,6 @@ final class LiveFolderManager {
                             if let previous = results[request.url] {
                                 request.createdByMe = request.createdByMe || previous.createdByMe
                                 request.isAwaitingMyReview = request.isAwaitingMyReview || previous.isAwaitingMyReview
-                                request.gitLabCategories = request.categories.union(previous.categories)
                             }
                             results[request.url] = request
                         }

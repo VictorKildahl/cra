@@ -214,21 +214,19 @@ enum SidebarMenus {
             copy(lines.joined(separator: "\n"))
         }
         menu.addItem(.separator())
-        add(menu, "Delete Live Folder") { confirmDeleteLiveFolder(item, store: store) }
+        let window = list.window
+        add(menu, "Delete Live Folder") { confirmDeleteLiveFolder(item, store: store, in: window) }
         return menu
     }
 
-    /// Arc asks first ("Delete your %@ Live Folder?") and says how to get it back.
-    static func confirmDeleteLiveFolder(_ item: SidebarItem, store: SidebarStore) {
-        let alert = NSAlert()
-        alert.messageText = "Delete your \(item.title ?? "Pull Requests") Live Folder?"
-        alert.informativeText = "You can restore this folder at any time by right-clicking the sidebar."
-        alert.addButton(withTitle: "Delete Folder")
-        alert.addButton(withTitle: "Cancel")
-        alert.buttons.first?.hasDestructiveAction = true
+    /// Arc asks first ("Delete your %@ Live Folder?") and says how to get it back, in its own words.
+    static func confirmDeleteLiveFolder(_ item: SidebarItem, store: SidebarStore, in window: NSWindow? = nil) {
+        let alert = AppDialog(title: "Delete your \(item.title ?? "Pull Requests") Live Folder?",
+                              message: "You can restore this folder at any time by right-clicking the sidebar.",
+                              actions: [DialogAction("Delete Folder", role: .destructive), .cancel])
         let id = item.id
-        if let window = NSApp.keyWindow {
-            alert.beginSheetModal(for: window) { if $0 == .alertFirstButtonReturn { store.deleteFolder(id) } }
+        if let window = window ?? AppDialog.parentWindow {
+            alert.present(over: window) { if $0 == .alertFirstButtonReturn { store.deleteFolder(id) } }
         } else if alert.runModal() == .alertFirstButtonReturn {
             store.deleteFolder(id)
         }
@@ -236,11 +234,23 @@ enum SidebarMenus {
 
     // MARK: Splits
 
-    /// Live Folders ▸ GitLab…: Arc has no GitLab folder, so this asks for the instance in Arc's text-input
-    /// dialog (the Rename Profile sheet's shape) and adds a folder like its GitHub one. Empty means gitlab.com.
-    private static func newGitLabFolder(_ list: SpaceListView) {
-        guard let window = list.window else { return }
-        let space = list.spaceID, store = list.store
+    /// Live Folders ▸ in the sidebar's and the space header's menus, after GitHub: the GitLab folders like
+    /// the GitHub one (✓ while there, a click asks to delete it; one per instance), then GitLab… to add one.
+    static func addGitLabFolders(to menu: NSMenu, space: UUID, store: SidebarStore, window: NSWindow?) {
+        let gitlabs = store.liveFolders.filter { $0.liveFolder?.source == .gitlab && store.isInSpace($0.id, space) }
+            .sorted { ($0.liveFolder?.serverURL ?? "") < ($1.liveFolder?.serverURL ?? "") }
+        for folder in gitlabs {
+            let server = folder.liveFolder?.serverURL.map(GitLabLiveClient.serverLabel) ?? ""
+            add(menu, "GitLab (\(server))", on: true) { confirmDeleteLiveFolder(folder, store: store, in: window) }
+        }
+        add(menu, "GitLab…", enabled: !store.isStandalone(space: space) && window != nil) {
+            if let window { newGitLabFolder(space: space, store: store, window: window) }
+        }
+    }
+
+    /// GitLab…: Arc has no GitLab folder, so this asks for the instance in Arc's text-input dialog (the
+    /// Rename Profile sheet's shape) and adds a folder like its GitHub one. Empty means gitlab.com.
+    private static func newGitLabFolder(space: UUID, store: SidebarStore, window: NSWindow) {
         let dialog = AppDialog(title: "Add a GitLab Live Folder",
                                message: "Enter your GitLab’s address, or leave it empty for GitLab.com. The folder signs in with this Space’s Profile.",
                                actions: [DialogAction("Add Folder"), .cancel], input: "", placeholder: "https://gitlab.com",
@@ -256,6 +266,7 @@ enum SidebarMenus {
                 return
             }
             guard let folder = store.createLiveFolder(.gitlab, inSpace: space, serverURL: server) else { return }
+            store.setExpanded(folder.id, true)
             LiveFolderManager.shared.refresh(folder.id, force: true)
         }
     }
@@ -341,17 +352,10 @@ enum SidebarMenus {
         let github = store.liveFolder(.github, inSpace: space)
         add(liveFolders, action: "newGitHubLiveFolder", "GitHub",
             enabled: !store.isStandalone(space: space), on: github != nil) {
-            if let github { confirmDeleteLiveFolder(github, store: store) }
+            if let github { confirmDeleteLiveFolder(github, store: store, in: list.window) }
             else { actions.performAction("newGitHubLiveFolder") }
         }
-        // GitLab folders like the GitHub one: ✓ while there, a click asks to delete it; one per instance.
-        let gitlabs = store.liveFolders.filter { $0.liveFolder?.source == .gitlab && store.isInSpace($0.id, space) }
-            .sorted { ($0.liveFolder?.serverURL ?? "") < ($1.liveFolder?.serverURL ?? "") }
-        for folder in gitlabs {
-            let server = folder.liveFolder?.serverURL.map(GitLabLiveClient.serverLabel) ?? ""
-            add(liveFolders, "GitLab (\(server))", on: true) { confirmDeleteLiveFolder(folder, store: store) }
-        }
-        add(liveFolders, "GitLab…", enabled: !store.isStandalone(space: space)) { newGitLabFolder(list) }
+        addGitLabFolders(to: liveFolders, space: space, store: store, window: list.window)
         menu.addItem(.separator())
         if let s = store.space(space), !store.children(of: s.todayContainerID).isEmpty {
             add(menu, action: "clearToday") { store.clearToday(space) }

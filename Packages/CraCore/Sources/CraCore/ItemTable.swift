@@ -20,6 +20,7 @@ public final class ItemTable {
     @ObservationIgnored private var signals: [UUID: ItemSignal] = [:]
     /// Bumped on every change: what a walk over all items observes.
     private var version = 0
+    @ObservationIgnored private var tabs = 0
 
     public init() {}
 
@@ -29,10 +30,19 @@ public final class ItemTable {
             return storage[id]
         }
         set {
-            guard storage[id] != newValue else { return }
+            let old = storage[id]
+            guard old != newValue else { return }
             storage[id] = newValue
+            tabs += (newValue?.isTab == true ? 1 : 0) - (old?.isTab == true ? 1 : 0)
             notify(id)
         }
+    }
+
+    /// How many items are tabs, kept as items change: the performance recorder reads it every
+    /// five seconds, and counting 2,600 items there cost 2–6 ms of the main thread (GitHub #214).
+    public var tabCount: Int {
+        _ = version
+        return tabs
     }
 
     public var all: [UUID: SidebarItem] {

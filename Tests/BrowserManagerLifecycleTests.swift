@@ -102,6 +102,8 @@ enum BrowserManagerLifecycleTests {
         await sleepClockCase()
         await pressureSweepCase()
         await discardCase()
+        await discardedPageLoadCase()
+        await sleepCountsCase()
         shortTimerCase()
         recentlyAudibleCase()
         await audiblePageStaysAwakeCase()
@@ -550,6 +552,79 @@ enum BrowserManagerLifecycleTests {
         let (busy, busyRT) = await sleepOne(discard: #"{"discarded":false}"#)
         expect(!busyRT.discarded && manager.runtime(for: busy) === busyRT && busyRT.sleepRefusal == "navigating",
                "a page Chromium wouldn't discard is asked again later")
+        manager.closeAll()
+    }
+
+    // promise: #214
+    /// CEF reports a load end for the page a discard just ended (#214). That page isn't there: the
+    /// log says nothing, history gets no visit and no Web Store install starts. Loaded again on
+    /// waking, it counts.
+    @MainActor
+    private static func discardedPageLoadCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.protectedRecentTabs = 0
+        let url = "https://example.test/discarded-load"
+        let id = store.createTab(url: url).id
+        let rt = manager.ensureRuntime(for: id)!
+        rt.hiddenAt = Date.distantPast
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
+        rt.browser.reply(to: isolatedProbe, with: idleReply)
+        await drainMainQueue()
+        rt.browser.reply(to: "Runtime.evaluate", with: idleReply)
+        await drainMainQueue()
+        await finishSleep(rt.browser)
+        let installs = ExtensionStore.shared.webStoreProfiles.count
+        expect(rt.discarded, "the page is discarded")
+        manager.browser(rt.browser, didFinishLoadingURL: url, title: "Discarded", statusCode: 200)
+        expect(store.visits.isEmpty && ExtensionStore.shared.webStoreProfiles.count == installs,
+               "a discarded page's load end is no visit and starts no Web Store install")
+        manager.show(id, focus: false)
+        manager.browser(rt.browser, didFinishLoadingURL: url, title: "Woken", statusCode: 200)
+        expect(store.visits == [url] && ExtensionStore.shared.webStoreProfiles.count == installs + 1,
+               "the page loaded again on waking is a visit")
+        manager.closeAll()
+    }
+
+    // promise: #214
+    /// What the recorder says about tab sleeping (#214): a candidate passed over counts once per
+    /// reason (the first that holds, TabSleepPolicy.hold), and a page refusing again after the
+    /// back-off counts as a retry of the same page, not as another page.
+    @MainActor
+    private static func sleepCountsCase() async {
+        var facts: [(PerfCounter, String)] = []
+        Perf.attach { fact in if case .count(let c, let key, _, _) = fact { facts.append((c, key)) } }
+        defer { Perf.attach(nil) }
+        facts = []  // what earlier cases left in the recorder's start-up buffer
+        func counted(_ c: PerfCounter) -> [String] { facts.filter { $0.0 == c }.map(\.1) }
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.protectedRecentTabs = 0
+
+        let loadingID = store.createTab(url: "https://example.test/loading").id
+        let loading = manager.ensureRuntime(for: loadingID)!
+        loading.hiddenAt = Date.distantPast
+        loading.browser.setLoading(true)
+        for _ in 0..<3 { manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60)) }
+        expect(counted(.sleepSkip) == ["loading"] && !loading.browser.replies.contains { $0.method == isolatedProbe },
+               "a loading page passed over three times counts once, as loading")
+        loading.browser.setLoading(false)
+        loading.browser.hasDevTools = true
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
+        expect(counted(.sleepSkip) == ["loading", "devTools"], "a new reason counts again")
+        loading.browser.hasDevTools = false
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
+        expect(loading.browser.replies.contains { $0.method == isolatedProbe }, "with nothing holding it the page is asked")
+        loading.browser.reply(to: isolatedProbe, with: #"{"result":{"type":"string","value":"typed"}}"#)
+        await drainMainQueue()
+        for _ in 0..<2 {
+            loading.sleepProbeAfter = Date.distantPast
+            manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
+            loading.browser.reply(to: isolatedProbe, with: #"{"result":{"type":"string","value":"typed"}}"#)
+            await drainMainQueue()
+        }
+        expect(counted(.sleepRefusal) == ["typed"] && counted(.sleepRetry) == ["typed", "typed"],
+               "one page refusing three times is one refusal and two retries")
         manager.closeAll()
     }
 

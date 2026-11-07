@@ -3304,9 +3304,17 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
 - [O metadata] Sidebar drops: `SidebarDropTarget = tabList(…) | appTray`, `SidebarDropTargetRegion = left | right`,
   `SidebarDropOperation = move | copy`, the window action `draggedToCombineSplitCompatibleItems(…)`. No drop makes a
   folder: `createFolderFromItems` / `createFolderFromSelection` are the menus' "New Folder with N Items". Cra (#191):
-  a tab dropped on the middle of any tab row, pinned or Today, offers the split (the pinned tab stays, the split
-  opens in Today with a copy, `SidebarStore.createSplit`); Cra's own "New Folder" drop on pinned rows is gone.
-  [?] Not observed live: Arc's drop on a pinned row.
+  a tab dropped on the middle of any tab row, pinned or Today, offers the split; Cra's own "New Folder" drop on
+  pinned rows is gone.
+- [O] Tab-on-tab drops, live (Arc 1.172, offline copy, 7 Nov 2026, discussion #180): the split takes the TARGET's
+  place and both tabs move into it, no copies. A Today tab dropped on the left of pinned "pina" made a pinned split
+  "todaya | pina" in pina's slot (minus button, gone from Today); pinned "pinb" dropped on the right of Today
+  "todayb" made a Today split "todayb | pinb" in todayb's slot (gone from Pinned). The reporter's capture shows
+  pinned on pinned the same way. Arc opens the tab a drag picks up, so the split ends up open with the dropped
+  tab's pane focused (ring and full toolbar on it). Cra (#180): `SidebarStore.combineIntoSplit` moves the dropped
+  tab beside the target (pinning or unpinning it like any drop there), then `createSplit(inPlace:)`; the list
+  selects the dropped tab. Other ways into a split (⌥Return, a drop on the page, Add Split View) keep the Today
+  copy of a pinned tab observed on 24 Oct.
 - [O strings/metadata] Settings ▸ Profiles "Download location" is per profile: `DownloadLocationView { store,
   _selectedTag, _panelOpen }` with tags `arc.folder`, `arc.promptForDownload`, `arc.other` ("Button to confirm
   selection of directory for file downloads"). [?] The menu's own labels aren't in the strings. Cra (#190):
@@ -3372,3 +3380,25 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
 - Cra: BlankWindow (Space.standaloneWindowID, saved in sidebar.json outside spaceOrder), SidebarStore.addBlankWindow /
   isStandalone, TabTearOff (decision + frame), SpaceListView.dragEnded, AppDelegate.tearOffTab and moveBlankWindow
   ("Move to…", `cra://debug?blankMoveTo=<n>`), BlankWindow.theme (Auto).
+
+## Confirmation dialogs (Arc 1.172.1, 7 Nov 2026, PR #224, offline Arc on a fake home, 2x window captures)
+- [O static] Arc has two paths: `AlertClient.runModal` (NSAlert) and its own `Dialogs` module (`DialogView`,
+  `DialogButton`, `SuppressionCheckbox`, `TextInputDialogView`, `PermissionRequestDialogView`,
+  `NSWindow+DialogSheet.swift` → `Dialogs.SheetWindow`, "Label for the icon to press enter/escape").
+- [O] Quit Arc? (shouldWarnBeforeQuitting), Delete your “<name>” Space? and Delete your <name> Live Folder?
+  are all the Dialogs card, presented as a real sheet on the browser window: 450 pt wide, centred, no AX
+  window of its own, the window dimmed, and macOS 26's sheet animation (fade in while dropping a few points).
+  The 1 pt light edge is the sheet's own (20 % white over the card), not a stroke. Card #161C2F, 16 pt
+  continuous corners.
+- [O] Quit: the app icon 50.5 pt across from 43.5 pt in; "Quit Arc?" caps 120 pt down; buttons 37 pt tall
+  (+1.5 pt lip) from 183.5 pt: "Quit, and don’t ask again" at the left edge (27.5 pt in), Cancel `ESC` and
+  Quit `↩` at the right, ending 26.5 pt from the card's edge, 7.5 pt apart; card 248 pt tall.
+- [O] Delete Space / Delete Live Folder: Arc's logo mark instead of the app icon, title caps at 120 pt, the
+  message's at 157 pt, buttons from 208.5 pt; Cancel `ESC` and a red Delete / Delete Folder `↩` (fill
+  #E2492C, no lighter rim, lip #41232A, key badge #E55B41 edged #E86D56). Live Folder text: "You can restore
+  this folder at any time by right-clicking the sidebar."
+- [O] Colours: secondary #302F60 edged #6362A9, its ESC badge #4E4C77; Quit #3339F1. Hover: 10 % white over a
+  secondary button, badge included (#302F60 → #454470), 10 % black over the default one (#3339F1 → #2D33D9).
+- Cra (#224, STRENCH0): `AppDialog` + `DialogPanel` (a real sheet via beginSheet) replace NSAlert and the
+  borderless DialogOverlayWindow; checked against these captures on the same display, within ~1 pt and a few
+  levels of colour. Arc's quit capture was taken with its command bar open; that doesn't change the sheet.

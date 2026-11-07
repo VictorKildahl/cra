@@ -449,12 +449,13 @@ enum SpaceMenu {
         let github = store.liveFolder(.github, inSpace: id)
         MenuItems.add(live, "GitHub", on: github != nil) {
             if let github {
-                SidebarMenus.confirmDeleteLiveFolder(github, store: store)
+                SidebarMenus.confirmDeleteLiveFolder(github, store: store, in: anchor.window)
             } else if let f = store.createLiveFolder(.github, inSpace: id) {
                 store.setExpanded(f.id, true)
                 LiveFolderManager.shared.refresh(f.id)
             }
         }
+        SidebarMenus.addGitLabFolders(to: live, space: id, store: store, window: anchor.window)
         m.addItem(.separator())
         let export = MenuItems.submenu(m, "Export “\(space.title)” into Folder")
         for s in store.orderedSpaces {

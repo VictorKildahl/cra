@@ -1012,7 +1012,8 @@ final class SpaceListView: NSView, NSDraggingSource {
         case .insert(let parent, let index)?:
             store.moveItems(group, to: parent, index: index)
         case .split(let tab, let leading)?:
-            store.createSplit(with: leading ? [id, tab] : [tab, id], at: tab)
+            // Arc opens the tab a drag picks up, so the new split ends up open on its pane (#180).
+            if store.combineIntoSplit(id, onto: tab, leading: leading) != nil { store.selectTab(id, window: ui.windowID) }
         case .into(let target)?:
             if store.item(target)?.isFolder == true {
                 store.moveItems(group, to: target, index: nil)
@@ -1037,8 +1038,8 @@ final class SpaceListView: NSView, NSDraggingSource {
     }
 
     /// Top and bottom quarters of a row insert before/after it; the middle combines: a folder
-    /// takes the item, a Today tab makes a split (the dragged tab goes on the side of the row
-    /// it hovers), a pinned tab makes a new folder, a split row takes a pane.
+    /// takes the item, a tab, pinned or not, makes a split in its place (the dragged tab goes on
+    /// the side of the row it hovers), a split row takes a pane.
     func resolve(dragged id: UUID, at p: CGPoint) -> SidebarListDrop {
         guard let space = store.space(spaceID) else { return SidebarListDrop(draggedID: id) }
         let items = rows.filter { $0.itemID != nil }
@@ -1060,8 +1061,8 @@ final class SpaceListView: NSView, NSDraggingSource {
                 else if f >= 0.75 { target = store.isExpanded(rid) ? .insert(parent: rid, index: 0) : after }
                 else { target = .into(rid) }
             } else if middle && isTab && item.isTab {
-                // Arc combines two tabs into a split wherever the target sits (#191): a pinned
-                // one stays pinned and the split opens in Today with a copy of it.
+                // Arc combines two tabs into a split wherever the target sits (#191), in the
+                // target's place: on a pinned tab it is a pinned split (#180).
                 target = .split(with: rid, leading: p.x < r.frame.midX)
             } else if middle && isTab && item.isSplit {
                 target = .into(rid)

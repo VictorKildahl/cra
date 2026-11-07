@@ -282,6 +282,7 @@
 #178   Packages/CraCore/Tests/CraCoreTests/ToolbarExtensionFitTests.swift::pinsGoBeforeRefresh  f9abe9cd9c7f
 #178   Packages/CraCore/Tests/CraCoreTests/ToolbarExtensionFitTests.swift::refreshGoesOnceThePinsAreNotEnough  e723177218d9
 #178   Packages/CraCore/Tests/CraCoreTests/ToolbarExtensionFitTests.swift::theSlidersGoOnlyWhenTheAddressWouldBeSqueezed  e8aec2739640
+#180   Tests/StoreTests.swift::dropOnPinnedTabSplits  e363bbd33fb2
 #183   Packages/CraCore/Tests/CraCoreTests/LinkMenuTests.swift::defaultSwitchesToTheNewTabLikeArc  169e27801cfa
 #183   Packages/CraCore/Tests/CraCoreTests/LinkMenuTests.swift::settingIsOffForSettingsWithoutIt  6d661c8bddc5
 #183   Packages/CraCore/Tests/CraCoreTests/LinkMenuTests.swift::settingOnKeepsThePageInFrontAndOffersTheSwitch  9086830db26d
@@ -292,7 +293,7 @@
 #190   Packages/CraCore/Tests/CraCoreTests/DownloadLocationTests.swift::eachProfileKeepsItsOwn  f394f179f5ba
 #190   Packages/CraCore/Tests/CraCoreTests/DownloadLocationTests.swift::goingBackToTheDefaultDropsTheEntry  96fe0ad9a50b
 #190   Packages/CraCore/Tests/CraCoreTests/DownloadLocationTests.swift::profilesWithoutAChoiceUseDownloadsWithoutAsking  ffef7f30e25f
-#191   Tests/StoreTests.swift::dropOnPinnedTabSplits  ac72302089d5
+#191   Tests/StoreTests.swift::dropOnPinnedTabSplits  e363bbd33fb2
 #195   Packages/CraCore/Tests/CraCoreTests/ActionSearchScopeTests.swift::barOpenersAreLeftOut  1a36c34470fb
 #195   Packages/CraCore/Tests/CraCoreTests/ActionSearchScopeTests.swift::nothingTypedListsByUseThenMenuOrder  55375f23aad1
 #195   Packages/CraCore/Tests/CraCoreTests/ActionSearchScopeTests.swift::typedRanksByMatchThenUse  4614e4f53f66
@@ -330,6 +331,10 @@
 #211   Packages/CraCore/Tests/CraCoreTests/FaviconKeyTests.swift::tabsOnOneHostKeepTheirOwnIcons  21d360f30e94
 #212   Packages/CraCore/Tests/CraCoreTests/KeyChordTests.swift::turkishQZoomKeys  840de09abff1
 #213   Packages/CraCore/Tests/CraCoreTests/FolderPeekTests.swift::aClickOpensAClosedFolderEvenWithItsOpenTabInSight  70f9e64eb96b
+#214   Packages/CraCore/Tests/CraCoreTests/ItemTableTests.swift::tabCountFollowsWrites  549f222462af
+#214   Packages/CraCore/Tests/CraCoreTests/TabSleepPolicyTests.swift::holds  d2bd0269d879
+#214   Tests/BrowserManagerLifecycleTests.swift::discardedPageLoadCase  4c91d8a1d9df
+#214   Tests/BrowserManagerLifecycleTests.swift::sleepCountsCase  ea4c379bd476
 #215   Tests/StoreTests.swift::arcLiveFolderImportsLive  a5c462b3a9c7
 #218   Tests/Scenarios/extension-popup-download.scenario  ffb6285b0eee
 #219   Packages/CraCore/Tests/CraCoreTests/TabTearOffTests.swift::aWindowLargerThanTheScreenShrinksToFit  bb6acd6907ac

@@ -64,9 +64,8 @@ MainActor.assumeIsolated {
         exit(0)
     }
     if !started {
-        let alert = NSAlert()
-        alert.messageText = "Cra could not start Chromium"
-        alert.informativeText = "Chromium Embedded Framework failed to initialize. See \(AppPaths.log.path)."
+        let alert = AppDialog(title: "Cra could not start Chromium",
+                              message: "Chromium Embedded Framework failed to initialize. See \(AppPaths.log.path).")
         alert.runModal()
         exit(1)
     }

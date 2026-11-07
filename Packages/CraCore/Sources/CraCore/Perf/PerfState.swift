@@ -73,7 +73,7 @@ public struct PerfState: Sendable {
         case .rendererUnresponsive: events.append(PerfEvent(at: at, kind: "renderer", detail: "unresponsive", site: site))
         case .rendererResponsive: events.append(PerfEvent(at: at, kind: "renderer", detail: "responsive again", site: site))
         case .loadError: events.append(PerfEvent(at: at, kind: "load", detail: "error \(key)", site: site))
-        case .tabSlept, .sleepRefusal: break
+        case .tabSlept, .sleepRefusal, .sleepRetry, .sleepSkip, .fileSaved: break
         }
     }
 
