@@ -423,6 +423,16 @@ final class SidebarStore {
 
     var orderedSpaces: [Space] { spaceOrder.compactMap { spaces[$0] } }
     /// Arc's single-space mode: one space and the header turned off. Incognito and Blank Windows keep theirs.
+    /// Arc's "Allow websites to get your theme data": the `:root` rule a tab's pages get, from its
+    /// space's theme in the scheme pages see (View ▸ Appearance, else the Mac's); nil when off or
+    /// incognito.
+    func themeDataCSS(item id: UUID, systemDark: Bool) -> String? {
+        guard settings.shareThemeWithWebsites, !isIncognito(item: id),
+              let theme = spaceID(ofItem: id).flatMap({ spaces[$0]?.theme }) else { return nil }
+        let dark = settings.websiteAppearance == .dark || (settings.websiteAppearance == .automatic && systemDark)
+        return ":root { " + ArcThemeData.declarations(palette: ArcThemeData.palette(theme: theme, dark: dark), gradient: theme.colors) + " }"
+    }
+
     func hidesSpaceHeader(_ id: UUID) -> Bool {
         !settings.showSpaceHeaderOnSingleSpace && spaceOrder.count == 1 && !isStandalone(space: id)
     }

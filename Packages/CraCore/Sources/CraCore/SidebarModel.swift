@@ -521,6 +521,8 @@ public struct AppSettings: Codable, Equatable {
     public var littleWindowArchiveAfter: LittleWindowArchive = .sixHours
     /// Arc's Settings ▸ Advanced "When opening Arc, restore windows from previous session", on by default.
     public var restoreWindows: Bool = true
+    /// Arc's Settings ▸ Advanced "Allow websites to get your theme data" (ArcThemeData), on by default.
+    public var shareThemeWithWebsites: Bool = true
     /// Arc's searchSuggestEnabled: the command bar asks the search engine for suggestions
     /// as you type and fills its rows with them.
     public var searchSuggestions: Bool = true
@@ -730,6 +732,7 @@ extension AppSettings {
         mediaFolders = (try? c.decodeIfPresent([MediaLibrary.Folder].self, forKey: .mediaFolders)) ?? MediaLibrary.Folder.allCases
         littleWindowArchiveAfter = (try? c.decodeIfPresent(LittleWindowArchive.self, forKey: .littleWindowArchiveAfter)) ?? .sixHours
         restoreWindows = try c.decodeIfPresent(Bool.self, forKey: .restoreWindows) ?? true
+        shareThemeWithWebsites = try c.decodeIfPresent(Bool.self, forKey: .shareThemeWithWebsites) ?? true
         searchSuggestions = try c.decodeIfPresent(Bool.self, forKey: .searchSuggestions) ?? true
         showSpaceHeaderOnSingleSpace = try c.decodeIfPresent(Bool.self, forKey: .showSpaceHeaderOnSingleSpace) ?? true
         sharedFavorites = try c.decodeIfPresent(Bool.self, forKey: .sharedFavorites) ?? false

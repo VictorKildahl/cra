@@ -75,6 +75,7 @@ enum BrowserManagerLifecycleTests {
         embeddedPageHandoffCase()
         await snapshotCase()
         loadingTabCase()
+        themeDataCase()
         await sleepCase("an unchanged idle page sleeps", shouldSleep: true) { _, _ in }
         await sleepCase("loading started while the probe was pending stays awake") { _, rt in rt.browser.setLoading(true) }
         await sleepCase("a completed same-URL reload invalidates the old probe") { _, rt in
@@ -338,6 +339,27 @@ enum BrowserManagerLifecycleTests {
         expect(probe?.isCancelled == true && rt.probeWork != nil && rt.probeWork !== probe, "its probe moves to after the load")
         manager.unload(id)
         expect(rt.probeWork == nil && rt.snapshotWork == nil, "unloading drops the pending probe")
+        manager.closeAll()
+    }
+
+    /// Arc's "Allow websites to get your theme data" (on by default): each page that commits gets the
+    /// space's palette as `--arc-palette-*` variables from Cra's world; off, pages get none.
+    @MainActor
+    private static func themeDataCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let id = store.createTab(url: "https://example.test/themed").id
+        let rt = manager.ensureRuntime(for: id)!
+        let themed = { rt.browser.replies.filter { $0.method == isolatedProbe }.count }
+        let before = themed()
+        manager.browser(rt.browser, didChangeCommittedLoad: true)
+        expect(themed() == before + 1 && rt.browser.lastIsolatedParams.contains("--arc-palette-title: #")
+               && rt.browser.lastIsolatedParams.contains("adoptedStyleSheets"), "a committed page gets the theme's variables")
+        manager.browser(rt.browser, didChangeCommittedLoad: false)
+        expect(themed() == before + 1, "a load that hasn't committed gets nothing yet")
+        store.settings.shareThemeWithWebsites = false
+        manager.browser(rt.browser, didChangeCommittedLoad: true)
+        expect(themed() == before + 1, "with the setting off, pages get none")
         manager.closeAll()
     }
 

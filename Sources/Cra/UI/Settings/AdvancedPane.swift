@@ -32,6 +32,10 @@ struct AdvancedPane: View {
                 // Arc: Settings ▸ Advanced "Play Arc sound effects".
                 SettingsCheckbox(title: "Play Cra sound effects", isOn: $store.settings.soundEffects)
             }
+            SettingsFormRow(label: "Websites:") {
+                // Arc: Settings ▸ Advanced "Allow websites to get your theme data" (--arc-palette-* variables).
+                SettingsCheckbox(title: "Allow websites to get your theme data", isOn: $store.settings.shareThemeWithWebsites)
+            }
             SettingsFormRow(label: "When quitting Cra:") {
                 SettingsCheckbox(title: "Warn before quitting", isOn: $store.settings.warnBeforeQuitting)
                 // Arc: Settings ▸ Advanced "When opening Arc, restore windows from previous session".

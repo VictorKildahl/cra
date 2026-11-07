@@ -1080,7 +1080,22 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         guard let id = tabID(of: browser) else { return }
         // Start-up phases: firstPageShown, then the page's navigation committed, then loaded.
         if committed, id == visibleTabID { Perf.phase("firstPageCommitted") }
+        if committed { shareTheme(id, with: browser) }
         delegate?.browserManagerDidUpdate(id)
+    }
+
+    /// Arc's "Allow websites to get your theme data": the space's palette as `--arc-palette-*` and
+    /// `--arc-background-*` variables on the page's root (ArcThemeData), in the scheme its pages see.
+    /// A stylesheet adopted from Cra's world, so the page's markup shows no trace of it, as in Arc.
+    private func shareTheme(_ id: UUID, with browser: CraBrowser) {
+        let systemDark = NSApp?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        guard let css = store.themeDataCSS(item: id, systemDark: systemDark) else { return }
+        guard let literal = String(data: (try? JSONSerialization.data(withJSONObject: [css], options: [])) ?? Data(), encoding: .utf8) else { return }
+        let script = "(()=>{let s=window.__craArcTheme;if(!s){s=window.__craArcTheme=new CSSStyleSheet();"
+            + "document.adoptedStyleSheets=[...document.adoptedStyleSheets,s];}s.replaceSync(\(literal)[0]);})()"
+        guard let params = try? JSONSerialization.data(withJSONObject: ["expression": script]),
+              let json = String(data: params, encoding: .utf8) else { return }
+        browser.evaluate(inIsolatedWorld: PageScript.world, params: json) { _, _ in }
     }
 
     func browser(_ browser: CraBrowser, didChangeProgress progress: Double) {

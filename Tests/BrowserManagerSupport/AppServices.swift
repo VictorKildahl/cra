@@ -20,7 +20,13 @@ struct TestItem {
 }
 enum TestRoot { case today }
 @MainActor final class SidebarStore {
-    struct Settings { var autoPictureInPicture = false }
+    struct Settings {
+        var autoPictureInPicture = false
+        var shareThemeWithWebsites = true
+    }
+    func themeDataCSS(item: UUID, systemDark: Bool) -> String? {
+        settings.shareThemeWithWebsites ? ":root { --arc-palette-title: #211A00FF; }" : nil
+    }
     var settings = Settings()
     var items: [UUID: TestItem] = [:]
     func item(_ id: UUID) -> TestItem? { items[id] }
