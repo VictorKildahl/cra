@@ -76,6 +76,12 @@ Legend: [O] observed, [I] inference, [U] unknown.
 - [O] Context menu strings: "Copy All Links as Markdown", "Delete Live Folder", repository list explained by
   "This list is generated based on your currently active pull requests.", "Failed to update". Deleting asks
   "Delete your %@ Live Folder?". Not in Arc's menu bar (only a debug menu "Automatic Live Folders").
+- [O] The menu's nesting (7 Nov 2026, PR #229 review, Arc 1.172.1's arm64 disassembly; Swift keeps strings of up
+  to 15 bytes as immediates, so they're decoded from the mov/movk pairs, not found by `strings`): the folder
+  menu builds a "Pull Requests" item with an image, then its children: "Refresh", "Initializing..." or "Last
+  fetched…", "Repositories", the "Single Sign-On" / "Required" SSO items, and the filters "Created by Me",
+  "Review Requests", "Team Review Requests". No "My Pull Requests" string exists. "Move to" sits in the shared
+  sidebar item menu.
 
 ## What Cra does
 
