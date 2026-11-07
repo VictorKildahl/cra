@@ -43,7 +43,7 @@
 #49    Packages/CraCore/Tests/CraCoreTests/TabSearchScopeTests.swift::nothingTypedListsByRecency  535e122471df
 #49    Packages/CraCore/Tests/CraCoreTests/TabSearchScopeTests.swift::percentAloneOffersTheScope  dce33dc44297
 #49    Packages/CraCore/Tests/CraCoreTests/TabSearchScopeTests.swift::typedRanksByMatchThenRecency  baeabb72626c
-#50    Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::theFullBar  53b4dec5d2fb
+#50    Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::theFullBar  6b2a5984c98c
 #50    Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::theShownSidebarCarriesTheToggle  083c181ed9ac
 #50    Tests/CommandBarGlyphTests.swift::leadingGlyph  3e90bfdbd048
 #50    Tests/Scenarios/toolbar-chrome.scenario  1fa8505c4e49
@@ -82,7 +82,7 @@
 #88    Packages/CraCore/Tests/CraCoreTests/DismissingClickTests.swift::theNextClickOpens  9cf0eeb51035
 #88    Packages/CraCore/Tests/CraCoreTests/SidebarModelTests.swift::sidebarSubtitle  879c6c151d6d
 #88    Packages/CraCore/Tests/CraCoreTests/SidebarModelTests.swift::toolbarShowsTheHostOnlyUnlessAsked  f6ce32167e2f
-#88    Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::theDeveloperBar  74ae28676b62
+#88    Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::theDeveloperBar  97f0c8752c57
 #88    Tests/PolicyTests.swift::devToolsToggle  5786fe494c6e
 #88    Tests/Scenarios/toolbar-chrome.scenario  1fa8505c4e49
 #90    Packages/CraCore/Tests/CraCoreTests/ConnectionSecurityTests.swift::aCertificateErrorIsNotSecure  f7e423ddd42a
@@ -271,11 +271,11 @@
 #176   Packages/CraCore/Tests/CraCoreTests/FavoritesLayoutTests.swift::slotUnderThePointer  bb151154628a
 #176   Packages/CraCore/Tests/CraCoreTests/FavoritesLayoutTests.swift::tilesMoveAlongPastTheOpenSlot  e3dab87749f3
 #178   Packages/CraCore/Tests/CraCoreTests/ShippedWindowsTests.swift::anAutoSpaceRingsTheFocusedPaneInOneColour  8b1715afe8fe
-#178   Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::anEmptyPaneHasGreyedNavigationAndClose  930d3981aac7
-#178   Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::anUnfocusedPaneShowsOnlyTheEssentials  e9c33c42d93c
-#178   Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::hoverChangesNothingOutsideASplit  e27252b048eb
-#178   Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::hoveringAnUnfocusedPaneRevealsItsControls  20813c06cf54
-#178   Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::theFocusedPaneHasEverythingButTheToggleAndSplitView  7084f9f48a51
+#178   Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::anEmptyPaneHasGreyedNavigationAndClose  a4a18af791fa
+#178   Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::anUnfocusedPaneShowsOnlyTheEssentials  3385f4080393
+#178   Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::hoverChangesNothingOutsideASplit  57223bed474f
+#178   Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::hoveringAnUnfocusedPaneRevealsItsControls  fc9e5d65b314
+#178   Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::theFocusedPaneHasEverythingButTheToggleAndSplitView  fcfbb7d66933
 #178   Packages/CraCore/Tests/CraCoreTests/ToolbarExtensionFitTests.swift::aShortAddressNeverCostsTheSliders  0707b2c34d24
 #178   Packages/CraCore/Tests/CraCoreTests/ToolbarExtensionFitTests.swift::everythingStaysWhileTheAddressFits  26ae324e1a1c
 #178   Packages/CraCore/Tests/CraCoreTests/ToolbarExtensionFitTests.swift::missingButtonsAreNotHidden  707555c4dc46
@@ -351,4 +351,7 @@
 #220   Tests/Scenarios/blank-window.scenario  cac94fd094a6
 #220   Tests/StoreTests.swift::blankWindowWithoutItsWindow  0de383e3d544
 #220   Tests/StoreTests.swift::blankWindows  2703cb42812a
+#226   Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::theSlidersShowWithoutExtensions  e4ea26d65d01
+#226   Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::theURLFieldHasTheSlidersWithoutExtensions  a7173c578717
+#226   Tests/Scenarios/site-controls-no-extensions.scenario  c1c5b5365539
 #227   Tests/Scenarios/quit-during-web-store-install.scenario  a3e3b0c8eb2b

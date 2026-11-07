@@ -14,6 +14,10 @@ final class SidebarView: NSView {
 
     /// The URL field's sliders button (screen rect), nil while the toolbar has it.
     var siteControlsButtonFrameOnScreen: NSRect? { topBar.siteControlsButtonFrameOnScreen }
+    /// Scenario hooks (#226): the URL field as if the pointer were over the header, and a press on
+    /// one of its buttons. nil while the toolbar has the address.
+    func debugURLFieldHover(_ on: Bool) -> [ToolbarComposition.Item]? { topBar.debugURLFieldHover(on) }
+    func debugURLFieldPress(_ item: ToolbarComposition.Item) -> Bool { topBar.debugURLFieldPress(item) }
     private let pager: SpacePagerView
     private let trayHost: DownloadsTrayView
     private let player: NowPlayingTrayView
@@ -315,6 +319,14 @@ final class SidebarTopBarView: NSView {
         return NSRect(x: f.maxX - 5 - 28, y: f.minY + (f.height - 28) / 2, width: 28, height: 28)
     }
     private var hoverHeader = false { didSet { if hoverHeader != oldValue { pill.showAccessories = hoverHeader } } }
+
+    func debugURLFieldHover(_ on: Bool) -> [ToolbarComposition.Item]? {
+        hoverHeader = on
+        layoutSubtreeIfNeeded()
+        return pill.isHidden ? nil : pill.shownItems
+    }
+
+    func debugURLFieldPress(_ item: ToolbarComposition.Item) -> Bool { !pill.isHidden && pill.debugPress(item) }
     private var syncQueued = false
 
     var preferredHeight: CGFloat { CraMetrics.titleAreaHeight + (compact ? 2 + 36 + 8 : 0) }
@@ -419,7 +431,7 @@ final class SidebarTopBarView: NSView {
                 }
             }
             pill.show(text: text, url: url, hasTab: tab != nil, colors: colors, active: active,
-                      pinned: pinned, hasExtensions: !entries.isEmpty, protectedMedia: tab.flatMap { ui.navState(for: $0.id).protectedMedia })
+                      pinned: pinned, protectedMedia: tab.flatMap { ui.navState(for: $0.id).protectedMedia })
         }
         needsLayout = true
         if wasCompact != compact { superview?.superview?.needsLayout = true }
@@ -525,10 +537,12 @@ final class SidebarURLPill: NSView {
     private let label = NSTextField.sidebarLabel(size: 13)
     private let tip: ArcTooltipAnchorView
     private var accessories: [NSView] = []
+    /// What each of `accessories` is, in order.
+    private(set) var shownItems: [ToolbarComposition.Item] = []
     private var hovering = false { didSet { if hovering != oldValue { refreshFill() } } }
     private var colors = SidebarColors()
     private var hasTab = false
-    private var model: (pinned: [(String, String, NSImage?)], hasExtensions: Bool, active: Bool)?
+    private var model: (pinned: [(String, String, NSImage?)], active: Bool)?
 
     override init(frame: NSRect) {
         tip = ArcTooltipAnchorView(frame: .zero)
@@ -549,14 +563,14 @@ final class SidebarURLPill: NSView {
     override var mouseDownCanMoveWindow: Bool { false }
 
     func show(text: String, url: String, hasTab: Bool, colors: SidebarColors, active: Bool,
-              pinned: [(String, String, NSImage?)], hasExtensions: Bool, protectedMedia: String? = nil) {
+              pinned: [(String, String, NSImage?)], protectedMedia: String? = nil) {
         self.protectedMedia = protectedMedia
         self.colors = colors
         self.hasTab = hasTab
         tip.text = url
         label.stringValue = text
         label.textColor = hasTab ? colors.textPrimary : colors.textTertiary
-        model = (pinned, hasExtensions, active)
+        model = (pinned, active)
         refreshAccessories(animated: false)
         refreshFill()
         needsLayout = true
@@ -571,29 +585,38 @@ final class SidebarURLPill: NSView {
     /// A WebKit page's service: the pins dim and say why (docs/protected-media.md).
     private var protectedMedia: String?
 
-    /// Arc's URL-bar accessories: pinned extensions (while they leave the address room), Copy
-    /// Link, then the site controls.
+    /// Arc's URL-bar accessories (ToolbarComposition.urlFieldAccessories): pinned extensions
+    /// (while they leave the address room), Copy Link, then the Site Control Center's sliders,
+    /// which show with no extension installed too (#226).
     private func refreshAccessories(animated: Bool) {
         accessories.forEach { $0.removeFromSuperview() }
         accessories = []
+        shownItems = []
         guard showAccessories, hasTab, let m = model, let actions else { needsLayout = true; return }
         pinsInField = PinnedExtensionGrid.fitsInURLField(count: m.pinned.count, fieldWidth: bounds.width)
-        for (id, _, icon) in pinsInField ? m.pinned : [] {
-            let b = ToolbarGlyphButton()
-            // Arc's pinned extension buttons have no tooltip (#106), unless they can't run here.
-            b.configure(symbol: nil, image: icon, help: protectedMedia.map(ExtensionStore.offOnProtectedMedia) ?? "",
-                        enabled: protectedMedia == nil, width: 28, iconSize: 16, tint: colors.textSecondary)
-            b.action = { actions.runExtension(id) }
-            b.menuProvider = { ExtensionStore.shared.entries.first { $0.extensionID == id }.map(ExtensionsMenu.iconMenu) }
-            accessories.append(b)
-        }
-        let copy = SidebarGlyphButton(symbol: "link", size: 28, height: 28, iconSize: 14, weight: .regular, help: "Copy URL (⇧⌘C)", colors: colors) { actions.performAction("copyURL") }
-        copy.active = m.active
-        accessories.append(copy)
-        if m.hasExtensions {
-            let e = SidebarGlyphButton(symbol: "slider.horizontal.2.square", size: 28, height: 28, iconSize: 15, weight: .regular, help: "Extensions", colors: colors) { actions.showExtensionsMenu() }
-            e.active = m.active
-            accessories.append(e)
+        let icons = Dictionary(m.pinned.map { ($0.0, $0.2) }, uniquingKeysWith: { a, _ in a })
+        for item in ToolbarComposition.urlFieldAccessories(pinnedExtensions: m.pinned.map(\.0), fieldWidth: bounds.width) {
+            switch item {
+            case .pinnedExtension(let id):
+                let b = ToolbarGlyphButton()
+                // Arc's pinned extension buttons have no tooltip (#106), unless they can't run here.
+                b.configure(symbol: nil, image: icons[id] ?? nil, help: protectedMedia.map(ExtensionStore.offOnProtectedMedia) ?? "",
+                            enabled: protectedMedia == nil, width: 28, iconSize: 16, tint: colors.textSecondary)
+                b.action = { actions.runExtension(id) }
+                b.menuProvider = { ExtensionStore.shared.entries.first { $0.extensionID == id }.map(ExtensionsMenu.iconMenu) }
+                accessories.append(b)
+            case .copyURL:
+                let copy = SidebarGlyphButton(symbol: "link", size: 28, height: 28, iconSize: 14, weight: .regular, help: "Copy URL (⇧⌘C)", colors: colors) { actions.performAction("copyURL") }
+                copy.active = m.active
+                accessories.append(copy)
+            case .extensions:
+                let e = SidebarGlyphButton(symbol: "slider.horizontal.2.square", size: 28, height: 28, iconSize: 15, weight: .regular, help: "Extensions", colors: colors) { actions.showExtensionsMenu() }
+                e.active = m.active
+                accessories.append(e)
+            default:
+                continue
+            }
+            shownItems.append(item)
         }
         for v in accessories {
             addSubview(v)
@@ -638,6 +661,17 @@ final class SidebarURLPill: NSView {
     override func mouseUp(with event: NSEvent) {
         guard bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
         actions?.openCommandBar(hasTab ? .editURL : .newTab)
+    }
+
+    /// Runs the shown button's own action, as a click on it would (scenario hook, #226).
+    func debugPress(_ item: ToolbarComposition.Item) -> Bool {
+        guard let i = shownItems.firstIndex(of: item) else { return false }
+        switch accessories[i] {
+        case let b as SidebarGlyphButton: b.action()
+        case let b as ToolbarGlyphButton: b.action()
+        default: return false
+        }
+        return true
     }
 }
 

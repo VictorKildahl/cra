@@ -2613,6 +2613,32 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func debugSiteControlsShown() -> Bool { siteControlCenter.isShown
     }
 
+    /// Scenario hooks (#226): the sidebar's URL field hovered, its buttons logged as
+    /// "url field: copyURL extensions" ("url field: none" while the toolbar has the address).
+    func debugURLFieldHover(_ on: Bool) {
+        let items = (shell.sidebarHost as? SidebarView)?.debugURLFieldHover(on)
+        CraLog.note("url field: " + (items.map { $0.map(Self.debugName).joined(separator: " ") } ?? "none"))
+    }
+
+    /// A press on the URL field's button by name ("siteControls", "copyURL"), then whether the
+    /// Site Control Center is open once it had time to (it waits up to 0.3 s on the page).
+    func debugURLFieldPress(_ name: String) {
+        let item: ToolbarComposition.Item = name == "copyURL" ? .copyURL : .extensions
+        let pressed = (shell.sidebarHost as? SidebarView)?.debugURLFieldPress(item) == true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+            CraLog.note("url field press \(name): pressed \(pressed), site control center \(self?.siteControlCenter.isShown == true ? "shown" : "not shown")")
+        }
+    }
+
+    private static func debugName(_ item: ToolbarComposition.Item) -> String {
+        switch item {
+        case .pinnedExtension(let id): return "pin:" + id
+        case .copyURL: return "copyURL"
+        case .extensions: return "siteControls"
+        default: return String(describing: item)
+        }
+    }
+
     private func openTab(_ url: String) {
         store.createTab(url: url, select: true, window: windowID)
         showWindow(nil)

@@ -32,7 +32,6 @@ final class PaneToolbarView: NSView {
         var path = ""
         var sidebarVisible = true
         var pinned: [Ext] = []
-        var hasExtensions = false
         /// A WebKit page's service: its extension buttons dim (none run there).
         var protectedMedia: String?
         var fill = NSColor.clear
@@ -176,7 +175,6 @@ final class PaneToolbarView: NSView {
         let profile = item.map { store.profileDirectoryName(item: $0.id) }
             ?? store.profileDirectoryName(space: store.focusedSpaceID(window: ui.windowID))
         let entries = extensions.entries(inProfile: profile)
-        m.hasExtensions = !entries.isEmpty
         m.pinned = extensions.pinnedIDs(inProfile: profile).compactMap { id in
             entries.first { $0.extensionID == id }.map {
                 Model.Ext(id: id, name: $0.name, icon: extensions.toolbarIcon(for: $0, profile: profile, tab: m.tabID),
@@ -272,7 +270,7 @@ final class PaneToolbarView: NSView {
         hairline.layer?.backgroundColor = m.hairline?.cgColor
         let bar = ToolbarComposition(kind: m.kind, inSplit: m.inSplit, sidebarVisible: m.sidebarVisible, focusedPane: m.focusedPane,
                                      hovered: m.hovered, canGoBack: m.canGoBack, canGoForward: m.canGoForward, isLoading: m.isLoading,
-                                     pinnedExtensions: m.pinned.map(\.id), hasExtensions: m.hasExtensions)
+                                     pinnedExtensions: m.pinned.map(\.id))
         // The no-tab bar and an empty pane show navigation that does nothing (Arc greys it out).
         let wide = m.kind == .noTab || m.kind == .emptyPane
         func view(_ item: ToolbarComposition.Item) -> NSView {
