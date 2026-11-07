@@ -33,7 +33,7 @@ or Arc-only service), per CONTRIBUTING.md.
 | Window dragging from the top of webpages | Settings ▸ Advanced | missing | |
 | Restore windows from previous session | Settings ▸ Advanced | partial | Cra has "Quit and Keep Windows" only. |
 | Block Cookie Banners | Settings ▸ General | missing | Cra blocks ads and trackers only. |
-| Archive Little Arcs after | Settings ▸ Links (6 hours default) | missing | |
+| Archive Little Arcs after | Settings ▸ Links (6 hours default) | done | Settings ▸ Tabs ▸ Links; a Little Window left alone that long closes into the archive. |
 | Previews (Gmail, Calendar on Favorites) | Settings ▸ General ▸ Previews Settings… | missing | Fetches through the browser session; nothing leaves the Mac. |
 | Join Meeting ⌃⌘J | Shortcuts | missing | Needs calendar previews first. |
 | Troubleshooting menu | Help ▸ Troubleshooting: Record Trace, Open Task Manager, Reveal Arc Data, Copy Arc Info | partial | Cra has Export Diagnostics… |
@@ -84,8 +84,8 @@ gains "New Profile".
 | Arc tab | Rows Cra lacks |
 |---|---|
 | General | Previews Settings…, Block Cookie Banners |
-| Profiles | Passwords / Credit Cards / Notifications / Privacy and Security shortcuts to Chromium's pages, "New documents" app |
-| Links | "Open Little Arc when clicking on links with ⌥⌘ held", "Archive Little Arcs after" |
+| Profiles | "New documents" app (Arc's Notes/Easels); Privacy, Passwords, Credit Cards and Notifications done |
+| Links | "Open Little Arc when clicking on links with ⌥⌘ held"; Archive Little Windows after done |
 | Advanced | Play sound effects, restore windows from previous session, window dragging from the top of webpages, Shared Quotes, websites get theme data, Enable Boosts |
 | Icon | Cra has its own icon picker |
 
@@ -112,3 +112,14 @@ in this sweep (Essential Shortcuts window, Library pages).
 - Settings ▸ Advanced ▸ Play Cra sound effects.
 - Library ▸ Media and Window ▸ View Media…; File ▸ Capture in Portrait Mode; the toolbar address
   menu's Capture…, Capture Full Page, Manage Extensions… and Hide Toolbar.
+- Settings ▸ Tabs ▸ Archive Little Windows after (1 hour, 6 hours, 12 hours); Settings ▸ Profiles ▸
+  Your Data and Settings (Chromium's privacy, passwords, cards and notifications pages per profile).
+
+## Left for later, and why
+
+- Boosts: the offline Arc has no network and a local server is blocked in this session, so its Boost
+  editor couldn't be put on screen to copy. Needs a site in Arc (Victor's OK to run the real Arc, or
+  a localhost server).
+- Easels and Notes: whole document types with their own editors; same approach once Boosts is in.
+- AppleScript dictionary, Cast, Find and Replace, cookie banner blocking, theme data for websites,
+  window dragging from the top of pages, Previews and Join Meeting: not started.

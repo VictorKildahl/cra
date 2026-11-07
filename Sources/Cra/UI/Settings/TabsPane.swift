@@ -38,6 +38,15 @@ struct TabsPane: View {
                 // Arc's "Open Little Arc when I press ⌥⌘N" (#195): New Little Window's shortcut from any app.
                 SettingsCheckbox(title: "Open a Little Window when I press \(KeyBindingRegistry.shared.action("newLittleWindow")?.primary?.display ?? "⌥⌘N") in any app",
                                  isOn: $store.settings.littleWindowShortcutEverywhere)
+                // Arc: "Archive Little Arcs after:" 1 hour, 6 hours (default), 12 hours.
+                HStack(spacing: 6) {
+                    Text("Archive Little Windows after:")
+                    Picker("", selection: $store.settings.littleWindowArchiveAfter) {
+                        ForEach(LittleWindowArchive.allCases, id: \.self) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                }
                 SettingsCheckbox(title: "Open a Peek window when clicking on links to other sites", isOn: $store.settings.peekLinksToOtherSites)
                 SettingsCheckbox(title: "In every tab, not only Favorites and Pinned tabs", isOn: $store.settings.peekInEveryTab)
                     .disabled(!store.settings.peekLinksToOtherSites)

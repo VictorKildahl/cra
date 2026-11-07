@@ -57,6 +57,39 @@ struct ProfilesPane: View {
             }
             .id(nav.shown)  // read again each time Settings comes up: Chromium's page may have changed them
             SettingsFootnote("The languages websites show their pages in for each Profile, most wanted first. Change opens Chromium’s language settings for that Profile. Cra itself stays in English.")
+            // Arc's Profiles ▸ "Your Data and Settings": Chromium's pages for the profile.
+            SettingsHeader("Your Data and Settings").padding(.top, 20)
+            SettingsCard {
+                ForEach(Array(Self.dataPages.enumerated()), id: \.offset) { i, page in
+                    if i > 0 { SettingsCardDivider() }
+                    dataRow(page)
+                }
+            }
+        }
+    }
+
+    /// Arc's four rows, in its order, with the Chromium page each opens.
+    static let dataPages: [(title: String, symbol: String, url: String)] = [
+        ("Privacy and Security", "lock.fill", "chrome://settings/privacy"),
+        ("Passwords", "key.fill", "chrome://password-manager/passwords"),
+        ("Credit Cards", "creditcard.and.123", "chrome://settings/payments"),
+        ("Notifications", "bell.fill", "chrome://settings/content/notifications"),
+    ]
+
+    private func dataRow(_ page: (title: String, symbol: String, url: String)) -> some View {
+        SettingsCardRow {
+            Label(page.title, systemImage: page.symbol).font(.system(size: 13))
+        } trailing: {
+            if store.profiles.isEmpty {
+                Button("Open") { actions.openProfilePage(page.url, nil) }
+            } else {
+                // One set of pages per Profile: pick whose.
+                Menu("Open") {
+                    Button("Default") { actions.openProfilePage(page.url, nil) }
+                    ForEach(store.profiles) { p in Button(p.name) { actions.openProfilePage(page.url, p.id) } }
+                }
+                .fixedSize()
+            }
         }
     }
 

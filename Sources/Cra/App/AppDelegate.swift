@@ -26,6 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private lazy var extensionsMenu = ExtensionsMenu(app: self)
     /// Arc's Little Arc windows: small, sidebar-less, disposable (see LittleWindowController).
     private(set) var littleWindows: [LittleWindowController] = []
+    /// When each Little Window was last the key window, for Arc's "Archive Little Arcs after:".
+    private var littleWindowLastUsed: [ObjectIdentifier: Date] = [:]
+    private var littleWindowArchiveCheck: ScheduledWork?
 
     /// Shortcuts the app takes before the web page sees them (Chrome calls
     /// these reserved). Everything else goes to the page first. Copy URL is reserved like Arc:
@@ -180,6 +183,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         observeContentBlocking()
         observeHttpsOnly()
+        // Arc's "Archive Little Arcs after:": a Little Window left alone that long closes, its page archived.
+        littleWindowArchiveCheck = composition.clock.every(60) { [weak self] in self?.archiveIdleLittleWindows() }
         observeChanges(of: { [store] in store.settings.websiteAppearance }) { CraCEFRuntime.setWebsiteAppearance($0.chromiumMode) }
         observeChanges(of: { [store] in store.settings.soundEffects }) { CaptureSound.enabled = $0 }
         observeLinkMenu()
@@ -603,6 +608,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     func removeLittleWindow(_ w: LittleWindowController) {
         littleWindows.removeAll { $0 === w }
         if let parent = w.peekParent, !littleWindows.contains(where: { $0.peekParent === parent }) { parent.sidebarUI.peekBadge = nil }
+    }
+
+    private func archiveIdleLittleWindows() {
+        let now = Date(), rule = store.settings.littleWindowArchiveAfter
+        let open = Set(littleWindows.map(ObjectIdentifier.init))
+        littleWindowLastUsed = littleWindowLastUsed.filter { open.contains($0.key) }
+        // A Peek belongs to its tab; only Little Windows of their own are archived (Arc).
+        for w in littleWindows where !w.isPeek {
+            let id = ObjectIdentifier(w), isKey = w.window?.isKeyWindow == true
+            if isKey || littleWindowLastUsed[id] == nil { littleWindowLastUsed[id] = now; continue }
+            if rule.expired(lastUsed: littleWindowLastUsed[id]!, now: now, isKey: isKey) {
+                CraLog.note("archiving a Little Window left alone for \(rule.label)")
+                w.closeWindow()
+            }
+        }
     }
 
     func closeLittleWindows() {

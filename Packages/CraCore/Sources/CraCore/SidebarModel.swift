@@ -517,6 +517,8 @@ public struct AppSettings: Codable, Equatable {
     /// asks macOS for access), then the folders the Library button's "Show media" menu ticks.
     public var mediaLibraryEnabled: Bool = false
     public var mediaFolders: [MediaLibrary.Folder] = MediaLibrary.Folder.allCases
+    /// Arc's Settings ▸ Links ▸ "Archive Little Arcs after:".
+    public var littleWindowArchiveAfter: LittleWindowArchive = .sixHours
     /// Arc's searchSuggestEnabled: the command bar asks the search engine for suggestions
     /// as you type and fills its rows with them.
     public var searchSuggestions: Bool = true
@@ -724,6 +726,7 @@ extension AppSettings {
         soundEffects = try c.decodeIfPresent(Bool.self, forKey: .soundEffects) ?? true
         mediaLibraryEnabled = try c.decodeIfPresent(Bool.self, forKey: .mediaLibraryEnabled) ?? false
         mediaFolders = (try? c.decodeIfPresent([MediaLibrary.Folder].self, forKey: .mediaFolders)) ?? MediaLibrary.Folder.allCases
+        littleWindowArchiveAfter = (try? c.decodeIfPresent(LittleWindowArchive.self, forKey: .littleWindowArchiveAfter)) ?? .sixHours
         searchSuggestions = try c.decodeIfPresent(Bool.self, forKey: .searchSuggestions) ?? true
         showSpaceHeaderOnSingleSpace = try c.decodeIfPresent(Bool.self, forKey: .showSpaceHeaderOnSingleSpace) ?? true
         sharedFavorites = try c.decodeIfPresent(Bool.self, forKey: .sharedFavorites) ?? false
