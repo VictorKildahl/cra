@@ -982,7 +982,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // dragEnd=<text>&at=x,y: the window's tab whose URL holds the text dragged and let go there
             // (from the screen's top left) with nothing taking it, as a drag out of the sidebar ends
-            // (#219). Without at: a point of the screen no Cra window covers.
+            // (#219). Without at: a point of the screen no Cra window covers, a corner if one is free,
+            // else anywhere along the screen's edges (a 1000×700 window covers every corner of the
+            // CI runners' 1024×768 screen).
             if let text = dict["dragEnd"], let screen = main.window?.screen ?? NSScreen.main {
                 let space = main.focusedSpace
                 let tab = (store.tabs(under: space.pinnedContainerID) + store.tabs(under: space.todayContainerID))
@@ -993,10 +995,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     point = NSPoint(x: screen.frame.minX + g[0], y: screen.frame.maxY - g[1])
                 } else {
                     let v = screen.visibleFrame.insetBy(dx: 40, dy: 40)
-                    point = [NSPoint(x: v.maxX, y: v.minY), NSPoint(x: v.minX, y: v.minY), NSPoint(x: v.maxX, y: v.maxY), NSPoint(x: v.minX, y: v.maxY)]
-                        .first { !SpaceListView.isOverAppWindow($0) }
+                    let corners = [NSPoint(x: v.maxX, y: v.minY), NSPoint(x: v.minX, y: v.minY), NSPoint(x: v.maxX, y: v.maxY), NSPoint(x: v.minX, y: v.maxY)]
+                    let e = screen.visibleFrame.insetBy(dx: 4, dy: 4)
+                    let edges = stride(from: 0.0, through: 1.0, by: 0.02).flatMap { t -> [NSPoint] in
+                        let x = e.minX + t * e.width, y = e.minY + t * e.height
+                        return [NSPoint(x: x, y: e.minY), NSPoint(x: e.maxX, y: y), NSPoint(x: e.minX, y: y), NSPoint(x: x, y: e.maxY)]
+                    }
+                    point = (corners + edges).first { !SpaceListView.isOverAppWindow($0) }
                 }
-                guard let point else { CraLog.note("dragEnd: no point outside Cra's windows"); return }
+                guard let point else { CraLog.note("dragEnd: no point outside Cra's windows on screen \(NSStringFromRect(screen.visibleFrame))"); return }
                 CraLog.note("dragEnd: let go at \(NSStringFromPoint(point))")
                 main.testDragEnded(tab.id, at: point)
                 return
