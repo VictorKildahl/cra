@@ -219,6 +219,9 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
 - (void)skipPictureInPictureBy:(double)seconds NS_SWIFT_NAME(skipPictureInPicture(by:));
 - (void)print;
 - (void)viewSource;
+/// One of Chrome's own commands by its IDC name ("IDC_ROUTE_MEDIA" for Cast…, "IDC_TASK_MANAGER"),
+/// where Chromium can run it for this page. NO when it can't.
+- (BOOL)runChromeCommand:(NSString *)name NS_SWIFT_NAME(runChromeCommand(_:));
 - (void)executeJavaScript:(NSString *)script;
 /// Asks the page for its background colour again (-browser:didReportBackgroundColor:);
 /// pages can switch themes without a load.

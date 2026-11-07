@@ -180,6 +180,9 @@ final class KeyBindingRegistry {
             KeyAction(id: "inspectElement", name: "Inspect Elements", section: .view, shortcuts: [Shortcut("c", cmdOpt)], inCommandBar: false),
             KeyAction(id: "jsConsole", name: "JavaScript Console", section: .view, shortcuts: [Shortcut("j", cmdOpt)], inCommandBar: false),
             // Arc: Extensions ▸ Picture in Picture (no shortcut); "Open Picture in Picture" in the command bar.
+            // Arc: View ▸ Cast; Help ▸ Troubleshooting ▸ Open Task Manager. Chrome's own.
+            KeyAction(id: "cast", name: "Cast…", section: .view, shortcuts: [], triggers: ["cast", "chromecast", "airplay"]),
+            KeyAction(id: "taskManager", name: "Open Task Manager", section: .help, shortcuts: [], triggers: ["task manager", "memory", "processes"]),
             KeyAction(id: "pictureInPicture", name: "Picture in Picture", section: .view, shortcuts: [], triggers: ["pip", "picture in picture", "pop out", "popout", "video"]),
             // Arc: View ▸ Add Split View ⌃⇧=, Close this Split Pane ⌃⇧-, Separate Page from Split View, Expand Current Split.
             KeyAction(id: "addSplitView", name: "Add Split View", section: .view, shortcuts: [Shortcut("=", [.control, .shift])], triggers: ["split", "split view", "add split"]),

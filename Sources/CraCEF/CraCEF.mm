@@ -17,6 +17,7 @@
 #include "include/cef_browser.h"
 #include "include/cef_client.h"
 #include "include/cef_command_ids.h"
+#include "include/cef_id_mappers.h"
 #include "include/cef_command_line.h"
 #include "include/cef_context_menu_handler.h"
 #include "include/cef_display_handler.h"
@@ -2521,6 +2522,13 @@ static NSView* FindRenderWidgetHostView(NSView* root) {
 }
 - (void)print { if (_browser) _browser->GetHost()->Print(); }
 - (void)viewSource { if (_browser) _browser->GetMainFrame()->ViewSource(); }
+- (BOOL)runChromeCommand:(NSString*)name {
+    if (!_browser) return NO;
+    int command = cef_id_for_command_id_name(name.UTF8String);
+    if (command <= 0 || !_browser->GetHost()->CanExecuteChromeCommand(command)) return NO;
+    _browser->GetHost()->ExecuteChromeCommand(command, CEF_WOD_CURRENT_TAB);
+    return YES;
+}
 - (void)executeJavaScript:(NSString*)script {
     if (_browser) _browser->GetMainFrame()->ExecuteJavaScript(CefStringFromNS(script), _browser->GetMainFrame()->GetURL(), 0);
 }

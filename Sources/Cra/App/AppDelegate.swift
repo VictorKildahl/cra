@@ -1295,6 +1295,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "expandAllFolders": store.setAllFoldersExpanded(true, inSpace: main.focusedSpaceID)
         case "openExtensions": main.showSiteControlsFromTheirButton()
         case "manageExtensions": main.openExtensionsPage()
+        case "cast": if main.currentBrowser?.runChromeCommand("IDC_ROUTE_MEDIA") != true { main.showToast("Nothing to Cast") }
+        case "taskManager": if main.currentBrowser?.runChromeCommand("IDC_TASK_MANAGER") != true { main.showToast("Open a Page First") }
         case "showArchive": main.showLibrary(.archive)
         case "clearArchive": store.clearArchive()
         case "stayOnTop": main.toggleStayOnTop()
@@ -1545,7 +1547,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         view.addItem(.separator())
         view.addItem(item("resetZoom")); view.addItem(item("zoomIn")); view.addItem(item("zoomOut"))
         view.addItem(.separator())
-        view.addItem(item("pictureInPicture"))
+        view.addItem(item("pictureInPicture")); view.addItem(item("cast"))
         view.addItem(.separator())
         for id in ["addSplitView", "closeSplitPane", "separateFromSplit", "flipSplitOrientation"] { view.addItem(item(id)) }
         view.addItem(.separator())
@@ -1614,7 +1616,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let trouble = NSMenu(title: "Troubleshooting")
         trouble.addItem(withTitle: "Export Diagnostics…", action: #selector(exportDiagnostics), keyEquivalent: "").target = self
         trouble.addItem(.separator())
-        trouble.addItem(item("revealData")); trouble.addItem(item("copyAppInfo"))
+        trouble.addItem(item("taskManager")); trouble.addItem(item("revealData")); trouble.addItem(item("copyAppInfo"))
         help.addItem(submenu: trouble, title: "Troubleshooting")
         menubar.addItem(submenu: help, title: "Help")
         NSApp.helpMenu = help

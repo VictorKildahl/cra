@@ -26,7 +26,7 @@ or Arc-only service), per CONTRIBUTING.md.
 | Copy URL without trackers | Copy URL ⇧⌘C ("Copy the current tab's URL without trackers") | done | utm_* and click ids dropped (CleanURL). |
 | Copy URL as Quote | Edit ▸ ⌃⇧⌘C, "Enable Shared Quotes when highlighting text" | done | Arc links to arc.net (cloud); Cra copies a text-fragment link. |
 | AppleScript dictionary | Arc.sdef, View ▸ Developer ▸ Allow JavaScript from Apple Events | missing | Raycast and other launchers script Arc through it. |
-| Cast | View ▸ Cast | missing | Chromium's media router. |
+| Cast | View ▸ Cast | done | Chrome's Cast bubble (IDC_ROUTE_MEDIA). |
 | Find and Replace, Use Selection to Find, Jump to Selection | Edit ▸ Find | missing | |
 | Sound effects | Settings ▸ Advanced "Play Arc sound effects" | done | Settings ▸ Advanced ▸ Play Cra sound effects gates the capture shutter. |
 | Theme data for websites | Settings ▸ Advanced "Allow websites to get your theme data" | missing | Arc exposes the space's palette to pages. |
@@ -36,7 +36,7 @@ or Arc-only service), per CONTRIBUTING.md.
 | Archive Little Arcs after | Settings ▸ Links (6 hours default) | done | Settings ▸ Tabs ▸ Links; a Little Window left alone that long closes into the archive. |
 | Previews (Gmail, Calendar on Favorites) | Settings ▸ General ▸ Previews Settings… | missing | Fetches through the browser session; nothing leaves the Mac. |
 | Join Meeting ⌃⌘J | Shortcuts | missing | Needs calendar previews first. |
-| Troubleshooting menu | Help ▸ Troubleshooting: Record Trace, Open Task Manager, Reveal Arc Data, Copy Arc Info | partial | Cra has Export Diagnostics… |
+| Troubleshooting menu | Help ▸ Troubleshooting: Record Trace, Open Task Manager, Reveal Arc Data, Copy Arc Info | done | Export Diagnostics…, Open Task Manager (Chrome's), Reveal Cra Data, Copy Cra Info; Record Trace is Arc-internal. |
 | Help menu | Getting Started, Release Notes, Contact the Team, Visit Help Center, Restore Data | partial | |
 | Ad blocker upsell card, Sync, Account, Membership card, Share Arc, Sign Out, Send to Dia, Share Space | | *skip* | Account/cloud. |
 | Max: Instant Links, 5-Second Previews, ChatGPT in the Command Bar, New ChatGPT Message ⌥⌘G | Settings ▸ Max | *skip* | AI partner (cloud). Tidy Tabs/Titles/Downloads already on-device. |
@@ -115,6 +115,7 @@ in this sweep (Essential Shortcuts window, Library pages).
 - Settings ▸ Tabs ▸ Archive Little Windows after (1 hour, 6 hours, 12 hours); Settings ▸ Profiles ▸
   Your Data and Settings (Chromium's privacy, passwords, cards and notifications pages per profile).
 - Sidebar tab menu: Add Split View on the open tab, Open in Split View on any other.
+- View ▸ Cast… and Help ▸ Troubleshooting ▸ Open Task Manager, Chrome's own (ExecuteChromeCommand).
 
 ## Left for later, and why
 
@@ -122,5 +123,5 @@ in this sweep (Essential Shortcuts window, Library pages).
   editor couldn't be put on screen to copy. Needs a site in Arc (Victor's OK to run the real Arc, or
   a localhost server).
 - Easels and Notes: whole document types with their own editors; same approach once Boosts is in.
-- AppleScript dictionary, Cast, Find and Replace, cookie banner blocking, theme data for websites,
+- AppleScript dictionary, Find and Replace, cookie banner blocking, theme data for websites,
   window dragging from the top of pages, Previews and Join Meeting: not started.
