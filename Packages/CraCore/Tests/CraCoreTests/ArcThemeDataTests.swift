@@ -54,4 +54,18 @@ struct ArcThemeDataTests {
         #expect(abs(Int(ours.suffix(2), radix: 16)! - Int(arc.suffix(2), radix: 16)!) <= 1, "alpha within a level")
         #expect(Self.channelGap(ours, arc) <= 10, "\(slot): \(ours) vs Arc's \(arc)")
     }
+
+    /// Measured live on Victor's gold space (dark scheme), 7 Nov 2026, against its primaries read off
+    /// the same page (shadedDark #6B5709, shaded = midTone #E1B514, tintedLight #FAEEC2).
+    @Test(arguments: [
+        ("title", "#E9E6D7FF"), ("subtitle", "#7D7761FF"), ("background", "#201A00FF"), ("backgroundExtra", "#100D00FF"),
+        ("foregroundPrimary", "#FAEEC2FF"), ("foregroundTertiary", "#E1B514FF"), ("focus", "#887832CE"), ("hover", "#9384437A"),
+    ])
+    func matchesArcLiveOnAGoldSpace(slot: String, arc: String) throws {
+        let palette = ArcThemeData.palette(shadedDark: Self.rgb(0x6B5709), shaded: Self.rgb(0xE1B514), midTone: Self.rgb(0xE1B514),
+                                           tintedLight: Self.rgb(0xFAEEC2), dark: true)
+        let ours = try #require(palette.first { $0.0 == slot }).1.css
+        #expect(abs(Int(ours.suffix(2), radix: 16)! - Int(arc.suffix(2), radix: 16)!) <= 1)
+        #expect(Self.channelGap(ours, arc) <= 10, "\(slot): \(ours) vs Arc's \(arc)")
+    }
 }

@@ -15,8 +15,8 @@ or Arc-only service), per CONTRIBUTING.md.
 | Arc feature | Where in Arc | Cra | Notes |
 |---|---|---|---|
 | Boosts (per-site CSS/JS, colours, fonts, Zap) | URL bar ✎, Library ▸ Boosts, Settings ▸ Advanced "Enable Boosts" | missing | Biggest local feature still absent. |
-| Easels | File ▸ New Easel ⌃⇧E, Library ▸ Easels | missing | Canvas of captures, text and live page clips. |
-| Notes | File ▸ New Note ⌃⇧N, ⌃⌥N in split, Help ▸ Export Arc Notes | missing | Rich-text documents as sidebar items. |
+| Easels | File ▸ New Easel ⌃⇧E, Library ▸ Easels | missing | Measured below; not built. |
+| Notes | File ▸ New Note ⌃⇧N, ⌃⌥N in split, Help ▸ Export Arc Notes | *skip* | Arc 1.172.1 no longer creates Notes: New Note is gone from the File menu and ⌃⇧N does nothing; only Help ▸ Export Arc Notes is left. |
 | Library ▸ Media | Window ▸ View Media…, Library rail | done | Off until Show Media; ⋯ picks the folders (Cra has no captures folder). |
 | Essential Keyboard Shortcuts window | Help ▸ Essential Keyboard Shortcuts, Settings ▸ Shortcuts | done | 475×462 floating dark panel, five rows of key caps, "View All ↗". |
 | Website appearance | View ▸ Appearance ▸ Automatic / Light / Dark ("Websites, Easels, and Notes will use:") | done | Forces prefers-color-scheme for pages. |
@@ -123,6 +123,19 @@ in this sweep (Essential Shortcuts window, Library pages).
   measured live in Arc (names, #RRGGBBAA format, no trace in the page's markup) and fitted to the
   semantic palette Arc stores per space.
 - Edit ▸ Find ▸ Use Selection to Find and Jump to Selection (⌘J).
+
+## Easels, measured (Arc 1.172.1, offline copy, 7 Nov 2026)
+
+- File ▸ New Easel (⌃⇧E) adds an "Untitled Easel" row to Today (AX `EaselCellView`, an easel glyph) and
+  opens it in the page area; the toolbar's address shows its name.
+- The page area is a native canvas (`easelCanvasView`), as wide as the page and 2436 pt tall, scrolling.
+  A title text box 894 pt wide sits centred 52 pt below the top, selected on creation (blue outline with
+  round corner handles), "Untitled Easel" in bold white about 22 pt; beside it a black pill with +, Aa
+  and − (text size).
+- Bottom left, 16 pt in: a toolbar of 36 pt buttons 38 pt apart on #100D00 (the palette's dark
+  backgroundExtra): Pointer, Image, Text, Ellipse, Rectangle, Arrow, Freehand, then captures. The picked
+  tool sits on #716328 with 8 pt corners; glyphs in #FAEEC2 (foregroundPrimary). Bottom right: a 36 pt
+  share button (person.badge.plus), cloud sharing in Arc.
 
 ## Left for later, and why
 
