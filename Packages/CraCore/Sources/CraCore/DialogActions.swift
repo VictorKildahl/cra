@@ -35,6 +35,12 @@ public struct DialogActions: Equatable, Sendable {
         return others + (defaultIndex.map { [$0] } ?? [])
     }
 
+    /// Buttons at the card's left edge: secondary choices such as Arc's "Quit, and don’t ask again".
+    public var leadingOrder: [Int] { displayOrder.filter { buttons[$0].role == .secondary } }
+
+    /// Buttons at the card's right edge, the default last.
+    public var trailingOrder: [Int] { displayOrder.filter { buttons[$0].role != .secondary } }
+
     public func key(at index: Int) -> String {
         if index == defaultIndex { return "↩" }
         return index == cancelIndex ? "ESC" : ""

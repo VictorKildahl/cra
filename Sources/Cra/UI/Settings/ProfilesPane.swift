@@ -137,8 +137,8 @@ struct ProfilesPane: View {
         guard let window = AppDialog.parentWindow else { return }
         let dialog = AppDialog(title: "Rename your Profile",
                                message: "This won’t affect the names of any of the Spaces associated with this Profile.",
-                               actions: [DialogAction("Save"), .cancel], input: profile.name, requiresInput: true,
-                               icon: .none, width: 496, buttonSpacing: 30)
+                               actions: [DialogAction("Save"), .cancel], input: profile.name, placeholder: "Profile name", requiresInput: true,
+                               icon: .none, width: 496, buttonSpacing: 30, buttonOutset: 0)
         dialog.present(over: window) { response in
             guard response == .alertFirstButtonReturn, let name = dialog.input else { return }
             store.renameProfile(profile.id, to: name.trimmingCharacters(in: .whitespacesAndNewlines))

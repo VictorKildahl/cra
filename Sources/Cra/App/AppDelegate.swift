@@ -331,7 +331,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private func confirmQuit() -> Bool {
         let alert = AppDialog(title: "Quit Cra?",
                               actions: [DialogAction("Quit"), .cancel, DialogAction("Quit, and don’t ask again", role: .secondary)],
-                              icon: .application, buttonSpacing: 49.5, buttonOutset: 10.5)
+                              icon: .application, buttonSpacing: 45.5)
         switch alert.runModal() {
         case .alertFirstButtonReturn: return true
         case .alertThirdButtonReturn:

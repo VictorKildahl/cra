@@ -15,6 +15,7 @@ final class AppDialog {
     let buttonSpacing: CGFloat
     let buttonOutset: CGFloat
     var input: String?
+    let placeholder: String
     let requiresInput: Bool
     let suppressionTitle: String?
     var isSuppressed = false
@@ -24,8 +25,8 @@ final class AppDialog {
     private var result = NSApplication.ModalResponse.abort
 
     init(title: String, message: String = "", actions: [DialogAction] = [DialogAction("OK")],
-         input: String? = nil, requiresInput: Bool = false, suppressionTitle: String? = nil,
-         icon: Icon = .mark, width: CGFloat = 450, buttonSpacing: CGFloat = 36, buttonOutset: CGFloat = 0) {
+         input: String? = nil, placeholder: String = "", requiresInput: Bool = false, suppressionTitle: String? = nil,
+         icon: Icon = .mark, width: CGFloat = 450, buttonSpacing: CGFloat = 38, buttonOutset: CGFloat = 10.5) {
         self.title = title
         self.message = message
         self.actions = DialogActions(actions)
@@ -34,6 +35,7 @@ final class AppDialog {
         self.buttonSpacing = buttonSpacing
         self.buttonOutset = buttonOutset
         self.input = input
+        self.placeholder = placeholder
         self.requiresInput = requiresInput
         self.suppressionTitle = suppressionTitle
     }
@@ -124,9 +126,11 @@ private struct AppDialogView: View {
             DialogScrollContent(width: dialog.width - 77, maximumHeight: max(140, (NSScreen.main?.visibleFrame.height ?? 800) - 250)) {
                 details
             }
+            // Arc's extra choice ("Quit, and don’t ask again") sits at the card's left edge, the rest at its right.
             HStack(spacing: 7) {
+                buttons(dialog.actions.leadingOrder)
                 Spacer(minLength: 0)
-                buttons
+                buttons(dialog.actions.trailingOrder)
             }
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, -dialog.buttonOutset)
@@ -137,7 +141,7 @@ private struct AppDialogView: View {
         .padding(.bottom, 28)
         .frame(width: dialog.width)
         .fixedSize(horizontal: false, vertical: true)
-        .modifier(DialogSurface(cornerRadius: 16, outlined: true))
+        .modifier(DialogSurface(cornerRadius: 16))
         .onAppear { inputFocused = dialog.input != nil }
     }
 
@@ -151,14 +155,19 @@ private struct AppDialogView: View {
                         BrandMark(size: 56)
                     }
                 }
-                .frame(width: dialog.icon == .mark ? 61 : 56, height: dialog.icon == .mark ? 61 : 56)
+                // Arc 1.172.1 (7 Nov 2026, Quit and Delete Space sheets against Cra's, card edge to pixel): the app
+                // icon shows 50.5 pt across from 43.5 pt in, the title's caps start 120 pt down, the buttons end
+                // 26.5 pt from the card's right edge.
+                .frame(width: dialog.icon == .mark ? 61 : 62, height: dialog.icon == .mark ? 61 : 62)
+                .offset(y: dialog.icon == .application ? 0.75 : 0)
+                .padding(.top, dialog.icon == .application ? -1 : 0)
                 .accessibilityHidden(true)
             }
             Text(dialog.title)
                 .font(.system(size: 17.5, weight: .semibold))
                 .foregroundStyle(.white)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, dialog.icon == .none ? 0 : 19)
+                .padding(.top, dialog.icon == .none ? 0 : dialog.icon == .application ? 18 : 17.5)
             if !dialog.message.isEmpty {
                 Text(dialog.message)
                     .font(.system(size: 14))
@@ -168,7 +177,7 @@ private struct AppDialogView: View {
                     .padding(.top, 16)
             }
             if dialog.input != nil {
-                TextField("Profile name", text: Binding(get: { dialog.input ?? "" }, set: { dialog.input = $0 }))
+                TextField(dialog.placeholder, text: Binding(get: { dialog.input ?? "" }, set: { dialog.input = $0 }))
                     .textFieldStyle(.plain)
                     .font(.system(size: 14))
                     .foregroundStyle(.white)
@@ -191,8 +200,8 @@ private struct AppDialogView: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    private var buttons: some View {
-        ForEach(dialog.actions.displayOrder, id: \.self) { index in
+    private func buttons(_ order: [Int]) -> some View {
+        ForEach(order, id: \.self) { index in
             let action = dialog.actions.buttons[index]
             DialogButton(title: action.title, key: dialog.actions.key(at: index),
                          enabled: dialog.actions.isEnabled(at: index, input: dialog.input, requiresInput: dialog.requiresInput),

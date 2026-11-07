@@ -217,10 +217,10 @@ enum SidebarMenus {
         return menu
     }
 
-    /// Arc asks first ("Delete your %@ Live Folder?") and says how to get it back.
+    /// Arc asks first ("Delete your %@ Live Folder?") and says how to get it back, in its own words.
     static func confirmDeleteLiveFolder(_ item: SidebarItem, store: SidebarStore, in window: NSWindow? = nil) {
         let alert = AppDialog(title: "Delete your \(item.title ?? "Pull Requests") Live Folder?",
-                              message: "You can add it again with New GitHub Live Folder in the sidebar’s menu or the command bar.",
+                              message: "You can restore this folder at any time by right-clicking the sidebar.",
                               actions: [DialogAction("Delete Folder", role: .destructive), .cancel])
         let id = item.id
         if let window = window ?? AppDialog.parentWindow {

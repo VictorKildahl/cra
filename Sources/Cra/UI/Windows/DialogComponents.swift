@@ -1,20 +1,20 @@
 import AppKit
 import SwiftUI
 
+/// Arc's dialog card (measured against Arc 1.172.1's Quit and Delete Space sheets, 7 Nov 2026: #161C2F).
 enum DialogTheme {
-    static let card = Color(hex: "#14192A")
+    static let card = Color(hex: "#161C2F")
     static let body = Color(hex: "#B8B9C4")
 }
 
+/// The card a dialog draws on. The sheet it sits in already has macOS's 1 pt light edge, as Arc's does,
+/// so the card draws none of its own.
 struct DialogSurface: ViewModifier {
     var cornerRadius: CGFloat = 24
-    var outlined = false
 
     func body(content: Content) -> some View {
         content
             .background(DialogTheme.card, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .strokeBorder(outlined ? Color(hex: "#414958") : .clear, lineWidth: 1))
             .environment(\.colorScheme, .dark)
     }
 }
@@ -23,6 +23,8 @@ struct DialogButton: View {
     enum Style {
         case secondary, primary, accent, destructive
 
+        /// Arc 1.172.1's Quit sheet under the pointer: 10 % white over Cancel (#302F60 → #454470, its key
+        /// badge too), 10 % black over Quit (#3339F1 → #2D33D9).
         var hoverTint: Color { self == .secondary ? .white : .black }
     }
     let title: String
@@ -46,6 +48,8 @@ struct DialogButton: View {
         self.action = action
     }
 
+    // Destructive (Delete in Arc's Delete Space and Delete Live Folder sheets): fill #E2492C, no lighter rim,
+    // key badge #E55B41 edged #E86D56 as captured; the hex values here render to those on Cra's sheets.
     private var accent: Bool { style == .accent && enabled }
     private var destructive: Bool { style == .destructive && enabled }
     private var primary: Bool { style != .secondary }
@@ -61,9 +65,9 @@ struct DialogButton: View {
                         .frame(minWidth: badge?.width ?? 27, maxWidth: badge?.width, minHeight: badge?.height ?? 19, maxHeight: badge?.height)
                         .padding(.horizontal, badge != nil || key == "↩" ? 0 : 2)
                         .background(RoundedRectangle(cornerRadius: badge == nil ? 5 : 3, style: .continuous)
-                            .fill(destructive ? Color(hex: "#FF6548") : accent ? Color(hex: "#464DFB") : primary ? Color(hex: enabled ? "#4E4C9A" : "#222469") : Color(hex: "#49456F")))
+                            .fill(destructive ? Color(hex: "#F74C31") : accent ? Color(hex: "#464DFB") : primary ? Color(hex: enabled ? "#4E4C9A" : "#222469") : Color(hex: "#4E4C77")))
                         .overlay(RoundedRectangle(cornerRadius: badge == nil ? 5 : 3, style: .continuous)
-                            .strokeBorder(destructive ? Color(hex: "#FF9079") : accent ? Color(hex: "#6B71FE") : .clear, lineWidth: 1))
+                            .strokeBorder(destructive ? Color(hex: "#FA624C") : accent ? Color(hex: "#6B71FE") : .clear, lineWidth: 1))
                 }
             }
             .padding(.leading, 12.5)
@@ -71,19 +75,21 @@ struct DialogButton: View {
             .frame(height: 37)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(destructive ? Color(hex: "#F32F13") : accent ? Color(hex: "#3239FB") : primary ? Color(hex: enabled ? "#3B3C8F" : "#1C1D4C") : Color(hex: "#2A2858"))
+                    .fill(destructive ? Color(hex: "#F53516") : accent ? Color(hex: "#3239FB") : primary ? Color(hex: enabled ? "#3B3C8F" : "#1C1D4C") : Color(hex: "#302F60"))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(destructive ? Color(hex: "#FF5739") : accent ? Color(hex: "#5B61FD") : primary ? (enabled ? Color(hex: "#6362A9") : .clear) : Color(hex: "#6362A9"), lineWidth: 1)
+                    .strokeBorder(destructive ? Color(hex: "#F53516") : accent ? Color(hex: "#5B61FD") : primary ? (enabled ? Color(hex: "#6362A9") : .clear) : Color(hex: "#6362A9"), lineWidth: 1)
             )
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(style == .accent ? Color(hex: enabled ? "#2C3475" : "#1D2259") : .clear)
+                    // Arc's default buttons sit on a darker lip, ~1.5 pt below: blue for Quit and Save, a dark
+                    // red for Delete (#41232A in Arc 1.172.1's Delete Space sheet).
+                    .fill(style == .accent ? Color(hex: enabled ? "#2C3475" : "#1D2259") : destructive ? Color(hex: "#41232A") : .clear)
                     .offset(y: 1.5)
             )
             .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(style.hoverTint.opacity(hovered && enabled ? 0.08 : 0))
+                .fill(style.hoverTint.opacity(hovered && enabled ? 0.1 : 0))
                 .allowsHitTesting(false))
         }
         .buttonStyle(.plain)

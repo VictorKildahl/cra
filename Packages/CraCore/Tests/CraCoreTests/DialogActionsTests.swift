@@ -21,6 +21,14 @@ struct DialogActionsTests {
         #expect(actions.key(at: 1).isEmpty)
     }
 
+    /// Arc 1.172.1's Quit sheet: "Quit, and don’t ask again" at the card's left edge, Cancel and Quit at its right.
+    @Test func quitPutsTheSecondaryChoiceAtTheLeftEdge() {
+        let actions = DialogActions([DialogAction("Quit"), .cancel, DialogAction("Quit, and don’t ask again", role: .secondary)])
+        #expect(actions.leadingOrder == [2])
+        #expect(actions.trailingOrder == [1, 0])
+        #expect(actions.key(at: 2).isEmpty)
+    }
+
     @Test func singleAcknowledgementAcceptsReturnAndEscape() {
         let actions = DialogActions([DialogAction("OK")])
         #expect(actions.defaultIndex == 0)
