@@ -391,7 +391,7 @@ final class SidebarFaviconView: NSImageView {
         shown = nil
         imageScaling = .scaleProportionallyUpOrDown
         image = source == .gitlab ? GitLabMark.image : GitHubMark.image
-        contentTintColor = source == .gitlab ? nil : color ?? colors.monoGlyph
+        contentTintColor = color ?? colors.monoGlyph
         layer?.masksToBounds = false
     }
 }
@@ -470,7 +470,7 @@ final class FolderGlyphView: NSView {
         for l in [back, frontPanel] { l.strokeColor = tint.cgColor }
         mark.isHidden = !live
         mark.image = source == .gitlab ? GitLabMark.image : GitHubMark.image
-        mark.contentTintColor = source == .gitlab ? nil : tint
+        mark.contentTintColor = tint
         dots.isHidden = !peeked || expanded || live
         dots.fillColor = tint.cgColor
         CATransaction.commit()
@@ -1601,11 +1601,11 @@ final class FolderRowView: SidebarRowView, NSTextFieldDelegate {
                 let signIn = m.liveSignInURL
                 accessory = SidebarGlyphButton(symbol: "exclamationmark.triangle", size: 26, iconSize: 13, weight: .regular,
                                                help: error, colors: colors) { [weak list] in
-                    if let signIn { list?.actions.openURL(signIn) } else { LiveFolderManager.shared.refresh(id, manual: true) }
+                    if let signIn { list?.actions.openURL(signIn) } else { LiveFolderManager.shared.refresh(id) }
                 }
             } else if hover {
                 accessory = SidebarGlyphButton(symbol: "arrow.clockwise", size: 26, iconSize: 12, help: m.liveHelp, colors: colors) {
-                    LiveFolderManager.shared.refresh(id, manual: true)
+                    LiveFolderManager.shared.refresh(id)
                 }
             }
         } else if hover && !m.expanded {

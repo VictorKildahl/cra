@@ -35,8 +35,8 @@ struct GitLabLiveClientTests {
     @Test func serverNamesDistinguishInstancesAndNormalizeEquivalentAddresses() {
         #expect(GitLabLiveClient.serverURL("HTTPS://GIT.Example.com:443/") == "https://git.example.com")
         #expect(GitLabLiveClient.serverURL("http://GIT.Example.com:80/gitlab/") == "http://git.example.com/gitlab")
-        #expect(GitLabLiveClient.folderTitle(server: "https://gitlab.com") == "GitLab · gitlab.com")
-        #expect(GitLabLiveClient.folderTitle(server: "https://git.example.com:8443/gitlab/") == "GitLab · git.example.com:8443/gitlab")
+        #expect(GitLabLiveClient.serverLabel("https://gitlab.com") == "gitlab.com")
+        #expect(GitLabLiveClient.serverLabel("https://git.example.com:8443/gitlab/") == "git.example.com:8443/gitlab")
     }
 
     @Test func failuresCannotBecomeEmptySuccesses() throws {
@@ -59,17 +59,15 @@ struct GitLabLiveClientTests {
         var folder = LiveFolderData()
         folder.source = .gitlab
         folder.serverURL = "https://git.example.com/gitlab"
-        folder.separateByCategory = true
         folder.hiddenItems = ["https://git.example.com/gitlab/team/app/-/merge_requests/17"]
         let restored = try JSONDecoder().decode(LiveFolderData.self, from: JSONEncoder().encode(folder))
         #expect(restored == folder)
         #expect(restored.signInURL == "https://git.example.com/gitlab/users/sign_in")
         let legacy = try JSONDecoder().decode(LiveFolderData.self, from: Data("{}".utf8))
         #expect(legacy.source == .github && legacy.serverURL == nil)
-        #expect(legacy.separateByCategory == nil && legacy.cachedResults == nil)
     }
 
-    @Test func categoriesUseDistinctFiltersAndDeduplicateByPriority() throws {
+    @Test func filtersUseDistinctQueries() throws {
         let expected: [(GitLabLiveCategory, String)] = [(.authored, "created_by_me"), (.review, "all"), (.assigned, "assigned_to_me")]
         for (category, scope) in expected {
             let url = try #require(URLComponents(string: GitLabLiveClient.mergeRequestsURL(server: "https://git.example.com", category: category, userID: 42, page: 1)))
@@ -78,15 +76,7 @@ struct GitLabLiveClientTests {
             #expect((query["reviewer_id"] != nil) == (category == .review))
         }
         var folder = LiveFolderData()
-        folder.filter.attributes = [.authored, .reviewRequests, .assigned]
-        var request = LivePullRequest(owner: "team", repo: "app", number: 17, title: "Fix")
-        request.gitLabCategories = [.authored, .review, .assigned]
-        #expect(folder.category(for: request) == .authored)
-        folder.filter.attributes.remove(.authored)
-        #expect(folder.category(for: request) == .review)
-        folder.filter.attributes.remove(.reviewRequests)
-        #expect(folder.category(for: request) == .assigned)
-        folder.filter.attributes = []
-        #expect(folder.category(for: request) == nil)
+        folder.filter.attributes = [.reviewRequests, .assigned]
+        #expect(folder.gitLabCategories == [.review, .assigned])
     }
 }

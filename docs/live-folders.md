@@ -88,7 +88,7 @@ Legend: [O] observed, [I] inference, [U] unknown.
   (a tab open in a window stays until it isn't). Closing or dragging a tab out adds it to `hiddenItems`.
   Nothing can be dropped into a live folder.
 - Refresh, on Dia's schedule: at most every 120 s and only while Cra is the active app; when any Cra window
-  becomes key; immediately from the folder's button and menu; forced when a filter changes; forced 5 s and
+  becomes key; from the folder's button and menu (10 s apart); forced when a filter changes; forced 5 s and
   45 s after a tab goes from a repository's compare page to a pull request (one was just created) or to a
   `#pullrequestreview-` anchor (a review was submitted). One GitHub folder per space ("New GitHub Live
   Folder" in the sidebar menus and command bar). Not copied: Dia's realtime updates (see below).
@@ -118,38 +118,25 @@ Legend: [O] observed, [I] inference, [U] unknown.
   one within a second of the window taking focus.
 - Not verified: the review trigger (`#pullrequestreview-` anchor) with a real review.
 
-## GitLab live folders
+## GitLab live folders (Cra only; contributed by STRENCH0, #223)
 
-The sidebar's **Live Folders** submenu offers **GitHub** and **GitLab…**. A checkmark marks
-an existing folder; clicking it asks for confirmation before deleting the folder. Each GitLab
-server has its own checked entry, with **Add GitLab Server…** below them. Enter the server's
-base URL (GitLab.com or a self-managed instance, including a port or installation subpath).
-Leave the address blank to use the suggested `https://gitlab.com`. Requests use the
-space's Chromium profile and its GitLab session cookie, without a separate access token.
-The client reads `/api/v4/user` and paginated `/api/v4/merge_requests`. Each space supports
-one folder per GitLab server; different servers have independent filters, category layouts
-and hidden lists. Default names include the server address, for example **GitLab · gitlab.com**.
-Ports and installation subpaths are included when present. Names can be changed from the folder menu.
-
-The folder menu controls **My Merge Requests**, **Review Requests**, and **Assigned to Me**,
-plus which projects are included. **Separate by Category** puts the enabled categories in
-automatic subfolders. Each MR has one tab: when categories overlap, the first enabled match
-wins in the order above. Changing layout moves existing tabs rather than recreating them.
-If a filter removes a selected tab, it moves to Today so its page stays open.
-
-Closing or dragging out an MR hides it for the whole live folder, including every category.
-The last 200 manually closed or extracted URLs stay excluded across refreshes. Both GitHub
-and GitLab folders offer **Restore Hidden**: clear all exclusions and immediately reload from
-the service, without restoring cached tabs or presenting a separate list. Closed or deleted
-requests do not return. The ordinary Reopen Closed Tab command can undo an accidental close.
-Automatic removal of an MR from the results never adds it to the exclusions.
-
-Manual refresh bypasses the automatic refresh cooldown and keeps its busy indicator visible
-for at least 450 ms. A configuration change during a request queues a fresh request.
-Requests keep Chromium's default timeout. A failed GitLab refresh shows the existing error
-indicator and pauses automatic updates until a manual refresh or configuration change. There are no automatic
-retries for GitLab; successful folders continue updating every two minutes while Cra is active.
-GitHub's retry and sign-in behaviour is unchanged.
-
-The full-colour GitLab mark is from the official
-[GitLab SVG assets](https://gitlab.com/gitlab-org/gitlab-svgs/-/blob/main/illustrations/gitlab_logo.svg).
+Arc has no GitLab source (only `dataSource.github`), so Cra's GitLab folder is Arc's GitHub folder with
+GitLab as the source: the same folder row, menus, dialogs, refresh schedule and hidden items.
+- Live Folders ▸ (space and sidebar menus, Arc's submenu): **GitHub** ✓ while the space has one, then
+  **GitLab (host)** ✓ per GitLab folder, then **GitLab…**. A ✓ item asks Arc's "Delete your %@ Live Folder?"
+  ("You can restore this folder at any time by right-clicking the sidebar.", Delete Folder `↩`).
+- GitLab… asks for the instance in Arc's text-input dialog; empty means `https://gitlab.com`. Self-managed
+  addresses keep their port and subpath (`GitLabLiveClient.serverURL`). One folder per instance per space,
+  named "Merge Requests" (Arc's GitHub one is "Pull Requests").
+- Requests go through `+[CraCEFRuntime fetchURL:…]` on the space's profile, like GitHub's: GitLab takes its
+  session cookie on `GET /api/v4`, so no token. `/api/v4/user` for the user id, then one paged
+  `/api/v4/merge_requests?state=opened` per filter: `scope=created_by_me` (My Merge Requests),
+  `scope=all&reviewer_id=<id>` (Review Requests), `scope=assigned_to_me` (Assigned to Me). All three on by
+  default, as Arc's GitHub filters are. A redirect to another page (a sign-in) reads as signed out.
+- The folder menu is the GitHub one: last update, the instance, Refresh, the three filters, Projects
+  (Arc's Repositories), Sign In to GitLab… when signed out, Rename…, Icon Color, Copy All Links as Markdown,
+  Delete Live Folder. The mark is GitLab's tanuki in one colour, drawn in the folder's ink like GitHub's.
+- A space moving to another profile empties its live folders and fetches again with the new profile;
+  an answer to a request made for the old profile, server or filters is dropped.
+- Left out of #223 as not Arc: category subfolders ("Separate by Category"), "Restore Hidden", a minimum
+  450 ms refresh spinner and manual refreshes without Arc's 10 s gap.

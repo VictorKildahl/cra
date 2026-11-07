@@ -76,8 +76,6 @@ public struct TabData: Codable, Equatable {
     public var liveSubtitle: String?
     /// When its pull request left the live folder's results; the tab goes after a grace period.
     public var liveGoneAt: Date?
-    public var liveFolderID: UUID?
-    public var liveCategory: GitLabLiveCategory?
     /// The page's toolbar colour as last reported (TabRuntime.themeColor). A slept or restored
     /// tab's toolbar keeps it while the page loads again, as Arc's does.
     public var themeColor: String?
@@ -178,7 +176,6 @@ public struct SidebarItem: Identifiable, Codable, Equatable {
     public var folderIcon: FolderIconStyle? = nil
     /// Set on a folder that fills itself (Arc: list.automaticLiveFolderData).
     public var liveFolder: LiveFolderData? = nil
-    public var liveFolderCategory: GitLabLiveCategory?
     /// A Today folder shown as a group header, as Tidy Tabs makes them (Arc: SidebarItemData.tabGroup,
     /// its title in `title`). Kept on a folder so a Cra that predates groups still reads the file.
     public var tabGroup: Bool? = nil

@@ -1,8 +1,13 @@
 import Foundation
 
+/// GitLab live folders: Arc's GitHub folder (LiveFolderModel) filled from GitLab's REST API, read with the
+/// space's own browser session like Arc reads github.com (no token: GitLab accepts its session cookie on
+/// GET /api/v4). Works for gitlab.com and self-managed instances, a port or a subpath included.
 public enum GitLabLiveClient {
     public static let pageSize = 100
 
+    /// The instance's base URL, normalized (lowercase scheme and host, no default port, no trailing slash),
+    /// or nil for anything that isn't a plain http(s) address (credentials, a query or a fragment).
     public static func serverURL(_ input: String) -> String? {
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty,
@@ -17,10 +22,13 @@ public enum GitLabLiveClient {
         return url.url?.absoluteString
     }
 
-    public static func folderTitle(server: String) -> String {
+    /// A new folder's name, as Arc names its GitHub folder "Pull Requests".
+    public static let folderTitle = "Merge Requests"
+
+    /// The instance as the Live Folders menu names it: "gitlab.com", "git.example.com:8443/gitlab".
+    public static func serverLabel(_ server: String) -> String {
         let normalized = serverURL(server) ?? server
-        let label = normalized.components(separatedBy: "://").last ?? normalized
-        return "GitLab · \(label)"
+        return normalized.components(separatedBy: "://").last ?? normalized
     }
 
     public static func userURL(server: String) -> String { "\(server)/api/v4/user" }
@@ -89,7 +97,6 @@ public enum GitLabLiveClient {
                                      createdByMe: category == .authored, isAwaitingMyReview: category == .review,
                                      createdAt: date(request.createdAt), updatedAt: date(request.updatedAt))
             pr.webURL = request.webUrl
-            pr.gitLabCategories = [category]
             switch request.state {
             case "opened": pr.state = request.draft == true ? .draft : .open
             case "merged": pr.state = .merged

@@ -16,9 +16,9 @@ final class LiveFolderManager {
     /// Repositories in each folder's last results plus the hidden ones: the folder menu's list
     /// (Arc: "This list is generated based on your currently active pull requests.").
     private(set) var repositories: [UUID: [String]] = [:]
+    /// Folders whose filters, profile or server changed while a refresh was out: they refresh again
+    /// once it's back (its answer is for the old settings and is dropped).
     @ObservationIgnored private var pendingRefresh: Set<UUID> = []
-    @ObservationIgnored private var manualStartedAt: [UUID: Date] = [:]
-    @ObservationIgnored private var feedbackWork: [UUID: ScheduledWork] = [:]
     @ObservationIgnored private var timer: ScheduledWork?
     /// The last address each tab reported, to tell what a page came from.
     @ObservationIgnored private var lastURL: [UUID: String] = [:]
@@ -32,7 +32,7 @@ final class LiveFolderManager {
     /// catches up within seconds, sometimes later).
     static let triggerDelays: [TimeInterval] = [5, 45]
     /// Arc's requestedTooSoon: clicks on refresh closer together than this do nothing.
-    static let minimumInterval = LiveFolderRefreshPolicy.minimumInterval
+    static let minimumInterval: TimeInterval = 10
     /// A folder that failed or waits for a sign-in tries again this often (a Mac waking up has no
     /// network for a moment; an SSO session renews as soon as a GitHub page is opened).
     nonisolated static let retryInterval: TimeInterval = 30
@@ -76,16 +76,13 @@ final class LiveFolderManager {
     }
 
     /// `force` skips the gap between refreshes: the folder's filters just changed.
-    func refresh(_ id: UUID, force: Bool = false, manual: Bool = false) {
+    func refresh(_ id: UUID, force: Bool = false) {
         guard let store, let live = store.item(id)?.liveFolder, let context = store.liveRequestContext(id) else { return }
         if refreshing.contains(id) {
             if force { pendingRefresh.insert(id) }
             return
         }
-        let trigger: LiveFolderRefreshPolicy.Trigger = manual ? .manual : force ? .configuration : .automatic
-        guard LiveFolderRefreshPolicy.shouldStart(source: live.source, lastFetch: live.lastFetch, lastError: live.lastError,
-                                                  now: store.clock.now, trigger: trigger) else { return }
-        if manual { manualStartedAt[id] = store.clock.now }
+        if !force, let last = live.lastFetch, store.clock.now.timeIntervalSince(last) < Self.minimumInterval, live.lastError == nil { return }
         if live.source == .gitlab {
             refreshGitLab(id, live: live, profile: store.profilePath(item: id), context: context)
             return
@@ -128,17 +125,6 @@ final class LiveFolderManager {
     }
 
     private func finishRefresh(_ id: UUID) {
-        let delay = store.map { LiveFolderRefreshPolicy.feedbackDelay(startedAt: manualStartedAt[id], now: $0.clock.now) } ?? 0
-        if delay > 0, let store {
-            feedbackWork[id] = store.clock.after(delay) { [weak self] in self?.completeRefresh(id) }
-        } else {
-            completeRefresh(id)
-        }
-    }
-
-    private func completeRefresh(_ id: UUID) {
-        feedbackWork.removeValue(forKey: id)
-        manualStartedAt.removeValue(forKey: id)
         refreshing.remove(id)
         if pendingRefresh.remove(id) != nil { refresh(id, force: true) }
     }

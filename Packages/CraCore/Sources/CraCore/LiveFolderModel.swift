@@ -6,7 +6,8 @@ import Foundation
 // cached LiveItem.github.pullRequest in StorableLiveData.json. Dia 1.54 keeps the same GitHub client
 // (ARCClients/GitHubClient). Findings and what was verified: docs/live-folders.md.
 
-/// What a live folder is filled from. Arc and Dia also have Bitbucket, Notion, Drive and calendar sources.
+/// What a live folder is filled from. Arc and Dia also have Bitbucket, Notion, Drive and calendar sources;
+/// Arc has no GitLab source, so Cra's GitLab folder is Arc's GitHub folder read from GitLab's API.
 public enum LiveFolderSource: String, Codable {
     case github
     case gitlab
@@ -25,6 +26,7 @@ public struct GitHubLiveFilter: Codable, Equatable {
         public static let reviewRequests = Attributes(rawValue: 2)
         /// review-requested:@me, which also covers teams you are on (Arc: "Team Review Requests")
         public static let teamReviewRequests = Attributes(rawValue: 4)
+        /// GitLab only: merge requests assigned to you (Cra's bit; Arc's mask stops at 4).
         public static let assigned = Attributes(rawValue: 8)
         public static let all: Attributes = [.authored, .reviewRequests, .teamReviewRequests]
     }
@@ -43,6 +45,8 @@ public enum LiveFolderError: String, Codable, Equatable, Error {
     case notSignedIn, rateLimited, unexpectedPage, network
 }
 
+/// The GitLab folder's filters, one API query each (the GitHub folder's My Pull Requests and Review Requests,
+/// plus Assigned to Me, which GitLab has where GitHub has team review requests).
 public enum GitLabLiveCategory: String, Codable, CaseIterable {
     case authored, review, assigned
 
@@ -65,12 +69,11 @@ public enum GitLabLiveCategory: String, Codable, CaseIterable {
 
 public struct LiveFolderData: Codable, Equatable {
     public var source: LiveFolderSource = .github
+    /// GitLab: the instance's base URL (GitLabLiveClient.serverURL), gitlab.com or self-managed.
     public var serverURL: String?
     public var filter = GitHubLiveFilter()
     /// Items closed out of the folder; they don't come back (Arc: hiddenItems).
     public var hiddenItems: [String] = []
-    public var separateByCategory: Bool?
-    public var cachedResults: [LivePullRequest]?
     public var lastFetch: Date?
     /// Why the last refresh failed; nil once one succeeds.
     public var lastError: LiveFolderError?
@@ -93,18 +96,12 @@ public struct LiveFolderData: Codable, Equatable {
         GitLabLiveCategory.allCases.filter { filter.attributes.contains($0.attribute) }
     }
 
-    public func category(for request: LivePullRequest) -> GitLabLiveCategory? {
-        gitLabCategories.first { request.categories.contains($0) }
-    }
-
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         source = try c.decodeIfPresent(LiveFolderSource.self, forKey: .source) ?? .github
         serverURL = try c.decodeIfPresent(String.self, forKey: .serverURL)
         filter = try c.decodeIfPresent(GitHubLiveFilter.self, forKey: .filter) ?? GitHubLiveFilter()
         hiddenItems = try c.decodeIfPresent([String].self, forKey: .hiddenItems) ?? []
-        separateByCategory = try c.decodeIfPresent(Bool.self, forKey: .separateByCategory)
-        cachedResults = try c.decodeIfPresent([LivePullRequest].self, forKey: .cachedResults)
         lastFetch = try c.decodeIfPresent(Date.self, forKey: .lastFetch)
         lastError = try? c.decodeIfPresent(LiveFolderError.self, forKey: .lastError)
         ssoOrganizations = try c.decodeIfPresent([String].self, forKey: .ssoOrganizations) ?? []
@@ -126,16 +123,8 @@ public struct LivePullRequest: Codable, Equatable, Identifiable {
     public var isAwaitingMyReview = false
     public var createdAt: Date?
     public var updatedAt: Date?
+    /// GitLab's own address for the merge request (its URL can't be built from owner/repo/number).
     public var webURL: String?
-    public var gitLabCategories: Set<GitLabLiveCategory>?
-
-    public var categories: Set<GitLabLiveCategory> {
-        if let gitLabCategories { return gitLabCategories }
-        var result: Set<GitLabLiveCategory> = []
-        if createdByMe { result.insert(.authored) }
-        if isAwaitingMyReview { result.insert(.review) }
-        return result
-    }
 
     public init(owner: String, repo: String, number: Int, title: String, author: String? = nil, state: State = .open,
                 createdByMe: Bool = false, isAwaitingMyReview: Bool = false, createdAt: Date? = nil, updatedAt: Date? = nil) {

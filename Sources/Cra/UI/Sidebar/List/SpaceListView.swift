@@ -361,10 +361,14 @@ final class SpaceListView: NSView, NSDraggingSource {
     /// can't be read (Arc: "Sign back in to GitHub.", "Login with SSO to unlock this folder").
     private static func liveStatus(_ item: SidebarItem, hasTabs: Bool) -> (text: String, url: String?)? {
         guard let live = item.liveFolder, !hasTabs else { return nil }
+        // GitLab: the GitHub folder's lines, in GitLab's words.
         if live.source == .gitlab {
-            if live.lastError == .notSignedIn { return ("Sign back in to GitLab.", live.signInURL) }
-            if let error = live.lastError { return (LiveFolderText.status(error, source: .gitlab), live.serverURL) }
-            return live.lastFetch == nil ? nil : ("Merge requests matching your filters will show up here automatically", nil)
+            switch live.lastError {
+            case .notSignedIn?: return ("Sign back in to GitLab.", live.signInURL)
+            case .some: return ("We’re having trouble connecting to GitLab; click here to see your Merge Requests.",
+                                live.serverURL.map { "\($0)/dashboard/merge_requests" })
+            case nil: return live.lastFetch == nil ? nil : ("Merge requests from you and your team will show up here automatically", nil)
+            }
         }
         switch live.lastError {
         case .notSignedIn?: return ("Sign back in to GitHub.", live.signInURL)
@@ -1037,7 +1041,6 @@ final class SpaceListView: NSView, NSDraggingSource {
     /// it hovers), a pinned tab makes a new folder, a split row takes a pane.
     func resolve(dragged id: UUID, at p: CGPoint) -> SidebarListDrop {
         guard let space = store.space(spaceID) else { return SidebarListDrop(draggedID: id) }
-        guard store.item(id)?.liveFolderCategory == nil else { return SidebarListDrop(draggedID: id) }
         let items = rows.filter { $0.itemID != nil }
         let group = ui.group(for: id, in: store)
         let isTab = store.item(id)?.isTab == true

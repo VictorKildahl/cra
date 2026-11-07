@@ -663,7 +663,7 @@ final class SidebarStore {
     }
 
     func rename(_ id: UUID, to title: String?) {
-        guard var it = items[id], it.liveFolderCategory == nil else { return }
+        guard var it = items[id] else { return }
         let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines)
         it.title = (trimmed?.isEmpty ?? true) ? nil : trimmed
         items[id] = it
@@ -799,7 +799,6 @@ final class SidebarStore {
     /// today list unpacks it.
     func moveItem(_ id: UUID, to newParent: UUID, index: Int?) {
         guard var it = items[id], items[newParent] != nil, id != newParent, !isDescendant(newParent, of: id) else { return }
-        guard it.liveFolderCategory == nil else { return }
         // A page can't change profile: nothing moves into or out of an incognito window.
         guard isIncognito(item: id) == isIncognito(item: newParent) else { return }
         // A Blank Window holds tabs only: nothing goes into its (hidden) favorites or pinned section.
@@ -1406,7 +1405,7 @@ final class SidebarStore {
     }
 
     func deleteFolder(_ id: UUID) {
-        guard let f = items[id], f.isFolder, f.liveFolderCategory == nil else { return }
+        guard let f = items[id], f.isFolder else { return }
         // A live folder's tabs are the service's items, not the user's: they go with it.
         if f.isLiveFolder {
             removeLiveTree(id)
@@ -1566,7 +1565,6 @@ final class SidebarStore {
         }
         for child in items[id]?.children ?? [] { removeLiveTree(child) }
         updateLiveFolder(id) {
-            $0.cachedResults = nil
             $0.hiddenItems = []
             $0.lastFetch = nil
             $0.lastError = nil
@@ -1574,14 +1572,6 @@ final class SidebarStore {
             $0.enterprise = nil
         }
         liveFolderChanged(id)
-    }
-
-    func resetHiddenLiveItems(_ id: UUID) {
-        liveFolderVersions[id] = UUID()
-        updateLiveFolder(id) {
-            $0.hiddenItems = []
-            $0.cachedResults = nil
-        }
     }
 
     func liveFolder(containing id: UUID) -> SidebarItem? {
@@ -1620,19 +1610,12 @@ final class SidebarStore {
         if source == .gitlab, server == nil { return nil }
         if let existing = liveFolder(source, inSpace: sid, serverURL: server) { return existing }
         guard let space = spaces[sid], !isStandalone(space: sid) else { return nil }
-        if source == .gitlab {
-            for existing in liveFolders where existing.liveFolder?.source == .gitlab && spaceID(ofItem: existing.id) == sid {
-                if existing.title == "GitLab Merge Requests", let address = existing.liveFolder?.serverURL {
-                    rename(existing.id, to: GitLabLiveClient.folderTitle(server: address))
-                }
-            }
-        }
-        let title = server.map { GitLabLiveClient.folderTitle(server: $0) } ?? "Pull Requests"
+        let title = source == .gitlab ? GitLabLiveClient.folderTitle : "Pull Requests"
         let folder = createFolder(named: title, in: space.pinnedContainerID, index: 0)
         var live = LiveFolderData()
         live.source = source
         live.serverURL = server
-        if source == .gitlab { live.filter.attributes = [.authored, .reviewRequests] }
+        if source == .gitlab { live.filter.attributes = [.authored, .reviewRequests, .assigned] }
         items[folder.id]?.liveFolder = live
         touch()
         return items[folder.id]
@@ -1645,30 +1628,6 @@ final class SidebarStore {
         touch()
     }
 
-    func reapplyLiveResults(_ id: UUID) {
-        guard let live = items[id]?.liveFolder, let cached = live.cachedResults else { return }
-        applyLiveResults(cached, to: id, ssoOrganizations: live.ssoOrganizations, fetched: false)
-    }
-
-    private func liveSections(_ folderID: UUID, live: LiveFolderData) -> [GitLabLiveCategory: UUID] {
-        guard live.source == .gitlab, live.separateByCategory == true else { return [:] }
-        var sections: [GitLabLiveCategory: UUID] = [:]
-        for category in live.gitLabCategories {
-            if let existing = children(of: folderID).first(where: { $0.liveFolderCategory == category }) {
-                sections[category] = existing.id
-            } else {
-                var section = SidebarItem.folder(category.title, parent: folderID)
-                section.createdAt = clock.now
-                section.liveFolderCategory = category
-                items[section.id] = section
-                items[folderID]?.children.append(section.id)
-                prefs.expandedFolders.insert(section.id)
-                sections[category] = section.id
-            }
-        }
-        return sections
-    }
-
     private func removeLiveTree(_ id: UUID) {
         for child in items[id]?.children ?? [] { removeLiveTree(child) }
         detach(id)
@@ -1677,117 +1636,66 @@ final class SidebarStore {
         prefs.peekedFolders.removeValue(forKey: id)
     }
 
-    private func removeFilteredLiveTab(_ id: UUID) {
-        guard var item = items[id], var tab = item.tab else { return }
-        let selected = prefs.windows.contains { $0.selectedTabPerSpace.values.contains(id) }
-        detach(id)
-        if selected, let sid = spaceID(ofItem: id), let today = spaces[sid]?.todayContainerID {
-            tab.liveItemURL = nil
-            tab.liveSubtitle = nil
-            tab.liveGoneAt = nil
-            tab.liveFolderID = nil
-            tab.liveCategory = nil
-            item.data = .tab(tab)
-            item.parentID = today
-            items[id] = item
-            items[today]?.children.insert(id, at: 0)
-        } else {
-            items[id] = nil
-        }
-    }
-
     /// A refresh came back. New pull requests come in unread at their place (a Today tab already
     /// showing one moves in instead, Dia's reparentPullRequestTabToLiveFolder), ones that left the
     /// results stay for LiveFolderManager.retention before they go, the rest keep the pull request's
     /// title and author. The first fill marks nothing unread.
-    func applyLiveResults(_ prs: [LivePullRequest], to folderID: UUID, ssoOrganizations: [String], fetched: Bool = true,
-                          context: LiveRequestContext? = nil) {
+    /// `context`: what the request was made for; an answer for an old profile, server or filter is dropped.
+    func applyLiveResults(_ prs: [LivePullRequest], to folderID: UUID, ssoOrganizations: [String], context: LiveRequestContext? = nil) {
         if let context, liveRequestContext(folderID) != context { return }
         guard var folder = items[folderID], var live = folder.liveFolder else { return }
-        if let sid = spaceID(ofItem: folderID), let today = spaces[sid]?.todayContainerID {
-            for tab in tabs(under: folderID) where tab.tab?.liveItemURL == nil { moveItem(tab.id, to: today, index: nil) }
-        }
-        if live.source == .gitlab, fetched { live.cachedResults = prs }
         let hidden = Set(live.hiddenItems)
         let hiddenRepos = Set(live.filter.hiddenRepositories.map { $0.lowercased() })
-        let wanted = prs.filter {
-            !hidden.contains($0.url) && !hiddenRepos.contains($0.repository.lowercased())
-                && (live.source != .gitlab || live.category(for: $0) != nil)
-        }
-        let sections = liveSections(folderID, live: live)
+        let wanted = prs.filter { !hidden.contains($0.url) && !hiddenRepos.contains($0.repository.lowercased()) }
         var existing: [String: UUID] = [:]
-        let previousTabs = tabs(under: folderID)
-        for c in previousTabs { if let u = c.tab?.liveItemURL { existing[u] = c.id } }
+        for c in children(of: folderID) { if let u = c.tab?.liveItemURL { existing[u] = c.id } }
         // Nothing in it yet from a refresh that worked: what arrives now isn't news.
         let firstFill = live.lastFetch == nil || (live.lastError != nil && existing.isEmpty)
-        var order: [UUID: [UUID]] = [:]
+        var order: [UUID] = []
         for pr in wanted {
-            let category = live.source == .gitlab ? live.category(for: pr) : nil
-            let parent = category.flatMap { sections[$0] } ?? folderID
             // Arc leaves the author off your own pull requests; Cra names everyone's.
             let subtitle = pr.author
             if let id = existing.removeValue(forKey: pr.url) ?? adoptableTab(for: pr, folderID: folderID),
                var it = items[id], var t = it.tab {
-                if it.parentID != parent {
+                if it.parentID != folderID {
                     detach(id)
-                    it.parentID = parent
+                    it.parentID = folderID
                     t.savedURL = pr.url
                 }
                 t.savedTitle = pr.title
                 t.liveItemURL = pr.url
                 t.liveSubtitle = subtitle
                 t.liveGoneAt = nil
-                t.liveFolderID = live.source == .gitlab ? folderID : nil
-                t.liveCategory = category
                 it.data = .tab(t)
                 items[id] = it
-                order[parent, default: []].append(id)
+                order.append(id)
             } else {
-                var tab = SidebarItem.tab(pr.url, title: pr.title, parent: parent)
+                var tab = SidebarItem.tab(pr.url, title: pr.title, parent: folderID)
                 var t = TabData(url: pr.url, title: pr.title)
                 t.liveItemURL = pr.url
                 t.liveSubtitle = subtitle
-                t.liveFolderID = live.source == .gitlab ? folderID : nil
-                t.liveCategory = category
                 tab.data = .tab(t)
                 tab.isUnread = !firstFill
                 tab.createdAt = pr.createdAt ?? clock.now
                 items[tab.id] = tab
-                order[parent, default: []].append(tab.id)
+                order.append(tab.id)
             }
         }
         // Gone from the results (merged, reviewed, closed): marked now, removed once the grace is over.
         // An organization whose SSO session lapsed only hid its pull requests: those stay as they are.
         let ssoHidden = Set(ssoOrganizations.map { $0.lowercased() })
-        let returned = Set(prs.map(\.url))
-        for previous in previousTabs {
-            guard let url = previous.tab?.liveItemURL, let id = existing[url] else { continue }
-            guard var it = items[id], var t = it.tab else { continue }
-            if live.source == .gitlab,
-               hidden.contains(url) || returned.contains(url) || t.liveCategory.map({ !live.gitLabCategories.contains($0) }) == true {
-                removeFilteredLiveTab(id)
-                continue
-            }
-            let needsSSO = GitHubLiveClient.pullPath(url).map { ssoHidden.contains($0.owner.lowercased()) } ?? false
-            if t.liveGoneAt == nil, !needsSSO { t.liveGoneAt = clock.now }
-            let parent = t.liveCategory.flatMap { sections[$0] } ?? folderID
-            if it.parentID != parent { detach(id); it.parentID = parent }
+        for id in existing.values {
+            guard var it = items[id], var t = it.tab, t.liveGoneAt == nil else { continue }
+            if let url = t.liveItemURL, let p = GitHubLiveClient.pullPath(url), ssoHidden.contains(p.owner.lowercased()) { continue }
+            t.liveGoneAt = clock.now
             it.data = .tab(t)
             items[id] = it
-            order[parent, default: []].append(id)
-        }
-        for section in children(of: folderID) where section.liveFolderCategory != nil {
-            items[section.id]?.children = order[section.id] ?? []
-            if !sections.values.contains(section.id) { removeLiveTree(section.id) }
         }
         folder = items[folderID] ?? folder
-        let listed = GitLabLiveCategory.allCases.compactMap { sections[$0] } + (order[folderID] ?? [])
-        folder.children = listed + folder.children.filter { !listed.contains($0) && items[$0] != nil }
-        if fetched {
-            live.lastFetch = clock.now
-            live.lastError = nil
-            live.ssoOrganizations = ssoOrganizations
-        }
+        folder.children = order + folder.children.filter { !order.contains($0) && items[$0] != nil }
+        live.lastFetch = clock.now
+        live.lastError = nil
+        live.ssoOrganizations = ssoOrganizations
         folder.liveFolder = live
         items[folderID] = folder
         touch()
@@ -1837,9 +1745,6 @@ final class SidebarStore {
         items[folderID]?.liveFolder = live
         t.liveItemURL = nil
         t.liveSubtitle = nil
-        t.liveGoneAt = nil
-        t.liveFolderID = nil
-        t.liveCategory = nil
         it.data = .tab(t)
         items[id] = it
     }
@@ -1912,31 +1817,14 @@ final class SidebarStore {
         let sid = entry.sourceSpaceID.flatMap { spaces[$0] != nil ? $0 : nil } ?? focusedSpaceID
         let space = spaces[sid]!
         // Back into the folder it was closed from, if that's still in the space.
-        var folder = entry.sourceFolderID.flatMap { items[$0]?.isFolder == true && spaceID(ofItem: $0) == sid ? $0 : nil }
-            ?? it.tab?.liveFolderID.flatMap { items[$0]?.isLiveFolder == true && spaceID(ofItem: $0) == sid ? $0 : nil }
-        let liveRoot = folder.flatMap { liveFolder(containing: $0) }
-        let existing = it.tab?.liveItemURL.flatMap { url in
-            liveRoot.flatMap { root in tabs(under: root.id).first { $0.tab?.liveItemURL == url } }
-        }
-        let navigated = it.tab.map { tab in tab.liveItemURL.map { tab.url != $0 } ?? false } ?? false
-        let differentPage = existing.map { $0.tab?.url != it.tab?.url } ?? false
-        let restoreSeparately = navigated || differentPage
-        if restoreSeparately { folder = nil }
-        let parent = restoreSeparately ? space.todayContainerID : folder ?? (entry.wasPinned ? space.pinnedContainerID : space.todayContainerID)
-        if let folder, let url = it.tab?.liveItemURL, let live = liveFolder(containing: folder) {
-            updateLiveFolder(live.id) {
-                $0.hiddenItems.removeAll { $0 == url }
-            }
-            if let existing, existing.tab?.url == it.tab?.url {
-                if select { selectTab(existing.id) } else { touch() }
-                return existing
-            }
+        let folder = entry.sourceFolderID.flatMap { items[$0]?.isFolder == true && spaceID(ofItem: $0) == sid ? $0 : nil }
+        let parent = folder ?? (entry.wasPinned ? space.pinnedContainerID : space.todayContainerID)
+        if let folder, let url = it.tab?.liveItemURL, items[folder]?.isLiveFolder == true {
+            updateLiveFolder(folder) { $0.hiddenItems.removeAll { $0 == url } }
         } else if var t = it.tab, t.liveItemURL != nil {
             t.liveItemURL = nil
             t.liveSubtitle = nil
             t.liveGoneAt = nil
-            t.liveFolderID = nil
-            t.liveCategory = nil
             it.data = .tab(t)
         }
         it.parentID = parent
