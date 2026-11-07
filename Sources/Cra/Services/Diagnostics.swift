@@ -110,9 +110,7 @@ enum Diagnostics {
         }
         try? fm.removeItem(at: staging)
         guard ditto.terminationStatus == 0, fm.fileExists(atPath: destination.path) else {
-            let alert = NSAlert()
-            alert.messageText = "Cra couldn’t save the diagnostics"
-            alert.informativeText = "Try another folder."
+            let alert = AppDialog(title: "Cra couldn’t save the diagnostics", message: "Try another folder.")
             alert.runModal()
             return
         }

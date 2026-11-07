@@ -276,7 +276,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         sidebarActions.editSpaceThemeBeside = { [weak self] s, card in self?.showSpaceStyleEditor(space: s, beside: card) }
         sidebarActions.newProfile = { [weak self] id in self?.showNewProfileDialog(forSpace: id) }
         sidebarActions.manageSpaces = { [weak self] in self?.showManageSpaces() }
-        sidebarActions.deleteSpace = { [weak self] s in self?.app.confirmDeleteSpace(s) }
+        sidebarActions.deleteSpace = { [weak self] s in self?.app.confirmDeleteSpace(s, in: self?.window) }
         sidebarActions.toggleSidebar = { [weak self] in self?.toggleSidebar() }
         sidebarActions.toggleLibrary = { [weak self] in self?.toggleLibrary() }
         sidebarActions.showLibrary = { [weak self] page in self?.showLibrary(page) }
@@ -1745,7 +1745,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// pinned URL loads the new one; one navigated away stays where it is.
     func editPinnedURL(_ id: UUID) {
         guard let window, let tab = store.item(id)?.tab, store.isPinned(id), tab.liveItemURL == nil else { return }
-        DialogOverlayWindow.present(over: window) { [weak self] close in
+        DialogPanel.present(over: window) { [weak self] close in
             EditPinnedURLDialog(url: tab.savedURL, onSave: { url in
                 close()
                 guard let self, let before = self.store.item(id)?.tab, self.store.setPinnedURL(id, to: url),

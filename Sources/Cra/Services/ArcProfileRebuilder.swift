@@ -21,13 +21,11 @@ enum ArcProfileRebuilder {
             alert("No spaces to move", "Every space named like one of your Arc spaces is already on the right profile, or Arc has it on its Default profile.")
             return
         }
-        let a = NSAlert()
-        a.messageText = "Move \(moves.count == 1 ? "this space" : "these spaces") to \(moves.count == 1 ? "its" : "their") Arc profile\(moves.count == 1 ? "" : "s")?"
-        a.informativeText = moves.map { "\($0.spaceTitle) → \($0.profileName)" }.joined(separator: "\n") + "\n\n"
+        let message = moves.map { "\($0.spaceTitle) → \($0.profileName)" }.joined(separator: "\n") + "\n\n"
             + "Cra brings over the sign-ins, passwords and extensions these Arc profiles have, so the spaces work as they did in Arc. "
             + "Sign-ins and passwords you added in Cra since the import stay with Default. macOS asks for your password to unlock Arc's data, then Cra restarts."
-        a.addButton(withTitle: "Move and Restart")
-        a.addButton(withTitle: "Cancel")
+        let a = AppDialog(title: "Move \(moves.count == 1 ? "this space" : "these spaces") to \(moves.count == 1 ? "its" : "their") Arc profile\(moves.count == 1 ? "" : "s")?",
+                          message: message, actions: [DialogAction("Move and Restart"), .cancel])
         guard a.runModal() == .alertFirstButtonReturn else { return }
 
         let folders = Set(moves.map(\.folder))
@@ -43,11 +41,9 @@ enum ArcProfileRebuilder {
                 case .success(let c): credentials = c
                 case .failure(let error):
                     CraLog.note("rebuild from Arc: sign-ins not read: \(error.localizedDescription)")
-                    let b = NSAlert()
-                    b.messageText = "Move the spaces without their sign-ins?"
-                    b.informativeText = "\(error.localizedDescription) The spaces would start signed out of every site. Cancel changes nothing."
-                    b.addButton(withTitle: "Move Without Sign-ins")
-                    b.addButton(withTitle: "Cancel")
+                    let b = AppDialog(title: "Move the spaces without their sign-ins?",
+                                      message: "\(error.localizedDescription) The spaces would start signed out of every site. Cancel changes nothing.",
+                                      actions: [DialogAction("Move Without Sign-ins"), .cancel])
                     guard b.runModal() == .alertFirstButtonReturn else { return }
                 }
             }
@@ -82,9 +78,7 @@ enum ArcProfileRebuilder {
     }
 
     private static func alert(_ title: String, _ text: String) {
-        let a = NSAlert()
-        a.messageText = title
-        a.informativeText = text
+        let a = AppDialog(title: title, message: text)
         a.runModal()
     }
 }

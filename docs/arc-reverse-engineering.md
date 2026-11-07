@@ -3380,3 +3380,25 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
 - Cra: BlankWindow (Space.standaloneWindowID, saved in sidebar.json outside spaceOrder), SidebarStore.addBlankWindow /
   isStandalone, TabTearOff (decision + frame), SpaceListView.dragEnded, AppDelegate.tearOffTab and moveBlankWindow
   ("Move to…", `cra://debug?blankMoveTo=<n>`), BlankWindow.theme (Auto).
+
+## Confirmation dialogs (Arc 1.172.1, 7 Nov 2026, PR #224, offline Arc on a fake home, 2x window captures)
+- [O static] Arc has two paths: `AlertClient.runModal` (NSAlert) and its own `Dialogs` module (`DialogView`,
+  `DialogButton`, `SuppressionCheckbox`, `TextInputDialogView`, `PermissionRequestDialogView`,
+  `NSWindow+DialogSheet.swift` → `Dialogs.SheetWindow`, "Label for the icon to press enter/escape").
+- [O] Quit Arc? (shouldWarnBeforeQuitting), Delete your “<name>” Space? and Delete your <name> Live Folder?
+  are all the Dialogs card, presented as a real sheet on the browser window: 450 pt wide, centred, no AX
+  window of its own, the window dimmed, and macOS 26's sheet animation (fade in while dropping a few points).
+  The 1 pt light edge is the sheet's own (20 % white over the card), not a stroke. Card #161C2F, 16 pt
+  continuous corners.
+- [O] Quit: the app icon 50.5 pt across from 43.5 pt in; "Quit Arc?" caps 120 pt down; buttons 37 pt tall
+  (+1.5 pt lip) from 183.5 pt: "Quit, and don’t ask again" at the left edge (27.5 pt in), Cancel `ESC` and
+  Quit `↩` at the right, ending 26.5 pt from the card's edge, 7.5 pt apart; card 248 pt tall.
+- [O] Delete Space / Delete Live Folder: Arc's logo mark instead of the app icon, title caps at 120 pt, the
+  message's at 157 pt, buttons from 208.5 pt; Cancel `ESC` and a red Delete / Delete Folder `↩` (fill
+  #E2492C, no lighter rim, lip #41232A, key badge #E55B41 edged #E86D56). Live Folder text: "You can restore
+  this folder at any time by right-clicking the sidebar."
+- [O] Colours: secondary #302F60 edged #6362A9, its ESC badge #4E4C77; Quit #3339F1. Hover: 10 % white over a
+  secondary button, badge included (#302F60 → #454470), 10 % black over the default one (#3339F1 → #2D33D9).
+- Cra (#224, STRENCH0): `AppDialog` + `DialogPanel` (a real sheet via beginSheet) replace NSAlert and the
+  borderless DialogOverlayWindow; checked against these captures on the same display, within ~1 pt and a few
+  levels of colour. Arc's quit capture was taken with its command bar open; that doesn't change the sheet.

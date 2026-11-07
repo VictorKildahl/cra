@@ -329,12 +329,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     private func confirmQuit() -> Bool {
-        let alert = NSAlert()
-        alert.messageText = "Quit Cra?"
-        alert.informativeText = "All windows and tabs will close. They come back when Cra starts again."
-        alert.addButton(withTitle: "Quit")
-        alert.addButton(withTitle: "Cancel")
-        return alert.runModal() == .alertFirstButtonReturn
+        let alert = AppDialog(title: "Quit Cra?",
+                              actions: [DialogAction("Quit"), .cancel, DialogAction("Quit, and don’t ask again", role: .secondary)],
+                              icon: .application, buttonSpacing: 45.5)
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: return true
+        case .alertThirdButtonReturn:
+            store.settings.warnBeforeQuitting = false
+            return true
+        default: return false
+        }
     }
 
     func openExternalURL(_ url: String) {
@@ -1121,7 +1125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         guard keyFallbackMonitor == nil else { return }
         keyFallbackMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             // Esc drops a ⌘/⇧-click tab selection before anything else sees it.
-            if event.keyCode == 53, let ui = self?.main.sidebarUI, !ui.multiSelection.isEmpty {
+            if event.keyCode == 53, !(event.window is DialogPanel), let ui = self?.main.sidebarUI, !ui.multiSelection.isEmpty {
                 ui.clearPicks()
                 return nil
             }
@@ -1180,6 +1184,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     func perform(_ id: String) {
+        if let dialog = NSApp.keyWindow as? DialogPanel, ["closeTab", "closeWindow"].contains(id) {
+            dialog.close()
+            return
+        }
         store.recordCommandUse(id)
         // An extension's own window (Arc: BrowserExtensionWindowController.closeCurrentItem:)
         // closes on ⌘W instead of the tab behind it.
@@ -1326,21 +1334,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NSPasteboard.general.setString(s, forType: .string)
     }
 
-    func confirmDeleteSpace(_ space: Space) {
+    func confirmDeleteSpace(_ space: Space, in window: NSWindow? = nil) {
+        let window = window ?? main?.window ?? AppDialog.parentWindow
         guard store.spaceOrder.count > 1 else {
-            let a = NSAlert()
-            a.messageText = "You need at least one space."
-            a.runModal()
+            let a = AppDialog(title: "You need at least one space.")
+            a.runModal(over: window)
             return
         }
-        let a = NSAlert()
-        // Arc 1.171's copy (WindowsData+CloseItems).
-        a.messageText = "Delete your \(space.title) Space?"
-        a.informativeText = "This will archive all the tabs and folders inside it."
-        a.addButton(withTitle: "Delete")
-        a.addButton(withTitle: "Cancel")
-        a.alertStyle = .warning
-        if a.runModal() == .alertFirstButtonReturn { store.deleteSpace(space.id) }
+        let a = AppDialog(title: "Delete your “\(space.title)” Space?",
+                          message: "This will archive all the tabs and folders inside it.",
+                          actions: [DialogAction("Delete", role: .destructive), .cancel])
+        if a.runModal(over: window) == .alertFirstButtonReturn { store.deleteSpace(space.id) }
     }
 
     // MARK: Windows
