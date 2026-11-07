@@ -11,3 +11,11 @@ cra://debug?browserWindows=relaunched
 expect-log browser windows relaunched: kind=normal listed=1 tabs=1 open=1
 cra://action/viewEasels
 wait 1
+# The capture menu's New Easel: an easel with the capture on it opens in a new tab (after the
+# relaunch only cra.log is read, which counts tabs rather than naming them).
+cra://open?url=${PAGE}?n=captured
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?captureToEasel=1
+wait 2
+cra://debug?browserWindows=captured
+expect-log browser windows captured: kind=normal listed=1 tabs=3 open=1

@@ -1853,6 +1853,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         return CGImageSourceCreateImageAtIndex(source, 0, nil)
     }
 
+    /// Testing without the pointer (cra://debug?captureToEasel=1): the visible page captured and
+    /// the capture menu's New Easel chosen.
+    func debugCaptureToEasel() {
+        currentBrowser?.sendDevToolsMethod("Page.captureScreenshot", params: #"{"format":"png"}"#) { [weak self] shot, _ in
+            MainActor.assumeIsolated {
+                let o = shot.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+                let png = (o?["data"] as? String).flatMap { Data(base64Encoded: $0) }
+                self?.captureFinished(.newEasel, png)
+            }
+        }
+    }
+
     /// The capture menu's choice, once the overlay is down.
     private func captureFinished(_ action: CaptureOverlay.Action?, _ png: Data?) {
         captureOverlay = nil
@@ -1869,6 +1881,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             if let png { saveCapture(png) }
         case .message?:
             if let png { sendCaptureViaMessages(png) }
+        case .newEasel?:
+            guard let png, let easel = EaselFiles.create(withPicture: png) else { return }
+            _ = store.createTab(url: easel.url, title: easel.title, select: true, window: windowID)
         case .retake?:
             capturePage()
         case nil:

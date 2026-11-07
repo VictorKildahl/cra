@@ -129,6 +129,19 @@ enum EaselFiles {
     }
     static func load(_ id: UUID) -> Easel { store(id).load(or: { Easel(id: id) }) }
 
+    /// Arc's capture menu ▸ New Easel: an easel with the capture on it, under the title.
+    static func create(withPicture png: Data) -> Easel? {
+        guard let image = NSImage(data: png) else { return nil }
+        var easel = Easel()
+        let name = UUID().uuidString + ".png"
+        guard (try? png.write(to: pictures(easel.id).appendingPathComponent(name))) != nil else { return nil }
+        let scale = min(1, 640 / max(image.size.width, image.size.height, 1))
+        easel.items = [Easel.Item(kind: .image(file: name), frame: .init(x: 120, y: 160, width: image.size.width * scale,
+                                                                        height: image.size.height * scale))]
+        store(easel.id).saveNow(easel)
+        return easel
+    }
+
     /// Every easel on disk, newest edit first, for Library ▸ Easels.
     static func all() -> [(id: UUID, title: String, edited: Date)] {
         let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
