@@ -34,8 +34,8 @@ or Arc-only service), per CONTRIBUTING.md.
 | Restore windows from previous session | Settings ▸ Advanced | done | Settings ▸ Advanced; off keeps the window in use last. |
 | Block Cookie Banners | Settings ▸ General | done | Settings ▸ Privacy; hides the common consent managers' banners (CookieBanners), off by default as in Arc. |
 | Archive Little Arcs after | Settings ▸ Links (6 hours default) | done | Settings ▸ Tabs ▸ Links; a Little Window left alone that long closes into the archive. |
-| Previews (Gmail, Calendar on Favorites) | Settings ▸ General ▸ Previews Settings… | partial | Gmail done: hovering a Gmail favorite shows its unread mail from Gmail's Atom feed (the space's own sign-in), Arc's card and empty state measured on Victor's Arc. Calendar not measured: Victor has no Calendar favorite. |
-| Join Meeting ⌃⌘J | Shortcuts | missing | Needs Calendar previews, which couldn't be measured (no Calendar favorite in Victor's Arc). |
+| Previews (Gmail, Calendar on Favorites) | Settings ▸ General ▸ Previews Settings… | partial | Gmail done: hovering a Gmail favorite shows its unread mail from Gmail's Atom feed (the space's own sign-in), Arc's card and empty state measured on Victor's Arc. Arc shows the empty card when it has no mail to list, signed out too. Calendar not measured: the Victor space has no Google sign-in, so Arc has no events to preview. |
+| Join Meeting ⌃⌘J | Shortcuts | missing | Needs Calendar previews, which need a space signed in to Google Calendar to measure. |
 | Troubleshooting menu | Help ▸ Troubleshooting: Record Trace, Open Task Manager, Reveal Arc Data, Copy Arc Info | done | Export Diagnostics…, Open Task Manager (Chrome's), Reveal Cra Data, Copy Cra Info; Record Trace is Arc-internal. |
 | Help menu | Getting Started, Release Notes, Contact the Team, Visit Help Center, Restore Data | partial | |
 | Ad blocker upsell card, Sync, Account, Membership card, Share Arc, Sign Out, Send to Dia, Share Space | | *skip* | Account/cloud. |
@@ -161,4 +161,4 @@ in this sweep (Essential Shortcuts window, Library pages).
 
 ## Left for later, and why
 
-- Calendar previews and Join Meeting: Arc shows them for a Google Calendar favorite, which Victor's Arc doesn't have.
+- Calendar previews and Join Meeting: Arc shows them for a Google Calendar favorite in a space signed in to Google; Victor's Arc has neither (checked 7 Nov: calendar.google.com shows the signed-out landing page). Signing in to his accounts is his to do.

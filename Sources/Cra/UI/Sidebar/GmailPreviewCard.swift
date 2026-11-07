@@ -22,9 +22,10 @@ final class GmailPreviewCard {
             CraCEFRuntime.fetchURL(feed, headers: nil, profilePath: profilePath) { status, _, _, body in
                 MainActor.assumeIsolated {
                     guard let self, let tile, self.tile === tile, tile.window != nil else { return }
-                    // Signed out: Gmail answers with its sign-in page, and Arc shows nothing.
-                    guard status == 200, let inbox = GmailPreview.parse(body) else { return }
-                    self.show(inbox, by: tile)
+                    // Arc shows its "exhale" card whenever it has no unread mail to list, signed out
+                    // included (seen on a space with no Google sign-in, 7 Nov 2026).
+                    let inbox = status == 200 ? GmailPreview.parse(body) : nil
+                    self.show(inbox ?? GmailPreview.Inbox(unread: 0, mails: []), by: tile)
                 }
             }
         }
