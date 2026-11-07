@@ -59,7 +59,7 @@ Arc's actions (Settings ▸ Shortcuts, 106 rows) that Cra has no action for:
 | Switch to Split View 1–4 | ⌃⇧1…4 | done |
 | Expand Current Split | — | missing (Cra has Flip orientation) |
 | Open Extensions | ⌘E | done |
-| Show Little Arc "Open In" Menu | ⇧⌘O | missing |
+| Show Little Arc "Open In" Menu | ⇧⌘O | done |
 | Open Little Arc or Peek in… | ⌘O | partial (Window menu) |
 | Network Inspector | — | *skip* (DevTools has it) |
 | Exit | ⎋ | n/a |
@@ -118,6 +118,7 @@ in this sweep (Essential Shortcuts window, Library pages).
 - View ▸ Cast… and Help ▸ Troubleshooting ▸ Open Task Manager, Chrome's own (ExecuteChromeCommand).
 - Sidebar tab menu: Change Icon… and Share ▸.
 - Settings ▸ Advanced ▸ "When opening Cra, restore windows from previous session".
+- Show Little Window "Open In" Menu (⇧⌘O): the Little Window's list of spaces.
 
 ## Left for later, and why
 

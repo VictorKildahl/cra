@@ -934,6 +934,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             browser?.showDevTools()
         case "print": browser?.print()
         case "promoteLittleWindow": promote(to: nil)
+        // Arc's Show Little Arc "Open In" Menu (⇧⌘O): the ⌄ button's list of spaces.
+        case "littleWindowOpenInMenu": if hasPage, !isPeek { togglePopup() }
         // Move Tab to Space N (⌃⌘N, #86) sends the page there, as the spaces popup does (#92).
         case let id where id.hasPrefix("moveTabToSpace"):
             if let n = Int(id.dropFirst(14)), n >= 1, n <= store.spaceOrder.count { promote(to: store.spaceOrder[n - 1]) }

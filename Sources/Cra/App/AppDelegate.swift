@@ -1111,7 +1111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return !SystemIntegration.shared.isDefaultBrowser
         case "pictureInPicture":
             item.title = main.currentBrowser?.isInPictureInPicture == true ? "Exit Picture in Picture" : "Picture in Picture"
-        case "promoteLittleWindow": return keyLittleWindow?.hasPage ?? false
+        case "promoteLittleWindow", "littleWindowOpenInMenu": return keyLittleWindow?.hasPage ?? false
         case "checkForUpdates": return SoftwareUpdater.shared.validateMenuItem(item)
         case "closeSplitPane", "separateFromSplit", "flipSplitOrientation":
             return store.selectedTabID.flatMap { store.splitContaining($0) } != nil
@@ -1240,7 +1240,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         switch id {
         case "newLittleWindow": openLittleWindow(url: "")
         case "closeLittleWindows": closeLittleWindows()
-        case "promoteLittleWindow": break  // only meaningful while a little window is key
+        case "promoteLittleWindow", "littleWindowOpenInMenu": break  // only meaningful while a little window is key
         case "newTab": main.openCommandBar(.newTab)
         case "newWindow": openNewWindow()
         case "newIncognitoWindow": openNewWindow(incognito: true)
@@ -1597,7 +1597,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         window.addItem(.separator())
         window.addItem(item("openLibrary")); window.addItem(item("viewDownloads")); window.addItem(item("viewMedia"))
         window.addItem(.separator())
-        window.addItem(item("promoteLittleWindow")); window.addItem(item("closeLittleWindows"))
+        window.addItem(item("promoteLittleWindow")); window.addItem(item("littleWindowOpenInMenu")); window.addItem(item("closeLittleWindows"))
         window.addItem(.separator())
         window.addItem(std("Bring All to Front", #selector(NSApplication.arrangeInFront(_:))))
         menubar.addItem(submenu: window, title: "Window")
