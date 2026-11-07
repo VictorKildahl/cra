@@ -2690,6 +2690,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         store.selectTab(panes[n - 1], window: windowID)
     }
 
+    /// Chrome's extensions page, as the Site Control Center's Manage Extensions… opens it.
+    func openExtensionsPage() { openTab("chrome://extensions") }
+
     /// Arc's Open Extensions (⌘E): the Site Control Center, as if its sliders were clicked.
     func openSiteControls() { showSiteControlsFromTheirButton() }
 
@@ -2764,6 +2767,27 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             let params = #"{"format":"png","captureBeyondViewport":true,"clip":{"x":0,"y":0,"width":\#(w),"height":\#(min(h, 16384)),"scale":1}}"#
             b.sendDevToolsMethod("Page.captureScreenshot", params: params) { shot, error in
                 MainActor.assumeIsolated { self?.finishCapture(shot, error: error) }
+            }
+        }
+    }
+
+    /// Arc's File ▸ Capture in Portrait Mode: the page laid out at a phone's width (390 × 844 pt,
+    /// the layout a site gives an iPhone 15) and captured at 3x, then put back as it was.
+    func capturePortrait() {
+        captureOverlay?.close()
+        guard let b = currentBrowser else { return }
+        showToast("Capture in Progress")
+        let metrics = #"{"width":390,"height":844,"deviceScaleFactor":3,"mobile":true}"#
+        b.sendDevToolsMethod("Emulation.setDeviceMetricsOverride", params: metrics) { [weak self] _, error in
+            MainActor.assumeIsolated {
+                guard error == nil else { self?.finishCapture(nil, error: error); return }
+                // A layout pass and a paint at the new width before the shot.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    b.sendDevToolsMethod("Page.captureScreenshot", params: #"{"format":"png"}"#) { shot, error in
+                        b.sendDevToolsMethod("Emulation.clearDeviceMetricsOverride", params: "{}") { _, _ in }
+                        MainActor.assumeIsolated { self?.finishCapture(shot, error: error) }
+                    }
+                }
             }
         }
     }

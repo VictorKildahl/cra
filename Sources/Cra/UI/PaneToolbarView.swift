@@ -488,18 +488,27 @@ final class PaneToolbarView: NSView {
         actions.performAction("copyURL")
     }
 
-    /// Arc's menu on the toolbar address: Copy URL, and Show Full URL / Hide Full URL for the
-    /// normal bar (the developer bar always shows it).
+    /// Arc's menu on the toolbar address (Arc 1.172.1): Copy URL, Capture…, Capture Full Page,
+    /// Manage Extensions…, then Show Full URL / Hide Full URL for the normal bar (the developer
+    /// bar always shows it) and Hide Toolbar. Arc's Share ▸ is in the Site Control Center here, and
+    /// Shared Quotes go through arc.net, so neither is listed.
     private func addressMenu() -> NSMenu? {
         guard model.kind == .normal || model.kind == .developer else { return nil }
         let menu = NSMenu()
+        let focus = { [weak self] in if let id = self?.paneTabID { self?.actions.focusPane(id) } }
         menu.addItem(ToolbarMenuAction.item("Copy URL", shortcut: "copyURL", { [weak self] in self?.copyURL() }))
+        menu.addItem(ToolbarMenuAction.item("Capture…", shortcut: "capturePage", { [weak self] in focus(); self?.actions.performAction("capturePage") }))
+        menu.addItem(ToolbarMenuAction.item("Capture Full Page", shortcut: "captureFullPage", { [weak self] in focus(); self?.actions.performAction("captureFullPage") }))
+        menu.addItem(.separator())
+        menu.addItem(ToolbarMenuAction.item("Manage Extensions…", { [weak self] in self?.actions.performAction("manageExtensions") }))
+        menu.addItem(.separator())
         if model.kind == .normal {
             let full = store.settings.toolbarShowsFullURL
             menu.addItem(ToolbarMenuAction.item(full ? "Hide Full URL" : "Show Full URL", { [weak self] in
                 self?.store.settings.toolbarShowsFullURL.toggle()
             }))
         }
+        menu.addItem(ToolbarMenuAction.item("Hide Toolbar", shortcut: "toggleToolbar", { [weak self] in self?.store.settings.showToolbar = false }))
         return menu
     }
 

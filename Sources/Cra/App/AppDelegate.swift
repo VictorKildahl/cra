@@ -1074,7 +1074,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "stayOnTop": item.state = main.staysOnTop ? .on : .off
         case "appearanceAutomatic", "appearanceLight", "appearanceDark":
             item.state = "appearance" + store.settings.websiteAppearance.title == item.representedObject as? String ? .on : .off
-        case "copyURLQuote", "savePageAs", "captureFullPage", "revealTab": return store.selectedTabID != nil
+        case "copyURLQuote", "savePageAs", "captureFullPage", "capturePortrait", "revealTab": return store.selectedTabID != nil
         case "clearArchive": return !store.archive.isEmpty
         case "resetSpaceTabs": return !main.isStandalone
         case "toggleDeveloperMode":
@@ -1267,12 +1267,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "copyURLQuote": main.copyURLAsQuote()
         case "savePageAs": main.savePageAs()
         case "captureFullPage": main.captureFullPage()
+        case "capturePortrait": main.capturePortrait()
         case "collapsePinned": if !main.isStandalone { store.togglePinnedCollapsed(main.focusedSpaceID) }
         case "revealTab": main.revealSelectedTab()
         case "resetSpaceTabs": main.resetAllPinnedTabs()
         case "collapseAllFolders": store.setAllFoldersExpanded(false, inSpace: main.focusedSpaceID)
         case "expandAllFolders": store.setAllFoldersExpanded(true, inSpace: main.focusedSpaceID)
         case "openExtensions": main.showSiteControlsFromTheirButton()
+        case "manageExtensions": main.openExtensionsPage()
         case "showArchive": main.showLibrary(.archive)
         case "clearArchive": store.clearArchive()
         case "stayOnTop": main.toggleStayOnTop()
@@ -1313,6 +1315,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "openLibrary": main.toggleLibrary()
         case "viewArchive": main.showLibrary(.archive)
         case "viewDownloads": main.showLibrary(.downloads)
+        case "viewMedia": main.showLibrary(.media)
         case "goBack": main.currentBrowser?.goBack()
         case "goForward": main.currentBrowser?.goForward()
         case "pinTab": if let c = current, !main.isBlank { store.togglePinned(c) }
@@ -1483,7 +1486,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         file.addItem(item("closeWindow")); file.addItem(item("closeTab"))
         file.addItem(.separator())
         // Arc: Capture…, Capture Full Page, Save Page As, Print.
-        for id in ["capturePage", "captureFullPage", "savePageAs", "print"] { file.addItem(item(id)) }
+        for id in ["capturePage", "captureFullPage", "capturePortrait", "savePageAs", "print"] { file.addItem(item(id)) }
         menubar.addItem(submenu: file, title: "File")
 
         let edit = NSMenu(title: "Edit")
@@ -1567,7 +1570,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         window.addItem(std("Minimize Window", #selector(NSWindow.performMiniaturize(_:)), "m"))
         window.addItem(std("Zoom", #selector(NSWindow.performZoom(_:))))
         window.addItem(.separator())
-        window.addItem(item("openLibrary")); window.addItem(item("viewDownloads"))
+        window.addItem(item("openLibrary")); window.addItem(item("viewDownloads")); window.addItem(item("viewMedia"))
         window.addItem(.separator())
         window.addItem(item("promoteLittleWindow")); window.addItem(item("closeLittleWindows"))
         window.addItem(.separator())

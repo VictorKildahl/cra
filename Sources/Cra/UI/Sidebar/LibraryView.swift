@@ -1,11 +1,13 @@
 import AppKit
+import SwiftUI
 
-/// The Library's pages Cra has, in the order of Arc's rail (which also lists Media, Easels and Boosts).
+/// The Library's pages Cra has, in the order of Arc's rail (which also lists Easels and Boosts).
 enum LibraryPage: String, CaseIterable {
-    case downloads, spaces, archive
+    case media, downloads, spaces, archive
 
     var title: String {
         switch self {
+        case .media: "Media"
         case .downloads: "Downloads"
         case .spaces: "Spaces"
         case .archive: "Archived Tabs"
@@ -13,13 +15,20 @@ enum LibraryPage: String, CaseIterable {
     }
     var symbol: String {
         switch self {
+        case .media: "photo.on.rectangle"
         case .downloads: "arrow.down.circle"
         case .spaces: "square.on.square"
         case .archive: "archivebox"
         }
     }
-    var selectedSymbol: String { symbol + ".fill" }
-    var searchPrompt: String { self == .downloads ? "Search Downloads…" : "Search Archive…" }
+    var selectedSymbol: String { self == .media ? "photo.fill.on.rectangle.fill" : symbol + ".fill" }
+    var searchPrompt: String {
+        switch self {
+        case .media: "Search Media…"
+        case .downloads: "Search Downloads…"
+        default: "Search Archive…"
+        }
+    }
 }
 
 /// Arc's Library: not a window but a mode of the sidebar (WindowState+Library, HomeButton/*),
@@ -266,6 +275,7 @@ private final class LibraryRailButton: NSView {
 private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
     enum Row {
         case header(String)
+        case media([MediaLibrary.File])
         case download(DownloadHistory.Entry)
         case archived(ArchivedItem)
     }
@@ -286,6 +296,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
     private let scroll = NSScrollView()
     private let table = NSTableView()
     private let empty = LibraryEmptyView()
+    private var mediaCard: NSHostingView<MediaOptInCard>?
 
     init(page: LibraryPage, store: SidebarStore, actions: SidebarActions, favicons: FaviconCache) {
         self.page = page
@@ -357,6 +368,9 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
             _ = store.archive
             _ = DownloadHistory.shared.entries
             _ = DownloadHistory.shared.thumbnails.count
+            _ = MediaScanner.shared.files
+            _ = store.settings.mediaLibraryEnabled
+            _ = store.settings.mediaFolders
         } onChange: { [weak self] in
             Task { @MainActor in self?.observe() }
         }
@@ -367,7 +381,22 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
 
     private func reload() {
         var out: [Row] = []
+        mediaCard?.isHidden = true
         switch page {
+        case .media:
+            guard store.settings.mediaLibraryEnabled else {
+                showMediaCard()
+                empty.show(symbol: "photo.on.rectangle", title: "", detail: nil)
+                break
+            }
+            // Read again whenever the page shows, a search changes or the folders change; the scan is
+            // cheap, off the main thread, and reads only the folders ticked.
+            MediaScanner.shared.rescan(store.settings.mediaFolders)
+            let all = MediaScanner.shared.files
+            let shown = MediaLibrary.shown(all, query: query)
+            out = MediaLibrary.rows(shown).map { .media($0) }
+            empty.show(symbol: "photo.on.rectangle", title: all.isEmpty ? "Nothing here yet!" : "No matches",
+                       detail: all.isEmpty ? "Screenshots, pictures and videos in the folders you show appear here." : nil)
         case .downloads:
             let all = DownloadHistory.shared.entries.reversed().filter { FileManager.default.fileExists(atPath: $0.path) }
             let shown = needle.isEmpty ? all : all.filter { ($0.path as NSString).lastPathComponent.lowercased().contains(needle) }
@@ -391,7 +420,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
                        detail: store.archive.isEmpty ? "Tabs you close end up here." : nil)
         }
         rows = out
-        empty.isHidden = !out.isEmpty
+        empty.isHidden = !out.isEmpty || (page == .media && !store.settings.mediaLibraryEnabled)
         scroll.isHidden = out.isEmpty
         table.reloadData()
         refresh()
@@ -405,6 +434,18 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         menuButton.layer?.backgroundColor = ink.withAlphaComponent(0.05).cgColor
         menuGlyph.contentTintColor = ink.withAlphaComponent(0.7)
         empty.ink = ink
+    }
+
+    /// Arc's opt-in card, over the page until Show Media is pressed.
+    private func showMediaCard() {
+        let card = MediaOptInCard(dark: colors.isDark) { [store] in store.settings.mediaLibraryEnabled = true }
+        if let mediaCard { mediaCard.rootView = card } else {
+            let host = NSHostingView(rootView: card)
+            addSubview(host)
+            mediaCard = host
+        }
+        mediaCard?.isHidden = false
+        needsLayout = true
     }
 
     private static func grouped<T>(_ items: [T], date: KeyPath<T, Date>) -> [(String, [T])] {
@@ -436,6 +477,11 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         scroll.frame = NSRect(x: 0, y: 46, width: w, height: max(0, bounds.height - 46))
         table.tableColumns.first?.width = w
         empty.frame = scroll.frame
+        if let card = mediaCard {
+            let size = card.fittingSize
+            card.frame = NSRect(x: ((w - size.width) / 2).rounded(), y: max(56, ((bounds.height - size.height) / 2).rounded()),
+                                width: size.width, height: size.height)
+        }
     }
 
     // MARK: Search
@@ -458,6 +504,22 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         let menu = NSMenu()
         menu.autoenablesItems = false
         switch page {
+        case .media:
+            // Arc's "Show media" folders (its Library button's right-click menu).
+            let store = store
+            let header = NSMenuItem(title: "Show media", action: nil, keyEquivalent: "")
+            header.isEnabled = false
+            menu.addItem(header)
+            for f in MediaLibrary.Folder.allCases {
+                let on = store.settings.mediaFolders.contains(f)
+                MenuItems.add(menu, f.title, on: on) {
+                    if on { store.settings.mediaFolders.removeAll { $0 == f } } else { store.settings.mediaFolders.append(f) }
+                }
+            }
+            if store.settings.mediaLibraryEnabled {
+                menu.addItem(.separator())
+                MenuItems.add(menu, "Hide Media") { store.settings.mediaLibraryEnabled = false }
+            }
         case .downloads:
             // The folder the window's profile downloads to (#190).
             let profile = (window?.windowController as? MainWindowController)?.profileDirectoryName
@@ -479,6 +541,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
 
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
         if case .header = rows[row] { return 40 }
+        if case .media = rows[row] { return MediaGridMetrics.rowHeight }
         return 56
     }
 
@@ -488,6 +551,16 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
             let v = tableView.makeView(withIdentifier: .init("header"), owner: nil) as? LibraryHeaderCell ?? LibraryHeaderCell()
             v.identifier = .init("header")
             v.show(label, ink: colors.isDark ? .white : .black)
+            return v
+        case .media(let files):
+            let v = tableView.makeView(withIdentifier: .init("media"), owner: nil) as? MediaRowCell ?? MediaRowCell()
+            v.identifier = .init("media")
+            v.open = { [store, actions] file in
+                // Arc opens a picked picture in a tab, and the Library steps aside.
+                _ = store.createTab(url: URL(fileURLWithPath: file.path).absoluteString, select: true)
+                actions.closeLibrary()
+            }
+            v.show(files, ink: colors.isDark ? .white : .black)
             return v
         case .download(let e):
             let v = tableView.makeView(withIdentifier: .init("item"), owner: nil) as? LibraryItemCell ?? LibraryItemCell()
@@ -512,7 +585,7 @@ extension LibraryListView: NSMenuDelegate {
         let row = table.clickedRow
         guard rows.indices.contains(row) else { return }
         switch rows[row] {
-        case .header: break
+        case .header, .media: break
         case .archived(let e):
             let actions = actions, store = store
             MenuItems.add(menu, "Restore") { actions.restoreArchived(e.id) }
