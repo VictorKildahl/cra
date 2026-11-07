@@ -37,6 +37,8 @@ struct AdvancedPane: View {
                 SettingsCheckbox(title: "Allow websites to get your theme data", isOn: $store.settings.shareThemeWithWebsites)
                 // Arc: "Allow window dragging from the top of webpages" (with the toolbar hidden).
                 SettingsCheckbox(title: "Allow window dragging from the top of webpages", isOn: $store.settings.pageTopWindowDrag)
+                // Arc: "Enable Boosts on websites you visit".
+                SettingsCheckbox(title: "Enable Boosts on websites you visit", isOn: $store.settings.boostsEnabled)
             }
             SettingsFormRow(label: "When quitting Cra:") {
                 SettingsCheckbox(title: "Warn before quitting", isOn: $store.settings.warnBeforeQuitting)

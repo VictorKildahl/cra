@@ -74,6 +74,9 @@ open class CraBrowser {
         lastParams = params
         replies.append((method, completion))
     }
+    /// Scripts run in the page's own world (a Boost's JavaScript), in order.
+    public private(set) var scripts: [String] = []
+    public func executeJavaScript(_ script: String) { scripts.append(script) }
     public private(set) var lastIsolatedParams = ""
     /// Recorded as "<world>:Runtime.evaluate".
     public func evaluate(inIsolatedWorld world: String, params: String, completion: @escaping (String?, String?) -> Void) {

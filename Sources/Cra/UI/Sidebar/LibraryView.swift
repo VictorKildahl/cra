@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The Library's pages Cra has, in the order of Arc's rail (which also lists Easels and Boosts).
 enum LibraryPage: String, CaseIterable {
-    case media, downloads, easels, spaces, archive
+    case media, downloads, easels, spaces, boosts, archive
 
     var title: String {
         switch self {
@@ -11,6 +11,7 @@ enum LibraryPage: String, CaseIterable {
         case .downloads: "Downloads"
         case .easels: "Easels"
         case .spaces: "Spaces"
+        case .boosts: "Boosts"
         case .archive: "Archived Tabs"
         }
     }
@@ -20,6 +21,7 @@ enum LibraryPage: String, CaseIterable {
         case .downloads: "arrow.down.circle"
         case .easels: "pencil.and.scribble"
         case .spaces: "square.on.square"
+        case .boosts: "paintbrush.pointed"
         case .archive: "archivebox"
         }
     }
@@ -27,6 +29,7 @@ enum LibraryPage: String, CaseIterable {
         switch self {
         case .media: "photo.fill.on.rectangle.fill"
         case .easels: symbol
+        case .boosts: "paintbrush.pointed.fill"
         default: symbol + ".fill"
         }
     }
@@ -35,6 +38,7 @@ enum LibraryPage: String, CaseIterable {
         case .media: "Search Media…"
         case .downloads: "Search Downloads…"
         case .easels: "Search Easels…"
+        case .boosts: "Search Boosts…"
         default: "Search Archive…"
         }
     }
@@ -286,6 +290,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         case header(String)
         case media([MediaLibrary.File])
         case easel(id: UUID, title: String, edited: Date)
+        case boost(Boost)
         case download(DownloadHistory.Entry)
         case archived(ArchivedItem)
     }
@@ -379,6 +384,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
             _ = DownloadHistory.shared.entries
             _ = DownloadHistory.shared.thumbnails.count
             _ = MediaScanner.shared.files
+            _ = BoostStore.shared.boosts
             _ = store.settings.mediaLibraryEnabled
             _ = store.settings.mediaFolders
         } onChange: { [weak self] in
@@ -426,6 +432,13 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
             // Arc's empty Easels page: "Out of ideas!"
             empty.show(symbol: "pencil.and.scribble", title: all.isEmpty ? "Out of ideas!" : "No matches",
                        detail: all.isEmpty ? "Choose File ▸ New Easel to create a new Easel." : nil)
+        case .boosts:
+            let all = BoostStore.shared.boosts
+            let shown = needle.isEmpty ? all : all.filter { $0.name.lowercased().contains(needle) || $0.host.contains(needle) }
+            out = shown.sorted { $0.host < $1.host }.map { .boost($0) }
+            // Arc's empty Boosts page.
+            empty.show(symbol: "paintbrush.pointed", title: all.isEmpty ? "Nothing Boosted Yet!" : "No matches",
+                       detail: all.isEmpty ? "Type “New Boost” in the command bar on any site to make your own." : nil)
         case .spaces:
             break
         case .archive:
@@ -549,6 +562,8 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         case .archive:
             let store = store
             MenuItems.add(menu, "Clear Archive", enabled: !store.archive.isEmpty) { store.clearArchive() }
+        case .boosts:
+            MenuItems.add(menu, "New Boost for This Site") { [weak self] in self?.actions.performAction("newBoost") }
         case .easels:
             MenuItems.add(menu, "New Easel") { [weak self] in self?.actions.performAction("newEasel") }
         case .spaces:
@@ -573,6 +588,15 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
             let v = tableView.makeView(withIdentifier: .init("header"), owner: nil) as? LibraryHeaderCell ?? LibraryHeaderCell()
             v.identifier = .init("header")
             v.show(label, ink: colors.isDark ? .white : .black)
+            return v
+        case .boost(let b):
+            let v = tableView.makeView(withIdentifier: .init("item"), owner: nil) as? LibraryItemCell ?? LibraryItemCell()
+            v.identifier = .init("item")
+            v.showBoost(b, colors: colors) { [store, actions] in
+                // Opens the site, where the boost shows.
+                _ = store.createTab(url: "https://\(b.host)/", select: true)
+                actions.closeLibrary()
+            }
             return v
         case .easel(let id, let title, let edited):
             let v = tableView.makeView(withIdentifier: .init("item"), owner: nil) as? LibraryItemCell ?? LibraryItemCell()
@@ -618,6 +642,12 @@ extension LibraryListView: NSMenuDelegate {
         guard rows.indices.contains(row) else { return }
         switch rows[row] {
         case .header, .media, .easel: break
+        case .boost(let b):
+            var flipped = b
+            flipped.enabled.toggle()
+            MenuItems.add(menu, b.enabled ? "Disable Boost" : "Enable Boost") { BoostStore.shared.update(flipped) }
+            menu.addItem(.separator())
+            MenuItems.add(menu, "Delete Boost") { BoostStore.shared.delete(b.id) }
         case .archived(let e):
             let actions = actions, store = store
             MenuItems.add(menu, "Restore") { actions.restoreArchived(e.id) }
@@ -723,6 +753,24 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
         if let tip { (tip.text, tip.keys) = (url, []) } else if !url.isEmpty { tip = ArcTooltipAnchorView.attach(to: self, help: url) }
         tip?.text = url
         apply(ink: ink)
+    }
+
+    /// A boost on Library ▸ Boosts: its name and site, dimmed while off.
+    func showBoost(_ b: Boost, colors: SidebarColors, open: @escaping () -> Void) {
+        self.colors = colors
+        download = nil
+        restore = open
+        let ink: NSColor = colors.isDark ? .white : .black
+        tile.layer?.contents = nil
+        tile.layer?.backgroundColor = ink.withAlphaComponent(0.04).cgColor
+        icon.isHidden = false
+        icon.image = NSImage(systemSymbolName: "paintbrush.pointed", accessibilityDescription: "Boost")
+        title.stringValue = b.name
+        title.lineBreakMode = .byTruncatingTail
+        detail.stringValue = b.host + (b.enabled ? "" : " · Off")
+        tip?.text = b.host
+        apply(ink: ink)
+        alphaValue = b.enabled ? 1 : 0.55
     }
 
     /// An easel on Library ▸ Easels: its glyph, its title, when it was last edited.

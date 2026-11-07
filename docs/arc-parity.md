@@ -14,7 +14,7 @@ or Arc-only service), per CONTRIBUTING.md.
 
 | Arc feature | Where in Arc | Cra | Notes |
 |---|---|---|---|
-| Boosts (per-site CSS/JS, colours, fonts, Zap) | URL bar ✎, Library ▸ Boosts, Settings ▸ Advanced "Enable Boosts" | missing | Biggest local feature still absent. |
+| Boosts (per-site CSS/JS, colours, fonts, Zap) | URL bar ✎, Library ▸ Boosts, Settings ▸ Advanced "Enable Boosts" | done | New Boost (command bar), the editor (wheel, invert, contrast/brightness/saturation, 20 fonts, size, case, Zap, CSS/JS code), Library ▸ Boosts, Settings ▸ Advanced switch. Not built: the Code panel's eyedropper and hammer tools; the Boost Gallery and sharing are *skip* (arc.net). The colour wheel's recolouring is CSS filters, not Arc's own engine. |
 | Easels | File ▸ New Easel ⌃⇧E, Library ▸ Easels | partial | File ▸ New Easel (⌃⇧E): canvas, title, Pointer/Image/Text/Ellipse/Rectangle/Arrow/Freehand, pictures by file, paste or drop, saved per easel. Library ▸ Easels and Window ▸ View Easels… done. The canvas shows the window's backdrop under a 50 % veil as in Arc. The toolbar strip above it takes the same veil. The capture menu's New Easel done. The capture menu's Send To… done too. The pill's + and − and Aa (Arc's four looks: bold, serif, wide, mono, in macOS's designs) work, on the title too; Duplicate (the toolbar's eighth button) done; sharing is *skip* (cloud). |
 | Notes | File ▸ New Note ⌃⇧N, ⌃⌥N in split, Help ▸ Export Arc Notes | *skip* | Arc 1.172.1 no longer creates Notes: New Note is gone from the File menu and ⌃⇧N does nothing; only Help ▸ Export Arc Notes is left. |
 | Library ▸ Media | Window ▸ View Media…, Library rail | done | Off until Show Media; ⋯ picks the folders (Cra has no captures folder). |
@@ -86,7 +86,7 @@ gains "New Profile".
 | General | Previews Settings… (Block Cookie Banners done, under Privacy) |
 | Profiles | "New documents" app (Arc's Notes/Easels); Privacy, Passwords, Credit Cards and Notifications done |
 | Links | "Open Little Arc when clicking on links with ⌥⌘ held"; Archive Little Windows after done |
-| Advanced | Shared Quotes (arc.net), Enable Boosts (the rest done) |
+| Advanced | Shared Quotes (arc.net) (the rest done) |
 | Icon | Cra has its own icon picker |
 
 ## 5. Animations and styling
@@ -126,6 +126,7 @@ in this sweep (Essential Shortcuts window, Library pages).
   measured live in Arc (names, #RRGGBBAA format, no trace in the page's markup) and fitted to the
   semantic palette Arc stores per space.
 - Edit ▸ Find ▸ Use Selection to Find and Jump to Selection (⌘J).
+- Boosts: New Boost, the editor, Zap, CSS/JS code, Library ▸ Boosts, Window ▸ View Boosts…, the Advanced switch.
 - Window dragging from the top of webpages (Victor's choice, 7 Nov: on, as in Arc).
 - AppleScript, Arc's dictionary (Victor's choice, 7 Nov: like Arc, JavaScript off by default).
 - Settings ▸ Privacy ▸ Block cookie banners (Arc's "Block Cookie Banners", off by default).
@@ -146,9 +147,17 @@ in this sweep (Essential Shortcuts window, Library pages).
   tool sits on #716328 with 8 pt corners; glyphs in #FAEEC2 (foregroundPrimary). Bottom right: a 36 pt
   share button (person.badge.plus), cloud sharing in Arc.
 
+## Boosts, measured (Arc 1.172.1, Victor's Arc, 7 Nov 2026)
+
+- The command bar's "New Boost" opens the editor for the open site: a 183 × 588 pt floating panel 10 pt in
+  from the window's right edge and 215 pt down (AX `boostsEditor`). Header 40 pt: Done (grey ✕), "My Boost ⌄"
+  (Rename this Boost…, Shuffle, Reset all Edits, Delete this Boost, All Boosts…), Undo. A 147 pt colour wheel in a
+  brushed grey frame with two handles; Invert lightness, Advanced color controls (a popover: Contrast, Brightness,
+  Original Saturation sliders) and Reset to original colors, 42 × 38 each; a white card of 20 "Aa" fonts (5 × 4,
+  26 pt cells); Size and Case (69 × 38); Zap ⚡ and Code {} (147 × 38). Code widens the panel to 480 pt: Back, a
+  CSS / JS switch, a dark editor, an eyedropper and a hammer below. Delete asks "Delete this Boost?" in Arc's
+  dialog. Reference captures: docs/screenshots/arc-boost-*.png.
+
 ## Left for later, and why
 
-- Boosts: the offline Arc has no network and a local server is blocked in this session, so its Boost
-  editor couldn't be put on screen to copy. Needs a site in Arc (Victor's OK to run the real Arc, or
-  a localhost server).
 - Previews and Join Meeting: not started (they need a live Google session in Arc to measure).

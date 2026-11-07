@@ -139,6 +139,9 @@ final class KeyBindingRegistry {
             KeyAction(id: "newGitHubLiveFolder", name: "New GitHub Live Folder", section: .file, shortcuts: [],
                       triggers: ["live folder", "pull requests", "github"]),
             KeyAction(id: "newSpace", name: "New Space…", section: .file, shortcuts: [], triggers: ["space"]),
+            // Arc's command bar: New Boost, the open site's boost.
+            KeyAction(id: "newBoost", name: "New Boost", section: .none, shortcuts: [], triggers: ["boost", "restyle", "zap"],
+                      symbol: "paintbrush.pointed"),
             // Arc: File ▸ New Easel ⌃⇧E.
             KeyAction(id: "newEasel", name: "New Easel", section: .file, shortcuts: [Shortcut("e", [.control, .shift])],
                       triggers: ["easel", "whiteboard", "canvas", "draw"]),
@@ -238,6 +241,8 @@ final class KeyBindingRegistry {
             // Window
             KeyAction(id: "openLibrary", name: "Open Library…", section: .window, shortcuts: [Shortcut("l", cmdShift)], triggers: ["library"]),
             KeyAction(id: "viewDownloads", name: "View Downloads…", section: .window, shortcuts: [Shortcut("j", cmdShift)], triggers: ["downloads"]),
+            // Arc: Window ▸ View Boosts….
+            KeyAction(id: "viewBoosts", name: "View Boosts…", section: .window, shortcuts: [], triggers: ["boosts"]),
             // Arc: Window ▸ View Easels….
             KeyAction(id: "viewEasels", name: "View Easels…", section: .window, shortcuts: [], triggers: ["easels"]),
             // Arc: Window ▸ View Media….

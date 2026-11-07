@@ -70,6 +70,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             return nil
         }
+        // The Boost editor's All Boosts…: Library ▸ Boosts.
+        NotificationCenter.default.addObserver(forName: .craShowBoostsLibrary, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.main.showLibrary(.boosts) }
+        }
         NotificationCenter.default.addObserver(forName: .craKeyBindingsChanged, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.buildMenus() }
         }
@@ -77,6 +81,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if !store.settings.restoreWindows { store.keepOnlyActiveWindow() }
         // Before any page is made: an easel's tab opens its canvas.
         EaselBrowser.register()
+        // Arc's Boosts: each page on a boosted site gets its boosts; an edit shows at once.
+        BrowserManager.boostFor = { [store] url in
+            guard store.settings.boostsEnabled else { return nil }
+            let boosts = Boost.applying(to: url, from: BoostStore.shared.boosts)
+            guard !boosts.isEmpty else { return nil }
+            return (boosts.map(\.stylesheet).joined(separator: "\n"), boosts.map(\.js).filter { !$0.isEmpty }.joined(separator: ";\n"))
+        }
+        BoostStore.changed = { [weak self] host in for m in self?.mainWindows ?? [] { m.browsers.reapplyBoosts(host: host) } }
         mainWindows = store.prefs.windows.map { MainWindowController(app: self, session: $0) }
         followKeyWindow()
         // First launch: the default browser step and the import are the onboarding and
@@ -886,6 +898,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
+            // boostZap=1|0: Boost editor's Zap on or off for the open page.
+            if let z = dict["boostZap"] { main.debugZap(z == "1"); return }
             // captureToEasel=1: the page's screenshot, then the capture menu's New Easel.
             if let how = dict["captureToEasel"] { main.debugCaptureToEasel(send: how == "send"); return }
             // settingsPane=max: Settings opened on that pane.
@@ -1387,6 +1401,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             store.setExpanded(f.id, true)
             if isNew { LiveFolderManager.shared.refresh(f.id) }
         case "newSpace": main.showSpaceEditor(space: nil)
+        case "newBoost": main.openBoostEditor()
         case "newEasel":
             guard !main.isIncognito else { break }
             let easel = Easel()
@@ -1478,6 +1493,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "viewDownloads": main.showLibrary(.downloads)
         case "viewMedia": main.showLibrary(.media)
         case "viewEasels": main.showLibrary(.easels)
+        case "viewBoosts": main.showLibrary(.boosts)
         case "goBack": main.currentBrowser?.goBack()
         case "goForward": main.currentBrowser?.goForward()
         case "pinTab": if let c = current, !main.isBlank { store.togglePinned(c) }
@@ -1741,7 +1757,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         window.addItem(std("Minimize Window", #selector(NSWindow.performMiniaturize(_:)), "m"))
         window.addItem(std("Zoom", #selector(NSWindow.performZoom(_:))))
         window.addItem(.separator())
-        window.addItem(item("openLibrary")); window.addItem(item("viewDownloads")); window.addItem(item("viewEasels")); window.addItem(item("viewMedia"))
+        window.addItem(item("openLibrary")); window.addItem(item("viewDownloads")); window.addItem(item("viewEasels")); window.addItem(item("viewMedia")); window.addItem(item("viewBoosts"))
         window.addItem(.separator())
         window.addItem(item("promoteLittleWindow")); window.addItem(item("littleWindowOpenInMenu")); window.addItem(item("closeLittleWindows"))
         window.addItem(.separator())

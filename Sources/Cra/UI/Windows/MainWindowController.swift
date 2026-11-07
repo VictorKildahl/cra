@@ -2799,6 +2799,46 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// Arc's "Capture the full page": the whole document, beyond the viewport, as a PNG.
+    // MARK: Boosts
+
+    /// Arc's New Boost: the open site's boost (made if it has none) in the editor beside the page.
+    func openBoostEditor() {
+        guard let window, let url = selectedTabID.flatMap({ store.item($0)?.tab?.url }),
+              let boost = BoostStore.shared.boostForSite(of: url) else { showToast("Boosts Work on Websites"); return }
+        BoostEditorController.shared.open(boost, over: window) { [weak self] on in self?.setZapping(on) }
+    }
+
+    /// Zap: the page outlines what's under the pointer, and a click hides it and keeps a selector
+    /// for it; when Zap ends the selectors go into the boost.
+    /// Testing without the pointer (cra://debug?boostZap=1|0): Zap on or off, as its button does.
+    func debugZap(_ on: Bool) { setZapping(on) }
+
+    private func setZapping(_ on: Bool) {
+        guard let b = currentBrowser else { return }
+        if on { b.executeJavaScript(Self.zapScript); return }
+        b.sendDevToolsMethod("Runtime.evaluate", params: #"{"expression":"(()=>{const z=window.__craZap;if(!z)return '[]';z.stop();return JSON.stringify(z.hidden)})()","returnByValue":true}"#) { result, _ in
+            MainActor.assumeIsolated {
+                let o = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+                let text = (o?["result"] as? [String: Any])?["value"] as? String ?? "[]"
+                let selectors = (try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String]) ?? []
+                BoostEditorController.shared.addZapped(selectors)
+            }
+        }
+    }
+
+    static let zapScript = """
+    (()=>{if(window.__craZap)return;const hidden=[];let over=null;
+    const sel=e=>{if(e.id)return '#'+CSS.escape(e.id);const p=[];for(let n=e;n&&n.nodeType===1&&n!==document.body&&p.length<5;n=n.parentElement){
+    if(n.id){p.unshift('#'+CSS.escape(n.id));break}let i=1;for(let s=n.previousElementSibling;s;s=s.previousElementSibling)if(s.tagName===n.tagName)i++;
+    p.unshift(n.tagName.toLowerCase()+':nth-of-type('+i+')')}return (p[0]&&p[0][0]==='#'?'':'body > ')+p.join(' > ')};
+    const mark=e=>{if(over)over.style.outline=over.__craOutline||'';over=e;if(e){e.__craOutline=e.style.outline;e.style.outline='2px solid #ff3b30'}};
+    const page=t=>t===document.body||t===document.documentElement;
+    const move=ev=>mark(page(ev.target)?null:ev.target);
+    const click=ev=>{ev.preventDefault();ev.stopPropagation();const t=ev.target;if(page(t))return;mark(null);hidden.push(sel(t));t.style.display='none'};
+    document.addEventListener('mouseover',move,true);document.addEventListener('click',click,true);
+    window.__craZap={hidden,stop(){document.removeEventListener('mouseover',move,true);document.removeEventListener('click',click,true);mark(null);delete window.__craZap}}})()
+    """
+
     // MARK: Arc parity (docs/arc-parity.md)
 
     /// Arc's Window ▸ Stay On Top: the window floats over other apps' windows.

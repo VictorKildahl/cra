@@ -1092,6 +1092,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         if committed, id == visibleTabID { Perf.phase("firstPageCommitted") }
         if committed {
             shareTheme(id, with: browser)
+            applyBoost(to: browser, clearing: false)
             if let css = store.cookieBannerCSS(item: id) { adopt(css, as: "__craCookieBanners", in: browser) }
         }
         delegate?.browserManagerDidUpdate(id)
@@ -1104,6 +1105,26 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         let systemDark = NSApp?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         guard let css = store.themeDataCSS(item: id, systemDark: systemDark) else { return }
         adopt(css, as: "__craArcTheme", in: browser)
+    }
+
+    /// Arc's Boosts: the site's boost for this page (set by the app; BoostStore), nil for none.
+    static var boostFor: ((String) -> (css: String, js: String)?)?
+
+    /// The page's boost: its stylesheet adopted like the theme data, its script run in the page.
+    /// An emptied boost clears what an earlier one adopted.
+    func applyBoost(to browser: CraBrowser, clearing: Bool = true) {
+        let boost = Self.boostFor?(browser.currentURL)
+        // A new document has nothing adopted: no call unless there is a boost to put on it.
+        guard boost != nil || clearing else { return }
+        adopt(boost?.css ?? "", as: "__craBoost", in: browser)
+        if let js = boost?.js, !js.isEmpty { browser.executeJavaScript(js) }
+    }
+
+    /// Every page on `host` gets its boost again (the editor's changes, live).
+    func reapplyBoosts(host: String) {
+        for rt in runtimes.values where URL(string: rt.browser.currentURL)?.host.map(Boost.siteHost).map({ $0 == host || $0.hasSuffix("." + host) }) == true {
+            applyBoost(to: rt.browser)
+        }
     }
 
     /// A stylesheet adopted by the page's document from Cra's world, kept under `name` there so a
