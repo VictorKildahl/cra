@@ -18,17 +18,17 @@ or Arc-only service), per CONTRIBUTING.md.
 | Easels | File ▸ New Easel ⌃⇧E, Library ▸ Easels | missing | Canvas of captures, text and live page clips. |
 | Notes | File ▸ New Note ⌃⇧N, ⌃⌥N in split, Help ▸ Export Arc Notes | missing | Rich-text documents as sidebar items. |
 | Library ▸ Media | Window ▸ View Media…, Library rail | missing | Images/videos from Documents, Desktop, Screenshots, Arc Captures, Downloads; right-click "Show media" picks folders. |
-| Essential Keyboard Shortcuts window | Help ▸ Essential Keyboard Shortcuts, Settings ▸ Shortcuts | missing | 475×462 floating dark panel, five rows of key caps, "View All ↗". |
-| Website appearance | View ▸ Appearance ▸ Automatic / Light / Dark ("Websites, Easels, and Notes will use:") | missing | Forces prefers-color-scheme for pages. |
-| Stay On Top | Window ▸ Stay On Top | missing | Floats the window above other apps. |
-| Save Page As | File ▸ Save Page As ⇧⌘S | missing | |
-| Capture Full Page / Portrait Mode | File, URL-bar menu | partial | Cra has Capture… only. |
-| Copy URL without trackers | Copy URL ⇧⌘C ("Copy the current tab's URL without trackers") | missing | Cra copies the URL as is. |
-| Copy URL as Quote | Edit ▸ ⌃⇧⌘C, "Enable Shared Quotes when highlighting text" | missing | Arc links to arc.net (cloud); Cra can use a text-fragment link instead. |
+| Essential Keyboard Shortcuts window | Help ▸ Essential Keyboard Shortcuts, Settings ▸ Shortcuts | done | 475×462 floating dark panel, five rows of key caps, "View All ↗". |
+| Website appearance | View ▸ Appearance ▸ Automatic / Light / Dark ("Websites, Easels, and Notes will use:") | done | Forces prefers-color-scheme for pages. |
+| Stay On Top | Window ▸ Stay On Top | done | Floats the window above other apps. |
+| Save Page As | File ▸ Save Page As ⇧⌘S | done | |
+| Capture Full Page / Portrait Mode | File, URL-bar menu | partial | Capture Full Page done; Portrait Mode missing. |
+| Copy URL without trackers | Copy URL ⇧⌘C ("Copy the current tab's URL without trackers") | done | utm_* and click ids dropped (CleanURL). |
+| Copy URL as Quote | Edit ▸ ⌃⇧⌘C, "Enable Shared Quotes when highlighting text" | done | Arc links to arc.net (cloud); Cra copies a text-fragment link. |
 | AppleScript dictionary | Arc.sdef, View ▸ Developer ▸ Allow JavaScript from Apple Events | missing | Raycast and other launchers script Arc through it. |
 | Cast | View ▸ Cast | missing | Chromium's media router. |
 | Find and Replace, Use Selection to Find, Jump to Selection | Edit ▸ Find | missing | |
-| Sound effects | Settings ▸ Advanced "Play Arc sound effects" | partial | Cra plays the capture shutter only, with no setting. |
+| Sound effects | Settings ▸ Advanced "Play Arc sound effects" | done | Settings ▸ Advanced ▸ Play Cra sound effects gates the capture shutter. |
 | Theme data for websites | Settings ▸ Advanced "Allow websites to get your theme data" | missing | Arc exposes the space's palette to pages. |
 | Window dragging from the top of webpages | Settings ▸ Advanced | missing | |
 | Restore windows from previous session | Settings ▸ Advanced | partial | Cra has "Quit and Keep Windows" only. |
@@ -47,18 +47,18 @@ Arc's actions (Settings ▸ Shortcuts, 106 rows) that Cra has no action for:
 
 | Arc action | Arc shortcut | Cra |
 |---|---|---|
-| Collapse Pinned Tabs (View) | — | missing |
-| Reveal Tab in Sidebar (Tabs) / Reveal Current Tab | ⌃Space | missing |
-| Reset all tabs in this Space (Tabs) | — | missing |
-| View Archive… / Clear Archive (Archive menu) | — | partial (Library only) |
-| Collapse All Folders / Expand All Folders | — | missing |
-| Next Tab / Previous Tab, second binding | ⌘} / ⌘{ | missing |
+| Collapse Pinned Tabs (View) | — | done |
+| Reveal Tab in Sidebar (Tabs) / Reveal Current Tab | ⌃Space | done |
+| Reset all tabs in this Space (Tabs) | — | done |
+| View Archive… / Clear Archive (Archive menu) | — | done |
+| Collapse All Folders / Expand All Folders | — | done |
+| Next Tab / Previous Tab, second binding | ⌘} / ⌘{ | done |
 | Go Back / Go Forward, second binding | ⌘← / ⌘→ | missing |
-| Developer Tools, second binding | F12 | missing |
-| Go to last Sidebar Item | ⌘9 | check (Cra: Go to Tab 9) |
-| Switch to Split View 1–4 | ⌃⇧1…4 | missing |
+| Developer Tools, second binding | F12 | done |
+| Go to last Sidebar Item | ⌘9 | done |
+| Switch to Split View 1–4 | ⌃⇧1…4 | done |
 | Expand Current Split | — | missing (Cra has Flip orientation) |
-| Open Extensions | ⌘E | missing |
+| Open Extensions | ⌘E | done |
 | Show Little Arc "Open In" Menu | ⇧⌘O | missing |
 | Open Little Arc or Peek in… | ⌘O | partial (Window menu) |
 | Network Inspector | — | *skip* (DevTools has it) |
@@ -98,4 +98,15 @@ in this sweep (Essential Shortcuts window, Library pages).
 
 ## Built in this sweep
 
-(filled in as items land)
+- Window ▸ Stay On Top; File ▸ Capture Full Page and Save Page As (⇧⌘S, single file or HTML only);
+  Edit ▸ Copy URL as Quote (⌃⇧⌘C, a text-fragment link instead of Arc's arc.net card).
+- Copy URL, Copy URL as Markdown and the sidebar's Copy Link leave out utm_* and click ids
+  (CleanURL).
+- View ▸ Collapse/Expand Pinned Tabs; View ▸ Appearance (Automatic / Light / Dark for websites).
+- Tabs ▸ Reveal Tab in Sidebar (⌃Space) and Reset all tabs in this Space; Archive ▸ View Archive… and
+  Clear Archive; Collapse All Folders / Expand All Folders; Open Extensions (⌘E); Switch to Split
+  View 1–4 (⌃⇧1…4); Next/Previous Tab on ⌘} / ⌘{ too; Developer Tools on F12 too; ⌘9 = last tab.
+- Today tab menu: Archive Tabs Below.
+- Help ▸ Essential Keyboard Shortcuts (Arc's card, checked side by side at 2x); Help ▸
+  Troubleshooting with Export Diagnostics…, Reveal Cra Data, Copy Cra Info.
+- Settings ▸ Advanced ▸ Play Cra sound effects.
