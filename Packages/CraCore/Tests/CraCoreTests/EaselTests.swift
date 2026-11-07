@@ -41,4 +41,10 @@ struct EaselTests {
                    Easel.Item(kind: .image(file: "a.png"), frame: .init(x: 0, y: 0, width: 10, height: 10))]
         #expect(try JSONDecoder().decode(Easel.self, from: JSONEncoder().encode(e)) == e)
     }
+
+    @Test func itsTabHoldsItsAddress() {
+        let e = Easel()
+        #expect(Easel.id(fromURL: e.url) == e.id)
+        #expect(Easel.id(fromURL: "https://example.com/") == nil && Easel.id(fromURL: "easel://nope") == nil)
+    }
 }

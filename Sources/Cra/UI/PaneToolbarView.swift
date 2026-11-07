@@ -169,6 +169,8 @@ final class PaneToolbarView: NSView {
             m.host = AppSettings.siteKey(for: t.url) ?? human
             // Arc shows the host only unless "Show Full URL" is on (#88).
             m.path = store.settings.toolbarShowsFullURL && human.hasPrefix(m.host) ? String(human.dropFirst(m.host.count)) : ""
+            // An easel's bar shows its name (Arc 1.172.1).
+            if Easel.id(fromURL: t.url) != nil { m.host = item.displayTitle; m.path = "" }
         }
         m.protectedMedia = m.tabID.flatMap { ui.navState(for: $0).protectedMedia }
         let extensions = ExtensionStore.shared

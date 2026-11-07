@@ -139,6 +139,9 @@ final class KeyBindingRegistry {
             KeyAction(id: "newGitHubLiveFolder", name: "New GitHub Live Folder", section: .file, shortcuts: [],
                       triggers: ["live folder", "pull requests", "github"]),
             KeyAction(id: "newSpace", name: "New Space…", section: .file, shortcuts: [], triggers: ["space"]),
+            // Arc: File ▸ New Easel ⌃⇧E.
+            KeyAction(id: "newEasel", name: "New Easel", section: .file, shortcuts: [Shortcut("e", [.control, .shift])],
+                      triggers: ["easel", "whiteboard", "canvas", "draw"]),
             KeyAction(id: "closeWindow", name: "Close Window", section: .file, shortcuts: [Shortcut("w", cmdShift)], inCommandBar: false),
             KeyAction(id: "closeTab", name: "Close Tab", section: .file, shortcuts: [Shortcut("w", cmd)], triggers: ["close", "archive tab"]),
             KeyAction(id: "capturePage", name: "Capture…", section: .file, shortcuts: [Shortcut("2", cmdShift)], triggers: ["capture", "screenshot"]),

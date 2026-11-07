@@ -1,0 +1,11 @@
+# Arc's File ▸ New Easel (⌃⇧E, Arc 1.172.1, docs/arc-parity.md "Easels, measured"): a Today tab on an
+# easel:// address whose page is Cra's canvas, not a web page; it comes back after a relaunch.
+budget rss=700 stalls50=10
+cra://action/newEasel
+wait 2
+cra://debug?browserWindows=created
+expect-log Cra browser windows created: kind=normal .*tabs=\[easel://[0-9A-F-]{36}\] open=easel://[0-9A-F-]{36} page=1
+relaunch
+wait 4
+cra://debug?browserWindows=relaunched
+expect-log browser windows relaunched: kind=normal listed=1 tabs=1 open=1

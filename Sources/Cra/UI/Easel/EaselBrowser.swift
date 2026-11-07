@@ -1,0 +1,131 @@
+import AppKit
+import CraCEF
+
+/// An Easel's page (Arc's File ▸ New Easel ⌃⇧E, measured on Arc 1.172.1; docs/arc-parity.md
+/// "Easels, measured"). Like WebKitBrowser it is a CraBrowser hosting its own view in
+/// `containerView`, so the tab, split view, the sidebar row and closing work as for any page. The
+/// tab's address is `easel://<id>`; the easel itself is `Easels/<id>.json` in the data folder, with
+/// its pictures in `Easels/<id>/`.
+final class EaselBrowser: CraBrowser, NativePage {
+    nonisolated func owns(_ url: String) -> Bool { url == address }
+
+    private let container: NSView
+    private let canvas: EaselCanvasView
+    private let address: String
+    private var closed = false
+
+    override init(frame: NSRect, url: String?, delegate: CraBrowserDelegate?, incognito: Bool, profilePath: String?) {
+        container = NSView(frame: frame)
+        address = url ?? ""
+        let id = url.flatMap(Easel.id(fromURL:)) ?? UUID()
+        canvas = MainActor.assumeIsolated { EaselCanvasView(document: EaselFiles.load(id)) }
+        super.init()
+        self.delegate = delegate
+        MainActor.assumeIsolated {
+            container.wantsLayer = true
+            container.autoresizesSubviews = true
+            canvas.frame = container.bounds
+            canvas.autoresizingMask = [.width, .height]
+            container.addSubview(canvas)
+            canvas.onTitle = { [weak self] title in
+                guard let self else { return }
+                self.delegate?.browser(self, didChangeTitle: title)
+            }
+        }
+        // Like a page, it reports its address and title a turn later, once the tab holds it.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.closed else { return }
+            let title = MainActor.assumeIsolated { self.canvas.document.title }
+            self.delegate?.browser(self, didChangeURL: self.address)
+            self.delegate?.browser(self, didChangeTitle: title)
+            self.delegate?.browser?(self, didChangeCommittedLoad: true)
+            self.delegate?.browser(self, didChangeLoading: false, canGoBack: false, canGoForward: false)
+            self.delegate?.browser(self, didFinishLoadingURL: self.address, title: title, statusCode: 200)
+        }
+    }
+
+    override convenience init(frame: NSRect, url: String?, delegate: CraBrowserDelegate?) {
+        self.init(frame: frame, url: url, delegate: delegate, incognito: false, profilePath: nil)
+    }
+
+    override convenience init(frame: NSRect, url: String?, delegate: CraBrowserDelegate?, incognito: Bool) {
+        self.init(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: nil)
+    }
+
+    override var containerView: NSView { container }
+    override var hostWindow: NSWindow? { nil }
+    override var currentURL: String { address }
+    override var currentTitle: String { MainActor.assumeIsolated { canvas.document.title } }
+    override var isLoading: Bool { false }
+    override var hasCommittedLoad: Bool { true }
+    override var canGoBack: Bool { false }
+    override var canGoForward: Bool { false }
+    override var isCreated: Bool { !closed }
+    override var isClosed: Bool { closed }
+    override var hasDevTools: Bool { false }
+
+    /// Another address typed into an easel's tab goes to a page of its own, as the other engine's do.
+    override func loadURL(_ url: String) {
+        guard url != address else { return }
+        _ = delegate?.browser?(self, handsOffNavigationToURL: url, method: "GET")
+    }
+    override func reload() {}
+    override func reloadIgnoringCache() {}
+    override func stopLoading() {}
+    override func goBack() {}
+    override func goForward() {}
+    override func setFocused(_ focused: Bool) {
+        MainActor.assumeIsolated { if focused { canvas.focus() } }
+    }
+    override func probeBackgroundColor() {}
+    override func executeJavaScript(_ script: String) {}
+    override func evaluate(inIsolatedWorld world: String, params: String, completion: @escaping (String?, String?) -> Void) {
+        DispatchQueue.main.async { completion(nil, "an Easel has no page") }
+    }
+    override func sendDevToolsMethod(_ method: String, params: String, completion: @escaping (String?, String?) -> Void) {
+        DispatchQueue.main.async { completion(nil, "\(method): an Easel has no page") }
+    }
+    override func sslStatus() -> CraSSLStatus? { nil }
+    override func print() {}
+    override func viewSource() {}
+    override func notifyMoveOrResizeStarted() {}
+
+    override func close() {
+        guard !closed else { return }
+        closed = true
+        MainActor.assumeIsolated {
+            canvas.saveNow()
+            canvas.removeFromSuperview()
+        }
+        DispatchQueue.main.async { [self] in delegate?.browserDidClose(self) }
+    }
+}
+
+extension EaselBrowser {
+    /// PageEngines' hook: an easel's address gets its canvas.
+    static func register() {
+        PageEngines.nativePage = { frame, url, delegate, incognito, profilePath in
+            Easel.id(fromURL: url) == nil ? nil : EaselBrowser(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath)
+        }
+    }
+}
+
+/// Where easels live: one JSON file each, their pictures in a folder of the same name.
+@MainActor
+enum EaselFiles {
+    static var folder: URL {
+        let u = AppPaths.supportDir.appendingPathComponent("Easels", isDirectory: true)
+        try? FileManager.default.createDirectory(at: u, withIntermediateDirectories: true)
+        return u
+    }
+    static func store(_ id: UUID) -> JSONStore<Easel> {
+        _ = folder
+        return JSONStore<Easel>("Easels/\(id.uuidString).json")
+    }
+    static func load(_ id: UUID) -> Easel { store(id).load(or: { Easel(id: id) }) }
+    static func pictures(_ id: UUID) -> URL {
+        let u = folder.appendingPathComponent(id.uuidString, isDirectory: true)
+        try? FileManager.default.createDirectory(at: u, withIntermediateDirectories: true)
+        return u
+    }
+}

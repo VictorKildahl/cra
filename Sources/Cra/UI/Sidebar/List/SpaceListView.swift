@@ -286,7 +286,9 @@ final class SpaceListView: NSView, NSDraggingSource {
             } else if let tab = item.tab {
                 let selected = store.isSelected(item.id, window: window)
                 let navigatedAway = pinned && tab.url != tab.savedURL && !tab.savedURL.isEmpty
-                let (img, flip) = icon(tab.iconKey)
+                // An easel's row has an easel glyph, not a favicon (Arc's EaselCellView).
+                let (img, flip) = Easel.id(fromURL: tab.url) != nil && tab.customIconKey == nil
+                    ? (NSImage(systemSymbolName: "pencil.and.scribble", accessibilityDescription: "Easel"), false) : icon(tab.iconKey)
                 let (homeImg, homeFlip) = navigatedAway ? icon(tab.customIconKey ?? FaviconKey.key(for: tab.savedURL)) : (img, flip)
                 let developerMode = store.settings.isDeveloperMode(url: tab.url)
                 // Tidy Tab Titles' rename: "Double-click to rename" under the new name for a few seconds.

@@ -17,6 +17,14 @@ public struct Easel: Codable, Equatable, Sendable {
         (self.id, self.title, self.items) = (id, title, items)
     }
 
+    /// The address an easel's tab holds: `easel://<id>`. The page area shows the easel there.
+    public static let scheme = "easel"
+    public var url: String { "\(Self.scheme)://\(id.uuidString)" }
+    public static func id(fromURL url: String) -> UUID? {
+        guard url.hasPrefix("\(scheme)://") else { return nil }
+        return UUID(uuidString: String(url.dropFirst(scheme.count + 3)))
+    }
+
     /// The toolbar's tools, in Arc's order (EaselIconPointer … EaselIconFreehand).
     public enum Tool: String, CaseIterable, Sendable {
         case pointer, image, text, ellipse, rectangle, arrow, freehand

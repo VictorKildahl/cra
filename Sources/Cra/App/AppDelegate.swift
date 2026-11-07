@@ -74,6 +74,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         // Arc's "When opening Arc, restore windows from previous session", off: one window comes back.
         if !store.settings.restoreWindows { store.keepOnlyActiveWindow() }
+        // Before any page is made: an easel's tab opens its canvas.
+        EaselBrowser.register()
         mainWindows = store.prefs.windows.map { MainWindowController(app: self, session: $0) }
         followKeyWindow()
         // First launch: the default browser step and the import are the onboarding and
@@ -1258,6 +1260,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             store.setExpanded(f.id, true)
             if isNew { LiveFolderManager.shared.refresh(f.id) }
         case "newSpace": main.showSpaceEditor(space: nil)
+        case "newEasel":
+            guard !main.isIncognito else { break }
+            let easel = Easel()
+            _ = store.createTab(url: easel.url, title: easel.title, select: true, window: main.windowID)
         case "editSpace": if !main.isStandalone { main.showSpaceEditor(space: store.focusedSpace) }
         case "changeProfile": if !main.isStandalone { main.showChangeProfileDialog(forSpace: store.focusedSpace.id) }
         case "deleteSpace": if !main.isStandalone { confirmDeleteSpace(store.focusedSpace) }
@@ -1508,7 +1514,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         menubar.addItem(submenu: appMenu, title: "Cra")
 
         let file = NSMenu(title: "File")
-        for id in ["newTab", "newWindow", "newBlankWindow", "newIncognitoWindow", "newLittleWindow", "reopenClosedTab", "editURL", "newFolder", "newSpace"] { file.addItem(item(id)) }
+        for id in ["newTab", "newWindow", "newBlankWindow", "newIncognitoWindow", "newLittleWindow", "reopenClosedTab", "editURL", "newFolder", "newSpace", "newEasel"] { file.addItem(item(id)) }
         file.addItem(.separator())
         file.addItem(item("closeWindow")); file.addItem(item("closeTab"))
         file.addItem(.separator())

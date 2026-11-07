@@ -15,7 +15,7 @@ or Arc-only service), per CONTRIBUTING.md.
 | Arc feature | Where in Arc | Cra | Notes |
 |---|---|---|---|
 | Boosts (per-site CSS/JS, colours, fonts, Zap) | URL bar ✎, Library ▸ Boosts, Settings ▸ Advanced "Enable Boosts" | missing | Biggest local feature still absent. |
-| Easels | File ▸ New Easel ⌃⇧E, Library ▸ Easels | missing | Measured below; not built. |
+| Easels | File ▸ New Easel ⌃⇧E, Library ▸ Easels | partial | File ▸ New Easel (⌃⇧E): canvas, title, Pointer/Image/Text/Ellipse/Rectangle/Arrow/Freehand, pictures by file, paste or drop, saved per easel. Missing: Library ▸ Easels, the canvas's backdrop colour (Cra's is black), the text-size pill, captures into an easel; sharing is *skip* (cloud). |
 | Notes | File ▸ New Note ⌃⇧N, ⌃⌥N in split, Help ▸ Export Arc Notes | *skip* | Arc 1.172.1 no longer creates Notes: New Note is gone from the File menu and ⌃⇧N does nothing; only Help ▸ Export Arc Notes is left. |
 | Library ▸ Media | Window ▸ View Media…, Library rail | done | Off until Show Media; ⋯ picks the folders (Cra has no captures folder). |
 | Essential Keyboard Shortcuts window | Help ▸ Essential Keyboard Shortcuts, Settings ▸ Shortcuts | done | 475×462 floating dark panel, five rows of key caps, "View All ↗". |
@@ -123,6 +123,9 @@ in this sweep (Essential Shortcuts window, Library pages).
   measured live in Arc (names, #RRGGBBAA format, no trace in the page's markup) and fitted to the
   semantic palette Arc stores per space.
 - Edit ▸ Find ▸ Use Selection to Find and Jump to Selection (⌘J).
+- Easels, first version: File ▸ New Easel (⌃⇧E) opens a canvas in the tab (EaselBrowser, a page
+  engine of its own like WebKitBrowser, so sidebar.json is unchanged: the tab's address is
+  easel://<id>, the drawing Easels/<id>.json).
 
 ## Easels, measured (Arc 1.172.1, offline copy, 7 Nov 2026)
 
@@ -142,7 +145,6 @@ in this sweep (Essential Shortcuts window, Library pages).
 - Boosts: the offline Arc has no network and a local server is blocked in this session, so its Boost
   editor couldn't be put on screen to copy. Needs a site in Arc (Victor's OK to run the real Arc, or
   a localhost server).
-- Easels and Notes: whole document types with their own editors; same approach once Boosts is in.
 - AppleScript dictionary (a new way for other apps to drive Cra; worth a decision on what it may do,
   as for cra:// URLs), cookie banner blocking, window dragging from the top of pages (measured, above), Previews and
   Join Meeting: not started.
