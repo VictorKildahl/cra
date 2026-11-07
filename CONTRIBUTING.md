@@ -13,6 +13,12 @@ you can send. Code is welcome too, within the few rules below.
 - **No cloud AI.** Arc Max-style features (summaries, LLM search, anything that needs an
   API key or sends pages away) are out of scope. The one exception is Tidy Tabs, which runs
   on the Mac's own Apple Intelligence model and only shows when that is turned on.
+- **English only, for now.** Like Arc, the interface isn't translated: keeping every
+  language in step with a UI that changes most days is more than one maintainer can carry.
+  Web pages and Chromium's own dialogs already follow the system language. If you'd like
+  Cra in your language, upvote the
+  [localization idea](https://github.com/VictorKildahl/cra/discussions/240) instead of
+  opening an issue or a PR.
 - **No account, no server, no telemetry.** Everything stays on the user's Mac.
 - **Native first.** The app is AppKit and SwiftUI; web content is Chromium through CEF.
 
