@@ -76,7 +76,9 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
     var onToolDone: () -> Void = {}
     private let title = NSTextField()
     private var texts: [UUID: NSTextField] = [:]
-    private var selected: UUID? { didSet { needsDisplay = true } }
+    private var selected: UUID? { didSet { needsDisplay = true; placeSizePill() } }
+    /// Arc's black pill beside a picked text box: +, Aa, − (text size).
+    private let sizePill = EaselSizePill()
     private var dragStart: Easel.Point?
     private var dragLast: Easel.Point?
     private var preview: Easel.Item?
@@ -99,6 +101,9 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
         title.placeholderString = "Untitled Easel"
         title.delegate = self
         addSubview(title)
+        sizePill.isHidden = true
+        sizePill.onStep = { [weak self] step in self?.resizeSelectedText(by: step) }
+        addSubview(sizePill)
         for item in document.items { if case .text = item.kind { addTextField(for: item) } }
         registerForDraggedTypes([.fileURL, .png, .tiff])
     }
@@ -187,6 +192,7 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
             let item = Easel.Item(kind: .text("", size: 18), frame: .init(x: p.x, y: p.y - 12, width: 240, height: 26))
             commit { $0.items.append(item) }
             addTextField(for: item)
+            selected = item.id
             window?.makeFirstResponder(texts[item.id])
             onToolDone()
         case .freehand:
@@ -287,6 +293,31 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
 
     // MARK: Text
 
+    /// The pill sits 20 pt left of the picked text box, level with its top (Arc: buttons 24 pt,
+    /// 44 pt left of the title box).
+    private func placeSizePill() {
+        guard let id = selected, let item = document.items.first(where: { $0.id == id }), case .text = item.kind else {
+            sizePill.isHidden = true
+            return
+        }
+        sizePill.isHidden = false
+        sizePill.frame = NSRect(x: item.frame.x - 44, y: item.frame.y, width: 24, height: 72)
+    }
+
+    private func resizeSelectedText(by step: Double) {
+        guard let id = selected, let i = document.items.firstIndex(where: { $0.id == id }),
+              case .text(let string, let size) = document.items[i].kind else { return }
+        let new = min(96, max(10, size + step))
+        let height = ceil(new * 1.45)
+        commit {
+            $0.items[i].kind = .text(string, size: new)
+            $0.items[i].frame.height = height
+        }
+        texts[id]?.font = .systemFont(ofSize: new, weight: .medium)
+        texts[id]?.frame = rect(document.items[i].frame)
+        placeSizePill()
+    }
+
     private func addTextField(for item: Easel.Item) {
         guard case .text(let string, let size) = item.kind else { return }
         let f = NSTextField(string: string)
@@ -301,6 +332,12 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
         f.frame = rect(item.frame)
         addSubview(f)
         texts[item.id] = f
+    }
+
+    /// A text box being typed in is the picked one: its size pill shows.
+    func controlTextDidBeginEditing(_ obj: Notification) {
+        guard let f = obj.object as? NSTextField, f !== title, let id = f.identifier.flatMap({ UUID(uuidString: $0.rawValue) }) else { return }
+        selected = id
     }
 
     func controlTextDidChange(_ obj: Notification) {
@@ -321,6 +358,34 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
 
     override func resetCursorRects() {
         addCursorRect(bounds, cursor: tool == .pointer ? .arrow : (tool == .text ? .iBeam : .crosshair))
+    }
+}
+
+/// Arc's text-size pill (AX "add", "FontIcon", "remove", 24 pt buttons on black).
+@MainActor
+final class EaselSizePill: NSView {
+    var onStep: (Double) -> Void = { _ in }
+    override var isFlipped: Bool { true }
+    override var mouseDownCanMoveWindow: Bool { false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.black.setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill()
+        let config = NSImage.SymbolConfiguration(pointSize: 11, weight: .bold).applying(.init(paletteColors: [.white]))
+        for (i, name) in ["plus", "textformat", "minus"].enumerated() {
+            guard let img = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(config) else { continue }
+            let r = NSRect(x: 0, y: CGFloat(i) * 24, width: 24, height: 24)
+            img.draw(in: NSRect(x: r.midX - img.size.width / 2, y: r.midY - img.size.height / 2, width: img.size.width, height: img.size.height))
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let y = convert(event.locationInWindow, from: nil).y
+        switch Int(y / 24) {
+        case 0: onStep(4)
+        case 2: onStep(-4)
+        default: break
+        }
     }
 }
 
