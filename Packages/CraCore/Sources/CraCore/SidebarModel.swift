@@ -533,6 +533,9 @@ public struct AppSettings: Codable, Equatable {
     public var littleWindowArchiveAfter: LittleWindowArchive = .sixHours
     /// Arc's Settings ▸ Advanced "When opening Arc, restore windows from previous session", on by default.
     public var restoreWindows: Bool = true
+    /// Settings ▸ Advanced "When opening Cra, start on a new tab" (X DM 7 Nov 2026, not in Arc): off,
+    /// Cra opens on the tab in use last, as Arc does (LaunchStart).
+    public var startOnNewTab: Bool = false
     /// Arc's Settings ▸ Advanced "Allow websites to get your theme data" (ArcThemeData), on by default.
     public var shareThemeWithWebsites: Bool = true
     /// Arc's Settings ▸ General "Block Cookie Banners" (CookieBanners), off by default as in Arc.
@@ -779,6 +782,7 @@ extension AppSettings {
         mediaHidden = (try? c.decodeIfPresent([String].self, forKey: .mediaHidden)) ?? []
         littleWindowArchiveAfter = (try? c.decodeIfPresent(LittleWindowArchive.self, forKey: .littleWindowArchiveAfter)) ?? .sixHours
         restoreWindows = try c.decodeIfPresent(Bool.self, forKey: .restoreWindows) ?? true
+        startOnNewTab = try c.decodeIfPresent(Bool.self, forKey: .startOnNewTab) ?? false
         shareThemeWithWebsites = try c.decodeIfPresent(Bool.self, forKey: .shareThemeWithWebsites) ?? true
         blockCookieBanners = try c.decodeIfPresent(Bool.self, forKey: .blockCookieBanners) ?? false
         allowAppleEventsJavaScript = try c.decodeIfPresent(Bool.self, forKey: .allowAppleEventsJavaScript) ?? false

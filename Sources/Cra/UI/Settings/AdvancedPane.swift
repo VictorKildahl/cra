@@ -50,6 +50,8 @@ struct AdvancedPane: View {
                     .fixedSize(horizontal: false, vertical: true)
                 // Arc: Settings ▸ Advanced "When opening Arc, restore windows from previous session".
                 SettingsCheckbox(title: "When opening Cra, restore windows from previous session", isOn: $store.settings.restoreWindows)
+                // Not in Arc (X DM 7 Nov 2026): Arc opens on the tab in use last.
+                SettingsCheckbox(title: "When opening Cra, start on a new tab", isOn: $store.settings.startOnNewTab)
             }
             SettingsFormRow(label: "Import:") {
                 Button("Import from Another Browser…") { actions.importData() }

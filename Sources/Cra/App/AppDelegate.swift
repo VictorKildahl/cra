@@ -79,6 +79,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         // Arc's "When opening Arc, restore windows from previous session", off: one window comes back.
         if !store.settings.restoreWindows { store.keepOnlyActiveWindow() }
+        // Settings ▸ Advanced "When opening Cra, start on a new tab": the window in front opens on
+        // no tab, before any window is made, so the last page isn't loaded only to be hidden.
+        // A link that starts Cra arrives before this (application(_:open:)), into pendingURLs.
+        // NSApplicationLaunchIsDefaultLaunchKey isn't used: it is false for any start without
+        // LaunchServices, a plain one too.
+        let launch = LaunchStart.launch(firstRun: needsOnboarding, automaticUpdate: SoftwareUpdater.shared.launchedByAutoUpdate,
+                                        withLinks: !pendingURLs.isEmpty)
+        let startOnNewTab = LaunchStart.startsOnNewTab(enabled: store.settings.startOnNewTab, launch: launch)
+        CraLog.note("launch: \(launch)\(startOnNewTab ? ", on a new tab" : "")")
+        if startOnNewTab { store.selectTab(nil, window: store.activeWindowID) }
         // Before any page is made: an easel's tab opens its canvas.
         EaselBrowser.register()
         // Arc's Boosts: each page on a boosted site gets its boosts; an edit shows at once.
@@ -100,6 +110,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         } else {
             // The window in use last comes up in front.
             for w in mainWindows.reversed() { w.showWindow(nil) }
+            // As ⌘T: the command bar makes the new tab, Esc leaves the window empty.
+            if startOnNewTab { DispatchQueue.main.async { [weak self] in self?.main.openCommandBar(.newTab) } }
         }
         installKeyFallbackMonitor()
         installCommandFileWatcher()
@@ -392,6 +404,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     func openExternalURL(_ url: String) {
+        // A link from another app soon after starting on a new tab: its tab is what the window
+        // shows, so the bar that was waiting for a new tab goes.
+        if store.settings.startOnNewTab, let m = main, m.commandBar.isOpen, m.selectedTab == nil { m.commandBar.close() }
         if let u = URL(string: url), u.scheme?.lowercased() == "cra" {
             if Self.isUserFacing(u) || UserDefaults.standard.bool(forKey: "scriptingURLs") {
                 handleInternalURL(u)
@@ -1212,15 +1227,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     let tabs = (store.tabs(under: space.pinnedContainerID) + store.tabs(under: space.todayContainerID)).compactMap { $0.tab?.url }
                     let open = store.selectedTabID(window: m.windowID).flatMap { store.item($0)?.tab?.url } ?? "-"
                     let folders = (store.children(of: space.pinnedContainerID) + store.children(of: space.todayContainerID)).filter { $0.isFolder && !$0.isTabGroup }
-                    NSLog("Cra browser windows %@: kind=%@ space=%@ listed=%d tabs=[%@] open=%@ page=%d frame=%@ onTop=%d pinnedCollapsed=%d openFolders=%d/%d", label,
+                    NSLog("Cra browser windows %@: kind=%@ space=%@ listed=%d tabs=[%@] open=%@ page=%d frame=%@ onTop=%d pinnedCollapsed=%d openFolders=%d/%d commandBar=%d pages=%d", label,
                           m.isBlank ? "blank" : m.isIncognito ? "incognito" : "normal", space.title,
                           store.orderedSpaces.contains { $0.id == space.id } ? 1 : 0, tabs.joined(separator: " "), open,
                           store.selectedTabID(window: m.windowID).flatMap { m.browsers.runtime(for: $0) } != nil ? 1 : 0,
                           m.window.map { NSStringFromRect($0.frame) } ?? "-", m.staysOnTop ? 1 : 0,
-                          store.isPinnedCollapsed(space.id) ? 1 : 0, folders.filter { store.isExpanded($0.id) }.count, folders.count)
+                          store.isPinnedCollapsed(space.id) ? 1 : 0, folders.filter { store.isExpanded($0.id) }.count, folders.count,
+                          m.commandBar.isOpen ? 1 : 0, m.browsers.runtimes.count)
                     // cra.log (which a relaunch keeps) gets no addresses or names: kinds and counts.
                     CraLog.note("browser windows \(label): kind=\(m.isBlank ? "blank" : m.isIncognito ? "incognito" : "normal") "
-                        + "listed=\(store.orderedSpaces.contains { $0.id == space.id } ? 1 : 0) tabs=\(tabs.count) open=\(open == "-" ? 0 : 1)")
+                        + "listed=\(store.orderedSpaces.contains { $0.id == space.id } ? 1 : 0) tabs=\(tabs.count) open=\(open == "-" ? 0 : 1) "
+                        + "commandBar=\(m.commandBar.isOpen ? 1 : 0) pages=\(m.browsers.runtimes.count)")
                 }
                 return
             }
