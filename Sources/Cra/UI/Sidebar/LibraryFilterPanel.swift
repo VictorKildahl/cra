@@ -20,6 +20,8 @@ struct LibraryFilterPanel: View {
 
     let title: String
     let sections: [Section]
+    /// The list's width: the chips wrap within it.
+    var width: CGFloat = 300
     let dark: Bool
     let toggle: (String) -> Void
     let done: () -> Void
@@ -63,6 +65,8 @@ struct LibraryFilterPanel: View {
             }
         }
         .padding(.leading, 12).padding(.trailing, 8).padding(.bottom, 4)
+        .frame(width: width, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 

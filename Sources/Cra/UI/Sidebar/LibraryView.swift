@@ -333,6 +333,8 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
     private var query = ""
     private var rows: [Row] = []
     private var mediaHiddenObserver: NSObjectProtocol?
+    /// The width the grid rows were last sized for.
+    private var gridWidth: CGFloat = 0
     private let searchBox = NSView()
     private let searchGlyph = NSImageView()
     private let field = NSTextField()
@@ -575,12 +577,17 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         }
         var top: CGFloat = 46
         if let host = filterHost {
+            if host.rootView.width != w { host.rootView = filterPanel() }
             let h = host.fittingSize.height
             host.frame = NSRect(x: 0, y: 0, width: w, height: h)
             top = h + 4
         }
         scroll.frame = NSRect(x: 0, y: top + gap, width: w, height: max(0, bounds.height - top - gap))
         table.tableColumns.first?.width = w
+        if w != gridWidth {
+            gridWidth = w
+            table.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<rows.count))
+        }
         empty.frame = scroll.frame
         if let card = mediaCard {
             let size = card.fittingSize
@@ -674,7 +681,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
             for p in store.profiles { chips.append(Chip(id: p.directoryName, label: p.name, on: downloadFilter.profiles.contains(p.directoryName))) }
             sections.append(.init(title: "Profiles", chips: chips))
         }
-        return LibraryFilterPanel(title: page == .archive ? "Filter Archived Tabs" : "Filter Downloads…", sections: sections,
+        return LibraryFilterPanel(title: page == .archive ? "Filter Archived Tabs" : "Filter Downloads…", sections: sections, width: max(200, bounds.width),
                                   dark: colors.isDark, toggle: { [weak self] id in self?.toggleChip(id) },
                                   done: { [weak self] in self?.filtering = false })
     }
@@ -725,8 +732,9 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
 
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
         if case .header = rows[row] { return 40 }
-        if case .media = rows[row] { return MediaGridMetrics.rowHeight(width: tableView.bounds.width) }
-        if case .easels = rows[row] { return MediaGridMetrics.rowHeight(width: tableView.bounds.width) }
+        // The list's own width: the table may not have its width yet when this is first asked.
+        if case .media = rows[row] { return MediaGridMetrics.rowHeight(width: bounds.width) }
+        if case .easels = rows[row] { return MediaGridMetrics.rowHeight(width: bounds.width) }
         return 56
     }
 
