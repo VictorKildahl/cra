@@ -125,6 +125,12 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
     // The window moves by its background: a drag here draws instead.
     override var mouseDownCanMoveWindow: Bool { false }
 
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        if let field = hit as? EaselTextField, field !== title, field.currentEditor() == nil { return self }
+        return hit
+    }
+
     override func layout() {
         super.layout()
         let w = min(CGFloat(Easel.titleWidth), bounds.width - 40)
@@ -208,6 +214,7 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
+        titlePicked = false
         let p = point(event)
         dragStart = p
         dragLast = p
@@ -220,6 +227,11 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
                 return
             }
             selected = document.item(at: p)?.id
+            if event.clickCount == 2, let id = selected, let field = texts[id] {
+                dragStart = nil
+                dragLast = nil
+                field.selectText(nil)
+            }
         case .text:
             let item = Easel.Item(kind: .text("", size: 18), frame: .init(x: p.x, y: p.y - 12, width: 240, height: 26))
             commit { $0.items.append(item) }
@@ -250,6 +262,7 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
             }
             document.items[i] = document.items[i].moved(by: .init(p.x - last.x, p.y - last.y))
             texts[id]?.frame = rect(document.items[i].frame)
+            placeSizePill()
             needsDisplay = true
         case .freehand:
             stroke.append(p)
@@ -431,6 +444,13 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
         if f === title { selected = nil; titlePicked = true; return }
         guard let id = f.identifier.flatMap({ UUID(uuidString: $0.rawValue) }) else { return }
         selected = id
+    }
+
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        guard commandSelector == #selector(NSResponder.cancelOperation(_:)) || commandSelector == #selector(NSResponder.insertNewline(_:)) else { return false }
+        window?.makeFirstResponder(self)
+        titlePicked = false
+        return true
     }
 
     func controlTextDidChange(_ obj: Notification) {

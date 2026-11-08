@@ -18,6 +18,11 @@ enum DialogTests {
         expect(secondaryHover.redComponent == 1 && secondaryHover.greenComponent == 1 && secondaryHover.blueComponent == 1,
                "secondary buttons brighten on hover")
         if let directory = ProcessInfo.processInfo.environment["CRA_DIALOG_SNAPSHOTS"] { try snapshots(in: directory) }
+        checkEaselDeletion()
+        if CommandLine.arguments.contains("--easel") {
+            print("Easel deletion dialog: \(checks) checks passed")
+            return
+        }
         let parent = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 900, height: 700),
                               styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         parent.isReleasedWhenClosed = false
@@ -51,12 +56,12 @@ enum DialogTests {
         acknowledgementWindow.close()
 
         for code: UInt16 in [36, 53, 76] {
-            let dialog = AppDialog(title: "Delete your “Work” Space?", message: "This will archive all the tabs and folders inside it.",
-                                   actions: [DialogAction("Delete", role: .destructive), .cancel])
+            let dialog = AppDialog.easelDeletion()
             var responses: [NSApplication.ModalResponse] = []
             dialog.present(over: parent) { responses.append($0) }
             let window = sheet(over: parent)
-            expect(window.sheetParent === parent, "the panel is attached to its source window")
+            expect(window.sheetParent === parent, "Easel deletion is attached to its source window")
+            expect(window.animationBehavior == .default, "Easel deletion keeps native sheet animations")
             expect(window.canBecomeKey, "the dialog can receive keyboard input")
             window.sendEvent(key(code, window: window))
             expect(window.isDismissing, "answering ends the native sheet session")
@@ -152,8 +157,28 @@ enum DialogTests {
     }
 
     @MainActor
+    private static func checkEaselDeletion() {
+        let dialog = AppDialog.easelDeletion()
+        expect(dialog.title == "Are you sure you want to delete this Easel?", "Easel deletion uses Arc's title")
+        expect(dialog.message == "Doing so will delete the Easel permanently.", "Easel deletion explains permanence")
+        expect(dialog.icon == .mark && dialog.width == 450, "Easel deletion uses the branded dialog card")
+        expect(dialog.actions.buttons.map(\.title) == ["Delete", "Cancel"], "Easel deletion offers Delete and Cancel")
+        expect(dialog.actions.buttons[0].role == .destructive, "Delete uses the destructive button style")
+        expect(dialog.actions.trailingOrder == [1, 0], "Cancel precedes Delete visually")
+        expect(dialog.actions.key(at: 0) == "↩" && dialog.actions.key(at: 1) == "ESC", "Easel deletion shows its keyboard shortcuts")
+        for code: UInt16 in [36, 53, 76] {
+            let window = AppDialog.easelDeletion().prepareWindow()
+            window.setFrameOrigin(NSPoint(x: -10000, y: -10000))
+            expect(window.contentView?.bounds.width == 450, "Easel deletion fits its card")
+            expect(window.handleKey?(key(code, window: window)) == true, "Easel deletion handles Return, Escape and keypad Enter")
+            expect(window.isDismissing, "a keyboard choice closes the dialog")
+        }
+    }
+
+    @MainActor
     private static func snapshots(in directory: String) throws {
         let examples: [(String, AppDialog)] = [
+            ("delete-easel", .easelDeletion()),
             ("delete-space", AppDialog(title: "Delete your “Work main” Space?", message: "This will archive all the tabs and folders inside it.",
                                        actions: [DialogAction("Delete", role: .destructive), .cancel])),
             ("rename-profile", AppDialog(title: "Rename your Profile", message: "This won’t affect the names of any of the Spaces associated with this Profile.",

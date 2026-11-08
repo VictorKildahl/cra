@@ -8,5 +8,5 @@ xcrun swiftc -swift-version 5 -parse-as-library ${CRA_TEST_SWIFTC_FLAGS:-} \
   Sources/Cra/UI/Colors.swift Sources/Cra/UI/BrandMark.swift \
   Sources/Cra/UI/Windows/DialogComponents.swift Sources/Cra/UI/Windows/AppDialog.swift \
   Tests/DialogTests.swift -o "$TEST_DIR/dialog-tests"
-"$TEST_DIR/dialog-tests"
+"$TEST_DIR/dialog-tests" "$@"
 [ -z "${CRA_TEST_KEEP:-}" ] || cp "$TEST_DIR/dialog-tests" "$CRA_TEST_KEEP/"
