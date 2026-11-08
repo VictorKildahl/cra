@@ -18,7 +18,8 @@ Notes for working on the code. How to send a change is in
 you.
 
 Requirements: macOS 14+ on Apple silicon, Xcode 16+, CMake (`brew install cmake`), about
-1 GB of disk for CEF and the build products.
+1 GB of disk for CEF and the build products. `CRA_ARCH=x86_64 scripts/build.sh` cross-compiles the
+Intel app into `build/x86_64/Cra.app` (another ~1 GB); every release ships both.
 
 `scripts/fetch-cef.sh` pins the CEF version and downloads it into `vendor/cef` (not
 committed). It fetches Cra's own CEF build, made by `scripts/build-cef.sh` with H.264/AAC
@@ -252,7 +253,7 @@ renders of them (so the multiply blends survive) used by `BrandMark`, and
 ## Releasing
 
 `scripts/release.sh` builds, signs with a Developer ID, notarizes, and packages a DMG and
-zip into `build/dist`. Pushing a `v*` tag runs the same through GitHub Actions and
+zip into `build/dist`, for Apple silicon and Intel. Pushing a `v*` tag runs the same through GitHub Actions and
 publishes a release. Releases with UI changes get short clips on the release notes first
 (`scripts/clips`, `.claude/skills/release-clips`). See [release.md](release.md) for the
 one-time certificate setup.

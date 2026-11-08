@@ -3,8 +3,9 @@ import PackageDescription
 
 // CEF (Chromium Embedded Framework) lives in vendor/cef, fetched by
 // scripts/fetch-cef.sh, with its C++ wrapper built by CMake into
-// vendor/cef/build/libcef_dll_wrapper.
-let cefRoot = "\(Context.packageDirectory)/vendor/cef"
+// vendor/cef/build/libcef_dll_wrapper. A build for the other CPU (scripts/build.sh with
+// CRA_ARCH) points CRA_CEF_DIR at that CPU's copy, vendor/cef-<arch>.
+let cefRoot = Context.environment["CRA_CEF_DIR"] ?? "\(Context.packageDirectory)/vendor/cef"
 
 // Same flags CEF uses for its own wrapper (vendor/cef/cmake/cef_variables.cmake),
 // so the ABI of the wrapper classes matches.

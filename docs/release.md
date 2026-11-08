@@ -84,9 +84,18 @@ A Claude Code hook (`.claude/settings.json` → `scripts/clips/check-release-med
 pushing a `v*` tag when `Sources/Cra/UI` changed since the previous tag and the release's
 entry has no `media`. If there is nothing to film, add `// no clip: <reason>` to the entry.
 
-Artifacts land on the GitHub release: `Cra.dmg`, `Cra.zip`, `SHA256SUMS.txt`. The names
-carry no version so `releases/latest/download/Cra.dmg` always resolves; the website's
-download button and `scripts/install.sh` rely on that.
+Every release ships both CPUs. The workflow builds Apple silicon and Intel in two parallel
+jobs on the same Apple silicon runner (Intel is cross-compiled) and a third job publishes:
+
+| Apple silicon | Intel |
+|---|---|
+| `Cra.dmg` | `Cra-Intel.dmg` |
+| `Cra.zip` | `Cra-Intel.zip` |
+| `appcast.xml` | `appcast-intel.xml` |
+
+plus one `SHA256SUMS.txt` for all four archives. The names carry no version so
+`releases/latest/download/Cra.dmg` always resolves; the website's download buttons and
+`scripts/install.sh` (which picks the zip by CPU) rely on that.
 
 ## Locally
 
@@ -97,10 +106,18 @@ NOTARY_KEYCHAIN_PROFILE=cra \
 scripts/release.sh
 ```
 
-`scripts/release.sh` runs `build.sh` (sign, innermost first, with the CEF entitlements),
-notarizes and staples the app, runs `package.sh` (zip, DMG with an Applications link,
-checksums), then notarizes and staples the DMG and checks it with `spctl`.
-Without `CRA_SIGN_IDENTITY` it produces an ad-hoc build and skips notarization.
+`scripts/release.sh` does this once per CPU (`CRA_ARCHS`, default `arm64 x86_64`): it runs
+`build.sh` (sign, innermost first, with the CEF entitlements), notarizes and staples the
+app, runs `package.sh` (zip, DMG with an Applications link, checksums), then notarizes and
+staples the DMG, checks it with `spctl` and writes that CPU's appcast. Both CPUs share one
+build number. Without `CRA_SIGN_IDENTITY` it produces an ad-hoc build and skips notarization.
+
+`CRA_ARCH=x86_64 scripts/build.sh` builds the other CPU on its own: the host CPU keeps
+`vendor/cef` and `build/Cra.app`, the other one gets `vendor/cef-<arch>` (that CPU's CEF,
+read by `Package.swift` through `CRA_CEF_DIR`), `build/swiftpm-<arch>` and
+`build/<arch>/Cra.app`. `build.sh` stops if any executable in the bundle lacks that CPU's
+code. An Intel build runs on Apple silicon under Rosetta, which is enough for a launch
+check; Intel-only problems still need a real Intel Mac.
 
 ## The DMG window
 
@@ -210,7 +227,8 @@ are the controls. Details and Arc's original are in `docs/arc-reverse-engineerin
   updated again.
 - **Appcast.** `scripts/release.sh` ends with `scripts/appcast.sh`, which signs the final
   `Cra.zip` and writes `build/dist/appcast.xml`; the workflow uploads it with the other
-  assets. `CRA_RELEASE_NOTES=<file.html>` adds release notes to the update window.
+  assets. Each archive holds one CPU's app, so Intel copies have their own feed:
+  `build.sh` points their `SUFeedURL` at `appcast-intel.xml`, which signs `Cra-Intel.zip`. `CRA_RELEASE_NOTES=<file.html>` adds release notes to the update window.
 - **Version numbers.** Sparkle compares `CFBundleVersion`, the build number `build.sh`
   takes from the clock, so every release is newer than the last.
 - **Dev builds** have no feed (`build.sh` drops `SUFeedURL` unless `CRA_RELEASE=1`), so they
@@ -265,6 +283,3 @@ issue and tag a release.
 
 - **Homebrew.** A cask (`brew install --cask cra`) pointing at the DMG and
   `SHA256SUMS.txt`.
-- **Intel.** CEF is published for `macosx64` too (above). Still missing: an x86_64
-  `swift build` in `scripts/build.sh`, a separate Intel DMG from the release workflow
-  and its own Sparkle feed.

@@ -2,6 +2,8 @@
 # Packages build/Cra.app into build/dist/: a zip, a DMG with the drag-to-install
 # window (resources/dmg), and SHA-256 checksums. Signs the DMG when CRA_SIGN_IDENTITY is set.
 #   scripts/package.sh [path/to/Cra.app]
+# An Apple silicon app becomes Cra.zip and Cra.dmg, an Intel one Cra-Intel.zip and
+# Cra-Intel.dmg. Each run replaces only its own files, so both can sit in build/dist.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 APP="${1:-build/Cra.app}"
@@ -9,10 +11,11 @@ APP="${1:-build/Cra.app}"
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
 IDENTITY="${CRA_SIGN_IDENTITY:--}"
 DIST="build/dist"
-rm -rf "$DIST" && mkdir -p "$DIST"
-
-ZIP="$DIST/Cra.zip"
-DMG="$DIST/Cra.dmg"
+SUFFIX="$(scripts/asset-suffix.sh "$APP")"
+ZIP="$DIST/Cra$SUFFIX.zip"
+DMG="$DIST/Cra$SUFFIX.dmg"
+mkdir -p "$DIST"
+rm -f "$ZIP" "$DMG"
 
 # Zip: ditto keeps resource forks and symlinks, which codesign requires.
 ditto -c -k --keepParent "$APP" "$ZIP"
@@ -30,6 +33,6 @@ if [ "$IDENTITY" != "-" ]; then
   codesign --force --sign "$IDENTITY" --timestamp "$DMG"
 fi
 
-(cd "$DIST" && shasum -a 256 "$(basename "$ZIP")" "$(basename "$DMG")" > "SHA256SUMS.txt")
+(cd "$DIST" && shasum -a 256 Cra*.zip Cra*.dmg > SHA256SUMS.txt)
 echo "Packaged:"
 ls -la "$DIST"

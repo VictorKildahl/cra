@@ -11,11 +11,13 @@ fail() { printf '\033[31m%s\033[0m\n' "$*" >&2; exit 1; }
 
 # Everything runs from main so a partially downloaded script never executes.
 main() {
-  local url="${CRA_DOWNLOAD_URL:-https://github.com/VictorKildahl/cra/releases/latest/download/Cra.zip}"
+  [ "$(uname -s)" = Darwin ] || fail "Cra runs on macOS only."
+  # hw.optional.arm64 is 1 on Apple silicon even when this shell runs under Rosetta.
+  local asset=Cra-Intel.zip
+  [ "$(sysctl -n hw.optional.arm64 2>/dev/null)" = 1 ] && asset=Cra.zip
+  local url="${CRA_DOWNLOAD_URL:-https://github.com/VictorKildahl/cra/releases/latest/download/$asset}"
   local dir="${CRA_INSTALL_DIR:-}"
 
-  [ "$(uname -s)" = Darwin ] || fail "Cra runs on macOS only."
-  [ "$(uname -m)" = arm64 ] || fail "Cra needs a Mac with Apple silicon (M1 or later)."
   [ "$(sw_vers -productVersion | cut -d. -f1)" -ge 14 ] || fail "Cra needs macOS 14 Sonoma or later."
 
   if [ -z "$dir" ]; then
