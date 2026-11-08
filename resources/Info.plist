@@ -70,6 +70,10 @@
 	     name over mDNS instead of handing the page this Mac's local IP address. -->
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Video calls and other web sites can connect to devices on your network, like someone on the same Wi-Fi or your router's settings page.</string>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>NSUserActivityTypeBrowsingWeb</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
