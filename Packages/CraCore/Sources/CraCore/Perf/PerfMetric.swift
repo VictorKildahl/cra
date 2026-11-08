@@ -32,9 +32,19 @@ public enum PerfCounter: String, Codable, CaseIterable, Sendable {
     /// Chromium's "Page Unresponsive" (about 15 s without handling input), and its recovery.
     case rendererUnresponsive
     case rendererResponsive
-    /// Tab sleeping closed a page, or kept one awake; the key is why.
+    /// Tab sleeping closed a page; the key is why (the policy).
     case tabSlept
+    /// A page that refused to sleep, once per page and reason (what cra.log says); the key is the
+    /// reason. `sleepRetry` counts the same page refusing again after the back-off (GitHub #214:
+    /// one page asked eight times read like eight pages).
     case sleepRefusal
+    case sleepRetry
+    /// A candidate tab sleeping passed over without asking its page (loading, Picture in
+    /// Picture, DevTools…), once per page and reason; the key is TabSleepPolicy.Hold.
+    case sleepSkip
+    /// A data-folder JSON file written; the key is its name, so `jsonSave`'s count can be told
+    /// apart by file (GitHub #214).
+    case fileSaved
 }
 
 /// The kinds of process Cra runs, from the name macOS gives each one.

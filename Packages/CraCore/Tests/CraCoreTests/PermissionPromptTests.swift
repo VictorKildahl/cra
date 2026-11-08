@@ -21,7 +21,7 @@ struct PermissionPromptTests {
 
     // #137: Calendar's sheet said "is asking for a browser permission" for a type CraCEF
     // didn't map. Every type CraCEF maps is named.
-    @Test func chromesOtherTypesAreNamed() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/137")) func chromesOtherTypesAreNamed() {
         let calendar = "https://calendar.google.com/"
         #expect(PermissionPrompt.message(origin: calendar, kinds: 1 << 18) == "https://calendar.google.com/ wants to open a kind of link, like email or calendar links")
         #expect(PermissionPrompt.message(origin: calendar, kinds: 1 << 7) == "https://calendar.google.com/ wants to access other devices on your local network")
@@ -32,7 +32,7 @@ struct PermissionPromptTests {
         }
     }
 
-    @Test func eachTypeHasItsOwnBit() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/137")) func eachTypeHasItsOwnBit() {
         let bits = PermissionPrompt.requests.map(\.kind)
         #expect(Set(bits).count == bits.count)
         #expect(bits.allSatisfy { $0.nonzeroBitCount == 1 && $0 & (1 | 2 | 4 | 16) == 0 })

@@ -40,6 +40,9 @@ final class TabRuntime {
     var sleepProbeAfter: Date?
     /// Why the page last refused to sleep ("" when it didn't), so the log says it once.
     var sleepRefusal: String?
+    /// Why tab sleeping last passed the page over without asking it (nil: it didn't), so the log
+    /// and the recorder say it once (#214).
+    var sleepHold: TabSleepPolicy.Hold?
     /// Whether this page's DevTools are open, closing or asked for (DevToolsToggle).
     var devTools = DevToolsToggle()
     /// Loads of an extension's page Chromium blocked because the extension wasn't up yet
@@ -155,12 +158,12 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// Take over a live browser from elsewhere (a Little Window being promoted
     /// to a tab): it keeps its history, scroll position and page state.
     @discardableResult
-    func adopt(_ browser: CraBrowser, for tabID: UUID) -> TabRuntime {
+    func adopt(_ browser: CraBrowser, for tabID: UUID, from origin: String = "a Little Window's") -> TabRuntime {
         if let host = browser.hostWindow, let parent = host.parent { parent.removeChildWindow(host) }
         browser.containerView.removeFromSuperview()
         browser.delegate = self
         let rt = register(browser: browser, tabID: tabID)
-        log(tabID, "takes over a Little Window's page")
+        log(tabID, "takes over \(origin) page")
         store.updateTab(tabID, url: browser.currentURL, title: browser.currentTitle)
         return rt
     }
@@ -420,9 +423,21 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     func sleepIdleTabs(_ policy: TabSleepPolicy) {
         let now = clock.now
         let cutoff = now.addingTimeInterval(-policy.hiddenFor)
-        var asked = 0
+        var asked = 0, waiting = 0
+        var held: [TabSleepPolicy.Hold: Int] = [:]
+        let pass = SleepPass(reason: policy.reason)
         for id in policy.candidates(sleepPages, visible: visibleTabIDs, protectedRecent: protectedRecentTabs, now: now) {
-            guard let rt = runtimes[id], canSleep(rt, before: cutoff), rt.sleepProbeAfter.map({ $0 <= now }) ?? true else { continue }
+            guard let rt = runtimes[id] else { continue }
+            if let hold = sleepHold(rt, before: cutoff) {
+                held[hold, default: 0] += 1
+                passOver(rt, hold)
+                continue
+            }
+            rt.sleepHold = nil
+            guard rt.sleepProbeAfter.map({ $0 <= now }) ?? true else {
+                waiting += 1
+                continue
+            }
             if let limit = policy.limit, asked >= limit { break }
             asked += 1
             let b = rt.browser
@@ -447,7 +462,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                                     guard let self, let rt, self.stillSleepable(id, rt, url, navigationRevision, cutoff) else { return }
                                     let refusal = TabSleepPolicy.refusal(freezingReasons: Self.freezingReasons(result))
                                     guard refusal.isEmpty else { return self.keepAwake(rt, url, refusal) }
-                                    self.discard(id, rt, url, policy)
+                                    self.discard(id, rt, url, policy, pass)
                                 }
                             }
                         }
@@ -455,11 +470,25 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                 }
             }
         }
+        // A pressure sweep that asks nothing says why (#237); the minute's timer pass, with
+        // nothing old enough most of the time, stays quiet.
+        if asked == 0, policy.reason == .memoryPressure {
+            let why = policy.nothingToClose(sleepPages, visible: visibleTabIDs, held: held, waiting: waiting, now: now)
+            CraLog.note("tab sleep for memory pressure closes nothing: \(why)")
+        }
+    }
+
+    /// One pass's closed pages, logged as one line once the last of its pages has answered and
+    /// its callbacks let it go (#237: a sweep of twelve pages wrote twelve identical lines).
+    private final class SleepPass {
+        var log: TabSleepPolicy.PassLog
+        init(reason: TabSleepPolicy.Reason) { log = TabSleepPolicy.PassLog(reason: reason) }
+        deinit { for line in log.lines { CraLog.note(line) } }
     }
 
     /// Chrome's in-place discard (Cra.discard, which needs WebContentsDiscard). A CEF without it
     /// answers an error: the page closes instead, and its tab loads the URL again when shown.
-    private func discard(_ id: UUID, _ rt: TabRuntime, _ url: String, _ policy: TabSleepPolicy) {
+    private func discard(_ id: UUID, _ rt: TabRuntime, _ url: String, _ policy: TabSleepPolicy, _ pass: SleepPass) {
         rt.browser.sendDevToolsMethod("Cra.discard", params: "{}") { [weak self, weak rt] result, error in
             DispatchQueue.main.async {
                 guard let self, let rt, self.runtimes[id] === rt, !self.visibleTabIDs.contains(id) else { return }
@@ -471,13 +500,12 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                 self.sleptTabs.insert(id)
                 Perf.count(.tabSlept, policy.reason.rawValue)
                 if !rt.browser.isIncognito {
-                    let why = policy.reason == .memoryPressure ? ", the Mac is short of memory"
-                        : policy.reason == .splitCopy ? ", a split shows its copy" : ""
-                    let how = !discarded ? "unloads" : reply?["processEnded"] as? Bool == true ? "discards (its renderer ended)" : "discards"
-                    CraLog.note("tab sleep \(how) \(CraLog.host(url)) (hidden \(Int(self.clock.now.timeIntervalSince(rt.hiddenAt ?? self.clock.now) / 60)) min\(why))")
+                    pass.log.closed(host: CraLog.host(url), hiddenFor: self.clock.now.timeIntervalSince(rt.hiddenAt ?? self.clock.now),
+                                    discarded: discarded, processEnded: reply?["processEnded"] as? Bool == true)
                 }
                 guard discarded else { return self.unload(id) }
                 rt.discarded = true
+                rt.sleepRefusal = nil
                 if rt.freezeVoted { self.setFreezingVote(rt, false) }
                 self.delegate?.browserManagerDidUpdate(id)
             }
@@ -508,12 +536,23 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         runtimes[id] === rt && rt.navigationRevision == revision && rt.browser.currentURL == url && canSleep(rt, before: cutoff)
     }
 
-    /// Asked again after the back-off; the log names the site once per reason (never an incognito one).
+    /// Asked again after the back-off; the log names the site once per reason (never an incognito
+    /// one), and the recorder counts the page once per reason and its later refusals as retries (#214).
     private func keepAwake(_ rt: TabRuntime, _ url: String, _ refusal: String) {
         rt.sleepProbeAfter = clock.now.addingTimeInterval(Self.refusalBackoff)
+        guard rt.sleepRefusal != refusal else { return Perf.count(.sleepRetry, refusal) }
         Perf.count(.sleepRefusal, refusal)
-        if rt.sleepRefusal != refusal, !rt.browser.isIncognito { CraLog.note("tab sleep keeps \(CraLog.host(url)) awake: \(refusal)") }
+        if !rt.browser.isIncognito { CraLog.note("tab sleep keeps \(CraLog.host(url)) awake: \(refusal)") }
         rt.sleepRefusal = refusal
+    }
+
+    /// A candidate held awake before its page is asked (loading, DevTools…): said once per reason,
+    /// so a sweep that comes late can be explained from cra.log and the recorder (#214).
+    private func passOver(_ rt: TabRuntime, _ hold: TabSleepPolicy.Hold) {
+        guard rt.sleepHold != hold else { return }
+        rt.sleepHold = hold
+        Perf.count(.sleepSkip, hold.rawValue)
+        if !rt.browser.isIncognito { CraLog.note("tab sleep passes over \(CraLog.host(rt.browser.currentURL)): \(hold.rawValue)") }
     }
 
     static let refusalBackoff: TimeInterval = 10 * 60
@@ -562,11 +601,15 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         TabSleepPolicy.recentlyShown(sleepPages, visible: visibleTabIDs, count: protectedRecentTabs)
     }
 
-    private func canSleep(_ rt: TabRuntime, before cutoff: Date) -> Bool {
+    private func canSleep(_ rt: TabRuntime, before cutoff: Date) -> Bool { sleepHold(rt, before: cutoff) == nil }
+
+    private func sleepHold(_ rt: TabRuntime, before cutoff: Date) -> TabSleepPolicy.Hold? {
         let b = rt.browser
-        return !rt.discarded && rt.hiddenAt.map { $0 < cutoff } == true && rt.audibleAt.map { $0 < cutoff } != false
-            && !visibleTabIDs.contains(rt.tabID) && b.isCreated && !b.isClosed && !b.isLoading && !b.isInPictureInPicture
-            && !b.isCapturingMedia && !b.isAudible && !b.hasDevTools
+        return TabSleepPolicy.hold(.init(discarded: rt.discarded, hiddenAt: rt.hiddenAt, audibleAt: rt.audibleAt,
+                                         visible: visibleTabIDs.contains(rt.tabID), created: b.isCreated, closed: b.isClosed,
+                                         loading: b.isLoading, pictureInPicture: b.isInPictureInPicture,
+                                         capturing: b.isCapturingMedia, audible: b.isAudible, devTools: b.hasDevTools),
+                                   before: cutoff)
     }
 
     /// In Cra's isolated world: "" when the page has nothing to lose, else why it must stay:
@@ -729,7 +772,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     private func hibernate(_ tabID: UUID) {
         guard let rt = runtimes[tabID], !rt.browser.isInPictureInPicture else { return }
         log(tabID, "sleeps: its split copy shows the page")
-        discard(tabID, rt, rt.browser.currentURL, .splitCopy)
+        discard(tabID, rt, rt.browser.currentURL, .splitCopy, SleepPass(reason: .splitCopy))
     }
 
     /// The window is out of sight: covered by another app, on another desktop or in the Dock.
@@ -814,6 +857,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                 skip: { [weak browser] s in browser?.skipPictureInPicture(by: s) },
                 close: { [weak browser] in browser?.closePictureInPicture() })
             PictureInPictureChrome.shared.isPlaying = browser.isPictureInPicturePlaying
+            PictureInPictureChrome.shared.address = PictureInPictureLayout.address(of: browser.currentURL)
             PictureInPictureChrome.shared.videoEntered()
         } else {
             PictureInPictureChrome.shared.videoLeft()
@@ -854,6 +898,16 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
             }
             if audible { refreshMediaControls(id) }
         }
+        delegate?.browserManagerDidUpdate(id)
+    }
+
+    /// The page's sound starting or stopping as it happens, before the 2 s hold `didChangeAudible`
+    /// waits out. Sound starting marks the tab's card playing: paused from the card and played
+    /// again on the page within the hold, the tab never went quiet, so `didChangeAudible` doesn't
+    /// come. Cards come and go only with the held state.
+    func browser(_ browser: CraBrowser, didChangeSoundPlaying playing: Bool) {
+        guard playing, let id = tabID(of: browser), nowPlaying?.entries.contains(where: { $0.id == id && !$0.playing }) == true else { return }
+        nowPlaying?.update(id) { $0.playing = true }
         delegate?.browserManagerDidUpdate(id)
     }
 
@@ -1055,7 +1109,52 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         guard let id = tabID(of: browser) else { return }
         // Start-up phases: firstPageShown, then the page's navigation committed, then loaded.
         if committed, id == visibleTabID { Perf.phase("firstPageCommitted") }
+        if committed {
+            shareTheme(id, with: browser)
+            applyBoost(to: browser, clearing: false)
+            if let css = store.cookieBannerCSS(item: id) { adopt(css, as: "__craCookieBanners", in: browser) }
+        }
         delegate?.browserManagerDidUpdate(id)
+    }
+
+    /// Arc's "Allow websites to get your theme data": the space's palette as `--arc-palette-*` and
+    /// `--arc-background-*` variables on the page's root (ArcThemeData), in the scheme its pages see.
+    /// A stylesheet adopted from Cra's world, so the page's markup shows no trace of it, as in Arc.
+    private func shareTheme(_ id: UUID, with browser: CraBrowser) {
+        let systemDark = NSApp?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        guard let css = store.themeDataCSS(item: id, systemDark: systemDark) else { return }
+        adopt(css, as: "__craArcTheme", in: browser)
+    }
+
+    /// Arc's Boosts: the site's boost for this page (set by the app; BoostStore), nil for none.
+    static var boostFor: ((String) -> (css: String, js: String)?)?
+
+    /// The page's boost: its stylesheet adopted like the theme data, its script run in the page.
+    /// An emptied boost clears what an earlier one adopted.
+    func applyBoost(to browser: CraBrowser, clearing: Bool = true) {
+        let boost = Self.boostFor?(browser.currentURL)
+        // A new document has nothing adopted: no call unless there is a boost to put on it.
+        guard boost != nil || clearing else { return }
+        adopt(boost?.css ?? "", as: "__craBoost", in: browser)
+        if let js = boost?.js, !js.isEmpty { browser.executeJavaScript(js) }
+    }
+
+    /// Every page on `host` gets its boost again (the editor's changes, live).
+    func reapplyBoosts(host: String) {
+        for rt in runtimes.values where URL(string: rt.browser.currentURL)?.host.map(Boost.siteHost).map({ $0 == host || $0.hasSuffix("." + host) }) == true {
+            applyBoost(to: rt.browser)
+        }
+    }
+
+    /// A stylesheet adopted by the page's document from Cra's world, kept under `name` there so a
+    /// later commit of the same document replaces it.
+    private func adopt(_ css: String, as name: String, in browser: CraBrowser) {
+        guard let literal = String(data: (try? JSONSerialization.data(withJSONObject: [css], options: [])) ?? Data(), encoding: .utf8) else { return }
+        let script = "(()=>{let s=window.\(name);if(!s){s=window.\(name)=new CSSStyleSheet();"
+            + "document.adoptedStyleSheets=[...document.adoptedStyleSheets,s];}s.replaceSync(\(literal)[0]);})()"
+        guard let params = try? JSONSerialization.data(withJSONObject: ["expression": script]),
+              let json = String(data: params, encoding: .utf8) else { return }
+        browser.evaluate(inIsolatedWorld: PageScript.world, params: json) { _, _ in }
     }
 
     func browser(_ browser: CraBrowser, didChangeProgress progress: Double) {
@@ -1065,7 +1164,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     }
 
     func browser(_ browser: CraBrowser, didFinishLoadingURL url: String, title: String, statusCode: Int) {
-        guard let id = tabID(of: browser) else { return }
+        // CEF ends the load of the page a discard just closed: nothing loaded, and nothing was visited (#214).
+        guard let id = tabID(of: browser), runtimes[id]?.discarded != true else { return }
         log(id, "loaded \(site(url, id, browser)) (HTTP \(statusCode))")
         if statusCode != 0 { runtimes[id]?.extensionPageRetries = 0 }
         guard !browser.isIncognito else { return }
@@ -1098,21 +1198,28 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     func browser(_ browser: CraBrowser, didLoadFavicon image: NSImage, forURL iconURL: String) {
         guard let id = tabID(of: browser), let tab = store.item(id)?.tab else { return }
-        let key = FaviconKey.key(for: tab.url) ?? tab.faviconKey
-        guard let key else { return }
-        favicons.store(image, forKey: key, persist: !browser.isIncognito)
-        if tab.faviconKey != key { store.updateTab(id, url: tab.url) }
+        // The tab shows its own page's icon; the site key keeps the latest for suggestions and
+        // pages not loaded yet. Tabs on one host (AWS, localhost) no longer share one (#211).
+        guard let site = FaviconKey.key(for: tab.url) ?? tab.faviconKey.map(FaviconKey.siteKey(of:)) else { return }
+        let key = FaviconKey.key(site: site, iconURL: iconURL)
+        let persist = !browser.isIncognito
+        favicons.store(image, forKey: site, persist: persist)
+        // A page that draws its icon (data:, an unread badge) would leave a file per count.
+        let fetched = iconURL.hasPrefix("https:") || iconURL.hasPrefix("http:")
+        if key != site { favicons.store(image, forKey: key, persist: persist && fetched) }
+        store.setFaviconKey(id, key)
     }
 
     func browser(_ browser: CraBrowser, didReportThemeColor hex: String) {
-        guard let id = tabID(of: browser) else { return }
+        // The blank document a discard leaves answers the load end's probe with white (#237).
+        guard let id = tabID(of: browser), runtimes[id]?.discarded != true else { return }
         runtimes[id]?.themeColor = hex
         store.setThemeColor(id, hex)
         delegate?.browserManagerDidUpdate(id)
     }
 
     func browser(_ browser: CraBrowser, didReportBackgroundColor hex: String) {
-        guard let id = tabID(of: browser), let rt = runtimes[id], rt.backgroundColor != hex else { return }
+        guard let id = tabID(of: browser), let rt = runtimes[id], !rt.discarded, rt.backgroundColor != hex else { return }
         rt.backgroundColor = hex
         delegate?.browserManagerDidUpdate(id)
     }
@@ -1328,12 +1435,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     }
 
     func browser(_ browser: CraBrowser, requestsPermissionForOrigin origin: String, kinds: UInt, completion: @escaping (Bool) -> Void) {
-        let alert = NSAlert()
-        alert.messageText = PermissionPrompt.message(origin: origin, kinds: kinds)
-        alert.addButton(withTitle: "Allow")
-        alert.addButton(withTitle: "Block")
+        let alert = AppDialog(title: PermissionPrompt.message(origin: origin, kinds: kinds),
+                              actions: [DialogAction("Allow"), DialogAction("Block", role: .cancel)])
         guard let window = container.window else { completion(false); return }
-        alert.beginSheetModal(for: window) { resp in completion(resp == .alertFirstButtonReturn) }
+        alert.present(over: window) { resp in completion(resp == .alertFirstButtonReturn) }
     }
 
     func browserDidReceiveFocus(_ browser: CraBrowser) {

@@ -9,7 +9,8 @@ struct SpaceIconTests {
               pinnedContainerID: UUID(), todayContainerID: UUID(), createdAt: Date(timeIntervalSince1970: 0), symbol: symbol)
     }
 
-    @Test(arguments: [("", "square.on.square.fill"), ("🏠", nil), ("", nil)] as [(String, String?)])
+    /// Edit Space… → Save leaves the icon as it was: a symbol, an emoji or none (#205).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/205"), arguments: [("", "square.on.square.fill"), ("🏠", nil), ("", nil)] as [(String, String?)])
     func savingTheIconItReadsChangesNothing(emoji: String, symbol: String?) {
         let space = Self.space(emoji: emoji, symbol: symbol)
         var saved = space
@@ -17,7 +18,9 @@ struct SpaceIconTests {
         #expect(saved == space)
     }
 
-    @Test func iconsNeverStack() {
+    /// Setting an icon writes both fields, so an emoji and a symbol never stack (#205).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/205"))
+    func iconsNeverStack() {
         var s = Self.space(emoji: "", symbol: "star.fill")
         #expect(s.icon == .symbol("star.fill"))
         s.icon = .emoji("🌱")
@@ -29,7 +32,8 @@ struct SpaceIconTests {
     }
 
     /// A symbol wins over an emoji stored beside it; an empty symbol counts as none.
-    @Test func readingTheStoredPair() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/205"))
+    func readingTheStoredPair() {
         #expect(SpaceIcon(emoji: "🌱", symbol: "square.on.square.fill") == .symbol("square.on.square.fill"))
         #expect(SpaceIcon(emoji: "🌱", symbol: "") == .emoji("🌱"))
         #expect(SpaceIcon(emoji: "", symbol: nil) == .none)

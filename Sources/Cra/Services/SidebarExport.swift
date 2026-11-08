@@ -67,7 +67,7 @@ enum SidebarExport {
                 try html.write(to: url, atomically: true, encoding: .utf8)
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             } catch {
-                NSAlert(error: error).runModal()
+                DispatchQueue.main.async { AppDialog(error: error).runModal(over: window ?? AppDialog.parentWindow) }
             }
         }
         if let window { panel.beginSheetModal(for: window, completionHandler: done) } else { done(panel.runModal()) }

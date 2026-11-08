@@ -1,0 +1,26 @@
+# Arc's File ▸ New Easel (⌃⇧E, Arc 1.172.1, docs/arc-parity.md "Easels, measured"): a Today tab on an
+# easel:// address whose page is Cra's canvas, not a web page; it comes back after a relaunch.
+budget rss=700 stalls50=10
+cra://action/newEasel
+wait 2
+cra://debug?browserWindows=created
+expect-log Cra browser windows created: kind=normal .*tabs=\[easel://[0-9A-F-]{36}\] open=easel://[0-9A-F-]{36} page=1
+relaunch
+wait 4
+cra://debug?browserWindows=relaunched
+expect-log browser windows relaunched: kind=normal listed=1 tabs=1 open=1
+cra://action/viewEasels
+wait 1
+# The capture menu's New Easel: an easel with the capture on it opens in a new tab (after the
+# relaunch only cra.log is read, which counts tabs rather than naming them).
+cra://open?url=${PAGE}?n=captured
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?captureToEasel=1
+wait 2
+cra://debug?browserWindows=captured
+expect-log browser windows captured: kind=normal listed=1 tabs=3 open=1
+# Send To… an easel: the capture lands on the easel edited last, next to the first one.
+cra://open?url=${PAGE}?n=sent
+wait 2
+cra://debug?captureToEasel=send
+expect-log capture sent to an easel, which now holds 2 items

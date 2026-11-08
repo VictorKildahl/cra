@@ -3,8 +3,19 @@ import CraCEF
 
 /// Which engine draws a page, and the factory every page browser comes from
 /// (ProtectedMediaSites has the rules; docs/protected-media.md the why).
+/// A page Cra draws itself (an Easel) instead of a website. It keeps its own address and hands
+/// any other one to the engine that address gets.
+@MainActor
+protocol NativePage: AnyObject {
+    func owns(_ url: String) -> Bool
+}
+
 @MainActor
 enum PageEngines {
+    /// The app's pages of its own (EaselBrowser), registered at launch: a browser for an address
+    /// one of them owns, else nil.
+    static var nativePage: ((_ frame: NSRect, _ url: String, _ delegate: CraBrowserDelegate?, _ incognito: Bool, _ profilePath: String?) -> CraBrowser?)?
+
     /// The list, with the user's own choices (protected-media.json) on it. `defaults write
     /// dk.kildahl.cra webKitProtectedMedia -bool NO` turns it all off (every page Chromium's again).
     /// A test instance sets CRA_WEBKIT_DRM=0|1 and CRA_WEBKIT_HOSTS=<host,host> (the scenarios' localhost).
@@ -54,6 +65,8 @@ enum PageEngines {
     /// opener's engine: WebKit can only hand a popup to a web view it made, CEF to a CraBrowser.
     static func makeBrowser(frame: NSRect, url: String?, delegate: CraBrowserDelegate?, incognito: Bool,
                             profilePath: String?, opener: CraBrowser? = nil) -> CraBrowser {
+        // An easel's address (Arc's Easels): its canvas, not a page.
+        if let url, let page = nativePage?(frame, url, delegate, incognito, profilePath) { return page }
         let engine = url.map { sites.engine(for: $0) } ?? opener.map(engine(of:)) ?? .chromium
         switch engine {
         case .webKit:
@@ -69,6 +82,8 @@ enum PageEngines {
     /// Chromium asks for every main-frame request (CraCEF's OnBeforeBrowse); WebKit only for
     /// addresses Cra loads (-loadURL:), never for the page's own navigations.
     static func handoffTarget(from browser: CraBrowser, to url: String, method: String) -> PageEngine? {
+        // An easel hands every other address to the engine that address gets.
+        if let page = browser as? NativePage { return page.owns(url) ? nil : sites.engine(for: url) }
         let current = engine(of: browser)
         switch current {
         case .chromium: return sites.handoff(from: current, to: url, method: method)

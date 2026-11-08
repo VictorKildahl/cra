@@ -29,7 +29,7 @@ struct ThemeTonesTests {
     }
 
     /// Every tone is a mix of shadedDark: what Arc stores lands within rounding.
-    @Test(arguments: spaces)
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/152"), arguments: spaces)
     func tonesAreArcsPaletteSlots(space: Space) {
         let sd = RGB(space.shadedDark.0 / 255, space.shadedDark.1 / 255, space.shadedDark.2 / 255)
         let t = TooltipTones(shadedDark: sd)
@@ -41,14 +41,15 @@ struct ThemeTonesTests {
 
     /// Cra rebuilds shadedDark from the theme colour: Victor's #F8D558 lands next to Arc's
     /// (which runs below 0 in blue, so the screen shows 0), and so does its tip's fill.
-    @Test func victorsThemeRebuildsArcsShade() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/152"))
+    func victorsThemeRebuildsArcsShade() {
         let theme = SpaceTheme(colors: ["#F8D558", "#A4F554"], intensity: 0.25, noise: 0.35, appearance: "light", vibrant: true, accent: "#F8D558")
         #expect(Self.close(theme.shadedDark, (111.42, 85.74, 0), within: 8))
         #expect(Self.close(TooltipTones(theme: theme).fill, (33.42, 25.72, 0), within: 3))
     }
 
     /// Arc's shadedDark sits at 10 % luminance in the theme's hue; greys stay grey.
-    @Test(arguments: ["#F8D558", "#E63333", "#2861B3", "#3A8F5C", "#808080"])
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/152"), arguments: ["#F8D558", "#E63333", "#2861B3", "#3A8F5C", "#808080"])
     func shadedDarkKeepsTheHueAtTenPercentLuminance(hex: String) {
         let c = SpaceTheme.shadedDark(hex)
         func lin(_ x: Double) -> Double { x <= 0.04045 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4) }

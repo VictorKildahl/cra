@@ -10,9 +10,19 @@ you can send. Code is welcome too, within the few rules below.
   include a screenshot or clip of both. Arc isn't the only source of truth, though: if
   Arc's way is unintuitive or worse than it could be, open an issue that makes the case,
   and we'll decide it on its merits.
+- **New ideas go to Discussions.** A feature Arc never had goes in
+  [Ideas](https://github.com/VictorKildahl/cra/discussions/categories/ideas), where others
+  can upvote it. Issues are for bugs and for Arc features Cra is missing; an idea opened as
+  an issue is labelled `not now`, closed and moved there.
 - **No cloud AI.** Arc Max-style features (summaries, LLM search, anything that needs an
   API key or sends pages away) are out of scope. The one exception is Tidy Tabs, which runs
   on the Mac's own Apple Intelligence model and only shows when that is turned on.
+- **English only, for now.** Like Arc, the interface isn't translated: keeping every
+  language in step with a UI that changes most days is more than one maintainer can carry.
+  Web pages and Chromium's own dialogs already follow the system language. If you'd like
+  Cra in your language, upvote the
+  [localization idea](https://github.com/VictorKildahl/cra/discussions/240) instead of
+  opening an issue or a PR.
 - **No account, no server, no telemetry.** Everything stays on the user's Mac.
 - **Native first.** The app is AppKit and SwiftUI; web content is Chromium through CEF.
 
@@ -45,6 +55,8 @@ hooks and how to run a test instance next to your daily Cra.
    have caught comes with that test ([docs/development.md](docs/development.md#tests)).
 4. Don't touch the release pipeline, signing or the CEF pin unless that's the point of
    the PR. Releases are cut by the maintainer.
+
+[docs/reviewing.md](docs/reviewing.md) lists what a review checks, so you can check it first.
 
 ## Chromium and CEF
 

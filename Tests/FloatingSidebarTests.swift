@@ -82,7 +82,25 @@ enum FloatingSidebarTests {
         expect(!sidebar.isShown && !shell.sidebarDetached && !shell.floatingSidebar,
                "an uninterrupted hide still reattaches the sidebar normally")
 
-        // GitHub #82: like Arc, only the key window reveals, so a window behind another can't.
+        onlyTheKeyWindowReveals(window: window, sidebar: sidebar, panel: panel)
+
+        // #136: the pointer is sampled only while Cra is the active app.
+        sidebar.install()
+        expect(!sidebar.isPolling, "an inactive app installs no pointer timer")
+        NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApp)
+        expect(sidebar.isPolling, "becoming active starts the pointer timer")
+        NotificationCenter.default.post(name: NSApplication.didResignActiveNotification, object: NSApp)
+        expect(!sidebar.isPolling, "leaving the app stops it")
+        window.close()
+        print("Floating sidebar: \(checks) checks passed")
+    }
+
+    /// GitHub #82: like Arc, only the key window's hidden sidebar comes out on hover, so a window
+    /// behind another can't reveal over it. The key window may be one of its own children (the
+    /// page, DevTools, the floating panel); with Cra inactive, none reveals.
+    // promise: #82
+    @MainActor
+    private static func onlyTheKeyWindowReveals(window: NSWindow, sidebar: FloatingSidebarController, panel: NSWindow) {
         let page = NSWindow(contentRect: NSRect(x: -9990, y: -9990, width: 1380, height: 860),
                             styleMask: [.borderless], backing: .buffered, defer: false)
         page.isReleasedWhenClosed = false
@@ -105,18 +123,11 @@ enum FloatingSidebarTests {
         window.removeChildWindow(page)
         page.close()
         front.close()
-
-        // #136: the pointer is sampled only while Cra is the active app.
-        sidebar.install()
-        expect(!sidebar.isPolling, "an inactive app installs no pointer timer")
-        NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApp)
-        expect(sidebar.isPolling, "becoming active starts the pointer timer")
-        NotificationCenter.default.post(name: NSApplication.didResignActiveNotification, object: NSApp)
-        expect(!sidebar.isPolling, "leaving the app stops it")
-        window.close()
-        print("Floating sidebar: \(checks) checks passed")
     }
 
+    // promise: #24
+    /// Where the pointer reveals and hides the floating sidebar; edge to edge, with no margin, only
+    /// Arc's 5 pt strip over the page reveals it (#24).
     private static func geometry() {
         // Nonzero bounds also check that both paths use shell-local geometry.
         let bounds = CGRect(x: 20, y: 10, width: 1400, height: 880)

@@ -1,0 +1,19 @@
+# Arc's View ▸ Appearance (Arc 1.172.1, docs/arc-parity.md): Light and Dark force what pages see
+# as prefers-color-scheme, live and without a reload; Automatic follows the Mac again.
+budget rss=700 stalls50=10
+cra://open?url=${PAGE}?n=look
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://action/appearanceDark
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'dark-'+matchMedia('(prefers-color-scheme: dark)').matches"}
+expect-log Cra cdp Runtime.evaluate .*"value":"dark-true"
+cra://action/appearanceLight
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'light-'+matchMedia('(prefers-color-scheme: dark)').matches"}
+expect-log Cra cdp Runtime.evaluate .*"value":"light-false"
+cra://open?url=${PAGE}?n=new
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'newtab-'+matchMedia('(prefers-color-scheme: dark)').matches"}
+expect-log Cra cdp Runtime.evaluate .*"value":"newtab-false"
+cra://action/appearanceAutomatic
+wait 1

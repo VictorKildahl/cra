@@ -9,8 +9,8 @@ import SwiftUI
 /// for the intensity and a dotted dial for the grain. Every change goes to `onChange` at once (the
 /// caller previews it); nothing here writes. Like Arc's editor state it keeps the pad's colours,
 /// the intensity, the grain and Auto / Light / Dark, and builds the theme from them
-/// (SpaceThemeVariants): one colour is Arc's one-dot theme, two or three a gradient whose Auto
-/// gets a light and a dark half.
+/// (SpaceThemeVariants): one colour is Arc's one-dot fill, two or three a gradient, and Auto
+/// always gets a light and a dark half (#155).
 struct SpaceStyleEditor: View {
     @State private var theme: SpaceTheme
     @State private var pad: PadState
@@ -276,9 +276,9 @@ private struct WaveSlider: View {
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width, h = geo.size.height
-            let x = 8 + (w - 16) * value
+            let x = 8 + (w - 16) * CGFloat(value)
             let wave = Path { p in
-                let amp = 3 + (h / 2 - 12) * value
+                let amp = 3 + (h / 2 - 12) * CGFloat(value)
                 for px in stride(from: 8.0, through: w - 8, by: 1) {
                     let y = h / 2 - amp * sin((px - 8) / (w - 16) * CGFloat.pi * 14)
                     px == 8 ? p.move(to: CGPoint(x: px, y: y)) : p.addLine(to: CGPoint(x: px, y: y))

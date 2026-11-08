@@ -8,12 +8,12 @@ enum ViewSnapshot {
     /// "PaneToolbarView" or "PaneToolbarView,1": the first (or nth) view of that class on screen
     /// in the window, left to right and top to bottom (the pager keeps other spaces' columns
     /// laid out beside the visible one).
-    static func write(_ spec: String, in window: NSWindow?, to path: String) {
+    static func find(_ spec: String, in window: NSWindow?) -> NSView? {
         let parts = spec.split(separator: ",").map(String.init)
-        guard let root = window?.contentView?.superview ?? window?.contentView else { return }
+        guard let name = parts.first, let root = window?.contentView?.superview ?? window?.contentView else { return nil }
         var found: [NSView] = []
         func walk(_ v: NSView) {
-            if String(describing: type(of: v)) == parts[0], !v.isHiddenOrHasHiddenAncestor, !v.visibleRect.isEmpty,
+            if String(describing: type(of: v)) == name, !v.isHiddenOrHasHiddenAncestor, !v.visibleRect.isEmpty,
                v.convert(v.bounds, to: nil).intersects(root.bounds) { found.append(v) }
             v.subviews.forEach(walk)
         }
@@ -23,7 +23,12 @@ enum ViewSnapshot {
             return (a.minX, -a.maxY) < (b.minX, -b.maxY)
         }
         let index = parts.count > 1 ? Int(parts[1]) ?? 0 : 0
-        guard index < found.count, let png = render(found[index]) else {
+        return index < found.count ? found[index] : nil
+    }
+
+    /// The view `find` picks, drawn to a PNG at `path`.
+    static func write(_ spec: String, in window: NSWindow?, to path: String) {
+        guard let view = find(spec, in: window), let png = render(view) else {
             CraLog.note("snapshot: no visible \(spec)")
             return
         }

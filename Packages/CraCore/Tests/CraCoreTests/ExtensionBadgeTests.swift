@@ -10,11 +10,13 @@ struct ExtensionBadgeTests {
                        defaultBackground: grey) { _ in width }
     }
 
-    @Test func noTextNoBadge() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/106"))
+    func noTextNoBadge() {
         #expect(Self.badge("", color: "#FB8C00FF", width: 0) == nil)
     }
 
-    @Test func fortyTwoMatchesArc() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/106"))
+    func fortyTwoMatchesArc() throws {
         // Arc 1.171: "42" on a 16 pt icon is 8 × 7 pt, 1 pt in from the icon's bottom right.
         let b = try #require(Self.badge("42", color: "#FB8C00FF", width: 10.6))
         #expect(b.frame == CGRect(x: 7, y: 8, width: 8, height: 7))
@@ -23,7 +25,7 @@ struct ExtensionBadgeTests {
         #expect(b.cutoutCornerRadius == 1.5)
     }
 
-    @Test(arguments: [
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/106"), arguments: [
         // Never narrower than tall.
         (3.0, CGRect(x: 8, y: 8, width: 7, height: 7)),
         // Odd widths are made even, like the 28 pt icon area.
@@ -37,7 +39,8 @@ struct ExtensionBadgeTests {
         #expect(try #require(Self.badge("x", width: textWidth)).frame == frame)
     }
 
-    @Test func textContrastsWithTheBackground() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/106"))
+    func textContrastsWithTheBackground() throws {
         // Orange is light: Google Grey 900 text, as in Arc's capture.
         #expect(try #require(Self.badge("1", color: "#FB8C00FF", width: 5)).textColor == ExtensionBadge.RGBA(hex: "#202124"))
         #expect(try #require(Self.badge("1", color: "#1A73E8FF", width: 5)).textColor == ExtensionBadge.RGBA(r: 1, g: 1, b: 1))
@@ -46,7 +49,8 @@ struct ExtensionBadgeTests {
                 == ExtensionBadge.RGBA(r: 1, g: 1, b: 1))
     }
 
-    @Test func backgroundIsOpaqueOrTheDefault() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/106"))
+    func backgroundIsOpaqueOrTheDefault() throws {
         #expect(try #require(Self.badge("1", color: "#FF000080", width: 5)).background == ExtensionBadge.RGBA(r: 1, g: 0, b: 0))
         // Unset reaches Cra as transparent black.
         #expect(try #require(Self.badge("1", color: "#00000000", width: 5)).background == Self.grey)

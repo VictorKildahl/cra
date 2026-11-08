@@ -35,13 +35,18 @@ jobs:
           path: vendor/cef
           key: cef-${{ runner.arch }}-${{ steps.cef.outputs.version }}-${{ hashFiles('scripts/fetch-cef.sh') }}
 
-      - name: Build (debug, ad-hoc signed)
-        run: scripts/build.sh debug
+      # Release, as users run it: the scenario budgets (the recorder's 0.1 % of a core above all)
+      # are a release build's. A debug build's recorder alone costs 0.16–0.22 %.
+      - name: Build (release, ad-hoc signed)
+        run: scripts/build.sh
 
       - name: Scenarios
         env:
           CRA_FLAGS: backdrop=${{ matrix.backdrop }}
           CRA_SCENARIO_SCREEN: "1"
+          # Budgets and snapshots were set on a Mac; on this VM they go in the summary, and only
+          # what the app does fails the job (scripts/scenario.sh).
+          CRA_BUDGETS: report
         run: |
           {
             echo "## Scenarios, backdrop=${{ matrix.backdrop }}"
@@ -49,6 +54,10 @@ jobs:
             echo "| Scenario | Result | Longest stall / over 50 ms | Memory | Problems |"
             echo "|---|---|---|---|---|"
           } >> "$GITHUB_STEP_SUMMARY"
+          # A fresh runner's first Cra launch pages CEF in from disk on the main thread (1.1–2.7 s
+          # at start-up, 3–6 Nov) whatever the scenario; one throwaway run first, so the start-up
+          # budget measures Cra, not the runner's cold disk.
+          scripts/scenario.sh solid-spaces > /dev/null 2>&1 || true
           scripts/scenario.sh all
 
       - name: Keep logs
@@ -103,5 +112,9 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
+      # About a thousand mutants are more than the job's hour: a shuffled sample (a new order each
+      # ISO week) runs until the time is up, and the score is over the ones it reached.
       - name: Mutants of the pure code (70 % must be caught)
+        env:
+          CRA_MUTATION_MINUTES: "70"
         run: scripts/mutate.py

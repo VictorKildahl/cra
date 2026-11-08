@@ -1,0 +1,14 @@
+# An extension's popup saves a file with chrome.downloads as it opens. With Chrome's own UI the
+# popup is a page CEF made no browser for, and CEF cancelled its downloads before Cra saw them
+# ("No CefBrowser for download item"); they now go to the profile's last-used page (GitHub #218).
+# promise: #218
+home
+budget rss=600 stalls50=5
+cra://debug?installExtension=${FIXTURES}/DownloadExtension
+relaunch
+cra://open?url=${PAGE}?n=download
+wait 3
+cra://debug?extensionAction=${DOWNLOAD_EXTENSION_ID}
+expect-log Download finished from a blob: address
+cra://dismiss
+cra://debug?removeExtension=${DOWNLOAD_EXTENSION_ID}

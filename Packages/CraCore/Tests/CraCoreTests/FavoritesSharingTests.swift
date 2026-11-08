@@ -10,7 +10,8 @@ struct FavoritesSharingTests {
 
     static func ids(_ n: Int) -> [UUID] { (0..<n).map { _ in UUID() } }
 
-    @Test func eachProfileGetsOneListOfItsSpacesFavorites() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/154"))
+    func eachProfileGetsOneListOfItsSpacesFavorites() {
         let sp = Self.ids(4), c = Self.ids(4), f = Self.ids(5), made = Self.ids(2), work = UUID()
         var next = made.makeIterator()
         let plan = FavoritesSharing.share([
@@ -30,7 +31,8 @@ struct FavoritesSharingTests {
     }
 
     /// Arc keeps a profile's list while no space uses it; turning sharing on again starts from it.
-    @Test func aProfilesListIsReused() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/154"))
+    func aProfilesListIsReused() {
         let sp = UUID(), c = UUID(), list = UUID(), f = Self.ids(3)
         let plan = FavoritesSharing.share(
             [S(spaceID: sp, profileID: nil, containerID: c, items: [E(id: f[1], key: "tab https://a.example"), E(id: f[2], key: "tab https://b.example")])],
@@ -40,7 +42,8 @@ struct FavoritesSharingTests {
         #expect(plan.moves == [.init(item: f[2], container: list)] && plan.duplicates == [f[1]: f[0]])
     }
 
-    @Test func twoOfAPageInOneSpaceBothStay() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/154"))
+    func twoOfAPageInOneSpaceBothStay() {
         let sp = UUID(), c = UUID(), f = Self.ids(2)
         let plan = FavoritesSharing.share([S(spaceID: sp, profileID: nil, containerID: c,
                                              items: [E(id: f[0], key: "tab https://a.example"), E(id: f[1], key: "tab https://a.example")])], lists: [])
@@ -49,7 +52,8 @@ struct FavoritesSharingTests {
 
     /// Off gives each space its own list again; on folds the copies back, so the list comes back
     /// as it was, not doubled.
-    @Test func offAndOnAgainChangesNothing() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/154"))
+    func offAndOnAgainChangesNothing() {
         let sp = Self.ids(3), list = UUID(), c = Self.ids(2), f = Self.ids(4)
         let shared = [E(id: f[0], key: "tab https://a.example"), E(id: f[1], key: "split https://b.example https://c.example")]
         let lists = [ProfileFavorites(profileID: nil, containerID: list)]
@@ -64,7 +68,8 @@ struct FavoritesSharingTests {
         #expect(on.duplicates == [f[2]: f[0], f[3]: f[1]])
     }
 
-    @Test func sharedListsStayPut() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/154"))
+    func sharedListsStayPut() {
         let sp = Self.ids(2), list = UUID(), work = UUID(), f = UUID()
         let lists = [L(ProfileFavorites(profileID: work, containerID: list), items: [E(id: f, key: "tab https://a.example")])]
         let plan = FavoritesSharing.share(sp.map { S(spaceID: $0, profileID: work, containerID: list, items: lists[0].items) }, lists: lists)
@@ -74,7 +79,8 @@ struct FavoritesSharingTests {
                 "a space with its own list keeps it")
     }
 
-    @Test func keys() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/154"))
+    func keys() {
         let tab = SidebarItem.tab("https://mail.example/inbox", parent: nil)
         #expect(FavoritesSharing.key(of: tab, children: []) == "tab https://mail.example/inbox")
         #expect(FavoritesSharing.key(of: SidebarItem.tab("", parent: nil), children: []) == nil, "an empty pane matches nothing")
@@ -86,14 +92,16 @@ struct FavoritesSharingTests {
         #expect(FavoritesSharing.key(of: SidebarItem.folder("F", parent: nil), children: []) == nil)
     }
 
-    @Test func settingIsOffUntilTurnedOn() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/154"))
+    func settingIsOffUntilTurnedOn() throws {
         let empty = try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8))
         #expect(!empty.sharedFavorites)
         let on = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"sharedFavorites": true}"#.utf8))
         #expect(on.sharedFavorites)
     }
 
-    @Test func listsRoundTrip() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/154"))
+    func listsRoundTrip() throws {
         var doc = SidebarDocument.fresh()
         doc.profileFavorites = [ProfileFavorites(profileID: nil, containerID: UUID()), ProfileFavorites(profileID: UUID(), containerID: UUID())]
         let data = try JSONEncoder().encode(doc)

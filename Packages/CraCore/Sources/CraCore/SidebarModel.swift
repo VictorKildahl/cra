@@ -64,7 +64,7 @@ public struct TabData: Codable, Equatable {
     public var muted: Bool = false
     public var timeLastActiveAt: Date?
     public var activeTabBeforeCreationID: UUID?
-    /// Host used as favicon cache key.
+    /// Favicon cache key: the host, then the page's own icon once it loads (FaviconKey, #211).
     public var faviconKey: String?
     /// Favicon cache key of an image the user picked; wins over the site's favicon.
     public var customIconKey: String?
@@ -103,7 +103,7 @@ public struct TabData: Codable, Equatable {
         guard url != savedURL else { return }
         url = savedURL
         if let homeTitle { savedTitle = homeTitle }
-        if let key = FaviconKey.key(for: savedURL) { faviconKey = key }
+        faviconKey = FaviconKey.key(after: faviconKey, goingTo: savedURL)
     }
 
     public init(url: String, title: String = "") {
@@ -267,9 +267,12 @@ public struct Space: Identifiable, Codable, Equatable {
     public var profileID: UUID?
     /// An SF Symbol from the Icon tab of Arc's icon picker, shown instead of `emoji` (then empty).
     public var symbol: String? = nil
+    /// The Blank Window this space belongs to (Arc: a `standalone` sidebar container keyed by its
+    /// window). Such a space is in no window's space list and goes when its window closes (BlankWindow).
+    public var standaloneWindowID: UUID? = nil
 
     public init(id: UUID, title: String, emoji: String, theme: SpaceTheme, favoritesContainerID: UUID, pinnedContainerID: UUID,
-                todayContainerID: UUID, createdAt: Date, profileID: UUID? = nil, symbol: String? = nil) {
+                todayContainerID: UUID, createdAt: Date, profileID: UUID? = nil, symbol: String? = nil, standaloneWindowID: UUID? = nil) {
         self.id = id
         self.title = title
         self.emoji = emoji
@@ -280,6 +283,7 @@ public struct Space: Identifiable, Codable, Equatable {
         self.createdAt = createdAt
         self.profileID = profileID
         self.symbol = symbol
+        self.standaloneWindowID = standaloneWindowID
     }
 }
 
@@ -493,6 +497,9 @@ public struct AppSettings: Codable, Equatable {
     public var hapticFeedbackOnReorder: Bool = true
     /// Dia's Advanced ▸ "Warn before quitting" (shouldWarnBeforeQuitting, off by default).
     public var warnBeforeQuitting: Bool = false
+    /// GitHub #231, not in Arc (Arc quits on ⌘Q): ⌘Q puts the pages away and Cra stays in the menu
+    /// bar, so ⌥⌘N opens a Little Window without a launch. Off, ⌘Q quits as in Arc (MenuBarMode).
+    public var keepInMenuBar: Bool = false
     /// Dia's Tabs ▸ "Clean up tabs I haven't used in:" checkbox; `autoArchive` keeps the
     /// threshold while this is off.
     public var autoArchiveEnabled: Bool = true
@@ -505,6 +512,39 @@ public struct AppSettings: Codable, Equatable {
     public var tabSleepOnMemoryPressure: Bool = false
     /// Privacy ▸ "Always use secure connections": Chrome's HTTPS-Only Mode.
     public var httpsOnly: Bool = false
+    /// Arc's View ▸ Appearance: what websites see as the colour scheme.
+    public var websiteAppearance: WebsiteAppearance = .automatic
+    /// Arc's Settings ▸ Advanced "Play Arc sound effects" (the capture shutter), on by default.
+    public var soundEffects: Bool = true
+    /// Arc's Library ▸ Media: off until "Show Media" is pressed (reading Desktop and Documents
+    /// asks macOS for access), then the folders the Library button's "Show media" menu ticks.
+    public var mediaLibraryEnabled: Bool = false
+    public var mediaFolders: [MediaLibrary.Folder] = MediaLibrary.Folder.allCases
+    /// Arc's Settings ▸ Links ▸ "Archive Little Arcs after:".
+    public var littleWindowArchiveAfter: LittleWindowArchive = .sixHours
+    /// Arc's Settings ▸ Advanced "When opening Arc, restore windows from previous session", on by default.
+    public var restoreWindows: Bool = true
+    /// Arc's Settings ▸ Advanced "Allow websites to get your theme data" (ArcThemeData), on by default.
+    public var shareThemeWithWebsites: Bool = true
+    /// Arc's Settings ▸ General "Block Cookie Banners" (CookieBanners), off by default as in Arc.
+    public var blockCookieBanners: Bool = false
+    /// Arc's View ▸ Developer ▸ "Allow JavaScript from Apple Events": AppleScript's `execute`, off by default.
+    public var allowAppleEventsJavaScript: Bool = false
+    /// Arc's Settings ▸ Advanced "Allow window dragging from the top of webpages" (PageTopDrag), on by default.
+    public var pageTopWindowDrag: Bool = true
+    /// Arc's Settings ▸ Advanced "Enable Boosts on websites you visit", on by default.
+    public var boostsEnabled: Bool = true
+    /// Arc's Settings ▸ General ▸ Previews: hovering a Gmail favorite shows its unread mail.
+    public var favoritePreviews: Bool = true
+    /// Arc's Live Calendar on a Google Calendar favorite (the favorite's menu ▸ Live Calendar), on
+    /// until "Disable Live Calendar".
+    public var liveCalendar: Bool = true
+    /// Live Calendar ▸ Show Hover Preview: today's timeline when the pointer rests on the tile.
+    public var calendarHoverPreview: Bool = true
+    /// Live Calendar ▸ Show Time to Next Meeting: the tile counts down to it.
+    public var calendarTimeToNextMeeting: Bool = true
+    /// Live Calendar ▸ Show Next Meeting Link, Two Minutes Before in Arc.
+    public var calendarMeetingLink: CalendarPreview.LinkTiming = .twoMinutes
     /// Arc's searchSuggestEnabled: the command bar asks the search engine for suggestions
     /// as you type and fills its rows with them.
     public var searchSuggestions: Bool = true
@@ -703,11 +743,28 @@ extension AppSettings {
         folderPreviews = try c.decodeIfPresent(Bool.self, forKey: .folderPreviews) ?? true
         hapticFeedbackOnReorder = try c.decodeIfPresent(Bool.self, forKey: .hapticFeedbackOnReorder) ?? true
         warnBeforeQuitting = try c.decodeIfPresent(Bool.self, forKey: .warnBeforeQuitting) ?? false
+        keepInMenuBar = try c.decodeIfPresent(Bool.self, forKey: .keepInMenuBar) ?? false
         autoArchiveEnabled = try c.decodeIfPresent(Bool.self, forKey: .autoArchiveEnabled) ?? true
         tabSleepTimerEnabled = try c.decodeIfPresent(Bool.self, forKey: .tabSleepTimerEnabled) ?? true
         tabSleepAfter = (try? c.decodeIfPresent(TabSleepThreshold.self, forKey: .tabSleepAfter)) ?? .fourHours
         tabSleepOnMemoryPressure = try c.decodeIfPresent(Bool.self, forKey: .tabSleepOnMemoryPressure) ?? false
         httpsOnly = try c.decodeIfPresent(Bool.self, forKey: .httpsOnly) ?? false
+        websiteAppearance = (try? c.decodeIfPresent(WebsiteAppearance.self, forKey: .websiteAppearance)) ?? .automatic
+        soundEffects = try c.decodeIfPresent(Bool.self, forKey: .soundEffects) ?? true
+        mediaLibraryEnabled = try c.decodeIfPresent(Bool.self, forKey: .mediaLibraryEnabled) ?? false
+        mediaFolders = (try? c.decodeIfPresent([MediaLibrary.Folder].self, forKey: .mediaFolders)) ?? MediaLibrary.Folder.allCases
+        littleWindowArchiveAfter = (try? c.decodeIfPresent(LittleWindowArchive.self, forKey: .littleWindowArchiveAfter)) ?? .sixHours
+        restoreWindows = try c.decodeIfPresent(Bool.self, forKey: .restoreWindows) ?? true
+        shareThemeWithWebsites = try c.decodeIfPresent(Bool.self, forKey: .shareThemeWithWebsites) ?? true
+        blockCookieBanners = try c.decodeIfPresent(Bool.self, forKey: .blockCookieBanners) ?? false
+        allowAppleEventsJavaScript = try c.decodeIfPresent(Bool.self, forKey: .allowAppleEventsJavaScript) ?? false
+        pageTopWindowDrag = try c.decodeIfPresent(Bool.self, forKey: .pageTopWindowDrag) ?? true
+        boostsEnabled = try c.decodeIfPresent(Bool.self, forKey: .boostsEnabled) ?? true
+        favoritePreviews = try c.decodeIfPresent(Bool.self, forKey: .favoritePreviews) ?? true
+        liveCalendar = try c.decodeIfPresent(Bool.self, forKey: .liveCalendar) ?? true
+        calendarHoverPreview = try c.decodeIfPresent(Bool.self, forKey: .calendarHoverPreview) ?? true
+        calendarTimeToNextMeeting = try c.decodeIfPresent(Bool.self, forKey: .calendarTimeToNextMeeting) ?? true
+        calendarMeetingLink = (try? c.decodeIfPresent(CalendarPreview.LinkTiming.self, forKey: .calendarMeetingLink)) ?? .twoMinutes
         searchSuggestions = try c.decodeIfPresent(Bool.self, forKey: .searchSuggestions) ?? true
         showSpaceHeaderOnSingleSpace = try c.decodeIfPresent(Bool.self, forKey: .showSpaceHeaderOnSingleSpace) ?? true
         sharedFavorites = try c.decodeIfPresent(Bool.self, forKey: .sharedFavorites) ?? false
@@ -770,6 +827,7 @@ extension Space {
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         profileID = try c.decodeIfPresent(UUID.self, forKey: .profileID)
         symbol = try c.decodeIfPresent(String.self, forKey: .symbol)
+        standaloneWindowID = try c.decodeIfPresent(UUID.self, forKey: .standaloneWindowID)
         // Edit Space… → Save in 0.1.31 and older wrote 🌱 beside a space's symbol, and the sidebar
         // drew both stacked (#205). The symbol was the space's icon, so the emoji beside it goes.
         if symbol?.isEmpty == false { emoji = "" }
@@ -795,3 +853,25 @@ extension TabData {
         homeTitle = try c.decodeIfPresent(String.self, forKey: .homeTitle)
     }
 }
+
+/// Arc's View ▸ Appearance ("Websites, Easels, and Notes will use:"): Automatic follows the Mac.
+public enum WebsiteAppearance: String, Codable, CaseIterable, Sendable {
+    case automatic, light, dark
+
+    public var title: String {
+        switch self {
+        case .automatic: "Automatic"
+        case .light: "Light"
+        case .dark: "Dark"
+        }
+    }
+    /// What Chromium's colour mode takes: 0 the system's, 1 light, 2 dark.
+    public var chromiumMode: Int {
+        switch self {
+        case .automatic: 0
+        case .light: 1
+        case .dark: 2
+        }
+    }
+}
+

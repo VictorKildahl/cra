@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "Cra Download Fixture",
+  "version": "1.0",
+  "description": "Made up for scripts/scenario.sh: a popup that saves a file through chrome.downloads (GitHub #218).",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlRQ7Y3GkDvCSWuYjAN6SvAYdH++2MtBajyxWnzCMlQqV/j672uR6gp+2h2bVFavOOAKTNWIh5pqxNef+lYOTypnZdeHHKIxkkU399J700vF5BuaxbrhMjrZdtEnqDq2dEAq1IXT09yy0RG/S7Df8RezNQ/hmnJ9Lx/cUp5C3SflRkCAt6Rd0Ek/jQ9ixetOzvZ8nbIRWM+76qqTWjxa/3IS5kFTPC6Bn3RYN7/TVdyKOIGvLYQPwtTWMo/prZZNcdFg75CHUbNDlgyFg6klKdzhP74TGWRcL0ubmGZkJgakE/DBLmGH9yxapFfQ0HtSoMeepW0n9dGPt6JFFlPBSLwIDAQAB",
+  "permissions": ["downloads"],
+  "action": { "default_popup": "popup.html", "default_title": "Cra Download Fixture" }
+}

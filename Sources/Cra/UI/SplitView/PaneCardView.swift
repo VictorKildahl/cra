@@ -168,8 +168,11 @@ final class PaneCardView: NSView {
         // gradient plus about +9/+11/+12 per channel, i.e. a white veil at ~0.2.
         layer?.backgroundColor = transparent || hasPage ? NSColor.clear.cgColor : NSColor(white: 1, alpha: isDark ? 0.08 : 0.2).cgColor
         let bar = developerBar ?? toolbarColor.map { NSColor(Color(hex: $0)) } ?? .white
-        toolbarBackground.layer?.backgroundColor = (hasPage && !transparent ? bar : NSColor.clear).cgColor
-        let page = pageColor.map { NSColor(Color(hex: $0)) } ?? CraBrowser.pageCanvasColor
+        // A page of Cra's own over the backdrop (an Easel) takes its veil under the toolbar too, as Arc's does.
+        let veiled = pageColor == "clear" ? NSColor(white: 0, alpha: 0.5) : bar
+        toolbarBackground.layer?.backgroundColor = (hasPage && !transparent ? veiled : NSColor.clear).cgColor
+        // "clear": a page of Cra's own that lets the window's backdrop through (an Easel, as in Arc).
+        let page = pageColor == "clear" ? NSColor.clear : pageColor.map { NSColor(Color(hex: $0)) } ?? CraBrowser.pageCanvasColor
         pageBackground.layer?.backgroundColor = (hasPage && !transparent ? page : NSColor.clear).cgColor
         hairline.isHidden = hasPage || transparent || !showToolbar
         hairline.layer?.backgroundColor = NSColor(white: isDark ? 1 : 0, alpha: 0.08).cgColor
@@ -201,7 +204,7 @@ final class PaneCardView: NSView {
         elsewhereView.layer?.cornerRadius = pageBackground.layer?.cornerRadius ?? 0
         elsewhereView.layer?.maskedCorners = pageBackground.layer?.maskedCorners ?? []
         let wb = frozenWebBounds ?? webArea.bounds
-        for sub in webArea.subviews where sub.frame != wb { sub.frame = wb }
+        EmbeddedPages.place(webArea.subviews, in: wb)
         ring.frame = b
     }
 

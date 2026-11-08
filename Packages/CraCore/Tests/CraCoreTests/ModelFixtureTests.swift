@@ -48,16 +48,31 @@ struct ModelFixtureTests {
         try decoder.decode(T.self, from: encoder.encode(value)) == value
     }
 
-    @Test(arguments: ["sidebar.json", "sidebar-legacy.json", "sidebar-stacked-icon.json"])
+    @Test(arguments: ["sidebar.json", "sidebar-legacy.json", "sidebar-stacked-icon.json", "sidebar-auto-theme.json"])
     func sidebarLoadsAsRecorded(name: String) throws {
         let (loaded, recorded) = try Self.load(name, as: SidebarDocument.self)
         #expect(loaded == recorded)
         #expect(try Self.roundTrips(loaded))
     }
 
+    /// Auto spaces keep both halves through a load (#155). A dark half without its optional fields
+    /// gets them off, and one that can't be read is dropped with its space kept: until 0.1.33 either
+    /// set the whole sidebar.json aside as corrupt.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/155"))
+    func autoSpacesKeepBothHalves() throws {
+        let (loaded, _) = try Self.load("sidebar-auto-theme.json", as: SidebarDocument.self)
+        #expect(loaded.spaces.map(\.title) == ["Editor Auto", "Short half", "Broken half"])
+        #expect(loaded.spaces.map { $0.theme.followsSystem } == [true, true, true])
+        #expect(loaded.spaces.map { $0.theme.dark != nil } == [true, true, false])
+        for space in loaded.spaces.prefix(2) {
+            #expect(!space.theme.resolved(systemDark: false).isDark && space.theme.resolved(systemDark: true).isDark)
+        }
+    }
+
     /// 0.1.31's Edit Space… → Save wrote 🌱 beside an imported space's symbol (#205): the symbol
     /// stays and the emoji goes, so the sidebar draws one icon again.
-    @Test func stackedSpaceIconLoadsAsItsSymbol() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/205"))
+    func stackedSpaceIconLoadsAsItsSymbol() throws {
         let (loaded, _) = try Self.load("sidebar-stacked-icon.json", as: SidebarDocument.self)
         #expect(loaded.spaces.map(\.emoji) == [""])
         #expect(loaded.spaces.map(\.icon) == [.symbol("square.on.square.fill")])
@@ -117,7 +132,7 @@ struct ModelFixtureTests {
         #expect(empty.choosing(.webKit, for: "https://www.viaplay.dk/").added == ["www.viaplay.dk"])
     }
 
-    @Test(arguments: ["pinned-extensions.json", "pinned-extensions-profiles.json"])
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/107"), arguments: ["pinned-extensions.json", "pinned-extensions-profiles.json"])
     func pinnedExtensionsLoadAsRecorded(name: String) throws {
         let (loaded, recorded) = try Self.load(name, as: PinnedExtensions.self)
         #expect(loaded == recorded)

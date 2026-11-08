@@ -6,13 +6,13 @@ struct ActionSearchScopeTests {
     typealias C = ActionSearchScope.Candidate<String>
 
     /// New Tab… and Open Command Bar would only reopen the bar; everything else is listed.
-    @Test(arguments: [("newTab", false), ("editURL", false), ("archiveTab", true), ("toggleSidebar", true)])
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/195"), arguments: [("newTab", false), ("editURL", false), ("archiveTab", true), ("toggleSidebar", true)])
     func barOpenersAreLeftOut(id: String, listed: Bool) {
         #expect(ActionSearchScope.lists(actionID: id) == listed)
     }
 
     /// Nothing typed: every action, the most used first, the others in menu order.
-    @Test func nothingTypedListsByUseThenMenuOrder() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/195")) func nothingTypedListsByUseThenMenuOrder() {
         let actions = [
             C(id: "new-tab", score: 0, uses: 0),
             C(id: "archive", score: 0, uses: 4),
@@ -23,7 +23,7 @@ struct ActionSearchScopeTests {
     }
 
     /// Typed: actions the text doesn't name drop out, the best name leads, use breaks ties.
-    @Test func typedRanksByMatchThenUse() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/195")) func typedRanksByMatchThenUse() {
         let actions = [
             C(id: "unrelated", score: 0, uses: 10),
             C(id: "add-top-split", score: 68, uses: 0),
@@ -34,7 +34,7 @@ struct ActionSearchScopeTests {
     }
 
     /// Use counts are capped: a much-used action can't outrank one the text names better by far.
-    @Test func useCannotBuryABetterName() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/195")) func useCannotBuryABetterName() {
         let actions = [C(id: "habit", score: 50, uses: 500), C(id: "named", score: 80, uses: 0)]
         #expect(ActionSearchScope.rank(actions, typed: true) == ["named", "habit"])
     }

@@ -2,7 +2,9 @@ import CraCore
 import Testing
 
 struct ToolbarColorTests {
-    @Test(arguments: [
+    /// A tab's toolbar colour: its page's report, else the colour the tab saved, else white, so a page
+    /// coming back never flashes a white bar it didn't have (#84).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/84"), arguments: [
         // The page's own report wins over what the tab remembers.
         ("#602040", "#205060", "#602040" as String?),
         // Not reported yet (no live page, or a page still loading): the remembered colour.

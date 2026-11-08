@@ -1,0 +1,16 @@
+# Developer Mode on a site with the toolbar hidden (Cra's default) shows Arc's developer bar
+# above that site's pages: the space colour with its diagonal stripes, the whole URL and its
+# copy-link, console, network and inspect buttons (#42). Before 0.1.31 the switch saved the
+# site and showed nothing until View > Show Toolbar was on (#185). The snapshot fails when no
+# PaneToolbarView is on screen.
+# promise: #185 #42
+budget rss=600 stalls50=6   # turning developer mode on or off stalls 130–650 ms (a reload)
+port 47124
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=devbar
+wait 3
+cra://action/toggleDeveloperMode
+wait 2
+snapshot PaneToolbarView developer-bar-toolbar-hidden
+cra://action/toggleDeveloperMode
+wait 2

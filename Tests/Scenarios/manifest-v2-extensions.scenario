@@ -1,0 +1,15 @@
+# A Manifest V2 extension, the kind uBlock Origin is, loads and blocks requests. Chromium 156
+# refuses to load MV2 extensions ("unsupported manifest version", in a modal alert for a folder
+# loaded at start-up) and turns installed ones off; Cra's engine keeps them
+# (scripts/cef-patches/extensions-manifest-v2.patch, GitHub #228).
+# The fixture cancels requests whose address holds "cra-mv2-probe" from a blocking webRequest
+# listener, which Manifest V3 no longer has; without the extension the fetch loads the page.
+# promise: #228
+budget rss=600 stalls50=5
+extension ${FIXTURES}/ManifestV2Extension
+cra://open?url=${PAGE}?n=mv2
+expect-log loaded 127\.0\.0\.1
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('page.html?cra-mv2-probe').then(()=>'mv2:loaded',()=>'mv2:blocked')","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"mv2:blocked"
+reject-log fault:

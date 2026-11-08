@@ -48,7 +48,8 @@ struct SidebarModelTests {
     /// The line under a tab's title (GitHub #88, #139): Arc's TabCellState.subtitle is a
     /// developer-mode site's host (and port), else a pull request's author. Leaving a pinned
     /// page shows none.
-    @Test func sidebarSubtitle() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/88"), .bug("https://github.com/VictorKildahl/cra/issues/139"))
+    func sidebarSubtitle() {
         var tab = TabData(url: "https://www.youtube.com/watch?v=1", title: "Video")
         #expect(tab.sidebarSubtitle(developerMode: false) == nil)
         #expect(tab.sidebarSubtitle(developerMode: true) == "youtube.com", "developer mode: the host, without www.")
@@ -64,7 +65,8 @@ struct SidebarModelTests {
 
     /// GitHub #139: a pinned tab that goes back to its page shows that page's name and favicon,
     /// not the last page's, before it loads again.
-    @Test func returningHomeShowsTheHomesNameAndIcon() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/139"))
+    func returningHomeShowsTheHomesNameAndIcon() throws {
         var tab = TabData(url: "https://github.com/", title: "")
         tab.noteTitle("GitHub", pinned: true)
         #expect(tab.homeTitle == "GitHub")
@@ -153,7 +155,8 @@ struct SidebarModelTests {
 
     /// #185: Developer Mode from the Site Control Center showed nothing with the toolbar hidden
     /// (Cra's default). Arc shows its developer bar above that site's pages anyway.
-    @Test func developerBarShowsWithTheToolbarHidden() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/185"))
+    func developerBarShowsWithTheToolbarHidden() {
         var settings = AppSettings()
         #expect(!settings.showToolbar)
         #expect(!settings.showsBar(above: "https://example.com/a"))
@@ -166,7 +169,9 @@ struct SidebarModelTests {
         #expect(settings.showsBar(above: "https://other.org/") && settings.showsBar(above: nil))
     }
 
-    @Test func toolbarShowsTheHostOnlyUnlessAsked() throws {
+    /// The toolbar shows the host only, Arc's default, unless Show Full URL is on (#88).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/88"))
+    func toolbarShowsTheHostOnlyUnlessAsked() throws {
         #expect(!AppSettings().toolbarShowsFullURL, "Arc's default: the host only")
         let decode = { (json: String) in try JSONDecoder().decode(AppSettings.self, from: Data(json.utf8)) }
         #expect(try !decode("{}").toolbarShowsFullURL, "settings from before the option keep Arc's default")

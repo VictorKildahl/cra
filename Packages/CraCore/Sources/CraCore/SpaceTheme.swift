@@ -19,8 +19,9 @@ public struct SpaceTheme: Codable, Equatable {
     public var solid: Bool = false
     /// Arc's Auto theme (background.appearanceBased): with `appearance` "auto" the space follows
     /// macOS, the fields above are its light half and this is the half shown while macOS is dark.
-    /// nil on an "auto" theme with one set of colours (saved before 0.1.29, the Edit Space sheet's
-    /// Auto, a Zen import): it stays on the side its colours suit whatever macOS shows.
+    /// nil on an "auto" theme with one set of colours (saved before 0.1.29, the old Edit Space sheet's
+    /// Auto, a Zen import): it stays on the side its colours suit whatever macOS shows. The theme
+    /// editor's Auto always writes both halves (SpaceThemeVariants).
     public var dark: Variant? = nil
     /// The theme editor's pad colours the theme was built from (Arc: the editor's key colour and
     /// the ones its wheel adds); nil for a preset or an import, whose own colours go on the pad.
@@ -34,6 +35,18 @@ public struct SpaceTheme: Codable, Equatable {
         public var vibrant: Bool = false
         public var accent: String? = nil
         public var solid: Bool = false
+
+        /// A half written without `vibrant` or `solid` (by hand, or by a later Cra that drops them)
+        /// reads them as off instead of failing the file.
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            colors = try c.decode([String].self, forKey: .colors)
+            intensity = try c.decode(Double.self, forKey: .intensity)
+            noise = try c.decodeIfPresent(Double.self, forKey: .noise) ?? 0
+            vibrant = try c.decodeIfPresent(Bool.self, forKey: .vibrant) ?? false
+            accent = try c.decodeIfPresent(String.self, forKey: .accent)
+            solid = try c.decodeIfPresent(Bool.self, forKey: .solid) ?? false
+        }
 
         public init(colors: [String], intensity: Double, noise: Double, vibrant: Bool = false, accent: String? = nil, solid: Bool = false) {
             self.colors = colors
@@ -74,7 +87,8 @@ public struct SpaceTheme: Codable, Equatable {
         vibrant = try c.decodeIfPresent(Bool.self, forKey: .vibrant) ?? false
         accent = try c.decodeIfPresent(String.self, forKey: .accent)
         solid = try c.decodeIfPresent(Bool.self, forKey: .solid) ?? false
-        dark = try c.decodeIfPresent(Variant.self, forKey: .dark)
+        // A dark half that can't be read is dropped, not the whole sidebar.json with it.
+        dark = (try? c.decodeIfPresent(Variant.self, forKey: .dark)) ?? nil
         key = try c.decodeIfPresent([String].self, forKey: .key)
     }
 

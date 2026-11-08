@@ -1,0 +1,22 @@
+# No extension installed and the toolbar hidden (Cra's default): hovering the sidebar's header
+# shows Copy Link and the Site Control Center's sliders in the URL field, and a press on the
+# sliders opens the Site Control Center (Share, Boost, Capture, settings), as in Arc. Until
+# 0.1.33 the sliders showed only with an extension installed, so there was no way in (#226).
+# Then View > Show Toolbar: the toolbar carries the sliders without extensions too.
+# promise: #226
+budget rss=600 stalls50=6
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=sitecontrols
+wait 3
+cra://debug?urlFieldHover=1
+expect-log url field: copyURL siteControls$
+cra://debug?urlFieldPress=siteControls
+wait 1
+expect-log url field press siteControls: pressed true, site control center shown
+cra://debug?urlFieldHover=0
+cra://action/toggleToolbar
+wait 1
+cra://debug?urlFieldHover=1
+expect-log url field: none
+cra://action/toggleToolbar
+wait 1

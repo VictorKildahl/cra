@@ -6,62 +6,80 @@ struct ToolbarCompositionTests {
     typealias T = ToolbarComposition
 
     private func bar(_ kind: T.Kind, split: Bool = false, sidebar: Bool = false, focused: Bool = true, hovered: Bool = false,
-                     back: Bool = false, forward: Bool = false, loading: Bool = false, pinned: [String] = [],
-                     extensions: Bool = false) -> T {
+                     back: Bool = false, forward: Bool = false, loading: Bool = false, pinned: [String] = []) -> T {
         T(kind: kind, inSplit: split, sidebarVisible: sidebar, focusedPane: focused, hovered: hovered, canGoBack: back,
-          canGoForward: forward, isLoading: loading, pinnedExtensions: pinned, hasExtensions: extensions)
+          canGoForward: forward, isLoading: loading, pinnedExtensions: pinned)
     }
 
-    @Test func theFullBar() {
-        let full = bar(.normal, back: true, loading: true, pinned: ["a", "b"], extensions: true)
+    /// The full bar with the sidebar hidden: the toggle first, then ← → ↻ (#50).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/50"))
+    func theFullBar() {
+        let full = bar(.normal, back: true, loading: true, pinned: ["a", "b"])
         // Toggle, ← → and ↻ (an ✕ while loading); pinned extensions, Extensions, Split View.
         #expect(full.left == [.toggleSidebar, .back(enabled: true), .forward(enabled: false), .reload(loading: true, enabled: true)])
         #expect(full.right == [.pinnedExtension("a"), .pinnedExtension("b"), .extensions, .addSplit])
     }
 
-    @Test func noExtensionsButtonWithoutExtensions() {
-        #expect(bar(.normal).right == [.addSplit])
+    /// With no extension installed the sliders still open the Site Control Center (Share, Boost,
+    /// Capture, the site's settings), as in Arc (#226).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/226"))
+    func theSlidersShowWithoutExtensions() {
+        #expect(bar(.normal).right == [.extensions, .addSplit])
+        #expect(bar(.normal, split: true).right == [.extensions, .splitOptions, .closePane])
     }
 
-    @Test func theShownSidebarCarriesTheToggle() {
+    /// The sidebar's URL field (toolbar hidden): pins while they fit, Copy Link, then the sliders,
+    /// with or without extensions (#226).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/226"))
+    func theURLFieldHasTheSlidersWithoutExtensions() {
+        #expect(T.urlFieldAccessories(pinnedExtensions: [], fieldWidth: 224) == [.copyURL, .extensions])
+        #expect(T.urlFieldAccessories(pinnedExtensions: ["a", "b"], fieldWidth: 224)
+            == [.pinnedExtension("a"), .pinnedExtension("b"), .copyURL, .extensions])
+        // Too many to leave the address its room: they go in the grid over the favorites.
+        #expect(T.urlFieldAccessories(pinnedExtensions: ["a", "b", "c", "d", "e"], fieldWidth: 224) == [.copyURL, .extensions])
+    }
+
+    /// With the sidebar shown its header carries the toggle and the bar has none (#50).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/50"))
+    func theShownSidebarCarriesTheToggle() {
         // Arc 1.171, #50: the sidebar's header has the toggle, the bar none.
         #expect(bar(.normal, sidebar: true).left == [.back(enabled: false), .forward(enabled: false), .reload(loading: false, enabled: true)])
         #expect(bar(.noTab, sidebar: true).left.first == .back(enabled: false))
         #expect(bar(.developer, sidebar: true).left.isEmpty)
     }
 
-    @Test func theFocusedPaneHasEverythingButTheToggleAndSplitView() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/178")) func theFocusedPaneHasEverythingButTheToggleAndSplitView() {
         // Arc 1.171 (#178): ← → ↻ · address · pinned extensions · Extensions · options · close.
-        let pane = bar(.normal, split: true, back: true, loading: true, pinned: ["a"], extensions: true)
+        let pane = bar(.normal, split: true, back: true, loading: true, pinned: ["a"])
         #expect(pane.left == [.back(enabled: true), .forward(enabled: false), .reload(loading: true, enabled: true)])
         #expect(pane.right == [.pinnedExtension("a"), .extensions, .splitOptions, .closePane])
     }
 
-    @Test func anUnfocusedPaneShowsOnlyTheEssentials() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/178")) func anUnfocusedPaneShowsOnlyTheEssentials() {
         // Arc's onlyShowEssentialControls: ← →, the address and close.
-        let pane = bar(.normal, split: true, focused: false, back: true, pinned: ["a"], extensions: true)
+        let pane = bar(.normal, split: true, focused: false, back: true, pinned: ["a"])
         #expect(pane.left == [.back(enabled: true), .forward(enabled: false)])
         #expect(pane.right == [.closePane])
     }
 
-    @Test func hoveringAnUnfocusedPaneRevealsItsControls() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/178")) func hoveringAnUnfocusedPaneRevealsItsControls() {
         // Arc's onHover blueprint: the focused pane's set, so a click that focuses it moves nothing.
-        let pane = bar(.normal, split: true, focused: false, hovered: true, pinned: ["a"], extensions: true)
+        let pane = bar(.normal, split: true, focused: false, hovered: true, pinned: ["a"])
         #expect(pane.left == [.back(enabled: false), .forward(enabled: false), .reload(loading: false, enabled: true)])
         #expect(pane.right == [.pinnedExtension("a"), .extensions, .splitOptions, .closePane])
-        #expect(pane == bar(.normal, split: true, pinned: ["a"], extensions: true))
+        #expect(pane == bar(.normal, split: true, pinned: ["a"]))
     }
 
-    @Test func hoverChangesNothingOutsideASplit() {
-        let a = bar(.normal, pinned: ["a"], extensions: true)
-        #expect(bar(.normal, hovered: true, pinned: ["a"], extensions: true) == a)
-        #expect(bar(.normal, focused: false, pinned: ["a"], extensions: true) == a)
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/178")) func hoverChangesNothingOutsideASplit() {
+        let a = bar(.normal, pinned: ["a"])
+        #expect(bar(.normal, hovered: true, pinned: ["a"]) == a)
+        #expect(bar(.normal, focused: false, pinned: ["a"]) == a)
     }
 
-    @Test func anEmptyPaneHasGreyedNavigationAndClose() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/178")) func anEmptyPaneHasGreyedNavigationAndClose() {
         for focused in [true, false] {
             for hovered in [true, false] {
-                let pane = bar(.emptyPane, split: true, focused: focused, hovered: hovered, pinned: ["a"], extensions: true)
+                let pane = bar(.emptyPane, split: true, focused: focused, hovered: hovered, pinned: ["a"])
                 #expect(pane.left == [.back(enabled: false), .forward(enabled: false)])
                 #expect(pane.right == [.closePane])
             }
@@ -69,15 +87,17 @@ struct ToolbarCompositionTests {
     }
 
     @Test func noTabGreysTheNavigation() {
-        let noTab = bar(.noTab, pinned: ["a"], extensions: true)
+        let noTab = bar(.noTab, pinned: ["a"])
         #expect(noTab.left == [.toggleSidebar, .back(enabled: false), .forward(enabled: false), .reload(loading: false, enabled: false)])
         #expect(noTab.right == [.pinnedExtension("a"), .extensions, .addSplit])
     }
 
-    @Test func theDeveloperBar() {
+    /// The developer bar: Copy, a divider, then Console, Network and Inspect (#88).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/88"))
+    func theDeveloperBar() {
         // Copy · divider · Console, Network, Inspect before the right end (Arc 1.170, #88).
         let dev = bar(.developer, pinned: ["a"])
         #expect(dev.left == [.toggleSidebar])
-        #expect(dev.right == [.copyURL, .divider, .console, .network, .inspect, .pinnedExtension("a"), .addSplit])
+        #expect(dev.right == [.copyURL, .divider, .console, .network, .inspect, .pinnedExtension("a"), .extensions, .addSplit])
     }
 }

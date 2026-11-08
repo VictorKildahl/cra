@@ -6,9 +6,13 @@ import Foundation
 // cached LiveItem.github.pullRequest in StorableLiveData.json. Dia 1.54 keeps the same GitHub client
 // (ARCClients/GitHubClient). Findings and what was verified: docs/live-folders.md.
 
-/// What a live folder is filled from. Arc and Dia also have Bitbucket, Notion, Drive and calendar sources.
+/// What a live folder is filled from. Arc and Dia also have Bitbucket, Notion, Drive and calendar sources;
+/// Arc has no GitLab source, so Cra's GitLab folder is Arc's GitHub folder read from GitLab's API.
 public enum LiveFolderSource: String, Codable {
     case github
+    case gitlab
+
+    public var title: String { self == .github ? "GitHub" : "GitLab" }
 }
 
 /// Which pull requests a GitHub live folder shows. Arc saves `attributes` as a bit mask (7 = all three).
@@ -22,6 +26,8 @@ public struct GitHubLiveFilter: Codable, Equatable {
         public static let reviewRequests = Attributes(rawValue: 2)
         /// review-requested:@me, which also covers teams you are on (Arc: "Team Review Requests")
         public static let teamReviewRequests = Attributes(rawValue: 4)
+        /// GitLab only: merge requests assigned to you (Cra's bit; Arc's mask stops at 4).
+        public static let assigned = Attributes(rawValue: 8)
         public static let all: Attributes = [.authored, .reviewRequests, .teamReviewRequests]
     }
 
@@ -33,14 +39,47 @@ public struct GitHubLiveFilter: Codable, Equatable {
         self.attributes = attributes
         self.hiddenRepositories = hiddenRepositories
     }
+
+    public func isRepositoryHidden(_ repository: String) -> Bool {
+        hiddenRepositories.contains { $0.lowercased() == repository.lowercased() }
+    }
+
+    public mutating func setRepository(_ repository: String, hidden: Bool) {
+        hiddenRepositories.removeAll { $0.lowercased() == repository.lowercased() }
+        if hidden { hiddenRepositories.append(repository) }
+    }
 }
 
-public enum LiveFolderError: String, Codable, Equatable {
+public enum LiveFolderError: String, Codable, Equatable, Error {
     case notSignedIn, rateLimited, unexpectedPage, network
+}
+
+/// The GitLab folder's filters, one API query each (the GitHub folder's My Pull Requests and Review Requests,
+/// plus Assigned to Me, which GitLab has where GitHub has team review requests).
+public enum GitLabLiveCategory: String, Codable, CaseIterable {
+    case authored, review, assigned
+
+    public var title: String {
+        switch self {
+        case .authored: return "My Merge Requests"
+        case .review: return "Review Requests"
+        case .assigned: return "Assigned to Me"
+        }
+    }
+
+    public var attribute: GitHubLiveFilter.Attributes {
+        switch self {
+        case .authored: return .authored
+        case .review: return .reviewRequests
+        case .assigned: return .assigned
+        }
+    }
 }
 
 public struct LiveFolderData: Codable, Equatable {
     public var source: LiveFolderSource = .github
+    /// GitLab: the instance's base URL (GitLabLiveClient.serverURL), gitlab.com or self-managed.
+    public var serverURL: String?
     public var filter = GitHubLiveFilter()
     /// Items closed out of the folder; they don't come back (Arc: hiddenItems).
     public var hiddenItems: [String] = []
@@ -55,14 +94,36 @@ public struct LiveFolderData: Codable, Equatable {
 
     /// Where to sign in again.
     public var signInURL: String {
+        if source == .gitlab { return "\(serverURL ?? "https://gitlab.com")/users/sign_in" }
         if let enterprise { return "https://github.com/enterprises/\(enterprise)/sso" }
         return "https://github.com/login?return_to=%2Fpulls"
     }
 
     public init() {}
+
+    public var gitLabCategories: [GitLabLiveCategory] {
+        GitLabLiveCategory.allCases.filter { filter.attributes.contains($0.attribute) }
+    }
+
+    public func repository(for url: String) -> String? {
+        if source == .gitlab {
+            guard let server = serverURL.flatMap(GitLabLiveClient.serverURL), url.hasPrefix(server + "/"),
+                  let boundary = url.range(of: "/-/merge_requests/", options: .backwards) else { return nil }
+            let project = String(url[..<boundary.lowerBound].dropFirst(server.count + 1))
+            guard project.split(separator: "/").count >= 2 else { return nil }
+            return project
+        }
+        guard let components = URLComponents(string: url), components.host?.lowercased() == "github.com",
+              ["http", "https"].contains(components.scheme?.lowercased() ?? "") else { return nil }
+        let parts = components.path.split(separator: "/")
+        guard parts.count >= 4, parts[2] == "pull", let number = Int(parts[3]), number > 0 else { return nil }
+        return "\(parts[0])/\(parts[1])"
+    }
+
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         source = try c.decodeIfPresent(LiveFolderSource.self, forKey: .source) ?? .github
+        serverURL = try c.decodeIfPresent(String.self, forKey: .serverURL)
         filter = try c.decodeIfPresent(GitHubLiveFilter.self, forKey: .filter) ?? GitHubLiveFilter()
         hiddenItems = try c.decodeIfPresent([String].self, forKey: .hiddenItems) ?? []
         lastFetch = try c.decodeIfPresent(Date.self, forKey: .lastFetch)
@@ -86,6 +147,8 @@ public struct LivePullRequest: Codable, Equatable, Identifiable {
     public var isAwaitingMyReview = false
     public var createdAt: Date?
     public var updatedAt: Date?
+    /// GitLab's own address for the merge request (its URL can't be built from owner/repo/number).
+    public var webURL: String?
 
     public init(owner: String, repo: String, number: Int, title: String, author: String? = nil, state: State = .open,
                 createdByMe: Bool = false, isAwaitingMyReview: Bool = false, createdAt: Date? = nil, updatedAt: Date? = nil) {
@@ -102,6 +165,6 @@ public struct LivePullRequest: Codable, Equatable, Identifiable {
     }
 
     public var id: String { url }
-    public var url: String { "https://github.com/\(owner)/\(repo)/pull/\(number)" }
+    public var url: String { webURL ?? "https://github.com/\(owner)/\(repo)/pull/\(number)" }
     public var repository: String { "\(owner)/\(repo)" }
 }

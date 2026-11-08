@@ -1,0 +1,1 @@
+{"manifest_version": 3, "name": "Just Loaded", "version": "0.1", "action": {"default_popup": "popup.html"}}

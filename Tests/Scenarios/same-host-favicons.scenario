@@ -1,0 +1,25 @@
+# Two tabs on one host keep their own icons (GitHub #211: every AWS console or localhost tab
+# took the icon the last one loaded). Both pages come from the same local server.
+budget rss=600 stalls50=10
+port 47124
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=orange
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?pageJS=document.title='Orange',document.head.append(Object.assign(document.createElement('link'),{rel:'icon',href:'icon-orange.png'}))
+wait 3
+cra://open?url=${PAGE}?n=blue
+wait 3
+cra://debug?pageJS=document.title='Blue',document.head.append(Object.assign(document.createElement('link'),{rel:'icon',href:'icon-blue.png'}))
+wait 3
+snapshot TabRowView,0 same-host-favicon-newer
+snapshot TabRowView,1 same-host-favicon-older
+# A page on the same host, with no icon of its own yet, keeps the tab's.
+cra://navigate?url=${PAGE}?n=blue2
+wait 3
+snapshot TabRowView,0 same-host-favicon-newer-same-host
+cra://debug?checkStore=1
+# Each tab's icon is saved: after a relaunch, before any page loads, both are still their own.
+relaunch
+wait 3
+snapshot TabRowView,1 same-host-favicon-older
+cra://debug?checkStore=1

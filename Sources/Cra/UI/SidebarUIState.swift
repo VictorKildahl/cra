@@ -117,10 +117,10 @@ final class SidebarUIState {
     }
     /// Tabs picked with ⌘/⇧-click; closing acts on all of them.
     var multiSelection: Set<UUID> = []
-    /// The tab an open Peek came from and the peeked page's favicon, which its row shows.
-    var peekBadge: PeekBadge?
+    /// The tabs with a Peek, open or waiting on them (#242), and the peeked page's favicon, which
+    /// their rows show.
+    var peekBadges: [UUID: PeekBadge] = [:]
     struct PeekBadge: Equatable {
-        let tabID: UUID
         let iconKey: String?
     }
     /// Where the next ⇧-click range starts.
@@ -186,6 +186,11 @@ enum SplitDropTarget: Equatable {
 final class SidebarActions {
     var openCommandBar: (CommandBarMode) -> Void = { _ in }
     var closeTab: (UUID) -> Void = { _ in }
+    /// A tab dragged out of every Cra window and let go there (screen point): Arc opens it in a
+    /// Blank Window where it was dropped (GitHub #219).
+    var tearOffTab: (UUID, NSPoint) -> Void = { _, _ in }
+    /// A Blank Window's "Move to…" picked a space (Arc: its tabs go there, the window closes).
+    var moveBlankWindow: (UUID) -> Void = { _ in }
     var goBack: () -> Void = {}
     var goForward: () -> Void = {}
     var reload: () -> Void = {}

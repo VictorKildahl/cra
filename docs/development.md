@@ -67,13 +67,14 @@ the save panel.
 
     scripts/test.sh                  # everything below except the smoke test, in seconds
     scripts/test.sh core             # only Packages/CraCore
+    scripts/test-folder-glyph.sh      # folder emblems: layer projection, colors and Retina resolution
     Tests/smoke-launch.sh            # launches build/Cra.app three times, about 30 s
     scripts/scenario.sh all          # user journeys in build/Cra.app, about 6 minutes
     scripts/scenario.sh sleep-tabs   # one of them (Tests/Scenarios/<name>.scenario)
     scripts/coverage.py              # line coverage, and the changed-lines gate against origin/main
     scripts/coverage.py --base <ref> # the same against another base (CI passes the PR's)
     scripts/fuzz.sh                  # mutated importer fixtures under AddressSanitizer
-    scripts/mutate.py [word]         # mutation testing of the pure code, minutes; a word limits it
+    scripts/mutate.py [word]         # mutation testing of the pure code, about an hour; a word limits it
 
 [testing.md](testing.md) has the rules, the layers, the gates and how to write a scenario.
 
@@ -97,6 +98,9 @@ to Markdown or `docs/` alone runs nothing.
   `ManualScheduler`, against the made-up Arc and Chromium profiles in `Tests/Fixtures`.
 - `scripts/test-policies.sh`: the decisions pulled out of the window controllers
   (`ExtensionLaunch`, `DevToolsToggle`, `FeatureFlags`).
+- `scripts/test-folder-glyph.sh`: the standalone folder component's real AppKit layers and image
+  pixels: emblems follow the front panel's perspective, keep their colors and proportions, and
+  update at 1x/Retina. No CEF or visible window; coverage uses the same harness as `scripts/test.sh`.
 - `scripts/test-perf.sh`: the performance recorder on a real main run loop: injected stalls,
   hang files with a `sample` stack, the session marker, ownership, the recording switch
   ([performance.md](performance.md)).
@@ -167,6 +171,13 @@ download's file name by hand; `CRA_TIDY_FAKE_MODEL=off` (or `preparing`, `inelig
 without Apple Intelligence would. `cra://debug?tidy=1` runs Tidy on the window's space without
 hovering the divider, `cra://debug?undoTidy=1` is ⌘Z's undo and `cra://debug?settingsPane=max`
 opens Settings on a pane.
+
+`cra://debug?dragEnd=<text>` ends a drag of the window's tab whose URL holds the text, let go
+with nothing taking it, the way a drag out of the sidebar ends: outside every Cra window it opens
+in a new Blank Window (`&at=x,y` picks the point, from the screen's top left).
+`cra://debug?blankMoveTo=<n>` picks the nth space in the Blank Window's "Move to…".
+`cra://debug?browserWindows=<label>` logs each browser window's kind (normal, blank, incognito),
+space, tabs, open tab and frame; cra.log gets the kinds and counts only.
 
 `cra://debug?menuAt=315,24` opens the menu a click at that window point would open (the
 developer-mode ⌄ here), and `&button=right` the context menu, a tab row's for instance.

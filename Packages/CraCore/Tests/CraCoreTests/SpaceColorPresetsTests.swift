@@ -5,7 +5,8 @@ import Testing
 struct SpaceColorPresetsTests {
     /// Arc's ColorPicker colours as Arc writes them (sRGB): Brand4 is the CloudDev red, Brand8 is
     /// the 0.4236, 0.7286, 0.8512 Arc saved for a picked swatch.
-    @Test func catalogColours() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/170"))
+    func catalogColours() {
         for group in [SpaceColorPresets.brand, SpaceColorPresets.drab, SpaceColorPresets.pastel, SpaceColorPresets.greyscale] {
             #expect(group.count == 9 && Set(group).count == 9)
             #expect(group.allSatisfy { HexColor.components($0) != nil })
@@ -16,7 +17,8 @@ struct SpaceColorPresetsTests {
     }
 
     /// Five pages of nine as in Arc: Brand, Brand pairs, Pastel, Drab, Greyscale.
-    @Test func pages() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/170"))
+    func pages() {
         #expect(SpaceColorPresets.pages.map(\.group) == ["Brand", "Brand", "Pastel", "Drab", "Greyscale"])
         #expect(SpaceColorPresets.pages.map { $0.seconds != nil } == [false, true, false, false, false])
         for page in SpaceColorPresets.pages {
@@ -26,7 +28,8 @@ struct SpaceColorPresetsTests {
     }
 
     /// The editor opens on the page holding the space's colours.
-    @Test func pageOfAKey() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/170"))
+    func pageOfAKey() {
         for (i, page) in SpaceColorPresets.pages.enumerated() {
             for swatch in page.swatches { #expect(SpaceColorPresets.page(of: swatch) == i) }
         }
@@ -34,19 +37,22 @@ struct SpaceColorPresetsTests {
         #expect(SpaceColorPresets.page(of: ["#123456"]) == nil)
     }
 
-    /// A new space starts on one colour, saved as Arc's one-dot (solid) theme, not a gradient.
-    @Test(arguments: 0..<9)
-    func newSpaceIsOneColour(index: Int) {
-        let theme = SpaceColorPresets.newSpaceTheme(index: index)
-        #expect(theme.key == [SpaceColorPresets.brand[index]])
+    /// A new space starts on one colour (#170) on Auto, so it follows macOS like every Auto space
+    /// (#155): the colour, flat, while macOS is light (a pastel of it when it reads dark) and the
+    /// colour's hue, dark, while macOS is dark.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/155"), arguments: 0..<9)
+    func newSpaceIsOneColourOnAuto(index: Int) {
         let hex = SpaceColorPresets.brand[index]
-        #expect(theme.solid && theme.colors == [hex, hex] && theme.dark == nil && !theme.followsSystem)
-        #expect(theme.isDark == (HexColor.luminance(hex)! < 0.45))
+        let theme = SpaceColorPresets.newSpaceTheme(index: index)
+        #expect(theme.key == [hex] && theme.appearance == "auto" && theme.dark != nil)
+        let light = theme.resolved(systemDark: false), dark = theme.resolved(systemDark: true)
+        #expect(light.solid && light.colors.count == 2 && light.colors[0] == light.colors[1] && !light.isDark)
+        #expect(dark.colors.count == 2 && dark.colors[0] == dark.colors[1] && dark.isDark)
     }
 
     /// Arc's pairs: each Brand colour with the second colour Arc saved for it, which keeps roughly
     /// its brightness and lies 29–46° further round the hue wheel.
-    @Test(arguments: 0..<9)
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/170"), arguments: 0..<9)
     func brandPairs(index: Int) {
         let swatch = SpaceColorPresets.pages[1].swatches[index]
         #expect(swatch == [SpaceColorPresets.brand[index], SpaceColorPresets.brandPairs[index]])

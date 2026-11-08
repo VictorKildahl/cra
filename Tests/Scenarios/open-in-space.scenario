@@ -1,0 +1,31 @@
+# promise: #168
+# cra://open?url=…&space=<space id> (#168): the link opens as a tab in that space and the window
+# goes there; background=1 adds it there and leaves the window where it is. An unknown id, or a
+# space's title instead of its id, opens it where it did before, in the space in use. Each step
+# reads which space the window shows (themeShown).
+budget rss=600 stalls50=10
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Work","emoji":"💼","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+cra://open?url=${PAGE}?n=home
+wait 2
+cra://debug?themeShown=start
+expect-log Cra theme shown start: space=Home
+cra://open?url=${PAGE}?n=work-background&space=A0000000-0000-0000-0000-000000000002&background=1
+wait 2
+cra://debug?themeShown=background
+expect-log Cra theme shown background: space=Home
+cra://open?url=${PAGE}?n=work&space=A0000000-0000-0000-0000-000000000002
+wait 2
+cra://debug?themeShown=work
+expect-log Cra theme shown work: space=Work
+cra://open?url=${PAGE}?n=unknown&space=A0000000-0000-0000-0000-000000000009
+wait 2
+cra://debug?themeShown=unknown
+expect-log Cra theme shown unknown: space=Work
+cra://open?url=${PAGE}?n=title&space=Home
+wait 2
+cra://debug?themeShown=title
+expect-log Cra theme shown title: space=Work
+cra://open?url=${PAGE}?n=home-again&space=A0000000-0000-0000-0000-000000000001
+wait 2
+cra://debug?themeShown=home-again
+expect-log Cra theme shown home-again: space=Home

@@ -39,6 +39,8 @@ sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD_NUMBER/" resources/Info.
 [ -n "${CRA_GOOGLE_API_KEY:-}" ] && /usr/libexec/PlistBuddy -c "Add :CraGoogleAPIKey string $CRA_GOOGLE_API_KEY" "$APP/Contents/Info.plist"
 echo -n "APPL????" > "$APP/Contents/PkgInfo"
 [ -f resources/AppIcon.icns ] && cp resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+# The AppleScript dictionary (Arc's, same terms and codes: Info.plist OSAScriptingDefinition).
+cp resources/Cra.sdef "$APP/Contents/Resources/Cra.sdef"
 [ -d resources/web ] && cp -R resources/web "$APP/Contents/Resources/web"
 [ -d resources/brand ] && cp -R resources/brand "$APP/Contents/Resources/brand"
 [ -d resources/blocklist ] && cp -R resources/blocklist "$APP/Contents/Resources/blocklist"

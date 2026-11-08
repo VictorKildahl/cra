@@ -28,8 +28,28 @@ struct AdvancedPane: View {
                 SearchEnginePicker(store: store, openURL: actions.openURL)
                 SettingsCheckbox(title: "Show search suggestions", isOn: $store.settings.searchSuggestions)
             }
+            SettingsFormRow(label: "Sounds:") {
+                // Arc: Settings ▸ Advanced "Play Arc sound effects".
+                SettingsCheckbox(title: "Play Cra sound effects", isOn: $store.settings.soundEffects)
+            }
+            SettingsFormRow(label: "Websites:") {
+                // Arc: Settings ▸ Advanced "Allow websites to get your theme data" (--arc-palette-* variables).
+                SettingsCheckbox(title: "Allow websites to get your theme data", isOn: $store.settings.shareThemeWithWebsites)
+                // Arc: "Allow window dragging from the top of webpages" (with the toolbar hidden).
+                SettingsCheckbox(title: "Allow window dragging from the top of webpages", isOn: $store.settings.pageTopWindowDrag)
+                // Arc: "Enable Boosts on websites you visit".
+                SettingsCheckbox(title: "Enable Boosts on websites you visit", isOn: $store.settings.boostsEnabled)
+            }
             SettingsFormRow(label: "When quitting Cra:") {
                 SettingsCheckbox(title: "Warn before quitting", isOn: $store.settings.warnBeforeQuitting)
+                    .disabled(store.settings.keepInMenuBar)
+                // GitHub #231, not in Arc: ⌘Q puts Cra in the menu bar instead of quitting.
+                SettingsCheckbox(title: "Keep Cra in the menu bar", isOn: $store.settings.keepInMenuBar)
+                Text("⌘Q closes Cra’s windows and pages but leaves it running in the menu bar, so \(KeyBindingRegistry.shared.action("newLittleWindow")?.primary?.display ?? "⌥⌘N") opens a Little Window at once. Quit it from the menu bar.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                // Arc: Settings ▸ Advanced "When opening Arc, restore windows from previous session".
+                SettingsCheckbox(title: "When opening Cra, restore windows from previous session", isOn: $store.settings.restoreWindows)
             }
             SettingsFormRow(label: "Import:") {
                 Button("Import from Another Browser…") { actions.importData() }

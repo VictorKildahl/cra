@@ -18,7 +18,7 @@ struct ArcThemeImportTests {
 
     /// A one-colour Arc theme (blendedSingleColor) stays that colour, flat, whatever its vibrancy
     /// and text appearance (0.1.22 imported it as a gradient of another colour, #30).
-    @Test(arguments: [
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/30"), arguments: [
         ("solidRedDark", "#E63333", 1.0, "dark"),
         ("solidWhiteDark", "#FFFFFF", 1.0, "dark"),
         ("solidWhiteLight", "#FFFFFF", 1.0, "light"),
@@ -56,7 +56,7 @@ struct ArcThemeImportTests {
 
     /// Arc's `single` theme never follows macOS: one without `contentOverBackgroundAppearance` takes
     /// the side its colours suit instead of Auto, so it is never swapped for a derived half (#171).
-    @Test(arguments: [("solidRedDark", "dark"), ("solidWhiteLight", "light"), ("gradientVibrantLight", "light")])
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/171"), arguments: [("solidRedDark", "dark"), ("solidWhiteLight", "light"), ("gradientVibrantLight", "light")])
     func singleWithoutAppearanceKeepsItsSide(name: String, appearance: String) throws {
         let theme = try #require(ArcThemeImport.theme(from: Self.withoutAppearanceKey(Self.spaces[name]!)))
         #expect(theme.appearance == appearance && !theme.followsSystem)
@@ -74,7 +74,8 @@ struct ArcThemeImportTests {
     }
 
     /// An appearance-based theme with one half shows that half whatever macOS shows.
-    @Test func appearanceBasedWithOneHalfKeepsIt() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/171"))
+    func appearanceBasedWithOneHalfKeepsIt() throws {
         var space = Self.spaces["gradientAppearanceBasedDark"]!
         var info = space["customInfo"] as! [String: Any], wt = info["windowTheme"] as! [String: Any]
         var bg = wt["background"] as! [String: Any], ab = bg["appearanceBased"] as! [String: Any]
@@ -85,7 +86,8 @@ struct ArcThemeImportTests {
     }
 
     /// A style Cra can't read falls back to the mid tone of Arc's derived palette, which keeps the hue.
-    @Test func unknownStyleFallsBackToThePalettesMidTone() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/30"))
+    func unknownStyleFallsBackToThePalettesMidTone() throws {
         let theme = try #require(Self.theme("unknownStyleWithPalette"))
         #expect(theme.solid && theme.colors == ["#8389FF", "#8389FF"])
     }
@@ -184,7 +186,8 @@ struct SpaceThemeAppearanceTests {
     static let light = SpaceTheme(colors: ["#CDCDFC", "#FFE5E5"], intensity: 0.5, noise: 0, appearance: "light", accent: "#C8CAFF")
     static let dark = SpaceTheme(colors: ["#2C273B", "#32263A"], intensity: 1, noise: 0, appearance: "dark", accent: "#010220")
 
-    @Test func autoShowsTheHalfMacOSAsksFor() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/155"))
+    func autoShowsTheHalfMacOSAsksFor() {
         let theme = SpaceTheme(light: Self.light, dark: Self.dark)
         #expect(theme.followsSystem)
         #expect(theme.resolved(systemDark: false) == Self.light)
@@ -199,13 +202,55 @@ struct SpaceThemeAppearanceTests {
 
     /// An Auto theme with one set of colours (saved before 0.1.29, or an import that had no second
     /// half) stays on the side its colours suit while macOS changes: no derived half (#171).
-    @Test(arguments: ["#F8D558", "#2861B3", "#F25E6B"])
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/171"), arguments: ["#F8D558", "#2861B3", "#F25E6B"])
     func autoThemeWithOneHalfKeepsItsLook(hex: String) {
         let theme = SpaceTheme(colors: [hex, hex], intensity: 0.8, noise: 0.1, appearance: "auto")
         var own = theme
         own.appearance = theme.isDark ? "dark" : "light"
         #expect(theme.resolved(systemDark: false) == own)
         #expect(theme.resolved(systemDark: true) == own)
+    }
+
+    /// Every swatch the editor offers, with one, two or three colours on the pad, picked on Auto
+    /// follows macOS: a light half while macOS is light, a dark half while it is dark, both kept
+    /// through a save, and the editor reopens on Auto. 0.1.30–0.1.32 saved one colour on Auto (the
+    /// editor's default) as a fixed light or dark theme, and the space stopped following macOS (#155).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/155"), arguments: SpaceColorPresets.pages.flatMap(\.swatches), 1...3)
+    func everySwatchOnAutoFollowsMacOS(swatch: [String], colours: Int) throws {
+        // The pad's + adds colours round the wheel from the first (SpaceColorWheel).
+        let first = SpaceColorWheel.hsb(swatch[0])
+        let key = (0..<colours).map { i in
+            swatch.indices.contains(i) ? swatch[i]
+                : SpaceColorWheel.hex(hue: (first.hue + SpaceColorWheel.offset(i) + 360).truncatingRemainder(dividingBy: 360),
+                                      saturation: first.saturation, brightness: first.brightness)
+        }
+        let theme = SpaceThemeVariants.theme(key: key, intensity: 0.5, noise: 0.2, appearance: "auto")
+        // The editor reads its Auto / Light / Dark back from `appearance` (SpaceStyleEditor).
+        #expect(theme.appearance == "auto" && theme.followsSystem && theme.key == key)
+        let saved = try JSONDecoder().decode(SpaceTheme.self, from: JSONEncoder().encode(theme))
+        #expect(saved == theme)
+        let light = saved.resolved(systemDark: false), dark = saved.resolved(systemDark: true)
+        #expect(!light.isDark && dark.isDark && light.colors != dark.colors)
+    }
+
+    /// Light and Dark keep one look whatever macOS shows, for every swatch (#155).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/155"), arguments: SpaceColorPresets.pages.flatMap(\.swatches), ["light", "dark"])
+    func everySwatchOnLightOrDarkKeepsOneLook(swatch: [String], appearance: String) {
+        let theme = SpaceThemeVariants.theme(key: swatch, intensity: 0.5, noise: 0.2, appearance: appearance)
+        #expect(!theme.followsSystem && theme.dark == nil && theme.appearance == appearance)
+        #expect(theme.resolved(systemDark: false) == theme.resolved(systemDark: true))
+        #expect(theme.isDark == (appearance == "dark"))
+    }
+
+    /// A dark half written without its optional fields loads with them off, and one that can't be
+    /// read at all is dropped: before, either set the whole sidebar.json aside as corrupt.
+    @Test func unreadableDarkHalfDropsOnlyTheHalf() throws {
+        let partial = ##"{"colors":["#AA0000","#AA0000"],"intensity":1,"noise":0,"appearance":"auto","dark":{"colors":["#110000","#110000"],"intensity":1}}"##
+        let theme = try JSONDecoder().decode(SpaceTheme.self, from: Data(partial.utf8))
+        #expect(theme.dark == SpaceTheme.Variant(colors: ["#110000", "#110000"], intensity: 1, noise: 0))
+        let broken = ##"{"colors":["#AA0000","#AA0000"],"intensity":1,"noise":0,"appearance":"auto","dark":{"colors":5}}"##
+        let kept = try JSONDecoder().decode(SpaceTheme.self, from: Data(broken.utf8))
+        #expect(kept.dark == nil && kept.colors == ["#AA0000", "#AA0000"])
     }
 
     /// Both halves and the editor's colours are saved; a theme without them saves as before.
@@ -230,9 +275,12 @@ struct SpaceThemeAppearanceTests {
         let light = theme.resolved(systemDark: false), dark = theme.resolved(systemDark: true)
         #expect(light.colors == ["#8389FF", "#FF83C8"] && !light.isDark)
         #expect(close(dark.accent, "#01021F") && dark.isDark)
-        // One colour on Auto is Arc's one-dot `single` theme: that colour, flat, on the side it suits (#170).
+        // One colour on Auto is a flat fill on both halves: the colour while macOS is light, its hue
+        // dark while macOS is dark (#155; not Arc's fixed `single`, see everySwatchOnAutoFollowsMacOS).
         let one = SpaceThemeVariants.theme(key: ["#8389FF"], intensity: 0.5, noise: 0, appearance: "auto")
-        #expect(one.colors == ["#8389FF", "#8389FF"] && one.solid && one.appearance == "light" && one.key == ["#8389FF"])
+        #expect(one.followsSystem && one.key == ["#8389FF"])
+        #expect(one.resolved(systemDark: false).colors == ["#8389FF", "#8389FF"] && one.resolved(systemDark: false).solid)
+        #expect(close(one.resolved(systemDark: true).accent, "#01021F"))
         // In Light it is the same flat colour; in Dark one flat colour keeping its hue.
         #expect(SpaceThemeVariants.theme(key: ["#8389FF"], intensity: 0.5, noise: 0, appearance: "light").solid)
         let darkOne = SpaceThemeVariants.theme(key: ["#8389FF"], intensity: 0.5, noise: 0, appearance: "dark")

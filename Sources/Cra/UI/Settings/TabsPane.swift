@@ -14,6 +14,8 @@ struct TabsPane: View {
                 SettingsCheckbox(title: "Show the New Tab button above tabs", isOn: $store.settings.newTabButtonAtTop)
                 SettingsCheckbox(title: "Haptic feedback when reordering tabs", isOn: $store.settings.hapticFeedbackOnReorder)
                 SettingsCheckbox(title: "Preview a folder’s tabs when hovering over it", isOn: $store.settings.folderPreviews)
+                // Arc: Settings ▸ General ▸ Previews (Gmail's unread mail on its favorite).
+                SettingsCheckbox(title: "Preview unread Gmail when hovering its favorite", isOn: $store.settings.favoritePreviews)
                 SettingsCheckbox(title: "Show toolbar above the page", isOn: $store.settings.showToolbar)
                 SettingsCheckbox(title: "Pages fill the window edge to edge", isOn: $store.settings.edgeToEdgeContent)
                 SettingsCheckbox(title: "Enable Picture in Picture when you leave a video tab", isOn: $store.settings.autoPictureInPicture)
@@ -38,6 +40,15 @@ struct TabsPane: View {
                 // Arc's "Open Little Arc when I press ⌥⌘N" (#195): New Little Window's shortcut from any app.
                 SettingsCheckbox(title: "Open a Little Window when I press \(KeyBindingRegistry.shared.action("newLittleWindow")?.primary?.display ?? "⌥⌘N") in any app",
                                  isOn: $store.settings.littleWindowShortcutEverywhere)
+                // Arc: "Archive Little Arcs after:" 1 hour, 6 hours (default), 12 hours.
+                HStack(spacing: 6) {
+                    Text("Archive Little Windows after:")
+                    Picker("", selection: $store.settings.littleWindowArchiveAfter) {
+                        ForEach(LittleWindowArchive.allCases, id: \.self) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                }
                 SettingsCheckbox(title: "Open a Peek window when clicking on links to other sites", isOn: $store.settings.peekLinksToOtherSites)
                 SettingsCheckbox(title: "In every tab, not only Favorites and Pinned tabs", isOn: $store.settings.peekInEveryTab)
                     .disabled(!store.settings.peekLinksToOtherSites)

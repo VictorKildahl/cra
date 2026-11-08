@@ -14,7 +14,8 @@ struct ExtensionActionStateTests {
                               state: ExtensionActionState(icon: icon, title: title))
     }
 
-    @Test func decodesTheEvent() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/106"))
+    func decodesTheEvent() throws {
         let u = try #require(ExtensionActionUpdate(params: Self.params([
             "id": "abc", "profile": "Profile 1", "targetId": "T1",
             "icon": "data:image/png;base64," + Self.png.base64EncodedString(),
@@ -27,7 +28,8 @@ struct ExtensionActionStateTests {
                                                 badgeTextColor: "#FFFFFFFF"))
     }
 
-    @Test func everyTabEventHasNoTarget() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/106"))
+    func everyTabEventHasNoTarget() throws {
         let u = try #require(ExtensionActionUpdate(params: Self.params(["id": "abc", "profile": "Default", "icon": ""])))
         #expect(u.targetID == nil)
         #expect(u.state.isEmpty)
@@ -63,7 +65,8 @@ struct ExtensionActionStateTests {
         #expect(ExtensionActionStates().state(extensionID: "ext", profile: "Default", tab: UUID()).isEmpty)
     }
 
-    @Test func everyTabValueAppliesToEachTabInItsProfile() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/106"))
+    func everyTabValueAppliesToEachTabInItsProfile() {
         var s = ExtensionActionStates()
         s.apply(Self.update(icon: Self.png), tab: nil)
         #expect(s.state(extensionID: "ext", profile: "Default", tab: UUID()).icon == Self.png)
@@ -73,7 +76,8 @@ struct ExtensionActionStateTests {
         #expect(s.state(extensionID: "other", profile: "Default", tab: nil).icon == nil)
     }
 
-    @Test func aTabsOwnValueWinsValueByValue() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/106"))
+    func aTabsOwnValueWinsValueByValue() {
         var s = ExtensionActionStates()
         let tab = UUID(), elsewhere = UUID()
         s.apply(Self.update(icon: Self.png, title: "On"), tab: nil)
@@ -86,7 +90,8 @@ struct ExtensionActionStateTests {
         #expect(s.state(extensionID: "ext", profile: "Default", tab: tab) == ExtensionActionState(icon: Self.other, title: "Paused"))
     }
 
-    @Test func aNavigationThatClearsTheTabFallsBack() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/106"))
+    func aNavigationThatClearsTheTabFallsBack() {
         var s = ExtensionActionStates()
         let tab = UUID()
         s.apply(Self.update(icon: Self.png), tab: nil)
@@ -100,14 +105,16 @@ struct ExtensionActionStateTests {
         }())
     }
 
-    @Test func anEmptyEveryTabStateGoesBackToTheManifest() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/106"))
+    func anEmptyEveryTabStateGoesBackToTheManifest() {
         var s = ExtensionActionStates()
         s.apply(Self.update(icon: Self.png), tab: nil)
         s.apply(Self.update(), tab: nil)
         #expect(s == ExtensionActionStates())
     }
 
-    @Test func closedTabsAreForgotten() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/106"))
+    func closedTabsAreForgotten() {
         var s = ExtensionActionStates()
         let open = UUID(), closed = UUID()
         s.apply(Self.update(target: "A", icon: Self.png), tab: open)

@@ -7,14 +7,16 @@ struct ExtensionPageRetryTests {
     let options = "chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html#general"
     let on: (String) -> Bool = { _ in true }
 
-    @Test func retriesWithGrowingWaits() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/107"))
+    func retriesWithGrowingWaits() {
         let waits = (0..<ExtensionPageRetry.attempts).map { ExtensionPageRetry.delay(url: options, errorCode: -20, attempt: $0, isOn: on) }
         #expect(waits == [0.25, 0.5, 1, 2, 4, 4])
         #expect(ExtensionPageRetry.delay(url: options, errorCode: -20, attempt: ExtensionPageRetry.attempts, isOn: on) == nil)
     }
 
     /// Off or removed in the tab's profile: Chromium's error page stays.
-    @Test func extensionThatIsOffIsNotRetried() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/107"))
+    func extensionThatIsOffIsNotRetried() {
         var asked: [String] = []
         let off: (String) -> Bool = { asked.append($0); return false }
         #expect(ExtensionPageRetry.delay(url: options, errorCode: -20, attempt: 0, isOn: off) == nil)

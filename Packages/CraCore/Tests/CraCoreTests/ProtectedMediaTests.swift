@@ -6,7 +6,7 @@ import Testing
 struct ProtectedMediaTests {
     let sites = ProtectedMediaSites()
 
-    @Test(arguments: [
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/66"), arguments: [
         "https://open.spotify.com/",
         "https://open.spotify.com/track/1?si=x",
         "https://www.netflix.com/browse",
@@ -80,7 +80,7 @@ struct ProtectedMediaTests {
     }
 
     /// Prime Video where Amazon serves it, and Amazon Music; the rest of Amazon stays in Chromium.
-    @Test func amazon() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/66")) func amazon() {
         #expect(sites.engine(for: "https://www.amazon.com/gp/video/detail/B0X/ref=x?autoplay=1") == .webKit)
         #expect(sites.engine(for: "https://www.amazon.com/gp/video") == .webKit)
         #expect(sites.engine(for: "https://www.amazon.co.uk/gp/video/storefront") == .webKit)
@@ -99,7 +99,7 @@ struct ProtectedMediaTests {
     }
 
     /// The Site Control Center's Safari's Engine switch: what Cra keeps after a choice.
-    @Test func choosingPerSite() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/66")) func choosingPerSite() {
         // A site off the list goes to WebKit, and back.
         var r = ProtectedMediaSites.choosing(.webKit, for: "https://www.viaplay.dk/film", added: [], removed: [])
         #expect(r.added == ["www.viaplay.dk"] && r.removed.isEmpty)
@@ -150,7 +150,7 @@ struct ProtectedMediaTests {
 
     /// A Chromium page's own navigation to a service moves before the request goes out; a POST
     /// can't move its body, and a WebKit page never leaves by itself (sign-in round trips).
-    @Test func handoffRules() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/66")) func handoffRules() {
         #expect(sites.handoff(from: .chromium, to: "https://www.netflix.com/browse", method: "GET") == .webKit)
         #expect(sites.handoff(from: .chromium, to: "https://www.netflix.com/browse", method: "get") == .webKit)
         #expect(sites.handoff(from: .chromium, to: "https://open.spotify.com/callback", method: "POST") == nil)

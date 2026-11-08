@@ -1,6 +1,11 @@
 import AppKit
 import CraCEF
 
+@MainActor final class AppDialog {
+    init(title: String, actions: [DialogAction]) {}
+    func present(over window: NSWindow, completion: @escaping (NSApplication.ModalResponse) -> Void) { completion(.abort) }
+}
+
 // Unrelated shell services required to typecheck the complete production manager.
 // The tab store deliberately remains observable so stale callbacks can be asserted.
 struct TestTab { var url: String; var savedTitle = ""; var muted = false; var faviconKey: String?; var themeColor: String?; var activeTabBeforeCreationID: UUID? }
@@ -15,7 +20,15 @@ struct TestItem {
 }
 enum TestRoot { case today }
 @MainActor final class SidebarStore {
-    struct Settings { var autoPictureInPicture = false }
+    struct Settings {
+        var autoPictureInPicture = false
+        var shareThemeWithWebsites = true
+        var blockCookieBanners = false
+    }
+    func cookieBannerCSS(item: UUID) -> String? { settings.blockCookieBanners ? "#onetrust-banner-sdk { display: none !important; }" : nil }
+    func themeDataCSS(item: UUID, systemDark: Bool) -> String? {
+        settings.shareThemeWithWebsites ? ":root { --arc-palette-title: #211A00FF; }" : nil
+    }
     var settings = Settings()
     var items: [UUID: TestItem] = [:]
     func item(_ id: UUID) -> TestItem? { items[id] }
@@ -37,7 +50,10 @@ enum TestRoot { case today }
         if let title { items[id]?.tab?.savedTitle = title }
     }
     func setThemeColor(_ id: UUID, _ hex: String) { items[id]?.tab?.themeColor = hex }
-    func recordVisit(url: String, title: String) {}
+    func setFaviconKey(_ id: UUID, _ key: String) { items[id]?.tab?.faviconKey = key }
+    /// The URLs a finished load counted as visits, in order.
+    var visits: [String] = []
+    func recordVisit(url: String, title: String) { visits.append(url) }
     func clearHistory(_ range: BrowsingDataClear.Range) {}
     func selectTab(_ id: UUID, window: UUID?) {}
     func markUnread(_ id: UUID, _ unread: Bool) {}
@@ -60,7 +76,11 @@ enum TestRoot { case today }
     var webStoreProfiles: [String] = []
     func installFromWebStore(using browser: CraBrowser, profile: String) { webStoreProfiles.append(profile) }
 }
-enum FaviconKey { static func key(for url: String) -> String? { url } }
+enum FaviconKey {
+    static func key(for url: String) -> String? { url }
+    static func key(site: String, iconURL: String) -> String { site + "#" + iconURL }
+    static func siteKey(of key: String) -> String { key }
+}
 enum BrowsingDataClear {
     enum Range { case allTime }
     static func historyRange(messageJSON: String, now: Date) -> Range? { nil }
@@ -89,6 +109,7 @@ final class PictureInPictureChrome {
     static let shared = PictureInPictureChrome()
     var actions: PictureInPictureActions?
     var isPlaying = false
+    var address = ""
     func videoEntered() {}
     func videoLeft() {}
 }

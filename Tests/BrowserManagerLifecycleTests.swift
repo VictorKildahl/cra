@@ -75,6 +75,7 @@ enum BrowserManagerLifecycleTests {
         embeddedPageHandoffCase()
         await snapshotCase()
         loadingTabCase()
+        themeDataCase()
         await sleepCase("an unchanged idle page sleeps", shouldSleep: true) { _, _ in }
         await sleepCase("loading started while the probe was pending stays awake") { _, rt in rt.browser.setLoading(true) }
         await sleepCase("a completed same-URL reload invalidates the old probe") { _, rt in
@@ -102,12 +103,19 @@ enum BrowserManagerLifecycleTests {
         await sleepClockCase()
         await pressureSweepCase()
         await discardCase()
+        await discardedPageLoadCase()
+        await discardedPageColoursCase()
+        await sleepCountsCase()
         shortTimerCase()
         recentlyAudibleCase()
+        await audiblePageStaysAwakeCase()
         devToolsCase()
+        extensionTabActivationCase()
         await beforeUnloadCase()
         nowPlayingCase()
+        await nowPlayingResumeWithinHoldCase()
         await nowPlayingPictureInPictureCase()
+        nowPlayingSkipsPictureInPictureCase()
         await leaveVideoTabPictureInPictureCase()
         await splitCopySleepsPinnedTabCase()
         await coveredWindowPictureInPictureCase()
@@ -121,6 +129,7 @@ enum BrowserManagerLifecycleTests {
         print("Browser manager lifecycle: \(checks) checks passed")
     }
 
+    // promise: #80
     /// The line cra.log gets about a page on screen (#80): how many frames the page was asked
     /// for, and which display's refresh rate its window follows.
     @MainActor
@@ -246,6 +255,9 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #2 #4
+    /// A tab open in another window moves its page over without reloading it (#2), and back to the
+    /// first window when that one is used again (#4): the same runtime, its views reattached.
     @MainActor
     private static func embeddedPageHandoffCase() {
         _ = NSApplication.shared
@@ -311,6 +323,7 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #136
     /// A tab shown while its page loads is neither captured nor probed until the load is over
     /// (#136): both ask the renderer for work in the busiest second of the page.
     @MainActor
@@ -328,6 +341,41 @@ enum BrowserManagerLifecycleTests {
         expect(probe?.isCancelled == true && rt.probeWork != nil && rt.probeWork !== probe, "its probe moves to after the load")
         manager.unload(id)
         expect(rt.probeWork == nil && rt.snapshotWork == nil, "unloading drops the pending probe")
+        manager.closeAll()
+    }
+
+    /// Arc's "Allow websites to get your theme data" (on by default): each page that commits gets the
+    /// space's palette as `--arc-palette-*` variables from Cra's world; off, pages get none.
+    @MainActor
+    private static func themeDataCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let id = store.createTab(url: "https://example.test/themed").id
+        let rt = manager.ensureRuntime(for: id)!
+        let themed = { rt.browser.replies.filter { $0.method == isolatedProbe }.count }
+        let before = themed()
+        manager.browser(rt.browser, didChangeCommittedLoad: true)
+        expect(themed() == before + 1 && rt.browser.lastIsolatedParams.contains("--arc-palette-title: #")
+               && rt.browser.lastIsolatedParams.contains("adoptedStyleSheets"), "a committed page gets the theme's variables")
+        manager.browser(rt.browser, didChangeCommittedLoad: false)
+        expect(themed() == before + 1, "a load that hasn't committed gets nothing yet")
+        store.settings.shareThemeWithWebsites = false
+        manager.browser(rt.browser, didChangeCommittedLoad: true)
+        expect(themed() == before + 1, "with the setting off, pages get none")
+        // Arc's "Block Cookie Banners", off by default: on, a committed page gets the banner rules.
+        store.settings.blockCookieBanners = true
+        manager.browser(rt.browser, didChangeCommittedLoad: true)
+        expect(themed() == before + 2 && rt.browser.lastIsolatedParams.contains("__craCookieBanners")
+               && rt.browser.lastIsolatedParams.contains("#onetrust-banner-sdk"), "blocking cookie banners hides them on every committed page")
+        // Arc's Boosts: a committed page on a boosted site gets the boost's stylesheet and script.
+        BrowserManager.boostFor = { url in url.contains("example.test") ? (css: "h1 { color: red }", js: "window.boosted = 1") : nil }
+        store.settings.blockCookieBanners = false
+        rt.browser.navigate(to: "https://example.test/themed")
+        manager.browser(rt.browser, didChangeCommittedLoad: true)
+        expect(rt.browser.replies.contains { $0.method == isolatedProbe } && rt.browser.lastIsolatedParams.contains("__craBoost")
+               && rt.browser.lastIsolatedParams.contains("h1 { color: red }") && rt.browser.scripts.last == "window.boosted = 1",
+               "a boosted site's page gets the boost's CSS and runs its script")
+        BrowserManager.boostFor = nil
         manager.closeAll()
     }
 
@@ -377,6 +425,7 @@ enum BrowserManagerLifecycleTests {
         manager.runtime(for: id).map(\.discarded) ?? true
     }
 
+    // promise: #136
     /// Like Arc, the 10 tabs used last keep their pages however long they have been hidden (#136).
     @MainActor
     private static func recentTabsCase() {
@@ -393,6 +442,7 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #136
     /// Like Arc, a page out of sight past the threshold is voted to freeze unless it is one of
     /// the 10 tabs used last; showing it drops the vote (#136).
     @MainActor
@@ -416,6 +466,7 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #32
     /// A page that refused isn't probed again every minute, only after the back-off or once shown again.
     @MainActor
     private static func refusalBackoffCase() async {
@@ -436,6 +487,7 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #32
     /// Tab sleeping on the manager's clock: an hour's threshold and the 10-minute back-off run
     /// in no time, and nothing is asked a second early.
     @MainActor
@@ -464,6 +516,7 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #153
     /// Under memory pressure (#153) the 3 pages hidden longest are asked, the 10 tabs used last
     /// included; a page refusing inside its back-off doesn't take one of the 3, and a page left
     /// less than 5 minutes ago isn't asked.
@@ -478,7 +531,7 @@ enum BrowserManagerLifecycleTests {
         runtimes[5].hiddenAt = clock.now.addingTimeInterval(-4 * 60)
         runtimes[0].sleepProbeAfter = clock.now.addingTimeInterval(60)
         func probed() -> [Bool] { runtimes.map { rt in rt.browser.replies.contains { $0.method == isolatedProbe } } }
-        manager.sleepIdleTabs(.memoryPressure)
+        manager.sleepIdleTabs(.memoryPressure(.warning))
         expect(probed() == [false, true, true, true, false, false],
                "the 3 pages hidden longest are asked, past a refusing page, none of the 10 used last kept")
         for rt in runtimes[1...3] {
@@ -489,11 +542,12 @@ enum BrowserManagerLifecycleTests {
             await finishSleep(rt.browser)
         }
         expect(ids.map { asleep(manager, $0) } == [false, true, true, true, false, false], "the 3 pages are discarded")
-        manager.sleepIdleTabs(.memoryPressure)
+        manager.sleepIdleTabs(.memoryPressure(.warning))
         expect(probed()[4] && !probed()[5], "the next sweep takes the next page, not one left 4 minutes ago")
         manager.closeAll()
     }
 
+    // promise: #153
     /// Sleeping discards the page in place (#153): the runtime stays with Chromium's history and
     /// scroll position, showing the tab loads it now, and it holds none of the 10 recent places.
     /// A call with camera and microphone off, or a device, keeps the page awake; a CEF without
@@ -539,6 +593,112 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #214
+    /// CEF reports a load end for the page a discard just ended (#214). That page isn't there: the
+    /// log says nothing, history gets no visit and no Web Store install starts. Loaded again on
+    /// waking, it counts.
+    @MainActor
+    private static func discardedPageLoadCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.protectedRecentTabs = 0
+        let url = "https://example.test/discarded-load"
+        let id = store.createTab(url: url).id
+        let rt = manager.ensureRuntime(for: id)!
+        rt.hiddenAt = Date.distantPast
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
+        rt.browser.reply(to: isolatedProbe, with: idleReply)
+        await drainMainQueue()
+        rt.browser.reply(to: "Runtime.evaluate", with: idleReply)
+        await drainMainQueue()
+        await finishSleep(rt.browser)
+        let installs = ExtensionStore.shared.webStoreProfiles.count
+        expect(rt.discarded, "the page is discarded")
+        manager.browser(rt.browser, didFinishLoadingURL: url, title: "Discarded", statusCode: 200)
+        expect(store.visits.isEmpty && ExtensionStore.shared.webStoreProfiles.count == installs,
+               "a discarded page's load end is no visit and starts no Web Store install")
+        manager.show(id, focus: false)
+        manager.browser(rt.browser, didFinishLoadingURL: url, title: "Woken", statusCode: 200)
+        expect(store.visits == [url] && ExtensionStore.shared.webStoreProfiles.count == installs + 1,
+               "the page loaded again on waking is a visit")
+        manager.closeAll()
+    }
+
+    // promise: #237
+    /// The blank document a discard leaves answers the load end's colour probes with white (#237:
+    /// every discarded YouTube or GitHub tab saved #FFFFFF, a 2 MB sidebar.json write each, and
+    /// woke with a white toolbar). The tab keeps the colours its page reported; woken, the page
+    /// reports again.
+    @MainActor
+    private static func discardedPageColoursCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.protectedRecentTabs = 0
+        let id = store.createTab(url: "https://example.test/dark-site").id
+        let rt = manager.ensureRuntime(for: id)!
+        manager.browser(rt.browser, didReportThemeColor: "#212121")
+        manager.browser(rt.browser, didReportBackgroundColor: "#0F0F0F")
+        rt.hiddenAt = Date.distantPast
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
+        rt.browser.reply(to: isolatedProbe, with: idleReply)
+        await drainMainQueue()
+        rt.browser.reply(to: "Runtime.evaluate", with: idleReply)
+        await drainMainQueue()
+        await finishSleep(rt.browser)
+        expect(rt.discarded, "the page is discarded")
+        manager.browser(rt.browser, didReportThemeColor: "#FFFFFF")
+        manager.browser(rt.browser, didReportBackgroundColor: "#FFFFFF")
+        expect(store.item(id)?.tab?.themeColor == "#212121" && rt.themeColor == "#212121" && rt.backgroundColor == "#0F0F0F",
+               "a discarded page's blank document doesn't replace the tab's colours")
+        manager.show(id, focus: false)
+        manager.browser(rt.browser, didReportThemeColor: "#303030")
+        expect(store.item(id)?.tab?.themeColor == "#303030", "the page loaded again on waking reports its colour")
+        manager.closeAll()
+    }
+
+    // promise: #214
+    /// What the recorder says about tab sleeping (#214): a candidate passed over counts once per
+    /// reason (the first that holds, TabSleepPolicy.hold), and a page refusing again after the
+    /// back-off counts as a retry of the same page, not as another page.
+    @MainActor
+    private static func sleepCountsCase() async {
+        var facts: [(PerfCounter, String)] = []
+        Perf.attach { fact in if case .count(let c, let key, _, _) = fact { facts.append((c, key)) } }
+        defer { Perf.attach(nil) }
+        facts = []  // what earlier cases left in the recorder's start-up buffer
+        func counted(_ c: PerfCounter) -> [String] { facts.filter { $0.0 == c }.map(\.1) }
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.protectedRecentTabs = 0
+
+        let loadingID = store.createTab(url: "https://example.test/loading").id
+        let loading = manager.ensureRuntime(for: loadingID)!
+        loading.hiddenAt = Date.distantPast
+        loading.browser.setLoading(true)
+        for _ in 0..<3 { manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60)) }
+        expect(counted(.sleepSkip) == ["loading"] && !loading.browser.replies.contains { $0.method == isolatedProbe },
+               "a loading page passed over three times counts once, as loading")
+        loading.browser.setLoading(false)
+        loading.browser.hasDevTools = true
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
+        expect(counted(.sleepSkip) == ["loading", "devTools"], "a new reason counts again")
+        loading.browser.hasDevTools = false
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
+        expect(loading.browser.replies.contains { $0.method == isolatedProbe }, "with nothing holding it the page is asked")
+        loading.browser.reply(to: isolatedProbe, with: #"{"result":{"type":"string","value":"typed"}}"#)
+        await drainMainQueue()
+        for _ in 0..<2 {
+            loading.sleepProbeAfter = Date.distantPast
+            manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
+            loading.browser.reply(to: isolatedProbe, with: #"{"result":{"type":"string","value":"typed"}}"#)
+            await drainMainQueue()
+        }
+        expect(counted(.sleepRefusal) == ["typed"] && counted(.sleepRetry) == ["typed", "typed"],
+               "one page refusing three times is one refusal and two retries")
+        manager.closeAll()
+    }
+
+    // promise: #153
     /// "Force tabs out of memory after:" below Arc's 4 hours closes the 10 tabs used last too;
     /// 4 hours and more keep them (#153).
     @MainActor
@@ -557,6 +717,7 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #153
     /// A page that played sound counts as in use: tab sleeping waits as long after it went quiet
     /// as after it went out of sight (#153).
     @MainActor
@@ -580,8 +741,53 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #28
+    /// A tab playing sound, Web Audio included (Chromium's own audible state, #28), is never put
+    /// to sleep, however long it has been out of sight, and one that starts playing while it is
+    /// being asked stays awake too.
+    @MainActor
+    private static func audiblePageStaysAwakeCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.protectedRecentTabs = 0
+        let id = store.createTab(url: "https://example.test/playing").id
+        let runtime = manager.ensureRuntime(for: id)!
+        runtime.hiddenAt = Date.distantPast
+        runtime.browser.isAudible = true
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
+        manager.sleepIdleTabs(.memoryPressure(.warning))
+        expect(!runtime.browser.replies.contains { $0.method == isolatedProbe } && !asleep(manager, id),
+               "a page playing sound is never asked to sleep, on the timer or under memory pressure")
+        manager.closeAll()
+        await sleepCase("a page that starts playing while it is asked stays awake") { _, rt in rt.browser.isAudible = true }
+    }
+
+    /// #38: an extension's chrome.tabs.update({active: true}) (SwitchyOmega's Options on its open
+    /// settings tab) selects that Cra tab, and only while its page is the tab's live one.
+    // promise: #38
+    @MainActor
+    private static func extensionTabActivationCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let observer = Observer()
+        manager.delegate = observer
+        let options = store.createTab(url: "chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html").id
+        let other = store.createTab(url: "https://example.test/other").id
+        manager.show(options, focus: false)
+        let page = manager.runtime(for: options)!.browser
+        manager.show(other, focus: false)
+        manager.browserRequestsActivation(page, byPage: false)
+        expect(observer.activatedTabs == [options] && observer.activatedByPage == [false],
+               "the extension's activation asks for its options tab, not the one in front")
+        manager.unload(options)
+        manager.browserRequestsActivation(page, byPage: false)
+        expect(observer.activatedTabs == [options], "a page already closing selects nothing")
+        manager.closeAll()
+    }
+
     /// ⌥⌘I pressed again while CEF is still closing DevTools opens them once they are gone,
     /// instead of closing them a second time. Console and Network switch panels on open DevTools.
+    // promise: #138
     @MainActor
     private static func devToolsCase() {
         let store = SidebarStore()
@@ -611,6 +817,7 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #32
     /// The page's own onbeforeunload, asked in its world after the isolated probe, keeps it awake.
     @MainActor
     private static func beforeUnloadCase() async {
@@ -629,6 +836,7 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #33
     /// The sidebar player lists pages that played sound, keeps paused ones, hides the one on
     /// screen, and drops a page that navigates while quiet or closes.
     @MainActor
@@ -658,6 +866,62 @@ enum BrowserManagerLifecycleTests {
         expect(np.entries.map(\.id) == [b], "a playing page that navigates (a playlist) keeps its card")
         manager.unload(b)
         expect(np.entries.isEmpty, "closing the page removes its card")
+        manager.closeAll()
+    }
+
+    /// Paused from the sidebar's card, then played again on the page within the 2 s the engine
+    /// holds a quiet tab audible: the tab never went quiet, so only its sound starting tells the
+    /// card. Before, the card stayed on paused while the page played (Chromium and WebKit, 7 Nov 2026).
+    @MainActor
+    private static func nowPlayingResumeWithinHoldCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let np = NowPlaying()
+        manager.nowPlaying = np
+        let a = store.createTab(url: "https://music.example.test/").id, b = store.createTab(url: "https://example.test/other").id
+        let ra = manager.ensureRuntime(for: a)!, rb = manager.ensureRuntime(for: b)!
+        manager.show(b, focus: false)
+        ra.browser.isAudible = true
+        manager.browser(ra.browser, didChangeSoundPlaying: true)
+        manager.browser(ra.browser, didChangeAudible: true)
+        ra.browser.reply(to: "Cra.mediaSession", with: #"{"actions":["play","pause"],"pictureInPicture":false}"#)
+        await drainMainQueue()
+        ra.browser.replies.removeAll()
+        manager.performNowPlaying(a, .togglePlayback)
+        ra.browser.reply(to: "cra:Runtime.evaluate", with: #"{"result":{"type":"string","value":"playing"}}"#)
+        await drainMainQueue()
+        ra.browser.reply(to: "Cra.mediaSession", with: #"{"handled":true,"pictureInPicture":false}"#)
+        await drainMainQueue()
+        expect(np.entries.first?.playing == false, "paused from the card, the card shows paused")
+        manager.browser(ra.browser, didChangeSoundPlaying: false)
+        manager.browser(ra.browser, didChangeSoundPlaying: true)
+        expect(np.entries.first?.playing == true, "the page playing again within the hold shows on the card")
+        manager.browser(rb.browser, didChangeSoundPlaying: true)
+        expect(np.entries.map(\.id) == [a], "sound alone doesn't make a card: the held audible state does")
+        manager.closeAll()
+    }
+
+    // promise: #33
+    /// The sidebar player (#33) has no card for a tab whose video is in Picture in Picture; the
+    /// card comes back when the video leaves it.
+    @MainActor
+    private static func nowPlayingSkipsPictureInPictureCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let np = NowPlaying()
+        manager.nowPlaying = np
+        let a = store.createTab(url: "https://example.test/video").id, b = store.createTab(url: "https://example.test/other").id
+        let ra = manager.ensureRuntime(for: a)!
+        manager.show(b, focus: false)
+        ra.browser.isAudible = true
+        manager.browser(ra.browser, didChangeAudible: true)
+        expect(np.shown.map(\.id) == [a], "a tab playing out of sight has a card")
+        ra.browser.isInPictureInPicture = true
+        manager.browser(ra.browser, didChangePictureInPicture: true)
+        expect(np.shown.isEmpty && np.entries.map(\.id) == [a], "its video in Picture in Picture: no card")
+        ra.browser.isInPictureInPicture = false
+        manager.browser(ra.browser, didChangePictureInPicture: false)
+        expect(np.shown.map(\.id) == [a], "back from Picture in Picture, the card is back")
         manager.closeAll()
     }
 
@@ -760,6 +1024,7 @@ enum BrowserManagerLifecycleTests {
     /// going out of sight, drives Chrome's automatic Picture in Picture (`Cra.autoPictureInPicture`),
     /// as Chrome's tab strip and Arc do; coming back has Chrome close the window (GitHub #198).
     /// A page Chrome doesn't ask gets the video request.
+    // promise: #198
     @MainActor
     private static func callPictureInPictureCase() async {
         let clock = ManualScheduler()
@@ -839,6 +1104,7 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #33
     /// The sidebar player in a Chromium tab: Chromium runs the page's media session handlers
     /// (`Cra.mediaSession`, like Arc's media actions) and reports which it has, however early the
     /// page registered them; a page without a play/pause handler has its media elements played or
@@ -930,6 +1196,7 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #46 #84
     /// A woken page's toolbar starts in the colour its page last reported (Arc, #46), and a tab
     /// coming on screen asks its page for its background again unless the page is still loading.
     @MainActor

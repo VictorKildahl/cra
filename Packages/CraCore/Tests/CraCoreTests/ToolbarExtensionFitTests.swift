@@ -34,22 +34,22 @@ struct ToolbarExtensionFitTests {
 struct ToolbarRoomTests {
     private let pins: [CGFloat] = [34, 34]
 
-    @Test func everythingStaysWhileTheAddressFits() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/178")) func everythingStaysWhileTheAddressFits() {
         #expect(ToolbarRoom.plan(pins: pins, reload: 37, settings: 34, needed: 150, room: 200) == .init())
     }
 
-    @Test func pinsGoBeforeRefresh() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/178")) func pinsGoBeforeRefresh() {
         // 120 + one pin = 154 ≥ 150.
         #expect(ToolbarRoom.plan(pins: pins, reload: 37, settings: 34, needed: 150, room: 120) == .init(hiddenPins: 1))
     }
 
-    @Test func refreshGoesOnceThePinsAreNotEnough() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/178")) func refreshGoesOnceThePinsAreNotEnough() {
         // 40 + 68 = 108 < 150: ↻ goes too, and the address, cut short, keeps the sliders.
         #expect(ToolbarRoom.plan(pins: pins, reload: 37, settings: 34, needed: 150, room: 40)
                 == .init(hiddenPins: 2, hidesReload: true))
     }
 
-    @Test func theSlidersGoOnlyWhenTheAddressWouldBeSqueezed() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/178")) func theSlidersGoOnlyWhenTheAddressWouldBeSqueezed() {
         // A 215 pt pane (Arc 1.170): ← → · options · ✕ and the address only.
         #expect(ToolbarRoom.plan(pins: [], reload: 37, settings: 34, needed: 150, room: 0)
                 == .init(hidesReload: true, hidesSettings: true))
@@ -61,12 +61,12 @@ struct ToolbarRoomTests {
         #expect(ToolbarRoom.plan(pins: [], reload: 37, settings: 34, needed: 150, room: 82 - 37).hidesSettings)
     }
 
-    @Test func aShortAddressNeverCostsTheSliders() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/178")) func aShortAddressNeverCostsTheSliders() {
         // Needs 60: ↻ makes room (30 + 37 = 67), nothing else goes.
         #expect(ToolbarRoom.plan(pins: [], reload: 37, settings: 34, needed: 60, room: 30) == .init(hidesReload: true))
     }
 
-    @Test func missingButtonsAreNotHidden() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/178")) func missingButtonsAreNotHidden() {
         #expect(ToolbarRoom.plan(pins: [], reload: nil, settings: nil, needed: 150, room: 0) == .init())
     }
 }

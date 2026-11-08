@@ -3,19 +3,18 @@ import Observation
 import QuickLookThumbnailing
 
 /// Finished downloads, newest last, for the list Arc shows when you hover the Library
-/// button (its downloads tray). Kept in downloads.json; files deleted since drop out.
-/// Downloads still running, and ones that failed or were cancelled, are listed too (`live`,
-/// not saved): Arc shows progress and failures there, not in a toast.
+/// button (its downloads tray) and on Library ▸ Downloads. Kept in downloads.json; files deleted
+/// since drop out. Downloads still running, and ones that failed or were cancelled, are listed
+/// in both too (`live`, not saved): Arc shows progress and failures there, not in a toast. Which
+/// rows each list shows is `DownloadList` (CraCore).
 @MainActor
 @Observable
 final class DownloadHistory {
     static let shared = DownloadHistory()
 
-    struct Entry: Codable, Identifiable, Equatable {
-        let id: UUID
-        var path: String
-        var date: Date
-    }
+    typealias Entry = DownloadList.Entry
+    typealias Live = DownloadList.Live
+    typealias Listed = DownloadList.Listed
 
     /// Arc 1.170 listed every recent download it still had on disk (four, oldest at the
     /// top); how many it shows at most was not observed.
@@ -31,56 +30,17 @@ final class DownloadHistory {
         entries = file.load(or: { [] })
     }
 
-    /// A download Chromium is still reporting on, or one that ended without a file.
-    struct Live: Identifiable, Equatable {
-        let id: UInt32
-        var name: String
-        var path: String
-        var started: Date
-        var received: Int64
-        var total: Int64
-        var percent: Int
-        var bytesPerSecond: Double?
-        /// The last point the speed was measured from.
-        var sampleBytes: Int64 = 0
-        var sampleAt = Date.distantPast
-        var failed = false
-        var cancelled = false
-        /// When Chromium last reported on it (see MainWindowController.checkStalledDownloads).
-        var updated: Date
-
-        var running: Bool { !failed && !cancelled }
-        var row: DownloadRow.State {
-            failed ? .failed : cancelled ? .cancelled : .downloading(received: received, total: total, bytesPerSecond: bytesPerSecond)
-        }
-    }
-
     private(set) var live: [Live] = []
-
-    /// A row in the hover list.
-    enum Listed: Identifiable, Equatable {
-        case finished(Entry)
-        case live(Live)
-
-        var id: String {
-            switch self {
-            case .finished(let e): return e.id.uuidString
-            case .live(let l): return "live-\(l.id)"
-            }
-        }
-        var date: Date {
-            switch self {
-            case .finished(let e): return e.date
-            case .live(let l): return l.started
-            }
-        }
-    }
 
     /// The hover list: newest downloads, oldest first: files still on disk, and running, failed
     /// or cancelled ones.
     var recent: [Listed] {
-        let finished = entries.filter { FileManager.default.fileExists(atPath: $0.path) }.map(Listed.finished)
-        return Array((finished + live.map(Listed.live)).sorted { $0.date < $1.date }.suffix(Self.listLimit))
+        DownloadList.tray(entries: entries, live: live, limit: Self.listLimit) { FileManager.default.fileExists(atPath: $0) }
+    }
+
+    /// Library ▸ Downloads: every download, newest first, running ones included (#245).
+    func library(query: String) -> [Listed] {
+        DownloadList.library(entries: entries, live: live, query: query) { FileManager.default.fileExists(atPath: $0) }
     }
 
     var hasRunningDownloads: Bool { live.contains(where: \.running) }

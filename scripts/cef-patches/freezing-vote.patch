@@ -11,10 +11,10 @@ index dd0a558c0..a54f79de4 100644
      "//components/pref_registry",
      "//components/printing/browser",
 diff --git a/cef/libcef/browser/devtools/devtools_controller.cc b/cef/libcef/browser/devtools/devtools_controller.cc
-index c60f22d..da94ae0 100644
+index c60f22d1a..f0d609890 100644
 --- a/cef/libcef/browser/devtools/devtools_controller.cc
 +++ b/cef/libcef/browser/devtools/devtools_controller.cc
-@@ -5,10 +5,416 @@
+@@ -5,10 +5,435 @@
  #include "cef/libcef/browser/devtools/devtools_controller.h"
  
  #include "base/json/json_reader.h"
@@ -22,6 +22,7 @@ index c60f22d..da94ae0 100644
 +#include "base/functional/callback_helpers.h"
  #include "base/json/json_writer.h"
 +#include "base/memory/ref_counted.h"
++#include "base/scoped_observation.h"
 +#include "base/strings/string_number_conversions.h"
 +#include "base/supports_user_data.h"
 +#include "base/task/sequenced_task_runner.h"
@@ -30,6 +31,7 @@ index c60f22d..da94ae0 100644
 +#include "chrome/browser/picture_in_picture/auto_picture_in_picture_tab_helper.h"
 +#include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
 +#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/profiles/profile_observer.h"
 +#include "components/crx_file/id_util.h"
 +#include "components/performance_manager/freezing/freezing_policy.h"
 +#include "components/performance_manager/public/freezing/freezing.h"
@@ -213,17 +215,34 @@ index c60f22d..da94ae0 100644
 +
 +// The page that downloads the store's CRX, as WebstoreInstallWithPrompt has
 +// one: never shown, so the download stays out of every window's UI. It lives
-+// until the install is over.
++// until the install is over, or until its profile goes away: a quit while an
++// install still ran (or never ended) destroyed the profile with the page open,
++// and Chromium stops on that ("BrowserContext is getting destroyed without
++// first closing all WebContents", GitHub #227). WebstoreInstaller holds the
++// page through a WeakPtr; an install cut off this way never replies, and the
++// client asks for it again on the next launch.
 +struct CraWebStoreInstallPage
-+    : public base::RefCountedThreadSafe<CraWebStoreInstallPage> {
++    : public base::RefCountedThreadSafe<CraWebStoreInstallPage>,
++      public ProfileObserver {
 +  explicit CraWebStoreInstallPage(Profile* profile)
 +      : contents(content::WebContents::Create(
-+            content::WebContents::CreateParams(profile))) {}
++            content::WebContents::CreateParams(profile))) {
++    profile_observation_.Observe(profile);
++  }
 +  std::unique_ptr<content::WebContents> contents;
++
++  // ProfileObserver: first thing in ~ProfileImpl, before its user data (the
++  // list of the profile's WebContents) is checked and cleared.
++  void OnProfileWillBeDestroyed(Profile* profile) override {
++    profile_observation_.Reset();
++    contents.reset();
++  }
 +
 + private:
 +  friend class base::RefCountedThreadSafe<CraWebStoreInstallPage>;
-+  ~CraWebStoreInstallPage() = default;
++  ~CraWebStoreInstallPage() override = default;
++
++  base::ScopedObservation<Profile, ProfileObserver> profile_observation_{this};
 +};
 +
 +// Cra (GitHub #203): {"id":N,"method":"Cra.installFromWebStore","params":
@@ -431,7 +450,7 @@ index c60f22d..da94ae0 100644
  
  CefDevToolsController::CefDevToolsController(
      content::WebContents* inspected_contents)
-@@ -30,6 +436,38 @@ CefDevToolsController::~CefDevToolsController() {
+@@ -30,6 +455,38 @@ CefDevToolsController::~CefDevToolsController() {
  bool CefDevToolsController::SendDevToolsMessage(
      const std::string_view& message) {
    CEF_REQUIRE_UIT();

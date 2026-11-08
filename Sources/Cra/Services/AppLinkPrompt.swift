@@ -44,12 +44,10 @@ enum AppLinkPrompt {
             return true
         }
         CraLog.note("page \(page) asks to open \(name) for \(scheme)")
-        let alert = NSAlert()
-        alert.messageText = "Open \(name)?"
-        alert.informativeText = "\(URL(string: browser.currentURL)?.host ?? "This site") wants to open this application."
-        alert.addButton(withTitle: "Open \(name)")
-        alert.addButton(withTitle: "Cancel")
-        alert.beginSheetModal(for: window) { response in
+        let alert = AppDialog(title: "Open \(name)?",
+                              message: "\(URL(string: browser.currentURL)?.host ?? "This site") wants to open this application.",
+                              actions: [DialogAction("Open \(name)"), .cancel])
+        alert.present(over: window) { response in
             if response == .alertFirstButtonReturn { NSWorkspace.shared.open(target) }
         }
         return true

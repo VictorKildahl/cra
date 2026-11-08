@@ -32,7 +32,6 @@ final class PaneToolbarView: NSView {
         var path = ""
         var sidebarVisible = true
         var pinned: [Ext] = []
-        var hasExtensions = false
         /// A WebKit page's service: its extension buttons dim (none run there).
         var protectedMedia: String?
         var fill = NSColor.clear
@@ -170,13 +169,14 @@ final class PaneToolbarView: NSView {
             m.host = AppSettings.siteKey(for: t.url) ?? human
             // Arc shows the host only unless "Show Full URL" is on (#88).
             m.path = store.settings.toolbarShowsFullURL && human.hasPrefix(m.host) ? String(human.dropFirst(m.host.count)) : ""
+            // An easel's bar shows its name (Arc 1.172.1).
+            if Easel.id(fromURL: t.url) != nil { m.host = item.displayTitle; m.path = "" }
         }
         m.protectedMedia = m.tabID.flatMap { ui.navState(for: $0).protectedMedia }
         let extensions = ExtensionStore.shared
         let profile = item.map { store.profileDirectoryName(item: $0.id) }
             ?? store.profileDirectoryName(space: store.focusedSpaceID(window: ui.windowID))
         let entries = extensions.entries(inProfile: profile)
-        m.hasExtensions = !entries.isEmpty
         m.pinned = extensions.pinnedIDs(inProfile: profile).compactMap { id in
             entries.first { $0.extensionID == id }.map {
                 Model.Ext(id: id, name: $0.name, icon: extensions.toolbarIcon(for: $0, profile: profile, tab: m.tabID),
@@ -272,7 +272,7 @@ final class PaneToolbarView: NSView {
         hairline.layer?.backgroundColor = m.hairline?.cgColor
         let bar = ToolbarComposition(kind: m.kind, inSplit: m.inSplit, sidebarVisible: m.sidebarVisible, focusedPane: m.focusedPane,
                                      hovered: m.hovered, canGoBack: m.canGoBack, canGoForward: m.canGoForward, isLoading: m.isLoading,
-                                     pinnedExtensions: m.pinned.map(\.id), hasExtensions: m.hasExtensions)
+                                     pinnedExtensions: m.pinned.map(\.id))
         // The no-tab bar and an empty pane show navigation that does nothing (Arc greys it out).
         let wide = m.kind == .noTab || m.kind == .emptyPane
         func view(_ item: ToolbarComposition.Item) -> NSView {
@@ -402,7 +402,10 @@ final class PaneToolbarView: NSView {
         if m.kind == .normal {
             let start: CGFloat = 2.5
             let leftEnd = left.isEmpty ? 0 : start + left.reduce(0) { $0 + widthOf($1) }
-            let room = rx - trailing.reduce(0) { $0 + widthOf($1) } - 6 - (leftEnd + (left.isEmpty ? 0 : 6)) - 2 * (8 + 6)
+            // Broken into sub-expressions: newer Swift type-checkers time out on the one-liner.
+            let trailingWidth: CGFloat = trailing.reduce(0) { $0 + widthOf($1) }
+            let leftWidth: CGFloat = leftEnd + (left.isEmpty ? 0 : 6)
+            let room = rx - trailingWidth - 6 - leftWidth - 2 * (8 + 6)
             plan = ToolbarRoom.plan(pins: pins.map(widthOf), reload: reload.map(widthOf), settings: settings.map(widthOf),
                                     needed: urlButton.idealWidth, room: room)
         }
@@ -490,18 +493,27 @@ final class PaneToolbarView: NSView {
         actions.performAction("copyURL")
     }
 
-    /// Arc's menu on the toolbar address: Copy URL, and Show Full URL / Hide Full URL for the
-    /// normal bar (the developer bar always shows it).
+    /// Arc's menu on the toolbar address (Arc 1.172.1): Copy URL, Capture…, Capture Full Page,
+    /// Manage Extensions…, then Show Full URL / Hide Full URL for the normal bar (the developer
+    /// bar always shows it) and Hide Toolbar. Arc's Share ▸ is in the Site Control Center here, and
+    /// Shared Quotes go through arc.net, so neither is listed.
     private func addressMenu() -> NSMenu? {
         guard model.kind == .normal || model.kind == .developer else { return nil }
         let menu = NSMenu()
+        let focus = { [weak self] in if let id = self?.paneTabID { self?.actions.focusPane(id) } }
         menu.addItem(ToolbarMenuAction.item("Copy URL", shortcut: "copyURL", { [weak self] in self?.copyURL() }))
+        menu.addItem(ToolbarMenuAction.item("Capture…", shortcut: "capturePage", { [weak self] in focus(); self?.actions.performAction("capturePage") }))
+        menu.addItem(ToolbarMenuAction.item("Capture Full Page", shortcut: "captureFullPage", { [weak self] in focus(); self?.actions.performAction("captureFullPage") }))
+        menu.addItem(.separator())
+        menu.addItem(ToolbarMenuAction.item("Manage Extensions…", { [weak self] in self?.actions.performAction("manageExtensions") }))
+        menu.addItem(.separator())
         if model.kind == .normal {
             let full = store.settings.toolbarShowsFullURL
             menu.addItem(ToolbarMenuAction.item(full ? "Hide Full URL" : "Show Full URL", { [weak self] in
                 self?.store.settings.toolbarShowsFullURL.toggle()
             }))
         }
+        menu.addItem(ToolbarMenuAction.item("Hide Toolbar", shortcut: "toggleToolbar", { [weak self] in self?.store.settings.showToolbar = false }))
         return menu
     }
 

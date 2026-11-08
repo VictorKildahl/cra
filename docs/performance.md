@@ -71,7 +71,10 @@ whether Cra was active. Per process kind (browser, renderer, GPU, utility, other
 Chromium's `--type=` argument): CPU, memory footprint, disk reads and writes, wakeups (in the
 file only), and processes started and ended. The Mac: CPU, memory pressure, thermal state, Low
 Power Mode, free disk, and Cra's average CPU while nobody used the Mac (`idle`: 5-second samples
-with no keyboard or mouse input for a minute). Tabs by state, sleep refusals by reason, and
+with no keyboard or mouse input for a minute). Tabs by state; tab sleeping's pages closed
+(`tabSlept`), pages refusing (`sleepRefusal`, once per page and reason, then `sleepRetry` for
+each ask after the back-off) and candidates passed over without being asked (`sleepSkip`:
+loading, DevTools, Picture in Picture…, once per page and reason; cra.log names the site); and
 timings for tab switch (without the page created for a tab that had none, which is page
 create), page create, page load, waking a slept tab and framing an extension's popup. In the visible page,
 read with the long tasks every 5 s and never in background tabs: long tasks, Chromium's long
@@ -79,7 +82,8 @@ animation frames (`longFrames`, `longestFrameMs`: a passive observer, it asks fo
 the frames its videos played and dropped (`getVideoPlaybackQuality`). Renderer crashes, hangs
 and failed loads with their codes. Start-up phases (store loaded, Chromium started, windows shown, then the first page shown,
 committed and loaded), JSON load and save times (saves run on the
-persistence queue, so `jsonSave` is never a main-thread stall), the profile's and caches' size
+persistence queue, so `jsonSave` is never a main-thread stall; `fileSaved` counts the writes by
+file name), the profile's and caches' size
 (at export only). The session: a random id, the launch number, the previous session and whether
 it quit. The totals in `tabs` are since launch; `history.json`, in the export too, has stalls
 and long tasks per 5 minutes.

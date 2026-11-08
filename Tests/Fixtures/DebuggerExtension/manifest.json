@@ -1,0 +1,8 @@
+{
+  "manifest_version": 3,
+  "name": "Cra Debugger Fixture",
+  "version": "1.0",
+  "description": "Made up for scripts/scenario.sh: attaches chrome.debugger to a page, as the Playwright MCP bridge does, so Chrome shows its \"started debugging this browser\" bar (GitHub #241).",
+  "permissions": ["debugger", "tabs"],
+  "background": { "service_worker": "worker.js" }
+}

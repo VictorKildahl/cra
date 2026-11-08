@@ -110,6 +110,9 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
 - (void)browser:(CraBrowser *)browser didChangeMediaCapture:(BOOL)capturing;
 /// The page started or stopped playing sound (see `isAudible`).
 - (void)browser:(CraBrowser *)browser didChangeAudible:(BOOL)audible;
+/// The page's sound started or stopped as it happened, before the 2 s that `isAudible` and
+/// `browser:didChangeAudible:` hold a quiet page audible.
+- (void)browser:(CraBrowser *)browser didChangeSoundPlaying:(BOOL)playing;
 /// `hasCommittedLoad` changed: the main frame committed, or a new navigation started.
 - (void)browser:(CraBrowser *)browser didChangeCommittedLoad:(BOOL)committed;
 /// The page's main-frame load failed with a net error (ERR_ABORTED, a navigation cut off,
@@ -228,6 +231,9 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
 - (void)skipPictureInPictureBy:(double)seconds NS_SWIFT_NAME(skipPictureInPicture(by:));
 - (void)print;
 - (void)viewSource;
+/// One of Chrome's own commands by its IDC name ("IDC_ROUTE_MEDIA" for Cast…, "IDC_TASK_MANAGER"),
+/// where Chromium can run it for this page. NO when it can't.
+- (BOOL)runChromeCommand:(NSString *)name NS_SWIFT_NAME(runChromeCommand(_:));
 - (void)executeJavaScript:(NSString *)script;
 /// Asks the page for its background colour again (-browser:didReportBackgroundColor:);
 /// pages can switch themes without a load.
@@ -277,6 +283,11 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
 /// http:// navigations are upgraded, and a site without HTTPS shows Chrome's warning
 /// page before it loads. Profiles that load later get it too. Off until enabled.
 + (void)setHttpsOnlyModeEnabled:(BOOL)enabled;
+/// Arc's View ▸ Appearance ("Websites, Easels, and Notes will use:"): 0 Automatic (the Mac's),
+/// 1 Light, 2 Dark. Chrome's colour mode in every profile, which pages' prefers-color-scheme and
+/// Chrome's own pages follow; profiles that load later get it too.
++ (void)setWebsiteAppearance:(NSInteger)mode;
+@property (class, nonatomic, readonly) NSInteger websiteAppearance;
 /// Chromium's secure DNS setting (chrome://settings/security), app-wide in Local State:
 /// `dns_over_https.mode` and `dns_over_https.templates` as Chromium holds them now. nil
 /// before Chromium is ready and once quitting starts.

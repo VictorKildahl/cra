@@ -1,0 +1,8 @@
+{
+  "manifest_version": 3,
+  "name": "Cra Web Store Copy Fixture",
+  "version": "1.0",
+  "description": "Made up for scripts/scenario.sh: a Web Store extension as an import copies it (the store's update_url, a folder named by its ID), so Cra installs it from the store.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoUXvuoORaGfgdQgkOKk3hh4RFYj/3wTBTef+bzL6CJuJckv2pUrcCHiG+N3fTJ6UCOkTa04hUvzNuRRzfnp+E0sCAIc4iQPItjuqMlF4ZT+s+JB8o5YCk2QBloPW4Z/8KMo7IOHEtRdrKreoOttcmib87bhoR2Os/Jur/WN+xemKZ373pvSp5UAUWicW7GJdPTMW0NVTbCp+S+fXoaxiUO/iXL4rO2BIWf90YPj3PwyNtuLwRl5UasjPsh1KNLNCCtZH8Wfcg9WIr+BNOlPIboIFCDGIqZAwm0lXIp67admID4FVvYqNMHS+3fEriA04SAGVj7YvrtL0ZnhzokLvtwIDAQAB",
+  "update_url": "https://clients2.google.com/service/update2/crx"
+}

@@ -1,0 +1,39 @@
+# Arc's Boosts (Arc 1.172.1, docs/arc-parity.md "Boosts, measured"): a page on a boosted site gets the
+# boost's stylesheet (its controls' rules and its own CSS) and runs its JavaScript.
+budget rss=700 stalls50=10
+seed boosts.json [{"id":"0E5B6E0A-5C3B-4F8D-9C55-4A7C5F2B9E11","host":"127.0.0.1","name":"Test Boost","enabled":true,"hue":0,"strength":0,"invert":false,"contrast":50,"brightness":50,"saturation":50,"textScale":1,"textCase":"upper","zapped":["#zapme"],"css":"body { background: rgb(1, 2, 3) !important; }","js":"window.boosted = 'yes'"}]
+cra://open?url=${PAGE}?n=boosted
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const z=document.createElement('div');z.id='zapme';document.body.append(z);const b=getComputedStyle(document.body);return 'boost-'+b.backgroundColor+'-'+b.textTransform+'-'+getComputedStyle(z).display+'-'+window.boosted})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"boost-rgb\(1, 2, 3\)-uppercase-none-yes"
+# Zap: what a click hides is kept as a selector; a click on the page itself hides nothing.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const s=document.createElement('section');s.innerHTML='<p id=zz>x</p><span>y</span>';document.body.append(s);return 'ready'})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"ready"
+cra://action/newBoost
+wait 1
+cra://debug?boostZap=1
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{document.body.click();document.getElementById('zz').click();return 'zz-'+getComputedStyle(document.getElementById('zz')).display+'-body-'+getComputedStyle(document.body).display})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"zz-none-body-block"
+cra://debug?boostZap=0
+expect-log zap kept 1 selector$
+# The code panel's eyedropper (BoostPicker): a click is held, and Arc's menu copies the selector for the
+# element or zaps it and the ones like it.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const u=document.createElement('ul');u.className='list';u.innerHTML='<li class=item>a</li><li class=item id=second>b</li><li class=item>c</li>';document.body.append(u);window.pickClick=()=>{const e=document.getElementById('second'),r=e.getBoundingClientRect();return e.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,clientX:r.left+2,clientY:r.top+2}))};return 'list'})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"list"
+cra://debug?boostPick=copyThis
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'followed-'+window.pickClick()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"followed-false"
+expect-log boost pick this=#second related=li\.item \(3\)
+expect-log boost pick copied #second$
+cra://debug?boostPick=zapRelated
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(window.pickClick(),'zap-sent')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"zap-sent"
+expect-log boost pick this=#second
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'items-'+[...document.querySelectorAll('li.item')].map(e=>getComputedStyle(e).display).join(',')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"items-none,none,none"
+cra://debug?boostPick=0

@@ -127,6 +127,11 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   gold theme the back was #E9B300, the front #FCEDBC and every edge black at ~26%; how the back colour follows the
   theme is worked out in the next entry. Cra: FolderGlyphView. Cra masks the back with the front panel's shape
   (`frontHole`, turned with the front's transform) for the translucent White and Black icon styles.
+  The live folder's mark (7 Nov, PR #234, Arc 1.171's ivars and disassembly): `customIconImage` sets
+  `_customIconLayer`, which is inserted at index 0 of the front path layer (`insertSublayer:atIndex:0`), so it
+  turns with the front panel and sits under the front shading. Arc's other fields there: `frontContainerLayer`,
+  `frontPathLayer`, `_frontMaskLayer`, `frontShadingLayer`, `backLayer`, `_backMaskLayer`,
+  `backShadingMaskLayer`, `backShadingLayer`, `_badgeLayer`, `_ellipsisLayer`.
 - [O] Folder glyph colours (4 Nov, offline Arc 1.171, 2x window captures in sRGB of the default dark theme, a
   dark gold and a light blue, folders opened over AX `AXDisclosing`): every panel is opaque and comes from the
   theme's primaryColorPalette. Back = midTone on every theme. Light themes: front tintedLight (#E4F2F8 exact),
@@ -721,10 +726,33 @@ Over another app's full-screen Space (6 Nov, GitHub #206):
   overlay is a borderless non-activating NSPanel. Measured on a test copy with a full-screen stand-in app in
   front: main had video and Document PiP off that Space. Now both are on it, so is a video PiP opened while that
   Space is in front, and a click and a drag on it keep the full-screen app frontmost and its Space active.
-One residual difference: Chrome paints its origin strip ("File on your device", top gradient)
-inside the compositor layer for about two seconds when the window first appears (present at
-1.5 s, gone at 2.5 s in quarter-second captures); it is drawn whether or not the window is
-resized or focused, so it cannot be suppressed from CEF. After that nothing is drawn, as in Arc.
+Chrome's origin strip (8 Nov, GitHub #246): Chrome draws its title strip (favicon, host, top scrim)
+for 5 s after the window appears and then keeps it until a click or key press reaches its window,
+unless the page is trusted for media playback (file://, or high media engagement;
+`VideoOverlayWindowViews::UpdateControlsVisibility`). The 24 Oct captures used a file:// page, so
+the strip went after about two seconds; on YouTube it never went, because Cra's overlay takes every
+click. CraCEF enables `VideoPipForceTrustedForMediaPlaybackForTesting` (it only feeds that check), so
+the strip never shows: on an http page it is absent at 0.5 s and after 10 s (captures of a test copy).
+Arc 1.172 binary (otool/llvm-objdump on the arm64 slice, 8 Nov, #246):
+- [O static] Position keys are now `LastVideoPIPPosition` / `LastDocumentPIPPosition`. No fixed default
+  size: `.screen(corner, size: nil)` keeps the window's current size inside the limits, 10 pt in. The
+  first size most likely comes from the video's rect on the page [I]. Limits: at least 224×126 scaled
+  to the content's aspect (a 16:9 window is 224×126 at its smallest, which is the 223×125.5 the #246
+  reporter measured), at most max(224, 0.617 × screen width) × max(126, visible height − 20).
+- [O static] Hover layer: one flat `Color.black.opacity(0.33)` scrim, `.easeInOut(duration: 0.2)` in
+  and out; the controls fade with it. Buttons press-scale to 0.95.
+- [O static] Size classes by width: tiny < 280, small < 400, normal < 600, large. Controls 12 pt in when
+  tiny, 16 pt otherwise, button padding 8 (10 from 400 pt): glyph centres 26 / 30 / 32 pt from the
+  edges (the reporter measured 26 on a tiny window). Back to Tab is a pill top-left, 12 pt medium
+  words from 400 pt wide, 6 pt continuous corners. Minimize and Close are a group (top-right [I]),
+  glyphs with tooltips only. The address centred between them is from the reporter's captures; no
+  host label was found in the binary.
+- [O static] Minimize is per site (`minimizeEnabled` in its PiP config) and asks Chromium to leave PiP;
+  `offscreen` is a separate "stash" past the screen edge. Cra has neither.
+- [O static] Scrubber: 5 pt capsule (15 pt drag area) 8 pt above the bottom (4 when tiny), white over
+  white 30 %; dragging upwards slows seeking by 2^round(dy / 60 pt), down to 1/16. Cra has none yet.
+Cra follows the limits, the scrim, the fade, the insets and the Back to Tab words
+(`PictureInPictureLayout` in CraCore) and keeps its 782×440-on-1728×1117 opening size.
 
 Chromium only enters PiP from a page holding a user activation. `CefBrowserHost::SendKeyEvent`
 never reached the page in Chrome-style hosting (CEF 154), so Cra sends an F19 key down/up straight
@@ -1209,6 +1237,11 @@ so test pages must not use it). Live HID clicks and hovers at 1x, plus a static 
   | Today split, open | an ✕ inside every pane | Archive this item | that pane is archived, the split becomes a tab |
   | Today split, background | one ✕ at the row's end | Archive this item | the whole split is archived |
 
+- [O reporter, 2x screenshots, GitHub #243] With the button shown, a long name's ink ends 20.5 pt before the ✕'s
+  ink (✕ centred 18 pt from the fill's end), so its box ends ~13.5 pt before the button. At rest the rows look the
+  same as Cra's 21 pt tail (not measured). Cra (`TabRowTrailing`): the name's box 15 pt before the first trailing
+  control (13 pt from the label's widened box), 21 pt before the row's end with none; it was 26 pt, kept from the
+  old trailing ↩ button.
 - [O live] ⌘W on several picked tabs closes them all; [O static] a Today tab among them archives every one,
   otherwise they all deselect. The ⌘W keycaps only show on the open row's tooltip.
 - [O live] Split cells: 4 pt inside the fill, 4 pt apart, each favicon 6 pt into its cell. An open split draws
@@ -2667,7 +2700,9 @@ was frontmost, 1x region captures and 100 fps recordings; test tabs archived aft
   closed with the tab listed (two clicks), with another tab open it closes for good and drops the peek and the
   dots. A folder without a peek opens as usual. Arc's window state then has no entry for it. So a click on a
   closed folder that keeps tabs in sight means "close", keeping only the open tab (as the 29 Oct folder-peek
-  notes found). Cra: FolderPeek.clickOpens.
+  notes found). Cra copied this until GitHub #213 (6 Nov 2026): a click on a closed folder now always opens it,
+  peek or not (FolderPeek.clickOpens), since Arc's way left the rest of the folder out of reach while one of its
+  tabs was open. Closing it still keeps the open tab in sight.
 
 ## Secure DNS (Arc 1.171, 2 Nov 2026, issue #110, live net log)
 - [O] Arc leaves Chromium's default. Victor's Arc `Local State` has no `dns_over_https` key, and a net log of Arc
@@ -2725,6 +2760,24 @@ tap with a real Shift key held around them; the space read from each window's `s
   step focuses the space on Cra's usual space-change spring (Dia's 0.4 s, slower than Arc's here), or slides the
   Library in or out like its button. On the Spaces page the cards take the wheel first (10 pt per line, as in Arc)
   and the wheel leaves the Library only at their end.
+
+## Mouse back and forward buttons (Arc 1.172.1, 7 Nov 2026, issue #233, static: main binary arm64)
+
+Reported on #233: in Arc a mouse's back and forward buttons over the sidebar switch spaces.
+- [O static] `Arc.SidebarView` implements `otherMouseUp:` (method list 0x1036918e0, with `hitTest:`, `mouseDown:`,
+  `menuForEvent:`; imp 0x100313594 → 0x1003134a0). Behind a Bool stored property being true (not identified),
+  `buttonNumber` 3 sends the spaces reducer's empty case 3 and 4 sends case 2. That enum's empty cases, in order
+  (`__swift5_fieldmd`): `didTriggerCreateSpaceGesture`, `didTapCreateSpaceButton`, `focusNextSpace`,
+  `focusPreviousSpace`, `iconPickerWillClose`. So back (3) = `focusPreviousSpace`, forward (4) = `focusNextSpace`, on
+  the button's release; the press does nothing there. No `otherMouseUp:` on the page, where Chromium's own
+  back/forward runs.
+- [O static] NSEvent helpers next to `PageSwipeController` (0x100a0d608…0x100a0d6b8): `otherMouseDown` with button
+  2, `otherMouseUp` with button 3 and with button 4.
+- [U] Whether `focusNextSpace` wraps at the last space or opens the Library before the first; what the Bool gate is.
+  Not checked live (Victor was using the Mac).
+- Cra: `MouseButtonSpaceSwitch` (CraCore) maps 3 → −1 and 4 → +1. The window's `otherMouseUp` monitor, over the
+  sidebar (docked or floating, not a Little Window), calls `focusSpace(offset:)` like Spaces ▸ Previous/Next Space
+  (which wrap) and swallows the event; anywhere else the event goes on. Scenario `mouse-buttons-switch-spaces`.
 
 ### Extension action icons, badges and tooltips (Arc 1.171, 2 Nov 2026, issue #106, offline Arc + probe)
 - [O live] Offline Arc (fake home with the Storable*.json files minus both sync states, `--load-extension` with
@@ -2877,8 +2930,11 @@ that waits 3 s before answering and then serves a page whose image takes 5 s.
   switch redraws at once. Arc imports keep both halves. The editor builds halves from its pad (`SpaceTheme.key`) with
   `SpaceThemeVariants`: the light half is the pad's colours (lifted to HSL lightness 0.9 only when they read dark),
   the dark half keeps their hue at HSL lightness 0.064, drawn like an imported dark half (27 % over #2B2632). An
-  Auto theme with one set of colours (saved before, or from the Edit Space sheet or Zen) stays on the side they suit
-  whatever macOS shows, and an Arc `single` without `contentOverBackgroundAppearance` imports as that side (#171).
+  Auto theme with one set of colours (saved before 0.1.29, or from Zen) stays on the side they suit whatever macOS
+  shows, and an Arc `single` without `contentOverBackgroundAppearance` imports as that side (#171).
+- Cra deviates on purpose (Victor, 6 Nov 2026, #155): the editor's Auto always builds both halves, one colour too.
+  Arc saves a swatch picked on Auto as a fixed `single`; Cra copied that in 0.1.30–0.1.32, and a space set to Auto
+  stopped following macOS. Pinned by `everySwatchOnAutoFollowsMacOS` and the `auto-theme` scenario.
 - [?] Not worked out: how Arc's editor maps a picked colour to its halves (the pad's `lightnessRange` and the bias
   value). Cra's halves are fitted to Arc's default theme only.
 
@@ -3014,6 +3070,16 @@ event with `shiftClickModalEntryPointEnabled` set for the run, AX frames and 60 
   from a pinned tab the top of Today). Not observed in Arc: a ⌘-click inside the Peek (Cra: a background tab,
   the Peek stays) and window.open with features (Cra: still a Little Window over the Peek, which keeps the
   opener alive for sign-ins).
+- [O static + reported, 8 Nov, GitHub #242] A Peek belongs to its tab. Arc 1.172.1's
+  WindowContents/WindowContentState keeps `modalByWindowContent` (next to `presentationState`,
+  `sourceToWindowContentMap` and `windowContentSidebarItemMap`), a modal per window content, and the
+  reporter (Arc 1.172, daily use) sees the Peek a target=_blank link "closed" there again, same page and
+  scroll, back on its pinned tab. So the 6 Nov run above saw the Peek go out of sight, not end. Cra:
+  PeekPresence (CraCore), MainWindowController.syncPeeks → LittleWindowController.parkPeek /
+  unparkPeek / dropPeek; the tab's row keeps the peeked favicon while the Peek waits (modalIcon).
+  Not observed live: whether a sidebar click with the Peek on screen (the 4 Nov run: "closed the Peek")
+  also only hides it, whether the Peek comes back with a motion (Cra: at once, the page veiled at once),
+  and what a pinned tab's ⌘W does to a Peek waiting on it (Cra: the Peek goes with the page).
 
 ### Peek grows out of the link (Arc 1.171, 6 Nov 2026, GitHub #204, offline Arc)
 The reporter recorded Arc 1.172.1 growing the card out of the clicked link. 1.172.0/1.172.1 only moved Chromium
@@ -3044,6 +3110,29 @@ links, A near the top left and B near the bottom right, real HID Shift-clicks (`
   out to the whole area when it's gone. Recorded the same way in a test copy: the card's left edge went .65,
   .77, .84, .91, .93, .98 of the way a frame apart (Arc .60, .77, .85, .91, .95, .97), its bottom edge .34,
   .59, .71, .80, .87, .91 (Arc .31, .54, .73, .82, .89, .94), and it closed back into the link.
+
+### Peek, the window's shadow and its edges (Arc 1.172.1, 6 Nov 2026, PR #222, offline Arc)
+Offline Arc (fake home, network blocked) in a 1100 × 760 pt window at 100,80, a Peek opened by a HID
+Shift-click on a lab page's link, then HID clicks and drags; Peek open or closed read from AX (its Close button,
+`confirmCloseModal`), the window's state from AX and `screencapture -l` with the shadow.
+- [O] The Peek is a card inside the browser window: no second CGWindow or AX window while it shows (the
+  `ModalContent.ModalWindow` class is a plain NSWindow subclass with no focus overrides, but none was on
+  screen). The browser window stays main and keeps its full shadow, before and after a click into the
+  Peek's page (capture 2424 × 1744 px both times).
+- [O] Clicks near the edge, outside the card: 1–3 pt inside the right or bottom edge and 1–2 pt inside the
+  top keep the Peek (macOS's resize band takes them); 4 pt in (3 at the top) closes it. Left: the sidebar
+  is there, and 1–6 pt in kept it.
+- [O] A drag from 2 pt inside the right edge, or 2 pt below the bottom edge, resizes the window with the
+  Peek open, and the card grows with the window.
+- [O, Cra] 0.1.32 lost the browser window's active look as soon as a Peek opened (grey traffic lights,
+  capture 2336 × 1656 px): Chromium keeps only the child windows it made itself from becoming main
+  (-[NativeWidgetMacNSWindow canBecomeMainWindow]), and the Peek's page window hangs on Cra's window
+  through AppKit. Its click catcher covered the whole window, so every click 1–12 pt in closed the Peek
+  and a drag from 2 pt inside closed it instead of resizing (from outside it resized).
+- Cra: ChromiumChildFocus keeps a Peek's or Little Window's page from becoming main; PeekDimPanel covers
+  PeekLayout.dismissArea, the window minus a 3 pt band. Checked on a test copy like Arc above: full shadow
+  and coloured traffic lights after a click in the Peek, edge clicks 1–3 pt in keep it and 4 pt in close it,
+  and a drag from 2 pt inside resizes with the Peek open.
 
 ## Capture (Arc 1.171, 4 Nov 2026, X request, Swift metadata + strings + offline Arc at 2x, 120 fps recordings)
 - [O metadata] Module `Capture`: ContentCaptureViewController holds ContentCaptureView (grayscale and darkened layers with
@@ -3276,9 +3365,17 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
 - [O metadata] Sidebar drops: `SidebarDropTarget = tabList(…) | appTray`, `SidebarDropTargetRegion = left | right`,
   `SidebarDropOperation = move | copy`, the window action `draggedToCombineSplitCompatibleItems(…)`. No drop makes a
   folder: `createFolderFromItems` / `createFolderFromSelection` are the menus' "New Folder with N Items". Cra (#191):
-  a tab dropped on the middle of any tab row, pinned or Today, offers the split (the pinned tab stays, the split
-  opens in Today with a copy, `SidebarStore.createSplit`); Cra's own "New Folder" drop on pinned rows is gone.
-  [?] Not observed live: Arc's drop on a pinned row.
+  a tab dropped on the middle of any tab row, pinned or Today, offers the split; Cra's own "New Folder" drop on
+  pinned rows is gone.
+- [O] Tab-on-tab drops, live (Arc 1.172, offline copy, 7 Nov 2026, discussion #180): the split takes the TARGET's
+  place and both tabs move into it, no copies. A Today tab dropped on the left of pinned "pina" made a pinned split
+  "todaya | pina" in pina's slot (minus button, gone from Today); pinned "pinb" dropped on the right of Today
+  "todayb" made a Today split "todayb | pinb" in todayb's slot (gone from Pinned). The reporter's capture shows
+  pinned on pinned the same way. Arc opens the tab a drag picks up, so the split ends up open with the dropped
+  tab's pane focused (ring and full toolbar on it). Cra (#180): `SidebarStore.combineIntoSplit` moves the dropped
+  tab beside the target (pinning or unpinning it like any drop there), then `createSplit(inPlace:)`; the list
+  selects the dropped tab. Other ways into a split (⌥Return, a drop on the page, Add Split View) keep the Today
+  copy of a pinned tab observed on 24 Oct.
 - [O strings/metadata] Settings ▸ Profiles "Download location" is per profile: `DownloadLocationView { store,
   _selectedTag, _panelOpen }` with tags `arc.folder`, `arc.promptForDownload`, `arc.other` ("Button to confirm
   selection of directory for file downloads"). [?] The menu's own labels aren't in the strings. Cra (#190):
@@ -3310,3 +3407,59 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
   puts Search first for a selection, turns Lens's "Search image with Google" into "Search Google for Image", adds
   Open Link in Little Window and Capture Image… (ContentCapture.liftedLayout), and opens New Window / Incognito /
   Inspect in Cra's own windows and DevTools. Kept on purpose: Open Link in Background Tab under New Tab (#183).
+
+## Blank Window and dragging a tab out (Arc 1.172, 6 Nov 2026, #219 #220, offline Arc on a fake home, AX + 2x window captures)
+
+- [O static] Window styles in StorableWindows.json: `standard { sidebarContext: global | standalone }`, `little`, and the
+  kinds `standard | global | incognito | littleArc | blank`. A Blank Window is `standard` with a `standalone` sidebar:
+  StorableSidebar.json keeps `{standalone: <window id>}` beside `global`, holding one space of its own (Default
+  profile, `customInfo` empty, no pinned container, no top apps). Strings: `newBlankWindow`, `onCreateNewBlankWindow`,
+  "Creates a new blank window.", "Title for Explore tabs in a standalone-sidebar window."; AX id
+  `standaloneBrowserWindow-<id>`.
+- [O] File ▸ Blank Window ⌃⌘N (AX mods 4), between New Window and New Incognito Window. It opens cascaded from the
+  window in use with the command bar up. Sidebar: "This Window" (13 pt semibold, glyphs 16.5 pt in, cap top 51.5 pt
+  from the window's top with the toolbar on), then New Tab (text 20 pt in, top 90 pt): no favorites or empty card, no
+  pinned section, no line, no space icons; the Library button and + stay, and a click on + does nothing (no menu,
+  no editor, no window). Colours follow macOS (window captures, inactive; light forced with Arc's
+  NSRequiresAquaSystemAppearance): dark, sidebar #313246 → #363247 and the empty page area #4F4B5D → #584A5D;
+  light, sidebar #E3E3F4 → #E9E7F1 and page area #F8F7FA → #FCF9F9.
+- [O] With the pointer over its sidebar the header shows "Move to…" (grey #7A7A86, glyphs 153.5–202.5 pt of a 228 pt
+  sidebar) in place of the space's •••. It is the Today section header's accessory (`moveToMainWindow`, tooltip "Move
+  to main window"). A click pops a menu up at the pointer listing the spaces as icon + name ("🧑‍💻 Victor"); while
+  it's open the button sits on a pill, white ~10 % over the sidebar (#474757 on #333247), 142.5–215 × 43–70.5 pt.
+  Picking a space moved the window's tab to the top of that space's Today, opened it in the main window (which came
+  forward) and closed the Blank Window.
+- [O] Closing a Blank Window drops its standalone container and its tabs: nothing went to StorableArchive.json.
+- [O] A sidebar tab dragged out and let go over another app (real HID drags, slow steps; a fast cliclick drag reads as
+  a click, a press on a non-key window drags the window): the tab leaves the global sidebar and opens alone in a new
+  Blank Window the size of the window it came from; that window then showed no tab (the drag had selected it). The
+  window centres on where the pointer let go: 926 × 500 dropped at (1100, 700) and (500, 820) from the top left opened
+  at (637, 450) and (37, 570). Near an edge it stays inside: dropped at (350, 300), a 1000 × 760 window sat at
+  (20, 53), 20 pt inside the visible frame on both sides. Drags that read as clicks: the press selected an unloaded
+  tab; select it first, then drag (scratch tool: CGEvent drag with deltas at 60 Hz).
+- [O] A tab dropped on a Blank Window's sidebar moved there out of the global sidebar.
+- Cra: BlankWindow (Space.standaloneWindowID, saved in sidebar.json outside spaceOrder), SidebarStore.addBlankWindow /
+  isStandalone, TabTearOff (decision + frame), SpaceListView.dragEnded, AppDelegate.tearOffTab and moveBlankWindow
+  ("Move to…", `cra://debug?blankMoveTo=<n>`), BlankWindow.theme (Auto).
+
+## Confirmation dialogs (Arc 1.172.1, 7 Nov 2026, PR #224, offline Arc on a fake home, 2x window captures)
+- [O static] Arc has two paths: `AlertClient.runModal` (NSAlert) and its own `Dialogs` module (`DialogView`,
+  `DialogButton`, `SuppressionCheckbox`, `TextInputDialogView`, `PermissionRequestDialogView`,
+  `NSWindow+DialogSheet.swift` → `Dialogs.SheetWindow`, "Label for the icon to press enter/escape").
+- [O] Quit Arc? (shouldWarnBeforeQuitting), Delete your “<name>” Space? and Delete your <name> Live Folder?
+  are all the Dialogs card, presented as a real sheet on the browser window: 450 pt wide, centred, no AX
+  window of its own, the window dimmed, and macOS 26's sheet animation (fade in while dropping a few points).
+  The 1 pt light edge is the sheet's own (20 % white over the card), not a stroke. Card #161C2F, 16 pt
+  continuous corners.
+- [O] Quit: the app icon 50.5 pt across from 43.5 pt in; "Quit Arc?" caps 120 pt down; buttons 37 pt tall
+  (+1.5 pt lip) from 183.5 pt: "Quit, and don’t ask again" at the left edge (27.5 pt in), Cancel `ESC` and
+  Quit `↩` at the right, ending 26.5 pt from the card's edge, 7.5 pt apart; card 248 pt tall.
+- [O] Delete Space / Delete Live Folder: Arc's logo mark instead of the app icon, title caps at 120 pt, the
+  message's at 157 pt, buttons from 208.5 pt; Cancel `ESC` and a red Delete / Delete Folder `↩` (fill
+  #E2492C, no lighter rim, lip #41232A, key badge #E55B41 edged #E86D56). Live Folder text: "You can restore
+  this folder at any time by right-clicking the sidebar."
+- [O] Colours: secondary #302F60 edged #6362A9, its ESC badge #4E4C77; Quit #3339F1. Hover: 10 % white over a
+  secondary button, badge included (#302F60 → #454470), 10 % black over the default one (#3339F1 → #2D33D9).
+- Cra (#224, STRENCH0): `AppDialog` + `DialogPanel` (a real sheet via beginSheet) replace NSAlert and the
+  borderless DialogOverlayWindow; checked against these captures on the same display, within ~1 pt and a few
+  levels of colour. Arc's quit capture was taken with its command bar open; that doesn't change the sheet.

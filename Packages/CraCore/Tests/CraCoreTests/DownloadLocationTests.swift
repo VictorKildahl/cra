@@ -6,13 +6,13 @@ import Testing
 struct DownloadLocationTests {
     let downloads = URL(fileURLWithPath: "/Users/me/Downloads", isDirectory: true)
 
-    @Test func profilesWithoutAChoiceUseDownloadsWithoutAsking() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/190")) func profilesWithoutAChoiceUseDownloadsWithoutAsking() {
         let s = AppSettings()
         #expect(s.downloadLocation(profileID: nil) == DownloadLocation())
         #expect(s.downloadLocation(profileID: UUID()).folderURL(downloads: downloads) { _ in true } == downloads)
     }
 
-    @Test func eachProfileKeepsItsOwn() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/190")) func eachProfileKeepsItsOwn() throws {
         var s = AppSettings()
         let work = UUID()
         s.setDownloadLocation(DownloadLocation(folder: "/Volumes/Work", askWhereToSave: false), profileID: work)
@@ -26,14 +26,14 @@ struct DownloadLocationTests {
         #expect(Set(back.downloadLocations.keys) == [work.uuidString, "Default"])
     }
 
-    @Test func goingBackToTheDefaultDropsTheEntry() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/190")) func goingBackToTheDefaultDropsTheEntry() {
         var s = AppSettings()
         s.setDownloadLocation(DownloadLocation(askWhereToSave: true), profileID: nil)
         s.setDownloadLocation(DownloadLocation(), profileID: nil)
         #expect(s.downloadLocations.isEmpty)
     }
 
-    @Test func aMissingFolderFallsBackToDownloads() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/190")) func aMissingFolderFallsBackToDownloads() {
         let l = DownloadLocation(folder: "/Volumes/Unplugged")
         #expect(l.folderURL(downloads: downloads) { _ in false } == downloads)
         #expect(l.folderURL(downloads: downloads) { _ in true }.path == "/Volumes/Unplugged")

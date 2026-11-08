@@ -36,6 +36,10 @@
 	<string>14.0</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.productivity</string>
+	<key>NSAppleScriptEnabled</key>
+	<true/>
+	<key>OSAScriptingDefinition</key>
+	<string>Cra.sdef</string>
 	<key>NSPrincipalClass</key>
 	<string>CraApplication</string>
 	<key>NSHighResolutionCapable</key>

@@ -1,25 +1,48 @@
 import AppKit
+import SwiftUI
+import UniformTypeIdentifiers
 
-/// The Library's pages Cra has, in the order of Arc's rail (which also lists Media, Easels and Boosts).
+/// The Library's pages Cra has, in the order of Arc's rail (which also lists Easels and Boosts).
 enum LibraryPage: String, CaseIterable {
-    case downloads, spaces, archive
+    case media, downloads, easels, spaces, boosts, archive
 
     var title: String {
         switch self {
+        case .media: "Media"
         case .downloads: "Downloads"
+        case .easels: "Easels"
         case .spaces: "Spaces"
+        case .boosts: "Boosts"
         case .archive: "Archived Tabs"
         }
     }
     var symbol: String {
         switch self {
+        case .media: "photo.on.rectangle"
         case .downloads: "arrow.down.circle"
+        case .easels: "pencil.and.scribble"
         case .spaces: "square.on.square"
+        case .boosts: "paintbrush.pointed"
         case .archive: "archivebox"
         }
     }
-    var selectedSymbol: String { symbol + ".fill" }
-    var searchPrompt: String { self == .downloads ? "Search Downloads…" : "Search Archive…" }
+    var selectedSymbol: String {
+        switch self {
+        case .media: "photo.fill.on.rectangle.fill"
+        case .easels: symbol
+        case .boosts: "paintbrush.pointed.fill"
+        default: symbol + ".fill"
+        }
+    }
+    var searchPrompt: String {
+        switch self {
+        case .media: "Search Media…"
+        case .downloads: "Search Downloads…"
+        case .easels: "Search Easels…"
+        case .boosts: "Search Boosts…"
+        default: "Search Archive…"
+        }
+    }
 }
 
 /// Arc's Library: not a window but a mode of the sidebar (WindowState+Library, HomeButton/*),
@@ -266,7 +289,10 @@ private final class LibraryRailButton: NSView {
 private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
     enum Row {
         case header(String)
-        case download(DownloadHistory.Entry)
+        case media([MediaLibrary.File])
+        case easel(id: UUID, title: String, edited: Date)
+        case boost(Boost)
+        case download(DownloadHistory.Listed)
         case archived(ArchivedItem)
     }
 
@@ -286,6 +312,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
     private let scroll = NSScrollView()
     private let table = NSTableView()
     private let empty = LibraryEmptyView()
+    private var mediaCard: NSHostingView<MediaOptInCard>?
 
     init(page: LibraryPage, store: SidebarStore, actions: SidebarActions, favicons: FaviconCache) {
         self.page = page
@@ -356,7 +383,12 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         withObservationTracking {
             _ = store.archive
             _ = DownloadHistory.shared.entries
+            _ = DownloadHistory.shared.live
             _ = DownloadHistory.shared.thumbnails.count
+            _ = MediaScanner.shared.files
+            _ = BoostStore.shared.boosts
+            _ = store.settings.mediaLibraryEnabled
+            _ = store.settings.mediaFolders
         } onChange: { [weak self] in
             Task { @MainActor in self?.observe() }
         }
@@ -367,16 +399,49 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
 
     private func reload() {
         var out: [Row] = []
+        mediaCard?.isHidden = true
         switch page {
+        case .media:
+            guard store.settings.mediaLibraryEnabled else {
+                showMediaCard()
+                empty.show(symbol: "photo.on.rectangle", title: "", detail: nil)
+                break
+            }
+            // Read again whenever the page shows, a search changes or the folders change; the scan is
+            // cheap, off the main thread, and reads only the folders ticked.
+            MediaScanner.shared.rescan(store.settings.mediaFolders)
+            let all = MediaScanner.shared.files
+            let shown = MediaLibrary.shown(all, query: query)
+            out = MediaLibrary.rows(shown).map { .media($0) }
+            empty.show(symbol: "photo.on.rectangle", title: all.isEmpty ? "Nothing here yet!" : "No matches",
+                       detail: all.isEmpty ? "Screenshots, pictures and videos in the folders you show appear here." : nil)
         case .downloads:
-            let all = DownloadHistory.shared.entries.reversed().filter { FileManager.default.fileExists(atPath: $0.path) }
-            let shown = needle.isEmpty ? all : all.filter { ($0.path as NSString).lastPathComponent.lowercased().contains(needle) }
+            // Running, failed and cancelled downloads too, as in the tray (#245).
+            let all = DownloadHistory.shared.library(query: "")
+            let shown = needle.isEmpty ? all : DownloadHistory.shared.library(query: query)
             for (label, entries) in Self.grouped(shown, date: \.date) {
                 out.append(.header(label))
                 out += entries.map { .download($0) }
             }
             empty.show(symbol: "arrow.down.circle", title: all.isEmpty ? "Nothing here yet!" : "No matches",
                        detail: all.isEmpty ? "Files you download show up here." : nil)
+        case .easels:
+            let all = EaselFiles.all()
+            let shown = needle.isEmpty ? all : all.filter { $0.title.lowercased().contains(needle) }
+            for (label, entries) in Self.grouped(shown, date: \.edited) {
+                out.append(.header(label))
+                out += entries.map { .easel(id: $0.id, title: $0.title, edited: $0.edited) }
+            }
+            // Arc's empty Easels page: "Out of ideas!"
+            empty.show(symbol: "pencil.and.scribble", title: all.isEmpty ? "Out of ideas!" : "No matches",
+                       detail: all.isEmpty ? "Choose File ▸ New Easel to create a new Easel." : nil)
+        case .boosts:
+            let all = BoostStore.shared.boosts
+            let shown = needle.isEmpty ? all : all.filter { $0.name.lowercased().contains(needle) || $0.host.contains(needle) }
+            out = shown.sorted { $0.host < $1.host }.map { .boost($0) }
+            // Arc's empty Boosts page.
+            empty.show(symbol: "paintbrush.pointed", title: all.isEmpty ? "Nothing Boosted Yet!" : "No matches",
+                       detail: all.isEmpty ? "Type “New Boost” in the command bar on any site to make your own." : nil)
         case .spaces:
             break
         case .archive:
@@ -391,7 +456,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
                        detail: store.archive.isEmpty ? "Tabs you close end up here." : nil)
         }
         rows = out
-        empty.isHidden = !out.isEmpty
+        empty.isHidden = !out.isEmpty || (page == .media && !store.settings.mediaLibraryEnabled)
         scroll.isHidden = out.isEmpty
         table.reloadData()
         refresh()
@@ -405,6 +470,18 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         menuButton.layer?.backgroundColor = ink.withAlphaComponent(0.05).cgColor
         menuGlyph.contentTintColor = ink.withAlphaComponent(0.7)
         empty.ink = ink
+    }
+
+    /// Arc's opt-in card, over the page until Show Media is pressed.
+    private func showMediaCard() {
+        let card = MediaOptInCard(dark: colors.isDark) { [store] in store.settings.mediaLibraryEnabled = true }
+        if let mediaCard { mediaCard.rootView = card } else {
+            let host = NSHostingView(rootView: card)
+            addSubview(host)
+            mediaCard = host
+        }
+        mediaCard?.isHidden = false
+        needsLayout = true
     }
 
     private static func grouped<T>(_ items: [T], date: KeyPath<T, Date>) -> [(String, [T])] {
@@ -436,6 +513,11 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         scroll.frame = NSRect(x: 0, y: 46, width: w, height: max(0, bounds.height - 46))
         table.tableColumns.first?.width = w
         empty.frame = scroll.frame
+        if let card = mediaCard {
+            let size = card.fittingSize
+            card.frame = NSRect(x: ((w - size.width) / 2).rounded(), y: max(56, ((bounds.height - size.height) / 2).rounded()),
+                                width: size.width, height: size.height)
+        }
     }
 
     // MARK: Search
@@ -458,6 +540,22 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         let menu = NSMenu()
         menu.autoenablesItems = false
         switch page {
+        case .media:
+            // Arc's "Show media" folders (its Library button's right-click menu).
+            let store = store
+            let header = NSMenuItem(title: "Show media", action: nil, keyEquivalent: "")
+            header.isEnabled = false
+            menu.addItem(header)
+            for f in MediaLibrary.Folder.allCases {
+                let on = store.settings.mediaFolders.contains(f)
+                MenuItems.add(menu, f.title, on: on) {
+                    if on { store.settings.mediaFolders.removeAll { $0 == f } } else { store.settings.mediaFolders.append(f) }
+                }
+            }
+            if store.settings.mediaLibraryEnabled {
+                menu.addItem(.separator())
+                MenuItems.add(menu, "Hide Media") { store.settings.mediaLibraryEnabled = false }
+            }
         case .downloads:
             // The folder the window's profile downloads to (#190).
             let profile = (window?.windowController as? MainWindowController)?.profileDirectoryName
@@ -467,6 +565,10 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         case .archive:
             let store = store
             MenuItems.add(menu, "Clear Archive", enabled: !store.archive.isEmpty) { store.clearArchive() }
+        case .boosts:
+            MenuItems.add(menu, "New Boost for This Site") { [weak self] in self?.actions.performAction("newBoost") }
+        case .easels:
+            MenuItems.add(menu, "New Easel") { [weak self] in self?.actions.performAction("newEasel") }
         case .spaces:
             return
         }
@@ -479,6 +581,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
 
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
         if case .header = rows[row] { return 40 }
+        if case .media = rows[row] { return MediaGridMetrics.rowHeight }
         return 56
     }
 
@@ -488,6 +591,35 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
             let v = tableView.makeView(withIdentifier: .init("header"), owner: nil) as? LibraryHeaderCell ?? LibraryHeaderCell()
             v.identifier = .init("header")
             v.show(label, ink: colors.isDark ? .white : .black)
+            return v
+        case .boost(let b):
+            let v = tableView.makeView(withIdentifier: .init("item"), owner: nil) as? LibraryItemCell ?? LibraryItemCell()
+            v.identifier = .init("item")
+            v.showBoost(b, colors: colors) { [store, actions] in
+                // Opens the site, where the boost shows.
+                _ = store.createTab(url: "https://\(b.host)/", select: true)
+                actions.closeLibrary()
+            }
+            return v
+        case .easel(let id, let title, let edited):
+            let v = tableView.makeView(withIdentifier: .init("item"), owner: nil) as? LibraryItemCell ?? LibraryItemCell()
+            v.identifier = .init("item")
+            v.showEasel(title: title, edited: edited, colors: colors) { [store, actions] in
+                let url = Easel(id: id).url
+                if let tab = store.allTabs().first(where: { $0.tab?.url == url }) { store.selectTab(tab.id) }
+                else { _ = store.createTab(url: url, title: title, select: true) }
+                actions.closeLibrary()
+            }
+            return v
+        case .media(let files):
+            let v = tableView.makeView(withIdentifier: .init("media"), owner: nil) as? MediaRowCell ?? MediaRowCell()
+            v.identifier = .init("media")
+            v.open = { [store, actions] file in
+                // Arc opens a picked picture in a tab, and the Library steps aside.
+                _ = store.createTab(url: URL(fileURLWithPath: file.path).absoluteString, select: true)
+                actions.closeLibrary()
+            }
+            v.show(files, ink: colors.isDark ? .white : .black)
             return v
         case .download(let e):
             let v = tableView.makeView(withIdentifier: .init("item"), owner: nil) as? LibraryItemCell ?? LibraryItemCell()
@@ -512,7 +644,13 @@ extension LibraryListView: NSMenuDelegate {
         let row = table.clickedRow
         guard rows.indices.contains(row) else { return }
         switch rows[row] {
-        case .header: break
+        case .header, .media, .easel: break
+        case .boost(let b):
+            var flipped = b
+            flipped.enabled.toggle()
+            MenuItems.add(menu, b.enabled ? "Disable Boost" : "Enable Boost") { BoostStore.shared.update(flipped) }
+            menu.addItem(.separator())
+            MenuItems.add(menu, "Delete Boost") { BoostStore.shared.delete(b.id) }
         case .archived(let e):
             let actions = actions, store = store
             MenuItems.add(menu, "Restore") { actions.restoreArchived(e.id) }
@@ -522,7 +660,9 @@ extension LibraryListView: NSMenuDelegate {
             }
             menu.addItem(.separator())
             MenuItems.add(menu, "Remove from Archive") { store.removeFromArchive(e.id) }
-        case .download(let e):
+        case .download(.live):
+            break
+        case .download(.finished(let e)):
             let url = URL(fileURLWithPath: e.path)
             MenuItems.add(menu, "Open") { NSWorkspace.shared.open(url) }
             MenuItems.add(menu, "Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
@@ -569,7 +709,9 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
     private let detail = NSTextField.sidebarLabel(size: 12)
     private var tip: ArcTooltipAnchorView?
     private var colors = SidebarColors()
+    /// A finished download's file: opened by a click, dragged out.
     private var download: DownloadHistory.Entry?
+    private var isDownloadRow = false
     private var restore: (() -> Void)?
     private var downAt: NSPoint?
     private var hovering = false { didSet { if hovering != oldValue { refreshHover() } } }
@@ -605,6 +747,7 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
     func showArchived(_ e: ArchivedItem, icon image: NSImage?, colors: SidebarColors, restore: @escaping () -> Void) {
         self.colors = colors
         download = nil
+        isDownloadRow = false
         self.restore = restore
         let ink: NSColor = colors.isDark ? .white : .black
         tile.layer?.contents = nil
@@ -620,13 +763,65 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
         apply(ink: ink)
     }
 
-    func showDownload(_ e: DownloadHistory.Entry, colors: SidebarColors) {
+    /// A boost on Library ▸ Boosts: its name and site, dimmed while off.
+    func showBoost(_ b: Boost, colors: SidebarColors, open: @escaping () -> Void) {
         self.colors = colors
-        download = e
+        download = nil
+        isDownloadRow = false
+        restore = open
+        let ink: NSColor = colors.isDark ? .white : .black
+        tile.layer?.contents = nil
+        tile.layer?.backgroundColor = ink.withAlphaComponent(0.04).cgColor
+        icon.isHidden = false
+        icon.image = NSImage(systemSymbolName: "paintbrush.pointed", accessibilityDescription: "Boost")
+        title.stringValue = b.name
+        title.lineBreakMode = .byTruncatingTail
+        detail.stringValue = b.host + (b.enabled ? "" : " · Off")
+        tip?.text = b.host
+        apply(ink: ink)
+        alphaValue = b.enabled ? 1 : 0.55
+    }
+
+    /// An easel on Library ▸ Easels: its glyph, its title, when it was last edited.
+    func showEasel(title text: String, edited: Date, colors: SidebarColors, open: @escaping () -> Void) {
+        self.colors = colors
+        download = nil
+        isDownloadRow = false
+        restore = open
+        let ink: NSColor = colors.isDark ? .white : .black
+        tile.layer?.contents = nil
+        tile.layer?.backgroundColor = ink.withAlphaComponent(0.04).cgColor
+        icon.isHidden = false
+        icon.image = NSImage(systemSymbolName: "pencil.and.scribble", accessibilityDescription: "Easel")
+        title.stringValue = text
+        title.lineBreakMode = .byTruncatingTail
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .full
+        detail.stringValue = "Edited " + f.localizedString(for: edited, relativeTo: Date())
+        tip?.text = text
+        apply(ink: ink)
+    }
+
+    /// A download on Library ▸ Downloads: a finished file (thumbnail, name, age) or one still
+    /// running, failed or cancelled (its type's icon, name, progress or what went wrong; #245).
+    func showDownload(_ listed: DownloadHistory.Listed, colors: SidebarColors) {
+        self.colors = colors
+        isDownloadRow = true
         restore = nil
         let ink: NSColor = colors.isDark ? .white : .black
         icon.isHidden = true
-        if let image = DownloadHistory.shared.thumbnail(for: e.path) {
+        let image: NSImage?
+        switch listed {
+        case .finished(let e):
+            download = e
+            image = DownloadHistory.shared.thumbnail(for: e.path)
+            detail.stringValue = Self.age.localizedString(for: min(e.date, Date()), relativeTo: Date())
+        case .live(let l):
+            download = nil
+            image = NSWorkspace.shared.icon(for: UTType(filenameExtension: (l.name as NSString).pathExtension) ?? .data)
+            detail.stringValue = DownloadRow.subtitle(l.row, now: Date())
+        }
+        if let image {
             var rect = NSRect(x: 0, y: 0, width: 32, height: 32)
             let scale = window?.backingScaleFactor ?? 2
             tile.layer?.contents = image.cgImage(forProposedRect: &rect, context: nil, hints: [.ctm: AffineTransform(scale: scale)])
@@ -636,14 +831,14 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
             tile.layer?.contents = nil
             tile.layer?.backgroundColor = ink.withAlphaComponent(0.04).cgColor
         }
-        title.stringValue = (e.path as NSString).lastPathComponent
+        title.stringValue = listed.name
         title.lineBreakMode = .byTruncatingMiddle
-        detail.stringValue = Self.age.localizedString(for: min(e.date, Date()), relativeTo: Date())
         tip?.text = ""
         apply(ink: ink)
     }
 
     private func apply(ink: NSColor) {
+        alphaValue = 1   // a reused cell may come from a Boost that was off
         title.textColor = ink.withAlphaComponent(0.82)
         detail.textColor = ink.withAlphaComponent(0.55)
         refreshHover()
@@ -659,7 +854,7 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
         card.frame = bounds.insetBy(dx: 4, dy: 2)
         let h = card.bounds.height
         // Archived: 24 pt tile 9 pt in; download: 32 pt thumbnail 5 pt in; the text 10 pt after.
-        let isDownload = download != nil
+        let isDownload = isDownloadRow
         let t: CGFloat = isDownload ? 32 : 24
         let x: CGFloat = isDownload ? 5 : 9
         tile.frame = NSRect(x: x, y: (h - t) / 2, width: t, height: t)
@@ -698,7 +893,7 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
     override func mouseUp(with event: NSEvent) {
         defer { downAt = nil }
         guard downAt != nil, bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
-        if let download { NSWorkspace.shared.open(URL(fileURLWithPath: download.path)) } else { restore?() }
+        if let download { NSWorkspace.shared.open(URL(fileURLWithPath: download.path)) } else if !isDownloadRow { restore?() }
     }
 
     func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {

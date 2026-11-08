@@ -1,0 +1,251 @@
+{
+  "items" : [
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2026-11-06T08:00:00Z",
+      "data" : {
+        "container" : {
+          "_0" : {
+            "favorites" : {
+              "spaceID" : "A0000000-0000-0000-0000-000000000001"
+            }
+          }
+        }
+      },
+      "id" : "C0000000-0000-0000-0000-000000000011",
+      "isUnread" : false
+    },
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2026-11-06T08:00:00Z",
+      "data" : {
+        "container" : {
+          "_0" : {
+            "pinned" : {
+              "spaceID" : "A0000000-0000-0000-0000-000000000001"
+            }
+          }
+        }
+      },
+      "id" : "C0000000-0000-0000-0000-000000000012",
+      "isUnread" : false
+    },
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2026-11-06T08:00:00Z",
+      "data" : {
+        "container" : {
+          "_0" : {
+            "today" : {
+              "spaceID" : "A0000000-0000-0000-0000-000000000001"
+            }
+          }
+        }
+      },
+      "id" : "C0000000-0000-0000-0000-000000000013",
+      "isUnread" : false
+    },
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2026-11-06T08:00:00Z",
+      "data" : {
+        "container" : {
+          "_0" : {
+            "favorites" : {
+              "spaceID" : "A0000000-0000-0000-0000-000000000002"
+            }
+          }
+        }
+      },
+      "id" : "C0000000-0000-0000-0000-000000000021",
+      "isUnread" : false
+    },
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2026-11-06T08:00:00Z",
+      "data" : {
+        "container" : {
+          "_0" : {
+            "pinned" : {
+              "spaceID" : "A0000000-0000-0000-0000-000000000002"
+            }
+          }
+        }
+      },
+      "id" : "C0000000-0000-0000-0000-000000000022",
+      "isUnread" : false
+    },
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2026-11-06T08:00:00Z",
+      "data" : {
+        "container" : {
+          "_0" : {
+            "today" : {
+              "spaceID" : "A0000000-0000-0000-0000-000000000002"
+            }
+          }
+        }
+      },
+      "id" : "C0000000-0000-0000-0000-000000000023",
+      "isUnread" : false
+    },
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2026-11-06T08:00:00Z",
+      "data" : {
+        "container" : {
+          "_0" : {
+            "favorites" : {
+              "spaceID" : "A0000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "id" : "C0000000-0000-0000-0000-000000000031",
+      "isUnread" : false
+    },
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2026-11-06T08:00:00Z",
+      "data" : {
+        "container" : {
+          "_0" : {
+            "pinned" : {
+              "spaceID" : "A0000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "id" : "C0000000-0000-0000-0000-000000000032",
+      "isUnread" : false
+    },
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2026-11-06T08:00:00Z",
+      "data" : {
+        "container" : {
+          "_0" : {
+            "today" : {
+              "spaceID" : "A0000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      },
+      "id" : "C0000000-0000-0000-0000-000000000033",
+      "isUnread" : false
+    }
+  ],
+  "spaceOrder" : [
+    "A0000000-0000-0000-0000-000000000001",
+    "A0000000-0000-0000-0000-000000000002",
+    "A0000000-0000-0000-0000-000000000003"
+  ],
+  "spaces" : [
+    {
+      "createdAt" : "2026-11-06T08:00:00Z",
+      "emoji" : "🌗",
+      "favoritesContainerID" : "C0000000-0000-0000-0000-000000000011",
+      "id" : "A0000000-0000-0000-0000-000000000001",
+      "pinnedContainerID" : "C0000000-0000-0000-0000-000000000012",
+      "theme" : {
+        "accent" : "#8389FF",
+        "appearance" : "auto",
+        "colors" : [
+          "#8389FF",
+          "#8389FF"
+        ],
+        "dark" : {
+          "accent" : "#01021F",
+          "colors" : [
+            "#2B2734",
+            "#2B2734"
+          ],
+          "intensity" : 1,
+          "noise" : 0,
+          "solid" : false,
+          "vibrant" : false
+        },
+        "intensity" : 0.5,
+        "key" : [
+          "#8389FF"
+        ],
+        "noise" : 0,
+        "solid" : true,
+        "vibrant" : false
+      },
+      "title" : "Editor Auto",
+      "todayContainerID" : "C0000000-0000-0000-0000-000000000013"
+    },
+    {
+      "createdAt" : "2026-11-06T08:00:00Z",
+      "emoji" : "🌓",
+      "favoritesContainerID" : "C0000000-0000-0000-0000-000000000021",
+      "id" : "A0000000-0000-0000-0000-000000000002",
+      "pinnedContainerID" : "C0000000-0000-0000-0000-000000000022",
+      "theme" : {
+        "accent" : "#F8D558",
+        "appearance" : "auto",
+        "colors" : [
+          "#F8D558",
+          "#FFF1B8"
+        ],
+        "dark" : {
+          "colors" : [
+            "#101A3A",
+            "#1E2C5C"
+          ],
+          "intensity" : 0.9,
+          "noise" : 0,
+          "solid" : false,
+          "vibrant" : false
+        },
+        "intensity" : 0.6,
+        "noise" : 0,
+        "solid" : false,
+        "vibrant" : false
+      },
+      "title" : "Short half",
+      "todayContainerID" : "C0000000-0000-0000-0000-000000000023"
+    },
+    {
+      "createdAt" : "2026-11-06T08:00:00Z",
+      "emoji" : "🌑",
+      "favoritesContainerID" : "C0000000-0000-0000-0000-000000000031",
+      "id" : "A0000000-0000-0000-0000-000000000003",
+      "pinnedContainerID" : "C0000000-0000-0000-0000-000000000032",
+      "theme" : {
+        "appearance" : "auto",
+        "colors" : [
+          "#2861B3",
+          "#2861B3"
+        ],
+        "intensity" : 1,
+        "noise" : 0,
+        "solid" : false,
+        "vibrant" : false
+      },
+      "title" : "Broken half",
+      "todayContainerID" : "C0000000-0000-0000-0000-000000000033"
+    }
+  ],
+  "version" : 1
+}

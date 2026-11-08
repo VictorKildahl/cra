@@ -1,0 +1,9 @@
+# promise: #110
+# Cra leaves Chromium's secure DNS setting at its default, as Arc does: automatic, with no DoH
+# provider of its own, so the network's resolver (and split-horizon DNS at work) keeps working.
+# cra.log says which mode is in effect at launch (#110). Settings ▸ Privacy ▸ Secure DNS (#133)
+# changes it only when the user picks a provider.
+fresh
+budget rss=500 stalls50=5
+expect-log secure dns: automatic, no provider \(system resolver\)
+reject-log secure dns: (secure|off)

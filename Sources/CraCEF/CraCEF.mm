@@ -20,6 +20,7 @@
 #include "include/cef_browser.h"
 #include "include/cef_client.h"
 #include "include/cef_command_ids.h"
+#include "include/cef_id_mappers.h"
 #include "include/cef_command_line.h"
 #include "include/cef_context_menu_handler.h"
 #include "include/cef_display_handler.h"
@@ -441,6 +442,8 @@ static void HideDownloadBubble(CefRefPtr<CefRequestContext> context) {
 }
 
 static bool g_httpsOnly = false;
+/// Arc's View ▸ Appearance for websites: 0 follows the Mac, 1 light, 2 dark.
+static NSInteger g_websiteAppearance = 0;
 static bool g_incognitoReady = false;
 
 /// Chrome's "Always use secure connections" (Settings ▸ Privacy in Cra).
@@ -454,7 +457,16 @@ static void ApplyHttpsOnly(CefRefPtr<CefRequestContext> context) {
     }
 }
 
+/// Chrome's colour mode for the profile, which is what its pages' prefers-color-scheme follows.
+static void ApplyWebsiteAppearance(CefRefPtr<CefRequestContext> context) {
+    if (!context) return;
+    cef_color_variant_t mode = g_websiteAppearance == 1 ? CEF_COLOR_VARIANT_LIGHT
+        : g_websiteAppearance == 2 ? CEF_COLOR_VARIANT_DARK : CEF_COLOR_VARIANT_SYSTEM;
+    if (context->GetChromeColorSchemeMode() != mode) context->SetChromeColorScheme(mode, 0);
+}
+
 static void ApplyProfilePreferences(CefRefPtr<CefRequestContext> context) {
+    ApplyWebsiteAppearance(context);
     ApplyWebRTCPolicy(context);
     HideDownloadBubble(context);
     ApplyHttpsOnly(context);
@@ -685,6 +697,13 @@ public:
             // Tab sleeping discards a page in place (Cra.discard), as Arc's Chromium does: the tab
             // keeps its back/forward list and scroll position, and loads again when shown (#153).
             + "WebContentsDiscard,"
+            // Chrome keeps its video PiP's origin strip (favicon, host, a dark top scrim) on screen
+            // until the person clicks or types in that window, unless the page is file:// or has
+            // high media engagement (VideoOverlayWindowViews::UpdateControlsVisibility). Cra's
+            // overlay takes every click, so on YouTube the strip never left (#246). Treated as
+            // trusted, the window hides it from the start; Cra's own top bar shows the host on hover,
+            // as Arc's does. The feature does nothing else (Chromium 156).
+            + "VideoPipForceTrustedForMediaPlaybackForTesting,"
             // A hidden page's frame unlocks, so Chromium can evict it past its saved-frame cap or
             // after 5 minutes, as Chrome does for background tabs (Cra's are never detached from
             // their window, which is how Chrome gets there). Cra's page windows then let go of
@@ -1055,6 +1074,7 @@ private:
 /// are dark and white while they are light (measured on Arc 1.171, also for a tab it restores
 /// unloaded). Pages follow the app's appearance; Cra sets no colour scheme of its own.
 static BOOL PagesAreDark() {
+    if (g_websiteAppearance) return g_websiteAppearance == 2;
     return [[NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:@[NSAppearanceNameAqua, NSAppearanceNameDarkAqua]]
         isEqualToString:NSAppearanceNameDarkAqua];
 }
@@ -2500,6 +2520,8 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 // gap between two tracks doesn't blink the speaker.
 - (void)audibleChanged:(BOOL)audible {
     NSUInteger change = ++_audibleChanges;
+    if ([self.delegate respondsToSelector:@selector(browser:didChangeSoundPlaying:)])
+        [self.delegate browser:self didChangeSoundPlaying:audible];
     if (audible) { [self updateAudible:YES]; return; }
     __weak CraBrowser* weakSelf = self;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
@@ -2651,6 +2673,13 @@ static NSView* FindRenderWidgetHostView(NSView* root) {
 }
 - (void)print { if (_browser) _browser->GetHost()->Print(); }
 - (void)viewSource { if (_browser) _browser->GetMainFrame()->ViewSource(); }
+- (BOOL)runChromeCommand:(NSString*)name {
+    if (!_browser) return NO;
+    int command = cef_id_for_command_id_name(name.UTF8String);
+    if (command <= 0 || !_browser->GetHost()->CanExecuteChromeCommand(command)) return NO;
+    _browser->GetHost()->ExecuteChromeCommand(command, CEF_WOD_CURRENT_TAB);
+    return YES;
+}
 - (void)executeJavaScript:(NSString*)script {
     if (_browser) _browser->GetMainFrame()->ExecuteJavaScript(CefStringFromNS(script), _browser->GetMainFrame()->GetURL(), 0);
 }
@@ -2870,6 +2899,17 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 /// the rest get it from ApplyProfilePreferences when they load. Every settings write calls
 /// this, so an unchanged value does nothing. Once quitting starts the global context goes
 /// away (GetGlobalContext returns null, #36); the setting is applied again at the next start.
++ (void)setWebsiteAppearance:(NSInteger)mode {
+    if (mode == g_websiteAppearance) return;
+    g_websiteAppearance = mode;
+    if (!g_contextInitialized || g_quitting) return;
+    ApplyWebsiteAppearance(CefRequestContext::GetGlobalContext());
+    for (auto& [path, context] : g_profileContexts) {
+        if ([g_readyProfiles containsObject:@(path.c_str())]) ApplyWebsiteAppearance(context);
+    }
+    if (g_incognitoContext && g_incognitoReady) ApplyWebsiteAppearance(g_incognitoContext);
+}
++ (NSInteger)websiteAppearance { return g_websiteAppearance; }
 + (void)setHttpsOnlyModeEnabled:(BOOL)enabled {
     if (enabled == g_httpsOnly) return;
     g_httpsOnly = enabled;

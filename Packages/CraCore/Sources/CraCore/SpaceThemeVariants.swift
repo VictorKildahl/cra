@@ -4,14 +4,12 @@ import Foundation
 /// `background.appearanceBased` from the editor's key colour).
 public enum SpaceThemeVariants {
     /// What the theme editor makes of its pad: both halves for Auto, one for Light or Dark.
+    /// Auto always gets both halves, one colour too (#155): Arc saves a swatch picked on Auto as one
+    /// `single` theme that never changes with macOS, and copying that (0.1.30–0.1.32) left a space set
+    /// to Auto stuck on one side. An imported Arc `single` stays on its side (ArcThemeImport, #171).
     public static func theme(key: [String], intensity: Double, noise: Double, appearance: String) -> SpaceTheme {
         var t: SpaceTheme
         switch appearance {
-        // One colour on Auto: Arc saves a picked swatch as one `single` theme in that colour, on the
-        // side the colour suits (an imported one reads the same way, ArcThemeImport).
-        case "auto" where key.count == 1:
-            t = SpaceTheme(colors: [key[0], key[0]], intensity: intensity, noise: noise, appearance: "auto", accent: key[0], solid: true)
-            t.appearance = t.isDark ? "dark" : "light"
         case "light": t = light(key: key, intensity: intensity, noise: noise)
         case "dark": t = dark(key: key, intensity: intensity, noise: noise)
         default: t = SpaceTheme(light: light(key: key, intensity: intensity, noise: noise), dark: dark(key: key, intensity: intensity, noise: noise))

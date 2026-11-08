@@ -60,7 +60,8 @@ enum GitHubLiveClient {
     /// Turns one response into pull requests, or says why it can't.
     static func read(status: Int, finalURL: String, body: String) -> Result<Page, Failure> {
         if status == 0 { return .failure(.network) }
-        if let path = URL(string: finalURL)?.path, path == "/login" || path.hasPrefix("/session") {
+        let finalPath = URL(string: finalURL)?.path
+        if let path = finalPath, path == "/login" || path.hasPrefix("/session") || isSSOPath(path) {
             return .failure(.notSignedIn)
         }
         if status == 429 || (status == 403 && body.localizedCaseInsensitiveContains("rate limit")) { return .failure(.rateLimited) }
@@ -69,6 +70,9 @@ enum GitHubLiveClient {
         if status == 401 || (body.count < 2000 && body.localizedCaseInsensitiveContains("authenticate you")) { return .failure(.notSignedIn) }
         if body.contains("\"logged_in\":false") { return .failure(.notSignedIn) }
         guard (200..<300).contains(status) else { return .failure(.unexpectedPage) }
+        // Sent somewhere other than the pulls or search page: no pull requests there is no answer,
+        // and reading it as one would empty the folder.
+        let elsewhere = finalPath.map { !$0.isEmpty && !$0.hasPrefix("/pulls") && !$0.hasPrefix("/search") } ?? false
 
         var page = Page()
         page.ssoOrganizations = ssoOrganizations(in: body)
@@ -77,6 +81,7 @@ enum GitHubLiveClient {
             guard let json = try? JSONSerialization.jsonObject(with: Data(trimmed.utf8)) else { return .failure(.unexpectedPage) }
             page.viewer = viewer(inJSON: json)
             page.pullRequests = pullRequests(inJSON: json)
+            if page.pullRequests.isEmpty && elsewhere { return .failure(.unexpectedPage) }
             return .success(page)
         }
         // An HTML page: logged out pages carry an empty user-login.
@@ -92,7 +97,7 @@ enum GitHubLiveClient {
         }
         if found.isEmpty { found = pullRequests(inHTML: body) }
         page.pullRequests = unique(found)
-        if page.pullRequests.isEmpty && !sawPayload && !body.contains("blankslate") { return .failure(.unexpectedPage) }
+        if page.pullRequests.isEmpty && (elsewhere || (!sawPayload && !body.contains("blankslate"))) { return .failure(.unexpectedPage) }
         return .success(page)
     }
 
@@ -214,6 +219,21 @@ enum GitHubLiveClient {
     }
 
     // MARK: Helpers
+
+    /// GitHub's single sign-on pages. A lapsed Enterprise Managed User session (Victor's JYSK
+    /// account, 6 Nov 2026) is sent to /enterprises/<slug>/sso, a signed-in page with the user's
+    /// login and React data, which read as "no pull requests" until this check.
+    static func isSSOPath(_ path: String) -> Bool {
+        let parts = path.split(separator: "/")
+        return parts.count == 3 && (parts[0] == "enterprises" || parts[0] == "orgs") && parts[2] == "sso"
+    }
+
+    /// The enterprise a link to its single sign-on names (github.com/enterprises/<slug>/sso).
+    static func enterprise(inSSO url: String) -> String? {
+        guard let u = URL(string: url), u.host == "github.com", isSSOPath(u.path) else { return nil }
+        let parts = u.path.split(separator: "/")
+        return parts[0] == "enterprises" ? String(parts[1]) : nil
+    }
 
     static func pullPath(_ link: String) -> (owner: String, repo: String, number: Int)? {
         guard let m = matches(#"(?:^|github\.com)/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/pull/(\d+)"#, in: link).first, m.count > 3,
