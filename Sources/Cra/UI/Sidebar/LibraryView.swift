@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The Library's pages Cra has, in the order of Arc's rail (which also lists Easels and Boosts).
 enum LibraryPage: String, CaseIterable {
@@ -291,7 +292,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         case media([MediaLibrary.File])
         case easel(id: UUID, title: String, edited: Date)
         case boost(Boost)
-        case download(DownloadHistory.Entry)
+        case download(DownloadHistory.Listed)
         case archived(ArchivedItem)
     }
 
@@ -382,6 +383,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         withObservationTracking {
             _ = store.archive
             _ = DownloadHistory.shared.entries
+            _ = DownloadHistory.shared.live
             _ = DownloadHistory.shared.thumbnails.count
             _ = MediaScanner.shared.files
             _ = BoostStore.shared.boosts
@@ -414,8 +416,9 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
             empty.show(symbol: "photo.on.rectangle", title: all.isEmpty ? "Nothing here yet!" : "No matches",
                        detail: all.isEmpty ? "Screenshots, pictures and videos in the folders you show appear here." : nil)
         case .downloads:
-            let all = DownloadHistory.shared.entries.reversed().filter { FileManager.default.fileExists(atPath: $0.path) }
-            let shown = needle.isEmpty ? all : all.filter { ($0.path as NSString).lastPathComponent.lowercased().contains(needle) }
+            // Running, failed and cancelled downloads too, as in the tray (#245).
+            let all = DownloadHistory.shared.library(query: "")
+            let shown = needle.isEmpty ? all : DownloadHistory.shared.library(query: query)
             for (label, entries) in Self.grouped(shown, date: \.date) {
                 out.append(.header(label))
                 out += entries.map { .download($0) }
@@ -657,7 +660,9 @@ extension LibraryListView: NSMenuDelegate {
             }
             menu.addItem(.separator())
             MenuItems.add(menu, "Remove from Archive") { store.removeFromArchive(e.id) }
-        case .download(let e):
+        case .download(.live):
+            break
+        case .download(.finished(let e)):
             let url = URL(fileURLWithPath: e.path)
             MenuItems.add(menu, "Open") { NSWorkspace.shared.open(url) }
             MenuItems.add(menu, "Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
@@ -704,7 +709,9 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
     private let detail = NSTextField.sidebarLabel(size: 12)
     private var tip: ArcTooltipAnchorView?
     private var colors = SidebarColors()
+    /// A finished download's file: opened by a click, dragged out.
     private var download: DownloadHistory.Entry?
+    private var isDownloadRow = false
     private var restore: (() -> Void)?
     private var downAt: NSPoint?
     private var hovering = false { didSet { if hovering != oldValue { refreshHover() } } }
@@ -740,6 +747,7 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
     func showArchived(_ e: ArchivedItem, icon image: NSImage?, colors: SidebarColors, restore: @escaping () -> Void) {
         self.colors = colors
         download = nil
+        isDownloadRow = false
         self.restore = restore
         let ink: NSColor = colors.isDark ? .white : .black
         tile.layer?.contents = nil
@@ -759,6 +767,7 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
     func showBoost(_ b: Boost, colors: SidebarColors, open: @escaping () -> Void) {
         self.colors = colors
         download = nil
+        isDownloadRow = false
         restore = open
         let ink: NSColor = colors.isDark ? .white : .black
         tile.layer?.contents = nil
@@ -777,6 +786,7 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
     func showEasel(title text: String, edited: Date, colors: SidebarColors, open: @escaping () -> Void) {
         self.colors = colors
         download = nil
+        isDownloadRow = false
         restore = open
         let ink: NSColor = colors.isDark ? .white : .black
         tile.layer?.contents = nil
@@ -792,13 +802,26 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
         apply(ink: ink)
     }
 
-    func showDownload(_ e: DownloadHistory.Entry, colors: SidebarColors) {
+    /// A download on Library ▸ Downloads: a finished file (thumbnail, name, age) or one still
+    /// running, failed or cancelled (its type's icon, name, progress or what went wrong; #245).
+    func showDownload(_ listed: DownloadHistory.Listed, colors: SidebarColors) {
         self.colors = colors
-        download = e
+        isDownloadRow = true
         restore = nil
         let ink: NSColor = colors.isDark ? .white : .black
         icon.isHidden = true
-        if let image = DownloadHistory.shared.thumbnail(for: e.path) {
+        let image: NSImage?
+        switch listed {
+        case .finished(let e):
+            download = e
+            image = DownloadHistory.shared.thumbnail(for: e.path)
+            detail.stringValue = Self.age.localizedString(for: min(e.date, Date()), relativeTo: Date())
+        case .live(let l):
+            download = nil
+            image = NSWorkspace.shared.icon(for: UTType(filenameExtension: (l.name as NSString).pathExtension) ?? .data)
+            detail.stringValue = DownloadRow.subtitle(l.row, now: Date())
+        }
+        if let image {
             var rect = NSRect(x: 0, y: 0, width: 32, height: 32)
             let scale = window?.backingScaleFactor ?? 2
             tile.layer?.contents = image.cgImage(forProposedRect: &rect, context: nil, hints: [.ctm: AffineTransform(scale: scale)])
@@ -808,14 +831,14 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
             tile.layer?.contents = nil
             tile.layer?.backgroundColor = ink.withAlphaComponent(0.04).cgColor
         }
-        title.stringValue = (e.path as NSString).lastPathComponent
+        title.stringValue = listed.name
         title.lineBreakMode = .byTruncatingMiddle
-        detail.stringValue = Self.age.localizedString(for: min(e.date, Date()), relativeTo: Date())
         tip?.text = ""
         apply(ink: ink)
     }
 
     private func apply(ink: NSColor) {
+        alphaValue = 1   // a reused cell may come from a Boost that was off
         title.textColor = ink.withAlphaComponent(0.82)
         detail.textColor = ink.withAlphaComponent(0.55)
         refreshHover()
@@ -831,7 +854,7 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
         card.frame = bounds.insetBy(dx: 4, dy: 2)
         let h = card.bounds.height
         // Archived: 24 pt tile 9 pt in; download: 32 pt thumbnail 5 pt in; the text 10 pt after.
-        let isDownload = download != nil
+        let isDownload = isDownloadRow
         let t: CGFloat = isDownload ? 32 : 24
         let x: CGFloat = isDownload ? 5 : 9
         tile.frame = NSRect(x: x, y: (h - t) / 2, width: t, height: t)
@@ -870,7 +893,7 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
     override func mouseUp(with event: NSEvent) {
         defer { downAt = nil }
         guard downAt != nil, bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
-        if let download { NSWorkspace.shared.open(URL(fileURLWithPath: download.path)) } else { restore?() }
+        if let download { NSWorkspace.shared.open(URL(fileURLWithPath: download.path)) } else if !isDownloadRow { restore?() }
     }
 
     func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
