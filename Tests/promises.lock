@@ -82,7 +82,7 @@
 #88    Packages/CraCore/Tests/CraCoreTests/DismissingClickTests.swift::theNextClickOpens  9cf0eeb51035
 #88    Packages/CraCore/Tests/CraCoreTests/SidebarModelTests.swift::sidebarSubtitle  879c6c151d6d
 #88    Packages/CraCore/Tests/CraCoreTests/SidebarModelTests.swift::toolbarShowsTheHostOnlyUnlessAsked  f6ce32167e2f
-#88    Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::theDeveloperBar  97f0c8752c57
+#88    Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::theDeveloperBar  78543026ea38
 #88    Tests/PolicyTests.swift::devToolsToggle  5786fe494c6e
 #88    Tests/Scenarios/toolbar-chrome.scenario  1fa8505c4e49
 #90    Packages/CraCore/Tests/CraCoreTests/ConnectionSecurityTests.swift::aCertificateErrorIsNotSecure  f7e423ddd42a

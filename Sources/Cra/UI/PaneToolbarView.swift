@@ -277,8 +277,8 @@ final class PaneToolbarView: NSView {
                                      pinnedExtensions: m.pinned.map(\.id))
         // The no-tab bar and an empty pane show navigation that does nothing (Arc greys it out).
         let wide = m.kind == .noTab || m.kind == .emptyPane
-        // Arc's right-hand boxes: 32 pt, 4 pt apart (layout). The developer bar keeps its own widths.
-        let rightBox: CGFloat = m.kind == .developer ? 34 : 32
+        // Arc's right-hand boxes: 32 pt, 4 pt apart (layout); 28 pt edge to edge on the developer bar.
+        let rightBox: CGFloat = m.kind == .developer ? 28 : 32
         func view(_ item: ToolbarComposition.Item) -> NSView {
             switch item {
             case .toggleSidebar:
@@ -322,10 +322,10 @@ final class PaneToolbarView: NSView {
             case .addSplit:
                 return glyph("split", "square.split.2x1", help: "Add Split View (⌃⇧=)", width: rightBox, iconSize: 16) { $0.actions.performAction("addSplitView") }
             case .splitOptions:
-                return glyph("splitOptions", "rectangle.split.2x1", help: "Split View Options") { $0.showSplitMenu(from: $0.buttons["splitOptions"]) }
+                return glyph("splitOptions", "rectangle.split.2x1", help: "Split View Options", width: rightBox) { $0.showSplitMenu(from: $0.buttons["splitOptions"]) }
             case .closePane:
                 let id = paneTabID
-                return glyph("close", "xmark", help: "Close this Split Pane (⌃⇧-)", width: 30, iconSize: 14, tint: m.closeTint) {
+                return glyph("close", "xmark", help: "Close this Split Pane (⌃⇧-)", width: rightBox, iconSize: 14, tint: m.closeTint) {
                     if let id { $0.actions.closePane(id) }
                 }
             }
@@ -375,11 +375,12 @@ final class PaneToolbarView: NSView {
             b.cornerRadius = m.kind == .developer ? 6 : 7
             b.iconRowHeight = bh
         }
-        // Right group, from the trailing edge: pinned extensions … Split View, 32 pt boxes 4 pt apart
-        // (a 36 pt pitch) with Split View 5 pt in, centred 21 pt from the card edge like the left
-        // group's first icon (Arc 1.171, window capture 8 Nov 2026); a split pane's close 4 pt in;
-        // developer copy | Console, Network, Inspect | spaced as in Arc 1.170 (#88).
-        var rx = w - (m.inSplit ? 4 : (right.isEmpty ? 0 : (m.kind == .developer ? 6 : 5)))
+        // Right group, from the trailing edge, 5 pt in (Arc 1.171, captures and AX reads 8 Nov 2026):
+        // pinned extensions … Split View as 32 pt boxes 4 pt apart (a 36 pt pitch), the last centred
+        // 21 pt from the card edge like the left group's first icon. A split pane ends in options and
+        // close, edge to edge, 4 pt after the sliders. The developer bar: Extensions, pins, Split View
+        // as 28 pt boxes edge to edge, after copy | Console, Network, Inspect | spaced as in #88.
+        var rx = w - (right.isEmpty ? 0 : 5)
         var trailing = right
         var devGroup: [NSView] = []
         if m.kind == .developer, let i = trailing.firstIndex(where: { $0 === devDivider }),
@@ -394,7 +395,9 @@ final class PaneToolbarView: NSView {
         let reload = left.first { $0 === buttons["reload"] }
         let settings = trailing.first { $0 === buttons["extensions"] }
         // The gap after a box (to its right) when the next one along is a box too.
-        let isBox = { (v: NSView) in m.kind != .developer && (pins.contains { $0 === v } || v === settings || v === self.buttons["split"]) }
+        let isBox = { (v: NSView) in
+            m.kind != .developer && (pins.contains { $0 === v } || v === settings || v === self.buttons["split"] || v === self.buttons["splitOptions"])
+        }
         let gapAfter = { (items: [NSView], i: Int) -> CGFloat in
             i + 1 < items.count && isBox(items[i]) && isBox(items[i + 1]) ? PaneToolbarView.rightGap : 0
         }
@@ -403,9 +406,9 @@ final class PaneToolbarView: NSView {
         var showsCopy = true
         if m.kind == .normal {
             let fullLeft: CGFloat = 2.5 + 3 * 37 + 6
-            let fullRight: CGFloat = (m.inSplit ? 4 + 30 + 26 : 5 + 32 + 4) + 32 + 6
+            let fullRight: CGFloat = (m.inSplit ? 5 + 32 + 32 + 4 : 5 + 32 + 4) + 32 + 6
             let fullRoom = w - fullLeft - fullRight - 2 * (8 + 6)
-            showsCopy = !ToolbarRoom.plan(pins: [], reload: 37, settings: m.inSplit ? 32 : 36, needed: urlButton.idealWidth(withCopy: true),
+            showsCopy = !ToolbarRoom.plan(pins: [], reload: 37, settings: 32 + PaneToolbarView.rightGap, needed: urlButton.idealWidth(withCopy: true),
                                           room: fullRoom).hidesSettings
         }
         urlButton.showsCopy = showsCopy

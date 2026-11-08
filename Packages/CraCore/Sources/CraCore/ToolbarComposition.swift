@@ -61,10 +61,10 @@ public struct ToolbarComposition: Equatable, Sendable {
             right += [.copyURL, .divider, .console, .network, .inspect]
         }
         // Arc's right end: pinned extensions, the Extensions button, then Split View (not in a
-        // split); also on the no-tab bar.
+        // split); also on the no-tab bar. The developer bar has the Extensions button first.
         if !essentialOnly, kind != .emptyPane {
-            right += pinnedExtensions.map(Item.pinnedExtension)
-            right.append(.extensions)
+            let pins = pinnedExtensions.map(Item.pinnedExtension)
+            right += kind == .developer ? [.extensions] + pins : pins + [.extensions]
             if !inSplit { right.append(.addSplit) }
         }
         if inSplit {

@@ -1843,6 +1843,13 @@ Arc's popup this time, so geometry is not measured.
 
 ## Site Control Center and pinned extensions (Arc 1.170, 26 Oct 2026, live via AX + captures)
 
+- [O] The right group's spacing (Arc 1.171, window captures and AX frames, 8 Nov 2026), all 5 pt in from the card
+  edge: normal bar, pinned extensions, sliders, Split View as 32 pt boxes 4 pt apart, icons centred 21, 57, 93,
+  129 pt from the edge; a focused split pane ends in Split View Options and Close Split View Pane (32 pt, edge to
+  edge, centred 53 and 21), the sliders 4 pt before them (89) and the pins on from there (125, 161); an unfocused
+  or empty pane keeps only the close, centred 21; the developer bar has Extensions Menu, pinned extensions, Split
+  View Menu as 28 pt boxes edge to edge (centred 103, 75, 47, 19 with two pins), 16.5 pt after Inspect Element.
+  Cra matches all three (toolbar-pinned-extensions scenario).
 - [O] The toolbar's sliders button is "Site Control Center" (32×28 at the bar's right end, after the pinned extension
   icons at a 36 pt pitch; `SiteControlCenterView` in ARC_SiteControlCenter). It opens an `AXPopover` 262 wide whose
   content column is 236 wide, inset 13; the popover's top sits 4 pt above the bar's bottom edge.
