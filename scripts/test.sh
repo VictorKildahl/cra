@@ -31,6 +31,7 @@ if [ "${1:-}" != core ]; then
   suite "Folder glyph" scripts/test-folder-glyph.sh
   suite "Perf recorder" scripts/test-perf.sh
   suite "MCP transport" scripts/test-mcp-transport.sh
+  suite "CEF download" python3 Tests/test_cef_download.py
   suite "Lint" scripts/lint.py
 fi
 

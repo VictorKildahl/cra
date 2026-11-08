@@ -29,7 +29,7 @@ if [ ! -d vendor/cef/Release ]; then
   echo "Downloading ${NAME} from ${URL%/*}..."
   rm -rf vendor/cef-download
   mkdir -p vendor/cef-download
-  curl -fL --progress-bar -o "vendor/cef-download/${NAME}.tar.bz2" "$URL"
+  python3 scripts/download-cef.py "$URL" "vendor/cef-download/${NAME}.tar.bz2"
   tar -xjf "vendor/cef-download/${NAME}.tar.bz2" -C vendor/cef-download
   rm -rf vendor/cef
   mv "vendor/cef-download/${NAME}" vendor/cef

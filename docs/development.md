@@ -25,6 +25,9 @@ committed). It fetches Cra's own CEF build, made by `scripts/build-cef.sh` with 
 and the patches in `scripts/cef-patches` and published as a `cef-*` release by
 `scripts/publish-cef.sh`; `CEF_URL` points it at Spotify's stock build instead. A daily workflow (`.github/workflows/cef-updates.yml`) opens an
 issue when a newer stable CEF is out; `scripts/update-cef.sh` moves the pin.
+If the release download fails, `scripts/download-cef.py` retrieves the same Cra asset
+through GitHub's public API and verifies its published SHA-256 before unpacking.
+Custom `CEF_URL` downloads never fall back to a different Cra build.
 
 ## Layout
 
@@ -104,6 +107,8 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-perf.sh`: the performance recorder on a real main run loop: injected stalls,
   hang files with a `sample` stack, the session marker, ownership, the recording switch
   ([performance.md](performance.md)).
+- `python3 Tests/test_cef_download.py`: offline checks for direct downloads, API fallback,
+  checksum and metadata failures, and custom URLs; included in `scripts/test.sh`.
 - `scripts/lint.py`: Cra's own rules (testing.md), checked by `scripts/test.sh`.
 - `Tests/smoke-launch.sh [app]`: starts the app on a throwaway data folder with no pages,
   with a page opened, then with it restored, and quits it like ⌘Q after a settings write.
