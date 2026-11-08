@@ -143,14 +143,37 @@ struct SidebarModelTests {
         var settings = AppSettings()
         #expect(AppSettings.siteKey(for: "https://www.Example.com/a") == "example.com")
         #expect(AppSettings.siteKey(for: "notes") == nil)
-        settings.toggleDeveloperMode(url: "http://localhost:3000/")
-        #expect(settings.isDeveloperMode(url: "http://localhost:8080/other"))
+        settings.toggleDeveloperMode(url: "http://example.dev:3000/")
+        #expect(settings.isDeveloperMode(url: "http://example.dev:8080/other"))
         #expect(!settings.isDeveloperMode(url: "https://example.com"))
         #expect(!settings.isDeveloperMode(url: "notes"))
-        settings.toggleDeveloperMode(url: "http://localhost/")
+        settings.toggleDeveloperMode(url: "http://example.dev/")
         #expect(settings.developerHosts.isEmpty)
         settings.toggleDeveloperMode(url: "notes")
         #expect(settings.developerHosts.isEmpty, "no host, nothing to toggle")
+    }
+
+    /// #228 (Balajitechlabs): Arc turns Developer Mode on by itself for localhost, on any
+    /// port. ⌃D turns it off for that host, and Arc remembers that in
+    /// StorableDeveloperModeState.json's `disabledDefaultHosts`.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/228"))
+    func localhostStartsInDeveloperMode() throws {
+        var settings = AppSettings()
+        #expect(settings.isDeveloperMode(url: "http://localhost:3000/"))
+        #expect(settings.isDeveloperMode(url: "http://localhost:8080/api"))
+        #expect(!settings.isDeveloperMode(url: "https://example.com"))
+        #expect(!settings.isDeveloperMode(url: "http://app.localhost:3000/"), "the host itself only")
+        settings.toggleDeveloperMode(url: "http://localhost:5173/")
+        #expect(!settings.isDeveloperMode(url: "http://localhost:3000/"), "off for the host, every port")
+        let saved = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
+        #expect(!saved.isDeveloperMode(url: "http://localhost:3000/"), "turned off stays off")
+        settings.toggleDeveloperMode(url: "http://localhost/")
+        #expect(settings.isDeveloperMode(url: "http://localhost:3000/"))
+        #expect(settings.developerHosts.isEmpty && settings.disabledDefaultDeveloperHosts.isEmpty)
+        // Turned on by hand before it was a default: one ⌃D still turns it off.
+        settings.developerHosts = ["localhost"]
+        settings.toggleDeveloperMode(url: "http://localhost/")
+        #expect(!settings.isDeveloperMode(url: "http://localhost/"))
     }
 
     /// #185: Developer Mode from the Site Control Center showed nothing with the toolbar hidden

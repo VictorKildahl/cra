@@ -12,6 +12,9 @@
   "developerHosts" : [
     "localhost"
   ],
+  "disabledDefaultDeveloperHosts" : [
+
+  ],
   "edgeToEdgeContent" : true,
   "folderPreviews" : false,
   "hapticFeedbackOnReorder" : false,

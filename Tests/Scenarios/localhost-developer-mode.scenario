@@ -1,0 +1,11 @@
+# Arc turns Developer Mode on by itself for localhost, on any port (#228). With the toolbar
+# hidden (Cra's default), a localhost page shows the developer bar straight away; the snapshot
+# fails when no PaneToolbarView is on screen. ${WEBKIT} is the fixture server as localhost.
+# promise: #228
+budget rss=600 stalls50=6
+port 47126
+cra://debug?windowSize=1280x800
+cra://open?url=${WEBKIT}/page.html?n=localhost
+expect-log loaded localhost \(HTTP 200\)
+wait 3
+snapshot PaneToolbarView localhost-developer-bar

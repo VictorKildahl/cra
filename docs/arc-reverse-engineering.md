@@ -313,6 +313,13 @@ behind a link glyph, sidebar toggle right; developer = lock + full monospace URL
 copy/capture/DevTools/source icons right, nav buttons in the sidebar's title row. Cra
 stores the hosts in `AppSettings.developerHosts`.
 
+localhost is in Developer Mode before anyone turns it on (8 Nov 2026, #228): Arc's
+StorableDeveloperModeState.json holds `enabledHosts` and `disabledDefaultHosts`, and Victor's
+has `"disabledDefaultHosts": ["localhost"]` after ⌃D turned it off there. Only localhost is
+attested; 127.0.0.1 wasn't checked live (the `(localhost|127\.0\.0\.1)` regex in
+ARCFoundationBase's String+URL sits with the URL-detection patterns, not DeveloperModeClient).
+Cra: `AppSettings.defaultDeveloperHosts` and `disabledDefaultDeveloperHosts`.
+
 The ⌄ after ↻ in that title row (GitHub #89, Arc screenshot from vrubzov1957): "✓ Reload ⌘R",
 "Refresh (Ignore Cache) ⇧⌘R", a separator, "Clear Cookies and Refresh". Arc's context menus show
 the shortcut glyphs of rows that have one. Cra's chevron lists Refresh ✓ ⌘R, Force Refresh ⇧⌘R |

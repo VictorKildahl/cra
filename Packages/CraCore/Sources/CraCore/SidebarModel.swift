@@ -460,6 +460,9 @@ public struct AppSettings: Codable, Equatable {
     /// Arc's per-site Developer Mode (⌃D): the toolbar shows the full URL in
     /// monospace with the developer icons, and the nav buttons move to the sidebar.
     public var developerHosts: Set<String> = []
+    /// Arc's `disabledDefaultHosts`: localhost starts in Developer Mode, and ⌃D on it
+    /// records it here (#228).
+    public var disabledDefaultDeveloperHosts: Set<String> = []
     /// Host pages in Chrome-style windows: Chrome extensions and Chrome's own
     /// DevTools docking. Needs a restart to change.
     public var chromeEngine: Bool = true
@@ -596,7 +599,14 @@ public struct AppSettings: Codable, Equatable {
         get { defaultLinkDestination == .littleWindow }
         set { defaultLinkDestination = newValue ? .littleWindow : .mostRecentSpace }
     }
-    public func isDeveloperMode(url: String) -> Bool { AppSettings.siteKey(for: url).map(developerHosts.contains) ?? false }
+    /// Hosts Arc puts in Developer Mode by itself, on any port. localhost is the one Arc's
+    /// StorableDeveloperModeState.json shows in `disabledDefaultHosts` once ⌃D turns it off.
+    public static let defaultDeveloperHosts: Set<String> = ["localhost"]
+    public func isDeveloperMode(url: String) -> Bool {
+        guard let k = AppSettings.siteKey(for: url) else { return false }
+        return developerHosts.contains(k)
+            || (Self.defaultDeveloperHosts.contains(k) && !disabledDefaultDeveloperHosts.contains(k))
+    }
     /// Whether a page shown alone carries a bar above it: the toolbar while it is shown, and
     /// Arc's developer bar on a Developer Mode site even with the toolbar hidden (#185). A
     /// split's panes always carry bars (#178); the shell adds that rule.
@@ -605,7 +615,11 @@ public struct AppSettings: Codable, Equatable {
     }
     public mutating func toggleDeveloperMode(url: String) {
         guard let k = AppSettings.siteKey(for: url) else { return }
-        if developerHosts.contains(k) { developerHosts.remove(k) } else { developerHosts.insert(k) }
+        let on = isDeveloperMode(url: url)
+        if Self.defaultDeveloperHosts.contains(k) {
+            developerHosts.remove(k)
+            if on { disabledDefaultDeveloperHosts.insert(k) } else { disabledDefaultDeveloperHosts.remove(k) }
+        } else if on { developerHosts.remove(k) } else { developerHosts.insert(k) }
     }
     /// Settings saved without `toolbarDefaultMigrated` take the toolbar from Arc's View ▸
     /// Show Toolbar (nil without Arc: off), once. Arc's preference is read only then.
@@ -724,6 +738,7 @@ extension AppSettings {
         toolbarShowsFullURL = try c.decodeIfPresent(Bool.self, forKey: .toolbarShowsFullURL) ?? false
         hasSeenImportPrompt = try c.decodeIfPresent(Bool.self, forKey: .hasSeenImportPrompt) ?? false
         developerHosts = try c.decodeIfPresent(Set<String>.self, forKey: .developerHosts) ?? []
+        disabledDefaultDeveloperHosts = try c.decodeIfPresent(Set<String>.self, forKey: .disabledDefaultDeveloperHosts) ?? []
         chromeEngine = try c.decodeIfPresent(Bool.self, forKey: .chromeEngine) ?? true
         autoPictureInPicture = try c.decodeIfPresent(Bool.self, forKey: .autoPictureInPicture) ?? true
         blockAdsAndTrackers = try c.decodeIfPresent(Bool.self, forKey: .blockAdsAndTrackers) ?? true
