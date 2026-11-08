@@ -1437,10 +1437,23 @@ final class SidebarStore {
         return items[folder.id]
     }
 
-    func setFolderIcon(_ style: FolderIconStyle?, for id: UUID) {
+    func setFolderIconColor(_ color: FolderIconStyle?, for id: UUID) {
         guard var it = items[id], it.isFolder else { return }
-        it.folderIcon = style
+        var icon = it.folderIcon ?? FolderIcon()
+        guard icon.color != color else { return }
+        icon.color = color
+        it.folderIcon = icon.isEmpty ? nil : icon
         items[id] = it
+        touch()
+    }
+
+    func setFolderSymbol(_ symbol: FolderSymbol?, for id: UUID) {
+        guard var item = items[id], item.isFolder, !item.isLiveFolder, !item.isTabGroup,
+              item.folderIcon?.symbol != symbol else { return }
+        var icon = item.folderIcon ?? FolderIcon()
+        icon.symbol = symbol
+        item.folderIcon = icon.isEmpty ? nil : icon
+        items[id] = item
         touch()
     }
 

@@ -1358,6 +1358,7 @@ struct FolderRowModel: Equatable {
     var liveSignInURL: String?
     var liveHelp: String
     var liveSource: LiveFolderSource? = nil
+    var symbol: FolderSymbol? = nil
 }
 
 final class FolderRowView: SidebarRowView, NSTextFieldDelegate {
@@ -1384,7 +1385,7 @@ final class FolderRowView: SidebarRowView, NSTextFieldDelegate {
         model = m
         let emblem: FolderEmblem? = m.live
             ? FolderEmblem(image: m.liveSource == .gitlab ? GitLabMark.image : GitHubMark.image, coloring: .template)
-            : nil
+            : m.symbol.map { FolderEmblem(image: $0.image, coloring: .template) }
         glyph.show(expanded: m.expanded, peeked: m.peeked, emblem: emblem,
                    tint: m.tint, fillColor: m.fill, backColor: m.back, animated: toggled && window != nil)
         titleLabel.stringValue = m.title
@@ -1402,6 +1403,7 @@ final class FolderRowView: SidebarRowView, NSTextFieldDelegate {
     }
 
     override var fillLeading: CGFloat { CGFloat(model?.depth ?? 0) * CraMetrics.indent }
+    var iconRect: NSRect { glyph.frame }
     override func baseFill() -> NSColor { isHovered ? colors.hoverFill : .clear }
 
     override func hoverChanged() {

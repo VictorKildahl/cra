@@ -172,8 +172,7 @@ public struct SidebarItem: Identifiable, Codable, Equatable {
     public var isUnread: Bool
     public var createdAt: Date
     public var data: ItemData
-    /// A folder's glyph colour; nil is Auto (it follows the theme).
-    public var folderIcon: FolderIconStyle? = nil
+    public var folderIcon: FolderIcon? = nil
     /// Set on a folder that fills itself (Arc: list.automaticLiveFolderData).
     public var liveFolder: LiveFolderData? = nil
     /// A Today folder shown as a group header, as Tidy Tabs makes them (Arc: SidebarItemData.tabGroup,
@@ -181,7 +180,7 @@ public struct SidebarItem: Identifiable, Codable, Equatable {
     public var tabGroup: Bool? = nil
 
     public init(id: UUID, parentID: UUID?, title: String?, children: [UUID], isUnread: Bool, createdAt: Date, data: ItemData,
-                folderIcon: FolderIconStyle? = nil, liveFolder: LiveFolderData? = nil, tabGroup: Bool? = nil) {
+                folderIcon: FolderIcon? = nil, liveFolder: LiveFolderData? = nil, tabGroup: Bool? = nil) {
         self.id = id
         self.parentID = parentID
         self.title = title

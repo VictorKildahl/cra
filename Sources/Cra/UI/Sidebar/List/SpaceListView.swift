@@ -258,7 +258,7 @@ final class SpaceListView: NSView, NSDraggingSource {
             } else if item.isFolder {
                 let expanded = store.isExpanded(item.id)
                 let peeked = expanded ? [] : store.peekedTabs(in: item.id)
-                let glyph = palette.folderColors(item.folderIcon)
+                let glyph = palette.folderColors(item.folderIcon?.color)
                 row.content = .folder(FolderRowModel(
                     id: item.id, depth: depth, title: item.title ?? "Folder", renameText: item.title ?? "",
                     editing: renaming == item.id, expanded: expanded, peeked: !peeked.isEmpty, live: item.isLiveFolder,
@@ -266,7 +266,8 @@ final class SpaceListView: NSView, NSDraggingSource {
                     tabCount: expanded ? 0 : store.tabs(under: item.id).count,
                     liveBusy: refreshing.contains(item.id), liveError: item.liveFolder.flatMap(LiveFolderText.warning)?.help,
                     liveSignInURL: item.liveFolder.flatMap(LiveFolderText.warning)?.signInURL,
-                    liveHelp: LiveFolderText.refreshHelp(item.liveFolder), liveSource: item.liveFolder?.source))
+                    liveHelp: LiveFolderText.refreshHelp(item.liveFolder), liveSource: item.liveFolder?.source,
+                    symbol: item.folderIcon?.symbol))
                 out.append(row)
                 guard expanded else {
                     // Arc keeps the open tab of a closed folder in sight, one level in (FolderPeek).
@@ -709,6 +710,13 @@ final class SpaceListView: NSView, NSDraggingSource {
         for l in all.allObjects where l.ui === ui {
             guard let row = l.views[.item(folderID)] as? FolderRowView else { continue }
             FolderPreviewController.shared.debugOpen(folderID, row: row, list: l)
+        }
+    }
+
+    func showFolderIconPicker(_ id: UUID) {
+        guard let row = views[.item(id)] as? FolderRowView, let item = store.item(id) else { return }
+        FolderIconPicker.show(current: item.folderIcon?.symbol, anchor: row, rect: row.iconRect) { [store] symbol in
+            store.setFolderSymbol(symbol, for: id)
         }
     }
 
