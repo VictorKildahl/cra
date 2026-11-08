@@ -828,7 +828,7 @@ final class ShellView: NSView {
         layoutSubtreeIfNeeded()
     }
 
-    func animateSidebar(visible: Bool, floating: Bool, fullscreen: Bool, width: CGFloat, duration: TimeInterval = 0.085) {
+    func animateSidebar(visible: Bool, floating: Bool, fullscreen: Bool, width: CGFloat, duration: TimeInterval = SidebarMotion.duration) {
         let target = frames(sidebarVisible: visible, floating: floating, fullscreen: fullscreen, width: width)
         // Size the pages for their destination once, up front; the cards then just slide over them.
         let targetLayout = paneLayout(in: NSRect(origin: .zero, size: target.content.size))
@@ -843,10 +843,10 @@ final class ShellView: NSView {
         }
         layoutContentChildren()
         animatingFrames = true
-        // Fast start, soft landing: feels immediate without a visible snap.
-        // Fitted to Arc 1.170's ⌘S hide at 60 fps: 66 / 87 / 96 / 99 % of the travel after
-        // frames 1–4 (card edge 568 → 204 → 90 → 42 → 24 → 20 px).
-        let timing = CAMediaTimingFunction(controlPoints: 0.15, 0.7, 0.3, 1)
+        // Arc 1.172.1's ⌘S at 60 fps (CraCore SidebarMotion): about 43 / 72 / 89 / 97 % of the travel
+        // after frames 1–4.
+        let c = SidebarMotion.curve
+        let timing = CAMediaTimingFunction(controlPoints: Float(c.0), Float(c.1), Float(c.2), Float(c.3))
         onAnimatePaneFrames?(webTargets, duration, timing)
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = duration

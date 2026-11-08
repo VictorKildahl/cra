@@ -101,7 +101,15 @@ gains "New Profile".
   matches after this sweep (it had no opening animation and resized with AppKit's default). Arc's code
   header is only Back and a centred CSS / JS switch; Cra had the boost's name and Undo there too.
 
-Not re-measured in this sweep: earlier sessions measured the sidebar, command bar, split view,
+- Sidebar ⌘S, 8 Nov 2026, `screencapture -V` at 60 fps, four Arc runs and two of Cra each way (SidebarMotion): Arc's
+  page edge covers about 43 / 72 / 89 / 97 % of its travel after frames 1–4 hiding and 30 / 69 / 89 / 97 % showing,
+  done in 5 frames. Cra ran ahead (67 / 87 / 96 / 99 %, fitted to an ffmpeg recording that had dropped Arc's first
+  frames); now 0.085 s on (0.3, 0.7, 0.5, 1), measured 23–48 / 60 / 83–85 / 96–98 % hiding and 30–47 / 65–76 /
+  86–92 / 96–98 % showing. ffmpeg's avfoundation capture misses window moves; `screencapture -V` doesn't.
+
+- Previews cards, 8 Nov 2026: see "Previews, measured".
+
+Not re-measured in this sweep: earlier sessions measured the command bar, split view,
 Peek, Little Arc, PiP, folders, space dock, Library swipe, dialogs, toasts and toolbar against Arc
 (docs/arc-reverse-engineering.md). New surfaces built from this list are matched to captures taken
 in this sweep (Essential Shortcuts window, Library pages).
