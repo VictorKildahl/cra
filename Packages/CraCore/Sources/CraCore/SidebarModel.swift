@@ -536,6 +536,15 @@ public struct AppSettings: Codable, Equatable {
     public var boostsEnabled: Bool = true
     /// Arc's Settings ▸ General ▸ Previews: hovering a Gmail favorite shows its unread mail.
     public var favoritePreviews: Bool = true
+    /// Arc's Live Calendar on a Google Calendar favorite (the favorite's menu ▸ Live Calendar), on
+    /// until "Disable Live Calendar".
+    public var liveCalendar: Bool = true
+    /// Live Calendar ▸ Show Hover Preview: today's timeline when the pointer rests on the tile.
+    public var calendarHoverPreview: Bool = true
+    /// Live Calendar ▸ Show Time to Next Meeting: the tile counts down to it.
+    public var calendarTimeToNextMeeting: Bool = true
+    /// Live Calendar ▸ Show Next Meeting Link, Two Minutes Before in Arc.
+    public var calendarMeetingLink: CalendarPreview.LinkTiming = .twoMinutes
     /// Arc's searchSuggestEnabled: the command bar asks the search engine for suggestions
     /// as you type and fills its rows with them.
     public var searchSuggestions: Bool = true
@@ -752,6 +761,10 @@ extension AppSettings {
         pageTopWindowDrag = try c.decodeIfPresent(Bool.self, forKey: .pageTopWindowDrag) ?? true
         boostsEnabled = try c.decodeIfPresent(Bool.self, forKey: .boostsEnabled) ?? true
         favoritePreviews = try c.decodeIfPresent(Bool.self, forKey: .favoritePreviews) ?? true
+        liveCalendar = try c.decodeIfPresent(Bool.self, forKey: .liveCalendar) ?? true
+        calendarHoverPreview = try c.decodeIfPresent(Bool.self, forKey: .calendarHoverPreview) ?? true
+        calendarTimeToNextMeeting = try c.decodeIfPresent(Bool.self, forKey: .calendarTimeToNextMeeting) ?? true
+        calendarMeetingLink = (try? c.decodeIfPresent(CalendarPreview.LinkTiming.self, forKey: .calendarMeetingLink)) ?? .twoMinutes
         searchSuggestions = try c.decodeIfPresent(Bool.self, forKey: .searchSuggestions) ?? true
         showSpaceHeaderOnSingleSpace = try c.decodeIfPresent(Bool.self, forKey: .showSpaceHeaderOnSingleSpace) ?? true
         sharedFavorites = try c.decodeIfPresent(Bool.self, forKey: .sharedFavorites) ?? false

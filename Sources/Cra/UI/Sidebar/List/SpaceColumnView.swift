@@ -1122,6 +1122,9 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
     /// Cuts a split's tile into its cells.
     private let cutMask = CAShapeLayer()
     private let unreadDot = CALayer()
+    /// Live Calendar's Show Time to Next Meeting ("12m", "Now") at the tile's top right.
+    private let countdown = CATextLayer()
+    nonisolated(unsafe) private var calendarObserver: NSObjectProtocol?
     private var focusRing: FocusRingLayer?
     private var model: FavoriteTileModel?
     private var palette: SpacePalette?
@@ -1144,11 +1147,24 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         cutMask.fillRule = .evenOdd
         unreadDot.cornerRadius = 3
         layer?.addSublayer(unreadDot)
+        countdown.fontSize = 9
+        countdown.font = NSFont.systemFont(ofSize: 9, weight: .semibold)
+        countdown.alignmentMode = .right
+        countdown.contentsScale = 2
+        countdown.isHidden = true
+        layer?.addSublayer(countdown)
+        calendarObserver = NotificationCenter.default.addObserver(forName: LiveCalendarClient.changed, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.calendarChanged() }
+        }
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    deinit {
+        if let o = calendarObserver { NotificationCenter.default.removeObserver(o) }
+    }
 
     override var isFlipped: Bool { true }
     override var mouseDownCanMoveWindow: Bool { false }
@@ -1165,6 +1181,9 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         while favicons.count > m.cells.count { favicons.removeLast().removeFromSuperview() }
         // Arc 1.171: the open split's tile is one selected tile; the cut shows while it is closed.
         layer?.mask = m.cells.count > 1 && !m.selected ? cutMask : nil
+        if let url = liveCalendarURL, let store = grid?.store {
+            LiveCalendarClient.shared.watch(favorite: url, profilePath: store.profilePath(item: itemID))
+        }
         refresh()
     }
 
@@ -1195,6 +1214,10 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         for (f, c) in zip(favicons, m.cells) { f.show(c.icon, flip: c.icon != nil && c.glyphDark == dark, colors: faviconColors) }
         unreadDot.isHidden = !(m.unread && !m.selected)
         unreadDot.backgroundColor = (m.tileColor == nil ? colors.textPrimary : (dark ? NSColor.white : NSColor.black)).withAlphaComponent(0.6).cgColor
+        let ink = (m.tileColor == nil ? colors.textPrimary : (dark ? NSColor.white : NSColor.black)).withAlphaComponent(0.7)
+        countdown.string = countdownText.map { NSAttributedString(string: $0, attributes: [.font: NSFont.systemFont(ofSize: 9, weight: .semibold), .foregroundColor: ink]) }
+        countdown.isHidden = countdownText == nil
+        if countdownText != nil { unreadDot.isHidden = true }
         if m.focus != (focusRing != nil) {
             if m.focus {
                 let r = FocusRingLayer(radius: FavoriteTileMetrics.corner)
@@ -1231,6 +1254,7 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
             cutMask.path = path
         }
         unreadDot.frame = CGRect(x: bounds.width - 5 - 6, y: 5, width: 6, height: 6)
+        countdown.frame = CGRect(x: 4, y: 3, width: bounds.width - 9, height: 12)
         focusRing?.frame = bounds
         CATransaction.commit()
     }
@@ -1262,7 +1286,7 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         hovering = true
         trackPointer(event)
         if let url = previewURL, let store = grid?.store {
-            GmailPreviewCard.shared.hover(self, favoriteURL: url, profilePath: store.profilePath(item: itemID))
+            FavoritePreviewCard.shared.hover(self, target: previewTarget(url, store: store))
         }
     }
     override func mouseMoved(with event: NSEvent) { trackPointer(event) }
@@ -1270,17 +1294,62 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         hovering = false
         hoveredCell = nil
         ArcTooltipController.shared.mouseExited(self)
-        GmailPreviewCard.shared.leave(self)
+        FavoritePreviewCard.shared.leave(self)
     }
 
-    /// A Gmail favorite with Previews on: Arc shows its unread mail instead of the name tooltip.
+    /// A Gmail favorite with Previews on, or a Calendar favorite with Live Calendar's hover
+    /// preview: Arc shows the card instead of the name tooltip, and none on the open tab.
     private var previewURL: String? {
-        guard let store = grid?.store, store.settings.favoritePreviews, let url = store.item(itemID)?.tab?.url,
-              GmailPreview.feedURL(for: url) != nil else { return nil }
+        guard let store = grid?.store, model?.selected != true, model?.cells.count == 1, let url = store.item(itemID)?.tab?.url else { return nil }
+        if GmailPreview.feedURL(for: url) != nil { return store.settings.favoritePreviews ? url : nil }
+        if CalendarPreview.isCalendar(url) { return store.settings.liveCalendar && store.settings.calendarHoverPreview ? url : nil }
+        return nil
+    }
+
+    /// The favorite's Google Calendar address while Live Calendar is on for it.
+    private var liveCalendarURL: String? {
+        guard let store = grid?.store, store.settings.liveCalendar, let url = store.item(itemID)?.tab?.url,
+              CalendarPreview.isCalendar(url) else { return nil }
         return url
     }
 
-    override func mouseDown(with event: NSEvent) { press = event }
+    private var calendarEvents: [CalendarPreview.Event] {
+        guard let url = liveCalendarURL, let store = grid?.store else { return [] }
+        return LiveCalendarClient.shared.state(for: url, profilePath: store.profilePath(item: itemID))?.events ?? []
+    }
+
+    private var countdownText: String? {
+        guard let store = grid?.store, store.settings.calendarTimeToNextMeeting, liveCalendarURL != nil else { return nil }
+        return CalendarPreview.timeToNext(in: calendarEvents, now: Date())
+    }
+
+    private func previewTarget(_ url: String, store: SidebarStore) -> FavoritePreviewCard.Target {
+        let id = itemID
+        return FavoritePreviewCard.Target(
+            favorite: url, profilePath: store.profilePath(item: id),
+            open: { [weak self] u in self?.openInFavorite(u) },
+            openNewTab: { [weak grid] u in grid?.actions.openURL(u) },
+            disableLiveCalendar: { store.settings.liveCalendar = false })
+    }
+
+    /// A mail, event or new draft from the card: the favorite opens on it.
+    private func openInFavorite(_ url: String) {
+        guard let grid else { return }
+        grid.store.selectTab(itemID, window: grid.ui.windowID)
+        (window?.windowController as? MainWindowController)?.loadInSelectedTab(url)
+    }
+
+    private func calendarChanged() {
+        guard liveCalendarURL != nil else { return }
+        refresh()
+        MeetingReminder.shared.update(tile: self, favorite: liveCalendarURL, events: calendarEvents,
+                                      timing: grid?.store.settings.calendarMeetingLink ?? .twoMinutes) { [weak grid] in grid?.actions.openURL($0) }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        FavoritePreviewCard.shared.cancel(self)
+        press = event
+    }
     override func mouseDragged(with event: NSEvent) {
         guard let p = press, let grid else { return }
         guard hypot(event.locationInWindow.x - p.locationInWindow.x, event.locationInWindow.y - p.locationInWindow.y) > 3 else { return }
@@ -1364,6 +1433,10 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         let tileColor = item.tab?.tileColor
         let m = NSMenu()
         m.autoenablesItems = false
+        if let url = item.tab?.url, CalendarPreview.isCalendar(url) {
+            Self.liveCalendarMenu(m, url: url, profilePath: store.profilePath(item: id), store: store)
+            m.addItem(.separator())
+        }
         MenuItems.add(m, action: "favoriteTab", title: Self.removeTitle(id, store)) { store.removeFromFavorites(id) }
         MenuItems.add(m, action: "renameTab", title: "Rename…") { ui.renamingID = id }
         if let t = item.tab, t.liveItemURL == nil {
@@ -1405,6 +1478,35 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         MenuItems.add(m, action: "closeTab", title: "Close") { actions.closeTab(id) }
         MenuItems.add(m, "Archive") { store.archiveTab(id, reason: .manual) }
         return m
+    }
+
+    /// Arc 1.172.1's Live Calendar ▸ at the top of a Calendar favorite's menu: the last fetch,
+    /// Refresh, then ✓Show Hover Preview, ✓Show Time to Next Meeting and Show Next Meeting Link ▸
+    /// (Never … Ten Minutes Before). With Live Calendar off it offers to turn it back on.
+    private static func liveCalendarMenu(_ m: NSMenu, url: String, profilePath: String?, store: SidebarStore) {
+        let sub = MenuItems.submenu(m, "Live Calendar")
+        m.items.last?.image = NSImage(systemSymbolName: "calendar", accessibilityDescription: nil)
+        guard store.settings.liveCalendar else {
+            MenuItems.add(sub, "Enable Live Calendar") { store.settings.liveCalendar = true }
+            return
+        }
+        let state = LiveCalendarClient.shared.state(for: url, profilePath: profilePath)
+        let status = state?.failed == true ? "Failed to update" : state?.signedOut == true ? "Not signed in" : CalendarPreview.lastFetch(state?.fetched, now: Date())
+        MenuItems.add(sub, status, enabled: false) {}
+        MenuItems.add(sub, "Refresh") { LiveCalendarClient.shared.refresh(favorite: url, profilePath: profilePath) }
+        sub.addItem(.separator())
+        MenuItems.add(sub, "Show Hover Preview", on: store.settings.calendarHoverPreview) { store.settings.calendarHoverPreview.toggle() }
+        MenuItems.add(sub, "Show Time to Next Meeting", on: store.settings.calendarTimeToNextMeeting) {
+            store.settings.calendarTimeToNextMeeting.toggle()
+            NotificationCenter.default.post(name: LiveCalendarClient.changed, object: nil)
+        }
+        let link = MenuItems.submenu(sub, "Show Next Meeting Link")
+        for t in CalendarPreview.LinkTiming.allCases {
+            MenuItems.add(link, t.title, on: store.settings.calendarMeetingLink == t) {
+                store.settings.calendarMeetingLink = t
+                NotificationCenter.default.post(name: LiveCalendarClient.changed, object: nil)
+            }
+        }
     }
 
     /// Shared favorites (#154) take Arc's words: Remove Favorite deletes the favorite.

@@ -900,7 +900,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             // gmailPreview=<unread>: the Gmail favorite's preview card for a sample inbox.
-            if let n = dict["gmailPreview"].flatMap(Int.init), let w = main.window { GmailPreviewCard.shared.demo(unread: n, in: w); return }
+            if let n = dict["gmailPreview"].flatMap(Int.init), let w = main.window { FavoritePreviewCard.shared.demoGmail(unread: n, in: w); return }
+            // calendarPreview=1: the Calendar favorite's card for a sample day (a call in 90 s).
+            if dict["calendarPreview"] != nil, let w = main.window { FavoritePreviewCard.shared.demoCalendar(in: w); return }
+            // previewDismiss=1: the card goes, as when the pointer leaves it.
+            if dict["previewDismiss"] != nil { FavoritePreviewCard.shared.dismiss(animated: false); return }
             // boostZap=1|0: Boost editor's Zap on or off for the open page.
             if let z = dict["boostZap"] { main.debugZap(z == "1"); return }
             // boostPick=1|0|copyThis|copyRelated|zapRelated: the code panel's eyedropper on (the
@@ -1278,6 +1282,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "editSpace", "deleteSpace", "nextSpace", "previousSpace", "manageSpaces", "changeProfile": return !main.isStandalone
         // A Blank Window has no favorites or pinned section to put a tab in (Arc).
         case "favoriteTab", "newFolder", "newGitHubLiveFolder", "resetTab": return !main.isBlank
+        case "joinNextMeeting": return LiveCalendarClient.shared.nextCall()?.meetingURL != nil
         case "closeLittleWindows": return !littleWindows.isEmpty
         case let id? where id.hasPrefix("moveTabToSpace"):
             guard let n = Int(id.dropFirst(14)), n >= 1, n <= store.spaceOrder.count else { return false }
@@ -1515,6 +1520,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "pinTab": if let c = current, !main.isBlank { store.togglePinned(c) }
         case "favoriteTab":
             if let c = current, !main.isBlank { store.isFavorite(c) ? store.removeFromFavorites(c) : store.addToFavorites(c) }
+        case "joinNextMeeting":
+            if let url = LiveCalendarClient.shared.nextCall()?.meetingURL { main.sidebarActions.openURL(url) } else { NSSound.beep() }
         // A pane has no row of its own: its split's name is edited.
         case "renameTab": main.sidebarUI.renamingID = current.map { store.splitContaining($0)?.id ?? $0 }
         case "duplicateTab": if let c = current { store.duplicateTab(c) }

@@ -34,8 +34,8 @@ or Arc-only service), per CONTRIBUTING.md.
 | Restore windows from previous session | Settings ▸ Advanced | done | Settings ▸ Advanced; off keeps the window in use last. |
 | Block Cookie Banners | Settings ▸ General | done | Settings ▸ Privacy; hides the common consent managers' banners (CookieBanners), off by default as in Arc. |
 | Archive Little Arcs after | Settings ▸ Links (6 hours default) | done | Settings ▸ Tabs ▸ Links; a Little Window left alone that long closes into the archive. |
-| Previews (Gmail, Calendar on Favorites) | Settings ▸ General ▸ Previews Settings… | partial | Gmail done: hovering a Gmail favorite shows its unread mail from Gmail's Atom feed (the space's own sign-in), Arc's card and empty state measured on Victor's Arc. Arc shows the empty card when it has no mail to list, signed out too. Calendar not measured: the Victor space has no Google sign-in, so Arc has no events to preview. |
-| Join Meeting ⌃⌘J | Shortcuts | missing | Needs Calendar previews, which need a space signed in to Google Calendar to measure. |
+| Previews (Gmail, Calendar on Favorites) | Settings ▸ General ▸ Previews Settings…, a Calendar favorite's menu ▸ Live Calendar | done | Gmail: the unread mail from Gmail's Atom feed (the space's own sign-in) in Arc's card, rows, ＋ and motion, measured on Victor's signed-in Arc 8 Nov. Calendar: Arc's timeline card, gear menu, Live Calendar ▸ submenu, tile countdown and meeting link; events read through Google's Calendar embed (Arc's own fetch says "Failed to update" in 1.172.1). See "Previews, measured". |
+| Join Meeting ⌃⌘J | Shortcuts | done | The call on now, else the next one today, from a Live Calendar favorite. |
 | Troubleshooting menu | Help ▸ Troubleshooting: Record Trace, Open Task Manager, Reveal Arc Data, Copy Arc Info | done | Export Diagnostics…, Open Task Manager (Chrome's), Reveal Cra Data, Copy Cra Info; Record Trace is Arc-internal. |
 | Help menu | Getting Started, Release Notes, Contact the Team, Visit Help Center, Restore Data | partial | |
 | Ad blocker upsell card, Sync, Account, Membership card, Share Arc, Sign Out, Send to Dia, Share Space | | *skip* | Account/cloud. |
@@ -83,7 +83,7 @@ gains "New Profile".
 
 | Arc tab | Rows Cra lacks |
 |---|---|
-| General | (Previews: Gmail done, Tabs pane; Block Cookie Banners done, under Privacy) |
+| General | (Previews: Gmail done, Tabs pane; Live Calendar in the Calendar favorite's menu, as in Arc; Block Cookie Banners done, under Privacy) |
 | Profiles | "New documents" app (Arc's Notes/Easels); Privacy, Passwords, Credit Cards and Notifications done |
 | Links | "Open Little Arc when clicking on links with ⌥⌘ held"; Archive Little Windows after done |
 | Advanced | Shared Quotes (arc.net) (the rest done) |
@@ -133,7 +133,12 @@ in this sweep (Essential Shortcuts window, Library pages).
   measured live in Arc (names, #RRGGBBAA format, no trace in the page's markup) and fitted to the
   semantic palette Arc stores per space.
 - Edit ▸ Find ▸ Use Selection to Find and Jump to Selection (⌘J).
-- Previews for a Gmail favorite: unread mail in Arc's card on hover (Settings ▸ Tabs).
+- Previews for a Gmail favorite: unread mail in Arc's card on hover (Settings ▸ Tabs); 8 Nov: Arc's full card
+  (sender, age, subject, two lines, scrolling past 270 pt, ＋ for a new mail, rows open the mail) and its motion.
+- Live Calendar on a Google Calendar favorite (8 Nov, Victor's choice: a working version, as Arc's no longer reads):
+  today's timeline on hover, the gear's Last fetch / Refresh / Disable Live Calendar, the favorite's Live Calendar ▸
+  submenu (Show Hover Preview, Show Time to Next Meeting, Show Next Meeting Link ▸ Never … Ten Minutes Before), the
+  tile's countdown, a Join card from two minutes before a call, and Join Meeting ⌃⌘J.
 - Boosts: New Boost, the editor, Zap, CSS/JS code, Library ▸ Boosts, Window ▸ View Boosts…, the Advanced switch.
 - Window dragging from the top of webpages (Victor's choice, 7 Nov: on, as in Arc).
 - AppleScript, Arc's dictionary (Victor's choice, 7 Nov: like Arc, JavaScript off by default).
@@ -170,6 +175,24 @@ in this sweep (Essential Shortcuts window, Library pages).
   Hide Developer Tools", and an arrow.clockwise "Refresh this Page" (Cra shows it for JS, which runs on load). Delete asks "Delete this Boost?" in Arc's
   dialog. Reference captures: docs/screenshots/arc-boost-*.png.
 
+## Previews, measured (Arc 1.172.1, Victor's signed-in Arc, 8 Nov 2026)
+
+- Hovering a favorite that isn't the open tab shows the card about 0.25 s after the tile lights up (once the content is
+  in hand; the first Gmail fetch took ~0.85 s); it grows from about 80 % and fades in over some 4 frames at 60 fps
+  (opacity .21/.47/.76/.95/1). The pointer can move onto the card; once it has left tile and card, the card waits
+  ~0.17 s and fades out, shrinking a little, over ~4 frames. Cra measured the same way: 0.28 s, .14/.29/.82/.97/1,
+  0.15 s (CraCore FavoritePreviewMotion).
+- Gmail: 238 pt wide, at most 270 pt (the fourth row peeks), rows 84 pt with 1 pt lines, 11 pt insets; sender semibold
+  13 and its age ("50s", "1m", "3h"), subject 13, two grey lines 12; the pointer's row a lighter card 3 pt in; a 32 pt ＋
+  9.5 pt from the bottom right. The card refreshes in place when mail arrives.
+- Calendar: 238 × 255 pt, an hour 42 pt with "8 AM" (English, whatever the Mac's clock) at the top left, the current
+  hour's line 13 pt under the top, a cream now line with a dot from 42 pt in, a filled gear and a ＋ at the bottom right.
+  Gear: "Last fetch: Just now" (dimmed), Refresh, Disable Live Calendar. The favorite's menu starts with Live Calendar ▸:
+  status, Refresh, ✓Show Hover Preview, ✓Show Time to Next Meeting, Show Next Meeting Link ▸ Never / On Start /
+  ✓Two Minutes Before / Five / Ten. Arc's LiveCalendarClient (a hidden browser) says "Failed to update" for a calendar
+  with events, so its event blocks, countdown and meeting link couldn't be seen: Cra's are its own, in the card's style.
+  Cra reads the primary calendar the way Google's Calendar embed does (a hidden `calendar/u/<n>/embed` page asks the
+  Calendar API through the page's own signed-in client), every 5 minutes and on hover when older than a minute.
+
 ## Left for later, and why
 
-- Calendar previews and Join Meeting: Arc shows them for a Google Calendar favorite in a space signed in to Google; Victor's Arc has neither (checked 7 Nov: calendar.google.com shows the signed-out landing page). Signing in to his accounts is his to do.

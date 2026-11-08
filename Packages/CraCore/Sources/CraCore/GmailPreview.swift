@@ -8,7 +8,14 @@ public enum GmailPreview {
     public struct Mail: Equatable, Sendable {
         public var from: String
         public var subject: String
-        public init(from: String, subject: String) { (self.from, self.subject) = (from, subject) }
+        /// The feed's opening lines of the mail, under the subject in Arc's card.
+        public var snippet: String
+        public var received: Date?
+        /// The mail in Gmail (the feed's alternate link).
+        public var link: String?
+        public init(from: String, subject: String, snippet: String = "", received: Date? = nil, link: String? = nil) {
+            (self.from, self.subject, self.snippet, self.received, self.link) = (from, subject, snippet, received, link)
+        }
     }
 
     public struct Inbox: Equatable, Sendable {
@@ -28,8 +35,9 @@ public enum GmailPreview {
         return "https://mail.google.com/mail/u/\(account)/feed/atom"
     }
 
-    /// The feed's unread count and its newest mails (sender, subject), at most `limit`.
-    public static func parse(_ xml: String, limit: Int = 5) -> Inbox? {
+    /// The feed's unread count and its newest mails, at most `limit` (the feed holds 20; Arc's card
+    /// scrolls through them).
+    public static func parse(_ xml: String, limit: Int = 20) -> Inbox? {
         guard xml.contains("<feed") else { return nil }
         let count = Int(first("fullcount", in: xml) ?? "") ?? 0
         var mails: [Mail] = []
@@ -37,10 +45,44 @@ public enum GmailPreview {
         while mails.count < limit, let start = rest.range(of: "<entry>"), let end = rest.range(of: "</entry>", range: start.upperBound..<rest.endIndex) {
             let entry = String(rest[start.upperBound..<end.lowerBound])
             let author = first("author", in: entry).flatMap { first("name", in: $0) } ?? ""
-            mails.append(Mail(from: unescape(author), subject: unescape(first("title", in: entry) ?? "")))
+            mails.append(Mail(from: unescape(author), subject: unescape(first("title", in: entry) ?? ""),
+                              snippet: unescape(first("summary", in: entry) ?? ""),
+                              received: (first("issued", in: entry) ?? first("modified", in: entry)).flatMap(date),
+                              link: href(in: entry).map(unescape)))
             rest = rest[end.upperBound...]
         }
         return Inbox(unread: count, mails: mails)
+    }
+
+    /// Arc's age of a mail in the card: "50s", "2m", "3h", then days.
+    public static func age(of date: Date, now: Date) -> String {
+        let s = max(0, Int(now.timeIntervalSince(date)))
+        switch s {
+        case ..<60: return "\(s)s"
+        case ..<3600: return "\(s / 60)m"
+        case ..<86400: return "\(s / 3600)h"
+        default: return "\(s / 86400)d"
+        }
+    }
+
+    /// Arc's ＋ on the card: a new mail in the favorite's account.
+    public static func composeURL(for favorite: String) -> String? {
+        guard let feed = feedURL(for: favorite) else { return nil }
+        return feed.replacingOccurrences(of: "/feed/atom", with: "/#inbox?compose=new")
+    }
+
+    private static func date(_ s: String) -> Date? {
+        let f = ISO8601DateFormatter()
+        if let d = f.date(from: s) { return d }
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f.date(from: s)
+    }
+
+    private static func href(in entry: String) -> String? {
+        guard let link = entry.range(of: "<link"), let end = entry.range(of: ">", range: link.upperBound..<entry.endIndex),
+              let h = entry.range(of: "href=\"", range: link.upperBound..<end.lowerBound),
+              let q = entry.range(of: "\"", range: h.upperBound..<end.lowerBound) else { return nil }
+        return String(entry[h.upperBound..<q.lowerBound])
     }
 
     private static func first(_ tag: String, in s: String) -> String? {

@@ -221,6 +221,10 @@ final class KeyBindingRegistry {
             KeyAction(id: "recentTabBackward", name: "Previous Recent Tab", section: .tabs, shortcuts: [Shortcut(Shortcut.tab, [.control, .shift])], inCommandBar: false),
             KeyAction(id: "clearToday", name: "Clear Today", section: .tabs, shortcuts: [Shortcut("k", cmdShift)], triggers: ["clear", "tidy"]),
             KeyAction(id: "favoriteTab", name: "Add to Favorites", section: .tabs, shortcuts: [], triggers: ["favorite", "top app"]),
+            // Arc's Join Meeting ⌃⌘J (Settings ▸ Shortcuts; the command bar's "Join next video conference"):
+            // the call from a Calendar favorite's Live Calendar.
+            KeyAction(id: "joinNextMeeting", name: "Join Meeting", section: .none, shortcuts: [Shortcut("j", [.control, .command])],
+                      triggers: ["join", "meeting", "video call", "join next video conference"]),
             KeyAction(id: "renameTab", name: "Rename Tab…", section: .tabs, shortcuts: [], triggers: ["rename"]),
             KeyAction(id: "duplicateTab", name: "Duplicate Tab", section: .tabs, shortcuts: [], triggers: ["duplicate"]),
             KeyAction(id: "resetTab", name: "Reset Pinned Tab", section: .tabs, shortcuts: [], triggers: ["reset", "home"]),
