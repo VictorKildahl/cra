@@ -23,6 +23,13 @@ cra://debug?sidePanel=close
 wait 1
 cra://debug?extensionAction=${SIDE_PANEL_EXTENSION_ID}
 wait 2
+# In Chrome a side panel page is not a tab: tabs.getCurrent() resolves undefined. Claude's panel
+# checks that and refused to run in Cra's, which is a page in a browser of its own. A relaunched
+# Cra's stdout isn't kept, so the panel answers by opening panel-<answer>.localhost, a host
+# cra.log names.
+cra://debug?cdp=Runtime.evaluate&target=sidePanel&params={"expression":"chrome.tabs.getCurrent().then(t=>chrome.tabs.create({url:'http://panel-'+(t?'tab':'none')+'.localhost/',active:false}))","awaitPromise":true}
+expect-log for panel-[a-z]+\.localhost
+expect-log for panel-none\.localhost
 cra://debug?removeExtension=${SIDE_PANEL_EXTENSION_ID}
 wait 1
 reject-log fault:

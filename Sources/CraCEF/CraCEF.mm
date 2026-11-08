@@ -96,6 +96,16 @@ static NSArray<NSNumber*>* g_linkMenuBackground = @[@NO, @YES];
 /// (the page's world, then Cra's isolated world).
 static NSArray<NSString*>* g_documentStartParams = nil;
 
+/// Page.addScriptToEvaluateOnNewDocument params for `source` in `world` (nil: the page's own
+/// world), or nil when there is no script.
+static NSString* DocumentStartParams(NSString* source, NSString* world) {
+    if (!source.length) return nil;
+    NSMutableDictionary* params = [@{@"source": source, @"runImmediately": @YES} mutableCopy];
+    if (world) params[@"worldName"] = world;
+    NSData* json = [NSJSONSerialization dataWithJSONObject:params options:0 error:nil];
+    return json ? [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding] : nil;
+}
+
 /// Removes separators a removed item left at either end or next to another one. Hidden items
 /// don't count: Chrome's model keeps some it doesn't show.
 static void CraTidySeparators(CefRefPtr<CefMenuModel> model) {
@@ -2116,6 +2126,10 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     NSMutableSet<NSNumber*>* _activeDownloads;
     BOOL _parked;
     NSUInteger _audibleChanges;
+    /// This page's own document start script (Page.addScriptToEvaluateOnNewDocument params), and
+    /// the URL it waits for: the browser starts on about:blank and loads it once the script is in.
+    NSString* _ownDocumentStartParams;
+    NSString* _scriptedURL;
 }
 
 - (instancetype)initWithFrame:(NSRect)frame url:(NSString*)url delegate:(id<CraBrowserDelegate>)delegate {
@@ -2128,6 +2142,11 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 
 - (instancetype)initWithFrame:(NSRect)frame url:(NSString*)url delegate:(id<CraBrowserDelegate>)delegate
                     incognito:(BOOL)incognito profilePath:(NSString*)profilePath {
+    return [self initWithFrame:frame url:url delegate:delegate incognito:incognito profilePath:profilePath documentStartScript:nil];
+}
+
+- (instancetype)initWithFrame:(NSRect)frame url:(NSString*)url delegate:(id<CraBrowserDelegate>)delegate
+                    incognito:(BOOL)incognito profilePath:(NSString*)profilePath documentStartScript:(NSString*)script {
     self = [super init];
     if (!self) return nil;
     _delegate = delegate;
@@ -2137,6 +2156,11 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     _currentTitle = @"";
     _pendingURL = url;
     _isPopupHost = (url == nil);
+    _ownDocumentStartParams = url ? DocumentStartParams(script, nil) : nil;
+    if (_ownDocumentStartParams) {
+        _scriptedURL = url;
+        _pendingURL = @"about:blank";
+    }
     _containerView = [[NSView alloc] initWithFrame:frame];
     _containerView.wantsLayer = YES;
     _containerView.autoresizesSubviews = YES;
@@ -2208,12 +2232,24 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     _browser = browser;
     self.isCreated = YES;
     // The page agent runs new-document scripts only while its domain is enabled.
-    if (g_documentStartParams.count) [self sendDevToolsMethod:@"Page.enable" params:@"{}" completion:^(NSString*, NSString*) {}];
+    if (g_documentStartParams.count || _ownDocumentStartParams)
+        [self sendDevToolsMethod:@"Page.enable" params:@"{}" completion:^(NSString*, NSString*) {}];
     for (NSString* params in g_documentStartParams)
         [self sendDevToolsMethod:@"Page.addScriptToEvaluateOnNewDocument" params:params
                       completion:^(NSString*, NSString* error) {
                           if (error) NSLog(@"Cra: document start script not installed: %@", error);
                       }];
+    if (_ownDocumentStartParams) {
+        // The page's scripts must never run without it, so its page loads only once it is in.
+        NSString* url = _scriptedURL;
+        _scriptedURL = nil;
+        __weak CraBrowser* weakSelf = self;
+        [self sendDevToolsMethod:@"Page.addScriptToEvaluateOnNewDocument" params:_ownDocumentStartParams
+                      completion:^(NSString*, NSString* error) {
+                          if (error) NSLog(@"Cra: document start script not installed: %@", error);
+                          if (url) [weakSelf loadURL:url];
+                      }];
+    }
     if (_pendingFocus) {
         _pendingFocus = NO;
         browser->GetHost()->SetFocus(true);
@@ -2695,12 +2731,8 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 }
 + (void)setDocumentStartScript:(NSString*)script isolatedScript:(NSString*)isolatedScript world:(NSString*)world {
     NSMutableArray<NSString*>* all = [NSMutableArray array];
-    for (NSDictionary* params in @[@{@"source": script ?: @"", @"runImmediately": @YES},
-                                   @{@"source": isolatedScript ?: @"", @"worldName": world ?: @"", @"runImmediately": @YES}]) {
-        if (![params[@"source"] length]) continue;
-        NSData* json = [NSJSONSerialization dataWithJSONObject:params options:0 error:nil];
-        if (json) [all addObject:[[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding]];
-    }
+    if (NSString* params = DocumentStartParams(script, nil)) [all addObject:params];
+    if (NSString* params = DocumentStartParams(isolatedScript, world ?: @"")) [all addObject:params];
     g_documentStartParams = all;
 }
 + (BOOL)chromeHosting { return g_chromeHosting; }

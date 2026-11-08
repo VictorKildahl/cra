@@ -142,6 +142,9 @@ final class ExtensionSidePanelController: NSObject, @preconcurrency CraBrowserDe
 
     var isShowing: Bool { state != nil }
 
+    /// The panel page's browser, for scripts/scenario.sh (cra://debug?cdp=…&target=sidePanel).
+    var pageBrowser: CraBrowser? { browser }
+
     /// Owns the browser `b` (the panel page).
     func owns(_ b: CraBrowser) -> Bool { browser === b }
 
@@ -166,7 +169,8 @@ final class ExtensionSidePanelController: NSObject, @preconcurrency CraBrowserDe
         } else {
             closeBrowser()
             let b = CraBrowser(frame: NSRect(x: 0, y: 0, width: ExtensionSidePanelWidth.initial, height: 600), url: wanted.url,
-                               delegate: self, incognito: false, profilePath: profilePath)
+                               delegate: self, incognito: false, profilePath: profilePath,
+                               documentStartScript: PageScript.extensionSidePanel)
             browser = b
             if let host = b.hostWindow { attach(host) }
             Task { [weak self] in await self?.resolvePageTarget(of: b) }

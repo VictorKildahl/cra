@@ -1167,9 +1167,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             if let method = dict["cdp"] {
-                // target=little: the newest Little Window's (or Peek's) page; tab=<id>: that tab's page.
+                // target=little: the newest Little Window's (or Peek's) page; target=sidePanel: the
+                // extension side panel's page; tab=<id>: that tab's page.
                 let tab = dict["tab"].flatMap(UUID.init(uuidString:)).flatMap { main.browsers.runtime(for: $0)?.browser }
-                let b = dict["target"] == "little" ? littleWindows.last?.browser : tab ?? main.currentBrowser
+                let b = switch dict["target"] {
+                case "little": littleWindows.last?.browser
+                case "sidePanel": main.sidePanel.pageBrowser
+                default: tab ?? main.currentBrowser
+                }
                 b?.sendDevToolsMethod(method, params: dict["params"] ?? "{}") { result, error in
                     NSLog("Cra cdp %@ → %@", method, result ?? "error: \(error ?? "?")")
                 }

@@ -57,6 +57,22 @@ enum PageScript {
     })();
     """
 
+    /// An extension side panel's page (ExtensionSidePanelController), in its own world. Chrome's
+    /// side panel page is not a tab, so tabs.getCurrent() gives it undefined, and Claude's panel
+    /// refuses to run where it gets one. Cra's panel is a page in a browser of its own, which
+    /// Chromium counts as a tab.
+    static let extensionSidePanel = """
+    (() => {
+      const tabs = globalThis.chrome?.tabs;
+      if (!tabs?.getCurrent) return;
+      Object.defineProperty(tabs, 'getCurrent', { configurable: true, writable: true,
+        value: { getCurrent(callback) {
+          if (typeof callback !== 'function') return Promise.resolve(undefined);
+          Promise.resolve().then(() => callback(undefined));
+        } }.getCurrent });
+    })();
+    """
+
     /// Cra's isolated world.
     static let isolatedWorld = """
     (() => {

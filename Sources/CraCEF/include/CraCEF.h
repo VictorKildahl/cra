@@ -181,6 +181,11 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
                     incognito:(BOOL)incognito;
 - (instancetype)initWithFrame:(NSRect)frame url:(nullable NSString *)url delegate:(nullable id<CraBrowserDelegate>)delegate
                     incognito:(BOOL)incognito profilePath:(nullable NSString *)profilePath;
+/// `script` runs in this page's own world before the page's scripts, after the ones every page
+/// gets (+[CraCEFRuntime setDocumentStartScript:…]); the page loads once it is in place.
+- (instancetype)initWithFrame:(NSRect)frame url:(nullable NSString *)url delegate:(nullable id<CraBrowserDelegate>)delegate
+                    incognito:(BOOL)incognito profilePath:(nullable NSString *)profilePath
+          documentStartScript:(nullable NSString *)script;
 
 - (void)loadURL:(NSString *)url;
 - (void)goBack;
