@@ -91,6 +91,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         BoostStore.changed = { [weak self] host in for m in self?.mainWindows ?? [] { m.browsers.reapplyBoosts(host: host) } }
         mainWindows = store.prefs.windows.map { MainWindowController(app: self, session: $0) }
         followKeyWindow()
+        observeFlippingRows()
         // First launch: the default browser step and the import are the onboarding and
         // the browser window appears once they are done (Dia does the same).
         if needsOnboarding {
@@ -504,7 +505,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 MainActor.assumeIsolated {
                     guard let self, var w = note.object as? NSWindow else { return }
                     while let parent = w.parent { w = parent }
-                    if let c = self.mainWindows.first(where: { $0.window === w }) { self.store.activeWindowID = c.windowID }
+                    if let c = self.mainWindows.first(where: { $0.window === w }) {
+                        self.store.activeWindowID = c.windowID
+                        self.retitleFlippingRows()
+                    }
                     self.littleWindows.first { $0.window === w }?.refreshTarget()
                 }
             }
@@ -984,6 +988,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
+            // sidebarShown=<label>: whether the main window shows its sidebar, and the View menu's
+            // Hide/Show Sidebar row as the menu bar has it: title and the key it answers to, which
+            // is the user's own when System Settings ▸ Keyboard ▸ App Shortcuts names the row (#253).
+            if let label = dict["sidebarShown"] {
+                func row(in menu: NSMenu) -> NSMenuItem? {
+                    for i in menu.items {
+                        if i.representedObject as? String == "toggleSidebar" { return i }
+                        if let sub = i.submenu, let found = row(in: sub) { return found }
+                    }
+                    return nil
+                }
+                let item = NSApp.mainMenu.flatMap(row(in:))
+                let mods = item.map { m in
+                    [(NSEvent.ModifierFlags.control, "⌃"), (.option, "⌥"), (.shift, "⇧"), (.command, "⌘")]
+                        .filter { m.keyEquivalentModifierMask.contains($0.0) }.map(\.1).joined()
+                } ?? ""
+                CraLog.note("sidebar shown \(label): visible=\(main.sidebarVisible ? 1 : 0) menu=\(item?.title ?? "-") key=\(mods)\(item?.keyEquivalent ?? "-")")
+                return
+            }
             // peekShown=<label>: the page behind a Peek in each window, faded and drawn back or whole (PR #221).
             if let label = dict["peekShown"] {
                 for m in mainWindows { NSLog("Cra peek shown %@: %@", label, m.peekBackdropShown()) }
@@ -1264,14 +1287,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NSApp.sendAction(Self.chromiumPasteAndMatchStyle, to: page, from: sender)
     }
 
+    /// The title of a menu row that says what it will do, as Arc's do: Hide Sidebar or Show Sidebar.
+    private func flippingTitle(_ id: String) -> String? {
+        guard let main = self.main else { return nil }
+        switch id {
+        case "toggleSidebar": return main.sidebarVisible ? "Hide Sidebar" : "Show Sidebar"
+        case "toggleToolbar": return store.settings.showToolbar ? "Hide Toolbar" : "Show Toolbar"
+        case "collapsePinned": return store.isPinnedCollapsed(main.focusedSpaceID) ? "Expand Pinned Tabs" : "Collapse Pinned Tabs"
+        default: return nil
+        }
+    }
+    private static let flippingRows = ["toggleSidebar", "toggleToolbar", "collapsePinned"]
+
+    /// System Settings ▸ Keyboard ▸ App Shortcuts names a menu row by its title, and AppKit looks a
+    /// key up among the titles the menu bar has at that moment, before it validates the row. So a
+    /// flipping row takes its new title when what it shows changes, not when the menu next opens:
+    /// after ⌘S hid the sidebar, a shortcut given to Show Sidebar found only "Hide Sidebar" (#253).
+    private func observeFlippingRows() {
+        observeChanges(of: { [weak self] in self.map { s in Self.flippingRows.compactMap(s.flippingTitle) } ?? [] }) { [weak self] _ in
+            self?.retitleFlippingRows()
+        }
+    }
+
+    /// Also when another window comes in front (its sidebar may be hidden) and after the menus are rebuilt.
+    private func retitleFlippingRows() {
+        func walk(_ menu: NSMenu) {
+            for item in menu.items {
+                if let id = item.representedObject as? String, let title = flippingTitle(id), item.title != title { item.title = title }
+                if let sub = item.submenu { walk(sub) }
+            }
+        }
+        NSApp.mainMenu.map(walk)
+    }
+
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         if item.action == #selector(pasteAsPlainText(_:)) { return pageTakingPasteAndMatchStyle != nil }
+        if let id = item.representedObject as? String, let title = flippingTitle(id), item.title != title { item.title = title }
         switch item.representedObject as? String {
-        case "toggleSidebar": item.title = main.sidebarVisible ? "Hide Sidebar" : "Show Sidebar"
-        case "toggleToolbar": item.title = store.settings.showToolbar ? "Hide Toolbar" : "Show Toolbar"
-        case "collapsePinned":
-            item.title = store.isPinnedCollapsed(main.focusedSpaceID) ? "Expand Pinned Tabs" : "Collapse Pinned Tabs"
-            return !main.isStandalone
+        case "collapsePinned": return !main.isStandalone
         case "stayOnTop": item.state = main.staysOnTop ? .on : .off
         case "allowAppleEventsJavaScript": item.state = store.settings.allowAppleEventsJavaScript ? .on : .off
         case "appearanceAutomatic", "appearanceLight", "appearanceDark":
@@ -1826,6 +1879,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NSApp.helpMenu = help
 
         NSApp.mainMenu = menubar
+        retitleFlippingRows()
     }
 
     /// Help menu links open as a tab in the normal window in use, like Arc's.

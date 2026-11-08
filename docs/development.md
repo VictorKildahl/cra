@@ -121,7 +121,9 @@ Cra were in front or behind, e.g. the download bin's dimming), `windowSize=1280x
 memory-pressure sweep at that level, if Settings ▸ Tabs has it on), `stall=<ms>` (blocks the main
 thread), `perfReport=<path>` (the recorder's perf.json now), `systemAppearance=light|dark|system`
 (the appearance Auto space themes follow, without changing the Mac's), `themeEditor=1` (Edit
-Theme Color… for the focused space), `relaunch=1`, `quit=1`, and `nowPlaying=state|toggle|next|previous|pip|dismiss` (the sidebar player's
+Theme Color… for the focused space), `sidebarShown=<label>` (whether the window shows its sidebar,
+and the View menu's Hide/Show Sidebar row: its title and the key it answers to, an App Shortcut's
+when one names it), `relaunch=1`, `quit=1`, and `nowPlaying=state|toggle|next|previous|pip|dismiss` (the sidebar player's
 newest card, then a `Cra nowPlaying[<label>] <host> playing=… prev=… next=… video=… pip=…` line per card
 on stdout; `&label=` tells checks apart).
 
