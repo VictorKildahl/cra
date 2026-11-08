@@ -1574,13 +1574,26 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// its settings tab already open): selected, as in Arc (GitHub #38). A page that asked
     /// (Chromium allows that after a click on its notification, or from its opener) also
     /// brings the window and Cra to the front, like Arc: Messenger's chat opens on a click.
+    /// What comes forward is TabActivationRaise's: never this window from behind another
+    /// browser window in use (#239).
     func browserManagerActivationRequested(_ tabID: UUID, byPage: Bool) {
         store.selectTab(tabID, window: windowID)
-        if byPage, !HitchMonitor.background {
+        var key = NSApp.keyWindow
+        while let parent = key?.parent { key = parent }
+        let windowIsKey = key != nil && key === window
+        let otherKey = key.map { k in app.mainWindows.contains { $0 !== self && $0.window === k } } ?? false
+        let outcome = TabActivationRaise.outcome(byPage: byPage, appActive: NSApp.isActive, windowIsKey: windowIsKey,
+                                                 anotherBrowserWindowIsKey: otherKey)
+        CraLog.note("tab \(tabID.uuidString.prefix(8)) brought to the front by its \(byPage ? "page" : "extension"): "
+                    + "\(outcome) (window key=\(windowIsKey), another window key=\(otherKey))")
+        switch outcome {
+        case .windowAndApp where !HitchMonitor.background:
             showWindow(nil)
             NSApp.activate(ignoringOtherApps: true)
-        } else if NSApp.isActive, window?.isKeyWindow == false {
+        case .window:
             showWindow(nil)
+        default:
+            break
         }
     }
 
@@ -3469,6 +3482,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let page = shell.webContainer.convert(shell.webContainer.bounds, to: nil)
         slowResponseToastTab = nil
         toast.show(text, action: action, page: page, in: window, theme: focusedSpace.theme)
+    }
+
+    /// The update banner's news while this window's sidebar (which carries the banner) is hidden:
+    /// Cra's toast with the banner's action, staying until its ✕ so it isn't missed.
+    func showUpdateToast(_ notice: UpdateNotice) {
+        guard let window else { return }
+        let page = shell.webContainer.convert(shell.webContainer.bounds, to: nil)
+        toast.show(notice.title, action: ShinyToast.Action(title: notice.button) { SoftwareUpdater.shared.act(on: notice) },
+                   page: page, in: window, theme: focusedSpace.theme, onClose: {})
     }
 
     /// Navigate the focused tab (an empty split pane gets its first page here).
