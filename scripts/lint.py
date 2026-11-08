@@ -23,6 +23,9 @@ gains a finding fails, one that loses one is reported so the baseline can come d
   importer-without-fixture
       An importer (enum …Importer) without a checked-in profile under Tests/Fixtures/<Name>:
       parsers are tested against files in the source browser's format, not dictionaries.
+  app-icon-without-png
+      An AppIconManager preset without resources/app-icons/<id>.png (scripts/make-app-icons.swift
+      writes them): the picker would show an empty tile and the Dock would keep the old icon.
   core-platform-import
       Packages/CraCore importing AppKit, Cocoa, SwiftUI, UIKit or CraCEF. The core is models and
       decisions that build and test without a window or Chromium (#51); what needs one stays in
@@ -113,6 +116,10 @@ def findings():
             for name in re.findall(r"\benum (\w+)Importer\b", line):
                 if not os.path.isdir(os.path.join(ROOT, "Tests", "Fixtures", name)):
                     hit("importer-without-fixture", f"{rel}:{name}", i)
+            if rel == "Services/AppIconManager.swift":
+                for icon in re.findall(r'\bOption\(id: "(\w+)"', line):
+                    if not os.path.isfile(os.path.join(ROOT, "resources", "app-icons", f"{icon}.png")):
+                        hit("app-icon-without-png", f"{rel}:{icon}", i)
     for dirpath, _, names in os.walk(CORE):
         for n in sorted(names):
             if n.endswith(".swift"):
