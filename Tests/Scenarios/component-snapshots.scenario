@@ -47,3 +47,10 @@ snapshot SplitRowView split-row
 cra://action/renameTab   # from a pane, the split's name is edited in its row
 wait 1
 snapshot SplitRowView split-row-renaming
+# A long name at rest keeps a 21 pt tail; on hover it runs to 13 pt before the close button, as in
+# Arc, where it stopped 24 pt before it (#243).
+cra://open?url=${PAGE}?n=with%20a%20name%20long%20enough%20to%20run%20under%20the%20close%20button
+wait 3
+snapshot TabRowView,0 today-tab-row-long
+cra://debug?hover=TabRowView,0
+snapshot TabRowView,0 today-tab-row-long-hover

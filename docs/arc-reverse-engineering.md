@@ -1214,6 +1214,11 @@ so test pages must not use it). Live HID clicks and hovers at 1x, plus a static 
   | Today split, open | an ✕ inside every pane | Archive this item | that pane is archived, the split becomes a tab |
   | Today split, background | one ✕ at the row's end | Archive this item | the whole split is archived |
 
+- [O reporter, 2x screenshots, GitHub #243] With the button shown, a long name's ink ends 20.5 pt before the ✕'s
+  ink (✕ centred 18 pt from the fill's end), so its box ends ~13.5 pt before the button. At rest the rows look the
+  same as Cra's 21 pt tail (not measured). Cra (`TabRowTrailing`): the name's box 15 pt before the first trailing
+  control (13 pt from the label's widened box), 21 pt before the row's end with none; it was 26 pt, kept from the
+  old trailing ↩ button.
 - [O live] ⌘W on several picked tabs closes them all; [O static] a Today tab among them archives every one,
   otherwise they all deselect. The ⌘W keycaps only show on the open row's tooltip.
 - [O live] Split cells: 4 pt inside the fill, 4 pt apart, each favicon 6 pt into its cell. An open split draws

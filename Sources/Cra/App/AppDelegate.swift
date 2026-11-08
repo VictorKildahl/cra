@@ -938,6 +938,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             if let v = dict["fullscreen"], let w = main.window, (v == "1") != w.styleMask.contains(.fullScreen) { w.toggleFullScreen(nil); return }
             if let spec = dict["snapshot"], let out = dict["out"] { ViewSnapshot.write(spec, in: main.window, to: out); return }
+            // hover=TabRowView,1: that sidebar row hovered as if the pointer were on it (snapshots of
+            // hover-only controls, #243) until the pointer moves or the sidebar changes.
+            if let spec = dict["hover"] {
+                guard let row = ViewSnapshot.find(spec, in: main.window) as? SidebarRowView else {
+                    CraLog.note("hover: no visible \(spec)")
+                    return
+                }
+                row.list?.debugHover(row)
+                return
+            }
             if let size = dict["windowSize"]?.split(separator: "x").compactMap({ Double($0) }), size.count == 2, let w = main.window {
                 w.setFrame(NSRect(x: w.frame.minX, y: w.frame.maxY - size[1], width: size[0], height: size[1]), display: true)
                 return

@@ -1213,17 +1213,16 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
             soundButton.frame = NSRect(x: x - (s.width - Self.soundGlyphWidth) / 2, y: (h - s.height) / 2, width: s.width, height: s.height)
             x += Self.soundGlyphWidth + 8
         }
-        // HStack(spacing: 11) with a Spacer(minLength: 4) between the text and the trailing items.
-        var right = bounds.width - 6
-        for v in accessories.reversed() {
-            // The unread dot is centred where the close button shows on hover, which is also
-            // under a live folder's refresh button (FolderRowView, Arc lines them up too).
+        // The unread dot and a peek badge are centred where the close button shows on hover, which
+        // is also under a live folder's refresh button (FolderRowView, Arc lines them up too).
+        let trailing = TabRowTrailing.layout(rowWidth: bounds.width, textX: x, controls: accessories.map {
+            TabRowTrailing.Control(width: $0.frame.width, slot: $0 === unreadDot || $0 === peekBadge ? Self.closeSize : nil)
+        })
+        for (v, vx) in zip(accessories, trailing.controlX) {
             let s = v.frame.size
-            let slot = v === unreadDot || v === peekBadge ? Self.closeSize : s.width
-            v.frame = NSRect(x: right - slot / 2 - s.width / 2, y: (h - s.height) / 2, width: s.width, height: s.height)
-            right = v.frame.minX - 11
+            v.frame = NSRect(x: vx, y: (h - s.height) / 2, width: s.width, height: s.height)
         }
-        let textWidth = max(0, right - 4 - 11 - x)
+        let textWidth = trailing.textWidth
         let th = titleLabel.intrinsicContentSize.height
         if shownSubtitle != nil {
             let sh = subtitleLabel.intrinsicContentSize.height

@@ -819,6 +819,12 @@ final class SpaceListView: NSView, NSDraggingSource {
         hoverAt(inside && document.isMouseInside ? p : nil)
     }
 
+    /// Scenarios (cra://debug?hover=): `row` takes the hover as if the pointer were on its middle.
+    /// The pointer's next move, or the list's next sync, puts it back where the pointer is.
+    func debugHover(_ row: SidebarRowView) {
+        hoverAt(row.convert(NSPoint(x: row.bounds.midX, y: row.bounds.midY), to: nil))
+    }
+
     private func hoverAt(_ windowPoint: NSPoint?) {
         var target: SidebarRowView?
         var local = NSPoint.zero
