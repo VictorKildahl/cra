@@ -1444,6 +1444,14 @@ final class SidebarStore {
         touch()
     }
 
+    func setFolderSymbol(_ symbol: FolderSymbol?, for id: UUID) {
+        guard var item = items[id], item.isFolder, !item.isLiveFolder, !item.isTabGroup,
+              item.folderSymbol != symbol else { return }
+        item.folderSymbol = symbol
+        items[id] = item
+        touch()
+    }
+
     /// A new folder at the top of the space's pinned list holding these tabs.
     @discardableResult
     func createFolder(with tabIDs: [UUID], named name: String = "New Folder") -> SidebarItem {

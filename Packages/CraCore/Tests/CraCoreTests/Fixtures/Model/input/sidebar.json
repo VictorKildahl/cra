@@ -38,7 +38,7 @@
      "data": {"tab": {"_0": {"url": "https://mail.example.com/inbox", "savedURL": "https://mail.example.com/", "savedTitle": "Inbox (3)", "muted": true,
        "timeLastActiveAt": "2026-10-30T09:00:00Z", "faviconKey": "mail.example.com", "customIconKey": "custom-mail", "tileColor": "#E63333"}}}},
     {"id": "D0000000-0000-0000-0000-000000000002", "parentID": "C0000000-0000-0000-0000-000000000002", "title": "Reading", "children": ["D0000000-0000-0000-0000-000000000003"], "isUnread": false, "createdAt": "2026-10-03T08:00:00Z",
-     "data": {"folder": {}}, "folderIcon": "white"},
+     "data": {"folder": {}}, "folderIcon": "white", "folderSymbol": "code"},
     {"id": "D0000000-0000-0000-0000-000000000003", "parentID": "D0000000-0000-0000-0000-000000000002", "title": "My blog", "children": [], "isUnread": true, "createdAt": "2026-10-03T08:00:00Z",
      "data": {"tab": {"_0": {"url": "https://blog.example.org/post/1", "savedURL": "https://blog.example.org/", "savedTitle": "Post one",
        "activeTabBeforeCreationID": "D0000000-0000-0000-0000-000000000001", "faviconKey": "blog.example.org"}}}},

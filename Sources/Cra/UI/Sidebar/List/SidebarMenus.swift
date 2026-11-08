@@ -30,7 +30,11 @@ enum SidebarMenus {
     private static func submenu(_ menu: NSMenu, _ title: String, image: NSImage? = nil) -> NSMenu {
         let sub = Self.menu()
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        item.image = image
+        if let image {
+            let icon = image.copy() as! NSImage
+            icon.size = NSSize(width: 16, height: 16)
+            item.image = icon
+        }
         item.submenu = sub
         menu.addItem(item)
         return sub
@@ -179,6 +183,7 @@ enum SidebarMenus {
         let store = list.store, ui = list.ui
         let id = item.id
         let menu = menu()
+        add(menu, "Change Icon…") { list.showFolderIconPicker(id) }
         add(menu, "Rename…") { ui.renamingID = id }
         add(menu, "New Folder Inside") {
             let f = store.createFolder(named: "New Folder", in: id, index: 0)

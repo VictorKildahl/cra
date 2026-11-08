@@ -266,7 +266,8 @@ final class SpaceListView: NSView, NSDraggingSource {
                     tabCount: expanded ? 0 : store.tabs(under: item.id).count,
                     liveBusy: refreshing.contains(item.id), liveError: item.liveFolder.flatMap(LiveFolderText.warning)?.help,
                     liveSignInURL: item.liveFolder.flatMap(LiveFolderText.warning)?.signInURL,
-                    liveHelp: LiveFolderText.refreshHelp(item.liveFolder), liveSource: item.liveFolder?.source))
+                    liveHelp: LiveFolderText.refreshHelp(item.liveFolder), liveSource: item.liveFolder?.source,
+                    symbol: item.folderSymbol))
                 out.append(row)
                 guard expanded else {
                     // Arc keeps the open tab of a closed folder in sight, one level in (FolderPeek).
@@ -709,6 +710,13 @@ final class SpaceListView: NSView, NSDraggingSource {
         for l in all.allObjects where l.ui === ui {
             guard let row = l.views[.item(folderID)] as? FolderRowView else { continue }
             FolderPreviewController.shared.debugOpen(folderID, row: row, list: l)
+        }
+    }
+
+    func showFolderIconPicker(_ id: UUID) {
+        guard let row = views[.item(id)] as? FolderRowView, let item = store.item(id) else { return }
+        FolderIconPicker.show(current: item.folderSymbol, anchor: row, rect: row.iconRect) { [store] symbol in
+            store.setFolderSymbol(symbol, for: id)
         }
     }
 

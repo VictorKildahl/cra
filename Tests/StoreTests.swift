@@ -43,6 +43,7 @@ enum StoreTests {
         incognitoStaysOffDisk()
         pinnedURL()
         tabFavicons()
+        folderSymbols()
         moveTabToSpace()
         folderPeek()
         collapsedPinnedPeek()
@@ -1298,6 +1299,39 @@ enum StoreTests {
         store.selectTab(before.id, window: main)
         store.selectTab(pl.id, window: main)
         expect(store.closeSuccessor(ofPinned: pl.id, window: main) == nil, "a pinned split hands over to nothing (Arc)")
+    }
+
+    @MainActor
+    private static func folderSymbols() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let folder = store.createFolder(named: "Symbols", in: store.focusedSpace.pinnedContainerID)
+        let nested = store.createFolder(named: "Nested", in: folder.id)
+        let tab = store.createTab(url: "https://example.com", pinned: true, select: false, parent: folder.id)
+        store.setFolderIcon(.white, for: folder.id)
+        store.setFolderSymbol(.code, for: folder.id)
+        store.setFolderSymbol(.star, for: nested.id)
+        expect(store.item(folder.id)?.folderSymbol == .code && store.item(nested.id)?.folderSymbol == .star,
+               "each folder keeps its own symbol")
+        store.setFolderSymbol(.heart, for: tab.id)
+        store.setFolderSymbol(.heart, for: store.focusedSpace.pinnedContainerID)
+        store.setFolderSymbol(.heart, for: UUID())
+        expect(store.item(tab.id)?.folderSymbol == nil && store.item(store.focusedSpace.pinnedContainerID)?.folderSymbol == nil,
+               "symbols are only set on folders")
+        store.saveAll()
+        let reloaded = AppComposition(clock: ManualScheduler()).store
+        expect(reloaded.item(folder.id)?.folderSymbol == .code && reloaded.item(nested.id)?.folderSymbol == .star,
+               "folder symbols survive a store reload")
+        reloaded.setFolderSymbol(nil, for: folder.id)
+        expect(reloaded.item(folder.id)?.folderSymbol == nil && reloaded.item(folder.id)?.folderIcon == .white,
+               "removing a symbol keeps the folder color")
+        reloaded.setFolderIcon(.black, for: nested.id)
+        expect(reloaded.item(nested.id)?.folderIcon == .black && reloaded.item(nested.id)?.folderSymbol == .star,
+               "changing the folder color keeps its symbol")
+        reloaded.setFolderIcon(nil, for: folder.id)
+        expect(reloaded.item(folder.id)?.folderIcon == nil && reloaded.item(folder.id)?.folderSymbol == nil,
+               "removing both choices restores the default folder")
+        expect(reloaded.item(folder.id)?.children == [nested.id, tab.id], "changing the icon preserves folder contents")
+        reloaded.saveAll()
     }
 
     // promise: #85

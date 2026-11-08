@@ -174,6 +174,9 @@ public struct SidebarItem: Identifiable, Codable, Equatable {
     public var data: ItemData
     /// A folder's glyph colour; nil is Auto (it follows the theme).
     public var folderIcon: FolderIconStyle? = nil
+    /// The symbol picked with Change Icon… (Arc's folder icon picker). A key of its own, beside
+    /// `folderIcon`, so a Cra that predates symbols still reads the file.
+    public var folderSymbol: FolderSymbol? = nil
     /// Set on a folder that fills itself (Arc: list.automaticLiveFolderData).
     public var liveFolder: LiveFolderData? = nil
     /// A Today folder shown as a group header, as Tidy Tabs makes them (Arc: SidebarItemData.tabGroup,
@@ -181,7 +184,7 @@ public struct SidebarItem: Identifiable, Codable, Equatable {
     public var tabGroup: Bool? = nil
 
     public init(id: UUID, parentID: UUID?, title: String?, children: [UUID], isUnread: Bool, createdAt: Date, data: ItemData,
-                folderIcon: FolderIconStyle? = nil, liveFolder: LiveFolderData? = nil, tabGroup: Bool? = nil) {
+                folderIcon: FolderIconStyle? = nil, folderSymbol: FolderSymbol? = nil, liveFolder: LiveFolderData? = nil, tabGroup: Bool? = nil) {
         self.id = id
         self.parentID = parentID
         self.title = title
@@ -190,6 +193,7 @@ public struct SidebarItem: Identifiable, Codable, Equatable {
         self.createdAt = createdAt
         self.data = data
         self.folderIcon = folderIcon
+        self.folderSymbol = folderSymbol
         self.liveFolder = liveFolder
         self.tabGroup = tabGroup
     }
