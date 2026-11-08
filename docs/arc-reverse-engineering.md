@@ -58,6 +58,11 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
 - [O] Actions: viewArchive, clearArchive, reopenClosedTab, resetSpace, archiveTab.
 
 ## Command bar (ARC_CommandBar.bundle + strings + StorableCommandBarAdditionalRanking.json)
+- [O] ⌘T appearance (8 Nov 2026, user-supplied Arc screenshot): a nearly opaque charcoal panel,
+  subtle outline, a separated input row and five compact results. Input and result titles align.
+  The selected result is solid indigo with white text and a white arrow tile; unselected actions
+  and arrow tiles are subdued. Recent open tabs show “Switch to Tab” even before typing.
+  The empty input reads “Search or Enter URL...” and has a small magnifier and a circular info badge.
 - [O] Entry points: keyboardShortcutT, keyboardShortcutL, keyboardShortcutFocusSidebar, keyboardShortcutCommandOptionG,
   sidebarDoubleClick, sidebarNewTabButton, placeholderClick, littleArcPlaceholderClick, topbar, appMenu*,
   toggleBetweenTypeTravelAndCommandBar.

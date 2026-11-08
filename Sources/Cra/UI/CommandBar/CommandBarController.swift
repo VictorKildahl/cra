@@ -54,7 +54,7 @@ final class CommandBarController {
     var placeholder: String {
         if scope != nil { return "Search…" }
         switch mode {
-        case .newTab: return "Search or enter URL…"
+        case .newTab: return "Search or Enter URL..."
         case .editURL: return "Edit URL or search…"
         }
     }

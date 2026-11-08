@@ -32,8 +32,11 @@ final class CommandTextField {
         field.isBezeled = false
         field.drawsBackground = false
         field.focusRingType = .none
-        field.font = .systemFont(ofSize: 20, weight: .regular)
-        field.placeholderString = controller.placeholder
+        field.font = .systemFont(ofSize: 18, weight: .medium)
+        field.placeholderAttributedString = NSAttributedString(string: controller.placeholder, attributes: [
+            .font: NSFont.systemFont(ofSize: 18, weight: .medium),
+            .foregroundColor: NSColor(srgbRed: 0.59, green: 0.59, blue: 0.59, alpha: 1),
+        ])
         field.delegate = coordinator
         field.lineBreakMode = .byTruncatingTail
         field.cell?.usesSingleLineMode = true
@@ -44,7 +47,10 @@ final class CommandTextField {
     }
 
     private static func update(_ field: NSTextField, controller: CommandBarController, coordinator coord: Coordinator) {
-        field.placeholderString = controller.placeholder
+        field.placeholderAttributedString = NSAttributedString(string: controller.placeholder, attributes: [
+            .font: NSFont.systemFont(ofSize: 18, weight: .medium),
+            .foregroundColor: NSColor(srgbRed: 0.59, green: 0.59, blue: 0.59, alpha: 1),
+        ])
         if coord.appliedVersion != controller.fieldTextVersion {
             coord.appliedVersion = controller.fieldTextVersion
             coord.suppressChange = true
