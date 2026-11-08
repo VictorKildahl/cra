@@ -37,4 +37,8 @@ extension Space {
             symbol = newValue.symbol
         }
     }
+
+    /// The name as a menu lists it: the emoji first when there is one, so a space with a symbol
+    /// or no icon (a dot in the dock) has no gap in front of its name.
+    public var labeled: String { emoji.isEmpty ? title : "\(emoji) \(title)" }
 }

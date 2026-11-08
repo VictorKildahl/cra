@@ -54,6 +54,7 @@ enum StoreTests {
         try arcSpacesWithoutAThemeShareOneDefault()
         try arcItemListedTwice()
         try arcLiveFolderImportsLive()
+        try arcSpaceWithoutAnIconImportsAsADot()
         littleWindowProfile()
         tidyTabs()
         pinHook()
@@ -790,6 +791,37 @@ enum StoreTests {
                "an imported pull request that left the results goes like any other")
         expect(kids.allSatisfy { !$0.isUnread }, "nothing the first refresh brings is marked unread")
         expect(store.integrityProblems().isEmpty, "the imported live folder keeps the sidebar sound")
+    }
+
+    // promise: #252
+    /// An Arc space with no `customInfo.iconType` (Remove Icon in Arc's picker) is a dot in Arc's
+    /// dock, and imports with no icon so Cra's dock draws the same dot. It used to come over as 🗂️.
+    /// A space with an icon the importer can't read still gets 🗂️ rather than a dot (#252).
+    @MainActor
+    private static func arcSpaceWithoutAnIconImportsAsADot() throws {
+        let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Arc/StorableSidebar.json")
+        var root = try JSONSerialization.jsonObject(with: Data(contentsOf: fixture)) as! [String: Any]
+        var sidebar = root["sidebar"] as! [String: Any]
+        var containers = sidebar["containers"] as! [[String: Any]]
+        let main = containers.firstIndex { $0["spaces"] != nil }!
+        var spaces = containers[main]["spaces"] as! [Any]
+        let home = spaces.firstIndex { ($0 as? [String: Any])?["title"] as? String == "Home" }!
+        let work = spaces.firstIndex { ($0 as? [String: Any])?["title"] as? String == "Work" }!
+        var homeSpace = spaces[home] as! [String: Any], workSpace = spaces[work] as! [String: Any]
+        homeSpace["customInfo"] = nil
+        workSpace["customInfo"] = ["iconType": ["icon": "some-future-glyph"]]
+        spaces[home] = homeSpace
+        spaces[work] = workSpace
+        containers[main]["spaces"] = spaces
+        sidebar["containers"] = containers
+        root["sidebar"] = sidebar
+        let plan = try ArcImporter.plan(sidebar: JSONSerialization.data(withJSONObject: root))
+        expect(plan.spaces.map(\.emoji) == ["", "🗂️"], "an icon-less Arc space comes over with no icon, an unreadable one as 🗂️ (#252)")
+
+        let store = AppComposition(clock: ManualScheduler()).store
+        let ids = store.apply(plan, includeArchive: false, includeSettings: false).spaceIDs
+        expect(ids.first.flatMap { store.space($0) }?.icon == SpaceIcon.none, "the imported space has no icon, a dot in the dock (#252)")
+        for id in ids { store.deleteSpace(id) }
     }
 
     // promise: #30

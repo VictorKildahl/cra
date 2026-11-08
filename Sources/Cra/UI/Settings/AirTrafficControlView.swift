@@ -125,7 +125,7 @@ struct AirTrafficControlView: View {
             Section("Open in Space") {
                 Text("Most Recent Space").tag(LinkDestination.mostRecentSpace)
                 ForEach(spaces) { space in
-                    Text("\(space.emoji) \(space.title)").tag(LinkDestination.space(space.id))
+                    Text(space.labeled).tag(LinkDestination.space(space.id))
                 }
             }
             Divider()

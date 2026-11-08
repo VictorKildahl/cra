@@ -124,7 +124,7 @@ enum SidebarMenus {
         menu.addItem(.separator())
         let spaces = submenu(menu, "Move to Space")
         for s in store.orderedSpaces {
-            add(spaces, "\(s.emoji) \(s.title)", enabled: !store.isInSpace(id, s.id)) { store.moveTab(id, toSpace: s.id, window: ui.windowID) }
+            add(spaces, s.labeled, enabled: !store.isInSpace(id, s.id)) { store.moveTab(id, toSpace: s.id, window: ui.windowID) }
         }
         folderItems(menu, [id], list: list)
         menu.addItem(.separator())
@@ -251,7 +251,7 @@ enum SidebarMenus {
         let spaces = submenu(menu, "Move to")
         for space in store.orderedSpaces {
             let current = store.isInSpace(id, space.id)
-            add(spaces, "\(space.emoji) \(space.title)", on: current) {
+            add(spaces, space.labeled, on: current) {
                 if !current { store.moveTab(id, toSpace: space.id, window: ui.windowID) }
             }
         }
@@ -357,7 +357,7 @@ enum SidebarMenus {
         let spaces = submenu(menu, "Move to")
         for s in store.orderedSpaces {
             let current = store.isInSpace(id, s.id)
-            add(spaces, "\(s.emoji) \(s.title)", on: current) { if !current { store.moveTab(id, toSpace: s.id, window: ui.windowID) } }
+            add(spaces, s.labeled, on: current) { if !current { store.moveTab(id, toSpace: s.id, window: ui.windowID) } }
         }
         menu.addItem(.separator())
         add(menu, "Archive Item") { for c in children { store.archiveTab(c, reason: .manual) } }

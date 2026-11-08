@@ -204,8 +204,11 @@ enum ArcImporter {
         for (sid, space) in pairs(main["spaces"]) {
             let title = space["title"] as? String ?? "Space"
             spaceTitleByID[sid] = title
-            var emoji = "🗂️"
+            // No iconType is Remove Icon in Arc, a dot in its dock: keep it icon-less, which Cra's
+            // dock draws as the same dot (#252). An icon this can't read gets 🗂️.
+            var emoji = ""
             if let info = space["customInfo"] as? [String: Any], let icon = info["iconType"] as? [String: Any] {
+                emoji = "🗂️"
                 if let e = icon["emoji_v2"] as? String { emoji = e }
                 else if let code = icon["emoji"] as? Int, let scalar = UnicodeScalar(code) { emoji = String(Character(scalar)) }
             }

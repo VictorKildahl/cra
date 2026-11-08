@@ -2434,9 +2434,15 @@ Theme palettes in a hand-built space can be borrowed; only the `background` styl
   media volume. Not built: the recording card (mic/camera) and marquee titles.
 - [O] Space dock with many spaces (5, 7, 8, 12, 16, 22 spaces): cells share the 217 pt between Library and +
   (300 pt sidebar) in half points, at most 34; below 22 pt the open space keeps 22 and the others split the
-  rest (17.5 / 13 / 9 pt with 12 / 16 / 22 spaces); icon-less spaces are dots, small when squeezed. Cra
-  (`SpaceDockView.cellWidths`) follows the widths and shrinks emoji in narrow cells; it has no icon-less spaces
-  yet (imported ones get 🗂️).
+  rest (17.5 / 13 / 9 pt with 12 / 16 / 22 spaces).
+- [O] Space dock dots (Arc 1.171, 8 Nov 2026, #252; offline Arc with 4 and 12 spaces, 2x window captures,
+  light #CDB68F and dark #2A2536 sidebars): a space with no icon (`customInfo.iconType` absent, Remove Icon) is
+  an 8 pt dot centred in its cell, level with the + glyph. Ink: black on light, white on dark, 0.5 for the open
+  space, 0.25 (light) / 0.18 (dark) for the rest. Squeezed (cells under 22 pt), every space but the open one is
+  a 4 pt dot in the same ink, emoji spaces too; the open space keeps its emoji, or its 8 pt dot. Not observed:
+  hover over a dot. Cra: CraCore `SpaceDock` (widths, `mark`, `dotAlpha`), drawn by `SpaceCellView`; the Arc
+  importer keeps an icon-less space icon-less (it used to get 🗂️). Pinned by the space-dots and solid-spaces
+  scenarios.
 
 ## Developer bar (Arc 1.170, 1 Nov 2026, issue #42, live window captures at 2x)
 
