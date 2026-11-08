@@ -1,0 +1,12 @@
+# Chrome keeps its video Picture in Picture window's origin strip (favicon, host and a dark top
+# scrim) on screen until the person clicks or types in that window, unless the page is trusted
+# for media playback (file://, or high media engagement). Cra's overlay takes every click, so on
+# YouTube the strip never left (GitHub #246); the scenarios' file:// fixtures hid it. Cra starts
+# Chromium with every video PiP trusted, so the strip goes with the controls from the start and
+# only Cra's own top bar shows the host, on hover. Whether the strip is drawn is pixels in
+# Chromium's compositor (docs/release-checklist.md); this pins the switch that decides it.
+# promise: #246
+cra://open?url=chrome://version
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'pip-trusted:'+document.body.innerText.includes('VideoPipForceTrustedForMediaPlaybackForTesting')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"pip-trusted:true"

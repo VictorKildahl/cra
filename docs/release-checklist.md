@@ -99,6 +99,10 @@ built release app with a test profile. Note anything that fails in the release's
   PiP and coming back closes it. The tab shows the recording dot and doesn't sleep.
 - **#134:** with another app in front, the PiP edges show resize cursors, and a click on play
   doesn't move the window.
+- **#246:** a YouTube video's PiP shows no Chrome strip (site icon, host, dark top band) at any
+  point, also in the first seconds; with the pointer away it is the bare video. On hover: Back to
+  Tab on the left (with its words from 400 pt wide), the host centred and whole, Close on the
+  right, one even dim layer.
 - **#178:** in a split, the focused pane's ring shows (also over docked DevTools), and so does
   the card shadow.
 - **#90:** Capture on a second display and behind other windows isn't blank. It goes to the

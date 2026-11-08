@@ -12,7 +12,7 @@ xcrun swiftc -swift-version 5 -parse-as-library ${CRA_TEST_SWIFTC_FLAGS:-} -I "$
   -Xlinker -rpath -Xlinker "$TEST_DIR" \
   "$MANAGER_SOURCE" Sources/Cra/Services/NowPlaying.swift Sources/Cra/Services/PageScript.swift Sources/Cra/Services/Scheduler.swift Sources/Cra/Services/DevToolsToggle.swift Sources/Cra/Services/CraLog.swift Sources/Cra/Services/PageProbe.swift Sources/Cra/Services/Persistence.swift \
   Sources/Cra/Perf/Perf.swift Packages/CraCore/Sources/CraCore/Perf/*.swift Packages/CraCore/Sources/CraCore/ExtensionPageRetry.swift Packages/CraCore/Sources/CraCore/PermissionPrompt.swift Packages/CraCore/Sources/CraCore/TabSleepPolicy.swift Packages/CraCore/Sources/CraCore/ProtectedMedia.swift Sources/Cra/Services/WebKit/PageEngines.swift Tests/Support/ManualScheduler.swift Tests/BrowserManagerSupport/AppServices.swift \
-  Packages/CraCore/Sources/CraCore/DialogActions.swift Packages/CraCore/Sources/CraCore/Boost.swift Tests/BrowserManagerLifecycleTests.swift -o "$TEST_DIR/lifecycle-tests"
+  Packages/CraCore/Sources/CraCore/DialogActions.swift Packages/CraCore/Sources/CraCore/Boost.swift Packages/CraCore/Sources/CraCore/PictureInPictureLayout.swift Tests/BrowserManagerLifecycleTests.swift -o "$TEST_DIR/lifecycle-tests"
 # A data folder of its own: PageEngines keeps protected-media.json there, not in the real Cra's.
 CRA_DATA_DIR="$TEST_DIR/data" "$TEST_DIR/lifecycle-tests"
 [ -z "${CRA_TEST_KEEP:-}" ] || cp "$TEST_DIR/lifecycle-tests" "$CRA_TEST_KEEP/"

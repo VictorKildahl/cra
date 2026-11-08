@@ -726,10 +726,33 @@ Over another app's full-screen Space (6 Nov, GitHub #206):
   overlay is a borderless non-activating NSPanel. Measured on a test copy with a full-screen stand-in app in
   front: main had video and Document PiP off that Space. Now both are on it, so is a video PiP opened while that
   Space is in front, and a click and a drag on it keep the full-screen app frontmost and its Space active.
-One residual difference: Chrome paints its origin strip ("File on your device", top gradient)
-inside the compositor layer for about two seconds when the window first appears (present at
-1.5 s, gone at 2.5 s in quarter-second captures); it is drawn whether or not the window is
-resized or focused, so it cannot be suppressed from CEF. After that nothing is drawn, as in Arc.
+Chrome's origin strip (8 Nov, GitHub #246): Chrome draws its title strip (favicon, host, top scrim)
+for 5 s after the window appears and then keeps it until a click or key press reaches its window,
+unless the page is trusted for media playback (file://, or high media engagement;
+`VideoOverlayWindowViews::UpdateControlsVisibility`). The 24 Oct captures used a file:// page, so
+the strip went after about two seconds; on YouTube it never went, because Cra's overlay takes every
+click. CraCEF enables `VideoPipForceTrustedForMediaPlaybackForTesting` (it only feeds that check), so
+the strip never shows: on an http page it is absent at 0.5 s and after 10 s (captures of a test copy).
+Arc 1.172 binary (otool/llvm-objdump on the arm64 slice, 8 Nov, #246):
+- [O static] Position keys are now `LastVideoPIPPosition` / `LastDocumentPIPPosition`. No fixed default
+  size: `.screen(corner, size: nil)` keeps the window's current size inside the limits, 10 pt in. The
+  first size most likely comes from the video's rect on the page [I]. Limits: at least 224×126 scaled
+  to the content's aspect (a 16:9 window is 224×126 at its smallest, which is the 223×125.5 the #246
+  reporter measured), at most max(224, 0.617 × screen width) × max(126, visible height − 20).
+- [O static] Hover layer: one flat `Color.black.opacity(0.33)` scrim, `.easeInOut(duration: 0.2)` in
+  and out; the controls fade with it. Buttons press-scale to 0.95.
+- [O static] Size classes by width: tiny < 280, small < 400, normal < 600, large. Controls 12 pt in when
+  tiny, 16 pt otherwise, button padding 8 (10 from 400 pt): glyph centres 26 / 30 / 32 pt from the
+  edges (the reporter measured 26 on a tiny window). Back to Tab is a pill top-left, 12 pt medium
+  words from 400 pt wide, 6 pt continuous corners. Minimize and Close are a group (top-right [I]),
+  glyphs with tooltips only. The address centred between them is from the reporter's captures; no
+  host label was found in the binary.
+- [O static] Minimize is per site (`minimizeEnabled` in its PiP config) and asks Chromium to leave PiP;
+  `offscreen` is a separate "stash" past the screen edge. Cra has neither.
+- [O static] Scrubber: 5 pt capsule (15 pt drag area) 8 pt above the bottom (4 when tiny), white over
+  white 30 %; dragging upwards slows seeking by 2^round(dy / 60 pt), down to 1/16. Cra has none yet.
+Cra follows the limits, the scrim, the fade, the insets and the Back to Tab words
+(`PictureInPictureLayout` in CraCore) and keeps its 782×440-on-1728×1117 opening size.
 
 Chromium only enters PiP from a page holding a user activation. `CefBrowserHost::SendKeyEvent`
 never reached the page in Chrome-style hosting (CEF 154), so Cra sends an F19 key down/up straight

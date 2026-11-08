@@ -857,6 +857,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                 skip: { [weak browser] s in browser?.skipPictureInPicture(by: s) },
                 close: { [weak browser] in browser?.closePictureInPicture() })
             PictureInPictureChrome.shared.isPlaying = browser.isPictureInPicturePlaying
+            PictureInPictureChrome.shared.address = PictureInPictureLayout.address(of: browser.currentURL)
             PictureInPictureChrome.shared.videoEntered()
         } else {
             PictureInPictureChrome.shared.videoLeft()

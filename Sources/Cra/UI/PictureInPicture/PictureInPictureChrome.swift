@@ -18,8 +18,8 @@ struct PictureInPictureActions {
 /// the top-right corner, remembered where the user leaves it (measured on Arc
 /// 1.168, see docs/arc-reverse-engineering.md). A transparent child window
 /// over it keeps the pointer away from Chrome's controls and draws Arc's
-/// instead on hover: close and back-to-tab at the top, play/pause with
-/// ±15 s skips in the middle (Arc's tooltips: "closes the pip window",
+/// instead on hover: back-to-tab, the page's address and close at the top,
+/// play/pause with ±15 s skips in the middle (Arc's tooltips: "closes the pip window",
 /// "returns to the original tab", "Skip back/ahead 15 seconds"). The overlay
 /// also owns dragging and aspect-locked edge resizing.
 @MainActor
@@ -30,12 +30,13 @@ final class PictureInPictureChrome {
     var isPlaying = false {
         didSet { for o in overlays.values { o.controls.isPlaying = isPlaying } }
     }
+    /// The page's host, centred in the top bar (Arc's; Chrome's own strip stays hidden, #246).
+    var address = "" {
+        didSet { for o in overlays.values { o.controls.address = address } }
+    }
 
-    /// Arc on a 1728×1117 display: 782×440 for a 16:9 video, 10 pt from the
-    /// top and right edges of the visible frame.
     static let cornerRadius: CGFloat = 6
-    static let edgeMargin: CGFloat = 10
-    static let defaultHeightFraction: CGFloat = 440.0 / 1084.0
+    static let edgeMargin = PictureInPictureLayout.edgeMargin
     private static let frameKey = "CraPictureInPictureFrame"
 
     private var overlays: [ObjectIdentifier: PictureInPictureOverlay] = [:]
@@ -60,6 +61,7 @@ final class PictureInPictureChrome {
         let overlay = PictureInPictureOverlay(over: window)
         overlays[ObjectIdentifier(window)] = overlay
         overlay.controls.isPlaying = isPlaying
+        overlay.controls.address = address
         window.addChildWindow(overlay, ordered: .above)
         overlay.orderFront(nil)
         observers.append(NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
@@ -109,27 +111,18 @@ final class PictureInPictureChrome {
         let aspect = window.frame.width / max(window.frame.height, 1)
         window.setFrame(initialFrame(aspect: aspect, screen: window.screen ?? NSScreen.main), display: true)
         window.invalidateShadow()
-        // Chrome still paints its title strip ("File on your device") for the
-        // first seconds after the window appears; that lives inside Chromium's
-        // compositor layer and is not reachable from here (neither resizing
-        // nor focus changes affect it). After that the window is Arc's.
+        // Chrome's own title strip (favicon, host, top scrim) stays hidden because CraCEF starts
+        // Chromium with every video PiP trusted (VideoPipForceTrustedForMediaPlaybackForTesting,
+        // #246); without that it stayed until a click reached this window, which never happens.
     }
 
-    /// Last frame the user left the window at (Arc's "absolute" placement),
-    /// else Arc's default: top-right corner of the visible frame.
+    /// Last frame the user left the window at, else Arc's default (PictureInPictureLayout).
     func initialFrame(aspect: CGFloat, screen: NSScreen?) -> NSRect {
         let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1728, height: 1084)
-        if let s = UserDefaults.standard.string(forKey: Self.frameKey) {
-            let r = NSRectFromString(s)
-            if !r.isEmpty, visible.intersects(r) {
-                // Keep the remembered width, follow the video's aspect ratio.
-                let h = (r.width / aspect).rounded()
-                return NSRect(x: r.minX, y: r.maxY - h, width: r.width, height: h)
-            }
-        }
-        let h = (visible.height * Self.defaultHeightFraction).rounded()
-        let w = (h * aspect).rounded()
-        return NSRect(x: visible.maxX - Self.edgeMargin - w, y: visible.maxY - Self.edgeMargin - h, width: w, height: h)
+        let remembered = UserDefaults.standard.string(forKey: Self.frameKey).map(NSRectFromString)
+        let frame = PictureInPictureLayout.initialFrame(aspect: aspect, screen: screen?.frame ?? visible, visible: visible, remembered: remembered)
+        CraLog.note("pip: opens at \(Int(frame.width))×\(Int(frame.height))\(remembered == nil ? "" : " (remembered)")")
+        return frame
     }
 
     func remember(_ frame: NSRect) {
@@ -259,11 +252,15 @@ final class PictureInPictureOverlayView: NSView {
         guard let target, var g = gesture else { return }
         // The button was let go without a mouse-up reaching this window.
         if NSEvent.pressedMouseButtons & 1 == 0 { finish(event); return }
+        // Arc's limits (#246): 224 × 126 for a 16:9 video at least, 61.7 % of the screen's width and
+        // the visible height less 20 at most.
+        let screen = target.screen ?? NSScreen.main
+        let visible = screen?.visibleFrame ?? target.frame
+        let limits = PictureInPictureLayout.sizeLimits(aspect: g.startFrame.width / max(g.startFrame.height, 1),
+                                                       screen: screen?.frame ?? visible, visible: visible)
         let constraints = target.contentMaxSize
-        let visible = target.screen?.visibleFrame.size ?? constraints
-        let maxSize = NSSize(width: min(constraints.width, visible.width - 2 * PictureInPictureChrome.edgeMargin),
-                             height: min(constraints.height, visible.height - 2 * PictureInPictureChrome.edgeMargin))
-        let minSize = NSSize(width: max(target.contentMinSize.width, 160), height: max(target.contentMinSize.height, 90))
+        let maxSize = NSSize(width: min(constraints.width, limits.max.width), height: min(constraints.height, limits.max.height))
+        let minSize = NSSize(width: max(target.contentMinSize.width, limits.min.width), height: max(target.contentMinSize.height, limits.min.height))
         let wasDragging = g.isDragging
         let frame = g.frame(mouse: Self.screenLocation(of: event), minSize: minSize, maxSize: maxSize)
         gesture = g

@@ -691,6 +691,13 @@ public:
             // Tab sleeping discards a page in place (Cra.discard), as Arc's Chromium does: the tab
             // keeps its back/forward list and scroll position, and loads again when shown (#153).
             + "WebContentsDiscard,"
+            // Chrome keeps its video PiP's origin strip (favicon, host, a dark top scrim) on screen
+            // until the person clicks or types in that window, unless the page is file:// or has
+            // high media engagement (VideoOverlayWindowViews::UpdateControlsVisibility). Cra's
+            // overlay takes every click, so on YouTube the strip never left (#246). Treated as
+            // trusted, the window hides it from the start; Cra's own top bar shows the host on hover,
+            // as Arc's does. The feature does nothing else (Chromium 156).
+            + "VideoPipForceTrustedForMediaPlaybackForTesting,"
             // A hidden page's frame unlocks, so Chromium can evict it past its saved-frame cap or
             // after 5 minutes, as Chrome does for background tabs (Cra's are never detached from
             // their window, which is how Chrome gets there). Cra's page windows then let go of
