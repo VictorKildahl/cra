@@ -1,0 +1,8 @@
+{
+  "manifest_version": 2,
+  "name": "Cra Manifest V2 Fixture",
+  "version": "1.0",
+  "description": "Made up for scripts/scenario.sh: a Manifest V2 extension that blocks requests from a persistent background page with webRequestBlocking, the way uBlock Origin does (GitHub #228).",
+  "permissions": ["webRequest", "webRequestBlocking", "http://127.0.0.1/*"],
+  "background": { "scripts": ["background.js"], "persistent": true }
+}

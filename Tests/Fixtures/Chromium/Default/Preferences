@@ -12,6 +12,21 @@
      1
     ],
     "path": "/nowhere"
+   },
+   "cccccccccccccccccccccccccccccccc": {
+    "location": 1,
+    "disable_reasons": [
+     8388608
+    ],
+    "path": "cccc/1.0"
+   },
+   "dddddddddddddddddddddddddddddddd": {
+    "location": 1,
+    "disable_reasons": [
+     1,
+     8388608
+    ],
+    "path": "dddd/1.0"
    }
   }
  }

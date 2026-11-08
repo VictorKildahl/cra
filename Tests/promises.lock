@@ -355,6 +355,8 @@
 #226   Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::theURLFieldHasTheSlidersWithoutExtensions  a7173c578717
 #226   Tests/Scenarios/site-controls-no-extensions.scenario  c1c5b5365539
 #227   Tests/Scenarios/quit-during-web-store-install.scenario  a3e3b0c8eb2b
+#228   Tests/Scenarios/manifest-v2-extensions.scenario  79e8ee402189
+#228   Tests/StoreTests.swift::chromiumManifestV2Import  bf235b11b6d1
 #231   Packages/CraCore/Tests/CraCoreTests/MenuBarModeTests.swift::incognitoWindowsCloseTheRestArePutAway  017bb7d06672
 #231   Packages/CraCore/Tests/CraCoreTests/MenuBarModeTests.swift::offEveryQuitQuits  f494762d7992
 #231   Packages/CraCore/Tests/CraCoreTests/MenuBarModeTests.swift::onlyCrasOwnQuitStaysInTheMenuBar  93aebb57b7ca

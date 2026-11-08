@@ -21,6 +21,7 @@ enum StoreTests {
         try arcImport()
         try diaImport()
         chromiumProfile()
+        chromiumManifestV2Import()
         autoArchive()
         tabSleepCadence()
         tabRestTimes()
@@ -229,8 +230,19 @@ enum StoreTests {
         expect(marks.other.map(\.url) == ["https://example.com/other"], "other and mobile bookmarks come after")
         expect(ChromiumImporter.parseSession(Data("SNSS".utf8) + Data([4, 0, 0, 0]) + Data(repeating: 1, count: 16)).isEmpty,
                "an encrypted session (version 4) gives nothing rather than garbage")
-        expect(ExtensionImporter.disabledIDs(inProfile: profile) == ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
+        expect(ExtensionImporter.disabledIDs(inProfile: profile).contains("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+               && !ExtensionImporter.disabledIDs(inProfile: profile).contains("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
                "an extension with disable_reasons is off, one in state 1 is on")
+    }
+
+    // promise: #228
+    /// Chrome 139 and later turn every Manifest V2 extension off (disable reason 1 << 23);
+    /// Cra runs them (extensions-manifest-v2.patch), so an import from Chrome brings uBlock
+    /// Origin over turned on unless the person had turned it off too.
+    private static func chromiumManifestV2Import() {
+        let profile = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Chromium/Default")
+        expect(ExtensionImporter.disabledIDs(inProfile: profile) == ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "dddddddddddddddddddddddddddddddd"],
+               "off only for being Manifest V2 counts as on; off by the person as well stays off")
     }
 
     /// Arc archives unused Today tabs on a 30-minute pass; the selected tab stays.
