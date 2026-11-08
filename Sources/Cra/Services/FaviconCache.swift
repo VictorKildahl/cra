@@ -32,6 +32,25 @@ final class FaviconCache {
     func image(for urlString: String) -> NSImage? { image(forKey: FaviconKey.key(for: urlString)) }
 
     private var dominant: [String: String] = [:]
+    private var selectionPalettes: [String: [String]] = [:]
+
+    /// Spatial logo colors for the selected favorite's outline, cached until the icon changes.
+    func selectionColors(forKey key: String?) -> [String]? {
+        guard let key else { return nil }
+        if let colors = selectionPalettes[key] { return colors }
+        guard let image = image(forKey: key),
+              let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+        let size = 16
+        var pixels = [UInt8](repeating: 0, count: size * size * 4)
+        guard let context = CGContext(data: &pixels, width: size, height: size, bitsPerComponent: 8, bytesPerRow: size * 4,
+                                      space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue)
+        else { return nil }
+        context.draw(cg, in: CGRect(x: 0, y: 0, width: size, height: size))
+        let colors = FavoriteSelectionTint.sample(rgba: pixels, width: size, height: size)
+        selectionPalettes[key] = colors
+        return colors
+    }
 
     /// Average colour of the favicon's opaque pixels as "#RRGGBB" (Arc tints
     /// the toolbar with the favicon's dominant colour when a page has no
@@ -94,6 +113,7 @@ final class FaviconCache {
         images = [:]
         attemptedDiskLoad = []
         dominant = [:]
+        selectionPalettes = [:]
         glyphTone = [:]
     }
 
@@ -132,6 +152,7 @@ final class FaviconCache {
     /// `persist` false keeps the icon in memory only (incognito pages).
     func store(_ image: NSImage, forKey key: String, persist: Bool = true) {
         images[key] = image
+        selectionPalettes[key] = nil
         guard persist else { return }
         let file = AppPaths.favicons.appendingPathComponent(Self.fileName(key))
         DispatchQueue.global(qos: .utility).async {
