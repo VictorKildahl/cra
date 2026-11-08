@@ -49,11 +49,13 @@ final class EaselCanvasView: NSView {
     private func changed(_ doc: Easel) {
         let renamed = doc.title != document.title
         document = doc
+        guard !EaselFiles.deleted.contains(doc.id) else { return }
         store.save(doc)
         if renamed { onTitle(doc.title) }
     }
 
-    func saveNow() { store.saveNow(document) }
+    /// A deleted easel's tab, closing, writes nothing back.
+    func saveNow() { if !EaselFiles.deleted.contains(document.id) { store.saveNow(document) } }
 
     func focus() { window?.makeFirstResponder(sheet) }
 
@@ -77,7 +79,9 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
     var onToolDone: () -> Void = {}
     private let title = EaselTextField()
     private var texts: [UUID: NSTextField] = [:]
-    private var selected: UUID? { didSet { if selected != nil { titlePicked = false }; needsDisplay = true; placeSizePill() } }
+    private var selected: UUID? { didSet { if selected != nil { titlePicked = false }; needsDisplay = true; placeSizePill(); window?.invalidateCursorRects(for: self) } }
+    /// A corner of the picked item being dragged (Arc's AspectRatioControlPoints).
+    private var resizing: (corner: Easel.Corner, from: Easel.Rect)?
     /// The title box is being typed in: the pill acts on it.
     private var titlePicked = false { didSet { placeSizePill() } }
     /// Arc's black pill beside a picked text box: +, Aa, − (text size).
@@ -192,6 +196,12 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
         dragLast = p
         switch tool {
         case .pointer:
+            // A corner of the picked picture or shape resizes it; anywhere else picks (and moves).
+            if let id = selected, let item = document.items.first(where: { $0.id == id }), Easel.resizes(item.kind),
+               let corner = Easel.corner(of: item.frame, at: p) {
+                resizing = (corner, item.frame)
+                return
+            }
             selected = document.item(at: p)?.id
         case .text:
             let item = Easel.Item(kind: .text("", size: 18), frame: .init(x: p.x, y: p.y - 12, width: 240, height: 26))
@@ -214,6 +224,13 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
         switch tool {
         case .pointer:
             guard let id = selected, let i = document.items.firstIndex(where: { $0.id == id }) else { return }
+            if let r = resizing {
+                var keep = true
+                if case .image = document.items[i].kind {} else { keep = event.modifierFlags.contains(.shift) }
+                document.items[i].frame = Easel.resized(r.from, corner: r.corner, to: p, keepRatio: keep)
+                needsDisplay = true
+                return
+            }
             document.items[i] = document.items[i].moved(by: .init(p.x - last.x, p.y - last.y))
             texts[id]?.frame = rect(document.items[i].frame)
             needsDisplay = true
@@ -227,10 +244,10 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
     }
 
     override func mouseUp(with event: NSEvent) {
-        defer { dragStart = nil; dragLast = nil; preview = nil; stroke = [] }
+        defer { dragStart = nil; dragLast = nil; preview = nil; stroke = []; resizing = nil }
         switch tool {
         case .pointer:
-            if selected != nil { onChange(document) }
+            if selected != nil { onChange(document); window?.invalidateCursorRects(for: self) }
         case .freehand:
             if stroke.count > 1, let item = Easel.freehand(stroke) { commit { $0.items.append(item) }; selected = nil }
         default:
@@ -417,7 +434,25 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
 
     override func resetCursorRects() {
         addCursorRect(bounds, cursor: tool == .pointer ? .arrow : (tool == .text ? .iBeam : .crosshair))
+        // The picked picture's or shape's corners: the diagonal resize cursors.
+        guard tool == .pointer, let id = selected, let item = document.items.first(where: { $0.id == id }), Easel.resizes(item.kind) else { return }
+        let f = item.frame, g = Easel.cornerGrab
+        for (corner, x, y) in [(Easel.Corner.topLeft, f.x, f.y), (.topRight, f.x + f.width, f.y),
+                               (.bottomLeft, f.x, f.y + f.height), (.bottomRight, f.x + f.width, f.y + f.height)] {
+            let falling = corner == .topLeft || corner == .bottomRight
+            addCursorRect(NSRect(x: x - g, y: y - g, width: 2 * g, height: 2 * g), cursor: falling ? Self.nwseCursor : Self.neswCursor)
+        }
     }
+
+    /// macOS's diagonal frame-resize cursors (macOS 15+), else the crosshair.
+    static let nwseCursor: NSCursor = {
+        if #available(macOS 15.0, *) { return NSCursor.frameResize(position: .topLeft, directions: .all) }
+        return .crosshair
+    }()
+    static let neswCursor: NSCursor = {
+        if #available(macOS 15.0, *) { return NSCursor.frameResize(position: .topRight, directions: .all) }
+        return .crosshair
+    }()
 }
 
 /// A text field that says when it takes the keyboard: clicking a text box picks it, and its

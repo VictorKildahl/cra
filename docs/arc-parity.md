@@ -211,6 +211,13 @@ in this sweep (Essential Shortcuts window, Library pages).
   itself. Cra: CraCore MediaPreview, Esc/← →/Space, ⋯ = Open, Show in Finder, Copy, Move to Trash.
 - No ⋯ beside the search on Media and Boosts; the first item starts 15 pt (a media tile) or 10.5 pt
   (a boost's card) under the search field.
+- Easels page: the media grid's tiles, two to a row, newest first, no day headers and no ⋯; each a light
+  card (white 3 pt rim) with the easel drawn small, Arc's pink squiggle and the title in bold at its
+  bottom left; right-click Delete (Cra asks first). Arc's "Your Easels are yours to keep / Export All
+  Easels" banner is about Arc winding down and is *skip*.
+- Easel pictures resize from their corners and keep their proportions (Arc's AspectRatioControlPoints;
+  Arc draws no handles, only the 2 pt blue outline). Cra: CraCore Easel.resized, the diagonal resize
+  cursors on a picked item's corners; rectangles and ellipses resize freely (⇧ keeps proportions).
 - Boost rows: the site's icon on a 43 pt light tile with a white rim, name 14 pt over the site; under
   the pointer a rounded card and a 36 × 22 pt switch; off = the tile struck through; right-click
   Rename (in place), Delete.

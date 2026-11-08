@@ -300,7 +300,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
     enum Row {
         case header(String)
         case media([MediaLibrary.File])
-        case easel(id: UUID, title: String, edited: Date)
+        case easels([EaselEntry])
         case boost(Boost)
         case download(DownloadHistory.Listed)
         case archived(ArchivedItem)
@@ -441,10 +441,9 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         case .easels:
             let all = EaselFiles.all()
             let shown = needle.isEmpty ? all : all.filter { $0.title.lowercased().contains(needle) }
-            for (label, entries) in Self.grouped(shown, date: \.edited) {
-                out.append(.header(label))
-                out += entries.map { .easel(id: $0.id, title: $0.title, edited: $0.edited) }
-            }
+            // Arc: one grid, newest edit first, two to a row, no day headers.
+            let entries = shown.map { EaselEntry(id: $0.id, title: $0.title, edited: $0.edited) }
+            out = stride(from: 0, to: entries.count, by: 2).map { .easels(Array(entries[$0..<min($0 + 2, entries.count)])) }
             // Arc's empty Easels page: "Out of ideas!"
             empty.show(symbol: "pencil.and.scribble", title: all.isEmpty ? "Out of ideas!" : "No matches",
                        detail: all.isEmpty ? "Choose File ▸ New Easel to create a new Easel." : nil)
@@ -530,7 +529,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         // 10.5 pt to a boost's card, 15 pt to the first media tile's; a day header brings its own.
         let gap: CGFloat
         switch rows.first {
-        case .media?: gap = 15
+        case .media?, .easels?: gap = 15
         case .header?, nil: gap = 0
         default: gap = 10
         }
@@ -579,7 +578,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
     }
 
     /// Arc shows ⋯ beside the search on these pages only.
-    private var hasMenuButton: Bool { ![.media, .boosts, .spaces].contains(page) }
+    private var hasMenuButton: Bool { ![.media, .boosts, .easels, .spaces].contains(page) }
 
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
@@ -587,8 +586,8 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         let menu = NSMenu()
         menu.autoenablesItems = false
         switch page {
-        case .media, .boosts, .spaces:
-            // Arc's Media and Boosts pages have no ⋯ (Media's folders are on its rail button).
+        case .media, .boosts, .easels, .spaces:
+            // Arc's Media, Boosts and Easels pages have no ⋯ (Media's folders are on its rail button).
             return
         case .downloads:
             // The folder the window's profile downloads to (#190).
@@ -599,8 +598,6 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         case .archive:
             let store = store
             MenuItems.add(menu, "Clear Archive", enabled: !store.archive.isEmpty) { store.clearArchive() }
-        case .easels:
-            MenuItems.add(menu, "New Easel") { [weak self] in self?.actions.performAction("newEasel") }
         }
         menu.popUp(positioning: nil, at: NSPoint(x: menuButton.frame.minX, y: menuButton.frame.maxY + 4), in: self)
     }
@@ -612,6 +609,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
         if case .header = rows[row] { return 40 }
         if case .media = rows[row] { return MediaGridMetrics.rowHeight }
+        if case .easels = rows[row] { return MediaGridMetrics.rowHeight }
         return 56
     }
 
@@ -633,15 +631,17 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
                 actions.closeLibrary()
             }
             return v
-        case .easel(let id, let title, let edited):
-            let v = tableView.makeView(withIdentifier: .init("item"), owner: nil) as? LibraryItemCell ?? LibraryItemCell()
-            v.identifier = .init("item")
-            v.showEasel(title: title, edited: edited, colors: colors) { [store, actions] in
-                let url = Easel(id: id).url
+        case .easels(let entries):
+            let v = tableView.makeView(withIdentifier: .init("easels"), owner: nil) as? EaselRowCell ?? EaselRowCell()
+            v.identifier = .init("easels")
+            v.open = { [store, actions] e in
+                let url = Easel(id: e.id).url
                 if let tab = store.allTabs().first(where: { $0.tab?.url == url }) { store.selectTab(tab.id) }
-                else { _ = store.createTab(url: url, title: title, select: true) }
+                else { _ = store.createTab(url: url, title: e.title, select: true) }
                 actions.closeLibrary()
             }
+            v.delete = { [weak self] e in self?.deleteEasel(e) }
+            v.show(entries, ink: colors.isDark ? .white : .black)
             return v
         case .media(let files):
             let v = tableView.makeView(withIdentifier: .init("media"), owner: nil) as? MediaRowCell ?? MediaRowCell()
@@ -669,6 +669,23 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
 
     func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool { false }
 
+    /// Library ▸ Easels ▸ Delete: asked first (its drawing and pictures go), its tabs close.
+    private func deleteEasel(_ e: EaselEntry) {
+        let alert = NSAlert()
+        alert.messageText = "Delete “\(e.title.isEmpty ? "Untitled Easel" : e.title)”?"
+        alert.informativeText = "The Easel and its pictures will be deleted. This can’t be undone."
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
+        alert.buttons.first?.hasDestructiveAction = true
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let url = Easel(id: e.id).url
+        EaselFiles.deleted.insert(e.id)
+        for tab in store.allTabs() where tab.tab?.url == url { actions.closeTab(tab.id) }
+        EaselFiles.delete(e.id)
+        CraLog.note("easel deleted")
+        reload()
+    }
+
     /// The boost's site icon: the site's own, else that of a tab on it (icons are kept per page).
     private func boostIcon(_ b: Boost) -> NSImage? {
         if let i = favicons.image(for: "https://\(b.host)/") { return i }
@@ -690,7 +707,7 @@ extension LibraryListView: NSMenuDelegate {
         let row = table.menuRow
         guard rows.indices.contains(row) else { return }
         switch rows[row] {
-        case .header, .media, .easel: break
+        case .header, .media, .easels: break
         case .boost(let b):
             // Arc 1.172.1: Rename (in place) and Delete.
             let cell = table.view(atColumn: 0, row: row, makeIfNecessary: false) as? BoostRowCell
@@ -817,26 +834,6 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
         let url = e.item.tab?.url ?? ""
         if let tip { (tip.text, tip.keys) = (url, []) } else if !url.isEmpty { tip = ArcTooltipAnchorView.attach(to: self, help: url) }
         tip?.text = url
-        apply(ink: ink)
-    }
-
-    /// An easel on Library ▸ Easels: its glyph, its title, when it was last edited.
-    func showEasel(title text: String, edited: Date, colors: SidebarColors, open: @escaping () -> Void) {
-        self.colors = colors
-        download = nil
-        isDownloadRow = false
-        restore = open
-        let ink: NSColor = colors.isDark ? .white : .black
-        tile.layer?.contents = nil
-        tile.layer?.backgroundColor = ink.withAlphaComponent(0.04).cgColor
-        icon.isHidden = false
-        icon.image = NSImage(systemSymbolName: "pencil.and.scribble", accessibilityDescription: "Easel")
-        title.stringValue = text
-        title.lineBreakMode = .byTruncatingTail
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .full
-        detail.stringValue = "Edited " + f.localizedString(for: edited, relativeTo: Date())
-        tip?.text = text
         apply(ink: ink)
     }
 
