@@ -460,8 +460,8 @@ public struct AppSettings: Codable, Equatable {
     /// Arc's per-site Developer Mode (⌃D): the toolbar shows the full URL in
     /// monospace with the developer icons, and the nav buttons move to the sidebar.
     public var developerHosts: Set<String> = []
-    /// Arc's `disabledDefaultHosts`: localhost starts in Developer Mode, and ⌃D on it
-    /// records it here (#228).
+    /// Arc's `disabledDefaultHosts`: local servers start in Developer Mode, and ⌃D on one
+    /// records its host here (#228).
     public var disabledDefaultDeveloperHosts: Set<String> = []
     /// Host pages in Chrome-style windows: Chrome extensions and Chrome's own
     /// DevTools docking. Needs a restart to change.
@@ -599,13 +599,15 @@ public struct AppSettings: Codable, Equatable {
         get { defaultLinkDestination == .littleWindow }
         set { defaultLinkDestination = newValue ? .littleWindow : .mostRecentSpace }
     }
-    /// Hosts Arc puts in Developer Mode by itself, on any port. localhost is the one Arc's
-    /// StorableDeveloperModeState.json shows in `disabledDefaultHosts` once ⌃D turns it off.
-    public static let defaultDeveloperHosts: Set<String> = ["localhost"]
+    /// Hosts Arc puts in Developer Mode by itself, on any port: localhost, 127.0.0.1 and any
+    /// *.localhost, not [::1] (Arc 1.172, checked live 8 Nov 2026).
+    public static func isDefaultDeveloperHost(_ host: String) -> Bool {
+        host == "localhost" || host == "127.0.0.1" || host.hasSuffix(".localhost")
+    }
     public func isDeveloperMode(url: String) -> Bool {
         guard let k = AppSettings.siteKey(for: url) else { return false }
         return developerHosts.contains(k)
-            || (Self.defaultDeveloperHosts.contains(k) && !disabledDefaultDeveloperHosts.contains(k))
+            || (Self.isDefaultDeveloperHost(k) && !disabledDefaultDeveloperHosts.contains(k))
     }
     /// Whether a page shown alone carries a bar above it: the toolbar while it is shown, and
     /// Arc's developer bar on a Developer Mode site even with the toolbar hidden (#185). A
@@ -616,7 +618,7 @@ public struct AppSettings: Codable, Equatable {
     public mutating func toggleDeveloperMode(url: String) {
         guard let k = AppSettings.siteKey(for: url) else { return }
         let on = isDeveloperMode(url: url)
-        if Self.defaultDeveloperHosts.contains(k) {
+        if Self.isDefaultDeveloperHost(k) {
             developerHosts.remove(k)
             if on { disabledDefaultDeveloperHosts.insert(k) } else { disabledDefaultDeveloperHosts.remove(k) }
         } else if on { developerHosts.remove(k) } else { developerHosts.insert(k) }

@@ -153,18 +153,21 @@ struct SidebarModelTests {
         #expect(settings.developerHosts.isEmpty, "no host, nothing to toggle")
     }
 
-    /// #228 (Balajitechlabs): Arc turns Developer Mode on by itself for localhost, on any
-    /// port. ⌃D turns it off for that host, and Arc remembers that in
-    /// StorableDeveloperModeState.json's `disabledDefaultHosts`.
+    /// #228 (Balajitechlabs): Arc turns Developer Mode on by itself for local servers, on any
+    /// port: localhost, 127.0.0.1 and *.localhost, not [::1]. ⌃D turns it off for that host, and
+    /// Arc remembers that in StorableDeveloperModeState.json's `disabledDefaultHosts`.
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/228"))
-    func localhostStartsInDeveloperMode() throws {
+    func localServersStartInDeveloperMode() throws {
         var settings = AppSettings()
         #expect(settings.isDeveloperMode(url: "http://localhost:3000/"))
-        #expect(settings.isDeveloperMode(url: "http://localhost:8080/api"))
+        #expect(settings.isDeveloperMode(url: "http://127.0.0.1:8080/api"))
+        #expect(settings.isDeveloperMode(url: "http://app.localhost:5173/"))
+        #expect(!settings.isDeveloperMode(url: "http://[::1]:3000/"))
+        #expect(!settings.isDeveloperMode(url: "http://localhost.example.com/"))
         #expect(!settings.isDeveloperMode(url: "https://example.com"))
-        #expect(!settings.isDeveloperMode(url: "http://app.localhost:3000/"), "the host itself only")
         settings.toggleDeveloperMode(url: "http://localhost:5173/")
         #expect(!settings.isDeveloperMode(url: "http://localhost:3000/"), "off for the host, every port")
+        #expect(settings.isDeveloperMode(url: "http://127.0.0.1:8080/"), "127.0.0.1 keeps its own")
         let saved = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
         #expect(!saved.isDeveloperMode(url: "http://localhost:3000/"), "turned off stays off")
         settings.toggleDeveloperMode(url: "http://localhost/")

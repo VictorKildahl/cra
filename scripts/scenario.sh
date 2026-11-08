@@ -98,6 +98,16 @@ fi
 if ! grep -q '^fresh' "$FILE" && [ ! -f "$DATA/settings.json" ]; then
   echo '{"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}' > "$DATA/settings.json"
 fi
+# ${PAGE} is on 127.0.0.1, which starts in Developer Mode as in Arc (#228). Runs start with it
+# turned off, as after ⌃D, so pages show the normal bar; a seeded settings.json that names
+# disabledDefaultDeveloperHosts keeps its own.
+if [ -f "$DATA/settings.json" ]; then
+  python3 -I -c '
+import json, sys
+p = sys.argv[1]; s = json.load(open(p))
+s.setdefault("disabledDefaultDeveloperHosts", ["127.0.0.1"])
+json.dump(s, open(p, "w"))' "$DATA/settings.json"
+fi
 
 PIDS=()
 PID=""

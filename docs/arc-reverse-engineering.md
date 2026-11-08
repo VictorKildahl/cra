@@ -313,12 +313,16 @@ behind a link glyph, sidebar toggle right; developer = lock + full monospace URL
 copy/capture/DevTools/source icons right, nav buttons in the sidebar's title row. Cra
 stores the hosts in `AppSettings.developerHosts`.
 
-localhost is in Developer Mode before anyone turns it on (8 Nov 2026, #228): Arc's
+Local servers are in Developer Mode before anyone turns it on (8 Nov 2026, #228). Arc's
 StorableDeveloperModeState.json holds `enabledHosts` and `disabledDefaultHosts`, and Victor's
-has `"disabledDefaultHosts": ["localhost"]` after ⌃D turned it off there. Only localhost is
-attested; 127.0.0.1 wasn't checked live (the `(localhost|127\.0\.0\.1)` regex in
-ARCFoundationBase's String+URL sits with the URL-detection patterns, not DeveloperModeClient).
-Cra: `AppSettings.defaultDeveloperHosts` and `disabledDefaultDeveloperHosts`.
+has `"disabledDefaultHosts": ["localhost"]` after ⌃D turned it off there. Checked live in
+Victor's hidden Arc 1.172 (AppleScript new tab, then the AX tree; a sidebar row's
+`sidebarItemSubtitleTextField` shows host:port only in Developer Mode, e.g. ahrefs.com and
+example.com from `enabledHosts`): `127.0.0.1:47188` and `app.localhost:47188` showed it,
+`[::1]:47188` didn't, and localhost didn't because Victor had turned it off. The
+`(localhost|127\.0\.0\.1)` regex in ARCFoundationBase's String+URL is URL detection, not this.
+Cra: `AppSettings.isDefaultDeveloperHost` and `disabledDefaultDeveloperHosts`; scenario runs
+start with 127.0.0.1 turned off so ${PAGE} keeps the normal bar.
 
 The ⌄ after ↻ in that title row (GitHub #89, Arc screenshot from vrubzov1957): "✓ Reload ⌘R",
 "Refresh (Ignore Cache) ⇧⌘R", a separator, "Clear Cookies and Refresh". Arc's context menus show
