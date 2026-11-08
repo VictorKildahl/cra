@@ -154,6 +154,8 @@ static CraClient* AsCraClient(CefClient* c) {
 @property (nonatomic, copy) NSString* currentTitle;
 @property (nonatomic) BOOL isLoading;
 @property (nonatomic) BOOL hasCommittedLoad;
+@property (nonatomic, copy) NSString* navigatingURL;
+@property (nonatomic) NSInteger navigationStarts;
 @property (nonatomic) BOOL canGoBack;
 @property (nonatomic) BOOL canGoForward;
 @property (nonatomic) BOOL isCreated;
@@ -1587,7 +1589,11 @@ public:
                             method:NSStringFromCef(request->GetMethod())]) return true;
         // A new page, also one started while the last is still loading: the loading bar waits
         // for its answer again.
-        if (!is_redirect) SetCommittedLoad(o, NO);
+        o.navigatingURL = NSStringFromCef(request->GetURL());
+        if (!is_redirect) {
+            o.navigationStarts += 1;
+            SetCommittedLoad(o, NO);
+        }
         return false;
     }
 

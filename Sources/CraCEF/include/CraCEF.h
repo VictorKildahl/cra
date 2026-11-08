@@ -151,6 +151,11 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
 /// NO from the start of a main-frame navigation until it commits (the server answered and the
 /// new page began to load), YES after.
 @property (nonatomic, readonly) BOOL hasCommittedLoad;
+/// The address the main frame is navigating to, redirects followed (OnBeforeBrowse); what a
+/// page still waiting for its answer is waiting for (GitHub #256). nil before the first.
+@property (nonatomic, readonly, copy, nullable) NSString *navigatingURL;
+/// Main-frame navigations started (not redirects): another one restarts a wait.
+@property (nonatomic, readonly) NSInteger navigationStarts;
 @property (nonatomic, readonly) BOOL canGoBack;
 @property (nonatomic, readonly) BOOL canGoForward;
 @property (nonatomic, readonly) BOOL isCreated;

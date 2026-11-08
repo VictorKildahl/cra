@@ -52,6 +52,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var commandBarOpenedAt = Date.distantPast
     private var commandBarClosingClick = DismissingClick()
     private let toast = ShinyToast()
+    /// Each live tab's wait for its first response (GitHub #256), the tab whose notice the toast
+    /// shows (nil once another toast took its place), and the check when the next one is due.
+    private var slowResponses: [UUID: SlowResponseNotice] = [:]
+    private var slowResponseToastTab: UUID?
+    private var slowResponseCheck: ScheduledWork?
     private var commandObserving = false
     /// Closed for good (another window stayed open): it no longer follows the store.
     private var isTornDown = false
@@ -552,6 +557,61 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if sidebarUI.pageThemeColor != themeColor { sidebarUI.pageThemeColor = themeColor }
         for (id, rt) in browsers.runtimes where sidebarUI.progress[id] != rt.progress { sidebarUI.progress[id] = rt.progress }
         syncNavStates(browsers.visibleTabIDs)
+        syncSlowResponse()
+    }
+
+    /// The front tab still waiting for its first response after ten seconds says so in the toast,
+    /// with Stop Loading (SlowResponseNotice, GitHub #256). Runs on every page event and when the
+    /// front tab's notice falls due.
+    private func syncSlowResponse() {
+        let now = app.composition.clock.now
+        var next: [UUID: SlowResponseNotice] = [:]
+        for (id, rt) in browsers.runtimes {
+            var n = slowResponses[id] ?? SlowResponseNotice()
+            n.update(LoadingIndicator.Phase(isLoading: rt.browser.isLoading, committed: rt.browser.hasCommittedLoad),
+                     navigation: rt.browser.navigationStarts, now: now)
+            next[id] = n
+        }
+        slowResponses = next
+        let id = browsers.visibleTabID
+        let notice = id.flatMap { next[$0] }
+        slowResponseCheck?.cancel()
+        slowResponseCheck = nil
+        if let due = notice?.showsAt, due > now {
+            slowResponseCheck = app.composition.clock.after(due.timeIntervalSince(now)) { [weak self] in self?.syncSlowResponse() }
+        }
+        if let id, notice?.isShown(at: now) == true {
+            if slowResponseToastTab != id { showSlowResponse(id) }
+        } else if let shown = slowResponseToastTab {
+            slowResponseToastTab = nil
+            CraLog.note("page \(slowResponseLogHost(shown)) no longer waiting: notice gone (navigation \(browsers.runtime(for: shown)?.browser.navigationStarts ?? 0))")
+            toast.dismiss()
+        }
+    }
+
+    private func showSlowResponse(_ id: UUID) {
+        guard let window, let browser = browsers.runtime(for: id)?.browser else { return }
+        let url = browser.navigatingURL ?? store.item(id)?.tab?.url ?? ""
+        let page = shell.webContainer.convert(shell.webContainer.bounds, to: nil)
+        toast.show(SlowResponseNotice.message(for: url),
+                   action: ShinyToast.Action(title: "Stop Loading") { [weak self] in
+                       CraLog.note("page \(self?.slowResponseLogHost(id) ?? "") stopped from the notice")
+                       self?.browsers.runtime(for: id)?.browser.stopLoading()
+                   },
+                   page: page, in: window, theme: focusedSpace.theme,
+                   onClose: { [weak self] in
+                       // ✕: the page goes on waiting, without the notice.
+                       self?.slowResponses[id]?.close()
+                       if self?.slowResponseToastTab == id { self?.slowResponseToastTab = nil }
+                   })
+        slowResponseToastTab = id
+        CraLog.note("page \(slowResponseLogHost(id)) still waiting for a response: notice shown (navigation \(browser.navigationStarts))")
+    }
+
+    /// The host for log lines, as CraLog writes pages.
+    private func slowResponseLogHost(_ id: UUID) -> String {
+        guard let browser = browsers.runtime(for: id)?.browser else { return "?" }
+        return browser.isIncognito ? "(incognito)" : CraLog.host(browser.navigatingURL ?? store.item(id)?.tab?.url ?? "")
     }
 
     /// Each pane's toolbar state, for the panes whose page is live in this window.
@@ -3393,6 +3453,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 return
             }
             let page = self.shell.webContainer.convert(self.shell.webContainer.bounds, to: nil)
+            self.slowResponseToastTab = nil
             self.toast.show("\(service) plays with Safari's engine",
                             action: ShinyToast.Action(title: "Why?") { [weak self] in self?.showSiteControlsFromTheirButton() },
                             page: page, in: window, theme: self.focusedSpace.theme, onClose: told)
@@ -3406,6 +3467,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func showToast(_ text: String, action: ShinyToast.Action? = nil) {
         guard let window else { return }
         let page = shell.webContainer.convert(shell.webContainer.bounds, to: nil)
+        slowResponseToastTab = nil
         toast.show(text, action: action, page: page, in: window, theme: focusedSpace.theme)
     }
 

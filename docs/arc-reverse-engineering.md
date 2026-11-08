@@ -2998,6 +2998,22 @@ that waits 3 s before answering and then serves a page whose image takes 5 s.
   margin (edge to edge, fullscreen) there is no bar; on light themes it is black at the same opacities. It slides
   with the card when the sidebar hides or shows.
 
+## A long wait for the first response (Arc 1.172.1, 8 Nov 2026, issue #256, offline copy)
+Offline Arc (fake home, network limited to localhost), a new tab opened over AppleScript (`make new tab with
+properties {URL:…}`) on a local server that answers after 40 s; window captures at 3, 6, 13, 20, 30 and 44 s.
+- [O] While it waits: a white page, the tab row "Untitled", the address reading about:blank, × in place of reload.
+  No status text, no notice; the frames at 13, 20 and 30 s are identical. The page appears when the answer comes.
+- [O static] Arc's StatusTextController (`StatusText = statusText(String) | explainedStatusText(String, String)`)
+  never showed Chromium's "Waiting for $1" load state in this run.
+- Cra deviates on purpose (Victor asked for #256): ten seconds into the loading bar's waiting phase, Arc's toast
+  (ShinyToast, so it shows edge to edge, in fullscreen and in a Little Window too) says "Still waiting for <host> to
+  respond" with Stop Loading and ✕. It goes when the page commits, fails, is stopped or another tab comes to the
+  front; ✕ holds for that navigation. SlowResponseNotice (CraCore) decides; CraBrowser.navigatingURL and
+  navigationStarts (OnBeforeBrowse) give the host and restart the clock for a new navigation. Pinned by
+  SlowResponseNoticeTests and the `slow-first-response` scenario (`${STALL}` never answers).
+- [?] Not measured: whether Arc ever times out on its own (Chromium's network stack has no response-header
+  timeout; the request waits for the server or a reset).
+
 ## Light and dark space themes (Arc 1.171, 3 Nov 2026, issue #155, Swift metadata + offline Arc)
 - [O static] `WindowTheme.background` is `AppearanceBasedConfiguration<Background>`: `single(_0)` or
   `appearanceBased(light:, dark:)`; `semanticColorPalette` and `windowAppearance` use the same wrapper. The editor's

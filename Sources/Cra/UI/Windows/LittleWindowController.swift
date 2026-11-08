@@ -164,6 +164,11 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private var tooltip: LittleTooltipPanel?
     private var tooltipTimer: Timer?
     private let toast = ShinyToast()
+    /// The page's wait for its first response (GitHub #256), whether the toast shows it, and the
+    /// check when it falls due.
+    private var slowResponse = SlowResponseNotice()
+    private var slowResponseShown = false
+    private var slowResponseCheck: ScheduledWork?
     /// The space a cra://open named: "Open in" stays on it, matching the page's profile,
     /// until the user switches spaces from this window's command bar.
     private var requestedSpaceID: UUID?
@@ -1053,6 +1058,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// The toast sits 8 pt under the window's top, over the toolbar (Arc's Little Arc).
     private func showToast(_ text: String, action: ShinyToast.Action? = nil) {
         guard let window, let content = window.contentView else { return }
+        slowResponseShown = false
         toast.show(text, action: action, page: content.convert(content.bounds, to: nil), in: window, colors: LittlePalette.toast)
     }
 
@@ -1109,6 +1115,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         guard let window, (notification.object as? NSWindow) === window, !window.styleMask.contains(.fullScreen) else { return }
         if commandBar.isOpen { positionCommandPanel() }
         if popup != nil { closePopup() }
+        // A toast that stays (the slow-response notice) keeps to the top right.
+        if let content = window.contentView { toast.follow(page: content.convert(content.bounds, to: nil), in: window) }
     }
 
     /// Only a drag by the user sets the remembered size, not placement clamping
@@ -1166,6 +1174,49 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         state.canGoBack = canGoBack
         state.canGoForward = canGoForward
         if !loading { state.progress = 0 }
+        syncSlowResponse(browser)
+    }
+
+    func browser(_ browser: CraBrowser, didChangeCommittedLoad committed: Bool) { syncSlowResponse(browser) }
+
+    /// As in a browser window (MainWindowController.syncSlowResponse): ten seconds without the
+    /// page's first response puts it in the toast, with Stop Loading. `reporting`: the page whose
+    /// event this is; its first one comes while it is still being made, before `browser` is set.
+    private func syncSlowResponse(_ reporting: CraBrowser? = nil) {
+        let browser = reporting ?? self.browser
+        let clock = app.composition.clock
+        let now = clock.now
+        if let browser {
+            slowResponse.update(LoadingIndicator.Phase(isLoading: browser.isLoading, committed: browser.hasCommittedLoad),
+                                navigation: browser.navigationStarts, now: now)
+        } else {
+            slowResponse.update(.hidden, navigation: 0, now: now)
+        }
+        slowResponseCheck?.cancel()
+        slowResponseCheck = nil
+        if let due = slowResponse.showsAt, due > now {
+            slowResponseCheck = clock.after(due.timeIntervalSince(now)) { [weak self] in self?.syncSlowResponse() }
+        }
+        if slowResponse.isShown(at: now) {
+            guard !slowResponseShown, let window, let content = window.contentView, let browser else { return }
+            slowResponseShown = true
+            let host = browser.isIncognito ? "(incognito)" : CraLog.host(browser.navigatingURL ?? currentURL)
+            toast.show(SlowResponseNotice.message(for: browser.navigatingURL ?? currentURL),
+                       action: ShinyToast.Action(title: "Stop Loading") { [weak browser] in
+                           CraLog.note("Little Window: page \(host) stopped from the notice")
+                           browser?.stopLoading()
+                       },
+                       page: content.convert(content.bounds, to: nil), in: window, colors: LittlePalette.toast,
+                       onClose: { [weak self] in
+                           self?.slowResponse.close()
+                           self?.slowResponseShown = false
+                       })
+            CraLog.note("Little Window: page \(host) still waiting for a response: notice shown (navigation \(browser.navigationStarts))")
+        } else if slowResponseShown {
+            slowResponseShown = false
+            CraLog.note("Little Window: page no longer waiting: notice gone")
+            toast.dismiss()
+        }
     }
 
     func browser(_ browser: CraBrowser, didChangeProgress progress: Double) { state.progress = progress }

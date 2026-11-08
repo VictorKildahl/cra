@@ -394,3 +394,10 @@
 #252   Tests/Scenarios/space-dots.scenario  6d228947e52a
 #252   Tests/StoreTests.swift::arcSpaceWithoutAnIconImportsAsADot  14c68aa6e846
 #253   Tests/Scenarios/app-shortcuts.scenario  f21d8bb94bb5
+#256   Packages/CraCore/Tests/CraCoreTests/SlowResponseNoticeTests.swift::aCommittedPageThatKeepsLoadingNeverShowsIt  74904a1aff59
+#256   Packages/CraCore/Tests/CraCoreTests/SlowResponseNoticeTests.swift::aNewNavigationWhileWaitingStartsAgain  6dcd1be80b22
+#256   Packages/CraCore/Tests/CraCoreTests/SlowResponseNoticeTests.swift::closedStaysClosedForThatWaitOnly  14c8e339146c
+#256   Packages/CraCore/Tests/CraCoreTests/SlowResponseNoticeTests.swift::goesWhenThePageAnswersFailsOrStops  1c7bbe784e08
+#256   Packages/CraCore/Tests/CraCoreTests/SlowResponseNoticeTests.swift::namesTheSiteItWaitsFor  77131f187ae0
+#256   Packages/CraCore/Tests/CraCoreTests/SlowResponseNoticeTests.swift::showsAfterTenSecondsWithoutAResponse  652b2e9348ba
+#256   Tests/Scenarios/slow-first-response.scenario  ef5ecd1c5764
