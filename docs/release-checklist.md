@@ -151,6 +151,9 @@ built release app with a test profile. Note anything that fails in the release's
   `secure dns: secure via dns.google` and chrome://settings/security shows the same choice.
 - **#190:** with Ask Where to Save Each File on, the save panel is a sheet on Cra's window, and
   Cancel cancels the download.
+- **PR #254:** with the release app as the default browser, open a page in Safari on an iPhone
+  signed in to the same Apple Account and click the Handoff icon in the Dock. The page opens in
+  Cra, in the space Air Traffic Control picks, and not in Safari.
 
 ## Not pinned yet
 
