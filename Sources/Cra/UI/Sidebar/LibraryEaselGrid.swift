@@ -35,7 +35,7 @@ final class EaselRowCell: NSView {
     override func layout() {
         super.layout()
         let m = MediaGridMetrics.self
-        let w = min(m.tile, (bounds.width - 2 * m.inset - m.gap) / 2)
+        let w = m.tile(width: bounds.width)
         for (i, t) in tiles.enumerated() { t.frame = NSRect(x: m.inset + CGFloat(i) * (w + m.gap), y: 0, width: w, height: w) }
     }
 }

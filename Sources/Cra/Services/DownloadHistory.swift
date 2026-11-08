@@ -73,8 +73,8 @@ final class DownloadHistory {
     }
 
     @discardableResult
-    func add(path: String) -> Entry {
-        let entry = Entry(id: UUID(), path: path, date: Date())
+    func add(path: String, profile: String? = nil) -> Entry {
+        let entry = Entry(id: UUID(), path: path, date: Date(), profile: profile)
         entries.append(entry)
         if entries.count > 200 { entries.removeFirst(entries.count - 200) }
         file.save(entries)

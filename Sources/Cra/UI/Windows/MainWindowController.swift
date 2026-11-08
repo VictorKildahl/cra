@@ -667,7 +667,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                                       cancelled: download.state == .cancelled, failed: download.state == .interrupted)
         updateRecentDownload(download)
         if download.state == .complete, !download.fullPath.isEmpty, finishedDownloads.insert(download.identifier).inserted {
-            DownloadHistory.shared.add(path: download.fullPath)
+            DownloadHistory.shared.add(path: download.fullPath, profile: browsers.downloadSourceTab.map(store.profileDirectoryName(item:)) ?? profileDirectoryName)
             // The address's scheme only, never the file: scenarios wait for this line.
             CraLog.note("Download finished from a \(URL(string: download.url)?.scheme ?? "unknown"): address")
             let id = download.identifier

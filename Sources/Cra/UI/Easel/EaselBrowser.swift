@@ -7,6 +7,11 @@ import CraCEF
 /// tab's address is `easel://<id>`; the easel itself is `Easels/<id>.json` in the data folder, with
 /// its pictures in `Easels/<id>/`.
 final class EaselBrowser: CraBrowser, NativePage {
+    /// Arc's Peek shows the canvas on #0B0B0B, where a tab shows the space's backdrop through it.
+    func usePeekLook() { canvas.layer?.backgroundColor = NSColor(white: 11.0 / 255, alpha: 1).cgColor }
+    /// In a tab again (Peek's ⤢): the veiled backdrop.
+    func usePageLook() { canvas.layer?.backgroundColor = NSColor(white: 0, alpha: 0.5).cgColor }
+
     nonisolated func owns(_ url: String) -> Bool { url == address }
 
     private let container: NSView

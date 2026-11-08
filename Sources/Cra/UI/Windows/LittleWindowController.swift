@@ -441,11 +441,21 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         self.dim = dim
         pw.addChildWindow(dim, ordered: .above)
         dim.orderFront(nil)
-        let controls = PeekControlsPanel(buttons: [
+        // Arc's Peek of an easel (Library ▸ Easels, 8 Nov 2026): no toolbar, the canvas on #0B0B0B,
+        // and only ✕ and ⤢ beside it.
+        let easel = browser as? EaselBrowser
+        if let easel {
+            shell.hidesBar = true
+            easel.usePeekLook()
+        }
+        var buttons: [PeekControlsPanel.Button] = [
             .init(symbol: "xmark", help: "Close (⌘W)") { [weak self] in self?.closeWindow() },
             .init(symbol: "arrow.up.left.and.arrow.down.right", help: "Expand (⌘O)") { [weak self] in self?.promote(to: nil) },
-            .init(symbol: "square.split.2x1", help: "Add To Split") { [weak self] in self?.promoteToSplit() },
-        ])
+        ]
+        if easel == nil {
+            buttons.append(.init(symbol: "square.split.2x1", help: "Add To Split") { [weak self] in self?.promoteToSplit() })
+        }
+        let controls = PeekControlsPanel(buttons: buttons)
         self.controls = controls
         controls.place(parent.peekButtonFrames(), theme: parent.focusedSpace.theme)
         controls.alphaValue = 0
@@ -890,6 +900,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// live browser goes with it, so history, scroll position and logins stay.
     func promote(to spaceID: UUID?) {
         guard let b = browser, hasPage else { return }
+        (b as? EaselBrowser)?.usePageLook()
         closePopup()
         commandBar.close()
         app.useNormalWindow()
@@ -1307,7 +1318,9 @@ final class LittleShellView: NSView {
             needsLayout = true
         }
     }
-    private var barHeight: CGFloat { isPeek ? PeekLayout.barHeight : LittleMetrics.barHeight }
+    private var barHeight: CGFloat { hidesBar ? 0 : (isPeek ? PeekLayout.barHeight : LittleMetrics.barHeight) }
+    /// A page with no toolbar over it (an easel in Peek).
+    var hidesBar = false { didSet { toolbarHost.isHidden = hidesBar; needsLayout = true } }
     private var trackingArea: NSTrackingArea?
 
     override init(frame: NSRect) {

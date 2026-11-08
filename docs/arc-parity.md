@@ -218,6 +218,18 @@ in this sweep (Essential Shortcuts window, Library pages).
 - Easel pictures resize from their corners and keep their proportions (Arc's AspectRatioControlPoints;
   Arc draws no handles, only the 2 pt blue outline). Cra: CraCore Easel.resized, the diagonal resize
   cursors on a picked item's corners; rectangles and ellipses resize freely (⇧ keeps proportions).
+- An easel picked on the Easels page opens in Peek (no toolbar, the canvas on #0B0B0B, only ✕ and ⤢;
+  ⤢ makes it a tab with the veiled backdrop).
+- Media grid: in a 305 pt column the tiles are 132 pt, 12 pt from the left, 16 pt apart, rows 8 pt
+  apart; a video has a white ▶ over its picture.
+- Downloads and Archived Tabs: a "Filter" pill (73 × 36 pt) beside the search opens a panel in its
+  place: "Filter Archived Tabs" / "Filter Downloads…" and Done, then chips (Archived Tabs: How was the
+  tab closed? Auto-Closed / Manually Closed; Where was the tab? Little Arc and each space. Downloads:
+  Profiles); a picked chip is dark with white text. An archived row on hover shows a bin (remove) and
+  a curved arrow (restore). Downloads' empty page: "Come back after you've found some cool stuff to
+  save." Cra's Open Downloads Folder and Clear Archive moved to the rail buttons' right-click.
+- The selected rail page's glyph and the Spaces page's + take the space's colours (an olive space: a
+  cream disc with a dark mark), not a fixed blue.
 - Boost rows: the site's icon on a 43 pt light tile with a white rim, name 14 pt over the site; under
   the pointer a rounded card and a 36 × 22 pt switch; off = the tile struck through; right-click
   Rename (in place), Delete.

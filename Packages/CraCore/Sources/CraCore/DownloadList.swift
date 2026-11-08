@@ -9,11 +9,15 @@ public enum DownloadList {
         public let id: UUID
         public var path: String
         public var date: Date
+        /// The profile folder it was downloaded in ("Default", "Profile 2"; nil before 8 Nov 2026),
+        /// for Arc's Filter ▸ Profiles on Library ▸ Downloads.
+        public var profile: String?
 
-        public init(id: UUID, path: String, date: Date) {
+        public init(id: UUID, path: String, date: Date, profile: String? = nil) {
             self.id = id
             self.path = path
             self.date = date
+            self.profile = profile
         }
 
         public var name: String { (path as NSString).lastPathComponent }
