@@ -1024,9 +1024,32 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             for v in views { target.addSubview(v) }
         }
         let bounds = shell.paneCards.first { $0.webArea === target }?.frozenWebBounds ?? target.bounds
-        for v in views where v.frame != bounds { v.frame = bounds }
+        EmbeddedPages.place(views, in: bounds)
         if embedFocusTab == id { focusEmbeddedPage(id) }
     }
+
+    /// `cra://debug?pageInsets=1`: where the focused page's input view sits against the compositor
+    /// that draws the page, after its card lays out again, and the insets Chromium gave it. While
+    /// the debugger bar shows, both say the bar's height at the top (#241).
+    func pageInsetsReadout() -> String {
+        guard let host = browsers.visibleRuntime?.hostWindow, let views = EmbeddedPages.pageViews(of: host),
+              let compositor = views.first, let page = views.last, let area = page.superview else { return "page view insets: no page" }
+        pageInsetsReadouts += 1
+        if let card = shell.paneCards.first(where: { $0.webArea === area }) {
+            card.needsLayout = true
+            card.layoutSubtreeIfNeeded()
+        }
+        let c = compositor.frame, p = page.frame
+        let top = area.isFlipped ? p.minY - c.minY : c.maxY - p.maxY
+        let bottom = area.isFlipped ? c.maxY - p.maxY : p.minY - c.minY
+        let chromium = EmbeddedPages.chromiumInsets(of: page).map { "top=\(Int($0.top)) left=\(Int($0.left)) bottom=\(Int($0.bottom)) right=\(Int($0.right))" } ?? "none"
+        // The compositor's area from the window's top left, where clickAt points go.
+        let inWindow = area.convert(c, to: nil)
+        let origin = "\(Int(inWindow.minX)),\(Int((window?.frame.height ?? 0) - inWindow.maxY))"
+        return "page view insets \(pageInsetsReadouts): top=\(Int(top)) left=\(Int(p.minX - c.minX)) bottom=\(Int(bottom)) right=\(Int(c.maxX - p.maxX)); Chromium's \(chromium); page area at \(origin) \(Int(c.width))x\(Int(c.height))"
+    }
+
+    private var pageInsetsReadouts = 0
 
     /// `cra://debug?embedDump=1`: where every page view is, for EmbeddedPages work.
     func embeddedPagesDump() -> String {

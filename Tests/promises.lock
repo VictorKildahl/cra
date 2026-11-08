@@ -364,5 +364,8 @@
 #233   Packages/CraCore/Tests/CraCoreTests/MouseButtonSpaceSwitchTests.swift::backGoesToThePreviousSpaceAndForwardToTheNext  10b4dc8a4a65
 #233   Packages/CraCore/Tests/CraCoreTests/MouseButtonSpaceSwitchTests.swift::otherButtonsDoNotSwitch  07b725a8e6f5
 #233   Tests/Scenarios/mouse-buttons-switch-spaces.scenario  79148e8b3ebb
+#241   Packages/CraCore/Tests/CraCoreTests/PageViewInsetsTests.swift::placesTheViewBelowTheBarInTheCard  7ba2374d493e
+#241   Packages/CraCore/Tests/CraCoreTests/PageViewInsetsTests.swift::readsTheBarAboveThePageInEitherSuperview  548a9473598d
+#241   Tests/Scenarios/debugger-infobar.scenario  189c93dc5b96
 #243   Packages/CraCore/Tests/CraCoreTests/TabRowTrailingTests.swift::hoveredNameRunsToTheCloseButton  0a8658ede567
 #243   Packages/CraCore/Tests/CraCoreTests/TabRowTrailingTests.swift::restingTailIsUnchanged  f479053f4258

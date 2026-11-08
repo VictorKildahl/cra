@@ -841,6 +841,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             for item in comps?.queryItems ?? [] { if let v = item.value { dict[item.name] = v } }
             if let js = dict["devtoolsjs"] { main.debugRunInDevTools(js) }
             if dict["embedDump"] != nil { NSLog("%@", main.embeddedPagesDump()); return }
+            if dict["pageInsets"] != nil { CraLog.note(main.pageInsetsReadout()); return }
             // Tests that leave the pointer alone: scroll=dy,steps,x,y scrolls the scroll view at a
             // point of the main window (from its top left); swipe=dx,steps plays a space swipe.
             if let g = dict["scroll"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 4, let w = main.window {

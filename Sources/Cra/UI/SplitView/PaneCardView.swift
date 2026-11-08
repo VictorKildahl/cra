@@ -204,7 +204,7 @@ final class PaneCardView: NSView {
         elsewhereView.layer?.cornerRadius = pageBackground.layer?.cornerRadius ?? 0
         elsewhereView.layer?.maskedCorners = pageBackground.layer?.maskedCorners ?? []
         let wb = frozenWebBounds ?? webArea.bounds
-        for sub in webArea.subviews where sub.frame != wb { sub.frame = wb }
+        EmbeddedPages.place(webArea.subviews, in: wb)
         ring.frame = b
     }
 
