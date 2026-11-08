@@ -42,3 +42,21 @@ struct LibraryGlyph: View {
         return img
     }
 }
+
+struct SidebarPlusMenuGlyph: View {
+    var isOpen = false
+    var tint = NSColor.secondaryLabelColor
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 1)
+                .frame(width: 14, height: 2)
+            RoundedRectangle(cornerRadius: 1)
+                .frame(width: 2, height: 14)
+        }
+            .foregroundStyle(Color(tint))
+            .rotationEffect(.degrees(isOpen ? 45 : 0))
+            .animation(.spring(response: 0.2, dampingFraction: 0.5, blendDuration: 0), value: isOpen)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}

@@ -175,6 +175,7 @@ final class SidebarGlyphButton: NSView {
     var action: () -> Void
     let size: NSSize
     private let glyph = NSImageView()
+    private var menuGlyph: NSHostingView<SidebarPlusMenuGlyph>?
     private var shownSymbol: String?
     /// Arc turns the refresh arrow while it is pressed (NSImageView.pressTurn).
     private var turnsOnPress = false
@@ -217,6 +218,21 @@ final class SidebarGlyphButton: NSView {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    func setMenuOpen(_ open: Bool) {
+        if let menuGlyph {
+            menuGlyph.rootView.isOpen = open
+        } else {
+            let host = NSHostingView(rootView: SidebarPlusMenuGlyph(isOpen: open, tint: tint ?? glyph.contentTintColor ?? colors.glyph))
+            host.frame = bounds
+            host.autoresizingMask = [.width, .height]
+            addSubview(host)
+            menuGlyph = host
+        }
+        glyph.isHidden = true
+        mark?.isHidden = true
+        menuGlyph?.isHidden = false
+    }
+
     /// `animated` swaps another symbol in the way Arc swaps refresh and stop.
     func setSymbol(_ symbol: String, iconSize: CGFloat, weight: NSFont.Weight = .medium, help: String, animated: Bool = false) {
         let image = SidebarSymbols.image(symbol, size: iconSize, weight: weight)
@@ -234,6 +250,7 @@ final class SidebarGlyphButton: NSView {
         shownSymbol = nil
         glyph.image = image
         glyph.isHidden = false
+        menuGlyph?.isHidden = true
         mark?.isHidden = true
         setHelp(help)
     }
@@ -252,6 +269,7 @@ final class SidebarGlyphButton: NSView {
         markMinus = minus
         shownSymbol = nil
         glyph.isHidden = true
+        menuGlyph?.isHidden = true
         mark?.isHidden = false
         needsLayout = true
         refresh()
@@ -275,6 +293,7 @@ final class SidebarGlyphButton: NSView {
             tint = enabled ? colors.glyph : colors.textTertiary.withAlphaComponent(colors.textTertiary.alphaComponent * 0.55)
         }
         glyph.contentTintColor = self.tint ?? tint
+        menuGlyph?.rootView.tint = self.tint ?? tint
         mark?.strokeColor = (self.tint ?? tint).cgColor
         layer?.backgroundColor = ((hovering || highlighted) && enabled ? colors.hoverFill : .clear).cgColor
     }
