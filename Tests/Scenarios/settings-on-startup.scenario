@@ -1,0 +1,9 @@
+# chrome://settings has no On startup section, as in Arc (its settings page sets onStartup:false).
+# CEF writes the pref itself at every launch from persist_session_cookies, and Cra's sidebar restores
+# its own tabs, so a choice made there snapped back to "Continue where you left off" (X DM 7 Nov 2026).
+# The address goes to the settings home page, and neither the section nor its menu row shows. The
+# other 15 menu rows stay: hiding one page means listing them all, and one left out would vanish too.
+cra://open?url=chrome://settings/onStartup
+wait 4
+cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(r=>setTimeout(()=>{const f=s=>{let c=0;const w=x=>{if(x.matches(s))c++;if(x.shadowRoot)[...x.shadowRoot.children].forEach(w);[...x.children].forEach(w)};w(document.documentElement);return c};r('startup:'+location.pathname+'|'+f('settings-on-startup-page')+'|'+f('[id=onStartup]:not([hidden])')+'|'+f('[role=menuitem]:not([hidden])'))},1000))","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"startup:/\|0\|0\|15"
