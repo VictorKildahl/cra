@@ -3,48 +3,41 @@ import Foundation
 import Testing
 
 struct FolderSymbolTests {
-    @Test func previousLeafIdentifierStillLoads() throws {
-        let symbol = try JSONDecoder().decode(FolderSymbol.self, from: Data(#""pizza""#.utf8))
-        #expect(symbol.rawValue == "leaf")
-    }
-
     @Test(arguments: FolderSymbol.allCases)
     func selectedSymbolSurvivesReload(_ symbol: FolderSymbol) throws {
         var folder = SidebarItem.folder("Reading", parent: nil)
-        folder.folderIcon = FolderIcon(color: .white, symbol: symbol)
+        folder.folderIcon = .white
+        folder.folderSymbol = symbol
         let reloaded = try JSONDecoder().decode(SidebarItem.self, from: JSONEncoder().encode(folder))
         #expect(reloaded == folder)
-        #expect(reloaded.folderIcon?.symbol == symbol)
-        #expect(reloaded.folderIcon?.color == .white)
+        #expect(reloaded.folderSymbol == symbol)
+        #expect(reloaded.folderIcon == .white)
     }
 
-    @Test func removingSymbolKeepsFolderColorAndOldFormat() throws {
+    /// Cra 0.1.35 decodes `folderIcon` as a plain colour string and fails the whole sidebar.json
+    /// on anything else, which starts it with an empty sidebar. The symbol sits beside it instead.
+    @Test func symbolLeavesTheColourKeyReadableByAnOlderCra() throws {
         var folder = SidebarItem.folder("Reading", parent: nil)
-        folder.folderIcon = FolderIcon(color: .black)
-        let original = try JSONEncoder().encode(folder)
-        #expect(!String(decoding: original, as: UTF8.self).contains("folderSymbol"))
-        #expect(try JSONDecoder().decode(SidebarItem.self, from: original).folderIcon?.symbol == nil)
-        folder.folderIcon?.symbol = .code
-        folder.folderIcon?.symbol = nil
-        #expect(try JSONDecoder().decode(SidebarItem.self, from: JSONEncoder().encode(folder)).folderIcon?.color == .black)
-        let removed = try JSONEncoder().encode(folder)
-        #expect(!String(decoding: removed, as: UTF8.self).contains("folderSymbol"))
-        #expect(try JSONDecoder().decode(SidebarItem.self, from: removed) == JSONDecoder().decode(SidebarItem.self, from: original))
+        folder.folderIcon = .black
+        folder.folderSymbol = .code
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(folder)) as? [String: Any]
+        #expect(json?["folderIcon"] as? String == "black")
+        #expect(json?["folderSymbol"] as? String == "code")
     }
 
-    @Test(arguments: FolderIconStyle.allCases)
-    func legacyColorEncodingStaysCompatible(_ color: FolderIconStyle) throws {
-        let legacy = try JSONEncoder().encode(color)
-        let icon = try JSONDecoder().decode(FolderIcon.self, from: legacy)
-        #expect(icon == FolderIcon(color: color))
-        #expect(try JSONEncoder().encode(icon) == legacy)
+    @Test func noSymbolWritesNoKey() throws {
+        var folder = SidebarItem.folder("Reading", parent: nil)
+        folder.folderIcon = .white
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(folder)) as? [String: Any]
+        #expect(json?["folderSymbol"] == nil)
+        #expect(json?["folderIcon"] as? String == "white")
     }
 
-    @Test func symbolWithoutColorFollowsTheTheme() throws {
-        let icon = FolderIcon(symbol: .code)
-        #expect(!icon.isEmpty)
-        #expect(FolderIcon().isEmpty)
-        #expect(try JSONDecoder().decode(FolderIcon.self, from: JSONEncoder().encode(icon)) == icon)
-        #expect(try JSONDecoder().decode(FolderIcon.self, from: Data("{}".utf8)).isEmpty)
+    @Test func symbolWithoutColourFollowsTheTheme() throws {
+        var folder = SidebarItem.folder("Reading", parent: nil)
+        folder.folderSymbol = .star
+        let reloaded = try JSONDecoder().decode(SidebarItem.self, from: JSONEncoder().encode(folder))
+        #expect(reloaded.folderIcon == nil)
+        #expect(reloaded.folderSymbol == .star)
     }
 }

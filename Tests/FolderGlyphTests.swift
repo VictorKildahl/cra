@@ -91,7 +91,7 @@ enum FolderGlyphTests {
         expect(isRed(pixel(original)), "original artwork keeps its color despite the blue folder tint")
         expect(pixel(original, y: 0).alphaComponent < 0.01, "wide artwork is letterboxed, not stretched")
         let originalImage = sourceImage(mark)
-        expect(originalImage.width == 20 && originalImage.height == 10,
+        expect(pixelSize(originalImage) == nativePixelSize(wide) && originalImage.width == 2 * originalImage.height,
                "artwork keeps its native source resolution before fitting")
         show(glyph, emblem: FolderEmblem(image: wide))
         expect(sourceImage(mark) === originalImage, "unchanged artwork is not rasterized again")
@@ -147,7 +147,7 @@ enum FolderGlyphTests {
             show(glyph, emblem: emblem)
             let mark = imageLayer(in: glyph.layer!)!
             let source = sourceImage(mark)
-            expect(source.width == 10 && source.height == 10,
+            expect(pixelSize(source) == nativePixelSize(emblem.image),
                    "backing scale does not resample the native source")
             expect(source === cachedSource, "moving between displays reuses the source image")
             expect(mark.contentsScale == scale, "the bitmap is displayed at its backing scale")
@@ -175,7 +175,7 @@ enum FolderGlyphTests {
             show(glyph, emblem: FolderEmblem(image: symbol.image, coloring: .template))
             let mark = imageLayer(in: glyph.layer!)!
             let source = sourceImage(mark)
-            expect(source.width == 16 && source.height == 16,
+            expect(symbol.image.size == CGSize(width: 16, height: 16) && pixelSize(source) == nativePixelSize(symbol.image),
                    "picker symbols use Arc's 16 pt font canvas: \(symbol)")
             let pixels = bitmap(mark)
             let visible = (0..<pixels.pixelsHigh).contains { y in
@@ -193,7 +193,7 @@ enum FolderGlyphTests {
             show(glyph, emblem: FolderEmblem(image: artwork, coloring: .template))
             let mark = imageLayer(in: glyph.layer!)!
             let source = sourceImage(mark)
-            expect(source.width == 32 && source.height == 32,
+            expect(artwork.size == CGSize(width: 32, height: 32) && pixelSize(source) == nativePixelSize(artwork),
                    "live folder source matches Arc's 32 pt asset canvas")
             expect(mark.bounds.size == CGSize(width: 9.5, height: 9.5),
                    "live folder marks use the same fit as picker symbols")
@@ -261,6 +261,16 @@ enum FolderGlyphTests {
     private static func isRed(_ color: NSColor) -> Bool { color.redComponent > 0.9 && color.blueComponent < 0.1 }
     private static func isBlue(_ color: NSColor) -> Bool { color.blueComponent > 0.9 && color.redComponent < 0.1 }
     private static func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat { hypot(a.x - b.x, a.y - b.y) }
+
+    /// What the image's own CGImage measures. NSImage picks the main display's scale for a nil
+    /// context (2x on a Retina Mac, 1x on a display-less CI runner); the contract is only that the
+    /// emblem's frame and the window's backing scale never re-rasterize the artwork.
+    private static func nativePixelSize(_ image: NSImage) -> CGSize {
+        var rect = CGRect(origin: .zero, size: image.size)
+        return pixelSize(image.cgImage(forProposedRect: &rect, context: nil, hints: nil)!)
+    }
+
+    private static func pixelSize(_ image: CGImage) -> CGSize { CGSize(width: image.width, height: image.height) }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
         guard condition() else { print("FAIL: \(message)"); exit(1) }

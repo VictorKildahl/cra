@@ -175,7 +175,7 @@ enum SidebarMenus {
         let sub = submenu(menu, "Icon Color")
         let id = item.id
         for (title, style) in [("Auto", FolderIconStyle?.none), ("White", .white), ("Black", .black)] {
-            add(sub, title, on: item.folderIcon?.color == style) { list.store.setFolderIconColor(style, for: id) }
+            add(sub, title, on: item.folderIcon == style) { list.store.setFolderIcon(style, for: id) }
         }
     }
 

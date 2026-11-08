@@ -138,6 +138,7 @@
         }
       },
       "folderIcon" : "white",
+      "folderSymbol" : "code",
       "id" : "D0000000-0000-0000-0000-000000000002",
       "isUnread" : false,
       "parentID" : "C0000000-0000-0000-0000-000000000002",
