@@ -20,9 +20,10 @@ public enum PeekTrigger {
     }
 
     /// A link clicked inside the Peek that asks for a new tab (target=_blank, window.open without
-    /// features) leaves the Peek: Arc 1.171 (6 Nov 2026, GitHub #202) closed the Peek and opened
+    /// features) leaves the Peek: Arc 1.171 (6 Nov 2026, GitHub #202) took the Peek away and opened
     /// the page as a selected Today tab in the space, below the tab the Peek came from, with no
-    /// second Little Arc. A Shift-click still loads in the Peek. Only pages a tab can show: an
+    /// second Little Arc. The Peek waits on its tab for the next link (PeekPresence, #242). A
+    /// Shift-click still loads in the Peek. Only pages a tab can show: an
     /// about:blank a script fills in later needs its opener, so it stays a popup.
     public static func leavesPeek(_ url: String, shiftClick: Bool, newTab: Bool) -> Bool {
         guard newTab, !shiftClick, let scheme = URL(string: url)?.scheme?.lowercased() else { return false }

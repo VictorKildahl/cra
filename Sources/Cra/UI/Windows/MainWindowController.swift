@@ -488,6 +488,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             browsers.show(live, focused: liveFocus, focus: !commandBar.isOpen)
         }
         shell.layoutContentChildren()
+        syncPeeks(onScreen: panes)
         syncRingPanel()
         syncSidebarUI()
         window?.title = selectedTab?.displayTitle ?? space.title
@@ -1643,10 +1644,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// one whose close already fades it back doesn't snap that fade.
     private var peekVeil = PeekVeil()
 
-    /// `peek` is opening over this window.
-    func showPeekVeil(for peek: UUID) {
+    /// `peek` is opening over this window, or back with its tab (`animated` false, #242).
+    func showPeekVeil(for peek: UUID, animated: Bool = true) {
         guard peekVeil.show(for: peek) else { return }
-        applyPeekVeil(duration: PeekLayout.openVeilDuration, timing: PeekTransition.easeOutCubic)
+        if animated { applyPeekVeil(duration: PeekLayout.openVeilDuration, timing: PeekTransition.easeOutCubic) } else { applyPeekVeil(duration: 0) }
+    }
+
+    /// `peek` waits on its tab while another is on screen (#242): the page snaps back, and the
+    /// Peek can veil it again.
+    func parkPeekVeil(for peek: UUID) {
+        guard peekVeil.hide(for: peek) else { return }
+        applyPeekVeil(duration: 0)
     }
 
     /// `peek` is closing: the page comes back over Arc's 0.2 s while the card lands.
@@ -1708,6 +1716,29 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     private var peeks: [LittleWindowController] { app.littleWindows.filter { $0.peekParent === self } }
 
+    /// Arc keeps a Peek per tab (#242): each shows while its tab is on screen here, waits out of
+    /// sight while another is, and goes with its tab (PeekPresence).
+    private func syncPeeks(onScreen panes: [UUID]) {
+        for p in peeks {
+            switch PeekPresence.of(peekFrom: p.peekSourceTab, onScreen: panes, tabExists: p.peekSourceTab.map { store.item($0) != nil } ?? false) {
+            case .shown: p.unparkPeek()
+            case .parked: p.parkPeek()
+            case .dropped: p.dropPeek()
+            }
+        }
+    }
+
+    /// `tab`'s page closed (a pinned tab's ⌘W keeps its row): its Peek goes with it (#242).
+    func dropPeeks(from tab: UUID) {
+        for p in peeks where p.peekSourceTab == tab { p.dropPeek() }
+    }
+
+    /// cra://debug?peeks: this window's Peeks, on screen or not, and their pages (#242).
+    func peeksShown() -> String {
+        let list = peeks.map { p in "\(p.window.map { $0.isVisible && $0.alphaValue > 0 } == true ? "shown" : "hidden") \(p.currentURL)" }
+        return list.isEmpty ? "none" : list.joined(separator: ", ")
+    }
+
     /// The Peek closed last over this window and the tab it came from: Arc's ⇧⌘T brings it back
     /// when nothing was archived after it.
     var closedPeek: (url: String, tabID: UUID?, at: Date)?
@@ -1747,7 +1778,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             let wasSelected = selectedTabID.map(panes.contains) ?? false
             for p in panes {
                 _ = store.resetPinnedTab(p)
-                for w in app.mainWindows { w.browsers.unload(p) }
+                for w in app.mainWindows { w.browsers.unload(p); w.dropPeeks(from: p) }
             }
             // Arc goes back to the tab shown before this one if its page is still loaded, and
             // otherwise shows nothing (CloseSuccessor). The panes were just unloaded, so they

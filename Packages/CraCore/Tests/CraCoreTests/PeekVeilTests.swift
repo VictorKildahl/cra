@@ -16,6 +16,16 @@ struct PeekVeilTests {
         #expect(!veil.isOn)
     }
 
+    /// A Peek waiting on its tab lets the page go and veils it again when its tab is back (#242).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/242"))
+    func aPeekBackWithItsTabVeilsThePageAgain() {
+        var veil = PeekVeil()
+        _ = veil.show(for: a)
+        do { let changed = veil.hide(for: a); #expect(changed) }
+        do { let changed = veil.show(for: a); #expect(changed) }
+        #expect(veil.owner == a)
+    }
+
     /// Expand, Add To Split or a close in the 30 ms before the open's veil starts: the Peek is gone
     /// first, and the late show used to leave the page faded and shrunk with no Peek over it.
     @Test func aPeekThatHasEndedNeverVeilsThePage() {

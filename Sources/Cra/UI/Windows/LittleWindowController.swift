@@ -139,8 +139,11 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private(set) weak var peekParent: MainWindowController?
     /// This Peek to its window's veil (MainWindowController.showPeekVeil).
     private let peekID = UUID()
-    /// The tab the Peek came from: links that leave the Peek open as tabs placed from it.
-    private let peekSourceTab: UUID?
+    /// The tab the Peek came from: links that leave the Peek open as tabs placed from it, and
+    /// the Peek waits on it while another tab is on screen (#242).
+    let peekSourceTab: UUID?
+    /// Another tab is on screen: the Peek is out of sight, its page alive, until its tab is back.
+    private(set) var isParked = false
     private var dim: PeekDimPanel?
     private var controls: PeekControlsPanel?
     /// The Peek is on its way out (closePeekAnimated).
@@ -320,7 +323,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         }
         // CEF hands the page window over at its own small frame: shown during a Peek's open it
         // flashed as a black block in the corner.
-        if openingPeek { w.contentView?.isHidden = true }
+        // A Peek waiting on its tab shows it when it is back (unparkPeek).
+        if openingPeek || isParked { w.contentView?.isHidden = true }
+        w.ignoresMouseEvents = isParked
         window.addChildWindow(w, ordered: .above)
         ChromiumChildFocus.attach(w)
         positionHostWindow(shell.convert(shell.page.frame, to: nil))
@@ -421,7 +426,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     // MARK: Peek
 
     /// The click catcher, the Peek and its buttons, in their order above the parent's other children.
-    var peekWindows: [NSWindow] { [dim, window, controls].compactMap { $0 } }
+    var peekWindows: [NSWindow] { isParked ? [] : [dim, window, controls].compactMap { $0 } }
 
     /// Arc's Peek: the card grows out of the link clicked in `tabID`'s page (without one, from the
     /// whole area right of the sidebar) to its own frame, its buttons riding its corner, while the
@@ -467,9 +472,11 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             // Next turn, with the panel on its way to the screen.
             DispatchQueue.main.async { [weak self, weak t] in
                 guard let self, let t, self.transition === t, !self.closingPeek else { return }
-                // A Peek gone by then (Expand, Add To Split, a close) never veils the page.
+                // A Peek gone by then (Expand, Add To Split, a close) never veils the page, nor
+                // one waiting on its tab.
                 let peek = self.peekID
-                DispatchQueue.main.asyncAfter(deadline: .now() + PeekTransition.lead) { [weak parent] in
+                DispatchQueue.main.asyncAfter(deadline: .now() + PeekTransition.lead) { [weak self, weak parent] in
+                    guard self?.isParked != true else { return }
                     parent?.showPeekVeil(for: peek)
                 }
                 self.landPeek(t)
@@ -490,6 +497,77 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
                 if self.transition === t { self.transition = nil }
             }
         }
+    }
+
+    /// Another tab came on screen in the window (#242): Arc keeps a Peek per tab
+    /// (`modalByWindowContent`), so it waits out of sight, its page as it was, until its tab is
+    /// back (PeekPresence). The page behind comes back at once, as the tab switch is.
+    func parkPeek() {
+        guard isPeek, !isParked, !closingPeek, let window, let parent = peekParent else { return }
+        isParked = true
+        openingPeek = false
+        transition?.remove()
+        transition = nil
+        tooltipTimer?.invalidate(); hideTooltip()
+        closePopup()
+        commandBar.close()
+        for w in [dim, controls].compactMap({ $0 }) {
+            w.parent?.removeChildWindow(w)
+            w.orderOut(nil)
+        }
+        // The card and its page window stay ordered in, invisible and letting clicks through to the
+        // tab under them: ordered out and back, Chromium scrolled the page to the top, and the
+        // reporter comes back for the next link where they left it. The page hidden, not
+        // transparent: Chromium sets its window's alpha back.
+        window.alphaValue = 0
+        window.ignoresMouseEvents = true
+        (window as? LittleWindow)?.isParked = true
+        if let host = browser?.hostWindow, host.parent === window {
+            host.contentView?.isHidden = true
+            host.ignoresMouseEvents = true
+        }
+        parent.parkPeekVeil(for: peekID)
+        // The keyboard goes back to the window (also in the background, where actions follow the key window).
+        if let pw = parent.window { if NSApp.isActive { pw.makeKeyAndOrderFront(nil) } else { pw.makeKey() } }
+        parent.currentBrowser?.setFocused(true)
+    }
+
+    /// Its tab is on screen again: the Peek is back where it was, over the page faded behind it.
+    func unparkPeek() {
+        guard isParked, let window, let parent = peekParent, let pw = parent.window else { return }
+        isParked = false
+        // Parked while it was still opening: it lands now, without the motion.
+        window.alphaValue = 1
+        window.ignoresMouseEvents = false
+        (window as? LittleWindow)?.isParked = false
+        if let host = browser?.hostWindow, host.parent === window {
+            host.contentView?.isHidden = false
+            host.alphaValue = 1
+            host.ignoresMouseEvents = false
+        }
+        controls?.alphaValue = 1
+        // The click catcher under the card, the buttons over it, all above the window's other children.
+        window.parent?.removeChildWindow(window)
+        for w in [dim, window, controls].compactMap({ $0 }) {
+            pw.addChildWindow(w, ordered: .above)
+            w.orderFront(nil)
+        }
+        repositionPeek()
+        rejoinPage()
+        if NSApp.isActive { window.makeKeyAndOrderFront(nil) }
+        if hasPage || isPopupHost { focusPage() }
+        parent.showPeekVeil(for: peekID, animated: false)
+    }
+
+    /// The tab the Peek waits on is gone (#242): the Peek goes with it, unseen and not offered
+    /// back by ⇧⌘T, which reopens the tab.
+    func dropPeek() {
+        guard isPeek, let window, !closingPeek else { return }
+        closingPeek = true
+        transition?.remove()
+        transition = nil
+        guard windowShouldClose(window) else { return }
+        window.close()
     }
 
     func repositionPeek() {
@@ -968,13 +1046,18 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// ⌘W / Close Window: the same path as the close button. (performClose is
     /// skipped: it refuses to act while the standard buttons are dimmed.)
     func closeWindow() {
-        guard let window, window.isVisible else { return }
+        guard let window, window.isVisible || isParked else { return }
         if isPeek, !closingPeek {
             if hasPage, !promoted, let parent = peekParent {
-                parent.closedPeek = (currentURL, parent.sidebarUI.peekBadge?.tabID, store.clock.now)
+                parent.closedPeek = (currentURL, peekSourceTab, store.clock.now)
             }
-            closePeekAnimated { [weak self] in self?.closeWindow() }
-            return
+            // Out of sight (its window closing, ⌘Q to the menu bar): nothing to animate.
+            if isParked {
+                closingPeek = true
+            } else {
+                closePeekAnimated { [weak self] in self?.closeWindow() }
+                return
+            }
         }
         guard windowShouldClose(window) else { return }
         window.close()
@@ -1129,13 +1212,12 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     }
 
     /// Arc 1.171 (#202): a link from a Peek that asks for a new tab is a Today tab in the space,
-    /// placed as a link from the tab under the Peek would be, and the Peek closes for it. A
-    /// background one (⌘-click) leaves the Peek open, as the click left the page in a tab.
+    /// placed as a link from the tab under the Peek would be, and selected. The Peek waits on its
+    /// own tab, as it does for any other tab (parkPeek, #242), for the next link. A background
+    /// one (⌘-click) leaves the Peek on screen.
     private func openTabFromPeek(_ url: String, inBackground background: Bool) {
         guard let parent = peekParent else { return }
         parent.browsers.openLinkTab(url, from: peekSourceTab, inBackground: background)
-        // Not from inside Chromium's popup callback: the Peek's page closes a turn later.
-        if !background { DispatchQueue.main.async { [weak self] in self?.closeWindow() } }
     }
 
     /// A popup that needs its opener (a sign-in window) stays a Little Window, over a Peek too:
@@ -1335,8 +1417,10 @@ final class LittleWindow: NSPanel {
     func hasActiveAppearance(forStandardWindowButton type: UInt) -> Bool { true }
     /// Arc's open animation: ~120 ms from a small rectangle to the full frame.
     override func animationResizeTime(_ newFrame: NSRect) -> TimeInterval { LittleMetrics.openDuration }
-    /// A Peek is borderless (Arc's card has no title bar) but still takes the keyboard.
-    override var canBecomeKey: Bool { true }
+    /// A Peek is borderless (Arc's card has no title bar) but still takes the keyboard, unless it
+    /// waits on its tab out of sight (#242).
+    var isParked = false
+    override var canBecomeKey: Bool { !isParked }
     /// A panel never becomes main; a titled window did, and the browser window's active look
     /// and the page's hover state follow the main window.
     override var canBecomeMain: Bool { styleMask.contains(.titled) }

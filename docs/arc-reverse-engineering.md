@@ -3047,6 +3047,16 @@ event with `shiftClickModalEntryPointEnabled` set for the run, AX frames and 60 
   from a pinned tab the top of Today). Not observed in Arc: a ⌘-click inside the Peek (Cra: a background tab,
   the Peek stays) and window.open with features (Cra: still a Little Window over the Peek, which keeps the
   opener alive for sign-ins).
+- [O static + reported, 8 Nov, GitHub #242] A Peek belongs to its tab. Arc 1.172.1's
+  WindowContents/WindowContentState keeps `modalByWindowContent` (next to `presentationState`,
+  `sourceToWindowContentMap` and `windowContentSidebarItemMap`), a modal per window content, and the
+  reporter (Arc 1.172, daily use) sees the Peek a target=_blank link "closed" there again, same page and
+  scroll, back on its pinned tab. So the 6 Nov run above saw the Peek go out of sight, not end. Cra:
+  PeekPresence (CraCore), MainWindowController.syncPeeks → LittleWindowController.parkPeek /
+  unparkPeek / dropPeek; the tab's row keeps the peeked favicon while the Peek waits (modalIcon).
+  Not observed live: whether a sidebar click with the Peek on screen (the 4 Nov run: "closed the Peek")
+  also only hides it, whether the Peek comes back with a motion (Cra: at once, the page veiled at once),
+  and what a pinned tab's ⌘W does to a Peek waiting on it (Cra: the Peek goes with the page).
 
 ### Peek grows out of the link (Arc 1.171, 6 Nov 2026, GitHub #204, offline Arc)
 The reporter recorded Arc 1.172.1 growing the card out of the clicked link. 1.172.0/1.172.1 only moved Chromium

@@ -690,12 +690,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Chrome-style page window, which is a child).
     var keyLittleWindow: LittleWindowController? {
         if let key = NSApp.keyWindow {
-            return littleWindows.first { $0.window === key || $0.window === key.parent }
+            return littleWindows.first { !$0.isParked && ($0.window === key || $0.window === key.parent) }
         }
         // No key window while the app is inactive (e.g. during a cra:// handoff from a
         // second launch): the frontmost window stands in for it.
         guard let front = NSApp.orderedWindows.first(where: { $0.isVisible && !($0 is NSPanel) }) else { return nil }
-        return littleWindows.first { $0.window === front || $0.window === front.parent }
+        return littleWindows.first { !$0.isParked && ($0.window === front || $0.window === front.parent) }
     }
 
     /// Creates a little window without showing it (`url` nil = popup host).
@@ -714,19 +714,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     /// Arc's Peek: a Little Window over `parent` that closes when a click lands past it.
+    /// One per tab (#242): a Peek another tab left waiting stays.
     func openPeek(url: String, over parent: MainWindowController, fromTab tabID: UUID? = nil) {
-        for p in littleWindows where p.peekParent === parent { p.closeWindow() }
+        for p in littleWindows where p.peekParent === parent && (!p.isParked || p.peekSourceTab == tabID) { p.closeWindow() }
         let w = LittleWindowController(app: self, url: url, peekOver: parent, fromTab: tabID)
         littleWindows.append(w)
-        // Arc badges the tab the Peek came from with the peeked page's favicon (modalIcon).
-        parent.sidebarUI.peekBadge = tabID.map { .init(tabID: $0, iconKey: FaviconKey.key(for: url)) }
+        // Arc badges the tab the Peek came from with the peeked page's favicon (modalIcon), also
+        // while the Peek waits on it.
+        if let tabID { parent.sidebarUI.peekBadges[tabID] = .init(iconKey: FaviconKey.key(for: url)) }
         w.showAsPeek(fromTab: tabID)
     }
 
     func removeLittleWindow(_ w: LittleWindowController) {
         littleWindows.removeAll { $0 === w }
         if inMenuBar { DispatchQueue.main.async { [weak self] in self?.settleDockIcon() } }
-        if let parent = w.peekParent, !littleWindows.contains(where: { $0.peekParent === parent }) { parent.sidebarUI.peekBadge = nil }
+        if let parent = w.peekParent, let tab = w.peekSourceTab,
+           !littleWindows.contains(where: { $0.peekParent === parent && $0.peekSourceTab == tab }) { parent.sidebarUI.peekBadges[tab] = nil }
     }
 
     private func archiveIdleLittleWindows() {
@@ -981,6 +984,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // peekShown=<label>: the page behind a Peek in each window, faded and drawn back or whole (PR #221).
             if let label = dict["peekShown"] {
                 for m in mainWindows { NSLog("Cra peek shown %@: %@", label, m.peekBackdropShown()) }
+                return
+            }
+            // peeks=<label>: each window's Peeks, on screen or waiting on their tab, and their pages (#242).
+            if let label = dict["peeks"] {
+                for m in mainWindows { NSLog("Cra peeks %@: %@", label, m.peeksShown()) }
                 return
             }
             if dict["relaunch"] != nil { relaunch(); return }

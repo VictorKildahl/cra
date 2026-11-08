@@ -307,7 +307,7 @@ final class SpaceListView: NSView, NSDraggingSource {
                     navigatedAway: navigatedAway,
                     focusRing: focusID == item.id, developerMode: developerMode, peeked: peeked,
                     homeIcon: homeImg, homeFlipIcon: homeFlip,
-                    peekIcon: ui.peekBadge?.tabID == item.id ? icon(ui.peekBadge?.iconKey).0 : nil,
+                    peekIcon: ui.peekBadges[item.id].flatMap { icon($0.iconKey).0 },
                     tidyRename: tidyRename, gitlabMark: liveSource == .gitlab))
                 out.append(row)
             } else if item.isSplit {

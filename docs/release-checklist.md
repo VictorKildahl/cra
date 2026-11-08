@@ -74,7 +74,11 @@ built release app with a test profile. Note anything that fails in the release's
   the grey picture and the lens follow. With another app full screen, ⌥⌘N opens a Little
   Window over it, and doesn't when Settings ▸ Tabs ▸ Links is off.
 - **#202:** in a Peek, ⌘-click a `target=_blank` link: a background tab opens and the Peek
-  stays. A plain click on it closes the Peek and selects the new tab below the source tab.
+  stays. A plain click on it takes the Peek away and selects the new tab below the source tab.
+- **#242:** Peek a link from a pinned tab, scroll the Peek, click a `target=_blank` link in it: the
+  new tab shows with no Peek and the pinned row keeps the peeked page's favicon. Click the pinned
+  row: the same Peek is back at the same scroll, the page behind faded, and clicks in it work.
+  (Which Peek shows when is the peek-per-tab scenario; this is the look and the scroll.)
 - **PR #222:** with a Peek open, the browser window keeps its full shadow and coloured traffic
   lights, also after a click in the Peek, as in Arc. A drag from every edge and corner resizes the
   window with the Peek open and the card follows; a click on the background 4 pt or more inside
