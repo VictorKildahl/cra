@@ -40,15 +40,36 @@ public enum MediaLibrary {
 
     /// The grid's files: media only, each path once (Screenshots is often the Desktop), newest
     /// first, those whose name holds the query, at most `limit`.
-    public static func shown(_ files: [File], query: String, limit: Int = 500) -> [File] {
+    public static func shown(_ files: [File], query: String, hidden: Set<String> = [], limit: Int = 500) -> [File] {
         let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
         var seen = Set<String>()
         return files
-            .filter { isMedia($0.path) && seen.insert($0.path).inserted }
+            .filter { isMedia($0.path) && !hidden.contains($0.path) && seen.insert($0.path).inserted }
             .filter { needle.isEmpty || $0.name.lowercased().contains(needle) }
             .sorted { $0.date != $1.date ? $0.date > $1.date : $0.path < $1.path }
             .prefix(limit).map { $0 }
     }
+
+    /// Arc's menu on a picked picture or video (its tile's right-click and the preview's ⋯), 8 Nov 2026:
+    /// Copy Image, —, Send via iMessage, AirDrop, —, Show in Finder, —, Hide from Arc.
+    public enum Action: CaseIterable, Sendable {
+        case copy, sendMessage, airDrop, showInFinder, hide
+
+        public func title(isVideo: Bool) -> String {
+            switch self {
+            case .copy: return isVideo ? "Copy Video" : "Copy Image"
+            case .sendMessage: return "Send via iMessage"
+            case .airDrop: return "AirDrop"
+            case .showInFinder: return "Show in Finder"
+            case .hide: return "Hide from Cra"
+            }
+        }
+
+        /// A line goes before these.
+        public var startsGroup: Bool { self == .sendMessage || self == .showInFinder || self == .hide }
+    }
+
+    public static func isVideo(_ path: String) -> Bool { ["mov", "mp4", "m4v"].contains((path as NSString).pathExtension.lowercased()) }
 
     /// Two to a row, as Arc's grid lays them out.
     public static func rows(_ files: [File]) -> [[File]] {

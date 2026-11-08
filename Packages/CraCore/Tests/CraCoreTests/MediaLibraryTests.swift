@@ -34,4 +34,19 @@ struct MediaLibraryTests {
         let files = (0..<10).map { Self.file("/d/\($0).png", Double($0)) }
         #expect(MediaLibrary.shown(files, query: "", limit: 3).map(\.name) == ["0.png", "1.png", "2.png"])
     }
+
+    /// Arc's "Hide from Arc": the file leaves the grid and stays on disk.
+    @Test func hiddenFilesLeaveTheGrid() {
+        let files = [MediaLibrary.File(path: "/a/one.png", date: Date(timeIntervalSince1970: 2)),
+                     MediaLibrary.File(path: "/a/two.png", date: Date(timeIntervalSince1970: 1))]
+        #expect(MediaLibrary.shown(files, query: "", hidden: ["/a/one.png"]).map(\.name) == ["two.png"])
+    }
+
+    /// Arc's menu on a media pick, in its order and groups.
+    @Test func arcsMenu() {
+        #expect(MediaLibrary.Action.allCases.map { $0.title(isVideo: false) }
+                == ["Copy Image", "Send via iMessage", "AirDrop", "Show in Finder", "Hide from Cra"])
+        #expect(MediaLibrary.Action.allCases.filter(\.startsGroup) == [.sendMessage, .showInFinder, .hide])
+        #expect(MediaLibrary.isVideo("/x/clip.MOV"))
+    }
 }

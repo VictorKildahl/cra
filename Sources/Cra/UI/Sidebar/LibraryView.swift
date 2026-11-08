@@ -332,6 +332,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
     var switchKnob = NSColor.white
     private var query = ""
     private var rows: [Row] = []
+    private var mediaHiddenObserver: NSObjectProtocol?
     private let searchBox = NSView()
     private let searchGlyph = NSImageView()
     private let field = NSTextField()
@@ -446,8 +447,13 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
             // Read again whenever the page shows, a search changes or the folders change; the scan is
             // cheap, off the main thread, and reads only the folders ticked.
             MediaScanner.shared.rescan(store.settings.mediaFolders)
+            if mediaHiddenObserver == nil {
+                mediaHiddenObserver = NotificationCenter.default.addObserver(forName: MediaPreviewController.hidden, object: nil, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { if self?.page == .media { self?.reload() } }
+                }
+            }
             let all = MediaScanner.shared.files
-            let shown = MediaLibrary.shown(all, query: query)
+            let shown = MediaLibrary.shown(all, query: query, hidden: Set(store.settings.mediaHidden))
             out = MediaLibrary.rows(shown).map { .media($0) }
             empty.show(symbol: "photo.on.rectangle", title: all.isEmpty ? "Nothing here yet!" : "No matches",
                        detail: all.isEmpty ? "Screenshots, pictures and videos in the folders you show appear here." : nil)
@@ -764,6 +770,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
                 let files = self.rows.flatMap { row -> [MediaLibrary.File] in if case .media(let f) = row { return f } else { return [] } }
                 MediaPreviewController.shared.show(files, at: files.firstIndex(of: file) ?? 0, from: thumbnail, over: window)
             }
+            v.fileMenu = { [weak self, store] file in MediaMenu.make(for: file, store: store) { if $0 == .hide { self?.reload() } } }
             v.show(files, ink: colors.isDark ? .white : .black)
             return v
         case .download(let e):

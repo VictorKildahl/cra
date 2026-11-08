@@ -523,6 +523,8 @@ public struct AppSettings: Codable, Equatable {
     /// asks macOS for access), then the folders the Library button's "Show media" menu ticks.
     public var mediaLibraryEnabled: Bool = false
     public var mediaFolders: [MediaLibrary.Folder] = MediaLibrary.Folder.allCases
+    /// Files taken off Library ▸ Media with Arc's "Hide from Arc" (the file stays on disk).
+    public var mediaHidden: [String] = []
     /// Arc's Settings ▸ Links ▸ "Archive Little Arcs after:".
     public var littleWindowArchiveAfter: LittleWindowArchive = .sixHours
     /// Arc's Settings ▸ Advanced "When opening Arc, restore windows from previous session", on by default.
@@ -770,6 +772,7 @@ extension AppSettings {
         soundEffects = try c.decodeIfPresent(Bool.self, forKey: .soundEffects) ?? true
         mediaLibraryEnabled = try c.decodeIfPresent(Bool.self, forKey: .mediaLibraryEnabled) ?? false
         mediaFolders = (try? c.decodeIfPresent([MediaLibrary.Folder].self, forKey: .mediaFolders)) ?? MediaLibrary.Folder.allCases
+        mediaHidden = (try? c.decodeIfPresent([String].self, forKey: .mediaHidden)) ?? []
         littleWindowArchiveAfter = (try? c.decodeIfPresent(LittleWindowArchive.self, forKey: .littleWindowArchiveAfter)) ?? .sixHours
         restoreWindows = try c.decodeIfPresent(Bool.self, forKey: .restoreWindows) ?? true
         shareThemeWithWebsites = try c.decodeIfPresent(Bool.self, forKey: .shareThemeWithWebsites) ?? true

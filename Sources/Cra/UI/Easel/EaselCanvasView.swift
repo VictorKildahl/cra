@@ -94,6 +94,7 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
 
     static let ink = NSColor(white: 1, alpha: 0.92)
     static let selection = NSColor(srgbRed: 0.47, green: 0.71, blue: 0.95, alpha: 1)
+    static let arcSelection = NSColor(srgbRed: 127 / 255, green: 184 / 255, blue: 214 / 255, alpha: 1)
 
     init(document: Easel) {
         self.document = document
@@ -146,11 +147,27 @@ final class EaselSheetView: NSView, NSTextFieldDelegate {
         for item in document.items + [preview].compactMap({ $0 }) { draw(item) }
         if stroke.count > 1, let s = Easel.freehand(stroke) { draw(s) }
         if let id = selected, let item = document.items.first(where: { $0.id == id }) {
-            let r = rect(item.frame).insetBy(dx: -4, dy: -4)
-            Self.selection.setStroke()
-            let path = NSBezierPath(roundedRect: r, xRadius: 6, yRadius: 6)
-            path.lineWidth = 2
-            path.stroke()
+            if Easel.resizes(item.kind) {
+                // Arc 1.172.1: a square 2 pt outline on the item's edge (#7FB8D6) and, at each corner,
+                // a 7.5 pt ring of it round a 3 pt dark dot (8 Nov 2026, 2x stills).
+                let r = rect(item.frame)
+                Self.arcSelection.setStroke()
+                let path = NSBezierPath(rect: r.insetBy(dx: -1, dy: -1))
+                path.lineWidth = 2
+                path.stroke()
+                for c in [NSPoint(x: r.minX, y: r.minY), NSPoint(x: r.maxX, y: r.minY), NSPoint(x: r.minX, y: r.maxY), NSPoint(x: r.maxX, y: r.maxY)] {
+                    Self.arcSelection.setFill()
+                    NSBezierPath(ovalIn: NSRect(x: c.x - 3.75, y: c.y - 3.75, width: 7.5, height: 7.5)).fill()
+                    NSColor.black.setFill()
+                    NSBezierPath(ovalIn: NSRect(x: c.x - 1.5, y: c.y - 1.5, width: 3, height: 3)).fill()
+                }
+            } else {
+                let r = rect(item.frame).insetBy(dx: -4, dy: -4)
+                Self.selection.setStroke()
+                let path = NSBezierPath(roundedRect: r, xRadius: 6, yRadius: 6)
+                path.lineWidth = 2
+                path.stroke()
+            }
         }
     }
 

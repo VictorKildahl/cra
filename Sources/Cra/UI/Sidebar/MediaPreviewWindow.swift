@@ -10,6 +10,8 @@ import CoreImage
 @MainActor
 final class MediaPreviewController {
     static let shared = MediaPreviewController()
+    /// A file was hidden from the preview: the grid reads again.
+    static let hidden = Notification.Name("CraMediaHidden")
     private var overlay: MediaPreviewOverlay?
 
     var isShown: Bool { overlay != nil }
@@ -181,22 +183,17 @@ private final class MediaPreviewOverlay: NSWindow {
         close(animated: true)
     }
 
-    /// The ⋯ menu: the file's actions, as on a download (Arc's Download Context Menu).
+    /// The ⋯ menu: Arc's media menu (the tile's right-click), CraCore MediaLibrary.Action.
     private func fileMenu(at point: NSPoint) {
-        let url = URL(fileURLWithPath: files[index].path)
-        let m = NSMenu()
-        m.autoenablesItems = false
-        MenuItems.add(m, "Open") { [weak self] in NSWorkspace.shared.open(url); self?.close(animated: true) }
-        MenuItems.add(m, "Show in Finder") { [weak self] in NSWorkspace.shared.activateFileViewerSelecting([url]); self?.close(animated: true) }
-        m.addItem(.separator())
-        MenuItems.add(m, "Copy") {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.writeObjects([url as NSURL])
-        }
-        m.addItem(.separator())
-        MenuItems.add(m, "Move to Trash") { [weak self] in
-            NSWorkspace.shared.recycle([url]) { _, _ in }
-            self?.close(animated: true)
+        guard let store = (NSApp.delegate as? AppDelegate)?.store else { return }
+        let m = MediaMenu.make(for: files[index], store: store) { [weak self] action in
+            guard let self, action == .hide else { return }
+            // Hidden: the next one shows, or the preview closes with nothing left.
+            self.files.remove(at: self.index)
+            if self.files.isEmpty { self.close(animated: true); return }
+            self.index = min(self.index, self.files.count - 1)
+            self.panel.show(self.files[self.index], canBack: self.index > 0, canForward: self.index < self.files.count - 1)
+            NotificationCenter.default.post(name: MediaPreviewController.hidden, object: nil)
         }
         m.popUp(positioning: nil, at: point, in: panel)
     }

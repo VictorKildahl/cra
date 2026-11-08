@@ -215,8 +215,9 @@ in this sweep (Essential Shortcuts window, Library pages).
   card (white 3 pt rim) with the easel drawn small, Arc's pink squiggle and the title in bold at its
   bottom left; right-click Delete (Cra asks first). Arc's "Your Easels are yours to keep / Export All
   Easels" banner is about Arc winding down and is *skip*.
-- Easel pictures resize from their corners and keep their proportions (Arc's AspectRatioControlPoints;
-  Arc draws no handles, only the 2 pt blue outline). Cra: CraCore Easel.resized, the diagonal resize
+- Easel pictures resize from their corners and keep their proportions, the opposite corner fixed
+  (watched in Arc 8 Nov: 163 × 133 → 216 × 175 pt). A picked picture or shape has a square 2 pt outline
+  on its edge (#7FB8D6) and a 7.5 pt ring with a 3 pt dark dot at each corner. Cra: CraCore Easel.resized, the diagonal resize
   cursors on a picked item's corners; rectangles and ellipses resize freely (⇧ keeps proportions).
 - An easel picked on the Easels page opens in Peek (no toolbar, the canvas on #0B0B0B, only ✕ and ⤢;
   ⤢ makes it a tab with the veiled backdrop).
@@ -228,6 +229,8 @@ in this sweep (Essential Shortcuts window, Library pages).
   Profiles); a picked chip is dark with white text. An archived row on hover shows a bin (remove) and
   a curved arrow (restore). Downloads' empty page: "Come back after you've found some cool stuff to
   save." Cra's Open Downloads Folder and Clear Archive moved to the rail buttons' right-click.
+- A media pick's menu (its tile's right-click and the preview's ⋯): Copy Image, —, Send via iMessage,
+  AirDrop, —, Show in Finder, —, Hide from Arc (Cra: "Hide from Cra"; the file stays on disk).
 - The selected rail page's glyph and the Spaces page's + take the space's colours (an olive space: a
   cream disc with a dark mark), not a fixed blue.
 - Boost rows: the site's icon on a 43 pt light tile with a white rim, name 14 pt over the site; under

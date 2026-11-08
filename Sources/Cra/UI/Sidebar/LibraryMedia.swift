@@ -97,6 +97,7 @@ final class MediaRowCell: NSView {
     private var tiles: [MediaTile] = []
     /// The picked file and where its picture is drawn, in screen points.
     var open: (MediaLibrary.File, NSRect?) -> Void = { _, _ in }
+    var fileMenu: (MediaLibrary.File) -> NSMenu? = { _ in nil }
 
     override var isFlipped: Bool { true }
 
@@ -104,6 +105,7 @@ final class MediaRowCell: NSView {
         while tiles.count < 2 {
             let t = MediaTile()
             t.open = { [weak self] in self?.open($0, $1) }
+            t.contextMenu = { [weak self] in self?.fileMenu($0) }
             tiles.append(t)
             addSubview(t)
         }
@@ -126,6 +128,9 @@ final class MediaRowCell: NSView {
 
 final class MediaTile: NSView, NSDraggingSource {
     var open: (MediaLibrary.File, NSRect?) -> Void = { _, _ in }
+    var contextMenu: (MediaLibrary.File) -> NSMenu? = { _ in nil }
+
+    override func menu(for event: NSEvent) -> NSMenu? { file.flatMap(contextMenu) }
     private var file: MediaLibrary.File?
     private var ink: NSColor = .white
     private let picture = CALayer()
@@ -267,5 +272,36 @@ struct MediaOptInCard: View {
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(dark ? Color(white: 0.18) : .white)
             .shadow(color: .black.opacity(0.15), radius: 10, y: 3))
         .environment(\.colorScheme, dark ? .dark : .light)
+    }
+}
+
+/// Arc's menu on a media pick (the tile's right-click, the preview's ⋯): Copy Image, Send via
+/// iMessage, AirDrop, Show in Finder, Hide from Cra (CraCore MediaLibrary.Action).
+@MainActor
+enum MediaMenu {
+    static func make(for file: MediaLibrary.File, store: SidebarStore, done: @escaping (MediaLibrary.Action) -> Void = { _ in }) -> NSMenu {
+        let url = URL(fileURLWithPath: file.path)
+        let video = MediaLibrary.isVideo(file.path)
+        let m = NSMenu()
+        m.autoenablesItems = false
+        for action in MediaLibrary.Action.allCases {
+            if action.startsGroup { m.addItem(.separator()) }
+            MenuItems.add(m, action.title(isVideo: video)) {
+                switch action {
+                case .copy:
+                    NSPasteboard.general.clearContents()
+                    var objects: [NSPasteboardWriting] = [url as NSURL]
+                    if !video, let image = NSImage(contentsOf: url) { objects.insert(image, at: 0) }
+                    NSPasteboard.general.writeObjects(objects)
+                case .sendMessage: NSSharingService(named: .composeMessage)?.perform(withItems: [url])
+                case .airDrop: NSSharingService(named: .sendViaAirDrop)?.perform(withItems: [url])
+                case .showInFinder: NSWorkspace.shared.activateFileViewerSelecting([url])
+                case .hide:
+                    if !store.settings.mediaHidden.contains(file.path) { store.settings.mediaHidden.append(file.path) }
+                }
+                done(action)
+            }
+        }
+        return m
     }
 }
