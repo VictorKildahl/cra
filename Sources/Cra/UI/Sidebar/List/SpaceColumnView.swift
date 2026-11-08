@@ -1300,7 +1300,9 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
     /// A Gmail favorite with Previews on, or a Calendar favorite with Live Calendar's hover
     /// preview: Arc shows the card instead of the name tooltip, and none on the open tab.
     private var previewURL: String? {
-        guard let store = grid?.store, model?.selected != true, model?.cells.count == 1, let url = store.item(itemID)?.tab?.url else { return nil }
+        // Not while the Library covers the sidebar (the tile is still under the pointer's path there).
+        guard let store = grid?.store, grid?.ui.libraryPage == nil, grid?.ui.libraryReveal == nil, !isHiddenOrHasHiddenAncestor,
+              model?.selected != true, model?.cells.count == 1, let url = store.item(itemID)?.tab?.url else { return nil }
         if GmailPreview.feedURL(for: url) != nil { return store.settings.favoritePreviews ? url : nil }
         if CalendarPreview.isCalendar(url) { return store.settings.liveCalendar && store.settings.calendarHoverPreview ? url : nil }
         return nil

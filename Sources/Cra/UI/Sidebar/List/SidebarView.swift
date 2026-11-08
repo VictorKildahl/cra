@@ -183,8 +183,17 @@ final class SidebarView: NSView {
                 host.animator().frame = bounds
                 tabs.animator().alphaValue = 0
             }
+            // Faded out isn't gone: the favorites' tracking areas would still show their tooltips and
+            // preview cards through the Library. Hidden once the 0.05 s fade is over (a timer, as an
+            // animation's completion can wait while the window is off screen).
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { [weak self] in
+                guard let self, self.shownLibrary != nil, self.ui.libraryReveal == nil else { return }
+                self.tabs.isHidden = true
+                CraLog.note("library covers the tab list")
+            }
         } else if let host = libraryHost {
             libraryHost = nil
+            tabs.isHidden = false
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.1
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
@@ -221,12 +230,14 @@ final class SidebarView: NSView {
                 host.alphaValue = 1
                 host.frame = bounds
                 tabs.alphaValue = 0
+                tabs.isHidden = true
                 if shownLibrary != page { host.focusSearch() }
                 shownLibrary = page
             } else {
                 libraryHost?.removeFromSuperview()
                 libraryHost = nil
                 tabs.alphaValue = 1
+                tabs.isHidden = false
                 shownLibrary = nil
             }
             return
@@ -236,6 +247,7 @@ final class SidebarView: NSView {
         host.page = page
         host.alphaValue = 1
         tabs.alphaValue = 1
+        tabs.isHidden = false
         // Neither page shows outside the column, under the card's inset.
         layer?.masksToBounds = true
         let base = ui.libraryRevealBase, library = ui.libraryRevealWidth

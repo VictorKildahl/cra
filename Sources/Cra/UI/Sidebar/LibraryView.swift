@@ -92,6 +92,7 @@ final class LibraryView: NSView {
         super.init(frame: .zero)
         rail.onPick = { actions.showLibrary($0) }
         rail.onBack = { actions.closeLibrary() }
+        rail.mediaMenu = { [store] in LibraryListView.mediaFoldersMenu(store) }
         list.onEscape = { actions.closeLibrary() }
         addSubview(rail)
         addSubview(list)
@@ -121,6 +122,9 @@ final class LibraryView: NSView {
 
     private func apply() {
         rail.colors = SidebarColors(palette)
+        // Light themes: Arc's switch is the folder's shaded dark with a tinted-light knob.
+        list.switchTint = palette.isDark ? NSColor.white.withAlphaComponent(0.85) : NSColor(palette.folderTint)
+        list.switchKnob = palette.isDark ? NSColor(white: 0.15, alpha: 1) : NSColor(palette.folderFill)
         list.colors = SidebarColors(palette)
     }
 
@@ -146,6 +150,8 @@ final class LibraryView: NSView {
 /// centred; the back arrow at the bottom.
 private final class LibraryRailView: NSView {
     var onPick: (LibraryPage) -> Void = { _ in }
+    /// Arc's "Show media" folders, on a right-click of the Media button.
+    var mediaMenu: () -> NSMenu? = { nil }
     var onBack: () -> Void = {}
     var colors = SidebarColors() { didSet { refresh() } }
     private let wash = CAGradientLayer()
@@ -164,6 +170,7 @@ private final class LibraryRailView: NSView {
         for p in LibraryPage.allCases {
             let b = LibraryRailButton(page: p)
             b.onPress = { [weak self] in self?.onPick(p) }
+            if p == .media { b.menuProvider = { [weak self] in self?.mediaMenu() } }
             buttons.append(b)
             addSubview(b)
         }
@@ -218,6 +225,9 @@ private final class LibraryRailView: NSView {
 private final class LibraryRailButton: NSView {
     let page: LibraryPage
     var onPress: () -> Void = {}
+    var menuProvider: (() -> NSMenu?)?
+
+    override func menu(for event: NSEvent) -> NSMenu? { menuProvider?() }
     private let glyph = NSImageView()
     private let label = NSTextField.sidebarLabel(size: 12, weight: .semibold)
     private var selected = false
@@ -300,8 +310,11 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
     private let actions: SidebarActions
     private let favicons: FaviconCache
     var onEscape: () -> Void = {}
-    var page: LibraryPage { didSet { if page != oldValue { field.stringValue = ""; query = ""; field.placeholderString = page.searchPrompt; reload() } } }
+    var page: LibraryPage { didSet { if page != oldValue { field.stringValue = ""; query = ""; field.placeholderString = page.searchPrompt; reload(); needsLayout = true } } }
     var colors = SidebarColors() { didSet { if colors != oldValue { refresh(); table.reloadData() } } }
+    /// A boost's switch (Arc: the theme's dark shade, a light knob).
+    var switchTint = NSColor.controlAccentColor
+    var switchKnob = NSColor.white
     private var query = ""
     private var rows: [Row] = []
     private let searchBox = NSView()
@@ -310,7 +323,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
     private let menuButton = NSView()
     private let menuGlyph = NSImageView()
     private let scroll = NSScrollView()
-    private let table = NSTableView()
+    private let table = LibraryTable()
     private let empty = LibraryEmptyView()
     private var mediaCard: NSHostingView<MediaOptInCard>?
 
@@ -456,6 +469,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
                        detail: store.archive.isEmpty ? "Tabs you close end up here." : nil)
         }
         rows = out
+        needsLayout = true
         empty.isHidden = !out.isEmpty || (page == .media && !store.settings.mediaLibraryEnabled)
         scroll.isHidden = out.isEmpty
         table.reloadData()
@@ -501,16 +515,26 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
 
     override func layout() {
         super.layout()
-        // HStack(spacing: 4) 10 pt down, 7 pt in, 8 pt from the right: the field, the ⋯ button.
+        // HStack(spacing: 4) 10 pt down, 7 pt in, 8 pt from the right: the field, the ⋯ button
+        // (Media and Boosts: the field alone, as in Arc).
         let w = bounds.width
-        searchBox.frame = NSRect(x: 7, y: 10, width: max(0, w - 7 - 8 - 4 - 36), height: 36)
+        menuButton.isHidden = !hasMenuButton
+        searchBox.frame = NSRect(x: 7, y: 10, width: max(0, w - 7 - 8 - (hasMenuButton ? 4 + 36 : 0)), height: 36)
         menuButton.frame = NSRect(x: w - 8 - 36, y: 10, width: 36, height: 36)
         let gw = searchGlyph.image?.size.width ?? 14
         searchGlyph.frame = NSRect(x: 12, y: 0, width: gw, height: 36)
         let fh = ceil(field.intrinsicContentSize.height)
         let fx = 12 + gw + 10
         field.frame = NSRect(x: fx - SidebarText.inset, y: (36 - fh) / 2, width: max(0, searchBox.bounds.width - fx - 12) + 2 * SidebarText.inset, height: fh)
-        scroll.frame = NSRect(x: 0, y: 46, width: w, height: max(0, bounds.height - 46))
+        // Arc leaves room between the search and the first item (Arc 1.172.1, 8 Nov 2026, 2x stills):
+        // 10.5 pt to a boost's card, 15 pt to the first media tile's; a day header brings its own.
+        let gap: CGFloat
+        switch rows.first {
+        case .media?: gap = 15
+        case .header?, nil: gap = 0
+        default: gap = 10
+        }
+        scroll.frame = NSRect(x: 0, y: 46 + gap, width: w, height: max(0, bounds.height - 46 - gap))
         table.tableColumns.first?.width = w
         empty.frame = scroll.frame
         if let card = mediaCard {
@@ -534,28 +558,38 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
 
     // MARK: ⋯ menu (Arc's Filter button; Cra's holds the page's actions)
 
+    /// Arc's "Show media" folders (its Library button's right-click menu; Cra's Media button).
+    static func mediaFoldersMenu(_ store: SidebarStore) -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        let header = NSMenuItem(title: "Show media", action: nil, keyEquivalent: "")
+        header.isEnabled = false
+        menu.addItem(header)
+        for f in MediaLibrary.Folder.allCases {
+            let on = store.settings.mediaFolders.contains(f)
+            MenuItems.add(menu, f.title, on: on) {
+                if on { store.settings.mediaFolders.removeAll { $0 == f } } else { store.settings.mediaFolders.append(f) }
+            }
+        }
+        if store.settings.mediaLibraryEnabled {
+            menu.addItem(.separator())
+            MenuItems.add(menu, "Hide Media") { store.settings.mediaLibraryEnabled = false }
+        }
+        return menu
+    }
+
+    /// Arc shows ⋯ beside the search on these pages only.
+    private var hasMenuButton: Bool { ![.media, .boosts, .spaces].contains(page) }
+
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
-        guard menuButton.frame.contains(p) else { return super.mouseDown(with: event) }
+        guard hasMenuButton, menuButton.frame.contains(p) else { return super.mouseDown(with: event) }
         let menu = NSMenu()
         menu.autoenablesItems = false
         switch page {
-        case .media:
-            // Arc's "Show media" folders (its Library button's right-click menu).
-            let store = store
-            let header = NSMenuItem(title: "Show media", action: nil, keyEquivalent: "")
-            header.isEnabled = false
-            menu.addItem(header)
-            for f in MediaLibrary.Folder.allCases {
-                let on = store.settings.mediaFolders.contains(f)
-                MenuItems.add(menu, f.title, on: on) {
-                    if on { store.settings.mediaFolders.removeAll { $0 == f } } else { store.settings.mediaFolders.append(f) }
-                }
-            }
-            if store.settings.mediaLibraryEnabled {
-                menu.addItem(.separator())
-                MenuItems.add(menu, "Hide Media") { store.settings.mediaLibraryEnabled = false }
-            }
+        case .media, .boosts, .spaces:
+            // Arc's Media and Boosts pages have no ⋯ (Media's folders are on its rail button).
+            return
         case .downloads:
             // The folder the window's profile downloads to (#190).
             let profile = (window?.windowController as? MainWindowController)?.profileDirectoryName
@@ -565,12 +599,8 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         case .archive:
             let store = store
             MenuItems.add(menu, "Clear Archive", enabled: !store.archive.isEmpty) { store.clearArchive() }
-        case .boosts:
-            MenuItems.add(menu, "New Boost for This Site") { [weak self] in self?.actions.performAction("newBoost") }
         case .easels:
             MenuItems.add(menu, "New Easel") { [weak self] in self?.actions.performAction("newEasel") }
-        case .spaces:
-            return
         }
         menu.popUp(positioning: nil, at: NSPoint(x: menuButton.frame.minX, y: menuButton.frame.maxY + 4), in: self)
     }
@@ -593,9 +623,11 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
             v.show(label, ink: colors.isDark ? .white : .black)
             return v
         case .boost(let b):
-            let v = tableView.makeView(withIdentifier: .init("item"), owner: nil) as? LibraryItemCell ?? LibraryItemCell()
-            v.identifier = .init("item")
-            v.showBoost(b, colors: colors) { [store, actions] in
+            let v = tableView.makeView(withIdentifier: .init("boost"), owner: nil) as? BoostRowCell ?? BoostRowCell()
+            v.identifier = .init("boost")
+            v.show(b, icon: boostIcon(b), ink: colors.isDark ? .white : .black,
+                   hoverFill: colors.hoverFill, tint: switchTint, knob: switchKnob)
+            v.open = { [store, actions] in
                 // Opens the site, where the boost shows.
                 _ = store.createTab(url: "https://\(b.host)/", select: true)
                 actions.closeLibrary()
@@ -614,10 +646,11 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         case .media(let files):
             let v = tableView.makeView(withIdentifier: .init("media"), owner: nil) as? MediaRowCell ?? MediaRowCell()
             v.identifier = .init("media")
-            v.open = { [store, actions] file in
-                // Arc opens a picked picture in a tab, and the Library steps aside.
-                _ = store.createTab(url: URL(fileURLWithPath: file.path).absoluteString, select: true)
-                actions.closeLibrary()
+            v.open = { [weak self, weak v] file, thumbnail in
+                // Arc previews the pick over the dimmed window; the Library and the space stay as they were.
+                guard let self, let window = v?.window else { return }
+                let files = self.rows.flatMap { row -> [MediaLibrary.File] in if case .media(let f) = row { return f } else { return [] } }
+                MediaPreviewController.shared.show(files, at: files.firstIndex(of: file) ?? 0, from: thumbnail, over: window)
             }
             v.show(files, ink: colors.isDark ? .white : .black)
             return v
@@ -635,22 +668,31 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
     }
 
     func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool { false }
+
+    /// The boost's site icon: the site's own, else that of a tab on it (icons are kept per page).
+    private func boostIcon(_ b: Boost) -> NSImage? {
+        if let i = favicons.image(for: "https://\(b.host)/") { return i }
+        let key = store.allTabs().lazy.compactMap { $0.tab }.first { t in
+            guard let host = URL(string: t.url)?.host?.lowercased() else { return false }
+            return host == b.host || host.hasSuffix("." + b.host)
+        }?.faviconKey
+        return favicons.image(forKey: key)
+    }
 }
 
 extension LibraryListView: NSMenuDelegate {
     /// The row's context menu, built for the row under the pointer.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        let row = table.clickedRow
+        let row = table.menuRow
         guard rows.indices.contains(row) else { return }
         switch rows[row] {
         case .header, .media, .easel: break
         case .boost(let b):
-            var flipped = b
-            flipped.enabled.toggle()
-            MenuItems.add(menu, b.enabled ? "Disable Boost" : "Enable Boost") { BoostStore.shared.update(flipped) }
-            menu.addItem(.separator())
-            MenuItems.add(menu, "Delete Boost") { BoostStore.shared.delete(b.id) }
+            // Arc 1.172.1: Rename (in place) and Delete.
+            let cell = table.view(atColumn: 0, row: row, makeIfNecessary: false) as? BoostRowCell
+            MenuItems.add(menu, "Rename") { cell?.beginRename() }
+            MenuItems.add(menu, "Delete") { BoostStore.shared.delete(b.id) }
         case .archived(let e):
             let actions = actions, store = store
             MenuItems.add(menu, "Restore") { actions.restoreArchived(e.id) }
@@ -672,6 +714,18 @@ extension LibraryListView: NSMenuDelegate {
                 NSPasteboard.general.writeObjects([url as NSURL])
             }
         }
+    }
+}
+
+/// Arc draws no ring round the row a right-click is on: the table hands out the row's menu itself
+/// (NSTableView's own path outlines the clicked row).
+private final class LibraryTable: NSTableView {
+    private(set) var menuRow = -1
+    override func menu(for event: NSEvent) -> NSMenu? {
+        menuRow = row(at: convert(event.locationInWindow, from: nil))
+        guard let m = menu else { return nil }
+        m.delegate?.menuNeedsUpdate?(m)
+        return m.items.isEmpty ? nil : m
     }
 }
 
@@ -763,25 +817,6 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
         apply(ink: ink)
     }
 
-    /// A boost on Library ▸ Boosts: its name and site, dimmed while off.
-    func showBoost(_ b: Boost, colors: SidebarColors, open: @escaping () -> Void) {
-        self.colors = colors
-        download = nil
-        isDownloadRow = false
-        restore = open
-        let ink: NSColor = colors.isDark ? .white : .black
-        tile.layer?.contents = nil
-        tile.layer?.backgroundColor = ink.withAlphaComponent(0.04).cgColor
-        icon.isHidden = false
-        icon.image = NSImage(systemSymbolName: "paintbrush.pointed", accessibilityDescription: "Boost")
-        title.stringValue = b.name
-        title.lineBreakMode = .byTruncatingTail
-        detail.stringValue = b.host + (b.enabled ? "" : " · Off")
-        tip?.text = b.host
-        apply(ink: ink)
-        alphaValue = b.enabled ? 1 : 0.55
-    }
-
     /// An easel on Library ▸ Easels: its glyph, its title, when it was last edited.
     func showEasel(title text: String, edited: Date, colors: SidebarColors, open: @escaping () -> Void) {
         self.colors = colors
@@ -838,7 +873,6 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
     }
 
     private func apply(ink: NSColor) {
-        alphaValue = 1   // a reused cell may come from a Boost that was off
         title.textColor = ink.withAlphaComponent(0.82)
         detail.textColor = ink.withAlphaComponent(0.55)
         refreshHover()

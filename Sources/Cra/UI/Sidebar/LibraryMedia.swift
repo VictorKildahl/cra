@@ -89,14 +89,15 @@ enum MediaGridMetrics {
 
 final class MediaRowCell: NSView {
     private var tiles: [MediaTile] = []
-    var open: (MediaLibrary.File) -> Void = { _ in }
+    /// The picked file and where its picture is drawn, in screen points.
+    var open: (MediaLibrary.File, NSRect?) -> Void = { _, _ in }
 
     override var isFlipped: Bool { true }
 
     func show(_ files: [MediaLibrary.File], ink: NSColor) {
         while tiles.count < 2 {
             let t = MediaTile()
-            t.open = { [weak self] in self?.open($0) }
+            t.open = { [weak self] in self?.open($0, $1) }
             tiles.append(t)
             addSubview(t)
         }
@@ -118,7 +119,7 @@ final class MediaRowCell: NSView {
 }
 
 final class MediaTile: NSView, NSDraggingSource {
-    var open: (MediaLibrary.File) -> Void = { _ in }
+    var open: (MediaLibrary.File, NSRect?) -> Void = { _, _ in }
     private var file: MediaLibrary.File?
     private var ink: NSColor = .white
     private let picture = CALayer()
@@ -204,7 +205,7 @@ final class MediaTile: NSView, NSDraggingSource {
     override func mouseUp(with event: NSEvent) {
         defer { downAt = nil }
         guard downAt != nil, let file, bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
-        open(file)
+        open(file, window.map { $0.convertToScreen(convert(picture.frame, to: nil)) })
     }
 
     func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
