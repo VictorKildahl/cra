@@ -208,8 +208,9 @@ final class SoftwareUpdater: NSObject {
         app.main.showWindow(nil)
     }
 
+    /// The updated banner's "What's new" row. The card stays so Sponsor Cra is still there
+    /// after reading; only its ✕ (or the next launch) puts it away.
     func openReleaseNotes() {
-        updatedTo = nil
         guard let app else { return }
         app.store.createTab(url: Self.releaseNotesURL, select: true)
         app.main.showWindow(nil)
