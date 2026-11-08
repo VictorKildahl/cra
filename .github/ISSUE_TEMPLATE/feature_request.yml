@@ -1,5 +1,5 @@
 name: Feature request
-description: Something Arc did that Cra doesn't yet, or an idea of your own.
+description: Something Arc did that Cra doesn't do yet.
 labels: [enhancement]
 body:
   - type: textarea
@@ -13,8 +13,10 @@ body:
     id: arc
     attributes:
       label: How Arc did it
-      description: If this is an Arc feature, how it looked and behaved there. Screenshots or a recording from Arc are gold.
+      description: How it looked and behaved in Arc. Screenshots or a recording from Arc are gold.
+    validations:
+      required: true
   - type: markdown
     attributes:
       value: |
-        Cra has no built-in AI, account or telemetry, so requests in those directions will be closed. The [roadmap](https://crabrowser.app/roadmap) lists what's already planned.
+        An idea Arc never had goes in [Ideas](https://github.com/VictorKildahl/cra/discussions/categories/ideas) instead, where others can upvote it. Cra has no built-in AI, account or telemetry, so requests in those directions will be closed. The [roadmap](https://crabrowser.app/roadmap) lists what's already planned.

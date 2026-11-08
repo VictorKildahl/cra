@@ -10,6 +10,10 @@ you can send. Code is welcome too, within the few rules below.
   include a screenshot or clip of both. Arc isn't the only source of truth, though: if
   Arc's way is unintuitive or worse than it could be, open an issue that makes the case,
   and we'll decide it on its merits.
+- **New ideas go to Discussions.** A feature Arc never had goes in
+  [Ideas](https://github.com/VictorKildahl/cra/discussions/categories/ideas), where others
+  can upvote it. Issues are for bugs and for Arc features Cra is missing; an idea opened as
+  an issue is labelled `not now`, closed and moved there.
 - **No cloud AI.** Arc Max-style features (summaries, LLM search, anything that needs an
   API key or sends pages away) are out of scope. The one exception is Tidy Tabs, which runs
   on the Mac's own Apple Intelligence model and only shows when that is turned on.
