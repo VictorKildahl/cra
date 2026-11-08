@@ -212,6 +212,7 @@ struct SettingsSidebar: View {
             ForEach(SettingsPane.allCases) { row($0) }
             Spacer(minLength: 0)
         }
+        .padding(.horizontal, 8)
         .padding(.top, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
@@ -230,7 +231,7 @@ struct SettingsSidebar: View {
                     .foregroundStyle(selected ? (key ? Color.white : Color.accentColor) : Color.primary)
                 Spacer(minLength: 0)
             }
-            .padding(.leading, 20)
+            .padding(.leading, 12)
             .frame(height: 28)
             .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(selected ? (key ? Color.accentColor : Color.primary.opacity(0.1)) : Color.clear))
@@ -261,6 +262,9 @@ struct SettingsContent: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            // Scroll views can draw into the ignored titlebar safe area. Keep every
+            // pane inside its viewport below the fixed navigation row.
+            .clipped()
         }
         .ignoresSafeArea(.container, edges: .top)
     }
