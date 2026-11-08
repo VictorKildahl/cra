@@ -3528,6 +3528,9 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
   puts Search first for a selection, turns Lens's "Search image with Google" into "Search Google for Image", adds
   Open Link in Little Window and Capture Image… (ContentCapture.liftedLayout), and opens New Window / Incognito /
   Inspect in Cra's own windows and DevTools. Kept on purpose: Open Link in Background Tab under New Tab (#183).
+  Added on purpose (#257, not in Arc, whose binary has Split View only as a Link Routing destination): Open Link
+  in Split View under the New Tab items, where Chrome has its own; the link opens as a pane after the clicked
+  page's (SidebarStore.openLinkInSplit), "Cannot Add New Pane" at four. Not in Little Windows or Peeks.
 
 ## Blank Window and dragging a tab out (Arc 1.172, 6 Nov 2026, #219 #220, offline Arc on a fake home, AX + 2x window captures)
 

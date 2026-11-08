@@ -52,6 +52,10 @@ enum BrowserManagerLifecycleTests {
         expect(observer.capturedImages.count == 1 && observer.capturedImages.first?.tab == id
                && observer.capturedImages.first?.point == NSPoint(x: 12, y: 34),
                "Capture Image… reaches the window for the live page's tab only")
+        manager.browser(replacement.browser, requestsSplitPaneWithURL: "https://example.test/entry")
+        manager.browser(old.browser, requestsSplitPaneWithURL: "https://example.test/stale-entry")
+        expect(observer.splitLinks.map(\.url) == ["https://example.test/entry"] && observer.splitLinks.first?.tab == id,
+               "Open Link in Split View reaches the window with the live page's tab, a closed page's doesn't")
 
         let retainedID = store.createTab(url: "https://example.test/retained").id
         weak var retainedBrowser = manager.ensureRuntime(for: retainedID)?.browser
@@ -1310,4 +1314,6 @@ private final class Observer: BrowserManagerDelegate {
         openedLinks.append((url, kind, space, fromIncognito))
     }
     func browserManagerCaptureImage(at point: NSPoint, tabID: UUID) { capturedImages.append((point, tabID)) }
+    var splitLinks: [(url: String, tab: UUID)] = []
+    func browserManagerOpenLinkInSplit(_ url: String, fromTab tabID: UUID) { splitLinks.append((url, tabID)) }
 }

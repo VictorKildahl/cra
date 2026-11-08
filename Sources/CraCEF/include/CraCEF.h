@@ -90,6 +90,9 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
 @optional
 /// The page's context menu: Open Link in New Window, Little Window or Incognito Window.
 - (void)browser:(CraBrowser *)browser requestsWindowWithURL:(NSString *)url kind:(CraLinkWindow)kind;
+/// The page's context menu: Open Link in Split View, a pane beside this page (#257). Without it
+/// the menu has no such item (a Little Window's page).
+- (void)browser:(CraBrowser *)browser requestsSplitPaneWithURL:(NSString *)url;
 /// The page's context menu on an image: Capture Image… at `point` (page points from the top
 /// left). Without it the menu has no such item.
 - (void)browser:(CraBrowser *)browser requestsCaptureOfImageAt:(NSPoint)point;

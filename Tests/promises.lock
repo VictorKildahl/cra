@@ -404,3 +404,4 @@
 #256   Packages/CraCore/Tests/CraCoreTests/SlowResponseNoticeTests.swift::namesTheSiteItWaitsFor  77131f187ae0
 #256   Packages/CraCore/Tests/CraCoreTests/SlowResponseNoticeTests.swift::showsAfterTenSecondsWithoutAResponse  652b2e9348ba
 #256   Tests/Scenarios/slow-first-response.scenario  ef5ecd1c5764
+#257   Tests/StoreTests.swift::openLinkInSplit  93b1ecb4d3f2

@@ -1614,6 +1614,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         app.openLink(url, in: kind, space: space, fromIncognito: fromIncognito)
     }
 
+    /// Open Link in Split View (#257): the link opens as a pane beside the page it was clicked in,
+    /// as ⌥Return does from the command bar; a split of four says so, as Add Split View does.
+    func browserManagerOpenLinkInSplit(_ url: String, fromTab tabID: UUID) {
+        // cra:// is Cra's scripting scheme; a page must not drive it.
+        if url.isEmpty || url.lowercased().hasPrefix("cra:") || store.item(tabID) == nil { return }
+        guard store.openLinkInSplit(url, from: tabID, window: windowID) != nil else {
+            showToast("Cannot Add New Pane")
+            return
+        }
+        refresh()
+    }
+
     /// The area Arc's Peek is centred on (window coordinates): right of the sidebar to the
     /// window's edge, top to bottom; the whole window with the sidebar out of the way.
     private func peekAreaInWindow() -> NSRect {

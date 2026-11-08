@@ -120,6 +120,7 @@ enum CraMenuCommand {
     kMenuOpenLinkFirst = MENU_ID_USER_FIRST + 1,
     kMenuOpenLinkSecond,
     kMenuOpenLinkLittleWindow,
+    kMenuOpenLinkSplitView,
     kMenuCaptureImage,
     kMenuCopyLink,
     kMenuInspectElement,
@@ -1697,7 +1698,8 @@ public:
 
     // Arc's page menus are Chrome's with a few changes (Arc 1.172, 6 Nov 2026):
     // - link: Open Link in New Tab, New Window, Little Arc, Incognito Window. Cra's New Tab item
-    //   follows the background-links setting, with the other kind of tab under it (LinkMenu, #183).
+    //   follows the background-links setting, with the other kind of tab under it (LinkMenu, #183),
+    //   then Open Link in Split View (#257, not in Arc; Chrome's own item sits there too).
     // - page: no QR code item; Translate sits with Save As…, Print… and Cast….
     // - selected text: Search <engine> for "…" comes before Copy (not with a link).
     // - image: Capture Image… after Save Image As…, and Search <engine> for Image where Chromium
@@ -1709,8 +1711,10 @@ public:
             model->InsertItemAt(newTab, kMenuOpenLinkFirst, g_linkMenuTitles[0].UTF8String);
             model->InsertItemAt(newTab + 1, kMenuOpenLinkSecond, g_linkMenuTitles[1].UTF8String);
         }
-        // Little Windows load in the normal profile: none from an incognito page.
         CraBrowser* o = owner_;
+        if (newTab >= 0 && [o.delegate respondsToSelector:@selector(browser:requestsSplitPaneWithURL:)])
+            model->InsertItemAt(newTab + 2, kMenuOpenLinkSplitView, "Open Link in Split View");
+        // Little Windows load in the normal profile: none from an incognito page.
         int newWindow = model->GetIndexOf(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW);
         if (newWindow >= 0 && !o.isIncognito) model->InsertItemAt(newWindow + 1, kMenuOpenLinkLittleWindow, "Open Link in Little Window");
         for (int id : {IDC_CONTENT_CONTEXT_GENERATE_QR_CODE, IDC_CONTENT_CONTEXT_OPENLINKINPROFILE,
@@ -1745,11 +1749,14 @@ public:
         CraTidySeparators(model);
     }
 
-    static void AddAlloyItems(CefRefPtr<CefContextMenuParams> params, CefRefPtr<CefMenuModel> model) {
+    void AddAlloyItems(CefRefPtr<CefContextMenuParams> params, CefRefPtr<CefMenuModel> model) {
         size_t index = 0;
         if (!params->GetLinkUrl().empty()) {
             model->InsertItemAt(index++, kMenuOpenLinkFirst, g_linkMenuTitles[0].UTF8String);
             model->InsertItemAt(index++, kMenuOpenLinkSecond, g_linkMenuTitles[1].UTF8String);
+            CraBrowser* o = owner_;
+            if ([o.delegate respondsToSelector:@selector(browser:requestsSplitPaneWithURL:)])
+                model->InsertItemAt(index++, kMenuOpenLinkSplitView, "Open Link in Split View");
             model->InsertItemAt(index++, kMenuCopyLink, "Copy Link");
             model->InsertSeparatorAt(index++);
         }
@@ -1780,6 +1787,10 @@ public:
                 return true;
             case kMenuOpenImageInNewTab:
                 [o.delegate browser:o requestsNewTabWithURL:NSStringFromCef(params->GetSourceUrl()) inBackground:NO];
+                return true;
+            case kMenuOpenLinkSplitView:
+                if ([o.delegate respondsToSelector:@selector(browser:requestsSplitPaneWithURL:)])
+                    [o.delegate browser:o requestsSplitPaneWithURL:NSStringFromCef(params->GetLinkUrl())];
                 return true;
             case kMenuCopyLink:
             case kMenuCopyImageURL: {

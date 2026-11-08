@@ -86,6 +86,8 @@ protocol BrowserManagerDelegate: AnyObject {
     func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool, newTab: Bool) -> Bool
     /// The page's context menu: Open Link in New Window, Little Window or Incognito Window.
     func browserManagerOpenLink(_ url: String, in kind: CraLinkWindow, space: UUID?, fromIncognito: Bool)
+    /// The page's context menu: Open Link in Split View, a pane beside `tabID`'s (#257).
+    func browserManagerOpenLinkInSplit(_ url: String, fromTab tabID: UUID)
     /// The page's context menu on an image: Capture Image… (page points from the top left).
     func browserManagerCaptureImage(at point: NSPoint, tabID: UUID)
 }
@@ -1250,6 +1252,11 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     func browser(_ browser: CraBrowser, requestsWindowWithURL url: String, kind: CraLinkWindow) {
         guard let id = tabID(of: browser) else { return }
         delegate?.browserManagerOpenLink(url, in: kind, space: store.spaceID(ofItem: id), fromIncognito: browser.isIncognito)
+    }
+
+    func browser(_ browser: CraBrowser, requestsSplitPaneWithURL url: String) {
+        guard let id = tabID(of: browser) else { return }
+        delegate?.browserManagerOpenLinkInSplit(url, fromTab: id)
     }
 
     /// A link that asks for a new tab, from `source`'s page or from a Peek over it (#202): a

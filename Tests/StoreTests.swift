@@ -68,6 +68,7 @@ enum StoreTests {
         allFoldersExpanded()
         revealInSidebar()
         oneWindowAtLaunch()
+        openLinkInSplit()
         print("Store: \(checks) checks passed")
     }
 
@@ -1764,6 +1765,42 @@ enum StoreTests {
         expect(store.item(stays.id) != nil && store.integrityProblems().isEmpty, "and the sidebar stays sound")
         store.removeWindow(second)
         store.saveAll()
+    }
+
+    // promise: #257
+    /// A page's "Open Link in Split View" (#257): the link opens in a new pane right after the
+    /// page it was clicked in, as the open pane; a split of four panes takes no more.
+    @MainActor
+    private static func openLinkInSplit() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let sid = store.createSpace(title: "Link Split", emoji: "🔗").id
+        let main = store.activeWindowID
+        let today = store.space(sid)!.todayContainerID
+        let list = store.createTab(url: "https://example.com/list", in: sid, window: main)
+        let entry = store.openLinkInSplit("https://example.com/entry-1", from: list.id, window: main)
+        let split = store.splitContaining(list.id)
+        expect(entry != nil && split != nil && store.paneTabIDs(for: list.id) == [list.id, entry!.id],
+               "from a lone tab the link opens in a split beside it, the page on the left")
+        expect(store.item(entry!.id)?.tab?.url == "https://example.com/entry-1" && store.selectedTabID(window: main) == entry!.id,
+               "the new pane loads the link and is the open one")
+        expect(store.children(of: today).map(\.id) == [split!.id], "the split takes the tab's place in Today")
+
+        let second = store.openLinkInSplit("https://example.com/entry-2", from: list.id, window: main)!
+        expect(store.paneTabIDs(for: list.id) == [list.id, second.id, entry!.id],
+               "from a pane of a split the link joins it right after that pane")
+        let third = store.openLinkInSplit("https://example.com/entry-3", from: entry!.id, window: main)!
+        expect(store.paneTabIDs(for: list.id) == [list.id, second.id, entry!.id, third.id], "up to four panes")
+        expect(store.openLinkInSplit("https://example.com/entry-4", from: list.id, window: main) == nil
+               && store.paneTabIDs(for: list.id).count == 4 && store.selectedTabID(window: main) == third.id,
+               "a fifth is refused and nothing changes (the window says Cannot Add New Pane)")
+
+        let pinned = store.createTab(url: "https://example.com/pinned-list", in: sid, pinned: true, window: main)
+        let fromPinned = store.openLinkInSplit("https://example.com/pinned-entry", from: pinned.id, window: main)!
+        expect(store.isPinned(pinned.id) && store.splitContaining(pinned.id) == nil && store.splitContaining(fromPinned.id) != nil
+               && !store.isPinned(fromPinned.id) && store.paneTabIDs(for: fromPinned.id).count == 2,
+               "a pinned tab stays where it is: the split goes in Today with a copy of its page, as Add Split View does")
+        expect(store.openLinkInSplit("https://example.com/x", from: UUID(), window: main) == nil, "no tab, no pane")
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 
     /// Arc's Today tab menu: "Archive Tabs Below" archives every Today row under the one clicked.
