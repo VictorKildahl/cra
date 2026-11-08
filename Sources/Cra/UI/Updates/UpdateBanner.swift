@@ -37,8 +37,7 @@ final class UpdateBannerView: NSView {
 
     private static var kind: Kind? {
         let u = SoftwareUpdater.shared
-        if u.readyRelease != nil, !u.bannerDismissed { return .ready(title: "An update is ready!", subtitle: "Click to restart") }
-        if let r = u.foundRelease, !u.bannerDismissed { return .ready(title: "New Cra Version Available", subtitle: "Cra \(r.version)") }
+        if let n = u.notice { return .ready(title: n.title, subtitle: n.subtitle) }
         if u.updatedTo != nil { return .updated }
         return nil
     }
@@ -296,8 +295,7 @@ final class ReadyCard: BannerCard {
 
     override func mouseUp(with event: NSEvent) {
         guard bounds.contains(convert(event.locationInWindow, from: nil)), !handleClose(event) else { return }
-        let u = SoftwareUpdater.shared
-        if u.readyRelease != nil { u.installAndRelaunch() } else if u.foundRelease != nil { u.showFoundUpdate() }
+        if let notice = SoftwareUpdater.shared.notice { SoftwareUpdater.shared.act(on: notice) }
     }
 }
 

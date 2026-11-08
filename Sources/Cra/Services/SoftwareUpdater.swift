@@ -57,6 +57,18 @@ final class SoftwareUpdater: NSObject {
     /// The close button on a banner hides it until the next launch (Arc counts these in
     /// autoUpdateBannerDismissalCount).
     var bannerDismissed = false
+    /// What the "ready" banner says, and the toast says for a window whose sidebar is hidden.
+    var notice: UpdateNotice? {
+        UpdateNotice.current(ready: readyRelease?.version, found: foundRelease?.version, dismissed: bannerDismissed)
+    }
+
+    /// Clicking the banner, or the toast's button: restart into it, or show the found update.
+    func act(on notice: UpdateNotice) {
+        switch notice {
+        case .ready: installAndRelaunch()
+        case .available: showFoundUpdate()
+        }
+    }
     /// Arc's "Automatically update my Arc" (Dia: "Automatically update Dia"): download in
     /// the background and restart while the user is away. Off, a found update only shows a
     /// banner. Stored by Sparkle as SUAutomaticallyUpdate.

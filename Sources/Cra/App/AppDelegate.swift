@@ -92,6 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         mainWindows = store.prefs.windows.map { MainWindowController(app: self, session: $0) }
         followKeyWindow()
         observeFlippingRows()
+        observeUpdateNotice()
         // First launch: the default browser step and the import are the onboarding and
         // the browser window appears once they are done (Dia does the same).
         if needsOnboarding {
@@ -297,6 +298,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     private func observeContentBlocking() {
         observeChanges(of: { [store] in store.settings.blockAdsAndTrackers }, apply: CraCEFRuntime.setContentBlockingEnabled)
+    }
+
+    /// The last update notice toasted this launch (UpdateNotice.toast), and how many were.
+    private var toldUpdate: UpdateNotice?
+    private var updateToasts = 0
+
+    /// An update that turns up, or a sidebar hidden while one waits, toasts in the front window
+    /// when that window's sidebar is hidden: the banner can't be seen there.
+    private func observeUpdateNotice() {
+        observeChanges(of: { [unowned self] in
+            UpdateNotice.toast(SoftwareUpdater.shared.notice, told: toldUpdate, sidebarVisible: main?.sidebarVisible ?? true)
+        }) { [weak self] notice in
+            guard let self, let notice, let w = main, w.window?.isVisible == true else { return }
+            toldUpdate = notice
+            updateToasts += 1
+            w.showUpdateToast(notice)
+            CraLog.note("update toast \(updateToasts): \(notice.title) [\(notice.button)] \(notice.version)")
+        }
     }
 
     private func installURLEventHandler() {
