@@ -1,0 +1,16 @@
+# The toolbar's right group with two pinned extensions, as in Arc 1.171 (window capture, 8 Nov 2026):
+# 32 pt boxes 4 pt apart, so the icons sit on a 36 pt pitch, centred 129, 93, 57 (sliders) and 21
+# (Split View) pt from the card edge. Cra drew 34 pt boxes edge to edge, Split View 23 pt in.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true}
+cra://debug?installExtension=${FIXTURES}/Extension
+cra://debug?installExtension=${FIXTURES}/SidePanelExtension
+relaunch
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=pins
+wait 3
+cra://debug?pinExtension=${EXTENSION_ID}
+cra://debug?pinExtension=${SIDE_PANEL_EXTENSION_ID}
+wait 2
+snapshot PaneToolbarView toolbar-pinned-extensions
+reject-log fault:
