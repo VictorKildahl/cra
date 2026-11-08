@@ -676,7 +676,10 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
             guard let host = URL(string: t.url)?.host?.lowercased() else { return false }
             return host == b.host || host.hasSuffix("." + b.host)
         }?.faviconKey
-        return favicons.image(forKey: key)
+        if let i = favicons.image(forKey: key) { return i }
+        // Never shown in a tab here: fetch the site's own icon, then draw the row again.
+        SiteIconLoader.shared.load(host: b.host, into: favicons) { [weak self] in self?.table.reloadData() }
+        return nil
     }
 }
 
