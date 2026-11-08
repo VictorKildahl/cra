@@ -32,20 +32,89 @@ public struct TabSleepPolicy: Equatable, Sendable {
         TabSleepPolicy(hiddenFor: after.seconds, keepsRecentTabs: after.seconds >= TabSleepThreshold.fourHours.seconds)
     }
 
-    /// "…when the Mac is short of memory": the 3 pages hidden longest, whatever their rank, but
+    /// "…when the Mac is short of memory": the pages hidden longest, whatever their rank, but
     /// none left in the last 5 minutes, so a tab just left (or just woken) isn't closed again.
-    public static let memoryPressure = TabSleepPolicy(hiddenFor: 5 * 60, keepsRecentTabs: false, limit: 3, reason: .memoryPressure)
+    /// 3 at warning; 9 at critical, so a sweep keeps up with tabs opened faster than the clock
+    /// closes them (#237: a burst of YouTube tabs held a 16 GB Mac 7 GB over its memory).
+    public static func memoryPressure(_ level: PerfSystemSample.Pressure) -> TabSleepPolicy {
+        TabSleepPolicy(hiddenFor: 5 * 60, keepsRecentTabs: false, limit: level == .critical ? 9 : 3, reason: .memoryPressure)
+    }
 
     /// A pinned tab that a split pane copied (Arc): its page sleeps at once, the copy shows it.
     public static let splitCopy = TabSleepPolicy(hiddenFor: 0, keepsRecentTabs: false, limit: 1, reason: .splitCopy)
 
-    /// macOS reports a level for a while after pages close, so a sweep waits this long for the
-    /// last one to tell before taking more.
-    public static let pressureSweepInterval: TimeInterval = 90
+    /// How often the app's pass runs (AppComposition.tabSleepInterval).
+    public static let passInterval: TimeInterval = 60
 
-    /// Whether the minute's pass sweeps for memory pressure.
+    /// Whether the minute's pass sweeps for memory pressure. macOS reports a level for a while
+    /// after pages close, so at warning a sweep skips a pass for the last one to tell (every
+    /// 2 minutes); at critical it sweeps every pass (#237). Half a pass of slack absorbs the
+    /// timer's jitter.
     public static func sweepsForPressure(_ pressure: PerfSystemSample.Pressure, enabled: Bool, lastSweep: Date?, now: Date) -> Bool {
-        enabled && pressure.isShort && lastSweep.map { now.timeIntervalSince($0) >= pressureSweepInterval } ?? true
+        guard enabled, pressure.isShort else { return false }
+        guard let lastSweep else { return true }
+        let passes: TimeInterval = pressure == .critical ? 1 : 2
+        return now.timeIntervalSince(lastSweep) >= (passes - 0.5) * passInterval
+    }
+
+    /// What one pass closed, as one line per way of closing in cra.log (#237: a sweep of twelve
+    /// pages wrote twelve identical lines). Hosts only, as everywhere in the log.
+    public struct PassLog: Equatable, Sendable {
+        public var reason: Reason
+        private var pages: [(host: String, minutes: Int, discarded: Bool, processEnded: Bool)] = []
+
+        public init(reason: Reason) { self.reason = reason }
+
+        public static func == (a: PassLog, b: PassLog) -> Bool { a.reason == b.reason && a.lines == b.lines }
+
+        /// A page the pass closed: discarded in place, or unloaded by a CEF that can't discard.
+        public mutating func closed(host: String, hiddenFor: TimeInterval, discarded: Bool, processEnded: Bool) {
+            pages.append((host, Int(max(hiddenFor, 0) / 60), discarded, processEnded))
+        }
+
+        public var lines: [String] {
+            let why = reason == .memoryPressure ? ", the Mac is short of memory" : reason == .splitCopy ? ", a split shows its copy" : ""
+            return [(true, "discards"), (false, "unloads")].compactMap { discarded, verb in
+                let ps = pages.filter { $0.discarded == discarded }
+                guard !ps.isEmpty else { return nil }
+                var counts: [String: Int] = [:], order: [String] = []
+                for p in ps {
+                    if counts[p.host] == nil { order.append(p.host) }
+                    counts[p.host, default: 0] += 1
+                }
+                let hosts = order.enumerated().sorted { (counts[$0.element]!, -$0.offset) > (counts[$1.element]!, -$1.offset) }
+                    .map { counts[$0.element]! > 1 ? "\($0.element) ×\(counts[$0.element]!)" : $0.element }
+                let lo = ps.map(\.minutes).min()!, hi = ps.map(\.minutes).max()!
+                let ended = ps.filter(\.processEnded).count
+                let detail: String
+                if ps.count == 1 {
+                    detail = "hidden \(lo) min" + (ended == 1 ? ", its renderer ended" : "")
+                } else {
+                    detail = "\(ps.count) pages hidden " + (lo == hi ? "\(lo)" : "\(lo)–\(hi)") + " min"
+                        + (ended == 0 ? "" : ", \(ended) renderer\(ended == 1 ? "" : "s") ended")
+                }
+                return "tab sleep \(verb) \(hosts.joined(separator: ", ")) (\(detail)\(why))"
+            }
+        }
+    }
+
+    /// Why a pass asks no page (#237: two pressure sweeps logged their cap and then nothing).
+    /// `held` counts the candidates passed over by reason, `waiting` the ones inside their
+    /// back-off after a refusal.
+    public func nothingToClose(_ pages: [Page], visible: [UUID], held: [Hold: Int], waiting: Int, now: Date) -> String {
+        func plural(_ n: Int, _ word: String) -> String { "\(n) \(word)\(n == 1 ? "" : "s")" }
+        var why: [String] = []
+        if !held.isEmpty {
+            let total = held.values.reduce(0, +)
+            let reasons = held.sorted { $0.key.rawValue < $1.key.rawValue }.map { "\($0.key.rawValue) \($0.value)" }
+            why.append("\(plural(total, "page")) passed over (\(reasons.joined(separator: ", ")))")
+        }
+        if waiting > 0 { why.append("\(plural(waiting, "page")) refused lately, asked again later") }
+        if !why.isEmpty { return why.joined(separator: "; ") }
+        let hidden = pages.compactMap { p in visible.contains(p.id) ? nil : p.hiddenAt }
+        guard let earliest = hidden.min() else { return "no page is out of sight" }
+        let longest = Int(now.timeIntervalSince(earliest) / 60)
+        return "none of \(plural(hidden.count, "hidden page")) has been out of sight \(Int(hiddenFor / 60)) min (longest \(longest) min)"
     }
 
     /// A page as tab sleeping sees it: when it went off screen (nil while shown) and when it last

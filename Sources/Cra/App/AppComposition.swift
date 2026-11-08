@@ -20,7 +20,7 @@ final class AppComposition {
     /// Arc archives on a 30-minute pass; tab freezing and sleeping look every minute. `sleepTabs` reaches
     /// the windows' browser managers, which the composition does not own.
     static let autoArchiveInterval: TimeInterval = 1800
-    static let tabSleepInterval: TimeInterval = 60
+    static let tabSleepInterval = TabSleepPolicy.passInterval
     /// Arc's timeToFreezeTab: a page out of sight 30 minutes is voted to freeze.
     static let tabFreezeAfter: TimeInterval = 30 * 60
 

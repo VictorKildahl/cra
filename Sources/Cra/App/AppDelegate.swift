@@ -239,8 +239,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         guard TabSleepPolicy.sweepsForPressure(pressure, enabled: store.settings.tabSleepOnMemoryPressure,
                                                lastSweep: lastPressureSweep, now: now) else { return }
         lastPressureSweep = now
-        CraLog.note("tab sleep: memory pressure \(pressure.rawValue), closing up to \(TabSleepPolicy.memoryPressure.limit ?? 0) pages per window")
-        for w in mainWindows { w.browsers.sleepIdleTabs(.memoryPressure) }
+        let policy = TabSleepPolicy.memoryPressure(pressure)
+        CraLog.note("tab sleep: memory pressure \(pressure.rawValue), closing up to \(policy.limit ?? 0) pages per window")
+        for w in mainWindows { w.browsers.sleepIdleTabs(policy) }
     }
 
     /// Settings > Privacy > "Always use secure connections", live like content blocking.

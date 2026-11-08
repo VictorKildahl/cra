@@ -104,6 +104,7 @@ enum BrowserManagerLifecycleTests {
         await pressureSweepCase()
         await discardCase()
         await discardedPageLoadCase()
+        await discardedPageColoursCase()
         await sleepCountsCase()
         shortTimerCase()
         recentlyAudibleCase()
@@ -530,7 +531,7 @@ enum BrowserManagerLifecycleTests {
         runtimes[5].hiddenAt = clock.now.addingTimeInterval(-4 * 60)
         runtimes[0].sleepProbeAfter = clock.now.addingTimeInterval(60)
         func probed() -> [Bool] { runtimes.map { rt in rt.browser.replies.contains { $0.method == isolatedProbe } } }
-        manager.sleepIdleTabs(.memoryPressure)
+        manager.sleepIdleTabs(.memoryPressure(.warning))
         expect(probed() == [false, true, true, true, false, false],
                "the 3 pages hidden longest are asked, past a refusing page, none of the 10 used last kept")
         for rt in runtimes[1...3] {
@@ -541,7 +542,7 @@ enum BrowserManagerLifecycleTests {
             await finishSleep(rt.browser)
         }
         expect(ids.map { asleep(manager, $0) } == [false, true, true, true, false, false], "the 3 pages are discarded")
-        manager.sleepIdleTabs(.memoryPressure)
+        manager.sleepIdleTabs(.memoryPressure(.warning))
         expect(probed()[4] && !probed()[5], "the next sweep takes the next page, not one left 4 minutes ago")
         manager.closeAll()
     }
@@ -620,6 +621,38 @@ enum BrowserManagerLifecycleTests {
         manager.browser(rt.browser, didFinishLoadingURL: url, title: "Woken", statusCode: 200)
         expect(store.visits == [url] && ExtensionStore.shared.webStoreProfiles.count == installs + 1,
                "the page loaded again on waking is a visit")
+        manager.closeAll()
+    }
+
+    // promise: #237
+    /// The blank document a discard leaves answers the load end's colour probes with white (#237:
+    /// every discarded YouTube or GitHub tab saved #FFFFFF, a 2 MB sidebar.json write each, and
+    /// woke with a white toolbar). The tab keeps the colours its page reported; woken, the page
+    /// reports again.
+    @MainActor
+    private static func discardedPageColoursCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.protectedRecentTabs = 0
+        let id = store.createTab(url: "https://example.test/dark-site").id
+        let rt = manager.ensureRuntime(for: id)!
+        manager.browser(rt.browser, didReportThemeColor: "#212121")
+        manager.browser(rt.browser, didReportBackgroundColor: "#0F0F0F")
+        rt.hiddenAt = Date.distantPast
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
+        rt.browser.reply(to: isolatedProbe, with: idleReply)
+        await drainMainQueue()
+        rt.browser.reply(to: "Runtime.evaluate", with: idleReply)
+        await drainMainQueue()
+        await finishSleep(rt.browser)
+        expect(rt.discarded, "the page is discarded")
+        manager.browser(rt.browser, didReportThemeColor: "#FFFFFF")
+        manager.browser(rt.browser, didReportBackgroundColor: "#FFFFFF")
+        expect(store.item(id)?.tab?.themeColor == "#212121" && rt.themeColor == "#212121" && rt.backgroundColor == "#0F0F0F",
+               "a discarded page's blank document doesn't replace the tab's colours")
+        manager.show(id, focus: false)
+        manager.browser(rt.browser, didReportThemeColor: "#303030")
+        expect(store.item(id)?.tab?.themeColor == "#303030", "the page loaded again on waking reports its colour")
         manager.closeAll()
     }
 
@@ -722,7 +755,7 @@ enum BrowserManagerLifecycleTests {
         runtime.hiddenAt = Date.distantPast
         runtime.browser.isAudible = true
         manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
-        manager.sleepIdleTabs(.memoryPressure)
+        manager.sleepIdleTabs(.memoryPressure(.warning))
         expect(!runtime.browser.replies.contains { $0.method == isolatedProbe } && !asleep(manager, id),
                "a page playing sound is never asked to sleep, on the timer or under memory pressure")
         manager.closeAll()
