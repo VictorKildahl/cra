@@ -78,7 +78,9 @@ built release app with a test profile. Note anything that fails in the release's
 - **#242:** Peek a link from a pinned tab, scroll the Peek, click a `target=_blank` link in it: the
   new tab shows with no Peek and the pinned row keeps the peeked page's favicon. Click the pinned
   row: the same Peek is back at the same scroll, the page behind faded, and clicks in it work.
-  (Which Peek shows when is the peek-per-tab scenario; this is the look and the scroll.)
+  With the Peek shown, click another tab's row: that tab opens (the Peek waits); a click on the
+  faded page beside the card closes it. (Which Peek shows when is the peek-per-tab scenario;
+  this is the look, the scroll and the real clicks.)
 - **PR #222:** with a Peek open, the browser window keeps its full shadow and coloured traffic
   lights, also after a click in the Peek, as in Arc. A drag from every edge and corner resizes the
   window with the Peek open and the card follows; a click on the background 4 pt or more inside

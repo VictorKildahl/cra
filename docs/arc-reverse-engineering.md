@@ -3077,9 +3077,24 @@ event with `shiftClickModalEntryPointEnabled` set for the run, AX frames and 60 
   scroll, back on its pinned tab. So the 6 Nov run above saw the Peek go out of sight, not end. Cra:
   PeekPresence (CraCore), MainWindowController.syncPeeks → LittleWindowController.parkPeek /
   unparkPeek / dropPeek; the tab's row keeps the peeked favicon while the Peek waits (modalIcon).
-  Not observed live: whether a sidebar click with the Peek on screen (the 4 Nov run: "closed the Peek")
-  also only hides it, whether the Peek comes back with a motion (Cra: at once, the page veiled at once),
-  and what a pinned tab's ⌘W does to a Peek waiting on it (Cra: the Peek goes with the page).
+- [O live, 8 Nov, GitHub #242] Checked in offline Arc 1.172.1 (fake home, one space, pages on pin/away/other
+  .lvh.me:47139 that report load, scroll, visibility and pagehide to the server, HID clicks at 2x, a 60 fps
+  recording). From the pinned tab: its link peeked, the peeked page scrolled itself to 1234; the Peek's
+  target=_blank link opened a selected Today tab and the peeked page went `hidden`, alive (no pagehide).
+  A click on the pinned row brought the same page back (same instance, never reloaded) at 1234.
+  - A click on another sidebar row with the Peek on screen only hides it too: that tab opens, the peeked
+    page goes hidden, and the Peek is back with its tab. The 4 Nov "closed the Peek" was this.
+  - A Peek from a Today tab (Shift-click) waits the same way; its target=_blank link put the new tab right
+    below its tab. Both rows showed the badge at once.
+  - Coming back: the card is there whole in one frame (one blank frame while the page repaints), no
+    grow or fade; only the dimming behind it eases in, ~5 frames (~80 ms). Cra: at once.
+  - The background pinned row with a Peek waiting on it shows ✕ (Archive this tab) on hover, being on its
+    page, and archiving it ended the Peek (pagehide). A pinned tab with a waiting Peek is never away from
+    its page, so the minus (Close and Keep Pinned) and ⌘W don't meet a waiting Peek; ⌘W with the pinned
+    tab open closes the Peek on screen (4 Nov). Cra: archiving drops the Peek; a pinned ⌘W drops it too.
+  - Cra: the click catcher (PeekDimPanel, PeekLayout.dismissArea with `contentMinX`) covered the sidebar,
+    so a row click closed the Peek; it now covers the page area only and the row's tab opens (syncPeeks
+    parks the Peek). cra://debug?peekCatcher reads it.
 
 ### Peek grows out of the link (Arc 1.171, 6 Nov 2026, GitHub #204, offline Arc)
 The reporter recorded Arc 1.172.1 growing the card out of the clicked link. 1.172.0/1.172.1 only moved Chromium

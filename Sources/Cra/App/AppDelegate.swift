@@ -994,6 +994,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 for m in mainWindows { NSLog("Cra peeks %@: %@", label, m.peeksShown()) }
                 return
             }
+            // peekCatcher=<label>: whether the shown Peek's click catcher leaves the sidebar alone (#242).
+            if let label = dict["peekCatcher"] {
+                for m in mainWindows { NSLog("Cra peek catcher %@: %@", label, m.peekCatcherReadout()) }
+                return
+            }
             if dict["relaunch"] != nil { relaunch(); return }
             // quit=1 quits for real, as the menu bar item's Quit; quit=menu is ⌘Q (#231).
             if let q = dict["quit"] { q == "menu" ? NSApp.terminate(nil) : quitFromMenuBar(); return }

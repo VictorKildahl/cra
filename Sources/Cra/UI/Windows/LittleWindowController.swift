@@ -145,6 +145,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// Another tab is on screen: the Peek is out of sight, its page alive, until its tab is back.
     private(set) var isParked = false
     private var dim: PeekDimPanel?
+    /// The click catcher's frame (screen coordinates), for cra://debug?peekCatcher.
+    var dimFrame: NSRect? { dim?.frame }
     private var controls: PeekControlsPanel?
     /// The Peek is on its way out (closePeekAnimated).
     private var closingPeek = false
@@ -435,7 +437,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// lands.
     func showAsPeek(fromTab tabID: UUID?) {
         guard let window, let parent = peekParent, let pw = parent.window else { return }
-        let dim = PeekDimPanel(covering: pw) { [weak self] in self?.closeWindow() }
+        let dim = PeekDimPanel(covering: parent.peekDismissArea(), of: pw) { [weak self] in self?.closeWindow() }
         self.dim = dim
         pw.addChildWindow(dim, ordered: .above)
         dim.orderFront(nil)
@@ -572,7 +574,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     func repositionPeek() {
         guard let window, let parent = peekParent, let pw = parent.window, !closingPeek else { return }
-        dim?.reposition(covering: pw)
+        dim?.reposition(covering: parent.peekDismissArea(), of: pw)
         window.setFrame(parent.peekFrame(), display: true)
         controls?.place(parent.peekButtonFrames(), theme: parent.focusedSpace.theme)
     }

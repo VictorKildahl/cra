@@ -374,10 +374,11 @@
 #241   Packages/CraCore/Tests/CraCoreTests/PageViewInsetsTests.swift::placesTheViewBelowTheBarInTheCard  7ba2374d493e
 #241   Packages/CraCore/Tests/CraCoreTests/PageViewInsetsTests.swift::readsTheBarAboveThePageInEitherSuperview  548a9473598d
 #241   Tests/Scenarios/debugger-infobar.scenario  189c93dc5b96
+#242   Packages/CraCore/Tests/CraCoreTests/PeekLayoutTests.swift::aClickOnTheSidebarIsTheSidebars  5e5b1489b238
 #242   Packages/CraCore/Tests/CraCoreTests/PeekPresenceTests.swift::aPeekGoesWithItsTab  883c18835e90
 #242   Packages/CraCore/Tests/CraCoreTests/PeekPresenceTests.swift::aPeekWaitsWhileAnotherTabIsOpenAndComesBackWithItsTab  176a47b35b61
 #242   Packages/CraCore/Tests/CraCoreTests/PeekVeilTests.swift::aPeekBackWithItsTabVeilsThePageAgain  b7239be288df
-#242   Tests/Scenarios/peek-per-tab.scenario  985d0534cd4f
+#242   Tests/Scenarios/peek-per-tab.scenario  8f4c23cdb33b
 #243   Packages/CraCore/Tests/CraCoreTests/TabRowTrailingTests.swift::hoveredNameRunsToTheCloseButton  0a8658ede567
 #243   Packages/CraCore/Tests/CraCoreTests/TabRowTrailingTests.swift::restingTailIsUnchanged  f479053f4258
 #245   Packages/CraCore/Tests/CraCoreTests/DownloadListTests.swift::libraryListsRunningDownloads  fec003db07c1

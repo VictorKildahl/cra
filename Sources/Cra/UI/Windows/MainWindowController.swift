@@ -1545,11 +1545,32 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// window's edge, top to bottom; the whole window with the sidebar out of the way.
     private func peekAreaInWindow() -> NSRect {
         guard let window else { return .zero }
+        return PeekLayout.area(window: window.frame.size, contentMinX: peekContentMinX())
+    }
+
+    /// Where the sidebar ends (window coordinates), 0 with it hidden.
+    private func peekContentMinX() -> CGFloat {
         // Asked from windowDidResize, before the shell has laid out at the new size.
         shell.layoutSubtreeIfNeeded()
         let content = shell.convert(shell.contentContainer.frame, to: nil)
         let sidebarShown = store.window(windowID).sidebarVisible && content.minX > CraMetrics.contentInset
-        return PeekLayout.area(window: window.frame.size, contentMinX: sidebarShown ? content.minX : 0)
+        return sidebarShown ? content.minX : 0
+    }
+
+    /// Where a click closes a Peek (screen coordinates): the page area, not the sidebar, whose rows
+    /// still open their tabs (#242).
+    func peekDismissArea() -> NSRect {
+        guard let window else { return .zero }
+        return PeekLayout.dismissArea(covering: window.frame, contentMinX: peekContentMinX())
+    }
+
+    /// cra://debug?peekCatcher: whether the shown Peek's click catcher leaves the sidebar's rows to
+    /// the sidebar (#242).
+    func peekCatcherReadout() -> String {
+        guard let window, let dim = peeks.first(where: { !$0.isParked })?.dimFrame else { return "none" }
+        let sidebar = window.convertToScreen(shell.sidebarHost.convert(shell.sidebarHost.bounds, to: nil))
+        let covered = !store.window(windowID).sidebarVisible ? "hidden" : dim.intersects(sidebar.insetBy(dx: 0.5, dy: 0.5)) ? "covered" : "clear"
+        return "sidebar=\(covered)"
     }
 
     /// The whole area, where a Peek grows from and goes back to (screen coordinates).
@@ -1721,7 +1742,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private func syncPeeks(onScreen panes: [UUID]) {
         for p in peeks {
             switch PeekPresence.of(peekFrom: p.peekSourceTab, onScreen: panes, tabExists: p.peekSourceTab.map { store.item($0) != nil } ?? false) {
-            case .shown: p.unparkPeek()
+            case .shown:
+                p.unparkPeek()
+                // The sidebar shown or hidden under it: the catcher follows the page area.
+                if let f = p.dimFrame, f != peekDismissArea() { p.repositionPeek() }
             case .parked: p.parkPeek()
             case .dropped: p.dropPeek()
             }

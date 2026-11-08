@@ -38,9 +38,17 @@ public enum PeekLayout {
     public static let dismissInset: CGFloat = 3
 
     /// The part of a browser window (`window`, its frame) where a click closes the Peek over it: all
-    /// of it but the band along its edges that macOS keeps for resizing.
-    public static func dismissArea(covering window: CGRect) -> CGRect {
-        window.insetBy(dx: dismissInset, dy: dismissInset)
+    /// of it right of the sidebar (`contentMinX` in from the window's left edge, 0 with the sidebar
+    /// hidden) but the band along its edges that macOS keeps for resizing.
+    ///
+    /// The sidebar stays the sidebar under a Peek. Arc 1.172.1 (offline Arc, HID clicks, 8 Nov 2026,
+    /// GitHub #242): a click on another tab's row opens that tab and the Peek waits on its own tab,
+    /// the page behind it alive and where it was scrolled; clicks 1–6 pt into the sidebar kept the
+    /// Peek (6 Nov). Only the page area closes it.
+    public static func dismissArea(covering window: CGRect, contentMinX: CGFloat = 0) -> CGRect {
+        let inside = window.insetBy(dx: dismissInset, dy: dismissInset)
+        let left = max(inside.minX, window.minX + contentMinX)
+        return CGRect(x: left, y: inside.minY, width: max(0, inside.maxX - left), height: inside.height)
     }
 
     public struct Backdrop: Sendable, Equatable {
