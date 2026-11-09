@@ -283,10 +283,6 @@
 #178   Packages/CraCore/Tests/CraCoreTests/ToolbarExtensionFitTests.swift::refreshGoesOnceThePinsAreNotEnough  e723177218d9
 #178   Packages/CraCore/Tests/CraCoreTests/ToolbarExtensionFitTests.swift::theSlidersGoOnlyWhenTheAddressWouldBeSqueezed  e8aec2739640
 #180   Tests/StoreTests.swift::dropOnPinnedTabSplits  e363bbd33fb2
-#183   Packages/CraCore/Tests/CraCoreTests/LinkMenuTests.swift::defaultSwitchesToTheNewTabLikeArc  169e27801cfa
-#183   Packages/CraCore/Tests/CraCoreTests/LinkMenuTests.swift::settingIsOffForSettingsWithoutIt  6d661c8bddc5
-#183   Packages/CraCore/Tests/CraCoreTests/LinkMenuTests.swift::settingOnKeepsThePageInFrontAndOffersTheSwitch  9086830db26d
-#183   Packages/CraCore/Tests/CraCoreTests/ShippedSidebarTests.swift::backgroundLinksSettingIsKept  f4c02e2bd336
 #185   Packages/CraCore/Tests/CraCoreTests/SidebarModelTests.swift::developerBarShowsWithTheToolbarHidden  20670c4040fc
 #185   Tests/Scenarios/developer-bar.scenario  7e0621dd18c1
 #190   Packages/CraCore/Tests/CraCoreTests/DownloadLocationTests.swift::aMissingFolderFallsBackToDownloads  f5a843595618
@@ -443,3 +439,10 @@
 #275   Tests/BrowserManagerLifecycleTests.swift::suspendedMediaSleepsCase  ed7cdf678f8b
 #275   Tests/BrowserManagerLifecycleTests.swift::sweepThatClosesNothingCase  1a8cbbe87871
 #275   Tests/Scenarios/silent-media-sleeps.scenario  2daa59945de2
+#276   Packages/CraCore/Tests/CraCoreTests/LinkMenuTests.swift::newTabItemIsChromiumsOwnLabel  c72dc5e3cbbb
+#276   Packages/CraCore/Tests/CraCoreTests/LinkMenuTests.swift::oneItemThatOpensBehindThePageLikeArc  44744bec098c
+#276   Packages/CraCore/Tests/CraCoreTests/LinkMenuTests.swift::settingOnSwitchesToTheNewTab  31cf13927fcb
+#276   Packages/CraCore/Tests/CraCoreTests/PageMenuLabelsTests.swift::aLabelThatIsNotTheTemplatesKeepsChromiumsItem  474546987849
+#276   Packages/CraCore/Tests/CraCoreTests/PageMenuLabelsTests.swift::englishStillReadsLikeArc  19f1611a7dcc
+#276   Packages/CraCore/Tests/CraCoreTests/PageMenuLabelsTests.swift::imageSearchReadsInChromiumsLanguage  5dbb3f70b1bc
+#276   Packages/CraCore/Tests/CraCoreTests/ShippedSidebarTests.swift::linkTabsOpenBehindThePageUnlessAsked  e17aaf032b28

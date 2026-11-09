@@ -27,6 +27,16 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
     CraLinkWindowLittle = 2,
 };
 
+/// Chromium's own strings that Cra's page menus use (GitHub #276).
+typedef NS_ENUM(NSInteger, CraChromiumString) {
+    /// "Open Link in New &Tab"
+    CraChromiumStringOpenLinkInNewTab = 0,
+    /// Google Lens's "Search Image with $1"
+    CraChromiumStringSearchLensForImage = 1,
+    /// Chrome's own "&Search $1 for Image"
+    CraChromiumStringSearchWebForImage = 2,
+};
+
 @interface CraDownloadInfo : NSObject
 @property (nonatomic) uint32_t identifier;
 @property (nonatomic, copy) NSString *url;
@@ -280,9 +290,15 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
 /// DevTools) instead of embedded Alloy views. Set before any browser exists.
 + (void)setChromeHosting:(BOOL)enabled;
 + (BOOL)chromeHosting;
-/// The two "open link" items at the top of a page's context menu, in order: their titles and
-/// whether each opens its tab in the background. Exactly two; read when a menu opens.
-+ (void)setLinkMenuTitles:(NSArray<NSString *> *)titles opensInBackground:(NSArray<NSNumber *> *)background;
+/// The "Open Link in New Tab" item at the top of a page's context menu: its title and whether it
+/// opens its tab in the background. Read when a menu opens.
++ (void)setLinkMenuTitle:(NSString *)title opensInBackground:(BOOL)background;
+/// One of Chromium's strings in the language Chromium runs in, as its resource bundle has it
+/// (`$1` where a name goes, `&` before a mnemonic); nil before CEF is up.
++ (nullable NSString *)chromiumString:(CraChromiumString)string;
+/// Gets the Google Lens item's title when an image's menu opens (main thread) and gives the title
+/// of the image search item that replaces it, or nil to keep Chromium's item.
++ (void)setImageSearchTitle:(NSString *_Nullable (^)(NSString *lensTitle))block;
 /// Run in every frame of every page browser before the page's own scripts (and once in the
 /// document already loaded): `script` in the page's world, `isolatedScript` in the isolated
 /// world named `world` (invisible to the page). Set before browsers are created.

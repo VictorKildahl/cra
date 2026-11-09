@@ -28,10 +28,12 @@
 #include "include/cef_life_span_handler.h"
 #include "include/cef_load_handler.h"
 #include "include/cef_navigation_entry.h"
+#include "include/cef_pack_strings.h"
 #include "include/cef_parser.h"
 #include "include/cef_permission_handler.h"
 #include "include/cef_request_context.h"
 #include "include/cef_request_handler.h"
+#include "include/cef_resource_bundle.h"
 #include "include/cef_resource_request_handler.h"
 #include "include/cef_urlrequest.h"
 #include "include/cef_version.h"
@@ -92,8 +94,16 @@ static CefString CefStringFromNS(NSString* s) {
 }
 
 // The two "open link" items on a page's context menu, from CraCore's LinkMenu (GitHub #183).
-static NSArray<NSString*>* g_linkMenuTitles = @[@"Open Link in New Tab", @"Open Link in Background Tab"];
-static NSArray<NSNumber*>* g_linkMenuBackground = @[@NO, @YES];
+static NSString* g_linkMenuTitle = @"Open Link in New Tab";
+static BOOL g_linkMenuBackground = YES;
+static NSString* _Nullable (^g_imageSearchTitle)(NSString*) = nil;
+
+/// Chromium's string `ids` in the language Chromium runs in, or `fallback` (GitHub #276).
+static std::string ChromiumLabel(int ids, const char* fallback) {
+    CefRefPtr<CefResourceBundle> bundle = CefResourceBundle::GetGlobal();
+    std::string label = bundle ? bundle->GetLocalizedString(ids).ToString() : std::string();
+    return label.empty() ? fallback : label;
+}
 
 /// Page.addScriptToEvaluateOnNewDocument params every page browser gets once it exists
 /// (the page's world, then Cra's isolated world).
@@ -120,8 +130,7 @@ static void CraTidySeparators(CefRefPtr<CefMenuModel> model) {
 }
 
 enum CraMenuCommand {
-    kMenuOpenLinkFirst = MENU_ID_USER_FIRST + 1,
-    kMenuOpenLinkSecond,
+    kMenuOpenLinkNewTab = MENU_ID_USER_FIRST + 1,
     kMenuOpenLinkLittleWindow,
     kMenuOpenLinkSplitView,
     kMenuCaptureImage,
@@ -1700,9 +1709,8 @@ public:
     }
 
     // Arc's page menus are Chrome's with a few changes (Arc 1.172, 6 Nov 2026):
-    // - link: Open Link in New Tab, New Window, Little Arc, Incognito Window. Cra's New Tab item
-    //   follows the background-links setting, with the other kind of tab under it (LinkMenu, #183),
-    //   then Open Link in Split View (#257, not in Arc; Chrome's own item sits there too).
+    // - link: Open Link in New Tab, New Window, Split View, Little Arc, Incognito Window (Arc 1.172,
+    //   9 Nov 2026). New Tab opens behind the page unless the setting says to switch (LinkMenu, #276).
     // - page: no QR code item; Translate sits with Save As…, Print… and Cast….
     // - selected text: Search <engine> for "…" comes before Copy (not with a link).
     // - image: Capture Image… after Save Image As…, and Search <engine> for Image where Chromium
@@ -1711,14 +1719,14 @@ public:
         int newTab = model->GetIndexOf(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB);
         if (newTab >= 0) {
             model->RemoveAt(newTab);
-            model->InsertItemAt(newTab, kMenuOpenLinkFirst, g_linkMenuTitles[0].UTF8String);
-            model->InsertItemAt(newTab + 1, kMenuOpenLinkSecond, g_linkMenuTitles[1].UTF8String);
+            model->InsertItemAt(newTab, kMenuOpenLinkNewTab, g_linkMenuTitle.UTF8String);
         }
+        // Arc's order under New Window: Split View, then Little Arc (#276).
         CraBrowser* o = owner_;
-        if (newTab >= 0 && [o.delegate respondsToSelector:@selector(browser:requestsSplitPaneWithURL:)])
-            model->InsertItemAt(newTab + 2, kMenuOpenLinkSplitView, "Open Link in Split View");
-        // Little Windows load in the normal profile: none from an incognito page.
         int newWindow = model->GetIndexOf(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW);
+        if (newWindow >= 0 && [o.delegate respondsToSelector:@selector(browser:requestsSplitPaneWithURL:)])
+            model->InsertItemAt(++newWindow, kMenuOpenLinkSplitView, "Open Link in Split View");
+        // Little Windows load in the normal profile: none from an incognito page.
         if (newWindow >= 0 && !o.isIncognito) model->InsertItemAt(newWindow + 1, kMenuOpenLinkLittleWindow, "Open Link in Little Window");
         for (int id : {IDC_CONTENT_CONTEXT_GENERATE_QR_CODE, IDC_CONTENT_CONTEXT_OPENLINKINPROFILE,
                        IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW, IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP,
@@ -1737,12 +1745,12 @@ public:
             model->InsertItemAt(copy, IDC_CONTENT_CONTEXT_SEARCHWEBFOR, label);
         }
         int lens = model->GetIndexOf(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE);
-        if (lens >= 0) {
-            // "Search image with Google" → "Search Google for Image", Chrome's own item for it.
-            std::string label = model->GetLabelAt(lens).ToString(), with = "Search image with ";
-            std::string engine = label.rfind(with, 0) == 0 ? label.substr(with.size()) : "Google";
+        // "Search Image with Google" → "Search Google for Image", Chrome's own item for it, in
+        // Chromium's language (CraCore's PageMenuLabels, #276).
+        NSString* imageSearch = lens >= 0 && g_imageSearchTitle ? g_imageSearchTitle(NSStringFromCef(model->GetLabelAt(lens))) : nil;
+        if (imageSearch) {
             model->RemoveAt(lens);
-            model->InsertItemAt(lens, IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE, "Search " + engine + " for Image");
+            model->InsertItemAt(lens, IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE, CefStringFromNS(imageSearch));
         }
         int saveImage = model->GetIndexOf(IDC_CONTENT_CONTEXT_SAVEIMAGEAS);
         if (saveImage >= 0 && params->GetMediaType() == CM_MEDIATYPE_IMAGE &&
@@ -1755,17 +1763,16 @@ public:
     void AddAlloyItems(CefRefPtr<CefContextMenuParams> params, CefRefPtr<CefMenuModel> model) {
         size_t index = 0;
         if (!params->GetLinkUrl().empty()) {
-            model->InsertItemAt(index++, kMenuOpenLinkFirst, g_linkMenuTitles[0].UTF8String);
-            model->InsertItemAt(index++, kMenuOpenLinkSecond, g_linkMenuTitles[1].UTF8String);
+            model->InsertItemAt(index++, kMenuOpenLinkNewTab, g_linkMenuTitle.UTF8String);
             CraBrowser* o = owner_;
             if ([o.delegate respondsToSelector:@selector(browser:requestsSplitPaneWithURL:)])
                 model->InsertItemAt(index++, kMenuOpenLinkSplitView, "Open Link in Split View");
-            model->InsertItemAt(index++, kMenuCopyLink, "Copy Link");
+            model->InsertItemAt(index++, kMenuCopyLink, ChromiumLabel(IDS_CONTENT_CONTEXT_COPYLINKLOCATION, "Copy Link Address"));
             model->InsertSeparatorAt(index++);
         }
         if ((params->GetTypeFlags() & CM_TYPEFLAG_MEDIA) && !params->GetSourceUrl().empty()) {
-            model->InsertItemAt(index++, kMenuOpenImageInNewTab, "Open Image in New Tab");
-            model->InsertItemAt(index++, kMenuCopyImageURL, "Copy Image Address");
+            model->InsertItemAt(index++, kMenuOpenImageInNewTab, ChromiumLabel(IDS_CONTENT_CONTEXT_OPENIMAGENEWTAB, "Open Image in New Tab"));
+            model->InsertItemAt(index++, kMenuCopyImageURL, ChromiumLabel(IDS_CONTENT_CONTEXT_COPYIMAGELOCATION, "Copy Image Address"));
             model->InsertSeparatorAt(index++);
         }
         if (params->GetMediaType() == CM_MEDIATYPE_VIDEO && (params->GetMediaStateFlags() & CM_MEDIAFLAG_CAN_PICTURE_IN_PICTURE)) {
@@ -1774,7 +1781,7 @@ public:
             model->InsertSeparatorAt(index++);
         }
         if (model->GetCount() > 0) model->AddSeparator();
-        model->AddItem(kMenuInspectElement, "Inspect Element");
+        model->AddItem(kMenuInspectElement, ChromiumLabel(IDS_CONTENT_CONTEXT_INSPECTELEMENT, "Inspect"));
     }
 
     bool OnContextMenuCommand(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
@@ -1783,10 +1790,9 @@ public:
         CraBrowser* o = owner_;
         if (!o) return false;
         switch (command_id) {
-            case kMenuOpenLinkFirst:
-            case kMenuOpenLinkSecond:
+            case kMenuOpenLinkNewTab:
                 [o.delegate browser:o requestsNewTabWithURL:NSStringFromCef(params->GetLinkUrl())
-                       inBackground:g_linkMenuBackground[command_id - kMenuOpenLinkFirst].boolValue];
+                       inBackground:g_linkMenuBackground];
                 return true;
             case kMenuOpenImageInNewTab:
                 [o.delegate browser:o requestsNewTabWithURL:NSStringFromCef(params->GetSourceUrl()) inBackground:NO];
@@ -2739,11 +2745,18 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 @implementation CraCEFRuntime
 
 + (void)setChromeHosting:(BOOL)enabled { g_chromeHosting = enabled; }
-+ (void)setLinkMenuTitles:(NSArray<NSString*>*)titles opensInBackground:(NSArray<NSNumber*>*)background {
-    if (titles.count != 2 || background.count != 2) return;
-    g_linkMenuTitles = [titles copy];
-    g_linkMenuBackground = [background copy];
++ (void)setLinkMenuTitle:(NSString*)title opensInBackground:(BOOL)background {
+    g_linkMenuTitle = [title copy];
+    g_linkMenuBackground = background;
 }
++ (nullable NSString*)chromiumString:(CraChromiumString)string {
+    int ids = string == CraChromiumStringOpenLinkInNewTab ? IDS_CONTENT_CONTEXT_OPENLINKNEWTAB
+        : string == CraChromiumStringSearchLensForImage ? IDS_CONTENT_CONTEXT_SEARCHLENSFORIMAGE
+        : IDS_CONTENT_CONTEXT_SEARCHWEBFORIMAGE;
+    std::string label = ChromiumLabel(ids, "");
+    return label.empty() ? nil : @(label.c_str());
+}
++ (void)setImageSearchTitle:(NSString* _Nullable (^)(NSString*))block { g_imageSearchTitle = [block copy]; }
 + (void)setDocumentStartScript:(NSString*)script isolatedScript:(NSString*)isolatedScript world:(NSString*)world {
     NSMutableArray<NSString*>* all = [NSMutableArray array];
     for (NSDictionary* params in @[@{@"source": script ?: @"", @"runImmediately": @YES},

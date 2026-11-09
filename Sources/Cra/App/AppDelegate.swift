@@ -303,12 +303,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
     }
 
-    /// Settings ▸ Tabs ▸ "Open links in new tabs in the background" (GitHub #183): the page
-    /// context menu's two open-link items (LinkMenu), read when the next menu opens.
+    /// The page context menu's "Open Link in New Tab" (LinkMenu), read when the next menu opens:
+    /// behind the page as in Arc unless Settings ▸ Tabs says to switch (#276). It and the image
+    /// search item read in Chromium's language, as Arc's do.
     private func observeLinkMenu() {
-        observeChanges(of: { [store] in store.settings.openLinksInBackground }) { background in
-            let items = LinkMenu.items(openLinksInBackground: background)
-            CraCEFRuntime.setLinkMenuTitles(items.map(\.title), opensInBackground: items.map { NSNumber(value: $0.opensInBackground) })
+        let newTab = CraCEFRuntime.chromiumString(.openLinkInNewTab) ?? LinkMenu.newTabTitle
+        observeChanges(of: { [store] in store.settings.openLinksInForeground }) { switches in
+            let item = LinkMenu.item(switchesToTab: switches, newTabTitle: newTab)
+            CraCEFRuntime.setLinkMenuTitle(item.title, opensInBackground: item.opensInBackground)
+        }
+        CraCEFRuntime.setImageSearchTitle { lens in
+            guard let lensTemplate = CraCEFRuntime.chromiumString(.searchLensForImage),
+                  let webTemplate = CraCEFRuntime.chromiumString(.searchWebForImage) else { return nil }
+            return PageMenuLabels.imageSearch(lensLabel: lens, lensTemplate: lensTemplate, webTemplate: webTemplate)
         }
     }
 

@@ -489,9 +489,10 @@ public struct AppSettings: Codable, Equatable {
     /// Arc's "Open Little Arc when I press ⌥⌘N" (globalLittleBrowserHotkeyEnabled, on by default):
     /// New Little Window's shortcut works from every app, full-screen ones too (GitHub #195).
     public var littleWindowShortcutEverywhere: Bool = true
-    /// GitHub #183, not in Arc (Chrome's way): a page's "Open Link in New Tab" leaves the page in
-    /// front and the new tab loading behind it (LinkMenu). Off like Arc, which switches to it.
-    public var openLinksInBackground: Bool = false
+    /// A page's "Open Link in New Tab" switches to the tab it opens (LinkMenu). Off as in Arc, whose
+    /// item leaves the page in front and the tab loading behind it (GitHub #276). A new key: #183's
+    /// openLinksInBackground was off (switch) in every settings.json that never turned it on.
+    public var openLinksInForeground: Bool = false
     /// Arc's Previews ▸ Folders (folderPreviewEnabled): resting the pointer on a closed folder
     /// lists its tabs, most recent first, with a search field.
     public var folderPreviews: Bool = true
@@ -768,7 +769,7 @@ extension AppSettings {
         peekInEveryTab = try c.decodeIfPresent(Bool.self, forKey: .peekInEveryTab) ?? false
         peekOnShiftClick = try c.decodeIfPresent(Bool.self, forKey: .peekOnShiftClick) ?? true
         littleWindowShortcutEverywhere = try c.decodeIfPresent(Bool.self, forKey: .littleWindowShortcutEverywhere) ?? true
-        openLinksInBackground = try c.decodeIfPresent(Bool.self, forKey: .openLinksInBackground) ?? false
+        openLinksInForeground = try c.decodeIfPresent(Bool.self, forKey: .openLinksInForeground) ?? false
         folderPreviews = try c.decodeIfPresent(Bool.self, forKey: .folderPreviews) ?? true
         hapticFeedbackOnReorder = try c.decodeIfPresent(Bool.self, forKey: .hapticFeedbackOnReorder) ?? true
         warnBeforeQuitting = try c.decodeIfPresent(Bool.self, forKey: .warnBeforeQuitting) ?? false

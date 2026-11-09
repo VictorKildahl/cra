@@ -3558,6 +3558,11 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
 - [O] Link: Open Link in New Tab, Open Link in New Window, Open Link in Little Arc, Open Link in Incognito Window |
   Save Link As…, Copy Link Address | Copy, Copy link to highlight, Search Google for "…", Print… (the link text is
   selected) | extensions | Inspect.
+- [O] Arc 1.172 on 9 Nov 2026 (#276, Victor's Arc, HID right-click on a page that is one link, AX press, active tab
+  read over AppleScript): Open Link in New Tab, Open Link in New Window, Open Link in Split View, Open Link in Little
+  Arc, Open Link in Incognito Window. "Open Link in New Tab" left the page's tab active and opened the link's tab
+  behind it. A Russian UI (#276's screenshots) shows Chromium's Russian for New Tab, New Window, Incognito and the
+  image search («Найти картинку (Google)»), English for Split View, Little Arc and Capture Image….
 - [O] Selected text: Look up '…' | Search Google for "…", Copy, Copy link to highlight, Print… (search first).
 - [O] Image: Open Image in New Tab, Save Image As…, Capture Image…, Copy Image, Copy Image Address, Search Google
   for Image. Video: Loop, Show all controls | Open Video in New Tab, Save Video Frame As…, Save Video As…, Copy
@@ -3569,12 +3574,17 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
   grey. On a 1688 × 963 pt page a 160 × 100 pt image's ring ran 623.5…791.5 pt, the 273 pt menu 801.5…1074.5.
 - Cra: Chromium 156 shows the same menu once cef-patches/context-menu-embedded-view.patch lets it show in Cra's
   window. CraCEF's MakeArcMenu drops the QR code and video-frame search items, joins Translate to Save As…'s group,
-  puts Search first for a selection, turns Lens's "Search image with Google" into "Search Google for Image", adds
+  puts Search first for a selection, turns Lens's "Search Image with Google" into "Search Google for Image", adds
   Open Link in Little Window and Capture Image… (ContentCapture.liftedLayout), and opens New Window / Incognito /
-  Inspect in Cra's own windows and DevTools. Kept on purpose: Open Link in Background Tab under New Tab (#183).
-  Added on purpose (#257, not in Arc, whose binary has Split View only as a Link Routing destination): Open Link
-  in Split View under the New Tab items, where Chrome has its own; the link opens as a pane after the clicked
-  page's (SidebarStore.openLinkInSplit), "Cannot Add New Pane" at four. Not in Little Windows or Peeks.
+  Inspect in Cra's own windows and DevTools. Items Chromium has words for read in Chromium's language, as Arc's do
+  (#276, a Russian UI: «Открыть ссылку в новой вкладке», «Найти картинку (Google)»): New Tab is Chromium's label and
+  the image search is Chromium's "&Search $1 for Image" filled with the engine Lens's label names (PageMenuLabels).
+  Little Window, Split View and Capture Image… stay English, as Arc's Little Arc, Split View and Capture Image… do.
+  One "Open Link in New Tab", behind the page as in Arc; Settings ▸ Tabs ▸ "“Open Link in New Tab” switches to the
+  new tab" (openLinksInForeground, off) makes it switch (#276; until then Cra switched and had "Open Link in
+  Background Tab" under it, #183). Open Link in Split View (#257) sits under New Window, as Arc's does; the link
+  opens as a pane after the clicked page's (SidebarStore.openLinkInSplit), "Cannot Add New Pane" at four. Not in
+  Little Windows or Peeks.
 
 ## Blank Window and dragging a tab out (Arc 1.172, 6 Nov 2026, #219 #220, offline Arc on a fake home, AX + 2x window captures)
 
