@@ -36,6 +36,11 @@ gains a finding fails, one that loses one is reported so the baseline can come d
   perf-no-network
       Networking (URLSession, CFNetwork, Network.framework, sockets) under either Perf folder: the
       performance recorder never sends anything anywhere (#91); the export is the user's to share.
+  sidebar-responsive-scrolling
+      A plain NSScrollView() under UI/Sidebar. AppKit's responsive scrolling takes a gesture's
+      events off the window's scroll monitor once it starts over such a view, so a space or
+      Library swipe begun there never arrives, or loses its end and stays between two pages (the
+      Library's Downloads list, 9 Nov 2026). Use SidebarListScrollView, which opts out.
   perf-boundary
       The performance recorder stays removable (#91, docs/performance.md): outside its two folders
       only the files in PERF_CALLERS reach it, and inside Sources/Cra/Perf only PerfCEF.swift sees
@@ -116,6 +121,8 @@ def findings():
                     hit("perf-boundary", rel, i)
             elif rel not in PERF_CALLERS and PERF_NAME.search(line):
                 hit("perf-boundary", rel, i)
+            if rel.startswith("UI/Sidebar/") and re.search(r"\bNSScrollView\(\)", line):
+                hit("sidebar-responsive-scrolling", rel, i)
             for name in re.findall(r"\benum (\w+)Importer\b", line):
                 if not os.path.isdir(os.path.join(ROOT, "Tests", "Fixtures", name)):
                     hit("importer-without-fixture", f"{rel}:{name}", i)

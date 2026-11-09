@@ -19,3 +19,4 @@ raw-observation-tracking	UI/Theme.swift	2
 raw-observation-tracking	UI/Updates/UpdateBanner.swift	1
 raw-observation-tracking	UI/Windows/LittleWindowController.swift	2
 raw-observation-tracking	UI/Windows/MainWindowController.swift	2
+sidebar-responsive-scrolling	UI/Sidebar/FolderPreview.swift	1

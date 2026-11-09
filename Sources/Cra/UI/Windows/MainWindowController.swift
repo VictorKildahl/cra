@@ -27,6 +27,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var middleClickMonitor: Any?
     private enum SwipeAxis { case undecided, horizontal, vertical }
     private var swipeAxis = SwipeAxis.vertical
+    /// A space or Library swipe is under the fingers: begun, its release not yet seen.
+    private var swipeTracking = false
     private var swipeX: CGFloat = 0
     private var swipeY: CGFloat = 0
     /// Points travelled since the space swipe locked, and recent deltas for its release speed.
@@ -39,6 +41,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// The Library's reveal a swipe started from: 0 on the first space, 1 in the Library; nil
     /// when the swipe can only page between spaces.
     private var librarySwipeFrom: CGFloat?
+    /// Where the Library was sliding when the swipe caught it (LibrarySwipe.reveal's `toward`).
+    private var librarySwipeToward: CGFloat?
     private var librarySettleSpring: (start: CFTimeInterval, from: CGFloat, velocity: CGFloat, target: CGFloat)?
     private var librarySettleLink: CADisplayLink?
     /// Shows the lists' overlay knob again once a swipe's scroller flash has faded.
@@ -2461,7 +2465,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // main window has this monitor), so a scroll that starts there never reaches the
             // phase switch below; a stale .horizontal would eat the page's momentum and
             // scrolling would stop dead the moment the fingers lift.
-            if event.phase == .began || event.phase == .mayBegin { self.swipeAxis = .vertical }
+            if event.phase == .began || event.phase == .mayBegin {
+                // A swipe whose end never came (a view took the gesture's last events) is let go
+                // now, so the sidebar isn't left between two pages.
+                if self.swipeTracking { self.endSpaceSwipe() }
+                self.swipeAxis = .vertical
+            }
             // A mouse wheel only ever scrolls.
             if !event.hasPreciseScrollingDeltas { self.showListKnobs() }
             // The momentum tail of a space swipe belongs to the swipe, not the tab list.
@@ -2544,11 +2553,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     private func beginSpaceSwipe() {
+        swipeTracking = true
         swipeTravel = 0
         swipeSamples = []
         swipeHaptics = PageDetentHaptics()
         sidebarUI.spaceSettleVelocity = 0
         // A swipe during a Library settle picks it up where it shows.
+        librarySwipeToward = librarySettleSpring?.target
         stopLibrarySettle()
         let shown = sidebarUI.libraryReveal
         librarySwipeFrom = nil
@@ -2591,9 +2602,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Library they push it back out. Returns false when the swipe is one between spaces.
     private func trackLibrarySwipe() -> Bool {
         guard let from = librarySwipeFrom else { return false }
-        guard let r = LibrarySwipe.reveal(from: from, travel: swipeTravel, width: sidebarUI.libraryRevealWidth) else {
-            // Back on the space and beyond: the swipe heads for the next space instead.
-            if sidebarUI.libraryReveal != nil {
+        let width = sidebarUI.libraryRevealWidth
+        guard let r = LibrarySwipe.reveal(from: from, travel: swipeTravel, width: width, toward: librarySwipeToward) else {
+            // Back on the space and beyond: the swipe heads for the next space instead. One that
+            // caught the Library sliding out lets it land first and pages with what's left.
+            if from != 0 {
+                swipeTravel = LibrarySwipe.travelPastSpace(from: from, travel: swipeTravel, width: width)
+                librarySwipeFrom = 0
+                librarySwipeToward = nil
+                finishLibrarySwipe(at: 0)
+            } else if sidebarUI.libraryReveal != nil {
                 setLibraryReveal(0)
                 sidebarUI.libraryReveal = nil
                 shell.thawPages()
@@ -2793,6 +2811,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     private func endSpaceSwipe() {
         HitchMonitor.mark("swipe-lift")
+        swipeTracking = false
         if let r = sidebarUI.libraryReveal, librarySwipeFrom != nil { return endLibrarySwipe(r) }
         librarySwipeFrom = nil
         let width = max(1, shell.sidebarWidth)

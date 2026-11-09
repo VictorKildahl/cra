@@ -341,7 +341,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
     private let menuButton = NSView()
     private let menuGlyph = NSImageView()
     private let filterLabel = NSTextField.sidebarLabel(size: 14, weight: .medium)
-    private let scroll = NSScrollView()
+    private let scroll = SidebarListScrollView()
     private let table = LibraryTable()
     private let empty = LibraryEmptyView()
     private var mediaCard: NSHostingView<MediaOptInCard>?

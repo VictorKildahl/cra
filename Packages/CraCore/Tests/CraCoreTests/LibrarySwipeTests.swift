@@ -28,6 +28,19 @@ struct LibrarySwipeTests {
         #expect(LibrarySwipe.reveal(from: 0, travel: -10, width: 347) == nil)
     }
 
+    /// Swiping out of the Library and on again before it has slid away goes on to the next
+    /// space, as two quick space swipes go two pages (Loom report, 9 Nov 2026: the second swipe
+    /// rubber-banded on the first space). It counts from the page the slide was headed for.
+    @Test func aSwipeThatCatchesTheLibraryLeavingGoesOnToTheNextSpace() {
+        #expect(LibrarySwipe.reveal(from: 0.2, travel: -40, width: 400, toward: 0) == 0.1)
+        #expect(LibrarySwipe.reveal(from: 0.2, travel: -100, width: 400, toward: 0) == nil)
+        // What's left of the fingers' travel once the Library is out pages the spaces.
+        #expect(LibrarySwipe.travelPastSpace(from: 0.2, travel: -100, width: 400) == -20)
+        // Caught on its way in, or swiped out from rest, it still gives way past the space.
+        #expect(LibrarySwipe.reveal(from: 0.8, travel: -400, width: 400, toward: 1)! < 0)
+        #expect(LibrarySwipe.reveal(from: 1, travel: -500, width: 400)! < 0)
+    }
+
     /// Past either end it gives way like the space swipe: never more than half a page.
     @Test func rubberBandsPastEitherEnd() {
         let past = LibrarySwipe.reveal(from: 0, travel: 347 * 3, width: 347)!
