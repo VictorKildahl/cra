@@ -191,8 +191,9 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         return rt
     }
 
-    /// Popup host: a browser shell its opener's engine will fill with window.open content.
-    func makePopupHost(for tabID: UUID, opener: CraBrowser) -> CraBrowser {
+    /// Popup host: a browser shell its opener's engine will fill with window.open content, or
+    /// Chromium with an extension's chrome.tabs.create (no opener of this window's).
+    func makePopupHost(for tabID: UUID, opener: CraBrowser?) -> CraBrowser {
         let browser = PageEngines.makeBrowser(frame: container.bounds, url: nil, delegate: self, incognito: store.isIncognito(item: tabID),
                                               profilePath: store.profilePath(item: tabID), opener: opener)
         register(browser: browser, tabID: tabID)

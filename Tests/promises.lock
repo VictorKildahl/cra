@@ -481,3 +481,4 @@
 #287   Packages/CraCore/Tests/CraCoreTests/SidebarWidthTests.swift::stopsWhereArcStops  16f9b497fbcd
 #288   Tests/Scenarios/tear-off-profile.scenario  c58e24dc060d
 #288   Tests/StoreTests.swift::tornOffTabKeepsItsProfile  53a7c1d28415
+#292   Tests/Scenarios/extension-tabs-create.scenario  af280e7bb957

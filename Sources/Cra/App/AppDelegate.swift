@@ -145,18 +145,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         try? JSONEncoder().encode(installed.sorted()).write(to: welcomedFile, options: .atomic)
         DownloadDestinations.install(store: store)
         AppLinkPrompt.install()
+        let dropsStartUpPage = { [weak self] (url: String) -> Bool in
+            guard let self, Date().timeIntervalSince(launchedAt) < 10,
+                  !hasNewExtension || self.store.allTabs().contains(where: { $0.tab?.url == url }) else { return false }
+            NSLog("Cra: dropped start-up page from an extension: %@", url)
+            return true
+        }
         CraCEFRuntime.setStrayPageHandler { [weak self] url, profile in
             Task { @MainActor in
-                guard let self else { return }
-                if Date().timeIntervalSince(launchedAt) < 10,
-                   !hasNewExtension || self.store.allTabs().contains(where: { $0.tab?.url == url }) {
-                    NSLog("Cra: dropped start-up page from an extension: %@", url)
-                    return
-                }
+                guard let self, !dropsStartUpPage(url) else { return }
                 // The window in use, and a space on the profile whose extension asked (#107).
                 let window = self.useNormalWindow()
                 self.openExtensionPage(url, window: window.windowID, profile: profile)
                 window.showWindow(nil)
+            }
+        }
+        // chrome.tabs.create: the page Chromium made becomes the new tab's, so the id the
+        // extension got back is the tab that loads (#292). Declined (a dropped start-up page, an
+        // options page already open), it goes to Chrome's window and the stray page handler.
+        CraCEFRuntime.setExtensionTabHandler { [weak self] url, profile, background, opener in
+            MainActor.assumeIsolated {
+                // A cra: address never opens from a page or an extension, as BrowserManager drops page popups to one.
+                guard let self, !url.lowercased().hasPrefix("cra:"), !dropsStartUpPage(url) else { return nil }
+                let window = self.useNormalWindow()
+                guard let opened = self.openExtensionPage(url, window: window.windowID, profile: profile, select: !background),
+                      let controller = self.mainWindows.first(where: { $0.windowID == opened.window }) else { return nil }
+                let host = controller.browsers.makePopupHost(for: opened.tab, opener: opener)
+                if !background {
+                    controller.browsers.show(opened.tab, focus: true)
+                    controller.showWindow(nil)
+                }
+                return host
             }
         }
         CraCEFRuntime.setRelaunchHandler { [weak self] urls in
@@ -637,7 +656,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Arc: opening it again selects the open one (GitHub #38).
     /// `profile` is the Chromium profile folder whose extension asked, nil for the focused page's.
     /// `singleton`: an open tab with the page in that profile is selected instead of a new one.
-    func openExtensionPage(_ url: String, window: UUID, profile: String? = nil, singleton: Bool = false) {
+    /// `select` false opens a new tab behind (tabs.create's active: false). Returns the new tab and
+    /// its window, nil when an open tab was selected.
+    @discardableResult
+    func openExtensionPage(_ url: String, window: UUID, profile: String? = nil, singleton: Bool = false,
+                           select: Bool = true) -> (tab: UUID, window: UUID)? {
         // Extensions run in the normal profile, so Chrome opens their pages in a normal window:
         // in an incognito one the page can't load (#107). Incognito is Default's off the record.
         var window = window, profile = profile
@@ -660,8 +683,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             spaces: store.orderedSpaces.filter { !store.isIncognito(space: $0.id) }.map { space($0.id) },
             profile: profile, openTabs: open, singleton: singleton || ExtensionStore.shared.optionsPageOwner(url) != nil)
         switch target {
-        case .select(let tab): store.selectTab(tab, window: window)
-        case .create(let sid): store.createTab(url: url, in: sid, select: true, window: window)
+        case .select(let tab):
+            store.selectTab(tab, window: window)
+            return nil
+        case .create(let sid):
+            return (store.createTab(url: url, in: sid, select: select, window: window).id, window)
         }
     }
 

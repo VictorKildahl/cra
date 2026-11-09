@@ -1,0 +1,20 @@
+# promise: #292
+# An extension opens a page with chrome.tabs.create, waits for the tab it got back to finish
+# loading and then looks that tab up by its id, as Dashlane's device check does. Cra used to
+# close the tab Chromium made and open the page in one of its own, so the returned id never
+# loaded, tabs.get couldn't find it, tabs.onCreated fired twice and Dashlane's check timed out
+# (answer-loaded-false-get-missing-created-2). Now the tab Chromium made is the Cra tab, as in
+# Chrome and Arc. The fixture opens its answer as a tab, which `back` reads as the selected URL.
+budget rss=700 stalls50=5
+cra://debug?installExtension=${FIXTURES}/TabsCreateExtension
+relaunch
+cra://open?url=${PAGE}?n=start
+wait 3
+cra://debug?extensionAction=${TABS_CREATE_EXTENSION_ID}
+wait 7
+cra://debug?back=answer
+expect-log back answer: selected=.*page\.html\?n=answer-
+expect-log back answer: selected=.*page\.html\?n=answer-loaded-true-get-found-created-1
+cra://debug?removeExtension=${TABS_CREATE_EXTENSION_ID}
+wait 1
+reject-log fault:
