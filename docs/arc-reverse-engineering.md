@@ -3616,6 +3616,9 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
   (20, 53), 20 pt inside the visible frame on both sides. Drags that read as clicks: the press selected an unloaded
   tab; select it first, then drag (scratch tool: CGEvent drag with deltas at 60 Hz).
 - [O] A tab dropped on a Blank Window's sidebar moved there out of the global sidebar.
+- [Reported, #288, 9 Nov 2026, video] A tab dragged out of a space on another profile opens in a window that stays
+  on that profile: the page stays signed in. Cra's tear-off Blank Window takes the tab's profile
+  (SidebarStore.moveToBlankWindow); a ⌃⌘N Blank Window stays on Default.
 - Cra: BlankWindow (Space.standaloneWindowID, saved in sidebar.json outside spaceOrder), SidebarStore.addBlankWindow /
   isStandalone, TabTearOff (decision + frame), SpaceListView.dragEnded, AppDelegate.tearOffTab and moveBlankWindow
   ("Move to…", `cra://debug?blankMoveTo=<n>`), BlankWindow.theme (Auto).

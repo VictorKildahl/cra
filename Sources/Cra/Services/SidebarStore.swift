@@ -325,10 +325,16 @@ final class SidebarStore {
     }
 
     /// A torn-off tab (#219) moves into a Blank Window's tabs and opens there; the window it left
-    /// loses it, as in Arc (no other tab opens in its place).
+    /// loses it, as in Arc (no other tab opens in its place). A new Blank Window takes the tab's
+    /// profile, so its page stays signed in and isn't loaded again elsewhere (#288; Arc keeps the
+    /// window on the space's profile).
     func moveToBlankWindow(_ id: UUID, window: UUID) {
         let sid = focusedSpaceID(window: window)
         guard isBlank(space: sid), let space = spaces[sid], items[id]?.isTab == true else { return }
+        if children(of: space.todayContainerID).isEmpty {
+            let profile = profileID(item: id)
+            spaces[sid]?.profileID = profile
+        }
         moveItem(id, to: space.todayContainerID, index: 0)
         guard items[id]?.parentID == space.todayContainerID else { return }
         tookTab(id, into: window, open: true)

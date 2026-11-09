@@ -455,3 +455,5 @@
 #286   Packages/CraCore/Tests/CraCoreTests/PermissionAskTests.swift::onlyTheTabInFrontAsks  fc757adafaca
 #286   Tests/BrowserManagerLifecycleTests.swift::permissionWaitsForItsTabCase  47983328a052
 #286   Tests/Scenarios/permission-waits-for-its-tab.scenario  691141857a65
+#288   Tests/Scenarios/tear-off-profile.scenario  c58e24dc060d
+#288   Tests/StoreTests.swift::tornOffTabKeepsItsProfile  53a7c1d28415

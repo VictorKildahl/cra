@@ -64,6 +64,7 @@ enum StoreTests {
         blankWindows()
         blankWindowWithoutItsWindow()
         tornOffTabMovesToABlankWindow()
+        tornOffTabKeepsItsProfile()
         archiveTabsBelow()
         allFoldersExpanded()
         dropIntoFolderGoesOnTop()
@@ -1783,6 +1784,42 @@ enum StoreTests {
         expect(store.item(stays.id) != nil && store.integrityProblems().isEmpty, "and the sidebar stays sound")
         store.removeWindow(second)
         store.saveAll()
+    }
+
+    // promise: #288
+    /// A tab torn off a space on another profile keeps that profile (#288): in Arc the window it
+    /// opens in stays with the space's profile and the page stays signed in. Cra put the Blank
+    /// Window on Default, so BrowserManager closed the page and loaded it again signed out.
+    @MainActor
+    private static func tornOffTabKeepsItsProfile() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let work = store.createProfile(name: "Torn Work")
+        let sid = store.createSpace(title: "Work", emoji: "💼").id
+        store.setProfile(work.id, forSpace: sid)
+        let main = store.activeWindowID
+        let torn = store.createTab(url: "https://example.com/signed-in", in: sid, window: main)
+        let before = store.profilePath(item: torn.id)
+        expect(before != nil, "the tab loads in the space's profile")
+
+        let blank = store.addBlankWindow(frame: nil).id
+        store.moveToBlankWindow(torn.id, window: blank)
+        expect(store.spaceID(ofItem: torn.id) == store.focusedSpaceID(window: blank),
+               "the torn-off tab is in the Blank Window")
+        expect(store.profilePath(item: torn.id) == before,
+               "and still in its space's profile, so its page isn't loaded again signed out")
+        let next = store.createTab(url: "https://example.com/next", window: blank)
+        expect(store.profilePath(item: next.id) == before, "a new tab in that window loads in the same profile")
+
+        // From a space on Default it stays on Default.
+        let home = store.createSpace(title: "Home", emoji: "🏠").id
+        let plain = store.createTab(url: "https://example.com/plain", in: home, window: main)
+        let second = store.addBlankWindow(frame: nil).id
+        store.moveToBlankWindow(plain.id, window: second)
+        expect(store.spaceID(ofItem: plain.id) == store.focusedSpaceID(window: second) && store.profilePath(item: plain.id) == nil,
+               "a tab from a Default space stays on Default")
+        store.removeWindow(blank)
+        store.removeWindow(second)
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 
     // promise: #257

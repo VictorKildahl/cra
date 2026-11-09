@@ -6,6 +6,7 @@ import CoreGraphics
 /// window it left shows no tab if that one was open. The new window centres on where the pointer
 /// let go (two drops in the open: 926 × 500 at (1100, 700) and (500, 820) from the top left opened
 /// at (637, 450) and (37, 570)); near the screen's edge it stays 20 pt inside the visible frame.
+/// The window keeps the tab's profile, so the page stays signed in (#288).
 public enum TabTearOff {
     /// How far inside the screen's visible frame the window stays.
     public static let inset: CGFloat = 20
