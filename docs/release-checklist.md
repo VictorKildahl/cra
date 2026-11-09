@@ -106,6 +106,9 @@ built release app with a test profile. Note anything that fails in the release's
   window leaves its Space first. ⌥⌘N from another app opens a Little Window at once, with the
   Dock icon. Closing it takes the icon away again. New Window in the item's menu brings the
   windows back, and Quit Cra there quits.
+- **#298:** in a tab on a DRM service (it opens in WebKit, docs/protected-media.md), Option-click a
+  link: it opens as a split pane beside the page, as it does in any other tab (that scenario's
+  posted click never reaches a WebKit page behind other windows).
 - **#172:** with a space on its own profile, a Little Window from that space and a Peek from its
   tab see that profile's cookies. The chip names the profile; switching it reloads the page in
   the other profile.

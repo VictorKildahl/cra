@@ -8,6 +8,24 @@ enum BrowserManagerLifecycleTests {
     private static let isolatedProbe = "cra:Runtime.evaluate"
     private static var checks = 0
 
+    /// An Option-clicked link, which Chromium makes a download, opens in Split View instead
+    /// (#298); other downloads, and a closed page's, go ahead as downloads.
+    // promise: #298
+    @MainActor
+    private static func optionClickSplitCase(_ manager: BrowserManager, _ observer: Observer, live: CraBrowser, closed: CraBrowser, tab: UUID) async {
+        let option = UInt(NSEvent.ModifierFlags.option.rawValue)
+        let before = observer.splitLinks.count
+        expect(manager.browser(live, opensSplitForDownloadURL: "https://example.test/option", clickModifiers: option, clickAge: 0.05),
+               "an Option-clicked link's download becomes a split pane")
+        expect(!manager.browser(live, opensSplitForDownloadURL: "https://example.test/plain.zip", clickModifiers: 0, clickAge: 0.05)
+               && !manager.browser(live, opensSplitForDownloadURL: "https://example.test/later.zip", clickModifiers: option, clickAge: -1)
+               && !manager.browser(closed, opensSplitForDownloadURL: "https://example.test/stale-option", clickModifiers: option, clickAge: 0.05),
+               "a plain click's download, one with no click, and a closed page's stay downloads")
+        await withCheckedContinuation { done in DispatchQueue.main.async { done.resume() } }
+        expect(observer.splitLinks.dropFirst(before).map(\.url) == ["https://example.test/option"] && observer.splitLinks.last?.tab == tab,
+               "the Option-clicked link opens beside the live page's tab, once Chromium's call has returned")
+    }
+
     @MainActor
     static func main() async {
         await tabFaviconsCase()
@@ -58,6 +76,7 @@ enum BrowserManagerLifecycleTests {
         manager.browser(old.browser, requestsSplitPaneWithURL: "https://example.test/stale-entry")
         expect(observer.splitLinks.map(\.url) == ["https://example.test/entry"] && observer.splitLinks.first?.tab == id,
                "Open Link in Split View reaches the window with the live page's tab, a closed page's doesn't")
+        await optionClickSplitCase(manager, observer, live: replacement.browser, closed: old.browser, tab: id)
 
         let retainedID = store.createTab(url: "https://example.test/retained").id
         weak var retainedBrowser = manager.ensureRuntime(for: retainedID)?.browser

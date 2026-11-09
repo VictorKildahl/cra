@@ -1363,6 +1363,15 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         delegate?.browserManagerOpenLinkInSplit(url, fromTab: id)
     }
 
+    /// An Option-clicked link, which Chromium downloads, opens in Split View as in Arc (#298).
+    func browser(_ browser: CraBrowser, opensSplitForDownloadURL url: String, clickModifiers: UInt, clickAge: TimeInterval) -> Bool {
+        guard let id = tabID(of: browser),
+              LinkSplitClick.opensSplit(downloadOf: url, clickModifiers: clickModifiers, clickAge: clickAge) else { return false }
+        // After Chromium's call returns: the pane makes a page of its own.
+        DispatchQueue.main.async { [weak self] in self?.delegate?.browserManagerOpenLinkInSplit(url, fromTab: id) }
+        return true
+    }
+
     /// A link that asks for a new tab, from `source`'s page or from a Peek over it (#202): a
     /// Today tab in `source`'s space, else the window's.
     func openLinkTab(_ url: String, from source: UUID?, inBackground background: Bool) {

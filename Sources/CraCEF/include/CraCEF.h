@@ -112,6 +112,13 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 /// The page's context menu: Open Link in Split View, a pane beside this page (#257). Without it
 /// the menu has no such item (a Little Window's page).
 - (void)browser:(CraBrowser *)browser requestsSplitPaneWithURL:(NSString *)url;
+/// Chromium wants to download `url` for this page. `clickModifiers` (AppKit's flags) and
+/// `clickAge` (seconds since) are the page's last click, or Return in it; `clickAge` is negative
+/// when there was none. Return YES when that was an Option-click on a link, which Chromium makes
+/// a download and Arc opens in Split View (#298): the download doesn't start, and the delegate
+/// opens the pane once Chromium's call has returned.
+- (BOOL)browser:(CraBrowser *)browser opensSplitForDownloadURL:(NSString *)url
+  clickModifiers:(NSUInteger)clickModifiers clickAge:(NSTimeInterval)clickAge;
 /// The page's context menu on an image: Capture Image… at `point` (page points from the top
 /// left). Without it the menu has no such item.
 - (void)browser:(CraBrowser *)browser requestsCaptureOfImageAt:(NSPoint)point;

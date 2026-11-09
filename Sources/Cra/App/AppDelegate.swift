@@ -1027,8 +1027,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     CraLog.note("mouse \(b) at \(Int(g[0])),\(Int(g[1])): \(taken ? "switched space" : "passed on")")
                     return
                 }
-                // clicks=2: a double-click there (a favorite's Back to Pinned Page, #264).
-                TestGesture.click(at: point, in: w, clicks: dict["clicks"].flatMap(Int.init) ?? 1)
+                // clicks=2: a double-click there (a favorite's Back to Pinned Page, #264); mods=<modifier
+                // bits>: keys held through it (524288, Option: a link opens in Split View, #298).
+                TestGesture.click(at: point, in: w, clicks: dict["clicks"].flatMap(Int.init) ?? 1,
+                                  modifiers: NSEvent.ModifierFlags(rawValue: dict["mods"].flatMap(UInt.init) ?? 0))
                 return
             }
             if let st = dict["status"] { main.browserManager(statusMessage: st); return }
@@ -1253,6 +1255,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // back=<label>: the front tab's page, whether Back is on for it, and the space's Today tab
             // count; a link's tab closes to the tab it came from on Back (#273).
+            // split=<label>: the selected tab's split, its panes' pages in order, and how many
+            // downloads there are (an Option-clicked link opens a pane, not a download, #298).
+            if let label = dict["split"] {
+                let selected = main.selectedTab
+                let panes = selected.map { store.paneTabIDs(for: $0.id) } ?? []
+                let urls = panes.count > 1 ? panes.compactMap { store.item($0)?.tab?.url }.joined(separator: " | ") : "none"
+                CraLog.note("split \(label): panes=\(urls) selected=\(selected?.tab?.url ?? "-") downloads=\(DownloadHistory.shared.live.count + DownloadHistory.shared.entries.count)")
+                return
+            }
             if let label = dict["back"] {
                 let today = store.tabs(under: store.focusedSpace(window: main.windowID).todayContainerID).count
                 CraLog.note("back \(label): selected=\(main.selectedTab?.tab?.url ?? "-") back=\(main.sidebarUI.canGoBack ? 1 : 0) today=\(today)")
