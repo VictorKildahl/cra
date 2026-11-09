@@ -13,9 +13,10 @@ you can send. Code is welcome too, within the few rules below.
 - **New ideas go to Discussions.** A feature Arc never had goes in
   [Ideas](https://github.com/VictorKildahl/cra/discussions/categories/ideas), where others
   can upvote it. Issues are for bugs and for Arc features Cra is missing; an idea opened as
-  an issue is labelled `not now`, closed and moved there. An idea is closed when it ships,
-  when it's declined, or when it's still under 5 upvotes after 60 days
-  (`scripts/ideas-housekeeping.py`, weekly); one labelled `planned` stays open.
+  an issue is labelled `not now` and closed, and may be moved there. An idea is closed
+  when it ships, when it's declined, or when it's still under 5 upvotes after 60 days
+  (`scripts/ideas-housekeeping.py`, weekly); one labelled `planned` stays open. What makes
+  a good one is under [Features Arc never had](#features-arc-never-had).
 - **No cloud AI.** Arc Max-style features (summaries, LLM search, anything that needs an
   API key or sends pages away) are out of scope. The one exception is Tidy Tabs, which runs
   on the Mac's own Apple Intelligence model and only shows when that is turned on.
@@ -31,6 +32,40 @@ you can send. Code is welcome too, within the few rules below.
 For anything bigger than a bug fix, open an issue or a
 [discussion](https://github.com/VictorKildahl/cra/discussions) first, so we can agree on
 the shape before you spend the time.
+
+### Features Arc never had
+
+Parity comes first: Arc is sunset on 22 December 2026, so the first job is that everything
+Arc did works in Cra, the way Arc did it. Arc is the reference, not the ceiling, though, and a
+new feature fits when:
+
+- **It solves a real problem.** Start from what gets in your way, not from a feature another
+  browser has.
+- **It builds on what's there.** Tabs, folders, spaces, splits and the command bar cover a
+  lot. A new behaviour for one of those beats a new concept, and a new concept has to earn
+  its place.
+- **It looks like Arc could have shipped it.** It's built from Arc's own parts: its rows,
+  pills, menus, spacing and motion. If it needs its own visual language, it probably doesn't
+  fit.
+- **Nothing leaves the Mac.** No account, server, telemetry or cloud AI. On-device Apple
+  Intelligence is fine, and the feature stays hidden when it's off, like Tidy Tabs.
+- **It stays out of the way.** People who never use it don't see new settings, badges or
+  prompts.
+- **One person can keep it working.** Cra has one maintainer and a UI that changes most
+  days, which counts against anything that needs constant upkeep (it's why translations are
+  "not now").
+
+What feels out of place: anything that needs a sign-in or a server, AI that sends pages
+away, a second design language, or a feature that's mostly settings.
+
+Where Cra already differs from Arc, it's one decision at a time with a reason: favorites
+belong to each space, and a collapsed space header keeps the space's icon.
+
+To propose one, post it in
+[Ideas](https://github.com/VictorKildahl/cra/discussions/categories/ideas): the problem,
+which part of Cra it extends, and roughly how it would look. This list grows as original
+features ship and there are real examples to point at
+([#284](https://github.com/VictorKildahl/cra/discussions/284) is where it started).
 
 ## Getting set up
 
