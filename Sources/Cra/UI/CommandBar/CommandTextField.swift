@@ -33,10 +33,9 @@ final class CommandTextField {
         field.drawsBackground = false
         field.focusRingType = .none
         field.font = .systemFont(ofSize: 18, weight: .medium)
-        field.placeholderAttributedString = NSAttributedString(string: controller.placeholder, attributes: [
-            .font: NSFont.systemFont(ofSize: 18, weight: .medium),
-            .foregroundColor: NSColor(srgbRed: 0.59, green: 0.59, blue: 0.59, alpha: 1),
-        ])
+        // Arc's typed text is (230,231,233) on its dark bar.
+        field.textColor = NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(white: 0.9, alpha: 1) : .labelColor }
+        field.placeholderAttributedString = placeholder(controller.placeholder)
         field.delegate = coordinator
         field.lineBreakMode = .byTruncatingTail
         field.cell?.usesSingleLineMode = true
@@ -46,11 +45,19 @@ final class CommandTextField {
         return field
     }
 
-    private static func update(_ field: NSTextField, controller: CommandBarController, coordinator coord: Coordinator) {
-        field.placeholderAttributedString = NSAttributedString(string: controller.placeholder, attributes: [
+    private static func placeholder(_ text: String) -> NSAttributedString {
+        NSAttributedString(string: text, attributes: [
             .font: NSFont.systemFont(ofSize: 18, weight: .medium),
-            .foregroundColor: NSColor(srgbRed: 0.59, green: 0.59, blue: 0.59, alpha: 1),
+            // Arc 1.172.1 live: the placeholder's ink peaks at (163,162,162).
+            .foregroundColor: NSColor(white: 0.64, alpha: 1),
         ])
+    }
+
+    private static func update(_ field: NSTextField, controller: CommandBarController, coordinator coord: Coordinator) {
+        // Runs on every keystroke: rebuild the placeholder only when its text changes.
+        if field.placeholderAttributedString?.string != controller.placeholder {
+            field.placeholderAttributedString = placeholder(controller.placeholder)
+        }
         if coord.appliedVersion != controller.fieldTextVersion {
             coord.appliedVersion = controller.fieldTextVersion
             coord.suppressChange = true

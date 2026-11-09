@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// Arc's command bar: a wide charcoal panel, input row with the top match's favicon,
-/// single-line rows "Title — url", an indigo selected row, "Switch to
+/// Arc's command bar: a wide translucent panel, input row with the top match's favicon,
+/// single-line rows "Title — url", the selected row tinted with the space color, "Switch to
 /// Tab" + arrow for open tabs. AppKit: the rows are reused views that change only what changed,
 /// so a keystroke costs the search and a few labels, not a SwiftUI pass over the bar.
 @MainActor
@@ -77,6 +77,19 @@ final class CommandBarView: NSView {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    private var shownTones: (SpaceTheme?, Bool, CommandBarTones)?
+
+    /// The space's palette in the bar's own appearance (CraCore CommandBarTones), worked out once per
+    /// theme and appearance rather than on every keystroke.
+    private func tones(dark: Bool) -> CommandBarTones {
+        if let t = shownTones, t.0 == controller.theme, t.1 == dark { return t.2 }
+        let tones = CommandBarTones(theme: controller.theme ?? SpaceTheme(colors: ["#010220"], intensity: 1, noise: 0, appearance: "dark"), dark: dark)
+        shownTones = (controller.theme, dark, tones)
+        return tones
+    }
+
+    static func ink(_ c: RGB, _ alpha: Double = 1) -> NSColor { NSColor(srgbRed: c.r, green: c.g, blue: c.b, alpha: alpha) }
+
     override var isFlipped: Bool { true }
 
     private var dark: Bool { effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua }
@@ -114,8 +127,10 @@ final class CommandBarView: NSView {
         // Keep a hint of the backdrop under Arc's nearly opaque charcoal surface.
         material.material = dark ? .hudWindow : .popover
         tint.layer?.backgroundColor = (dark ? NSColor(srgbRed: 29 / 255, green: 27 / 255, blue: 30 / 255, alpha: 0.97) : NSColor.white.withAlphaComponent(0.94)).cgColor
-        info.layer?.backgroundColor = (dark ? NSColor(srgbRed: 6 / 255, green: 5 / 255, blue: 36 / 255, alpha: 1) : NSColor.black.withAlphaComponent(0.05)).cgColor
-        info.contentTintColor = NSColor.labelColor.withAlphaComponent(0.55)
+        // Arc 1.172.1 live: the badge is the space's backgroundExtra, its glyph (148,146,140) on a gold space.
+        let tones = self.tones(dark: dark)
+        info.layer?.backgroundColor = Self.ink(tones.badge).cgColor
+        info.contentTintColor = dark ? NSColor.white.withAlphaComponent(0.55) : NSColor.labelColor.withAlphaComponent(0.55)
         border.strokeColor = NSColor.labelColor.withAlphaComponent(dark ? 0.12 : 0.08).cgColor
         divider.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.08).cgColor
         let scope = c.scope
@@ -124,11 +139,10 @@ final class CommandBarView: NSView {
             scopeChanged(color: site?.color.map { NSColor(hex: $0) })
         }
         shownScope = c.isOpen ? scope : nil
-        // Arc's indigo selection stays legible independently of the space background.
-        // Scoped site searches keep their brand colour.
+        // A site's brand colour; the tabs scope and Chromium's other keywords take the space's, the
+        // colour of its rows (Arc's rows take theirs from the theme's palette, CommandBar.SuggestionsView).
         let highlight: NSColor
-        if case .site(let site) = scope, let hex = site.color { highlight = NSColor(hex: hex) } else { highlight = NSColor(srgbRed: 69 / 255, green: 65 / 255, blue: 221 / 255, alpha: 1) }
-        info.isHidden = !c.query.isEmpty || scope != nil
+        if case .site(let site) = scope, let hex = site.color { highlight = NSColor(hex: hex) } else { highlight = Self.ink(tones.selection.rgb, tones.selection.alpha) }
         divider.isHidden = items.isEmpty
         pill.isHidden = scope == nil
         if let scope {
@@ -140,6 +154,8 @@ final class CommandBarView: NSView {
         // Arc shows no hint for the actions Tab offers on the empty field.
         let offered = scope == nil && c.previewText == nil && c.result.scope != .actions ? c.result.scope : nil
         hint.isHidden = offered == nil
+        // Arc keeps the info badge while typing ("alpha", "golf"); a site's "Search …  Tab" takes its place.
+        info.isHidden = scope != nil || offered != nil
         keycap.isHidden = offered == nil
         if let offered {
             hint.stringValue = "Search \(offered.name)"
@@ -213,11 +229,12 @@ final class CommandBarView: NSView {
         // The magnifier and row favicons share a centre; input and result titles align.
         let fh = Self.fieldHeight
         let icon = leadingIcon.frame.size
-        leadingIcon.frame = NSRect(x: 20 + (22 - icon.width) / 2, y: (fh - icon.height) / 2, width: icon.width, height: icon.height)
+        leadingIcon.frame = NSRect(x: 21 + (22 - icon.width) / 2, y: (fh - icon.height) / 2, width: icon.width, height: icon.height)
         var right = b.width - 22
         if !info.isHidden {
-            info.frame = NSRect(x: right - 24, y: (fh - 24) / 2, width: 24, height: 24)
-            right -= 24 + 14
+            // Arc: a 24 pt circle 21 pt from the edge.
+            info.frame = NSRect(x: b.width - 21 - 24, y: (fh - 24) / 2, width: 24, height: 24)
+            right = info.frame.minX - 14
         }
         if !keycap.isHidden {
             // Key cap 23 tall, 4 pt around "Tab", 10 pt after the hint.
@@ -423,8 +440,9 @@ final class CommandBarRowView: NSView {
         shown = (s, image, selected, highlight, otherSpace, dark)
         layer?.backgroundColor = (selected ? highlight : .clear).cgColor
         // Selection changes all foregrounds too, including when reusable rows keep their content.
-        let ink: NSColor = selected ? .white : (dark ? NSColor(srgbRed: 0.78, green: 0.78, blue: 0.78, alpha: 1) : NSColor.black.withAlphaComponent(0.85))
-        let secondaryInk = selected ? NSColor.white.withAlphaComponent(0.85) : (dark ? NSColor(srgbRed: 0.40, green: 0.40, blue: 0.40, alpha: 1) : NSColor.black.withAlphaComponent(0.40))
+        // Arc 1.172.1 live (dark): titles (214,214,214), "Switch to Tab" and URLs (117,117,117), white when selected.
+        let ink: NSColor = selected ? .white : (dark ? NSColor(white: 0.84, alpha: 1) : NSColor.black.withAlphaComponent(0.85))
+        let secondaryInk = selected ? NSColor.white.withAlphaComponent(0.85) : (dark ? NSColor(white: 0.46, alpha: 1) : NSColor.black.withAlphaComponent(0.40))
         if let image {
             icon.isHidden = false
             emoji.isHidden = true
@@ -465,7 +483,8 @@ final class CommandBarRowView: NSView {
         arrowBox.isHidden = !isTab
         arrow.isHidden = !isTab
         trailing.textColor = selected ? .white : secondaryInk
-        arrow.contentTintColor = selected ? highlight : NSColor.labelColor.withAlphaComponent(0.65)
+        // Arc: the arrow (189,189,189) on a white-5 % tile; selected, the row's colour on a white tile.
+        arrow.contentTintColor = selected ? highlight.withAlphaComponent(1) : (dark ? NSColor.white.withAlphaComponent(0.72) : NSColor.labelColor.withAlphaComponent(0.65))
         arrowBox.layer?.backgroundColor = (selected ? NSColor.white : NSColor.labelColor.withAlphaComponent(0.05)).cgColor
         needsLayout = true
     }
@@ -489,7 +508,7 @@ final class CommandBarRowView: NSView {
         icon.frame = iconBox.frame.insetBy(dx: 4, dy: 4)
         let es = emoji.intrinsicContentSize
         emoji.frame = NSRect(x: 10 + (24 - es.width) / 2, y: (h - es.height) / 2, width: es.width, height: es.height)
-        var right = bounds.width - 14
+        var right = bounds.width - 12
         if !arrowBox.isHidden {
             arrowBox.frame = NSRect(x: right - 24, y: (h - 24) / 2, width: 24, height: 24)
             arrow.frame = arrowBox.frame

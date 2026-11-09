@@ -25,7 +25,8 @@ final class CommandBarController {
     /// Layout hints set by the window controller before opening.
     var panelWidth: CGFloat = CraMetrics.commandBarWidth
     var attached = false
-    var highlight: Color = .accentColor.opacity(0.4)
+    /// The space whose palette colours the selected row and the info badge (CraCore CommandBarTones).
+    var theme: SpaceTheme?
     var focusedSpaceID: UUID?
     var spaceName: (UUID) -> String = { _ in "" }
     /// Arc's scoped search: Tab on "youtube" scopes the bar to YouTube, on "%" to the space's open
@@ -54,7 +55,7 @@ final class CommandBarController {
     var placeholder: String {
         if scope != nil { return "Search…" }
         switch mode {
-        case .newTab: return "Search or Enter URL..."
+        case .newTab: return "Search or Enter URL…"
         case .editURL: return "Edit URL or search…"
         }
     }
