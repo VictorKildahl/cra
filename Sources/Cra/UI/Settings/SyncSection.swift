@@ -35,11 +35,12 @@ struct SyncSection: View {
             SettingsCardRow {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Sync with iCloud").font(.system(size: 13))
-                    if !sync.iCloudAvailable {
-                        Text(iCloudUnavailableReason).font(.system(size: 11)).foregroundStyle(.secondary)
-                    }
+                    Text(sync.iCloudAvailable ? "Uses the iCloud account signed in on this Mac." : iCloudUnavailableReason)
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
                 }
             } trailing: {
+                // macOS doesn't tell apps which Apple Account is signed in; System Settings shows it.
+                Button("iCloud Settings…") { NSWorkspace.shared.open(Self.appleAccountSettings) }
                 Toggle("Sync with iCloud", isOn: Binding(get: { sync.location == .iCloud }, set: { on in on ? enableICloud() : sync.disable() }))
                     .toggleStyle(.switch).labelsHidden()
                     .disabled(!sync.iCloudAvailable)
@@ -69,7 +70,7 @@ struct SyncSection: View {
                     Text(status).font(.system(size: 13)).foregroundStyle(sync.error == nil ? .secondary : Color.red)
                 } trailing: {
                     if !sync.otherDevices.isEmpty {
-                        Text(sync.otherDevices.joined(separator: ", ")).font(.system(size: 13)).foregroundStyle(.secondary)
+                        Text("Also on " + sync.otherDevices.joined(separator: ", ")).font(.system(size: 13)).foregroundStyle(.secondary)
                     }
                 }
             }
@@ -83,6 +84,8 @@ struct SyncSection: View {
         }
         SettingsFootnote(notice ?? "Spaces, pinned tabs, favorites, folders, settings and shortcuts sync. Logins, cookies, history and extensions stay on each Mac.")
     }
+
+    static let appleAccountSettings = URL(string: "x-apple.systempreferences:com.apple.systempreferences.AppleIDSettings")!
 
     private var iCloudUnavailableReason: String {
         FileManager.default.ubiquityIdentityToken == nil
