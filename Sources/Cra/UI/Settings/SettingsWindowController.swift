@@ -200,9 +200,10 @@ struct SettingsToolbarRow: View {
     }
 }
 
-/// Dia's source list: 28 pt rows inset 8, 20 pt glyph 20 in, label 49 in. The selected row
-/// is accent-filled with white text while the window is key, otherwise a grey fill with
-/// accent-coloured text.
+/// Dia's source list: 28 pt rows, the selection 10 pt inside the sidebar's edges with a 7 pt
+/// corner, the 20 pt glyph 10 pt into it (20 in) and the label 49 in (Dia 1.55.1, AX + 2x capture,
+/// 9 Nov 2026). The selected row is accent-filled with white text while the window is key,
+/// otherwise a grey fill with accent-coloured text.
 struct SettingsSidebar: View {
     let nav: SettingsNavigation
     @Environment(\.controlActiveState) private var activeState
@@ -212,7 +213,7 @@ struct SettingsSidebar: View {
             ForEach(SettingsPane.allCases) { row($0) }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 10)
         .padding(.top, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
@@ -231,9 +232,9 @@ struct SettingsSidebar: View {
                     .foregroundStyle(selected ? (key ? Color.white : Color.accentColor) : Color.primary)
                 Spacer(minLength: 0)
             }
-            .padding(.leading, 12)
+            .padding(.leading, 10)
             .frame(height: 28)
-            .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .fill(selected ? (key ? Color.accentColor : Color.primary.opacity(0.1)) : Color.clear))
             .contentShape(Rectangle())
         }
