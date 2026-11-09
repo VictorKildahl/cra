@@ -1276,6 +1276,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let id = dict["extensionAction"] { main.runExtensionAction(id); return }
             // What the side panel's close button does (scripts/scenario.sh).
             if dict["sidePanel"] == "close" { main.sidePanel.hide(); return }
+            // An expression's value in the side panel's page, to cra.log (a relaunched Cra's stdout isn't kept).
+            if let js = dict["sidePanelJS"] { main.sidePanel.debugEvaluate(js); return }
             if let path = dict["exportDiagnostics"] {
                 Diagnostics.export(windows: mainWindows, store: store, to: URL(fileURLWithPath: path))
                 return

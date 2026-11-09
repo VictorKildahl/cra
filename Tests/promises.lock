@@ -423,6 +423,7 @@
 #264   Packages/CraCore/Tests/CraCoreTests/FavoriteClickTests.swift::doubleClickAwayFromItsPageGoesBack  f3ebad820b5a
 #264   Packages/CraCore/Tests/CraCoreTests/FavoriteClickTests.swift::otherwiseAClickOnlyOpensIt  b38c5f0dbc19
 #264   Tests/Scenarios/favorite-double-click.scenario  8dcc4a3bc176
+#265   Tests/Scenarios/extension-side-panel.scenario  9f032072fee1
 #266   Tests/StoreTests.swift::dropIntoFolderGoesOnTop  d415c46e2d37
 #272   Packages/CraCore/Tests/CraCoreTests/DownloadMenuTests.swift::finishedFileGetsArcsMenu  d55083c19c73
 #272   Packages/CraCore/Tests/CraCoreTests/DownloadMenuTests.swift::liveRowsPauseResumeAndCancel  07badb06af6b

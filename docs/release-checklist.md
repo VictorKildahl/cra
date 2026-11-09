@@ -142,6 +142,10 @@ built release app with a test profile. Note anything that fails in the release's
 - **#89:** in developer mode the ⌄ chevron lists Refresh ⌘R, Force Refresh ⇧⌘R, Clear Cookies
   and Refresh, Clear Cache and Refresh, View Source ⌥⌘U and Developer Tools ⌥⌘I. Tab row
   context menus show their shortcuts.
+- **#265:** signed in to a paid Claude plan, Claude in Chrome's toolbar button opens its panel
+  and Claude works in it: no "Claude isn't available on this page" and no "Can't reach Claude
+  in Chrome". The scenario covers what the extension checks, but only an account gets past
+  claude.ai's sign-in.
 
 ### Profiles, privacy, media and the engine
 

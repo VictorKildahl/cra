@@ -2127,6 +2127,8 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     CefRefPtr<CefBrowser> _browser;
     CefRefPtr<CraClient> _client;
     NSString* _pendingURL;
+    /// A side panel page, loaded once the page is marked as one (-adoptBrowser:).
+    NSString* _sidePanelURL;
     BOOL _pendingFocus;
     BOOL _isPopupHost;
     NSMutableSet<NSNumber*>* _activeDownloads;
@@ -2144,14 +2146,26 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 
 - (instancetype)initWithFrame:(NSRect)frame url:(NSString*)url delegate:(id<CraBrowserDelegate>)delegate
                     incognito:(BOOL)incognito profilePath:(NSString*)profilePath {
+    return [self initWithFrame:frame url:url sidePanelURL:nil delegate:delegate incognito:incognito profilePath:profilePath];
+}
+
+- (instancetype)initWithFrame:(NSRect)frame extensionSidePanelURL:(NSString*)url
+                     delegate:(id<CraBrowserDelegate>)delegate profilePath:(NSString*)profilePath {
+    // Created with no page (CEF then doesn't navigate), so no script of the panel runs as a tab.
+    return [self initWithFrame:frame url:@"" sidePanelURL:url delegate:delegate incognito:NO profilePath:profilePath];
+}
+
+- (instancetype)initWithFrame:(NSRect)frame url:(NSString*)url sidePanelURL:(NSString*)sidePanelURL
+                     delegate:(id<CraBrowserDelegate>)delegate incognito:(BOOL)incognito profilePath:(NSString*)profilePath {
     self = [super init];
     if (!self) return nil;
     _delegate = delegate;
     _isIncognito = incognito;
     _profilePath = incognito ? nil : [profilePath copy];
-    _currentURL = url ?: @"";
+    _currentURL = sidePanelURL ?: url ?: @"";
     _currentTitle = @"";
     _pendingURL = url;
+    _sidePanelURL = [sidePanelURL copy];
     _isPopupHost = (url == nil);
     _containerView = [[NSView alloc] initWithFrame:frame];
     _containerView.wantsLayer = YES;
@@ -2230,6 +2244,25 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
                       completion:^(NSString*, NSString* error) {
                           if (error) NSLog(@"Cra: document start script not installed: %@", error);
                       }];
+    if (_sidePanelURL) {
+        // DevTools messages run in order, so the document start scripts are in place as well.
+        __weak CraBrowser* weakSelf = self;
+        void (^load)(NSString*) = ^(NSString* why) {
+            CraBrowser* me = weakSelf;
+            if (!me || !me->_sidePanelURL) return;
+            if (why) NSLog(@"Cra: side panel not marked: %@", why);
+            NSString* url = me->_sidePanelURL;
+            me->_sidePanelURL = nil;
+            if (me->_browser) me->_browser->GetMainFrame()->LoadURL(CefStringFromNS(url));
+        };
+        [self sendDevToolsMethod:@"Cra.extensionSidePanel" params:@"{}"
+                      completion:^(NSString*, NSString* error) { load(error); }];
+        // A CEF without the method never answers: Chromium hands a method it doesn't know to the
+        // page's renderer, and a browser with no page has none. The panel then loads as a tab.
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            load(@"no answer");
+        });
+    }
     if (_pendingFocus) {
         _pendingFocus = NO;
         browser->GetHost()->SetFocus(true);
@@ -2278,7 +2311,9 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 - (BOOL)hasDevTools { return _browser ? _browser->GetHost()->HasDevTools() : NO; }
 
 - (void)loadURL:(NSString*)url {
-    if (_browser) {
+    if (_sidePanelURL) {
+        _sidePanelURL = [url copy];  // still being marked: load this one instead
+    } else if (_browser) {
         _browser->GetMainFrame()->LoadURL(CefStringFromNS(url));
     } else {
         _pendingURL = url;

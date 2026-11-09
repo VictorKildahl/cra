@@ -190,6 +190,12 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
                     incognito:(BOOL)incognito;
 - (instancetype)initWithFrame:(NSRect)frame url:(nullable NSString *)url delegate:(nullable id<CraBrowserDelegate>)delegate
                     incognito:(BOOL)incognito profilePath:(nullable NSString *)profilePath;
+/// An extension's side panel page (`url`). Chromium counts every page Cra hosts as a tab; this
+/// one is marked as a side panel (Cra.extensionSidePanel, scripts/cef-patches) before it loads,
+/// so that, as in Chrome, it has no tab: no `sender.tab` on its messages, `tabs.getCurrent()`
+/// gives undefined, and `runtime.getContexts()` lists it as SIDE_PANEL (GitHub #265).
+- (instancetype)initWithFrame:(NSRect)frame extensionSidePanelURL:(NSString *)url
+                     delegate:(nullable id<CraBrowserDelegate>)delegate profilePath:(nullable NSString *)profilePath;
 
 - (void)loadURL:(NSString *)url;
 - (void)goBack;

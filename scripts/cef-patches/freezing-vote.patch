@@ -11,10 +11,10 @@ index dd0a558c0..a54f79de4 100644
      "//components/pref_registry",
      "//components/printing/browser",
 diff --git a/cef/libcef/browser/devtools/devtools_controller.cc b/cef/libcef/browser/devtools/devtools_controller.cc
-index c60f22d1a..f0d609890 100644
+index c60f22d1a..bb3c9afaa 100644
 --- a/cef/libcef/browser/devtools/devtools_controller.cc
 +++ b/cef/libcef/browser/devtools/devtools_controller.cc
-@@ -5,10 +5,435 @@
+@@ -5,10 +5,447 @@
  #include "cef/libcef/browser/devtools/devtools_controller.h"
  
  #include "base/json/json_reader.h"
@@ -45,6 +45,7 @@ index c60f22d1a..f0d609890 100644
 +#include "content/public/common/content_features.h"
 +#include "extensions/browser/extension_registry.h"
 +#include "extensions/browser/install_approval.h"
++#include "extensions/browser/view_type_utils.h"
 +#include "extensions/browser/webstore_installer.h"
 +#include "extensions/common/extension.h"
 +#include "extensions/common/mojom/manifest.mojom-shared.h"
@@ -362,10 +363,21 @@ index c60f22d1a..f0d609890 100644
 +  if (!method || !id ||
 +      (*method != "Cra.setFreezingVote" && *method != "Cra.getFreezingState" &&
 +       *method != "Cra.discard" && *method != "Cra.load" &&
-+       *method != "Cra.mediaSession" && *method != "Cra.autoPictureInPicture")) {
++       *method != "Cra.mediaSession" && *method != "Cra.autoPictureInPicture" &&
++       *method != "Cra.extensionSidePanel")) {
 +    return false;
 +  }
 +  *message_id = *id;
++  if (*method == "Cra.extensionSidePanel") {
++    // Cra (GitHub #265): the page is an extension's side panel, which Cra
++    // hosts in a tab of its own. Like Chrome's side panel it then has no tab:
++    // no sender.tab on its messages and ports, tabs.getCurrent() gives
++    // undefined, and runtime.getContexts() reports it as SIDE_PANEL. Sent
++    // before the panel page loads; the page stays one until it closes.
++    extensions::SetViewType(contents,
++                            extensions::mojom::ViewType::kExtensionSidePanel);
++    return true;
++  }
 +  if (*method == "Cra.autoPictureInPicture") {
 +    HandleCraAutoPictureInPicture(contents, dict->FindDict("params"), result,
 +                                  error);
@@ -450,7 +462,7 @@ index c60f22d1a..f0d609890 100644
  
  CefDevToolsController::CefDevToolsController(
      content::WebContents* inspected_contents)
-@@ -30,6 +455,38 @@ CefDevToolsController::~CefDevToolsController() {
+@@ -30,6 +467,38 @@ CefDevToolsController::~CefDevToolsController() {
  bool CefDevToolsController::SendDevToolsMessage(
      const std::string_view& message) {
    CEF_REQUIRE_UIT();
