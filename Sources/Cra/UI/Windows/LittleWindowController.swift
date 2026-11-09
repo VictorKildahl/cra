@@ -717,7 +717,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         let prefill = hasPage ? currentURL : nil
         // Suggestions come from the normal profile even when an incognito window was in front.
         app.useNormalWindow()
-        commandBar.highlight = store.focusedSpace.theme.palette.commandHighlight
+        commandBar.theme = store.focusedSpace.theme.shown
         commandBar.focusedSpaceID = store.focusedSpaceID
         commandBar.open(mode: hasPage ? .editURL : .newTab, prefill: prefill)
         commandBar.attached = false

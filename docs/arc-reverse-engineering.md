@@ -58,6 +58,16 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
 - [O] Actions: viewArchive, clearArchive, reopenClosedTab, resetSpace, archiveTab.
 
 ## Command bar (ARC_CommandBar.bundle + strings + StorableCommandBarAdditionalRanking.json)
+- [O live] ⌘T (9 Nov 2026, Arc 1.172.1 offline copy, 1x sRGB captures + AX, PR #268): panel 766 wide, radius
+  ≈12, 1 pt outline, fill ≈ (10,9,9) at ≈0.84 over the blurred page ((51,50,50) over white). Input row 64 pt
+  with a 1 pt divider (white ≈0.1); rows 46 tall on a 50 pt pitch, 6 pt under the divider, 10 pt in, radius ≈6,
+  bottom padding ≈11. Leading magnifier 12 pt, centred 32 pt in; placeholder "Search or Enter URL…" 18 pt,
+  ink (163,162,162); typed text (230,231,233); placeholder and row titles both start 52 pt in. The selected row
+  is the space's focus colour ((121,104,33) gold, (70,77,219) default theme; the dark palette on a dark Mac,
+  light spaces too), white title and trailing text, a white 24 pt arrow tile with the arrow in the row colour.
+  Unselected: titles (214,214,214), "Switch to Tab" / URLs (117,117,117), arrow (189,189,189) on a white-5 % tile
+  12 pt from the row's edge. "Switch to Tab" shows before typing. The info badge is a 24 pt circle 21 pt from the
+  edge in the space's backgroundExtra and stays while typing. Cra: CommandBarView, CraCore CommandBarTones.
 - [O] Entry points: keyboardShortcutT, keyboardShortcutL, keyboardShortcutFocusSidebar, keyboardShortcutCommandOptionG,
   sidebarDoubleClick, sidebarNewTabButton, placeholderClick, littleArcPlaceholderClick, topbar, appMenu*,
   toggleBetweenTypeTravelAndCommandBar.
@@ -192,7 +202,7 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
 - [O] Command bar: ~766pt wide, vertically centered, dark translucent in dark mode. Input row 60pt with the top match's
   favicon; rows 50pt single-line "Title — url"; the completion row comes first, then the typed query, then matches; open
   tabs show "Switch to Tab" + arrow box (other-space tabs show the space name); the selected row is tinted with the
-  space color. ⌘L with the toolbar visible edits inline: dropdown hangs under the toolbar across the content width.
+  space color. (Re-measured 9 Nov 2026: input row 64, rows 46 on a 50 pt pitch; see the ⌘T entry.) ⌘L with the toolbar visible edits inline: dropdown hangs under the toolbar across the content width.
   Arc draws the bar inside the window, so it is light or dark with the space's theme; Cra's bar is a child panel,
   which takes macOS' appearance unless given the window's (it was dark over light spaces on a dark Mac until 4 Nov).
 

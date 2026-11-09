@@ -448,9 +448,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // alert and popover it presents, and those follow macOS as Arc's do, whatever the
             // space colour (#171).
             shell.appearance = NSAppearance(named: palette.isDark ? .darkAqua : .aqua)
-            // The command bar follows macOS (#187); only its highlight is the space's, also when
-            // the space changes under an open bar.
-            commandBar.highlight = palette.commandHighlight
+            // The command bar follows macOS (#187); only its selected row and info badge take the
+            // space's palette, also when the space changes under an open bar.
+            commandBar.theme = space.theme.shown
             // Vibrant themes see through to the desktop like Arc; others are opaque.
             shell.vibrancy.isHidden = !palette.vibrant
             shell.vibrancyLift.isHidden = !palette.vibrant
@@ -3376,7 +3376,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let fillingEmptyPane = selectedTab?.isEmptyTab == true
         let prefill = mode == .editURL && !fillingEmptyPane ? selectedTab?.tab?.url : nil
         let effectiveMode: CommandBarMode = (mode == .editURL && (selectedTab == nil || fillingEmptyPane)) ? .newTab : mode
-        commandBar.highlight = focusedSpace.theme.palette.commandHighlight
+        commandBar.theme = focusedSpace.theme.shown
         commandBar.focusedSpaceID = focusedSpaceID
         commandBar.open(mode: effectiveMode, prefill: prefill)
         // Arc draws the New Tab row as the active one while the bar makes a new tab; the
