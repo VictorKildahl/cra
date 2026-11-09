@@ -621,6 +621,9 @@ public struct AppSettings: Codable, Equatable {
     public var boostsEnabled: Bool = true
     /// Arc's Settings ▸ General ▸ Previews: hovering a Gmail favorite shows its unread mail.
     public var favoritePreviews: Bool = true
+    /// Cra's addition (PR #267, Dia-like): the open favorite's rim takes its logo's colours.
+    /// Off keeps Arc's neutral 2 pt rim.
+    public var favoriteLogoOutline: Bool = false
     /// Arc's Live Calendar on a Google Calendar favorite (the favorite's menu ▸ Live Calendar), on
     /// until "Disable Live Calendar".
     public var liveCalendar: Bool = true
@@ -871,6 +874,7 @@ extension AppSettings {
         pageTopWindowDrag = try c.decodeIfPresent(Bool.self, forKey: .pageTopWindowDrag) ?? true
         boostsEnabled = try c.decodeIfPresent(Bool.self, forKey: .boostsEnabled) ?? true
         favoritePreviews = try c.decodeIfPresent(Bool.self, forKey: .favoritePreviews) ?? true
+        favoriteLogoOutline = try c.decodeIfPresent(Bool.self, forKey: .favoriteLogoOutline) ?? false
         liveCalendar = try c.decodeIfPresent(Bool.self, forKey: .liveCalendar) ?? true
         calendarHoverPreview = try c.decodeIfPresent(Bool.self, forKey: .calendarHoverPreview) ?? true
         calendarTimeToNextMeeting = try c.decodeIfPresent(Bool.self, forKey: .calendarTimeToNextMeeting) ?? true

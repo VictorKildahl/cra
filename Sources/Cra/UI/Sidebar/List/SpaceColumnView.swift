@@ -597,6 +597,7 @@ final class FavoritesGridView: NSView {
             favoritesID = space.favoritesContainerID
             dismissed = store.isStandalone(space: spaceID) || store.isFavoritesEmptyStateDismissed(space.favoritesContainerID)
             // A favorite split is one tile with a cell per pane (Arc: AppItem.childItems).
+            let logoOutline = store.settings.favoriteLogoOutline
             for item in store.children(of: space.favoritesContainerID) where item.isTab || item.isSplit {
                 let panes = item.isSplit ? store.children(of: item.id).filter(\.isTab) : [item]
                 guard !panes.isEmpty else { continue }
@@ -604,13 +605,15 @@ final class FavoritesGridView: NSView {
                     let key = p.tab?.iconKey
                     let icon = favicons.image(forKey: key)
                     return FavoriteTileModel.Cell(id: p.id, title: p.displayTitle, icon: icon,
-                                                  glyphDark: icon == nil ? nil : favicons.glyphIsDark(forKey: key))
+                                                  glyphDark: icon == nil ? nil : favicons.glyphIsDark(forKey: key),
+                                                  selectionColors: logoOutline ? favicons.selectionColors(forKey: key) : nil)
                 }
                 let open = panes.first { store.isSelected($0.id, inSpace: spaceID, window: ui.windowID) }?.id
                 let title = item.isSplit && item.title == nil ? panes.map(\.displayTitle).joined(separator: " | ") : item.displayTitle
                 models.append((item.id, FavoriteTileModel(title: title, cells: cells, vertical: item.split?.orientation == .vertical,
                                                           tileColor: item.tab?.tileColor, selected: open != nil, openCell: open,
-                                                          unread: panes.contains(where: \.isUnread), focus: ui.keyboardFocusID == item.id)))
+                                                          unread: panes.contains(where: \.isUnread), focus: ui.keyboardFocusID == item.id,
+                                                          logoOutline: logoOutline)))
             }
         } onChange: { [weak self] in
             Task { @MainActor in
@@ -1066,6 +1069,7 @@ struct FavoriteTileModel: Equatable {
         var title: String
         var icon: NSImage?
         var glyphDark: Bool?
+        var selectionColors: [String]?
     }
     var title: String
     var cells: [Cell]
@@ -1076,6 +1080,8 @@ struct FavoriteTileModel: Equatable {
     var openCell: UUID?
     var unread: Bool
     var focus: Bool
+    /// Settings ▸ Tabs "Outline the open favorite in its logo’s colors" (off: Arc's neutral rim).
+    var logoOutline = false
 }
 
 enum FavoriteTileMetrics {
@@ -1103,14 +1109,16 @@ enum FavoriteTileMetrics {
 
 /// A favorite tile. Arc 1.170: 13 pt circular corners; the active tile is the hover fill with a
 /// 2 pt darker rim; inactive tiles sit ~4.5% darker than the sidebar. A picked tile colour keeps
-/// its hue in every state; hover and selection shade it.
+/// its hue in every state; hover and selection shade it. With the logo outline setting on, the
+/// rim is a Dia-like gradient of the open site's logo colours instead (PR #267).
 final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
     let itemID: UUID
     private let spaceID: UUID
     private weak var grid: FavoritesGridView?
     private let shade = CALayer()
-    /// The selected tile's 2 pt rim, under the focus ring (a layer border would draw over it).
-    private let rim = CALayer()
+    /// The selected tile's colored rim stays under the keyboard focus ring.
+    private let rim = CAGradientLayer()
+    private let rimMask = CAShapeLayer()
     private var favicons: [SidebarFaviconView] = []
     /// Cuts a split's tile into its cells.
     private let cutMask = CAShapeLayer()
@@ -1136,7 +1144,13 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         layer?.cornerRadius = FavoriteTileMetrics.corner
         shade.cornerRadius = FavoriteTileMetrics.corner
         layer?.addSublayer(shade)
-        rim.cornerRadius = FavoriteTileMetrics.corner
+        rim.type = .conic
+        rim.startPoint = CGPoint(x: 0.5, y: 0.5)
+        rim.endPoint = CGPoint(x: 0.5, y: 0)
+        rimMask.fillColor = nil
+        rimMask.strokeColor = NSColor.black.cgColor
+        rimMask.lineWidth = 2
+        rim.mask = rimMask
         rim.zPosition = 5
         layer?.addSublayer(rim)
         cutMask.fillRule = .evenOdd
@@ -1202,8 +1216,17 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
             layer?.backgroundColor = fill.cgColor
             shade.backgroundColor = NSColor.clear.cgColor
         }
-        rim.borderWidth = m.selected ? 2 : 0
-        rim.borderColor = (dark ? NSColor.white.withAlphaComponent(0.14) : NSColor.black.withAlphaComponent(0.17)).cgColor
+        if m.logoOutline {
+            let selectedCell = m.cells.first { $0.id == m.openCell } ?? m.cells.first
+            rim.colors = FavoriteSelectionTint.colors(iconColors: selectedCell?.selectionColors, dark: dark)
+                .map { NSColor(hex: $0).cgColor }
+            rim.opacity = 0.72
+        } else {
+            let arcRim = (dark ? NSColor.white.withAlphaComponent(0.14) : NSColor.black.withAlphaComponent(0.17)).cgColor
+            rim.colors = [arcRim, arcRim]
+            rim.opacity = 1
+        }
+        rim.isHidden = !m.selected
         var faviconColors = colors
         faviconColors.isDark = dark
         for (f, c) in zip(favicons, m.cells) { f.show(c.icon, flip: c.icon != nil && c.glyphDark == dark, colors: faviconColors) }
@@ -1234,6 +1257,11 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         CATransaction.setDisableActions(true)
         shade.frame = bounds
         rim.frame = bounds
+        rimMask.frame = bounds
+        let inset = rimMask.lineWidth / 2
+        rimMask.path = CGPath(roundedRect: bounds.insetBy(dx: inset, dy: inset),
+                             cornerWidth: FavoriteTileMetrics.corner - inset,
+                             cornerHeight: FavoriteTileMetrics.corner - inset, transform: nil)
         let cells = cellFrames
         let side = FavoriteTileMetrics.favicon
         for (f, r) in zip(favicons, cells) {
