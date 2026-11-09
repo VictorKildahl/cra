@@ -457,5 +457,10 @@
 #286   Packages/CraCore/Tests/CraCoreTests/PermissionAskTests.swift::onlyTheTabInFrontAsks  fc757adafaca
 #286   Tests/BrowserManagerLifecycleTests.swift::permissionWaitsForItsTabCase  47983328a052
 #286   Tests/Scenarios/permission-waits-for-its-tab.scenario  691141857a65
+#287   Packages/CraCore/Tests/CraCoreTests/SidebarHeaderLayoutTests.swift::moreMenuTones  27e6344399d8
+#287   Packages/CraCore/Tests/CraCoreTests/SidebarHeaderLayoutTests.swift::narrowBelow214  040e11794e63
+#287   Packages/CraCore/Tests/CraCoreTests/SidebarHeaderLayoutTests.swift::regularDownTo214  38bc61ac3c72
+#287   Packages/CraCore/Tests/CraCoreTests/SidebarWidthTests.swift::goesAsNarrowAsArc  34e6aff5e22c
+#287   Packages/CraCore/Tests/CraCoreTests/SidebarWidthTests.swift::stopsWhereArcStops  16f9b497fbcd
 #288   Tests/Scenarios/tear-off-profile.scenario  c58e24dc060d
 #288   Tests/StoreTests.swift::tornOffTabKeepsItsProfile  53a7c1d28415

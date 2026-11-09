@@ -196,7 +196,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         wireActions()
         shell.resizeHandle.onDrag = { [weak self] dx in
             guard let self else { return }
-            let w = min(max(CraMetrics.sidebarMinWidth, shell.sidebarWidth + dx), CraMetrics.sidebarMaxWidth)
+            let w = CGFloat(SidebarWidth.clamped(Double(shell.sidebarWidth + dx)))
             shell.sidebarWidth = w
             shell.layoutSubtreeIfNeeded()
         }

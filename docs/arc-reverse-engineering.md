@@ -3686,3 +3686,23 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
   address; WebKit pages save WKWebView's interactionState. Saved a second after a load, when the tab is hidden
   and at quit. `MainWindowController.goBack` takes ⌘[, the toolbars and the menu; the mouse button is
   Chromium's. Readouts `cra://debug?back=<label>`, `cra://debug?scroll=<label>`.
+
+## Sidebar width and the narrow header (Arc 1.17x, 9 Nov 2026, GitHub #287)
+- [O disasm] `WindowLayoutController.handleSidebarResizePanGestureRecognizer:` (arm64, 0x100221030): the new
+  width is `round(start + translation)`; under 82 pt the sidebar hides (drag-to-hide); otherwise it's clamped to
+  164…500 pt. Resize state has `canSnapToDefaultWidth`, `breakpointIndex`, `timeOfSnap`: a slow drag snapped back
+  6 pt at a few widths (274 → 256, 214 → 208 …), not studied further.
+- [O live AX] Offline Arc, toolbar hidden (`topBarURLEnabled` NO), drag in 6 pt steps from 274 to 164, offsets from
+  the sidebar's left edge. 214 pt and wider: toggle at 77, ← → ↻ 32 pt boxes 2 pt apart, ending 6 pt from the edge;
+  at 214 the toggle moves to 74 to keep 2 pt off ← . 208 pt and narrower (`SidebarHeaderWidthLayout.narrow`): no
+  toggle; ← → and "More options" (•••) 28 pt boxes touching, ending 6 pt from the edge, same centre line.
+  209–213 pt was never landed on (snapping), so the exact switch is [U].
+- [O 1x capture] ••• opens a popover (••• turns ✕): 200 × 96 pt body, radius ~12, a 12 × 6 pt arrow whose tip is
+  10 pt under the button, centred on it; 8 pt padding, rows 40 pt: Reload ⌘R (dimmed with no page), Toggle Sidebar
+  ⌘S, each an SF-style icon centred 27.5 pt in, 13 pt semibold title at 50.5 pt, shortcut "⌘ R" ending 21 pt from
+  the right. Tones on the yellow "Lab" theme (shadedDark 0.437, 0.336, −0.080): fill (17, 13, 0) = black + 15 %
+  shadedDark; hovered row (81, 70, 26) = fill + 41 % shadedDark + 13 % white, radius ~8, inset 8; disabled text
+  (121, 120, 129); a shortcut ≈ white 30 %. One theme only; the hover was seen on one row, not followed live.
+- Cra (#287): `SidebarWidth` (164…500, drag + Arc import), `SidebarHeaderLayout` (switch below 214, boxes, toggle
+  shift), `SidebarMoreMenu` (popover geometry and tones), drawn by `SidebarMorePanel`. Glyph columns match Arc's
+  within 1 px at 214, 208 and 164 pt. Not built: drag-to-hide under 82 pt and resize snapping.
