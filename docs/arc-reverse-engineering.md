@@ -3503,6 +3503,13 @@ Arc Max's renameDownloads: a finished download is renamed on disk and a card abo
 - [O, Cra test copy] Child windows: a child ordered in before its parent is on screen, or shown by its owner before it was
   attached (Chromium's page window), stays on the desktop Space. Making it key then switches Spaces. Ordering it
   out and adding it again as a child, after the parent is on screen, puts it on the parent's Space.
+- [O, Cra scenario little-window-fullscreen, 9 Nov 2026, #277] With `.fullScreenPrimary`, a Little Window shown while
+  Cra's own browser window is full screen got a full-screen Space of its own (`styleMask` .fullScreen, the browser
+  window off the active Space): a black screen with the card in the middle and no traffic lights. With
+  `.fullScreenAuxiliary` only, it joins the browser window's Space. The page's own full screen adds primary while it
+  lasts. Leaving that, macOS puts the Little Window on the desktop Space, not back over the full-screen browser
+  window (as before #277). Bringing the browser window's Space back works, but the panel stays tied to the desktop
+  Space even when ordered in with `.moveToActiveSpace`, and making it key switches back to the desktop.
 
 ## Little Arc's ⌥⌘N from any app, Capture scrolling, and clicks on a Peek's bar (Arc 1.171, 5 Nov 2026, issue #195)
 

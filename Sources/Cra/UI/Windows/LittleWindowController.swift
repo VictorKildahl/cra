@@ -250,8 +250,11 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             // Little Arc is a non-activating panel (AX subrole AXSystemDialog), so it opens over
             // the app in front even when that app is full screen (#186). An ordinary window can't
             // join another app's full-screen Space: macOS switched to the desktop to show it.
-            // Primary keeps the page's own full screen.
-            window.collectionBehavior = [.fullScreenPrimary, .fullScreenAuxiliary]
+            // Auxiliary only: AppKit puts a full-screen-primary window shown while one of Cra's
+            // windows is full screen into a full-screen Space of its own, a black screen with the
+            // card in the middle and no traffic lights (#277). The page's own full screen adds
+            // primary for as long as it lasts (browser(_:didChangeFullscreen:)).
+            window.collectionBehavior = [.fullScreenAuxiliary]
             placeWindow()
         }
 
@@ -1106,7 +1109,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     /// Left with the green button or ⌃⌘F while a video was fullscreen: the page leaves too.
     func windowDidExitFullScreen(_ notification: Notification) {
-        guard (notification.object as? NSWindow) === window, pageFullscreen else { return }
+        guard let window, (notification.object as? NSWindow) === window else { return }
+        if !isPeek { window.collectionBehavior.remove(.fullScreenPrimary) }
+        guard pageFullscreen else { return }
         pageFullscreen = false
         browser?.exitFullscreen()
     }
@@ -1244,6 +1249,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     func browser(_ browser: CraBrowser, didChangeFullscreen fullscreen: Bool) {
         guard let window else { return }
         pageFullscreen = fullscreen
+        // Only a full-screen-primary window gets a full-screen Space of its own (#277: not while it opens).
+        if fullscreen, !isPeek { window.collectionBehavior.insert(.fullScreenPrimary) }
         if fullscreen != window.styleMask.contains(.fullScreen) { window.toggleFullScreen(nil) }
     }
 

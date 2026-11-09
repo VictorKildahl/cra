@@ -1132,6 +1132,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("little shown \(label): windows=\(littleWindows.count) space=\(space) profile=\(profile)")
                 return
             }
+            // windowState=<label>: each window's full screen, Space and traffic lights (#277). Lights are
+            // "hidden", or their alpha; "-" when a window has none.
+            if let label = dict["windowState"] {
+                func lights(_ w: NSWindow) -> String {
+                    [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].map { type in
+                        guard let b = w.standardWindowButton(type) else { return "-" }
+                        return b.isHidden ? "hidden" : String(format: "%.1f", b.alphaValue)
+                    }.joined(separator: ",")
+                }
+                func flag(_ b: Bool) -> Int { b ? 1 : 0 }
+                for (i, m) in mainWindows.enumerated() {
+                    guard let w = m.window else { continue }
+                    CraLog.note("window state \(label): main\(i) fullscreen=\(flag(w.styleMask.contains(.fullScreen))) "
+                        + "visible=\(flag(w.isVisible)) onSpace=\(flag(w.isOnActiveSpace)) "
+                        + "layout=\(flag(m.shell.windowFullscreen)) sidebarUI=\(flag(m.sidebarUI.windowFullscreen)) "
+                        + "lightsHidden=\(flag((w as? CraWindow)?.trafficLightsHidden ?? false)) lights=\(lights(w))")
+                }
+                for (i, l) in littleWindows.enumerated() where !l.isPeek {
+                    guard let w = l.window else { continue }
+                    CraLog.note("window state \(label): little\(i) fullscreen=\(flag(w.styleMask.contains(.fullScreen))) "
+                        + "primary=\(flag(w.collectionBehavior.contains(.fullScreenPrimary))) "
+                        + "visible=\(flag(w.isVisible)) onSpace=\(flag(w.isOnActiveSpace)) lights=\(lights(w))")
+                }
+                return
+            }
             // themeShown=<label>: which half each window draws now (the space's theme, the window content
             // and the sidebar), without redrawing first, so a missed macOS switch shows (#155).
             if let label = dict["themeShown"] {
