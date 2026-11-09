@@ -1083,6 +1083,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("sidebar shown \(label): visible=\(main.sidebarVisible ? 1 : 0) menu=\(item?.title ?? "-") key=\(mods)\(item?.keyEquivalent ?? "-")")
                 return
             }
+            // pip=<label>: Chromium's Picture in Picture window as Cra keeps it; pipKey=space|force asks
+            // it to become key the ways Chromium can leave it open to that (#262).
+            if let label = dict["pip"] { NSLog("Cra pip %@: %@", label, PictureInPictureChrome.shared.readout()); return }
+            if let how = dict["pipKey"] { PictureInPictureChrome.shared.debugTakeKey(how); return }
             // peekShown=<label>: the page behind a Peek in each window, faded and drawn back or whole (PR #221).
             if let label = dict["peekShown"] {
                 for m in mainWindows { NSLog("Cra peek shown %@: %@", label, m.peekBackdropShown()) }

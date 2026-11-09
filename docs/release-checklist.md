@@ -109,6 +109,10 @@ built release app with a test profile. Note anything that fails in the release's
   point, also in the first seconds; with the pointer away it is the bare video. On hover: Back to
   Tab on the left (with its words from 400 pt wide), the host centred and whole, Close on the
   right, one even dim layer.
+- **#262:** hover a YouTube PiP after a drag on its edges, a resize, a trip to another app's
+  full-screen Space and back, and a click on Cra's window: only Cra's controls show (no grey ±10,
+  no second ✕, no scrubber). Play/pause alone in a window under 280 pt wide, with the ±15 pair
+  and a bigger play/pause from 280 pt; `cra.log` has no "Chromium's window became key".
 - **#178:** in a split, the focused pane's ring shows (also over docked DevTools), and so does
   the card shadow.
 - **#90:** Capture on a second display and behind other windows isn't blank. It goes to the

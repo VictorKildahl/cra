@@ -764,6 +764,16 @@ Arc 1.172 binary (otool/llvm-objdump on the arm64 slice, 8 Nov, #246):
   white 30 %; dragging upwards slows seeking by 2^round(dy / 60 pt), down to 1/16. Cra has none yet.
 Cra follows the limits, the scrim, the fade, the insets and the Back to Tab words
 (`PictureInPictureLayout` in CraCore) and keeps its 782×440-on-1728×1117 opening size.
+Centre controls (8 Nov, GitHub #262, from the #246 reporter's Arc crops): play/pause only, glyph
+about 23.5 pt, at 224 and 277 pt wide; the ±15 pair in ~31 pt circles and a 37–40 pt play/pause at
+396 and 801 pt, so the skips arrive with the small size class (280 pt). Cra: play 28 pt symbol
+(22 × 26 pt of ink) when tiny, 44 pt (35 × 39) from 280, skips 28 pt (30 × 32.5)
+(`PictureInPictureLayout.centreControls`). Chromium's own controls showed under Cra's when its
+window became key: `NativeWidgetMacNSWindow.preventKeyWindow`, which Cra sets, is also written by
+Chromium (`orderFrontKeepWindowKeyState` sets it, and clears it after the next Space change), and
+`VideoOverlayWindowViews::OnNativeFocus` shows the controls. Cra sets it again on activation, Space
+changes and resizes, and hands the key back if the window takes it anyway (logged as `pip:
+Chromium's window became key`).
 
 Chromium only enters PiP from a page holding a user activation. `CefBrowserHost::SendKeyEvent`
 never reached the page in Chrome-style hosting (CEF 154), so Cra sends an F19 key down/up straight

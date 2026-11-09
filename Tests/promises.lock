@@ -418,3 +418,5 @@
 #260   Packages/CraCore/Tests/CraCoreTests/PageDetentHapticsTests.swift::theRubberBandIsSilent  f36ce7aacbfc
 #261   Packages/CraCore/Tests/CraCoreTests/HiddenFrameReleaseTests.swift::aTabShownWhileDrawingComesBackOpaqueAndOnItsOwn  bec084944923
 #261   Packages/CraCore/Tests/CraCoreTests/HiddenFrameReleaseTests.swift::aWindowDrawingForAReleaseIsNeverSeen  b604023e16f8
+#262   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::centreControlsGrowWithArcsSizeClasses  6b90ede0c164
+#262   Tests/Scenarios/pip-never-key.scenario  e2fa4a5e6fe6
