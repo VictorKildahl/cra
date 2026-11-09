@@ -863,11 +863,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     func handleInternalURL(_ u: URL) {
         let comps = URLComponents(url: u, resolvingAgainstBaseURL: false)
         func q(_ name: String) -> String? { comps?.queryItems?.first { $0.name == name }?.value }
-        // Actions keep their target: a key Little Window stays key (perform routes to it).
-        // A background test instance (CRA_TEST_BACKGROUND) never comes to the front. A Little
-        // Window opens on the Space in use, so the browser window stays where it is (#186).
+        // What comes forward is InternalURLRaise's. A background test instance
+        // (CRA_TEST_BACKGROUND) never comes to the front.
         let little = u.host == "open" && q("little") == "1"
-        if (u.host != "action" || keyLittleWindow == nil) && !little && !HitchMonitor.background {
+        let background = u.host == "open" && q("background") == "1"
+        if InternalURLRaise.raises(host: u.host, little: little, background: background, littleWindowIsKey: keyLittleWindow != nil),
+           !HitchMonitor.background {
             main.showWindow(nil)
             NSApp.activate(ignoringOtherApps: true)
         }
@@ -883,7 +884,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let url = q("url") { main.loadInSelectedTab(url) }
         case "open":
             guard let url = q("url") else { break }
-            let background = q("background") == "1"
             // space=<id> (#168): a real, normal space, as Air Traffic Control routes to; an unknown
             // or incognito one opens where it did before, in the space in use.
             let space = openableSpace(q("space").flatMap(UUID.init(uuidString:)))
@@ -894,7 +894,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 let target = useNormalWindow(forSpace: space)
                 let tab = store.createTab(url: url, in: space, select: !background, window: target.windowID)
                 if background { store.markUnread(tab.id, true); target.browsers.ensureRuntime(for: tab.id) }
-                if !HitchMonitor.background { target.showWindow(nil) }
+                if !background, !HitchMonitor.background { target.showWindow(nil) }
             } else {
                 useNormalWindow()
                 let tab = store.createTab(url: url, select: !background)

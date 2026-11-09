@@ -235,7 +235,7 @@ Cra registers the `cra://` scheme so it can be driven from a shell:
 
     open "cra://action/newTab"              # any action id from KeyBindings.swift
     open "cra://commandbar?query=github"    # open the command bar with text
-    open "cra://open?url=https://example.com&background=1"
+    open "cra://open?url=https://example.com&background=1"   # a tab behind; Cra stays where it is
     open "cra://open?url=https://example.com&little=1"   # in a Little Window
     open "cra://open?url=https://example.com&space=<space id>"   # in that space (its id in sidebar.json)
     open "cra://import?source=arc&archive=1&settings=1"  # headless import
