@@ -22,12 +22,15 @@ enum TestGesture {
     /// A click at a point of the window, through the app's event queue: AppKit routes it as it
     /// routes the pointer's (the window's sendEvent, first-click rules, hit testing), so a test
     /// sees what a real click there does, while the pointer and the front app stay put.
-    static func click(at point: NSPoint, in window: NSWindow) {
-        for (type, pressure) in [(NSEvent.EventType.leftMouseDown, Float(1)), (.leftMouseUp, 0)] {
-            guard let e = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-                                             windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1,
-                                             pressure: pressure) else { return }
-            NSApp.postEvent(e, atStart: false)
+    static func click(at point: NSPoint, in window: NSWindow, clicks: Int = 1) {
+        // A double-click is two presses, the second with clickCount 2, as AppKit counts them.
+        for count in 1...max(clicks, 1) {
+            for (type, pressure) in [(NSEvent.EventType.leftMouseDown, Float(1)), (.leftMouseUp, 0)] {
+                guard let e = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                 windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: count,
+                                                 pressure: pressure) else { return }
+                NSApp.postEvent(e, atStart: false)
+            }
         }
     }
 

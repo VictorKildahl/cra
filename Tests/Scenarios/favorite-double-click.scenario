@@ -1,0 +1,30 @@
+# promise: #264
+# A double-click on a favorite away from its pinned page takes it back there, as the tile menu's
+# Back to Pinned Page does (#264). A single click only opens it. The clicks go through the event
+# queue to the tile, as the pointer's would; the page reads where it is.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=home
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://action/favoriteTab
+wait 1
+cra://debug?cdp=Page.navigate&params={"url":"${PAGE}?n=away"}
+wait 1.5
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'at=' + location.search"}
+expect-log "value":"at=\?n=away"
+
+# One click on the tile leaves the favorite where it is.
+cra://debug?clickAt=40,105
+wait 1
+reject-log favorite double-click
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'single=' + location.search"}
+expect-log "value":"single=\?n=away"
+
+# A double-click takes it home.
+cra://debug?clickAt=40,105&clicks=2
+expect-log favorite double-click: back to pinned page
+wait 1.5
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'double=' + location.search"}
+expect-log "value":"double=\?n=home"
+cra://debug?checkStore=1

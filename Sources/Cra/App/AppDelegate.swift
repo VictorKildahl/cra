@@ -916,7 +916,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     CraLog.note("mouse \(b) at \(Int(g[0])),\(Int(g[1])): \(taken ? "switched space" : "passed on")")
                     return
                 }
-                TestGesture.click(at: point, in: w)
+                // clicks=2: a double-click there (a favorite's Back to Pinned Page, #264).
+                TestGesture.click(at: point, in: w, clicks: dict["clicks"].flatMap(Int.init) ?? 1)
                 return
             }
             if let st = dict["status"] { main.browserManager(statusMessage: st); return }

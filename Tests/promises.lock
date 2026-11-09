@@ -420,3 +420,6 @@
 #261   Packages/CraCore/Tests/CraCoreTests/HiddenFrameReleaseTests.swift::aWindowDrawingForAReleaseIsNeverSeen  b604023e16f8
 #262   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::centreControlsGrowWithArcsSizeClasses  6b90ede0c164
 #262   Tests/Scenarios/pip-never-key.scenario  e2fa4a5e6fe6
+#264   Packages/CraCore/Tests/CraCoreTests/FavoriteClickTests.swift::doubleClickAwayFromItsPageGoesBack  f3ebad820b5a
+#264   Packages/CraCore/Tests/CraCoreTests/FavoriteClickTests.swift::otherwiseAClickOnlyOpensIt  b38c5f0dbc19
+#264   Tests/Scenarios/favorite-double-click.scenario  8dcc4a3bc176
