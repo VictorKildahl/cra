@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Cra Tabs Create Fixture",
+  "version": "1.0",
+  "description": "Made up for scripts/scenario.sh: opens a tab with chrome.tabs.create and follows the id it gets back, as Dashlane's device check does (GitHub #292).",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyeJ5gheOL7xSRY58rqhg4BgnMj1+AmrSnszkKiiEfE/R3Vil1z/XcRVcjb2Zqo3ExfgZDsf0FuT6aM1vZv4RfF6jsV1mHnJIQjPvSl/Q1K2hoK88H/dQhkvkML51LXE8+x20DBPyk5PdgmQ9ul4+u0RSzrvySGYO7vPZLNUw9RnDtnjsd4S27GwLPcinSUK3Lpi/V1i/i9beole6AeUXtseX2dFuzyMSgMsvila4nQ047POgAXU7USH6VM+2pb6xFw5oXsMDVQATCCBNibT8CXPjjBnUxL0m5iHJAGCCU9VGV/FkFesUZu50a11NjCo1nYlvFPgx9QXfRqcrusJYMQIDAQAB",
+  "permissions": ["tabs"],
+  "background": { "service_worker": "worker.js" },
+  "action": { "default_title": "Cra Tabs Create Fixture" }
+}

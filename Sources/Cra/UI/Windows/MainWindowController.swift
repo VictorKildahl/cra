@@ -194,14 +194,53 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
 
         wireActions()
-        shell.resizeHandle.onDrag = { [weak self] dx in
+        // Arc's drag of the sidebar's edge (#287, SidebarResize): the edge stays under the pointer,
+        // a slow drag snaps to 228 pt with a haptic tick, and the sidebar hides under 82 pt and
+        // comes back at 164 if the drag returns before letting go.
+        shell.resizeHandle.onBegin = { [weak self] in
             guard let self else { return }
-            let w = CGFloat(SidebarWidth.clamped(Double(shell.sidebarWidth + dx)))
-            shell.sidebarWidth = w
+            sidebarResize = SidebarResize(startWidth: Double(shell.sidebarWidth))
+            hiddenByResize = false
+        }
+        shell.resizeHandle.onResize = { [weak self] translation, speed in
+            guard let self, var resize = sidebarResize else { return }
+            let wasSnapped = resize.isSnapped
+            let outcome = resize.update(translation: Double(translation), speed: Double(speed))
+            sidebarResize = resize
+            switch outcome {
+            case .hidden where !shell.floatingSidebar:
+                // Hidden this way, it keeps the width the drag started from (Arc: ⌘S brings back
+                // a 200 pt sidebar dragged shut from 200).
+                shell.sidebarWidth = CGFloat(resize.startWidth)
+                if sidebarVisible {
+                    sidebarVisible = false
+                    hiddenByResize = true
+                }
+            case .hidden:
+                shell.sidebarWidth = CGFloat(SidebarWidth.minimum)
+            case .width(let w):
+                shell.sidebarWidth = CGFloat(w)
+                if hiddenByResize {
+                    hiddenByResize = false
+                    sidebarVisible = true
+                }
+            }
             shell.layoutSubtreeIfNeeded()
+            if resize.isSnapped, !wasSnapped {
+                NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+            }
         }
         shell.resizeHandle.onEnd = { [weak self] in
             guard let self else { return }
+            sidebarResize = nil
+            // The first time a drag hides the sidebar, Arc's tip says how to get it back
+            // (hasHiddenSidebarWithGesture: once, never again).
+            if hiddenByResize, !UserDefaults.standard.bool(forKey: Self.hiddenSidebarByDragKey) {
+                UserDefaults.standard.set(true, forKey: Self.hiddenSidebarByDragKey)
+                let keys = KeyBindingRegistry.shared.action("toggleSidebar")?.primary?.display ?? "⌘S"
+                showToast("You can use", keyCap: (keys, "to easily show and hide your Sidebar!"))
+            }
+            hiddenByResize = false
             store.prefs.sidebarWidth = Double(shell.sidebarWidth)
             lastSidebarWidth = shell.sidebarWidth
         }
@@ -2186,6 +2225,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// Set when the Library brought a hidden sidebar out; leaving it hides the sidebar again.
     private var libraryShowedSidebar = false
+    /// The drag of the sidebar's edge in progress (#287), and whether it has hidden the sidebar.
+    private var sidebarResize: SidebarResize?
+    private var hiddenByResize = false
+    static let hiddenSidebarByDragKey = "hasHiddenSidebarWithGesture"
 
     /// Arc's Library button and ⇧⌘L: open the Library on the page last shown, or leave it. In a
     /// docked sidebar it slides in and out like the swipe into it (LibrarySwipe).
@@ -2258,7 +2301,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     private func setFloatingSidebar(_ show: Bool) {
         guard let floatingSidebar else { return }
-        if show { if !sidebarVisible, floatingSidebar.isKey { floatingSidebar.show() } } else { floatingSidebar.hide(animated: true) }
+        if show { if !sidebarVisible { floatingSidebar.edgeHovered() } } else { floatingSidebar.hide(animated: true) }
     }
 
     private func installFloatingSidebar() {
@@ -3578,11 +3621,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var offeredProtectedMedia: Set<String> = []
 
     /// Arc's toast at the top right of the page (ShinyToast): Cra's confirmations.
-    func showToast(_ text: String, action: ShinyToast.Action? = nil) {
+    func showToast(_ text: String, keyCap: (keys: String, after: String)? = nil, action: ShinyToast.Action? = nil) {
         guard let window else { return }
         let page = shell.webContainer.convert(shell.webContainer.bounds, to: nil)
         slowResponseToastTab = nil
-        toast.show(text, action: action, page: page, in: window, theme: focusedSpace.theme)
+        toast.show(text, keyCap: keyCap, action: action, page: page, in: window, theme: focusedSpace.theme)
     }
 
     /// The update banner's news while this window's sidebar (which carries the banner) is hidden:

@@ -74,6 +74,7 @@ static NSHashTable<CraBrowser*>* g_allBrowsers = nil;
 /// Closed tabs whose page stays alive until its downloads end (see -[CraBrowser close]).
 static NSMutableSet<CraBrowser*>* g_parkedBrowsers = nil;
 static void (^g_strayPageHandler)(NSString*, NSString*) = nil;
+static CraBrowser* (^g_extensionTabHandler)(NSString*, NSString*, BOOL, CraBrowser*) = nil;
 static BOOL (^g_appLinkHandler)(CraBrowser*, NSString*, BOOL) = nil;
 // Downloads whose save panel was cancelled (#190): cancelled on their next update, never shown.
 static std::set<uint32_t> g_cancelledDownloads;
@@ -283,6 +284,14 @@ static void HideStrayWindow(NSWindow* window) {
     [window orderOut:nil];
 }
 
+// The Chromium profile folder a browser's pages use: "Default", "Profile <id>", nil off the record.
+static NSString* ProfileFolderName(CefRefPtr<CefBrowser> browser) {
+    CefRefPtr<CefRequestContext> context = browser->GetHost()->GetRequestContext();
+    NSString* cache = context ? NSStringFromCef(context->GetCachePath()) : @"";
+    // The global context's path is the root folder: that is Default.
+    return !cache.length ? nil : [cache.lastPathComponent hasPrefix:@"Profile "] ? cache.lastPathComponent : @"Default";
+}
+
 class StrayBrowserClient : public CefClient, public CefLifeSpanHandler, public CefRequestHandler {
 public:
     CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
@@ -315,10 +324,7 @@ public:
             return true;
         }
         // The profile whose extension asked: its pages belong in a space on that profile (#107).
-        CefRefPtr<CefRequestContext> context = browser->GetHost()->GetRequestContext();
-        NSString* cache = context ? NSStringFromCef(context->GetCachePath()) : @"";
-        // The global context's path is the root folder: that is Default.
-        NSString* profile = !cache.length ? nil : [cache.lastPathComponent hasPrefix:@"Profile "] ? cache.lastPathComponent : @"Default";
+        NSString* profile = ProfileFolderName(browser);
         void (^handler)(NSString*, NSString*) = g_strayPageHandler;
         dispatch_async(dispatch_get_main_queue(), ^{ handler(url, profile); });
         browser->GetHost()->CloseBrowser(true);
@@ -1310,6 +1316,20 @@ public:
                        CefRefPtr<CefDictionaryValue>& extra_info, bool* no_javascript_access) override {
         CEF_REQUIRE_UI_THREAD();
         CraBrowser* o = owner_;
+        // An extension's chrome.tabs.create, offered through the page that is its current window
+        // (extension-tabs-create.patch): the tab goes where the extension's pages go, whatever this
+        // page is (a tab, a Little Window, a side panel), and the extension keeps its id (#292).
+        // The patch marks it in extra_info, which a page can't set (it can pick a frame name).
+        if (extra_info && extra_info->HasKey("cra_extension_tab")) {
+            extra_info = nullptr;
+            if (!g_extensionTabHandler || !g_chromeHosting) return true;
+            CraBrowser* host = g_extensionTabHandler(NSStringFromCef(target_url), ProfileFolderName(browser),
+                                                     target_disposition == CEF_WOD_NEW_BACKGROUND_TAB, o);
+            if (!host) return true;
+            client = [host cefClient];
+            CraPageSettings(settings);
+            return false;
+        }
         if (!o || !o.delegate) return true;
         // Document Picture in Picture (documentPictureInPicture.requestWindow: Google Meet's call
         // window): CEF always makes Chrome's own Picture in Picture window for it. It is not a
@@ -2971,6 +2991,9 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 + (BOOL)anotherInstanceWasNotified { return g_alreadyRunning; }
 + (void)setRelaunchHandler:(void (^)(NSArray<NSString*>*))handler { g_relaunchHandler = [handler copy]; }
 + (void)setStrayPageHandler:(void (^)(NSString*, NSString*))handler { g_strayPageHandler = [handler copy]; }
++ (void)setExtensionTabHandler:(CraBrowser* (^)(NSString*, NSString*, BOOL, CraBrowser*))handler {
+    g_extensionTabHandler = [handler copy];
+}
 + (void)setAppLinkHandler:(BOOL (^)(CraBrowser*, NSString*, BOOL))handler { g_appLinkHandler = [handler copy]; }
 + (void)setDownloadDestinationHandler:(void (^)(NSString*, NSString*, void (^)(NSString*)))handler { g_downloadDestinationHandler = [handler copy]; }
 

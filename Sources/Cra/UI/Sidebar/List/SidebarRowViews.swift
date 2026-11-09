@@ -16,6 +16,7 @@ struct SidebarColors: Equatable {
     var selectedFill = NSColor.clear
     var separator = NSColor.separatorColor
     var pillFill = NSColor.clear
+    var pillHoverFill = NSColor.clear
     var countBadgeFill = NSColor.clear
 
     init() {}
@@ -29,11 +30,18 @@ struct SidebarColors: Equatable {
         selectedFill = NSColor(p.selectedFill)
         separator = NSColor(p.separator)
         pillFill = NSColor(p.pillFill)
+        pillHoverFill = NSColor(p.pillHoverFill)
         countBadgeFill = NSColor(p.countBadgeFill)
     }
 
     /// SidebarIconButton's glyph tone outside the header (no active state).
     var glyph: NSColor { isDark ? NSColor.white.withAlphaComponent(0.55) : NSColor.black.withAlphaComponent(0.26) }
+    /// The space header's title and a tab group's name, dimmer than other secondary text: white 0.45
+    /// on dark themes (1 Nov), black 0.46 on light ones (Arc 1.172.1 at 1x, 9 Nov, GitHub #293).
+    var sectionTitle: NSColor {
+        let t = SidebarTones.sectionTitle(dark: isDark)
+        return (t.white ? NSColor.white : NSColor.black).withAlphaComponent(t.alpha)
+    }
     /// A one-colour favicon or GitHub's mark on the sidebar.
     var monoGlyph: NSColor { isDark ? NSColor.white.withAlphaComponent(0.92) : NSColor.black.withAlphaComponent(0.85) }
 }
@@ -2691,7 +2699,7 @@ final class GroupHeaderRowView: SidebarRowView {
         guard m != model else { return }
         model = m
         titleLabel.stringValue = m.title
-        titleLabel.textColor = colors.isDark ? NSColor.white.withAlphaComponent(0.45) : colors.textSecondary
+        titleLabel.textColor = colors.sectionTitle
         setAccessibilityLabel(m.title)
         needsLayout = true
     }

@@ -379,8 +379,16 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 + (BOOL)anotherInstanceWasNotified;
 /// Called in the running instance when another launch is handed over.
 + (void)setRelaunchHandler:(void (^)(NSArray<NSString *> *urls))handler;
-/// Pages Chromium opens on its own (an extension's chrome.tabs.create or
-/// windows.create, welcome pages after an extension loads). The handler gets
+/// An extension's chrome.tabs.create (scripts/cef-patches/extension-tabs-create.patch): the
+/// handler gets the URL, the Chromium profile folder the extension runs in, whether the tab
+/// opens behind, and the page Chromium offers it through (the extension's current window).
+/// It returns the popup host (a CraBrowser made with a nil url) of the tab it opened, whose
+/// page is then the tab Chromium made and the extension holds (GitHub #292), or nil to leave
+/// the page to Chrome's own window and so to the stray page handler.
++ (void)setExtensionTabHandler:(CraBrowser * _Nullable (^)(NSString *url, NSString * _Nullable profile, BOOL background,
+                                                          CraBrowser * _Nullable opener))handler;
+/// Pages Chromium opens on its own (an extension's chrome.tabs.create when the extension tab
+/// handler declines, windows.create, welcome pages after an extension loads). The handler gets
 /// the URL to open as a Cra tab and the Chromium profile folder it came from
 /// ("Default", "Profile <id>"; nil off the record); Chrome's own window for it is closed.
 /// Popup-type windows (windows.create({type: "popup"})) stay Chrome's windows.

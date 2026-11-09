@@ -78,7 +78,7 @@ struct ModelFixtureTests {
         #expect(loaded.spaces.map(\.icon) == [.symbol("square.on.square.fill")])
     }
 
-    @Test(arguments: ["settings.json", "settings-legacy.json", "settings-empty.json", "settings-bad-routes.json"])
+    @Test(arguments: ["settings.json", "settings-legacy.json", "settings-empty.json", "settings-bad-routes.json", "settings-long-archive.json"])
     func settingsLoadAsRecorded(name: String) throws {
         let (loaded, recorded) = try Self.loadSettings(name)
         #expect(loaded == recorded)

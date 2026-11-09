@@ -389,8 +389,9 @@ public struct ArchivedItem: Codable, Identifiable, Equatable {
     }
 }
 
+/// Arc offers 12 hours to 30 days; 90 and 180 days are Cra's (#278).
 public enum AutoArchiveThreshold: String, Codable, CaseIterable, Identifiable {
-    case twelveHours, twentyFourHours, sevenDays, thirtyDays
+    case twelveHours, twentyFourHours, sevenDays, thirtyDays, ninetyDays, oneHundredEightyDays
     public var id: String { rawValue }
     public var seconds: TimeInterval {
         switch self {
@@ -398,6 +399,8 @@ public enum AutoArchiveThreshold: String, Codable, CaseIterable, Identifiable {
         case .twentyFourHours: return 24 * 3600
         case .sevenDays: return 7 * 86400
         case .thirtyDays: return 30 * 86400
+        case .ninetyDays: return 90 * 86400
+        case .oneHundredEightyDays: return 180 * 86400
         }
     }
     public var label: String {
@@ -406,7 +409,31 @@ public enum AutoArchiveThreshold: String, Codable, CaseIterable, Identifiable {
         case .twentyFourHours: return "24 hours"
         case .sevenDays: return "7 days"
         case .thirtyDays: return "30 days"
+        case .ninetyDays: return "90 days"
+        case .oneHundredEightyDays: return "180 days"
         }
+    }
+
+    /// Cra 0.1.36 and older know Arc's four and set the whole settings.json aside as corrupt on
+    /// any other value, so a longer one is saved as 30 days with `AppSettings.autoArchiveDays`
+    /// beside it, which they ignore. A value from a newer Cra loads as the longest one this Cra
+    /// knows: a threshold only ever archives later than asked, never sooner.
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = Self(rawValue: raw) ?? Self.allCases.last!
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(longerThanArc ? Self.thirtyDays.rawValue : rawValue)
+    }
+
+    var longerThanArc: Bool { seconds > Self.thirtyDays.seconds }
+    var days: Int { Int(seconds / 86400) }
+
+    /// The shortest threshold that archives no sooner than `days`.
+    init(days: Int) {
+        self = Self.allCases.first { $0.seconds >= TimeInterval(days) * 86400 } ?? Self.allCases.last!
     }
 }
 
@@ -444,7 +471,11 @@ public enum SearchEngine: String, Codable, CaseIterable, Identifiable {
 }
 
 public struct AppSettings: Codable, Equatable {
-    public var autoArchive: AutoArchiveThreshold = .twelveHours
+    public var autoArchive: AutoArchiveThreshold = .twelveHours {
+        didSet { autoArchiveDays = autoArchive.longerThanArc ? autoArchive.days : nil }
+    }
+    /// 90 or 180 when `autoArchive` is longer than Arc's 30 days, which settings.json then holds.
+    public private(set) var autoArchiveDays: Int?
     public var searchEngine: SearchEngine = .google
     public var newTabsAtTop: Bool = true
     /// Tabs ▸ "Show the New Tab button above tabs": the + New Tab row leads Today
@@ -741,8 +772,14 @@ extension AppSettings {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        autoArchive = try c.decodeIfPresent(AutoArchiveThreshold.self, forKey: .autoArchive) ?? .twelveHours
-        searchEngine = try c.decodeIfPresent(SearchEngine.self, forKey: .searchEngine) ?? .google
+        if let days = try? c.decodeIfPresent(Int.self, forKey: .autoArchiveDays) {
+            autoArchive = AutoArchiveThreshold(days: days)
+        } else {
+            autoArchive = (try? c.decodeIfPresent(AutoArchiveThreshold.self, forKey: .autoArchive)) ?? .twelveHours
+        }
+        // An initializer doesn't run didSet.
+        autoArchiveDays = autoArchive.longerThanArc ? autoArchive.days : nil
+        searchEngine = (try? c.decodeIfPresent(SearchEngine.self, forKey: .searchEngine)) ?? .google
         newTabsAtTop = try c.decodeIfPresent(Bool.self, forKey: .newTabsAtTop) ?? true
         if try c.decodeIfPresent(Bool.self, forKey: .newTabButtonDefaultMigrated) == true {
             newTabButtonAtTop = try c.decodeIfPresent(Bool.self, forKey: .newTabButtonAtTop) ?? true
