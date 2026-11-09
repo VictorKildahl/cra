@@ -435,3 +435,9 @@
 #273   Packages/CraCore/Tests/CraCoreTests/BackToReferrerTests.swift::theTabsOwnHistoryComesFirst  0bc72847a0fa
 #273   Tests/Scenarios/back-to-referrer.scenario  0f6d794025d8
 #273   Tests/StoreTests.swift::backToReferrer  2720869dbbd9
+#275   Packages/CraCore/Tests/CraCoreTests/TabSleepPolicyTests.swift::sweepThatClosesNothingSaysWhy  046eed78906d
+#275   Packages/CraCore/Tests/CraCoreTests/TabSleepPolicyTests.swift::wakeRunsOnePass  4414a5df9362
+#275   Tests/BrowserManagerLifecycleTests.swift::nowPlayingAfterSleepCase  8f316a63bebf
+#275   Tests/BrowserManagerLifecycleTests.swift::suspendedMediaSleepsCase  ed7cdf678f8b
+#275   Tests/BrowserManagerLifecycleTests.swift::sweepThatClosesNothingCase  1a8cbbe87871
+#275   Tests/Scenarios/silent-media-sleeps.scenario  2daa59945de2

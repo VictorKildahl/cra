@@ -427,7 +427,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         let cutoff = now.addingTimeInterval(-policy.hiddenFor)
         var asked = 0, waiting = 0
         var held: [TabSleepPolicy.Hold: Int] = [:]
-        let pass = SleepPass(reason: policy.reason)
+        let pass = SleepPass(reason: policy.reason, done: sleepPassLogged)
         for id in policy.candidates(sleepPages, visible: visibleTabIDs, protectedRecent: protectedRecentTabs, now: now) {
             guard let rt = runtimes[id] else { continue }
             if let hold = sleepHold(rt, before: cutoff) {
@@ -451,19 +451,19 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                 DispatchQueue.main.async {
                     guard let self, let rt, self.stillSleepable(id, rt, url, navigationRevision, cutoff) else { return }
                     let refusal = Self.sleepRefusal(result)
-                    guard refusal.isEmpty else { return self.keepAwake(rt, url, refusal) }
+                    guard refusal.isEmpty else { return self.keepAwake(rt, url, refusal, pass) }
                     rt.browser.sendDevToolsMethod("Runtime.evaluate", params: Self.beforeUnloadProbe) { [weak self, weak rt] result, _ in
                         DispatchQueue.main.async {
                             guard let self, let rt, self.stillSleepable(id, rt, url, navigationRevision, cutoff) else { return }
                             let refusal = Self.sleepRefusal(result)
-                            guard refusal.isEmpty else { return self.keepAwake(rt, url, refusal) }
+                            guard refusal.isEmpty else { return self.keepAwake(rt, url, refusal, pass) }
                             // Chromium knows about calls, devices and capture that the page's own
                             // world can't show; an older CEF without Cra's methods doesn't say.
                             rt.browser.sendDevToolsMethod("Cra.getFreezingState", params: "{}") { [weak self, weak rt] result, _ in
                                 DispatchQueue.main.async {
                                     guard let self, let rt, self.stillSleepable(id, rt, url, navigationRevision, cutoff) else { return }
                                     let refusal = TabSleepPolicy.refusal(freezingReasons: Self.freezingReasons(result))
-                                    guard refusal.isEmpty else { return self.keepAwake(rt, url, refusal) }
+                                    guard refusal.isEmpty else { return self.keepAwake(rt, url, refusal, pass) }
                                     self.discard(id, rt, url, policy, pass)
                                 }
                             }
@@ -484,9 +484,16 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// its callbacks let it go (#237: a sweep of twelve pages wrote twelve identical lines).
     private final class SleepPass {
         var log: TabSleepPolicy.PassLog
-        init(reason: TabSleepPolicy.Reason) { log = TabSleepPolicy.PassLog(reason: reason) }
-        deinit { for line in log.lines { CraLog.note(line) } }
+        let done: (TabSleepPolicy.PassLog) -> Void
+        init(reason: TabSleepPolicy.Reason, done: @escaping (TabSleepPolicy.PassLog) -> Void) {
+            log = TabSleepPolicy.PassLog(reason: reason)
+            self.done = done
+        }
+        deinit { done(log) }
     }
+
+    /// Where a finished pass's lines go: cra.log (a test reads them here).
+    var sleepPassLogged: (TabSleepPolicy.PassLog) -> Void = { for line in $0.lines { CraLog.note(line) } }
 
     /// Chrome's in-place discard (Cra.discard, which needs WebContentsDiscard). A CEF without it
     /// answers an error: the page closes instead, and its tab loads the URL again when shown.
@@ -498,7 +505,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                 let discarded = reply?["discarded"] as? Bool == true
                 // Chromium keeps a page whose navigation was about to commit; ask again later.
                 // A split's copy can't wait: the hidden page would play on. It closes instead.
-                if error == nil, !discarded, policy.reason != .splitCopy { return self.keepAwake(rt, url, "navigating") }
+                if error == nil, !discarded, policy.reason != .splitCopy { return self.keepAwake(rt, url, "navigating", pass) }
                 self.sleptTabs.insert(id)
                 Perf.count(.tabSlept, policy.reason.rawValue)
                 if !rt.browser.isIncognito {
@@ -508,6 +515,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                 guard discarded else { return self.unload(id) }
                 rt.discarded = true
                 rt.sleepRefusal = nil
+                // Its page is gone, as a closed one's is: the card would play nothing (#275).
+                self.nowPlaying?.remove(id)
                 if rt.freezeVoted { self.setFreezingVote(rt, false) }
                 self.delegate?.browserManagerDidUpdate(id)
             }
@@ -540,8 +549,9 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     /// Asked again after the back-off; the log names the site once per reason (never an incognito
     /// one), and the recorder counts the page once per reason and its later refusals as retries (#214).
-    private func keepAwake(_ rt: TabRuntime, _ url: String, _ refusal: String) {
+    private func keepAwake(_ rt: TabRuntime, _ url: String, _ refusal: String, _ pass: SleepPass) {
         rt.sleepProbeAfter = clock.now.addingTimeInterval(Self.refusalBackoff)
+        pass.log.refused(refusal)
         guard rt.sleepRefusal != refusal else { return Perf.count(.sleepRetry, refusal) }
         Perf.count(.sleepRefusal, refusal)
         if !rt.browser.isIncognito { CraLog.note("tab sleep keeps \(CraLog.host(url)) awake: \(refusal)") }
@@ -614,14 +624,15 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                                    before: cutoff)
     }
 
-    /// In Cra's isolated world: "" when the page has nothing to lose, else why it must stay:
-    /// media playing, or text the user typed that is still there on the same URL (PageScript
-    /// records trusted input; values a framework set, or text submitted by a navigation, don't
-    /// count).
+    /// In Cra's isolated world: "" when the page has nothing to lose, else why it must stay: text
+    /// the user typed that is still there on the same URL (PageScript records trusted input;
+    /// values a framework set, or text submitted by a navigation, don't count). Whether it plays
+    /// is Chromium's to say, as in Chrome and Arc (`audible`, `audibleAt`): a video Chromium
+    /// suspends in a hidden tab still reads `paused == false` here, and kept every YouTube tab
+    /// awake all night (#275).
     private static let sleepProbe: String = {
         let js = """
         (() => {
-          if ([...document.querySelectorAll('video,audio')].some(m => !m.paused && !m.ended && !m.muted && m.volume > 0)) return 'playing';
           const edited = e => e.isContentEditable ? e.textContent.trim() !== ''
             : e.type === 'checkbox' || e.type === 'radio' ? e.checked !== e.defaultChecked
             : e.tagName === 'SELECT' ? [...e.options].some(o => o.selected !== o.defaultSelected)
@@ -774,7 +785,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     private func hibernate(_ tabID: UUID) {
         guard let rt = runtimes[tabID], !rt.browser.isInPictureInPicture else { return }
         log(tabID, "sleeps: its split copy shows the page")
-        discard(tabID, rt, rt.browser.currentURL, .splitCopy, SleepPass(reason: .splitCopy))
+        discard(tabID, rt, rt.browser.currentURL, .splitCopy, SleepPass(reason: .splitCopy, done: sleepPassLogged))
     }
 
     /// The window is out of sight: covered by another app, on another desktop or in the Dock.
@@ -1028,6 +1039,18 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                 if answer == nil || answer == "none" { browser?.requestPictureInPicture(automatic: automatic) }
                 else if let answer, answer != "ok" { NSLog("Cra: Picture in Picture request failed: %@", answer) }
             }
+        }
+    }
+
+    /// The Mac woke (#275): Chromium's audio service can end in the night without telling a tab
+    /// it went quiet, so every card reads its tab's sound again, and a playing one its buttons.
+    func systemDidWake() {
+        guard let np = nowPlaying else { return }
+        for entry in np.entries {
+            guard let rt = runtimes[entry.id], !rt.discarded else { np.remove(entry.id); continue }
+            let audible = rt.browser.isAudible
+            np.update(entry.id) { $0.playing = audible }
+            if audible { refreshMediaControls(entry.id) }
         }
     }
 

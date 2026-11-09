@@ -116,6 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         installKeyFallbackMonitor()
         installCommandFileWatcher()
         composition.startPeriodicWork { [weak self] in self?.sleepIdleTabs() }
+        observeSystemWake()
         logSidebarProblems()
         LiveFolderManager.shared.start(store: store)
         // A restart into an update while the user was away leaves the front app alone.
@@ -234,16 +235,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// The last memory-pressure sweep (TabSleepPolicy.sweepsForPressure).
     private var lastPressureSweep: Date?
+    /// The last pass, timer or wake (TabSleepPolicy.passDue).
+    private var lastSleepPass: Date?
+    /// The level the last pass read, so cra.log says when it changes (#275: a report couldn't
+    /// tell a late timer from a level that read normal).
+    private var lastPressure: PerfSystemSample.Pressure?
+
+    /// Waking the Mac runs a pass at once (#275): the timer doesn't fire in system sleep, and
+    /// one that is late, or held back by App Nap, left a full Mac alone for 24 minutes. The
+    /// now-playing cards read their tabs' sound again.
+    private func observeSystemWake() {
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.systemDidWake() }
+        }
+    }
+
+    private func systemDidWake() {
+        CraLog.note("tab sleep: the Mac woke")
+        for w in mainWindows { w.browsers.systemDidWake() }
+        sleepIdleTabs()
+    }
 
     /// Settings ▸ Tabs ▸ Tab Cleanup, read every minute so a change counts from the next pass.
     private func sleepIdleTabs() {
+        let now = composition.clock.now
+        guard TabSleepPolicy.passDue(lastPass: lastSleepPass, now: now) else { return }
+        lastSleepPass = now
         let settings = store.settings
         for w in mainWindows {
             w.browsers.freezeIdleTabs(hiddenLongerThan: freezeAfter)
             w.releaseHiddenFrames(now: composition.clock.now)
             if settings.tabSleepTimerEnabled { w.browsers.sleepIdleTabs(.timer(settings.tabSleepAfter)) }
         }
-        sweepForMemoryPressure(PerfSystemSample.pressure(level: PerfSystemSampler.pressureLevel()))
+        let pressure = PerfSystemSample.pressure(level: PerfSystemSampler.pressureLevel())
+        if let lastPressure, lastPressure != pressure { CraLog.note("memory pressure \(lastPressure.rawValue) → \(pressure.rawValue)") }
+        lastPressure = pressure
+        sweepForMemoryPressure(pressure)
     }
 
     /// "Force tabs out of memory when the Mac is short of memory" (GitHub #153): while macOS
@@ -1144,6 +1171,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 for w in mainWindows { w.browsers.sleepIdleTabs(TabSleepPolicy(hiddenFor: s, keepsRecentTabs: false)) }
                 return
             }
+            // What waking the Mac does (#275), without sleeping it: the cards re-read, one pass.
+            if dict["wake"] != nil { systemDidWake(); return }
             // One memory-pressure sweep as if macOS reported this level (warning, critical), without
             // filling memory or waiting out the last sweep. The setting still decides.
             if let level = dict["memoryPressure"].flatMap(PerfSystemSample.Pressure.init(rawValue:)) {

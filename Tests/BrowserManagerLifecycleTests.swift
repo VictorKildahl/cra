@@ -1,5 +1,6 @@
 import AppKit
 import CraCEF
+import JavaScriptCore
 
 @main
 enum BrowserManagerLifecycleTests {
@@ -113,10 +114,13 @@ enum BrowserManagerLifecycleTests {
         shortTimerCase()
         recentlyAudibleCase()
         await audiblePageStaysAwakeCase()
+        await suspendedMediaSleepsCase()
+        await sweepThatClosesNothingCase()
         devToolsCase()
         extensionTabActivationCase()
         await beforeUnloadCase()
         nowPlayingCase()
+        await nowPlayingAfterSleepCase()
         await nowPlayingResumeWithinHoldCase()
         await nowPlayingPictureInPictureCase()
         nowPlayingSkipsPictureInPictureCase()
@@ -766,6 +770,65 @@ enum BrowserManagerLifecycleTests {
         await sleepCase("a page that starts playing while it is asked stays awake") { _, rt in rt.browser.isAudible = true }
     }
 
+    // promise: #275
+    /// Chromium suspends a video in a hidden tab without pausing it: `paused` stays false, nothing
+    /// is heard, and Chromium says the tab is silent. Its page sleeps like any quiet one (#275: 35
+    /// YouTube tabs refused as "playing" all night while none made a sound). The probe that runs
+    /// here is the real one, on a page with such a video.
+    @MainActor
+    private static func suspendedMediaSleepsCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.protectedRecentTabs = 0
+        let id = store.createTab(url: "https://example.test/watch").id
+        let runtime = manager.ensureRuntime(for: id)!
+        runtime.hiddenAt = Date.distantPast
+        runtime.browser.isAudible = false
+        manager.sleepIdleTabs(.memoryPressure(.warning))
+        let answer = runProbe(runtime.browser.lastIsolatedParams, media: "[{paused: false, ended: false, muted: false, volume: 1}]")
+        runtime.browser.reply(to: isolatedProbe, with: #"{"result":{"type":"string","value":"\#(answer)"}}"#)
+        await drainMainQueue()
+        if runtime.browser.replies.contains(where: { $0.method == "Runtime.evaluate" }) {
+            runtime.browser.reply(to: "Runtime.evaluate", with: idleReply)
+            await drainMainQueue()
+        }
+        await finishSleep(runtime.browser)
+        expect(asleep(manager, id) && runtime.sleepRefusal == nil, "a page whose suspended video makes no sound sleeps under memory pressure")
+        manager.closeAll()
+    }
+
+    /// The isolated probe's expression, run in JavaScriptCore on a page with these media elements
+    /// and nothing typed.
+    private static func runProbe(_ params: String, media: String) -> String {
+        let json = try! JSONSerialization.jsonObject(with: Data(params.utf8)) as! [String: Any]
+        let context = JSContext()!
+        context.evaluateScript("var window = {}; var location = {href: 'https://example.test/watch'}; "
+            + "var document = {querySelectorAll: () => \(media)};")
+        return context.evaluateScript(json["expression"] as? String)?.toString() ?? "no reply"
+    }
+
+    // promise: #275
+    /// A pressure sweep whose pages all refuse says so once they have answered (#275: after a
+    /// wake, twelve sweeps asked 3 pages each and the log had only their headers).
+    @MainActor
+    private static func sweepThatClosesNothingCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        var logged: [String] = []
+        manager.sleepPassLogged = { logged += $0.lines }
+        let runtimes = (0..<3).map { n in manager.ensureRuntime(for: store.createTab(url: "https://example.test/editor\(n)").id)! }
+        for rt in runtimes { rt.hiddenAt = Date.distantPast }
+        manager.sleepIdleTabs(.memoryPressure(.warning))
+        for rt in runtimes {
+            rt.browser.reply(to: isolatedProbe, with: #"{"result":{"type":"string","value":"typed"}}"#)
+            await drainMainQueue()
+        }
+        await drainMainQueue()
+        expect(logged == ["tab sleep for memory pressure closes nothing: 3 pages refused (typed 3)"],
+               "a sweep whose 3 pages refused says why it closed nothing")
+        manager.closeAll()
+    }
+
     /// #38: an extension's chrome.tabs.update({active: true}) (SwitchyOmega's Options on its open
     /// settings tab) selects that Cra tab, and only while its page is the tab's live one.
     // promise: #38
@@ -870,6 +933,42 @@ enum BrowserManagerLifecycleTests {
         expect(np.entries.map(\.id) == [b], "a playing page that navigates (a playlist) keeps its card")
         manager.unload(b)
         expect(np.entries.isEmpty, "closing the page removes its card")
+        manager.closeAll()
+    }
+
+    // promise: #275
+    /// A card follows its page through a sleep (#275): a discarded page leaves the player, as a
+    /// closed one does, and on waking the Mac a card reads the tab's sound again, so one Chromium
+    /// stopped hearing in the night doesn't stay on "playing".
+    @MainActor
+    private static func nowPlayingAfterSleepCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.protectedRecentTabs = 0
+        let np = NowPlaying()
+        manager.nowPlaying = np
+        let a = store.createTab(url: "https://example.test/a").id, b = store.createTab(url: "https://example.test/b").id
+        let ra = manager.ensureRuntime(for: a)!, rb = manager.ensureRuntime(for: b)!
+        for rt in [ra, rb] {
+            rt.browser.isAudible = true
+            manager.browser(rt.browser, didChangeAudible: true)
+        }
+        ra.browser.isAudible = false
+        manager.browser(ra.browser, didChangeAudible: false)
+        ra.audibleAt = Date.distantPast
+        ra.hiddenAt = Date.distantPast
+        ra.browser.replies.removeAll()  // the card's media-controls questions
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
+        ra.browser.reply(to: isolatedProbe, with: idleReply)
+        await drainMainQueue()
+        ra.browser.reply(to: "Runtime.evaluate", with: idleReply)
+        await drainMainQueue()
+        await finishSleep(ra.browser)
+        expect(ra.discarded && np.entries.map(\.id) == [b], "a discarded page leaves the player")
+        rb.browser.isAudible = false
+        manager.systemDidWake()
+        expect(np.entries.map(\.id) == [b] && np.entries[0].playing == false,
+               "after a wake, a card whose tab no longer sounds reads paused")
         manager.closeAll()
     }
 
