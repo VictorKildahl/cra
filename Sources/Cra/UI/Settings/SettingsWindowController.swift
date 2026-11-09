@@ -98,7 +98,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
     func show(_ pane: SettingsPane) { nav.show(pane) }
     func didShow() { nav.didShow() }
 
-    init(store: SidebarStore, bindings: KeyBindingRegistry, actions: SettingsActions) {
+    init(store: SidebarStore, bindings: KeyBindingRegistry, sync: SettingsSyncService, actions: SettingsActions) {
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: SettingsMetrics.windowSize),
                               styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
         super.init(window: window)
@@ -118,7 +118,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         sidebar.maximumThickness = SettingsMetrics.sidebarWidth - 8
         sidebar.canCollapse = false
         let content = NSHostingController(rootView: SettingsContent(nav: nav, actions: actions)
-            .environment(store).environment(bindings))
+            .environment(store).environment(bindings).environment(sync))
         let contentItem = NSSplitViewItem(viewController: content)
         split.addSplitViewItem(sidebar)
         split.addSplitViewItem(contentItem)

@@ -62,6 +62,8 @@ enum StoreTests {
         dropOnPinnedTabSplits()
         reopenClosedTabs()
         windowsShareTheSidebar()
+        settingsSync()
+        syncLeavesBlankWindowsOnTheirMac()
         blankWindows()
         blankWindowWithoutItsWindow()
         tornOffTabMovesToABlankWindow()
@@ -1713,6 +1715,192 @@ enum StoreTests {
         store.removeWindow(second)
         expect(store.item(tab.id) != nil && store.item(made.id) != nil, "closing a window keeps the tabs")
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    /// Two Macs on one sync folder: the second takes the first's sidebar, a change on either reaches
+    /// the other on its next look, a Mac never applies its own write, a half-synced bundle waits.
+    @MainActor
+    private static func settingsSync() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("cra-sync-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let clockA = ManualScheduler(), clockB = ManualScheduler(now: clockA.now)
+        let a = AppComposition(clock: clockA).store
+        _ = a.createSpace(title: "Studio Space", emoji: "🎛️")
+        a.settings.searchEngine = .kagi
+        a.settings.setDownloadLocation(DownloadLocation(folder: "/Volumes/Studio"), profileID: nil)
+        let syncA = SettingsSyncService(store: a, clock: clockA, device: "Studio", deviceID: "studio")
+        expect(syncA.enable(folder: folder) == .synced, "the first Mac writes its bundle at once")
+        let bundle = folder.appendingPathComponent(SettingsSync.folderName)
+        expect(FileManager.default.fileExists(atPath: bundle.appendingPathComponent(SettingsSync.manifestName).path)
+               && FileManager.default.fileExists(atPath: bundle.appendingPathComponent(SettingsSync.sidebarName).path),
+               "the bundle sits in a Cra folder inside the chosen one")
+        expect(syncA.isEnabled && syncA.lastSync == clockA.now, "sync is on and dated by the app's clock")
+        let relaunched = SettingsSyncService(store: a, clock: clockA, device: "Studio", deviceID: "studio")
+        expect(relaunched.folder?.standardizedFileURL == bundle.standardizedFileURL,
+               "after a relaunch the bundle still goes to the Cra folder, never over the chosen folder's own files")
+        try? FileManager.default.removeItem(at: bundle)
+        syncA.poll()
+        expect(FileManager.default.fileExists(atPath: bundle.appendingPathComponent(SettingsSync.manifestName).path),
+               "a Cra folder deleted from the provider is written again on the next look")
+
+        let b = SidebarStore(clock: clockB)
+        b.settings.setDownloadLocation(DownloadLocation(askWhereToSave: true), profileID: nil)
+        let syncB = SettingsSyncService(store: b, clock: clockB, device: "MacBook", deviceID: "macbook")
+        var reloads = 0
+        syncB.keybindingsChanged = { reloads += 1 }
+        guard case .bundleFound(let found) = syncB.enable(folder: folder) else { return expect(false, "the second Mac is asked about the bundle it finds") }
+        expect(found.device == "Studio" && found.spaces == a.orderedSpaces.count, "the question names the other Mac and its spaces")
+        expect(!syncB.isEnabled && !b.orderedSpaces.map(\.title).contains("Studio Space"), "nothing is applied before the answer")
+        syncB.useRemote()
+        expect(b.orderedSpaces.map(\.title) == a.orderedSpaces.map(\.title), "Use That Sidebar: the second Mac shows the first's spaces")
+        expect(b.settings.searchEngine == .kagi, "and its settings")
+        expect(b.settings.downloadLocation(profileID: nil).askWhereToSave, "but keeps its own download folder")
+        expect(reloads == 1 && syncB.otherDevices == ["Studio"], "shortcuts are read again and the other Mac is listed")
+        expect(b.integrityProblems().isEmpty, "the applied sidebar is sound")
+
+        let own = SettingsSyncService(store: b, clock: clockB).deviceID
+        expect(own.count == 32 && own == SettingsSyncService(store: a, clock: clockA).deviceID
+               && own != SettingsSyncService.deviceID(hardwareUUID: "6B29FC40-CA47-1067-B31D-00DD010662DA"),
+               "a Mac is known in the folder by a hash of its hardware, the same each launch")
+        // Migration Assistant gives the new Mac the old one's name: the two still sync.
+        let twin = SidebarStore(clock: ManualScheduler(now: clockA.now))
+        let syncTwin = SettingsSyncService(store: twin, clock: clockA, device: "Studio", deviceID: "studio-new")
+        guard case .bundleFound = syncTwin.enable(folder: folder) else { return expect(false, "a Mac with the same name as the writer is asked about its bundle") }
+        syncTwin.useRemote()
+        expect(twin.orderedSpaces.map(\.title) == a.orderedSpaces.map(\.title), "and takes its sidebar")
+        syncTwin.disable()
+
+        // A change on the first Mac reaches the second on its next look.
+        clockA.advance(by: 10)
+        _ = a.createSpace(title: "Studio Later", emoji: "🕐", focus: false)
+        syncA.poll()
+        syncB.poll()
+        expect(b.orderedSpaces.map(\.title).contains("Studio Later"), "a space made on the first Mac shows on the second")
+        let manifestURL = bundle.appendingPathComponent(SettingsSync.manifestName)
+        let before = try? Data(contentsOf: manifestURL)
+        syncB.poll()
+        expect((try? Data(contentsOf: manifestURL)) == before, "a look that finds nothing new writes nothing")
+
+        // And back: the second Mac's setting reaches the first, which never applies its own write.
+        clockB.advance(by: 20)
+        b.settings.httpsOnly = true
+        syncB.poll()
+        syncA.poll()
+        expect(a.settings.httpsOnly, "a setting changed on the second Mac reaches the first")
+        expect(a.settings.downloadLocation(profileID: nil).folder == "/Volumes/Studio", "the first keeps its own download folder")
+        expect(a.orderedSpaces.map(\.title).contains("Studio Later"), "its spaces are the same, so nothing was lost")
+        expect(syncA.otherDevices == ["MacBook"], "the first Mac now lists the second")
+        let spacesA = a.orderedSpaces.map(\.title)
+        syncA.poll()
+        expect(a.orderedSpaces.map(\.title) == spacesA && (try? Data(contentsOf: manifestURL)) != before, "the first Mac leaves its own bundle alone")
+
+        // A manifest that names files not yet downloaded waits.
+        clockA.advance(by: 30)
+        let stale = SyncManifest(device: "Mini", deviceID: "mini", writtenAt: clockA.now, files: [SettingsSync.sidebarName: "not-there"])
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+        try? encoder.encode(stale).write(to: manifestURL)
+        syncB.poll()
+        expect(!syncB.otherDevices.contains("Mini"), "a bundle whose files have not all arrived is not applied")
+
+        syncB.disable()
+        expect(syncB.folder == nil && !syncB.isEnabled && b.settings.httpsOnly, "Stop Syncing keeps what is on the Mac")
+
+        // replace(document:) repairs like a launch: a space on a profile the other Mac deleted goes to Default.
+        var doc = a.document
+        doc.profiles = nil
+        let gone = UUID()
+        doc.spaces[0].profileID = gone
+        b.replace(document: doc)
+        expect(b.orderedSpaces[0].profileID == nil && b.integrityProblems().isEmpty, "a space on a missing profile falls back to Default")
+    
+        iCloudSync(first: a, firstClock: clockA)
+    }
+
+    /// iCloud is the same bundle in the app's container, with two differences a test folder can
+    /// stand in for (CRA_SYNC_ICLOUD_DIR): the bundle goes to `Documents/Cra`, and a file iCloud
+    /// has not downloaded is a placeholder, which Cra waits for instead of writing over it.
+    @MainActor
+    private static func iCloudSync(first a: SidebarStore, firstClock clockA: ManualScheduler) {
+        let container = FileManager.default.temporaryDirectory.appendingPathComponent("cra-icloud-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: container, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: container) }
+        setenv("CRA_SYNC_ICLOUD_DIR", container.path, 1)
+        defer { unsetenv("CRA_SYNC_ICLOUD_DIR") }
+
+        let syncA = SettingsSyncService(store: a, clock: clockA, device: "Studio", deviceID: "studio")
+        expect(syncA.iCloudAvailable, "with a container the iCloud switch is offered")
+        expect(syncA.enableICloud() == .synced && syncA.location == .iCloud, "the first Mac turns iCloud on and writes its bundle")
+        let bundle = container.appendingPathComponent("Documents/Cra", isDirectory: true)
+        expect(FileManager.default.fileExists(atPath: bundle.appendingPathComponent(SettingsSync.manifestName).path),
+               "the bundle sits in Documents/Cra of the container, where iCloud Drive shows it")
+
+        // iCloud delivered the manifest but not yet the sidebar: a placeholder stands in for it.
+        let sidebar = bundle.appendingPathComponent(SettingsSync.sidebarName)
+        let placeholder = bundle.appendingPathComponent(SettingsSync.placeholderName(for: SettingsSync.sidebarName))
+        try? FileManager.default.moveItem(at: sidebar, to: placeholder)
+        let clockB = ManualScheduler(now: clockA.now)
+        let b = SidebarStore(clock: clockB)
+        let syncB = SettingsSyncService(store: b, clock: clockB, device: "MacBook", deviceID: "macbook")
+        expect(syncB.enableICloud() == .downloading && syncB.awaitingDownload && !syncB.isEnabled,
+               "the second Mac waits for the download instead of writing its own sidebar over it")
+        expect(FileManager.default.fileExists(atPath: placeholder.path), "nothing in the bundle was touched while waiting")
+        syncB.poll()
+        expect(syncB.awaitingDownload && syncB.pendingChoice == nil, "a look while the file is still a placeholder keeps waiting")
+        // The download finished.
+        try? FileManager.default.moveItem(at: placeholder, to: sidebar)
+        syncB.poll()
+        expect(!syncB.awaitingDownload && syncB.pendingChoice?.device == "Studio", "once the bundle is whole the user is asked which sidebar to keep")
+        syncB.useRemote()
+        expect(b.orderedSpaces.map(\.title) == a.orderedSpaces.map(\.title) && syncB.isEnabled, "Use That Sidebar: the second Mac takes the first's spaces")
+
+        // Since macOS 14 a file iCloud has not downloaded keeps its name (a dataless file), and
+        // reading it waits for the download on the main thread: Cra asks for it and looks again.
+        let clockC = ManualScheduler(now: clockA.now)
+        let syncC = SettingsSyncService(store: SidebarStore(clock: clockC), clock: clockC, device: "Mini", deviceID: "mini")
+        var downloaded = false
+        syncC.downloadStatus = { url in url.lastPathComponent == SettingsSync.sidebarName && !downloaded ? .notDownloaded : nil }
+        expect(syncC.enableICloud() == .downloading && syncC.awaitingDownload, "a file iCloud has not downloaded yet is waited for, not read")
+        downloaded = true
+        syncC.poll()
+        expect(syncC.pendingChoice?.device == "Studio", "once it is current the question comes")
+        syncC.disable()
+
+        syncB.disable()
+        let fresh = SettingsSyncService(store: b, clock: clockB, device: "MacBook", deviceID: "macbook")
+        expect(fresh.location == nil, "Stop Syncing is remembered across a relaunch")
+        syncA.disable()
+    }
+
+    /// A Blank Window is one Mac's window: its sidebar never goes to the other Mac, and a bundle
+    /// from the other Mac leaves this one's Blank Windows and their tabs alone.
+    @MainActor
+    private static func syncLeavesBlankWindowsOnTheirMac() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("cra-sync-blank-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let clock = ManualScheduler()
+        let a = SidebarStore(clock: clock)
+        let blankA = a.addBlankWindow(frame: nil).id
+        _ = a.createTab(url: "https://example.com/studio-blank", window: blankA)
+        let syncA = SettingsSyncService(store: a, clock: clock, device: "Studio", deviceID: "studio")
+        expect(syncA.enable(folder: folder) == .synced, "the first Mac writes its bundle")
+
+        let b = SidebarStore(clock: clock)
+        let blankB = b.addBlankWindow(frame: nil).id
+        let ownB = b.focusedSpaceID(window: blankB)
+        let tabB = b.createTab(url: "https://example.com/macbook-blank", window: blankB)
+        let syncB = SettingsSyncService(store: b, clock: clock, device: "MacBook", deviceID: "macbook")
+        guard case .bundleFound(let found) = syncB.enable(folder: folder) else { return expect(false, "the second Mac finds the bundle") }
+        expect(found.spaces == a.orderedSpaces.count && found.tabs == a.document.items.filter(\.isTab).count - 1,
+               "the question counts only the first Mac's spaces and their tabs")
+        syncB.useRemote()
+        expect(b.orderedSpaces.map(\.id) == a.orderedSpaces.map(\.id), "the other Mac's Blank Window is no space here")
+        expect(!b.document.items.contains { $0.tab?.url == "https://example.com/studio-blank" }, "nor are its tabs")
+        expect(b.isBlank(window: blankB) && b.space(ownB) != nil && b.spaceID(ofItem: tabB.id) == ownB,
+               "this Mac's Blank Window keeps its sidebar and its tab")
+        expect(b.integrityProblems().isEmpty, "the sidebar stays sound")
+        syncA.disable(); syncB.disable()
     }
 
     // promise: #220

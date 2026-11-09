@@ -113,6 +113,15 @@ final class KeyBindingRegistry {
         NotificationCenter.default.post(name: .craKeyBindingsChanged, object: nil)
     }
 
+    /// keybindings.json was written by another Mac's bundle (SettingsSyncService): read it again.
+    func reloadOverrides() {
+        overrides = overridesFile.load(or: { [:] })
+        // With the plugins' commands: the built-in list alone would drop New GitHub Live Folder and the rest.
+        actions = defaultActions
+        apply()
+        NotificationCenter.default.post(name: .craKeyBindingsChanged, object: nil)
+    }
+
     func resetOverrides() {
         overrides = [:]
         overridesFile.saveNow(overrides)

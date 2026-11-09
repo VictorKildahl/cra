@@ -120,6 +120,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         installSideButtonKeyMonitor()
         installCommandFileWatcher()
         composition.startPeriodicWork { [weak self] in self?.sleepIdleTabs() }
+        composition.sync.keybindingsChanged = { [weak self] in self?.bindings.reloadOverrides() }
+        composition.sync.start()
         observeSystemWake()
         logSidebarProblems()
         LiveFolderManager.shared.start(store: store)
@@ -2035,7 +2037,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     guard let self, let w = self.settingsWindow else { return }
                     self.main.showNewProfileDialog(over: w)
                 })
-            let c = SettingsWindowController(store: store, bindings: bindings, actions: actions)
+            let c = SettingsWindowController(store: store, bindings: bindings, sync: composition.sync, actions: actions)
             settingsController = c
             settingsWindow = c.window
             // Settings opened from the menu bar item: closing it puts Cra back in the menu bar.

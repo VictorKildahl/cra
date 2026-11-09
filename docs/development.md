@@ -52,6 +52,17 @@ Data lives in `~/Library/Application Support/Cra`: the sidebar and archive as JS
 and a Chromium profile folder. Delete it to
 start over.
 
+Settings ▸ General ▸ Sync keeps `sidebar.json`, `settings.json` (minus each Mac's own fields,
+`AppSettings.forSync`) and `keybindings.json` the same on the user's Macs, through iCloud
+(`Documents/Cra` in the app's iCloud Documents container; docs/release.md says how the signed
+build gets the entitlement) or through a folder a file provider syncs: `SettingsSyncService`
+writes them with a `manifest.json` into a `Cra` folder there and applies a newer bundle another
+Mac wrote (`SettingsSync` in CraCore decides). `sync.json` in the data folder holds the location
+and the last bundle written or applied. To try it on one Mac, run a second instance on another
+`CRA_DATA_DIR` with `CRA_SYNC_DEVICE=<name>` (a Mac is known in the folder by a hash of its
+hardware UUID, which two instances share);
+`CRA_SYNC_ICLOUD_DIR=<folder>` makes both treat that folder as the iCloud container.
+
 `cra.log` is Cra's own log: each tab's page opening, showing, loading, failing to load (with
 the net error and the extension that set the proxy) and closing, and three seconds after a tab
 comes on screen and its page has loaded, what the page holds (`blank`, `visibility`, element
@@ -107,6 +118,9 @@ to Markdown or `docs/` alone runs nothing.
   the bundled GitHub, GitLab and Jira providers in `resources/live-folder-plugins`, through
   `LiveFolderPluginProcess` with made-up session responses: permissions, timeouts, and each
   provider's parsing and sign-in cases (`Tests/LiveFolderProviderTests.swift`).
+- `scripts/test-key-bindings.sh`: `KeyBindingRegistry`'s command list on a `keybindings.json` of its
+  own: the live folder plugins' commands after New Folder, and shortcuts kept through a synced file,
+  a reset and Reset All.
 - `scripts/test-sidebar-creation-menu.sh`: the sidebar + menu's real window and view off screen:
   rows and keys, clicks on enabled and disabled rows, Arc's open and close timings, and the +
   turning into an × on its spring.

@@ -803,6 +803,36 @@ final class SidebarStore {
 
     func touchAfterImport() { touch() }
 
+    /// The sidebar another Mac wrote to the sync folder (SettingsSyncService), in place of this
+    /// one's: spaces, items, profiles and profile favorites. Incognito and Blank Windows keep their
+    /// spaces; they are this Mac's windows, never in a synced document (`SidebarDocument.forSync`).
+    /// Repaired like a file at launch, so a profile the other Mac deleted leaves its spaces on
+    /// Default, and a window whose space is gone shows the first.
+    func replace(document synced: SidebarDocument) {
+        let doc = synced.forSync()
+        var kept = Set<UUID>()
+        for sid in incognitoSpaceIDs.union(blankSpaceIDs) { if let s = spaces[sid] { collectSubtree(of: s, into: &kept) } }
+        for id in items.all.keys where !kept.contains(id) { items[id] = nil }
+        for (id, _) in spaces where !isStandalone(space: id) { spaces[id] = nil }
+        storedThemes = [:]
+        previousTab = [:]
+        for s in doc.spaces { spaces[s.id] = s }
+        profiles = doc.profiles ?? []
+        profileFavorites = doc.profileFavorites ?? []
+        spaceOrder = BlankWindow.spaceOrder(saved: doc.spaceOrder, spaces: doc.spaces)
+        for it in doc.items where !kept.contains(it.id) { items[it.id] = it }
+        repair()
+        var windows = prefs.windows
+        for i in windows.indices where !isStandalone(window: windows[i].id) {
+            if windows[i].focusedSpaceID.flatMap({ spaces[$0] }) == nil { windows[i].focusedSpaceID = spaceOrder.first }
+            windows[i].selectedTabPerSpace = windows[i].selectedTabPerSpace.filter { spaces[$0.key] != nil && items[$0.value] != nil }
+        }
+        prefs.windows = windows
+        splitSharedFavorites(doc.favoritesContainerID)
+        settings.sharedFavorites ? shareFavorites() : unshareFavorites()
+        touch()
+    }
+
     /// What goes to disk: everything but incognito windows' spaces and tabs. Blank Windows'
     /// spaces go too, outside `spaceOrder`.
     var document: SidebarDocument {

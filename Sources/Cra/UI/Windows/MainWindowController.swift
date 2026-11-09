@@ -980,14 +980,26 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
     }
 
+    /// A Peek's windows went on the window above its other children (opened, or back with its tab):
+    /// the floating sidebar goes back in front of them (#295).
+    func peekWindowsAttached() {
+        guard let window else { return }
+        for panel in floatingSidebar?.attachedPanels ?? [] {
+            window.removeChildWindow(panel)
+            window.addChildWindow(panel, ordered: .above)
+            panel.orderFront(nil)
+        }
+    }
+
     /// Overlay panel above the page windows (and the floating sidebar), the find bar above it.
     private func raiseOverlayPanels() {
         guard let window else { return }
         var panels: [NSPanel?] = [overlayPanel]
         if let ringPanel, ringPanel.parent != nil { panels.insert(ringPanel, at: 0) }
         if overlay.findVisible { panels.append(findPanel) }
-        // A Peek (and its dimming) stays above everything else in the window.
-        let wanted = panels.compactMap { $0 } + peeks.flatMap(\.peekWindows)
+        // A Peek (and its dimming) stays above everything else in the window but the hidden sidebar
+        // slid out at the edge: that one is the sidebar, whose rows stay in reach of a Peek (#242, #295).
+        let wanted = panels.compactMap { $0 } + peeks.flatMap(\.peekWindows) + (floatingSidebar?.attachedPanels ?? [])
         // Already the last children, in order, and showing: re-adding each one rebuilt the
         // window's ordering group, a window server round trip, on every tab switch.
         let children = window.childWindows ?? []
@@ -1725,8 +1737,26 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func peekCatcherReadout() -> String {
         guard let window, let dim = peeks.first(where: { !$0.isParked })?.dimFrame else { return "none" }
         let sidebar = window.convertToScreen(shell.sidebarHost.convert(shell.sidebarHost.bounds, to: nil))
-        let covered = !store.window(windowID).sidebarVisible ? "hidden" : dim.intersects(sidebar.insetBy(dx: 0.5, dy: 0.5)) ? "covered" : "clear"
-        return "sidebar=\(covered)"
+        guard store.window(windowID).sidebarVisible else { return "sidebar=hidden floating=\(floatingSidebarOverPeek())" }
+        return "sidebar=\(dim.intersects(sidebar.insetBy(dx: 0.5, dy: 0.5)) ? "covered" : "clear")"
+    }
+
+    /// Whether the hidden sidebar, slid out over the page, is in front of the shown Peek's windows
+    /// (#295): "above", "below", or "none" while it isn't out. Read from the window server's order.
+    private func floatingSidebarOverPeek() -> String {
+        guard let sidebar = floatingSidebar?.attachedPanels.last, sidebar.isVisible else { return "none" }
+        // The card's page is a Chromium window of its own, a child of the card's.
+        let peekWindows = peeks.flatMap { $0.peekWindows + ($0.peekWindows.isEmpty ? [] : [$0.browser?.hostWindow].compactMap { $0 }) }
+        // Front to back as the window server has them; the window's child order (back to front)
+        // when it doesn't list one of them yet.
+        var frontToBack = NSWindow.windowNumbers(options: [])?.map(\.intValue) ?? []
+        if !([sidebar] + peekWindows).allSatisfy({ frontToBack.contains($0.windowNumber) }) {
+            frontToBack = (window?.childWindows ?? []).reversed().map(\.windowNumber)
+            for p in peeks { if let card = p.window, let host = p.browser?.hostWindow, let i = frontToBack.firstIndex(of: card.windowNumber) { frontToBack.insert(host.windowNumber, at: i) } }
+        }
+        guard let mine = frontToBack.firstIndex(of: sidebar.windowNumber) else { return "none" }
+        let behind = peekWindows.allSatisfy { w in frontToBack.firstIndex(of: w.windowNumber).map { $0 > mine } ?? true }
+        return behind ? "above" : "below"
     }
 
     /// The whole area, where a Peek grows from and goes back to (screen coordinates).

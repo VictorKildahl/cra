@@ -3285,6 +3285,10 @@ event with `shiftClickModalEntryPointEnabled` set for the run, AX frames and 60 
   - Cra: the click catcher (PeekDimPanel, PeekLayout.dismissArea with `contentMinX`) covered the sidebar,
     so a row click closed the Peek; it now covers the page area only and the row's tab opens (syncPeeks
     parks the Peek). cra://debug?peekCatcher reads it.
+  - [?, 9 Nov, GitHub #295] With the sidebar hidden, the sidebar that slides out at the edge came out behind a
+    Peek and its click catcher in Cra (raiseOverlayPanels put the Peek last). Not measured in Arc, whose Peek is
+    a card inside the window under its floating sidebar. Cra now stacks the floating sidebar above the Peek's
+    windows; cra://debug?peekCatcher reads `floating=above|below|none` from the window server's order.
 
 ### Peek grows out of the link (Arc 1.171, 6 Nov 2026, GitHub #204, offline Arc)
 The reporter recorded Arc 1.172.1 growing the card out of the clicked link. 1.172.0/1.172.1 only moved Chromium

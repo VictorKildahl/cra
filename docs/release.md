@@ -189,6 +189,39 @@ One-time setup, as the Account Holder:
 the keychain group, iCloud Keychain once approved), because macOS refuses to launch an
 app that claims an entitlement its profile lacks. Ad-hoc builds never get them.
 
+## iCloud sync
+
+Settings ▸ General ▸ Sync keeps the sidebar, the settings and the shortcuts the same on the
+user's Macs through Cra's iCloud Documents container (no server of Cra's own; a folder in
+Dropbox or a similar service is the other option and needs nothing here). Apple grants iCloud
+Documents to Developer ID apps through the provisioning profile (Supported capabilities,
+macOS). One-time setup, as the Account Holder:
+
+1. Identifiers → `dk.kildahl.cra` → Capabilities → tick **iCloud**, keep **Include CloudKit
+   support** (the portal's default; Cra still claims only CloudDocuments), Configure → tick
+   container `iCloud.dk.kildahl.cra` (register it under Identifiers → iCloud Containers first if
+   the list is empty). Save. Done 9 Nov 2026.
+2. Profiles → the Developer ID profile for `dk.kildahl.cra` → Edit → Save, so it carries the
+   iCloud entitlements, then download it. Check:
+   `security cms -D -i Cra.provisionprofile | grep -A3 ubiquity`.
+3. Replace the `MACOS_PROVISIONING_PROFILE` secret (`base64 -i Cra.provisionprofile | pbcopy`).
+
+`build.sh` copies the container identifiers the profile grants into `Cra.entitlements`
+(`ubiquity-container-identifiers`, `icloud-container-identifiers`, `icloud-services` =
+CloudDocuments, `icloud-container-environment` = Production as Xcode's Developer ID export
+claims it) and names the first in Info.plist (`NSUbiquitousContainers`), so the bundle
+shows in iCloud Drive as a "Cra" folder. Without them the switch in Settings is off with a note.
+
+To try it before the release profile has the entitlement, with an Apple Developer account of
+your own: register an App ID in your namespace (say `io.example.cra.sync`) with iCloud
+Documents and a container, make a Development profile for your Mac, and build with
+`CRA_BUNDLE_ID=io.example.cra.sync CRA_SIGN_IDENTITY="Apple Development: …"
+CRA_PROVISIONING_PROFILE=<path> scripts/build.sh`. Run it with `CRA_DATA_DIR`, since another
+bundle identifier still uses Cra's data folder. Two such instances on one Mac share the
+account's iCloud and sync within seconds; two Macs on one Apple ID is the full test.
+`CRA_SYNC_ICLOUD_DIR=<folder>` makes any build treat a folder as the container, for the
+store test and a check without an entitlement.
+
 ## Safe Browsing
 
 Chromium's phishing and malware lists come from Google's Safe Browsing API, which

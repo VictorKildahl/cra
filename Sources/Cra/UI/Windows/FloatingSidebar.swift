@@ -293,6 +293,12 @@ final class FloatingSidebarController {
         p.order(.above, relativeTo: s.windowNumber)
     }
 
+    /// The shadow's panel and the sidebar's, bottom first, while they are on the window.
+    var attachedPanels: [NSWindow] {
+        guard let panel, panel.parent === window else { return [] }
+        return [shadowPanel, panel].compactMap { $0 }
+    }
+
     private func detachPanels() {
         for w in [panel, shadowPanel].compactMap({ $0 }) {
             window.removeChildWindow(w)
