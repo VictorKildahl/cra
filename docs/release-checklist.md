@@ -45,6 +45,10 @@ built release app with a test profile. Note anything that fails in the release's
   forward to the next, docked and in the hidden sidebar (⌘S); over a page they still go back and
   forward in the tab's history. The scenario hands the button to the window's handler, so only a
   real mouse proves the monitor sees it.
+- **#260:** on a built-in trackpad, every space change by a two-finger swipe over the sidebar
+  ticks once: a short flick, a slow drag past half (the tick comes at half), and a swipe into
+  the Library and back out. A short drag that settles back is silent; a sideways wheel never
+  ticks (Arc). `PageDetentHaptics` holds the rule; only a finger feels the tick.
 - **#12:** a two-finger swipe in the hidden sidebar (⌘S) switches spaces, and the next space
   draws mid-swipe. There is one link bubble only, and the dashed ring shows only on a
   cross-space keyboard switch.

@@ -405,3 +405,10 @@
 #256   Packages/CraCore/Tests/CraCoreTests/SlowResponseNoticeTests.swift::showsAfterTenSecondsWithoutAResponse  652b2e9348ba
 #256   Tests/Scenarios/slow-first-response.scenario  ef5ecd1c5764
 #257   Tests/StoreTests.swift::openLinkInSplit  93b1ecb4d3f2
+#260   Packages/CraCore/Tests/CraCoreTests/PageDetentHapticsTests.swift::aDragPastHalfTicksOnce  95ddc92dcb30
+#260   Packages/CraCore/Tests/CraCoreTests/PageDetentHapticsTests.swift::aFlickBackFromPastHalfTicksForHome  ddc139d42598
+#260   Packages/CraCore/Tests/CraCoreTests/PageDetentHapticsTests.swift::aFlickTicksOnce  6c4db02074c3
+#260   Packages/CraCore/Tests/CraCoreTests/PageDetentHapticsTests.swift::aShortDragBackIsSilent  89e3c8aede42
+#260   Packages/CraCore/Tests/CraCoreTests/PageDetentHapticsTests.swift::outAndBackTicksAtEachCrossing  ec81dca8ff4a
+#260   Packages/CraCore/Tests/CraCoreTests/PageDetentHapticsTests.swift::theLibraryIsAPage  5dd0f383c260
+#260   Packages/CraCore/Tests/CraCoreTests/PageDetentHapticsTests.swift::theRubberBandIsSilent  f36ce7aacbfc

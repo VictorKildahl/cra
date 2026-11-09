@@ -2626,6 +2626,16 @@ curves fitted per frame. "p" = Library reveal progress, 0 = space, 1 = Library o
   targetPosition, positions, keyTimes, duration} (a sampled keyframe settle), PagingPosition {floorPageID,
   ceilPageID, progress}, nonGesturalScrollState {cumulativeDistance, lastEventTime, lastTriggerTime},
   performsPageDetentHaptics}. The Library is a page before the first space, with its own width.
+- [O static, Arc 1.172.1, 8 Nov 2026, issue #260] Page detent haptics: the only
+  `performFeedbackPattern:performanceTime:` in `PageSwipeController` is `.alignment` (1), `.now` (1), at
+  0x100a278e4. Its method (vtable 0x2e0) runs when `performsPageDetentHaptics` is true, takes the detent page as
+  `pages[clamp(frinta(offset / pageWidth))]` (round half away from zero) and ticks when that differs from
+  `lastDetentPageID`, storing it. It has one caller, the scroll tracking loop (`nextEventMatchingMask:`, `phase`,
+  `momentumPhase`, `scrollingDeltaX`): no tick in the settle, none for a wheel (`nonGesturalScrollState`), so an
+  Arc flick that changes the page from under half a page doesn't tick either. The init stores false; no call of
+  the setter (vtable 0x208) with a constant true was found, so whether Arc's sidebar turns it on is
+  unverified (feel it). Method addresses come from the class descriptor's vtable (generic class: skip the
+  16-byte generic header, the 1 param (padded to 4) and the 1 requirement before the vtable).
 - [O] On the first space, fingers moving right (positive scrollingDeltaX) pull the Library in; on any other space
   the same gesture goes to the previous space. Fingers moving left inside the Library take it back out. Only over
   the sidebar (the page area was not tried).

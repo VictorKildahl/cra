@@ -32,7 +32,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Points travelled since the space swipe locked, and recent deltas for its release speed.
     private var swipeTravel: CGFloat = 0
     private var swipeSamples: [(time: TimeInterval, dx: CGFloat)] = []
-    private var swipeDetent = 0
+    /// The trackpad ticks of the swipe: Arc's page detent, and one on release (issue #260).
+    private var swipeHaptics = PageDetentHaptics()
     /// Shift + wheel over the sidebar adding up toward a space change.
     private var wheelSpaceSwitch = WheelSpaceSwitch()
     /// The Library's reveal a swipe started from: 0 on the first space, 1 in the Library; nil
@@ -2417,7 +2418,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private func beginSpaceSwipe() {
         swipeTravel = 0
         swipeSamples = []
-        swipeDetent = 0
+        swipeHaptics = PageDetentHaptics()
         sidebarUI.spaceSettleVelocity = 0
         // A swipe during a Library settle picks it up where it shows.
         stopLibrarySettle()
@@ -2432,6 +2433,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             prepareLibraryReveal(sidebarUI.lastLibraryPage)
             librarySwipeFrom = shown ?? 0
         }
+        // The Library is the page before the first space; a swipe picked up in a settle starts
+        // from the page it was nearer.
+        swipeHaptics = PageDetentHaptics(page: -Int((librarySwipeFrom ?? 0).rounded()))
+    }
+
+    private func performSwipeHaptic() {
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
     }
 
     // MARK: Swiping into the Library (LibrarySwipe)
@@ -2466,6 +2474,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         if sidebarUI.spaceSwipe != 0 { sidebarUI.spaceSwipe = 0 }
         setLibraryReveal(r)
+        if swipeHaptics.track(position: -r, pages: -1...0) { performSwipeHaptic() }
         return true
     }
 
@@ -2474,7 +2483,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         librarySwipeFrom = nil
         let width = sidebarUI.libraryRevealWidth
         let velocity = LibrarySwipe.velocity(samples: swipeSamples, width: width)
-        settleLibrary(from: r, velocity: velocity, to: LibrarySwipe.target(reveal: r, velocity: velocity))
+        let target = LibrarySwipe.target(reveal: r, velocity: velocity)
+        if swipeHaptics.land(on: -Int(target.rounded())) { performSwipeHaptic() }
+        settleLibrary(from: r, velocity: velocity, to: target)
     }
 
     /// The Library button: the same spring from rest, or turned around from where a settle is.
@@ -2638,12 +2649,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if pages < first { pages = first - band(first - pages) * 0.5 }
         if pages > last { pages = last + band(pages - last) * 0.5 }
         sidebarUI.spaceSwipe = pages
-        // Dia: performsPageDetentHaptics, a tick each time the nearest page changes.
-        let detent = Int(pages.rounded())
-        if detent != swipeDetent, detent >= Int(first), detent <= Int(last) {
-            swipeDetent = detent
-            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
-        }
+        // Arc's performsPageDetentHaptics: a tick each time the nearest page changes.
+        if swipeHaptics.track(position: pages, pages: Int(first)...Int(last)) { performSwipeHaptic() }
     }
 
     private func endSpaceSwipe() {
@@ -2660,6 +2667,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         var step = 0
         if abs(velocity) > 0.8 { step = velocity > 0 ? 1 : -1 } else if abs(pages) > 0.5 { step = pages > 0 ? 1 : -1 }
         if !(0..<store.spaceOrder.count).contains(index + step) { step = 0 }
+        // A flick lands on a page it never dragged past half of: the tick comes now (#260).
+        if swipeHaptics.land(on: step) { performSwipeHaptic() }
         let remaining = CGFloat(step) - pages
         sidebarUI.spaceSettleVelocity = abs(remaining) > 0.001 ? Double(max(-4, min(12, velocity / remaining))) : 0
         // The new space becomes the strip's page at once and the swipe returns to rest; the space
