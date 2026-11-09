@@ -1,0 +1,39 @@
+title: ""
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ideas are for features Arc never had. Bugs, and Arc features Cra is still missing, go in [Issues](https://github.com/VictorKildahl/cra/issues/new/choose). [Start here](https://github.com/VictorKildahl/cra/discussions/249) explains how ideas are picked.
+  - type: checkboxes
+    id: searched
+    attributes:
+      label: Before you post
+      options:
+        - label: I searched Ideas and this isn't there yet. (If it is, upvote it and add your use case as a comment.)
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you're trying to do, and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: How it could work in Cra. A sketch or a screenshot from another app helps.
+    validations:
+      required: true
+  - type: textarea
+    id: arc
+    attributes:
+      label: Arc
+      description: Did Arc have anything like it? If it did, this is an issue instead.
+      value: Arc didn't have this.
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        Nothing in Cra leaves the Mac: no cloud AI, no account, no server, no telemetry. Ideas in those directions will be closed. An idea open for 60 days with fewer than 5 upvotes is closed automatically.
