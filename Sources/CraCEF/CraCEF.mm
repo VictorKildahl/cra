@@ -28,10 +28,12 @@
 #include "include/cef_life_span_handler.h"
 #include "include/cef_load_handler.h"
 #include "include/cef_navigation_entry.h"
+#include "include/cef_pack_strings.h"
 #include "include/cef_parser.h"
 #include "include/cef_permission_handler.h"
 #include "include/cef_request_context.h"
 #include "include/cef_request_handler.h"
+#include "include/cef_resource_bundle.h"
 #include "include/cef_resource_request_handler.h"
 #include "include/cef_urlrequest.h"
 #include "include/cef_version.h"
@@ -75,6 +77,9 @@ static void (^g_strayPageHandler)(NSString*, NSString*) = nil;
 static BOOL (^g_appLinkHandler)(CraBrowser*, NSString*, BOOL) = nil;
 // Downloads whose save panel was cancelled (#190): cancelled on their next update, never shown.
 static std::set<uint32_t> g_cancelledDownloads;
+// Each download in progress, to pause, resume or cancel from its row (#272). Chromium's callback
+// holds the download's id, not the item, so it stays usable between updates.
+static std::map<uint32_t, CefRefPtr<CefDownloadItemCallback>> g_downloadCallbacks;
 static void (^g_downloadDestinationHandler)(NSString*, NSString*, void (^)(NSString*)) = nil;
 static void (^g_processEventHandler)(NSString*, NSString*, NSString*) = nil;
 
@@ -89,8 +94,16 @@ static CefString CefStringFromNS(NSString* s) {
 }
 
 // The two "open link" items on a page's context menu, from CraCore's LinkMenu (GitHub #183).
-static NSArray<NSString*>* g_linkMenuTitles = @[@"Open Link in New Tab", @"Open Link in Background Tab"];
-static NSArray<NSNumber*>* g_linkMenuBackground = @[@NO, @YES];
+static NSString* g_linkMenuTitle = @"Open Link in New Tab";
+static BOOL g_linkMenuBackground = YES;
+static NSString* _Nullable (^g_imageSearchTitle)(NSString*) = nil;
+
+/// Chromium's string `ids` in the language Chromium runs in, or `fallback` (GitHub #276).
+static std::string ChromiumLabel(int ids, const char* fallback) {
+    CefRefPtr<CefResourceBundle> bundle = CefResourceBundle::GetGlobal();
+    std::string label = bundle ? bundle->GetLocalizedString(ids).ToString() : std::string();
+    return label.empty() ? fallback : label;
+}
 
 /// Page.addScriptToEvaluateOnNewDocument params every page browser gets once it exists
 /// (the page's world, then Cra's isolated world).
@@ -117,8 +130,7 @@ static void CraTidySeparators(CefRefPtr<CefMenuModel> model) {
 }
 
 enum CraMenuCommand {
-    kMenuOpenLinkFirst = MENU_ID_USER_FIRST + 1,
-    kMenuOpenLinkSecond,
+    kMenuOpenLinkNewTab = MENU_ID_USER_FIRST + 1,
     kMenuOpenLinkLittleWindow,
     kMenuOpenLinkSplitView,
     kMenuCaptureImage,
@@ -1697,9 +1709,8 @@ public:
     }
 
     // Arc's page menus are Chrome's with a few changes (Arc 1.172, 6 Nov 2026):
-    // - link: Open Link in New Tab, New Window, Little Arc, Incognito Window. Cra's New Tab item
-    //   follows the background-links setting, with the other kind of tab under it (LinkMenu, #183),
-    //   then Open Link in Split View (#257, not in Arc; Chrome's own item sits there too).
+    // - link: Open Link in New Tab, New Window, Split View, Little Arc, Incognito Window (Arc 1.172,
+    //   9 Nov 2026). New Tab opens behind the page unless the setting says to switch (LinkMenu, #276).
     // - page: no QR code item; Translate sits with Save As…, Print… and Cast….
     // - selected text: Search <engine> for "…" comes before Copy (not with a link).
     // - image: Capture Image… after Save Image As…, and Search <engine> for Image where Chromium
@@ -1708,14 +1719,14 @@ public:
         int newTab = model->GetIndexOf(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB);
         if (newTab >= 0) {
             model->RemoveAt(newTab);
-            model->InsertItemAt(newTab, kMenuOpenLinkFirst, g_linkMenuTitles[0].UTF8String);
-            model->InsertItemAt(newTab + 1, kMenuOpenLinkSecond, g_linkMenuTitles[1].UTF8String);
+            model->InsertItemAt(newTab, kMenuOpenLinkNewTab, g_linkMenuTitle.UTF8String);
         }
+        // Arc's order under New Window: Split View, then Little Arc (#276).
         CraBrowser* o = owner_;
-        if (newTab >= 0 && [o.delegate respondsToSelector:@selector(browser:requestsSplitPaneWithURL:)])
-            model->InsertItemAt(newTab + 2, kMenuOpenLinkSplitView, "Open Link in Split View");
-        // Little Windows load in the normal profile: none from an incognito page.
         int newWindow = model->GetIndexOf(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW);
+        if (newWindow >= 0 && [o.delegate respondsToSelector:@selector(browser:requestsSplitPaneWithURL:)])
+            model->InsertItemAt(++newWindow, kMenuOpenLinkSplitView, "Open Link in Split View");
+        // Little Windows load in the normal profile: none from an incognito page.
         if (newWindow >= 0 && !o.isIncognito) model->InsertItemAt(newWindow + 1, kMenuOpenLinkLittleWindow, "Open Link in Little Window");
         for (int id : {IDC_CONTENT_CONTEXT_GENERATE_QR_CODE, IDC_CONTENT_CONTEXT_OPENLINKINPROFILE,
                        IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW, IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP,
@@ -1734,12 +1745,12 @@ public:
             model->InsertItemAt(copy, IDC_CONTENT_CONTEXT_SEARCHWEBFOR, label);
         }
         int lens = model->GetIndexOf(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE);
-        if (lens >= 0) {
-            // "Search image with Google" → "Search Google for Image", Chrome's own item for it.
-            std::string label = model->GetLabelAt(lens).ToString(), with = "Search image with ";
-            std::string engine = label.rfind(with, 0) == 0 ? label.substr(with.size()) : "Google";
+        // "Search Image with Google" → "Search Google for Image", Chrome's own item for it, in
+        // Chromium's language (CraCore's PageMenuLabels, #276).
+        NSString* imageSearch = lens >= 0 && g_imageSearchTitle ? g_imageSearchTitle(NSStringFromCef(model->GetLabelAt(lens))) : nil;
+        if (imageSearch) {
             model->RemoveAt(lens);
-            model->InsertItemAt(lens, IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE, "Search " + engine + " for Image");
+            model->InsertItemAt(lens, IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE, CefStringFromNS(imageSearch));
         }
         int saveImage = model->GetIndexOf(IDC_CONTENT_CONTEXT_SAVEIMAGEAS);
         if (saveImage >= 0 && params->GetMediaType() == CM_MEDIATYPE_IMAGE &&
@@ -1752,17 +1763,16 @@ public:
     void AddAlloyItems(CefRefPtr<CefContextMenuParams> params, CefRefPtr<CefMenuModel> model) {
         size_t index = 0;
         if (!params->GetLinkUrl().empty()) {
-            model->InsertItemAt(index++, kMenuOpenLinkFirst, g_linkMenuTitles[0].UTF8String);
-            model->InsertItemAt(index++, kMenuOpenLinkSecond, g_linkMenuTitles[1].UTF8String);
+            model->InsertItemAt(index++, kMenuOpenLinkNewTab, g_linkMenuTitle.UTF8String);
             CraBrowser* o = owner_;
             if ([o.delegate respondsToSelector:@selector(browser:requestsSplitPaneWithURL:)])
                 model->InsertItemAt(index++, kMenuOpenLinkSplitView, "Open Link in Split View");
-            model->InsertItemAt(index++, kMenuCopyLink, "Copy Link");
+            model->InsertItemAt(index++, kMenuCopyLink, ChromiumLabel(IDS_CONTENT_CONTEXT_COPYLINKLOCATION, "Copy Link Address"));
             model->InsertSeparatorAt(index++);
         }
         if ((params->GetTypeFlags() & CM_TYPEFLAG_MEDIA) && !params->GetSourceUrl().empty()) {
-            model->InsertItemAt(index++, kMenuOpenImageInNewTab, "Open Image in New Tab");
-            model->InsertItemAt(index++, kMenuCopyImageURL, "Copy Image Address");
+            model->InsertItemAt(index++, kMenuOpenImageInNewTab, ChromiumLabel(IDS_CONTENT_CONTEXT_OPENIMAGENEWTAB, "Open Image in New Tab"));
+            model->InsertItemAt(index++, kMenuCopyImageURL, ChromiumLabel(IDS_CONTENT_CONTEXT_COPYIMAGELOCATION, "Copy Image Address"));
             model->InsertSeparatorAt(index++);
         }
         if (params->GetMediaType() == CM_MEDIATYPE_VIDEO && (params->GetMediaStateFlags() & CM_MEDIAFLAG_CAN_PICTURE_IN_PICTURE)) {
@@ -1771,7 +1781,7 @@ public:
             model->InsertSeparatorAt(index++);
         }
         if (model->GetCount() > 0) model->AddSeparator();
-        model->AddItem(kMenuInspectElement, "Inspect Element");
+        model->AddItem(kMenuInspectElement, ChromiumLabel(IDS_CONTENT_CONTEXT_INSPECTELEMENT, "Inspect"));
     }
 
     bool OnContextMenuCommand(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
@@ -1780,10 +1790,9 @@ public:
         CraBrowser* o = owner_;
         if (!o) return false;
         switch (command_id) {
-            case kMenuOpenLinkFirst:
-            case kMenuOpenLinkSecond:
+            case kMenuOpenLinkNewTab:
                 [o.delegate browser:o requestsNewTabWithURL:NSStringFromCef(params->GetLinkUrl())
-                       inBackground:g_linkMenuBackground[command_id - kMenuOpenLinkFirst].boolValue];
+                       inBackground:g_linkMenuBackground];
                 return true;
             case kMenuOpenImageInNewTab:
                 [o.delegate browser:o requestsNewTabWithURL:NSStringFromCef(params->GetSourceUrl()) inBackground:NO];
@@ -1897,10 +1906,13 @@ public:
             else g_cancelledDownloads.erase(item->GetId());
             return;
         }
+        if (item->IsInProgress()) g_downloadCallbacks[item->GetId()] = callback;
+        else g_downloadCallbacks.erase(item->GetId());
         CraBrowser* o = owner_;
         if (!o) return;
         CraDownloadInfo* info = [CraDownloadInfo new];
         info.identifier = item->GetId();
+        info.paused = item->IsPaused();
         info.url = NSStringFromCef(item->GetURL());
         info.fullPath = NSStringFromCef(item->GetFullPath());
         info.suggestedName = NSStringFromCef(item->GetSuggestedFileName());
@@ -1960,9 +1972,12 @@ public:
             return true;
         }
         CefRefPtr<CefPermissionPromptCallback> cb = callback;
+        open_prompts_.insert(prompt_id);
+        CefRefPtr<CraClient> me = this;
         [o.delegate browser:o requestsPermissionForOrigin:NSStringFromCef(requesting_origin)
                       kinds:CraPermissionKinds(requested_permissions)
                  completion:^(BOOL allowed) {
+            me->open_prompts_.erase(prompt_id);
             answering_prompt_ = true;
             cb->Continue(allowed ? CEF_PERMISSION_RESULT_ACCEPT : CEF_PERMISSION_RESULT_DENY);
             answering_prompt_ = false;
@@ -1970,9 +1985,22 @@ public:
         return true;
     }
 
+    // Runs for every prompt that ends, Cra's answers included. One Cra hasn't answered was
+    // dropped by Chromium: the page navigated or closed, or a newer request took its place.
+    // Cra's sheet for it goes, or it stops waiting for its tab (#286).
+    void OnDismissPermissionPrompt(CefRefPtr<CefBrowser> browser, uint64_t prompt_id,
+                                   cef_permission_request_result_t result) override {
+        if (open_prompts_.erase(prompt_id) == 0) return;
+        CraBrowser* o = owner_;
+        if (o && [o.delegate respondsToSelector:@selector(browserWithdrewPermissionRequest:)])
+            [o.delegate browserWithdrewPermissionRequest:o];
+    }
+
 private:
     // True while a prompt's answer runs (UI thread only).
     static inline bool answering_prompt_ = false;
+    // Chrome-style prompts shown to Cra and not yet answered (UI thread only).
+    std::set<uint64_t> open_prompts_;
     __weak CraBrowser* owner_;
     // Made without a CraBrowser: Document Picture in Picture's client (owner_ is weak, so it can't say).
     const bool ownerless_;
@@ -2059,13 +2087,23 @@ private:
     IMPLEMENT_REFCOUNTING(CraChromeViewDelegate);
 };
 
+// Chromium brings the app to the front whenever it shows one of its windows
+// (NativeWidgetNSWindowBridge::SetVisibilityState, kShowAndActivateWindow), and every page is one:
+// the hidden page that reads a Calendar favorite every 5 minutes, a tab opened behind, a popup, a
+// tab restored at launch. Cra came to the front over the app in use each time (#274). Whether Cra
+// comes forward is the app's to decide (the Dock, a link from another app, a notification's
+// page), so while a page window is shown CraApplication refuses Chromium's request.
+static int g_showingPageWindow = 0;
+
 class CraChromeWindowDelegate : public CefWindowDelegate {
 public:
     CraChromeWindowDelegate(CraBrowser* owner, CefRefPtr<CefBrowserView> view) : owner_(owner), view_(view) {}
     void OnWindowCreated(CefRefPtr<CefWindow> window) override {
         window->AddChildView(view_);
         if (CefRefPtr<CefView> toolbar = view_->GetChromeToolbar()) toolbar->SetVisible(false);
+        g_showingPageWindow++;
         window->Show();
+        g_showingPageWindow--;
         NSView* v = (__bridge NSView*)window->GetWindowHandle();
         if (CraBrowser* o = owner_) [o hostWindowCreated:v.window];
     }
@@ -2111,6 +2149,12 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     CefRefPtr<CefBrowser> _browser;
     CefRefPtr<CraClient> _client;
     NSString* _pendingURL;
+    /// A side panel page, loaded once the page is marked as one (-adoptBrowser:).
+    NSString* _sidePanelURL;
+    // The saved back and forward list a new page opens with (#273), until it has gone in.
+    NSDictionary<NSString*, id>* _pendingHistory;
+    // An address was asked for while the list was going in: a failed restore doesn't load over it.
+    BOOL _historySuperseded;
     BOOL _pendingFocus;
     BOOL _isPopupHost;
     NSMutableSet<NSNumber*>* _activeDownloads;
@@ -2128,14 +2172,34 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 
 - (instancetype)initWithFrame:(NSRect)frame url:(NSString*)url delegate:(id<CraBrowserDelegate>)delegate
                     incognito:(BOOL)incognito profilePath:(NSString*)profilePath {
+    return [self initWithFrame:frame url:url delegate:delegate incognito:incognito profilePath:profilePath history:nil];
+}
+
+- (instancetype)initWithFrame:(NSRect)frame url:(NSString*)url delegate:(id<CraBrowserDelegate>)delegate
+                    incognito:(BOOL)incognito profilePath:(NSString*)profilePath
+                      history:(NSDictionary<NSString*, id>*)history {
+    return [self initWithFrame:frame url:url sidePanelURL:nil history:history delegate:delegate incognito:incognito profilePath:profilePath];
+}
+
+- (instancetype)initWithFrame:(NSRect)frame extensionSidePanelURL:(NSString*)url
+                     delegate:(id<CraBrowserDelegate>)delegate profilePath:(NSString*)profilePath {
+    // Created with no page (CEF then doesn't navigate), so no script of the panel runs as a tab.
+    return [self initWithFrame:frame url:@"" sidePanelURL:url history:nil delegate:delegate incognito:NO profilePath:profilePath];
+}
+
+- (instancetype)initWithFrame:(NSRect)frame url:(NSString*)url sidePanelURL:(NSString*)sidePanelURL
+                      history:(NSDictionary<NSString*, id>*)history
+                     delegate:(id<CraBrowserDelegate>)delegate incognito:(BOOL)incognito profilePath:(NSString*)profilePath {
     self = [super init];
     if (!self) return nil;
+    _pendingHistory = url && !incognito && [history[@"history"] isKindOfClass:NSString.class] ? [history copy] : nil;
     _delegate = delegate;
     _isIncognito = incognito;
     _profilePath = incognito ? nil : [profilePath copy];
-    _currentURL = url ?: @"";
+    _currentURL = sidePanelURL ?: url ?: @"";
     _currentTitle = @"";
     _pendingURL = url;
+    _sidePanelURL = [sidePanelURL copy];
     _isPopupHost = (url == nil);
     _containerView = [[NSView alloc] initWithFrame:frame];
     _containerView.wantsLayer = YES;
@@ -2164,7 +2228,7 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
         CefBrowserSettings settings;
         CraPageSettings(settings);
         CefRefPtr<CefBrowserView> view = CefBrowserView::CreateBrowserView(
-            _client, CefStringFromNS(_pendingURL ?: @"about:blank"), settings, nullptr,
+            _client, CefStringFromNS([self initialURL]), settings, nullptr,
             [self requestContext], new CraChromeViewDelegate(self));
         CefWindow::CreateTopLevelWindow(new CraChromeWindowDelegate(self, view));
         return;
@@ -2176,8 +2240,46 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     if (g_useChromeStyle) windowInfo.runtime_style = CEF_RUNTIME_STYLE_CHROME;
     CefBrowserSettings settings;
     CraPageSettings(settings);
-    CefBrowserHost::CreateBrowser(windowInfo, _client, CefStringFromNS(_pendingURL ?: @"about:blank"), settings,
+    CefBrowserHost::CreateBrowser(windowInfo, _client, CefStringFromNS([self initialURL]), settings,
                                   nullptr, [self requestContext]);
+}
+
+/// What a new page is made with: no address when a saved history goes in first, which CEF
+/// makes without navigating at all.
+- (NSString*)initialURL {
+    return _pendingHistory ? @"" : (_pendingURL ?: @"about:blank");
+}
+
+/// The saved list goes in once the page exists, after the document start scripts (the
+/// protocol runs messages in order), and loads its current entry (Cra.restoreHistory in
+/// freezing-vote.patch). An engine without the method, or a list it can't read, loads the
+/// address instead.
+- (void)restorePendingHistory {
+    NSDictionary* history = _pendingHistory;
+    _pendingHistory = nil;
+    if (!history) return;
+    NSData* body = [NSJSONSerialization dataWithJSONObject:@{@"history": history[@"history"] ?: @"",
+                                                             @"index": history[@"index"] ?: @0} options:0 error:nil];
+    __weak CraBrowser* weakSelf = self;
+    __block BOOL done = NO;
+    void (^finish)(NSInteger, NSString*) = ^(NSInteger count, NSString* error) {
+        CraBrowser* s = weakSelf;
+        if (!s || done) return;
+        done = YES;
+        if (count <= 0 && s->_browser && !s->_historySuperseded) s->_browser->GetMainFrame()->LoadURL(CefStringFromNS(s->_pendingURL ?: @"about:blank"));
+        if ([s.delegate respondsToSelector:@selector(browser:didRestoreHistoryEntries:error:)])
+            [s.delegate browser:s didRestoreHistoryEntries:count error:count > 0 ? nil : (error ?: @"nothing restored")];
+    };
+    [self sendDevToolsMethod:@"Cra.restoreHistory" params:[[NSString alloc] initWithData:body encoding:NSUTF8StringEncoding]
+                  completion:^(NSString* result, NSString* error) {
+        NSDictionary* reply = result ? [NSJSONSerialization JSONObjectWithData:[result dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil] : nil;
+        finish([reply isKindOfClass:NSDictionary.class] ? [reply[@"restored"] integerValue] : 0, error);
+    }];
+    // A CEF without the method never answers (Chromium hands a method it doesn't know to the
+    // page's renderer, and a page made without an address has none): the address loads.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        finish(0, @"no answer");
+    });
 }
 
 - (CefRefPtr<CefRequestContext>)requestContext {
@@ -2214,6 +2316,26 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
                       completion:^(NSString*, NSString* error) {
                           if (error) NSLog(@"Cra: document start script not installed: %@", error);
                       }];
+    if (_sidePanelURL) {
+        // DevTools messages run in order, so the document start scripts are in place as well.
+        __weak CraBrowser* weakSelf = self;
+        void (^load)(NSString*) = ^(NSString* why) {
+            CraBrowser* me = weakSelf;
+            if (!me || !me->_sidePanelURL) return;
+            if (why) NSLog(@"Cra: side panel not marked: %@", why);
+            NSString* url = me->_sidePanelURL;
+            me->_sidePanelURL = nil;
+            if (me->_browser) me->_browser->GetMainFrame()->LoadURL(CefStringFromNS(url));
+        };
+        [self sendDevToolsMethod:@"Cra.extensionSidePanel" params:@"{}"
+                      completion:^(NSString*, NSString* error) { load(error); }];
+        // A CEF without the method never answers: Chromium hands a method it doesn't know to the
+        // page's renderer, and a browser with no page has none. The panel then loads as a tab.
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            load(@"no answer");
+        });
+    }
+    [self restorePendingHistory];
     if (_pendingFocus) {
         _pendingFocus = NO;
         browser->GetHost()->SetFocus(true);
@@ -2262,7 +2384,12 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 - (BOOL)hasDevTools { return _browser ? _browser->GetHost()->HasDevTools() : NO; }
 
 - (void)loadURL:(NSString*)url {
-    if (_browser) {
+    // An address asked for now wins over the saved list still waiting to go in.
+    _pendingHistory = nil;
+    _historySuperseded = YES;
+    if (_sidePanelURL) {
+        _sidePanelURL = [url copy];  // still being marked: load this one instead
+    } else if (_browser) {
         _browser->GetMainFrame()->LoadURL(CefStringFromNS(url));
     } else {
         _pendingURL = url;
@@ -2688,11 +2815,18 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 @implementation CraCEFRuntime
 
 + (void)setChromeHosting:(BOOL)enabled { g_chromeHosting = enabled; }
-+ (void)setLinkMenuTitles:(NSArray<NSString*>*)titles opensInBackground:(NSArray<NSNumber*>*)background {
-    if (titles.count != 2 || background.count != 2) return;
-    g_linkMenuTitles = [titles copy];
-    g_linkMenuBackground = [background copy];
++ (void)setLinkMenuTitle:(NSString*)title opensInBackground:(BOOL)background {
+    g_linkMenuTitle = [title copy];
+    g_linkMenuBackground = background;
 }
++ (nullable NSString*)chromiumString:(CraChromiumString)string {
+    int ids = string == CraChromiumStringOpenLinkInNewTab ? IDS_CONTENT_CONTEXT_OPENLINKNEWTAB
+        : string == CraChromiumStringSearchLensForImage ? IDS_CONTENT_CONTEXT_SEARCHLENSFORIMAGE
+        : IDS_CONTENT_CONTEXT_SEARCHWEBFORIMAGE;
+    std::string label = ChromiumLabel(ids, "");
+    return label.empty() ? nil : @(label.c_str());
+}
++ (void)setImageSearchTitle:(NSString* _Nullable (^)(NSString*))block { g_imageSearchTitle = [block copy]; }
 + (void)setDocumentStartScript:(NSString*)script isolatedScript:(NSString*)isolatedScript world:(NSString*)world {
     NSMutableArray<NSString*>* all = [NSMutableArray array];
     for (NSDictionary* params in @[@{@"source": script ?: @"", @"runImmediately": @YES},
@@ -2831,6 +2965,17 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 + (void)setStrayPageHandler:(void (^)(NSString*, NSString*))handler { g_strayPageHandler = [handler copy]; }
 + (void)setAppLinkHandler:(BOOL (^)(CraBrowser*, NSString*, BOOL))handler { g_appLinkHandler = [handler copy]; }
 + (void)setDownloadDestinationHandler:(void (^)(NSString*, NSString*, void (^)(NSString*)))handler { g_downloadDestinationHandler = [handler copy]; }
+
++ (BOOL)controlDownload:(uint32_t)identifier action:(CraDownloadControl)action {
+    auto it = g_downloadCallbacks.find(identifier);
+    if (it == g_downloadCallbacks.end()) return NO;
+    switch (action) {
+        case CraDownloadControlPause: it->second->Pause(); break;
+        case CraDownloadControlResume: it->second->Resume(); break;
+        case CraDownloadControlCancel: it->second->Cancel(); break;
+    }
+    return YES;
+}
 + (void)setProcessEventHandler:(void (^)(NSString*, NSString*, NSString*))handler { g_processEventHandler = [handler copy]; }
 + (BOOL)isExtensionWindow:(NSWindow*)window { return window && [g_extensionWindows containsObject:window]; }
 + (BOOL)isPageWindow:(NSWindow*)window {
@@ -3011,11 +3156,20 @@ static BOOL CraTestBackground(void) {
     static BOOL background = [NSProcessInfo.processInfo.environment[@"CRA_TEST_BACKGROUND"] isEqualToString:@"1"];
     return background;
 }
+// Requests to come to the front made while Cra was in the background that went through, counted
+// before a background test copy refuses them all (cra://debug?activations=).
+static NSInteger g_backgroundActivations = 0;
++ (NSInteger)backgroundActivations { return g_backgroundActivations; }
+- (BOOL)allowsActivation {
+    if (g_showingPageWindow > 0) return NO;
+    if (!self.isActive) g_backgroundActivations++;
+    return !CraTestBackground();
+}
 - (void)activateIgnoringOtherApps:(BOOL)flag {
-    if (!CraTestBackground()) [super activateIgnoringOtherApps:flag];
+    if ([self allowsActivation]) [super activateIgnoringOtherApps:flag];
 }
 - (void)activate {
-    if (!CraTestBackground()) [super activate];
+    if ([self allowsActivation]) [super activate];
 }
 
 // A Chromium page view, wherever it lives: in its own window, or embedded in a Cra

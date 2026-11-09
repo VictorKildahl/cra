@@ -46,6 +46,15 @@ public struct TabSleepPolicy: Equatable, Sendable {
     /// How often the app's pass runs (AppComposition.tabSleepInterval).
     public static let passInterval: TimeInterval = 60
 
+    /// Whether a pass runs now: the minute's timer, or the Mac waking (#275: the first sweep came
+    /// 24 minutes after a wake; nothing listened for it). Within half a pass of the last one it
+    /// doesn't, so the timer's overdue fire right after a wake's pass, or a burst of wakes, runs
+    /// one pass, while the timer's jitter never skips one.
+    public static func passDue(lastPass: Date?, now: Date) -> Bool {
+        guard let lastPass else { return true }
+        return now.timeIntervalSince(lastPass) >= passInterval / 2
+    }
+
     /// Whether the minute's pass sweeps for memory pressure. macOS reports a level for a while
     /// after pages close, so at warning a sweep skips a pass for the last one to tell (every
     /// 2 minutes); at critical it sweeps every pass (#237). Half a pass of slack absorbs the
@@ -72,7 +81,29 @@ public struct TabSleepPolicy: Equatable, Sendable {
             pages.append((host, Int(max(hiddenFor, 0) / 60), discarded, processEnded))
         }
 
+        /// A page the pass asked that refused (BrowserManager's probes: typed, beforeunload, call…).
+        public mutating func refused(_ refusal: String) {
+            if refusals[refusal] == nil { refusalOrder.append(refusal) }
+            refusals[refusal, default: 0] += 1
+        }
+
+        private var refusals: [String: Int] = [:]
+        private var refusalOrder: [String] = []
+
+        /// A pressure sweep that closed nothing although it asked says why (#275: twelve sweeps
+        /// after a wake asked 3 pages each, all refused, and the log had only their headers).
+        /// The minute's timer pass stays quiet: its pages are asked again after the back-off.
         public var lines: [String] {
+            let closed = closedLines
+            guard closed.isEmpty, reason == .memoryPressure, !refusals.isEmpty else { return closed }
+            let total = refusals.values.reduce(0, +)
+            let reasons = refusalOrder.enumerated()
+                .sorted { (refusals[$0.element]!, -$0.offset) > (refusals[$1.element]!, -$1.offset) }
+                .map { "\($0.element) \(refusals[$0.element]!)" }
+            return ["tab sleep for memory pressure closes nothing: \(total) page\(total == 1 ? "" : "s") refused (\(reasons.joined(separator: ", ")))"]
+        }
+
+        private var closedLines: [String] {
             let why = reason == .memoryPressure ? ", the Mac is short of memory" : reason == .splitCopy ? ", a split shows its copy" : ""
             return [(true, "discards"), (false, "unloads")].compactMap { discarded, verb in
                 let ps = pages.filter { $0.discarded == discarded }

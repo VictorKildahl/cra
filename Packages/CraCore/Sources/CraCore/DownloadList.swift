@@ -38,6 +38,8 @@ public enum DownloadList {
         public var sampleAt = Date.distantPast
         public var failed = false
         public var cancelled = false
+        /// Paused from its menu (#272): still in progress for Chromium, so quitting would cancel it.
+        public var paused = false
         /// When Chromium last reported on it.
         public var updated: Date
 
@@ -52,10 +54,23 @@ public enum DownloadList {
             self.updated = updated
         }
 
+        /// Still in progress, paused or not.
         public var running: Bool { !failed && !cancelled }
         public var row: DownloadRow.State {
-            failed ? .failed : cancelled ? .cancelled : .downloading(received: received, total: total, bytesPerSecond: bytesPerSecond)
+            failed ? .failed : cancelled ? .cancelled : paused ? .paused
+                : .downloading(received: received, total: total, bytesPerSecond: bytesPerSecond)
         }
+    }
+
+    /// How far the downloads still in progress have got together, 0…1, for the ring on the Library
+    /// button (#272); nil when none is. One whose size isn't known yet counts as not started.
+    public static func progress(_ live: [Live]) -> Double? {
+        let running = live.filter(\.running)
+        guard !running.isEmpty else { return nil }
+        let total = running.reduce(Int64(0)) { $0 + max(0, $1.total) }
+        guard total > 0 else { return 0 }
+        let received = running.reduce(Int64(0)) { $0 + ($1.total > 0 ? min($1.received, $1.total) : 0) }
+        return min(1, Double(received) / Double(total))
     }
 
     /// A row in either list.

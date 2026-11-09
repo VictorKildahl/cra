@@ -800,19 +800,17 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
 
     /// Library ▸ Easels ▸ Delete: asked first (its drawing and pictures go), its tabs close.
     private func deleteEasel(_ e: EaselEntry) {
-        let alert = NSAlert()
-        alert.messageText = "Delete “\(e.title.isEmpty ? "Untitled Easel" : e.title)”?"
-        alert.informativeText = "The Easel and its pictures will be deleted. This can’t be undone."
-        alert.addButton(withTitle: "Delete")
-        alert.addButton(withTitle: "Cancel")
-        alert.buttons.first?.hasDestructiveAction = true
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        let url = Easel(id: e.id).url
-        EaselFiles.deleted.insert(e.id)
-        for tab in store.allTabs() where tab.tab?.url == url { actions.closeTab(tab.id) }
-        EaselFiles.delete(e.id)
-        CraLog.note("easel deleted")
-        reload()
+        guard let window = window ?? AppDialog.parentWindow else { return }
+        let dialog = AppDialog.easelDeletion()
+        dialog.present(over: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self else { return }
+            let url = Easel(id: e.id).url
+            EaselFiles.deleted.insert(e.id)
+            for tab in self.store.allTabs() where tab.tab?.url == url { self.actions.closeTab(tab.id) }
+            EaselFiles.delete(e.id)
+            CraLog.note("easel deleted")
+            self.reload()
+        }
     }
 
     /// The boost's site icon: the site's own, else that of a tab on it (icons are kept per page).
@@ -851,17 +849,9 @@ extension LibraryListView: NSMenuDelegate {
             }
             menu.addItem(.separator())
             MenuItems.add(menu, "Remove from Archive") { store.removeFromArchive(e.id) }
-        case .download(.live):
-            break
-        case .download(.finished(let e)):
-            let url = URL(fileURLWithPath: e.path)
-            MenuItems.add(menu, "Open") { NSWorkspace.shared.open(url) }
-            MenuItems.add(menu, "Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
-            menu.addItem(.separator())
-            MenuItems.add(menu, "Copy") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.writeObjects([url as NSURL])
-            }
+        case .download(let d):
+            // Arc's Download Context Menu, the tray's too (#272).
+            DownloadRowMenu.fill(menu, for: d)
         }
     }
 }

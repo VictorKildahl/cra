@@ -24,8 +24,6 @@ struct SpacePalette {
     /// A renamed split's pane count (Arc: the palette's cutoutColor). Arc 1.171 live, 3 Nov: the theme
     /// colour at ~60% on a dark theme; a light theme takes tintedLight, as the folder front does.
     let countBadgeFill: Color
-    /// Selected row in the command bar (Arc tints it with the space color).
-    let commandHighlight: Color
     let noise: Double
     /// Opacity of the gradient over the blurred desktop at the top and bottom
     /// stops (1 when not vibrant). Arc's light themes get more opaque downwards.
@@ -108,7 +106,6 @@ extension SpaceTheme {
         var stops = base.map { SpaceTheme.mix($0, towardWhite: !dark, amount: pull) }
         if stops.count == 1 { stops.append(SpaceTheme.mix(base[0], towardWhite: !dark, amount: pull + 0.15)) }
 
-        let accent = SpaceTheme.mix(base[0], towardWhite: dark, amount: dark ? 0.25 : -0.0)
         let folder = FolderTones(themeColor: self.accent ?? base[0], dark: dark)
         let alphaTop = solid ? SpacePalette.solidAlpha(intensity: intensity)
             : vibrant ? (dark ? max(0.35, min(0.9, intensity * 2.2)) : min(0.95, intensity * 1.70)) : 1
@@ -137,7 +134,6 @@ extension SpaceTheme {
             folderFill: dark ? darkFill : Color(folder.front),
             folderBack: dark ? darkFill : Color(folder.back),
             countBadgeFill: dark ? Color(hex: self.accent ?? base[0]).opacity(0.6) : Color(folder.front),
-            commandHighlight: dark ? accent.opacity(0.55) : SpaceTheme.mix(base[0], towardWhite: false, amount: 0.45).opacity(0.75),
             noise: noise,
             // Calibrated against Arc's rendering of a 0.25-intensity vibrant theme.
             // Fitted to Arc's Victor theme (intensity 0.25) over white and black
@@ -488,8 +484,6 @@ final class PagedGradientView: NSView {
 
 /// Layout constants measured from Arc 1.168 at 2x (see docs).
 enum CraMetrics {
-    static let sidebarMinWidth: CGFloat = 220
-    static let sidebarMaxWidth: CGFloat = 520
     static let sidebarDefaultWidth: CGFloat = 328
     static let rowHeight: CGFloat = 40
     static let rowSpacing: CGFloat = 1

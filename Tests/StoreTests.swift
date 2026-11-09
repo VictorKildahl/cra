@@ -64,11 +64,14 @@ enum StoreTests {
         blankWindows()
         blankWindowWithoutItsWindow()
         tornOffTabMovesToABlankWindow()
+        tornOffTabKeepsItsProfile()
         archiveTabsBelow()
         allFoldersExpanded()
+        dropIntoFolderGoesOnTop()
         revealInSidebar()
         oneWindowAtLaunch()
         openLinkInSplit()
+        backToReferrer()
         print("Store: \(checks) checks passed")
     }
 
@@ -97,7 +100,23 @@ enum StoreTests {
         let titles = composition.store.orderedSpaces.map(\.title)
         expect(titles.contains("Home") && titles.contains("Work"), "the imported spaces are in the sidebar")
         expect(composition.store.integrityProblems().isEmpty, "the imported sidebar is sound")
+        arcLinkRoutes(store: composition.store)
         arcProfiles(plan: plan, store: composition.store)
+    }
+
+    // promise: #258
+    /// Air Traffic Control comes over pointed at the spaces of the same name; a Little Arc that
+    /// names a space becomes a Little Window in it (#258).
+    @MainActor
+    private static func arcLinkRoutes(store: SidebarStore) {
+        let work = store.orderedSpaces.first { $0.title == "Work" }!.id, home = store.orderedSpaces.first { $0.title == "Home" }!.id
+        let routes = store.settings.linkRoutes.map { "\($0.match.rawValue) \($0.text)" }
+        expect(routes == ["contains meet.google.com", "contains work.example.com", "equals example.com/standup"],
+               "the routes come over in Arc's order, Meet once")
+        let to = { (text: String) in store.settings.linkRoutes.first { $0.text == text }?.destination }
+        expect(to("work.example.com") == .littleWindow(space: work), "a Little Arc in Work opens a Little Window in Work")
+        expect(to("example.com/standup") == .space(home) && to("meet.google.com") == .mostRecentSpace, "space routes keep their space")
+        expect(store.settings.defaultLinkDestination == .littleWindowInUse, "Little Arc as the default stays in the space in use")
     }
 
     // promise: #131
@@ -1767,6 +1786,42 @@ enum StoreTests {
         store.saveAll()
     }
 
+    // promise: #288
+    /// A tab torn off a space on another profile keeps that profile (#288): in Arc the window it
+    /// opens in stays with the space's profile and the page stays signed in. Cra put the Blank
+    /// Window on Default, so BrowserManager closed the page and loaded it again signed out.
+    @MainActor
+    private static func tornOffTabKeepsItsProfile() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let work = store.createProfile(name: "Torn Work")
+        let sid = store.createSpace(title: "Work", emoji: "💼").id
+        store.setProfile(work.id, forSpace: sid)
+        let main = store.activeWindowID
+        let torn = store.createTab(url: "https://example.com/signed-in", in: sid, window: main)
+        let before = store.profilePath(item: torn.id)
+        expect(before != nil, "the tab loads in the space's profile")
+
+        let blank = store.addBlankWindow(frame: nil).id
+        store.moveToBlankWindow(torn.id, window: blank)
+        expect(store.spaceID(ofItem: torn.id) == store.focusedSpaceID(window: blank),
+               "the torn-off tab is in the Blank Window")
+        expect(store.profilePath(item: torn.id) == before,
+               "and still in its space's profile, so its page isn't loaded again signed out")
+        let next = store.createTab(url: "https://example.com/next", window: blank)
+        expect(store.profilePath(item: next.id) == before, "a new tab in that window loads in the same profile")
+
+        // From a space on Default it stays on Default.
+        let home = store.createSpace(title: "Home", emoji: "🏠").id
+        let plain = store.createTab(url: "https://example.com/plain", in: home, window: main)
+        let second = store.addBlankWindow(frame: nil).id
+        store.moveToBlankWindow(plain.id, window: second)
+        expect(store.spaceID(ofItem: plain.id) == store.focusedSpaceID(window: second) && store.profilePath(item: plain.id) == nil,
+               "a tab from a Default space stays on Default")
+        store.removeWindow(blank)
+        store.removeWindow(second)
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
     // promise: #257
     /// A page's "Open Link in Split View" (#257): the link opens in a new pane right after the
     /// page it was clicked in, as the open pane; a split of four panes takes no more.
@@ -1800,6 +1855,53 @@ enum StoreTests {
                && !store.isPinned(fromPinned.id) && store.paneTabIDs(for: fromPinned.id).count == 2,
                "a pinned tab stays where it is: the split goes in Today with a copy of its page, as Add Split View does")
         expect(store.openLinkInSplit("https://example.com/x", from: UUID(), window: main) == nil, "no tab, no pane")
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    // promise: #273
+    /// Back on a tab a link opened (#273): once its page has nothing behind it, the tab closes to
+    /// the archive and the tab the link was clicked in shows again, as in Arc. Pages it went on to
+    /// come first, and a tab with nowhere to return to keeps Back off. The link is saved with the
+    /// tab (Arc's referrerID), as its page history is, so it outlasts a relaunch and ⇧⌘T.
+    @MainActor
+    private static func backToReferrer() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let sid = store.createSpace(title: "Back", emoji: "↩️").id
+        let main = store.activeWindowID
+        let source = store.createTab(url: "https://example.com/list", in: sid, window: main)
+        let other = store.createTab(url: "https://example.com/other", in: sid, window: main)
+        store.selectTab(source.id, window: main)
+        let link = store.createTab(url: "https://example.com/post", in: sid, window: main, referrer: source.id)
+        expect(store.backStep(link.id, canGoBack: true) == .history, "a page with history goes back in it first")
+        expect(store.backStep(link.id, canGoBack: false) == .close(returnTo: source.id),
+               "on the page the link opened, Back is on and returns to the tab the link came from")
+        expect(store.backStep(source.id, canGoBack: false) == .none && store.backStep(other.id, canGoBack: false) == .none,
+               "a tab no link opened has nothing to go back to")
+        store.closeToReferrer(link.id, referrer: source.id, window: main)
+        expect(store.item(link.id) == nil && store.archive.first?.id == link.id && store.archive.first?.reason == .manual,
+               "the tab goes to the archive, as ⌘W, so ⇧⌘T brings it back")
+        expect(store.selectedTabID(window: main) == source.id, "and the tab the link came from is the one shown")
+
+        // Its own tab gone: from a third tab, opened from the link's tab before it closed.
+        let second = store.createTab(url: "https://example.com/post-2", in: sid, window: main, referrer: source.id)
+        let third = store.createTab(url: "https://example.com/post-3", in: sid, window: main, referrer: second.id)
+        store.archiveTab(second.id, reason: .manual)
+        expect(store.backStep(third.id, canGoBack: false) == .none, "the tab it came from was closed: Back stays off")
+        let restored = store.reopenLastArchived()
+        expect(restored?.id == second.id && store.backStep(second.id, canGoBack: false) == .close(returnTo: source.id),
+               "a tab ⇧⌘T brings back returns where it came from, as its history comes back with it")
+        expect(store.backStep(third.id, canGoBack: false) == .close(returnTo: second.id), "and so does the tab opened from it")
+
+        store.saveAll()
+        let reloaded = AppComposition(clock: ManualScheduler()).store
+        expect(reloaded.item(third.id)?.tab?.referrerID == second.id
+               && reloaded.backStep(third.id, canGoBack: false) == .close(returnTo: second.id),
+               "after a relaunch Back still returns to the tab the link came from (Arc saves referrerID)")
+
+        let pinned = store.createTab(url: "https://example.com/pinned", in: sid, window: main, referrer: source.id)
+        store.togglePinned(pinned.id)
+        expect(store.isPinned(pinned.id) && store.backStep(pinned.id, canGoBack: false) == .none,
+               "a link's tab once pinned stays: closing a pinned tab would reset its page")
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 
@@ -1841,6 +1943,41 @@ enum StoreTests {
         store.setAllFoldersExpanded(true, inSpace: sid)
         expect(store.isExpanded(outer.id) && store.isExpanded(inner.id), "and they all open again")
         expect(!store.isExpanded(elsewhere.id), "another space's folders stay as they were")
+    }
+
+    // promise: #266
+    /// Tabs let go on a folder's row go in at the top, in their order, and the folder stays as it
+    /// was: Arc 1.172 (offline copy, real drag, 9 Nov 2026) saved a Today tab dropped on a closed
+    /// folder as its first child and left the folder closed, the dropped tab, open, in sight under
+    /// it. Cra added them at the bottom and opened the folder (#266).
+    @MainActor
+    private static func dropIntoFolderGoesOnTop() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let sid = store.createSpace(title: "Drops", emoji: "📁").id
+        let folder = store.createFolder(named: "Links", in: store.space(sid)!.pinnedContainerID)
+        let inside = ["a", "b", "c"].map { store.createTab(url: "https://example.com/\($0)", in: sid, select: false, parent: folder.id).id }
+        store.setExpanded(folder.id, false)
+        let open = store.createTab(url: "https://example.com/open", in: sid, select: true).id
+        let y = store.createTab(url: "https://example.com/y", in: sid, select: false).id
+        let z = store.createTab(url: "https://example.com/z", in: sid, select: false).id
+        let children = { store.item(folder.id)?.children ?? [] }
+
+        let before = children()
+        expect(Set(before) == Set(inside), "the folder holds its three tabs")
+        store.dropIntoFolder([open], folder: folder.id)
+        expect(children() == [open] + before, "a tab dropped on a folder goes in first (#266)")
+        expect(!store.isExpanded(folder.id), "a closed folder stays closed (#266)")
+        expect(store.peekedTabs(in: folder.id).map(\.id) == [open], "and keeps the open tab it took in sight, as Arc does")
+
+        store.dropIntoFolder([y, z], folder: folder.id)
+        expect(children() == [y, z, open] + before, "several picked tabs go in first, in their order")
+        expect(!store.isExpanded(folder.id) && store.peekedTabs(in: folder.id).map(\.id) == [open], "the folder still shows only the open tab")
+
+        store.setExpanded(folder.id, true)
+        let w = store.createTab(url: "https://example.com/w", in: sid, select: false).id
+        store.dropIntoFolder([w], folder: folder.id)
+        expect(children().first == w && store.isExpanded(folder.id), "an open folder takes it at the top and stays open")
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 
     /// Arc's Settings ▸ Advanced "When opening Arc, restore windows from previous session", off:

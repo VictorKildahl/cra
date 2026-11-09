@@ -27,13 +27,19 @@ struct ShippedSidebarTests {
                 "and a save and a relaunch keep it there")
     }
 
-    /// Settings ▸ Tabs ▸ Links ▸ "Open links in new tabs in the background" (#183) is off unless
-    /// turned on, and survives a restart once on.
-    @Test(.bug("https://github.com/VictorKildahl/cra/issues/183"))
-    func backgroundLinksSettingIsKept() throws {
-        #expect(!AppSettings().openLinksInBackground)
-        let on = try Self.settings("settings.json")
-        #expect(try on.openLinksInBackground && Self.reloaded(on).openLinksInBackground)
+    /// A page's "Open Link in New Tab" opens behind the page as in Arc for everyone (#276), those
+    /// who had #183's "Open links in new tabs in the background" off (the default) included;
+    /// "switches to the new tab" is off unless turned on, and survives a restart once on.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/276"))
+    func linkTabsOpenBehindThePageUnlessAsked() throws {
+        let decoder = ModelFixtureTests.decoder
+        for json in ["{}", #"{"openLinksInBackground": false}"#, #"{"openLinksInBackground": true}"#] {
+            #expect(try !decoder.decode(AppSettings.self, from: Data(json.utf8)).openLinksInForeground, "\(json)")
+        }
+        #expect(!AppSettings().openLinksInForeground)
+        var on = AppSettings()
+        on.openLinksInForeground = true
+        #expect(try Self.reloaded(on).openLinksInForeground)
     }
 
     /// Peek (#12): links to other sites peek from Favorites and Pinned tabs and Shift-click peeks

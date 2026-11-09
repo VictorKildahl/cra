@@ -24,6 +24,7 @@ final class AppIconManager {
         Option(id: defaultID, name: "Segments"),
         Option(id: "midnight", name: "Midnight"),
         Option(id: "mono", name: "Mono"),
+        Option(id: "violet", name: "Violet"),
     ]
 
     // Shared with Sources/CraDockTile.

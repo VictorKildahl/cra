@@ -48,7 +48,7 @@ final class EssentialShortcutsWindow {
         host.sizingOptions = []  // the title bar sits inside Arc's 462 pt, so the view doesn't size the window
         p.contentView = host
         p.setFrame(NSRect(origin: .zero, size: size), display: false)
-        if let screen = NSScreen.main {
+        if let screen = TestScreen.screen ?? NSScreen.main {
             let v = screen.visibleFrame
             p.setFrameOrigin(NSPoint(x: v.maxX - size.width - 10, y: v.maxY - size.height - 10))
         }

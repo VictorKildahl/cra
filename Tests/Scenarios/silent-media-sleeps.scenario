@@ -1,0 +1,23 @@
+# promise: #275
+# A hidden page whose media isn't paused but makes no sound sleeps: Chromium's audible state says
+# whether a tab plays, as in Chrome and Arc, not the page's `paused` flag (#275: YouTube tabs
+# whose videos Chromium had suspended refused as "playing" all night, and memory pressure stayed
+# yellow for hours). Here an <audio> loops a generated second of silence, started with the
+# protocol's user gesture so no click reaches the Mac. Then a wake as the Mac's, without sleeping it.
+budget rss=800 stalls50=30
+pace 0.5
+
+cra://open?url=${PAGE}?n=silent
+expect-log loaded 127\.0\.0\.1
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"(async()=>{const n=16000,b=new ArrayBuffer(44+n),v=new DataView(b),w=(o,s)=>[...s].forEach((c,i)=>v.setUint8(o+i,c.charCodeAt(0)));w(0,'RIFF');v.setUint32(4,36+n,true);w(8,'WAVE');w(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,8000,true);v.setUint32(28,16000,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,n,true);const a=document.createElement('audio');a.loop=true;a.src=URL.createObjectURL(new Blob([b],{type:'audio/wav'}));document.body.append(a);await a.play();return 'silent:'+(a.paused?'paused':'playing')+':'+a.volume})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"silent:playing:1"
+cra://open?url=${PAGE}?n=front
+expect-log loaded 127\.0\.0\.1
+wait 3
+cra://debug?sleepTabs=1
+expect-log tab sleep (unloads|discards) 127\.0\.0\.1
+reject-log tab sleep keeps 127\.0\.0\.1 awake: playing
+
+# The Mac waking runs a pass at once and says so.
+cra://debug?wake=1
+expect-log tab sleep: the Mac woke

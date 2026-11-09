@@ -1,0 +1,27 @@
+# promise: #288
+# A tab dragged out of a space on another profile keeps that profile, as in Arc: the Blank Window
+# it opens in stays on the space's profile, so the page isn't loaded again in Default and stays
+# signed in. Random is on the profile Hobbies (seeded as in space-profiles.scenario).
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Personal","emoji":"🏠","favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}},{"id":"A0000000-0000-0000-0000-000000000002","title":"Random","emoji":"🎲","favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z","profileID":"B0000000-0000-0000-0000-000000000001","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}}],"profiles":[{"id":"B0000000-0000-0000-0000-000000000001","name":"Hobbies"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+cra://debug?windowSize=1000x700
+cra://open?url=${PAGE}?n=stays&space=A0000000-0000-0000-0000-000000000002
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://open?url=${PAGE}?n=torn&space=A0000000-0000-0000-0000-000000000002
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.cookie='who=hobbies; max-age=86400';window.mark='kept-'+document.cookie"}
+expect-log Cra cdp Runtime.evaluate .*"value":"kept-who=hobbies"
+cra://debug?dragEnd=n=torn
+expect-log dragEnd: let go at
+wait 2
+cra://debug?browserWindows=torn
+expect-log Cra browser windows torn: kind=blank space=This Window listed=0 tabs=\[\S*n=torn\] open=\S*n=torn page=1
+# The same page, not one loaded again in another profile: what it held is still there.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'still-'+String(window.mark)"}
+expect-log Cra cdp Runtime.evaluate .*"value":"still-kept-who=hobbies"
+# Loaded again, it is in Hobbies' folder: the cookie is there.
+cra://debug?pageJS=location.reload()
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'after-'+document.cookie"}
+expect-log Cra cdp Runtime.evaluate .*"value":"after-who=hobbies"

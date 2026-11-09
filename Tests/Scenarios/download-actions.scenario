@@ -1,0 +1,26 @@
+# A download still in progress can be paused, resumed and cancelled from its row's menu (GitHub
+# #272). ${TRICKLE} sends the first 64 KB of a 10 MB file and holds the rest, so the download
+# stays in progress until the scenario cancels it; cancelled, nothing is left running for the
+# quit at the end (which would otherwise ask "Downloads in progress").
+# promise: #272
+home
+budget rss=600 stalls50=5
+cra://open?url=${TRICKLE}/trickle.bin
+wait 2
+cra://debug?downloadState=started
+expect-log download state started: running=true progress=0.007 rows=\["66 KB of 10 MB
+cra://debug?download=pause
+expect-log download control: pause
+wait 1
+cra://debug?downloadState=paused
+expect-log download state paused: running=true progress=0.007 rows=\["Paused"\]
+cra://debug?download=resume
+expect-log download control: resume
+wait 1
+cra://debug?downloadState=resumed
+expect-log download state resumed: running=true progress=0.007 rows=\["66 KB of 10 MB
+cra://debug?download=cancel
+expect-log download control: cancel
+wait 1
+cra://debug?downloadState=cancelled
+expect-log download state cancelled: running=false progress=none rows=\["Cancelled"\]

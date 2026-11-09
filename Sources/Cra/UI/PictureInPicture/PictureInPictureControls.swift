@@ -5,7 +5,7 @@ import AppKit
 /// Invisible until the pointer enters the window, then fades in one even dark
 /// layer with the controls: back-to-tab (top-left), the page's address (centred)
 /// and close (top-right), play/pause in the middle between ±15 s skips, as in Arc
-/// (#246). Fades out when the pointer leaves or rests for a while, and the window
+/// (#246), sized by Arc's size classes, without the skips in a tiny window (#262). Fades out when the pointer leaves or rests for a while, and the window
 /// is the bare video again. Only the buttons take clicks; everything else passes
 /// through to the overlay, which drags and resizes the window.
 @MainActor
@@ -19,9 +19,10 @@ final class PictureInPictureControlsView: NSView {
     private static let topButtonSize: CGFloat = 26
     private let closeButton = PictureInPictureButton(symbol: "xmark", pointSize: 12, diameter: topButtonSize, tip: "Close")
     private let backButton = PictureInPictureButton(symbol: "pip.exit", pointSize: 13, diameter: topButtonSize, tip: "Back to Tab")
-    private let playButton = PictureInPictureButton(symbol: "play.fill", pointSize: 22, diameter: 48, tip: "Play")
-    private let skipBackButton = PictureInPictureButton(symbol: "gobackward.15", pointSize: 17, diameter: 38, tip: "Skip back 15 seconds")
-    private let skipAheadButton = PictureInPictureButton(symbol: "goforward.15", pointSize: 17, diameter: 38, tip: "Skip ahead 15 seconds")
+    // Sized in layout() from PictureInPictureLayout.centreControls.
+    private let playButton = PictureInPictureButton(symbol: "play.fill", pointSize: 28, diameter: 52, tip: "Play")
+    private let skipBackButton = PictureInPictureButton(symbol: "gobackward.15", pointSize: 28, diameter: 46, tip: "Skip back 15 seconds")
+    private let skipAheadButton = PictureInPictureButton(symbol: "goforward.15", pointSize: 28, diameter: 46, tip: "Skip ahead 15 seconds")
     private var buttons: [PictureInPictureButton] { [backButton, closeButton, playButton, skipBackButton, skipAheadButton] }
     private var hideTimer: Timer?
     private var shown = false
@@ -58,6 +59,12 @@ final class PictureInPictureControlsView: NSView {
 
     override var isFlipped: Bool { true }
 
+    /// The centre cluster as laid out, for `cra://debug?pip`.
+    var readout: String {
+        layoutSubtreeIfNeeded()
+        return "play=\(Int(playButton.frame.width)) skips=\(skipBackButton.isHidden ? 0 : 1)"
+    }
+
     override func layout() {
         super.layout()
         CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -74,11 +81,18 @@ final class PictureInPictureControlsView: NSView {
             let h = ceil(addressLabel.intrinsicContentSize.height)
             addressLabel.frame = NSRect(x: a.minX, y: a.midY - h / 2, width: a.width, height: h)
         }
+        // The centre grows with the window as Arc's does; a window taller than 16:9 sizes it by its
+        // height, so it stays clear of the top bar.
+        let centre = PictureInPictureLayout.centreControls(width: min(bounds.width, bounds.height * 16 / 9))
+        playButton.resize(pointSize: centre.playPointSize, diameter: centre.playDiameter)
+        skipBackButton.resize(pointSize: centre.skipPointSize, diameter: centre.skipDiameter)
+        skipAheadButton.resize(pointSize: centre.skipPointSize, diameter: centre.skipDiameter)
+        skipBackButton.isHidden = !centre.showsSkips
+        skipAheadButton.isHidden = !centre.showsSkips
         let c = NSPoint(x: bounds.midX, y: bounds.midY)
-        let gap: CGFloat = bounds.width < 360 ? 18 : 30
         playButton.setFrameOrigin(NSPoint(x: c.x - playButton.frame.width / 2, y: c.y - playButton.frame.height / 2))
-        skipBackButton.setFrameOrigin(NSPoint(x: playButton.frame.minX - gap - skipBackButton.frame.width, y: c.y - skipBackButton.frame.height / 2))
-        skipAheadButton.setFrameOrigin(NSPoint(x: playButton.frame.maxX + gap, y: c.y - skipAheadButton.frame.height / 2))
+        skipBackButton.setFrameOrigin(NSPoint(x: playButton.frame.minX - centre.gap - skipBackButton.frame.width, y: c.y - skipBackButton.frame.height / 2))
+        skipAheadButton.setFrameOrigin(NSPoint(x: playButton.frame.maxX + centre.gap, y: c.y - skipAheadButton.frame.height / 2))
     }
 
     // Only the buttons are hit; drags anywhere else reach the overlay view below. A button takes
@@ -87,7 +101,7 @@ final class PictureInPictureControlsView: NSView {
     // means play, not a drag (#134).
     override func hitTest(_ point: NSPoint) -> NSView? {
         let p = convert(point, from: superview)
-        return buttons.first { $0.frame.contains(p) }
+        return buttons.first { !$0.isHidden && $0.frame.contains(p) }
     }
 
     override func updateTrackingAreas() {
@@ -117,7 +131,7 @@ final class PictureInPictureControlsView: NSView {
         let action = { [weak self] in
             guard let self, self.shown else { return }
             // Keep the controls while the pointer rests on a button.
-            if pointerInside(), self.buttons.contains(where: { $0.isHovered }) { self.hide(after: 2.5); return }
+            if pointerInside(), self.buttons.contains(where: { $0.isHovered && !$0.isHidden }) { self.hide(after: 2.5); return }
             self.shown = false
             self.fade(to: 0, duration: PictureInPictureLayout.fadeDuration)
         }
@@ -146,8 +160,8 @@ final class PictureInPictureButton: NSView {
     var symbol: String { didSet { image.image = Self.image(symbol, pointSize) } }
     private(set) var isHovered = false { didSet { updateBackground() } }
     private var isPressed = false { didSet { updateBackground() } }
-    private let pointSize: CGFloat
-    private let diameter: CGFloat
+    private var pointSize: CGFloat
+    private var diameter: CGFloat
     private let image = NSImageView()
     private let text = NSTextField(labelWithString: "")
     /// Words after the glyph: the button becomes a pill (Arc's Back to Tab on a wide window,
@@ -195,6 +209,16 @@ final class PictureInPictureButton: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    /// A new glyph size and disc for a round button (the centre ones grow with the window, #262).
+    func resize(pointSize: CGFloat, diameter: CGFloat) {
+        guard pointSize != self.pointSize || diameter != self.diameter else { return }
+        self.pointSize = pointSize
+        self.diameter = diameter
+        image.image = Self.image(symbol, pointSize)
+        if label == nil { layer?.cornerRadius = diameter / 2 }
+        setFrameSize(NSSize(width: diameter, height: diameter))
+    }
 
     override func layout() {
         super.layout()

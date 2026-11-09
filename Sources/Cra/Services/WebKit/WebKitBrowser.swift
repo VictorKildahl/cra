@@ -57,7 +57,13 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
     /// Cra's isolated world: PageScript's own script, plus what WebKit doesn't report natively.
     static let world = WKContentWorld.world(name: PageScript.world)
 
-    override init(frame: NSRect, url: String?, delegate: CraBrowserDelegate?, incognito: Bool, profilePath: String?) {
+    override convenience init(frame: NSRect, url: String?, delegate: CraBrowserDelegate?, incognito: Bool, profilePath: String?) {
+        self.init(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath, interactionState: nil)
+    }
+
+    /// `interactionState`: the back and forward list WKWebView saved for this tab (PageHistory,
+    /// #273). It goes in instead of loading `url`, and WebKit loads its current page.
+    init(frame: NSRect, url: String?, delegate: CraBrowserDelegate?, incognito: Bool, profilePath: String?, interactionState: Data?) {
         container = NSView(frame: frame)
         incognitoPage = incognito
         profile = incognito ? nil : profilePath
@@ -68,7 +74,29 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
         container.autoresizesSubviews = true
         container.layer?.backgroundColor = CraBrowser.pageCanvasColor.cgColor
         // nil: a popup host, filled by adoptPopup(configuration:) when WebKit opens the popup.
-        if let url { MainActor.assumeIsolated { makeWebView(configuration: nil); load(url) } }
+        if let url {
+            MainActor.assumeIsolated {
+                makeWebView(configuration: nil)
+                if let interactionState, !incognito {
+                    webView?.interactionState = interactionState
+                }
+                let list = webView?.backForwardList
+                let count = list?.currentItem == nil ? 0 : (list?.backList.count ?? 0) + 1 + (list?.forwardList.count ?? 0)
+                if count == 0 { load(url) }
+                // Reported once the page is its tab's (BrowserManager registers it after init).
+                if interactionState != nil {
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self else { return }
+                        self.delegate?.browser?(self, didRestoreHistoryEntries: count, error: count > 0 ? nil : "WebKit couldn't read it")
+                    }
+                }
+            }
+        }
+    }
+
+    /// The back and forward list as WKWebView saves it (PageHistory), nil before there is a page.
+    var savedInteractionState: Data? {
+        MainActor.assumeIsolated { webView?.backForwardList.currentItem == nil ? nil : webView?.interactionState as? Data }
     }
 
     override convenience init(frame: NSRect, url: String?, delegate: CraBrowserDelegate?) {

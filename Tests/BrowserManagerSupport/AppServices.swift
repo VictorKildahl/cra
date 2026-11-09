@@ -1,9 +1,24 @@
 import AppKit
 import CraCEF
 
+/// Records each sheet the manager puts up; a test answers it with `answer(_:)` or closes it.
 @MainActor final class AppDialog {
-    init(title: String, actions: [DialogAction]) {}
-    func present(over window: NSWindow, completion: @escaping (NSApplication.ModalResponse) -> Void) { completion(.abort) }
+    static var presented: [AppDialog] = []
+    let title: String
+    private(set) var completion: ((NSApplication.ModalResponse) -> Void)?
+    var isUp: Bool { completion != nil }
+    init(title: String, actions: [DialogAction]) { self.title = title }
+    func present(over window: NSWindow, completion: @escaping (NSApplication.ModalResponse) -> Void) {
+        self.completion = completion
+        Self.presented.append(self)
+    }
+    /// The production sheet's close(): ends it as Escape would (.abort) when nothing was chosen.
+    func close() { answer(.abort) }
+    func answer(_ response: NSApplication.ModalResponse) {
+        let done = completion
+        completion = nil
+        done?(response)
+    }
 }
 
 // Unrelated shell services required to typecheck the complete production manager.
@@ -32,7 +47,8 @@ enum TestRoot { case today }
     var settings = Settings()
     var items: [UUID: TestItem] = [:]
     func item(_ id: UUID) -> TestItem? { items[id] }
-    func isIncognito(item: UUID) -> Bool { false }
+    var incognitoItems: Set<UUID> = []
+    func isIncognito(item: UUID) -> Bool { incognitoItems.contains(item) }
     func profilePath(item: UUID) -> String? { nil }
     func profileDirectoryName(item: UUID) -> String { "Default" }
     func spaceID(ofItem: UUID) -> UUID? { nil }
@@ -59,7 +75,7 @@ enum TestRoot { case today }
     func markUnread(_ id: UUID, _ unread: Bool) {}
     @discardableResult
     func createTab(url: String, in space: UUID? = nil, select: Bool = false,
-                   parent: UUID? = nil, index: Int? = nil, window: UUID? = nil) -> TestItem {
+                   parent: UUID? = nil, index: Int? = nil, window: UUID? = nil, referrer: UUID? = nil) -> TestItem {
         let item = TestItem(id: UUID(), tab: TestTab(url: url))
         items[item.id] = item
         return item
@@ -118,4 +134,10 @@ final class PictureInPictureChrome {
 final class WebKitBrowser: CraBrowser {
     var isContentFullscreen = false
     var serviceName = ""
+    var savedInteractionState: Data?
+    convenience init(frame: NSRect, url: String?, delegate: CraBrowserDelegate?, incognito: Bool, profilePath: String?,
+                     interactionState: Data?) {
+        self.init(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath)
+        savedInteractionState = interactionState
+    }
 }

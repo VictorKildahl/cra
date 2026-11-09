@@ -139,6 +139,8 @@ final class KeyBindingRegistry {
             KeyAction(id: "newGitHubLiveFolder", name: "New GitHub Live Folder", section: .file, shortcuts: [],
                       triggers: ["live folder", "pull requests", "github"]),
             KeyAction(id: "newSpace", name: "New Space…", section: .file, shortcuts: [], triggers: ["space"]),
+            // Arc: File ▸ New Profile, the dialog Set Profile ▸ New Profile… opens (#279).
+            KeyAction(id: "newProfile", name: "New Profile", section: .file, shortcuts: [], triggers: ["profile"]),
             // Arc's command bar: New Boost, the open site's boost.
             KeyAction(id: "newBoost", name: "New Boost", section: .none, shortcuts: [], triggers: ["boost", "restyle", "zap"],
                       symbol: "paintbrush.pointed"),
@@ -147,11 +149,13 @@ final class KeyBindingRegistry {
                       triggers: ["easel", "whiteboard", "canvas", "draw"]),
             KeyAction(id: "closeWindow", name: "Close Window", section: .file, shortcuts: [Shortcut("w", cmdShift)], inCommandBar: false),
             KeyAction(id: "closeTab", name: "Close Tab", section: .file, shortcuts: [Shortcut("w", cmd)], triggers: ["close", "archive tab"]),
+            // Arc: File ▸ Share…, the system's share list for the page (#279).
+            KeyAction(id: "share", name: "Share…", section: .file, shortcuts: [], triggers: ["share", "airdrop"]),
             KeyAction(id: "capturePage", name: "Capture…", section: .file, shortcuts: [Shortcut("2", cmdShift)], triggers: ["capture", "screenshot"]),
             // Arc: File ▸ Capture Full Page, Save Page As ⇧⌘S.
             KeyAction(id: "captureFullPage", name: "Capture Full Page", section: .file, shortcuts: [], triggers: ["full page", "screenshot"]),
             KeyAction(id: "capturePortrait", name: "Capture in Portrait Mode", section: .file, shortcuts: [], triggers: ["portrait", "mobile screenshot"]),
-            KeyAction(id: "savePageAs", name: "Save Page As…", section: .file, shortcuts: [Shortcut("s", cmdShift)], triggers: ["save page", "download page"]),
+            KeyAction(id: "savePageAs", name: "Save Page As", section: .file, shortcuts: [Shortcut("s", cmdShift)], triggers: ["save page", "download page"]),
             KeyAction(id: "print", name: "Print", section: .file, shortcuts: [Shortcut("p", cmd)]),
             // Edit
             KeyAction(id: "copyURL", name: "Copy URL", section: .edit, shortcuts: [Shortcut("c", cmdShift)], triggers: ["copy link"]),

@@ -155,6 +155,7 @@
             "activeTabBeforeCreationID" : "D0000000-0000-0000-0000-000000000001",
             "faviconKey" : "blog.example.org",
             "muted" : false,
+            "referrerID" : "D0000000-0000-0000-0000-000000000001",
             "savedTitle" : "Post one",
             "savedURL" : "https:\/\/blog.example.org\/",
             "url" : "https:\/\/blog.example.org\/post\/1"

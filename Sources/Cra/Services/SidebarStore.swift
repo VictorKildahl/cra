@@ -325,10 +325,16 @@ final class SidebarStore {
     }
 
     /// A torn-off tab (#219) moves into a Blank Window's tabs and opens there; the window it left
-    /// loses it, as in Arc (no other tab opens in its place).
+    /// loses it, as in Arc (no other tab opens in its place). A new Blank Window takes the tab's
+    /// profile, so its page stays signed in and isn't loaded again elsewhere (#288; Arc keeps the
+    /// window on the space's profile).
     func moveToBlankWindow(_ id: UUID, window: UUID) {
         let sid = focusedSpaceID(window: window)
         guard isBlank(space: sid), let space = spaces[sid], items[id]?.isTab == true else { return }
+        if children(of: space.todayContainerID).isEmpty {
+            let profile = profileID(item: id)
+            spaces[sid]?.profileID = profile
+        }
         moveItem(id, to: space.todayContainerID, index: 0)
         guard items[id]?.parentID == space.todayContainerID else { return }
         tookTab(id, into: window, open: true)
@@ -561,13 +567,19 @@ final class SidebarStore {
 
     @discardableResult
     func createTab(url: String, title: String = "", in spaceID: UUID? = nil, pinned: Bool = false,
-                   select: Bool = true, parent: UUID? = nil, index: Int? = nil, window: UUID? = nil) -> SidebarItem {
+                   select: Bool = true, parent: UUID? = nil, index: Int? = nil, window: UUID? = nil,
+                   referrer: UUID? = nil) -> SidebarItem {
         let sid = spaceID ?? focusedSpaceID(window: window)
         let space = spaces[sid] ?? focusedSpace(window: window)
         let requestedParent = parent ?? (pinned ? space.pinnedContainerID : space.todayContainerID)
         let parentID = liveFolder(containing: requestedParent) == nil ? requestedParent : space.todayContainerID
         var tab = SidebarItem.tab(url, title: title, parent: parentID)
-        tab.data = .tab({ var t = TabData(url: url, title: title); t.activeTabBeforeCreationID = selectedTabID(in: sid, window: window); return t }())
+        tab.data = .tab({
+            var t = TabData(url: url, title: title)
+            t.activeTabBeforeCreationID = selectedTabID(in: sid, window: window)
+            t.referrerID = referrer
+            return t
+        }())
         tab.isUnread = !select
         items[tab.id] = tab
         var p = items[parentID]!
@@ -576,6 +588,20 @@ final class SidebarStore {
         items[parentID] = p
         if select { selectTab(tab.id, window: window) } else { touch() }
         return tab
+    }
+
+    /// What Back does on tab `id`, whose page `canGoBack` or not: a tab a link opened, with no
+    /// page behind, closes to the tab it came from while that one is still in the sidebar (#273).
+    func backStep(_ id: UUID, canGoBack: Bool) -> BackToReferrer.Step {
+        let referrer = items[id]?.tab?.referrerID.flatMap { items[$0]?.isTab == true ? $0 : nil }
+        return BackToReferrer.step(canGoBack: canGoBack, tab: id, referrer: referrer,
+                                   inSplit: splitContaining(id) != nil, pinned: isPinned(id))
+    }
+
+    /// Back's `.close`: the tab goes to the archive like ⌘W and `referrer` is shown in `window`.
+    func closeToReferrer(_ id: UUID, referrer: UUID, window: UUID?) {
+        archiveTab(id, reason: .manual)
+        selectTab(referrer, window: window)
     }
 
     func selectTab(_ id: UUID?, window: UUID? = nil) {
@@ -913,6 +939,19 @@ final class SidebarStore {
             moveItem(id, to: newParent, index: at)
             if at != nil, let i = items[newParent]?.children.firstIndex(of: id) { at = i + 1 }
         }
+    }
+
+    /// Items let go on a folder's row go in at the top, in their order, and the folder stays as
+    /// it was (Arc 1.172, a real drag in an offline copy, 9 Nov 2026, #266). A closed folder keeps
+    /// an open tab it took in sight under it, as when a folder closes around one.
+    func dropIntoFolder(_ ids: [UUID], folder: UUID) {
+        moveItems(ids, to: folder, index: 0)
+        let open = Set(_prefs.windows.flatMap { $0.selectedTabPerSpace.values })
+        var peeks = _prefs.peekedFolders
+        for tab in open where ids.contains(where: { $0 == tab || isDescendant(tab, of: $0) }) {
+            peeks = FolderPeek.opening(tab, folders: folderChain(of: tab), isExpanded: { self._prefs.expandedFolders.contains($0) }, peeks: peeks)
+        }
+        if peeks != _prefs.peekedFolders { prefs.peekedFolders = peeks }
     }
 
     private func rootContainerKind(_ id: UUID) -> ContainerKind? { rootContainer(of: id) }
