@@ -33,6 +33,9 @@ built release app with a test profile. Note anything that fails in the release's
 - **#189:** colour swatches grow on hover and shrink when pressed; "Back to Pinned URL" slides
   in over 0.16 s.
 - **#88:** importing from Arc copies its Show Full URL setting.
+- **PR #269:** in Settings, the selected source-list row is inset 8 pt from both sidebar edges
+  (glyph 20 pt and label 49 pt from the edge, as in Dia), and scrolling Performance or Advanced
+  never draws under the back/forward pill or the pane title.
 
 ### Sidebar, tabs and the command bar
 
