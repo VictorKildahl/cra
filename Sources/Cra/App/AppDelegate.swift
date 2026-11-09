@@ -360,8 +360,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             stayInMenuBar()
             return .terminateCancel
         }
-        // Dia: Advanced ▸ "Warn before quitting". Engine relaunches skip it.
-        if store.settings.warnBeforeQuitting, !isRelaunching, !confirmQuit() { return .terminateCancel }
+        // Arc asks while a download runs (quitting cancels it); otherwise Dia's Advanced ▸ "Warn
+        // before quitting". Restarts skip both (#272).
+        switch QuitPrompt.on(source: quitSource(), downloadsRunning: DownloadHistory.shared.hasRunningDownloads,
+                             warnBeforeQuitting: store.settings.warnBeforeQuitting) {
+        case .downloadsInProgress: if !confirmQuitCancellingDownloads() { return .terminateCancel }
+        case .confirmQuit: if !confirmQuit() { return .terminateCancel }
+        case .none: break
+        }
         // Little Windows are not in the sidebar; keep their pages in the Library.
         for w in littleWindows { w.archivePage() }
         for w in mainWindows { w.saveFrameNow() }
@@ -388,6 +394,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if PictureInPictureChrome.shared.isPlaying { return "Picture in Picture is playing" }
         if main.isImportVisible { return "the import is open" }
         return nil
+    }
+
+    /// Arc 1.172's question when quitting would cancel downloads (its words, "Close Arc" made
+    /// Cra's). Also asked before Install and Relaunch restarts into an update (#272).
+    func confirmQuitCancellingDownloads() -> Bool {
+        CraLog.note("quit asks: downloads in progress")
+        let alert = AppDialog(title: "Downloads in progress",
+                              message: "There are downloads in progress. Closing the application will cancel them.",
+                              actions: [DialogAction("Close Cra"), DialogAction("Keep browsing", role: .cancel)],
+                              icon: .application)
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     private func confirmQuit() -> Bool {
@@ -1136,6 +1153,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // Opens what normally needs a pointer or a held key, for screenshots.
             if let v = dict["downloads"] { main.sidebarUI.downloadsListOpen = v == "1"; return }
+            // What a running download's menu does (pause, resume, cancel), to the newest one in
+            // progress; `downloadState` logs how the rows read (#272).
+            if let v = dict["download"] {
+                let actions: [String: CraDownloadControl] = ["pause": .pause, "resume": .resume, "cancel": .cancel]
+                if let action = actions[v], let l = DownloadHistory.shared.live.last(where: \.running) {
+                    DownloadHistory.shared.control(l.id, action)
+                }
+                return
+            }
+            if let label = dict["downloadState"] {
+                let rows = DownloadHistory.shared.live.map { DownloadRow.subtitle($0.row, now: Date()) }
+                let progress = DownloadHistory.shared.progress.map { String(format: "%.3f", $0) } ?? "none"
+                CraLog.note("download state \(label): running=\(DownloadHistory.shared.hasRunningDownloads) progress=\(progress) rows=\(rows)")
+                return
+            }
             // The sidebar as if Cra were in front (1) or behind (0), until the app's next activation change:
             // a background test copy is in either state depending on what it was sent.
             if let v = dict["appActive"] { main.sidebarUI.appActive = v == "1"; return }

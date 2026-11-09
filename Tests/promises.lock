@@ -424,6 +424,12 @@
 #264   Packages/CraCore/Tests/CraCoreTests/FavoriteClickTests.swift::otherwiseAClickOnlyOpensIt  b38c5f0dbc19
 #264   Tests/Scenarios/favorite-double-click.scenario  8dcc4a3bc176
 #266   Tests/StoreTests.swift::dropIntoFolderGoesOnTop  d415c46e2d37
+#272   Packages/CraCore/Tests/CraCoreTests/DownloadMenuTests.swift::finishedFileGetsArcsMenu  d55083c19c73
+#272   Packages/CraCore/Tests/CraCoreTests/DownloadMenuTests.swift::liveRowsPauseResumeAndCancel  07badb06af6b
+#272   Packages/CraCore/Tests/CraCoreTests/DownloadMenuTests.swift::pausedRow  0f88d238b375
+#272   Packages/CraCore/Tests/CraCoreTests/DownloadMenuTests.swift::quitAsksAboutDownloads  45f0307fd85b
+#272   Packages/CraCore/Tests/CraCoreTests/DownloadMenuTests.swift::ringProgress  568bb7e6e5d7
+#272   Tests/Scenarios/download-actions.scenario  715b4e41506a
 #273   Packages/CraCore/Tests/CraCoreTests/BackToReferrerTests.swift::backOnTheFirstPageReturnsToTheTabTheLinkCameFrom  481ce44dc954
 #273   Packages/CraCore/Tests/CraCoreTests/BackToReferrerTests.swift::backStaysOffWithNothingToReturnTo  42f2d768be03
 #273   Packages/CraCore/Tests/CraCoreTests/BackToReferrerTests.swift::theTabsOwnHistoryComesFirst  0bc72847a0fa

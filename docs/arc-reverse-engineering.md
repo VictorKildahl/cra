@@ -1935,6 +1935,26 @@ Arc's popup this time, so geometry is not measured.
   download cards (its only other toast design) are gone (2 Nov 2026, #85 follow-up): the hover list shows running,
   failed and cancelled downloads too (DownloadHistory.live, DownloadRow). [U] Arc's exact wording and icon for a
   running or failed row (Cra: "81.3 MB of 104.9 MB — 30.1 MB/s", the file type's icon) — to capture live.
+- Acting on a download (Arc 1.172.1, 9 Nov 2026, #272; strings of 15 bytes or fewer decoded from the mov/movk
+  immediates of `otool -tV`):
+  - "Download Context Menu" (ContextMenus): `Open %@`, `Copy %@`, Show in Finder, separator, Cancel Download,
+    separator, Hide from Arc, Move to Trash. %@ is the file's kind from ARCFoundationBase's URL+DownloadDestination,
+    tested in order with UTType.conforms: Image, Disk Image, PDF, Movie, Audio, Zip Archive, Archive; with no match
+    it is the file's extension as it is (`URL.pathExtension`, "Open txt"). Cra: CraCore `DownloadMenu`, the tray and
+    Library ▸ Downloads share it (DownloadRowMenu); "Hide from Cra". Which items each state gets was not read; Cra
+    gives finished files the first and third groups, running ones Show in Finder and Cancel Download.
+  - Paused rows read "Paused" ("Subtitle copy for a paused download"); no item pauses one. Cra adds Pause Download /
+    Resume Download beside Cancel Download (CEF's CefDownloadItemCallback, kept per id in CraCEF.mm).
+  - Quitting while downloads run (`applicationShouldTerminate`): "Downloads in progress", "There are downloads in
+    progress. Closing the application will cancel them.", buttons "Close " + the app's name and "Keep browsing".
+    Cra: `QuitPrompt` asks it instead of "Quit Cra?", and before Install and Relaunch.
+  - The automatic update restart waits for downloads ("Auto update was cancelled because in progress download was
+    detected."); Cra has done so since 0.1.x (`autoUpdateBlocker`).
+  - `DownloadProgressBadge` (BaseHomeComponents): fields progress, colorPalette, reduceMotion, progressRingOpacity,
+    overallOpacity, overallScale, completionScale, completionOpacity, iconName, iconSize; the track colour asset is
+    DownloadProgressBarBackground. A ring with an icon, a completion mark that scales in, the whole badge scaling and
+    fading. [U] Where Arc draws it and its sizes: Cra puts a 16 pt one on the download bin's corner
+    (DownloadProgressBadgeView) and keeps the bin up while downloads run — to compare live.
 - Chrome's download-started animation (DownloadBubbleStartedAnimationViews, Chromium 156.0.8078.48): a views popup
   parented to the page, `accept_events = false`, 2 × kIconBackgroundRadius 32 = 64×64 pt, 500 ms, flying to the hidden
   toolbar's download button. Only reduced motion turns it off (CEF_CTBT_DOWNLOAD is deprecated: downloads became a

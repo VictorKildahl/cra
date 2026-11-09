@@ -159,6 +159,11 @@ built release app with a test profile. Note anything that fails in the release's
   `secure dns: secure via dns.google` and chrome://settings/security shows the same choice.
 - **#190:** with Ask Where to Save Each File on, the save panel is a sheet on Cra's window, and
   Cancel cancels the download.
+- **#272:** download a large file. The bin over the Library button keeps a ring that fills as it
+  downloads; right-clicking its row in the tray and on Library ▸ Downloads offers Pause Download and
+  Cancel Download, and a paused row reads "Paused". ⌘Q while it runs asks "Downloads in progress";
+  Keep browsing keeps it going. Once it finishes, a check replaces the arrow, and its row's menu
+  reads Open / Copy <kind>, Show in Finder, Hide from Cra and Move to Trash.
 - **PR #254:** with the release app as the default browser, open a page in Safari on an iPhone
   signed in to the same Apple Account and click the Handoff icon in the Dock. The page opens in
   Cra, in the space Air Traffic Control picks, and not in Safari.

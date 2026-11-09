@@ -254,6 +254,15 @@ private final class DownloadsTrayRowView: NSView, NSDraggingSource {
         NSWorkspace.shared.open(URL(fileURLWithPath: entry.path))
     }
 
+    /// Arc's Download Context Menu, as on Library ▸ Downloads (#272): Cancel Download on a running
+    /// row, Open, Copy and Show in Finder on a finished one.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        guard let listed else { return nil }
+        let menu = NSMenu()
+        DownloadRowMenu.fill(menu, for: listed)
+        return menu.items.isEmpty ? nil : menu
+    }
+
     func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
         context == .outsideApplication ? [.copy, .generic] : .copy
     }

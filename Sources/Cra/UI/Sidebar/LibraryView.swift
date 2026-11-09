@@ -851,17 +851,9 @@ extension LibraryListView: NSMenuDelegate {
             }
             menu.addItem(.separator())
             MenuItems.add(menu, "Remove from Archive") { store.removeFromArchive(e.id) }
-        case .download(.live):
-            break
-        case .download(.finished(let e)):
-            let url = URL(fileURLWithPath: e.path)
-            MenuItems.add(menu, "Open") { NSWorkspace.shared.open(url) }
-            MenuItems.add(menu, "Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
-            menu.addItem(.separator())
-            MenuItems.add(menu, "Copy") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.writeObjects([url as NSURL])
-            }
+        case .download(let d):
+            // Arc's Download Context Menu, the tray's too (#272).
+            DownloadRowMenu.fill(menu, for: d)
         }
     }
 }

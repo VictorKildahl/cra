@@ -726,7 +726,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // Progress and failures show in the downloads list, as in Arc (it has no download toast).
         DownloadHistory.shared.report(id: download.identifier, name: name, path: download.fullPath, received: download.receivedBytes,
                                       total: download.totalBytes, percent: download.percent, complete: download.state == .complete,
-                                      cancelled: download.state == .cancelled, failed: download.state == .interrupted)
+                                      cancelled: download.state == .cancelled, failed: download.state == .interrupted,
+                                      paused: download.paused)
         updateRecentDownload(download)
         if download.state == .complete, !download.fullPath.isEmpty, finishedDownloads.insert(download.identifier).inserted {
             DownloadHistory.shared.add(path: download.fullPath, profile: browsers.downloadSourceTab.map(store.profileDirectoryName(item:)) ?? profileDirectoryName)
@@ -753,6 +754,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// good. A row that hasn't heard from Chromium for a while reads the file instead:
     /// gone means it ended, the full size with no .crdownload beside it means it's done.
     private func checkStalledDownloads() {
+        // A paused download hears nothing from Chromium until it resumes, and isn't stalled.
         let inProgress = DownloadHistory.shared.live.filter { $0.running && windowDownloads.contains($0.id) }
         guard !inProgress.isEmpty else {
             downloadWatchdog?.invalidate()
@@ -760,7 +762,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             return
         }
         let fm = FileManager.default
-        for t in inProgress where !t.path.isEmpty && Date().timeIntervalSince(t.updated) > 5 {
+        for t in inProgress where !t.paused && !t.path.isEmpty && Date().timeIntervalSince(t.updated) > 5 {
             guard !fm.fileExists(atPath: t.path + ".crdownload") else { continue }
             let size = (try? fm.attributesOfItem(atPath: t.path))?[.size] as? Int64
             let state: CraDownloadState
@@ -794,9 +796,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             let bin = NSPoint(x: glyph.midX + LibraryButtonView.binOffset.width, y: glyph.midY - LibraryButtonView.binOffset.height)
             flight = DownloadFlight.launch(over: window, from: NSEvent.mouseLocation, to: bin)
         }
-        let id = download.identifier
-        DispatchQueue.main.asyncAfter(deadline: .now() + flight + 30) { [weak self] in
+        putAwayBin(download.identifier, after: flight + 30)
+    }
+
+    /// The bin leaves 30 s after it lands, but not while a download runs: its badge is how a
+    /// running download shows without hovering (#272). It goes 30 s after the last one ends.
+    private func putAwayBin(_ id: UInt32, after delay: TimeInterval) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self, self.sidebarUI.recentDownload?.id == id else { return }
+            if DownloadHistory.shared.hasRunningDownloads { self.putAwayBin(id, after: 5); return }
+            if let ended = DownloadHistory.shared.lastEnded, Date().timeIntervalSince(ended) < 30 {
+                self.putAwayBin(id, after: 30 - Date().timeIntervalSince(ended))
+                return
+            }
             withAnimation(.easeOut(duration: 0.15)) { self.sidebarUI.recentDownload = nil }
         }
     }

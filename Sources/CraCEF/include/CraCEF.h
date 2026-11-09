@@ -13,6 +13,13 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
     CraDownloadStateInterrupted = 3,
 };
 
+/// What a download's menu asks of it (GitHub #272).
+typedef NS_ENUM(NSInteger, CraDownloadControl) {
+    CraDownloadControlPause = 0,
+    CraDownloadControlResume = 1,
+    CraDownloadControlCancel = 2,
+};
+
 /// Where a page's context menu opens a link that isn't for a tab.
 typedef NS_ENUM(NSInteger, CraLinkWindow) {
     CraLinkWindowNew = 0,
@@ -29,6 +36,8 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
 @property (nonatomic) int64_t totalBytes;
 @property (nonatomic) NSInteger percent;
 @property (nonatomic) CraDownloadState state;
+/// In progress but paused (Chromium's IsPaused); `state` stays in progress.
+@property (nonatomic) BOOL paused;
 @end
 
 /// The connection of the page on screen (Chromium's SSL status of the visible navigation entry).
@@ -352,6 +361,9 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
 /// the user closed). Without a handler downloads go to ~/Downloads.
 + (void)setDownloadDestinationHandler:(void (^)(NSString * _Nullable profilePath, NSString *suggestedName,
                                                 void (^completion)(NSString * _Nullable path)))handler;
+/// Pauses, resumes or cancels a download still in progress, from its row's menu (GitHub #272); NO
+/// when Chromium has no download in progress by that id. Its next update reports the change.
++ (BOOL)controlDownload:(uint32_t)identifier action:(CraDownloadControl)action;
 /// Renderer trouble and failed loads, for Cra's performance recorder (GitHub #91): `kind` is
 /// terminated, unresponsive, responsive or loadError; `detail` how it ended or the net error
 /// code; `site` the host (nil for incognito, Cra's own pages or a closed tab). Never a URL.

@@ -1128,9 +1128,11 @@ final class LibraryButtonView: NSView {
     private let bin = NSView()
     private let binImage = CALayer()
     private let binTip: ArcTooltipAnchorView
+    /// The ring on the bin's corner while downloads run (#272).
+    private let badge = DownloadProgressBadgeView()
     private var shownDownload: UInt32?
     private var hovering = false { didSet { if hovering != oldValue { refresh() } } }
-    var colors = SidebarColors() { didSet { if colors != oldValue { glyph.image = LibraryGlyph.image(dark: colors.isDark); refresh() } } }
+    var colors = SidebarColors() { didSet { if colors != oldValue { glyph.image = LibraryGlyph.image(dark: colors.isDark); badge.colors = colors; refresh() } } }
     static let binOffset = CGSize(width: 9, height: -12)
     /// The download bin's frame, for Tidy Downloads' card to point at.
     var binFrame: NSRect { bin.frame }
@@ -1159,10 +1161,27 @@ final class LibraryButtonView: NSView {
         binImage.contentsGravity = .resizeAspectFill
         bin.layer?.addSublayer(binImage)
         bin.addSubview(binTip)
+        bin.addSubview(badge)
         bin.isHidden = true
         addSubview(bin)
         ui.libraryAnchor = self
         observe()
+        observeProgress()
+    }
+
+    private struct Progress: Equatable {
+        var running: Double?
+        var bin: UInt32?
+    }
+
+    /// The badge follows every running download together; when the last one ends, a check if the
+    /// bin's download finished with a file, else it just goes.
+    private func observeProgress() {
+        observeChanges(of: { [ui] in Progress(running: DownloadHistory.shared.progress, bin: ui.recentDownload?.id) }) { [weak self] p in
+            guard let self else { return }
+            let finished = p.bin.map { id in !DownloadHistory.shared.live.contains { $0.id == id } } ?? false
+            self.badge.show(progress: p.bin == nil ? nil : p.running, finished: finished)
+        }
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -1213,6 +1232,9 @@ final class LibraryButtonView: NSView {
         bin.frame = NSRect(x: c.x - 16, y: c.y - 16, width: 32, height: 32)
         binImage.frame = bin.bounds
         binTip.frame = bin.bounds
+        // Over the bin's bottom right corner, 4 pt out (the bin isn't flipped).
+        let b = DownloadProgressBadgeView.size
+        badge.frame = NSRect(x: bin.bounds.maxX - b + 4, y: -4, width: b, height: b)
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {

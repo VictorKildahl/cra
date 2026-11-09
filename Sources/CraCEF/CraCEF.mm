@@ -75,6 +75,9 @@ static void (^g_strayPageHandler)(NSString*, NSString*) = nil;
 static BOOL (^g_appLinkHandler)(CraBrowser*, NSString*, BOOL) = nil;
 // Downloads whose save panel was cancelled (#190): cancelled on their next update, never shown.
 static std::set<uint32_t> g_cancelledDownloads;
+// Each download in progress, to pause, resume or cancel from its row (#272). Chromium's callback
+// holds the download's id, not the item, so it stays usable between updates.
+static std::map<uint32_t, CefRefPtr<CefDownloadItemCallback>> g_downloadCallbacks;
 static void (^g_downloadDestinationHandler)(NSString*, NSString*, void (^)(NSString*)) = nil;
 static void (^g_processEventHandler)(NSString*, NSString*, NSString*) = nil;
 
@@ -1897,10 +1900,13 @@ public:
             else g_cancelledDownloads.erase(item->GetId());
             return;
         }
+        if (item->IsInProgress()) g_downloadCallbacks[item->GetId()] = callback;
+        else g_downloadCallbacks.erase(item->GetId());
         CraBrowser* o = owner_;
         if (!o) return;
         CraDownloadInfo* info = [CraDownloadInfo new];
         info.identifier = item->GetId();
+        info.paused = item->IsPaused();
         info.url = NSStringFromCef(item->GetURL());
         info.fullPath = NSStringFromCef(item->GetFullPath());
         info.suggestedName = NSStringFromCef(item->GetSuggestedFileName());
@@ -2831,6 +2837,17 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 + (void)setStrayPageHandler:(void (^)(NSString*, NSString*))handler { g_strayPageHandler = [handler copy]; }
 + (void)setAppLinkHandler:(BOOL (^)(CraBrowser*, NSString*, BOOL))handler { g_appLinkHandler = [handler copy]; }
 + (void)setDownloadDestinationHandler:(void (^)(NSString*, NSString*, void (^)(NSString*)))handler { g_downloadDestinationHandler = [handler copy]; }
+
++ (BOOL)controlDownload:(uint32_t)identifier action:(CraDownloadControl)action {
+    auto it = g_downloadCallbacks.find(identifier);
+    if (it == g_downloadCallbacks.end()) return NO;
+    switch (action) {
+        case CraDownloadControlPause: it->second->Pause(); break;
+        case CraDownloadControlResume: it->second->Resume(); break;
+        case CraDownloadControlCancel: it->second->Cancel(); break;
+    }
+    return YES;
+}
 + (void)setProcessEventHandler:(void (^)(NSString*, NSString*, NSString*))handler { g_processEventHandler = [handler copy]; }
 + (BOOL)isExtensionWindow:(NSWindow*)window { return window && [g_extensionWindows containsObject:window]; }
 + (BOOL)isPageWindow:(NSWindow*)window {
