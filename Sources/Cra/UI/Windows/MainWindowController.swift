@@ -2614,6 +2614,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             && host.bounds.contains(host.convert(event.locationInWindow, from: nil)) && !isStandalone
     }
 
+    /// Whether the pointer, not the key event's window, is over this window's sidebar. A key
+    /// goes to the focused page, so ⌥← from a mouse button has to be hit-tested here (issue #233).
+    func pointerOverSidebar() -> Bool {
+        let host = shell.sidebarHost
+        guard (shell.sidebarVisible || shell.floatingSidebar), !isStandalone, let window = host.window else { return false }
+        let point = window.convertPoint(fromScreen: NSEvent.mouseLocation)
+        guard host.bounds.contains(host.convert(point, from: nil)) else { return false }
+        return NSWindow.windowNumber(at: NSEvent.mouseLocation, belowWindowWithWindowNumber: 0) == window.windowNumber
+    }
+
     /// Shift + wheel, or a sideways wheel, over the sidebar: past a flick the next or previous
     /// space comes in on the space change's spring, and before the first space the Library
     /// slides in, as a swipe would bring it (Arc 1.171, WheelSpaceSwitch). Returns false for a
