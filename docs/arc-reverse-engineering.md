@@ -1684,6 +1684,11 @@ Dark mode only; light mode was not observed.
   `applicationShouldTerminate`, skipped on engine relaunch), `autoArchiveEnabled`.
 - [U] Light-mode colours, the popup option lists, the Shortcuts details pane, hover states
   (the source list has none), and the "Advanced Settings" ad-block dialog were not opened.
+- [O] Dia 1.55.1 (9 Nov 2026, AX + 2x window capture, PR #269): the sidebar is now an inset rounded panel
+  (x 8…204, 8 from the top) in a 778×600 window. AX rows are still 196×28 (the panel's width); the selected
+  fill is 10 pt inside the panel on both sides (x 18…194), 28 tall, corner ≈7, (0,141,255) sRGB; glyph 20×20
+  at +20 from the row, label at +49 (cap height 10 ≈ 14 pt). Cra keeps the full-height sidebar and maps
+  the same relationship onto it: the fill 10 pt inside the sidebar, the glyph 10 pt into the fill.
 
 ## Sidebar header with the toolbar hidden (Arc 1.170, 26 Oct 2026)
 
