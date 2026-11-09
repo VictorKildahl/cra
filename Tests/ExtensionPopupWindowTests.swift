@@ -17,8 +17,9 @@ enum ExtensionPopupWindowTests {
         window.setFrameOrigin(NSPoint(x: -10000, y: -10000))
         expect(!window.canBecomeKey && !window.canBecomeMain, "the popup frame must not take Chrome's focus")
         expect(window.isMovable, "the rest of the titlebar remains draggable")
-        expect(window.frame.maxY - bubble.frame.maxY >= ExtensionPopupWindow.titleBarHeight,
-               "Chrome's transparent top margin leaves the full title bar available for clicks and drags")
+        let titleBarBottom = window.frame.minY + window.contentLayoutRect.maxY
+        expect(bubble.frame.maxY - ExtensionPopupWindow.bubbleInset == titleBarBottom,
+               "the page starts right under AppKit's title bar, whatever its height, with no gap")
 
         for kind: NSWindow.ButtonType in [.closeButton, .miniaturizeButton, .zoomButton] {
             guard let button = window.standardWindowButton(kind), let titlebar = button.superview,
