@@ -36,10 +36,10 @@ built release app with a test profile. Note anything that fails in the release's
 
 ### Sidebar, tabs and the command bar
 
-- **⌘T appearance:** compare with the supplied Arc reference: charcoal surface, compact rows,
-  aligned input/result titles, indigo selection with white text and arrow tile. Recent open tabs
-  show “Switch to Tab” before typing. Arrow through results and check foregrounds update in
-  dark and light appearances; long titles truncate before the trailing action.
+- **PR #268, ⌘T:** next to Arc on a themed space and on a default one: the selected row is the
+  space's colour (gold on a gold space), white text and a white arrow tile; the info badge takes the
+  space's darkest tone. Recent open tabs show "Switch to Tab" before typing. Arrow through results
+  and check every row's inks follow the selection; long titles truncate before the trailing action.
 
 - **#196:** hover a Today tab and move onto its ✕ several times. The ✕ never vanishes before
   the click.
