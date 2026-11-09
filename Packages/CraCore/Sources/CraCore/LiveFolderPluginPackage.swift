@@ -1,6 +1,6 @@
 import Foundation
 
-public struct LiveFolderPluginPackage {
+public struct LiveFolderPluginPackage: Sendable {
     public let manifest: LiveFolderPluginManifest
     public let directory: URL
     public let script: String

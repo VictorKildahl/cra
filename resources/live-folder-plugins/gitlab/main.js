@@ -21,7 +21,7 @@ const presentation = {
         notSignedIn: "Not signed in to GitLab",
         rateLimited: "GitLab rate limit exceeded",
         unexpectedPage: "Failed to update: unexpected GitLab response",
-        network: "GitLab can’t be reached"
+        network: "Failed to update: GitLab can’t be reached"
     }
 };
 

@@ -1,6 +1,17 @@
 import Foundation
 import JavaScriptCore
 
+// Runs one call into a live folder plugin: the script and its input arrive as one line on stdin, the
+// result (or a session request, answered on stdin) goes out on stdout. Plugins can come from a ZIP
+// someone downloaded, so this process gives up files, network and every other service before it
+// reads the script: all a plugin can reach is the pipe to Cra, which checks each request.
+
+/// <sandbox.h>, which Swift doesn't import. Chromium's helpers use the same call.
+@_silgen_name("sandbox_init")
+private func sandbox_init(_ profile: UnsafePointer<CChar>, _ flags: UInt64,
+                          _ errorbuf: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32
+private let SANDBOX_NAMED: UInt64 = 1
+
 var errorState: [String: String] = [:]
 
 func send(_ value: [String: Any]) throws {
@@ -8,12 +19,30 @@ func send(_ value: [String: Any]) throws {
     try FileHandle.standardOutput.write(contentsOf: data + Data([10]))
 }
 
+/// JavaScriptCore loads ICU's data and its regular expression engine on first use: use them once
+/// while files can still be read, then lock the process into the system's pure-computation profile.
+func enterSandbox(_ context: JSContext) throws {
+    context.evaluateScript(#"""
+        /\p{L}+/u.test("é"); "Ä".normalize("NFD").toLowerCase(); "a".localeCompare("b");
+        Date.parse("2026-11-06T12:00:00.123+0300"); new Date(0).toISOString(); JSON.stringify({a: [1]});
+        encodeURIComponent("é ?"); parseInt("ff", 16); String.fromCodePoint(0x1F600);
+        """#)
+    var error: UnsafeMutablePointer<CChar>?
+    guard sandbox_init("pure-computation", SANDBOX_NAMED, &error) == 0 else {
+        let message = error.map { String(cString: $0) } ?? "unknown"
+        throw NSError(domain: "CraPluginHost", code: 5, userInfo: [NSLocalizedDescriptionKey: "Sandbox failed: \(message)"])
+    }
+}
+
 do {
+    guard let context = JSContext() else {
+        throw NSError(domain: "CraPluginHost", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid plugin invocation"])
+    }
+    try enterSandbox(context)
     guard let line = readLine(), let data = line.data(using: .utf8),
           let request = try JSONSerialization.jsonObject(with: data) as? [String: Any],
           let script = request["script"] as? String,
-          let method = request["method"] as? String,
-          let context = JSContext() else {
+          let method = request["method"] as? String else {
         throw NSError(domain: "CraPluginHost", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid plugin invocation"])
     }
     var exception: String?

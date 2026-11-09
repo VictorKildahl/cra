@@ -32,7 +32,6 @@ enum StoreTests {
         liveRepositoryFiltering()
         liveRepositoryMenus()
         liveFolderExpiryKeepsNavigatedPages()
-        liveFolderSignIn()
         gitLabHiddenItems()
         gitLabFolderExpiryAndDeletion()
         gitLabMultipleServers()
@@ -374,25 +373,6 @@ enum StoreTests {
         let second = store.createSpace(title: "Second", emoji: "2", focus: false)
         store.prefs.windows[0].selectedTabPerSpace[second.id] = b.id
         expect(store.integrityProblems().contains { $0.contains("lives elsewhere") }, "a window selecting another space's tab is reported")
-    }
-
-    /// GitHub's answers that mean "sign in" never read as an empty folder (6 Nov 2026: a lapsed
-    /// Enterprise Managed User session landed on the enterprise's SSO page and emptied the folder).
-    private static func liveFolderSignIn() {
-        let ssoPage = #"<html><meta name="user-login" content="vkp_jysk"><script type="application/json" id="client-env">{"locale":"en"}</script></html>"#
-        expect(GitHubLiveClient.read(status: 200, finalURL: "https://github.com/enterprises/jysk-emu/sso?return_to=%2Fpulls", body: ssoPage) == .failure(.notSignedIn),
-               "a fetch sent to the enterprise's single sign-on needs a sign-in")
-        expect(GitHubLiveClient.read(status: 200, finalURL: "https://github.com/orgs/jysk-dev/sso", body: ssoPage) == .failure(.notSignedIn),
-               "so does an organization's")
-        expect(GitHubLiveClient.enterprise(inSSO: "https://github.com/enterprises/jysk-emu/sso?return_to=%2Fpulls") == "jysk-emu",
-               "the folder learns the enterprise from where its fetch landed")
-        expect(GitHubLiveClient.read(status: 200, finalURL: "https://github.com/dashboard", body: ssoPage) == .failure(.unexpectedPage),
-               "an empty page that isn't the pulls or search page is no answer")
-        let empty = #"{"payload":{"pullsDashboardSurfaceContentRoute":{"results":[],"pageInfo":{},"error":null}}}"#
-        expect(GitHubLiveClient.read(status: 200, finalURL: "https://github.com/pulls?q=is%3Apr", body: empty) == .success(.init()),
-               "the pulls page with no results is an empty folder")
-        expect(GitHubLiveClient.read(status: 404, finalURL: "https://github.com/pulls?q=is%3Apr", body: #"{"error":"Couldn’t authenticate you"}"#) == .failure(.notSignedIn),
-               "signed out, the pulls page can't authenticate you")
     }
 
     /// A pull request that left the results stays for the grace period, then goes, all on the clock.

@@ -8,7 +8,7 @@ const presentation = {
     groups: {title: "Repositories", description: "This list is generated based on your currently active pull requests."},
     statusMessages: {
         notSignedIn: "Not signed in to GitHub", rateLimited: "GitHub rate limit exceeded",
-        unexpectedPage: "Failed to update: unexpected GitHub response", network: "GitHub can’t be reached"
+        unexpectedPage: "Failed to update: unexpected GitHub response", network: "Failed to update: GitHub can’t be reached"
     }
 };
 

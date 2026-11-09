@@ -73,10 +73,15 @@ struct PluginsPane: View {
                 do {
                     let archive = try await Task.detached { try LiveFolderPluginArchive(url: url) }.value
                     let package = archive.package
-                    var permissions = package.manifest.sessionOrigins
-                    if package.manifest.sessionSetting != nil { permissions.append("The server you configure for its folders.") }
-                    let message = permissions.isEmpty ? "This plugin does not request access to your browser session." :
-                        "This plugin can read responses using your browser session for:\n" + permissions.joined(separator: "\n")
+                    var permissions = package.manifest.sessionOrigins.map { "• " + $0 }
+                    if package.manifest.sessionSetting != nil { permissions.append("• The address you enter when you add its folder") }
+                    // A plugin reads these sites signed in as you, and can pass what it read from one to
+                    // another in an address: say so, since that is what the user is trusting it with.
+                    let message = permissions.isEmpty
+                        ? "This plugin doesn’t use your browser session. It can’t read files or reach the network."
+                        : "This plugin can load pages from these sites signed in as you, with the profile of the Space its folder is in, "
+                            + "and can send what it reads to any of them:\n\n" + permissions.joined(separator: "\n")
+                            + "\n\nOnly add plugins from people you trust."
                     AppDialog(title: "Add “\(package.manifest.name)”?", message: message,
                         actions: [DialogAction("Add Plugin"), .cancel]).present(over: window) { result in
                         guard result == .alertFirstButtonReturn else { return }

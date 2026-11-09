@@ -125,8 +125,12 @@ public struct LiveFolderData: Codable, Equatable {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        plugin = try c.decodeIfPresent(LiveFolderPluginConfiguration.self, forKey: .plugin)
-        source = try c.decodeIfPresent(LiveFolderSource.self, forKey: .source) ?? .github
+        plugin = try? c.decodeIfPresent(LiveFolderPluginConfiguration.self, forKey: .plugin)
+        // A source this Cra doesn't know (a newer one's) reads as a plugin folder rather than
+        // failing the whole sidebar.json, which is what 0.1.37 and older do with "plugin".
+        if let raw = try c.decodeIfPresent(String.self, forKey: .source) {
+            source = LiveFolderSource(rawValue: raw) ?? .plugin
+        }
         serverURL = try c.decodeIfPresent(String.self, forKey: .serverURL)
         filter = try c.decodeIfPresent(GitHubLiveFilter.self, forKey: .filter) ?? GitHubLiveFilter()
         hiddenItems = try c.decodeIfPresent([String].self, forKey: .hiddenItems) ?? []

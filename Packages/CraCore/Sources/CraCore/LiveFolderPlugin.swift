@@ -1,7 +1,7 @@
 import Foundation
 
-public struct LiveFolderPluginManifest: Codable, Equatable {
-    public struct Command: Codable, Equatable {
+public struct LiveFolderPluginManifest: Codable, Equatable, Sendable {
+    public struct Command: Codable, Equatable, Sendable {
         public let title: String
         public let description: String
         public let triggers: [String]
@@ -50,7 +50,7 @@ public enum LiveFolderPluginError: Error, Equatable, LocalizedError {
     }
 }
 
-public struct LiveFolderSessionOrigin: Hashable {
+public struct LiveFolderSessionOrigin: Hashable, Sendable {
     private let scheme: String
     private let host: String
     private let port: Int

@@ -90,6 +90,8 @@ struct LiveFolderPluginProcessTests {
             precondition(message.contains("notSignedIn") && state["enterprise"] == "example")
         }
         try jira(executable: executable)
+        try LiveFolderProviderTests.run(executable: executable)
+        try sandboxed(executable: executable)
         print("Plugin transport, permissions, timeout, bundled provider checks passed")
     }
 
@@ -200,4 +202,34 @@ struct LiveFolderPluginProcessTests {
         }
     }
 
+
+    /// <sandbox.h>: nonzero when the process is sandboxed, or when it is denied `operation`.
+    @_silgen_name("sandbox_check")
+    private static func sandbox_check(_ pid: pid_t, _ operation: UnsafePointer<CChar>?, _ type: Int32) -> Int32
+
+    /// Plugin code runs only after the host gave up files and the network: checked on a live host,
+    /// while it waits for the answer to its plugin's session request.
+    private static func sandboxed(executable: URL) throws {
+        let process = Process()
+        let input = Pipe(), output = Pipe()
+        process.executableURL = executable
+        process.standardInput = input
+        process.standardOutput = output
+        try process.run()
+        defer { process.terminate(); process.waitUntilExit() }
+        let invocation = try JSONSerialization.data(withJSONObject: [
+            "script": "return {run() { return cra.session.fetch('https://example.test/'); }};", "method": "run", "input": [:]])
+        try input.fileHandleForWriting.write(contentsOf: invocation + Data([10]))
+        var line = Data()
+        while !line.contains(10) {
+            let chunk = output.fileHandleForReading.availableData
+            precondition(!chunk.isEmpty, "the host asked for its session request")
+            line += chunk
+        }
+        precondition(String(decoding: line, as: UTF8.self).contains("\"fetch\""), "the plugin is running")
+        precondition(sandbox_check(process.processIdentifier, nil, 0) != 0, "the plugin host is sandboxed")
+        for operation in ["file-read-data", "file-write-data", "network-outbound", "process-exec"] {
+            precondition(sandbox_check(process.processIdentifier, operation, 0) != 0, "the plugin host may not \(operation)")
+        }
+    }
 }

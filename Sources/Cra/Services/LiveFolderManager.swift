@@ -1,20 +1,42 @@
 import AppKit
 import Observation
 
+/// Keeps live folders current on Dia's schedule (its LiveFolderRefreshTrigger: periodicRefresh,
+/// windowFocus, manualRefresh, configChanged, externalTrigger): every two minutes while a Cra window
+/// is active, when a window takes focus, when the user asks, and when a folder's plugin asks after a
+/// page moved (GitHub: a pull request created or reviewed in a tab). The requests and their reading
+/// are the plugins' (resources/live-folder-plugins, docs/live-folder-plugins.md); tabs, timing and
+/// what a failure leaves in place are Cra's. See docs/live-folders.md, "Dia's refresh timing".
 @MainActor
 @Observable
 final class LiveFolderManager {
     static let shared = LiveFolderManager()
     @ObservationIgnored private weak var store: SidebarStore?
+    /// Folders with a refresh in flight; their refresh button spins.
     private(set) var refreshing: Set<UUID> = []
+    /// Groups (repositories, projects) in each folder's last results plus the hidden ones: the folder
+    /// menu's list (Arc: "This list is generated based on your currently active pull requests.").
     private(set) var repositories: [UUID: [String]] = [:]
+    /// Why each folder's last plugin call failed, also written to cra.log (and so to Export Diagnostics).
     private(set) var diagnostics: [UUID: String] = [:]
+    /// Folders whose filters, profile or server changed while a refresh was out: they refresh again
+    /// once it's back (its answer is for the old settings and is dropped).
     @ObservationIgnored private var pendingRefresh: Set<UUID> = []
     @ObservationIgnored private var timer: ScheduledWork?
+    /// The last address each tab reported, to tell what a page came from.
     @ObservationIgnored private var lastURL: [UUID: String] = [:]
+    /// A page on a folder's service loaded while it waits for a sign-in: refresh once pages have settled.
+    @ObservationIgnored private var signInChecks: [UUID: DispatchWorkItem] = [:]
+
+    /// Dia's github-live-folder-min-refresh-interval-seconds (120 in its flag cache, 27 Oct 2026).
     nonisolated static let refreshInterval: TimeInterval = 120
+    /// Dia's github-live-folder-post-merge/-post-review-retention-seconds (120 each): an item
+    /// that left the results stays this long before its tab goes.
     nonisolated static let retention: TimeInterval = 120
+    /// Arc's requestedTooSoon: clicks on refresh closer together than this do nothing.
     static let minimumInterval: TimeInterval = 10
+    /// A folder that failed or waits for a sign-in tries again this often (a Mac waking up has no
+    /// network for a moment; an SSO session renews as soon as a GitHub page is opened).
     nonisolated static let retryInterval: TimeInterval = 30
 
     func start(store: SidebarStore) {
@@ -27,6 +49,7 @@ final class LiveFolderManager {
             self?.store?.expireLiveItems(olderThan: Self.retention)
             self?.refreshStale()
         }
+        // Dia's windowFocus trigger. App activation makes a window key too.
         NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.refreshStale() }
         }
@@ -37,6 +60,8 @@ final class LiveFolderManager {
         }
     }
 
+    /// Dia waits for an active window (LiveDataRefreshSkipReason.waitingForActiveWindow): nothing
+    /// is fetched while Cra is in the background.
     func refreshStale(olderThan age: TimeInterval = refreshInterval) {
         guard NSApp.isActive, LiveFolderPluginStore.shared.loaded, let store else { return }
         for folder in store.liveFolders {
@@ -46,6 +71,8 @@ final class LiveFolderManager {
         }
     }
 
+    /// The service asked for a sign-in, or the plugin's last answer holds some items back until one
+    /// (GitHub: SSO for an organization).
     nonisolated static func needsSignIn(_ live: LiveFolderData) -> Bool {
         live.lastError == .notSignedIn || live.plugin?.snapshot?.warning != nil
     }
@@ -56,6 +83,9 @@ final class LiveFolderManager {
         var state: [String: String]
     }
 
+    /// GitHub and GitLab folders saved before plugins become the bundled plugin's folders: the
+    /// plugin turns the old filter bits and instance into its settings, and the tabs already in the
+    /// folder seed its snapshot so nothing reloads or moves. Only bundled plugins may claim them.
     func migrateFolders() async {
         guard let store else { return }
         let registry = LiveFolderPluginStore.shared
@@ -75,10 +105,11 @@ final class LiveFolderManager {
                 try await updateSignIn(&configuration, entry: entry)
                 guard store.item(folder.id)?.liveFolder == live else { continue }
                 store.updateLiveFolder(folder.id) { $0.plugin = configuration }
-            } catch { diagnostics[folder.id] = error.localizedDescription }
+            } catch { note(error, folder: folder.id) }
         }
     }
 
+    /// A new folder's configuration: the plugin's own origins, plus the address its setup asked for.
     static func configuration(entry: LiveFolderPluginStore.Entry, settings: [String: String], filters: [String],
                               state: [String: String] = [:]) throws -> LiveFolderPluginConfiguration {
         var origins = entry.package.manifest.sessionOrigins
@@ -95,6 +126,7 @@ final class LiveFolderManager {
                                              state: state, sessionOrigins: origins)
     }
 
+    /// The plugin's sign-in action and the folder's instance-specific text, for its current settings and state.
     func updateSignIn(_ configuration: inout LiveFolderPluginConfiguration, entry: LiveFolderPluginStore.Entry) async throws {
         struct SignIn: Decodable {
             var title: String; var url: String; var warning: String
@@ -114,6 +146,7 @@ final class LiveFolderManager {
         configuration.detailLabel = result.detailLabel
     }
 
+    /// `force` skips the gap between refreshes: the folder's filters just changed.
     func refresh(_ id: UUID, force: Bool = false) {
         if store?.item(id)?.liveFolder?.plugin == nil, LiveFolderPluginStore.shared.loaded {
             Task {
@@ -163,7 +196,7 @@ final class LiveFolderManager {
                 store.applyPluginResults(snapshot, to: id, context: context)
             } catch {
                 guard acceptsResponse(id, context: context) else { return }
-                diagnostics[id] = error.localizedDescription
+                note(error, folder: id)
                 let code = error.localizedDescription.replacingOccurrences(of: "Error: ", with: "")
                 store.applyLiveFailure(LiveFolderError(rawValue: code) ?? .unexpectedPage, to: id, context: context)
                 if case LiveFolderPluginError.pluginFailed(_, let state) = error, !state.isEmpty, state != configuration.state {
@@ -173,10 +206,16 @@ final class LiveFolderManager {
                         try await updateSignIn(&updated, entry: entry)
                         guard store.liveRequestContext(id) == context else { return }
                         store.updateLiveFolder(id) { $0.plugin?.state = state; $0.plugin?.signIn = updated.signIn }
-                    } catch { diagnostics[id] = error.localizedDescription }
+                    } catch { note(error, folder: id) }
                 }
             }
         }
+    }
+
+    private func note(_ error: Error, folder: UUID) {
+        let message = error.localizedDescription
+        diagnostics[folder] = message
+        CraLog.note("live folder \(folder.uuidString.prefix(8)): \(message)")
     }
 
     private func acceptsResponse(_ id: UUID, context: SidebarStore.LiveRequestContext) -> Bool {
@@ -186,14 +225,24 @@ final class LiveFolderManager {
         return true
     }
 
+    /// A page in a tab moved (BrowserManager). A folder's plugin hears about pages on its own session
+    /// origins only, in the folder's profile: any other address would start a helper process per folder
+    /// for nothing. GitHub's plugin refreshes after a pull request is created (compare page → pull page)
+    /// or reviewed (#pullrequestreview- anchor), like Dia's edit/review creation triggers, and learns an
+    /// enterprise's SSO from where a tab lands.
     func pageChanged(tab: UUID, to url: String) {
         let previous = lastURL[tab]
         lastURL[tab] = url
         if lastURL.count > 500 { lastURL = [tab: url] }
-        guard previous != url, let store else { return }
+        guard previous != url, let store, !store.liveFolders.isEmpty else { return }
+        let page = URL(string: url), before = previous.flatMap { URL(string: $0) }
         struct Change: Decodable { var state: [String: String]; var refreshAfter: [Double]; var checkSignIn: Bool }
         for folder in store.liveFolders {
             guard let live = folder.liveFolder, var configuration = live.plugin,
+                  configuration.sessionOrigins.contains(where: { origin in
+                      guard let origin = try? LiveFolderSessionOrigin(origin) else { return false }
+                      return page.map(origin.permits) == true || before.map(origin.permits) == true
+                  }),
                   let entry = LiveFolderPluginStore.shared.entries[configuration.id],
                   let context = store.liveRequestContext(folder.id),
                   store.profilePath(item: tab) == store.profilePath(item: folder.id) else { continue }
@@ -211,13 +260,29 @@ final class LiveFolderManager {
                         guard store.liveRequestContext(id) == context else { return }
                         store.updateLiveFolder(id) { $0.plugin?.state = configuration.state; $0.plugin?.signIn = configuration.signIn }
                     }
-                    var delays = change.refreshAfter.filter { $0.isFinite && $0 >= 0 && $0 <= 300 }.prefix(5).map { $0 }
-                    if change.checkSignIn && Self.needsSignIn(live) { delays.append(2) }
-                    for delay in delays {
+                    for delay in change.refreshAfter.filter({ $0.isFinite && $0 >= 0 && $0 <= 300 }).prefix(5) {
                         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { self.refresh(id, force: true) }
                     }
-                } catch { diagnostics[id] = error.localizedDescription }
+                    if change.checkSignIn { checkSignIn(id) }
+                } catch { note(error, folder: id) }
             }
         }
+    }
+
+    /// Signing in ends on the service's own pages, and so does an SSO session that renews by itself
+    /// (an identity provider that signs in without asking, like JYSK's ADFS): a folder waiting for a
+    /// sign-in tries again a moment after those pages stop loading, instead of waiting for the next retry.
+    private func checkSignIn(_ id: UUID) {
+        guard let live = store?.item(id)?.liveFolder, Self.needsSignIn(live) else { return }
+        signInChecks[id]?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, let store = self.store else { return }
+            self.signInChecks[id] = nil
+            guard let live = store.item(id)?.liveFolder, Self.needsSignIn(live),
+                  store.clock.now.timeIntervalSince(live.lastFetch ?? .distantPast) >= Self.minimumInterval else { return }
+            self.refresh(id, force: true)
+        }
+        signInChecks[id] = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: work)
     }
 }

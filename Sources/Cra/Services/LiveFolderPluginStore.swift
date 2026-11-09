@@ -85,10 +85,31 @@ final class LiveFolderPluginStore {
         Bundle.main.executableURL!.deletingLastPathComponent().appendingPathComponent("CraPluginHost")
     }
 
+    @ObservationIgnored private var reloadTask: Task<Void, Never>?
+    @ObservationIgnored private var reloadAgain = false
+
+    /// Reads both plugin folders again. A call while one runs waits for a second pass that starts
+    /// after it, so an install or a toggle never returns before its plugin is (or isn't) loaded.
     func reload() async {
-        guard !reloading else { return }
-        reloading = true
-        defer { reloading = false }
+        if let running = reloadTask {
+            reloadAgain = true
+            await running.value
+            return
+        }
+        let task = Task { @MainActor in
+            reloading = true
+            repeat {
+                reloadAgain = false
+                await loadPackages()
+            } while reloadAgain
+            reloading = false
+        }
+        reloadTask = task
+        await task.value
+        reloadTask = nil
+    }
+
+    private func loadPackages() async {
         let builtin = Bundle.main.resourceURL!.appendingPathComponent("live-folder-plugins", isDirectory: true)
         let roots = [builtin, Self.directory]
         var directories: [URL] = []
@@ -139,12 +160,32 @@ final class LiveFolderPluginStore {
                 isCurrent: @escaping @MainActor @Sendable () -> Bool = { true }) async throws -> Data {
         let executable = Self.executable
         let id = package.manifest.id
-        return try await Task.detached {
-            try LiveFolderPluginProcess.invoke(executable: executable, script: package.script, method: method,
-                input: input, origins: origins) { request in
-                    try Self.fetch(request, origins: origins, profile: profile, pluginID: id, isCurrent: isCurrent)
-                }
-        }.value
+        // The helper's pipe and each session request block their thread until the answer comes (up
+        // to the 30 s deadline): a queue of their own, not Swift's cooperative pool, which has a
+        // thread per core and stalls every other task in Cra while they are all waiting.
+        return try await withCheckedThrowingContinuation { continuation in
+            Self.queue.async {
+                continuation.resume(with: Result {
+                    try LiveFolderPluginProcess.invoke(executable: executable, script: package.script, method: method,
+                        input: input, origins: origins) { request in
+                            try Self.fetch(request, origins: origins, profile: profile, pluginID: id, isCurrent: isCurrent)
+                        }
+                })
+            }
+        }
+    }
+
+    nonisolated private static let queue = DispatchQueue(label: "cra.live-folder-plugins", qos: .utility, attributes: .concurrent)
+    /// CRA_LIVE_FOLDER_DEBUG=1 writes every session response a plugin gets to <data dir>/live-folder-debug/.
+    nonisolated private static let debug = ProcessInfo.processInfo.environment["CRA_LIVE_FOLDER_DEBUG"] == "1"
+
+    nonisolated private static func dump(_ request: String, _ response: LiveFolderPluginResponse, pluginID: String) {
+        let dir = AppPaths.file("live-folder-debug")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let text = "GET \(request)\nstatus \(response.status)\nfinal \(response.url)\n\n\(response.body)"
+        let file = dir.appendingPathComponent("\(pluginID)-\(Int(Date().timeIntervalSince1970 * 1000)).txt")
+        try? text.write(to: file, atomically: true, encoding: .utf8)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
     }
 
     nonisolated private static func fetch(_ request: LiveFolderPluginRequest,
@@ -168,6 +209,7 @@ final class LiveFolderPluginStore {
                 }
             }
             let response = try pending.wait()
+            if debug { dump(target, response, pluginID: pluginID) }
             if (300..<400).contains(response.status) {
                 address = response.url
                 continue

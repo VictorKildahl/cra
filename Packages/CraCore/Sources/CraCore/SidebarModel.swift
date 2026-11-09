@@ -201,6 +201,44 @@ public struct SidebarItem: Identifiable, Codable, Equatable {
         self.tabGroup = tabGroup
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case id, parentID, title, children, isUnread, createdAt, data, folderIcon, folderSymbol, liveFolder, pluginFolder, tabGroup
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        parentID = try c.decodeIfPresent(UUID.self, forKey: .parentID)
+        title = try c.decodeIfPresent(String.self, forKey: .title)
+        children = try c.decode([UUID].self, forKey: .children)
+        isUnread = try c.decode(Bool.self, forKey: .isUnread)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        data = try c.decode(ItemData.self, forKey: .data)
+        folderIcon = try c.decodeIfPresent(FolderIconStyle.self, forKey: .folderIcon)
+        folderSymbol = try c.decodeIfPresent(FolderSymbol.self, forKey: .folderSymbol)
+        liveFolder = try c.decodeIfPresent(LiveFolderData.self, forKey: .pluginFolder)
+            ?? c.decodeIfPresent(LiveFolderData.self, forKey: .liveFolder)
+        tabGroup = try c.decodeIfPresent(Bool.self, forKey: .tabGroup)
+    }
+
+    /// A folder from a plugin with no GitHub or GitLab source of its own (Jira, an installed plugin)
+    /// is saved under `pluginFolder`: Cra 0.1.37 and older fail the whole sidebar.json on a
+    /// `liveFolder` source they don't know, and read this key's folder as a plain one with its tabs.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encodeIfPresent(parentID, forKey: .parentID)
+        try c.encodeIfPresent(title, forKey: .title)
+        try c.encode(children, forKey: .children)
+        try c.encode(isUnread, forKey: .isUnread)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(data, forKey: .data)
+        try c.encodeIfPresent(folderIcon, forKey: .folderIcon)
+        try c.encodeIfPresent(folderSymbol, forKey: .folderSymbol)
+        try c.encodeIfPresent(liveFolder, forKey: liveFolder?.source == .plugin ? .pluginFolder : .liveFolder)
+        try c.encodeIfPresent(tabGroup, forKey: .tabGroup)
+    }
+
     public var tab: TabData? {
         if case .tab(let t) = data { return t }
         return nil

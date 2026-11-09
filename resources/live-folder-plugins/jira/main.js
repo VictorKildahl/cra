@@ -23,7 +23,7 @@ const presentation = {
         notSignedIn: "Not signed in to Jira",
         rateLimited: "Jira rate limit exceeded",
         unexpectedPage: "Could not load Jira issues. Check the server address and your access permissions.",
-        network: "Jira can’t be reached"
+        network: "Failed to update: Jira can’t be reached"
     }
 };
 

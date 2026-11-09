@@ -8,7 +8,8 @@ to the package. Cra owns tabs, persistence, scheduling, profile selection and pe
 ## Installing a package
 
 Open **Settings → Plugins → Add Plugin…** and select a ZIP archive containing
-`manifest.json`, a JavaScript entry file and an icon, either at the archive root or inside one folder. After accepting its session permissions, the
+`manifest.json`, a JavaScript entry file and an icon, either at the archive root or inside one folder. The dialog lists the sites it may load signed in as you, and says it can pass what it reads from one
+to another. After you accept, the
 package is copied into `LiveFolderPlugins` under Cra’s data directory. It appears in Live Folders
 without rebuilding the application. **Reload Plugins** reloads edited packages; errors appear below the plugin list.
 Each plugin can be enabled or disabled in this pane. Duplicate IDs are rejected; bundled packages take precedence.
@@ -35,6 +36,14 @@ At least one ownership filter and one category must be enabled to show issues.
 Rows show the issue key, summary and status. **Projects** lists project keys from matching
 issues and lets you hide projects separately for each folder. Switching a filter refreshes
 the folder; excluded issues are removed after a successful refresh without the usual retention.
+
+## Saved folders
+
+A folder from GitHub or GitLab keeps `liveFolder` in `sidebar.json`, with the plugin’s
+configuration beside the old fields, so an older Cra still reads it as its GitHub or GitLab folder.
+Any other plugin’s folder (Jira, an installed plugin) is saved under `pluginFolder`: Cra 0.1.37 and
+older can’t read a `liveFolder` with another source and would set the whole file aside, while
+under the new key they show a plain folder with its tabs. Fixture: `sidebar-plugin-folder.json`.
 
 ## Manifest
 
@@ -66,7 +75,9 @@ server-address field. `legacySource` and `legacyCommand` are reserved for bundle
 ## JavaScript API
 
 The entry script returns an object with synchronous functions. Each invocation runs in a fresh
-JavaScriptCore helper process, outside the UI process. This is not a Node.js or DOM environment;
+JavaScriptCore helper process, outside the UI process. The helper enters macOS’s `pure-computation`
+sandbox before it reads the script: no files, no network, no other processes; its only way out is
+the pipe to Cra, which checks every session request against the folder’s origins. This is not a Node.js or DOM environment;
 imports, filesystem access and browser globals are not exposed. Promise results are rejected.
 
 | Method | Input | Result |
@@ -75,6 +86,10 @@ imports, filesystem access and browser globals are not exposed. Promise results 
 | `refresh(input)` | `settings`, `filters`, `state`, `groups`, session grants and cached metadata | Complete snapshot |
 | `signIn(input)` | Folder configuration | Sign-in action and instance-specific strings |
 | `pageChanged(input)` | `url`, `previousURL`, `settings`, `state` | `{state, refreshAfter, checkSignIn}` |
+
+`pageChanged` runs only when a tab in the folder’s profile moves to or from one of the folder’s
+session origins; other addresses never start the helper. `checkSignIn` refreshes a folder that waits
+for a sign-in 2 s after such pages stop loading (at most once per 10 s).
 
 `describe()` returns `folderTitle`, `menuTitle`, `icon`, `filters` and `statusMessages`. Each filter
 has `id`, `title` and `enabledByDefault`. Optional `groups: {title, description}` controls the group
@@ -110,20 +125,23 @@ space profile. Plugins cannot select another profile or read cookies. Cookie, au
 origin and referer request headers cannot be supplied by plugins. Redirects stop in Chromium and
 are checked before the next request; a redirect outside the grant is treated as requiring sign-in.
 
-Each invocation has a 30-second deadline and a limit of 200 requests. Responses are limited to
+Each invocation has a 30-second deadline and a limit of 200 requests. Invocations run on a dispatch
+queue of their own, never on Swift’s cooperative thread pool. Responses are limited to
 4 MiB, protocol messages to 8 MiB and snapshots to 10,000 items. A timed-out helper is terminated;
-the existing folder stays intact. Error details are kept in the live-folder manager’s diagnostics.
+the existing folder stays intact. Error details go to `cra.log` (Help ▸ Export Diagnostics), and
+`CRA_LIVE_FOLDER_DEBUG=1` writes every session response to `<data dir>/live-folder-debug/`.
 
 ## Verification
 
 ```sh
 swift test --package-path Packages/CraCore
-bash scripts/test-live-folder-plugins.sh
+scripts/test-live-folder-plugins.sh
 bash scripts/test-store.sh
 bash scripts/test-folder-glyph.sh
 scripts/dev.sh --once
 ```
 
-The plugin harness executes the real helper and tests transport, permissions, exceptions, timeout,
-bundled source parsing and SSO state. The store harness checks native tab reconciliation separately.
+The plugin harness (part of `scripts/test.sh`) executes the real, sandboxed helper and tests transport,
+permissions, exceptions, timeout, the sandbox, and each bundled provider’s requests, parsing, failures and
+migration (`Tests/LiveFolderProviderTests.swift`). The store harness checks native tab reconciliation separately.
 The dev build uses `build/CraDev.app` and `build/dev-data` by default.
