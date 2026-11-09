@@ -2065,13 +2065,23 @@ private:
     IMPLEMENT_REFCOUNTING(CraChromeViewDelegate);
 };
 
+// Chromium brings the app to the front whenever it shows one of its windows
+// (NativeWidgetNSWindowBridge::SetVisibilityState, kShowAndActivateWindow), and every page is one:
+// the hidden page that reads a Calendar favorite every 5 minutes, a tab opened behind, a popup, a
+// tab restored at launch. Cra came to the front over the app in use each time (#274). Whether Cra
+// comes forward is the app's to decide (the Dock, a link from another app, a notification's
+// page), so while a page window is shown CraApplication refuses Chromium's request.
+static int g_showingPageWindow = 0;
+
 class CraChromeWindowDelegate : public CefWindowDelegate {
 public:
     CraChromeWindowDelegate(CraBrowser* owner, CefRefPtr<CefBrowserView> view) : owner_(owner), view_(view) {}
     void OnWindowCreated(CefRefPtr<CefWindow> window) override {
         window->AddChildView(view_);
         if (CefRefPtr<CefView> toolbar = view_->GetChromeToolbar()) toolbar->SetVisible(false);
+        g_showingPageWindow++;
         window->Show();
+        g_showingPageWindow--;
         NSView* v = (__bridge NSView*)window->GetWindowHandle();
         if (CraBrowser* o = owner_) [o hostWindowCreated:v.window];
     }
@@ -3028,11 +3038,20 @@ static BOOL CraTestBackground(void) {
     static BOOL background = [NSProcessInfo.processInfo.environment[@"CRA_TEST_BACKGROUND"] isEqualToString:@"1"];
     return background;
 }
+// Requests to come to the front made while Cra was in the background that went through, counted
+// before a background test copy refuses them all (cra://debug?activations=).
+static NSInteger g_backgroundActivations = 0;
++ (NSInteger)backgroundActivations { return g_backgroundActivations; }
+- (BOOL)allowsActivation {
+    if (g_showingPageWindow > 0) return NO;
+    if (!self.isActive) g_backgroundActivations++;
+    return !CraTestBackground();
+}
 - (void)activateIgnoringOtherApps:(BOOL)flag {
-    if (!CraTestBackground()) [super activateIgnoringOtherApps:flag];
+    if ([self allowsActivation]) [super activateIgnoringOtherApps:flag];
 }
 - (void)activate {
-    if (!CraTestBackground()) [super activate];
+    if ([self allowsActivation]) [super activate];
 }
 
 // A Chromium page view, wherever it lives: in its own window, or embedded in a Cra

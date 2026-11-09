@@ -1,0 +1,29 @@
+# promise: #274
+# Cra in the background stays there while its pages get windows (#274). Chromium brings the app
+# to the front whenever it shows one of its windows, and every page is one: the hidden page that
+# reads a Google Calendar favorite's events (at launch, then every 5 minutes), a tab a link or an
+# extension opens behind, a tab restored at launch. 0.1.36 came to the front every 5 minutes for
+# anyone with a Calendar favorite. The run sits behind other windows, so Cra is never the active
+# app here; `background` counts the requests to bring it forward that would have gone through.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":["E0000000-0000-0000-0000-000000000001"],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"E0000000-0000-0000-0000-000000000001","parentID":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T09:00:00Z","data":{"tab":{"_0":{"url":"https://calendar.google.com/calendar/u/0/r","savedTitle":"Google Calendar"}}}}]}
+
+# The Calendar favorite's hidden page opens with the sidebar (offline it just fails to read).
+expect-log live calendar fetch begins
+wait 1
+cra://debug?activations=calendar
+expect-log activations calendar: active=0 background=0
+
+# A tab opened behind, as a link from another app with background=1 or an extension opens one.
+cra://open?url=${PAGE}?n=behind&background=1
+wait 2
+cra://debug?activations=background-tab
+expect-log activations background-tab: active=0 background=0
+
+# A tab opened in front of the window: still Cra's own choice whether the app comes forward, and a
+# background test copy never asks.
+cra://open?url=${PAGE}?n=front
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?activations=front-tab
+expect-log activations front-tab: active=0 background=0

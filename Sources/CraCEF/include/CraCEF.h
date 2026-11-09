@@ -414,6 +414,9 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
 /// NSApplication subclass CEF requires (CefAppProtocol). Set as
 /// NSPrincipalClass and created with +sharedApplication before anything else.
 @interface CraApplication : NSApplication
+/// How many requests to bring Cra to the front, made while it was in the background, went
+/// through (a background test copy counts them, then refuses them all).
+@property (class, readonly) NSInteger backgroundActivations;
 @end
 
 NS_ASSUME_NONNULL_END
