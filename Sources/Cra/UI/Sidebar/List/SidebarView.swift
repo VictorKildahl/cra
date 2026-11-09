@@ -715,7 +715,8 @@ final class SpaceDockView: NSView {
         self.ui = ui
         self.actions = actions
         library = LibraryButtonView(ui: ui, actions: actions)
-        plus = SidebarGlyphButton(symbol: "plus", size: 32, height: 32, iconSize: 14, help: "New", colors: SidebarColors(), action: {})
+        // Arc 1.172.1: a 32 pt button (sidebarPlusButton) with no tooltip.
+        plus = SidebarGlyphButton(symbol: "plus", size: 32, height: 32, iconSize: 14, help: "", colors: SidebarColors(), action: {})
         super.init(frame: .zero)
         plus.setMenuOpen(false)
         plus.action = { [weak self] in self?.toggleCreationMenu() }
@@ -743,7 +744,7 @@ final class SpaceDockView: NSView {
         let entries: [(String, String, String, Bool)] = [
             ("newSpace", "New Space", "plus.rectangle.on.rectangle", true),
             ("newFolder", "New Folder", "folder", true),
-            ("newEasel", "New Easel", "scribble.variable", true),
+            ("newEasel", "New Easel", "scribble", true),
             ("newBoost", "New Boost", "paintbrush.pointed", canBoost),
             ("addSplitView", "New Split", "rectangle.split.2x1", canSplit),
             ("newTab", "New Tab", "plus.rectangle", true),
@@ -752,10 +753,13 @@ final class SpaceDockView: NSView {
             SidebarCreationMenuItem(title: title, symbol: symbol, shortcut: KeyBindingRegistry.shared.action(id)?.primary?.display ?? "",
                                     enabled: enabled) { [actions] in actions.performAction(id) }
         }
-        creationMenu.toggle(from: plus, items: items) { [weak plus] open in
+        let tones = ArcMenuTones(theme: store.focusedSpace(window: ui.windowID).theme.shown)
+        func ink(_ c: RGB) -> NSColor { NSColor(srgbRed: c.r, green: c.g, blue: c.b, alpha: 1) }
+        let colors = SidebarCreationMenuColors(fill: ink(tones.fill), hover: ink(tones.hover), separator: ink(tones.separator),
+                                               shortcut: ink(tones.shortcut), disabled: ink(tones.disabled))
+        creationMenu.toggle(from: plus, items: items, colors: colors) { [weak plus] open in
             plus?.highlighted = open
             plus?.setMenuOpen(open)
-            plus?.setHelp(open ? "Close Menu" : "New")
         }
     }
 

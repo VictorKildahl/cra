@@ -175,7 +175,8 @@ final class SidebarGlyphButton: NSView {
     var action: () -> Void
     let size: NSSize
     private let glyph = NSImageView()
-    private var menuGlyph: NSHostingView<SidebarPlusMenuGlyph>?
+    /// The + that opens the creation menu, turned 45° into an × while it is open (Arc's PlusMenuIcon).
+    private var plusMark: CAShapeLayer?
     private var shownSymbol: String?
     /// Arc turns the refresh arrow while it is pressed (NSImageView.pressTurn).
     private var turnsOnPress = false
@@ -218,19 +219,26 @@ final class SidebarGlyphButton: NSView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func setMenuOpen(_ open: Bool) {
-        if let menuGlyph {
-            menuGlyph.rootView.isOpen = open
+    /// Shows Arc's 14 × 14 pt menu + in place of the image; `open` turns it into an × on a spring.
+    func setMenuOpen(_ open: Bool, animated: Bool = true) {
+        let m: CAShapeLayer
+        if let plusMark {
+            m = plusMark
         } else {
-            let host = NSHostingView(rootView: SidebarPlusMenuGlyph(isOpen: open, tint: tint ?? glyph.contentTintColor ?? colors.glyph))
-            host.frame = bounds
-            host.autoresizingMask = [.width, .height]
-            addSubview(host)
-            menuGlyph = host
+            m = CAShapeLayer()
+            m.fillColor = nil
+            m.lineWidth = 2
+            m.lineCap = .round
+            m.actions = ["path": NSNull(), "strokeColor": NSNull(), "hidden": NSNull(), "bounds": NSNull(), "position": NSNull(), "transform": NSNull()]
+            layer?.addSublayer(m)
+            plusMark = m
+            needsLayout = true
+            refresh()
         }
         glyph.isHidden = true
         mark?.isHidden = true
-        menuGlyph?.isHidden = false
+        m.isHidden = false
+        SidebarPlusMark.turn(m, open: open, animated: animated && window != nil)
     }
 
     /// `animated` swaps another symbol in the way Arc swaps refresh and stop.
@@ -250,7 +258,7 @@ final class SidebarGlyphButton: NSView {
         shownSymbol = nil
         glyph.image = image
         glyph.isHidden = false
-        menuGlyph?.isHidden = true
+        plusMark?.isHidden = true
         mark?.isHidden = true
         setHelp(help)
     }
@@ -269,7 +277,7 @@ final class SidebarGlyphButton: NSView {
         markMinus = minus
         shownSymbol = nil
         glyph.isHidden = true
-        menuGlyph?.isHidden = true
+        plusMark?.isHidden = true
         mark?.isHidden = false
         needsLayout = true
         refresh()
@@ -293,25 +301,34 @@ final class SidebarGlyphButton: NSView {
             tint = enabled ? colors.glyph : colors.textTertiary.withAlphaComponent(colors.textTertiary.alphaComponent * 0.55)
         }
         glyph.contentTintColor = self.tint ?? tint
-        menuGlyph?.rootView.tint = self.tint ?? tint
+        plusMark?.strokeColor = (self.tint ?? tint).cgColor
         mark?.strokeColor = (self.tint ?? tint).cgColor
         layer?.backgroundColor = ((hovering || highlighted) && enabled ? colors.hoverFill : .clear).cgColor
     }
 
     override func layout() {
         super.layout()
-        guard let mark else { return }
-        mark.frame = bounds
         // The centre on a whole point of the window: a dragged sidebar width is fractional.
         let mid = convert(CGPoint(x: bounds.midX, y: bounds.midY), to: nil)
         let centre = convert(CGPoint(x: mid.x.rounded(), y: mid.y.rounded()), from: nil)
+        if let plusMark {
+            // Turned about its own centre, so the layer sits on the glyph, not on the button.
+            plusMark.bounds = CGRect(x: 0, y: 0, width: 14, height: 14)
+            plusMark.position = centre
+            plusMark.path = SidebarPlusMark.path
+            plusMark.contentsScale = window?.backingScaleFactor ?? 2
+        }
+        guard let mark else { return }
+        mark.frame = bounds
         mark.path = SidebarSymbols.closeMark(minus: markMinus, centre: centre)
         mark.contentsScale = window?.backingScaleFactor ?? 2
     }
 
+
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
         mark?.contentsScale = window?.backingScaleFactor ?? 2
+        plusMark?.contentsScale = window?.backingScaleFactor ?? 2
     }
 
     override var mouseDownCanMoveWindow: Bool { false }

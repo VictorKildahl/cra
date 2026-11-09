@@ -1,5 +1,4 @@
 import AppKit
-import SwiftUI
 
 @main
 enum SidebarCreationMenuTests {
@@ -9,19 +8,22 @@ enum SidebarCreationMenuTests {
     static func main() throws {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
-        let renderer = ImageRenderer(content: SidebarPlusMenuGlyph(tint: .white).frame(width: 32, height: 32))
-        renderer.scale = 2
-        let glyph = NSBitmapImageRep(cgImage: renderer.cgImage!)
-        let ink = (0..<glyph.pixelsHigh).flatMap { y in
-            (0..<glyph.pixelsWide).compactMap { x -> CGPoint? in
-                (glyph.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.5 ? CGPoint(x: x, y: y) : nil
-            }
-        }
-        expect(glyph.pixelsWide == 64 && glyph.pixelsHigh == 64, "the plus button occupies 32 by 32 points")
-        expect(ink.map(\.x).max()! - ink.map(\.x).min()! + 1 == 28
-               && ink.map(\.y).max()! - ink.map(\.y).min()! + 1 == 28,
-               "Arc's visible plus occupies 14 by 14 points at Retina scale")
-        expect(ink.filter { $0.x == 24 }.count == 4, "the plus arms are two points thick")
+        let mark = CAShapeLayer()
+        mark.bounds = CGRect(origin: .zero, size: SidebarPlusMark.size)
+        mark.path = SidebarPlusMark.path
+        mark.lineWidth = SidebarPlusMark.lineWidth
+        mark.lineCap = .round
+        let inked = SidebarPlusMark.path.copy(strokingWithWidth: SidebarPlusMark.lineWidth, lineCap: .round, lineJoin: .round, miterLimit: 10).boundingBox
+        expect(inked.size == CGSize(width: 14, height: 14), "Arc's visible plus occupies 14 by 14 points")
+        expect(abs(inked.midX - 7) < 0.001 && abs(inked.midY - 7) < 0.001, "the plus turns about its own centre")
+        SidebarPlusMark.turn(mark, open: true, animated: true)
+        let turn = mark.animation(forKey: "turn") as? CASpringAnimation
+        expect(abs(mark.transform.m12 - sin(.pi / 4)) < 0.0001 && abs(mark.transform.m11 - cos(.pi / 4)) < 0.0001,
+               "an open menu leaves the plus turned 45° into an ×")
+        expect(turn.map { abs($0.stiffness - pow(2 * .pi / 0.2, 2)) < 0.01 && abs($0.damping - 4 * .pi * 0.5 / 0.2) < 0.01
+                          && ($0.toValue as? CGFloat) == .pi / 4 } == true, "the plus springs open")
+        SidebarPlusMark.turn(mark, open: false, animated: false)
+        expect(mark.transform.m12 == 0 && mark.animation(forKey: "turn") == nil, "closing without animation puts the plus straight back")
         let entries = [
             ("New Space", "plus.rectangle.on.rectangle", "", true),
             ("New Folder", "folder", "", true),
@@ -36,10 +38,11 @@ enum SidebarCreationMenuTests {
         }
         var picks: [Int?] = []
         let menu = SidebarCreationMenuView(items: items) { picks.append($0) }
-        expect(menu.handleKey(key(36)) && picks.isEmpty, "Return without a selection does not create anything")
+        expect(menu.selected == 5, "Arc opens the menu with New Tab picked")
+        expect(menu.handleKey(key(36)) && picks == [5], "Return on a fresh menu makes a new tab")
         for _ in 0..<4 { _ = menu.handleKey(key(125)) }
         _ = menu.handleKey(key(36))
-        expect(picks == [5], "Down skips disabled Boost and Split rows")
+        expect(picks == [5, 5], "Down skips disabled Boost and Split rows")
         _ = menu.handleKey(key(125))
         _ = menu.handleKey(key(36))
         expect(picks.last == 0, "Down wraps from the last row to the first")
@@ -47,7 +50,9 @@ enum SidebarCreationMenuTests {
         _ = menu.handleKey(key(36))
         expect(picks.last == 5, "Up wraps from the first row to the last")
         _ = menu.handleKey(key(53))
-        expect(picks.count == 4 && picks[3] == nil, "Escape dismisses without choosing a row")
+        expect(picks.count == 5 && picks[4] == nil, "Escape dismisses without choosing a row")
+        expect(SidebarCreationMenuView.shortcutText("⌃⇧=") == "⌃+" && SidebarCreationMenuView.shortcutText("⌃⇧E") == "⌃⇧E",
+               "Arc shows Add Split View's ⌃⇧= as ⌃+")
         expect(!menu.handleKey(key(0, characters: "a")), "unhandled keys can reach the browser's shortcuts")
         let buttons = menu.subviews.compactMap { $0 as? NSButton }
         buttons[2].performClick(nil)
@@ -136,7 +141,6 @@ enum SidebarCreationMenuTests {
             let preview = SidebarCreationMenuView(items: items) { _ in }
             parent.setContentSize(preview.frame.size)
             parent.contentView = preview
-            for _ in 0..<3 { _ = preview.handleKey(key(125)) }
             preview.layoutSubtreeIfNeeded()
             let bitmap = preview.bitmapImageRepForCachingDisplay(in: preview.bounds)!
             preview.cacheDisplay(in: preview.bounds, to: bitmap)
