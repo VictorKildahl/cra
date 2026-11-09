@@ -1,6 +1,7 @@
 #!/bin/bash
-# Downloads the pinned CEF binary distribution into vendor/cef and builds the
-# C++ wrapper library. Safe to re-run; skips what is already there.
+# Downloads the pinned CEF binary distribution into vendor/cef (CEF_DIR overrides) and
+# builds the C++ wrapper library. Safe to re-run; skips what is already there.
+# scripts/build.sh puts the other CPU's copy in vendor/cef-<arch> (CRA_ARCH).
 #
 # Cra ships its own CEF build (scripts/build-cef.sh: H.264/AAC plus the fixes in
 # scripts/cef-patches), published as a GitHub release asset by scripts/publish-cef.sh.
@@ -15,38 +16,39 @@ CEF_VERSION="${CEF_VERSION:-156.0.26+g8ea0c73+chromium-156.0.8078.88}"
 ARCH="${CEF_ARCH:-$([ "$(uname -m)" = arm64 ] && echo macosarm64 || echo macosx64)}"
 NAME="cef_binary_${CEF_VERSION}_${ARCH}_minimal"
 # Bump the suffix (codecs2, …) when the build changes but CEF_VERSION does not.
-CEF_RELEASE="${CEF_RELEASE:-cef-${CEF_VERSION%%+*}-codecs2}"
+CEF_RELEASE="${CEF_RELEASE:-cef-${CEF_VERSION%%+*}-codecs6}"
+DIR="${CEF_DIR:-vendor/cef}"
 URL="${CEF_URL:-https://github.com/VictorKildahl/cra/releases/download/${CEF_RELEASE}/cef_binary_${ARCH}_minimal.tar.bz2}"
 
-mkdir -p vendor
-# A different pinned build replaces vendor/cef.
-[ -d vendor/cef/Release ] && [ ! -f vendor/cef/.cra-source ] && echo "https://cef-builds.spotifycdn.com/${NAME}.tar.bz2" > vendor/cef/.cra-source
-if [ -d vendor/cef/Release ] && [ "$(cat vendor/cef/.cra-source)" != "$URL" ]; then
-  echo "CEF build changed, replacing vendor/cef"
-  rm -rf vendor/cef
+mkdir -p "$(dirname "$DIR")"
+# A different pinned build replaces the folder.
+[ -d "$DIR/Release" ] && [ ! -f "$DIR/.cra-source" ] && echo "https://cef-builds.spotifycdn.com/${NAME}.tar.bz2" > "$DIR/.cra-source"
+if [ -d "$DIR/Release" ] && [ "$(cat "$DIR/.cra-source")" != "$URL" ]; then
+  echo "CEF build changed, replacing $DIR"
+  rm -rf "$DIR"
 fi
-if [ ! -d vendor/cef/Release ]; then
+if [ ! -d "$DIR/Release" ]; then
   echo "Downloading ${NAME} from ${URL%/*}..."
-  rm -rf vendor/cef-download
-  mkdir -p vendor/cef-download
-  python3 scripts/download-cef.py "$URL" "vendor/cef-download/${NAME}.tar.bz2"
-  tar -xjf "vendor/cef-download/${NAME}.tar.bz2" -C vendor/cef-download
-  rm -rf vendor/cef
-  mv "vendor/cef-download/${NAME}" vendor/cef
-  rm -rf vendor/cef-download
-  echo "$URL" > vendor/cef/.cra-source
+  rm -rf "$DIR-download"
+  mkdir -p "$DIR-download"
+  python3 scripts/download-cef.py "$URL" "$DIR-download/${NAME}.tar.bz2"
+  tar -xjf "$DIR-download/${NAME}.tar.bz2" -C "$DIR-download"
+  rm -rf "$DIR"
+  mv "$DIR-download/${NAME}" "$DIR"
+  rm -rf "$DIR-download"
+  echo "$URL" > "$DIR/.cra-source"
 fi
 
-if [ ! -f vendor/cef/build/libcef_dll_wrapper/libcef_dll_wrapper.a ]; then
+if [ ! -f "$DIR/build/libcef_dll_wrapper/libcef_dll_wrapper.a" ]; then
   echo "Building libcef_dll_wrapper..."
   case "$ARCH" in
     macosarm64) TARGET_ARCH=arm64 ;;
     *)          TARGET_ARCH=x86_64 ;;
   esac
-  cmake -S vendor/cef -B vendor/cef/build -G "Unix Makefiles" \
+  cmake -S "$DIR" -B "$DIR/build" -G "Unix Makefiles" \
     -DCMAKE_BUILD_TYPE=Release -DPROJECT_ARCH="$TARGET_ARCH" -DUSE_SANDBOX=ON \
-    -DCMAKE_OSX_ARCHITECTURES="$TARGET_ARCH" > vendor/cef/build-configure.log
-  cmake --build vendor/cef/build --target libcef_dll_wrapper -j "$(sysctl -n hw.ncpu)" > vendor/cef/build-wrapper.log
+    -DCMAKE_OSX_ARCHITECTURES="$TARGET_ARCH" > "$DIR/build-configure.log"
+  cmake --build "$DIR/build" --target libcef_dll_wrapper -j "$(sysctl -n hw.ncpu)" > "$DIR/build-wrapper.log"
 fi
 
 # Chromium encrypts cookies, passwords and card numbers with a secret from the login
@@ -58,7 +60,7 @@ fi
 # that copy it into a std::string. Any other build must come with the source patch.
 # Stop rather than ship a framework that looks for the old item: Cra would encrypt with
 # one secret and Chromium decrypt with another.
-FRAMEWORK_BIN="vendor/cef/Release/Chromium Embedded Framework.framework/Chromium Embedded Framework"
+FRAMEWORK_BIN="$DIR/Release/Chromium Embedded Framework.framework/Chromium Embedded Framework"
 # Stock CEF builds (CEF_URL to spotifycdn.com) still use the shared "Chromium Safe
 # Storage" item, and this binary patch is arm64-specific (the folded-length stores are
 # ARM mov immediates). CRA_ALLOW_STOCK_CEF=1 accepts that: cookies and passwords are
@@ -81,4 +83,4 @@ else
   fi
   LC_ALL=C grep -qa "Cra Safe Storage" "$FRAMEWORK_BIN" || { echo "CEF names no Cra Safe Storage" >&2; exit 1; }
 fi
-echo "CEF ready: vendor/cef"
+echo "CEF ready: $DIR"

@@ -20,6 +20,32 @@ public enum PictureInPictureLayout {
         width < 280 ? 12 + 8 + 6 : width < 400 ? 16 + 8 + 6 : 16 + 10 + 6
     }
 
+    /// Play/pause in the middle with the ±15 s skips on either side, sized by Arc's size classes
+    /// (#262). Arc's glyphs on its own windows: play/pause only, about 23.5 pt, at 224 and 277 pt
+    /// wide; from 396 pt the skips in ~31 pt circles beside a 37–40 pt play/pause, the same at 801.
+    /// SF Symbol point sizes that draw those: play 28 (22 × 26 pt of ink) when tiny, 44 (35 × 39)
+    /// from 280 pt, `gobackward.15` 28 (30 × 32.5). The diameters are the hover discs.
+    public struct CentreControls: Equatable, Sendable {
+        public var playPointSize: CGFloat
+        public var playDiameter: CGFloat
+        public var showsSkips: Bool
+        public var skipPointSize: CGFloat
+        public var skipDiameter: CGFloat
+        /// Between a skip's disc and play's.
+        public var gap: CGFloat
+        /// The whole cluster, skips included when they show.
+        public var clusterWidth: CGFloat { showsSkips ? playDiameter + 2 * (gap + skipDiameter) : playDiameter }
+    }
+
+    /// The centre cluster for a window `width` wide. For a video taller than 16:9 pass the width a
+    /// 16:9 window of its height would have, so the cluster stays clear of the top bar.
+    public static func centreControls(width: CGFloat) -> CentreControls {
+        if width < 280 {
+            return CentreControls(playPointSize: 28, playDiameter: 52, showsSkips: false, skipPointSize: 28, skipDiameter: 46, gap: 10)
+        }
+        return CentreControls(playPointSize: 44, playDiameter: 68, showsSkips: true, skipPointSize: 28, skipDiameter: 46, gap: width < 400 ? 10 : 24)
+    }
+
     /// Back to Tab grows its words from 400 pt wide; Minimize and Close stay glyphs.
     public static func labelsBackToTab(width: CGFloat) -> Bool { width >= 400 }
 

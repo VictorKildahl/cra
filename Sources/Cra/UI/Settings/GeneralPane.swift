@@ -45,6 +45,7 @@ struct GeneralPane: View {
                 SettingsFootnote("Cra works best as your default browser.")
             }
             if let error { SettingsFootnote(error).foregroundStyle(.red) }
+            SyncSection().padding(.top, 20)
             AppIconSection().padding(.top, 20)
         }
         .onAppear { system.refresh() }

@@ -235,8 +235,10 @@ struct SettingsSearchField: NSViewRepresentable {
 }
 
 /// One-line descriptions for the detail column (Dia: "Create a new tab.").
+@MainActor
 enum ShortcutDescriptions {
     static func text(for a: KeyAction) -> String {
+        if let description = LiveFolderPluginStore.shared.entry(forCommand: a.id)?.package.manifest.command?.description { return description }
         if let t = table[a.id] { return t }
         if a.id.hasPrefix("item"), let n = a.id.dropFirst(4).first { return "Switch to the \(n). tab in the sidebar." }
         if a.id.hasPrefix("space"), let n = a.id.dropFirst(5).first { return "Switch to the \(n). space." }
@@ -252,7 +254,6 @@ enum ShortcutDescriptions {
         "reopenClosedTab": "Bring back the tab you closed last.",
         "editURL": "Open the command bar to search or enter a URL.",
         "newFolder": "Create a folder in the sidebar.",
-        "newGitHubLiveFolder": "Add a folder that fills itself with your open pull requests and review requests.",
         "newSpace": "Create a new space.",
         "closeWindow": "Close the current window.",
         "closeTab": "Close the current tab.",

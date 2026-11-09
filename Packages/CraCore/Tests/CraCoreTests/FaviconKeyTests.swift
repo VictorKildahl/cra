@@ -1,7 +1,20 @@
 import CraCore
+import Foundation
 import Testing
 
 struct FaviconKeyTests {
+    @Test func tabKeysAreIndependentAndStable() {
+        let first = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+        let second = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+        let key = FaviconKey.key(site: "gitlab.com", tabID: first)
+        #expect(key == "gitlab.com#tab-00000000-0000-0000-0000-000000000001")
+        #expect(key != FaviconKey.key(site: "gitlab.com", tabID: second))
+        #expect(key != FaviconKey.key(site: "example.org", tabID: first))
+        #expect(FaviconKey.siteKey(of: key) == "gitlab.com")
+        #expect(FaviconKey.key(after: key, goingTo: "https://gitlab.com/projects/pr1") == key)
+        #expect(FaviconKey.key(after: key, goingTo: "https://example.org/") == "example.org")
+    }
+
     @Test(arguments: [
         ("https://Mail.Example.com/inbox?x=1", "mail.example.com" as String?),
         ("http://localhost:3000/", "localhost"),

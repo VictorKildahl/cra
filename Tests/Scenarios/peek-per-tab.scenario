@@ -35,6 +35,10 @@ cra://debug?peeks=back
 expect-log Cra peeks back: shown \S+n=peek$
 cra://debug?peekShown=back
 expect-log Cra peek shown back: veiled=1 alpha=0\.28
+# Arc leaves the sidebar to the sidebar: a click on another row opens that tab and the Peek waits.
+# Only the page area around the card catches the click that closes it.
+cra://debug?peekCatcher=back
+expect-log Cra peek catcher back: sidebar=clear
 # Where the reporter left it.
 cra://debug?target=little&cdp=Runtime.evaluate&params={"expression":"'kept=' + scrollY"}
 expect-log "value":"kept=1234"

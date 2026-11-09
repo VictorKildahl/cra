@@ -12,14 +12,14 @@ enum PeekDimPanelTests {
                               styleMask: [.titled, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         parent.isReleasedWhenClosed = false
         var dismissed = 0
-        let panel = PeekDimPanel(covering: parent) { dismissed += 1 }
+        let panel = PeekDimPanel(covering: PeekLayout.dismissArea(covering: parent.frame), of: parent) { dismissed += 1 }
         parent.addChildWindow(panel, ordered: .above)
         checkResizeEdges(parent, panel)
         expect(!panel.canBecomeKey && !panel.canBecomeMain, "the dismiss panel must not take focus")
 
         for size in [NSSize(width: 640, height: 420), NSSize(width: 1500, height: 1000)] {
             parent.setFrame(NSRect(origin: parent.frame.origin, size: size), display: false)
-            panel.reposition(covering: parent)
+            panel.reposition(covering: PeekLayout.dismissArea(covering: parent.frame), of: parent)
             checkResizeEdges(parent, panel)
             expect(panel.contentView?.frame.size == panel.frame.size, "the click catcher follows the resized panel")
         }
@@ -38,11 +38,28 @@ enum PeekDimPanelTests {
             if type == .leftMouseDown { hit.mouseDown(with: event) } else { hit.rightMouseDown(with: event) }
         }
         expect(dismissed == 2, "both left and right background clicks dismiss Peek")
+        checkSidebar(parent, panel)
         checkPageFocus(parent)
         parent.removeChildWindow(panel)
         panel.close()
         parent.close()
         print("Peek dismiss panel: \(checks) checks passed")
+    }
+
+    /// The sidebar stays the sidebar under a Peek (#242): its rows open their tabs, so the panel
+    /// starts where the page does, with straight corners there.
+    @MainActor
+    private static func checkSidebar(_ parent: NSWindow, _ panel: PeekDimPanel) {
+        let frame = parent.frame
+        panel.reposition(covering: PeekLayout.dismissArea(covering: frame, contentMinX: 236), of: parent)
+        for x: CGFloat in [6, 114, 235] {
+            expect(!panel.frame.contains(NSPoint(x: frame.minX + x, y: frame.midY)), "a click on the sidebar reaches the sidebar")
+        }
+        expect(panel.frame.contains(NSPoint(x: frame.minX + 240, y: frame.midY)), "a click on the page beside the card closes the Peek")
+        expect(panel.contentView?.layer?.maskedCorners == [.layerMaxXMinYCorner, .layerMaxXMaxYCorner], "only the window's own corners are rounded")
+        panel.reposition(covering: PeekLayout.dismissArea(covering: frame, contentMinX: 0), of: parent)
+        expect(panel.frame.contains(NSPoint(x: frame.minX + 114, y: frame.midY)), "with the sidebar hidden the page fills the window")
+        expect(panel.contentView?.layer?.maskedCorners.contains(.layerMinXMaxYCorner) == true, "all four corners round with the sidebar hidden")
     }
 
     @MainActor

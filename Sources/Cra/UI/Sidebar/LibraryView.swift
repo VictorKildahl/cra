@@ -92,6 +92,7 @@ final class LibraryView: NSView {
         super.init(frame: .zero)
         rail.onPick = { actions.showLibrary($0) }
         rail.onBack = { actions.closeLibrary() }
+        rail.pageMenu = { [store, weak self] p in LibraryListView.pageMenu(p, store: store, profile: (self?.window?.windowController as? MainWindowController)?.profileDirectoryName) }
         list.onEscape = { actions.closeLibrary() }
         addSubview(rail)
         addSubview(list)
@@ -108,6 +109,7 @@ final class LibraryView: NSView {
         if page == .spaces {
             if spaces == nil {
                 let v = SpacesManagerView(store: store, ui: ui, actions: actions, favicons: favicons)
+                v.accent = accent
                 addSubview(v)
                 spaces = v
             }
@@ -119,8 +121,20 @@ final class LibraryView: NSView {
         needsLayout = true
     }
 
+    /// The space's accent pair (Arc 1.172.1): on a light theme the folder's tinted light with its
+    /// shaded dark on it; on a dark one near-white with dark.
+    private var accent: (fill: NSColor, ink: NSColor) {
+        palette.isDark ? (NSColor.white.withAlphaComponent(0.88), NSColor.black.withAlphaComponent(0.8))
+                       : (NSColor(palette.folderFill), NSColor(palette.folderTint))
+    }
+
     private func apply() {
+        rail.accent = accent
+        spaces?.accent = accent
         rail.colors = SidebarColors(palette)
+        // Light themes: Arc's switch is the folder's shaded dark with a tinted-light knob.
+        list.switchTint = palette.isDark ? NSColor.white.withAlphaComponent(0.85) : NSColor(palette.folderTint)
+        list.switchKnob = palette.isDark ? NSColor(white: 0.15, alpha: 1) : NSColor(palette.folderFill)
         list.colors = SidebarColors(palette)
     }
 
@@ -146,8 +160,12 @@ final class LibraryView: NSView {
 /// centred; the back arrow at the bottom.
 private final class LibraryRailView: NSView {
     var onPick: (LibraryPage) -> Void = { _ in }
+    /// Arc's "Show media" folders, on a right-click of the Media button.
+    var pageMenu: (LibraryPage) -> NSMenu? = { _ in nil }
     var onBack: () -> Void = {}
     var colors = SidebarColors() { didSet { refresh() } }
+    /// The selected page's glyph: the space's accent pair, not the Mac's accent colour (Arc).
+    var accent: (fill: NSColor, ink: NSColor) = (.controlAccentColor, .white) { didSet { refresh() } }
     private let wash = CAGradientLayer()
     private let hairline = CALayer()
     private var buttons: [LibraryRailButton] = []
@@ -164,6 +182,7 @@ private final class LibraryRailView: NSView {
         for p in LibraryPage.allCases {
             let b = LibraryRailButton(page: p)
             b.onPress = { [weak self] in self?.onPick(p) }
+            b.menuProvider = { [weak self] in self?.pageMenu(p) }
             buttons.append(b)
             addSubview(b)
         }
@@ -185,7 +204,7 @@ private final class LibraryRailView: NSView {
         wash.colors = [ink.withAlphaComponent(0.02).cgColor, ink.withAlphaComponent(0.045).cgColor]
         hairline.backgroundColor = ink.withAlphaComponent(0.09).cgColor
         CATransaction.commit()
-        for b in buttons { b.show(selected: b.page == page, ink: ink) }
+        for b in buttons { b.show(selected: b.page == page, ink: ink, accent: accent) }
         if back == nil {
             let b = SidebarGlyphButton(symbol: "arrow.left", size: 32, height: 32, iconSize: 15, weight: .regular,
                                        help: "Exit the Library (Esc)", colors: colors) { [weak self] in self?.onBack() }
@@ -218,6 +237,9 @@ private final class LibraryRailView: NSView {
 private final class LibraryRailButton: NSView {
     let page: LibraryPage
     var onPress: () -> Void = {}
+    var menuProvider: (() -> NSMenu?)?
+
+    override func menu(for event: NSEvent) -> NSMenu? { menuProvider?() }
     private let glyph = NSImageView()
     private let label = NSTextField.sidebarLabel(size: 12, weight: .semibold)
     private var selected = false
@@ -243,18 +265,21 @@ private final class LibraryRailButton: NSView {
 
     override var isFlipped: Bool { true }
 
-    func show(selected: Bool, ink: NSColor) {
+    private var accent: (fill: NSColor, ink: NSColor) = (.controlAccentColor, .white)
+
+    func show(selected: Bool, ink: NSColor, accent: (fill: NSColor, ink: NSColor)) {
         self.selected = selected
         self.ink = ink
+        self.accent = accent
         refresh()
     }
 
     private func refresh() {
         let config = NSImage.SymbolConfiguration(pointSize: 17, weight: .medium)
         if selected {
-            // The filled glyph in palette mode: white mark on the accent colour.
+            // The filled glyph in palette mode: the space's dark mark on its light tint (Arc 1.172.1).
             glyph.image = NSImage(systemSymbolName: page.selectedSymbol, accessibilityDescription: nil)?
-                .withSymbolConfiguration(config.applying(.init(paletteColors: [.white, .controlAccentColor])))
+                .withSymbolConfiguration(config.applying(.init(paletteColors: [accent.ink, accent.fill])))
             glyph.contentTintColor = nil
         } else {
             glyph.image = NSImage(systemSymbolName: page.symbol, accessibilityDescription: nil)?.withSymbolConfiguration(config)
@@ -290,7 +315,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
     enum Row {
         case header(String)
         case media([MediaLibrary.File])
-        case easel(id: UUID, title: String, edited: Date)
+        case easels([EaselEntry])
         case boost(Boost)
         case download(DownloadHistory.Listed)
         case archived(ArchivedItem)
@@ -300,17 +325,24 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
     private let actions: SidebarActions
     private let favicons: FaviconCache
     var onEscape: () -> Void = {}
-    var page: LibraryPage { didSet { if page != oldValue { field.stringValue = ""; query = ""; field.placeholderString = page.searchPrompt; reload() } } }
+    var page: LibraryPage { didSet { if page != oldValue { field.stringValue = ""; query = ""; field.placeholderString = page.searchPrompt; if filtering { filtering = false }; reload(); needsLayout = true } } }
     var colors = SidebarColors() { didSet { if colors != oldValue { refresh(); table.reloadData() } } }
+    /// A boost's switch (Arc: the theme's dark shade, a light knob).
+    var switchTint = NSColor.controlAccentColor
+    var switchKnob = NSColor.white
     private var query = ""
     private var rows: [Row] = []
+    private var mediaHiddenObserver: NSObjectProtocol?
+    /// The width the grid rows were last sized for.
+    private var gridWidth: CGFloat = 0
     private let searchBox = NSView()
     private let searchGlyph = NSImageView()
     private let field = NSTextField()
     private let menuButton = NSView()
     private let menuGlyph = NSImageView()
+    private let filterLabel = NSTextField.sidebarLabel(size: 14, weight: .medium)
     private let scroll = NSScrollView()
-    private let table = NSTableView()
+    private let table = LibraryTable()
     private let empty = LibraryEmptyView()
     private var mediaCard: NSHostingView<MediaOptInCard>?
 
@@ -339,10 +371,17 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         menuButton.wantsLayer = true
         menuButton.layer?.cornerRadius = 12
         menuButton.layer?.cornerCurve = .continuous
-        menuGlyph.image = SidebarSymbols.image("ellipsis", size: 14, weight: .medium)
+        // Arc's Filter button: a line.3 circle and "Filter", 73 × 36 pt.
+        menuGlyph.image = SidebarSymbols.image("line.3.horizontal.decrease.circle", size: 14, weight: .medium)
         menuGlyph.imageScaling = .scaleNone
-        menuGlyph.frame = NSRect(x: 0, y: 0, width: 36, height: 36)
+        menuGlyph.frame = NSRect(x: 9, y: 0, width: 18, height: 36)
         menuButton.addSubview(menuGlyph)
+        filterLabel.font = .systemFont(ofSize: 14, weight: .medium)
+        filterLabel.stringValue = "Filter"
+        menuButton.addSubview(filterLabel)
+        menuButton.setAccessibilityElement(true)
+        menuButton.setAccessibilityRole(.button)
+        menuButton.setAccessibilityLabel("Filter")
         addSubview(menuButton)
         let column = NSTableColumn(identifier: .init("row"))
         table.addTableColumn(column)
@@ -410,28 +449,36 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
             // Read again whenever the page shows, a search changes or the folders change; the scan is
             // cheap, off the main thread, and reads only the folders ticked.
             MediaScanner.shared.rescan(store.settings.mediaFolders)
+            if mediaHiddenObserver == nil {
+                mediaHiddenObserver = NotificationCenter.default.addObserver(forName: MediaPreviewController.hidden, object: nil, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { if self?.page == .media { self?.reload() } }
+                }
+            }
             let all = MediaScanner.shared.files
-            let shown = MediaLibrary.shown(all, query: query)
+            let shown = MediaLibrary.shown(all, query: query, hidden: Set(store.settings.mediaHidden))
             out = MediaLibrary.rows(shown).map { .media($0) }
             empty.show(symbol: "photo.on.rectangle", title: all.isEmpty ? "Nothing here yet!" : "No matches",
                        detail: all.isEmpty ? "Screenshots, pictures and videos in the folders you show appear here." : nil)
         case .downloads:
             // Running, failed and cancelled downloads too, as in the tray (#245).
             let all = DownloadHistory.shared.library(query: "")
-            let shown = needle.isEmpty ? all : DownloadHistory.shared.library(query: query)
+            let shown = (needle.isEmpty ? all : DownloadHistory.shared.library(query: query)).filter {
+                guard case .finished(let e) = $0 else { return downloadFilter.isEmpty }
+                return downloadFilter.shows(profile: e.profile ?? "Default")
+            }
             for (label, entries) in Self.grouped(shown, date: \.date) {
                 out.append(.header(label))
                 out += entries.map { .download($0) }
             }
+            // Arc's words.
             empty.show(symbol: "arrow.down.circle", title: all.isEmpty ? "Nothing here yet!" : "No matches",
-                       detail: all.isEmpty ? "Files you download show up here." : nil)
+                       detail: all.isEmpty ? "Come back after you’ve found some cool stuff to save." : nil)
         case .easels:
             let all = EaselFiles.all()
             let shown = needle.isEmpty ? all : all.filter { $0.title.lowercased().contains(needle) }
-            for (label, entries) in Self.grouped(shown, date: \.edited) {
-                out.append(.header(label))
-                out += entries.map { .easel(id: $0.id, title: $0.title, edited: $0.edited) }
-            }
+            // Arc: one grid, newest edit first, two to a row, no day headers.
+            let entries = shown.map { EaselEntry(id: $0.id, title: $0.title, edited: $0.edited) }
+            out = stride(from: 0, to: entries.count, by: 2).map { .easels(Array(entries[$0..<min($0 + 2, entries.count)])) }
             // Arc's empty Easels page: "Out of ideas!"
             empty.show(symbol: "pencil.and.scribble", title: all.isEmpty ? "Out of ideas!" : "No matches",
                        detail: all.isEmpty ? "Choose File ▸ New Easel to create a new Easel." : nil)
@@ -445,9 +492,10 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         case .spaces:
             break
         case .archive:
-            let shown = needle.isEmpty ? store.archive : store.archive.filter {
+            let filter = archiveFilter
+            let shown = (needle.isEmpty ? store.archive : store.archive.filter {
                 $0.item.displayTitle.lowercased().contains(needle) || ($0.item.tab?.url.lowercased().contains(needle) ?? false)
-            }
+            }).filter(filter.shows)
             for (label, entries) in Self.grouped(shown, date: \.archivedAt) {
                 out.append(.header(label))
                 out += entries.map { .archived($0) }
@@ -456,6 +504,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
                        detail: store.archive.isEmpty ? "Tabs you close end up here." : nil)
         }
         rows = out
+        needsLayout = true
         empty.isHidden = !out.isEmpty || (page == .media && !store.settings.mediaLibraryEnabled)
         scroll.isHidden = out.isEmpty
         table.reloadData()
@@ -467,8 +516,11 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         searchBox.layer?.backgroundColor = ink.withAlphaComponent(0.08).cgColor
         searchGlyph.contentTintColor = ink.withAlphaComponent(0.5)
         field.textColor = colors.textPrimary
-        menuButton.layer?.backgroundColor = ink.withAlphaComponent(0.05).cgColor
-        menuGlyph.contentTintColor = ink.withAlphaComponent(0.7)
+        // Picked chips show on the button: Arc's dark pill.
+        menuButton.layer?.backgroundColor = (filterActive ? ink.withAlphaComponent(colors.isDark ? 0.85 : 0.68) : ink.withAlphaComponent(0.08)).cgColor
+        let label = filterActive ? (colors.isDark ? NSColor.black : NSColor.white) : ink.withAlphaComponent(0.7)
+        menuGlyph.contentTintColor = label
+        filterLabel.textColor = label
         empty.ink = ink
     }
 
@@ -501,17 +553,41 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
 
     override func layout() {
         super.layout()
-        // HStack(spacing: 4) 10 pt down, 7 pt in, 8 pt from the right: the field, the ⋯ button.
+        // HStack(spacing: 4) 10 pt down, 7 pt in, 8 pt from the right: the field, the ⋯ button
+        // (Media and Boosts: the field alone, as in Arc).
         let w = bounds.width
-        searchBox.frame = NSRect(x: 7, y: 10, width: max(0, w - 7 - 8 - 4 - 36), height: 36)
-        menuButton.frame = NSRect(x: w - 8 - 36, y: 10, width: 36, height: 36)
+        menuButton.isHidden = !hasFilter || filtering
+        searchBox.isHidden = filtering
+        let fw: CGFloat = 73
+        searchBox.frame = NSRect(x: 7, y: 10, width: max(0, w - 7 - 8 - (hasFilter ? 7 + fw : 0)), height: 36)
+        menuButton.frame = NSRect(x: w - 8 - fw, y: 10, width: fw, height: 36)
+        filterLabel.frame = NSRect(x: 31, y: (36 - 18) / 2, width: fw - 33, height: 18)
         let gw = searchGlyph.image?.size.width ?? 14
         searchGlyph.frame = NSRect(x: 12, y: 0, width: gw, height: 36)
         let fh = ceil(field.intrinsicContentSize.height)
         let fx = 12 + gw + 10
         field.frame = NSRect(x: fx - SidebarText.inset, y: (36 - fh) / 2, width: max(0, searchBox.bounds.width - fx - 12) + 2 * SidebarText.inset, height: fh)
-        scroll.frame = NSRect(x: 0, y: 46, width: w, height: max(0, bounds.height - 46))
+        // Arc leaves room between the search and the first item (Arc 1.172.1, 8 Nov 2026, 2x stills):
+        // 10.5 pt to a boost's card, 15 pt to the first media tile's; a day header brings its own.
+        let gap: CGFloat
+        switch rows.first {
+        case .media?, .easels?: gap = 15
+        case .header?, nil: gap = 0
+        default: gap = 10
+        }
+        var top: CGFloat = 46
+        if let host = filterHost {
+            if host.rootView.width != w { host.rootView = filterPanel() }
+            let h = host.fittingSize.height
+            host.frame = NSRect(x: 0, y: 0, width: w, height: h)
+            top = h + 4
+        }
+        scroll.frame = NSRect(x: 0, y: top + gap, width: w, height: max(0, bounds.height - top - gap))
         table.tableColumns.first?.width = w
+        if w != gridWidth {
+            gridWidth = w
+            table.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<rows.count))
+        }
         empty.frame = scroll.frame
         if let card = mediaCard {
             let size = card.fittingSize
@@ -534,45 +610,120 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
 
     // MARK: ⋯ menu (Arc's Filter button; Cra's holds the page's actions)
 
-    override func mouseDown(with event: NSEvent) {
-        let p = convert(event.locationInWindow, from: nil)
-        guard menuButton.frame.contains(p) else { return super.mouseDown(with: event) }
+    /// Arc's "Show media" folders (its Library button's right-click menu; Cra's Media button).
+    static func mediaFoldersMenu(_ store: SidebarStore) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
+        let header = NSMenuItem(title: "Show media", action: nil, keyEquivalent: "")
+        header.isEnabled = false
+        menu.addItem(header)
+        for f in MediaLibrary.Folder.allCases {
+            let on = store.settings.mediaFolders.contains(f)
+            MenuItems.add(menu, f.title, on: on) {
+                if on { store.settings.mediaFolders.removeAll { $0 == f } } else { store.settings.mediaFolders.append(f) }
+            }
+        }
+        if store.settings.mediaLibraryEnabled {
+            menu.addItem(.separator())
+            MenuItems.add(menu, "Hide Media") { store.settings.mediaLibraryEnabled = false }
+        }
+        return menu
+    }
+
+    /// A rail button's right-click: Media's folders (Arc's Library button menu), and what Cra's ⋯
+    /// held before Arc's Filter took its place (Open Downloads Folder, Clear Archive).
+    static func pageMenu(_ page: LibraryPage, store: SidebarStore, profile: String?) -> NSMenu? {
         switch page {
-        case .media:
-            // Arc's "Show media" folders (its Library button's right-click menu).
-            let store = store
-            let header = NSMenuItem(title: "Show media", action: nil, keyEquivalent: "")
-            header.isEnabled = false
-            menu.addItem(header)
-            for f in MediaLibrary.Folder.allCases {
-                let on = store.settings.mediaFolders.contains(f)
-                MenuItems.add(menu, f.title, on: on) {
-                    if on { store.settings.mediaFolders.removeAll { $0 == f } } else { store.settings.mediaFolders.append(f) }
-                }
-            }
-            if store.settings.mediaLibraryEnabled {
-                menu.addItem(.separator())
-                MenuItems.add(menu, "Hide Media") { store.settings.mediaLibraryEnabled = false }
-            }
+        case .media: return mediaFoldersMenu(store)
         case .downloads:
-            // The folder the window's profile downloads to (#190).
-            let profile = (window?.windowController as? MainWindowController)?.profileDirectoryName
-            MenuItems.add(menu, "Open Downloads Folder") {
+            let m = NSMenu()
+            MenuItems.add(m, "Open Downloads Folder") {
                 NSWorkspace.shared.open(DownloadDestinations.folder(profileID: DownloadDestinations.profileID(profilePath: profile)))
             }
+            return m
         case .archive:
-            let store = store
-            MenuItems.add(menu, "Clear Archive", enabled: !store.archive.isEmpty) { store.clearArchive() }
-        case .boosts:
-            MenuItems.add(menu, "New Boost for This Site") { [weak self] in self?.actions.performAction("newBoost") }
-        case .easels:
-            MenuItems.add(menu, "New Easel") { [weak self] in self?.actions.performAction("newEasel") }
-        case .spaces:
-            return
+            let m = NSMenu()
+            m.autoenablesItems = false
+            MenuItems.add(m, "Clear Archive", enabled: !store.archive.isEmpty) { store.clearArchive() }
+            return m
+        default: return nil
         }
-        menu.popUp(positioning: nil, at: NSPoint(x: menuButton.frame.minX, y: menuButton.frame.maxY + 4), in: self)
+    }
+
+    // MARK: Filter (Arc's, on Archived Tabs and Downloads)
+
+    private var archiveFilter = ArchiveFilter()
+    private var downloadFilter = DownloadFilter()
+    private var filtering = false { didSet { showFilterPanel() } }
+    private var filterHost: NSHostingView<LibraryFilterPanel>?
+
+    private var hasFilter: Bool { page == .archive || page == .downloads }
+    private var filterActive: Bool { page == .archive ? !archiveFilter.isEmpty : page == .downloads ? !downloadFilter.isEmpty : false }
+
+    private func filterPanel() -> LibraryFilterPanel {
+        typealias Chip = LibraryFilterPanel.Chip
+        var sections: [LibraryFilterPanel.Section] = []
+        if page == .archive {
+            let f = archiveFilter
+            sections.append(.init(title: "How was the tab closed?", chips: [
+                Chip(id: "auto", label: "Auto-Closed", on: f.closed.contains(.auto)),
+                Chip(id: "manual", label: "Manually Closed", on: f.closed.contains(.manual)),
+            ]))
+            var places = [Chip(id: "little", label: "Little Window", on: f.places.contains(.littleWindow))]
+            for id in store.spaceOrder {
+                guard let sp = store.space(id) else { continue }
+                places.append(Chip(id: "space:" + id.uuidString, label: sp.title, icon: sp.emoji.isEmpty ? nil : sp.emoji,
+                                   on: f.places.contains(.space(id))))
+            }
+            sections.append(.init(title: "Where was the tab?", chips: places))
+        } else {
+            var chips = [Chip(id: "Default", label: "Default", on: downloadFilter.profiles.contains("Default"))]
+            for p in store.profiles { chips.append(Chip(id: p.directoryName, label: p.name, on: downloadFilter.profiles.contains(p.directoryName))) }
+            sections.append(.init(title: "Profiles", chips: chips))
+        }
+        return LibraryFilterPanel(title: page == .archive ? "Filter Archived Tabs" : "Filter Downloads…", sections: sections, width: max(200, bounds.width),
+                                  dark: colors.isDark, toggle: { [weak self] id in self?.toggleChip(id) },
+                                  done: { [weak self] in self?.filtering = false })
+    }
+
+    private func toggleChip(_ id: String) {
+        func flip<T: Hashable>(_ set: inout Set<T>, _ v: T) { if set.contains(v) { set.remove(v) } else { set.insert(v) } }
+        if page == .archive {
+            switch id {
+            case "auto": flip(&archiveFilter.closed, .auto)
+            case "manual": flip(&archiveFilter.closed, .manual)
+            case "little": flip(&archiveFilter.places, .littleWindow)
+            default: if let u = UUID(uuidString: String(id.dropFirst(6))) { flip(&archiveFilter.places, .space(u)) }
+            }
+        } else {
+            flip(&downloadFilter.profiles, id)
+        }
+        filterHost?.rootView = filterPanel()
+        reload()
+    }
+
+    private func showFilterPanel() {
+        if filtering, hasFilter {
+            let host = filterHost ?? NSHostingView(rootView: filterPanel())
+            // The window's title bar is no inset here: the panel takes the search row's place.
+            host.safeAreaRegions = []
+            host.rootView = filterPanel()
+            if filterHost == nil { addSubview(host); filterHost = host }
+        } else {
+            filterHost?.removeFromSuperview()
+            filterHost = nil
+            window?.makeFirstResponder(field)
+        }
+        searchBox.isHidden = filtering
+        menuButton.isHidden = filtering || !hasFilter
+        refresh()
+        needsLayout = true
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let p = convert(event.locationInWindow, from: nil)
+        guard hasFilter, !filtering, menuButton.frame.contains(p) else { return super.mouseDown(with: event) }
+        filtering = true
     }
 
     // MARK: Table
@@ -581,7 +732,9 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
 
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
         if case .header = rows[row] { return 40 }
-        if case .media = rows[row] { return MediaGridMetrics.rowHeight }
+        // The list's own width: the table may not have its width yet when this is first asked.
+        if case .media = rows[row] { return MediaGridMetrics.rowHeight(width: bounds.width) }
+        if case .easels = rows[row] { return MediaGridMetrics.rowHeight(width: bounds.width) }
         return 56
     }
 
@@ -593,32 +746,39 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
             v.show(label, ink: colors.isDark ? .white : .black)
             return v
         case .boost(let b):
-            let v = tableView.makeView(withIdentifier: .init("item"), owner: nil) as? LibraryItemCell ?? LibraryItemCell()
-            v.identifier = .init("item")
-            v.showBoost(b, colors: colors) { [store, actions] in
+            let v = tableView.makeView(withIdentifier: .init("boost"), owner: nil) as? BoostRowCell ?? BoostRowCell()
+            v.identifier = .init("boost")
+            v.show(b, icon: boostIcon(b), ink: colors.isDark ? .white : .black,
+                   hoverFill: colors.hoverFill, tint: switchTint, knob: switchKnob)
+            v.open = { [store, actions] in
                 // Opens the site, where the boost shows.
                 _ = store.createTab(url: "https://\(b.host)/", select: true)
                 actions.closeLibrary()
             }
             return v
-        case .easel(let id, let title, let edited):
-            let v = tableView.makeView(withIdentifier: .init("item"), owner: nil) as? LibraryItemCell ?? LibraryItemCell()
-            v.identifier = .init("item")
-            v.showEasel(title: title, edited: edited, colors: colors) { [store, actions] in
-                let url = Easel(id: id).url
-                if let tab = store.allTabs().first(where: { $0.tab?.url == url }) { store.selectTab(tab.id) }
-                else { _ = store.createTab(url: url, title: title, select: true) }
-                actions.closeLibrary()
+        case .easels(let entries):
+            let v = tableView.makeView(withIdentifier: .init("easels"), owner: nil) as? EaselRowCell ?? EaselRowCell()
+            v.identifier = .init("easels")
+            v.open = { [weak self] e in
+                // Arc opens an easel picked here in Peek (its ⤢ makes it a tab); the Library stays.
+                guard let self, let main = self.window?.windowController as? MainWindowController,
+                      let app = NSApp.delegate as? AppDelegate else { return }
+                app.openPeek(url: Easel(id: e.id).url, over: main)
+                CraLog.note("easel opens in Peek")
             }
+            v.delete = { [weak self] e in self?.deleteEasel(e) }
+            v.show(entries, ink: colors.isDark ? .white : .black)
             return v
         case .media(let files):
             let v = tableView.makeView(withIdentifier: .init("media"), owner: nil) as? MediaRowCell ?? MediaRowCell()
             v.identifier = .init("media")
-            v.open = { [store, actions] file in
-                // Arc opens a picked picture in a tab, and the Library steps aside.
-                _ = store.createTab(url: URL(fileURLWithPath: file.path).absoluteString, select: true)
-                actions.closeLibrary()
+            v.open = { [weak self, weak v] file, thumbnail in
+                // Arc previews the pick over the dimmed window; the Library and the space stay as they were.
+                guard let self, let window = v?.window else { return }
+                let files = self.rows.flatMap { row -> [MediaLibrary.File] in if case .media(let f) = row { return f } else { return [] } }
+                MediaPreviewController.shared.show(files, at: files.firstIndex(of: file) ?? 0, from: thumbnail, over: window)
             }
+            v.fileMenu = { [weak self, store] file in MediaMenu.make(for: file, store: store) { if $0 == .hide { self?.reload() } } }
             v.show(files, ink: colors.isDark ? .white : .black)
             return v
         case .download(let e):
@@ -629,28 +789,57 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         case .archived(let e):
             let v = tableView.makeView(withIdentifier: .init("item"), owner: nil) as? LibraryItemCell ?? LibraryItemCell()
             v.identifier = .init("item")
-            v.showArchived(e, icon: favicons.image(forKey: e.item.tab?.faviconKey), colors: colors) { [actions] in actions.restoreArchived(e.id) }
+            v.showArchived(e, icon: favicons.image(forKey: e.item.tab?.faviconKey), colors: colors,
+                           restore: { [actions] in actions.restoreArchived(e.id) },
+                           remove: { [store] in store.removeFromArchive(e.id) })
             return v
         }
     }
 
     func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool { false }
+
+    /// Library ▸ Easels ▸ Delete: asked first (its drawing and pictures go), its tabs close.
+    private func deleteEasel(_ e: EaselEntry) {
+        guard let window = window ?? AppDialog.parentWindow else { return }
+        let dialog = AppDialog.easelDeletion()
+        dialog.present(over: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self else { return }
+            let url = Easel(id: e.id).url
+            EaselFiles.deleted.insert(e.id)
+            for tab in self.store.allTabs() where tab.tab?.url == url { self.actions.closeTab(tab.id) }
+            EaselFiles.delete(e.id)
+            CraLog.note("easel deleted")
+            self.reload()
+        }
+    }
+
+    /// The boost's site icon: the site's own, else that of a tab on it (icons are kept per page).
+    private func boostIcon(_ b: Boost) -> NSImage? {
+        if let i = favicons.image(for: "https://\(b.host)/") { return i }
+        let key = store.allTabs().lazy.compactMap { $0.tab }.first { t in
+            guard let host = URL(string: t.url)?.host?.lowercased() else { return false }
+            return host == b.host || host.hasSuffix("." + b.host)
+        }?.faviconKey
+        if let i = favicons.image(forKey: key) { return i }
+        // Never shown in a tab here: fetch the site's own icon, then draw the row again.
+        SiteIconLoader.shared.load(host: b.host, into: favicons) { [weak self] in self?.table.reloadData() }
+        return nil
+    }
 }
 
 extension LibraryListView: NSMenuDelegate {
     /// The row's context menu, built for the row under the pointer.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        let row = table.clickedRow
+        let row = table.menuRow
         guard rows.indices.contains(row) else { return }
         switch rows[row] {
-        case .header, .media, .easel: break
+        case .header, .media, .easels: break
         case .boost(let b):
-            var flipped = b
-            flipped.enabled.toggle()
-            MenuItems.add(menu, b.enabled ? "Disable Boost" : "Enable Boost") { BoostStore.shared.update(flipped) }
-            menu.addItem(.separator())
-            MenuItems.add(menu, "Delete Boost") { BoostStore.shared.delete(b.id) }
+            // Arc 1.172.1: Rename (in place) and Delete.
+            let cell = table.view(atColumn: 0, row: row, makeIfNecessary: false) as? BoostRowCell
+            MenuItems.add(menu, "Rename") { cell?.beginRename() }
+            MenuItems.add(menu, "Delete") { BoostStore.shared.delete(b.id) }
         case .archived(let e):
             let actions = actions, store = store
             MenuItems.add(menu, "Restore") { actions.restoreArchived(e.id) }
@@ -660,18 +849,22 @@ extension LibraryListView: NSMenuDelegate {
             }
             menu.addItem(.separator())
             MenuItems.add(menu, "Remove from Archive") { store.removeFromArchive(e.id) }
-        case .download(.live):
-            break
-        case .download(.finished(let e)):
-            let url = URL(fileURLWithPath: e.path)
-            MenuItems.add(menu, "Open") { NSWorkspace.shared.open(url) }
-            MenuItems.add(menu, "Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
-            menu.addItem(.separator())
-            MenuItems.add(menu, "Copy") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.writeObjects([url as NSURL])
-            }
+        case .download(let d):
+            // Arc's Download Context Menu, the tray's too (#272).
+            DownloadRowMenu.fill(menu, for: d)
         }
+    }
+}
+
+/// Arc draws no ring round the row a right-click is on: the table hands out the row's menu itself
+/// (NSTableView's own path outlines the clicked row).
+private final class LibraryTable: NSTableView {
+    private(set) var menuRow = -1
+    override func menu(for event: NSEvent) -> NSMenu? {
+        menuRow = row(at: convert(event.locationInWindow, from: nil))
+        guard let m = menu else { return nil }
+        m.delegate?.menuNeedsUpdate?(m)
+        return m.items.isEmpty ? nil : m
     }
 }
 
@@ -713,8 +906,13 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
     private var download: DownloadHistory.Entry?
     private var isDownloadRow = false
     private var restore: (() -> Void)?
+    /// An archived tab's hover buttons (Arc 1.172.1): the bin removes it from the archive, the
+    /// curved arrow brings it back.
+    private var remove: (() -> Void)?
+    private let binButton = NSImageView()
+    private let restoreButton = NSImageView()
     private var downAt: NSPoint?
-    private var hovering = false { didSet { if hovering != oldValue { refreshHover() } } }
+    private var hovering = false { didSet { if hovering != oldValue { refreshHover(); needsLayout = true } } }
 
     private static let age: RelativeDateTimeFormatter = {
         let f = RelativeDateTimeFormatter()
@@ -738,17 +936,27 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
         tile.addSubview(icon)
         card.addSubview(title)
         card.addSubview(detail)
+        for (b, symbol, label) in [(binButton, "trash", "Delete"), (restoreButton, "arrow.uturn.backward", "Restore")] {
+            b.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)?.withSymbolConfiguration(.init(pointSize: 14, weight: .regular))
+            b.imageScaling = .scaleNone
+            b.isHidden = true
+            b.setAccessibilityElement(true)
+            b.setAccessibilityRole(.button)
+            b.setAccessibilityLabel(label)
+            card.addSubview(b)
+        }
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
     override var isFlipped: Bool { true }
 
-    func showArchived(_ e: ArchivedItem, icon image: NSImage?, colors: SidebarColors, restore: @escaping () -> Void) {
+    func showArchived(_ e: ArchivedItem, icon image: NSImage?, colors: SidebarColors, restore: @escaping () -> Void, remove: @escaping () -> Void) {
         self.colors = colors
         download = nil
         isDownloadRow = false
         self.restore = restore
+        self.remove = remove
         let ink: NSColor = colors.isDark ? .white : .black
         tile.layer?.contents = nil
         tile.layer?.backgroundColor = ink.withAlphaComponent(0.04).cgColor
@@ -763,51 +971,13 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
         apply(ink: ink)
     }
 
-    /// A boost on Library ▸ Boosts: its name and site, dimmed while off.
-    func showBoost(_ b: Boost, colors: SidebarColors, open: @escaping () -> Void) {
-        self.colors = colors
-        download = nil
-        isDownloadRow = false
-        restore = open
-        let ink: NSColor = colors.isDark ? .white : .black
-        tile.layer?.contents = nil
-        tile.layer?.backgroundColor = ink.withAlphaComponent(0.04).cgColor
-        icon.isHidden = false
-        icon.image = NSImage(systemSymbolName: "paintbrush.pointed", accessibilityDescription: "Boost")
-        title.stringValue = b.name
-        title.lineBreakMode = .byTruncatingTail
-        detail.stringValue = b.host + (b.enabled ? "" : " · Off")
-        tip?.text = b.host
-        apply(ink: ink)
-        alphaValue = b.enabled ? 1 : 0.55
-    }
-
-    /// An easel on Library ▸ Easels: its glyph, its title, when it was last edited.
-    func showEasel(title text: String, edited: Date, colors: SidebarColors, open: @escaping () -> Void) {
-        self.colors = colors
-        download = nil
-        isDownloadRow = false
-        restore = open
-        let ink: NSColor = colors.isDark ? .white : .black
-        tile.layer?.contents = nil
-        tile.layer?.backgroundColor = ink.withAlphaComponent(0.04).cgColor
-        icon.isHidden = false
-        icon.image = NSImage(systemSymbolName: "pencil.and.scribble", accessibilityDescription: "Easel")
-        title.stringValue = text
-        title.lineBreakMode = .byTruncatingTail
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .full
-        detail.stringValue = "Edited " + f.localizedString(for: edited, relativeTo: Date())
-        tip?.text = text
-        apply(ink: ink)
-    }
-
     /// A download on Library ▸ Downloads: a finished file (thumbnail, name, age) or one still
     /// running, failed or cancelled (its type's icon, name, progress or what went wrong; #245).
     func showDownload(_ listed: DownloadHistory.Listed, colors: SidebarColors) {
         self.colors = colors
         isDownloadRow = true
         restore = nil
+        remove = nil
         let ink: NSColor = colors.isDark ? .white : .black
         icon.isHidden = true
         let image: NSImage?
@@ -838,7 +1008,6 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
     }
 
     private func apply(ink: NSColor) {
-        alphaValue = 1   // a reused cell may come from a Boost that was off
         title.textColor = ink.withAlphaComponent(0.82)
         detail.textColor = ink.withAlphaComponent(0.55)
         refreshHover()
@@ -859,8 +1028,17 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
         let x: CGFloat = isDownload ? 5 : 9
         tile.frame = NSRect(x: x, y: (h - t) / 2, width: t, height: t)
         icon.frame = NSRect(x: (t - 16) / 2, y: (t - 16) / 2, width: 16, height: 16)
+        // Arc's archived row on hover: the bin and the restore arrow 34 pt apart, 14 pt from the right.
+        let showsButtons = hovering && remove != nil && !isDownloadRow
+        binButton.isHidden = !showsButtons
+        restoreButton.isHidden = !showsButtons
+        let ink: NSColor = colors.isDark ? .white : .black
+        binButton.contentTintColor = ink.withAlphaComponent(0.6)
+        restoreButton.contentTintColor = ink.withAlphaComponent(0.6)
+        restoreButton.frame = NSRect(x: card.bounds.width - 14 - 24, y: (h - 24) / 2, width: 24, height: 24)
+        binButton.frame = restoreButton.frame.offsetBy(dx: -34, dy: 0)
         // HStack(spacing: 10) ends in a Spacer, so the text stops 10 + 8 pt short of the edge.
-        let tx = x + t + 10, tw = max(0, card.bounds.width - tx - 18)
+        let tx = x + t + 10, tw = max(0, (showsButtons ? binButton.frame.minX - 8 : card.bounds.width - 18) - tx)
         // VStack(spacing: 1) of 17 + 15, centred.
         let top = (h - 33) / 2
         title.frame = NSRect(x: tx - SidebarText.inset, y: top, width: tw + 2 * SidebarText.inset, height: 17)
@@ -893,6 +1071,8 @@ private final class LibraryItemCell: NSView, NSDraggingSource {
     override func mouseUp(with event: NSEvent) {
         defer { downAt = nil }
         guard downAt != nil, bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
+        let p = card.convert(event.locationInWindow, from: nil)
+        if !binButton.isHidden, binButton.frame.insetBy(dx: -4, dy: -4).contains(p) { remove?(); return }
         if let download { NSWorkspace.shared.open(URL(fileURLWithPath: download.path)) } else if !isDownloadRow { restore?() }
     }
 

@@ -1,0 +1,20 @@
+# Cra draws Arc's Picture in Picture controls over Chromium's PiP window and keeps Chromium's own
+# (title, ±10 s, scrubber) away by never letting that window take the pointer or become key: a key
+# PiP window shows Chrome's controls on every mouse move, so two sets showed at once (GitHub #262).
+# Cra set Chromium's `preventKeyWindow` once, but Chromium writes it too: a window it orders in on
+# another Space gets NO back when the Space changes. Here it is cleared that way and the window
+# asked to become key; the switch must be back on and the window not key. (A background test copy
+# can't make any window key, so Cra handing the key back when it gets it anyway is a release check.)
+# promise: #262
+cra://open?url=file://${FIXTURES}/Pages/video.html
+expect-log loaded file:
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.getElementById('v').requestPictureInPicture().then(()=>'pip:open')","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"pip:open"
+wait 1
+cra://debug?pip=open
+expect-log Cra pip open: windows=1 key=0 appKey=0 mouse=0 preventKey=1
+cra://debug?pipKey=space
+wait 1
+cra://debug?pip=space
+expect-log Cra pip space: windows=1 key=0 appKey=0 mouse=0 preventKey=1

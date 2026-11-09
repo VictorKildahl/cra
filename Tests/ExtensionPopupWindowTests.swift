@@ -17,6 +17,9 @@ enum ExtensionPopupWindowTests {
         window.setFrameOrigin(NSPoint(x: -10000, y: -10000))
         expect(!window.canBecomeKey && !window.canBecomeMain, "the popup frame must not take Chrome's focus")
         expect(window.isMovable, "the rest of the titlebar remains draggable")
+        let titleBarBottom = window.frame.minY + window.contentLayoutRect.maxY
+        expect(bubble.frame.maxY - ExtensionPopupWindow.bubbleInset == titleBarBottom,
+               "the page starts right under AppKit's title bar, whatever its height, with no gap")
 
         for kind: NSWindow.ButtonType in [.closeButton, .miniaturizeButton, .zoomButton] {
             guard let button = window.standardWindowButton(kind), let titlebar = button.superview,
@@ -28,8 +31,8 @@ enum ExtensionPopupWindowTests {
             expect(titlebar.hitTest(light.convert(center, to: titlebar.superview)) === light, "the custom light owns its hit region")
             expect(!light.mouseDownCanMoveWindow, "a traffic light must not start a titlebar drag")
             expect(light.acceptsFirstMouse(for: nil), "the traffic light accepts clicks while its frame is not key")
-            let onScreen = window.convertToScreen(NSRect(origin: light.convert(center, to: nil), size: .zero)).origin
-            expect(!bubble.frame.contains(onScreen), "Chrome's child bubble does not cover the traffic light")
+            let onScreen = window.convertToScreen(light.convert(light.bounds, to: nil))
+            expect(!NSIntersectsRect(bubble.frame, onScreen), "Chrome's child bubble leaves the entire traffic light clickable")
 
             let outside = NSPoint(x: light.bounds.maxX + 10, y: light.bounds.maxY + 10)
             light.mouseDown(with: event(.leftMouseDown, at: center, in: light))
@@ -44,12 +47,12 @@ enum ExtensionPopupWindowTests {
 
         let close = window.standardWindowButton(.closeButton)!
         let light = close.superview!.subviews.first { $0 !== close && $0.frame == close.frame && !($0 is NSButton) }!
-        let center = NSPoint(x: light.bounds.midX, y: light.bounds.midY)
+        let lowerEdge = NSPoint(x: light.bounds.midX, y: light.isFlipped ? light.bounds.maxY - 1.5 : light.bounds.minY + 1.5)
         bubble.orderFront(nil)
         expect(bubble.isVisible, "the stand-in Chrome bubble is visible before dismissal")
-        light.mouseDown(with: event(.leftMouseDown, at: center, in: light))
+        window.sendEvent(event(.leftMouseDown, at: lowerEdge, in: light))
         expect(window.isVisible && bubble.parent === window, "mouse down alone does not close the popup")
-        light.mouseUp(with: event(.leftMouseUp, at: center, in: light))
+        window.sendEvent(event(.leftMouseUp, at: lowerEdge, in: light))
         expect(!window.isVisible && bubble.parent == nil, "releasing the close light dismisses and detaches the popup")
         await withCheckedContinuation { continuation in
             DispatchQueue.main.async { continuation.resume() }

@@ -99,3 +99,28 @@ jobs:
           name: scenario-logs
           path: build/scenarios
           if-no-files-found: ignore
+
+  build-intel:
+    name: Build Cra.app (Intel)
+    # Every release ships an Intel copy too (scripts/release.sh), cross-compiled on this runner.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read pinned CEF version
+        id: cef
+        run: echo "version=$(sed -n 's/^CEF_VERSION="${CEF_VERSION:-\(.*\)}"$/\1/p' scripts/fetch-cef.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache CEF
+        uses: actions/cache@v6
+        with:
+          path: vendor/cef-x86_64
+          key: cef-x86_64-${{ steps.cef.outputs.version }}-${{ hashFiles('scripts/fetch-cef.sh') }}
+
+      - name: Build (debug, ad-hoc signed)
+        run: CRA_ARCH=x86_64 scripts/build.sh debug
+
+      - name: Verify bundle
+        run: |
+          codesign --verify --deep --strict --verbose=2 build/x86_64/Cra.app
+          lipo -archs build/x86_64/Cra.app/Contents/MacOS/Cra

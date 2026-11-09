@@ -32,15 +32,22 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    name: Build, sign, notarize, publish
+  build:
+    name: Build, sign, notarize (${{ matrix.arch }})
     # The SDK a release links against decides AppKit's behaviour, so build on the macOS
     # (and SDK) local builds use: macos-15's 15.5 SDK rounded the page window's corners.
+    # Intel is cross-compiled on the same Apple silicon runner, with the same SDK.
     runs-on: macos-26
+    strategy:
+      matrix:
+        arch: [arm64, x86_64]
     env:
       CRA_VERSION: ${{ github.event.inputs.version || github.ref_name }}
+      CRA_ARCHS: ${{ matrix.arch }}
       # The secrets context is not allowed in step `if`s, so resolve it once here.
       HAS_CERT: ${{ secrets.MACOS_CERTIFICATE_P12 != '' }}
+    outputs:
+      signed: ${{ steps.cert.outputs.signed }}
     steps:
       - uses: actions/checkout@v7
 
@@ -51,11 +58,12 @@ jobs:
         id: cef
         run: echo "version=$(sed -n 's/^CEF_VERSION="${CEF_VERSION:-\(.*\)}"$/\1/p' scripts/fetch-cef.sh)" >> "$GITHUB_OUTPUT"
 
+      # build.sh keeps the runner's own CPU in vendor/cef and the other one in vendor/cef-<arch>.
       - name: Cache CEF
         uses: actions/cache@v6
         with:
-          path: vendor/cef
-          key: cef-${{ runner.arch }}-${{ steps.cef.outputs.version }}-${{ hashFiles('scripts/fetch-cef.sh') }}
+          path: ${{ matrix.arch == 'arm64' && 'vendor/cef' || format('vendor/cef-{0}', matrix.arch) }}
+          key: cef-${{ matrix.arch }}-${{ steps.cef.outputs.version }}-${{ hashFiles('scripts/fetch-cef.sh') }}
 
       - name: Import signing certificate
         id: cert
@@ -94,24 +102,59 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: Cra-${{ env.CRA_VERSION }}
+          name: Cra-${{ env.CRA_VERSION }}-${{ matrix.arch }}
           path: build/dist/*
+
+  publish:
+    name: Publish
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      CRA_VERSION: ${{ github.event.inputs.version || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Normalise version
+        run: echo "CRA_VERSION=${CRA_VERSION#v}" >> "$GITHUB_ENV"
+
+      # Both jobs' files in one folder; each wrote a SHA256SUMS.txt for its own CPU.
+      - name: Collect artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: Cra-*
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums for both CPUs
+        run: |
+          cd dist
+          for f in Cra.dmg Cra.zip appcast.xml Cra-Intel.dmg Cra-Intel.zip appcast-intel.xml; do
+            [ -f "$f" ] || { echo "Missing $f" >&2; exit 1; }
+          done
+          sha256sum Cra*.zip Cra*.dmg > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: Cra-${{ env.CRA_VERSION }}
+          path: dist/*
 
       - name: Publish GitHub release
         if: ${{ startsWith(github.ref, 'refs/tags/') }}
         env:
           GH_TOKEN: ${{ github.token }}
-          SIGNED: ${{ steps.cert.outputs.signed == 'true' }}
+          SIGNED: ${{ needs.build.outputs.signed == 'true' }}
         run: |
           NOTES="$RUNNER_TEMP/notes.md"
-          echo "Cra ${CRA_VERSION} for macOS 14 and later (Apple silicon)." > "$NOTES"
+          echo "Cra ${CRA_VERSION} for macOS 14 and later, on Apple silicon and Intel." > "$NOTES"
           echo >> "$NOTES"
           # Unsigned builds stay regular releases: releases/latest (the website and
           # scripts/install.sh) skips pre-releases.
           if [ "$SIGNED" = "true" ]; then
-            echo "Download \`Cra.dmg\` below, open it and drag Cra to Applications." >> "$NOTES"
+            echo "Download \`Cra.dmg\` (Apple silicon) or \`Cra-Intel.dmg\` (Intel) below, open it and drag Cra to Applications." >> "$NOTES"
           else
             cat .github/release-notes-unsigned.md >> "$NOTES"
           fi
-          gh release create "${{ github.ref_name }}" build/dist/* \
+          gh release create "${{ github.ref_name }}" dist/* \
             --title "Cra ${CRA_VERSION}" --notes-file "$NOTES" --verify-tag

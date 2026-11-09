@@ -11,7 +11,14 @@ enum FloatingSidebarGeometry {
     static let revealInsideEdgeToEdge: CGFloat = 5
     static let revealOutside: CGFloat = 4
     static let margin: CGFloat = 8
-    static let leaveSlack: CGFloat = 24
+    /// How far past the sidebar the pointer may go before it leaves. Arc 1.172.1 (120 fps, 9 Nov 2026,
+    /// GitHub #293) keeps a 264 pt sidebar out until x ≈ 345, 81 pt past its width; Cra let go 32 pt past
+    /// it, so a hand drifting off the sidebar's edge sent it away and back.
+    static let leaveSlack: CGFloat = 73
+    /// How long the pointer stays in the strip before the sidebar comes out. Arc moves ~150 ms after the
+    /// pointer arrives (its own reaction takes ~35 ms of that), and an edge brushed for 86 ms doesn't
+    /// reveal at all (GitHub #293). Cra revealed on the first sample, so passing the edge made it flicker.
+    static let revealDwell: TimeInterval = 0.1
 
     static func shouldReveal(at point: CGPoint, in bounds: CGRect, edgeToEdge: Bool = false) -> Bool {
         point.y >= bounds.minY && point.y <= bounds.maxY
@@ -25,4 +32,20 @@ enum FloatingSidebarGeometry {
         guard pressedMouseButtons == 0, !shouldReveal(at: point, in: bounds, edgeToEdge: edgeToEdge) else { return false }
         return !bounds.contains(point) || point.x > bounds.minX + sidebarWidth + margin + leaveSlack
     }
+}
+
+/// The wait before a hidden sidebar comes out: the pointer has to stay in the reveal strip for
+/// `FloatingSidebarGeometry.revealDwell`; leaving it starts the wait over (GitHub #293).
+struct FloatingSidebarRevealDwell {
+    private(set) var since: TimeInterval?
+
+    /// One pointer sample: true once the pointer has been in the strip long enough.
+    mutating func sample(inStrip: Bool, at now: TimeInterval) -> Bool {
+        guard inStrip else { since = nil; return false }
+        let start = since ?? now
+        since = start
+        return now - start >= FloatingSidebarGeometry.revealDwell
+    }
+
+    mutating func reset() { since = nil }
 }

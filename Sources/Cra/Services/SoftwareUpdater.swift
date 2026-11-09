@@ -57,6 +57,18 @@ final class SoftwareUpdater: NSObject {
     /// The close button on a banner hides it until the next launch (Arc counts these in
     /// autoUpdateBannerDismissalCount).
     var bannerDismissed = false
+    /// What the "ready" banner says, and the toast says for a window whose sidebar is hidden.
+    var notice: UpdateNotice? {
+        UpdateNotice.current(ready: readyRelease?.version, found: foundRelease?.version, dismissed: bannerDismissed)
+    }
+
+    /// Clicking the banner, or the toast's button: restart into it, or show the found update.
+    func act(on notice: UpdateNotice) {
+        switch notice {
+        case .ready: installAndRelaunch()
+        case .available: showFoundUpdate()
+        }
+    }
     /// Arc's "Automatically update my Arc" (Dia: "Automatically update Dia"): download in
     /// the background and restart while the user is away. Off, a found update only shows a
     /// banner. Stored by Sparkle as SUAutomaticallyUpdate.
@@ -150,6 +162,11 @@ final class SoftwareUpdater: NSObject {
 
     /// Restart into the downloaded update (the banner, Install and Relaunch).
     func installAndRelaunch() {
+        // The restart would cancel a running download: ask first, as quitting does (#272). The
+        // automatic restart never gets here while one runs (autoUpdateBlocker).
+        var restarts = installNow != nil || phase == .readyToInstall
+        if case .found(_, downloaded: true) = phase { restarts = true }
+        if restarts, DownloadHistory.shared.hasRunningDownloads, app?.confirmQuitCancellingDownloads() == false { return }
         if let reply = choiceReply {
             choiceReply = nil
             switch phase {
@@ -208,8 +225,9 @@ final class SoftwareUpdater: NSObject {
         app.main.showWindow(nil)
     }
 
+    /// The updated banner's "What's new" row. The card stays so Sponsor Cra is still there
+    /// after reading; only its ✕ (or the next launch) puts it away.
     func openReleaseNotes() {
-        updatedTo = nil
         guard let app else { return }
         app.store.createTab(url: Self.releaseNotesURL, select: true)
         app.main.showWindow(nil)

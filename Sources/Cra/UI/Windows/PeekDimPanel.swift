@@ -1,8 +1,9 @@
 import AppKit
 
-/// Covers a browser window while a Peek shows on it; a click on it ends the Peek. It leaves the
-/// window's edge band uncovered (PeekLayout.dismissArea), so a press there resizes the window
-/// and the Peek stays, as in Arc, where the Peek is a card inside the window.
+/// Covers a browser window's page area while a Peek shows on it; a click on it ends the Peek. It
+/// leaves the window's edge band uncovered (PeekLayout.dismissArea), so a press there resizes the
+/// window and the Peek stays, as in Arc, where the Peek is a card inside the window, and the
+/// sidebar, whose rows open their tabs while the Peek waits on its own (#242).
 final class PeekDimPanel: NSPanel {
     private final class Shade: NSView {
         var onClick: () -> Void = {}
@@ -11,16 +12,15 @@ final class PeekDimPanel: NSPanel {
         override func rightMouseDown(with event: NSEvent) { onClick() }
     }
 
-    init(covering parent: NSWindow, onClick: @escaping () -> Void) {
-        let frame = PeekLayout.dismissArea(covering: parent.frame)
-        super.init(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+    init(covering area: NSRect, of parent: NSWindow, onClick: @escaping () -> Void) {
+        super.init(contentRect: area, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .clear
         hasShadow = false
         isMovable = false
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
-        let shade = Shade(frame: NSRect(origin: .zero, size: frame.size))
+        let shade = Shade(frame: NSRect(origin: .zero, size: area.size))
         shade.onClick = onClick
         shade.wantsLayer = true
         // The page fades instead (MainWindowController.showPeekVeil); this only catches the click,
@@ -30,11 +30,20 @@ final class PeekDimPanel: NSPanel {
         shade.layer?.cornerCurve = .continuous
         shade.autoresizingMask = [.width, .height]
         contentView = shade
+        roundCorners(of: parent)
     }
 
-    /// Follows the browser window as it moves or resizes under the Peek.
-    func reposition(covering parent: NSWindow) {
-        setFrame(PeekLayout.dismissArea(covering: parent.frame), display: true)
+    /// Follows the browser window as it moves or resizes under the Peek, and its sidebar.
+    func reposition(covering area: NSRect, of parent: NSWindow) {
+        if frame != area { setFrame(area, display: true) }
+        roundCorners(of: parent)
+    }
+
+    /// Only the corners on the window's own edge are rounded; beside the sidebar it is straight.
+    private func roundCorners(of parent: NSWindow) {
+        let besideSidebar = frame.minX > parent.frame.minX + PeekLayout.dismissInset + 0.5
+        contentView?.layer?.maskedCorners = besideSidebar ? [.layerMaxXMinYCorner, .layerMaxXMaxYCorner]
+            : [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
     }
 
     override var canBecomeKey: Bool { false }

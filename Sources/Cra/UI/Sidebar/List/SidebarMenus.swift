@@ -30,7 +30,11 @@ enum SidebarMenus {
     private static func submenu(_ menu: NSMenu, _ title: String, image: NSImage? = nil) -> NSMenu {
         let sub = Self.menu()
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        item.image = image
+        if let image {
+            let icon = image.copy() as! NSImage
+            icon.size = NSSize(width: 16, height: 16)
+            item.image = icon
+        }
         item.submenu = sub
         menu.addItem(item)
         return sub
@@ -120,7 +124,7 @@ enum SidebarMenus {
         menu.addItem(.separator())
         let spaces = submenu(menu, "Move to Space")
         for s in store.orderedSpaces {
-            add(spaces, "\(s.emoji) \(s.title)", enabled: !store.isInSpace(id, s.id)) { store.moveTab(id, toSpace: s.id, window: ui.windowID) }
+            add(spaces, s.labeled, enabled: !store.isInSpace(id, s.id)) { store.moveTab(id, toSpace: s.id, window: ui.windowID) }
         }
         folderItems(menu, [id], list: list)
         menu.addItem(.separator())
@@ -179,6 +183,7 @@ enum SidebarMenus {
         let store = list.store, ui = list.ui
         let id = item.id
         let menu = menu()
+        add(menu, "Change Icon…") { list.showFolderIconPicker(id) }
         add(menu, "Rename…") { ui.renamingID = id }
         add(menu, "New Folder Inside") {
             let f = store.createFolder(named: "New Folder", in: id, index: 0)
@@ -198,29 +203,27 @@ enum SidebarMenus {
         let id = item.id
         let live = item.liveFolder ?? LiveFolderData()
         let menu = menu()
-        let requests = submenu(menu, live.source == .gitlab ? "Merge Requests" : "Pull Requests",
-                               image: live.source == .gitlab ? GitLabMark.image : GitHubMark.image)
+        let entry = LiveFolderPluginStore.shared.entry(for: live)
+        let requests = submenu(menu, entry?.presentation.menuTitle ?? item.title ?? "Live Folder", image: entry?.icon)
         note(requests, manager.refreshing.contains(id) ? "Updating…" : LiveFolderText.lastUpdate(live))
-        if live.source == .gitlab, let server = live.serverURL { note(requests, GitLabLiveClient.serverLabel(server)) }
+        if let detail = live.plugin?.detailLabel { note(requests, detail) }
         add(requests, "Refresh") { manager.refresh(id) }
         requests.addItem(.separator())
-        let filters: [(String, GitHubLiveFilter.Attributes)] = live.source == .gitlab
-            ? GitLabLiveCategory.allCases.map { ($0.title, $0.attribute) }
-            : [("Created by Me", .authored), ("Review Requests", .reviewRequests), ("Team Review Requests", .teamReviewRequests)]
-        for (title, attribute) in filters {
-            let on = live.filter.attributes.contains(attribute)
-            add(requests, title, on: on) {
-                store.updateLiveFolder(id) { l in
-                    if on { l.filter.attributes.remove(attribute) } else { l.filter.attributes.insert(attribute) }
+        for filter in entry?.presentation.filters ?? [] {
+            let on = live.plugin?.filters.contains(filter.id) == true
+            add(requests, filter.title, on: on) {
+                store.updateLiveFolder(id) { live in
+                    if on { live.plugin?.filters.removeAll { $0 == filter.id } }
+                    else { live.plugin?.filters.append(filter.id) }
                 }
                 manager.refresh(id, force: true)
             }
         }
         let repos = store.liveRepositories(id, fetched: manager.repositories[id])
-        if !repos.isEmpty {
+        if !repos.isEmpty, let groups = entry?.presentation.groups {
             requests.addItem(.separator())
-            let sub = submenu(requests, live.source == .gitlab ? "Projects" : "Repositories")
-            note(sub, live.source == .gitlab ? "Projects with active merge requests." : "This list is generated based on your currently active pull requests.")
+            let sub = submenu(requests, groups.title)
+            note(sub, groups.description)
             sub.addItem(.separator())
             for repo in repos {
                 let shown = !live.filter.isRepositoryHidden(repo)
@@ -232,21 +235,19 @@ enum SidebarMenus {
                 }
             }
         }
-        if live.lastError == .notSignedIn {
+        if live.lastError == .notSignedIn, let signIn = live.plugin?.signIn {
             requests.addItem(.separator())
-            add(requests, "Sign In to \(live.source.title)…") { actions.openURL(live.signInURL) }
-        } else if !live.ssoOrganizations.isEmpty {
+            add(requests, signIn.title) { actions.openURL(signIn.url) }
+        } else if let snapshot = live.plugin?.snapshot, !snapshot.actions.isEmpty {
             requests.addItem(.separator())
-            note(requests, "SSO ensures all of your organizations’ PRs appear")
-            for org in live.ssoOrganizations {
-                add(requests, "Sign In to \(org) with SSO…") { actions.openURL("https://github.com/orgs/\(org)/sso") }
-            }
+            if let message = snapshot.actionMessage { note(requests, message) }
+            for action in snapshot.actions { add(requests, action.title) { actions.openURL(action.url) } }
         }
         menu.addItem(.separator())
         let spaces = submenu(menu, "Move to")
         for space in store.orderedSpaces {
             let current = store.isInSpace(id, space.id)
-            add(spaces, "\(space.emoji) \(space.title)", on: current) {
+            add(spaces, space.labeled, on: current) {
                 if !current { store.moveTab(id, toSpace: space.id, window: ui.windowID) }
             }
         }
@@ -278,40 +279,57 @@ enum SidebarMenus {
 
     // MARK: Splits
 
-    /// Live Folders ▸ in the sidebar's and the space header's menus, after GitHub: the GitLab folders like
-    /// the GitHub one (✓ while there, a click asks to delete it; one per instance), then GitLab… to add one.
-    static func addGitLabFolders(to menu: NSMenu, space: UUID, store: SidebarStore, window: NSWindow?) {
-        let gitlabs = store.liveFolders.filter { $0.liveFolder?.source == .gitlab && store.isInSpace($0.id, space) }
-            .sorted { ($0.liveFolder?.serverURL ?? "") < ($1.liveFolder?.serverURL ?? "") }
-        for folder in gitlabs {
-            let server = folder.liveFolder?.serverURL.map(GitLabLiveClient.serverLabel) ?? ""
-            add(menu, "GitLab (\(server))", on: true) { confirmDeleteLiveFolder(folder, store: store, in: window) }
+    static func addLiveFolderPlugins(to menu: NSMenu, space: UUID, store: SidebarStore, window: NSWindow?) {
+        let registry = LiveFolderPluginStore.shared
+        for entry in registry.entries.values.sorted(by: { $0.package.manifest.name < $1.package.manifest.name }) {
+            let existing = store.liveFolders.filter { store.isInSpace($0.id, space) && $0.liveFolder?.plugin?.id == entry.package.manifest.id }
+                .sorted { ($0.liveFolder?.plugin?.instanceLabel ?? "") < ($1.liveFolder?.plugin?.instanceLabel ?? "") }
+            if entry.presentation.setup == nil {
+                add(menu, entry.package.manifest.name, enabled: !store.isStandalone(space: space), on: !existing.isEmpty) {
+                    if let folder = existing.first { confirmDeleteLiveFolder(folder, store: store, in: window) }
+                    else { addPluginFolder(entry, space: space, store: store, window: window) }
+                }
+            } else {
+                for folder in existing {
+                    add(menu, folder.liveFolder?.plugin?.instanceLabel ?? entry.package.manifest.name, on: true) {
+                        confirmDeleteLiveFolder(folder, store: store, in: window)
+                    }
+                }
+                add(menu, entry.package.manifest.name + "…", enabled: !store.isStandalone(space: space) && window != nil) {
+                    addPluginFolder(entry, space: space, store: store, window: window)
+                }
+            }
         }
-        add(menu, "GitLab…", enabled: !store.isStandalone(space: space) && window != nil) {
-            if let window { newGitLabFolder(space: space, store: store, window: window) }
-        }
+
     }
 
-    /// GitLab…: Arc has no GitLab folder, so this asks for the instance in Arc's text-input dialog (the
-    /// Rename Profile sheet's shape) and adds a folder like its GitHub one. Empty means gitlab.com.
-    private static func newGitLabFolder(space: UUID, store: SidebarStore, window: NSWindow) {
-        let dialog = AppDialog(title: "Add a GitLab Live Folder",
-                               message: "Enter your GitLab’s address, or leave it empty for GitLab.com. The folder signs in with this Space’s Profile.",
-                               actions: [DialogAction("Add Folder"), .cancel], input: "", placeholder: "https://gitlab.com",
-                               icon: .none, width: 496, buttonSpacing: 30, buttonOutset: 0)
+    static func addPluginFolder(_ entry: LiveFolderPluginStore.Entry, space: UUID, store: SidebarStore, window: NSWindow?) {
+        func create(_ settings: [String: String]) {
+            Task {
+                do {
+                    var configuration = try LiveFolderManager.configuration(entry: entry, settings: settings,
+                        filters: entry.presentation.filters.filter(\.enabledByDefault).map(\.id))
+                    try await LiveFolderManager.shared.updateSignIn(&configuration, entry: entry)
+                    guard let folder = store.createPluginFolder(configuration, title: entry.presentation.folderTitle, inSpace: space,
+                        legacySource: entry.package.manifest.legacySource) else { return }
+                    store.setExpanded(folder.id, true)
+                    LiveFolderManager.shared.refresh(folder.id, force: true)
+                } catch { AppDialog(title: "Could not add live folder", message: error.localizedDescription).runModal(over: window) }
+            }
+        }
+        guard let setup = entry.presentation.setup else { create([:]); return }
+        guard let window else { return }
+        let dialog = AppDialog(title: setup.title, message: setup.message,
+            actions: [DialogAction("Add Folder"), .cancel], input: "", placeholder: setup.placeholder,
+            icon: .none, width: 496, buttonSpacing: 30, buttonOutset: 0)
         dialog.present(over: window) { response in
             guard response == .alertFirstButtonReturn else { return }
-            let address = (dialog.input ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            guard let server = GitLabLiveClient.serverURL(address.isEmpty ? "https://gitlab.com" : address) else {
-                DispatchQueue.main.async {
-                    AppDialog(title: "That isn’t a GitLab address",
-                              message: "Use the address you open GitLab at, like https://gitlab.example.com.").runModal(over: window)
-                }
+            let input = (dialog.input ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let address = LiveFolderPluginConfiguration.normalizedAddress(input.isEmpty ? setup.defaultValue : input) else {
+                DispatchQueue.main.async { AppDialog(title: setup.invalidTitle, message: setup.invalidMessage).runModal(over: window) }
                 return
             }
-            guard let folder = store.createLiveFolder(.gitlab, inSpace: space, serverURL: server) else { return }
-            store.setExpanded(folder.id, true)
-            LiveFolderManager.shared.refresh(folder.id, force: true)
+            create([setup.key: address])
         }
     }
 
@@ -352,7 +370,7 @@ enum SidebarMenus {
         let spaces = submenu(menu, "Move to")
         for s in store.orderedSpaces {
             let current = store.isInSpace(id, s.id)
-            add(spaces, "\(s.emoji) \(s.title)", on: current) { if !current { store.moveTab(id, toSpace: s.id, window: ui.windowID) } }
+            add(spaces, s.labeled, on: current) { if !current { store.moveTab(id, toSpace: s.id, window: ui.windowID) } }
         }
         menu.addItem(.separator())
         add(menu, "Archive Item") { for c in children { store.archiveTab(c, reason: .manual) } }
@@ -393,13 +411,7 @@ enum SidebarMenus {
         add(menu, action: "newTab", "New Tab") { actions.openCommandBar(.newTab) }
         add(menu, action: "newFolder") { actions.performAction("newFolder") }
         let liveFolders = submenu(menu, "Live Folders")
-        let github = store.liveFolder(.github, inSpace: space)
-        add(liveFolders, action: "newGitHubLiveFolder", "GitHub",
-            enabled: !store.isStandalone(space: space), on: github != nil) {
-            if let github { confirmDeleteLiveFolder(github, store: store, in: list.window) }
-            else { actions.performAction("newGitHubLiveFolder") }
-        }
-        addGitLabFolders(to: liveFolders, space: space, store: store, window: list.window)
+        addLiveFolderPlugins(to: liveFolders, space: space, store: store, window: list.window)
         menu.addItem(.separator())
         if let s = store.space(space), !store.children(of: s.todayContainerID).isEmpty {
             add(menu, action: "clearToday") { store.clearToday(space) }

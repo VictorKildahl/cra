@@ -1,0 +1,20 @@
+# An update waiting while the sidebar is hidden is said in Cra's toast (X DM 8 Nov 2026: "if I'm
+# using the sidebar in the hidden, I may not even notice it"). With the sidebar out the banner says
+# it and no toast shows; hiding the sidebar toasts it once, and showing and hiding it again doesn't
+# repeat it. A newer update is news again, at once while the sidebar is hidden.
+cra://open?url=${PAGE}
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?bannerReady=0.1.98
+wait 1
+reject-log update toast
+cra://action/toggleSidebar
+wait 1
+expect-log update toast 1: An update is ready! \[Restart\] 0\.1\.98
+cra://action/toggleSidebar
+wait 1
+cra://action/toggleSidebar
+wait 1
+reject-log update toast 2
+cra://debug?bannerReady=0.1.99
+wait 1
+expect-log update toast 2: An update is ready! \[Restart\] 0\.1\.99

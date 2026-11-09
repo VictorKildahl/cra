@@ -131,3 +131,68 @@ diff --git a/chrome/browser/ui/extensions/extension_side_panel_utils.h b/chrome/
  // Toggles the side panel for the given `extension_id` in `browser_window`,
  // opening the panel if it is closed and closing it if it is open.
  void ToggleExtensionSidePanel(BrowserWindowInterface* browser_window,
+diff --git a/chrome/browser/extensions/api/messaging/chrome_messaging_delegate.cc b/chrome/browser/extensions/api/messaging/chrome_messaging_delegate.cc
+--- a/chrome/browser/extensions/api/messaging/chrome_messaging_delegate.cc
++++ b/chrome/browser/extensions/api/messaging/chrome_messaging_delegate.cc
+@@ -19,6 +19,7 @@
+ #include "extensions/browser/api/messaging/native_message_host.h"
+ #include "extensions/browser/api/messaging/native_message_port.h"
+ #include "extensions/browser/pref_names.h"
++#include "extensions/browser/view_type_utils.h"
+ #include "extensions/buildflags/buildflags.h"
+ #include "extensions/common/api/messaging/port_id.h"
+ #include "extensions/common/extension.h"
+@@ -82,6 +83,12 @@ ChromeMessagingDelegate::IsNativeMessagingHostAllowed(
+ 
+ std::optional<base::DictValue> ChromeMessagingDelegate::MaybeGetTabInfo(
+     content::WebContents* web_contents) {
++  // Cra: a side panel page that Cra hosts in a tab of its own (marked by
++  // Cra.extensionSidePanel) sends without a tab, as Chrome's side panel does.
++  if (web_contents &&
++      GetViewType(web_contents) == mojom::ViewType::kExtensionSidePanel) {
++    return std::nullopt;
++  }
+   // Add info about the opener's tab (if it was a tab).
+   if (web_contents && ExtensionTabUtil::GetTabId(web_contents) >= 0) {
+     // Only the tab id is useful to platform apps for internal use. The
+diff --git a/chrome/browser/extensions/api/tabs/tabs_api.cc b/chrome/browser/extensions/api/tabs/tabs_api.cc
+--- a/chrome/browser/extensions/api/tabs/tabs_api.cc
++++ b/chrome/browser/extensions/api/tabs/tabs_api.cc
+@@ -74,6 +74,9 @@
+ #include "extensions/common/manifest_constants.h"
+ #include "extensions/common/manifest_handlers/incognito_info.h"
+ #include "extensions/common/mojom/api_permission_id.mojom-shared.h"
++#include "extensions/common/mojom/view_type.mojom.h"
++// Cra: GetViewType, for side panels Cra hosts (Cra.extensionSidePanel).
++#include "extensions/browser/view_type_utils.h"
+ #include "extensions/common/permissions/permissions_data.h"
+ #include "services/metrics/public/cpp/ukm_builders.h"
+ #include "services/metrics/public/cpp/ukm_recorder.h"
+@@ -1819,6 +1822,12 @@
+   // a tab, return nothing (making the returned value undefined to the
+   // extension), rather than an error.
+   content::WebContents* caller_contents = GetSenderWebContents();
++  // Cra: a side panel page that Cra hosts in a tab of its own (marked by
++  // Cra.extensionSidePanel) is not a tab, as in Chrome.
++  if (caller_contents && GetViewType(caller_contents) ==
++                             mojom::ViewType::kExtensionSidePanel) {
++    return RespondNow(NoArguments());
++  }
+   if (caller_contents && ExtensionTabUtil::GetTabId(caller_contents) >= 0) {
+     return RespondNow(ArgumentList(
+         tabs::Get::Results::Create(tabs_internal::CreateTabObjectHelper(
+diff --git a/extensions/browser/api/runtime/runtime_api.cc b/extensions/browser/api/runtime/runtime_api.cc
+--- a/extensions/browser/api/runtime/runtime_api.cc
++++ b/extensions/browser/api/runtime/runtime_api.cc
+@@ -1049,7 +1049,10 @@ RuntimeGetContextsFunction::GetFrameContexts() {
+ int RuntimeGetContextsFunction::GetTabId(content::WebContents& web_contents) {
+   mojom::ViewType view_type = extensions::GetViewType(&web_contents);
+ 
+-  if (view_type == extensions::mojom::ViewType::kDeveloperTools) {
++  // Cra: also a side panel page that Cra hosts in a tab of its own (marked by
++  // Cra.extensionSidePanel): Chrome's side panel has no tab.
++  if (view_type == extensions::mojom::ViewType::kDeveloperTools ||
++      view_type == extensions::mojom::ViewType::kExtensionSidePanel) {
+     return -1;
+   }
+ 

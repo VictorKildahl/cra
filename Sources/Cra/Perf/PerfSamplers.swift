@@ -50,7 +50,10 @@ struct PerfProcessSampler {
 
     /// Chromium's `--type=` (renderer, gpu-process, utility) from the process's arguments, which
     /// macOS gives the same user's processes (what `ps` reads).
-    static func chromiumType(of pid: pid_t) -> String? {
+    static func chromiumType(of pid: pid_t) -> String? { argument("--type=", of: pid) }
+
+    /// The value of the process's first argument that starts with `prefix`.
+    static func argument(_ prefix: String, of pid: pid_t) -> String? {
         var mib = [CTL_KERN, KERN_PROCARGS2, pid]
         var size = 0
         guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 0 else { return nil }
@@ -58,9 +61,14 @@ struct PerfProcessSampler {
         guard sysctl(&mib, 3, &buffer, &size, nil, 0) == 0 else { return nil }
         for arg in buffer.prefix(size).split(separator: 0) {
             let s = String(decoding: arg, as: UTF8.self)
-            if s.hasPrefix("--type=") { return String(s.dropFirst(7)) }
+            if s.hasPrefix(prefix) { return String(s.dropFirst(prefix.count)) }
         }
         return nil
+    }
+
+    /// Chromium's audio service, the utility process that plays and records sound (#286).
+    static func audioServicePID() -> pid_t? {
+        children(of: getpid()).first { argument("--utility-sub-type=", of: $0) == "audio.mojom.AudioService" }
     }
 
     static func name(of pid: pid_t) -> String {

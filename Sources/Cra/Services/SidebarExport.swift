@@ -39,7 +39,7 @@ enum SidebarExport {
             }
         }
         for space in store.orderedSpaces {
-            let name = space.emoji.isEmpty ? space.title : "\(space.emoji) \(space.title)"
+            let name = space.labeled
             folder(name, created: space.createdAt, depth: 1) {
                 if !store.tabs(under: space.favoritesContainerID).isEmpty {
                     folder("Favorites", created: space.createdAt, depth: 2) { items(under: space.favoritesContainerID, depth: 3) }

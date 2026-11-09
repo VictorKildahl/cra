@@ -78,25 +78,34 @@ final class MediaScanner {
 /// Arc's Media grid (measured at 2x on Arc 1.172.1): tiles 138 pt square, 10 pt apart in two
 /// columns from 7 pt in, a faint fill (darker under the pointer) with 10 pt corners; the picture
 /// fitted inside 12 pt in, framed in 4 pt of white with a soft shadow.
+/// Arc 1.172.1's grid (Victor's Arc, 8 Nov 2026, 2x stills): in a 305 pt column the tiles are 132 pt,
+/// 12 pt from the left, 16 pt apart, rows 8 pt apart.
 enum MediaGridMetrics {
+    static let gap: CGFloat = 16
+    static let inset: CGFloat = 12
+    static let trailing: CGFloat = 13
+    static let rowGap: CGFloat = 8
+    static func tile(width: CGFloat) -> CGFloat { max(60, ((width - inset - trailing - gap) / 2).rounded(.down)) }
+    static func rowHeight(width: CGFloat) -> CGFloat { tile(width: width) + rowGap }
+    /// The thumbnail's pixel size to ask for.
     static let tile: CGFloat = 138
-    static let gap: CGFloat = 10
-    static let inset: CGFloat = 7
-    static let rowHeight: CGFloat = tile + 4
     static let padding: CGFloat = 12
     static let frame: CGFloat = 4
 }
 
 final class MediaRowCell: NSView {
     private var tiles: [MediaTile] = []
-    var open: (MediaLibrary.File) -> Void = { _ in }
+    /// The picked file and where its picture is drawn, in screen points.
+    var open: (MediaLibrary.File, NSRect?) -> Void = { _, _ in }
+    var fileMenu: (MediaLibrary.File) -> NSMenu? = { _ in nil }
 
     override var isFlipped: Bool { true }
 
     func show(_ files: [MediaLibrary.File], ink: NSColor) {
         while tiles.count < 2 {
             let t = MediaTile()
-            t.open = { [weak self] in self?.open($0) }
+            t.open = { [weak self] in self?.open($0, $1) }
+            t.contextMenu = { [weak self] in self?.fileMenu($0) }
             tiles.append(t)
             addSubview(t)
         }
@@ -110,7 +119,7 @@ final class MediaRowCell: NSView {
     override func layout() {
         super.layout()
         let m = MediaGridMetrics.self
-        let w = min(m.tile, (bounds.width - 2 * m.inset - m.gap) / 2)
+        let w = m.tile(width: bounds.width)
         for (i, t) in tiles.enumerated() {
             t.frame = NSRect(x: m.inset + CGFloat(i) * (w + m.gap), y: 0, width: w, height: w)
         }
@@ -118,10 +127,15 @@ final class MediaRowCell: NSView {
 }
 
 final class MediaTile: NSView, NSDraggingSource {
-    var open: (MediaLibrary.File) -> Void = { _ in }
+    var open: (MediaLibrary.File, NSRect?) -> Void = { _, _ in }
+    var contextMenu: (MediaLibrary.File) -> NSMenu? = { _ in nil }
+
+    override func menu(for event: NSEvent) -> NSMenu? { file.flatMap(contextMenu) }
     private var file: MediaLibrary.File?
     private var ink: NSColor = .white
     private let picture = CALayer()
+    /// Arc marks a video with a white ▶ over its picture.
+    private let play = NSImageView()
     private var hovering = false { didSet { refresh() } }
     private var downAt: NSPoint?
 
@@ -140,6 +154,14 @@ final class MediaTile: NSView, NSDraggingSource {
         picture.shadowRadius = 3
         picture.shadowOffset = CGSize(width: 0, height: -1)
         layer?.addSublayer(picture)
+        play.image = NSImage(systemSymbolName: "play.fill", accessibilityDescription: "Video")?
+            .withSymbolConfiguration(.init(pointSize: 22, weight: .regular))
+        play.contentTintColor = .white
+        play.imageScaling = .scaleNone
+        play.wantsLayer = true
+        play.shadow = { let sh = NSShadow(); sh.shadowColor = NSColor.black.withAlphaComponent(0.35); sh.shadowBlurRadius = 4; return sh }()
+        play.isHidden = true
+        addSubview(play)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -151,6 +173,7 @@ final class MediaTile: NSView, NSDraggingSource {
         toolTip = file.name
         guard file != self.file else { refresh(); return }
         self.file = file
+        play.isHidden = !["mov", "mp4", "m4v"].contains((file.path as NSString).pathExtension.lowercased())
         picture.contents = nil
         if let image = MediaScanner.shared.thumbnail(file, size: MediaGridMetrics.tile, done: { [weak self] image in
             guard self?.file == file else { return }
@@ -179,6 +202,7 @@ final class MediaTile: NSView, NSDraggingSource {
         picture.frame = NSRect(x: box.midX - w / 2, y: box.midY - h / 2, width: w, height: h)
         picture.shadowPath = CGPath(rect: picture.bounds, transform: nil)
         CATransaction.commit()
+        play.frame = NSRect(x: box.midX - 16, y: box.midY - 16, width: 32, height: 32)
     }
 
     override func updateTrackingAreas() {
@@ -204,7 +228,7 @@ final class MediaTile: NSView, NSDraggingSource {
     override func mouseUp(with event: NSEvent) {
         defer { downAt = nil }
         guard downAt != nil, let file, bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
-        open(file)
+        open(file, window.map { $0.convertToScreen(convert(picture.frame, to: nil)) })
     }
 
     func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
@@ -248,5 +272,36 @@ struct MediaOptInCard: View {
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(dark ? Color(white: 0.18) : .white)
             .shadow(color: .black.opacity(0.15), radius: 10, y: 3))
         .environment(\.colorScheme, dark ? .dark : .light)
+    }
+}
+
+/// Arc's menu on a media pick (the tile's right-click, the preview's ⋯): Copy Image, Send via
+/// iMessage, AirDrop, Show in Finder, Hide from Cra (CraCore MediaLibrary.Action).
+@MainActor
+enum MediaMenu {
+    static func make(for file: MediaLibrary.File, store: SidebarStore, done: @escaping (MediaLibrary.Action) -> Void = { _ in }) -> NSMenu {
+        let url = URL(fileURLWithPath: file.path)
+        let video = MediaLibrary.isVideo(file.path)
+        let m = NSMenu()
+        m.autoenablesItems = false
+        for action in MediaLibrary.Action.allCases {
+            if action.startsGroup { m.addItem(.separator()) }
+            MenuItems.add(m, action.title(isVideo: video)) {
+                switch action {
+                case .copy:
+                    NSPasteboard.general.clearContents()
+                    var objects: [NSPasteboardWriting] = [url as NSURL]
+                    if !video, let image = NSImage(contentsOf: url) { objects.insert(image, at: 0) }
+                    NSPasteboard.general.writeObjects(objects)
+                case .sendMessage: NSSharingService(named: .composeMessage)?.perform(withItems: [url])
+                case .airDrop: NSSharingService(named: .sendViaAirDrop)?.perform(withItems: [url])
+                case .showInFinder: NSWorkspace.shared.activateFileViewerSelecting([url])
+                case .hide:
+                    if !store.settings.mediaHidden.contains(file.path) { store.settings.mediaHidden.append(file.path) }
+                }
+                done(action)
+            }
+        }
+        return m
     }
 }

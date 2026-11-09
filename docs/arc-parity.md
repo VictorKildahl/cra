@@ -17,11 +17,12 @@ or Arc-only service), per CONTRIBUTING.md.
 | Boosts (per-site CSS/JS, colours, fonts, Zap) | URL bar ✎, Library ▸ Boosts, Settings ▸ Advanced "Enable Boosts" | done | New Boost (command bar), the editor (wheel, invert, contrast/brightness/saturation, 20 fonts, size, case, Zap, CSS/JS code), Library ▸ Boosts, Settings ▸ Advanced switch. The Code panel's eyedropper (selector picker: outlines the element and the ones like it, then Copy selector for this / for related, Zap all related elements), hammer (Show / Hide Developer Tools) and, for JS, Refresh this Page. The Boost Gallery and sharing are *skip* (arc.net). The colour wheel's recolouring is CSS filters, not Arc's own engine. |
 | Easels | File ▸ New Easel ⌃⇧E, Library ▸ Easels | partial | File ▸ New Easel (⌃⇧E): canvas, title, Pointer/Image/Text/Ellipse/Rectangle/Arrow/Freehand, pictures by file, paste or drop, saved per easel. Library ▸ Easels and Window ▸ View Easels… done. The canvas shows the window's backdrop under a 50 % veil as in Arc. The toolbar strip above it takes the same veil. The capture menu's New Easel done. The capture menu's Send To… done too. The pill's + and − and Aa (Arc's four looks: bold, serif, wide, mono, in macOS's designs) work, on the title too; Duplicate (the toolbar's eighth button) done; sharing is *skip* (cloud). |
 | Notes | File ▸ New Note ⌃⇧N, ⌃⌥N in split, Help ▸ Export Arc Notes | *skip* | Arc 1.172.1 no longer creates Notes: New Note is gone from the File menu and ⌃⇧N does nothing; only Help ▸ Export Arc Notes is left. |
-| Library ▸ Media | Window ▸ View Media…, Library rail | done | Off until Show Media; ⋯ picks the folders (Cra has no captures folder). |
+| Library ▸ Media | Window ▸ View Media…, Library rail | done | Off until Show Media; right-click the rail's Media button for the folders (Cra has no captures folder). A pick opens Arc's preview over the dimmed window (see "Library, measured"); the Library stays open. |
 | Essential Keyboard Shortcuts window | Help ▸ Essential Keyboard Shortcuts, Settings ▸ Shortcuts | done | 475×462 floating dark panel, five rows of key caps, "View All ↗". |
 | Website appearance | View ▸ Appearance ▸ Automatic / Light / Dark ("Websites, Easels, and Notes will use:") | done | Forces prefers-color-scheme for pages. |
 | Stay On Top | Window ▸ Stay On Top | done | Floats the window above other apps. |
 | Save Page As | File ▸ Save Page As ⇧⌘S | done | |
+| File menu: Share…, New Profile, Arc's sections | File ▸ Share…, File ▸ New Profile | done | GitHub #279: the File menu has Arc 1.172.1's five sections and rows (FileMenu); Share… opens the system share list under the toolbar, New Profile the New Profile dialog; Close Tab shows only with a tab selected; New Space… moved to Spaces, New Folder… to Tabs. |
 | Capture Full Page / Portrait Mode | File, URL-bar menu | done | Portrait: 390 × 844 pt at 3x. |
 | Copy URL without trackers | Copy URL ⇧⌘C ("Copy the current tab's URL without trackers") | done | utm_* and click ids dropped (CleanURL). |
 | Copy URL as Quote | Edit ▸ ⌃⇧⌘C, "Enable Shared Quotes when highlighting text" | done | Arc links to arc.net (cloud); Cra copies a text-fragment link. |
@@ -201,6 +202,41 @@ in this sweep (Essential Shortcuts window, Library pages).
   with events, so its event blocks, countdown and meeting link couldn't be seen: Cra's are its own, in the card's style.
   Cra reads the primary calendar the way Google's Calendar embed does (a hidden `calendar/u/<n>/embed` page asks the
   Calendar API through the page's own signed-in client), every 5 minutes and on hover when older than a minute.
+
+## Library, measured (Arc 1.172.1, Victor's Arc, 8 Nov 2026)
+
+- Media preview (MediaPreviewWindow): a pick doesn't leave the Library; a panel 199 pt in from the
+  window's sides and 133 pt from top and bottom (1728 × 1084 pt window) grows out of the thumbnail in
+  ~0.21 s, ghosting as it goes, over the window dimmed by about half. A 46 pt header: ✕, ‹ ›, the name
+  and its age, then ⋯ and "Open in Preview ↗"; the picture fits 15 pt inside, over a blurred copy of
+  itself. Cra: CraCore MediaPreview, Esc/← →/Space, ⋯ = Open, Show in Finder, Copy, Move to Trash.
+- No ⋯ beside the search on Media and Boosts; the first item starts 15 pt (a media tile) or 10.5 pt
+  (a boost's card) under the search field.
+- Easels page: the media grid's tiles, two to a row, newest first, no day headers and no ⋯; each a light
+  card (white 3 pt rim) with the easel drawn small, Arc's pink squiggle and the title in bold at its
+  bottom left; right-click Delete (Cra asks first). Arc's "Your Easels are yours to keep / Export All
+  Easels" banner is about Arc winding down and is *skip*.
+- Easel pictures resize from their corners and keep their proportions, the opposite corner fixed
+  (watched in Arc 8 Nov: 163 × 133 → 216 × 175 pt). A picked picture or shape has a square 2 pt outline
+  on its edge (#7FB8D6) and a 7.5 pt ring with a 3 pt dark dot at each corner. Cra: CraCore Easel.resized, the diagonal resize
+  cursors on a picked item's corners; rectangles and ellipses resize freely (⇧ keeps proportions).
+- An easel picked on the Easels page opens in Peek (no toolbar, the canvas on #0B0B0B, only ✕ and ⤢;
+  ⤢ makes it a tab with the veiled backdrop).
+- Media grid: in a 305 pt column the tiles are 132 pt, 12 pt from the left, 16 pt apart, rows 8 pt
+  apart; a video has a white ▶ over its picture.
+- Downloads and Archived Tabs: a "Filter" pill (73 × 36 pt) beside the search opens a panel in its
+  place: "Filter Archived Tabs" / "Filter Downloads…" and Done, then chips (Archived Tabs: How was the
+  tab closed? Auto-Closed / Manually Closed; Where was the tab? Little Arc and each space. Downloads:
+  Profiles); a picked chip is dark with white text. An archived row on hover shows a bin (remove) and
+  a curved arrow (restore). Downloads' empty page: "Come back after you've found some cool stuff to
+  save." Cra's Open Downloads Folder and Clear Archive moved to the rail buttons' right-click.
+- A media pick's menu (its tile's right-click and the preview's ⋯): Copy Image, —, Send via iMessage,
+  AirDrop, —, Show in Finder, —, Hide from Arc (Cra: "Hide from Cra"; the file stays on disk).
+- The selected rail page's glyph and the Spaces page's + take the space's colours (an olive space: a
+  cream disc with a dark mark), not a fixed blue.
+- Boost rows: the site's icon on a 43 pt light tile with a white rim, name 14 pt over the site; under
+  the pointer a rounded card and a 36 × 22 pt switch; off = the tile struck through; right-click
+  Rename (in place), Delete.
 
 ## Left for later, and why
 

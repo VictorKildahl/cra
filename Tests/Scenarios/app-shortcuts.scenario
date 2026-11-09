@@ -1,0 +1,31 @@
+# promise: #253
+# Shortcuts the user gives Hide Sidebar and Show Sidebar in System Settings ▸ Keyboard ▸ App
+# Shortcuts (NSUserKeyEquivalents, here as launch arguments) hide and show the sidebar, from the
+# sidebar and from a page. App Shortcuts find a row by its title, and AppKit matches a key before it
+# validates the row, so the View menu's row has to say Show Sidebar as soon as the sidebar hides, not
+# when the menu next opens (#253). Each step reads the sidebar and the row (sidebarShown).
+budget rss=600 stalls50=10
+arg -NSUserKeyEquivalents
+arg {"Hide Sidebar"="^@h";"Show Sidebar"="^@s";}
+cra://debug?windowSize=1280x800
+wait 2
+cra://debug?sidebarShown=start
+expect-log sidebar shown start: visible=1 menu=Hide Sidebar key=⌃⌘h
+cra://debug?key=h,4,1310720
+wait 1
+cra://debug?sidebarShown=hidden
+expect-log sidebar shown hidden: visible=0 menu=Show Sidebar key=⌃⌘s
+cra://debug?key=s,1,1310720
+wait 1
+cra://debug?sidebarShown=shown
+expect-log sidebar shown shown: visible=1 menu=Hide Sidebar key=⌃⌘h
+cra://open?url=${PAGE}
+wait 3
+cra://debug?key=h,4,1310720
+wait 1
+cra://debug?sidebarShown=page-hidden
+expect-log sidebar shown page-hidden: visible=0 menu=Show Sidebar key=⌃⌘s
+cra://debug?key=s,1,1310720
+wait 1
+cra://debug?sidebarShown=page-shown
+expect-log sidebar shown page-shown: visible=1 menu=Hide Sidebar key=⌃⌘h

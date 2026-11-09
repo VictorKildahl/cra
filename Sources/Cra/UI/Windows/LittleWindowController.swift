@@ -145,6 +145,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// Another tab is on screen: the Peek is out of sight, its page alive, until its tab is back.
     private(set) var isParked = false
     private var dim: PeekDimPanel?
+    /// The click catcher's frame (screen coordinates), for cra://debug?peekCatcher.
+    var dimFrame: NSRect? { dim?.frame }
     private var controls: PeekControlsPanel?
     /// The Peek is on its way out (closePeekAnimated).
     private var closingPeek = false
@@ -162,6 +164,11 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private var tooltip: LittleTooltipPanel?
     private var tooltipTimer: Timer?
     private let toast = ShinyToast()
+    /// The page's wait for its first response (GitHub #256), whether the toast shows it, and the
+    /// check when it falls due.
+    private var slowResponse = SlowResponseNotice()
+    private var slowResponseShown = false
+    private var slowResponseCheck: ScheduledWork?
     /// The space a cra://open named: "Open in" stays on it, matching the page's profile,
     /// until the user switches spaces from this window's command bar.
     private var requestedSpaceID: UUID?
@@ -243,8 +250,11 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             // Little Arc is a non-activating panel (AX subrole AXSystemDialog), so it opens over
             // the app in front even when that app is full screen (#186). An ordinary window can't
             // join another app's full-screen Space: macOS switched to the desktop to show it.
-            // Primary keeps the page's own full screen.
-            window.collectionBehavior = [.fullScreenPrimary, .fullScreenAuxiliary]
+            // Auxiliary only: AppKit puts a full-screen-primary window shown while one of Cra's
+            // windows is full screen into a full-screen Space of its own, a black screen with the
+            // card in the middle and no traffic lights (#277). The page's own full screen adds
+            // primary for as long as it lasts (browser(_:didChangeFullscreen:)).
+            window.collectionBehavior = [.fullScreenAuxiliary]
             placeWindow()
         }
 
@@ -382,7 +392,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private func placeWindow() {
         guard let window else { return }
         let mouse = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main ?? NSScreen.screens[0]
+        let screen = TestScreen.screen ?? NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main ?? NSScreen.screens[0]
         let vf = screen.visibleFrame
         var frame = window.frame
         frame.size.width = min(frame.width, vf.width - 40)
@@ -435,15 +445,25 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// lands.
     func showAsPeek(fromTab tabID: UUID?) {
         guard let window, let parent = peekParent, let pw = parent.window else { return }
-        let dim = PeekDimPanel(covering: pw) { [weak self] in self?.closeWindow() }
+        let dim = PeekDimPanel(covering: parent.peekDismissArea(), of: pw) { [weak self] in self?.closeWindow() }
         self.dim = dim
         pw.addChildWindow(dim, ordered: .above)
         dim.orderFront(nil)
-        let controls = PeekControlsPanel(buttons: [
+        // Arc's Peek of an easel (Library ▸ Easels, 8 Nov 2026): no toolbar, the canvas on #0B0B0B,
+        // and only ✕ and ⤢ beside it.
+        let easel = browser as? EaselBrowser
+        if let easel {
+            shell.hidesBar = true
+            easel.usePeekLook()
+        }
+        var buttons: [PeekControlsPanel.Button] = [
             .init(symbol: "xmark", help: "Close (⌘W)") { [weak self] in self?.closeWindow() },
             .init(symbol: "arrow.up.left.and.arrow.down.right", help: "Expand (⌘O)") { [weak self] in self?.promote(to: nil) },
-            .init(symbol: "square.split.2x1", help: "Add To Split") { [weak self] in self?.promoteToSplit() },
-        ])
+        ]
+        if easel == nil {
+            buttons.append(.init(symbol: "square.split.2x1", help: "Add To Split") { [weak self] in self?.promoteToSplit() })
+        }
+        let controls = PeekControlsPanel(buttons: buttons)
         self.controls = controls
         controls.place(parent.peekButtonFrames(), theme: parent.focusedSpace.theme)
         controls.alphaValue = 0
@@ -452,6 +472,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         shell.layoutSubtreeIfNeeded()
         pw.addChildWindow(window, ordered: .above)
         pw.addChildWindow(controls, ordered: .above)
+        parent.peekWindowsAttached()
         pw.makeMain()
         controls.orderFront(nil)
         window.makeKeyAndOrderFront(nil)
@@ -552,6 +573,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             pw.addChildWindow(w, ordered: .above)
             w.orderFront(nil)
         }
+        parent.peekWindowsAttached()
         repositionPeek()
         rejoinPage()
         if NSApp.isActive { window.makeKeyAndOrderFront(nil) }
@@ -572,7 +594,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     func repositionPeek() {
         guard let window, let parent = peekParent, let pw = parent.window, !closingPeek else { return }
-        dim?.reposition(covering: pw)
+        dim?.reposition(covering: parent.peekDismissArea(), of: pw)
         window.setFrame(parent.peekFrame(), display: true)
         controls?.place(parent.peekButtonFrames(), theme: parent.focusedSpace.theme)
     }
@@ -697,7 +719,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         let prefill = hasPage ? currentURL : nil
         // Suggestions come from the normal profile even when an incognito window was in front.
         app.useNormalWindow()
-        commandBar.highlight = store.focusedSpace.theme.palette.commandHighlight
+        commandBar.theme = store.focusedSpace.theme.shown
         commandBar.focusedSpaceID = store.focusedSpaceID
         commandBar.open(mode: hasPage ? .editURL : .newTab, prefill: prefill)
         commandBar.attached = false
@@ -888,6 +910,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// live browser goes with it, so history, scroll position and logins stay.
     func promote(to spaceID: UUID?) {
         guard let b = browser, hasPage else { return }
+        (b as? EaselBrowser)?.usePageLook()
         closePopup()
         commandBar.close()
         app.useNormalWindow()
@@ -1040,6 +1063,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// The toast sits 8 pt under the window's top, over the toolbar (Arc's Little Arc).
     private func showToast(_ text: String, action: ShinyToast.Action? = nil) {
         guard let window, let content = window.contentView else { return }
+        slowResponseShown = false
         toast.show(text, action: action, page: content.convert(content.bounds, to: nil), in: window, colors: LittlePalette.toast)
     }
 
@@ -1087,7 +1111,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     /// Left with the green button or ⌃⌘F while a video was fullscreen: the page leaves too.
     func windowDidExitFullScreen(_ notification: Notification) {
-        guard (notification.object as? NSWindow) === window, pageFullscreen else { return }
+        guard let window, (notification.object as? NSWindow) === window else { return }
+        if !isPeek { window.collectionBehavior.remove(.fullScreenPrimary) }
+        guard pageFullscreen else { return }
         pageFullscreen = false
         browser?.exitFullscreen()
     }
@@ -1096,6 +1122,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         guard let window, (notification.object as? NSWindow) === window, !window.styleMask.contains(.fullScreen) else { return }
         if commandBar.isOpen { positionCommandPanel() }
         if popup != nil { closePopup() }
+        // A toast that stays (the slow-response notice) keeps to the top right.
+        if let content = window.contentView { toast.follow(page: content.convert(content.bounds, to: nil), in: window) }
     }
 
     /// Only a drag by the user sets the remembered size, not placement clamping
@@ -1153,6 +1181,49 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         state.canGoBack = canGoBack
         state.canGoForward = canGoForward
         if !loading { state.progress = 0 }
+        syncSlowResponse(browser)
+    }
+
+    func browser(_ browser: CraBrowser, didChangeCommittedLoad committed: Bool) { syncSlowResponse(browser) }
+
+    /// As in a browser window (MainWindowController.syncSlowResponse): ten seconds without the
+    /// page's first response puts it in the toast, with Stop Loading. `reporting`: the page whose
+    /// event this is; its first one comes while it is still being made, before `browser` is set.
+    private func syncSlowResponse(_ reporting: CraBrowser? = nil) {
+        let browser = reporting ?? self.browser
+        let clock = app.composition.clock
+        let now = clock.now
+        if let browser {
+            slowResponse.update(LoadingIndicator.Phase(isLoading: browser.isLoading, committed: browser.hasCommittedLoad),
+                                navigation: browser.navigationStarts, now: now)
+        } else {
+            slowResponse.update(.hidden, navigation: 0, now: now)
+        }
+        slowResponseCheck?.cancel()
+        slowResponseCheck = nil
+        if let due = slowResponse.showsAt, due > now {
+            slowResponseCheck = clock.after(due.timeIntervalSince(now)) { [weak self] in self?.syncSlowResponse() }
+        }
+        if slowResponse.isShown(at: now) {
+            guard !slowResponseShown, let window, let content = window.contentView, let browser else { return }
+            slowResponseShown = true
+            let host = browser.isIncognito ? "(incognito)" : CraLog.host(browser.navigatingURL ?? currentURL)
+            toast.show(SlowResponseNotice.message(for: browser.navigatingURL ?? currentURL),
+                       action: ShinyToast.Action(title: "Stop Loading") { [weak browser] in
+                           CraLog.note("Little Window: page \(host) stopped from the notice")
+                           browser?.stopLoading()
+                       },
+                       page: content.convert(content.bounds, to: nil), in: window, colors: LittlePalette.toast,
+                       onClose: { [weak self] in
+                           self?.slowResponse.close()
+                           self?.slowResponseShown = false
+                       })
+            CraLog.note("Little Window: page \(host) still waiting for a response: notice shown (navigation \(browser.navigationStarts))")
+        } else if slowResponseShown {
+            slowResponseShown = false
+            CraLog.note("Little Window: page no longer waiting: notice gone")
+            toast.dismiss()
+        }
     }
 
     func browser(_ browser: CraBrowser, didChangeProgress progress: Double) { state.progress = progress }
@@ -1180,6 +1251,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     func browser(_ browser: CraBrowser, didChangeFullscreen fullscreen: Bool) {
         guard let window else { return }
         pageFullscreen = fullscreen
+        // Only a full-screen-primary window gets a full-screen Space of its own (#277: not while it opens).
+        if fullscreen, !isPeek { window.collectionBehavior.insert(.fullScreenPrimary) }
         if fullscreen != window.styleMask.contains(.fullScreen) { window.toggleFullScreen(nil) }
     }
 
@@ -1305,7 +1378,9 @@ final class LittleShellView: NSView {
             needsLayout = true
         }
     }
-    private var barHeight: CGFloat { isPeek ? PeekLayout.barHeight : LittleMetrics.barHeight }
+    private var barHeight: CGFloat { hidesBar ? 0 : (isPeek ? PeekLayout.barHeight : LittleMetrics.barHeight) }
+    /// A page with no toolbar over it (an easel in Peek).
+    var hidesBar = false { didSet { toolbarHost.isHidden = hidesBar; needsLayout = true } }
     private var trackingArea: NSTrackingArea?
 
     override init(frame: NSRect) {

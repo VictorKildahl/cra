@@ -92,12 +92,14 @@ struct ToolbarCompositionTests {
         #expect(noTab.right == [.pinnedExtension("a"), .extensions, .addSplit])
     }
 
-    /// The developer bar: Copy, a divider, then Console, Network and Inspect (#88).
+    /// The developer bar: Copy, a divider, then Console, Network and Inspect (#88), then Arc's
+    /// Extensions Menu before the pinned extensions and Split View (Arc 1.171, AX read 8 Nov 2026).
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/88"))
     func theDeveloperBar() {
         // Copy · divider · Console, Network, Inspect before the right end (Arc 1.170, #88).
-        let dev = bar(.developer, pinned: ["a"])
+        let dev = bar(.developer, pinned: ["a", "b"])
         #expect(dev.left == [.toggleSidebar])
-        #expect(dev.right == [.copyURL, .divider, .console, .network, .inspect, .pinnedExtension("a"), .extensions, .addSplit])
+        #expect(dev.right == [.copyURL, .divider, .console, .network, .inspect, .extensions, .pinnedExtension("a"),
+                              .pinnedExtension("b"), .addSplit])
     }
 }

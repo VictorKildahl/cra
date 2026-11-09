@@ -63,20 +63,31 @@ enum PageEngines {
 
     /// A page browser for `url` in the engine the rules pick. A popup host (`url` nil) takes its
     /// opener's engine: WebKit can only hand a popup to a web view it made, CEF to a CraBrowser.
+    /// `history`: the tab's saved back and forward list (PageHistory, #273); the page opens with
+    /// it when it ends at `url` and that engine wrote it.
     static func makeBrowser(frame: NSRect, url: String?, delegate: CraBrowserDelegate?, incognito: Bool,
-                            profilePath: String?, opener: CraBrowser? = nil) -> CraBrowser {
+                            profilePath: String?, opener: CraBrowser? = nil, history: PageHistory? = nil) -> CraBrowser {
         // An easel's address (Arc's Easels): its canvas, not a page.
         if let url, let page = nativePage?(frame, url, delegate, incognito, profilePath) { return page }
         let engine = url.map { sites.engine(for: $0) } ?? opener.map(engine(of:)) ?? .chromium
+        let restored = url.flatMap { u in history.flatMap { !incognito && $0.restores(into: engine, at: u) ? $0 : nil } }
         switch engine {
         case .webKit:
-            let page = WebKitBrowser(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath)
+            let page = WebKitBrowser(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath,
+                                     interactionState: restored?.state)
             page.serviceName = url.flatMap { sites.serviceName(for: $0) } ?? (opener as? WebKitBrowser)?.serviceName ?? ""
             return page
         case .chromium:
-            return CraBrowser(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath)
+            guard let url, let restored else {
+                return CraBrowser(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath)
+            }
+            return CraBrowser(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath,
+                              history: ["history": restored.state.base64EncodedString(), "index": restored.index])
         }
     }
+
+    /// Whether `browser` is one of the engines' pages (not an easel): only those have a history to save.
+    static func savesHistory(_ browser: CraBrowser) -> Bool { !(browser is NativePage) }
 
     /// Whether a navigation `browser` is about to make has to happen in the other engine.
     /// Chromium asks for every main-frame request (CraCEF's OnBeforeBrowse); WebKit only for

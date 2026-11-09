@@ -13,7 +13,11 @@ struct SpacePalette {
     let hoverFill: Color
     let selectedFill: Color
     let separator: Color
+    /// The sidebar URL pill and a favorite tile at rest; both take `pillHoverFill` under the pointer.
     let pillFill: Color
+    /// Arc 1.172.1 (live, 9 Nov 2026, GitHub #293): the URL pill and the favorite tiles share one hover,
+    /// a shade darker on light themes and lighter on dark ones. Cra's pill went near-white instead.
+    let pillHoverFill: Color
     let toolbarFill: Color
     let folderTint: Color
     /// Light themes: Arc's folder glyph (FolderTones), an opaque front in tintedLight, the outline in
@@ -24,8 +28,6 @@ struct SpacePalette {
     /// A renamed split's pane count (Arc: the palette's cutoutColor). Arc 1.171 live, 3 Nov: the theme
     /// colour at ~60% on a dark theme; a light theme takes tintedLight, as the folder front does.
     let countBadgeFill: Color
-    /// Selected row in the command bar (Arc tints it with the space color).
-    let commandHighlight: Color
     let noise: Double
     /// Opacity of the gradient over the blurred desktop at the top and bottom
     /// stops (1 when not vibrant). Arc's light themes get more opaque downwards.
@@ -108,7 +110,6 @@ extension SpaceTheme {
         var stops = base.map { SpaceTheme.mix($0, towardWhite: !dark, amount: pull) }
         if stops.count == 1 { stops.append(SpaceTheme.mix(base[0], towardWhite: !dark, amount: pull + 0.15)) }
 
-        let accent = SpaceTheme.mix(base[0], towardWhite: dark, amount: dark ? 0.25 : -0.0)
         let folder = FolderTones(themeColor: self.accent ?? base[0], dark: dark)
         let alphaTop = solid ? SpacePalette.solidAlpha(intensity: intensity)
             : vibrant ? (dark ? max(0.35, min(0.9, intensity * 2.2)) : min(0.95, intensity * 1.70)) : 1
@@ -130,14 +131,14 @@ extension SpaceTheme {
             hoverFill: dark ? .white.opacity(0.07) : .black.opacity(0.045),
             selectedFill: dark ? .white.opacity(0.13) : .white.opacity(0.74),
             separator: dark ? .white.opacity(0.12) : .black.opacity(0.09),
-            pillFill: dark ? .white.opacity(0.08) : .black.opacity(0.045),
+            pillFill: Color(SidebarTones.pill(dark: dark)),
+            pillHoverFill: Color(SidebarTones.pillHover(dark: dark)),
             // Arc: the toolbar is the first theme color at ~46% (dark) / lightened a touch (dark themes).
             toolbarFill: SpaceTheme.toolbarColor(self.accent ?? base[0], dark: dark),
             folderTint: dark ? ground.blendedToward(.white, 0.85) : Color(folder.outline),
             folderFill: dark ? darkFill : Color(folder.front),
             folderBack: dark ? darkFill : Color(folder.back),
             countBadgeFill: dark ? Color(hex: self.accent ?? base[0]).opacity(0.6) : Color(folder.front),
-            commandHighlight: dark ? accent.opacity(0.55) : SpaceTheme.mix(base[0], towardWhite: false, amount: 0.45).opacity(0.75),
             noise: noise,
             // Calibrated against Arc's rendering of a 0.25-intensity vibrant theme.
             // Fitted to Arc's Victor theme (intensity 0.25) over white and black
@@ -180,6 +181,9 @@ final class SystemAppearance: @unchecked Sendable {
 }
 
 extension Color {
+    /// A sidebar tone: white or black at its opacity.
+    init(_ tone: SidebarTones.Tone) { self = (tone.white ? Color.white : Color.black).opacity(tone.alpha) }
+
     /// Mix toward another color in sRGB (amount 0...1).
     func blendedToward(_ other: Color, _ amount: Double) -> Color {
         guard amount > 0 else { return self }
@@ -488,8 +492,6 @@ final class PagedGradientView: NSView {
 
 /// Layout constants measured from Arc 1.168 at 2x (see docs).
 enum CraMetrics {
-    static let sidebarMinWidth: CGFloat = 220
-    static let sidebarMaxWidth: CGFloat = 520
     static let sidebarDefaultWidth: CGFloat = 328
     static let rowHeight: CGFloat = 40
     static let rowSpacing: CGFloat = 1

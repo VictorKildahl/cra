@@ -6,31 +6,12 @@ struct FolderEmblem: Equatable {
 
     var image: NSImage
     var coloring: Coloring = .original
-    /// Fraction of the front panel's shorter side (7 pt on the current 16 × 12 pt panel).
-    var relativeSize: CGFloat = 7.0 / 12.0
+    var relativeSize: CGFloat? = nil
 
-    fileprivate func rasterized(size: CGSize, scale: CGFloat, tint: NSColor) -> CGImage? {
-        guard image.size.width > 0, image.size.height > 0,
-              let context = CGContext(data: nil, width: Int(ceil(size.width * scale)),
-                                      height: Int(ceil(size.height * scale)), bitsPerComponent: 8,
-                                      bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
-        context.scaleBy(x: scale, y: scale)
-        NSGraphicsContext.saveGraphicsState()
-        defer { NSGraphicsContext.restoreGraphicsState() }
-        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
-        let fit = min(size.width / image.size.width, size.height / image.size.height)
-        let fitted = CGSize(width: image.size.width * fit, height: image.size.height * fit)
-        let rect = CGRect(x: (size.width - fitted.width) / 2, y: (size.height - fitted.height) / 2,
-                          width: fitted.width, height: fitted.height)
-        image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1,
-                   respectFlipped: false, hints: [.interpolation: NSImageInterpolation.high.rawValue])
-        if coloring == .template {
-            context.setBlendMode(.sourceIn)
-            context.setFillColor(tint.cgColor)
-            context.fill(CGRect(origin: .zero, size: size))
-        }
-        return context.makeImage()
+    fileprivate func sourceImage() -> CGImage? {
+        guard image.size.width > 0, image.size.height > 0 else { return nil }
+        var proposedRect = CGRect(origin: .zero, size: image.size)
+        return image.cgImage(forProposedRect: &proposedRect, context: nil, hints: nil)
     }
 }
 
@@ -57,15 +38,11 @@ final class FolderGlyphView: NSView {
     private let backHolder = CALayer()
     private let frontHole = CAShapeLayer()
     private let mark = CALayer()
+    private let markMask = CALayer()
     private var emblem: FolderEmblem?
     private var emblemTint = NSColor.labelColor
-    private struct EmblemRendering: Equatable {
-        var emblem: FolderEmblem
-        var tint: NSColor
-        var size: CGSize
-        var scale: CGFloat
-    }
-    private var renderedEmblem: EmblemRendering?
+    private var renderedImage: NSImage?
+    private var emblemContents: CGImage?
     /// Arc's peeked folder (FolderPeek): three 2 pt dots on a 4 pt pitch in the closed body.
     private let dots = CAShapeLayer()
     private var expanded = false
@@ -101,6 +78,7 @@ final class FolderGlyphView: NSView {
         layer?.addSublayer(icon)
         layer?.addSublayer(dots)
         mark.contentsGravity = .resizeAspect
+        markMask.contentsGravity = .resizeAspect
         apply(animated: false)
     }
 
@@ -158,6 +136,10 @@ final class FolderGlyphView: NSView {
         let w = Self.side, h = Self.side
         CATransaction.begin()
         CATransaction.setDisableActions(true)
+        for imageLayer in [icon, backHolder, back, backShade, backShadeMask, front, frontPanel,
+                           frontShade, frontShadeMask, frontHole, mark, markMask, dots] {
+            imageLayer.contentsScale = scale
+        }
         icon.frame = CGRect(x: px((bounds.width - w) / 2), y: px((bounds.height - h) / 2), width: w, height: h)
         let r = (w / 7).rounded()
         let tabH = px((h * 0.25).rounded())
@@ -195,7 +177,7 @@ final class FolderGlyphView: NSView {
         frontShade.frame = front.bounds
         frontShadeMask.frame = front.bounds
         frontShadeMask.path = panel
-        layoutEmblem(scale: scale)
+        layoutEmblem()
         // In the holder's space (the icon's), everything but the front panel; the margin keeps the
         // turned square over the whole glyph.
         backHolder.frame = CGRect(x: 0, y: 0, width: w, height: h)
@@ -214,22 +196,44 @@ final class FolderGlyphView: NSView {
         CATransaction.commit()
     }
 
-    /// Rasterize only when the image, ink, size or backing scale changes, never on animation frames.
-    private func layoutEmblem(scale: CGFloat) {
-        guard let emblem else {
+    private func layoutEmblem() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        let shorterSide = min(front.bounds.width, front.bounds.height)
+        let side: CGFloat
+        if let relativeSize = emblem?.relativeSize {
+            side = shorterSide * min(1, max(0, relativeSize))
+        } else {
+            side = max(0, shorterSide - 2.5)
+        }
+        guard let emblem, side > 0 else {
             mark.contents = nil
-            renderedEmblem = nil
+            mark.mask = nil
+            markMask.contents = nil
+            mark.backgroundColor = nil
+            emblemContents = nil
+            renderedImage = nil
             return
         }
-        let side = min(front.bounds.width, front.bounds.height) * min(1, max(0, emblem.relativeSize))
-        guard side > 0 else { mark.contents = nil; renderedEmblem = nil; return }
-        let size = CGSize(width: side, height: side)
-        mark.bounds = CGRect(origin: .zero, size: size)
+        mark.bounds = CGRect(x: 0, y: 0, width: side, height: side)
         mark.position = CGPoint(x: front.bounds.midX, y: front.bounds.midY)
-        mark.contentsScale = scale
-        let rendering = EmblemRendering(emblem: emblem, tint: emblemTint, size: size, scale: scale)
-        guard rendering != renderedEmblem else { return }
-        mark.contents = emblem.rasterized(size: size, scale: scale, tint: emblemTint)
-        renderedEmblem = rendering
+        markMask.frame = mark.bounds
+        if emblem.image != renderedImage {
+            emblemContents = emblem.sourceImage()
+            renderedImage = emblem.image
+        }
+        switch emblem.coloring {
+        case .template:
+            mark.contents = nil
+            markMask.contents = emblemContents
+            mark.mask = markMask
+            mark.backgroundColor = emblemContents == nil ? nil : emblemTint.cgColor
+        case .original:
+            mark.mask = nil
+            markMask.contents = nil
+            mark.backgroundColor = nil
+            mark.contents = emblemContents
+        }
     }
 }

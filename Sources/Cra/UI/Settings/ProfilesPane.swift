@@ -193,7 +193,7 @@ struct ProfilesPane: View {
         return SettingsCardRow {
             VStack(alignment: .leading, spacing: 2) {
                 Text(name).font(.system(size: 13))
-                Text(spaces.isEmpty ? "No Spaces" : spaces.map { "\($0.emoji) \($0.title)" }.joined(separator: ", "))
+                Text(spaces.isEmpty ? "No Spaces" : spaces.map(\.labeled).joined(separator: ", "))
                     .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
             }
         } trailing: {

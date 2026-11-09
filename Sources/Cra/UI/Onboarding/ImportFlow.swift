@@ -684,7 +684,7 @@ final class ImportWindowController: NSWindowController, NSWindowDelegate {
             let f = p.frame
             window.setFrameOrigin(NSPoint(x: f.midX - Self.size.width / 2, y: f.midY - Self.size.height / 2))
         } else {
-            window.center()
+            window.centerOnTestScreen()
         }
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)

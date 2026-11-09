@@ -56,7 +56,8 @@ reset() {
   rm -rf "$CLIPS/data"
   python3 "$CLIPS_SRC/seed-demo.py" "$CLIPS/data" "{{540, 60}, {1100, 700}}" >/dev/null
   : > "$CLIPS/commands.txt"
-  (CRA_DATA_DIR="$CLIPS/data" CRA_COMMAND_FILE="$CLIPS/commands.txt" "$APP/Contents/MacOS/CraClip" > "$CLIPS/craclip.log" 2>&1 &)
+  # Clips are framed for the display in use, not the CRA_TEST_SCREEN one test runs use.
+  (env -u CRA_TEST_SCREEN CRA_DATA_DIR="$CLIPS/data" CRA_COMMAND_FILE="$CLIPS/commands.txt" "$APP/Contents/MacOS/CraClip" > "$CLIPS/craclip.log" 2>&1 &)
   nap 5
   PID=$(clip_pid)
   # The largest window is the main one; Chromium's page windows are AX windows too.

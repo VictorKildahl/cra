@@ -31,6 +31,14 @@ struct SpaceIconTests {
         #expect(s.emoji == "" && s.symbol == nil)
     }
 
+    /// Menus put the emoji before the name, and nothing before it for a symbol or no icon (#252).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/252"))
+    func menuLabel() {
+        #expect(Self.space(emoji: "🏠", symbol: nil).labeled == "🏠 S")
+        #expect(Self.space(emoji: "", symbol: nil).labeled == "S")
+        #expect(Self.space(emoji: "", symbol: "star.fill").labeled == "S")
+    }
+
     /// A symbol wins over an emoji stored beside it; an empty symbol counts as none.
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/205"))
     func readingTheStoredPair() {

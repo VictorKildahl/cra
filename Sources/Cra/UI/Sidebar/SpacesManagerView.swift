@@ -38,12 +38,18 @@ final class SpacesManagerView: NSView {
         b.isBordered = false
         b.wantsLayer = true
         b.layer?.cornerRadius = SpacesManagerMetrics.plus / 2
-        b.layer?.backgroundColor = NSColor(hex: "#2147F5").cgColor
-        b.contentTintColor = .white
+        b.layer?.backgroundColor = accent.fill.cgColor
+        b.contentTintColor = accent.ink
         b.toolTip = "New Space"
         b.setAccessibilityLabel("New Space")
         return b
     }()
+
+    /// The + takes the window's space colours (Arc 1.172.1, 8 Nov 2026: a cream disc with a dark +
+    /// in an olive space; the blue one measured 1 Nov was a blue space's).
+    var accent: (fill: NSColor, ink: NSColor) = (NSColor(hex: "#2147F5"), .white) {
+        didSet { plus.layer?.backgroundColor = accent.fill.cgColor; plus.contentTintColor = accent.ink }
+    }
 
     init(store: SidebarStore, ui: SidebarUIState, actions: SidebarActions, favicons: FaviconCache) {
         self.store = store

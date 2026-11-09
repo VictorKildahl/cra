@@ -3,8 +3,9 @@ import PackageDescription
 
 // CEF (Chromium Embedded Framework) lives in vendor/cef, fetched by
 // scripts/fetch-cef.sh, with its C++ wrapper built by CMake into
-// vendor/cef/build/libcef_dll_wrapper.
-let cefRoot = "\(Context.packageDirectory)/vendor/cef"
+// vendor/cef/build/libcef_dll_wrapper. A build for the other CPU (scripts/build.sh with
+// CRA_ARCH) points CRA_CEF_DIR at that CPU's copy, vendor/cef-<arch>.
+let cefRoot = Context.environment["CRA_CEF_DIR"] ?? "\(Context.packageDirectory)/vendor/cef"
 
 // Same flags CEF uses for its own wrapper (vendor/cef/cmake/cef_variables.cmake),
 // so the ABI of the wrapper classes matches.
@@ -29,6 +30,7 @@ let package = Package(
     products: [
         .executable(name: "Cra", targets: ["Cra"]),
         .executable(name: "CraHelper", targets: ["CraHelper"]),
+        .executable(name: "CraPluginHost", targets: ["CraPluginHost"]),
         // Loaded by the Dock, not by Cra; scripts/build.sh wraps it in
         // Cra.app/Contents/PlugIns/CraDockTile.docktileplugin.
         .library(name: "CraDockTile", type: .dynamic, targets: ["CraDockTile"]),
@@ -36,6 +38,8 @@ let package = Package(
     // Models and decisions that need no AppKit or CEF, with tests that run without vendor/cef.
     dependencies: [.package(path: "Packages/CraCore")],
     targets: [
+        .executableTarget(name: "CraPluginHost", path: "Sources/CraPluginHost",
+                          linkerSettings: [.linkedFramework("JavaScriptCore")]),
         // Objective-C++ bridge between Swift and CEF.
         .target(
             name: "CraCEF",

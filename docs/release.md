@@ -63,6 +63,22 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
+### Sponsors in the release notes
+
+Before writing the notes, run `scripts/sponsors.py`. It reads the GitHub Sponsors tiers and
+lists who the tiers promise a name in these notes (one-time $50 and up since the last tag,
+monthly $5 and up once a year), which Backers to ask first about the next big feature, and
+which companies need their logo on /support. Thank monthly sponsors with their `@login` in
+the sentence, so next year's run sees they were thanked. Private sponsors are counted, never
+named. It needs the VictorKildahl `gh` login with the `user` scope. Also list the public
+sponsors you thank in the release's `sponsors` field (`login` and `name`), which puts their
+GitHub avatars under the summary on the release's page.
+
+A run of fixes or small changes goes in a highlight's `items`, one fix per item with its
+issue and who reported it, never as a paragraph of sentences. A contributor thanked for the
+first time also goes in the website's `src/content/people.ts` (credited name → GitHub login),
+so the release page shows their avatar next to the thank-you.
+
 ### Clips in the release notes
 
 When a release changes something you can see (UI, animations, dragging), give its
@@ -80,13 +96,28 @@ It writes `public/releases/<version>/<name>.mp4` (H.264, silent, ≤1520 px) and
 in `alt`). A `.png` works too, for still changes. The release notes page loops clips muted
 while they're on screen. Keep them under ~8 s and ~2 MB.
 
+Every clip is the whole clip window (1100 x 700 pt, encoded 1520 x 967): the release page
+shows clips on an 11:7 stage of that shape, and a sidebar crop or a strip shrinks to a sliver
+on it. The encoder refuses other shapes (landscape 1.5-1.65:1, at least 1400 px wide,
+density 2), the website build fails on them for releases after 0.1.37
+(`src/content/release-media-rules.ts`), and the hook below blocks the tag.
+
 A Claude Code hook (`.claude/settings.json` → `scripts/clips/check-release-media.sh`) blocks
 pushing a `v*` tag when `Sources/Cra/UI` changed since the previous tag and the release's
 entry has no `media`. If there is nothing to film, add `// no clip: <reason>` to the entry.
 
-Artifacts land on the GitHub release: `Cra.dmg`, `Cra.zip`, `SHA256SUMS.txt`. The names
-carry no version so `releases/latest/download/Cra.dmg` always resolves; the website's
-download button and `scripts/install.sh` rely on that.
+Every release ships both CPUs. The workflow builds Apple silicon and Intel in two parallel
+jobs on the same Apple silicon runner (Intel is cross-compiled) and a third job publishes:
+
+| Apple silicon | Intel |
+|---|---|
+| `Cra.dmg` | `Cra-Intel.dmg` |
+| `Cra.zip` | `Cra-Intel.zip` |
+| `appcast.xml` | `appcast-intel.xml` |
+
+plus one `SHA256SUMS.txt` for all four archives. The names carry no version so
+`releases/latest/download/Cra.dmg` always resolves; the website's download buttons and
+`scripts/install.sh` (which picks the zip by CPU) rely on that.
 
 ## Locally
 
@@ -97,10 +128,18 @@ NOTARY_KEYCHAIN_PROFILE=cra \
 scripts/release.sh
 ```
 
-`scripts/release.sh` runs `build.sh` (sign, innermost first, with the CEF entitlements),
-notarizes and staples the app, runs `package.sh` (zip, DMG with an Applications link,
-checksums), then notarizes and staples the DMG and checks it with `spctl`.
-Without `CRA_SIGN_IDENTITY` it produces an ad-hoc build and skips notarization.
+`scripts/release.sh` does this once per CPU (`CRA_ARCHS`, default `arm64 x86_64`): it runs
+`build.sh` (sign, innermost first, with the CEF entitlements), notarizes and staples the
+app, runs `package.sh` (zip, DMG with an Applications link, checksums), then notarizes and
+staples the DMG, checks it with `spctl` and writes that CPU's appcast. Both CPUs share one
+build number. Without `CRA_SIGN_IDENTITY` it produces an ad-hoc build and skips notarization.
+
+`CRA_ARCH=x86_64 scripts/build.sh` builds the other CPU on its own: the host CPU keeps
+`vendor/cef` and `build/Cra.app`, the other one gets `vendor/cef-<arch>` (that CPU's CEF,
+read by `Package.swift` through `CRA_CEF_DIR`), `build/swiftpm-<arch>` and
+`build/<arch>/Cra.app`. `build.sh` stops if any executable in the bundle lacks that CPU's
+code. An Intel build runs on Apple silicon under Rosetta, which is enough for a launch
+check; Intel-only problems still need a real Intel Mac.
 
 ## The DMG window
 
@@ -163,6 +202,39 @@ One-time setup, as the Account Holder:
 the keychain group, iCloud Keychain once approved), because macOS refuses to launch an
 app that claims an entitlement its profile lacks. Ad-hoc builds never get them.
 
+## iCloud sync
+
+Settings ▸ General ▸ Sync keeps the sidebar, the settings and the shortcuts the same on the
+user's Macs through Cra's iCloud Documents container (no server of Cra's own; a folder in
+Dropbox or a similar service is the other option and needs nothing here). Apple grants iCloud
+Documents to Developer ID apps through the provisioning profile (Supported capabilities,
+macOS). One-time setup, as the Account Holder:
+
+1. Identifiers → `dk.kildahl.cra` → Capabilities → tick **iCloud**, keep **Include CloudKit
+   support** (the portal's default; Cra still claims only CloudDocuments), Configure → tick
+   container `iCloud.dk.kildahl.cra` (register it under Identifiers → iCloud Containers first if
+   the list is empty). Save. Done 9 Nov 2026.
+2. Profiles → the Developer ID profile for `dk.kildahl.cra` → Edit → Save, so it carries the
+   iCloud entitlements, then download it. Check:
+   `security cms -D -i Cra.provisionprofile | grep -A3 ubiquity`.
+3. Replace the `MACOS_PROVISIONING_PROFILE` secret (`base64 -i Cra.provisionprofile | pbcopy`).
+
+`build.sh` copies the container identifiers the profile grants into `Cra.entitlements`
+(`ubiquity-container-identifiers`, `icloud-container-identifiers`, `icloud-services` =
+CloudDocuments, `icloud-container-environment` = Production as Xcode's Developer ID export
+claims it) and names the first in Info.plist (`NSUbiquitousContainers`), so the bundle
+shows in iCloud Drive as a "Cra" folder. Without them the switch in Settings is off with a note.
+
+To try it before the release profile has the entitlement, with an Apple Developer account of
+your own: register an App ID in your namespace (say `io.example.cra.sync`) with iCloud
+Documents and a container, make a Development profile for your Mac, and build with
+`CRA_BUNDLE_ID=io.example.cra.sync CRA_SIGN_IDENTITY="Apple Development: …"
+CRA_PROVISIONING_PROFILE=<path> scripts/build.sh`. Run it with `CRA_DATA_DIR`, since another
+bundle identifier still uses Cra's data folder. Two such instances on one Mac share the
+account's iCloud and sync within seconds; two Macs on one Apple ID is the full test.
+`CRA_SYNC_ICLOUD_DIR=<folder>` makes any build treat a folder as the container, for the
+store test and a check without an entitlement.
+
 ## Safe Browsing
 
 Chromium's phishing and malware lists come from Google's Safe Browsing API, which
@@ -210,7 +282,8 @@ are the controls. Details and Arc's original are in `docs/arc-reverse-engineerin
   updated again.
 - **Appcast.** `scripts/release.sh` ends with `scripts/appcast.sh`, which signs the final
   `Cra.zip` and writes `build/dist/appcast.xml`; the workflow uploads it with the other
-  assets. `CRA_RELEASE_NOTES=<file.html>` adds release notes to the update window.
+  assets. Each archive holds one CPU's app, so Intel copies have their own feed:
+  `build.sh` points their `SUFeedURL` at `appcast-intel.xml`, which signs `Cra-Intel.zip`. `CRA_RELEASE_NOTES=<file.html>` adds release notes to the update window.
 - **Version numbers.** Sparkle compares `CFBundleVersion`, the build number `build.sh`
   takes from the clock, so every release is newer than the last.
 - **Dev builds** have no feed (`build.sh` drops `SUFeedURL` unless `CRA_RELEASE=1`), so they
@@ -265,6 +338,3 @@ issue and tag a release.
 
 - **Homebrew.** A cask (`brew install --cask cra`) pointing at the DMG and
   `SHA256SUMS.txt`.
-- **Intel.** CEF is published for `macosx64` too (above). Still missing: an x86_64
-  `swift build` in `scripts/build.sh`, a separate Intel DMG from the release workflow
-  and its own Sparkle feed.
