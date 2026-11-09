@@ -13,7 +13,9 @@ you can send. Code is welcome too, within the few rules below.
 - **New ideas go to Discussions.** A feature Arc never had goes in
   [Ideas](https://github.com/VictorKildahl/cra/discussions/categories/ideas), where others
   can upvote it. Issues are for bugs and for Arc features Cra is missing; an idea opened as
-  an issue is labelled `not now`, closed and moved there.
+  an issue is labelled `not now`, closed and moved there. An idea is closed when it ships,
+  when it's declined, or when it's still under 5 upvotes after 60 days
+  (`scripts/ideas-housekeeping.py`, weekly); one labelled `planned` stays open.
 - **No cloud AI.** Arc Max-style features (summaries, LLM search, anything that needs an
   API key or sends pages away) are out of scope. The one exception is Tidy Tabs, which runs
   on the Mac's own Apple Intelligence model and only shows when that is turned on.

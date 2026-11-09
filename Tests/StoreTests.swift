@@ -23,6 +23,7 @@ enum StoreTests {
         chromiumProfile()
         chromiumManifestV2Import()
         autoArchive()
+        longAutoArchive()
         tabSleepCadence()
         tabRestTimes()
         integrity()
@@ -292,6 +293,29 @@ enum StoreTests {
         let later = store.createTab(url: "https://example.com/later", select: false)
         clock.advance(by: 48 * 3600)
         expect(!archived(later.id), "with auto-archive off nothing is archived")
+    }
+
+    // promise: #278
+    /// 180 days, past Arc's 30 (#278): kept until the whole threshold has passed unused, archived
+    /// by the next pass after it; the selected tab and pinned tabs never are.
+    @MainActor
+    private static func longAutoArchive() {
+        let clock = ManualScheduler()
+        let composition = AppComposition(clock: clock)
+        let store = composition.store
+        store.settings.autoArchiveEnabled = true
+        store.settings.autoArchive = .oneHundredEightyDays
+        let idle = store.createTab(url: "https://example.com/idle-long", select: false)
+        let pinned = store.createTab(url: "https://example.com/pinned-long", pinned: true, select: false)
+        let shown = store.createTab(url: "https://example.com/shown-long", select: true)
+        composition.startPeriodicWork {}
+        func archived(_ id: UUID) -> Bool { store.item(id) == nil }
+        clock.advance(by: 179 * 86400)
+        expect(!archived(idle.id), "a Today tab unused for 179 days is kept at 180")
+        clock.advance(by: 86400 + AppComposition.autoArchiveInterval + 1)
+        expect(archived(idle.id), "the next pass after 180 days archives it")
+        expect(!archived(shown.id), "the selected tab is never archived")
+        expect(!archived(pinned.id), "pinned tabs are never auto-archived")
     }
 
     // promise: #136
@@ -926,10 +950,10 @@ enum StoreTests {
     @MainActor
     private static func tabFavicons() {
         let store = AppComposition(clock: ManualScheduler()).store
-        let rds = store.createTab(url: "https://console.aws.amazon.com/rds/home", select: false)
-        let eks = store.createTab(url: "https://console.aws.amazon.com/eks/home", select: false)
-        let rdsIcon = FaviconKey.key(for: "https://console.aws.amazon.com/rds/home", iconURL: "https://console.aws.amazon.com/rds/favicon.ico")!
-        let eksIcon = FaviconKey.key(for: "https://console.aws.amazon.com/eks/home", iconURL: "https://console.aws.amazon.com/eks/favicon.ico")!
+        let rds = store.createTab(url: "https://console.aws.amazon.com/rds/home", pinned: true, select: false)
+        let eks = store.createTab(url: "https://console.aws.amazon.com/eks/home", pinned: true, select: false)
+        let rdsIcon = FaviconKey.key(site: "console.aws.amazon.com", tabID: rds.id)
+        let eksIcon = FaviconKey.key(site: "console.aws.amazon.com", tabID: eks.id)
         store.setFaviconKey(rds.id, rdsIcon)
         store.setFaviconKey(eks.id, eksIcon)
         expect(store.item(rds.id)?.tab?.iconKey == rdsIcon && store.item(eks.id)?.tab?.iconKey == eksIcon && rdsIcon != eksIcon,

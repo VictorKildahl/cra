@@ -194,14 +194,53 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
 
         wireActions()
-        shell.resizeHandle.onDrag = { [weak self] dx in
+        // Arc's drag of the sidebar's edge (#287, SidebarResize): the edge stays under the pointer,
+        // a slow drag snaps to 228 pt with a haptic tick, and the sidebar hides under 82 pt and
+        // comes back at 164 if the drag returns before letting go.
+        shell.resizeHandle.onBegin = { [weak self] in
             guard let self else { return }
-            let w = CGFloat(SidebarWidth.clamped(Double(shell.sidebarWidth + dx)))
-            shell.sidebarWidth = w
+            sidebarResize = SidebarResize(startWidth: Double(shell.sidebarWidth))
+            hiddenByResize = false
+        }
+        shell.resizeHandle.onResize = { [weak self] translation, speed in
+            guard let self, var resize = sidebarResize else { return }
+            let wasSnapped = resize.isSnapped
+            let outcome = resize.update(translation: Double(translation), speed: Double(speed))
+            sidebarResize = resize
+            switch outcome {
+            case .hidden where !shell.floatingSidebar:
+                // Hidden this way, it keeps the width the drag started from (Arc: ⌘S brings back
+                // a 200 pt sidebar dragged shut from 200).
+                shell.sidebarWidth = CGFloat(resize.startWidth)
+                if sidebarVisible {
+                    sidebarVisible = false
+                    hiddenByResize = true
+                }
+            case .hidden:
+                shell.sidebarWidth = CGFloat(SidebarWidth.minimum)
+            case .width(let w):
+                shell.sidebarWidth = CGFloat(w)
+                if hiddenByResize {
+                    hiddenByResize = false
+                    sidebarVisible = true
+                }
+            }
             shell.layoutSubtreeIfNeeded()
+            if resize.isSnapped, !wasSnapped {
+                NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+            }
         }
         shell.resizeHandle.onEnd = { [weak self] in
             guard let self else { return }
+            sidebarResize = nil
+            // The first time a drag hides the sidebar, Arc's tip says how to get it back
+            // (hasHiddenSidebarWithGesture: once, never again).
+            if hiddenByResize, !UserDefaults.standard.bool(forKey: Self.hiddenSidebarByDragKey) {
+                UserDefaults.standard.set(true, forKey: Self.hiddenSidebarByDragKey)
+                let keys = KeyBindingRegistry.shared.action("toggleSidebar")?.primary?.display ?? "⌘S"
+                showToast("You can use", keyCap: (keys, "to easily show and hide your Sidebar!"))
+            }
+            hiddenByResize = false
             store.prefs.sidebarWidth = Double(shell.sidebarWidth)
             lastSidebarWidth = shell.sidebarWidth
         }
@@ -941,14 +980,26 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
     }
 
+    /// A Peek's windows went on the window above its other children (opened, or back with its tab):
+    /// the floating sidebar goes back in front of them (#295).
+    func peekWindowsAttached() {
+        guard let window else { return }
+        for panel in floatingSidebar?.attachedPanels ?? [] {
+            window.removeChildWindow(panel)
+            window.addChildWindow(panel, ordered: .above)
+            panel.orderFront(nil)
+        }
+    }
+
     /// Overlay panel above the page windows (and the floating sidebar), the find bar above it.
     private func raiseOverlayPanels() {
         guard let window else { return }
         var panels: [NSPanel?] = [overlayPanel]
         if let ringPanel, ringPanel.parent != nil { panels.insert(ringPanel, at: 0) }
         if overlay.findVisible { panels.append(findPanel) }
-        // A Peek (and its dimming) stays above everything else in the window.
-        let wanted = panels.compactMap { $0 } + peeks.flatMap(\.peekWindows)
+        // A Peek (and its dimming) stays above everything else in the window but the hidden sidebar
+        // slid out at the edge: that one is the sidebar, whose rows stay in reach of a Peek (#242, #295).
+        let wanted = panels.compactMap { $0 } + peeks.flatMap(\.peekWindows) + (floatingSidebar?.attachedPanels ?? [])
         // Already the last children, in order, and showing: re-adding each one rebuilt the
         // window's ordering group, a window server round trip, on every tab switch.
         let children = window.childWindows ?? []
@@ -1686,8 +1737,26 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func peekCatcherReadout() -> String {
         guard let window, let dim = peeks.first(where: { !$0.isParked })?.dimFrame else { return "none" }
         let sidebar = window.convertToScreen(shell.sidebarHost.convert(shell.sidebarHost.bounds, to: nil))
-        let covered = !store.window(windowID).sidebarVisible ? "hidden" : dim.intersects(sidebar.insetBy(dx: 0.5, dy: 0.5)) ? "covered" : "clear"
-        return "sidebar=\(covered)"
+        guard store.window(windowID).sidebarVisible else { return "sidebar=hidden floating=\(floatingSidebarOverPeek())" }
+        return "sidebar=\(dim.intersects(sidebar.insetBy(dx: 0.5, dy: 0.5)) ? "covered" : "clear")"
+    }
+
+    /// Whether the hidden sidebar, slid out over the page, is in front of the shown Peek's windows
+    /// (#295): "above", "below", or "none" while it isn't out. Read from the window server's order.
+    private func floatingSidebarOverPeek() -> String {
+        guard let sidebar = floatingSidebar?.attachedPanels.last, sidebar.isVisible else { return "none" }
+        // The card's page is a Chromium window of its own, a child of the card's.
+        let peekWindows = peeks.flatMap { $0.peekWindows + ($0.peekWindows.isEmpty ? [] : [$0.browser?.hostWindow].compactMap { $0 }) }
+        // Front to back as the window server has them; the window's child order (back to front)
+        // when it doesn't list one of them yet.
+        var frontToBack = NSWindow.windowNumbers(options: [])?.map(\.intValue) ?? []
+        if !([sidebar] + peekWindows).allSatisfy({ frontToBack.contains($0.windowNumber) }) {
+            frontToBack = (window?.childWindows ?? []).reversed().map(\.windowNumber)
+            for p in peeks { if let card = p.window, let host = p.browser?.hostWindow, let i = frontToBack.firstIndex(of: card.windowNumber) { frontToBack.insert(host.windowNumber, at: i) } }
+        }
+        guard let mine = frontToBack.firstIndex(of: sidebar.windowNumber) else { return "none" }
+        let behind = peekWindows.allSatisfy { w in frontToBack.firstIndex(of: w.windowNumber).map { $0 > mine } ?? true }
+        return behind ? "above" : "below"
     }
 
     /// The whole area, where a Peek grows from and goes back to (screen coordinates).
@@ -2186,6 +2255,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// Set when the Library brought a hidden sidebar out; leaving it hides the sidebar again.
     private var libraryShowedSidebar = false
+    /// The drag of the sidebar's edge in progress (#287), and whether it has hidden the sidebar.
+    private var sidebarResize: SidebarResize?
+    private var hiddenByResize = false
+    static let hiddenSidebarByDragKey = "hasHiddenSidebarWithGesture"
 
     /// Arc's Library button and ⇧⌘L: open the Library on the page last shown, or leave it. In a
     /// docked sidebar it slides in and out like the swipe into it (LibrarySwipe).
@@ -2258,7 +2331,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     private func setFloatingSidebar(_ show: Bool) {
         guard let floatingSidebar else { return }
-        if show { if !sidebarVisible, floatingSidebar.isKey { floatingSidebar.show() } } else { floatingSidebar.hide(animated: true) }
+        if show { if !sidebarVisible { floatingSidebar.edgeHovered() } } else { floatingSidebar.hide(animated: true) }
     }
 
     private func installFloatingSidebar() {
@@ -2651,6 +2724,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let host = shell.sidebarHost
         return (shell.sidebarVisible || shell.floatingSidebar) && event.window != nil && event.window === host.window
             && host.bounds.contains(host.convert(event.locationInWindow, from: nil)) && !isStandalone
+    }
+
+    /// Whether the pointer, not the key event's window, is over this window's sidebar. A key
+    /// goes to the focused page, so ⌥← from a mouse button has to be hit-tested here (issue #233).
+    func pointerOverSidebar() -> Bool {
+        let host = shell.sidebarHost
+        guard (shell.sidebarVisible || shell.floatingSidebar), !isStandalone, let window = host.window else { return false }
+        let point = window.convertPoint(fromScreen: NSEvent.mouseLocation)
+        guard host.bounds.contains(host.convert(point, from: nil)) else { return false }
+        return NSWindow.windowNumber(at: NSEvent.mouseLocation, belowWindowWithWindowNumber: 0) == window.windowNumber
     }
 
     /// Shift + wheel, or a sideways wheel, over the sidebar: past a flick the next or previous
@@ -3568,11 +3651,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var offeredProtectedMedia: Set<String> = []
 
     /// Arc's toast at the top right of the page (ShinyToast): Cra's confirmations.
-    func showToast(_ text: String, action: ShinyToast.Action? = nil) {
+    func showToast(_ text: String, keyCap: (keys: String, after: String)? = nil, action: ShinyToast.Action? = nil) {
         guard let window else { return }
         let page = shell.webContainer.convert(shell.webContainer.bounds, to: nil)
         slowResponseToastTab = nil
-        toast.show(text, action: action, page: page, in: window, theme: focusedSpace.theme)
+        toast.show(text, keyCap: keyCap, action: action, page: page, in: window, theme: focusedSpace.theme)
     }
 
     /// The update banner's news while this window's sidebar (which carries the banner) is hidden:

@@ -1,0 +1,56 @@
+{
+  "autoArchive" : "thirtyDays",
+  "autoArchiveDays" : 90,
+  "autoArchiveEnabled" : true,
+  "autoPictureInPicture" : true,
+  "blockAdsAndTrackers" : true,
+  "chromeEngine" : true,
+  "defaultLinkDestination" : {
+    "littleWindow" : {
+
+    }
+  },
+  "developerHosts" : [
+
+  ],
+  "disabledDefaultDeveloperHosts" : [
+
+  ],
+  "edgeToEdgeContent" : false,
+  "folderPreviews" : true,
+  "hapticFeedbackOnReorder" : true,
+  "hasSeenImportPrompt" : false,
+  "httpsOnly" : false,
+  "linkRoutes" : [
+    {
+      "destination" : {
+        "mostRecentSpace" : {
+
+        }
+      },
+      "id" : "00000000-0000-0000-0000-000000000000",
+      "match" : "contains",
+      "text" : "meet.google.com"
+    }
+  ],
+  "newTabButtonAtTop" : true,
+  "newTabButtonDefaultMigrated" : true,
+  "newTabsAtTop" : true,
+  "openLinksInForeground" : false,
+  "peekInEveryTab" : false,
+  "peekLinksToOtherSites" : true,
+  "peekOnShiftClick" : true,
+  "perfHidesSiteNames" : false,
+  "perfRecording" : true,
+  "searchEngine" : "bing",
+  "searchSuggestions" : true,
+  "showSpaceHeaderOnSingleSpace" : true,
+  "showStatusBar" : true,
+  "showToolbar" : true,
+  "tabSleepAfter" : "fourHours",
+  "tabSleepOnMemoryPressure" : false,
+  "tabSleepTimerEnabled" : true,
+  "toolbarDefaultMigrated" : true,
+  "toolbarShowsFullURL" : false,
+  "warnBeforeQuitting" : false
+}

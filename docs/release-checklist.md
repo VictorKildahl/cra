@@ -51,8 +51,10 @@ built release app with a test profile. Note anything that fails in the release's
   opens Downloads in the sidebar; Esc or the back arrow closes the Library.
 - **#233:** with a real mouse, its back button over the sidebar goes to the previous space and
   forward to the next, docked and in the hidden sidebar (⌘S); over a page they still go back and
-  forward in the tab's history. The scenario hands the button to the window's handler, so only a
-  real mouse proves the monitor sees it.
+  forward in the tab's history. A mouse that emits button 3/4 does this on mouse-up. An MX Master
+  with Logi Options+ does not: set Back/Forward to the keystrokes ⌥← and ⌥→ (a plain shortcut, not
+  the smart Back gesture) on the Cra profile. Console should log `Cra: mouse key back:`. The
+  scenario never sees a real button or that key, so only this check proves the monitor does.
 - **#260:** on a built-in trackpad, every space change by a two-finger swipe over the sidebar
   ticks once: a short flick, a slow drag past half (the tick comes at half), and a swipe into
   the Library and back out. A short drag that settles back is silent; a sideways wheel never

@@ -472,6 +472,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         shell.layoutSubtreeIfNeeded()
         pw.addChildWindow(window, ordered: .above)
         pw.addChildWindow(controls, ordered: .above)
+        parent.peekWindowsAttached()
         pw.makeMain()
         controls.orderFront(nil)
         window.makeKeyAndOrderFront(nil)
@@ -572,6 +573,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             pw.addChildWindow(w, ordered: .above)
             w.orderFront(nil)
         }
+        parent.peekWindowsAttached()
         repositionPeek()
         rejoinPage()
         if NSApp.isActive { window.makeKeyAndOrderFront(nil) }

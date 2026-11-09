@@ -117,6 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if startOnNewTab { DispatchQueue.main.async { [weak self] in self?.main.openCommandBar(.newTab) } }
         }
         installKeyFallbackMonitor()
+        installSideButtonKeyMonitor()
         installCommandFileWatcher()
         composition.startPeriodicWork { [weak self] in self?.sleepIdleTabs() }
         composition.sync.keybindingsChanged = { [weak self] in self?.bindings.reloadOverrides() }
@@ -146,18 +147,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         try? JSONEncoder().encode(installed.sorted()).write(to: welcomedFile, options: .atomic)
         DownloadDestinations.install(store: store)
         AppLinkPrompt.install()
+        let dropsStartUpPage = { [weak self] (url: String) -> Bool in
+            guard let self, Date().timeIntervalSince(launchedAt) < 10,
+                  !hasNewExtension || self.store.allTabs().contains(where: { $0.tab?.url == url }) else { return false }
+            NSLog("Cra: dropped start-up page from an extension: %@", url)
+            return true
+        }
         CraCEFRuntime.setStrayPageHandler { [weak self] url, profile in
             Task { @MainActor in
-                guard let self else { return }
-                if Date().timeIntervalSince(launchedAt) < 10,
-                   !hasNewExtension || self.store.allTabs().contains(where: { $0.tab?.url == url }) {
-                    NSLog("Cra: dropped start-up page from an extension: %@", url)
-                    return
-                }
+                guard let self, !dropsStartUpPage(url) else { return }
                 // The window in use, and a space on the profile whose extension asked (#107).
                 let window = self.useNormalWindow()
                 self.openExtensionPage(url, window: window.windowID, profile: profile)
                 window.showWindow(nil)
+            }
+        }
+        // chrome.tabs.create: the page Chromium made becomes the new tab's, so the id the
+        // extension got back is the tab that loads (#292). Declined (a dropped start-up page, an
+        // options page already open), it goes to Chrome's window and the stray page handler.
+        CraCEFRuntime.setExtensionTabHandler { [weak self] url, profile, background, opener in
+            MainActor.assumeIsolated {
+                // A cra: address never opens from a page or an extension, as BrowserManager drops page popups to one.
+                guard let self, !url.lowercased().hasPrefix("cra:"), !dropsStartUpPage(url) else { return nil }
+                let window = self.useNormalWindow()
+                guard let opened = self.openExtensionPage(url, window: window.windowID, profile: profile, select: !background),
+                      let controller = self.mainWindows.first(where: { $0.windowID == opened.window }) else { return nil }
+                let host = controller.browsers.makePopupHost(for: opened.tab, opener: opener)
+                if !background {
+                    controller.browsers.show(opened.tab, focus: true)
+                    controller.showWindow(nil)
+                }
+                return host
             }
         }
         CraCEFRuntime.setRelaunchHandler { [weak self] urls in
@@ -638,7 +658,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Arc: opening it again selects the open one (GitHub #38).
     /// `profile` is the Chromium profile folder whose extension asked, nil for the focused page's.
     /// `singleton`: an open tab with the page in that profile is selected instead of a new one.
-    func openExtensionPage(_ url: String, window: UUID, profile: String? = nil, singleton: Bool = false) {
+    /// `select` false opens a new tab behind (tabs.create's active: false). Returns the new tab and
+    /// its window, nil when an open tab was selected.
+    @discardableResult
+    func openExtensionPage(_ url: String, window: UUID, profile: String? = nil, singleton: Bool = false,
+                           select: Bool = true) -> (tab: UUID, window: UUID)? {
         // Extensions run in the normal profile, so Chrome opens their pages in a normal window:
         // in an incognito one the page can't load (#107). Incognito is Default's off the record.
         var window = window, profile = profile
@@ -661,8 +685,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             spaces: store.orderedSpaces.filter { !store.isIncognito(space: $0.id) }.map { space($0.id) },
             profile: profile, openTabs: open, singleton: singleton || ExtensionStore.shared.optionsPageOwner(url) != nil)
         switch target {
-        case .select(let tab): store.selectTab(tab, window: window)
-        case .create(let sid): store.createTab(url: url, in: sid, select: true, window: window)
+        case .select(let tab):
+            store.selectTab(tab, window: window)
+            return nil
+        case .create(let sid):
+            return (store.createTab(url: url, in: sid, select: select, window: window).id, window)
         }
     }
 
@@ -1080,13 +1107,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let v = dict["fullscreen"], let w = main.window, (v == "1") != w.styleMask.contains(.fullScreen) { w.toggleFullScreen(nil); return }
             if let spec = dict["snapshot"], let out = dict["out"] { ViewSnapshot.write(spec, in: main.window, to: out); return }
             // hover=TabRowView,1: that sidebar row hovered as if the pointer were on it (snapshots of
-            // hover-only controls, #243) until the pointer moves or the sidebar changes.
+            // hover-only controls, #243) until the pointer moves or the sidebar changes. The URL pill
+            // and favorite tiles take it too (#293).
             if let spec = dict["hover"] {
-                guard let row = ViewSnapshot.find(spec, in: main.window) as? SidebarRowView else {
-                    CraLog.note("hover: no visible \(spec)")
-                    return
+                switch ViewSnapshot.find(spec, in: main.window) {
+                case let row as SidebarRowView: row.list?.debugHover(row)
+                case let pill as SidebarURLPill: pill.debugHover()
+                case let tile as FavoriteTileView: tile.debugHover()
+                default: CraLog.note("hover: no visible \(spec)")
                 }
-                row.list?.debugHover(row)
                 return
             }
             if let size = dict["windowSize"]?.split(separator: "x").compactMap({ Double($0) }), size.count == 2, let w = main.window {
@@ -1641,6 +1670,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// window is one of ours (sidebar focused, no page), fall back to the
     /// physical-key matching in `Shortcut` for ⌘/⌃ shortcuts the menus missed.
     private var keyFallbackMonitor: Any?
+    /// ⌥← / ⌥→ from a mouse whose driver types them (Logi Options+, issue #233).
+    private var sideButtonKeyMonitor: Any?
     private func installKeyFallbackMonitor() {
         guard keyFallbackMonitor == nil else { return }
         keyFallbackMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -1658,6 +1689,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             self.perform(action.id)
             return nil
         }
+    }
+
+    /// ⌥← and ⌥→, the keystrokes Logi Options+ types for an MX Master's back and forward
+    /// buttons (issue #233). A key goes to the focused page, not the view under the pointer,
+    /// so the sidebar check is the pointer's. Over the sidebar that is the previous or next
+    /// space; over a page it is history back and forward. A text field always keeps the key
+    /// (⌥← moves by word, held or not). Other repeats are swallowed: holding the button must
+    /// not walk every space.
+    private func installSideButtonKeyMonitor() {
+        guard sideButtonKeyMonitor == nil else { return }
+        sideButtonKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            let key = Shortcut.press(event)?.key ?? ""
+            guard let offset = MouseButtonSpaceSwitch.offset(key: key, keyCode: event.keyCode,
+                                                              modifiers: event.modifierFlags.rawValue) else { return event }
+            let which = offset < 0 ? "back" : "forward"
+            let editing = self.textFieldHasKey(event)
+            let overSidebar = self.mainWindows.contains { $0.pointerOverSidebar() }
+            guard let action = MouseButtonSpaceSwitch.action(offset: offset, pointerOverSidebar: overSidebar,
+                                                              editingText: editing, isRepeat: event.isARepeat) else {
+                if !event.isARepeat { CraLog.note("mouse key \(which): left for text") }
+                return event
+            }
+            switch action {
+            case .swallow:
+                return nil
+            case .switchSpace(let step):
+                if let window = self.mainWindows.first(where: { $0.pointerOverSidebar() }) {
+                    self.store.focusSpace(offset: step, window: window.windowID)
+                }
+                CraLog.note("mouse key \(which): switched space")
+            case .history(let step):
+                guard let browser = self.keyLittleWindow?.browser ?? self.keyMainWindow()?.currentBrowser else { return event }
+                if step < 0 { browser.goBack() } else { browser.goForward() }
+                CraLog.note("mouse key \(which): history")
+            }
+            return nil
+        }
+    }
+
+    /// The main window that owns the key window (itself, or its page's child window).
+    private func keyMainWindow() -> MainWindowController? {
+        var w = NSApp.keyWindow
+        while let window = w {
+            if let m = mainWindows.first(where: { $0.window === window }) { return m }
+            w = window.parent
+        }
+        return nil
+    }
+
+    /// A text field, or a page input, has the key: ⌥← moves by word there, and ⌘Z undoes text
+    /// rather than the last closed tab. Chromium's page view reports its ui::TextInputType (0 = none).
+    private func textFieldHasKey(_ event: NSEvent) -> Bool {
+        let responder = (event.window ?? NSApp.keyWindow)?.firstResponder
+        if responder is NSText { return true }
+        if let view = responder as? NSView, NSStringFromClass(type(of: view)) == "RenderWidgetHostViewCocoa",
+           view.responds(to: NSSelectorFromString("textInputType")),
+           (view.value(forKey: "textInputType") as? Int ?? 0) != 0 { return true }
+        return false
     }
 
     /// Reserved shortcuts (CEF OnPreKeyEvent).
@@ -1692,12 +1782,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// the last Tidy, unless the keyboard is in something with text to undo: a text field, or an editable
     /// element in a page (Chromium's page view reports its ui::TextInputType, 0 = none).
     private func undoClosedTab(_ event: NSEvent) -> Bool {
-        guard Shortcut("z", .command).matches(event) else { return false }
-        let responder = (event.window ?? NSApp.keyWindow)?.firstResponder
-        if responder is NSText { return false }
-        if let view = responder as? NSView, NSStringFromClass(type(of: view)) == "RenderWidgetHostViewCocoa",
-           view.responds(to: NSSelectorFromString("textInputType")),
-           (view.value(forKey: "textInputType") as? Int ?? 0) != 0 { return false }
+        guard Shortcut("z", .command).matches(event), !textFieldHasKey(event) else { return false }
         // The last thing to undo may be a tidy (Arc's "Undo Tidy Tabs"); a tab closed since comes first.
         if !store.undoTidy() { perform("reopenClosedTab") }
         return true

@@ -44,7 +44,8 @@
 # for developer mode and tab sleep), ${WEBKIT} (that server as http://localhost:<port>, a host the
 # run treats as a DRM service, so its pages open in WebKit), ${EXTENSION_ID} (Tests/Fixtures/Extension) and
 # ${SIDE_PANEL_EXTENSION_ID} (Tests/Fixtures/SidePanelExtension) and ${DOWNLOAD_EXTENSION_ID}
-# (Tests/Fixtures/DownloadExtension) and ${WEB_STORE_COPY_ID} (Tests/Fixtures/WebStoreCopy) expand,
+# (Tests/Fixtures/DownloadExtension) and ${WEB_STORE_COPY_ID} (Tests/Fixtures/WebStoreCopy) and
+# ${TABS_CREATE_EXTENSION_ID} (Tests/Fixtures/TabsCreateExtension) expand,
 # and ${STALL}, an address on 127.0.0.1 that takes connections and never answers (a download
 # that never ends), and ${TRICKLE}, one that answers with a 10 MB file to save, sends the first
 # 64 KB and holds the rest back (a download that stays in progress).
@@ -57,6 +58,7 @@ EXTENSION_ID="$(cat "$FIXTURES/Extension/ID")"
 SIDE_PANEL_EXTENSION_ID="$(cat "$FIXTURES/SidePanelExtension/ID")"
 DOWNLOAD_EXTENSION_ID="$(cat "$FIXTURES/DownloadExtension/ID")"
 WEB_STORE_COPY_ID="$(cat "$FIXTURES/WebStoreCopy/ID")"
+TABS_CREATE_EXTENSION_ID="$(cat "$FIXTURES/TabsCreateExtension/ID")"
 
 if [ "${1:-}" = "all" ]; then
   failed=()
@@ -177,7 +179,7 @@ TRICKLER=$!
 disown "$TRICKLER"
 for _ in $(seq 1 50); do TRICKLE_PORT=$(head -1 "$OUT/trickle.log"); [ -n "$TRICKLE_PORT" ] && break; sleep 0.1; done
 TRICKLE="http://127.0.0.1:${TRICKLE_PORT:?trickle port did not open}"
-expand() { local s="$1"; s="${s//\$\{FIXTURES\}/$FIXTURES}"; s="${s//\$\{PAGE\}/$PAGE}"; s="${s//\$\{WEBKIT\}/$WEBKIT}"; s="${s//\$\{STALL\}/$STALL}"; s="${s//\$\{TRICKLE\}/$TRICKLE}"; s="${s//\$\{EXTENSION_ID\}/$EXTENSION_ID}"; s="${s//\$\{SIDE_PANEL_EXTENSION_ID\}/$SIDE_PANEL_EXTENSION_ID}"; s="${s//\$\{DOWNLOAD_EXTENSION_ID\}/$DOWNLOAD_EXTENSION_ID}"; s="${s//\$\{WEB_STORE_COPY_ID\}/$WEB_STORE_COPY_ID}"; printf '%s' "$s"; }
+expand() { local s="$1"; s="${s//\$\{FIXTURES\}/$FIXTURES}"; s="${s//\$\{PAGE\}/$PAGE}"; s="${s//\$\{WEBKIT\}/$WEBKIT}"; s="${s//\$\{STALL\}/$STALL}"; s="${s//\$\{TRICKLE\}/$TRICKLE}"; s="${s//\$\{EXTENSION_ID\}/$EXTENSION_ID}"; s="${s//\$\{SIDE_PANEL_EXTENSION_ID\}/$SIDE_PANEL_EXTENSION_ID}"; s="${s//\$\{DOWNLOAD_EXTENSION_ID\}/$DOWNLOAD_EXTENSION_ID}"; s="${s//\$\{WEB_STORE_COPY_ID\}/$WEB_STORE_COPY_ID}"; s="${s//\$\{TABS_CREATE_EXTENSION_ID\}/$TABS_CREATE_EXTENSION_ID}"; printf '%s' "$s"; }
 app_args=()
 while read -r _ a; do app_args+=("$(expand "$a")"); done < <(grep '^arg ' "$FILE")
 while read -r _ f; do mkdir -p "$DATA/Extensions" && cp -R "$(expand "$f")" "$DATA/Extensions/"; done < <(grep '^extension ' "$FILE")
@@ -271,7 +273,8 @@ while IFS= read -r raw || [ -n "$raw" ]; do
       ! grep -Eq "$re" "$DATA"/cra*.log "$OUT/stdout.log" 2>/dev/null || problem "a log line matching: $re" ;;
     snapshot)
       shot="$OUT/snapshots/$3.png"; ref="$ROOT/Tests/Snapshots/$3.png"
-      mkdir -p "$OUT/snapshots"; send "cra://debug?snapshot=$2&out=$shot"
+      # A name shot twice (before and after a relaunch) must not find the first file and stop waiting.
+      mkdir -p "$OUT/snapshots"; rm -f "$shot"; send "cra://debug?snapshot=$2&out=$shot"
       for _ in $(seq 1 25); do [ -s "$shot" ] && break; sleep 0.2; done
       if [ ! -s "$shot" ]; then problem "no snapshot of $2"
       elif [ "${CRA_SNAPSHOT_RECORD:-}" = "1" ]; then mkdir -p "$ROOT/Tests/Snapshots"; cp "$shot" "$ref"; echo "  recorded $3"
