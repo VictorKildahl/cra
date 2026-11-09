@@ -27,7 +27,7 @@ final class UpdaterWindowController: NSWindowController, NSWindowDelegate {
         w.standardWindowButton(.zoomButton)?.isEnabled = false
         super.init(window: w)
         w.delegate = self
-        w.center()
+        w.centerOnTestScreen()
     }
 
     required init?(coder: NSCoder) { fatalError() }

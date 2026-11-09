@@ -168,6 +168,14 @@ swipe (22 trackpad samples of 14 pt) and `cra://debug?scroll=30,30,150,700` scro
 scroll view at x 150, y 700 of the window (from its top left) 30 pt a frame for 30 frames.
 Measure them with `sample <pid> 6 1` and compare the main thread's busy time between builds.
 
+`CRA_TEST_SCREEN=<display>` opens every window of a test instance on that display instead of
+the one you are using: `left`, `right`, `main` (the menu bar's) or a display's name as System
+Settings ▸ Displays shows it (part of it is enough when only one display matches). Export it in
+`~/.zshenv` and every launcher that runs the binary directly passes it on (`scenario.sh`,
+`smoke-launch.sh`, `dev.sh`), so test copies started by agents stay on
+one screen. Saved window frames keep their place relative to their display; `clip.sh` ignores it.
+Unset, or naming no connected display, windows open as usual.
+
 Tidy Tabs needs Apple Intelligence. `CRA_TIDY_FAKE_MODEL=1` stands in a model that groups by
 site (after a 1.6 s pause), so a test instance on any Mac shows the button, the squiggle and the
 groups, Tidy Tab Titles names a pinned tab after its title's first part and Tidy Downloads tidies a

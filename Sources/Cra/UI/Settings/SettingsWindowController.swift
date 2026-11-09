@@ -131,7 +131,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         window.toolbar = toolbar
         // Size last: the toolbar and full-size content change how the frame is derived.
         window.setFrame(NSRect(origin: .zero, size: SettingsMetrics.windowSize), display: false)
-        window.center()
+        window.centerOnTestScreen()
         // On screen: shown and not entirely covered (the window needn't be key).
         for name in [NSWindow.didChangeOcclusionStateNotification, NSWindow.willCloseNotification] {
             NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [nav] note in

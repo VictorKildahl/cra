@@ -106,7 +106,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         window.title = "Cra"
         // The initializer can shift a saved global frame onto the current screen.
         // Apply it after construction so a window on another display stays there.
-        if session.frame != nil, NSScreen.screens.contains(where: { $0.visibleFrame.intersects(frame) }) {
+        // A test instance (CRA_TEST_SCREEN) keeps every window on its display.
+        if TestScreen.screen != nil {
+            if session.frame == nil { window.centerOnTestScreen() } else { window.setFrame(TestScreen.place(frame), display: false) }
+        } else if session.frame != nil, NSScreen.screens.contains(where: { $0.visibleFrame.intersects(frame) }) {
             window.setFrame(frame, display: false)
         } else {
             window.center()
