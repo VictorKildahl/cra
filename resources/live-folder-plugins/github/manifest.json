@@ -1,0 +1,15 @@
+{
+  "id": "cra.github",
+  "name": "GitHub",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "entry": "main.js",
+  "legacySource": "github",
+  "legacyCommand": "newGitHubLiveFolder",
+  "command": {
+    "title": "New GitHub Live Folder",
+    "description": "Add a folder that fills itself with your open pull requests and review requests.",
+    "triggers": ["live folder", "pull requests", "github"]
+  },
+  "sessionOrigins": ["https://github.com"]
+}

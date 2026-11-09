@@ -425,6 +425,9 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 + (void)fetchURL:(NSString *)url headers:(nullable NSDictionary<NSString *, NSString *> *)headers
      profilePath:(nullable NSString *)profilePath
       completion:(void (^)(NSInteger status, NSString *finalURL, NSString *mimeType, NSString *body))completion;
++ (void)fetchPluginURL:(NSString *)url headers:(nullable NSDictionary<NSString *, NSString *> *)headers
+          profilePath:(nullable NSString *)profilePath
+           completion:(void (^)(NSInteger status, NSString *finalURL, NSString *mimeType, NSString *body))completion;
 /// Same, inside an attached target's session (Target.attachToTarget with flatten).
 + (void)sendBrowserDevToolsMethod:(NSString *)method params:(NSString *)params sessionID:(nullable NSString *)sessionID
                        completion:(void (^)(NSString * _Nullable result, NSString * _Nullable error))completion;

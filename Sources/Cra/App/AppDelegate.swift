@@ -1597,7 +1597,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "addSplitView": return store.selectedTabID != nil
         case "editSpace", "deleteSpace", "nextSpace", "previousSpace", "manageSpaces", "changeProfile": return !main.isStandalone
         // A Blank Window has no favorites or pinned section to put a tab in (Arc).
-        case "favoriteTab", "newFolder", "newGitHubLiveFolder", "resetTab": return !main.isBlank
+        case "favoriteTab", "newFolder", "resetTab": return !main.isBlank
+        case let id? where LiveFolderPluginStore.shared.entry(forCommand: id) != nil: return !main.isStandalone
         case "joinNextMeeting": return LiveCalendarClient.shared.nextCall()?.meetingURL != nil
         case "closeLittleWindows": return !littleWindows.isEmpty
         case let id? where id.hasPrefix("moveTabToSpace"):
@@ -1772,6 +1773,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         // A key Little Window takes the page/window actions first (⌘W, ⌘L, ⌘R…).
         if let little = keyLittleWindow, little.handle(action: id) { return }
+        if let entry = LiveFolderPluginStore.shared.entry(forCommand: id) {
+            guard !main.isStandalone else { return }
+            SidebarMenus.addPluginFolder(entry, space: store.focusedSpace.id, store: store, window: main.window)
+            return
+        }
         let current = store.selectedTabID
         switch id {
         case "newLittleWindow": openLittleWindow(url: "")
@@ -1786,13 +1792,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             guard !main.isBlank else { break }
             let f = store.createFolder(named: "New Folder", in: store.focusedSpace.pinnedContainerID, index: 0)
             main.sidebarUI.renamingID = f.id
-        case "newGitHubLiveFolder":
-            guard !main.isStandalone else { break }
-            let sid = store.focusedSpace.id
-            let isNew = store.liveFolder(.github, inSpace: sid) == nil
-            guard let f = store.createLiveFolder(.github, inSpace: sid) else { break }
-            store.setExpanded(f.id, true)
-            if isNew { LiveFolderManager.shared.refresh(f.id) }
         case "newSpace": main.showSpaceEditor(space: nil)
         case "newProfile": if !main.isIncognito, let w = main.window { main.showNewProfileDialog(over: w) }
         case "share": main.shareSelectedPage()

@@ -85,18 +85,22 @@ Legend: [O] observed, [I] inference, [U] unknown.
 
 ## What Cra does
 
+The providers now ship as JavaScript packages under `resources/live-folder-plugins`.
+The native sidebar presentation and tab lifecycle remain the same. Package installation,
+session permissions and the provider API are documented in [Live folder plugins](live-folder-plugins.md).
+
 - Arc follow-up (7 Nov 2026): refresh, category filters and Repositories are in the **Pull Requests**
   submenu; the author filter is named **Created by Me**. Excluding or including a repository refreshes
   the folder and removes or restores its PRs without the closed-request grace period. A live tab
   navigated away from its PR stays in the folder; returning to an excluded PR removes it on the next
   refresh. A PR closed on GitHub was observed with a **Closed** subtitle and remained for at least a
   couple of minutes; its exact retention is still unknown. Cra keeps its existing closed-request delay.
-- Fetch: `+[CraCEFRuntime fetchURL:headers:profilePath:completion:]`, a browser-side `CefURLRequest` on the
-  space's profile, so it carries that profile's cookies. GitHubLiveClient runs one search per enabled
+- Fetch: `+[CraCEFRuntime fetchPluginURL:headers:profilePath:completion:]`, a browser-side `CefURLRequest` on the
+  space's profile, so it carries that profile's cookies. The GitHub plugin runs one search per enabled
   filter: `/pulls?q=…` with the JSON headers first, `/search?type=pullrequests` when that gives nothing it
   can read. The reader accepts GitHub's JSON routes, embedded React data and the classic list.
 - Folder: `SidebarItem.liveFolder` (LiveFolderData), tabs carry `liveItemURL` and `liveSubtitle`.
-  SidebarStore.applyLiveResults adds and updates tabs, moves a Today tab already on a new pull request into
+  SidebarStore.applyPluginResults adds and updates tabs, moves a Today tab already on a new pull request into
   the folder, and marks ones that left the results (`liveGoneAt`); `expireLiveItems` removes them 120 s later
   (a tab open in a window stays until it isn't). Closing or dragging a tab out adds it to `hiddenItems`.
   Nothing can be dropped into a live folder.

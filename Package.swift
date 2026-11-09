@@ -30,6 +30,7 @@ let package = Package(
     products: [
         .executable(name: "Cra", targets: ["Cra"]),
         .executable(name: "CraHelper", targets: ["CraHelper"]),
+        .executable(name: "CraPluginHost", targets: ["CraPluginHost"]),
         // Loaded by the Dock, not by Cra; scripts/build.sh wraps it in
         // Cra.app/Contents/PlugIns/CraDockTile.docktileplugin.
         .library(name: "CraDockTile", type: .dynamic, targets: ["CraDockTile"]),
@@ -37,6 +38,8 @@ let package = Package(
     // Models and decisions that need no AppKit or CEF, with tests that run without vendor/cef.
     dependencies: [.package(path: "Packages/CraCore")],
     targets: [
+        .executableTarget(name: "CraPluginHost", path: "Sources/CraPluginHost",
+                          linkerSettings: [.linkedFramework("JavaScriptCore")]),
         // Objective-C++ bridge between Swift and CEF.
         .target(
             name: "CraCEF",

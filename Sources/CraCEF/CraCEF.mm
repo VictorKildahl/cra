@@ -826,17 +826,24 @@ typedef void (^CraFetchCompletion)(NSInteger, NSString*, NSString*, NSString*);
 /// Collects a CefURLRequest's body. Requests made on the UI thread call back on it.
 class FetchClient : public CefURLRequestClient {
 public:
-    explicit FetchClient(CraFetchCompletion completion) : completion_([completion copy]) {}
+    explicit FetchClient(CraFetchCompletion completion, bool restricted = false)
+        : completion_([completion copy]), restricted_(restricted) {}
 
     void OnDownloadData(CefRefPtr<CefURLRequest> request, const void* data, size_t length) override {
+        if (restricted_ && body_.size() + length > 4 * 1024 * 1024) { request->Cancel(); return; }
         body_.append(static_cast<const char*>(data), length);
     }
     void OnRequestComplete(CefRefPtr<CefURLRequest> request) override {
         CefRefPtr<CefResponse> response = request->GetResponse();
-        bool ok = request->GetRequestStatus() == UR_SUCCESS && response;
+        bool redirect = restricted_ && response && response->GetStatus() >= 300 && response->GetStatus() < 400;
+        bool ok = response && (request->GetRequestStatus() == UR_SUCCESS || redirect);
         NSInteger status = ok ? response->GetStatus() : 0;
         NSString* finalURL = response ? NSStringFromCef(response->GetURL()) : @"";
         if (!finalURL.length) finalURL = NSStringFromCef(request->GetRequest()->GetURL());
+        if (redirect) {
+            NSString* location = NSStringFromCef(response->GetHeaderByName("Location"));
+            if (location.length) finalURL = [NSURL URLWithString:location relativeToURL:[NSURL URLWithString:finalURL]].absoluteURL.absoluteString ?: finalURL;
+        }
         NSString* mime = response ? NSStringFromCef(response->GetMimeType()) : @"";
         NSString* body = [[NSString alloc] initWithBytes:body_.data() length:body_.size() encoding:NSUTF8StringEncoding] ?: @"";
         CraFetchCompletion done = completion_;
@@ -857,6 +864,7 @@ public:
 private:
     CraFetchCompletion completion_;
     std::string body_;
+    bool restricted_;
     IMPLEMENT_REFCOUNTING(FetchClient);
 };
 
@@ -3091,16 +3099,20 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 }
 + (void)fetchURL:(NSString*)url headers:(NSDictionary<NSString*, NSString*>*)headers profilePath:(NSString*)profilePath
       completion:(void (^)(NSInteger, NSString*, NSString*, NSString*))completion {
-    [self fetchURL:url headers:headers profilePath:profilePath attempt:0 completion:completion];
+    [self fetchURL:url headers:headers profilePath:profilePath restricted:NO attempt:0 completion:completion];
+}
++ (void)fetchPluginURL:(NSString*)url headers:(NSDictionary<NSString*, NSString*>*)headers profilePath:(NSString*)profilePath
+      completion:(void (^)(NSInteger, NSString*, NSString*, NSString*))completion {
+    [self fetchURL:url headers:headers profilePath:profilePath restricted:YES attempt:0 completion:completion];
 }
 + (void)fetchURL:(NSString*)url headers:(NSDictionary<NSString*, NSString*>*)headers profilePath:(NSString*)profilePath
-         attempt:(int)attempt completion:(void (^)(NSInteger, NSString*, NSString*, NSString*))completion {
+         restricted:(BOOL)restricted attempt:(int)attempt completion:(void (^)(NSInteger, NSString*, NSString*, NSString*))completion {
     // Chromium's profiles load asynchronously; a fetch waits for its profile like a page does.
     BOOL ready = g_contextInitialized && (!profilePath.length || (ProfileContext(profilePath), [g_readyProfiles containsObject:profilePath]));
     if (!ready) {
         if (attempt >= 60) { completion(0, url, @"", @""); return; }
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [self fetchURL:url headers:headers profilePath:profilePath attempt:attempt + 1 completion:completion];
+            [self fetchURL:url headers:headers profilePath:profilePath restricted:restricted attempt:attempt + 1 completion:completion];
         });
         return;
     }
@@ -3108,14 +3120,19 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
     request->SetURL(CefStringFromNS(url));
     request->SetMethod("GET");
     // Sent like the page's own navigation: stored cookies, first party = the site itself.
-    request->SetFlags(UR_FLAG_ALLOW_STORED_CREDENTIALS | UR_FLAG_SKIP_CACHE);
+    request->SetFlags(UR_FLAG_ALLOW_STORED_CREDENTIALS | UR_FLAG_SKIP_CACHE | (restricted ? UR_FLAG_STOP_ON_REDIRECT : 0));
     request->SetFirstPartyForCookies(CefStringFromNS(url));
     CefRequest::HeaderMap map;
     for (NSString* name in headers) map.insert({CefStringFromNS(name), CefStringFromNS(headers[name])});
     request->SetHeaderMap(map);
     CefRefPtr<CefRequestContext> context = profilePath.length ? ProfileContext(profilePath) : CefRequestContext::GetGlobalContext();
-    CefRefPtr<CefURLRequest> r = CefURLRequest::Create(request, new FetchClient(completion), context);
+    CefRefPtr<CefURLRequest> r = CefURLRequest::Create(request, new FetchClient(completion, restricted), context);
     if (r) FetchClient::InFlight().insert(r); else completion(0, url, @"", @"");
+    if (r && restricted) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 20 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            if (FetchClient::InFlight().count(r)) r->Cancel();
+        });
+    }
 }
 + (void)sendBrowserDevToolsMethod:(NSString*)method params:(NSString*)params sessionID:(NSString*)sessionID
                        completion:(void (^)(NSString* _Nullable, NSString* _Nullable))completion {

@@ -27,6 +27,7 @@ enum StoreTests {
         tabRestTimes()
         integrity()
         liveFolderExpiry()
+        pluginFolderResults()
         liveRepositoryFiltering()
         liveRepositoryMenus()
         liveFolderExpiryKeepsNavigatedPages()
@@ -392,6 +393,57 @@ enum StoreTests {
         store.expireLiveItems(olderThan: 3600)
         expect(store.children(of: folder.id).map(\.tab?.liveItemURL) == [one.url], "and goes when it ends")
         expect(store.integrityProblems().isEmpty, "live folder changes keep the sidebar sound")
+    }
+
+    @MainActor
+    private static func pluginFolderResults() {
+        let clock = ManualScheduler()
+        let store = AppComposition(clock: clock).store
+        let configuration = LiveFolderPluginConfiguration(id: "custom.tasks", settings: [:], filters: ["mine"], sessionOrigins: ["https://example.test"])
+        guard let folder = store.createPluginFolder(configuration, title: "Tasks", inSpace: store.focusedSpaceID) else {
+            return expect(false, "a plugin folder is created")
+        }
+        let one = LiveFolderPluginItem(id: "one", url: "https://example.test/one", title: "One", subtitle: "alice", group: "team/app")
+        let two = LiveFolderPluginItem(id: "two", url: "https://example.test/two", title: "Two", group: "protected/app")
+        store.applyPluginResults(.init(items: [one, two]), to: folder.id)
+        expect(store.children(of: folder.id).count == 2, "plugin results create native tabs")
+        expect(store.children(of: folder.id).first?.tab?.liveSubtitle == "alice", "plugin subtitles reach the row model")
+        guard let tab = store.children(of: folder.id).first(where: { $0.tab?.liveItemURL == one.url }) else {
+            return expect(false, "the plugin item has a tab")
+        }
+        store.updateTab(tab.id, url: "https://example.test/other", title: "Other page")
+        expect(store.item(tab.id)?.tab?.savedTitle == "Other page", "navigation away uses the page title")
+        store.updateTab(tab.id, url: one.url)
+        expect(store.item(tab.id)?.tab?.savedTitle == one.title, "returning restores the plugin title without a refresh")
+        store.updateTab(tab.id, title: "Page title after returning")
+        expect(store.item(tab.id)?.tab?.savedTitle == one.title, "a later page title does not replace the restored plugin title")
+        store.updateTab(tab.id, url: "https://example.test/other", title: "Other page")
+        store.updateTab(tab.id, url: one.url, title: "Page title on return")
+        expect(store.item(tab.id)?.tab?.savedTitle == one.title, "combined URL and title events restore the plugin title")
+        let context = store.liveRequestContext(folder.id)
+        store.updateLiveFolder(folder.id) { $0.plugin?.filters = [] }
+        store.applyPluginResults(.init(items: []), to: folder.id, context: context)
+        expect(store.children(of: folder.id).allSatisfy { $0.tab?.liveGoneAt == nil }, "old-filter responses do not remove tabs")
+        store.applyPluginResults(.init(items: [one], preservedGroups: ["protected/app"]), to: folder.id)
+        store.applyPluginResults(.init(items: [one], preservedGroups: ["protected/app"]), to: folder.id)
+        expect(store.children(of: folder.id).allSatisfy { $0.tab?.liveGoneAt == nil }, "protected groups survive consecutive partial authorizations")
+        store.updateLiveFolder(folder.id) { $0.plugin?.filters = ["mine"] }
+        store.applyPluginResults(.init(items: [one, two]), to: folder.id)
+        store.updateLiveFolder(folder.id) { $0.plugin?.filters = [] }
+        expect(store.children(of: folder.id).count == 2, "changing a filter waits for its refresh result")
+        store.applyLiveFailure(.notSignedIn, to: folder.id)
+        expect(store.children(of: folder.id).count == 2, "a failed filter refresh preserves existing tabs")
+        store.applyPluginResults(.init(items: [one]), to: folder.id)
+        expect(store.children(of: folder.id).map(\.tab?.liveItemURL) == [one.url], "a successful filter refresh removes excluded items without retention")
+        store.applyPluginResults(.init(items: []), to: folder.id)
+        expect(store.children(of: folder.id).first?.tab?.liveGoneAt != nil, "a later background refresh still retains disappeared items")
+        store.applyPluginResults(.init(items: [one, two]), to: folder.id)
+        store.updateLiveFolder(folder.id) { $0.hiddenItems = [one.url] }
+        store.applyPluginResults(.init(items: [one, two]), to: folder.id)
+        clock.advance(by: 121)
+        store.expireLiveItems(olderThan: 120)
+        expect(store.children(of: folder.id).map(\.tab?.liveItemURL) == [two.url], "hidden plugin items do not return")
+        expect(store.integrityProblems().isEmpty, "plugin updates preserve sidebar integrity")
     }
 
     @MainActor

@@ -661,8 +661,14 @@ final class SidebarStore {
             if !isPinned(id) || t.savedURL.isEmpty || t.savedURL == "about:blank" { t.savedURL = url }
             t.faviconKey = FaviconKey.key(after: t.faviconKey, goingTo: url)
         }
-        // A live folder's tab keeps the pull request's title (Arc shows that, not the page's).
-        if let title, !(t.liveItemURL.map { t.url.hasPrefix($0) } ?? false) { t.noteTitle(title, pinned: isPinned(id)) }
+        if let liveURL = t.liveItemURL, t.url.hasPrefix(liveURL) {
+            if let parentID = it.parentID,
+               let item = items[parentID]?.liveFolder?.plugin?.snapshot?.items.first(where: { $0.url == liveURL }) {
+                t.savedTitle = item.title
+            }
+        } else if let title {
+            t.noteTitle(title, pinned: isPinned(id))
+        }
         // Pages report titles and addresses over and over while they load, and every write to
         // `items` re-renders the sidebar's lists: only real changes are written.
         guard t != it.tab else { return }
@@ -867,7 +873,11 @@ final class SidebarStore {
             guard let live = folder.liveFolder else { continue }
             if liveFolders.contains(where: { other in
                 guard !movingIDs.contains(other.id), let otherLive = other.liveFolder,
-                      !destinationSpaces.isDisjoint(with: spaceIDs(ofItem: other.id)), otherLive.source == live.source else { return false }
+                      !destinationSpaces.isDisjoint(with: spaceIDs(ofItem: other.id)) else { return false }
+                if let plugin = live.plugin {
+                    return otherLive.plugin?.id == plugin.id && otherLive.plugin?.settings == plugin.settings
+                }
+                guard otherLive.source == live.source else { return false }
                 return live.source == .github || otherLive.serverURL.flatMap(GitLabLiveClient.serverURL) == live.serverURL.flatMap(GitLabLiveClient.serverURL)
             }) { return }
         }
@@ -1661,6 +1671,7 @@ final class SidebarStore {
     var liveFolders: [SidebarItem] { items.values.filter(\.isLiveFolder) }
 
     struct LiveRequestContext: Equatable {
+        var plugin: LiveFolderPluginConfiguration?
         var source: LiveFolderSource
         var serverURL: String?
         var profile: String
@@ -1670,7 +1681,10 @@ final class SidebarStore {
 
     func liveRequestContext(_ id: UUID) -> LiveRequestContext? {
         guard let live = items[id]?.liveFolder else { return nil }
-        return LiveRequestContext(source: live.source, serverURL: live.serverURL,
+        return LiveRequestContext(plugin: live.plugin.map { config in
+            LiveFolderPluginConfiguration(id: config.id, settings: config.settings, filters: config.filters,
+                                          state: config.state, sessionOrigins: config.sessionOrigins)
+        }, source: live.source, serverURL: live.serverURL,
                                   profile: profileDirectoryName(item: id), attributes: live.filter.attributes,
                                   version: liveFolderVersions[id])
     }
@@ -1693,6 +1707,8 @@ final class SidebarStore {
             $0.lastError = nil
             $0.ssoOrganizations = []
             $0.enterprise = nil
+            $0.plugin?.snapshot = nil
+            $0.plugin?.state = [:]
         }
         liveFolderChanged(id)
     }
@@ -1726,34 +1742,35 @@ final class SidebarStore {
         return nil
     }
 
-    /// Arc's "Pull Requests" folder at the top of the space's pinned tabs, open.
+    func updateLiveFolder(_ id: UUID, _ change: (inout LiveFolderData) -> Void) {
+        guard var live = items[id]?.liveFolder else { return }
+        let previousFilters = live.plugin?.filters
+        change(&live)
+        if live.plugin?.snapshotFilters == nil, live.plugin?.filters != previousFilters {
+            live.plugin?.snapshotFilters = previousFilters
+        }
+        items[id]?.liveFolder = live
+        touch()
+    }
+
     @discardableResult
-    func createLiveFolder(_ source: LiveFolderSource, inSpace sid: UUID, serverURL: String? = nil) -> SidebarItem? {
-        let server = source == .gitlab ? serverURL.flatMap(GitLabLiveClient.serverURL) : nil
-        if source == .gitlab, server == nil { return nil }
-        if let existing = liveFolder(source, inSpace: sid, serverURL: server) { return existing }
+    func createPluginFolder(_ configuration: LiveFolderPluginConfiguration, title: String, inSpace sid: UUID, legacySource: String? = nil) -> SidebarItem? {
+        if let existing = liveFolders.first(where: { isInSpace($0.id, sid) && $0.liveFolder?.plugin?.id == configuration.id &&
+            $0.liveFolder?.plugin?.settings == configuration.settings }) { return existing }
         guard let space = spaces[sid], !isStandalone(space: sid) else { return nil }
-        let title = source == .gitlab ? GitLabLiveClient.folderTitle : "Pull Requests"
         let folder = createFolder(named: title, in: space.pinnedContainerID, index: 0)
         var live = LiveFolderData()
-        live.source = source
-        live.serverURL = server
-        if source == .gitlab { live.filter.attributes = [.authored, .reviewRequests, .assigned] }
+        live.plugin = configuration
+        live.source = legacySource.flatMap(LiveFolderSource.init(rawValue:)) ?? .plugin
         items[folder.id]?.liveFolder = live
         touch()
         return items[folder.id]
     }
 
-    func updateLiveFolder(_ id: UUID, _ change: (inout LiveFolderData) -> Void) {
-        guard var live = items[id]?.liveFolder else { return }
-        change(&live)
-        items[id]?.liveFolder = live
-        touch()
-    }
-
     func liveRepositories(_ id: UUID, fetched: [String]? = nil) -> [String] {
         guard let live = items[id]?.liveFolder else { return [] }
-        let known = fetched ?? children(of: id).compactMap { $0.tab?.liveItemURL.flatMap(live.repository) }
+        let known = fetched ?? live.plugin?.snapshot?.items.compactMap(\.group)
+            ?? children(of: id).compactMap { $0.tab?.liveItemURL.flatMap(live.repository) }
         var repositories: [String: String] = [:]
         for repository in known + live.filter.hiddenRepositories where repositories[repository.lowercased()] == nil {
             repositories[repository.lowercased()] = repository
@@ -1769,25 +1786,22 @@ final class SidebarStore {
         prefs.peekedFolders.removeValue(forKey: id)
     }
 
-    /// A refresh came back. New pull requests come in unread at their place (a Today tab already
-    /// showing one moves in instead, Dia's reparentPullRequestTabToLiveFolder), ones that left the
-    /// results stay for LiveFolderManager.retention before they go, the rest keep the pull request's
-    /// title and author. The first fill marks nothing unread.
-    /// `context`: what the request was made for; an answer for an old profile, server or filter is dropped.
-    func applyLiveResults(_ prs: [LivePullRequest], to folderID: UUID, ssoOrganizations: [String], context: LiveRequestContext? = nil) {
+    func applyPluginResults(_ snapshot: LiveFolderPluginSnapshot, to folderID: UUID, context: LiveRequestContext? = nil) {
         if let context, liveRequestContext(folderID) != context { return }
         guard var folder = items[folderID], var live = folder.liveFolder else { return }
         let hidden = Set(live.hiddenItems)
-        let wanted = prs.filter { !hidden.contains($0.url) && !live.filter.isRepositoryHidden($0.repository) }
+        let filtersChanged = live.plugin.map { config in
+            config.snapshotFilters.map { Set($0) != Set(config.filters) } ?? false
+        } ?? false
+        let wanted = snapshot.items.filter { !hidden.contains($0.url) && !live.filter.isRepositoryHidden($0.group ?? "") }
+        let groups = Dictionary(uniqueKeysWithValues: (live.plugin?.snapshot?.items ?? []).map { ($0.url, $0.group ?? "") })
         var existing: [String: UUID] = [:]
         for c in children(of: folderID) { if let u = c.tab?.liveItemURL { existing[u] = c.id } }
-        // Nothing in it yet from a refresh that worked: what arrives now isn't news.
         let firstFill = live.lastFetch == nil || (live.lastError != nil && existing.isEmpty)
         var order: [UUID] = []
         for pr in wanted {
-            // Arc leaves the author off your own pull requests; Cra names everyone's.
-            let subtitle = pr.author
-            if let id = existing.removeValue(forKey: pr.url) ?? adoptableTab(for: pr, folderID: folderID),
+            let subtitle = pr.subtitle
+            if let id = existing.removeValue(forKey: pr.url) ?? adoptablePluginTab(url: pr.url, folderID: folderID),
                var it = items[id], var t = it.tab {
                 if it.parentID != folderID {
                     detach(id)
@@ -1813,12 +1827,13 @@ final class SidebarStore {
                 order.append(tab.id)
             }
         }
-        // Gone from the results (merged, reviewed, closed): marked now, removed once the grace is over.
-        // An organization whose SSO session lapsed only hid its pull requests: those stay as they are.
-        let ssoHidden = Set(ssoOrganizations.map { $0.lowercased() })
+        let preserved = Set(snapshot.preservedGroups.map { $0.lowercased() })
         for id in existing.values {
             guard var it = items[id], var t = it.tab else { continue }
-            if let url = t.liveItemURL, let repository = live.repository(for: url), live.filter.isRepositoryHidden(repository) {
+            let preservesGroup = t.liveItemURL.flatMap { groups[$0] }.map { preserved.contains($0.lowercased()) } ?? false
+            let hiddenGroup = t.liveItemURL.flatMap { groups[$0] }.map { live.filter.isRepositoryHidden($0) } ?? false
+            if hiddenGroup || (filtersChanged && !preservesGroup) {
+                let url = t.liveItemURL
                 if t.url == url {
                     removeLiveTree(id)
                     for window in prefs.windows where window.selectedTabPerSpace.values.contains(id) {
@@ -1832,7 +1847,7 @@ final class SidebarStore {
                 continue
             }
             guard t.liveGoneAt == nil else { continue }
-            if let url = t.liveItemURL, let p = GitHubLiveClient.pullPath(url), ssoHidden.contains(p.owner.lowercased()) { continue }
+            if let url = t.liveItemURL, let group = groups[url], preserved.contains(group.lowercased()) { continue }
             t.liveGoneAt = clock.now
             it.data = .tab(t)
             items[id] = it
@@ -1841,10 +1856,21 @@ final class SidebarStore {
         folder.children = order + folder.children.filter { !order.contains($0) && items[$0] != nil }
         live.lastFetch = clock.now
         live.lastError = nil
-        live.ssoOrganizations = ssoOrganizations
+        var cached = snapshot
+        let incoming = Set(snapshot.items.map(\.url))
+        let retained = Set(folder.children.compactMap { items[$0]?.tab?.liveItemURL })
+        cached.items += (live.plugin?.snapshot?.items ?? []).filter { !incoming.contains($0.url) && retained.contains($0.url) }
+        live.plugin?.snapshot = cached
+        let currentFilters = live.plugin?.filters
+        live.plugin?.snapshotFilters = currentFilters
         folder.liveFolder = live
         items[folderID] = folder
         touch()
+    }
+
+    private func adoptablePluginTab(url: String, folderID: UUID) -> UUID? {
+        guard let sid = spaceID(ofItem: folderID), let space = spaces[sid] else { return nil }
+        return children(of: space.todayContainerID).first { $0.tab?.url == url }?.id
     }
 
     /// Live tabs whose pull request left the results longer than `age` ago go; one open in a
@@ -1862,16 +1888,6 @@ final class SidebarStore {
             }
         }
         if changed { touch() }
-    }
-
-    /// A Today tab in the folder's space already on this pull request (the one you just opened).
-    private func adoptableTab(for pr: LivePullRequest, folderID: UUID) -> UUID? {
-        guard let sid = spaceID(ofItem: folderID), let space = spaces[sid] else { return nil }
-        return children(of: space.todayContainerID).first { c in
-            if pr.webURL != nil { return c.tab?.url == pr.url }
-            guard let url = c.tab?.url, let p = GitHubLiveClient.pullPath(url) else { return false }
-            return p.owner.lowercased() == pr.owner.lowercased() && p.repo.lowercased() == pr.repo.lowercased() && p.number == pr.number
-        }?.id
     }
 
     func applyLiveFailure(_ error: LiveFolderError, to folderID: UUID, context: LiveRequestContext? = nil) {
