@@ -976,13 +976,8 @@ final class SpaceListView: NSView, NSDraggingSource {
                 if store.settings.hapticFeedbackOnReorder { NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now) }
             default: break
             }
-            // Spring-loaded folders: hovering a closed folder opens it.
-            if case .into(let f)? = drop.target, store.item(f)?.isFolder == true, !store.isExpanded(f) {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [ui, store] in
-                    guard ui.listDrop?.target == .into(f) else { return }
-                    store.setExpanded(f, true)
-                }
-            }
+            // A closed folder stays closed under a drag: Arc 1.172 only highlights its row, however
+            // long the tab hovers (2.5 s, offline copy, 9 Nov 2026, #266).
         }
         return info.draggingSourceOperationMask.contains(.move) ? .move : .copy
     }
@@ -1032,8 +1027,7 @@ final class SpaceListView: NSView, NSDraggingSource {
             if store.combineIntoSplit(id, onto: tab, leading: leading) != nil { store.selectTab(id, window: ui.windowID) }
         case .into(let target)?:
             if store.item(target)?.isFolder == true {
-                store.moveItems(group, to: target, index: nil)
-                store.setExpanded(target, true)
+                store.dropIntoFolder(group, folder: target)
             } else {
                 store.moveItem(id, to: target, index: nil)
             }

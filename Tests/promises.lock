@@ -423,3 +423,4 @@
 #264   Packages/CraCore/Tests/CraCoreTests/FavoriteClickTests.swift::doubleClickAwayFromItsPageGoesBack  f3ebad820b5a
 #264   Packages/CraCore/Tests/CraCoreTests/FavoriteClickTests.swift::otherwiseAClickOnlyOpensIt  b38c5f0dbc19
 #264   Tests/Scenarios/favorite-double-click.scenario  8dcc4a3bc176
+#266   Tests/StoreTests.swift::dropIntoFolderGoesOnTop  d415c46e2d37

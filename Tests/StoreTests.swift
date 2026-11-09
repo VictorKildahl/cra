@@ -66,6 +66,7 @@ enum StoreTests {
         tornOffTabMovesToABlankWindow()
         archiveTabsBelow()
         allFoldersExpanded()
+        dropIntoFolderGoesOnTop()
         revealInSidebar()
         oneWindowAtLaunch()
         openLinkInSplit()
@@ -1857,6 +1858,41 @@ enum StoreTests {
         store.setAllFoldersExpanded(true, inSpace: sid)
         expect(store.isExpanded(outer.id) && store.isExpanded(inner.id), "and they all open again")
         expect(!store.isExpanded(elsewhere.id), "another space's folders stay as they were")
+    }
+
+    // promise: #266
+    /// Tabs let go on a folder's row go in at the top, in their order, and the folder stays as it
+    /// was: Arc 1.172 (offline copy, real drag, 9 Nov 2026) saved a Today tab dropped on a closed
+    /// folder as its first child and left the folder closed, the dropped tab, open, in sight under
+    /// it. Cra added them at the bottom and opened the folder (#266).
+    @MainActor
+    private static func dropIntoFolderGoesOnTop() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let sid = store.createSpace(title: "Drops", emoji: "📁").id
+        let folder = store.createFolder(named: "Links", in: store.space(sid)!.pinnedContainerID)
+        let inside = ["a", "b", "c"].map { store.createTab(url: "https://example.com/\($0)", in: sid, select: false, parent: folder.id).id }
+        store.setExpanded(folder.id, false)
+        let open = store.createTab(url: "https://example.com/open", in: sid, select: true).id
+        let y = store.createTab(url: "https://example.com/y", in: sid, select: false).id
+        let z = store.createTab(url: "https://example.com/z", in: sid, select: false).id
+        let children = { store.item(folder.id)?.children ?? [] }
+
+        let before = children()
+        expect(Set(before) == Set(inside), "the folder holds its three tabs")
+        store.dropIntoFolder([open], folder: folder.id)
+        expect(children() == [open] + before, "a tab dropped on a folder goes in first (#266)")
+        expect(!store.isExpanded(folder.id), "a closed folder stays closed (#266)")
+        expect(store.peekedTabs(in: folder.id).map(\.id) == [open], "and keeps the open tab it took in sight, as Arc does")
+
+        store.dropIntoFolder([y, z], folder: folder.id)
+        expect(children() == [y, z, open] + before, "several picked tabs go in first, in their order")
+        expect(!store.isExpanded(folder.id) && store.peekedTabs(in: folder.id).map(\.id) == [open], "the folder still shows only the open tab")
+
+        store.setExpanded(folder.id, true)
+        let w = store.createTab(url: "https://example.com/w", in: sid, select: false).id
+        store.dropIntoFolder([w], folder: folder.id)
+        expect(children().first == w && store.isExpanded(folder.id), "an open folder takes it at the top and stays open")
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 
     /// Arc's Settings ▸ Advanced "When opening Arc, restore windows from previous session", off:

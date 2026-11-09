@@ -915,6 +915,19 @@ final class SidebarStore {
         }
     }
 
+    /// Items let go on a folder's row go in at the top, in their order, and the folder stays as
+    /// it was (Arc 1.172, a real drag in an offline copy, 9 Nov 2026, #266). A closed folder keeps
+    /// an open tab it took in sight under it, as when a folder closes around one.
+    func dropIntoFolder(_ ids: [UUID], folder: UUID) {
+        moveItems(ids, to: folder, index: 0)
+        let open = Set(_prefs.windows.flatMap { $0.selectedTabPerSpace.values })
+        var peeks = _prefs.peekedFolders
+        for tab in open where ids.contains(where: { $0 == tab || isDescendant(tab, of: $0) }) {
+            peeks = FolderPeek.opening(tab, folders: folderChain(of: tab), isExpanded: { self._prefs.expandedFolders.contains($0) }, peeks: peeks)
+        }
+        if peeks != _prefs.peekedFolders { prefs.peekedFolders = peeks }
+    }
+
     private func rootContainerKind(_ id: UUID) -> ContainerKind? { rootContainer(of: id) }
 
     // MARK: Split view (Arc: SidebarSplitViewData + WindowAction.SplitViewAction)

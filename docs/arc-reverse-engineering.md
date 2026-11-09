@@ -3611,3 +3611,15 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
 - Cra (#224, STRENCH0): `AppDialog` + `DialogPanel` (a real sheet via beginSheet) replace NSAlert and the
   borderless DialogOverlayWindow; checked against these captures on the same display, within ~1 pt and a few
   levels of colour. Arc's quit capture was taken with its command bar open; that doesn't change the sheet.
+
+## A tab dropped on a folder (Arc 1.172.1, 9 Nov 2026, #266, offline Arc on a fake home, real HID drag, AX + saved sidebar)
+- [O] Setup: one space, a closed pinned folder holding Alpha, Bravo, Charlie, Today tabs Xray and Delta, none open. A real
+  drag (cliclick, 10 steps) took Xray onto the middle of the folder's row and held it there 2.5 s before letting go.
+- [O] Under the drag the folder row only highlights (a darker band across it, 60 fps-sampled recording); it never opens,
+  however long the tab hovers. AX read 2.3 s into the hover: the folder still closed, no child rows.
+- [O] Picking the tab up opened it (window title Xray mid-drag). After the drop the folder stayed closed and showed
+  only Xray under it (the open tab's peek); StorableSidebar.json saved the folder's children as Xray, Alpha, Bravo,
+  Charlie: the dropped tab goes in FIRST.
+- Cra (#266): `SidebarStore.dropIntoFolder` inserts at index 0 in the picks' order, leaves the folder's open state
+  alone and peeks an open tab it took; the 0.6 s spring-loaded opening in `SpaceListView.dragUpdated` is gone.
+  Not changed: Cra still doesn't open the tab a drag picks up (only a split drop does).
