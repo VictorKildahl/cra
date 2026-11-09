@@ -171,6 +171,14 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   Previous ⌥⌘←, space N ⌃N. Tabs: Pin/Unpin ⌘D, Next Tab ⌥⌘↓, Previous Tab ⌥⌘↑, Clear Today ⇧⌘K, Go to Tab N ⌘N,
   Toggle recent tabs ⌃Tab. Archive: Go Back ⌘[ (shown as ⌘Æ on a Danish layout) / ⌘←, Go Forward ⌘] / ⌘→,
   View History ⌘Y. Window: Minimize ⌘M, Open Library ⇧⌘L, View Downloads ⇧⌘J.
+- [O] File menu, Arc 1.172.1 (AX dump plus window captures, 9 Nov 2026, #279): New Tab…, New Window, Blank Window,
+  New Incognito Window, New Little Arc Window, Restore Last Closed Tab | Open Command Bar | New Profile, New Easel |
+  Close Window, Close Tab ⌘W (shown only while a tab is selected) | Share…, Capture…, Capture Full Page, Capture in
+  Portrait Mode, Save Page As (no ellipsis), Print. AX also lists New Note ⌃⇧N, Archive Tab ⌘W and Send to Dia, which
+  never draw (hidden rows). Share… has no default key and opens the standard NSSharingServicePicker (Add to Reading
+  List, AirDrop, Mail, Notes | Copy, Edit Extensions…) hanging from the top centre of the page under the toolbar; with
+  no tab selected it stays enabled and does nothing. Spaces starts with New Space…; Tabs has New Folder… after
+  Open Little Arc or Peek in… ⌘O.
 
 ## Visual reference (Arc 1.168, measured at 2x from window captures)
 - [O] Sidebar 328pt wide. Row 1: traffic lights, sidebar toggle right after them (~93pt), nav ← → ↻ right-aligned when a

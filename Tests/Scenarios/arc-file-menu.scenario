@@ -1,0 +1,33 @@
+# promise: #279
+# The menu bar's File menu has Arc 1.172.1's rows and dividers (#279): Share… heads the
+# Capture section, New Profile sits with New Easel, Open Command Bar has a section of its own,
+# and Close Tab shows only while a tab is selected. New Space… moves to Spaces and New Folder…
+# to Tabs, where Arc keeps them. Each step reads the menu as it draws (menuRows).
+budget rss=600 stalls50=10
+cra://open?url=${PAGE}
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?menuRows=File
+expect-log menu rows File: New Tab…\|New Window\|Blank Window\|New Incognito Window\|New Little Window\|Restore Last Closed Tab\|──\|Open Command Bar\|──\|New Profile\|New Easel\|──\|Close Window\|Close Tab\|──\|Share…\|Capture…\|Capture Full Page\|Capture in Portrait Mode\|Save Page As\|Print$
+cra://action/closeTab
+wait 1
+cra://debug?menuRows=File&label=no-tab
+expect-log menu rows no-tab: .*\|New Easel\|──\|Close Window\|──\|Share…\|Capture…
+# A tab selected again brings the row back.
+cra://open?url=${PAGE}?n=again
+wait 2
+cra://debug?menuRows=File&label=tab-again
+expect-log menu rows tab-again: .*\|──\|Close Window\|Close Tab\|──\|Share…
+cra://action/closeTab
+wait 1
+cra://debug?menuRows=Spaces
+expect-log menu rows Spaces: New Space…\|
+cra://debug?menuRows=Tabs
+expect-log menu rows Tabs: .*\|New Folder…\|
+# With the row hidden, ⌘W still closes the window (Arc: "Close current tab or window").
+cra://debug?browserWindows=before-close
+expect-log browser windows before-close: count=1
+cra://debug?key=w,13,1048576
+wait 1
+cra://debug?browserWindows=after-close
+expect-log browser windows after-close: count=0

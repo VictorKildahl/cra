@@ -2059,6 +2059,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     private var captureOverlay: CaptureOverlay?
     private var captureStarting = false
+    /// File ▸ Share…'s list, kept while it is open.
+    private var sharePicker: NSSharingServicePicker?
 
     /// The focused page on screen, whether its view is embedded in the card or in its own window.
     private func pageScreenRect(_ rt: TabRuntime) -> NSRect? {
@@ -3014,6 +3016,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // The service's own window (Mail, AirDrop) takes over.
             if chose { self?.siteControlCenter.close() }
         }
+    }
+
+    /// File ▸ Share… (GitHub #279): the system's whole share list for the page in front (Arc's has
+    /// Add to Reading List, AirDrop, Mail, Notes, Copy, Edit Extensions…), hanging from the top
+    /// centre of the page as Arc 1.172.1 shows it.
+    func shareSelectedPage() {
+        guard let url = selectedTabID.flatMap({ store.item($0)?.tab?.url }).flatMap(URL.init(string:)),
+              let window, let content = window.contentView else { return }
+        let page = browsers.visibleRuntime.flatMap(pageScreenRect).map { content.convert(window.convertFromScreen($0), from: nil) }
+            ?? content.bounds
+        let top = content.isFlipped ? page.minY : page.maxY
+        let anchor = NSRect(x: page.midX - 1, y: content.isFlipped ? top : top - 1, width: 2, height: 1)
+        let picker = NSSharingServicePicker(items: [url])
+        sharePicker = picker
+        picker.show(relativeTo: anchor, of: content, preferredEdge: content.isFlipped ? .maxY : .minY)
     }
 
     /// The lock in the Site Control Center: the certificate of the page on screen.
