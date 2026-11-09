@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import IOKit
 import Observation
 
 /// Settings ▸ General ▸ Sync: the sidebar, the settings and the shortcut overrides kept the
@@ -58,7 +59,17 @@ final class SettingsSyncService {
     /// a file without a directory event, and the timer is what a test host drives.
     static let pollInterval: TimeInterval = 30
 
+    /// This Mac's computer name, which the question on another Mac shows.
     let device: String
+    /// This Mac in a manifest (`SyncManifest.deviceID`): a hash of its hardware UUID, which is
+    /// the same after a reinstall and differs on a Mac Migration Assistant set up from this one.
+    let deviceID: String
+    /// Whether iCloud (or a provider's File Provider) has a file on disk. Since macOS 14 a file
+    /// it has not downloaded keeps its name and reading it waits for the download, so a look
+    /// asks for it and comes back instead of reading it on the main thread.
+    var downloadStatus: (URL) -> URLUbiquitousItemDownloadingStatus? = { url in
+        (try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]))?.ubiquitousItemDownloadingStatus
+    }
     private let store: SidebarStore
     private let clock: Scheduler
     private let stateFile = JSONStore<State>("sync.json")
@@ -71,11 +82,13 @@ final class SettingsSyncService {
     private var queryObservers: [NSObjectProtocol] = []
     private var watcherDebounce: ScheduledWork?
 
-    init(store: SidebarStore, clock: Scheduler, device: String? = nil) {
+    init(store: SidebarStore, clock: Scheduler, device: String? = nil, deviceID: String? = nil) {
         self.store = store
         self.clock = clock
-        // CRA_SYNC_DEVICE names a test instance (two on one Mac share a computer name).
-        self.device = device ?? ProcessInfo.processInfo.environment["CRA_SYNC_DEVICE"] ?? Host.current().localizedName ?? "Mac"
+        // CRA_SYNC_DEVICE names a test instance (two on one Mac share a computer name and hardware).
+        let testDevice = ProcessInfo.processInfo.environment["CRA_SYNC_DEVICE"]
+        self.device = device ?? testDevice ?? Host.current().localizedName ?? "Mac"
+        self.deviceID = deviceID ?? testDevice ?? Self.hardwareDeviceID()
         state = stateFile.load(or: { State() })
         location = state.location
         if case .folder(let path)? = state.location { folder = URL(fileURLWithPath: path, isDirectory: true) }
@@ -133,6 +146,19 @@ final class SettingsSyncService {
         error = "Sign in to iCloud in System Settings to keep syncing."
     }
 
+    /// A hash of the Mac's hardware UUID, so the sync folder never holds the UUID itself.
+    static func deviceID(hardwareUUID: String) -> String {
+        SHA256.hash(data: Data("cra-sync:\(hardwareUUID)".utf8)).prefix(16).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func hardwareDeviceID() -> String {
+        let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPlatformExpertDevice"))
+        defer { IOObjectRelease(service) }
+        let uuid = IORegistryEntryCreateCFProperty(service, kIOPlatformUUIDKey as CFString, kCFAllocatorDefault, 0)?
+            .takeRetainedValue() as? String
+        return deviceID(hardwareUUID: uuid ?? Host.current().localizedName ?? "Mac")
+    }
+
     private static func bundleFolder(inContainer container: URL) -> URL {
         container.appendingPathComponent("Documents", isDirectory: true).appendingPathComponent(SettingsSync.folderName, isDirectory: true)
     }
@@ -165,7 +191,7 @@ final class SettingsSyncService {
         awaitingDownload = false
         stateFile.saveNow(state)
         switch look(at: target) {
-        case .bundle(let manifest, let bundle) where manifest.device != device:
+        case .bundle(let manifest, let bundle) where manifest.deviceID != deviceID:
             pendingChoice = SyncBundleSummary(manifest: manifest, document: bundle.document)
             return .bundleFound(pendingChoice!)
         case .downloading:
@@ -218,11 +244,11 @@ final class SettingsSyncService {
             if awaitingDownload {
                 // The bundle sync was turned on against has arrived: now the user picks.
                 awaitingDownload = false
-                if manifest.device != device {
+                if manifest.deviceID != deviceID {
                     pendingChoice = SyncBundleSummary(manifest: manifest, document: bundle.document)
                     return
                 }
-            } else if SettingsSync.shouldApply(remote: manifest, lastApplied: state.lastApplied, device: device) {
+            } else if SettingsSync.shouldApply(remote: manifest, lastApplied: state.lastApplied, deviceID: deviceID) {
                 apply(manifest, bundle)
             }
         case .none:
@@ -285,7 +311,7 @@ final class SettingsSyncService {
     }()
 
     private func localBundle() -> Bundle {
-        var doc = store.document
+        var doc = store.document.forSync()
         // The store keeps items in a dictionary: the same sidebar must encode to the same bytes.
         doc.items.sort { $0.id.uuidString < $1.id.uuidString }
         let keys = (try? Data(contentsOf: AppPaths.file(SettingsSync.keybindingsName))) ?? Data("{}".utf8)
@@ -326,7 +352,7 @@ final class SettingsSyncService {
     private func write(_ bundle: Bundle, to folder: URL) throws -> SyncManifest {
         let files = try files(of: bundle)
         for (name, data) in files { try coordinatedWrite(data, to: folder.appendingPathComponent(name)) }
-        let manifest = SyncManifest(device: device, writtenAt: clock.now, files: files.mapValues(Self.hash))
+        let manifest = SyncManifest(device: device, deviceID: deviceID, writtenAt: clock.now, files: files.mapValues(Self.hash))
         try coordinatedWrite(try Self.encoder.encode(manifest), to: folder.appendingPathComponent(SettingsSync.manifestName))
         return manifest
     }
@@ -354,12 +380,16 @@ final class SettingsSyncService {
         var downloading = false
         for name in [SettingsSync.manifestName] + SettingsSync.fileNames {
             let url = folder.appendingPathComponent(name)
-            if let d = coordinatedRead(url) { files[name] = d; continue }
-            // iCloud keeps an undownloaded file as a placeholder; ask for it and look again later.
-            if FileManager.default.fileExists(atPath: folder.appendingPathComponent(SettingsSync.placeholderName(for: name)).path) {
+            // A file not downloaded yet, or (iCloud before macOS 14) only its placeholder: ask for
+            // it and look again when it has arrived.
+            let status = downloadStatus(url)
+            let placeholder = FileManager.default.fileExists(atPath: folder.appendingPathComponent(SettingsSync.placeholderName(for: name)).path)
+            if placeholder || (status != nil && status != .current) {
                 try? FileManager.default.startDownloadingUbiquitousItem(at: url)
                 downloading = true
+                continue
             }
+            if let d = coordinatedRead(url) { files[name] = d }
         }
         guard let data = files.removeValue(forKey: SettingsSync.manifestName),
               let manifest = try? Self.decoder.decode(SyncManifest.self, from: data) else { return downloading ? .downloading : .none }
@@ -382,8 +412,8 @@ final class SettingsSyncService {
         state.lastApplied = manifest
         // What is here now is what the folder holds: nothing to write back until something changes
         // here. This Mac's own hashes, since a repaired sidebar need not encode to the same bytes.
-        state.lastWritten = SyncManifest(device: manifest.device, writtenAt: manifest.writtenAt, files: localHashes() ?? manifest.files)
-        if manifest.device != device, !state.devices.contains(manifest.device) { state.devices.append(manifest.device) }
+        state.lastWritten = SyncManifest(device: manifest.device, deviceID: manifest.deviceID, writtenAt: manifest.writtenAt, files: localHashes() ?? manifest.files)
+        if manifest.deviceID != deviceID, !state.devices.contains(manifest.device) { state.devices.append(manifest.device) }
         otherDevices = state.devices
         lastSync = manifest.writtenAt
         error = nil

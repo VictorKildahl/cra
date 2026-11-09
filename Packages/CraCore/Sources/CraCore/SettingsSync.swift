@@ -9,15 +9,19 @@ public struct SyncManifest: Codable, Equatable {
     public static let currentVersion = 1
 
     public var version: Int
-    /// The Mac that wrote the bundle (its computer name), so it never applies its own write.
+    /// The Mac that wrote the bundle, by its computer name: what the question on another Mac shows.
     public var device: String
+    /// The Mac that wrote the bundle, so it never applies its own write. Not the computer name:
+    /// Migration Assistant gives the new Mac the old one's, and those two are the Macs that sync.
+    public var deviceID: String
     public var writtenAt: Date
     /// File name → hash of its bytes, for every file in the bundle.
     public var files: [String: String]
 
-    public init(version: Int = SyncManifest.currentVersion, device: String, writtenAt: Date, files: [String: String]) {
+    public init(version: Int = SyncManifest.currentVersion, device: String, deviceID: String, writtenAt: Date, files: [String: String]) {
         self.version = version
         self.device = device
+        self.deviceID = deviceID
         self.writtenAt = writtenAt
         self.files = files
     }
@@ -35,25 +39,14 @@ public enum SettingsSync {
     /// Every file in a bundle besides the manifest.
     public static let fileNames = [sidebarName, settingsName, keybindingsName]
 
-    /// Whether a file name is a provider's conflict copy ("manifest 2.json" from iCloud,
-    /// "manifest (Peter's conflicted copy 2026-11-06).json" from Dropbox, "manifest-MacBook.json"
-    /// from OneDrive). Cra never reads them: last writer wins through the manifest.
-    public static func isConflictCopy(_ name: String) -> Bool {
-        let stem = (name as NSString).deletingPathExtension
-        if stem.lowercased().contains("conflicted copy") { return true }
-        if stem.range(of: #" \d+$"#, options: .regularExpression) != nil { return true }
-        if stem.range(of: #"-[^-]+$"#, options: .regularExpression) != nil, !stem.hasPrefix("-") { return true }
-        return false
-    }
-
     /// iCloud keeps a file it has not downloaded as `.<name>.icloud`. A bundle whose file is
     /// only a placeholder is not applied; Cra asks iCloud to download it and looks again.
     public static func placeholderName(for name: String) -> String { ".\(name).icloud" }
 
     /// Whether a manifest read from the folder is applied: written by another Mac, by a Cra
     /// that writes a format this one reads, and later than the one applied last.
-    public static func shouldApply(remote: SyncManifest, lastApplied: SyncManifest?, device: String) -> Bool {
-        if remote.device == device { return false }
+    public static func shouldApply(remote: SyncManifest, lastApplied: SyncManifest?, deviceID: String) -> Bool {
+        if remote.deviceID == deviceID { return false }
         if remote.version > SyncManifest.currentVersion { return false }
         if let last = lastApplied, remote.writtenAt <= last.writtenAt { return false }
         return true
@@ -83,6 +76,31 @@ public struct SyncBundleSummary: Equatable {
     public init(manifest: SyncManifest, document: SidebarDocument) {
         self.init(device: manifest.device, writtenAt: manifest.writtenAt, spaces: document.spaces.count,
                   tabs: document.items.filter { $0.tab != nil }.count)
+    }
+}
+
+public extension SidebarDocument {
+    /// The sidebar as written to the sync folder: without Blank Windows (#220), which are this
+    /// Mac's windows (each holds its own space outside `spaceOrder`, with its tabs).
+    func forSync() -> SidebarDocument {
+        let blank = spaces.filter { $0.standaloneWindowID != nil }
+        guard !blank.isEmpty else { return self }
+        let roots = Set(blank.flatMap { [$0.favoritesContainerID, $0.pinnedContainerID, $0.todayContainerID] })
+        let parents = Dictionary(items.map { ($0.id, $0.parentID) }, uniquingKeysWith: { a, _ in a })
+        /// Up the parent chain to a container (as deep as the store nests, with a bound for a cycle).
+        func inBlankWindow(_ id: UUID) -> Bool {
+            var cur: UUID? = id
+            for _ in 0..<64 {
+                guard let c = cur else { return false }
+                if roots.contains(c) { return true }
+                cur = parents[c] ?? nil
+            }
+            return false
+        }
+        var doc = self
+        doc.spaces = spaces.filter { $0.standaloneWindowID == nil }
+        doc.items = items.filter { !inBlankWindow($0.id) }
+        return doc
     }
 }
 

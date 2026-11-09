@@ -197,7 +197,8 @@ macOS). One-time setup, as the Account Holder:
 
 `build.sh` copies the container identifiers the profile grants into `Cra.entitlements`
 (`ubiquity-container-identifiers`, `icloud-container-identifiers`, `icloud-services` =
-CloudDocuments) and names the first in Info.plist (`NSUbiquitousContainers`), so the bundle
+CloudDocuments, `icloud-container-environment` = Production as Xcode's Developer ID export
+claims it) and names the first in Info.plist (`NSUbiquitousContainers`), so the bundle
 shows in iCloud Drive as a "Cra" folder. Without them the switch in Settings is off with a note.
 
 To try it before the release profile has the entitlement, with an Apple Developer account of

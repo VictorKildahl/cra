@@ -59,7 +59,8 @@ build gets the entitlement) or through a folder a file provider syncs: `Settings
 writes them with a `manifest.json` into a `Cra` folder there and applies a newer bundle another
 Mac wrote (`SettingsSync` in CraCore decides). `sync.json` in the data folder holds the location
 and the last bundle written or applied. To try it on one Mac, run a second instance on another
-`CRA_DATA_DIR` with `CRA_SYNC_DEVICE=<name>` (the two would otherwise share a computer name);
+`CRA_DATA_DIR` with `CRA_SYNC_DEVICE=<name>` (a Mac is known in the folder by a hash of its
+hardware UUID, which two instances share);
 `CRA_SYNC_ICLOUD_DIR=<folder>` makes both treat that folder as the iCloud container.
 
 `cra.log` is Cra's own log: each tab's page opening, showing, loading, failing to load (with

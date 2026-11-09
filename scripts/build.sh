@@ -183,6 +183,11 @@ if [ -n "${CRA_PROVISIONING_PROFILE:-}" ] && [ "$IDENTITY" != "-" ]; then
       done
     done
     $PB -c "Add :com.apple.developer.icloud-services array" -c "Add :com.apple.developer.icloud-services:0 string CloudDocuments" "$APP_ENTITLEMENTS"
+    # A Developer ID profile grants Development and Production; a distributed build uses
+    # Production, as Xcode's Developer ID export claims it.
+    if $PB -c "Print :Entitlements:com.apple.developer.icloud-container-environment" "$PROFILE" >/dev/null 2>&1; then
+      $PB -c "Add :com.apple.developer.icloud-container-environment string Production" "$APP_ENTITLEMENTS"
+    fi
     $PB -c "Add :NSUbiquitousContainers dict" -c "Add :NSUbiquitousContainers:$CONTAINER dict" \
         -c "Add :NSUbiquitousContainers:$CONTAINER:NSUbiquitousContainerIsDocumentScopePublic bool true" \
         -c "Add :NSUbiquitousContainers:$CONTAINER:NSUbiquitousContainerName string Cra" \
