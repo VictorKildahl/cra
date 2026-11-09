@@ -2098,6 +2098,17 @@ strings "Opens the tab switcher, where you can cycle through recent tabs like Co
   a 34 pt pitch inside a 68×32 section for two spaces, so the hit cells (34×32) touch with no gap. The strip is a
   263×50 scroll area centred between the 32×32 Library button (x 8, 9 pt above the bottom) and the 32×32 "+" button
   (8 pt from the sidebar edge).
+- [O live, 9 Nov 2026, Arc 1.172.1 offline copy, 1x sRGB captures + AX, PR #271] The + (`sidebarPlusButton`, no tooltip)
+  opens `ArcMenu`: a borderless 222×308 window whose fill is 210×290 (radius 12) with a 12 pt tail under it, 3.5 pt
+  left of the button's centre (194 pt into the fill), the tip 10 pt above the button. Rows 194×40 at y 8, 48 | 105,
+  145 | 202, 242, separators 1 pt at y 96 and 193 (x 10…200): New Space, New Folder | New Easel ⌃⇧E, New Boost |
+  New Split ⌃+, New Tab ⌘T. It opens with New Tab picked. Boost is off without a web page, Split without a tab.
+  Colours from the space's DARK semantic palette on light spaces too: fill backgroundExtra, hover and separators
+  hover at 0.48 over it, shortcuts subtitle, disabled (121,120,129); titles 13 pt semibold white 51 pt in,
+  shortcuts end 21 pt from the edge. Timings (static, disassembly): open 0.1 s scale from 0.95 + 0.05 s fade,
+  close 0.07 s, curve (0.215, 0.61, 0.355, 1). The + (14×14, 2 pt arms) turns 45° into × with ≈13 % overshoot,
+  settled ≈0.18 s. Glyphs for Space, Tab, Split and Boost are Arc's own PDFs; Cra uses the nearest SF Symbols.
+  Cra: SidebarCreationMenu, CraCore ArcMenuTones.
 - [O capture, Victor's screenshot] pressed cell: 34×32, ~6 pt circular corners, fill 39,33,51 over 21,14,34, i.e. white
   at ~7.8%.
 - [U] Arc's hover fill could not be recorded (live pointer runs were cut short while Victor was at the Mac); the pressed

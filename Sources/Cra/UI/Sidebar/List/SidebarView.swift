@@ -743,6 +743,7 @@ final class SpaceDockView: NSView {
     private let actions: SidebarActions
     private let library: LibraryButtonView
     private let plus: SidebarGlyphButton
+    private let creationMenu = SidebarCreationMenuController()
     private var cells: [UUID: SpaceCellView] = [:]
     private var order: [UUID] = []
     private var focused: UUID?
@@ -757,12 +758,11 @@ final class SpaceDockView: NSView {
         self.ui = ui
         self.actions = actions
         library = LibraryButtonView(ui: ui, actions: actions)
-        // Arc 1.172: a Blank Window's + shows but does nothing.
-        plus = SidebarGlyphButton(symbol: "plus", size: 28, iconSize: 13, help: "New Space", colors: SidebarColors()) { [store, ui] in
-            guard !store.isBlank(window: ui.windowID) else { return }
-            actions.editSpace(nil)
-        }
+        // Arc 1.172.1: a 32 pt button (sidebarPlusButton) with no tooltip.
+        plus = SidebarGlyphButton(symbol: "plus", size: 32, height: 32, iconSize: 14, help: "", colors: SidebarColors(), action: {})
         super.init(frame: .zero)
+        plus.setMenuOpen(false)
+        plus.action = { [weak self] in self?.toggleCreationMenu() }
         addSubview(library)
         addSubview(plus)
         sync()
@@ -771,6 +771,40 @@ final class SpaceDockView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     override var isFlipped: Bool { true }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow !== window { creationMenu.close(animated: false) }
+        super.viewWillMove(toWindow: newWindow)
+    }
+
+    private func toggleCreationMenu() {
+        guard !store.isBlank(window: ui.windowID) else { return }
+        ArcTooltipController.shared.dismiss()
+        let selected = store.selectedTabID(window: ui.windowID)
+        let url = selected.flatMap { store.item($0)?.tab?.url }.flatMap(URL.init(string:))
+        let canBoost = ["http", "https"].contains(url?.scheme?.lowercased() ?? "") && url?.host != nil
+        let canSplit = selected.map { store.paneTabIDs(for: $0).count < 4 } ?? false
+        let entries: [(String, String, String, Bool)] = [
+            ("newSpace", "New Space", "plus.rectangle.on.rectangle", true),
+            ("newFolder", "New Folder", "folder", true),
+            ("newEasel", "New Easel", "scribble", true),
+            ("newBoost", "New Boost", "paintbrush.pointed", canBoost),
+            ("addSplitView", "New Split", "rectangle.split.2x1", canSplit),
+            ("newTab", "New Tab", "plus.rectangle", true),
+        ]
+        let items = entries.map { id, title, symbol, enabled in
+            SidebarCreationMenuItem(title: title, symbol: symbol, shortcut: KeyBindingRegistry.shared.action(id)?.primary?.display ?? "",
+                                    enabled: enabled) { [actions] in actions.performAction(id) }
+        }
+        let tones = ArcMenuTones(theme: store.focusedSpace(window: ui.windowID).theme.shown)
+        func ink(_ c: RGB) -> NSColor { NSColor(srgbRed: c.r, green: c.g, blue: c.b, alpha: 1) }
+        let colors = SidebarCreationMenuColors(fill: ink(tones.fill), hover: ink(tones.hover), separator: ink(tones.separator),
+                                               shortcut: ink(tones.shortcut), disabled: ink(tones.disabled))
+        creationMenu.toggle(from: plus, items: items, colors: colors) { [weak plus] open in
+            plus?.highlighted = open
+            plus?.setMenuOpen(open)
+        }
+    }
 
     private func sync() {
         syncQueued = false
@@ -844,7 +878,8 @@ final class SpaceDockView: NSView {
         super.layout()
         let h = bounds.height
         library.frame = NSRect(x: 0, y: (h - 28) / 2, width: 28, height: 28)
-        plus.frame = NSRect(x: bounds.width - 28, y: (h - 28) / 2, width: 28, height: 28)
+        plus.frame = NSRect(x: bounds.width - plus.size.width, y: (h - plus.size.height) / 2,
+                            width: plus.size.width, height: plus.size.height)
         // A narrower sidebar can squeeze the dock into dots.
         refreshCells()
         placeCells(animated: false)
