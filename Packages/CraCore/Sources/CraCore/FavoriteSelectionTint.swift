@@ -1,6 +1,8 @@
 import Foundation
 
 /// Extends the favicon's spatial color palette around the selected favorite's outline.
+/// Foundation only, so harnesses that build FaviconCache from source need just this file;
+/// the outline's colours are in FavoriteOutlineColors.swift.
 public enum FavoriteSelectionTint {
     /// Clockwise stops from the top of premultiplied RGBA pixels. White backgrounds and
     /// transparent margins do not wash out a multicolor logo such as Gmail's.
@@ -36,19 +38,5 @@ public enum FavoriteSelectionTint {
             return pixels.max { score($0) < score($1) }!.color
         }
         return stops + [stops[0]]
-    }
-
-    public static func colors(iconColors: [String]?, dark: Bool) -> [String] {
-        let fallback = "#579AFF"
-        let source = (iconColors ?? []).filter { HexColor.components($0) != nil }
-        let colors = (source.isEmpty ? [fallback] : source).map { hex in
-            var tint = SpaceColorWheel.hsb(hex)
-            if tint.saturation < 0.12 || tint.brightness < 0.15 {
-                tint = SpaceColorWheel.hsb(fallback)
-            }
-            let brightness = dark ? max(0.82, tint.brightness) : min(0.76, max(0.58, tint.brightness))
-            return SpaceColorWheel.hex(hue: tint.hue, saturation: max(0.45, tint.saturation), brightness: brightness)
-        }
-        return colors.count > 1 && colors.first == colors.last ? colors : colors + [colors[0]]
     }
 }

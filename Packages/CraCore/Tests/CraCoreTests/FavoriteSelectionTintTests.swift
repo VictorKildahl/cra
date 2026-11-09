@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import CraCore
 
@@ -12,12 +13,18 @@ struct FavoriteSelectionTintTests {
         }
     }
 
+    /// Victor, 9 Nov 2026: X and GitHub got a blue outline that has nothing to do with their
+    /// logos. A logo without colour is outlined in ink that stands out on the tile.
     @Test(arguments: [nil, "#000000", "#FFFFFF", "#808080", "invalid"] as [String?])
-    func neutralOrMissingIconsHaveAColorfulFallback(icon: String?) {
-        let colors = FavoriteSelectionTint.colors(iconColors: icon.map { [$0] }, dark: true)
-        #expect(colors == FavoriteSelectionTint.colors(iconColors: nil, dark: true))
-        let tint = SpaceColorWheel.hsb(colors[1])
-        #expect(tint.saturation > 0.5 && tint.brightness > 0.85)
+    func neutralOrMissingIconsUseInk(icon: String?) {
+        for dark in [true, false] {
+            let colors = FavoriteSelectionTint.colors(iconColors: icon.map { [$0] }, dark: dark)
+            #expect(colors == FavoriteSelectionTint.colors(iconColors: nil, dark: dark))
+            #expect(Set(colors).count == 1)
+            let tint = SpaceColorWheel.hsb(colors[0])
+            #expect(tint.saturation < 0.05, "no hue for a logo that has none")
+            #expect(dark ? tint.brightness > 0.9 : tint.brightness < 0.2)
+        }
     }
 
     @Test func paleIconStaysVisibleOnBlack() {
@@ -58,5 +65,19 @@ struct FavoriteSelectionTintTests {
         #expect(FavoriteSelectionTint.sample(rgba: [], width: 0, height: 0).isEmpty)
         #expect(FavoriteSelectionTint.sample(rgba: [255, 255, 255, 255], width: 1, height: 1).isEmpty)
         #expect(FavoriteSelectionTint.sample(rgba: [255], width: 4, height: 4).isEmpty)
+    }
+}
+
+/// PR #267: the logo-coloured outline is opt-in; a fresh install and settings saved before it
+/// existed keep Arc's neutral rim, and turning it on survives a save.
+struct FavoriteLogoOutlineSettingTests {
+    @Test func offUnlessTurnedOn() throws {
+        let decoder = ModelFixtureTests.decoder
+        for s in [AppSettings(), try decoder.decode(AppSettings.self, from: Data("{}".utf8))] {
+            #expect(!s.favoriteLogoOutline)
+        }
+        var on = AppSettings()
+        on.favoriteLogoOutline = true
+        #expect(try decoder.decode(AppSettings.self, from: JSONEncoder().encode(on)).favoriteLogoOutline)
     }
 }

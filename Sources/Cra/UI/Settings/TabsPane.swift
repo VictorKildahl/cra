@@ -16,6 +16,7 @@ struct TabsPane: View {
                 SettingsCheckbox(title: "Preview a folder’s tabs when hovering over it", isOn: $store.settings.folderPreviews)
                 // Arc: Settings ▸ General ▸ Previews (Gmail's unread mail on its favorite).
                 SettingsCheckbox(title: "Preview unread Gmail when hovering its favorite", isOn: $store.settings.favoritePreviews)
+                SettingsCheckbox(title: "Outline the open favorite in its logo’s colors", isOn: $store.settings.favoriteLogoOutline)
                 SettingsCheckbox(title: "Show toolbar above the page", isOn: $store.settings.showToolbar)
                 SettingsCheckbox(title: "Pages fill the window edge to edge", isOn: $store.settings.edgeToEdgeContent)
                 SettingsCheckbox(title: "Enable Picture in Picture when you leave a video tab", isOn: $store.settings.autoPictureInPicture)
