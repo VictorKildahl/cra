@@ -301,4 +301,4 @@ one-time certificate setup.
 
 ## MCP
 
-See [Local MCP access](mcp.md) for setup, tools and access boundaries.
+See [Agents in Cra (MCP)](mcp.md) for setup, tools and access boundaries.

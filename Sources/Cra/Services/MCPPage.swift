@@ -6,6 +6,8 @@ import CraCEF
 final class MCPCDP {
     struct Failure: LocalizedError {
         let message: String
+        /// Set when the call failed because a JavaScript dialog opened (or was open).
+        var dialog: [String: Any]? = nil
         var errorDescription: String? { message }
     }
     let browser: CraBrowser
@@ -18,9 +20,22 @@ final class MCPCDP {
     }
     func call(_ method: String, _ params: [String: Any] = [:], timeout: Double = 2, cleanup: Bool = false) async throws -> [String: Any] {
         if !cleanup { try check() }
+        // An open JavaScript dialog blocks the renderer: fail now rather than after the timeout.
+        let answersDialog = method == "Page.handleJavaScriptDialog"
+        if !answersDialog, let dialog = MCPPage.dialog(of: browser) {
+            throw Failure(message: MCPPage.dialogMessage(dialog), dialog: dialog)
+        }
         let data = try JSONSerialization.data(withJSONObject: params)
         let result: [String: Any] = try await withCheckedThrowingContinuation { continuation in
             let reply = Reply(continuation)
+            if !answersDialog {
+                let browser = browser
+                let token = MCPPage.onDialog(browser) { [weak reply] in
+                    let dialog = MCPPage.dialog(of: browser) ?? [:]
+                    reply?.finish(.failure(Failure(message: MCPPage.dialogMessage(dialog), dialog: dialog)))
+                }
+                reply.onFinish = { MCPPage.removeDialogWaiter(browser, token) }
+            }
             reply.timer = Task { @MainActor in
                 do {
                     try await Task.sleep(for: .seconds(timeout))
@@ -89,10 +104,12 @@ final class MCPCDP {
     private final class Reply {
         var continuation: CheckedContinuation<[String: Any], Error>?
         var timer: Task<Void, Never>?
+        var onFinish: (() -> Void)?
         init(_ continuation: CheckedContinuation<[String: Any], Error>) { self.continuation = continuation }
         func finish(_ result: Result<[String: Any], Error>) {
             guard let continuation else { return }
             self.continuation = nil; timer?.cancel(); timer = nil
+            onFinish?(); onFinish = nil
             continuation.resume(with: result)
         }
     }
@@ -103,7 +120,112 @@ final class MCPPage {
     let browser: CraBrowser
     var references = MCPReferences()
     var pendingNavigation: (document: String, url: String)?
+    private var attached = false
+    private var capturingConsole = false
+    private var console: [[String: Any]] = []
+    private var consoleDropped = 0
+    /// Image pixels per CSS pixel of the last page_screenshot; x/y arguments use the same pixels.
+    var screenshotScale = 1.0
     init(_ browser: CraBrowser) { self.browser = browser }
+
+    // MARK: Events, dialogs and focus
+
+    /// JavaScript dialogs open in pages an MCP client works in, by browser. While one is open the
+    /// page's renderer waits for it, so every other DevTools call would hang until it closes.
+    private static var dialogs: [ObjectIdentifier: [String: Any]] = [:]
+    private static var dialogWaiters: [ObjectIdentifier: [UUID: () -> Void]] = [:]
+
+    static func dialog(of browser: CraBrowser) -> [String: Any]? { dialogs[ObjectIdentifier(browser)] }
+
+    /// Runs `fire` if a dialog opens in `browser` before the returned token is removed.
+    static func onDialog(_ browser: CraBrowser, _ fire: @escaping () -> Void) -> UUID {
+        let token = UUID()
+        dialogWaiters[ObjectIdentifier(browser), default: [:]][token] = fire
+        return token
+    }
+    static func removeDialogWaiter(_ browser: CraBrowser, _ token: UUID) {
+        dialogWaiters[ObjectIdentifier(browser)]?.removeValue(forKey: token)
+    }
+
+    static func dialogMessage(_ dialog: [String: Any]) -> String {
+        let type = dialog["type"] as? String ?? "alert"
+        let message = (dialog["message"] as? String ?? "").prefix(300)
+        return "A JavaScript \(type) is open (\"\(message)\") and the page waits for it. Answer it with page_dialog first."
+    }
+
+    /// Hidden tabs and covered windows keep working: focus emulation tells the page it has focus,
+    /// and DevTools keeps a hidden page painting so input lands and screenshots work. Page events
+    /// report dialogs. Undone by detach() when the last client leaves.
+    func attach(_ cdp: MCPCDP) async {
+        guard !attached else { return }
+        attached = true
+        let id = ObjectIdentifier(browser)
+        browser.devToolsEventHandler = { [weak self] method, params in
+            MainActor.assumeIsolated { self?.event(method, params, id: id) }
+        }
+        _ = try? await cdp.call("Page.enable", cleanup: true)
+        _ = try? await cdp.call("Emulation.setFocusEmulationEnabled", ["enabled": true], cleanup: true)
+    }
+
+    func detach() {
+        guard attached else { return }
+        attached = false
+        browser.devToolsEventHandler = nil
+        Self.dialogs.removeValue(forKey: ObjectIdentifier(browser))
+        Self.dialogWaiters.removeValue(forKey: ObjectIdentifier(browser))
+        guard !browser.isClosed else { return }
+        browser.sendDevToolsMethod("Emulation.setFocusEmulationEnabled", params: #"{"enabled":false}"#) { _, _ in }
+        if capturingConsole {
+            browser.sendDevToolsMethod("Runtime.disable", params: "{}") { _, _ in }
+            browser.sendDevToolsMethod("Log.disable", params: "{}") { _, _ in }
+        }
+    }
+
+    private func event(_ method: String, _ params: String, id: ObjectIdentifier) {
+        switch method {
+        case "Page.javascriptDialogOpening":
+            guard let object = Self.json(params) else { return }
+            var dialog: [String: Any] = ["type": object["type"] as? String ?? "alert",
+                                         "message": String((object["message"] as? String ?? "").prefix(2000))]
+            if let text = object["defaultPrompt"] as? String, dialog["type"] as? String == "prompt" { dialog["defaultPrompt"] = text }
+            Self.dialogs[id] = dialog
+            let waiters = Self.dialogWaiters.removeValue(forKey: id) ?? [:]
+            for fire in waiters.values { fire() }
+        case "Page.javascriptDialogClosed":
+            Self.dialogs.removeValue(forKey: id)
+        case "Runtime.consoleAPICalled" where capturingConsole:
+            guard let object = Self.json(params) else { return }
+            let args = (object["args"] as? [[String: Any]] ?? []).map { arg -> String in
+                if let value = arg["value"] { return value as? String ?? "\(value)" }
+                return arg["description"] as? String ?? arg["type"] as? String ?? ""
+            }
+            let frame = ((object["stackTrace"] as? [String: Any])?["callFrames"] as? [[String: Any]])?.first
+            record(level: object["type"] as? String ?? "log", text: args.joined(separator: " "),
+                   url: frame?["url"] as? String, line: frame?["lineNumber"] as? Int)
+        case "Runtime.exceptionThrown" where capturingConsole:
+            guard let details = Self.json(params)?["exceptionDetails"] as? [String: Any] else { return }
+            let text = (details["exception"] as? [String: Any])?["description"] as? String ?? details["text"] as? String ?? "Uncaught exception"
+            record(level: "error", text: text, url: details["url"] as? String, line: details["lineNumber"] as? Int)
+        case "Log.entryAdded" where capturingConsole:
+            guard let entry = Self.json(params)?["entry"] as? [String: Any] else { return }
+            record(level: entry["level"] as? String ?? "info", text: entry["text"] as? String ?? "",
+                   url: entry["url"] as? String, line: entry["lineNumber"] as? Int, source: entry["source"] as? String)
+        default: break
+        }
+    }
+
+    private func record(level: String, text: String, url: String?, line: Int?, source: String? = nil) {
+        var entry: [String: Any] = ["level": level, "text": String(text.prefix(2000))]
+        if let url, !url.isEmpty { entry["url"] = String(url.prefix(500)) }
+        if let line { entry["line"] = line + 1 }
+        if let source { entry["source"] = source }
+        console.append(entry)
+        if console.count > 300 { console.removeFirst(console.count - 300); consoleDropped += 1 }
+    }
+
+    private static func json(_ text: String) -> [String: Any]? {
+        text.data(using: .utf8).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+    }
 
     func resolve(_ ref: String, cdp: MCPCDP) async throws -> (node: Int, document: String) {
         let frame = try await cdp.frame()
@@ -147,20 +269,58 @@ final class MCPPage {
                 if let error = result["errorText"] as? String { throw MCPCDP.Failure(message: error) }
             } catch { pendingNavigation = nil; throw error }
             return try MCPCDP.content(["status": "navigation_requested"])
-        case "page_snapshot": return try await snapshot(cdp)
+        case "page_snapshot": return try await snapshot(cdp, interactive: arguments["interactive"] as? Bool == true, query: arguments["query"] as? String)
         case "page_wait": return try await wait(arguments, cdp: cdp)
         case "page_screenshot":
-            let view = try await cdp.inspect("({visible:document.visibilityState === 'visible',scale:devicePixelRatio})") as? [String: Any] ?? [:]
-            guard view["visible"] as? Bool == true else { throw MCPCDP.Failure(message: "Show the tab before capturing a screenshot.") }
+            // Works on hidden tabs too (attach()). One image pixel is one CSS pixel unless the
+            // viewport is wider than 1280; coordinate tools divide by the same scale.
+            let view = try await cdp.inspect("({scale:devicePixelRatio})") as? [String: Any] ?? [:]
             let metrics = try await cdp.call("Page.getLayoutMetrics")
             guard let viewport = metrics["cssVisualViewport"] as? [String: Any],
                   let width = viewport["clientWidth"] as? Double, let height = viewport["clientHeight"] as? Double,
                   width > 0, height > 0 else { throw MCPCDP.Failure(message: "Viewport unavailable.") }
+            let imageScale = min(1, 1280 / max(width, height))
             let shot = try await cdp.call("Page.captureScreenshot", ["format": "jpeg", "quality": 75, "captureBeyondViewport": false,
                 "clip": ["x": viewport["pageX"] ?? 0, "y": viewport["pageY"] ?? 0, "width": width, "height": height,
-                         "scale": min(1, 1280 / (max(width, height) * (view["scale"] as? Double ?? 1)))]], timeout: 10)
+                         "scale": imageScale / (view["scale"] as? Double ?? 1)]], timeout: 10)
             guard let data = shot["data"] as? String, data.utf8.count < 750_000 else { throw MCPCDP.Failure(message: "Screenshot exceeds the response limit.") }
-            return ["content": [["type": "image", "mimeType": "image/jpeg", "data": data]], "isError": false]
+            screenshotScale = imageScale
+            let info: [String: Any] = ["width": Int((width * imageScale).rounded()), "height": Int((height * imageScale).rounded()),
+                                       "coordinates": imageScale == 1 ? "x/y for page_click, page_hover and page_scroll are these image pixels (CSS pixels)."
+                                           : "x/y for page_click, page_hover and page_scroll are these image pixels; Cra scales them by \(1 / imageScale) to CSS pixels."]
+            return ["content": [["type": "image", "mimeType": "image/jpeg", "data": data],
+                                ["type": "text", "text": String(decoding: try JSONSerialization.data(withJSONObject: info, options: [.sortedKeys]), as: UTF8.self)]],
+                    "isError": false]
+        case "page_dialog":
+            let dialog = Self.dialog(of: browser)
+            let accept = arguments["action"] as? String != "dismiss"
+            var params: [String: Any] = ["accept": accept]
+            if let text = arguments["promptText"] as? String { params["promptText"] = text }
+            do { _ = try await cdp.call("Page.handleJavaScriptDialog", params, timeout: 5) }
+            catch { throw MCPCDP.Failure(message: dialog == nil ? "No JavaScript dialog is open in this tab." : error.localizedDescription) }
+            Self.dialogs.removeValue(forKey: ObjectIdentifier(browser))
+            var result: [String: Any] = ["status": accept ? "accepted" : "dismissed"]
+            if let dialog { result["dialog"] = dialog }
+            return try MCPCDP.content(result)
+        case "page_console":
+            var note: String?
+            if !capturingConsole {
+                // Off until asked: Runtime.enable is visible to pages that look for automation.
+                capturingConsole = true
+                _ = try await cdp.call("Runtime.enable", timeout: 5)
+                _ = try? await cdp.call("Log.enable", timeout: 5)
+                try await Task.sleep(for: .milliseconds(200))
+                note = "Capture started with this call; it includes the messages Chromium kept from before. Call again for new ones."
+            }
+            let level = arguments["level"] as? String ?? "all"
+            let wanted: Set<String> = level == "error" ? ["error", "assert"] : level == "warning" ? ["error", "assert", "warning"] : []
+            let entries = console.filter { wanted.isEmpty || wanted.contains($0["level"] as? String ?? "") }
+            if arguments["clear"] as? Bool == true { console.removeAll(); consoleDropped = 0 }
+            var result: [String: Any] = ["entries": Array(entries.suffix(100)), "count": entries.count, "contentTrust": "untrusted"]
+            if entries.count > 100 { result["truncated"] = "Showing the last 100." }
+            if consoleDropped > 0 { result["dropped"] = consoleDropped }
+            if let note { result["note"] = note }
+            return try MCPCDP.content(result)
         case "page_pdf":
             let result = try await cdp.call("Page.printToPDF", ["printBackground": true, "transferMode": "ReturnAsStream"], timeout: 30)
             guard let stream = result["stream"] as? String else { throw MCPCDP.Failure(message: "PDF stream unavailable.") }
@@ -216,47 +376,85 @@ final class MCPPage {
         }
     }
 
-    private func snapshot(_ cdp: MCPCDP) async throws -> [String: Any] {
+    /// Roles a page_snapshot with interactive=true keeps (with headings, to tell sections apart).
+    private static let interactiveRoles: Set<String> = ["button", "link", "textbox", "searchbox", "combobox", "checkbox", "radio", "switch",
+        "slider", "spinbutton", "menuitem", "menuitemcheckbox", "menuitemradio", "tab", "option", "listbox", "treeitem", "heading", "Iframe"]
+
+    private func snapshot(_ cdp: MCPCDP, interactive: Bool = false, query: String? = nil) async throws -> [String: Any] {
+        let needle = query?.lowercased().trimmingCharacters(in: .whitespaces)
         let frame = try await cdp.frame()
         guard let document = frame["loaderId"] as? String else { throw MCPCDP.Failure(message: "No document identity.") }
         let tree = try await cdp.call("Accessibility.getFullAXTree", ["frameId": frame["id"] ?? ""], timeout: 10)
-        let nodes = tree["nodes"] as? [[String: Any]] ?? []
-        references.retain(nodes: Set(nodes.compactMap { $0["backendDOMNodeId"] as? Int }), document: document)
-        let byID = Dictionary(nodes.compactMap { node -> (String, [String: Any])? in
-            guard let id = node["nodeId"] as? String else { return nil }; return (id, node)
-        }, uniquingKeysWith: { first, _ in first })
-        var suppressed: Set<String> = []
-        var descendants: [String] = []
-        for node in nodes {
-            let role = (node["role"] as? [String: Any])?["value"] as? String ?? ""
-            let editable = (node["properties"] as? [[String: Any]] ?? []).contains { $0["name"] as? String == "editable" }
-            if editable || ["textbox", "searchbox", "combobox"].contains(role) { descendants += node["childIds"] as? [String] ?? [] }
+        var trees: [[[String: Any]]] = [tree["nodes"] as? [[String: Any]] ?? []]
+        // Same-site iframes render in this page's process, so their trees come from this session
+        // and their refs work like any other. A cross-site frame's process is out of reach: it
+        // shows as a row to point at with page_screenshot and x/y.
+        var frameTrees: [Int: Int] = [:]  // iframe element (backend node) → index in trees
+        var crossSite: Set<Int> = []
+        var queue = trees[0]
+        while let node = queue.first, trees.count <= 10 {
+            queue.removeFirst()
+            guard (node["role"] as? [String: Any])?["value"] as? String == "Iframe", let backend = node["backendDOMNodeId"] as? Int,
+                  let described = try? await cdp.call("DOM.describeNode", ["backendNodeId": backend]),
+                  let frameID = (described["node"] as? [String: Any])?["frameId"] as? String else { continue }
+            if let inner = try? await cdp.call("Accessibility.getFullAXTree", ["frameId": frameID], timeout: 5),
+               let nodes = inner["nodes"] as? [[String: Any]], !nodes.isEmpty {
+                frameTrees[backend] = trees.count
+                trees.append(nodes)
+                queue += nodes
+            } else { crossSite.insert(backend) }
         }
-        while let id = descendants.popLast() {
-            if suppressed.insert(id).inserted { descendants += byID[id]?["childIds"] as? [String] ?? [] }
-        }
+        references.retain(nodes: Set(trees.flatMap { $0.compactMap { $0["backendDOMNodeId"] as? Int } }), document: document)
         var elements: [[String: Any]] = []
         var bytes = 0
         var truncated = false
-        for node in nodes where node["ignored"] as? Bool != true {
-            if let id = node["nodeId"] as? String, suppressed.contains(id) { continue }
-            let role = (node["role"] as? [String: Any])?["value"] as? String ?? ""
-            if ["InlineTextBox", "generic", "none"].contains(role) { continue }
-            let name = (node["name"] as? [String: Any])?["value"] as? String ?? ""
-            var row: [String: Any] = ["role": role, "name": String(name.prefix(500)), "node": node["nodeId"] ?? ""]
-            for property in node["properties"] as? [[String: Any]] ?? [] {
-                if let key = property["name"] as? String, ["checked", "selected", "expanded", "disabled", "focused", "required", "level"].contains(key),
-                   let value = (property["value"] as? [String: Any])?["value"] { row[key] = value }
+        func emit(_ index: Int, depth: Int) throws {
+            let nodes = trees[index]
+            let byID = Dictionary(nodes.compactMap { node -> (String, [String: Any])? in
+                guard let id = node["nodeId"] as? String else { return nil }; return (id, node)
+            }, uniquingKeysWith: { first, _ in first })
+            var suppressed: Set<String> = []
+            var descendants: [String] = []
+            for node in nodes {
+                let role = (node["role"] as? [String: Any])?["value"] as? String ?? ""
+                let editable = (node["properties"] as? [[String: Any]] ?? []).contains { $0["name"] as? String == "editable" }
+                if editable || ["textbox", "searchbox", "combobox"].contains(role) { descendants += node["childIds"] as? [String] ?? [] }
             }
-            if !["StaticText", "LineBreak"].contains(role), let backend = node["backendDOMNodeId"] as? Int, let ref = references.reference(node: backend, document: document) { row["ref"] = ref }
-            bytes += try JSONSerialization.data(withJSONObject: row).count
-            if elements.count >= 500 || bytes > 100_000 { truncated = true; break }
-            elements.append(row)
+            while let id = descendants.popLast() {
+                if suppressed.insert(id).inserted { descendants += byID[id]?["childIds"] as? [String] ?? [] }
+            }
+            for node in nodes where node["ignored"] as? Bool != true {
+                if truncated { return }
+                if let id = node["nodeId"] as? String, suppressed.contains(id) { continue }
+                let role = (node["role"] as? [String: Any])?["value"] as? String ?? ""
+                if ["InlineTextBox", "generic", "none", "RootWebArea"].contains(role) && index > 0 || ["InlineTextBox", "generic", "none"].contains(role) { continue }
+                let name = (node["name"] as? [String: Any])?["value"] as? String ?? ""
+                var row: [String: Any] = ["role": role, "name": String(name.prefix(500))]
+                if depth > 0 { row["frame"] = depth }
+                for property in node["properties"] as? [[String: Any]] ?? [] {
+                    if let key = property["name"] as? String, ["checked", "selected", "expanded", "disabled", "focused", "required", "level"].contains(key),
+                       let value = (property["value"] as? [String: Any])?["value"] { row[key] = value }
+                }
+                let backend = node["backendDOMNodeId"] as? Int
+                if !["StaticText", "LineBreak"].contains(role), let backend, let ref = references.reference(node: backend, document: document) { row["ref"] = ref }
+                if let backend, crossSite.contains(backend) { row["crossSite"] = "Content of another site: use page_screenshot and x/y." }
+                let keep = (!interactive || Self.interactiveRoles.contains(role))
+                    && (needle.map { $0.isEmpty || name.lowercased().contains($0) || role.lowercased() == $0 } ?? true)
+                if keep {
+                    bytes += try JSONSerialization.data(withJSONObject: row).count
+                    if elements.count >= 600 || bytes > 120_000 { truncated = true; return }
+                    elements.append(row)
+                }
+                if let backend, let inner = frameTrees[backend] { try emit(inner, depth: depth + 1) }
+            }
         }
+        try emit(0, depth: 0)
         let after = try await cdp.frame()
         guard after["loaderId"] as? String == document else { throw MCPCDP.Failure(message: "Document changed during snapshot. Take a new snapshot.") }
-        return try MCPCDP.content(["url": frame["url"] ?? "", "elements": elements, "truncated": truncated,
-                                   "scope": "main-frame", "contentTrust": "untrusted"])
+        var result: [String: Any] = ["url": frame["url"] ?? "", "elements": elements, "truncated": truncated,
+                                     "frames": trees.count - 1, "contentTrust": "untrusted"]
+        if truncated { result["hint"] = "Cut off at 600 elements. Narrow it with interactive=true (controls and headings) or query (words of a name)." }
+        return try MCPCDP.content(result)
     }
 
     private func wait(_ arguments: [String: Any], cdp: MCPCDP) async throws -> [String: Any] {

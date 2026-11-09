@@ -1,300 +1,184 @@
-# Local MCP access
+# Agents in Cra (MCP)
 
-Cra's optional MCP server lets an external agent work in the browser's existing
-signed-in sessions. This integration does not run a model or contact an AI provider itself.
-The server is off by default.
+Cra can let the agents you already run, like Claude Code or Cursor, use the browser as it is:
+your tabs, spaces and signed-in sessions, through the
+[Model Context Protocol](https://modelcontextprotocol.io). Cra runs no model and calls no AI
+service itself. The agent you connect reads what it opens, under that agent's own data rules.
 
-In **Settings → Advanced**, enable **Allow local agents to control Cra**, then
-choose **Copy MCP Configuration**. Add that entry to your client's MCP settings.
-Keep Cra running. Copy the configuration again after moving the app or changing
-profiles. CraDev uses a separate profile and socket from the installed Cra.
+It is off until you turn it on: **Settings ▸ Advanced ▸ Allow local agents to control Cra**,
+then **Copy MCP Configuration** and add that entry to the agent's MCP settings. For Claude Code:
+
+    claude mcp add cra -- "/Applications/Cra.app/Contents/MacOS/Cra" --mcp "$HOME/Library/Application Support/Cra/mcp.sock"
+
+Keep Cra running. Copy the configuration again after moving the app or changing profiles.
+CraDev has its own profile and socket.
+
+## How an agent works in Cra
+
+An agent works next to you, not on your screen. Every tool works on hidden tabs, in covered
+or minimised windows and with Cra in the background:
+
+- `tab_open` opens a tab like a ⌘-clicked link: in the today list of the current space (or the
+  space named by `space`), loading, unread and not selected. Cra doesn't come forward.
+  `select=true` also shows it in its window; `activate=true` brings Cra to the front.
+- The first time a client works in a page, Cra turns on DevTools focus emulation for it, so the
+  page runs as a focused, visible page: input lands, animations run, and screenshots work.
+  When the last client disconnects (or MCP is turned off) those pages go back to normal.
+- A sleeping tab wakes in the background when a tool needs it, and a tab an agent works in
+  counts as used, so tab sleeping and freezing wait as they would after you looked at it.
+- `tabs_list` lists your tabs in sidebar order with their space, section (favorites, pinned,
+  today) and folder. `active` marks the tab on screen in the window you used last;
+  `selected` marks each window's shown tab.
+- `tab_close` closes today tabs, as ⌘W does (Reopen Closed Tab brings one back). Pinned tabs,
+  favorites and tabs in a split stay.
+
+Private tabs and Little Windows are never listed or reachable, even with a known ID.
 
 ## Tools
 
-| Tool | Purpose |
+| Tool | What it does |
 | --- | --- |
-| `tabs_list` | Normal tabs and this connection’s background tabs, IDs, loaded state and ownership |
-| `tab_open` | Open an HTTP(S) page in the current profile; optional `background: true` for a windowless agent tab |
-| `tab_show` | Show a tab and wake it if needed; brings the browser forward |
-| `tab_close` | Close an unpinned, unsplit tab opened by this connection |
-| `page_read` | Visible text in pages of up to 20,000 UTF-16 units, plus 50 bounded links |
-| `page_snapshot` | Compact main-frame accessibility snapshot with stable element refs |
-| `page_navigate` | Request an HTTP(S) navigation through Chromium |
-| `page_history` | Back, forward or reload |
-| `page_wait` | Wait for loading and optional exact URL, text or CSS target state |
-| `page_click` | Humanized Chromium mouse click |
-| `page_hover` | Curved pointer movement without a click |
-| `page_scroll` | Paced wheel events at a target, including nested scroll regions |
-| `page_fill` | Replace editable text using native selection, Backspace and key events |
-| `page_type` | Type at the current caret; append when first focusing another field |
-| `page_press` | A key with optional Shift, Control, Alt or Meta modifiers |
-| `page_select` | Select one HTML option using native focus and keyboard type-ahead |
-| `page_drag` | Native HTML drag/drop or pointer drag from a ref/selector to `targetSelector` |
-| `page_upload` | Select absolute local files in a file input, including a hidden input |
-| `page_download` | Start a signed-in download in an owned background tab |
-| `download_status` | Download progress, terminal status and completed local path |
-| `download_cancel` | Cancel an unfinished download and remove its partial file |
-| `page_screenshot` | Viewport JPEG as MCP image content, limited to 1280 pixels |
-| `page_pdf` | PDF in the profile's private `mcp-exports` folder; returns path and size |
-| `page_evaluate` | Advanced JavaScript; use the native tools for interaction |
+| `tabs_list` | Your tabs in sidebar order, plus this connection's windowless pages |
+| `tab_open` | Open an HTTP(S) page in the background (`space`, `select`, `activate`, `windowless`) |
+| `tab_show` | Select a tab in its window; `activate=true` also brings Cra forward |
+| `tab_close` | Close a today tab |
+| `page_read` | Visible text in pages of up to 20,000 UTF-16 units, and up to 50 links |
+| `page_snapshot` | Accessibility tree with stable refs, including same-site iframes and open shadow roots; `interactive` and `query` narrow it |
+| `page_screenshot` | Viewport JPEG (at most 1280 px) of any tab, hidden ones included, with its size for x/y |
+| `page_navigate`, `page_history`, `page_wait` | Navigate, back/forward/reload, wait for a URL, text or element state |
+| `page_click` | Click a ref, selector or x/y; `button` left/right/middle, `clickCount` 1–3, `modifiers` |
+| `page_hover`, `page_scroll` | Pointer moves and wheel scrolling at a ref, selector or x/y |
+| `page_type` | Type text, into a target or wherever focus is (rich editors, iframes) |
+| `page_fill` | Replace a field's or editor's content |
+| `page_press` | A named key or any one character with modifiers, so ⌘K, ⌘A, ⇧Tab |
+| `page_select` | Choose a `<select>` option by value or by its visible label |
+| `page_dialog` | Accept or dismiss an alert, confirm, prompt or Leave Site? |
+| `page_console` | Console messages, uncaught exceptions and browser messages |
+| `page_drag`, `page_upload` | Native HTML or pointer drags; choose files for a file input |
+| `page_pdf` | Print to a new private PDF in the profile's `mcp-exports` folder |
+| `page_download`, `download_status`, `download_cancel` | Signed-in downloads in a windowless tab |
+| `page_evaluate` | JavaScript, for reading the page; never for clicks or typing |
 
-Use `page_snapshot` first, then supply the returned `ref` to an input tool. A
-main-frame CSS `selector` is also accepted. Supply exactly one of them; omit both
-for `page_press` to act on current focus. A reference never moves to a replacement
-node. Detached nodes, old documents and replaced browser runtimes invalidate it.
-Take another snapshot after such an error. Repeated snapshots preserve IDs for
-surviving nodes. Editable values and their accessibility descendants are omitted;
-labels and other page content remain untrusted website text and can contain user data. This is not a general redaction guarantee.
+Arguments are checked before anything happens, and a refused call says why (`page_click needs
+a target: ref, selector or x/y.`).
 
-`page_read` returns a JSON object directly. Continue with its `nextOffset` until
-that is null. Offsets are UTF-16 positions in the current visible text; restart
-from zero if the page changes. Link text and URLs are capped. For a particular
-link or a larger selection, use a targeted read with `page_evaluate`.
+### Finding things
 
-Navigation acknowledges the request. Follow it with `page_wait`, preferably with
-an exact `url` or expected `text`, before acting on the new page. A pending
-navigation cannot satisfy a wait using the previous document. Waits accept
-`selector` and `state` (`visible`, `hidden`, `attached`, `detached`), with
-`timeoutMs` from 0 to 10,000. All supplied conditions must hold.
+`page_snapshot` returns the page's elements with refs. A ref points at one node and never moves
+to another: if the page replaces the node, the ref is stale and the tool says so; take a new
+snapshot. Big pages are cut off at 600 elements; `interactive=true` keeps only controls and
+headings, and `query` keeps elements whose name has those words (or whose role is that word).
+Refs work for nodes in open shadow roots and in iframes from the same site as the page.
 
-## Native input and its limits
+Anything else (a cross-site iframe, a canvas, a custom widget without a name) is reached by
+position: take `page_screenshot`, then pass `x`/`y` in pixels of that image to `page_click`,
+`page_hover` or `page_scroll`. One image pixel is one CSS pixel unless the viewport is wider
+than 1280; the screenshot's text part says the scale. A click by position reports what was
+there (`target`) and the main document's trusted events; events inside a cross-site frame
+can't be seen, so the result says to check with a screenshot.
 
-The input tools use CDP `Input.dispatchMouseEvent` and `Input.dispatchKeyEvent`
-on the existing Chromium page. They never call DOM `click()`, assign a field's
-`value`, dispatch synthetic DOM input events, or script focus/selection. An
-isolated world locates retained targets and observes trusted browser events.
-Scrolling a target into view uses a Chromium DOM command. A select uses `DOM.focus`
-and its built-in keyboard type-ahead, avoiding macOS popup-menu differences.
-These are Chromium events, not movement of the Mac's physical mouse pointer.
+Editable values and their accessibility children are left out of snapshots, and point
+descriptions never include a field's value. Labels and other page text can still hold
+personal data. Everything a page returns is marked untrusted.
 
-Pointer paths are curved and eased (160–650 ms). Clicks hold for 55–110 ms;
-key holds vary from 25–60 ms, with 35–95 ms gaps. There are no deliberate typos,
-fingerprint changes or claims about evading automation detection. ASCII carries
-key codes/modifiers. Unicode is split between scalars into at most three UTF-16
-units per event, leaving room for Chromium's terminator. Complex emoji may produce
-multiple intermediate input events; a page can transform or reject them.
+### Input
 
-For ordinary tabs, keep the tab visible and the window uncovered. macOS can report an occluded page
-as hidden even when its DOM retains focus. Tools stop in that state. They also
-refuse ambiguous, covered, detached, disabled, inert and read-only targets.
+Input goes through Chromium's own input path (DevTools `Input.dispatchMouseEvent`,
+`Input.dispatchKeyEvent` and `Input.insertText`), so pages see trusted events. Cra never clicks
+from JavaScript, sets a field's value or dispatches synthetic DOM events. An isolated world finds
+targets and counts the trusted events that arrived.
 
-Text input supports text/search/email/url/tel/password inputs, textareas, and
-plain contenteditable areas. Rich editors with nested formatting are refused.
-Repeated spaces in plain contenteditable are compared using their visible-space
-representation. Newlines are supported in textareas only. Each text call accepts
-at most 256 graphemes, 256 emitted pieces and 4096 UTF-8 bytes. Controls other than
-newline are refused. `page_type` refuses a non-empty input that does not expose
-its caret; use `page_fill` instead. `page_press` never clicks an unfocused button
-or link merely to focus it. Use current focus or explicitly interact first.
+- **Clicks** move the pointer on a short eased path (60–240 ms) and hold the button for
+  30–70 ms. With a ref or selector the target must be visible, enabled and uncovered (Cra
+  looks through shadow roots), and it must not move while the button is down. A right-click
+  reaches the page's `contextmenu` handler, but no native menu opens over your screen.
+- **Typing** up to 100 pieces goes in key by key (8–25 ms holds, 6–30 ms gaps), so search boxes
+  and autocompletes react as they would to you. Longer text, up to 20,000 characters, goes in
+  as committed text per line, like a paste, in well under a second. `\n` is the Enter key: a
+  new line in a textarea or editor, a submit in a one-line field. Text into an input,
+  textarea or plain editable element is checked against the expected value; into a rich
+  editor, the editor must show the typed text; into a cross-site frame, nothing can be checked.
+- **Keys** with ⌘ on the Mac run Chromium's editing commands where the Mac has one (⌘A selects
+  all, ⌘Z undoes, ⌥⌫ deletes a word), and are page shortcuts otherwise (⌘K).
+- **Selects** use focus and the select's own type-ahead, never its popup: Cra types the
+  shortest unique start of the option's label. When options share a start, the page sees a
+  change event for each option passed on the way, and the result says how many.
+- **Dialogs**: while a JavaScript dialog is open the page waits for it, so every other tool on
+  that tab returns at once with the dialog's text, and `tabs_list` shows it. The click or key
+  that opened one returns `dialog_opened`. Answer it with `page_dialog`.
 
-`page_select` supports single HTML selects with at most 100 enabled options. The
-requested value must match one enabled option, with a unique ASCII letter as the first character of its label. Ambiguous initials are refused before input, so typing cannot transiently choose another option and trigger its change handler. Each selection allows Chromium’s one-second type-ahead buffer to expire before sending the initial. Custom menus use `page_click` on their individual options.
+An error may follow input that partly happened; the result says so ("Input may be partial").
+Read the page before trying again; never replay blindly. If the page navigates during input,
+the result is `navigation_observed`.
 
-Iframe/shadow-root targeting, complex rich text, right/double-click and
-JavaScript-dialog management are not exposed.
-Little Windows are outside this implementation's tab list. Private tabs are
-excluded from discovery and every operation, including requests with known IDs.
+### Windowless pages
 
-## Background tabs and file transfers
+`tab_open` with `windowless=true` makes a 1280×800 page outside the sidebar, in the space's
+profile (HttpOnly cookies included). It belongs to its connection, closes when that connection
+does (at most eight at once) and is needed only for `page_download`. It has no extensions, no
+native browser UI and no permission prompts: new media and permission requests, external app
+links and popups are refused, JavaScript dialogs are suppressed and file pickers cancelled
+(use `page_upload`). `tab_show` refuses it.
 
-`tab_open({url, background: true})` creates a windowless 1280×800 CEF page using
-that normal space’s profile, including HttpOnly cookies. Native input does not
-activate a window or require a foreground tab. Only its connection can list or
-use it. At most eight background tabs exist at once. Closing the connection or
-turning MCP off closes them and cancels their transfers. Screenshots work through
-Chromium. `tab_show` refuses these tabs: there is no seamless foreground handoff.
-Windowless CEF uses Alloy hosting, so Chrome extensions, native browser UI and
-permission prompts are unavailable. New media/permission requests, external app
-launches and popups are refused. Ignored agent prompts preserve existing permission
-values and embargo counters; ordinary Chromium history and permission-action metadata
-remain shared with the normal profile. JavaScript dialogs are suppressed and file
-choosers are cancelled; use page_upload for file selection. Ordinary tabs retain Chrome hosting and their normal behavior.
+### Files
 
-`page_drag` uses native pointer events, or intercepts Chromium’s real HTML drag
-payload and delivers it with `Input.dispatchDragEvent`. It does not construct DOM
-DragEvents or DataTransfer objects. Source and destination must have distinct,
-uncovered hit areas in the same main-frame viewport. It supports pointer capture;
-file drag, cross-frame drag and autoscrolling during a drag are outside its scope.
-Results confirm trusted drop/release events; the client should also inspect the
-page’s intended outcome. Cancellation sends Escape, releases the button and cancels interception. Pointer
-capture may still deliver a release/click to its owner; cancellation cannot undo
-already delivered input.
+`page_upload` takes 1–8 absolute paths of regular files (not symlinks), copies them into private
+staging and selects them with `DOM.setFileInputFiles`; it doesn't submit the form. 16 MiB a file,
+64 MiB a tab. Copies stay until their tab closes, its page is replaced, or MCP stops, so the page
+can still read its File objects; after a crash they go the next time MCP starts.
 
-`page_upload` accepts `paths`, one to eight absolute regular-file paths, and an
-exact file-input ref or selector. A file itself cannot be a symlink. Files are
-copied into private staging before Chromium’s `DOM.setFileInputFiles` selects them;
-JavaScript never assigns `files` or creates File objects. Selection does not submit
-the form. The limit is 16 MiB per file, 64 MiB staged and 16 staging batches per tab,
-with at most 16 transfer tabs. Copies cancelled before the Chromium selection are discarded. Once selection has
-been dispatched, an uncertain outcome conservatively retains them. Copies live until that tab closes, its runtime is
-replaced and cleaned up, or MCP stops, so Chromium can still read its File objects.
-Use a background tab for predictable connection-lifetime cleanup. After a crash,
-abandoned upload copies are removed when MCP next starts under its exclusive
-profile lock; completed downloads are retained.
+`page_download` fetches an HTTP(S) URL through a windowless page's session and returns a
+`downloadId` to poll with `download_status`. One at a time per page, at most 64 MiB, 60 seconds
+and eight a page. The site's file name never chooses the path: files go into new 0700 folders
+under `mcp-transfers` as 0600 files. Cancelling or disconnecting removes partial files; finished
+ones stay for you or the agent. A download still running after 60 seconds closes its page;
+`download_status` then says `timed_out` and how to recover.
 
-Download tools require an owned background tab. `page_download` starts an HTTP(S)
-request through CEF and returns a `downloadId`; poll `download_status` until
-`completed`, `cancelled` or `failed`. Only completed files expose a path. CEF follows
-redirects and sends the profile’s matching cookies. One download per tab runs at a
-time; each is limited to 64 MiB and 60 seconds, with eight attempts per tab. Site-
-initiated downloads without an explicit tool request are blocked in background
-tabs. The site’s suggested filename is metadata only; it cannot choose a disk path.
-New UUID directories under `mcp-transfers` use mode 0700; completed files use 0600.
-Cancelling or disconnecting removes partial files. Completed downloads remain for
-the client/user to consume and remove. `download_cancel` leaves completed files intact. After cancellation, poll until
-`canStartNext` is true before starting another download in the same tab, or close it and open a new one.
-If a request remains unfinished after 60 seconds (including missing response
-headers), its owned agent tab is closed to abort it; download_status remains
-available and returns `timed_out` with recovery instructions. The closed entry
-remains visible in tabs_list (`closed: true`) and retains its slot/status until
-tab_close or disconnect. Call tab_close before opening its replacement. The
-60-second limit is total elapsed time, even if bytes are still arriving.
+### Console
 
-## Cancellation and results
+`page_console` starts capturing on its first call for a tab (it includes what Chromium kept from
+before) and returns up to the last 100 of 300 kept entries: `console.*` calls, uncaught
+exceptions and browser messages such as failed requests. `level` narrows to warnings or errors;
+`clear=true` empties the buffer after reading. Capture turns on DevTools' Runtime domain, which
+some pages look for, so it stays off until asked.
 
-A per-tab lease prevents interleaving page operations. Other tabs and `ping`
-remain responsive. Send `notifications/cancelled` with the active request ID to
-stop further native input while retaining the connection. Closing the connection,
-disabling MCP or replacing/closing the target also stops input. Cleanup releases
-held keys/buttons and observers. Already delivered actions cannot be undone;
-arbitrary JavaScript already dispatched cannot be rolled back.
+## Access and limits
 
-Input results include observed trusted event counts. Text editing verifies the
-result without echoing the value. Navigation that destroys an input observer is
-reported as `navigation_observed`; read the destination to verify it. An error
-may mean a partial action. Never blindly replay it.
+The bridge (`Cra --mcp <socket>`) talks to the running app over a Unix socket in the profile
+folder, mode 0600; both ends check they run as the same macOS user. No TCP port is opened. An
+exclusive lock keeps a second instance from taking a live socket. Eight clients and 32 messages
+in flight per client are admitted. A socket path is limited to 104 bytes, so a data folder
+deep in the file system can't run MCP (Settings shows the error).
 
-Input deadlines scale from 45 to 100 seconds, with a 120-second transport ceiling
-and bounded cleanup. Most Chromium calls must acknowledge within two seconds;
-capture, snapshot, printing and evaluation have explicit longer bounds. Other
-requests retain a 20-second transport ceiling. A timeout is normally a tool error;
-a stuck transport closes that connection. Reconnect after a browser restart.
+Turning MCP on lets any program running as your user read your pages and act as you in them.
+It is not a per-site permission system, and Cra doesn't ask before a purchase or a message is
+sent. Set confirmations in the agent, and treat page content as untrusted: a page can contain
+instructions meant for the agent. Settings shows the last tool called.
 
-## Access and storage
+Clients can use MCP 2024-11-05, 2025-03-26, 2025-06-18 or 2025-11-25. Messages are at most
+1 MiB, text results 200,000 UTF-8 bytes. Input calls may run up to 100 seconds, PDFs 120,
+everything else 20. A per-tab lease keeps two calls from interleaving input in one tab; other
+tabs and `ping` stay responsive. `notifications/cancelled` stops an input call between events.
 
-The stdio subprocess communicates over a profile-specific Unix socket, mode 0600.
-Both peers verify the same macOS user. No TCP port is opened. An exclusive lock
-prevents another instance from replacing a live socket; cleanup removes only the
-socket that instance created. Eight clients and 32 in-flight messages per client
-are admitted. Input stops at stdin EOF; accepted non-input replies drain.
-
-Clients negotiate MCP versions 2024-11-05, 2025-03-26, 2025-06-18 or 2025-11-25.
-Initialize and send `notifications/initialized` before tool calls. Frames are
-limited to 1 MiB; text tool results to 200,000 UTF-8 bytes. Oversized results fail
-explicitly. Screenshots have a separate image-size bound. PDFs are capped at
-16 MiB and written to new mode-0600 files in a private directory, without a
-caller-selected output path. Exported files remain until removed by the user.
-
-Enabling access permits local agents running as your macOS user to read page
-content and act as the signed-in user. Configure confirmations in the agent
-client. This is not a per-site permission or a browser-enforced payment/send
-approval system. Treat page content as untrusted. Advanced settings show the last
-tool call. The connected client's own data handling applies to content it reads.
-Visible agent-created tabs remain normal tabs if their client disconnects. Windowless
-background tabs are owned by one connection and close when it disconnects or MCP
-is disabled. Both use the selected normal profile; neither is an isolated login session.
+Not reachable: cross-site iframe content through refs (use x/y), closed shadow roots, Chrome
+extension UI, permission prompts and passkey or Touch ID sheets, which stay yours to answer.
 
 ## Development checks
 
-Run `scripts/test.sh` for the normal unit and contract checks. The live suites below
-are manual integration checks, not part of `scripts/test.sh` or the PR workflow.
-Use them for changes to MCP input, transfers, CEF integration or browser lifecycle;
-the extended suite briefly opens a real Document Picture-in-Picture window.
-Build the app, then run:
+`scripts/test.sh` runs the CraCore tests (`MCP*Tests`) and the transport and bridge checks. The
+live suites run the real app with a temporary profile and local pages, behind other apps
+(`CRA_TEST_BACKGROUND=1`), so they don't need the screen:
 
 ```sh
-python3 Tests/mcp_extended.py --app build/CraDev.app
-python3 Tests/mcp_integration.py --app build/CraDev.app --pause-before-input --hold
+scripts/build.sh release
+python3 Tests/mcp_integration.py --app build/Cra.app   # protocol, input, refs, cancellation, restart
+python3 Tests/mcp_extended.py --app build/Cra.app      # windowless pages, uploads, downloads, permissions
+python3 Tests/mcp_agent.py --app build/Cra.app         # hidden tabs, editors, frames, keys, dialogs, console
 ```
 
-This uses disposable profiles and synthetic local HTTP content. Keep the test window uncovered. The suite activates its tab through `tab_show`
-before input. With `--pause-before-input`, create the printed
-`INPUT_READY` file to start the input phase. `--hold` retains a clean playground
-and prints a temporary MCP configuration for independent clients. Ctrl-C cleans
-up the held instance. Logs and test results remain in the printed `/tmp` folder.
-
-With Python 3.11+ and the official MCP SDK (`mcp>=1.20,<2`):
-
-```sh
-python Tests/mcp_sdk_smoke.py /tmp/cra-mcp-integration-…/mcp.json
-python3 Tests/mcp_claude_smoke.py /tmp/cra-mcp-integration-…/mcp.json
-```
-
-Run clients sequentially against the fixture. The SDK test needs no model.
-The optional Claude test needs an authenticated Claude Code installation and
-sends only synthetic fixture content to its configured model provider.
-
-The playground at `/` is the demo; `/regression` additionally shows deliberately
-unusable controls for negative tests. Its design follows crabrowser.app, with
-system fonts and no remote assets.
-
-
-## Validation of the local contribution (2026-11-05)
-
-The initial contribution was rebased onto upstream `ca6877c` and rebuilt with its pinned
-CEF bundle. Both normal and separate Dev debug builds pass signature verification.
-Existing unrelated compiler/runtime warnings remain.
-
-`scripts/test.sh` passed: 441 CraCore tests in 77 suites, the store/lifecycle and
-other harnesses, 63 recorder checks, MCP transport/bridge and lint. The coverage
-gate passed at 97.8% of measured changed executable lines (770/787) and 99.4% of
-CraCore. CEF/AppKit glue is outside those percentages and is exercised by the
-real-browser suites.
-
-The final 100-check integration and 67-check extended native suite passed.
-The official MCP Python SDK 1.30.0 and authenticated Claude Code each exercised
-all 24 tools on the final build; Claude returned 37 successful responses and
-independently verified native input, navigation and background file interactions.
-Earlier full integration and independent client journeys also passed repeatedly.
-
-The extended suite exercises windowless input and screenshots, trusted HTML drag
-payloads, pointer capture, visible/hidden/multiple uploads and byte-for-byte HTTP
-delivery, HttpOnly session sharing, redirects, canonical URLs, private file modes,
-quota handling, early close/disconnect and native CEF browser counts. It waits for
-the real 60-second download deadline and checks recovery. Permission regressions
-cover six repeated prompts and six immediate navigations, preserve a seeded user
-permission history, and compare the saved settings after a clean shutdown. The
-original permission regression was confirmed to fail against the previous binary.
-
-Claude reviewed the native implementation and re-reviewed concrete fixes for
-callbacks, cancellation, file quotas, dialogs and shared permission settings.
-These are source reviews and local fixture tests, not a guarantee of arbitrary-site
-compatibility. GitHub Actions reports remote CI separately.
-
-The unchanged recorder budget is 0.1% of one CPU core. On the final rebased build,
-`sleep-tabs` and `dev-mode` both passed at 0.061%, together with their memory and
-stall checks. Earlier repeated runs also passed. The optimization reduces callback
-and process-sampling overhead; `freeDiskBytes` now excludes purgeable data (see
-[performance.md](performance.md)).
-
-Upstream `44adb80` was subsequently merged to incorporate its DevTools close fix.
-The combined dialog handler keeps normal-page prompts and suppresses agent dialogs.
-The normal debug build/signature, complete `scripts/test.sh`, 100-check integration
-and 67-check extended suite passed again. Upstream's `devtools-close-tab` scenario
-also passed, including helper cleanup, memory/stall checks and recorder overhead
-of 0.073% against the unchanged 0.1% budget.
-
-Upstream `c33b736` was merged on 6 November 2026 with its pinned CEF codecs14 build.
-The conflict resolution preserves intentionally ownerless Document PiP clients while
-still closing tabs whose weak owner disappeared. Agent download updates are handled
-before ordinary save-panel cancellation tracking. Three real-browser regressions
-check that PiP stays alive without a sidebar tab, closes explicitly, and closes when
-its opener navigates; the suite also waits for agent shutdown before measuring PiP.
-The integrated build/signature, 487 Core tests in 84 suites and all harnesses/lint
-passed. Coverage passed at 770/787 measured changed lines (97.8%) and 99.4% Core.
-The final live suites passed 100 integration and 70 extended checks, following an
-earlier successful run. Two focused Claude source reviews found no blockers.
-The targeted `devtools-close-tab` scenario passed cleanup, memory and stall checks,
-with recorder overhead of 0.056% against the unchanged 0.1% budget.
-
-The Settings toggle was also tested with an active client and agent tab: client
-EOF, socket removal, new-client rejection, agent closure and staged-upload cleanup.
-The integration tests use process-local command-line overrides; persistent MCP
-settings remain off. Completed exports are deliberately retained.
-
-The commands above reproduce the tests using synthetic local fixtures. Screenshots
-below show the playground and windowless agent viewport.
-
-![MCP playground](images/mcp-playground.jpg)
-
-![Windowless agent workshop](images/mcp-agent-workshop.jpg)
+`mcp_extended.py --with-pip` also checks Document Picture in Picture, which floats a window over
+the screen. `mcp_integration.py --hold` keeps a clean playground running and prints an MCP
+configuration for trying a real client against it; `Tests/mcp_sdk_smoke.py` (official MCP Python
+SDK, no model) and `Tests/mcp_claude_smoke.py` (an authenticated Claude Code, sending only the
+fixture's synthetic content) take that configuration. Run them after changing MCP input,
+transfers, the CEF integration or browser lifecycle.

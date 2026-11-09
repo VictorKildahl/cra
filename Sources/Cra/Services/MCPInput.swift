@@ -25,116 +25,286 @@ final class MCPInput {
     private var heldKey: [String: Any]?
     private(set) var position: CGPoint
 
-    init(browser: CraBrowser, position: CGPoint, reference: (node: Int, document: String)? = nil, stageUploads: (([String]) async throws -> [String])? = nil, discardUploads: (([String]) -> Void)? = nil, canContinue: @escaping () -> Bool) {
+    /// Mouse button, click count and modifiers of a page_click.
+    private var button = "left"
+    private var clickCount = 1
+    private var mouseModifiers = 0
+    /// Image pixels per CSS pixel of the tab's last screenshot (x/y arguments use them).
+    private let screenshotScale: Double
+
+    init(browser: CraBrowser, position: CGPoint, reference: (node: Int, document: String)? = nil, screenshotScale: Double = 1,
+         stageUploads: (([String]) async throws -> [String])? = nil, discardUploads: (([String]) -> Void)? = nil, canContinue: @escaping () -> Bool) {
         self.browser = browser
         self.reference = reference
+        self.screenshotScale = screenshotScale
         self.stageUploads = stageUploads
         self.discardUploads = discardUploads
         self.position = position
         self.canContinue = canContinue
     }
 
+    /// A ref outside the main document (a same-site iframe): it is acted on by its box.
+    private struct OutsideDocument: Error {}
+
     func run(name: String, arguments: [String: Any]) async -> [String: Any] {
         let deadline = Task { @MainActor in
             do { try await Task.sleep(for: .seconds(MCPInputPlan.durationBudget(text: arguments["text"] as? String ?? ""))); expired = true } catch {}
         }
         defer { deadline.cancel() }
+        button = arguments["button"] as? String ?? "left"
+        clickCount = arguments["clickCount"] as? Int ?? 1
+        if name == "page_click" { mouseModifiers = (arguments["modifiers"] as? String).flatMap(MCPProtocol.modifierFlags) ?? 0 }
         let result: [String: Any]
         do {
-            try await prepare(selector: arguments["selector"] as? String, scroll: name != "page_upload")
-            if name == "page_upload" {
-                result = try await upload(arguments["paths"] as! [String])
-                await cleanup(); return result
-            }
-            if name == "page_drag" {
-                result = try await drag(to: arguments["targetSelector"] as! String)
-                await cleanup(); return result
-            }
-            let editing = name == "page_fill" || name == "page_type"
-            let initial = try await inspect(editing: editing)
-            if editing, let text = arguments["text"] as? String, text.contains("\n"), initial["multiline"] as? Bool != true {
-                throw Failure(message: "Newlines require a textarea. Use page_press Enter to submit a form explicitly.")
-            }
-            if name == "page_hover" || name == "page_scroll" {
-                try await move(editing: false)
-                if name == "page_scroll" {
-                    let dy = arguments["dy"] as! Int
-                    for _ in 0..<8 {
-                        _ = try await inspect(hit: true)
-                        dispatched = true
-                        _ = try await call("Input.dispatchMouseEvent", ["type": "mouseWheel", "x": position.x, "y": position.y, "deltaX": 0, "deltaY": Double(dy) / 8])
-                        try await pause(0.025 + Double.random(in: 0...0.025))
-                    }
-                    let observed = try await function("function(){return this.counts.wheel || 0}")
-                    guard ((observed["result"] as? [String: Any])?["value"] as? Int ?? 0) > 0 else { throw Failure(message: "The page did not confirm trusted wheel events.") }
-                }
-                result = try await finish(verifyValue: nil, mouse: false)
-                await cleanup()
-                return result
-            }
-            if name == "page_select" {
-                result = try await select(arguments["value"] as! String)
-                await cleanup()
-                return result
-            }
-            let clicked = name == "page_click" || name == "page_fill" || initial["focused"] as? Bool != true
-            if name == "page_press", initial["focused"] as? Bool != true, initial["editable"] as? Bool != true {
-                throw Failure(message: "An unfocused non-editable target would be activated by clicking. Use page_press without a target for current focus, or focus it explicitly first.")
-            }
-            if clicked { try await click(editing: editing) }
-            if name == "page_type", clicked {
-                _ = try await inspect(editing: true, focused: true)
-                try await key(key: "End", code: "End", virtual: 35, modifiers: 4, commands: ["moveToEndOfDocument"])
-            }
-            if name == "page_click" {
-                result = try await finish(verifyValue: nil)
-            } else if name == "page_press" {
-                _ = try await inspect(focused: true)
-                try await press(arguments["key"] as! String, modifiers: (arguments["modifiers"] as? String).flatMap(MCPProtocol.modifierFlags) ?? 0)
-                result = try await finish(verifyValue: nil, keyboard: true, mouse: clicked)
+            if let x = (arguments["x"] as? NSNumber)?.doubleValue, let y = (arguments["y"] as? NSNumber)?.doubleValue {
+                result = try await atPoint(name, CGPoint(x: x / screenshotScale, y: y / screenshotScale), arguments: arguments)
+            } else if name == "page_scroll", arguments["ref"] == nil, arguments["selector"] == nil {
+                let metrics = try await call("Page.getLayoutMetrics")
+                let viewport = metrics["cssVisualViewport"] as? [String: Any] ?? [:]
+                let middle = CGPoint(x: (viewport["clientWidth"] as? Double ?? 800) / 2, y: (viewport["clientHeight"] as? Double ?? 600) / 2)
+                result = try await atPoint(name, middle, arguments: arguments)
             } else {
-                var state = try await inspect(editing: true, focused: true)
-                let text = arguments["text"] as! String
-                if name == "page_fill" {
-                    try await key(key: "a", code: "KeyA", virtual: 65, modifiers: 4, commands: ["selectAll"])
-                    state = try await inspect(editing: true, focused: true)
-                    let count = (state["value"] as? String ?? "").utf16.count
-                    if let selectionStart = state["start"] as? Int,
-                       selectionStart != 0 || state["end"] as? Int != count {
-                        throw Failure(message: "Chromium did not select the entire field. Nothing will be erased.")
-                    }
-                    try await press("Backspace")
-                    state = try await inspect(editing: true, focused: true)
-                    guard state["value"] as? String == "" else { throw Failure(message: "The field did not clear.") }
+                do {
+                    try await prepare(selector: arguments["selector"] as? String, scroll: name != "page_upload")
+                    result = try await onTarget(name, arguments: arguments)
+                } catch is OutsideDocument {
+                    await cleanup()
+                    result = try await atPoint(name, try await referencePoint(), arguments: arguments)
                 }
-                if name == "page_type", !(state["start"] is Int), state["value"] as? String != "" {
-                    throw Failure(message: "This field does not expose its caret. Use page_fill to replace its content.")
-                }
-                let old = state["value"] as? String ?? ""
-                let start = state["start"] as? Int ?? 0
-                let end = state["end"] as? Int ?? start
-                let original = old as NSString
-                let expected = original.substring(to: start) + text + original.substring(from: end)
-                for piece in MCPInputPlan.textPieces(text) {
-                    _ = try await inspect(editing: true, focused: true)
-                    if piece == "\n" {
-                        try await press("Enter")
-                    } else {
-                        let identity = piece.unicodeScalars.count == 1 ? piece.first.flatMap(MCPInputPlan.textKey) : nil
-                        try await key(key: piece, code: identity?.code, virtual: identity?.virtual,
-                                      text: piece, modifiers: identity?.modifiers ?? 0,
-                                      unmodified: identity?.unmodified)
-                    }
-                    try await pause(MCPInputPlan.keyGap(Double.random(in: 0...1)))
-                }
-                result = try await finish(verifyValue: expected, keyboard: !text.isEmpty || name == "page_fill", mouse: clicked)
             }
         } catch {
-            let suffix = dispatched ? " Input may be partial; inspect the page before retrying." : " No input was sent."
-            result = MCPProtocol.content(error.localizedDescription + suffix, failed: true)
+            if dispatched, let dialog = (error as? MCPCDP.Failure)?.dialog {
+                // The input went in and the page answered with alert(), confirm() or prompt().
+                result = content(["status": "dialog_opened", "dialog": dialog,
+                                  "next": "The page opened a JavaScript dialog and waits for it. Answer it with page_dialog."])
+            } else {
+                let suffix = dispatched ? " Input may be partial; inspect the page before retrying." : " No input was sent."
+                result = MCPProtocol.content(error.localizedDescription + suffix, failed: true)
+            }
         }
         await cleanup()
         return result
+    }
+
+    /// Input on an element of the main document (or the focused one), checked before and after.
+    private func onTarget(_ name: String, arguments: [String: Any]) async throws -> [String: Any] {
+        if name == "page_upload" { return try await upload(arguments["paths"] as! [String]) }
+        if name == "page_drag" { return try await drag(to: arguments["targetSelector"] as! String) }
+        let editing = name == "page_fill" || name == "page_type"
+        let initial = try await inspect(editing: editing)
+        if name == "page_hover" || name == "page_scroll" {
+            // A hovered element may grow or move (a menu opens): that's the point of hovering.
+            try await move(editing: false, settle: false)
+            if name == "page_scroll" {
+                try await wheel(dx: arguments["dx"] as? Int ?? 0, dy: arguments["dy"] as? Int ?? 0)
+                let observed = try await function("function(){return this.counts.wheel || 0}")
+                guard ((observed["result"] as? [String: Any])?["value"] as? Int ?? 0) > 0 else { throw Failure(message: "The page did not confirm trusted wheel events.") }
+            }
+            return try await finish(.none, mouse: false)
+        }
+        if name == "page_select" { return try await select(value: arguments["value"] as? String, label: arguments["label"] as? String) }
+        let untargeted = arguments["ref"] == nil && arguments["selector"] == nil
+        let clicked = name == "page_click" || name == "page_fill" || !untargeted && initial["focused"] as? Bool != true
+        if name == "page_press", clicked, initial["editable"] as? Bool != true {
+            throw Failure(message: "An unfocused non-editable target would be activated by clicking. Use page_press without a target for current focus, or focus it explicitly first.")
+        }
+        if clicked { try await click(editing: editing) }
+        if name == "page_click" { return try await finish(.none) }
+        if name == "page_press" {
+            if !untargeted { _ = try await inspect(focused: true) }
+            let modifiers = (arguments["modifiers"] as? String).flatMap(MCPProtocol.modifierFlags) ?? 0
+            try await press(arguments["key"] as! String, modifiers: modifiers)
+            return try await finish(.none, keyboard: initial["kind"] as? String != "frame", mouse: clicked)
+        }
+        // page_type and page_fill.
+        let kind = initial["kind"] as? String ?? "none"
+        var state = try await inspect(editing: true, focused: true)
+        if name == "page_type", clicked, kind != "frame" {
+            try await key(key: "End", code: "End", virtual: 35, modifiers: 4, commands: ["moveToEndOfDocument"])
+            state = try await inspect(editing: true, focused: true)
+        }
+        let text = arguments["text"] as! String
+        // In a one-line field a newline is the Enter key: "query\n" searches, as typing it would.
+        let submits = text.contains("\n") && kind == "field" && state["multiline"] as? Bool != true
+        if name == "page_fill" {
+            try await key(key: "a", code: "KeyA", virtual: 65, modifiers: 4, commands: ["selectAll"])
+            state = try await inspect(editing: true, focused: true)
+            if kind == "field" {
+                let count = (state["value"] as? String ?? "").utf16.count
+                if let selectionStart = state["start"] as? Int, selectionStart != 0 || state["end"] as? Int != count {
+                    throw Failure(message: "Chromium did not select the entire field. Nothing will be erased.")
+                }
+            }
+            try await press("Backspace")
+            state = try await inspect(editing: true, focused: true)
+            guard (state["value"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw Failure(message: "The field did not clear.") }
+        }
+        if name == "page_type", kind == "field", !(state["start"] is Int), state["value"] as? String != "" {
+            throw Failure(message: "This field does not expose its caret. Use page_fill to replace its content.")
+        }
+        let verify: Verify
+        switch kind {
+        case "field" where submits: verify = .none
+        case "field":
+            let old = state["value"] as? String ?? ""
+            let start = state["start"] as? Int ?? old.utf16.count
+            let end = state["end"] as? Int ?? start
+            let original = old as NSString
+            verify = .exact(original.substring(to: start) + text + original.substring(from: end))
+        case "rich": verify = .contains(text)
+        default: verify = .none
+        }
+        let keys: Bool
+        do { keys = try await typeText(text) }
+        catch let error where text.contains("\n") && dispatched {
+            // Enter submitted the page while text went in: the old document's world is gone.
+            if let navigated = await navigated() { return navigated }
+            throw error
+        }
+        return try await finish(verify, keyboard: keys && kind != "frame" && !text.isEmpty, inserted: !keys && kind != "frame", mouse: clicked)
+    }
+
+    /// A point of the viewport in CSS pixels: anything at all, iframes and canvas included. The
+    /// main document's trusted events are counted; a cross-site frame's aren't visible to Cra.
+    private func atPoint(_ name: String, _ point: CGPoint, arguments: [String: Any]) async throws -> [String: Any] {
+        guard ["page_click", "page_hover", "page_scroll", "page_type", "page_fill", "page_press"].contains(name) else {
+            throw Failure(message: "\(name) needs a ref or selector of the main document.")
+        }
+        let metrics = try await call("Page.getLayoutMetrics")
+        let viewport = metrics["cssVisualViewport"] as? [String: Any] ?? [:]
+        let width = viewport["clientWidth"] as? Double ?? 0, height = viewport["clientHeight"] as? Double ?? 0
+        guard point.x >= 0, point.y >= 0, point.x < width, point.y < height else {
+            throw Failure(message: "x/y is outside the viewport (\(Int(width * screenshotScale))×\(Int(height * screenshotScale)) screenshot pixels). Scroll first or take a new screenshot.")
+        }
+        try await prepare(selector: "html", scroll: false)
+        let hit = await describe(point)
+        if hit["tag"] as? String == "SELECT", name == "page_click" {
+            throw Failure(message: "That is a <select>. Use page_select with its ref (page_snapshot) so no native menu opens.")
+        }
+        for step in MCPInputPlan.movement(from: position, to: point, variation: Double.random(in: 0...1)) {
+            try await pause(step.delay)
+            dispatched = true
+            _ = try await call("Input.dispatchMouseEvent", ["type": "mouseMoved", "x": step.point.x, "y": step.point.y, "buttons": 0])
+            position = step.point
+        }
+        switch name {
+        case "page_hover": break
+        case "page_scroll": try await wheel(dx: arguments["dx"] as? Int ?? 0, dy: arguments["dy"] as? Int ?? 0)
+        default:
+            try await pressMouse(at: point)
+            if name == "page_type" || name == "page_fill" {
+                try await pause(0.05)
+                if name == "page_fill" {
+                    try await key(key: "a", code: "KeyA", virtual: 65, modifiers: 4, commands: ["selectAll"])
+                    try await press("Backspace")
+                }
+                _ = try await typeText(arguments["text"] as! String)
+            } else if name == "page_press" {
+                try await press(arguments["key"] as! String, modifiers: (arguments["modifiers"] as? String).flatMap(MCPProtocol.modifierFlags) ?? 0)
+            }
+        }
+        let response = try await function("function(){return this.counts}")
+        let counts = (response["result"] as? [String: Any])?["value"] as? [String: Int] ?? [:]
+        var result: [String: Any] = ["status": "completed", "input": "chromium", "at": ["x": point.x * screenshotScale, "y": point.y * screenshotScale],
+                                     "target": hit, "trustedEvents": counts]
+        if name != "page_hover", name != "page_scroll", (counts["mousedown"] ?? 0) == 0 {
+            result["note"] = "The point is inside a frame, whose events Cra doesn't count. Check the result with page_screenshot or page_snapshot."
+        }
+        return content(result)
+    }
+
+    /// The middle of a ref's box (a node in a same-site iframe), scrolled into view first.
+    private func referencePoint() async throws -> CGPoint {
+        guard let reference else { throw Failure(message: "Target is unavailable.") }
+        _ = try? await call("DOM.scrollIntoViewIfNeeded", ["backendNodeId": reference.node])
+        let quads = try await call("DOM.getContentQuads", ["backendNodeId": reference.node])
+        guard let quad = (quads["quads"] as? [[Double]])?.first, quad.count == 8 else {
+            throw Failure(message: "Stale ref or the element has no box. Take a new snapshot.")
+        }
+        return CGPoint(x: (quad[0] + quad[2] + quad[4] + quad[6]) / 4, y: (quad[1] + quad[3] + quad[5] + quad[7]) / 4)
+    }
+
+    /// What is at a point, for the result: a short description, never a field's value.
+    private func describe(_ point: CGPoint) async -> [String: Any] {
+        let response = try? await function("""
+        function(x, y) {
+          let el = document.elementFromPoint(x, y);
+          while (el && el.shadowRoot) { const inner = el.shadowRoot.elementFromPoint(x, y); if (!inner || inner === el) break; el = inner; }
+          if (!el) return {};
+          const out = {tag: el.tagName};
+          for (const name of ['id', 'role', 'aria-label', 'name', 'type', 'title']) { const v = el.getAttribute(name); if (v) out[name] = v.slice(0, 200); }
+          if (el instanceof HTMLIFrameElement) { try { out.frame = new URL(el.src, location.href).origin; } catch (e) {} }
+          else if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el.isContentEditable)) {
+            const text = (el.innerText || '').trim().replace(/\\s+/g, ' ');
+            if (text) out.text = text.slice(0, 80);
+          }
+          return out;
+        }
+        """, arguments: [point.x, point.y])
+        return (response?["result"] as? [String: Any])?["value"] as? [String: Any] ?? [:]
+    }
+
+    private func cdp() -> MCPCDP { MCPCDP(browser, canContinue: canContinue) }
+
+    /// Types at the focus: key by key up to MCPInputPlan.keyTypingLimit pieces, else committed
+    /// text per line with Enter between. Returns whether keys were used.
+    private func typeText(_ text: String) async throws -> Bool {
+        if MCPInputPlan.typesKeys(text) {
+            for piece in MCPInputPlan.textPieces(text) {
+                try await inspectFocusStays()
+                if piece == "\n" {
+                    try await press("Enter")
+                } else {
+                    let identity = piece.unicodeScalars.count == 1 ? piece.first.flatMap(MCPInputPlan.textKey) : nil
+                    try await key(key: piece, code: identity?.code, virtual: identity?.virtual,
+                                  text: piece, modifiers: identity?.modifiers ?? 0, unmodified: identity?.unmodified)
+                }
+                try await pause(MCPInputPlan.keyGap(Double.random(in: 0...1)))
+            }
+            return true
+        }
+        for (index, line) in text.components(separatedBy: "\n").enumerated() {
+            if index > 0 { try await press("Enter") }
+            guard !line.isEmpty else { continue }
+            try await inspectFocusStays()
+            dispatched = true
+            _ = try await call("Input.insertText", ["text": line])
+        }
+        return false
+    }
+
+    /// Typing stops when focus leaves the element it started in (a page moved it, or a dialog).
+    private var focusAtStart: String?
+    private func inspectFocusStays() async throws {
+        let world = try await context()
+        let response = try await call("Runtime.evaluate", ["expression": Self.focusProbe, "returnByValue": true, "contextId": world])
+        let now = (response["result"] as? [String: Any])?["value"] as? String ?? ""
+        if let focusAtStart, focusAtStart != now { throw Failure(message: "Focus moved while typing; stopped so nothing lands in another field.") }
+        focusAtStart = now
+    }
+    /// The focused element, through open shadow roots, as a token that changes when focus moves.
+    private static let focusProbe = """
+    (() => { let a = document.activeElement; while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement;
+      if (!a) return ''; if (!a.__craFocusToken) Object.defineProperty(a, '__craFocusToken', {value: Math.random().toString(36).slice(2)});
+      return a.__craFocusToken; })()
+    """
+    private var isolatedContext: Int?
+    private func context() async throws -> Int {
+        if let isolatedContext { return isolatedContext }
+        let value = try await cdp().context()
+        isolatedContext = value
+        return value
+    }
+
+    private func wheel(dx: Int, dy: Int) async throws {
+        // Notches of about 40 px, at most 8: a few-pixel scroll is one whole event, not eight fractions Chromium drops.
+        let steps = max(1, min(8, max(abs(dx), abs(dy)) / 40))
+        for _ in 0..<steps {
+            dispatched = true
+            _ = try await call("Input.dispatchMouseEvent", ["type": "mouseWheel", "x": position.x, "y": position.y,
+                                                           "deltaX": Double(dx) / Double(steps), "deltaY": Double(dy) / Double(steps)])
+            try await pause(0.012 + Double.random(in: 0...0.012))
+        }
     }
 
     private func check() throws {
@@ -170,22 +340,34 @@ final class MCPInput {
         if let reference, reference.document != loaderID { throw Failure(message: "Stale ref: document changed. Take a new snapshot.") }
         let world = try await call("Page.createIsolatedWorld", ["frameId": frameID, "worldName": "cra-mcp-input"])
         guard let context = world["executionContextId"] as? Int else { throw Failure(message: "No isolated inspection world.") }
+        isolatedContext = context
         let literal = String(decoding: try JSONSerialization.data(withJSONObject: [selector ?? ""]), as: UTF8.self)
         var retained: String?
-        if let reference {
-            let resolved = try await call("DOM.resolveNode", ["backendNodeId": reference.node, "executionContextId": context, "objectGroup": group])
-            retained = (resolved["object"] as? [String: Any])?["objectId"] as? String
+        if let reference, selector != "html" {
+            do {
+                let resolved = try await call("DOM.resolveNode", ["backendNodeId": reference.node, "executionContextId": context, "objectGroup": group])
+                retained = (resolved["object"] as? [String: Any])?["objectId"] as? String
+            } catch let failure as MCPCDP.Failure where failure.dialog == nil {
+                // Nodes of another frame can't be resolved in the main document's world.
+                if (try? await call("DOM.describeNode", ["backendNodeId": reference.node])) != nil { throw OutsideDocument() }
+                throw Failure(message: "Stale ref: node unavailable. Take a new snapshot.")
+            }
             guard retained != nil else { throw Failure(message: "Stale ref: node unavailable. Take a new snapshot.") }
         }
         let script = """
         (function(target) {
           const selector = \(literal)[0];
-          const matches = target ? [target] : selector ? document.querySelectorAll(selector) : [document.activeElement];
+          let active = document.activeElement;
+          while (active && active.shadowRoot && active.shadowRoot.activeElement) active = active.shadowRoot.activeElement;
+          const matches = target ? [target] : selector ? document.querySelectorAll(selector) : [active || document.body];
           if (matches.length !== 1) throw Error('Selector must match exactly one element; found ' + matches.length);
           const node = matches[0];
-          if (!(node instanceof Element) || node.ownerDocument !== document || !node.isConnected) throw Error('Stale or unsupported target; take a new snapshot.');
+          if (!(node instanceof Element) || node.ownerDocument !== document || !node.isConnected) {
+            if (node && node.ownerDocument && node.ownerDocument !== document) throw Error('OUTSIDE_DOCUMENT');
+            throw Error('Stale or unsupported target; take a new snapshot.');
+          }
           const state = {node, counts:{}, downKeys:new Set()};
-          const types = ['mousemove','mousedown','mouseup','click','keydown','keyup','beforeinput','input','wheel','change','dragstart','dragover','drop','pointermove','pointerup'];
+          const types = ['mousemove','mousedown','mouseup','click','dblclick','auxclick','contextmenu','keydown','keyup','beforeinput','input','wheel','change','dragstart','dragover','drop','pointermove','pointerup'];
           const observe = event => {
             if (!event.isTrusted) return;
             const target = event.composedPath().includes(node);
@@ -196,17 +378,19 @@ final class MCPInput {
             if (event.type === 'keydown') state.downKeys.add(event.key);
             state.counts[event.type] = (state.counts[event.type] || 0) + 1;
           };
-          for (const type of types) document.addEventListener(type, observe, true);
-          state.stop = () => { for (const type of types) document.removeEventListener(type, observe, true); };
+          for (const type of types) window.addEventListener(type, observe, true);
+          state.stop = () => { for (const type of types) window.removeEventListener(type, observe, true); };
           return state;
         })
         """
         let made: [String: Any]
-        if let retained {
-            made = try await call("Runtime.callFunctionOn", ["objectId": retained, "functionDeclaration": "function(){return (" + script + ")(this)}", "objectGroup": group])
-        } else {
-            made = try await call("Runtime.evaluate", ["expression": script + "()", "contextId": context, "objectGroup": group])
-        }
+        do {
+            if let retained {
+                made = try await call("Runtime.callFunctionOn", ["objectId": retained, "functionDeclaration": "function(){return (" + script + ")(this)}", "objectGroup": group])
+            } else {
+                made = try await call("Runtime.evaluate", ["expression": script + "()", "contextId": context, "objectGroup": group])
+            }
+        } catch let failure as MCPCDP.Failure where failure.message.contains("OUTSIDE_DOCUMENT") { throw OutsideDocument() }
         object = (made["result"] as? [String: Any])?["objectId"] as? String
         guard object != nil else { throw Failure(message: "Could not retain target identity.") }
         let element = try await function("function(){return this.node}", value: false)
@@ -228,25 +412,30 @@ final class MCPInput {
         let response = try await function("""
         function(editing, focused, hit) {
           const n = this.node;
+          let active = document.activeElement;
+          while (active && active.shadowRoot && active.shadowRoot.activeElement) active = active.shadowRoot.activeElement;
           if (!n.isConnected || n.ownerDocument !== document) throw Error('Target was detached or replaced. Resolve it again.');
-          if (document.visibilityState !== 'visible') throw Error('Tab is hidden. Select it in Cra before sending input.');
           if (n.matches(':disabled') || n.closest('[inert],button:disabled,[aria-disabled="true"]')) throw Error('Target is disabled or inert.');
-          for (let ancestor = n; ancestor; ancestor = ancestor.parentElement) {
-            const style = getComputedStyle(ancestor);
+          for (let a = n; a; a = a.parentElement || (a.getRootNode() instanceof ShadowRoot ? a.getRootNode().host : null)) {
+            const style = getComputedStyle(a);
             if (style.visibility !== 'visible' || Number(style.opacity) === 0) throw Error('Target is not visible.');
           }
-          const rich = n.isContentEditable && Array.from(n.children).every(c => c.tagName === 'BR');
-          if (editing && !(rich || n instanceof HTMLTextAreaElement || n instanceof HTMLInputElement && ['text','search','email','url','tel','password'].includes(n.type))) throw Error('Typing supports text inputs and textareas only.');
+          const plain = n.isContentEditable && Array.from(n.children).every(c => c.tagName === 'BR');
+          const field = plain || n instanceof HTMLTextAreaElement || n instanceof HTMLInputElement && ['text','search','email','url','tel','password','number'].includes(n.type);
+          const kind = field ? 'field' : n.isContentEditable ? 'rich' : (n instanceof HTMLIFrameElement || n instanceof HTMLFrameElement) ? 'frame' : 'none';
+          if (editing && kind === 'none') throw Error('Nothing editable here. Click a field or editor first, or pass its ref or selector.');
           if (editing && n.readOnly) throw Error('Target is read-only.');
-          if (focused && document.activeElement !== n) throw Error('Focus changed; refusing to type into another element.');
+          if (focused && active !== n) throw Error('Focus changed; refusing to type into another element.');
           const rects = Array.from(n.getClientRects()).map(r => ({left:Math.max(0,r.left),top:Math.max(0,r.top),right:Math.min(innerWidth,r.right),bottom:Math.min(innerHeight,r.bottom)}));
           const r = rects.filter(r => r.right > r.left && r.bottom > r.top).sort((a,b) => (b.right-b.left)*(b.bottom-b.top)-(a.right-a.left)*(a.bottom-a.top))[0];
           if (hit && !r) throw Error('Target has no visible hit area.');
           const x = r ? (r.left+r.right)/2 : 0, y = r ? (r.top+r.bottom)/2 : 0;
-          const top = r && document.elementFromPoint(x,y);
-          if (hit && top !== n && !n.contains(top)) throw Error('Target is covered by another element.');
+          let top = r && document.elementFromPoint(x,y);
+          while (top && top.shadowRoot) { const inner = top.shadowRoot.elementFromPoint(x,y); if (!inner || inner === top) break; top = inner; }
+          const inside = (outer, inner) => { for (let p = inner; p; p = p.parentNode || p.host) if (p === outer) return true; return false; };
+          if (hit && !inside(n, top)) throw Error('Target is covered by another element.');
           let start = n.selectionStart, end = n.selectionEnd;
-          if (rich) {
+          if (plain) {
             const selection = getSelection();
             if (selection.rangeCount && n.contains(selection.anchorNode) && n.contains(selection.focusNode)) {
               const a = document.createRange(), b = document.createRange();
@@ -255,7 +444,8 @@ final class MCPInput {
               start = Math.min(a.toString().length, b.toString().length); end = Math.max(a.toString().length, b.toString().length);
             } else if (!n.textContent) { start = 0; end = 0; }
           }
-          return {x,y,editable:rich || n instanceof HTMLTextAreaElement || n instanceof HTMLInputElement && ['text','search','email','url','tel','password'].includes(n.type),value:rich ? n.textContent.replace(/\\u00a0/g,' ') : n.value || '',start,end,multiline:n instanceof HTMLTextAreaElement,focused:document.activeElement === n};
+          const value = plain ? n.textContent.replace(/\\u00a0/g,' ') : field ? n.value || '' : kind === 'rich' ? n.innerText : '';
+          return {x,y,kind,editable:kind !== 'none',value,start,end,multiline:n instanceof HTMLTextAreaElement || kind === 'rich',focused:active === n};
         }
         """, arguments: [editing, focused, hit])
         guard let value = (response["result"] as? [String: Any])?["value"] as? [String: Any] else {
@@ -264,16 +454,16 @@ final class MCPInput {
         return value
     }
 
-    private func move(editing: Bool) async throws {
+    private func move(editing: Bool, settle: Bool = true) async throws {
         let target = try await inspect(editing: editing, hit: true)
         let end = CGPoint(x: target["x"] as? Double ?? 0, y: target["y"] as? Double ?? 0)
         for move in MCPInputPlan.movement(from: position, to: end, variation: Double.random(in: 0...1)) {
             try await pause(move.delay)
-            _ = try await inspect(editing: editing)
             dispatched = true
             _ = try await call("Input.dispatchMouseEvent", ["type": "mouseMoved", "x": move.point.x, "y": move.point.y, "buttons": 0])
             position = move.point
         }
+        guard settle else { return }
         let current = try await inspect(editing: editing, hit: true)
         guard abs((current["x"] as? Double ?? -100) - end.x) < 2,
               abs((current["y"] as? Double ?? -100) - end.y) < 2 else {
@@ -283,49 +473,74 @@ final class MCPInput {
 
     private func click(editing: Bool) async throws {
         try await move(editing: editing)
-        let end = position
-        mouseDown = true
-        _ = try await call("Input.dispatchMouseEvent", ["type": "mousePressed", "x": end.x, "y": end.y,
-                                                       "button": "left", "buttons": 1, "clickCount": 1])
-        try await pause(MCPInputPlan.clickHold(Double.random(in: 0...1)))
-        // The press can run page code. Never release over a newly substituted target.
-        let released = try await inspect(editing: editing, hit: true)
-        guard abs((released["x"] as? Double ?? -100) - end.x) < 2,
-              abs((released["y"] as? Double ?? -100) - end.y) < 2 else {
-            throw Failure(message: "Target moved while the mouse button was held.")
+        try await pressMouse(at: position) { [self] in
+            // The press can run page code. Never release over a newly substituted target.
+            let released = try await inspect(editing: editing, hit: true)
+            guard abs((released["x"] as? Double ?? -100) - position.x) < 2,
+                  abs((released["y"] as? Double ?? -100) - position.y) < 2 else {
+                throw Failure(message: "Target moved while the mouse button was held.")
+            }
         }
-        _ = try await call("Input.dispatchMouseEvent", ["type": "mouseReleased", "x": end.x, "y": end.y,
-                                                       "button": "left", "buttons": 0, "clickCount": 1])
-        mouseDown = false
     }
 
-    private func select(_ value: String) async throws -> [String: Any] {
-        let response = try await function("""
-        function(value) {
-          const n = this.node;
-          if (!(n instanceof HTMLSelectElement) || n.multiple) throw Error('Only single HTML select controls are supported.');
-          const options = Array.from(n.options).filter(o => !o.disabled && !o.parentElement.disabled);
-          const matches = options.filter(o => o.value === value);
-          if (matches.length !== 1) throw Error('Value must match one enabled option.');
-          const label = matches[0].label.trim().replace(/\\s+/g, ' ');
-          const initial = Array.from(label)[0];
-          if (!initial || !/^[A-Za-z]$/.test(initial) || options.filter(o => o.label.trim().toLocaleLowerCase().startsWith(initial.toLocaleLowerCase())).length !== 1) throw Error('Native selection requires a unique first character; refusing intermediate option changes.');
-          if (options.length > 100) throw Error('Select exceeds 100 enabled options.');
-          return {label:initial,value:n.value};
+    /// Press and release `button` clickCount times at a point; `between` runs while it is held.
+    private func pressMouse(at point: CGPoint, between: (() async throws -> Void)? = nil) async throws {
+        let buttons = ["left": 1, "right": 2, "middle": 4][button] ?? 1
+        if button == "right" { browser.suppressesContextMenu = true }
+        for count in 1...clickCount {
+            mouseDown = true
+            dispatched = true
+            _ = try await call("Input.dispatchMouseEvent", ["type": "mousePressed", "x": point.x, "y": point.y, "modifiers": mouseModifiers,
+                                                           "button": button, "buttons": buttons, "clickCount": count])
+            try await pause(count < clickCount ? 0.03 : MCPInputPlan.clickHold(Double.random(in: 0...1)))
+            if count == clickCount { try await between?() }
+            _ = try await call("Input.dispatchMouseEvent", ["type": "mouseReleased", "x": point.x, "y": point.y, "modifiers": mouseModifiers,
+                                                           "button": button, "buttons": 0, "clickCount": count])
+            mouseDown = false
+            if count < clickCount { try await pause(0.04) }
         }
-        """, arguments: [value])
-        guard let state = (response["result"] as? [String: Any])?["value"] as? [String: Any], let label = state["label"] as? String,
-              MCPInputPlan.validText(label), let node else { throw Failure(message: "Select label unavailable or too long.") }
+    }
+
+    private func select(value: String?, label: String?) async throws -> [String: Any] {
+        // Type-ahead with the shortest prefix of the option's label that no other enabled option
+        // starts with; a label that is the start of another needs all of it.
+        let response = try await function("""
+        function(value, label) {
+          const n = this.node;
+          if (!(n instanceof HTMLSelectElement) || n.multiple) throw Error('Only single HTML select controls are supported. For a custom dropdown, click it open and click the option.');
+          const norm = s => s.trim().replace(/\\s+/g, ' ').toLocaleLowerCase();
+          const options = Array.from(n.options).filter(o => !o.disabled && !(o.parentElement instanceof HTMLOptGroupElement && o.parentElement.disabled));
+          const matches = options.filter(o => value !== null ? o.value === value : norm(o.label) === norm(label));
+          if (matches.length !== 1) throw Error((value !== null ? 'value' : 'label') + ' must match one enabled option; options: ' + options.slice(0, 30).map(o => JSON.stringify(o.label.trim()) + '=' + JSON.stringify(o.value)).join(', '));
+          const option = matches[0], text = option.label.trim().replace(/\\s+/g, ' ');
+          if (n.value === option.value) return {done:true, value:option.value};
+          let prefix = null;
+          for (let i = 1; i <= text.length && !prefix; i++) {
+            const p = norm(text.slice(0, i));
+            if (options.filter(o => norm(o.label).startsWith(p)).length === 1) prefix = text.slice(0, i);
+          }
+          if (!prefix) {
+            const first = options.find(o => norm(o.label).startsWith(norm(text)));
+            if (first !== option) throw Error('Another option starts with the same label; it cannot be reached by typing. Use the keyboard (page_press ArrowDown) instead.');
+            prefix = text;
+          }
+          return {done:false, prefix, value:option.value};
+        }
+        """, arguments: [value ?? NSNull(), label ?? NSNull()])
+        guard let state = (response["result"] as? [String: Any])?["value"] as? [String: Any], let target = state["value"] as? String, let node else {
+            throw Failure(message: "Select options unavailable.")
+        }
+        if state["done"] as? Bool == true { return content(["status": "completed", "input": "chromium", "note": "Already selected."]) }
+        guard let prefix = state["prefix"] as? String else { throw Failure(message: "Select label unavailable.") }
         // macOS' native popup consumes arrow keys differently. Native focus plus the select's
         // built-in type-ahead avoids the popup and still emits trusted input/change events.
         dispatched = true
         _ = try await call("DOM.focus", ["objectId": node])
         _ = try await inspect(focused: true)
         try await press("Escape")
-        // Blink retains select type-ahead for one second, including between tool calls.
-        // Expire that buffer before one unambiguous initial, avoiding intermediate selections.
+        // Blink keeps select type-ahead for one second, including between tool calls.
         try await pause(1.1)
-        for piece in MCPInputPlan.textPieces(label) {
+        for piece in MCPInputPlan.textPieces(prefix) {
             _ = try await inspect(focused: true)
             let identity = piece.unicodeScalars.count == 1 ? piece.first.flatMap(MCPInputPlan.textKey) : nil
             try await key(key: piece, code: identity?.code, virtual: identity?.virtual, text: piece,
@@ -333,18 +548,35 @@ final class MCPInput {
             try await pause(MCPInputPlan.keyGap(Double.random(in: 0...1)))
         }
         let final = try await function("function(){return this.node.value}")
-        guard (final["result"] as? [String: Any])?["value"] as? String == value else { throw Failure(message: "Select did not reach the requested option.") }
+        guard (final["result"] as? [String: Any])?["value"] as? String == target else { throw Failure(message: "Select did not reach the requested option.") }
         let observed = try await function("function(){return this.counts}")
         let counts = (observed["result"] as? [String: Any])?["value"] as? [String: Int] ?? [:]
-        if state["value"] as? String != value, (counts["input"] ?? 0) == 0 || (counts["change"] ?? 0) == 0 {
+        if (counts["input"] ?? 0) == 0 || (counts["change"] ?? 0) == 0 {
             throw Failure(message: "Select did not confirm trusted input/change events.")
         }
-        return try await finish(verifyValue: nil, keyboard: true, mouse: false)
+        var result = try await finish(.none, keyboard: true, mouse: false)
+        if (counts["change"] ?? 0) > 1 {
+            // Typing "Deu" passes "Denmark" first: the page saw a change event for each.
+            result = content(["status": "completed", "input": "chromium", "trustedEvents": counts,
+                              "note": "Type-ahead passed through \((counts["change"] ?? 1) - 1) other option(s) on the way, each with a change event."])
+        }
+        return result
     }
 
     private func press(_ name: String, modifiers: Int = 0) async throws {
-        guard let definition = MCPInputPlan.keys[name] else { throw Failure(message: "Unsupported key.") }
-        try await key(key: name, code: definition.code, virtual: definition.virtual, text: name == "Enter" ? "\r" : nil, modifiers: modifiers)
+        if let definition = MCPInputPlan.keys[name] {
+            let commands = MCPInputPlan.editingCommands(key: name, modifiers: modifiers)
+            let text: String? = name == "Enter" && modifiers & 7 == 0 ? "\r" : name == "Space" && modifiers & 7 == 0 ? " " : nil
+            try await key(key: name == "Space" ? " " : name, code: definition.code, virtual: definition.virtual, text: text, modifiers: modifiers, commands: commands)
+            return
+        }
+        guard let character = name.first, name.count == 1, let identity = MCPInputPlan.textKey(character) else { throw Failure(message: "Unsupported key.") }
+        // With Meta or Control a character is a shortcut (⌘K), so no text goes in with it.
+        let shortcut = modifiers & 6 != 0
+        let all = modifiers | identity.modifiers
+        try await key(key: shortcut ? identity.unmodified : name, code: identity.code, virtual: identity.virtual,
+                      text: shortcut ? nil : name, modifiers: all,
+                      commands: MCPInputPlan.editingCommands(key: identity.unmodified, modifiers: all), unmodified: identity.unmodified)
     }
 
     private func key(key: String, code: String? = nil, virtual: Int? = nil, text: String? = nil,
@@ -366,32 +598,47 @@ final class MCPInput {
         heldKey = nil
     }
 
-    private func finish(verifyValue: String?, keyboard: Bool = false, mouse: Bool = true) async throws -> [String: Any] {
+    private enum Verify { case none, exact(String), contains(String) }
+
+    private func finish(_ verify: Verify, keyboard: Bool = false, inserted: Bool = false, mouse: Bool = true) async throws -> [String: Any] {
         do {
-            if let expected = verifyValue {
+            switch verify {
+            case .none: break
+            case .exact(let expected):
                 let state = try await inspect(editing: true, focused: true)
                 guard state["value"] as? String == expected else {
                     throw Failure(message: "The field value differs from the requested edit (the page may have transformed or rejected input).")
                 }
+            case .contains(let text):
+                let state = try await inspect(editing: true)
+                let squash = { (s: String) in s.replacingOccurrences(of: "\u{a0}", with: " ").split(whereSeparator: \.isWhitespace).joined(separator: " ") }
+                guard squash(state["value"] as? String ?? "").contains(squash(text)) else {
+                    throw Failure(message: "The editor doesn't show the typed text (the page may have transformed or rejected input).")
+                }
             }
             let response = try await function("function(){return this.counts}")
             let counts = (response["result"] as? [String: Any])?["value"] as? [String: Int] ?? [:]
-            guard !mouse || (counts["mousedown"] ?? 0) > 0 && (counts["mouseup"] ?? 0) > 0 && (counts["click"] ?? 0) > 0,
+            let clicked = button == "right" ? (counts["contextmenu"] ?? 0) > 0 : button == "middle" ? true : (counts["click"] ?? 0) > 0
+            guard !mouse || (counts["mousedown"] ?? 0) > 0 && (counts["mouseup"] ?? 0) > 0 && clicked,
+                  !mouse || clickCount < 2 || (counts["dblclick"] ?? 0) > 0,
                   !keyboard || (counts["keydown"] ?? 0) > 0 && counts["keydown"] == counts["keyup"],
-                  verifyValue == nil || verifyValue == "" || (counts["input"] ?? 0) > 0 else {
+                  !inserted || (counts["input"] ?? 0) > 0 else {
                 throw Failure(message: "The page did not confirm the expected trusted input events.")
             }
-            return content(["status": "completed", "input": "chromium", "humanized": true, "trustedEvents": counts])
+            return content(["status": "completed", "input": "chromium", "trustedEvents": counts])
         } catch {
             // A committed navigation destroys the observer. Report that explicitly, never replay.
-            if verifyValue == nil, dispatched, !mouseDown, heldKey == nil,
-               let tree = try? await call("Page.getFrameTree"), let frameTree = tree["frameTree"] as? [String: Any],
-               let frame = frameTree["frame"] as? [String: Any], let current = frame["loaderId"] as? String, current != loader {
-                return content(["status": "navigation_observed", "input": "chromium", "humanized": true,
-                                "eventVerification": "The document navigated; the old event observer is no longer available."])
-            }
+            if dispatched, !mouseDown, heldKey == nil, let navigated = await navigated() { return navigated }
             throw error
         }
+    }
+
+    /// The navigation_observed result when the main document changed since prepare(), else nil.
+    private func navigated() async -> [String: Any]? {
+        guard let tree = try? await rawCall("Page.getFrameTree"), let frameTree = tree["frameTree"] as? [String: Any],
+              let frame = frameTree["frame"] as? [String: Any], let current = frame["loaderId"] as? String, current != loader else { return nil }
+        return content(["status": "navigation_observed", "input": "chromium",
+                        "eventVerification": "The document navigated (Enter or a click submitted it); the old event observer is gone. Read the new page to check."])
     }
 
     private func upload(_ paths: [String]) async throws -> [String: Any] {
@@ -489,6 +736,11 @@ final class MCPInput {
     }
 
     private func cleanup() async {
+        if browser.suppressesContextMenu {
+            // Chromium asks for the menu just after the press; keep refusing it a little longer.
+            let browser = browser
+            Task { @MainActor in try? await Task.sleep(for: .milliseconds(600)); browser.suppressesContextMenu = false }
+        }
         if dragIntercepted {
             _ = try? await rawCall("Input.cancelDragging")
             _ = try? await rawCall("Input.setInterceptDrags", ["enabled": false])

@@ -605,6 +605,15 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         }
     }
 
+    /// An MCP client works in the page (MCPServer): that counts as use, so sleeping and freezing
+    /// wait as they do after the user looks at a tab, and a discarded page loads again.
+    func touchedByAgent(_ id: UUID) {
+        guard let rt = runtimes[id] else { return }
+        if rt.hiddenAt != nil { rt.hiddenAt = clock.now }
+        if rt.freezeVoted { setFreezingVote(rt, false) }
+        wake(id, rt)
+    }
+
     /// Shown again: Chromium loads a discarded page when it becomes visible; Cra.load starts it
     /// now, as Chrome does on selecting the tab, so a covered window doesn't wait.
     private func wake(_ id: UUID, _ rt: TabRuntime) {

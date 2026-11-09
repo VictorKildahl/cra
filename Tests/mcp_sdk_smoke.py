@@ -65,7 +65,7 @@ async def main():
             await call("page_wait", {"tabId": tab, "url": base + "/"})
             await call("tab_close", {"tabId": tab})
             await call("tab_show", {"tabId": existing["id"]})
-            agent = (await call("tab_open", {"url": base + "/transfers", "background": True}))["tabId"]
+            agent = (await call("tab_open", {"url": base + "/transfers", "windowless": True}))["tabId"]
             async with asyncio.timeout(15):
                 while not any(t["id"] == agent and t["loaded"] for t in await call("tabs_list")):
                     await asyncio.sleep(.1)
@@ -85,6 +85,6 @@ async def main():
             assert cancelled["status"] == "completed"
             await call("tab_close", {"tabId": agent})
             assert used == TOOLS, TOOLS - used
-            print("PASS SDK all 24 tools, stable refs, native Unicode input, session, image/PDF and owned-tab lifecycle", flush=True)
+            print("PASS SDK 24 core tools, stable refs, native Unicode input, session, image/PDF and owned-tab lifecycle", flush=True)
 
 asyncio.run(main())

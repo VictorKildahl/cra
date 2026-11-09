@@ -20,6 +20,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--app", default="build/CraDev.app")
 parser.add_argument("--pause-before-input", action="store_true", help="Wait for a start-input file after focusing the test window.")
 parser.add_argument("--hold", action="store_true", help="Keep the isolated instance for a real MCP client; Ctrl-C cleans up.")
+parser.add_argument("--with-pip", action="store_true", help="Also check Document PiP, which floats a window over the screen.")
 options = parser.parse_args()
 app = Path(options.app).resolve()
 with (app / "Contents/Info.plist").open("rb") as file:
@@ -106,7 +107,7 @@ def command(value):
 
 def launch(enabled):
     global process
-    environment = dict(os.environ, CRA_DATA_DIR=str(profile), CRA_COMMAND_FILE=str(commands), CRA_TEST_BACKGROUND="0")
+    environment = dict(os.environ, CRA_DATA_DIR=str(profile), CRA_COMMAND_FILE=str(commands), CRA_TEST_BACKGROUND="1")
     process = subprocess.Popen([str(executable), "-mcpEnabled", "YES" if enabled else "NO"],
                                env=environment, stdout=log, stderr=log)
     marker = ("pid " + str(process.pid) + " reads commands from CRA_COMMAND_FILE").encode()
@@ -219,8 +220,8 @@ try:
     normal=eventually(lambda: next((t['id'] for t in tabs(client) if t['url']==url+'/normal'),None))
     ready(client,normal)
     baseline=live_count()
-    check('24 tools advertised',len(client.call('tools/list')['result']['tools'])==24)
-    agent=value(client.tool('tab_open',{'url':url+'/agent','background':True}))['tabId']
+    check('26 tools advertised',len(client.call('tools/list')['result']['tools'])==26)
+    agent=value(client.tool('tab_open',{'url':url+'/agent','windowless':True}))['tabId']
     ready(client,agent)
     eventually(lambda:live_count()==baseline+1)
     check('agent tab has visible rendering without a window', js(client,agent,'document.visibilityState')=='visible')
@@ -349,33 +350,36 @@ try:
     check('completed download persists after close',output.exists())
     # Document PiP intentionally has no CraBrowser owner. Keep it alive, while the
     # immediate-close tests below must still reclaim tabs whose weak owner vanished.
-    value(client.tool('tab_show',{'tabId':normal}))
-    tab_ids={t['id'] for t in tabs(client)}
-    value(client.tool('page_click',{'tabId':normal,'selector':'#document-pip'}))
-    eventually(lambda:js(client,normal,'!!window.testPiP && !testPiP.closed'))
-    eventually(lambda:live_count()==baseline+1)
-    check('Document PiP stays alive without a sidebar tab',
-          {t['id'] for t in tabs(client)}==tab_ids and
-          js(client,normal,'testPiP.document.body.textContent')=='Cra Document PiP fixture')
-    js(client,normal,'testPiP.close()')
-    eventually(lambda:live_count()==baseline)
-    check('closing Document PiP releases its browser',js(client,normal,'testPiP.closed'))
-    value(client.tool('tab_show',{'tabId':normal}))
-    value(client.tool('page_click',{'tabId':normal,'selector':'#document-pip'}))
-    eventually(lambda:js(client,normal,'!!window.testPiP && !testPiP.closed'))
-    eventually(lambda:live_count()==baseline+1)
-    value(client.tool('page_navigate',{'tabId':normal,'url':url+'/normal?pip-cleanup'}))
-    ready(client,normal)
-    eventually(lambda:live_count()==baseline)
-    check('navigating the opener closes Document PiP',js(client,normal,'!window.testPiP'))
+    # PiP floats over every app, so it runs only when asked (--with-pip).
+    def pip_checks(baseline):
+        value(client.tool('tab_show',{'tabId':normal}))
+        tab_ids={t['id'] for t in tabs(client)}
+        value(client.tool('page_click',{'tabId':normal,'selector':'#document-pip'}))
+        eventually(lambda:js(client,normal,'!!window.testPiP && !testPiP.closed'))
+        eventually(lambda:live_count()==baseline+1)
+        check('Document PiP stays alive without a sidebar tab',
+              {t['id'] for t in tabs(client)}==tab_ids and
+              js(client,normal,'testPiP.document.body.textContent')=='Cra Document PiP fixture')
+        js(client,normal,'testPiP.close()')
+        eventually(lambda:live_count()==baseline)
+        check('closing Document PiP releases its browser',js(client,normal,'testPiP.closed'))
+        value(client.tool('tab_show',{'tabId':normal}))
+        value(client.tool('page_click',{'tabId':normal,'selector':'#document-pip'}))
+        eventually(lambda:js(client,normal,'!!window.testPiP && !testPiP.closed'))
+        eventually(lambda:live_count()==baseline+1)
+        value(client.tool('page_navigate',{'tabId':normal,'url':url+'/normal?pip-cleanup'}))
+        ready(client,normal)
+        eventually(lambda:live_count()==baseline)
+        check('navigating the opener closes Document PiP',js(client,normal,'!window.testPiP'))
+    if options.with_pip: pip_checks(baseline)
     # Immediate close races asynchronous CEF creation; no orphan agent pages may remain.
     for _ in range(8):
-        quick=value(client.tool('tab_open',{'url':url+'/quick','background':True}))['tabId']
+        quick=value(client.tool('tab_open',{'url':url+'/quick','windowless':True}))['tabId']
         value(client.tool('tab_close',{'tabId':quick}))
     eventually(lambda:live_count()==baseline)
     check('immediate agent open/close leaves no CEF browsers',True)
     # Delayed response headers exercise native cancellation before an ID is known.
-    delayed=value(client.tool('tab_open',{'url':url+'/agent','background':True}))['tabId'];ready(client,delayed)
+    delayed=value(client.tool('tab_open',{'url':url+'/agent','windowless':True}))['tabId'];ready(client,delayed)
     first=value(client.tool('page_download',{'tabId':delayed,'url':url+'/download/delayed'}))
     eventually(lambda:delayed_requests>0)
     value(client.tool('download_cancel',{'tabId':delayed,'downloadId':first['downloadId']}))
@@ -387,19 +391,19 @@ try:
     value(client.tool('tab_close',{'tabId':delayed}))
     downloads_before=set((Path.home()/'Downloads').glob('*'))
     for i in range(8):
-        closing=value(client.tool('tab_open',{'url':url+'/agent','background':True}))['tabId'];ready(client,closing)
+        closing=value(client.tool('tab_open',{'url':url+'/agent','windowless':True}))['tabId'];ready(client,closing)
         value(client.tool('page_download',{'tabId':closing,'url':url+'/download/delayed?close='+str(i)}))
         value(client.tool('tab_close',{'tabId':closing}))
     eventually(lambda:live_count()==baseline)
     time.sleep(.6)
     check('late download callbacks never escape to user Downloads',set((Path.home()/'Downloads').glob('*'))==downloads_before)
     check('closing pending downloads leaves no CEF browsers',live_count()==baseline)
-    abandoned=value(client.tool('tab_open',{'url':url+'/abandoned','background':True}))['tabId'];ready(client,abandoned)
+    abandoned=value(client.tool('tab_open',{'url':url+'/abandoned','windowless':True}))['tabId'];ready(client,abandoned)
     client.close()
     eventually(lambda:live_count()==baseline)
     check('disconnect cleans up connection-owned agents',True)
     timeout_client=Client()
-    waiting=value(timeout_client.tool('tab_open',{'url':url+'/agent','background':True}))['tabId'];ready(timeout_client,waiting)
+    waiting=value(timeout_client.tool('tab_open',{'url':url+'/agent','windowless':True}))['tabId'];ready(timeout_client,waiting)
     stalled=value(timeout_client.tool('page_download',{'tabId':waiting,'url':url+'/download/no-headers'}))
     def timed_out():
         state=value(timeout_client.tool('download_status',{'tabId':waiting,'downloadId':stalled['downloadId']}))
@@ -410,7 +414,7 @@ try:
     check('timed-out tab remains discoverable for cleanup',True)
     eventually(lambda:live_count()==baseline)
     value(timeout_client.tool('tab_close',{'tabId':waiting}))
-    replacement=value(timeout_client.tool('tab_open',{'url':url+'/agent','background':True}))['tabId'];ready(timeout_client,replacement)
+    replacement=value(timeout_client.tool('tab_open',{'url':url+'/agent','windowless':True}))['tabId'];ready(timeout_client,replacement)
     retry=value(timeout_client.tool('page_download',{'tabId':replacement,'url':url+'/download/auth.txt'}))
     check('new agent can download after a stalled request',terminal(timeout_client,replacement,retry['downloadId'])['status']=='completed')
     timeout_client.close()

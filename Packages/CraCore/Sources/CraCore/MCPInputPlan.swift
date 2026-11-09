@@ -8,11 +8,13 @@ public enum MCPInputPlan {
         public let delay: Double
     }
 
+    /// Short eased paths: pages that track the pointer (hover menus, drag thresholds) see real
+    /// movement, without the second-long glides that made every click slow.
     public static func movement(from start: CGPoint, to end: CGPoint, variation: Double) -> [Move] {
         let distance = hypot(end.x - start.x, end.y - start.y)
-        let duration = min(0.65, 0.16 + distance / 1800)
-        let steps = max(8, Int(duration / 0.016))
-        let bend = (min(1, max(0, variation)) - 0.5) * min(70, distance * 0.2)
+        let duration = min(0.24, 0.06 + distance / 4000)
+        let steps = max(4, Int(duration / 0.016))
+        let bend = (min(1, max(0, variation)) - 0.5) * min(40, distance * 0.1)
         let length = max(1, distance)
         let control = CGPoint(x: (start.x + end.x) / 2 - (end.y - start.y) / length * bend,
                               y: (start.y + end.y) / 2 + (end.x - start.x) / length * bend)
@@ -26,9 +28,9 @@ public enum MCPInputPlan {
         }
     }
 
-    public static func keyHold(_ variation: Double) -> Double { 0.025 + bounded(variation) * 0.035 }
-    public static func keyGap(_ variation: Double) -> Double { 0.035 + bounded(variation) * 0.060 }
-    public static func clickHold(_ variation: Double) -> Double { 0.055 + bounded(variation) * 0.055 }
+    public static func keyHold(_ variation: Double) -> Double { 0.008 + bounded(variation) * 0.017 }
+    public static func keyGap(_ variation: Double) -> Double { 0.006 + bounded(variation) * 0.024 }
+    public static func clickHold(_ variation: Double) -> Double { 0.030 + bounded(variation) * 0.040 }
     private static func bounded(_ value: Double) -> Double { min(1, max(0, value)) }
 
     public static let keys: [String: (code: String, virtual: Int)] = [
@@ -37,8 +39,43 @@ public enum MCPInputPlan {
         "ArrowLeft": ("ArrowLeft", 37), "ArrowUp": ("ArrowUp", 38),
         "ArrowRight": ("ArrowRight", 39), "ArrowDown": ("ArrowDown", 40),
         "Home": ("Home", 36), "End": ("End", 35),
-        "PageUp": ("PageUp", 33), "PageDown": ("PageDown", 34)
+        "PageUp": ("PageUp", 33), "PageDown": ("PageDown", 34), "Space": ("Space", 32),
+        "F1": ("F1", 112), "F2": ("F2", 113), "F3": ("F3", 114), "F4": ("F4", 115), "F5": ("F5", 116), "F6": ("F6", 117),
+        "F7": ("F7", 118), "F8": ("F8", 119), "F9": ("F9", 120), "F10": ("F10", 121), "F11": ("F11", 122), "F12": ("F12", 123)
     ]
+
+    /// page_press accepts a named key or one printable character ("k" with Meta is ⌘K).
+    public static func pressable(_ key: String) -> Bool {
+        if keys[key] != nil { return true }
+        guard key.count == 1, let character = key.first else { return false }
+        return !character.unicodeScalars.contains { $0.value < 32 || $0.value == 127 } && textKey(character) != nil
+    }
+
+    /// Chromium on the Mac runs editing shortcuts as commands (NSResponder selectors), not from
+    /// the key event alone, so ⌘A, ⌘Z or ⌥⌫ sent through DevTools need them spelled out.
+    /// Modifier bits: Alt 1, Control 2, Meta 4, Shift 8.
+    public static func editingCommands(key: String, modifiers: Int) -> [String] {
+        let shift = modifiers & 8 != 0
+        let select = shift ? "AndModifySelection" : ""
+        switch (key.lowercased(), modifiers & ~8) {
+        case ("a", 4): return shift ? [] : ["selectAll"]
+        case ("c", 4): return shift ? [] : ["copy"]
+        case ("x", 4): return shift ? [] : ["cut"]
+        case ("v", 4): return shift ? [] : ["paste"]
+        case ("v", 5): return shift ? ["pasteAndMatchStyle"] : []
+        case ("z", 4): return [shift ? "redo" : "undo"]
+        case ("arrowleft", 4): return ["moveToBeginningOfLine" + select]
+        case ("arrowright", 4): return ["moveToEndOfLine" + select]
+        case ("arrowup", 4): return ["moveToBeginningOfDocument" + select]
+        case ("arrowdown", 4): return ["moveToEndOfDocument" + select]
+        case ("arrowleft", 1): return ["moveWordLeft" + select]
+        case ("arrowright", 1): return ["moveWordRight" + select]
+        case ("backspace", 1): return shift ? [] : ["deleteWordBackward"]
+        case ("delete", 1): return shift ? [] : ["deleteWordForward"]
+        case ("backspace", 4): return shift ? [] : ["deleteToBeginningOfLine"]
+        default: return []
+        }
+    }
 
     public struct TextKey {
         public let code: String
@@ -100,15 +137,21 @@ public enum MCPInputPlan {
         return pieces
     }
 
-    /// Each piece pauses at most keyHold(1) + keyGap(1) ≈ 0.155 s and makes a caret check and two key
-    /// dispatches; ~0.215 s per piece plus a 45 s base for clicking, clearing and verifying leaves room for both.
+    /// Text up to this many pieces is typed key by key (search boxes and autocompletes react to
+    /// keys); longer text goes in as committed text (Input.insertText), like a paste or dictation.
+    public static let keyTypingLimit = 100
+    public static let textLimit = 20_000
+
+    public static func typesKeys(_ text: String) -> Bool { textPieces(text).count <= keyTypingLimit }
+
+    /// Each piece pauses at most keyHold(1) + keyGap(1) ≈ 0.055 s and makes a caret check and two
+    /// key dispatches; a 45 s base covers clicking, clearing and verifying.
     public static func durationBudget(text: String) -> Double {
-        min(100, 45 + Double(textPieces(text).count) * 55 / Double(pieceLimit))
+        typesKeys(text) ? min(100, 45 + Double(textPieces(text).count) * 0.25) : 60
     }
 
     public static func validText(_ text: String) -> Bool {
-        text.count <= 256 && text.utf8.count <= 4096
+        text.count <= textLimit && text.utf8.count <= 100_000
             && !text.unicodeScalars.contains { $0.value < 32 && $0.value != 10 || $0.value == 127 }
-            && textPieces(text).count <= pieceLimit
     }
 }

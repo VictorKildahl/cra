@@ -82,7 +82,7 @@ def command(value):
 
 def launch(enabled):
     global process
-    environment = dict(os.environ, CRA_DATA_DIR=str(profile), CRA_COMMAND_FILE=str(commands), CRA_TEST_BACKGROUND="0")
+    environment = dict(os.environ, CRA_DATA_DIR=str(profile), CRA_COMMAND_FILE=str(commands), CRA_TEST_BACKGROUND="1")
     process = subprocess.Popen([str(executable), "-mcpEnabled", "YES" if enabled else "NO"],
                                env=environment, stdout=log, stderr=log)
     marker = ("pid " + str(process.pid) + " reads commands from CRA_COMMAND_FILE").encode()
@@ -160,7 +160,7 @@ try:
     quit_browser()
     launch(True)
     client = Client()
-    check("24 tools advertised", len(client.call("tools/list")["result"]["tools"]) == 24)
+    check("26 tools advertised", len(client.call("tools/list")["result"]["tools"]) == 26)
     check("socket mode 0600", socket_path.stat().st_mode & 0o777 == 0o600)
     command("cra://open?url=" + quote(url + "/regression", safe=""))
     tab = eventually(lambda: next((t["id"] for t in tabs(client) if t["url"] == url + "/regression"), None))
@@ -205,7 +205,7 @@ try:
     check("fixture sees trusted mouse and keyboard", all(e["trusted"] for e in events) and {"mousedown", "mouseup", "click", "keydown", "keyup", "input"}.issubset({e["type"] for e in events}))
     downs = [e["time"] for e in events if e["type"] == "keydown"]
     gaps = [b-a for a,b in zip(downs,downs[1:])]
-    check("typing has paced variable intervals", len(gaps) > 3 and min(gaps) >= 20 and max(gaps)-min(gaps) > 5)
+    check("typing has paced variable intervals", len(gaps) > 3 and min(gaps) >= 5 and max(gaps)-min(gaps) > 3)
     check("pointer follows multiple intermediate points", sum(e["type"] == "mousemove" for e in events) > 10)
     value(input_tool("page_fill", "#name", text="replacement"))
     check("native fill replaces existing content", value(evaluate(client, tab, "document.querySelector('#name').value"))["result"]["value"] == "replacement")
@@ -214,10 +214,11 @@ try:
     for selector in ["#missing", "button", "#disabled", "#hidden", "#covered", "#readonly", "#inert-field", "#transparent-field"]:
         check("refuses unsafe target " + selector, input_tool("page_fill", selector, text="must not arrive")["result"]["isError"])
     check("rejects unsupported key", "error" in input_tool("page_press", "#name", key="F999"))
-    check("rejects oversized text", "error" in input_tool("page_type", "#name", text="x" * 257))
+    check("rejects oversized text", "error" in input_tool("page_type", "#name", text="x" * 20001))
     value(input_tool("page_fill", "#multiline", text="first\nsecond"))
     check("textarea preserves newline", value(evaluate(client, tab, "document.querySelector('#multiline').value"))["result"]["value"] == "first\nsecond")
-    check("single-line Enter requires explicit press", input_tool("page_type", "#name", text="bad\nsubmit")["result"]["isError"])
+    value(input_tool("page_fill", "#name", text="Submitted by newline\n"))
+    check("a newline in a one-line field presses Enter", value(evaluate(client, tab, "document.querySelector('#out').textContent"))["result"]["value"] == "Submitted by newline")
     check("focus replacement aborts input", input_tool("page_fill", "#replace-on-focus", text="must not arrive")["result"]["isError"])
     check("replacement receives no text", value(evaluate(client, tab, "document.querySelector('#replace-on-focus').value"))["result"]["value"] == "")
     value(input_tool("page_fill", "#name", text="Enter submits"))
@@ -265,7 +266,11 @@ try:
     check("unknown select value refuses", input_tool("page_select", "#choice", value="absent")["result"]["isError"])
     value(evaluate(client, tab, "document.querySelector('#choice').insertAdjacentHTML('afterend','<select id=ambiguous-select><option value=band>Bandana</option><option value=banana>Banana</option></select>')"))
     selection_events = value(evaluate(client, tab, "window.inputEvents.length"))["result"]["value"]
-    check("ambiguous select refuses without intermediate changes", input_tool("page_select", "#ambiguous-select", value="banana")["result"]["isError"] and value(evaluate(client, tab, "window.inputEvents.length"))["result"]["value"] == selection_events)
+    shared = value(input_tool("page_select", "#ambiguous-select", value="banana"))
+    check("shared-start select types the unique prefix", value(evaluate(client, tab, "document.querySelector('#ambiguous-select').value"))["result"]["value"] == "banana")
+    check("select reports no options passed when typing never changed it on the way", "note" not in shared)
+    value(input_tool("page_select", "#choice", label="First"))
+    check("select by visible label", value(evaluate(client, tab, "document.querySelector('#choice').value"))["result"]["value"] == "one")
 
     value(input_tool("page_scroll", "#scroll-box", dy=600))
     check("native wheel scrolls nested region", value(evaluate(client, tab, "document.querySelector('#scroll-box').scrollTop"))["result"]["value"] > 0)
@@ -289,24 +294,26 @@ try:
     # Set up a replacement deliberately; a previously retained ref must never follow it.
     value(evaluate(client, tab, "document.querySelector('#name').replaceWith(document.querySelector('#name').cloneNode(true)); true"))
     check("detached ref cannot retarget replacement", client.tool("page_click", {"tabId": tab, "ref": name_ref})["result"]["isError"])
-    # An agent may close its own tabs, never the user's or another connection's tabs.
-    check("user tab cannot be closed", client.tool("tab_close", {"tabId": tab})["result"]["isError"])
+    # tab_open opens like a ⌘-clicked link: in the sidebar, loading, not selected.
     agent_tab = value(client.tool("tab_open", {"url": url + "/next?agent=1"}))["tabId"]
     eventually(lambda: any(t["id"] == agent_tab and t["loaded"] for t in tabs(client)))
     value(client.tool("page_wait", {"tabId": agent_tab, "url": url + "/next?agent=1"}))
     check("agent tab opens in existing session", value(evaluate(client, agent_tab, "document.cookie.includes('mcp_fixture=session')"))["result"]["value"] is True)
+    listed = next(t for t in tabs(client) if t["id"] == agent_tab)
+    check("opened tab stays in the background", not listed.get("selected") and not listed.get("active") and listed["section"] == "today")
+    check("the user's tab stays on screen", next(t for t in tabs(client) if t["id"] == tab).get("active") is True)
+    # Today tabs close from any connection, like ⌘W.
     foreign = Client()
-    check("other connection cannot close agent tab", foreign.tool("tab_close", {"tabId": agent_tab})["result"]["isError"])
+    value(foreign.tool("tab_close", {"tabId": agent_tab}))
     foreign.close()
-    value(client.tool("tab_close", {"tabId": agent_tab}))
-    check("owner closes its agent tab", agent_tab not in [t["id"] for t in tabs(client)])
+    check("a today tab closes", agent_tab not in [t["id"] for t in tabs(client)])
     value(client.tool("tab_show", {"tabId": tab}))
     check("tab show restores existing tab", True)
     # Cancellation and ping share the same connection while the input operation is running.
     seen_paths.clear()
     client.next_id += 1
     fill_id = client.next_id
-    client.proc.stdin.write(json.dumps({"jsonrpc":"2.0", "id":fill_id, "method":"tools/call", "params":{"name":"page_fill", "arguments":{"tabId":tab,"selector":"#name","text":"c"*200}}}).encode() + b"\n")
+    client.proc.stdin.write(json.dumps({"jsonrpc":"2.0", "id":fill_id, "method":"tools/call", "params":{"name":"page_fill", "arguments":{"tabId":tab,"selector":"#name","text":"c"*90}}}).encode() + b"\n")
     client.proc.stdin.flush()
     eventually(lambda: "/input-progress?length=3" in seen_paths)
     started = time.monotonic()
@@ -317,12 +324,12 @@ try:
     cancelled = json.loads(client.proc.stdout.readline())
     check("MCP cancellation returns partial-action error", cancelled["id"] == fill_id and cancelled["result"]["isError"])
     check("connection survives cancellation", client.call("ping")["result"] == {})
-    check("MCP cancellation stops remaining input", 0 < len(value(evaluate(client, tab, "document.querySelector('#name').value"))["result"]["value"]) < 200)
+    check("MCP cancellation stops remaining input", 0 < len(value(evaluate(client, tab, "document.querySelector('#name').value"))["result"]["value"]) < 90)
     # A connection closing mid-gesture must stop typing and release the per-tab lease.
     owner = Client()
     seen_paths.clear()
     owner.next_id += 1
-    owner.proc.stdin.write(json.dumps({"jsonrpc":"2.0", "id":owner.next_id, "method":"tools/call", "params":{"name":"page_fill", "arguments":{"tabId":tab, "selector":"#name", "text":"z"*200}}}).encode() + b"\n")
+    owner.proc.stdin.write(json.dumps({"jsonrpc":"2.0", "id":owner.next_id, "method":"tools/call", "params":{"name":"page_fill", "arguments":{"tabId":tab, "selector":"#name", "text":"z"*90}}}).encode() + b"\n")
     owner.proc.stdin.flush()
     eventually(lambda: "/input-progress?length=3" in seen_paths)
     check("input is already underway before cancellation", client.tool("page_read", {"tabId":tab})["result"].get("isError"))
@@ -330,7 +337,7 @@ try:
     owner.proc.terminate()
     owner.proc.wait(timeout=5)
     eventually(lambda: not client.tool("page_read", {"tabId":tab})["result"].get("isError"))
-    check("disconnect cancels remaining typing", 0 < len(value(evaluate(client, tab, "document.querySelector('#name').value"))["result"]["value"]) < 200)
+    check("disconnect cancels remaining typing", 0 < len(value(evaluate(client, tab, "document.querySelector('#name').value"))["result"]["value"]) < 90)
     value(input_tool("page_fill", "#name", text="after disconnect"))
     check("input works after cancelled owner", True)
     value(input_tool("page_click", "#next"))

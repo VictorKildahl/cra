@@ -50,18 +50,19 @@ struct MCPUnicodeTests {
         expectExact("\u{1100}\u{1161}\u{11A8}" + String(repeating: "\u{20D7}", count: 7) + "\u{10FFFF}")
     }
 
-    @Test func pieceCapBoundaries() {
+    @Test func textCapBoundaries() {
         let family = "👨\u{200D}👩\u{200D}👧\u{200D}👦"
-        #expect(MCPInputPlan.textPieces(String(repeating: family, count: 64)).count == 256)
-        #expect(MCPInputPlan.validText(String(repeating: family, count: 64)))
-        #expect(!MCPInputPlan.validText(String(repeating: family, count: 65)))
-        let stacked = "e" + String(repeating: "\u{301}", count: 5)
-        #expect(MCPInputPlan.validText(String(repeating: stacked, count: 128)))
-        #expect(!MCPInputPlan.validText(String(repeating: stacked, count: 129)))
-        #expect(MCPInputPlan.validText(String(repeating: "a", count: 255) + "\n"))
-        #expect(!MCPInputPlan.validText(String(repeating: "a", count: 256) + "\n"))
-        #expect(!MCPInputPlan.validText(String(repeating: "🦊", count: 257)))
-        #expect(!MCPInputPlan.validText("a" + String(repeating: "\u{301}", count: 4096)))
+        #expect(MCPInputPlan.textPieces(String(repeating: family, count: 25)).count == 100)
+        #expect(MCPInputPlan.typesKeys(String(repeating: family, count: 25)))
+        #expect(!MCPInputPlan.typesKeys(String(repeating: family, count: 26)))
+        #expect(MCPInputPlan.validText(String(repeating: "a", count: 19_999) + "\n"))
+        #expect(!MCPInputPlan.validText(String(repeating: "a", count: 20_000) + "\n"))
+        #expect(MCPInputPlan.validText(String(repeating: "🦊", count: 20_000)))
+        #expect(!MCPInputPlan.validText(String(repeating: "🦊", count: 20_001)))
+        // Few characters can still be a huge payload: the UTF-8 bound holds them back.
+        let stacked = "e" + String(repeating: "\u{301}", count: 4)
+        #expect(MCPInputPlan.validText(String(repeating: stacked, count: 11_111)))
+        #expect(!MCPInputPlan.validText(String(repeating: stacked, count: 11_112)))
     }
 
     @Test func controlsAreRejected() {
@@ -73,20 +74,19 @@ struct MCPUnicodeTests {
         let family = "👨\u{200D}👩\u{200D}👧\u{200D}👦"
         let worstPause = MCPInputPlan.keyHold(1) + MCPInputPlan.keyGap(1)
         #expect(MCPInputPlan.durationBudget(text: "") == 45)
-        #expect(MCPInputPlan.durationBudget(text: String(repeating: "a", count: 256)) == 100)
-        #expect(MCPInputPlan.durationBudget(text: String(repeating: family, count: 64)) == 100)
-        #expect(MCPInputPlan.durationBudget(text: String(repeating: "a", count: 5000)) == 100)
         #expect(MCPInputPlan.durationBudget(text: family) > MCPInputPlan.durationBudget(text: "a"))
         var previous = 0.0
-        for count in [0, 1, 10, 64, 128, 200, 255, 256] {
+        for count in [0, 1, 10, 64, 99, 100] {
             let text = String(repeating: "a", count: count)
             let budget = MCPInputPlan.durationBudget(text: text)
             let pieces = Double(MCPInputPlan.textPieces(text).count)
             #expect(budget >= 45 && budget <= 100 && budget >= previous)
-            // Every piece keeps at least 50 ms for its caret check and key dispatches beyond the worst pauses.
+            // Every typed piece keeps at least 50 ms for its focus check and key dispatches beyond the worst pauses.
             #expect(budget - 45 - pieces * worstPause >= pieces * 0.05)
             previous = budget
         }
+        // Longer text goes in as one insertion per line, whatever its length.
+        for count in [101, 256, 20_000] { #expect(MCPInputPlan.durationBudget(text: String(repeating: "a", count: count)) == 60) }
     }
 
     @Test func navigationKeysStay() {

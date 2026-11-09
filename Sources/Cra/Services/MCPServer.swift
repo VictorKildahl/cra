@@ -72,6 +72,7 @@ final class MCPServer {
         for transfer in transfers.values { transfer.close() }; transfers.removeAll()
         for tab in agentTabs.values { tab.browser.close() }
         agentTabs.removeAll()
+        for page in pages.values { page.detach() }
         pages.removeAll(); pointerPositions.removeAll(); ownedTabs.removeAll()
     }
 
@@ -146,6 +147,11 @@ final class MCPServer {
             Task { @MainActor [weak self] in
                 self?.clients.remove(client)
                 self?.ownedTabs.removeValue(forKey: owner)
+                // The last client gone: pages stop emulating focus and reporting events.
+                if let self, self.clients.isEmpty {
+                    for page in self.pages.values { page.detach() }
+                    self.pages.removeAll()
+                }
                 if let self {
                     for (id, tab) in self.agentTabs where tab.owner == owner {
                         self.transfers.removeValue(forKey: id)?.close()
@@ -158,16 +164,41 @@ final class MCPServer {
         }
     }
 
-    private func perform(_ name: String, arguments: [String: Any], owner: UUID, canContinue: @escaping () -> Bool, completion: @escaping ([String: Any]) -> Void) {
+    private func perform(_ name: String, arguments: [String: Any], owner: UUID, canContinue: @escaping () -> Bool,
+                         woke: Bool = false, completion: @escaping ([String: Any]) -> Void) {
         guard let app else { completion(MCPProtocol.content("Browser is unavailable", failed: true)); return }
         if name == "tabs_list" {
-            var tabs: [[String: Any]] = app.store.allTabs().filter { app.store.mcpTab($0.id) != nil }.sorted { $0.id.uuidString < $1.id.uuidString }.map {
-                ["id": $0.id.uuidString, "title": $0.displayTitle, "url": $0.tab?.url ?? "", "owned": ownedTabs[owner]?.contains($0.id) == true,
-                 "loaded": app.runtime(for: $0.id)?.browser != nil]
+            // Sidebar order: spaces left to right, then favorites, pinned and today, folders inline.
+            // `active` is the tab on screen in the window the user last used.
+            let activeWindow = app.store.activeWindowID
+            let activeTab = app.store.selectedTabID(window: activeWindow)
+            var seen: Set<UUID> = []
+            var tabs: [[String: Any]] = []
+            for sid in app.store.spaceOrder {
+                guard let space = app.store.space(sid) else { continue }
+                let selected = Set(app.mainWindows.filter { !$0.isIncognito }.compactMap { app.store.selectedTabID(in: sid, window: $0.windowID) })
+                for (section, container) in [("favorites", space.favoritesContainerID), ("pinned", space.pinnedContainerID), ("today", space.todayContainerID)] {
+                    for item in app.store.tabs(under: container) where app.store.mcpTab(item.id) != nil && seen.insert(item.id).inserted {
+                        var row: [String: Any] = ["id": item.id.uuidString, "title": item.displayTitle, "url": item.tab?.url ?? "",
+                                                  "space": space.title, "section": section,
+                                                  "owned": ownedTabs[owner]?.contains(item.id) == true,
+                                                  "loaded": app.runtime(for: item.id).map { !$0.discarded } ?? false]
+                        var folders: [String] = []
+                        var parent = item.parentID
+                        while let id = parent, let folder = app.store.item(id), folder.isFolder {
+                            folders.insert(folder.displayTitle, at: 0); parent = folder.parentID
+                        }
+                        if !folders.isEmpty { row["folder"] = folders.joined(separator: " / ") }
+                        if selected.contains(item.id) { row["selected"] = true }
+                        if item.id == activeTab { row["active"] = true }
+                        if let runtime = app.runtime(for: item.id), let dialog = MCPPage.dialog(of: runtime.browser) { row["dialog"] = dialog }
+                        tabs.append(row)
+                    }
+                }
             }
             tabs += agentTabs.filter { $0.value.owner == owner }.map { id, tab in
                 ["id": id.uuidString, "title": tab.browser.currentTitle, "url": tab.browser.currentURL,
-                 "owned": true, "loaded": tab.browser.isCreated && !tab.browser.isClosed, "closed": tab.browser.isClosed, "background": true]
+                 "owned": true, "loaded": tab.browser.isCreated && !tab.browser.isClosed, "closed": tab.browser.isClosed, "windowless": true]
             }
             completion((try? MCPCDP.content(tabs)) ?? MCPProtocol.content("Could not list tabs", failed: true))
             return
@@ -177,20 +208,34 @@ final class MCPServer {
                   let window = app.mainWindows.first(where: { $0.windowID == app.store.lastNormalWindowID && !$0.isIncognito }) else {
                 completion(MCPProtocol.content("Opening a tab requires an HTTP(S) URL and a normal browser window.", failed: true)); return
             }
-            if arguments["background"] as? Bool == true {
+            if arguments["windowless"] as? Bool == true {
                 guard agentTabs.count < 8 else { completion(MCPProtocol.content("Eight agent tabs are retained. Use tabs_list and tab_close to release open or timed-out tabs.", failed: true)); return }
                 let id = UUID()
                 let profile = app.store.profilePath(space: app.store.focusedSpaceID(window: window.windowID))
                 let browser = CraBrowser(agentURL: url, profilePath: profile)
                 agentTabs[id] = (owner, browser)
-                completion(try! MCPCDP.content(["tabId": id.uuidString, "status": "opened", "background": true]))
+                completion(try! MCPCDP.content(["tabId": id.uuidString, "status": "opened", "windowless": true]))
                 return
             }
-            let tab = app.store.createTab(url: url, window: window.windowID)
+            // By default the tab opens in the sidebar like a ⌘-clicked link: unread, loading, not
+            // selected, so the agent works next to the user without taking their screen.
+            let select = arguments["select"] as? Bool == true
+            var space: UUID?
+            if let name = arguments["space"] as? String {
+                space = app.store.spaceOrder.first { app.store.space($0)?.title.localizedCaseInsensitiveCompare(name) == .orderedSame }
+                guard space != nil else {
+                    let names = app.store.spaceOrder.compactMap { app.store.space($0)?.title }
+                    completion(MCPProtocol.content("No space is called \(name). Spaces: " + names.joined(separator: ", ") + ".", failed: true)); return
+                }
+            }
+            let tab = app.store.createTab(url: url, in: space, select: select, window: window.windowID)
             ownedTabs[owner, default: []].insert(tab.id)
-            window.window?.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            completion(try! MCPCDP.content(["tabId": tab.id.uuidString, "status": "opened"]))
+            if !select { window.browsers.ensureRuntime(for: tab.id) }
+            if arguments["activate"] as? Bool == true {
+                window.window?.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+            }
+            completion(try! MCPCDP.content(["tabId": tab.id.uuidString, "status": "opened", "selected": select]))
             return
         }
         guard let text = arguments["tabId"] as? String, let id = UUID(uuidString: text), app.store.mcpTab(id) != nil || agentTabs[id]?.owner == owner else {
@@ -211,16 +256,21 @@ final class MCPServer {
                 completion(MCPProtocol.content("Normal browser window unavailable.", failed: true)); return
             }
             if name == "tab_close" {
-                guard ownedTabs[owner]?.contains(id) == true, !app.store.isPinned(id), app.store.splitContaining(id) == nil else {
-                    completion(MCPProtocol.content("Only an unpinned, unsplit tab opened by this connection can be closed.", failed: true)); return
+                // Any today tab, like ⌘W (Reopen Closed Tab brings it back). Pinned tabs and
+                // favorites are the user's own layout and stay.
+                guard !app.store.isPinned(id), app.store.splitContaining(id) == nil else {
+                    completion(MCPProtocol.content("Pinned tabs, favorites and tabs in a split stay open; close only today tabs.", failed: true)); return
                 }
                 transfers.removeValue(forKey: id)?.close()
+                if let page = pages[id] { page.detach() }
                 window.closeTab(id)
                 ownedTabs[owner]?.remove(id); pages.removeValue(forKey: id); pointerPositions.removeValue(forKey: id)
             } else {
                 app.store.selectTab(id, window: window.windowID)
-                window.window?.makeKeyAndOrderFront(nil)
-                NSApp.activate(ignoringOtherApps: true)
+                if arguments["activate"] as? Bool == true {
+                    window.window?.makeKeyAndOrderFront(nil)
+                    NSApp.activate(ignoringOtherApps: true)
+                }
             }
             completion(try! MCPCDP.content(["status": name == "tab_close" ? "closed" : "shown"]))
             return
@@ -235,16 +285,39 @@ final class MCPServer {
         let browser: CraBrowser
         if let agent = agentTabs[id], agent.owner == owner { browser = agent.browser }
         else if let runtime = app.runtime(for: id), !runtime.discarded { browser = runtime.browser }
-        else { completion(MCPProtocol.content("Tab has no live page. Use tab_show, then wait for loading.", failed: true)); return }
+        else {
+            // A sleeping or never-opened tab wakes in the background, as a ⌘-clicked link loads,
+            // and the request goes on once its page has loaded (up to 10 s).
+            let window = app.mainWindows.first(where: { !$0.isIncognito && $0.browsers.runtime(for: id) != nil })
+                ?? app.mainWindows.first(where: { $0.windowID == app.store.lastNormalWindowID && !$0.isIncognito })
+            if app.runtime(for: id) != nil { window?.browsers.touchedByAgent(id) } else { window?.browsers.ensureRuntime(for: id) }
+            Task { @MainActor [weak self, weak app] in
+                let loaded = { () -> Bool in
+                    guard let runtime = app?.runtime(for: id) else { return false }
+                    return !runtime.discarded && runtime.browser.isCreated && !runtime.browser.isLoading
+                }
+                for _ in 0..<100 where !loaded() && canContinue() { try? await Task.sleep(for: .milliseconds(100)) }
+                guard let self, !woke, loaded(), canContinue() else {
+                    completion(MCPProtocol.content("The tab was asleep and is still loading. Try again in a moment.", failed: true)); return
+                }
+                self.perform(name, arguments: arguments, owner: owner, canContinue: canContinue, woke: true, completion: completion)
+            }
+            return
+        }
         guard browser.isCreated, !browser.isClosed, !browser.isIncognito else {
             completion(MCPProtocol.content("Page is not ready or has closed.", failed: true)); return
         }
         for tabID in Array(transfers.keys) where agentTabs[tabID] == nil && (app.store.mcpTab(tabID) == nil || app.runtime(for: tabID)?.browser !== pages[tabID]?.browser) {
             transfers.removeValue(forKey: tabID)?.close()
         }
-        pages = pages.filter { agentTabs[$0.key]?.browser === $0.value.browser || app.store.mcpTab($0.key) != nil && app.runtime(for: $0.key)?.browser === $0.value.browser }
+        pages = pages.filter {
+            let live = agentTabs[$0.key]?.browser === $0.value.browser || app.store.mcpTab($0.key) != nil && app.runtime(for: $0.key)?.browser === $0.value.browser
+            if !live { $0.value.detach() }
+            return live
+        }
         if pages[id] == nil { pages[id] = MCPPage(browser) }
         let page = pages[id]!
+        if agentTabs[id] == nil { app.mainWindows.first { $0.browsers.runtime(for: id) != nil }?.browsers.touchedByAgent(id) }
         let lease = UUID()
         busyTabs[id] = lease
         let cdp = MCPCDP(browser) { [weak self, weak app] in
@@ -254,10 +327,11 @@ final class MCPServer {
         }
         Task { @MainActor in
             defer { if busyTabs[id] == lease { busyTabs.removeValue(forKey: id) } }
+            await page.attach(cdp)
             do {
                 let result: [String: Any]
                 if name == "page_download" {
-                    guard browser.isAgent else { throw MCPCDP.Failure(message: "Download tools require a background tab opened by this connection.") }
+                    guard browser.isAgent else { throw MCPCDP.Failure(message: "Download tools need a windowless tab this connection opened (tab_open windowless=true).") }
                     if transfers[id] == nil {
                         guard transfers.count < 16 else { throw MCPCDP.Failure(message: "File-transfer tab limit reached. Close an existing transfer tab first.") }
                         transfers[id] = MCPTransfers(browser)
@@ -269,7 +343,7 @@ final class MCPServer {
                 } else if MCPProtocol.inputTools.contains(name) {
                     let reference: (node: Int, document: String)?
                     if let ref = arguments["ref"] as? String { reference = try await page.resolve(ref, cdp: cdp) } else { reference = nil }
-                    let input = MCPInput(browser: browser, position: pointerPositions[id] ?? CGPoint(x: 8, y: 8), reference: reference, stageUploads: { [weak server = self] paths in
+                    let input = MCPInput(browser: browser, position: pointerPositions[id] ?? CGPoint(x: 8, y: 8), reference: reference, screenshotScale: page.screenshotScale, stageUploads: { [weak server = self] paths in
                         guard let self = server else { throw MCPCDP.Failure(message: "Upload staging is unavailable.") }
                         if self.transfers[id] == nil {
                             guard self.transfers.count < 16 else { throw MCPCDP.Failure(message: "File-transfer tab limit reached.") }

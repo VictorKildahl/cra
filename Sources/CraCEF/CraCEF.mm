@@ -1791,7 +1791,8 @@ public:
     bool RunContextMenu(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>,
                         CefRefPtr<CefContextMenuParams>, CefRefPtr<CefMenuModel>,
                         CefRefPtr<CefRunContextMenuCallback> callback) override {
-        if (!windowless_) return false;
+        CraBrowser* o = owner_;
+        if (!windowless_ && !o.suppressesContextMenu) return false;
         callback->Cancel();
         return true;
     }
@@ -2245,7 +2246,14 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
    public:
     __weak CraBrowser* owner;
     void OnDevToolsEvent(CefRefPtr<CefBrowser>, const CefString& method, const void* params, size_t size) override {
-        if (method != "Input.dragIntercepted") return;
+        if (method != "Input.dragIntercepted") {
+            CraBrowser* o = owner;
+            void (^handler)(NSString*, NSString*) = o.devToolsEventHandler;
+            if (!handler || size > 262144) return;
+            NSString* body = [[NSString alloc] initWithBytes:params length:size encoding:NSUTF8StringEncoding] ?: @"{}";
+            handler(NSStringFromCef(method), body);
+            return;
+        }
         if (size > 65536) { owner.interceptedDragData = @"{\"oversized\":true}"; return; }
         NSData* data = [NSData dataWithBytes:params length:size];
         NSDictionary* payload = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];

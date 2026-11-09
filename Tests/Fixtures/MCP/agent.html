@@ -1,0 +1,114 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Cra agent fixture</title>
+<style>
+  body { font: 14px system-ui; margin: 16px; }
+  section { border: 1px solid #ccc; padding: 8px; margin: 8px 0; }
+  #canvas { border: 1px solid #333; }
+  .rich b { color: #a00; }
+  #log { height: 20px; overflow: hidden; }
+</style>
+<h1>Cra agent fixture</h1>
+<div id="log" aria-live="polite"></div>
+<script>
+  const log = (m) => { const d = document.getElementById('log'); d.textContent = m; window.events = (window.events||[]); window.events.push(m); console.log('fixture:', m); };
+  window.addEventListener('message', e => log(String(e.data)));
+</script>
+
+<section>
+  <h2>Shadow DOM</h2>
+  <shadow-card id="card"></shadow-card>
+  <script>
+    customElements.define('shadow-card', class extends HTMLElement {
+      constructor() { super(); const r = this.attachShadow({mode:'open'});
+        r.innerHTML = '<button id="sb">Shadow button</button> <input id="si" aria-label="Shadow input">';
+        r.getElementById('sb').addEventListener('click', e => log('shadow click trusted=' + e.isTrusted));
+        r.getElementById('si').addEventListener('input', e => log('shadow input=' + e.target.value));
+      }
+    });
+  </script>
+</section>
+
+<section>
+  <h2>Rich editor (Gmail-like)</h2>
+  <div id="rich" class="rich" contenteditable="true" role="textbox" aria-label="Message body" aria-multiline="true"
+       style="min-height:60px;border:1px solid #999"><div>Hello <b>world</b></div><div><br></div></div>
+  <script>document.getElementById('rich').addEventListener('input', e => log('rich input: ' + e.target.innerText.replace(/\n/g,'|')));</script>
+</section>
+
+<section>
+  <h2>Canvas</h2>
+  <canvas id="canvas" width="300" height="80" aria-label="Drawing canvas"></canvas>
+  <script>
+    const c = document.getElementById('canvas'), g = c.getContext('2d');
+    g.fillStyle = '#4a7'; g.fillRect(200, 20, 60, 40); g.fillStyle='#000'; g.fillText('Click the green box', 10, 40);
+    c.addEventListener('click', e => { const r=c.getBoundingClientRect(); const x=e.clientX-r.left, y=e.clientY-r.top;
+      log((x>=200&&x<=260&&y>=20&&y<=60) ? 'canvas green hit' : 'canvas miss ' + Math.round(x)+','+Math.round(y)); });
+  </script>
+</section>
+
+<section>
+  <h2>Mouse variants</h2>
+  <button id="dbl">Double-click me</button>
+  <button id="ctx">Right-click me</button>
+  <a id="newtab" href="/index.html">Plain link</a>
+  <button id="middle">Middle-click me</button>
+  <script>
+    document.getElementById('dbl').addEventListener('dblclick', e => log('dblclick trusted=' + e.isTrusted));
+    document.getElementById('ctx').addEventListener('contextmenu', e => { e.preventDefault(); log('contextmenu trusted=' + e.isTrusted); });
+    document.getElementById('middle').addEventListener('auxclick', e => log('auxclick button=' + e.button + ' trusted=' + e.isTrusted));
+    document.getElementById('dbl').addEventListener('click', e => { if (e.metaKey) log('meta click trusted=' + e.isTrusted); });
+    addEventListener('DOMContentLoaded', () => document.getElementById('menu-free').addEventListener('contextmenu', e => log('free contextmenu trusted=' + e.isTrusted)));
+  </script>
+</section>
+
+<section>
+  <h2>Select with shared initials</h2>
+  <label>Country <select id="country"><option value="">Pick</option><option value="dk">Denmark</option><option value="de">Germany</option><option value="de2">Deutschland</option><option value="se">Sweden</option><option value="es">Spain</option></select></label>
+  <script>document.getElementById('country').addEventListener('change', e => log('country=' + e.target.value));</script>
+</section>
+
+<section>
+  <h2>Dialogs</h2>
+  <button id="alert" onclick="alert('Hi from alert'); log('alert closed')">Alert</button>
+  <button id="confirm" onclick="log('confirm=' + confirm('Proceed?'))">Confirm</button>
+  <button id="prompt" onclick="log('prompt=' + prompt('Name?', 'x'))">Prompt</button>
+  <button id="menu-free">No handler (native menu would open)</button>
+  <button id="warn" onclick="console.warn('fixture warning'); setTimeout(() => { throw new Error('fixture boom'); })">Console</button>
+</section>
+
+<section>
+  <h2>Long text</h2>
+  <textarea id="long" aria-label="Long text" rows="3" cols="60"></textarea>
+  <script>document.getElementById('long').addEventListener('input', e => { window.longLen = e.target.value.length; });</script>
+</section>
+
+<section>
+  <h2>Search form</h2>
+  <form id="search" onsubmit="event.preventDefault(); log('searched=' + document.getElementById('q').value)"><input id="q" name="q" aria-label="Search the fixture"></form>
+</section>
+
+<section>
+  <h2>Keyboard shortcut</h2>
+  <input id="kb" aria-label="Shortcut field">
+  <script>document.addEventListener('keydown', e => { if ((e.metaKey||e.ctrlKey) && e.key === 'k') { e.preventDefault(); log('cmd-k trusted=' + e.isTrusted); } });</script>
+</section>
+
+<section>
+  <h2>Same-origin iframe</h2>
+  <iframe id="same" src="/frame.html" width="400" height="90"></iframe>
+</section>
+
+<section>
+  <h2>Cross-site iframe</h2>
+  <iframe id="cross" width="400" height="90"></iframe>
+  <script>const p = new URLSearchParams(location.search).get('cross'); if (p) document.getElementById('cross').src = 'http://localhost:' + p + '/frame.html';</script>
+</section>
+
+<section>
+  <h2>Hover reveal</h2>
+  <div id="hov" style="padding:8px;background:#eee">Hover me <span id="hidden" style="display:none"><button id="revealed" onclick="log('revealed clicked')">Revealed</button></span></div>
+  <script>const h=document.getElementById('hov'); h.addEventListener('mouseenter',()=>document.getElementById('hidden').style.display='inline'); </script>
+</section>
+<div style="height:1200px"></div>
+<button id="bottom" onclick="log('bottom clicked')">Bottom button</button>
