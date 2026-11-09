@@ -1,5 +1,10 @@
 import Foundation
 
+/// What favicons are cached under. A site's key is the page's host, lowercased: the icon a
+/// suggestion or a not-yet-loaded tab borrows from the last page seen there. A tab's own icon
+/// goes under a key combining the host and tab ID, so tabs on one host keep their own icons
+/// even when they share an icon URL (GitHub #211; Arc caches one favicon per sidebar item,
+/// SidebarItemsFaviconCache).
 public enum FaviconKey {
     public static func key(for urlString: String) -> String? {
         guard let host = URL(string: urlString)?.host, !host.isEmpty else { return nil }
