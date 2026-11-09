@@ -45,6 +45,12 @@ final class AppDialog {
         self.init(title: error.localizedDescription, message: error.localizedRecoverySuggestion ?? error.localizedFailureReason ?? "")
     }
 
+    static func easelDeletion() -> AppDialog {
+        AppDialog(title: "Are you sure you want to delete this Easel?",
+                  message: "Doing so will delete the Easel permanently.",
+                  actions: [DialogAction("Delete", role: .destructive), .cancel])
+    }
+
     static var parentWindow: NSWindow? {
         let candidates = [NSApp.keyWindow, NSApp.mainWindow].compactMap { $0 } + NSApp.orderedWindows
         for candidate in candidates {
