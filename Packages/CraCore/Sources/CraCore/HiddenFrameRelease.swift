@@ -37,3 +37,31 @@ public enum HiddenFrameRelease {
         }
     }
 }
+
+extension HiddenFrameRelease {
+    /// One thing done to a hidden tab's page window while it draws for a release (#261).
+    public enum WindowStep: Equatable, Sendable {
+        /// alphaValue 0.
+        case transparent
+        /// alphaValue 1.
+        case opaque
+        /// ignoresMouseEvents.
+        case clickThrough(Bool)
+        /// A child window of the browser window, ordered below it. On its own, a window ordered in
+        /// isn't kept below a full-screen window: macOS put it over it, or Stage Manager listed it.
+        case attachBelow
+        /// No longer a child of the browser window.
+        case detach
+        case orderOut
+    }
+
+    /// What puts a hidden tab's page window on screen to draw once, unseen.
+    public static let drawSteps: [WindowStep] = [.transparent, .clickThrough(true), .attachBelow]
+
+    /// What ends the draw. Off screen before it is opaque again: a frame committed between the two
+    /// showed the window's empty grey background (#261). `shown` when the tab came on screen
+    /// meanwhile: the window stays, on its own, to be attached above like any page window.
+    public static func doneSteps(shown: Bool) -> [WindowStep] {
+        (shown ? [.detach] : [.orderOut, .detach]) + [.opaque, .clickThrough(false)]
+    }
+}

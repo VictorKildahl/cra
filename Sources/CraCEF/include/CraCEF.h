@@ -13,11 +13,28 @@ typedef NS_ENUM(NSInteger, CraDownloadState) {
     CraDownloadStateInterrupted = 3,
 };
 
+/// What a download's menu asks of it (GitHub #272).
+typedef NS_ENUM(NSInteger, CraDownloadControl) {
+    CraDownloadControlPause = 0,
+    CraDownloadControlResume = 1,
+    CraDownloadControlCancel = 2,
+};
+
 /// Where a page's context menu opens a link that isn't for a tab.
 typedef NS_ENUM(NSInteger, CraLinkWindow) {
     CraLinkWindowNew = 0,
     CraLinkWindowIncognito = 1,
     CraLinkWindowLittle = 2,
+};
+
+/// Chromium's own strings that Cra's page menus use (GitHub #276).
+typedef NS_ENUM(NSInteger, CraChromiumString) {
+    /// "Open Link in New &Tab"
+    CraChromiumStringOpenLinkInNewTab = 0,
+    /// Google Lens's "Search Image with $1"
+    CraChromiumStringSearchLensForImage = 1,
+    /// Chrome's own "&Search $1 for Image"
+    CraChromiumStringSearchWebForImage = 2,
 };
 
 @interface CraDownloadInfo : NSObject
@@ -29,6 +46,8 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
 @property (nonatomic) int64_t totalBytes;
 @property (nonatomic) NSInteger percent;
 @property (nonatomic) CraDownloadState state;
+/// In progress but paused (Chromium's IsPaused); `state` stays in progress.
+@property (nonatomic) BOOL paused;
 @end
 
 /// The connection of the page on screen (Chromium's SSL status of the visible navigation entry).
@@ -90,6 +109,9 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
 @optional
 /// The page's context menu: Open Link in New Window, Little Window or Incognito Window.
 - (void)browser:(CraBrowser *)browser requestsWindowWithURL:(NSString *)url kind:(CraLinkWindow)kind;
+/// The page's context menu: Open Link in Split View, a pane beside this page (#257). Without it
+/// the menu has no such item (a Little Window's page).
+- (void)browser:(CraBrowser *)browser requestsSplitPaneWithURL:(NSString *)url;
 /// The page's context menu on an image: Capture Image… at `point` (page points from the top
 /// left). Without it the menu has no such item.
 - (void)browser:(CraBrowser *)browser requestsCaptureOfImageAt:(NSPoint)point;
@@ -108,8 +130,17 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
 - (void)browser:(CraBrowser *)browser didFindMatches:(NSInteger)count activeMatch:(NSInteger)activeMatch;
 /// The page started or stopped using the camera or microphone.
 - (void)browser:(CraBrowser *)browser didChangeMediaCapture:(BOOL)capturing;
+/// Chromium dropped the page's permission request before Cra answered it (the page navigated or
+/// closed, or a newer request replaced it): its sheet should go, and its completion does nothing.
+- (void)browserWithdrewPermissionRequest:(CraBrowser *)browser;
+/// A page made with a saved history (-initWithFrame:…history:): `count` entries went in, or
+/// `error` says why none did and the page loaded its address instead.
+- (void)browser:(CraBrowser *)browser didRestoreHistoryEntries:(NSInteger)count error:(nullable NSString *)error;
 /// The page started or stopped playing sound (see `isAudible`).
 - (void)browser:(CraBrowser *)browser didChangeAudible:(BOOL)audible;
+/// The page's sound started or stopped as it happened, before the 2 s that `isAudible` and
+/// `browser:didChangeAudible:` hold a quiet page audible.
+- (void)browser:(CraBrowser *)browser didChangeSoundPlaying:(BOOL)playing;
 /// `hasCommittedLoad` changed: the main frame committed, or a new navigation started.
 - (void)browser:(CraBrowser *)browser didChangeCommittedLoad:(BOOL)committed;
 /// The page's main-frame load failed with a net error (ERR_ABORTED, a navigation cut off,
@@ -148,6 +179,11 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
 /// NO from the start of a main-frame navigation until it commits (the server answered and the
 /// new page began to load), YES after.
 @property (nonatomic, readonly) BOOL hasCommittedLoad;
+/// The address the main frame is navigating to, redirects followed (OnBeforeBrowse); what a
+/// page still waiting for its answer is waiting for (GitHub #256). nil before the first.
+@property (nonatomic, readonly, copy, nullable) NSString *navigatingURL;
+/// Main-frame navigations started (not redirects): another one restarts a wait.
+@property (nonatomic, readonly) NSInteger navigationStarts;
 @property (nonatomic, readonly) BOOL canGoBack;
 @property (nonatomic, readonly) BOOL canGoForward;
 @property (nonatomic, readonly) BOOL isCreated;
@@ -170,6 +206,19 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
                     incognito:(BOOL)incognito;
 - (instancetype)initWithFrame:(NSRect)frame url:(nullable NSString *)url delegate:(nullable id<CraBrowserDelegate>)delegate
                     incognito:(BOOL)incognito profilePath:(nullable NSString *)profilePath;
+/// An extension's side panel page (`url`). Chromium counts every page Cra hosts as a tab; this
+/// one is marked as a side panel (Cra.extensionSidePanel, scripts/cef-patches) before it loads,
+/// so that, as in Chrome, it has no tab: no `sender.tab` on its messages, `tabs.getCurrent()`
+/// gives undefined, and `runtime.getContexts()` lists it as SIDE_PANEL (GitHub #265).
+- (instancetype)initWithFrame:(NSRect)frame extensionSidePanelURL:(NSString *)url
+                     delegate:(nullable id<CraBrowserDelegate>)delegate profilePath:(nullable NSString *)profilePath;
+/// A page that opens with a saved back and forward list (GitHub #273): `history` is what
+/// Cra.getHistory returned ({"history": base64, "index": n}). The page is made without an
+/// address, the list goes in before anything loads, and the current entry loads; if the list
+/// can't go in (an older engine, a damaged file) `url` loads instead.
+- (instancetype)initWithFrame:(NSRect)frame url:(NSString *)url delegate:(nullable id<CraBrowserDelegate>)delegate
+                    incognito:(BOOL)incognito profilePath:(nullable NSString *)profilePath
+                      history:(nullable NSDictionary<NSString *, id> *)history;
 
 - (void)loadURL:(NSString *)url;
 - (void)goBack;
@@ -219,6 +268,9 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
 - (void)skipPictureInPictureBy:(double)seconds NS_SWIFT_NAME(skipPictureInPicture(by:));
 - (void)print;
 - (void)viewSource;
+/// One of Chrome's own commands by its IDC name ("IDC_ROUTE_MEDIA" for Cast…, "IDC_TASK_MANAGER"),
+/// where Chromium can run it for this page. NO when it can't.
+- (BOOL)runChromeCommand:(NSString *)name NS_SWIFT_NAME(runChromeCommand(_:));
 - (void)executeJavaScript:(NSString *)script;
 /// Asks the page for its background colour again (-browser:didReportBackgroundColor:);
 /// pages can switch themes without a load.
@@ -251,9 +303,15 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
 /// DevTools) instead of embedded Alloy views. Set before any browser exists.
 + (void)setChromeHosting:(BOOL)enabled;
 + (BOOL)chromeHosting;
-/// The two "open link" items at the top of a page's context menu, in order: their titles and
-/// whether each opens its tab in the background. Exactly two; read when a menu opens.
-+ (void)setLinkMenuTitles:(NSArray<NSString *> *)titles opensInBackground:(NSArray<NSNumber *> *)background;
+/// The "Open Link in New Tab" item at the top of a page's context menu: its title and whether it
+/// opens its tab in the background. Read when a menu opens.
++ (void)setLinkMenuTitle:(NSString *)title opensInBackground:(BOOL)background;
+/// One of Chromium's strings in the language Chromium runs in, as its resource bundle has it
+/// (`$1` where a name goes, `&` before a mnemonic); nil before CEF is up.
++ (nullable NSString *)chromiumString:(CraChromiumString)string;
+/// Gets the Google Lens item's title when an image's menu opens (main thread) and gives the title
+/// of the image search item that replaces it, or nil to keep Chromium's item.
++ (void)setImageSearchTitle:(NSString *_Nullable (^)(NSString *lensTitle))block;
 /// Run in every frame of every page browser before the page's own scripts (and once in the
 /// document already loaded): `script` in the page's world, `isolatedScript` in the isolated
 /// world named `world` (invisible to the page). Set before browsers are created.
@@ -268,6 +326,11 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
 /// http:// navigations are upgraded, and a site without HTTPS shows Chrome's warning
 /// page before it loads. Profiles that load later get it too. Off until enabled.
 + (void)setHttpsOnlyModeEnabled:(BOOL)enabled;
+/// Arc's View ▸ Appearance ("Websites, Easels, and Notes will use:"): 0 Automatic (the Mac's),
+/// 1 Light, 2 Dark. Chrome's colour mode in every profile, which pages' prefers-color-scheme and
+/// Chrome's own pages follow; profiles that load later get it too.
++ (void)setWebsiteAppearance:(NSInteger)mode;
+@property (class, nonatomic, readonly) NSInteger websiteAppearance;
 /// Chromium's secure DNS setting (chrome://settings/security), app-wide in Local State:
 /// `dns_over_https.mode` and `dns_over_https.templates` as Chromium holds them now. nil
 /// before Chromium is ready and once quitting starts.
@@ -333,6 +396,9 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
 /// the user closed). Without a handler downloads go to ~/Downloads.
 + (void)setDownloadDestinationHandler:(void (^)(NSString * _Nullable profilePath, NSString *suggestedName,
                                                 void (^completion)(NSString * _Nullable path)))handler;
+/// Pauses, resumes or cancels a download still in progress, from its row's menu (GitHub #272); NO
+/// when Chromium has no download in progress by that id. Its next update reports the change.
++ (BOOL)controlDownload:(uint32_t)identifier action:(CraDownloadControl)action;
 /// Renderer trouble and failed loads, for Cra's performance recorder (GitHub #91): `kind` is
 /// terminated, unresponsive, responsive or loadError; `detail` how it ended or the net error
 /// code; `site` the host (nil for incognito, Cra's own pages or a closed tab). Never a URL.
@@ -383,6 +449,9 @@ typedef NS_ENUM(NSInteger, CraLinkWindow) {
 /// NSApplication subclass CEF requires (CefAppProtocol). Set as
 /// NSPrincipalClass and created with +sharedApplication before anything else.
 @interface CraApplication : NSApplication
+/// How many requests to bring Cra to the front, made while it was in the background, went
+/// through (a background test copy counts them, then refuses them all).
+@property (class, readonly) NSInteger backgroundActivations;
 @end
 
 NS_ASSUME_NONNULL_END

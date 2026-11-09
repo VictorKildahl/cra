@@ -1,8 +1,8 @@
 diff --git a/cef/BUILD.gn b/cef/BUILD.gn
-index dd0a558c0..a54f79de4 100644
+index 2018b0dc0..1045118b4 100644
 --- a/cef/BUILD.gn
 +++ b/cef/BUILD.gn
-@@ -973,6 +973,7 @@ source_set("libcef_static") {
+@@ -976,6 +976,7 @@ source_set("libcef_static") {
      "//components/network_session_configurator/common",
      "//components/pdf/browser",
      "//components/pdf/renderer",
@@ -10,18 +10,33 @@ index dd0a558c0..a54f79de4 100644
      "//components/plugins/renderer",
      "//components/pref_registry",
      "//components/printing/browser",
+@@ -984,6 +985,7 @@ source_set("libcef_static") {
+     "//components/proxy_config",
+     "//components/services/print_compositor/public/cpp",
+     "//components/services/print_compositor/public/mojom",
++    "//components/sessions",
+     "//components/update_client",
+     "//components/url_formatter",
+     "//components/user_prefs",
 diff --git a/cef/libcef/browser/devtools/devtools_controller.cc b/cef/libcef/browser/devtools/devtools_controller.cc
-index c60f22d..da94ae0 100644
+index c60f22d1a..d3d3d79b3 100644
 --- a/cef/libcef/browser/devtools/devtools_controller.cc
 +++ b/cef/libcef/browser/devtools/devtools_controller.cc
-@@ -5,10 +5,416 @@
+@@ -4,11 +4,570 @@
+ 
  #include "cef/libcef/browser/devtools/devtools_controller.h"
  
++#include <algorithm>
++#include <limits>
++
  #include "base/json/json_reader.h"
++#include "base/base64.h"
 +#include "base/feature_list.h"
 +#include "base/functional/callback_helpers.h"
  #include "base/json/json_writer.h"
 +#include "base/memory/ref_counted.h"
++#include "base/pickle.h"
++#include "base/scoped_observation.h"
 +#include "base/strings/string_number_conversions.h"
 +#include "base/supports_user_data.h"
 +#include "base/task/sequenced_task_runner.h"
@@ -30,19 +45,26 @@ index c60f22d..da94ae0 100644
 +#include "chrome/browser/picture_in_picture/auto_picture_in_picture_tab_helper.h"
 +#include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
 +#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/profiles/profile_observer.h"
 +#include "components/crx_file/id_util.h"
 +#include "components/performance_manager/freezing/freezing_policy.h"
 +#include "components/performance_manager/public/freezing/freezing.h"
 +#include "components/performance_manager/public/performance_manager.h"
++#include "components/sessions/content/content_serialized_navigation_builder.h"
++#include "components/sessions/core/serialized_navigation_entry.h"
++#include "components/sessions/core/session_constants.h"
 +#include "content/browser/media/session/media_session_impl.h"
  #include "content/public/browser/devtools_agent_host.h"
 +#include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/navigation_entry.h"
 +#include "content/public/browser/render_frame_host.h"
 +#include "content/public/browser/render_process_host.h"
++#include "content/public/browser/restore_type.h"
 +#include "content/public/browser/web_contents.h"
 +#include "content/public/common/content_features.h"
 +#include "extensions/browser/extension_registry.h"
 +#include "extensions/browser/install_approval.h"
++#include "extensions/browser/view_type_utils.h"
 +#include "extensions/browser/webstore_installer.h"
 +#include "extensions/common/extension.h"
 +#include "extensions/common/mojom/manifest.mojom-shared.h"
@@ -192,6 +214,109 @@ index c60f22d..da94ae0 100644
 +                     base::DictValue* result,
 +                     std::string* error);
 +
++// Cra (GitHub #273): a tab's back and forward list across a relaunch, the way
++// Chrome's session service keeps it (and Arc, which maps its tabs to Chrome's
++// session tabs).
++// {"id":N,"method":"Cra.getHistory"}: the last committed entry and up to
++// sessions::gMaxPersistNavigationCount entries on each side of it, each a
++// SerializedNavigationEntry with its page state (scroll position, form
++// contents) pickled as a session command holds one, so no more than ~63 KB an
++// entry. {"history":base64 (an int count, then the entries),"index":the
++// current entry's position in it,"url":its address}; "history" is empty for a
++// page that has committed nothing.
++// {"id":N,"method":"Cra.restoreHistory","params":{"history":base64,
++// "index":i}}: puts such a list into a page that hasn't navigated yet, as
++// Chrome's session restore does (NavigationController::Restore), and loads
++// entry i. {"restored":count}.
++constexpr size_t kCraMaxHistoryEntrySize =
++    std::numeric_limits<uint16_t>::max() - 1024;
++
++void HandleCraGetHistory(content::WebContents* contents,
++                         base::DictValue* result) {
++  content::NavigationController& controller = contents->GetController();
++  const int current = controller.GetLastCommittedEntryIndex();
++  content::NavigationEntry* current_entry = controller.GetLastCommittedEntry();
++  std::vector<sessions::SerializedNavigationEntry> navigations;
++  int index = 0;
++  if (current >= 0 && current_entry && !current_entry->IsInitialEntry()) {
++    const int first =
++        std::max(current - sessions::gMaxPersistNavigationCount, 0);
++    const int last =
++        std::min(current + sessions::gMaxPersistNavigationCount,
++                 controller.GetEntryCount() - 1);
++    for (int i = first; i <= last; ++i) {
++      content::NavigationEntry* entry = controller.GetEntryAtIndex(i);
++      if (!entry || entry->IsInitialEntry()) {
++        continue;
++      }
++      if (i == current) {
++        index = static_cast<int>(navigations.size());
++      }
++      navigations.push_back(
++          sessions::ContentSerializedNavigationBuilder::FromNavigationEntry(
++              i, entry));
++    }
++  }
++  std::string history;
++  if (!navigations.empty()) {
++    base::Pickle pickle;
++    pickle.WriteInt(static_cast<int>(navigations.size()));
++    for (const auto& navigation : navigations) {
++      navigation.WriteToPickle(kCraMaxHistoryEntrySize, &pickle);
++    }
++    history = base::Base64Encode(pickle.AsBytes());
++  }
++  result->Set("history", history);
++  result->Set("index", index);
++  result->Set("url", navigations.empty()
++                         ? std::string()
++                         : navigations[index].virtual_url().spec());
++}
++
++void HandleCraRestoreHistory(content::WebContents* contents,
++                             const base::DictValue* params,
++                             base::DictValue* result,
++                             std::string* error) {
++  const std::string* encoded = params ? params->FindString("history") : nullptr;
++  std::optional<int> index = params ? params->FindInt("index") : std::nullopt;
++  std::string bytes;
++  if (!encoded || !index || !base::Base64Decode(*encoded, &bytes)) {
++    *error = "needs history (base64) and index";
++    return;
++  }
++  base::Pickle pickle =
++      base::Pickle::WithUnownedBuffer(base::as_byte_span(bytes));
++  base::PickleIterator iterator(pickle);
++  int count = 0;
++  if (!iterator.ReadInt(&count) || count <= 0 ||
++      count > 2 * sessions::gMaxPersistNavigationCount + 1 || *index < 0 ||
++      *index >= count) {
++    *error = "unreadable history";
++    return;
++  }
++  std::vector<sessions::SerializedNavigationEntry> navigations(count);
++  for (int i = 0; i < count; ++i) {
++    if (!navigations[i].ReadFromPickle(&iterator)) {
++      *error = "unreadable history";
++      return;
++    }
++    navigations[i].set_index(i);
++  }
++  content::NavigationController& controller = contents->GetController();
++  content::NavigationEntry* committed = controller.GetLastCommittedEntry();
++  if (controller.GetEntryCount() > 1 || controller.GetPendingEntry() ||
++      (committed && !committed->IsInitialEntry())) {
++    *error = "the page has navigated already";
++    return;
++  }
++  std::vector<std::unique_ptr<content::NavigationEntry>> entries =
++      sessions::ContentSerializedNavigationBuilder::ToNavigationEntries(
++          navigations, contents->GetBrowserContext());
++  controller.Restore(*index, content::RestoreType::kRestored, &entries);
++  controller.LoadIfNecessary();
++  result->Set("restored", count);
++}
++
 +// A reply to a Cra.* method, in the protocol's shape. "id" comes first:
 +// CEF's ProtocolParser only reads a result that starts with {"id":, and
 +// JSONWriter would sort "error" ahead of it, so error replies never arrived.
@@ -213,17 +338,34 @@ index c60f22d..da94ae0 100644
 +
 +// The page that downloads the store's CRX, as WebstoreInstallWithPrompt has
 +// one: never shown, so the download stays out of every window's UI. It lives
-+// until the install is over.
++// until the install is over, or until its profile goes away: a quit while an
++// install still ran (or never ended) destroyed the profile with the page open,
++// and Chromium stops on that ("BrowserContext is getting destroyed without
++// first closing all WebContents", GitHub #227). WebstoreInstaller holds the
++// page through a WeakPtr; an install cut off this way never replies, and the
++// client asks for it again on the next launch.
 +struct CraWebStoreInstallPage
-+    : public base::RefCountedThreadSafe<CraWebStoreInstallPage> {
++    : public base::RefCountedThreadSafe<CraWebStoreInstallPage>,
++      public ProfileObserver {
 +  explicit CraWebStoreInstallPage(Profile* profile)
 +      : contents(content::WebContents::Create(
-+            content::WebContents::CreateParams(profile))) {}
++            content::WebContents::CreateParams(profile))) {
++    profile_observation_.Observe(profile);
++  }
 +  std::unique_ptr<content::WebContents> contents;
++
++  // ProfileObserver: first thing in ~ProfileImpl, before its user data (the
++  // list of the profile's WebContents) is checked and cleared.
++  void OnProfileWillBeDestroyed(Profile* profile) override {
++    profile_observation_.Reset();
++    contents.reset();
++  }
 +
 + private:
 +  friend class base::RefCountedThreadSafe<CraWebStoreInstallPage>;
-+  ~CraWebStoreInstallPage() = default;
++  ~CraWebStoreInstallPage() override = default;
++
++  base::ScopedObservation<Profile, ProfileObserver> profile_observation_{this};
 +};
 +
 +// Cra (GitHub #203): {"id":N,"method":"Cra.installFromWebStore","params":
@@ -343,10 +485,30 @@ index c60f22d..da94ae0 100644
 +  if (!method || !id ||
 +      (*method != "Cra.setFreezingVote" && *method != "Cra.getFreezingState" &&
 +       *method != "Cra.discard" && *method != "Cra.load" &&
-+       *method != "Cra.mediaSession" && *method != "Cra.autoPictureInPicture")) {
++       *method != "Cra.mediaSession" && *method != "Cra.autoPictureInPicture" &&
++       *method != "Cra.extensionSidePanel" && *method != "Cra.getHistory" &&
++       *method != "Cra.restoreHistory")) {
 +    return false;
 +  }
 +  *message_id = *id;
++  if (*method == "Cra.getHistory") {
++    HandleCraGetHistory(contents, result);
++    return true;
++  }
++  if (*method == "Cra.restoreHistory") {
++    HandleCraRestoreHistory(contents, dict->FindDict("params"), result, error);
++    return true;
++  }
++  if (*method == "Cra.extensionSidePanel") {
++    // Cra (GitHub #265): the page is an extension's side panel, which Cra
++    // hosts in a tab of its own. Like Chrome's side panel it then has no tab:
++    // no sender.tab on its messages and ports, tabs.getCurrent() gives
++    // undefined, and runtime.getContexts() reports it as SIDE_PANEL. Sent
++    // before the panel page loads; the page stays one until it closes.
++    extensions::SetViewType(contents,
++                            extensions::mojom::ViewType::kExtensionSidePanel);
++    return true;
++  }
 +  if (*method == "Cra.autoPictureInPicture") {
 +    HandleCraAutoPictureInPicture(contents, dict->FindDict("params"), result,
 +                                  error);
@@ -431,7 +593,7 @@ index c60f22d..da94ae0 100644
  
  CefDevToolsController::CefDevToolsController(
      content::WebContents* inspected_contents)
-@@ -30,6 +436,38 @@ CefDevToolsController::~CefDevToolsController() {
+@@ -30,6 +589,38 @@ CefDevToolsController::~CefDevToolsController() {
  bool CefDevToolsController::SendDevToolsMessage(
      const std::string_view& message) {
    CEF_REQUIRE_UIT();

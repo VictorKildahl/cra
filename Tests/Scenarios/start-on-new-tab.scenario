@@ -1,0 +1,14 @@
+# Settings ▸ Advanced "When opening Cra, start on a new tab" (X DM 7 Nov 2026, not in Arc): after a
+# relaunch the window keeps its tabs but selects none, loads no page, and has the command bar open
+# for a new tab, as ⌘T. Off (Arc's way, LaunchStartTests) it opens on the tab in use last.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "startOnNewTab": true}
+cra://open?url=${PAGE}?n=last
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?browserWindows=before
+expect-log browser windows before: kind=normal listed=1 tabs=1 open=1 commandBar=0 pages=1
+relaunch
+wait 4
+cra://debug?browserWindows=after
+# cra.log, which the relaunched Cra writes to (its NSLog lines aren't kept).
+expect-log browser windows after: kind=normal listed=1 tabs=1 open=0 commandBar=1 pages=0

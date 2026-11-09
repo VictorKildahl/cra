@@ -94,6 +94,16 @@ extension SpaceTheme {
 
     private static let midToneFloor = 0.68, midToneCeiling = 0.794
 
+    /// Arc's primaryColorPalette.shaded: the theme colour with its OKLab lightness held within
+    /// 0.5…0.794, at the nearer bound the gamut edge of its hue. Arc's default blue space (#010220)
+    /// → #3139FB (0.499), Victor's gold (#F8D558) → #E9B300 (0.794, its midTone too).
+    public static func shaded(_ hex: String?) -> RGB {
+        let c = HexColor.components(hex ?? "") ?? (0.5, 0.5, 0.5)
+        let base = RGB(c.r, c.g, c.b), l = oklabLightness(base)
+        if l < 0.5 { return edge(hex, lightness: 0.5) }
+        return l > midToneCeiling ? edge(hex, lightness: midToneCeiling) : base
+    }
+
     private static func paletteBase(_ hex: String?) -> RGB {
         let c = HexColor.components(hex ?? "") ?? (0.5, 0.5, 0.5)
         let rgb = RGB(c.r, c.g, c.b)
@@ -122,6 +132,7 @@ extension SpaceTheme {
 
     public var shadedDark: RGB { Self.shadedDark(paletteSource) }
     public var midTone: RGB { Self.midTone(paletteSource) }
+    public var shaded: RGB { Self.shaded(paletteSource) }
     public var tintedLight: RGB { Self.tintedLight(paletteSource) }
 }
 

@@ -66,7 +66,7 @@ enum PerfCEF {
 
     private static func tabCounts(_ app: AppDelegate) -> PerfTabCounts {
         let managers = app.mainWindows.compactMap(\.browsers)
-        return PerfTabCounts(tabs: app.store.allTabs().count,
+        return PerfTabCounts(tabs: app.store.items.tabCount,
                              live: managers.reduce(0) { $0 + $1.runtimes.values.filter { !$0.discarded }.count },
                              visible: managers.reduce(0) { $0 + $1.visibleTabIDs.count },
                              slept: managers.reduce(0) { $0 + $1.sleptTabs.count },

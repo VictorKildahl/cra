@@ -1,0 +1,44 @@
+# Back on a tab a link opened (GitHub #273), as in Arc (canNavigateBack, navigateBackToReferrer):
+# Back is on although the new page has no history, steps through pages the tab went on to, then
+# closes the tab and shows the one the link was clicked in. A page's window.open tab does the same.
+# promise: #273
+budget rss=900 stalls50=40
+pace 0.5
+
+cra://open?url=${PAGE}?n=source
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?back=start
+expect-log back start: selected=\S+n=source back=0 today=1$
+
+# A target=_blank link: a new tab in front, Back on.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='${PAGE}?n=link',a.target='_blank',document.body.append(a),a.click(),'clicked'))(document.createElement('a'))","userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"clicked"
+wait 1.5
+cra://debug?back=opened
+expect-log back opened: selected=\S+n=link back=1 today=2$
+
+# A page it went on to comes first (from a click: Chromium's Back skips pages a script moved on
+# from without one).
+cra://debug?cdp=Runtime.evaluate&params={"expression":"location.href='${PAGE}?n=next'","userGesture":true}
+wait 1.5
+cra://action/goBack
+wait 1.5
+cra://debug?back=history
+expect-log back history: selected=\S+n=link back=1 today=2$
+
+# Then Back closes the tab and the page the link was clicked in is in front again.
+cra://action/goBack
+wait 1
+cra://debug?back=returned
+expect-log back returned: selected=\S+n=source back=0 today=1$
+
+# window.open from a click: the tab it opens returns the same way.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=popup'))","userGesture":true}
+wait 1.5
+cra://debug?back=popup
+expect-log back popup: selected=\S+n=popup back=1 today=2$
+cra://action/goBack
+wait 1
+cra://debug?back=popupReturned
+expect-log back popupReturned: selected=\S+n=source back=0 today=1$

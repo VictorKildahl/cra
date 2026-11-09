@@ -181,7 +181,7 @@ struct ModelFixtureTests {
         #expect(legacy.showToolbar, "Arc's toolbar preference wins over the 0.1.0 value")
 
         let bad = try Self.loadSettings("settings-bad-routes.json").loaded
-        #expect(bad.defaultLinkDestination == .littleWindow && bad.linkRoutes.isEmpty)
+        #expect(bad.defaultLinkDestination == .littleWindowInUse && bad.linkRoutes.isEmpty)
     }
 
     @Test func legacyWindowsBecomeOneWindow() throws {

@@ -1,5 +1,6 @@
 import AppKit
 import CraCEF
+import JavaScriptCore
 
 @main
 enum BrowserManagerLifecycleTests {
@@ -52,6 +53,10 @@ enum BrowserManagerLifecycleTests {
         expect(observer.capturedImages.count == 1 && observer.capturedImages.first?.tab == id
                && observer.capturedImages.first?.point == NSPoint(x: 12, y: 34),
                "Capture Image… reaches the window for the live page's tab only")
+        manager.browser(replacement.browser, requestsSplitPaneWithURL: "https://example.test/entry")
+        manager.browser(old.browser, requestsSplitPaneWithURL: "https://example.test/stale-entry")
+        expect(observer.splitLinks.map(\.url) == ["https://example.test/entry"] && observer.splitLinks.first?.tab == id,
+               "Open Link in Split View reaches the window with the live page's tab, a closed page's doesn't")
 
         let retainedID = store.createTab(url: "https://example.test/retained").id
         weak var retainedBrowser = manager.ensureRuntime(for: retainedID)?.browser
@@ -75,6 +80,7 @@ enum BrowserManagerLifecycleTests {
         embeddedPageHandoffCase()
         await snapshotCase()
         loadingTabCase()
+        themeDataCase()
         await sleepCase("an unchanged idle page sleeps", shouldSleep: true) { _, _ in }
         await sleepCase("loading started while the probe was pending stays awake") { _, rt in rt.browser.setLoading(true) }
         await sleepCase("a completed same-URL reload invalidates the old probe") { _, rt in
@@ -102,13 +108,20 @@ enum BrowserManagerLifecycleTests {
         await sleepClockCase()
         await pressureSweepCase()
         await discardCase()
+        await discardedPageLoadCase()
+        await discardedPageColoursCase()
+        await sleepCountsCase()
         shortTimerCase()
         recentlyAudibleCase()
         await audiblePageStaysAwakeCase()
+        await suspendedMediaSleepsCase()
+        await sweepThatClosesNothingCase()
         devToolsCase()
         extensionTabActivationCase()
         await beforeUnloadCase()
         nowPlayingCase()
+        await nowPlayingAfterSleepCase()
+        await nowPlayingResumeWithinHoldCase()
         await nowPlayingPictureInPictureCase()
         nowPlayingSkipsPictureInPictureCase()
         await leaveVideoTabPictureInPictureCase()
@@ -121,6 +134,8 @@ enum BrowserManagerLifecycleTests {
         await sleepCase("malformed or missing replies cannot authorize sleeping", reply: nil) { _, _ in }
         await pageProbeCase()
         await pageEngineCase()
+        pageHistoryCase()
+        await permissionWaitsForItsTabCase()
         print("Browser manager lifecycle: \(checks) checks passed")
     }
 
@@ -339,6 +354,41 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    /// Arc's "Allow websites to get your theme data" (on by default): each page that commits gets the
+    /// space's palette as `--arc-palette-*` variables from Cra's world; off, pages get none.
+    @MainActor
+    private static func themeDataCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let id = store.createTab(url: "https://example.test/themed").id
+        let rt = manager.ensureRuntime(for: id)!
+        let themed = { rt.browser.replies.filter { $0.method == isolatedProbe }.count }
+        let before = themed()
+        manager.browser(rt.browser, didChangeCommittedLoad: true)
+        expect(themed() == before + 1 && rt.browser.lastIsolatedParams.contains("--arc-palette-title: #")
+               && rt.browser.lastIsolatedParams.contains("adoptedStyleSheets"), "a committed page gets the theme's variables")
+        manager.browser(rt.browser, didChangeCommittedLoad: false)
+        expect(themed() == before + 1, "a load that hasn't committed gets nothing yet")
+        store.settings.shareThemeWithWebsites = false
+        manager.browser(rt.browser, didChangeCommittedLoad: true)
+        expect(themed() == before + 1, "with the setting off, pages get none")
+        // Arc's "Block Cookie Banners", off by default: on, a committed page gets the banner rules.
+        store.settings.blockCookieBanners = true
+        manager.browser(rt.browser, didChangeCommittedLoad: true)
+        expect(themed() == before + 2 && rt.browser.lastIsolatedParams.contains("__craCookieBanners")
+               && rt.browser.lastIsolatedParams.contains("#onetrust-banner-sdk"), "blocking cookie banners hides them on every committed page")
+        // Arc's Boosts: a committed page on a boosted site gets the boost's stylesheet and script.
+        BrowserManager.boostFor = { url in url.contains("example.test") ? (css: "h1 { color: red }", js: "window.boosted = 1") : nil }
+        store.settings.blockCookieBanners = false
+        rt.browser.navigate(to: "https://example.test/themed")
+        manager.browser(rt.browser, didChangeCommittedLoad: true)
+        expect(rt.browser.replies.contains { $0.method == isolatedProbe } && rt.browser.lastIsolatedParams.contains("__craBoost")
+               && rt.browser.lastIsolatedParams.contains("h1 { color: red }") && rt.browser.scripts.last == "window.boosted = 1",
+               "a boosted site's page gets the boost's CSS and runs its script")
+        BrowserManager.boostFor = nil
+        manager.closeAll()
+    }
+
     @MainActor
     private static func sleepCase(_ message: String, shouldSleep: Bool = false, reply: String? = idleReply,
                                   mutate: (BrowserManager, TabRuntime) -> Void) async {
@@ -491,7 +541,7 @@ enum BrowserManagerLifecycleTests {
         runtimes[5].hiddenAt = clock.now.addingTimeInterval(-4 * 60)
         runtimes[0].sleepProbeAfter = clock.now.addingTimeInterval(60)
         func probed() -> [Bool] { runtimes.map { rt in rt.browser.replies.contains { $0.method == isolatedProbe } } }
-        manager.sleepIdleTabs(.memoryPressure)
+        manager.sleepIdleTabs(.memoryPressure(.warning))
         expect(probed() == [false, true, true, true, false, false],
                "the 3 pages hidden longest are asked, past a refusing page, none of the 10 used last kept")
         for rt in runtimes[1...3] {
@@ -502,7 +552,7 @@ enum BrowserManagerLifecycleTests {
             await finishSleep(rt.browser)
         }
         expect(ids.map { asleep(manager, $0) } == [false, true, true, true, false, false], "the 3 pages are discarded")
-        manager.sleepIdleTabs(.memoryPressure)
+        manager.sleepIdleTabs(.memoryPressure(.warning))
         expect(probed()[4] && !probed()[5], "the next sweep takes the next page, not one left 4 minutes ago")
         manager.closeAll()
     }
@@ -550,6 +600,111 @@ enum BrowserManagerLifecycleTests {
         let (busy, busyRT) = await sleepOne(discard: #"{"discarded":false}"#)
         expect(!busyRT.discarded && manager.runtime(for: busy) === busyRT && busyRT.sleepRefusal == "navigating",
                "a page Chromium wouldn't discard is asked again later")
+        manager.closeAll()
+    }
+
+    // promise: #214
+    /// CEF reports a load end for the page a discard just ended (#214). That page isn't there: the
+    /// log says nothing, history gets no visit and no Web Store install starts. Loaded again on
+    /// waking, it counts.
+    @MainActor
+    private static func discardedPageLoadCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.protectedRecentTabs = 0
+        let url = "https://example.test/discarded-load"
+        let id = store.createTab(url: url).id
+        let rt = manager.ensureRuntime(for: id)!
+        rt.hiddenAt = Date.distantPast
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
+        rt.browser.reply(to: isolatedProbe, with: idleReply)
+        await drainMainQueue()
+        rt.browser.reply(to: "Runtime.evaluate", with: idleReply)
+        await drainMainQueue()
+        await finishSleep(rt.browser)
+        let installs = ExtensionStore.shared.webStoreProfiles.count
+        expect(rt.discarded, "the page is discarded")
+        manager.browser(rt.browser, didFinishLoadingURL: url, title: "Discarded", statusCode: 200)
+        expect(store.visits.isEmpty && ExtensionStore.shared.webStoreProfiles.count == installs,
+               "a discarded page's load end is no visit and starts no Web Store install")
+        manager.show(id, focus: false)
+        manager.browser(rt.browser, didFinishLoadingURL: url, title: "Woken", statusCode: 200)
+        expect(store.visits == [url] && ExtensionStore.shared.webStoreProfiles.count == installs + 1,
+               "the page loaded again on waking is a visit")
+        manager.closeAll()
+    }
+
+    // promise: #237
+    /// The blank document a discard leaves answers the load end's colour probes with white (#237:
+    /// every discarded YouTube or GitHub tab saved #FFFFFF, a 2 MB sidebar.json write each, and
+    /// woke with a white toolbar). The tab keeps the colours its page reported; woken, the page
+    /// reports again.
+    @MainActor
+    private static func discardedPageColoursCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.protectedRecentTabs = 0
+        let id = store.createTab(url: "https://example.test/dark-site").id
+        let rt = manager.ensureRuntime(for: id)!
+        manager.browser(rt.browser, didReportThemeColor: "#212121")
+        manager.browser(rt.browser, didReportBackgroundColor: "#0F0F0F")
+        rt.hiddenAt = Date.distantPast
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
+        rt.browser.reply(to: isolatedProbe, with: idleReply)
+        await drainMainQueue()
+        rt.browser.reply(to: "Runtime.evaluate", with: idleReply)
+        await drainMainQueue()
+        await finishSleep(rt.browser)
+        expect(rt.discarded, "the page is discarded")
+        manager.browser(rt.browser, didReportThemeColor: "#FFFFFF")
+        manager.browser(rt.browser, didReportBackgroundColor: "#FFFFFF")
+        expect(store.item(id)?.tab?.themeColor == "#212121" && rt.themeColor == "#212121" && rt.backgroundColor == "#0F0F0F",
+               "a discarded page's blank document doesn't replace the tab's colours")
+        manager.show(id, focus: false)
+        manager.browser(rt.browser, didReportThemeColor: "#303030")
+        expect(store.item(id)?.tab?.themeColor == "#303030", "the page loaded again on waking reports its colour")
+        manager.closeAll()
+    }
+
+    // promise: #214
+    /// What the recorder says about tab sleeping (#214): a candidate passed over counts once per
+    /// reason (the first that holds, TabSleepPolicy.hold), and a page refusing again after the
+    /// back-off counts as a retry of the same page, not as another page.
+    @MainActor
+    private static func sleepCountsCase() async {
+        var facts: [(PerfCounter, String)] = []
+        Perf.attach { fact in if case .count(let c, let key, _, _) = fact { facts.append((c, key)) } }
+        defer { Perf.attach(nil) }
+        facts = []  // what earlier cases left in the recorder's start-up buffer
+        func counted(_ c: PerfCounter) -> [String] { facts.filter { $0.0 == c }.map(\.1) }
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.protectedRecentTabs = 0
+
+        let loadingID = store.createTab(url: "https://example.test/loading").id
+        let loading = manager.ensureRuntime(for: loadingID)!
+        loading.hiddenAt = Date.distantPast
+        loading.browser.setLoading(true)
+        for _ in 0..<3 { manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60)) }
+        expect(counted(.sleepSkip) == ["loading"] && !loading.browser.replies.contains { $0.method == isolatedProbe },
+               "a loading page passed over three times counts once, as loading")
+        loading.browser.setLoading(false)
+        loading.browser.hasDevTools = true
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
+        expect(counted(.sleepSkip) == ["loading", "devTools"], "a new reason counts again")
+        loading.browser.hasDevTools = false
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
+        expect(loading.browser.replies.contains { $0.method == isolatedProbe }, "with nothing holding it the page is asked")
+        loading.browser.reply(to: isolatedProbe, with: #"{"result":{"type":"string","value":"typed"}}"#)
+        await drainMainQueue()
+        for _ in 0..<2 {
+            loading.sleepProbeAfter = Date.distantPast
+            manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
+            loading.browser.reply(to: isolatedProbe, with: #"{"result":{"type":"string","value":"typed"}}"#)
+            await drainMainQueue()
+        }
+        expect(counted(.sleepRefusal) == ["typed"] && counted(.sleepRetry) == ["typed", "typed"],
+               "one page refusing three times is one refusal and two retries")
         manager.closeAll()
     }
 
@@ -610,11 +765,70 @@ enum BrowserManagerLifecycleTests {
         runtime.hiddenAt = Date.distantPast
         runtime.browser.isAudible = true
         manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
-        manager.sleepIdleTabs(.memoryPressure)
+        manager.sleepIdleTabs(.memoryPressure(.warning))
         expect(!runtime.browser.replies.contains { $0.method == isolatedProbe } && !asleep(manager, id),
                "a page playing sound is never asked to sleep, on the timer or under memory pressure")
         manager.closeAll()
         await sleepCase("a page that starts playing while it is asked stays awake") { _, rt in rt.browser.isAudible = true }
+    }
+
+    // promise: #275
+    /// Chromium suspends a video in a hidden tab without pausing it: `paused` stays false, nothing
+    /// is heard, and Chromium says the tab is silent. Its page sleeps like any quiet one (#275: 35
+    /// YouTube tabs refused as "playing" all night while none made a sound). The probe that runs
+    /// here is the real one, on a page with such a video.
+    @MainActor
+    private static func suspendedMediaSleepsCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.protectedRecentTabs = 0
+        let id = store.createTab(url: "https://example.test/watch").id
+        let runtime = manager.ensureRuntime(for: id)!
+        runtime.hiddenAt = Date.distantPast
+        runtime.browser.isAudible = false
+        manager.sleepIdleTabs(.memoryPressure(.warning))
+        let answer = runProbe(runtime.browser.lastIsolatedParams, media: "[{paused: false, ended: false, muted: false, volume: 1}]")
+        runtime.browser.reply(to: isolatedProbe, with: #"{"result":{"type":"string","value":"\#(answer)"}}"#)
+        await drainMainQueue()
+        if runtime.browser.replies.contains(where: { $0.method == "Runtime.evaluate" }) {
+            runtime.browser.reply(to: "Runtime.evaluate", with: idleReply)
+            await drainMainQueue()
+        }
+        await finishSleep(runtime.browser)
+        expect(asleep(manager, id) && runtime.sleepRefusal == nil, "a page whose suspended video makes no sound sleeps under memory pressure")
+        manager.closeAll()
+    }
+
+    /// The isolated probe's expression, run in JavaScriptCore on a page with these media elements
+    /// and nothing typed.
+    private static func runProbe(_ params: String, media: String) -> String {
+        let json = try! JSONSerialization.jsonObject(with: Data(params.utf8)) as! [String: Any]
+        let context = JSContext()!
+        context.evaluateScript("var window = {}; var location = {href: 'https://example.test/watch'}; "
+            + "var document = {querySelectorAll: () => \(media)};")
+        return context.evaluateScript(json["expression"] as? String)?.toString() ?? "no reply"
+    }
+
+    // promise: #275
+    /// A pressure sweep whose pages all refuse says so once they have answered (#275: after a
+    /// wake, twelve sweeps asked 3 pages each and the log had only their headers).
+    @MainActor
+    private static func sweepThatClosesNothingCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        var logged: [String] = []
+        manager.sleepPassLogged = { logged += $0.lines }
+        let runtimes = (0..<3).map { n in manager.ensureRuntime(for: store.createTab(url: "https://example.test/editor\(n)").id)! }
+        for rt in runtimes { rt.hiddenAt = Date.distantPast }
+        manager.sleepIdleTabs(.memoryPressure(.warning))
+        for rt in runtimes {
+            rt.browser.reply(to: isolatedProbe, with: #"{"result":{"type":"string","value":"typed"}}"#)
+            await drainMainQueue()
+        }
+        await drainMainQueue()
+        expect(logged == ["tab sleep for memory pressure closes nothing: 3 pages refused (typed 3)"],
+               "a sweep whose 3 pages refused says why it closed nothing")
+        manager.closeAll()
     }
 
     /// #38: an extension's chrome.tabs.update({active: true}) (SwitchyOmega's Options on its open
@@ -721,6 +935,74 @@ enum BrowserManagerLifecycleTests {
         expect(np.entries.map(\.id) == [b], "a playing page that navigates (a playlist) keeps its card")
         manager.unload(b)
         expect(np.entries.isEmpty, "closing the page removes its card")
+        manager.closeAll()
+    }
+
+    // promise: #275
+    /// A card follows its page through a sleep (#275): a discarded page leaves the player, as a
+    /// closed one does, and on waking the Mac a card reads the tab's sound again, so one Chromium
+    /// stopped hearing in the night doesn't stay on "playing".
+    @MainActor
+    private static func nowPlayingAfterSleepCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.protectedRecentTabs = 0
+        let np = NowPlaying()
+        manager.nowPlaying = np
+        let a = store.createTab(url: "https://example.test/a").id, b = store.createTab(url: "https://example.test/b").id
+        let ra = manager.ensureRuntime(for: a)!, rb = manager.ensureRuntime(for: b)!
+        for rt in [ra, rb] {
+            rt.browser.isAudible = true
+            manager.browser(rt.browser, didChangeAudible: true)
+        }
+        ra.browser.isAudible = false
+        manager.browser(ra.browser, didChangeAudible: false)
+        ra.audibleAt = Date.distantPast
+        ra.hiddenAt = Date.distantPast
+        ra.browser.replies.removeAll()  // the card's media-controls questions
+        manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
+        ra.browser.reply(to: isolatedProbe, with: idleReply)
+        await drainMainQueue()
+        ra.browser.reply(to: "Runtime.evaluate", with: idleReply)
+        await drainMainQueue()
+        await finishSleep(ra.browser)
+        expect(ra.discarded && np.entries.map(\.id) == [b], "a discarded page leaves the player")
+        rb.browser.isAudible = false
+        manager.systemDidWake()
+        expect(np.entries.map(\.id) == [b] && np.entries[0].playing == false,
+               "after a wake, a card whose tab no longer sounds reads paused")
+        manager.closeAll()
+    }
+
+    /// Paused from the sidebar's card, then played again on the page within the 2 s the engine
+    /// holds a quiet tab audible: the tab never went quiet, so only its sound starting tells the
+    /// card. Before, the card stayed on paused while the page played (Chromium and WebKit, 7 Nov 2026).
+    @MainActor
+    private static func nowPlayingResumeWithinHoldCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let np = NowPlaying()
+        manager.nowPlaying = np
+        let a = store.createTab(url: "https://music.example.test/").id, b = store.createTab(url: "https://example.test/other").id
+        let ra = manager.ensureRuntime(for: a)!, rb = manager.ensureRuntime(for: b)!
+        manager.show(b, focus: false)
+        ra.browser.isAudible = true
+        manager.browser(ra.browser, didChangeSoundPlaying: true)
+        manager.browser(ra.browser, didChangeAudible: true)
+        ra.browser.reply(to: "Cra.mediaSession", with: #"{"actions":["play","pause"],"pictureInPicture":false}"#)
+        await drainMainQueue()
+        ra.browser.replies.removeAll()
+        manager.performNowPlaying(a, .togglePlayback)
+        ra.browser.reply(to: "cra:Runtime.evaluate", with: #"{"result":{"type":"string","value":"playing"}}"#)
+        await drainMainQueue()
+        ra.browser.reply(to: "Cra.mediaSession", with: #"{"handled":true,"pictureInPicture":false}"#)
+        await drainMainQueue()
+        expect(np.entries.first?.playing == false, "paused from the card, the card shows paused")
+        manager.browser(ra.browser, didChangeSoundPlaying: false)
+        manager.browser(ra.browser, didChangeSoundPlaying: true)
+        expect(np.entries.first?.playing == true, "the page playing again within the hold shows on the card")
+        manager.browser(rb.browser, didChangeSoundPlaying: true)
+        expect(np.entries.map(\.id) == [a], "sound alone doesn't make a card: the held audible state does")
         manager.closeAll()
     }
 
@@ -1089,6 +1371,136 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #286
+    /// A page behind the tab in front asks nothing until its tab is shown, as in Chrome, and
+    /// sheets come one at a time (#286: a page reconnecting after the Mac woke put its
+    /// microphone sheet over the tab being read).
+    @MainActor
+    private static func permissionWaitsForItsTabCase() async {
+        AppDialog.presented = []
+        let store = SidebarStore()
+        let container = NSView()
+        let window = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 20, height: 20),
+                              styleMask: .borderless, backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        window.contentView!.addSubview(container)
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: container)
+        let behind = store.createTab(url: "https://meet.example/call").id
+        let front = store.createTab(url: "https://example.test/front").id
+        manager.show(behind, focus: false)
+        let caller = manager.runtime(for: behind)!.browser
+        manager.show(front, focus: false)
+        var answers: [String] = []
+        manager.browser(caller, requestsPermissionForOrigin: "https://meet.example", kinds: 2) { answers.append("mic \($0)") }
+        expect(AppDialog.presented.isEmpty && answers.isEmpty, "a page behind the tab in front asks nothing while it is behind")
+        manager.show(behind, focus: false)
+        expect(AppDialog.presented.map(\.title) == ["https://meet.example wants to use your microphone"],
+               "its tab coming to the front puts its sheet up")
+        manager.browser(caller, requestsPermissionForOrigin: "https://meet.example", kinds: 8) { answers.append("notifications \($0)") }
+        expect(AppDialog.presented.count == 1, "a second request waits for the sheet before it")
+        AppDialog.presented[0].answer(.alertFirstButtonReturn)
+        expect(answers == ["mic true"] && AppDialog.presented.map(\.title).last == "https://meet.example wants to show notifications",
+               "Allow answers the first request, and the next one asks")
+        AppDialog.presented[1].answer(.alertSecondButtonReturn)
+        expect(answers == ["mic true", "notifications false"], "Block answers the second")
+
+        // A request whose tab closes (or sleeps) before it is shown is dropped, never answered:
+        // Chromium forgets it with the page, and an answer would be remembered for the site.
+        let other = manager.ensureRuntime(for: front)!.browser
+        manager.browser(other, requestsPermissionForOrigin: "https://example.test", kinds: 1) { answers.append("camera \($0)") }
+        manager.unload(front)
+        await drainMainQueue()
+        manager.show(front, focus: false)
+        expect(AppDialog.presented.count == 2 && answers.count == 2, "a closed tab's waiting request never asks or answers")
+
+        // A page that moves to another window takes its waiting request along, and asks there
+        // once its tab is in front.
+        let mover = store.createTab(url: "https://call.example/room").id
+        manager.show(mover, focus: false)
+        let moving = manager.runtime(for: mover)!.browser
+        manager.show(front, focus: false)
+        manager.browser(moving, requestsPermissionForOrigin: "https://call.example", kinds: 1 | 2) { answers.append("call \($0)") }
+        let otherContainer = NSView()
+        let otherWindow = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 20, height: 20),
+                                   styleMask: .borderless, backing: .buffered, defer: true)
+        otherWindow.isReleasedWhenClosed = false
+        defer { otherWindow.close() }
+        otherWindow.contentView!.addSubview(otherContainer)
+        let otherManager = BrowserManager(store: store, favicons: FaviconCache(), container: otherContainer)
+        otherManager.takeRuntimeFromOtherWindow = { manager.release($0) }
+        otherManager.show(mover, focus: false)
+        await drainMainQueue()
+        expect(otherManager.runtime(for: mover)?.browser === moving
+               && AppDialog.presented.map(\.title).last == "https://call.example wants to use your camera and microphone",
+               "a page moved to another window asks there")
+        AppDialog.presented.last!.answer(.alertFirstButtonReturn)
+        expect(answers.last == "call true", "and its answer reaches the page")
+
+        // Chromium withdrew the request (the page navigated): its sheet goes and nothing answers.
+        manager.browser(page(manager, front), requestsPermissionForOrigin: "https://example.test", kinds: 4) { answers.append("location \($0)") }
+        let sheet = AppDialog.presented.last!
+        expect(sheet.title == "https://example.test wants to use your location" && sheet.isUp, "the tab in front asks at once")
+        manager.browserWithdrewPermissionRequest(page(manager, front))
+        expect(!sheet.isUp && answers.last == "call true", "a withdrawn request's sheet goes, unanswered")
+        manager.browser(caller, requestsPermissionForOrigin: "https://meet.example", kinds: 2) { answers.append("mic again \($0)") }
+        let before = AppDialog.presented.count
+        manager.browser(page(manager, front), requestsPermissionForOrigin: "https://example.test", kinds: 1) { answers.append("camera again \($0)") }
+        AppDialog.presented.last!.answer(.alertSecondButtonReturn)
+        manager.browserWithdrewPermissionRequest(caller)
+        manager.show(behind, focus: false)
+        expect(AppDialog.presented.count == before + 1 && answers.last == "camera again false",
+               "a withdrawn request waiting behind never asks")
+        manager.closeAll()
+        otherManager.closeAll()
+    }
+
+    @MainActor
+    private static func page(_ manager: BrowserManager, _ id: UUID) -> CraBrowser { manager.runtime(for: id)!.browser }
+
+    /// #273: a tab's back and forward list comes from its page a second after it settles and when
+    /// it goes off screen, and a new page for the tab (after a relaunch, a close, a wake) opens with
+    /// it, as Arc's do. Not once the tab has moved elsewhere, and never for an incognito page.
+    // promise: #273
+    @MainActor
+    private static func pageHistoryCase() {
+        let store = SidebarStore()
+        let clock = ManualScheduler()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView(), clock: clock)
+        let id = store.createTab(url: "https://example.test/a").id
+        manager.show(id, focus: false)
+        let first = manager.runtime(for: id)!.browser
+        expect(first.restoredHistory == nil, "a tab with nothing saved opens at its address")
+        first.navigate(to: "https://example.test/b")
+        first.setLoading(true)
+        first.setLoading(false)
+        clock.advance(by: 1)
+        expect(first.replies.contains { $0.method == "Cra.getHistory" }, "a second after the page settles, Cra asks for its list")
+        let list = Data([9, 8, 7]).base64EncodedString()
+        first.reply(to: "Cra.getHistory", with: #"{"history":"\#(list)","index":1,"url":"https://example.test/b"}"#)
+
+        manager.unload(id)
+        manager.show(id, focus: false)
+        let second = manager.runtime(for: id)!.browser
+        expect(second.restoredHistory?["history"] as? String == list && second.restoredHistory?["index"] as? Int == 1,
+               "the tab's next page opens with the saved list, at the entry it was on")
+
+        store.updateTab(id, url: "https://example.test/elsewhere")
+        manager.unload(id)
+        manager.show(id, focus: false)
+        expect(manager.runtime(for: id)!.browser.restoredHistory == nil, "a tab that moved on since opens fresh at its address")
+
+        let secret = store.createTab(url: "https://example.test/secret").id
+        store.incognitoItems.insert(secret)
+        manager.show(secret, focus: false)
+        let page = manager.runtime(for: secret)!.browser
+        page.setLoading(false)
+        clock.advance(by: 1)
+        manager.show(id, focus: false)
+        expect(!page.replies.contains { $0.method == "Cra.getHistory" }, "an incognito page's history is never asked for")
+        manager.closeAll()
+    }
+
     @MainActor
     private static func drainMainQueue() async {
         await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
@@ -1133,4 +1545,6 @@ private final class Observer: BrowserManagerDelegate {
         openedLinks.append((url, kind, space, fromIncognito))
     }
     func browserManagerCaptureImage(at point: NSPoint, tabID: UUID) { capturedImages.append((point, tabID)) }
+    var splitLinks: [(url: String, tab: UUID)] = []
+    func browserManagerOpenLinkInSplit(_ url: String, fromTab tabID: UUID) { splitLinks.append((url, tabID)) }
 }

@@ -1,0 +1,16 @@
+# Arc's Previews beside a Gmail or Google Calendar favorite (docs/arc-parity.md "Previews, measured"):
+# Gmail's card lists the unread mail, 84 pt rows to at most 270 pt with a ＋; with none it is Arc's
+# "exhale" card. Calendar's card is today's 255 pt timeline with the gear and ＋.
+budget rss=700 stalls50=10
+cra://debug?gmailPreview=3
+expect-log preview card shown: 238x254$
+cra://debug?previewDismiss=1
+cra://debug?gmailPreview=9
+expect-log preview card shown: 238x270$
+cra://debug?previewDismiss=1
+cra://debug?gmailPreview=0
+expect-log preview card shown: 240x6[0-9]$
+cra://debug?previewDismiss=1
+cra://debug?calendarPreview=1
+expect-log preview card shown: 238x255$
+cra://debug?previewDismiss=1

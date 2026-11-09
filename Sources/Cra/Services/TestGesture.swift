@@ -22,11 +22,33 @@ enum TestGesture {
     /// A click at a point of the window, through the app's event queue: AppKit routes it as it
     /// routes the pointer's (the window's sendEvent, first-click rules, hit testing), so a test
     /// sees what a real click there does, while the pointer and the front app stay put.
-    static func click(at point: NSPoint, in window: NSWindow) {
-        for (type, pressure) in [(NSEvent.EventType.leftMouseDown, Float(1)), (.leftMouseUp, 0)] {
-            guard let e = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-                                             windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1,
-                                             pressure: pressure) else { return }
+    static func click(at point: NSPoint, in window: NSWindow, clicks: Int = 1) {
+        // A double-click is two presses, the second with clickCount 2, as AppKit counts them.
+        for count in 1...max(clicks, 1) {
+            for (type, pressure) in [(NSEvent.EventType.leftMouseDown, Float(1)), (.leftMouseUp, 0)] {
+                guard let e = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                 windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: count,
+                                                 pressure: pressure) else { return }
+                NSApp.postEvent(e, atStart: false)
+            }
+        }
+    }
+
+    /// An other-button release at a point of the window, as the window's event monitors see it
+    /// (its button number is AppKit's, not the one a test means).
+    static func otherMouseUp(at point: NSPoint, in window: NSWindow) -> NSEvent? {
+        NSEvent.mouseEvent(with: .otherMouseUp, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                           windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0)
+    }
+
+    /// A key press through the app's event queue, routed as the keyboard's are (key equivalents,
+    /// the page, then Cra's own keys), with the characters a layout gives: the test picks the
+    /// layout's characters while the menu bar's key equivalents follow the selected one.
+    static func key(_ characters: String, keyCode: UInt16, modifiers: NSEvent.ModifierFlags, in window: NSWindow) {
+        for type in [NSEvent.EventType.keyDown, .keyUp] {
+            guard let e = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: modifiers, timestamp: ProcessInfo.processInfo.systemUptime,
+                                           windowNumber: window.windowNumber, context: nil, characters: characters,
+                                           charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode) else { return }
             NSApp.postEvent(e, atStart: false)
         }
     }

@@ -111,7 +111,7 @@ final class ExtensionsMenu: NSObject, NSMenuDelegate, NSMenuItemValidation {
             panel.allowedContentTypes = [.image]
             panel.message = "Choose an icon for \(e.name)'s toolbar button"
             guard panel.runModal() == .OK, let url = panel.url else { return }
-            do { try store.setCustomIcon(id, from: url) } catch { NSAlert(error: error).runModal() }
+            do { try store.setCustomIcon(id, from: url) } catch { AppDialog(error: error).runModal() }
         }
         choose.state = style.imageFile != nil ? .on : .off
         menu.addItem(choose)

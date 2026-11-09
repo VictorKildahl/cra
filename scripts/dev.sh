@@ -95,7 +95,7 @@ build() {
     fi
   done
   cp "$bin/Cra" "$APP/Contents/MacOS/$NAME" || return 1
-  for d in web brand blocklist browsers app-icons; do
+  for d in web brand blocklist browsers app-icons licenses fonts; do
     if [ -d "resources/$d" ]; then
       rsync -a --delete "resources/$d/" "$APP/Contents/Resources/$d/" || return 1
     fi

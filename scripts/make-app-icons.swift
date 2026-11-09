@@ -18,6 +18,12 @@ let monoRibbons = brand("cra-segments-mono")
     .replacingOccurrences(of: "</svg>", with: "")
     .replacingOccurrences(of: "currentColor", with: "#fff")
 let shadow = segments.range(of: #"<g opacity=".18".*?</g>"#, options: .regularExpression).map { String(segments[$0]) }!
+// The 19-wide white edge under the ribbons, and the four coloured ribbons (12 wide, multiplied).
+let edge = segments.ranges(of: #/<path [^>]*stroke="#fff" stroke-width="19"[^>]*/>/#).map { String(segments[$0]) }.joined()
+let ribbons = segments.ranges(of: #/<path [^>]*stroke-width="12"[^>]*/>/#).map { String(segments[$0]) }.joined()
+// Arc's family (#259): yellow, green, coral, blue become warm, magenta, orchid, blue-violet.
+let violetRibbons = [("#f6c34a", "#f3b985"), ("#4fbe7e", "#e438a7"), ("#f0574f", "#c33bd1"), ("#3f6df5", "#7b5cff")]
+    .reduce(ribbons) { $0.replacingOccurrences(of: $1.0, with: $1.1) }
 
 let icons: [String: String] = [
     // Dark tile; on dark, the ribbons blend normally (brand/README.md).
@@ -28,6 +34,12 @@ let icons: [String: String] = [
     // The shadow follows the 12-wide ribbons here, not the 19-wide white edge.
     "mono": ##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"><defs><linearGradient id="t" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5a84f8"/><stop offset="1" stop-color="#2f58d8"/></linearGradient></defs><rect width="64" height="64" rx="14.3" fill="url(#t)"/><g transform="translate(3.84 3.84) scale(0.88)">"##
         + shadow.replacingOccurrences(of: #"stroke-width="19""#, with: #"stroke-width="12""#) + monoRibbons + "</g></svg>",
+    // Arc's flat #100146 tile, with the edge in the #220a7e of the rim round Arc's mark. The
+    // ribbons are isolated, so multiply darkens only where they overlap; against the dark
+    // edge it would turn them almost black.
+    "violet": ##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"><rect width="64" height="64" rx="14.3" fill="#100146"/><g transform="translate(3.84 3.84) scale(0.88)">"##
+        + shadow + edge.replacingOccurrences(of: ##"stroke="#fff""##, with: ##"stroke="#220a7e""##)
+        + #"<g style="isolation:isolate">"# + violetRibbons + "</g></g></svg>",
 ]
 
 final class Renderer: NSObject, WKNavigationDelegate {
@@ -47,8 +59,10 @@ final class Renderer: NSObject, WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         let (id, _) = queue.removeFirst()
-        // 256 pt on the 2x backing: 512 px.
-        webView.takeSnapshot(with: nil) { image, error in
+        // 512 px on any display: 256 pt at 2x, or rendered at 512 pt where the window is 1x.
+        let config = WKSnapshotConfiguration()
+        config.snapshotWidth = NSNumber(value: 512 / Double(webView.window?.backingScaleFactor ?? 2))
+        webView.takeSnapshot(with: config) { image, error in
             guard let image, let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
                 fatalError("\(id): \(error?.localizedDescription ?? "no image")")
             }

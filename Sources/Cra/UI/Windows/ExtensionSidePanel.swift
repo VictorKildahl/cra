@@ -78,7 +78,7 @@ final class ExtensionSidePanelCard: NSView {
         title.frame = NSRect(x: icon.frame.maxX + 8, y: (h - titleH) / 2, width: max(0, closeButton.frame.minX - icon.frame.maxX - 16), height: titleH)
         hairline.frame = NSRect(x: 0, y: b.height - h - 1, width: b.width, height: 1)
         pageArea.frame = NSRect(x: 0, y: 0, width: b.width, height: max(0, b.height - h - 1))
-        for sub in pageArea.subviews where sub.frame != pageArea.bounds { sub.frame = pageArea.bounds }
+        EmbeddedPages.place(pageArea.subviews, in: pageArea.bounds)
     }
 
     // The same shadow as a page card (PaneCardView): a sibling behind it.
@@ -165,8 +165,9 @@ final class ExtensionSidePanelController: NSObject, @preconcurrency CraBrowserDe
             browser.loadURL(wanted.url)
         } else {
             closeBrowser()
-            let b = CraBrowser(frame: NSRect(x: 0, y: 0, width: ExtensionSidePanelWidth.initial, height: 600), url: wanted.url,
-                               delegate: self, incognito: false, profilePath: profilePath)
+            // Not a tab to the extension, as in Chrome (#265).
+            let b = CraBrowser(frame: NSRect(x: 0, y: 0, width: ExtensionSidePanelWidth.initial, height: 600),
+                               extensionSidePanelURL: wanted.url, delegate: self, profilePath: profilePath)
             browser = b
             if let host = b.hostWindow { attach(host) }
             Task { [weak self] in await self?.resolvePageTarget(of: b) }
@@ -203,6 +204,21 @@ final class ExtensionSidePanelController: NSObject, @preconcurrency CraBrowserDe
         }
         guard browser === b else { return }
         pageTarget = (info?["targetInfo"] as? [String: Any])?["targetId"] as? String
+    }
+
+    /// cra://debug?sidePanelJS=: the expression's value in the panel page, to cra.log.
+    func debugEvaluate(_ expression: String) {
+        guard let browser,
+              let data = try? JSONSerialization.data(withJSONObject: ["expression": expression, "returnByValue": true]),
+              let params = String(data: data, encoding: .utf8) else {
+            CraLog.note("side panel evaluates \(expression): no panel")
+            return
+        }
+        browser.sendDevToolsMethod("Runtime.evaluate", params: params) { result, error in
+            let object = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+            let value = (object?["result"] as? [String: Any])?["value"].map { "\($0)" }
+            CraLog.note("side panel evaluates \(expression) to \(value ?? error ?? "nothing")")
+        }
     }
 
     private func resize(by dx: CGFloat) {
@@ -268,7 +284,7 @@ final class ExtensionSidePanelController: NSObject, @preconcurrency CraBrowserDe
         EmbeddedPages.markHost(host)
         let area = shell.sidePanel.pageArea
         if views.contains(where: { $0.superview !== area }) { for v in views { area.addSubview(v) } }
-        for v in views where v.frame != area.bounds { v.frame = area.bounds }
+        EmbeddedPages.place(views, in: area.bounds)
     }
 
     /// The panel page's views (embedded in the card), so the window keeps its focus there.

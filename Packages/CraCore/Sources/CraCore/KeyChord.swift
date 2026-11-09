@@ -29,6 +29,80 @@ public struct KeyChord: Codable, Hashable {
         [36, 76].contains(keyCode) && Modifiers(rawValue: modifiers).intersection([.shift, .control, .option, .command]) == .command
     }
 
+    // MARK: Matching a key press
+
+    /// What a key press gives to match against: AppKit's charactersIgnoringModifiers, the
+    /// key's virtual key code and its device-independent modifier bits.
+    public struct Press: Hashable {
+        public var characters: String
+        public var keyCode: UInt16
+        public var modifiers: UInt
+
+        public init(characters: String, keyCode: UInt16, modifiers: UInt) {
+            self.characters = characters
+            self.keyCode = keyCode
+            self.modifiers = modifiers
+        }
+
+        /// The key as a chord stores it: lowercase, with Shift's character turned back into
+        /// the key's own ("{" is "["), Shift-Tab's backtab as Tab and the Delete key's U+007F
+        /// as `delete`.
+        public var key: String {
+            let lower = characters.lowercased()
+            return KeyChord.unshift[lower] ?? lower
+        }
+    }
+
+    /// The digit row's virtual key codes (the same on ANSI and ISO keyboards).
+    static let digitKeyCode: [UInt16: String] = [
+        18: "1", 19: "2", 20: "3", 21: "4", 23: "5", 22: "6", 26: "7", 28: "8", 25: "9", 29: "0",
+    ]
+
+    static let unshift: [String: String] = [
+        "\u{19}": tab, "\u{7F}": delete, "{": "[", "}": "]", "<": ",", ">": ".", "?": "/", "+": "=", "_": "-",
+        "~": "`", ":": ";", "\"": "'", "|": "\\",
+    ]
+
+    /// Where each punctuation key sits on an ANSI keyboard (virtual key codes). On layouts that
+    /// can't type the character without ⌥ (Danish and German "[" is ⌥8) the shortcut takes the
+    /// key in that place instead, as Arc and Chrome do for ⌘[ and ⌘].
+    static let ansiKeyCode: [String: UInt16] = [
+        "[": 33, "]": 30, "=": 24, "-": 27, ",": 43, ".": 47, "/": 44, ";": 41, "'": 39, "`": 50, "\\": 42,
+    ]
+
+    /// How a press matches this chord: by the character it types, or by the key's place when
+    /// the layout can't type the chord's character (`typable` says what the layout types
+    /// without ⌥, on its own or with Shift). Nil when it doesn't match. Caps Lock and the
+    /// function-key bit don't count.
+    public func match(_ press: Press, typable: (String) -> Bool) -> Match? {
+        let four: Modifiers = [.shift, .control, .option, .command]
+        guard Modifiers(rawValue: press.modifiers).intersection(four) == keys.intersection(four),
+              !press.characters.isEmpty else { return nil }
+        if press.key == key { return .character }
+        // Turkish Q types "-" on the ANSI "=" key, and "=" itself as ⇧0: matching "=" by place
+        // turned ⌘- into Zoom In (GitHub #212).
+        if let code = Self.ansiKeyCode[key], press.keyCode == code, !typable(key) { return .position }
+        // ⇧ on the digit row types "!", "@", "\"" and so on, which differ by layout: a chord of
+        // ⇧ and a digit (Arc's ⌃⇧1, Switch to Split View 1) takes the key in that digit's place.
+        if keys.contains(.shift), Self.digitKeyCode[press.keyCode] == key { return .position }
+        return nil
+    }
+
+    public enum Match: Comparable { case character, position }
+
+    /// The first entry with a chord the press types; failing that, the first one a key matches
+    /// by place. A character match anywhere wins over a place match earlier in the list.
+    public static func first<T>(in entries: [T], chords: (T) -> [KeyChord], press: Press,
+                                typable: (String) -> Bool) -> T? {
+        var byPlace: T?
+        for entry in entries {
+            let matches = chords(entry).compactMap { $0.match(press, typable: typable) }
+            if matches.contains(.character) { return entry }
+            if byPlace == nil, !matches.isEmpty { byPlace = entry }
+        }
+        return byPlace
+    }
+
     public static let tab = "\t"
     // AppKit's function-key characters (NSLeftArrowFunctionKey...).
     public static let left = "\u{F702}"
@@ -38,6 +112,10 @@ public struct KeyChord: Codable, Hashable {
     /// The Delete key as a menu's key equivalent wants it (NSBackspaceCharacter), shown ⌫.
     /// Its key events carry U+007F, which the app reads as this.
     public static let delete = "\u{8}"
+    /// F12 (NSF12FunctionKey): Arc's second Developer Tools key.
+    public static let f12 = "\u{F70F}"
+    /// The space bar: Arc's Reveal Current Tab is ⌃Space, shown ⌃⎵.
+    public static let space = " "
 
     /// How menus and the command bar show it: ⌃⌥⇧⌘ in Apple's order, then the key.
     public var display: String { caps.joined() }
@@ -56,6 +134,8 @@ public struct KeyChord: Codable, Hashable {
         case Self.up: s.append("↑")
         case Self.down: s.append("↓")
         case Self.delete: s.append("⌫")
+        case Self.f12: s.append("F12")
+        case Self.space: s.append("⎵")
         default: s.append(key.uppercased())
         }
         return s

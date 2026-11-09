@@ -79,10 +79,13 @@ final class SpaceColumnView: NSView {
         let set = { (v: NSView, f: NSRect) in if v.frame != f { animated ? (v.animator().frame = f) : (v.frame = f) } }
         set(favorites, NSRect(x: 8 + favoritesShift, y: 0, width: w - 16, height: fh))
         let tiles = favorites.tilesBottom(forWidth: w - 16)
-        let base = tiles ?? -8
+        // A Blank Window (Arc 1.172 captures, 6 Nov): its header sits 5 pt higher than a space's
+        // with no favorites, and its tabs 1.5 pt closer under it.
+        let blank = store.isBlank(space: spaceID)
+        let base = tiles ?? (blank ? -13 : -8)
         set(header, NSRect(x: 8, y: base + 8, width: w - 16, height: header.isHidden ? 0 : 36))
         // The list's line sits 11.5 pt into it (3 pt inset, then halfway down the 18 pt divider).
-        let top = base + (!header.isHidden ? 43 : tiles == nil ? 4 : 7)
+        let top = base + (!header.isHidden ? (blank ? 41.5 : 43) : tiles == nil ? 4 : 7)
         set(list, NSRect(x: 0, y: top, width: w, height: max(0, bounds.height - top)))
     }
 }
@@ -95,6 +98,14 @@ final class SpaceColumnView: NSView {
 /// right-click open the same space menu at the pointer. Collapsed, the chevron points right. Arc keeps
 /// it in the icon's place while collapsed; Cra shows the icon at rest and the chevron only on hover
 /// (X DM, 4 Nov), except for a space without an icon, where the chevron is all that shows the state.
+/// A Blank Window's header, Arc 1.172 2x captures (6 Nov): the name's glyphs 16.5 pt from the
+/// window's edge, "Move to…" (grey, 11 pt medium, 49 pt wide) ending 25.5 pt from the sidebar's
+/// edge. The offsets are fitted on Cra's own captures of the same points.
+enum BlankHeader {
+    static let titleX: CGFloat = 16.5 - 10 + 1.5
+    static let moveToEnd: CGFloat = 25.5 - 10.5
+}
+
 final class SpaceHeaderView: NSView, NSTextFieldDelegate {
     private let spaceID: UUID
     private let store: SidebarStore
@@ -114,6 +125,15 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
     /// Rename Space…: the name turns into a field and the ••• into Arc's "Done".
     private let done = NSTextField.sidebarLabel(size: 10, weight: .semibold)
     private var renameField: NSTextField?
+    /// A Blank Window's header (Arc 1.172, #220): "This Window" with no icon or chevron, and
+    /// "Move to…" at its end while the pointer is over the sidebar, which sends the window's tabs
+    /// to a space.
+    private var blank = false
+    private let moveTo = NSTextField.sidebarLabel(size: 11, weight: .medium)
+    /// Arc's pressed "Move to…": a pill behind it while its menu is open (white 10 % over the dark
+    /// sidebar, 27.5 pt tall, 11 pt before the text and 12.5 pt after it).
+    private let moveToPill = NSView()
+    private var columnHovering = false { didSet { if columnHovering != oldValue { refresh() } } }
     private var hovering = false { didSet { if hovering != oldValue { refresh() } } }
     /// Arc keeps the hover look while the space menu is open.
     private var menuOpen = false { didSet { if menuOpen != oldValue { refresh() } } }
@@ -140,8 +160,28 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         done.stringValue = "Done"
         done.isHidden = true
         symbol.imageScaling = .scaleNone
-        for v in [emoji, symbol, title, chevronBox, more, done] { addSubview(v) }
+        moveTo.stringValue = "Move to…"
+        moveTo.isHidden = true
+        moveToPill.wantsLayer = true
+        moveToPill.layer?.cornerRadius = 8
+        moveToPill.isHidden = true
+        for v in [emoji, symbol, title, chevronBox, more, done, moveToPill, moveTo] { addSubview(v) }
         sync()
+    }
+
+    private var columnTracking: NSTrackingArea?
+    private weak var trackedColumn: NSView?
+    /// "Move to…" follows the pointer over the whole column, not just the header.
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        if let t = columnTracking { trackedColumn?.removeTrackingArea(t) }
+        columnTracking = nil
+        guard let column = superview else { return }
+        trackedColumn = column
+        let t = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self,
+                               userInfo: ["column": true])
+        column.addTrackingArea(t)
+        columnTracking = t
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -158,6 +198,7 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
             emoji.stringValue = space.emoji
             symbol.image = space.symbol.flatMap { SidebarSymbols.image($0, size: 13, weight: .medium) }
             title.stringValue = space.title
+            blank = space.standaloneWindowID != nil
             colors = SidebarColors(space.theme.palette)
             collapsed = store.isPinnedCollapsed(spaceID)
             hide = store.hidesSpaceHeader(spaceID)
@@ -190,8 +231,18 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         symbol.alphaValue = showsChevron ? 0 : 1
         symbol.contentTintColor = colors.textSecondary
         more.colors = colors
-        more.isHidden = !lit || renameField != nil
+        more.isHidden = !lit || renameField != nil || blank
         done.isHidden = renameField == nil
+        moveTo.textColor = colors.textTertiary
+        moveTo.isHidden = !blank || !(columnHovering || hovering || menuOpen)
+        moveToPill.isHidden = !blank || !menuOpen
+        moveToPill.layer?.backgroundColor = (colors.isDark ? NSColor.white.withAlphaComponent(0.1) : colors.hoverFill).cgColor
+        if blank {
+            chevron.alphaValue = 0
+            layer?.backgroundColor = .clear
+            needsLayout = true
+            return
+        }
         // Arc's dark header fill is white 0.10, a little lighter than its rows' (1 Nov).
         let fill = colors.isDark ? NSColor.white.withAlphaComponent(0.1) : colors.hoverFill
         layer?.backgroundColor = (lit ? fill : .clear).cgColor
@@ -230,8 +281,14 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         let dw = ceil(done.attributedStringValue.size().width) + 2 * SidebarText.inset
         let dh = done.intrinsicContentSize.height
         done.frame = NSRect(x: w - 5.5 - dw + SidebarText.inset, y: (h - dh) / 2, width: dw, height: dh)
-        let x: CGFloat = 36
-        let end = renameField != nil ? done.frame.minX - 6 : (more.isHidden ? w - 8.5 : w - 18.5 - 13 - 2)
+        let mw = ceil(moveTo.attributedStringValue.size().width) + 2 * SidebarText.inset
+        let mh = moveTo.intrinsicContentSize.height
+        moveTo.frame = NSRect(x: w - BlankHeader.moveToEnd - mw + SidebarText.inset, y: (h - mh) / 2, width: mw, height: mh)
+        let glyphs = moveTo.frame.insetBy(dx: SidebarText.inset, dy: 0)
+        moveToPill.frame = NSRect(x: glyphs.minX - 11, y: (h - 27.5) / 2, width: glyphs.width + 23.5, height: 27.5)
+        let x: CGFloat = blank ? BlankHeader.titleX : 36
+        let end = blank ? (moveTo.isHidden ? w - 8.5 : moveTo.frame.minX - 6)
+            : renameField != nil ? done.frame.minX - 6 : (more.isHidden ? w - 8.5 : w - 18.5 - 13 - 2)
         let th = title.intrinsicContentSize.height
         let tw = min(ceil(title.attributedStringValue.size().width), max(0, end - x))
         title.frame = NSRect(x: x - SidebarText.inset, y: (h - th) / 2, width: tw + 2 * SidebarText.inset, height: th)
@@ -247,12 +304,21 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil))
     }
 
-    override func mouseEntered(with event: NSEvent) { hovering = true }
-    override func mouseExited(with event: NSEvent) { hovering = false }
+    override func mouseEntered(with event: NSEvent) {
+        if event.trackingArea === columnTracking { columnHovering = true } else { hovering = true }
+    }
+    override func mouseExited(with event: NSEvent) {
+        if event.trackingArea === columnTracking { columnHovering = false } else { hovering = false }
+    }
     override func mouseDown(with event: NSEvent) {}
     override func mouseUp(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
         guard bounds.contains(p) else { return }
+        // A Blank Window has nothing pinned to collapse; its one button is "Move to…".
+        if blank {
+            if !moveTo.isHidden, moveTo.frame.insetBy(dx: -6, dy: -6).contains(p) { showMenu(event) }
+            return
+        }
         if renameField != nil {
             if done.frame.insetBy(dx: -6, dy: -6).contains(p) { commitRename() }
             return
@@ -284,8 +350,23 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         if let w = window { hovering = bounds.contains(convert(w.mouseLocationOutsideOfEventStream, from: nil)) }
     }
 
+    /// "Move to…": the spaces, in the sidebar's order, each taking this window's tabs (#220).
+    private func moveToMenu() -> NSMenu {
+        let m = NSMenu()
+        for space in store.orderedSpaces {
+            let item = BlockMenuItem(title: space.emoji.isEmpty ? space.title : "\(space.emoji)  \(space.title)") { [store, actions, spaceID] in
+                guard store.isBlank(space: spaceID) else { return }
+                actions.moveBlankWindow(space.id)
+            }
+            if let sym = space.symbol { item.image = SidebarSymbols.image(sym, size: 13, weight: .medium) }
+            m.addItem(item)
+        }
+        return m
+    }
+
     private func makeSpaceMenu() -> NSMenu? {
-        SpaceMenu.make(spaceID: spaceID, store: store, ui: ui, actions: actions, anchor: self) { [weak self] in self?.beginRename() }
+        if blank { return moveToMenu() }
+        return SpaceMenu.make(spaceID: spaceID, store: store, ui: ui, actions: actions, anchor: self) { [weak self] in self?.beginRename() }
     }
 
     // MARK: Rename (Arc: isEditingSpaceHeader, "Sidebar space header done button")
@@ -368,12 +449,13 @@ enum SpaceMenu {
         let github = store.liveFolder(.github, inSpace: id)
         MenuItems.add(live, "GitHub", on: github != nil) {
             if let github {
-                SidebarMenus.confirmDeleteLiveFolder(github, store: store)
+                SidebarMenus.confirmDeleteLiveFolder(github, store: store, in: anchor.window)
             } else if let f = store.createLiveFolder(.github, inSpace: id) {
                 store.setExpanded(f.id, true)
                 LiveFolderManager.shared.refresh(f.id)
             }
         }
+        SidebarMenus.addGitLabFolders(to: live, space: id, store: store, window: anchor.window)
         m.addItem(.separator())
         let export = MenuItems.submenu(m, "Export “\(space.title)” into Folder")
         for s in store.orderedSpaces {
@@ -476,7 +558,11 @@ final class FavoritesGridView: NSView {
             return true
         }
         strip.onTargetChange = { [weak self] _ in self?.onHeightChange(true) }
-        strip.accepts = { [weak self] id in self?.isFavorite(id) != true }
+        // A Blank Window has no favorites (Arc, #220).
+        strip.accepts = { [weak self] id in
+            guard let self else { return false }
+            return !self.isFavorite(id) && !self.store.isBlank(space: self.spaceID)
+        }
         card.accepts = strip.accepts
         card.onDrop = strip.onDrop
         card.onDismiss = { [weak self] in
@@ -519,7 +605,7 @@ final class FavoritesGridView: NSView {
                 }
             }
             favoritesID = space.favoritesContainerID
-            dismissed = store.isIncognito(space: spaceID) || store.isFavoritesEmptyStateDismissed(space.favoritesContainerID)
+            dismissed = store.isStandalone(space: spaceID) || store.isFavoritesEmptyStateDismissed(space.favoritesContainerID)
             // A favorite split is one tile with a cell per pane (Arc: AppItem.childItems).
             for item in store.children(of: space.favoritesContainerID) where item.isTab || item.isSplit {
                 let panes = item.isSplit ? store.children(of: item.id).filter(\.isTab) : [item]
@@ -703,7 +789,7 @@ final class FavoritesGridView: NSView {
               let data = info.draggingPasteboard.data(forType: .craSidebarItem),
               let id = (try? JSONDecoder().decode(SidebarDragItem.self, from: data))?.id,
               let item = store.item(id), item.isTab || item.isSplit,
-              store.isIncognito(item: id) == store.isIncognito(space: spaceID) else { return nil }
+              store.isIncognito(item: id) == store.isIncognito(space: spaceID), !store.isBlank(space: spaceID) else { return nil }
         let w = bounds.width
         let top = extensionGrid(forWidth: w).favoritesOffset
         let p = convert(info.draggingLocation, from: nil)
@@ -1036,6 +1122,9 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
     /// Cuts a split's tile into its cells.
     private let cutMask = CAShapeLayer()
     private let unreadDot = CALayer()
+    /// Live Calendar's Show Time to Next Meeting ("12m", "Now") at the tile's top right.
+    private let countdown = CATextLayer()
+    nonisolated(unsafe) private var calendarObserver: NSObjectProtocol?
     private var focusRing: FocusRingLayer?
     private var model: FavoriteTileModel?
     private var palette: SpacePalette?
@@ -1058,11 +1147,24 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         cutMask.fillRule = .evenOdd
         unreadDot.cornerRadius = 3
         layer?.addSublayer(unreadDot)
+        countdown.fontSize = 9
+        countdown.font = NSFont.systemFont(ofSize: 9, weight: .semibold)
+        countdown.alignmentMode = .right
+        countdown.contentsScale = 2
+        countdown.isHidden = true
+        layer?.addSublayer(countdown)
+        calendarObserver = NotificationCenter.default.addObserver(forName: LiveCalendarClient.changed, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.calendarChanged() }
+        }
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    deinit {
+        if let o = calendarObserver { NotificationCenter.default.removeObserver(o) }
+    }
 
     override var isFlipped: Bool { true }
     override var mouseDownCanMoveWindow: Bool { false }
@@ -1079,6 +1181,9 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         while favicons.count > m.cells.count { favicons.removeLast().removeFromSuperview() }
         // Arc 1.171: the open split's tile is one selected tile; the cut shows while it is closed.
         layer?.mask = m.cells.count > 1 && !m.selected ? cutMask : nil
+        if let url = liveCalendarURL, let store = grid?.store {
+            LiveCalendarClient.shared.watch(favorite: url, profilePath: store.profilePath(item: itemID))
+        }
         refresh()
     }
 
@@ -1109,6 +1214,10 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         for (f, c) in zip(favicons, m.cells) { f.show(c.icon, flip: c.icon != nil && c.glyphDark == dark, colors: faviconColors) }
         unreadDot.isHidden = !(m.unread && !m.selected)
         unreadDot.backgroundColor = (m.tileColor == nil ? colors.textPrimary : (dark ? NSColor.white : NSColor.black)).withAlphaComponent(0.6).cgColor
+        let ink = (m.tileColor == nil ? colors.textPrimary : (dark ? NSColor.white : NSColor.black)).withAlphaComponent(0.7)
+        countdown.string = countdownText.map { NSAttributedString(string: $0, attributes: [.font: NSFont.systemFont(ofSize: 9, weight: .semibold), .foregroundColor: ink]) }
+        countdown.isHidden = countdownText == nil
+        if countdownText != nil { unreadDot.isHidden = true }
         if m.focus != (focusRing != nil) {
             if m.focus {
                 let r = FocusRingLayer(radius: FavoriteTileMetrics.corner)
@@ -1145,6 +1254,7 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
             cutMask.path = path
         }
         unreadDot.frame = CGRect(x: bounds.width - 5 - 6, y: 5, width: 6, height: 6)
+        countdown.frame = CGRect(x: 4, y: 3, width: bounds.width - 9, height: 12)
         focusRing?.frame = bounds
         CATransaction.commit()
     }
@@ -1172,11 +1282,76 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         ArcTooltipController.shared.mouseMoved(in: self)
     }
 
-    override func mouseEntered(with event: NSEvent) { hovering = true; trackPointer(event) }
+    override func mouseEntered(with event: NSEvent) {
+        hovering = true
+        trackPointer(event)
+        if let url = previewURL, let store = grid?.store {
+            FavoritePreviewCard.shared.hover(self, target: previewTarget(url, store: store))
+        }
+    }
     override func mouseMoved(with event: NSEvent) { trackPointer(event) }
-    override func mouseExited(with event: NSEvent) { hovering = false; hoveredCell = nil; ArcTooltipController.shared.mouseExited(self) }
+    override func mouseExited(with event: NSEvent) {
+        hovering = false
+        hoveredCell = nil
+        ArcTooltipController.shared.mouseExited(self)
+        FavoritePreviewCard.shared.leave(self)
+    }
 
-    override func mouseDown(with event: NSEvent) { press = event }
+    /// A Gmail favorite with Previews on, or a Calendar favorite with Live Calendar's hover
+    /// preview: Arc shows the card instead of the name tooltip, and none on the open tab.
+    private var previewURL: String? {
+        // Not while the Library covers the sidebar (the tile is still under the pointer's path there).
+        guard let store = grid?.store, grid?.ui.libraryPage == nil, grid?.ui.libraryReveal == nil, !isHiddenOrHasHiddenAncestor,
+              model?.selected != true, model?.cells.count == 1, let url = store.item(itemID)?.tab?.url else { return nil }
+        if GmailPreview.feedURL(for: url) != nil { return store.settings.favoritePreviews ? url : nil }
+        if CalendarPreview.isCalendar(url) { return store.settings.liveCalendar && store.settings.calendarHoverPreview ? url : nil }
+        return nil
+    }
+
+    /// The favorite's Google Calendar address while Live Calendar is on for it.
+    private var liveCalendarURL: String? {
+        guard let store = grid?.store, store.settings.liveCalendar, let url = store.item(itemID)?.tab?.url,
+              CalendarPreview.isCalendar(url) else { return nil }
+        return url
+    }
+
+    private var calendarEvents: [CalendarPreview.Event] {
+        guard let url = liveCalendarURL, let store = grid?.store else { return [] }
+        return LiveCalendarClient.shared.state(for: url, profilePath: store.profilePath(item: itemID))?.events ?? []
+    }
+
+    private var countdownText: String? {
+        guard let store = grid?.store, store.settings.calendarTimeToNextMeeting, liveCalendarURL != nil else { return nil }
+        return CalendarPreview.timeToNext(in: calendarEvents, now: Date())
+    }
+
+    private func previewTarget(_ url: String, store: SidebarStore) -> FavoritePreviewCard.Target {
+        let id = itemID
+        return FavoritePreviewCard.Target(
+            favorite: url, profilePath: store.profilePath(item: id),
+            open: { [weak self] u in self?.openInFavorite(u) },
+            openNewTab: { [weak grid] u in grid?.actions.openURL(u) },
+            disableLiveCalendar: { store.settings.liveCalendar = false })
+    }
+
+    /// A mail, event or new draft from the card: the favorite opens on it.
+    private func openInFavorite(_ url: String) {
+        guard let grid else { return }
+        grid.store.selectTab(itemID, window: grid.ui.windowID)
+        (window?.windowController as? MainWindowController)?.loadInSelectedTab(url)
+    }
+
+    private func calendarChanged() {
+        guard liveCalendarURL != nil else { return }
+        refresh()
+        MeetingReminder.shared.update(tile: self, favorite: liveCalendarURL, events: calendarEvents,
+                                      timing: grid?.store.settings.calendarMeetingLink ?? .twoMinutes) { [weak grid] in grid?.actions.openURL($0) }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        FavoritePreviewCard.shared.cancel(self)
+        press = event
+    }
     override func mouseDragged(with event: NSEvent) {
         guard let p = press, let grid else { return }
         guard hypot(event.locationInWindow.x - p.locationInWindow.x, event.locationInWindow.y - p.locationInWindow.y) > 3 else { return }
@@ -1195,7 +1370,15 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         // A split opens with the pressed pane focused.
         let cells = model?.cells ?? []
         let i = cellIndex(at: convert(p.locationInWindow, from: nil))
-        grid.store.selectTab(cells.indices.contains(i) ? cells[i].id : itemID, window: grid.ui.windowID)
+        let id = cells.indices.contains(i) ? cells[i].id : itemID
+        grid.store.selectTab(id, window: grid.ui.windowID)
+        // A double-click on a favorite away from its pinned page goes back there (#264); in a
+        // split, the pressed pane.
+        let away = grid.store.item(id)?.tab.map { $0.url != $0.savedURL } ?? false
+        if FavoriteClick.action(clickCount: event.clickCount, navigatedAway: away) == .backToPinnedPage {
+            CraLog.note("favorite double-click: back to pinned page")
+            grid.actions.resetPinnedTab(id)
+        }
     }
 
     func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
@@ -1260,6 +1443,10 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         let tileColor = item.tab?.tileColor
         let m = NSMenu()
         m.autoenablesItems = false
+        if let url = item.tab?.url, CalendarPreview.isCalendar(url) {
+            Self.liveCalendarMenu(m, url: url, profilePath: store.profilePath(item: id), store: store)
+            m.addItem(.separator())
+        }
         MenuItems.add(m, action: "favoriteTab", title: Self.removeTitle(id, store)) { store.removeFromFavorites(id) }
         MenuItems.add(m, action: "renameTab", title: "Rename…") { ui.renamingID = id }
         if let t = item.tab, t.liveItemURL == nil {
@@ -1303,6 +1490,35 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         return m
     }
 
+    /// Arc 1.172.1's Live Calendar ▸ at the top of a Calendar favorite's menu: the last fetch,
+    /// Refresh, then ✓Show Hover Preview, ✓Show Time to Next Meeting and Show Next Meeting Link ▸
+    /// (Never … Ten Minutes Before). With Live Calendar off it offers to turn it back on.
+    private static func liveCalendarMenu(_ m: NSMenu, url: String, profilePath: String?, store: SidebarStore) {
+        let sub = MenuItems.submenu(m, "Live Calendar")
+        m.items.last?.image = NSImage(systemSymbolName: "calendar", accessibilityDescription: nil)
+        guard store.settings.liveCalendar else {
+            MenuItems.add(sub, "Enable Live Calendar") { store.settings.liveCalendar = true }
+            return
+        }
+        let state = LiveCalendarClient.shared.state(for: url, profilePath: profilePath)
+        let status = state?.failed == true ? "Failed to update" : state?.signedOut == true ? "Not signed in" : CalendarPreview.lastFetch(state?.fetched, now: Date())
+        MenuItems.add(sub, status, enabled: false) {}
+        MenuItems.add(sub, "Refresh") { LiveCalendarClient.shared.refresh(favorite: url, profilePath: profilePath) }
+        sub.addItem(.separator())
+        MenuItems.add(sub, "Show Hover Preview", on: store.settings.calendarHoverPreview) { store.settings.calendarHoverPreview.toggle() }
+        MenuItems.add(sub, "Show Time to Next Meeting", on: store.settings.calendarTimeToNextMeeting) {
+            store.settings.calendarTimeToNextMeeting.toggle()
+            NotificationCenter.default.post(name: LiveCalendarClient.changed, object: nil)
+        }
+        let link = MenuItems.submenu(sub, "Show Next Meeting Link")
+        for t in CalendarPreview.LinkTiming.allCases {
+            MenuItems.add(link, t.title, on: store.settings.calendarMeetingLink == t) {
+                store.settings.calendarMeetingLink = t
+                NotificationCenter.default.post(name: LiveCalendarClient.changed, object: nil)
+            }
+        }
+    }
+
     /// Shared favorites (#154) take Arc's words: Remove Favorite deletes the favorite.
     private static func removeTitle(_ id: UUID, _ store: SidebarStore) -> String {
         store.profileList(ofItem: id) == nil ? "Remove from Favorites" : "Remove Favorite"
@@ -1334,7 +1550,7 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
 
     // ArcTooltipTarget: the title by the pointer.
     var text: String {
-        guard let m = model else { return "" }
+        guard let m = model, previewURL == nil else { return "" }
         if let i = hoveredCell, m.cells.count > 1, m.cells.indices.contains(i) { return m.cells[i].title }
         return m.title
     }

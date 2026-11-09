@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// Which buttons Arc's toolbar carries, in order, for a pane's state; PaneToolbarView makes
@@ -13,6 +14,10 @@ import Foundation
 /// and close; the other panes show only Arc's essential controls (`onlyShowEssentialControls`:
 /// ← →, the address and close) until the pointer is over their bar (Arc's `onHover` toolbar
 /// blueprint), which reveals the rest.
+///
+/// The Extensions button (Arc's sliders) opens the Site Control Center: Share, Boost, Capture,
+/// the extensions with their "+" and the site's settings. It is there with no extension
+/// installed too, in the toolbar and in the sidebar's URL field (GitHub #226).
 public struct ToolbarComposition: Equatable, Sendable {
     public enum Kind: Equatable, Sendable { case noTab, emptyPane, normal, developer }
 
@@ -39,7 +44,7 @@ public struct ToolbarComposition: Equatable, Sendable {
 
     /// `hovered`: the pointer is over this bar, which reveals an unfocused pane's controls.
     public init(kind: Kind, inSplit: Bool, sidebarVisible: Bool, focusedPane: Bool, hovered: Bool = false, canGoBack: Bool,
-                canGoForward: Bool, isLoading: Bool, pinnedExtensions: [String], hasExtensions: Bool) {
+                canGoForward: Bool, isLoading: Bool, pinnedExtensions: [String]) {
         // Arc's essential controls only: a split pane that neither has the focus nor the pointer.
         let essentialOnly = inSplit && !focusedPane && !hovered
         // Never in a split pane or an empty one.
@@ -56,10 +61,10 @@ public struct ToolbarComposition: Equatable, Sendable {
             right += [.copyURL, .divider, .console, .network, .inspect]
         }
         // Arc's right end: pinned extensions, the Extensions button, then Split View (not in a
-        // split); also on the no-tab bar.
+        // split); also on the no-tab bar. The developer bar has the Extensions button first.
         if !essentialOnly, kind != .emptyPane {
-            right += pinnedExtensions.map(Item.pinnedExtension)
-            if hasExtensions { right.append(.extensions) }
+            let pins = pinnedExtensions.map(Item.pinnedExtension)
+            right += kind == .developer ? [.extensions] + pins : pins + [.extensions]
             if !inSplit { right.append(.addSplit) }
         }
         if inSplit {
@@ -67,5 +72,13 @@ public struct ToolbarComposition: Equatable, Sendable {
             if !essentialOnly, kind != .emptyPane { right.append(.splitOptions) }
             right.append(.closePane)
         }
+    }
+
+    /// The sidebar's URL field while the toolbar is hidden, shown on hover over the header: the
+    /// pinned extensions while they leave the address its room (else they go in the grid over the
+    /// favorites), Copy Link, then the Site Control Center's sliders (Arc 1.171, GitHub #226).
+    public static func urlFieldAccessories(pinnedExtensions: [String], fieldWidth: CGFloat) -> [Item] {
+        let pins = PinnedExtensionGrid.fitsInURLField(count: pinnedExtensions.count, fieldWidth: fieldWidth) ? pinnedExtensions : []
+        return pins.map(Item.pinnedExtension) + [.copyURL, .extensions]
     }
 }

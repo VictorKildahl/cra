@@ -20,10 +20,15 @@ if [ "${1:-}" != core ]; then
   suite "Browser manager" Tests/test-browser-manager.sh
   suite "Floating sidebar" scripts/test-floating-sidebar.sh
   suite "Extension popup candidate" scripts/test-extension-popup-candidate.sh
+  suite "Extension popup window" scripts/test-extension-popup-window.sh
+  suite "Peek dismiss panel" scripts/test-peek-dim-panel.sh
+  suite "Dialogs" scripts/test-dialogs.sh
   suite "Extension state" scripts/test-extension-state.sh
+  suite "Extension store migration" scripts/test-extension-store-migration.sh
   suite "Store and importers" scripts/test-store.sh
   suite "Policies" scripts/test-policies.sh
   suite "Command bar glyph" scripts/test-command-bar-glyph.sh
+  suite "Folder glyph" scripts/test-folder-glyph.sh
   suite "Perf recorder" scripts/test-perf.sh
   suite "Lint" scripts/lint.py
 fi

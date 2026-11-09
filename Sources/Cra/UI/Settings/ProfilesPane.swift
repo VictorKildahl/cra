@@ -9,9 +9,6 @@ struct ProfilesPane: View {
     let nav: SettingsNavigation
     let actions: SettingsActions
     @Environment(SidebarStore.self) private var store
-    @State private var naming: BrowserProfile?
-    @State private var name = ""
-    @State private var deleting: BrowserProfile?
 
     var body: some View {
         SettingsCardPane {
@@ -21,8 +18,8 @@ struct ProfilesPane: View {
                 ForEach(store.profiles) { p in
                     SettingsCardDivider()
                     row(name: p.name, profileID: p.id) {
-                        Button("Rename…") { name = p.name; naming = p }
-                        Button("Delete…") { deleting = p }
+                        Button("Rename…") { rename(p) }
+                        Button("Delete…") { delete(p) }
                             .disabled(!store.spaces(usingProfile: p.id).isEmpty)
                     }
                 }
@@ -60,17 +57,39 @@ struct ProfilesPane: View {
             }
             .id(nav.shown)  // read again each time Settings comes up: Chromium's page may have changed them
             SettingsFootnote("The languages websites show their pages in for each Profile, most wanted first. Change opens Chromium’s language settings for that Profile. Cra itself stays in English.")
+            // Arc's Profiles ▸ "Your Data and Settings": Chromium's pages for the profile.
+            SettingsHeader("Your Data and Settings").padding(.top, 20)
+            SettingsCard {
+                ForEach(Array(Self.dataPages.enumerated()), id: \.offset) { i, page in
+                    if i > 0 { SettingsCardDivider() }
+                    dataRow(page)
+                }
+            }
         }
-        .alert("Rename Profile", isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
-            TextField("Profile name", text: $name)
-            Button("Rename") { if let p = naming { store.renameProfile(p.id, to: trimmed) } }
-            Button("Cancel", role: .cancel) {}
-        }
-        .alert("Delete “\(deleting?.name ?? "")”?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
-            Button("Delete", role: .destructive) { if let p = deleting { store.deleteProfile(p.id) } }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Deleting this Profile will permanently remove any cookies, history, preferences, and logins that belong to it.")
+    }
+
+    /// Arc's four rows, in its order, with the Chromium page each opens.
+    static let dataPages: [(title: String, symbol: String, url: String)] = [
+        ("Privacy and Security", "lock.fill", "chrome://settings/privacy"),
+        ("Passwords", "key.fill", "chrome://password-manager/passwords"),
+        ("Credit Cards", "creditcard.and.123", "chrome://settings/payments"),
+        ("Notifications", "bell.fill", "chrome://settings/content/notifications"),
+    ]
+
+    private func dataRow(_ page: (title: String, symbol: String, url: String)) -> some View {
+        SettingsCardRow {
+            Label(page.title, systemImage: page.symbol).font(.system(size: 13))
+        } trailing: {
+            if store.profiles.isEmpty {
+                Button("Open") { actions.openProfilePage(page.url, nil) }
+            } else {
+                // One set of pages per Profile: pick whose.
+                Menu("Open") {
+                    Button("Default") { actions.openProfilePage(page.url, nil) }
+                    ForEach(store.profiles) { p in Button(p.name) { actions.openProfilePage(page.url, p.id) } }
+                }
+                .fixedSize()
+            }
         }
     }
 
@@ -147,14 +166,34 @@ struct ProfilesPane: View {
             .flatMap(BrowserLanguages.codes(preferencesFile:)) ?? []
     }
 
-    private var trimmed: String { name.trimmingCharacters(in: .whitespaces) }
+    private func rename(_ profile: BrowserProfile) {
+        guard let window = AppDialog.parentWindow else { return }
+        let dialog = AppDialog(title: "Rename your Profile",
+                               message: "This won’t affect the names of any of the Spaces associated with this Profile.",
+                               actions: [DialogAction("Save"), .cancel], input: profile.name, placeholder: "Profile name", requiresInput: true,
+                               icon: .none, width: 496, buttonSpacing: 30, buttonOutset: 0)
+        dialog.present(over: window) { response in
+            guard response == .alertFirstButtonReturn, let name = dialog.input else { return }
+            store.renameProfile(profile.id, to: name.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+    }
+
+    private func delete(_ profile: BrowserProfile) {
+        guard let window = AppDialog.parentWindow else { return }
+        let dialog = AppDialog(title: "Delete “\(profile.name)”?",
+                               message: "Deleting this Profile will permanently remove any cookies, history, preferences, and logins that belong to it.",
+                               actions: [DialogAction("Delete Profile", role: .destructive), .cancel])
+        dialog.present(over: window) { response in
+            if response == .alertFirstButtonReturn { store.deleteProfile(profile.id) }
+        }
+    }
 
     private func row<Trailing: View>(name: String, profileID: UUID?, @ViewBuilder trailing: () -> Trailing) -> some View {
         let spaces = store.spaces(usingProfile: profileID)
         return SettingsCardRow {
             VStack(alignment: .leading, spacing: 2) {
                 Text(name).font(.system(size: 13))
-                Text(spaces.isEmpty ? "No Spaces" : spaces.map { "\($0.emoji) \($0.title)" }.joined(separator: ", "))
+                Text(spaces.isEmpty ? "No Spaces" : spaces.map(\.labeled).joined(separator: ", "))
                     .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
             }
         } trailing: {

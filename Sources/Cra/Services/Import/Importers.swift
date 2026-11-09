@@ -14,6 +14,10 @@ struct ImportedItem {
     var createdAt = Date()
     /// Cached favicon file in the source browser, if any.
     var faviconPath: String?
+    /// A live folder's source and filter (Arc's GitHub live folder, #215): it keeps refreshing.
+    var liveFolder: LiveFolderData?
+    /// The live item a tab in a live folder stands for (Arc: `liveItemID.url`).
+    var liveItemURL: String?
 }
 
 struct ImportedSpace {
@@ -47,7 +51,7 @@ struct ImportedArchiveEntry {
 enum ImportedLinkDestination {
     case mostRecentSpace
     case space(title: String)
-    case littleWindow
+    case littleWindow(spaceTitle: String?)
 }
 
 struct ImportedLinkRoute {
@@ -115,6 +119,11 @@ private func pairs(_ list: Any?) -> [(String, [String: Any])] {
     return out
 }
 
+/// Arc wraps an enum case's value as `{case: {_0: value}}`.
+private func tagged<T>(_ value: Any?, _ key: String) -> T? {
+    ((value as? [String: Any])?[key] as? [String: Any])?["_0"] as? T
+}
+
 // MARK: - Arc
 
 enum ArcImporter {
@@ -163,11 +172,12 @@ enum ArcImporter {
             if let tab = dataDict["tab"] as? [String: Any] {
                 guard let u = tab["savedURL"] as? String, !u.isEmpty else { return nil }
                 return ImportedItem(customTitle: custom, pageTitle: tab["savedTitle"] as? String ?? "", url: u, createdAt: created,
-                                    faviconPath: faviconFile(forItemID: id))
+                                    faviconPath: faviconFile(forItemID: id), liveItemURL: tagged(tab["liveItemID"], "url"))
             }
-            if dataDict["list"] != nil {
+            if let list = dataDict["list"] as? [String: Any] {
                 return ImportedItem(customTitle: custom, pageTitle: custom ?? "Folder", url: nil, isFolder: true,
-                                    children: childIDs.compactMap(convert), createdAt: created)
+                                    children: childIDs.compactMap(convert), createdAt: created,
+                                    liveFolder: liveFolder(list["automaticLiveFolderData"]))
             }
             if dataDict["splitView"] != nil || dataDict["tabGroup"] != nil {
                 // Flatten split views into their tabs.
@@ -194,8 +204,11 @@ enum ArcImporter {
         for (sid, space) in pairs(main["spaces"]) {
             let title = space["title"] as? String ?? "Space"
             spaceTitleByID[sid] = title
-            var emoji = "🗂️"
+            // No iconType is Remove Icon in Arc, a dot in its dock: keep it icon-less, which Cra's
+            // dock draws as the same dot (#252). An icon this can't read gets 🗂️.
+            var emoji = ""
             if let info = space["customInfo"] as? [String: Any], let icon = info["iconType"] as? [String: Any] {
+                emoji = "🗂️"
                 if let e = icon["emoji_v2"] as? String { emoji = e }
                 else if let code = icon["emoji"] as? Int, let scalar = UnicodeScalar(code) { emoji = String(Character(scalar)) }
             }
@@ -256,6 +269,23 @@ enum ArcImporter {
         return plan
     }
 
+    /// Arc's `automaticLiveFolderData` for a GitHub folder: `dataSource {github: {}}`, `filter
+    /// {github: {_0: {attributes, hiddenRepositories [{owner, name}]}}}`, `hiddenItems [{url: {_0}}]`.
+    /// Its `lastFetch` stays behind, so the folder refreshes as soon as Cra runs (#215).
+    static func liveFolder(_ value: Any?) -> LiveFolderData? {
+        guard let data = value as? [String: Any], (data["dataSource"] as? [String: Any])?["github"] != nil else { return nil }
+        var live = LiveFolderData()
+        if let filter: [String: Any] = tagged(data["filter"], "github") {
+            if let bits = filter["attributes"] as? Int { live.filter.attributes = GitHubLiveFilter.Attributes(rawValue: bits).intersection(.all) }
+            live.filter.hiddenRepositories = (filter["hiddenRepositories"] as? [[String: Any]] ?? []).compactMap { r in
+                guard let owner = r["owner"] as? String, let name = r["name"] as? String else { return nil }
+                return "\(owner)/\(name)"
+            }
+        }
+        live.hiddenItems = (data["hiddenItems"] as? [Any] ?? []).compactMap { tagged($0, "url") }
+        return live
+    }
+
     /// One Air Traffic Control rule: `sourceComponents[0].componentType.urlMatch` is
     /// `{_0: {contains: {}} | {matches: {}}, _1: text}`.
     private static func linkRoute(_ rule: [String: Any], spaceTitles: [String: String]) -> ImportedLinkRoute? {
@@ -269,17 +299,19 @@ enum ArcImporter {
     }
 
     /// `{littleArc: {_0: <profile>}}` or `{space: {_0: {mostRecent: {}}}}`; a specific
-    /// space is recognised by its id anywhere inside `space`.
+    /// space is recognised by its id anywhere inside either. Arc's editor never wrote a
+    /// Little Arc with a space, but one written by hand loaded in that space's profile;
+    /// Cra's Little Window route can name the space (#258).
     private static func linkDestination(_ value: Any?, spaceTitles: [String: String]) -> ImportedLinkDestination? {
         guard let d = value as? [String: Any] else { return nil }
-        if d["littleArc"] != nil { return .littleWindow }
-        guard let space = d["space"] else { return nil }
         func title(_ v: Any) -> String? {
             if let s = v as? String { return spaceTitles[s] }
             if let o = v as? [String: Any] { return o.values.lazy.compactMap(title).first }
             if let a = v as? [Any] { return a.lazy.compactMap(title).first }
             return nil
         }
+        if let little = d["littleArc"] { return .littleWindow(spaceTitle: title(little)) }
+        guard let space = d["space"] else { return nil }
         return title(space).map { .space(title: $0) } ?? .mostRecentSpace
     }
 
@@ -447,7 +479,9 @@ extension SidebarStore {
         func insert(_ items: [ImportedItem], into parent: UUID, skip: Set<String>, pinned: Bool) {
             var skip = skip
             for it in items {
-                if it.isFolder {
+                if let live = it.liveFolder {
+                    insertLiveFolder(it, live, into: parent, pinned: pinned)
+                } else if it.isFolder {
                     let name = it.customTitle ?? it.pageTitle
                     // Re-importing must not duplicate folders: reuse one with the same name.
                     let folder: SidebarItem
@@ -466,11 +500,30 @@ extension SidebarStore {
                     tab.createdAt = it.createdAt
                     // An open tab was alive in the other browser: auto-archive counts from the import,
                     // not from when the tab was made (Dia keeps tabs for weeks with auto-clean off).
-                    if var t = tab.tab { t.timeLastActiveAt = pinned ? it.createdAt : clock.now; tab.data = .tab(t) }
+                    if var t = tab.tab {
+                        t.timeLastActiveAt = pinned ? it.createdAt : clock.now
+                        if self.items[parent]?.isLiveFolder == true { t.liveItemURL = it.liveItemURL }
+                        tab.data = .tab(t)
+                    }
                     insertItem(tab, into: parent, at: nil)
                     result.tabs += 1
                 }
             }
+        }
+
+        // A space has one GitHub live folder: importing again fills the one it has.
+        func insertLiveFolder(_ it: ImportedItem, _ live: LiveFolderData, into parent: UUID, pinned: Bool) {
+            guard let sid = self.spaceID(ofItem: parent), !isIncognito(space: sid) else { return }
+            let folder: SidebarItem
+            if let existing = self.liveFolder(live.source, inSpace: sid) {
+                folder = existing
+            } else {
+                folder = createFolder(named: it.customTitle ?? it.pageTitle, in: parent)
+                self.items[folder.id]?.liveFolder = live
+                setExpanded(folder.id, false)
+                result.folders += 1
+            }
+            insert(it.children.filter { $0.liveItemURL != nil }, into: folder.id, skip: existingURLs(under: folder.id), pinned: pinned)
         }
 
         let current = focusedSpace.favoritesContainerID
@@ -530,7 +583,7 @@ extension SidebarStore {
             func destination(_ d: ImportedLinkDestination) -> LinkDestination {
                 switch d {
                 case .mostRecentSpace: return .mostRecentSpace
-                case .littleWindow: return .littleWindow
+                case .littleWindow(let title): return .littleWindow(space: title.flatMap(spaceID(titled:)))
                 case .space(let title):
                     return spaceID(titled: title).map { .space($0) } ?? .mostRecentSpace
                 }

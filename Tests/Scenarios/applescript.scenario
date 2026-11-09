@@ -1,0 +1,16 @@
+# Arc's AppleScript dictionary (Arc 1.172.1's Arc.sdef, same codes in resources/Cra.sdef): a window's
+# active tab is readable, `execute javascript` is refused until View ▸ Developer ▸ Allow JavaScript from
+# Apple Events is on (off by default, as in Arc), then runs in the tab. Scripts use raw codes, run inside Cra.
+budget rss=700 stalls50=10
+cra://open?url=${PAGE}?n=scripted
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?applescript=tell%20current%20application%20to%20get%20%C2%ABclass%20URL%20%C2%BB%20of%20%C2%ABclass%20acTa%C2%BB%20of%20%C2%ABclass%20WiND%C2%BB%201
+expect-log Cra applescript → http://127\.0\.0\.1:[0-9]+/page\.html\?n=scripted
+cra://debug?applescript=tell%20current%20application%20to%20count%20%C2%ABclass%20tAbB%C2%BB%20of%20%C2%ABclass%20WiND%C2%BB%201
+expect-log Cra applescript → .*1
+cra://debug?applescript=tell%20current%20application%20to%20%C2%ABevent%20CrSuExJa%C2%BB%20%C2%ABclass%20acTa%C2%BB%20of%20%C2%ABclass%20WiND%C2%BB%201%20given%20%C2%ABclass%20JvSc%C2%BB%3A%226%2A7%22
+expect-log Cra applescript → error .*Allow JavaScript from Apple Events
+cra://action/allowAppleEventsJavaScript
+cra://debug?applescript=tell%20current%20application%20to%20%C2%ABevent%20CrSuExJa%C2%BB%20%C2%ABclass%20acTa%C2%BB%20of%20%C2%ABclass%20WiND%C2%BB%201%20given%20%C2%ABclass%20JvSc%C2%BB%3A%226%2A7%22
+expect-log Cra applescript → 42

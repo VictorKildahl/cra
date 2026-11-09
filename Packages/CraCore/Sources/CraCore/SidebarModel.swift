@@ -64,6 +64,9 @@ public struct TabData: Codable, Equatable {
     public var muted: Bool = false
     public var timeLastActiveAt: Date?
     public var activeTabBeforeCreationID: UUID?
+    /// The tab a link opened this one from (Arc: referrerID). Back with no page behind closes this
+    /// tab and shows that one (BackToReferrer, #273). Saved, as the page's history is (PageHistory).
+    public var referrerID: UUID?
     /// Favicon cache key: the host, then the page's own icon once it loads (FaviconKey, #211).
     public var faviconKey: String?
     /// Favicon cache key of an image the user picked; wins over the site's favicon.
@@ -174,6 +177,9 @@ public struct SidebarItem: Identifiable, Codable, Equatable {
     public var data: ItemData
     /// A folder's glyph colour; nil is Auto (it follows the theme).
     public var folderIcon: FolderIconStyle? = nil
+    /// The symbol picked with Change Icon… (Arc's folder icon picker). A key of its own, beside
+    /// `folderIcon`, so a Cra that predates symbols still reads the file.
+    public var folderSymbol: FolderSymbol? = nil
     /// Set on a folder that fills itself (Arc: list.automaticLiveFolderData).
     public var liveFolder: LiveFolderData? = nil
     /// A Today folder shown as a group header, as Tidy Tabs makes them (Arc: SidebarItemData.tabGroup,
@@ -181,7 +187,7 @@ public struct SidebarItem: Identifiable, Codable, Equatable {
     public var tabGroup: Bool? = nil
 
     public init(id: UUID, parentID: UUID?, title: String?, children: [UUID], isUnread: Bool, createdAt: Date, data: ItemData,
-                folderIcon: FolderIconStyle? = nil, liveFolder: LiveFolderData? = nil, tabGroup: Bool? = nil) {
+                folderIcon: FolderIconStyle? = nil, folderSymbol: FolderSymbol? = nil, liveFolder: LiveFolderData? = nil, tabGroup: Bool? = nil) {
         self.id = id
         self.parentID = parentID
         self.title = title
@@ -190,6 +196,7 @@ public struct SidebarItem: Identifiable, Codable, Equatable {
         self.createdAt = createdAt
         self.data = data
         self.folderIcon = folderIcon
+        self.folderSymbol = folderSymbol
         self.liveFolder = liveFolder
         self.tabGroup = tabGroup
     }
@@ -267,9 +274,12 @@ public struct Space: Identifiable, Codable, Equatable {
     public var profileID: UUID?
     /// An SF Symbol from the Icon tab of Arc's icon picker, shown instead of `emoji` (then empty).
     public var symbol: String? = nil
+    /// The Blank Window this space belongs to (Arc: a `standalone` sidebar container keyed by its
+    /// window). Such a space is in no window's space list and goes when its window closes (BlankWindow).
+    public var standaloneWindowID: UUID? = nil
 
     public init(id: UUID, title: String, emoji: String, theme: SpaceTheme, favoritesContainerID: UUID, pinnedContainerID: UUID,
-                todayContainerID: UUID, createdAt: Date, profileID: UUID? = nil, symbol: String? = nil) {
+                todayContainerID: UUID, createdAt: Date, profileID: UUID? = nil, symbol: String? = nil, standaloneWindowID: UUID? = nil) {
         self.id = id
         self.title = title
         self.emoji = emoji
@@ -280,6 +290,7 @@ public struct Space: Identifiable, Codable, Equatable {
         self.createdAt = createdAt
         self.profileID = profileID
         self.symbol = symbol
+        self.standaloneWindowID = standaloneWindowID
     }
 }
 
@@ -456,13 +467,16 @@ public struct AppSettings: Codable, Equatable {
     /// Arc's per-site Developer Mode (⌃D): the toolbar shows the full URL in
     /// monospace with the developer icons, and the nav buttons move to the sidebar.
     public var developerHosts: Set<String> = []
+    /// Arc's `disabledDefaultHosts`: local servers start in Developer Mode, and ⌃D on one
+    /// records its host here (#228).
+    public var disabledDefaultDeveloperHosts: Set<String> = []
     /// Host pages in Chrome-style windows: Chrome extensions and Chrome's own
     /// DevTools docking. Needs a restart to change.
     public var chromeEngine: Bool = true
     /// Air Traffic Control's "Default": where links from other apps open when no route
     /// matches. Arc's "Links from other apps open in Little Arc" switch is this set to
     /// Little Arc (on) or the most recent space (off).
-    public var defaultLinkDestination: LinkDestination = .littleWindow
+    public var defaultLinkDestination: LinkDestination = .littleWindowInUse
     /// Air Traffic Control routes, checked in order (LinkRouting.swift). Starts with Arc's
     /// Google Meet route.
     public var linkRoutes: [LinkRoute] = [.googleMeet]
@@ -478,9 +492,10 @@ public struct AppSettings: Codable, Equatable {
     /// Arc's "Open Little Arc when I press ⌥⌘N" (globalLittleBrowserHotkeyEnabled, on by default):
     /// New Little Window's shortcut works from every app, full-screen ones too (GitHub #195).
     public var littleWindowShortcutEverywhere: Bool = true
-    /// GitHub #183, not in Arc (Chrome's way): a page's "Open Link in New Tab" leaves the page in
-    /// front and the new tab loading behind it (LinkMenu). Off like Arc, which switches to it.
-    public var openLinksInBackground: Bool = false
+    /// A page's "Open Link in New Tab" switches to the tab it opens (LinkMenu). Off as in Arc, whose
+    /// item leaves the page in front and the tab loading behind it (GitHub #276). A new key: #183's
+    /// openLinksInBackground was off (switch) in every settings.json that never turned it on.
+    public var openLinksInForeground: Bool = false
     /// Arc's Previews ▸ Folders (folderPreviewEnabled): resting the pointer on a closed folder
     /// lists its tabs, most recent first, with a search field.
     public var folderPreviews: Bool = true
@@ -493,6 +508,9 @@ public struct AppSettings: Codable, Equatable {
     public var hapticFeedbackOnReorder: Bool = true
     /// Dia's Advanced ▸ "Warn before quitting" (shouldWarnBeforeQuitting, off by default).
     public var warnBeforeQuitting: Bool = false
+    /// GitHub #231, not in Arc (Arc quits on ⌘Q): ⌘Q puts the pages away and Cra stays in the menu
+    /// bar, so ⌥⌘N opens a Little Window without a launch. Off, ⌘Q quits as in Arc (MenuBarMode).
+    public var keepInMenuBar: Bool = false
     /// Dia's Tabs ▸ "Clean up tabs I haven't used in:" checkbox; `autoArchive` keeps the
     /// threshold while this is off.
     public var autoArchiveEnabled: Bool = true
@@ -505,6 +523,44 @@ public struct AppSettings: Codable, Equatable {
     public var tabSleepOnMemoryPressure: Bool = false
     /// Privacy ▸ "Always use secure connections": Chrome's HTTPS-Only Mode.
     public var httpsOnly: Bool = false
+    /// Arc's View ▸ Appearance: what websites see as the colour scheme.
+    public var websiteAppearance: WebsiteAppearance = .automatic
+    /// Arc's Settings ▸ Advanced "Play Arc sound effects" (the capture shutter), on by default.
+    public var soundEffects: Bool = true
+    /// Arc's Library ▸ Media: off until "Show Media" is pressed (reading Desktop and Documents
+    /// asks macOS for access), then the folders the Library button's "Show media" menu ticks.
+    public var mediaLibraryEnabled: Bool = false
+    public var mediaFolders: [MediaLibrary.Folder] = MediaLibrary.Folder.allCases
+    /// Files taken off Library ▸ Media with Arc's "Hide from Arc" (the file stays on disk).
+    public var mediaHidden: [String] = []
+    /// Arc's Settings ▸ Links ▸ "Archive Little Arcs after:".
+    public var littleWindowArchiveAfter: LittleWindowArchive = .sixHours
+    /// Arc's Settings ▸ Advanced "When opening Arc, restore windows from previous session", on by default.
+    public var restoreWindows: Bool = true
+    /// Settings ▸ Advanced "When opening Cra, start on a new tab" (X DM 7 Nov 2026, not in Arc): off,
+    /// Cra opens on the tab in use last, as Arc does (LaunchStart).
+    public var startOnNewTab: Bool = false
+    /// Arc's Settings ▸ Advanced "Allow websites to get your theme data" (ArcThemeData), on by default.
+    public var shareThemeWithWebsites: Bool = true
+    /// Arc's Settings ▸ General "Block Cookie Banners" (CookieBanners), off by default as in Arc.
+    public var blockCookieBanners: Bool = false
+    /// Arc's View ▸ Developer ▸ "Allow JavaScript from Apple Events": AppleScript's `execute`, off by default.
+    public var allowAppleEventsJavaScript: Bool = false
+    /// Arc's Settings ▸ Advanced "Allow window dragging from the top of webpages" (PageTopDrag), on by default.
+    public var pageTopWindowDrag: Bool = true
+    /// Arc's Settings ▸ Advanced "Enable Boosts on websites you visit", on by default.
+    public var boostsEnabled: Bool = true
+    /// Arc's Settings ▸ General ▸ Previews: hovering a Gmail favorite shows its unread mail.
+    public var favoritePreviews: Bool = true
+    /// Arc's Live Calendar on a Google Calendar favorite (the favorite's menu ▸ Live Calendar), on
+    /// until "Disable Live Calendar".
+    public var liveCalendar: Bool = true
+    /// Live Calendar ▸ Show Hover Preview: today's timeline when the pointer rests on the tile.
+    public var calendarHoverPreview: Bool = true
+    /// Live Calendar ▸ Show Time to Next Meeting: the tile counts down to it.
+    public var calendarTimeToNextMeeting: Bool = true
+    /// Live Calendar ▸ Show Next Meeting Link, Two Minutes Before in Arc.
+    public var calendarMeetingLink: CalendarPreview.LinkTiming = .twoMinutes
     /// Arc's searchSuggestEnabled: the command bar asks the search engine for suggestions
     /// as you type and fills its rows with them.
     public var searchSuggestions: Bool = true
@@ -553,10 +609,22 @@ public struct AppSettings: Codable, Equatable {
     /// Arc's "Links from other apps open in Little Arc" (URLs handed over by other apps
     /// open in a small disposable window instead of a sidebar tab).
     public var openExternalLinksInLittleWindow: Bool {
-        get { defaultLinkDestination == .littleWindow }
-        set { defaultLinkDestination = newValue ? .littleWindow : .mostRecentSpace }
+        get { defaultLinkDestination.isLittleWindow }
+        set {
+            guard newValue != openExternalLinksInLittleWindow else { return }
+            defaultLinkDestination = newValue ? .littleWindowInUse : .mostRecentSpace
+        }
     }
-    public func isDeveloperMode(url: String) -> Bool { AppSettings.siteKey(for: url).map(developerHosts.contains) ?? false }
+    /// Hosts Arc puts in Developer Mode by itself, on any port: localhost, 127.0.0.1 and any
+    /// *.localhost, not [::1] (Arc 1.172, checked live 8 Nov 2026).
+    public static func isDefaultDeveloperHost(_ host: String) -> Bool {
+        host == "localhost" || host == "127.0.0.1" || host.hasSuffix(".localhost")
+    }
+    public func isDeveloperMode(url: String) -> Bool {
+        guard let k = AppSettings.siteKey(for: url) else { return false }
+        return developerHosts.contains(k)
+            || (Self.isDefaultDeveloperHost(k) && !disabledDefaultDeveloperHosts.contains(k))
+    }
     /// Whether a page shown alone carries a bar above it: the toolbar while it is shown, and
     /// Arc's developer bar on a Developer Mode site even with the toolbar hidden (#185). A
     /// split's panes always carry bars (#178); the shell adds that rule.
@@ -565,7 +633,11 @@ public struct AppSettings: Codable, Equatable {
     }
     public mutating func toggleDeveloperMode(url: String) {
         guard let k = AppSettings.siteKey(for: url) else { return }
-        if developerHosts.contains(k) { developerHosts.remove(k) } else { developerHosts.insert(k) }
+        let on = isDeveloperMode(url: url)
+        if Self.isDefaultDeveloperHost(k) {
+            developerHosts.remove(k)
+            if on { disabledDefaultDeveloperHosts.insert(k) } else { disabledDefaultDeveloperHosts.remove(k) }
+        } else if on { developerHosts.remove(k) } else { developerHosts.insert(k) }
     }
     /// Settings saved without `toolbarDefaultMigrated` take the toolbar from Arc's View ▸
     /// Show Toolbar (nil without Arc: off), once. Arc's preference is read only then.
@@ -684,6 +756,7 @@ extension AppSettings {
         toolbarShowsFullURL = try c.decodeIfPresent(Bool.self, forKey: .toolbarShowsFullURL) ?? false
         hasSeenImportPrompt = try c.decodeIfPresent(Bool.self, forKey: .hasSeenImportPrompt) ?? false
         developerHosts = try c.decodeIfPresent(Set<String>.self, forKey: .developerHosts) ?? []
+        disabledDefaultDeveloperHosts = try c.decodeIfPresent(Set<String>.self, forKey: .disabledDefaultDeveloperHosts) ?? []
         chromeEngine = try c.decodeIfPresent(Bool.self, forKey: .chromeEngine) ?? true
         autoPictureInPicture = try c.decodeIfPresent(Bool.self, forKey: .autoPictureInPicture) ?? true
         blockAdsAndTrackers = try c.decodeIfPresent(Bool.self, forKey: .blockAdsAndTrackers) ?? true
@@ -699,15 +772,34 @@ extension AppSettings {
         peekInEveryTab = try c.decodeIfPresent(Bool.self, forKey: .peekInEveryTab) ?? false
         peekOnShiftClick = try c.decodeIfPresent(Bool.self, forKey: .peekOnShiftClick) ?? true
         littleWindowShortcutEverywhere = try c.decodeIfPresent(Bool.self, forKey: .littleWindowShortcutEverywhere) ?? true
-        openLinksInBackground = try c.decodeIfPresent(Bool.self, forKey: .openLinksInBackground) ?? false
+        openLinksInForeground = try c.decodeIfPresent(Bool.self, forKey: .openLinksInForeground) ?? false
         folderPreviews = try c.decodeIfPresent(Bool.self, forKey: .folderPreviews) ?? true
         hapticFeedbackOnReorder = try c.decodeIfPresent(Bool.self, forKey: .hapticFeedbackOnReorder) ?? true
         warnBeforeQuitting = try c.decodeIfPresent(Bool.self, forKey: .warnBeforeQuitting) ?? false
+        keepInMenuBar = try c.decodeIfPresent(Bool.self, forKey: .keepInMenuBar) ?? false
         autoArchiveEnabled = try c.decodeIfPresent(Bool.self, forKey: .autoArchiveEnabled) ?? true
         tabSleepTimerEnabled = try c.decodeIfPresent(Bool.self, forKey: .tabSleepTimerEnabled) ?? true
         tabSleepAfter = (try? c.decodeIfPresent(TabSleepThreshold.self, forKey: .tabSleepAfter)) ?? .fourHours
         tabSleepOnMemoryPressure = try c.decodeIfPresent(Bool.self, forKey: .tabSleepOnMemoryPressure) ?? false
         httpsOnly = try c.decodeIfPresent(Bool.self, forKey: .httpsOnly) ?? false
+        websiteAppearance = (try? c.decodeIfPresent(WebsiteAppearance.self, forKey: .websiteAppearance)) ?? .automatic
+        soundEffects = try c.decodeIfPresent(Bool.self, forKey: .soundEffects) ?? true
+        mediaLibraryEnabled = try c.decodeIfPresent(Bool.self, forKey: .mediaLibraryEnabled) ?? false
+        mediaFolders = (try? c.decodeIfPresent([MediaLibrary.Folder].self, forKey: .mediaFolders)) ?? MediaLibrary.Folder.allCases
+        mediaHidden = (try? c.decodeIfPresent([String].self, forKey: .mediaHidden)) ?? []
+        littleWindowArchiveAfter = (try? c.decodeIfPresent(LittleWindowArchive.self, forKey: .littleWindowArchiveAfter)) ?? .sixHours
+        restoreWindows = try c.decodeIfPresent(Bool.self, forKey: .restoreWindows) ?? true
+        startOnNewTab = try c.decodeIfPresent(Bool.self, forKey: .startOnNewTab) ?? false
+        shareThemeWithWebsites = try c.decodeIfPresent(Bool.self, forKey: .shareThemeWithWebsites) ?? true
+        blockCookieBanners = try c.decodeIfPresent(Bool.self, forKey: .blockCookieBanners) ?? false
+        allowAppleEventsJavaScript = try c.decodeIfPresent(Bool.self, forKey: .allowAppleEventsJavaScript) ?? false
+        pageTopWindowDrag = try c.decodeIfPresent(Bool.self, forKey: .pageTopWindowDrag) ?? true
+        boostsEnabled = try c.decodeIfPresent(Bool.self, forKey: .boostsEnabled) ?? true
+        favoritePreviews = try c.decodeIfPresent(Bool.self, forKey: .favoritePreviews) ?? true
+        liveCalendar = try c.decodeIfPresent(Bool.self, forKey: .liveCalendar) ?? true
+        calendarHoverPreview = try c.decodeIfPresent(Bool.self, forKey: .calendarHoverPreview) ?? true
+        calendarTimeToNextMeeting = try c.decodeIfPresent(Bool.self, forKey: .calendarTimeToNextMeeting) ?? true
+        calendarMeetingLink = (try? c.decodeIfPresent(CalendarPreview.LinkTiming.self, forKey: .calendarMeetingLink)) ?? .twoMinutes
         searchSuggestions = try c.decodeIfPresent(Bool.self, forKey: .searchSuggestions) ?? true
         showSpaceHeaderOnSingleSpace = try c.decodeIfPresent(Bool.self, forKey: .showSpaceHeaderOnSingleSpace) ?? true
         sharedFavorites = try c.decodeIfPresent(Bool.self, forKey: .sharedFavorites) ?? false
@@ -770,6 +862,7 @@ extension Space {
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         profileID = try c.decodeIfPresent(UUID.self, forKey: .profileID)
         symbol = try c.decodeIfPresent(String.self, forKey: .symbol)
+        standaloneWindowID = try c.decodeIfPresent(UUID.self, forKey: .standaloneWindowID)
         // Edit Space… → Save in 0.1.31 and older wrote 🌱 beside a space's symbol, and the sidebar
         // drew both stacked (#205). The symbol was the space's icon, so the emoji beside it goes.
         if symbol?.isEmpty == false { emoji = "" }
@@ -785,6 +878,7 @@ extension TabData {
         muted = try c.decodeIfPresent(Bool.self, forKey: .muted) ?? false
         timeLastActiveAt = try c.decodeIfPresent(Date.self, forKey: .timeLastActiveAt)
         activeTabBeforeCreationID = try c.decodeIfPresent(UUID.self, forKey: .activeTabBeforeCreationID)
+        referrerID = try c.decodeIfPresent(UUID.self, forKey: .referrerID)
         faviconKey = try c.decodeIfPresent(String.self, forKey: .faviconKey) ?? URL(string: url)?.host
         customIconKey = try c.decodeIfPresent(String.self, forKey: .customIconKey)
         tileColor = try c.decodeIfPresent(String.self, forKey: .tileColor)
@@ -795,3 +889,25 @@ extension TabData {
         homeTitle = try c.decodeIfPresent(String.self, forKey: .homeTitle)
     }
 }
+
+/// Arc's View ▸ Appearance ("Websites, Easels, and Notes will use:"): Automatic follows the Mac.
+public enum WebsiteAppearance: String, Codable, CaseIterable, Sendable {
+    case automatic, light, dark
+
+    public var title: String {
+        switch self {
+        case .automatic: "Automatic"
+        case .light: "Light"
+        case .dark: "Dark"
+        }
+    }
+    /// What Chromium's colour mode takes: 0 the system's, 1 light, 2 dark.
+    public var chromiumMode: Int {
+        switch self {
+        case .automatic: 0
+        case .light: 1
+        case .dark: 2
+        }
+    }
+}
+

@@ -1,0 +1,14 @@
+# Arc's Settings ▸ Advanced "When opening Arc, restore windows from previous session" (Arc 1.172.1,
+# docs/arc-parity.md), turned off: after a relaunch only the window in use last comes back.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "restoreWindows": false}
+cra://open?url=${PAGE}?n=one
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://action/newWindow
+wait 2
+cra://debug?browserWindows=before
+expect-log browser windows before: count=2
+relaunch
+wait 4
+cra://debug?browserWindows=after
+expect-log browser windows after: count=1

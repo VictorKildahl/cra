@@ -18,8 +18,8 @@ struct PictureInPictureActions {
 /// the top-right corner, remembered where the user leaves it (measured on Arc
 /// 1.168, see docs/arc-reverse-engineering.md). A transparent child window
 /// over it keeps the pointer away from Chrome's controls and draws Arc's
-/// instead on hover: close and back-to-tab at the top, play/pause with
-/// ±15 s skips in the middle (Arc's tooltips: "closes the pip window",
+/// instead on hover: back-to-tab, the page's address and close at the top,
+/// play/pause with ±15 s skips in the middle (Arc's tooltips: "closes the pip window",
 /// "returns to the original tab", "Skip back/ahead 15 seconds"). The overlay
 /// also owns dragging and aspect-locked edge resizing.
 @MainActor
@@ -30,16 +30,18 @@ final class PictureInPictureChrome {
     var isPlaying = false {
         didSet { for o in overlays.values { o.controls.isPlaying = isPlaying } }
     }
+    /// The page's host, centred in the top bar (Arc's; Chrome's own strip stays hidden, #246).
+    var address = "" {
+        didSet { for o in overlays.values { o.controls.address = address } }
+    }
 
-    /// Arc on a 1728×1117 display: 782×440 for a 16:9 video, 10 pt from the
-    /// top and right edges of the visible frame.
     static let cornerRadius: CGFloat = 6
-    static let edgeMargin: CGFloat = 10
-    static let defaultHeightFraction: CGFloat = 440.0 / 1084.0
+    static let edgeMargin = PictureInPictureLayout.edgeMargin
     private static let frameKey = "CraPictureInPictureFrame"
 
     private var overlays: [ObjectIdentifier: PictureInPictureOverlay] = [:]
-    private var observers: [NSObjectProtocol] = []
+    private var observers: [ObjectIdentifier: [NSObjectProtocol]] = [:]
+    private var appObservers: [NSObjectProtocol] = []
 
     private init() {}
 
@@ -60,18 +62,108 @@ final class PictureInPictureChrome {
         let overlay = PictureInPictureOverlay(over: window)
         overlays[ObjectIdentifier(window)] = overlay
         overlay.controls.isPlaying = isPlaying
+        overlay.controls.address = address
         window.addChildWindow(overlay, ordered: .above)
         overlay.orderFront(nil)
-        observers.append(NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.prune() }
-        })
-        observers.append(NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: window, queue: .main) { [weak overlay, weak window] _ in
-            Task { @MainActor in
-                guard let overlay, let window else { return }
-                overlay.setFrame(window.frame, display: false)
-                PictureInPictureChrome.shared.remember(window.frame)
+        let center = NotificationCenter.default
+        let id = ObjectIdentifier(window)
+        observers[id].map { $0.forEach(center.removeObserver) }   // Chromium shows the same window again for the next video
+        observers[id] = [
+            center.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
+                Task { @MainActor in self?.prune() }
+            },
+            center.addObserver(forName: NSWindow.didResizeNotification, object: window, queue: .main) { [weak overlay, weak window] _ in
+                Task { @MainActor in
+                    guard let overlay, let window else { return }
+                    overlay.setFrame(window.frame, display: false)
+                    PictureInPictureChrome.keepFromKey(window)
+                    PictureInPictureChrome.shared.remember(window.frame)
+                }
+            },
+            center.addObserver(forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main) { [weak window] _ in
+                Task { @MainActor in if let window { PictureInPictureChrome.shared.tookKey(window) } }
+            },
+        ]
+        watchApp()
+    }
+
+    /// Only the overlay takes the pointer, and Chromium's window is never key: a key PiP window
+    /// shows Chrome's own controls (title, ±10 s, scrubber) on every mouse move, under Arc's (#262).
+    /// Chromium's window keeps a 4 pt resize band outside its frame that the overlay doesn't cover;
+    /// a drag there resized it natively and made it key. `preventKeyWindow` is Chromium's own
+    /// switch (NativeWidgetMacNSWindow), and Chromium writes it too: a window it orders in on
+    /// another Space gets NO back once the Space changes (`orderFrontKeepWindowKeyState`). So this
+    /// runs again whenever that can have happened, not once.
+    static func keepFromKey(_ window: NSWindow) {
+        window.ignoresMouseEvents = true
+        if window.responds(to: NSSelectorFromString("setPreventKeyWindow:")) {
+            window.setValue(true, forKey: "preventKeyWindow")
+        }
+    }
+
+    private static func preventsKey(_ window: NSWindow) -> Bool {
+        window.responds(to: NSSelectorFromString("preventKeyWindow")) && (window.value(forKey: "preventKeyWindow") as? Bool) == true
+    }
+
+    /// The moments Chromium's window can have been given the key back: Cra coming forward (AppKit
+    /// picks a key window then) and a Space change (Chromium clears `preventKeyWindow` in its own
+    /// observer of it, queued on the main queue like this one, so this goes after it).
+    private func watchApp() {
+        guard appObservers.isEmpty else { return }
+        let reassert: @Sendable (Notification) -> Void = { _ in
+            Task { @MainActor in PictureInPictureChrome.shared.reassert() }
+        }
+        let center = NotificationCenter.default
+        appObservers = [
+            center.addObserver(forName: NSApplication.willBecomeActiveNotification, object: nil, queue: .main, using: reassert),
+            center.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main, using: reassert),
+            // The task is queued behind Chromium's observer, which was queued when the post came.
+            NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main, using: reassert),
+        ]
+    }
+
+    private func reassert() {
+        for o in overlays.values { if let w = o.parent { Self.keepFromKey(w) } }
+    }
+
+    /// Chromium's window became key anyway: its controls are fading in. Say how, so a report can
+    /// tell, and give the key to a Cra window (or to the app before Cra) so they go again.
+    private func tookKey(_ window: NSWindow) {
+        let prevented = Self.preventsKey(window)
+        Self.keepFromKey(window)
+        let other = NSApp.orderedWindows.first { $0 !== window && !($0 is PictureInPictureOverlay) && $0.isVisible && $0.canBecomeKey }
+        CraLog.note("pip: Chromium's window became key (preventKeyWindow \(prevented ? 1 : 0), Cra \(NSApp.isActive ? "active" : "inactive")); key to \(other.map { NSStringFromClass(type(of: $0)) } ?? "the app before Cra")")
+        if let other { other.makeKey() } else if NSApp.isActive { NSApp.deactivate() }
+    }
+
+    /// `cra://debug?pip=<label>`: Chromium's PiP window as Cra keeps it, and the centre controls'
+    /// size for its width (#262).
+    func readout() -> String {
+        let shown = overlays.values.compactMap { o in o.parent.map { (o, $0) } }
+        guard !shown.isEmpty else { return "windows=0" }
+        return "windows=\(shown.count) " + shown.map { o, w in
+            "key=\(w.isKeyWindow ? 1 : 0) appKey=\(NSApp.keyWindow === w ? 1 : 0) mouse=\(w.ignoresMouseEvents ? 0 : 1) preventKey=\(Self.preventsKey(w) ? 1 : 0) width=\(Int(w.frame.width)) \(o.controls.readout)"
+        }.joined(separator: " | ")
+    }
+
+    /// `cra://debug?pipKey=space|force`: Chromium's window asked to become key the ways Chromium's
+    /// own code can leave it open to that. `space`: `preventKeyWindow` back to NO by a Space change,
+    /// as NativeWidgetMacNSWindow does after `orderFrontKeepWindowKeyState`; `force`: cleared and
+    /// made key at once, standing in for a path not known yet.
+    func debugTakeKey(_ how: String) {
+        for o in overlays.values {
+            guard let w = o.parent else { continue }
+            w.setValue(false, forKey: "preventKeyWindow")
+            if how == "space" {
+                NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.activeSpaceDidChangeNotification, object: NSWorkspace.shared)
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(200))
+                    w.makeKeyAndOrderFront(nil)
+                }
+            } else {
+                w.makeKeyAndOrderFront(nil)
             }
-        })
+        }
     }
 
     /// Chromium's PiP widget: a floating NativeWidgetMac window titled
@@ -89,15 +181,7 @@ final class PictureInPictureChrome {
         window.backgroundColor = .clear
         window.hasShadow = true
         window.titleVisibility = .hidden
-        // Only the overlay takes the pointer. Chrome's window keeps a 4 pt resize band outside
-        // its frame (NativeWidgetMacNSWindow) that the overlay doesn't cover: a drag there
-        // resized it natively and made it key, and a key PiP window shows Chrome's own controls
-        // (±10 s) on every mouse move, under Arc's. It also must not become key when a click
-        // on the overlay activates Cra.
-        window.ignoresMouseEvents = true
-        if window.responds(to: NSSelectorFromString("setPreventKeyWindow:")) {
-            window.setValue(true, forKey: "preventKeyWindow")
-        }
+        Self.keepFromKey(window)
         // Over another app's full-screen Space too, like Arc's (#206). The overlay copies this below.
         CraCEFRuntime.floatOverFullScreenSpaces(window)
         if let cv = window.contentView {
@@ -109,27 +193,18 @@ final class PictureInPictureChrome {
         let aspect = window.frame.width / max(window.frame.height, 1)
         window.setFrame(initialFrame(aspect: aspect, screen: window.screen ?? NSScreen.main), display: true)
         window.invalidateShadow()
-        // Chrome still paints its title strip ("File on your device") for the
-        // first seconds after the window appears; that lives inside Chromium's
-        // compositor layer and is not reachable from here (neither resizing
-        // nor focus changes affect it). After that the window is Arc's.
+        // Chrome's own title strip (favicon, host, top scrim) stays hidden because CraCEF starts
+        // Chromium with every video PiP trusted (VideoPipForceTrustedForMediaPlaybackForTesting,
+        // #246); without that it stayed until a click reached this window, which never happens.
     }
 
-    /// Last frame the user left the window at (Arc's "absolute" placement),
-    /// else Arc's default: top-right corner of the visible frame.
+    /// Last frame the user left the window at, else Arc's default (PictureInPictureLayout).
     func initialFrame(aspect: CGFloat, screen: NSScreen?) -> NSRect {
         let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1728, height: 1084)
-        if let s = UserDefaults.standard.string(forKey: Self.frameKey) {
-            let r = NSRectFromString(s)
-            if !r.isEmpty, visible.intersects(r) {
-                // Keep the remembered width, follow the video's aspect ratio.
-                let h = (r.width / aspect).rounded()
-                return NSRect(x: r.minX, y: r.maxY - h, width: r.width, height: h)
-            }
-        }
-        let h = (visible.height * Self.defaultHeightFraction).rounded()
-        let w = (h * aspect).rounded()
-        return NSRect(x: visible.maxX - Self.edgeMargin - w, y: visible.maxY - Self.edgeMargin - h, width: w, height: h)
+        let remembered = UserDefaults.standard.string(forKey: Self.frameKey).map(NSRectFromString)
+        let frame = PictureInPictureLayout.initialFrame(aspect: aspect, screen: screen?.frame ?? visible, visible: visible, remembered: remembered)
+        CraLog.note("pip: opens at \(Int(frame.width))×\(Int(frame.height))\(remembered == nil ? "" : " (remembered)")")
+        return frame
     }
 
     func remember(_ frame: NSRect) {
@@ -141,6 +216,7 @@ final class PictureInPictureChrome {
             overlay.parent?.removeChildWindow(overlay)
             overlay.orderOut(nil)
             overlays[id] = nil
+            observers.removeValue(forKey: id)?.forEach(NotificationCenter.default.removeObserver)
         }
     }
 }
@@ -259,11 +335,15 @@ final class PictureInPictureOverlayView: NSView {
         guard let target, var g = gesture else { return }
         // The button was let go without a mouse-up reaching this window.
         if NSEvent.pressedMouseButtons & 1 == 0 { finish(event); return }
+        // Arc's limits (#246): 224 × 126 for a 16:9 video at least, 61.7 % of the screen's width and
+        // the visible height less 20 at most.
+        let screen = target.screen ?? NSScreen.main
+        let visible = screen?.visibleFrame ?? target.frame
+        let limits = PictureInPictureLayout.sizeLimits(aspect: g.startFrame.width / max(g.startFrame.height, 1),
+                                                       screen: screen?.frame ?? visible, visible: visible)
         let constraints = target.contentMaxSize
-        let visible = target.screen?.visibleFrame.size ?? constraints
-        let maxSize = NSSize(width: min(constraints.width, visible.width - 2 * PictureInPictureChrome.edgeMargin),
-                             height: min(constraints.height, visible.height - 2 * PictureInPictureChrome.edgeMargin))
-        let minSize = NSSize(width: max(target.contentMinSize.width, 160), height: max(target.contentMinSize.height, 90))
+        let maxSize = NSSize(width: min(constraints.width, limits.max.width), height: min(constraints.height, limits.max.height))
+        let minSize = NSSize(width: max(target.contentMinSize.width, limits.min.width), height: max(target.contentMinSize.height, limits.min.height))
         let wasDragging = g.isDragging
         let frame = g.frame(mouse: Self.screenLocation(of: event), minSize: minSize, maxSize: maxSize)
         gesture = g

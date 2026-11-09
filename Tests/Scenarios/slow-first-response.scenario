@@ -1,0 +1,28 @@
+# A site that accepts the connection and doesn't answer left a new tab blank apart from the loading
+# bar, and edge to edge or in fullscreen without even that (GitHub #256). Ten seconds without the
+# page's first response, the toast says "Still waiting for 127.0.0.1 to respond" with Stop
+# Loading; it goes when the page is stopped or answers, and a new wait brings it back. The same in
+# a Little Window. ${STALL} accepts connections and never answers one.
+# promise: #256
+budget rss=800 stalls50=20
+
+cra://open?url=${STALL}/
+expect-log page 127\.0\.0\.1 still waiting for a response: notice shown \(navigation 1\)
+# ⌘. (Stop Loading) ends the wait: the notice goes with it.
+cra://action/stop
+expect-log page 127\.0\.0\.1 no longer waiting: notice gone \(navigation 1\)
+
+# Waiting again in the same tab: a new clock, the notice is back.
+cra://navigate?url=${STALL}/again
+expect-log page 127\.0\.0\.1 still waiting for a response: notice shown \(navigation 2\)
+# Another page that answers: gone, and it doesn't come back once that page is loading.
+cra://navigate?url=${PAGE}?n=answered
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+expect-log page 127\.0\.0\.1 no longer waiting: notice gone \(navigation 3\)
+wait 1
+reject-log notice shown \(navigation 3\)
+
+# A Little Window waiting for the same server.
+cra://open?url=${STALL}/little&little=1
+expect-log Little Window: page 127\.0\.0\.1 still waiting for a response: notice shown \(navigation 1\)
+cra://debug?checkStore=1

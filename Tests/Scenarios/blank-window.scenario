@@ -1,0 +1,45 @@
+# promise: #219 #220
+# A tab dragged out of every window and let go (#219) moves into a new Blank Window, as in Arc
+# 1.172: that window lists only it, under "This Window", in no space list; the page moves with
+# its state (no second load) and the window it left shows no tab. Its "Move to…" picking the space
+# (Arc 1.172) puts the tab back at the top of the space's Today, open in the main window with its
+# page as it was, and closes the Blank Window. File ▸ Blank Window (⌃⌘N, #220) opens an empty one,
+# and a relaunch brings it back.
+budget rss=700 stalls50=10
+cra://debug?windowSize=1000x700
+cra://open?url=${PAGE}?n=stays
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://open?url=${PAGE}?n=torn
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"window.mark='kept-'+location.search.slice(3)"}
+expect-log Cra cdp Runtime.evaluate .*"value":"kept-torn"
+cra://debug?browserWindows=before
+expect-log Cra browser windows before: kind=normal .*listed=1 .*open=\S*n=torn page=1
+cra://debug?dragEnd=n=torn
+expect-log dragEnd: let go at
+wait 2
+cra://debug?browserWindows=torn
+expect-log Cra browser windows torn: kind=blank space=This Window listed=0 tabs=\[\S*n=torn\] open=\S*n=torn page=1
+expect-log Cra browser windows torn: kind=normal .*listed=1 tabs=\[\S*n=stays\] open=- page=0
+expect-log takes over another window's page
+# The page in the new window is the same page: what it held is still there.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(window.mark)"}
+expect-log Cra cdp Runtime.evaluate .*"value":"kept-torn"
+cra://debug?blankMoveTo=1
+wait 2
+cra://debug?browserWindows=moved
+expect-log Cra browser windows moved: kind=normal .*listed=1 tabs=\[\S*n=torn \S*n=stays\] open=\S*n=torn page=1
+reject-log Cra browser windows moved: kind=blank
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'again-'+String(window.mark)"}
+expect-log Cra cdp Runtime.evaluate .*"value":"again-kept-torn"
+cra://action/newBlankWindow
+wait 2
+cra://debug?browserWindows=new
+expect-log Cra browser windows new: kind=blank space=This Window listed=0 tabs=\[\] open=- page=0
+relaunch
+wait 4
+cra://debug?browserWindows=relaunched
+# The relaunched Cra's lines reach cra.log only, which names no pages: kinds and counts.
+expect-log browser windows relaunched: kind=blank listed=0 tabs=0 open=0
+expect-log browser windows relaunched: kind=normal listed=1 tabs=2 open=1
+reject-log browser windows relaunched: kind=blank listed=0 tabs=1

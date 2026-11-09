@@ -47,7 +47,7 @@ enum NewestCopy {
     /// A running Cra older than this one that owns our profile is asked to quit, so this
     /// launch takes over instead of being handed to it. Its SingletonLock names it
     /// ("host-pid"), which also leaves CRA_DATA_DIR copies on other profiles alone.
-    static func replaceOlderRunningCopy() {
+    @MainActor static func replaceOlderRunningCopy() {
         guard let other = profileOwner(), let url = other.bundleURL,
               let theirs = shortVersion(at: url), isOlder(theirs, than: version) else { return }
         let pid = other.processIdentifier
@@ -69,24 +69,21 @@ enum NewestCopy {
     /// prompt is up. That prompt is centred and its app is in front, so this one floats
     /// above the centre and stays visible while Cra is not active (the launch may not
     /// have activated it yet), and it closes by itself (.OK) once the old copy is gone.
-    private static func stillOpenAlert(_ theirs: String, pid: pid_t) -> NSApplication.ModalResponse {
-        let alert = NSAlert()
-        alert.messageText = "Cra \(theirs) is still open"
-        alert.informativeText = "Quit it to open Cra \(version). If it asked whether to quit, choose Quit."
-        alert.addButton(withTitle: "Try Again")
-        alert.addButton(withTitle: "Force Quit")
-        alert.addButton(withTitle: "Cancel")
-        alert.layout()
-        alert.window.hidesOnDeactivate = false
+    @MainActor private static func stillOpenAlert(_ theirs: String, pid: pid_t) -> NSApplication.ModalResponse {
+        let alert = AppDialog(title: "Cra \(theirs) is still open",
+                              message: "Quit it to open Cra \(version). If it asked whether to quit, choose Quit.",
+                              actions: [DialogAction("Try Again"), DialogAction("Force Quit", role: .destructive), .cancel])
+        let window = alert.prepareWindow()
+        window.hidesOnDeactivate = false
         if let screen = NSScreen.main?.visibleFrame {
-            let size = alert.window.frame.size
-            alert.window.setFrameOrigin(NSPoint(x: screen.midX - size.width / 2, y: screen.midY + 170))
+            let size = window.frame.size
+            window.setFrameOrigin(NSPoint(x: screen.midX - size.width / 2, y: screen.midY + 170))
         }
         // runModal resets the level, so raise it once the modal session runs.
         RunLoop.current.perform(inModes: [.modalPanel]) {
             MainActor.assumeIsolated {
-                alert.window.level = .floating
-                alert.window.orderFrontRegardless()
+                window.level = .floating
+                window.orderFrontRegardless()
             }
         }
         let gone = Timer(timeInterval: 0.2, repeats: true) { _ in
@@ -94,7 +91,7 @@ enum NewestCopy {
         }
         RunLoop.current.add(gone, forMode: .modalPanel)
         defer { gone.invalidate() }
-        return alert.runModal()
+        return alert.runModal(over: nil)
     }
 
     private static func profileOwner() -> NSRunningApplication? {

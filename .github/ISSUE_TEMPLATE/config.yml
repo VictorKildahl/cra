@@ -1,8 +1,11 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Question or idea
-    url: https://github.com/VictorKildahl/cra/discussions
-    about: Ask how something works or talk through an idea in Discussions.
+  - name: Idea for a new feature
+    url: https://github.com/VictorKildahl/cra/discussions/categories/ideas
+    about: Something Arc never had? Post it in Ideas, where others can upvote it.
+  - name: Question
+    url: https://github.com/VictorKildahl/cra/discussions/categories/q-a
+    about: Ask how something works.
   - name: Security problem
     url: https://github.com/VictorKildahl/cra/security/advisories/new
     about: Report vulnerabilities privately, not as a public issue.

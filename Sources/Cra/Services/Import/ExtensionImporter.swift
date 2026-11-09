@@ -74,8 +74,15 @@ enum ExtensionImporter {
         return settings
     }
 
+    /// Chromium's DISABLE_UNSUPPORTED_MANIFEST_VERSION: Chrome 139 and later turn every
+    /// Manifest V2 extension off with it. Cra runs them (GitHub #228), so it doesn't count.
+    static let unsupportedManifestVersion = 1 << 23
+
     private static func isDisabled(_ s: [String: Any]) -> Bool {
-        !((s["disable_reasons"] as? [Any])?.isEmpty ?? true) || (s["state"] as? Int) == 0
+        if let reasons = s["disable_reasons"] as? [Any], !reasons.isEmpty {
+            return reasons.contains { ($0 as? Int) != unsupportedManifestVersion }
+        }
+        return (s["state"] as? Int) == 0
     }
 
     /// Extensions turned off in this profile (chrome://extensions), of any install location:

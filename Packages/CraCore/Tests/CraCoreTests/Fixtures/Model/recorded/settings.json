@@ -12,6 +12,9 @@
   "developerHosts" : [
     "localhost"
   ],
+  "disabledDefaultDeveloperHosts" : [
+
+  ],
   "edgeToEdgeContent" : true,
   "folderPreviews" : false,
   "hapticFeedbackOnReorder" : false,
@@ -42,7 +45,7 @@
   "newTabButtonAtTop" : false,
   "newTabButtonDefaultMigrated" : true,
   "newTabsAtTop" : false,
-  "openLinksInBackground" : true,
+  "openLinksInForeground" : false,
   "peekInEveryTab" : true,
   "peekLinksToOtherSites" : false,
   "peekOnShiftClick" : false,

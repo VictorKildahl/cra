@@ -65,7 +65,7 @@ extension MainWindowController {
 
     /// Settings ▸ Profiles ▸ Create Profile…: the same dialog over Settings, no space ticked.
     func showNewProfileDialog(over window: NSWindow, ticked: Set<UUID> = []) {
-        DialogOverlayWindow.present(over: window) { close in
+        DialogPanel.present(over: window) { close in
             NewProfileDialog(spaces: profileSpaces, ticked: ticked, onCreate: { [weak self] name, ids in
                 self?.createProfile(name: name, forSpaces: ids)
                 close()
@@ -77,7 +77,7 @@ extension MainWindowController {
     func showChangeProfileDialog(forSpace id: UUID) {
         guard let window, let space = store.space(id) else { return }
         let store = self.store
-        DialogOverlayWindow.present(over: window) { close in
+        DialogPanel.present(over: window) { close in
             ChangeProfileDialog(space: space, profiles: store.profiles, spaces: profileSpaces, onChange: { p in
                 store.setProfile(p, forSpace: id)
                 close()

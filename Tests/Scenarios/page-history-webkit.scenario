@@ -1,0 +1,23 @@
+# A WebKit tab (a DRM service, ProtectedMediaSites) keeps its back and forward list across a
+# relaunch too, from WKWebView's own interactionState (GitHub #273).
+# promise: #273
+budget rss=900 stalls50=40
+pace 0.5
+
+cra://open?url=${WEBKIT}/page.html?n=wk1
+expect-log loaded localhost \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"location.href='${WEBKIT}/page.html?n=wk2'","userGesture":true}
+wait 2
+cra://debug?back=before
+expect-log back before: selected=\S+n=wk2 back=1 today=1$
+
+relaunch
+expect-log opens with 2 pages of history
+wait 1.5
+cra://debug?back=relaunched
+expect-log back relaunched: selected=\S+n=wk2 back=1 today=1$
+cra://action/goBack
+wait 1.5
+cra://debug?back=history
+expect-log back history: selected=\S+n=wk1 back=0 today=1$

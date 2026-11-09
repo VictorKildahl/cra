@@ -41,6 +41,14 @@ built release app with a test profile. Note anything that fails in the release's
 - **#7:** click a tab while moving the pointer a few points on a trackpad. It opens.
 - **#3, #208:** a middle click on a sidebar tab row closes it; one in a page never does. ⇧⌘J
   opens Downloads in the sidebar; Esc or the back arrow closes the Library.
+- **#233:** with a real mouse, its back button over the sidebar goes to the previous space and
+  forward to the next, docked and in the hidden sidebar (⌘S); over a page they still go back and
+  forward in the tab's history. The scenario hands the button to the window's handler, so only a
+  real mouse proves the monitor sees it.
+- **#260:** on a built-in trackpad, every space change by a two-finger swipe over the sidebar
+  ticks once: a short flick, a slow drag past half (the tick comes at half), and a swipe into
+  the Library and back out. A short drag that settles back is silent; a sideways wheel never
+  ticks (Arc). `PageDetentHaptics` holds the rule; only a finger feels the tick.
 - **#12:** a two-finger swipe in the hidden sidebar (⌘S) switches spaces, and the next space
   draws mid-swipe. There is one link bubble only, and the dashed ring shows only on a
   cross-space keyboard switch.
@@ -61,14 +69,33 @@ built release app with a test profile. Note anything that fails in the release's
 
 ### Peek, Little Window, Picture in Picture, split view, Capture
 
+- **PR #221:** opening a Peek fades the page behind and draws it back a little, its margins widening
+  while the sidebar stays still, and closing brings it back in one smooth motion with no jump at the
+  end. With "Pages fill the window edge to edge" on, the page only fades. (The values are checked
+  by the peek-backdrop scenario; this is the motion.)
 - **#195:** in a Peek and a Little Window, click in the page, then Back, Forward, Refresh, the
   address and "Open in": each works on the first click. Capture and scroll: the page moves and
   the grey picture and the lens follow. With another app full screen, ⌥⌘N opens a Little
   Window over it, and doesn't when Settings ▸ Tabs ▸ Links is off.
 - **#202:** in a Peek, ⌘-click a `target=_blank` link: a background tab opens and the Peek
-  stays. A plain click on it closes the Peek and selects the new tab below the source tab.
+  stays. A plain click on it takes the Peek away and selects the new tab below the source tab.
+- **#242:** Peek a link from a pinned tab, scroll the Peek, click a `target=_blank` link in it: the
+  new tab shows with no Peek and the pinned row keeps the peeked page's favicon. Click the pinned
+  row: the same Peek is back at the same scroll, the page behind faded, and clicks in it work.
+  With the Peek shown, click another tab's row: that tab opens (the Peek waits); a click on the
+  faded page beside the card closes it. (Which Peek shows when is the peek-per-tab scenario;
+  this is the look, the scroll and the real clicks.)
+- **PR #222:** with a Peek open, the browser window keeps its full shadow and coloured traffic
+  lights, also after a click in the Peek, as in Arc. A drag from every edge and corner resizes the
+  window with the Peek open and the card follows; a click on the background 4 pt or more inside
+  the window closes it.
 - **#186:** send a link from a full-screen app. The Little Window opens centred on that Space
   with no switch to the desktop, and a video in it can still go full screen.
+- **#231:** with Keep Cra in the menu bar on, the C shows in the menu bar in light and dark.
+  ⌘Q takes the windows and the Dock icon away, and focus goes to the app behind. A full-screen
+  window leaves its Space first. ⌥⌘N from another app opens a Little Window at once, with the
+  Dock icon. Closing it takes the icon away again. New Window in the item's menu brings the
+  windows back, and Quit Cra there quits.
 - **#172:** with a space on its own profile, a Little Window from that space and a Peek from its
   tab see that profile's cookies. The chip names the profile; switching it reloads the page in
   the other profile.
@@ -78,6 +105,14 @@ built release app with a test profile. Note anything that fails in the release's
   PiP and coming back closes it. The tab shows the recording dot and doesn't sleep.
 - **#134:** with another app in front, the PiP edges show resize cursors, and a click on play
   doesn't move the window.
+- **#246:** a YouTube video's PiP shows no Chrome strip (site icon, host, dark top band) at any
+  point, also in the first seconds; with the pointer away it is the bare video. On hover: Back to
+  Tab on the left (with its words from 400 pt wide), the host centred and whole, Close on the
+  right, one even dim layer.
+- **#262:** hover a YouTube PiP after a drag on its edges, a resize, a trip to another app's
+  full-screen Space and back, and a click on Cra's window: only Cra's controls show (no grey ±10,
+  no second ✕, no scrubber). Play/pause alone in a window under 280 pt wide, with the ±15 pair
+  and a bigger play/pause from 280 pt; `cra.log` has no "Chromium's window became key".
 - **#178:** in a split, the focused pane's ring shows (also over docked DevTools), and so does
   the card shadow.
 - **#90:** Capture on a second display and behind other windows isn't blank. It goes to the
@@ -107,6 +142,10 @@ built release app with a test profile. Note anything that fails in the release's
 - **#89:** in developer mode the ⌄ chevron lists Refresh ⌘R, Force Refresh ⇧⌘R, Clear Cookies
   and Refresh, Clear Cache and Refresh, View Source ⌥⌘U and Developer Tools ⌥⌘I. Tab row
   context menus show their shortcuts.
+- **#265:** signed in to a paid Claude plan, Claude in Chrome's toolbar button opens its panel
+  and Claude works in it: no "Claude isn't available on this page" and no "Can't reach Claude
+  in Chrome". The scenario covers what the extension checks, but only an account gets past
+  claude.ai's sign-in.
 
 ### Profiles, privacy, media and the engine
 
@@ -124,6 +163,18 @@ built release app with a test profile. Note anything that fails in the release's
   `secure dns: secure via dns.google` and chrome://settings/security shows the same choice.
 - **#190:** with Ask Where to Save Each File on, the save panel is a sheet on Cra's window, and
   Cancel cancels the download.
+- **#272:** download a large file. The bin over the Library button keeps a ring that fills as it
+  downloads; right-clicking its row in the tray and on Library ▸ Downloads offers Pause Download and
+  Cancel Download, and a paused row reads "Paused". ⌘Q while it runs asks "Downloads in progress";
+  Keep browsing keeps it going. Once it finishes, a check replaces the arrow, and its row's menu
+  reads Open / Copy <kind>, Show in Finder, Hide from Cra and Move to Trash.
+- **PR #254:** with the release app as the default browser, open a page in Safari on an iPhone
+  signed in to the same Apple Account and click the Handoff icon in the Dock. The page opens in
+  Cra, in the space Air Traffic Control picks, and not in Safari.
+- **#261, #195:** with Stage Manager on, use Cra full screen with 20 or more visited tabs for ten
+  minutes. No grey pane flashes and Stage Manager shows no window coming and going. After a
+  minute pass, the GPU helper's footprint (`footprint -p <pid>`) still drops as the hidden tabs
+  let go of their tiles (#195: 20 tabs, 386 → about 235 MB).
 
 ## Not pinned yet
 

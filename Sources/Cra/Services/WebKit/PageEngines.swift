@@ -3,8 +3,19 @@ import CraCEF
 
 /// Which engine draws a page, and the factory every page browser comes from
 /// (ProtectedMediaSites has the rules; docs/protected-media.md the why).
+/// A page Cra draws itself (an Easel) instead of a website. It keeps its own address and hands
+/// any other one to the engine that address gets.
+@MainActor
+protocol NativePage: AnyObject {
+    func owns(_ url: String) -> Bool
+}
+
 @MainActor
 enum PageEngines {
+    /// The app's pages of its own (EaselBrowser), registered at launch: a browser for an address
+    /// one of them owns, else nil.
+    static var nativePage: ((_ frame: NSRect, _ url: String, _ delegate: CraBrowserDelegate?, _ incognito: Bool, _ profilePath: String?) -> CraBrowser?)?
+
     /// The list, with the user's own choices (protected-media.json) on it. `defaults write
     /// dk.kildahl.cra webKitProtectedMedia -bool NO` turns it all off (every page Chromium's again).
     /// A test instance sets CRA_WEBKIT_DRM=0|1 and CRA_WEBKIT_HOSTS=<host,host> (the scenarios' localhost).
@@ -52,23 +63,38 @@ enum PageEngines {
 
     /// A page browser for `url` in the engine the rules pick. A popup host (`url` nil) takes its
     /// opener's engine: WebKit can only hand a popup to a web view it made, CEF to a CraBrowser.
+    /// `history`: the tab's saved back and forward list (PageHistory, #273); the page opens with
+    /// it when it ends at `url` and that engine wrote it.
     static func makeBrowser(frame: NSRect, url: String?, delegate: CraBrowserDelegate?, incognito: Bool,
-                            profilePath: String?, opener: CraBrowser? = nil) -> CraBrowser {
+                            profilePath: String?, opener: CraBrowser? = nil, history: PageHistory? = nil) -> CraBrowser {
+        // An easel's address (Arc's Easels): its canvas, not a page.
+        if let url, let page = nativePage?(frame, url, delegate, incognito, profilePath) { return page }
         let engine = url.map { sites.engine(for: $0) } ?? opener.map(engine(of:)) ?? .chromium
+        let restored = url.flatMap { u in history.flatMap { !incognito && $0.restores(into: engine, at: u) ? $0 : nil } }
         switch engine {
         case .webKit:
-            let page = WebKitBrowser(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath)
+            let page = WebKitBrowser(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath,
+                                     interactionState: restored?.state)
             page.serviceName = url.flatMap { sites.serviceName(for: $0) } ?? (opener as? WebKitBrowser)?.serviceName ?? ""
             return page
         case .chromium:
-            return CraBrowser(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath)
+            guard let url, let restored else {
+                return CraBrowser(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath)
+            }
+            return CraBrowser(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath,
+                              history: ["history": restored.state.base64EncodedString(), "index": restored.index])
         }
     }
+
+    /// Whether `browser` is one of the engines' pages (not an easel): only those have a history to save.
+    static func savesHistory(_ browser: CraBrowser) -> Bool { !(browser is NativePage) }
 
     /// Whether a navigation `browser` is about to make has to happen in the other engine.
     /// Chromium asks for every main-frame request (CraCEF's OnBeforeBrowse); WebKit only for
     /// addresses Cra loads (-loadURL:), never for the page's own navigations.
     static func handoffTarget(from browser: CraBrowser, to url: String, method: String) -> PageEngine? {
+        // An easel hands every other address to the engine that address gets.
+        if let page = browser as? NativePage { return page.owns(url) ? nil : sites.engine(for: url) }
         let current = engine(of: browser)
         switch current {
         case .chromium: return sites.handoff(from: current, to: url, method: method)

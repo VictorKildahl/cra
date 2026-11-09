@@ -330,9 +330,13 @@ enum PerfTests {
         // One extra turn, so callbacks that end a pass (and report the stall) fall on the old
         // one-in-256 timing too.
         RunLoop.main.run(mode: .default, before: Date())
-        let timer = Timer(timeInterval: 0.001, repeats: true) { _ in }
+        // A turn every 5 ms, longer than the 2 ms wait, so the loop sleeps between turns: each
+        // turn is a pass of two callbacks however slow the build (sanitizers) or the Mac.
+        var turns = 0
+        let timer = Timer(timeInterval: 0.005, repeats: true) { _ in turns += 1 }
         RunLoop.main.add(timer, forMode: .common)
-        spin(1.0)
+        let limit = Date().addingTimeInterval(60)
+        while turns < 400, Date() < limit { spin(0.1) }
         timer.invalidate()
         observer.stop()
         let d = observer.drain()

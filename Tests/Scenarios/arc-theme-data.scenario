@@ -1,0 +1,11 @@
+# Arc's "Allow websites to get your theme data" (Arc 1.172.1, docs/arc-parity.md): a page reads the
+# space's palette as --arc-palette-* variables on its root, written #RRGGBBAA as Arc writes them,
+# with no inline style on <html> (Arc leaves the page's markup alone too).
+budget rss=700 stalls50=10
+cra://open?url=${PAGE}?n=theme
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'v-'+getComputedStyle(document.documentElement).getPropertyValue('--arc-palette-title').trim()+'-'+(document.documentElement.getAttribute('style')||'none')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"v-#[0-9A-F]{8}-none"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'bg-'+getComputedStyle(document.documentElement).getPropertyValue('--arc-palette-backgroundExtra').trim()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"bg-#[0-9A-F]{6}FF"

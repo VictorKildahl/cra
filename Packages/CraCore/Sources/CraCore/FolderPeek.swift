@@ -28,11 +28,12 @@ public enum FolderPeek {
         return out
     }
 
-    /// Whether a click on a folder's row opens it. A folder keeping tabs in sight closes instead,
-    /// keeping only the open tab listed (`expanding(_:false:)`), so a folder showing the open tab
-    /// doesn't open from a click at all (Arc 1.171, real clicks, 2 Nov 2026).
-    public static func clickOpens(expanded: Bool, peeked: Bool) -> Bool {
-        !expanded && !peeked
+    /// Whether a click on a folder's row opens it: a closed one always does, also while it keeps
+    /// the open tab in sight. Arc 1.171 doesn't open those (real clicks, 2 Nov 2026), which left
+    /// the rest of the folder out of reach until the tab closed (GitHub #213). Closing it again
+    /// keeps the open tab in sight, as before.
+    public static func clickOpens(expanded: Bool) -> Bool {
+        !expanded
     }
 
     /// The peeks once `tab` closes (⌘W) or leaves the sidebar.

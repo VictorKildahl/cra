@@ -14,6 +14,8 @@ struct TabsPane: View {
                 SettingsCheckbox(title: "Show the New Tab button above tabs", isOn: $store.settings.newTabButtonAtTop)
                 SettingsCheckbox(title: "Haptic feedback when reordering tabs", isOn: $store.settings.hapticFeedbackOnReorder)
                 SettingsCheckbox(title: "Preview a folder’s tabs when hovering over it", isOn: $store.settings.folderPreviews)
+                // Arc: Settings ▸ General ▸ Previews (Gmail's unread mail on its favorite).
+                SettingsCheckbox(title: "Preview unread Gmail when hovering its favorite", isOn: $store.settings.favoritePreviews)
                 SettingsCheckbox(title: "Show toolbar above the page", isOn: $store.settings.showToolbar)
                 SettingsCheckbox(title: "Pages fill the window edge to edge", isOn: $store.settings.edgeToEdgeContent)
                 SettingsCheckbox(title: "Enable Picture in Picture when you leave a video tab", isOn: $store.settings.autoPictureInPicture)
@@ -38,14 +40,23 @@ struct TabsPane: View {
                 // Arc's "Open Little Arc when I press ⌥⌘N" (#195): New Little Window's shortcut from any app.
                 SettingsCheckbox(title: "Open a Little Window when I press \(KeyBindingRegistry.shared.action("newLittleWindow")?.primary?.display ?? "⌥⌘N") in any app",
                                  isOn: $store.settings.littleWindowShortcutEverywhere)
+                // Arc: "Archive Little Arcs after:" 1 hour, 6 hours (default), 12 hours.
+                HStack(spacing: 6) {
+                    Text("Archive Little Windows after:")
+                    Picker("", selection: $store.settings.littleWindowArchiveAfter) {
+                        ForEach(LittleWindowArchive.allCases, id: \.self) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                }
                 SettingsCheckbox(title: "Open a Peek window when clicking on links to other sites", isOn: $store.settings.peekLinksToOtherSites)
                 SettingsCheckbox(title: "In every tab, not only Favorites and Pinned tabs", isOn: $store.settings.peekInEveryTab)
                     .disabled(!store.settings.peekLinksToOtherSites)
                     .padding(.leading, 20)
                 SettingsCheckbox(title: "Open a Peek window when clicking on links with Shift held", isOn: $store.settings.peekOnShiftClick)
-                // GitHub #183, Chrome's way and not Arc's: the page stays in front.
-                SettingsCheckbox(title: "Open links in new tabs in the background", isOn: $store.settings.openLinksInBackground)
-                Text("“Open Link in New Tab” keeps the page you’re reading in front. “Open Link in Foreground Tab” and ⇧⌘-click still switch to the new tab.")
+                // Off as in Arc, whose "Open Link in New Tab" keeps the page in front (#276).
+                SettingsCheckbox(title: "“Open Link in New Tab” switches to the new tab", isOn: $store.settings.openLinksInForeground)
+                Text("Off, the page you’re reading stays in front, as in Arc. ⌘-click opens a link behind the page and ⇧⌘-click switches to it, whatever this says.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 8) {

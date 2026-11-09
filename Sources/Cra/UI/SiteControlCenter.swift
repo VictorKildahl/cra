@@ -811,6 +811,20 @@ final class SharePicker: NSObject, @preconcurrency NSSharingServicePickerDelegat
         }
     }
 
+    /// Arc's Share ▸ submenu on a sidebar tab: the same services, as menu items.
+    static func addMenu(to menu: NSMenu, url: URL) {
+        let sub = NSMenu()
+        for name in kept {
+            guard let service = NSSharingService(named: name), service.canPerform(withItems: [url]) else { continue }
+            let item = MenuItems.add(sub, service.title, image: service.image) { service.perform(withItems: [url]) }
+            item.image?.size = NSSize(width: 16, height: 16)
+        }
+        guard !sub.items.isEmpty else { return }
+        let share = NSMenuItem(title: "Share", action: nil, keyEquivalent: "")
+        share.submenu = sub
+        menu.addItem(share)
+    }
+
     /// `done` runs when the list goes, `chose` when a service was picked.
     func show(_ url: URL, relativeTo anchor: NSView, done: @escaping (_ chose: Bool) -> Void) {
         let picker = NSSharingServicePicker(items: [url])

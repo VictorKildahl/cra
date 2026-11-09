@@ -110,9 +110,7 @@ enum Diagnostics {
         }
         try? fm.removeItem(at: staging)
         guard ditto.terminationStatus == 0, fm.fileExists(atPath: destination.path) else {
-            let alert = NSAlert()
-            alert.messageText = "Cra couldn’t save the diagnostics"
-            alert.informativeText = "Try another folder."
+            let alert = AppDialog(title: "Cra couldn’t save the diagnostics", message: "Try another folder.")
             alert.runModal()
             return
         }
@@ -177,7 +175,7 @@ enum Diagnostics {
         // Sites the user listed (Developer Mode, link routes) are counted, not named.
         if let data = try? JSONEncoder().encode(store.settings),
            var json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
-            for key in ["developerHosts", "linkRoutes"] { json[key] = (json[key] as? [Any])?.count }
+            for key in ["developerHosts", "disabledDefaultDeveloperHosts", "linkRoutes"] { json[key] = (json[key] as? [Any])?.count }
             if let pretty = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]) {
                 lines += ["", "Settings:", String(decoding: pretty, as: UTF8.self)]
             }

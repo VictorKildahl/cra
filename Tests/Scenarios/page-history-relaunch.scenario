@@ -1,0 +1,46 @@
+# A tab's back and forward list outlasts a relaunch, scroll position included, as in Arc (GitHub
+# #273: Arc keeps each tab's Chromium session history). A tab a link opened still closes to the tab
+# it came from once its own history is used up, as it did before the relaunch.
+# promise: #273
+budget rss=900 stalls50=40
+pace 0.5
+
+cra://open?url=${PAGE}?n=first
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+# From a click: Chromium's Back skips pages a script moved on from without one.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"location.href='${PAGE}?n=second'","userGesture":true}
+wait 1.5
+cra://debug?cdp=Runtime.evaluate&params={"expression":"scrollTo(0, 1500); 'scrolled'","userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"scrolled"
+cra://debug?scroll=before
+expect-log scroll before: 1500$
+# Chromium keeps the scroll position in the entry's page state a moment after the scroll.
+wait 1.5
+
+# A link's tab, in front.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='${PAGE}?n=link',a.target='_blank',document.body.append(a),a.click(),'clicked'))(document.createElement('a'))","userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"clicked"
+wait 2
+cra://debug?back=before
+expect-log back before: selected=\S+n=link back=1 today=2$
+
+relaunch
+expect-log opens with 1 page of history
+cra://debug?back=relaunched
+expect-log back relaunched: selected=\S+n=link back=1 today=2$
+
+# Back closes the link's tab; the tab it came from opens with both its pages, where it was.
+cra://action/goBack
+wait 2
+expect-log opens with 2 pages of history
+cra://debug?back=returned
+expect-log back returned: selected=\S+n=second back=1 today=1$
+cra://debug?scroll=returned
+expect-log scroll returned: 1500$
+
+# And its own Back goes to the page before the relaunch.
+cra://action/goBack
+wait 1.5
+cra://debug?back=history
+expect-log back history: selected=\S+n=first back=0 today=1$

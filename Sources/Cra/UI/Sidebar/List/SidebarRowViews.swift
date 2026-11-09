@@ -387,180 +387,12 @@ final class SidebarFaviconView: NSImageView {
         }
     }
 
-    func showGitHubMark(colors: SidebarColors, color: NSColor? = nil) {
+    func showGitHubMark(colors: SidebarColors, color: NSColor? = nil, source: LiveFolderSource = .github) {
         shown = nil
         imageScaling = .scaleProportionallyUpOrDown
-        image = GitHubMark.image
+        image = source == .gitlab ? GitLabMark.image : GitHubMark.image
         contentTintColor = color ?? colors.monoGlyph
         layer?.masksToBounds = false
-    }
-}
-
-/// Arc's folder glyph (FolderIconView, read from Arc 1.171's binary): a back panel with the tab
-/// and a front panel, both hinged at the bottom-left corner. Opening turns them toward you in
-/// perspective, the front tipping forward and the back leaning away, each shaded darker as it
-/// turns, with Core Animation's implicit 0.25 s transition. GitHub's mark on a live folder.
-final class FolderGlyphView: NSView {
-    /// Arc fixes the glyph at 16 × 16 pt.
-    static let side: CGFloat = 16
-    private let icon = CALayer()
-    private let back = CAShapeLayer()
-    private let backShade = CAGradientLayer()
-    private let backShadeMask = CAShapeLayer()
-    private let front = CALayer()
-    private let frontPanel = CAShapeLayer()
-    private let frontShade = CAGradientLayer()
-    private let frontShadeMask = CAShapeLayer()
-    /// The back panel shows only outside the front one. Theme folders are opaque (FolderTones), so
-    /// the front hides the back's outline anyway; the White and Black icon styles fill with
-    /// translucent tones, and without this an open folder showed the back's edges through the
-    /// front. The mask is the front panel's shape cut out of a larger square, turned with the
-    /// front's own transform so it moves with it.
-    private let backHolder = CALayer()
-    private let frontHole = CAShapeLayer()
-    private let mark = NSImageView()
-    /// Arc's peeked folder (FolderPeek): three 2 pt dots on a 4 pt pitch in the closed body.
-    private let dots = CAShapeLayer()
-    private var expanded = false
-
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        wantsLayer = true
-        // Arc: black from clear to 0.36 across the back, to 0.15 across the front.
-        backShade.colors = [NSColor.black.withAlphaComponent(0).cgColor, NSColor.black.withAlphaComponent(0.36).cgColor]
-        backShade.startPoint = CGPoint(x: 0, y: 0)
-        backShade.endPoint = CGPoint(x: 0.6, y: 1)
-        backShade.mask = backShadeMask
-        frontShade.colors = [NSColor.black.withAlphaComponent(0).cgColor, NSColor.black.withAlphaComponent(0.15).cgColor]
-        frontShade.startPoint = CGPoint(x: 0.1, y: 0)
-        frontShade.endPoint = CGPoint(x: 0.9, y: 1)
-        frontShade.mask = frontShadeMask
-        back.addSublayer(backShade)
-        front.addSublayer(frontPanel)
-        front.addSublayer(frontShade)
-        for l in [back, front, frontHole] as [CALayer] {
-            // Hinged on the bottom-left corner.
-            l.anchorPoint = CGPoint(x: 0, y: 1)
-        }
-        frontHole.fillRule = .evenOdd
-        frontHole.fillColor = NSColor.black.cgColor
-        backHolder.addSublayer(back)
-        backHolder.mask = frontHole
-        icon.addSublayer(backHolder)
-        icon.addSublayer(front)
-        layer?.addSublayer(icon)
-        layer?.addSublayer(dots)
-        mark.image = GitHubMark.image
-        mark.imageScaling = .scaleProportionallyUpOrDown
-        addSubview(mark)
-        apply(animated: false)
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    override var isFlipped: Bool { true }
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-    func show(expanded: Bool, peeked: Bool = false, live: Bool, tint: NSColor, fillColor: NSColor, backColor: NSColor? = nil, animated: Bool = false) {
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        back.fillColor = (backColor ?? fillColor).cgColor
-        frontPanel.fillColor = fillColor.cgColor
-        for l in [back, frontPanel] { l.strokeColor = tint.cgColor }
-        mark.isHidden = !live
-        mark.contentTintColor = tint
-        dots.isHidden = !peeked || expanded || live
-        dots.fillColor = tint.cgColor
-        CATransaction.commit()
-        guard expanded != self.expanded else { return }
-        self.expanded = expanded
-        apply(animated: animated)
-    }
-
-    /// Arc's per-state transforms: perspective m34 −0.00291, 3 pt to the right, 32° about the
-    /// vertical axis, then the back 28° and the front −30° about the horizontal one.
-    private func apply(animated: Bool) {
-        CATransaction.begin()
-        CATransaction.setDisableActions(!animated)
-        let open = expanded
-        var t = CATransform3DIdentity
-        t.m34 = -0.0029129464
-        t = CATransform3DTranslate(t, open ? 3 : 0, 0, 0)
-        t = CATransform3DRotate(t, open ? 32 * .pi / 180 : 0, 0, 1, 0)
-        back.transform = CATransform3DRotate(t, open ? 28 * .pi / 180 : 0, 1, 0, 0)
-        front.transform = CATransform3DRotate(t, open ? -30 * .pi / 180 : 0, 1, 0, 0)
-        frontHole.transform = front.transform
-        frontShade.opacity = open ? 1 : 0
-        backShade.opacity = open ? 1 : 0.2
-        CATransaction.commit()
-    }
-
-    override func viewDidChangeBackingProperties() {
-        super.viewDidChangeBackingProperties()
-        needsLayout = true
-    }
-
-    override func layout() {
-        super.layout()
-        let scale = window?.backingScaleFactor ?? 2
-        func px(_ v: CGFloat) -> CGFloat { (v * scale).rounded() / scale }
-        let w = Self.side, h = Self.side
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        icon.frame = CGRect(x: px((bounds.width - w) / 2), y: px((bounds.height - h) / 2), width: w, height: h)
-        let r = (w / 7).rounded()
-        let tabH = px((h * 0.25).rounded())
-        let t = (tabH / 1.5).rounded(.down)
-        let line = px(1.25)
-        // The back panel with its tab (the view is flipped: y runs down).
-        let path = CGMutablePath()
-        path.move(to: CGPoint(x: r, y: 0))
-        path.addLine(to: CGPoint(x: px(0.41 * w), y: 0))
-        path.addLine(to: CGPoint(x: px(0.58 * w), y: t))
-        path.addLine(to: CGPoint(x: w - r, y: t))
-        path.addArc(center: CGPoint(x: w - r, y: t + r), radius: r, startAngle: -.pi / 2, endAngle: 0, clockwise: false)
-        path.addLine(to: CGPoint(x: w, y: h - r))
-        path.addArc(center: CGPoint(x: w - r, y: h - r), radius: r, startAngle: 0, endAngle: .pi / 2, clockwise: false)
-        path.addLine(to: CGPoint(x: r, y: h))
-        path.addArc(center: CGPoint(x: r, y: h - r), radius: r, startAngle: .pi / 2, endAngle: .pi, clockwise: false)
-        path.addLine(to: CGPoint(x: 0, y: r))
-        path.addArc(center: CGPoint(x: r, y: r), radius: r, startAngle: .pi, endAngle: 1.5 * .pi, clockwise: false)
-        path.closeSubpath()
-        let backFrame = CGRect(x: 0, y: 0, width: w, height: h)
-        back.bounds = CGRect(origin: .zero, size: backFrame.size)
-        back.position = CGPoint(x: backFrame.minX, y: backFrame.maxY)
-        back.path = path
-        back.lineWidth = line
-        backShade.frame = back.bounds
-        backShadeMask.frame = back.bounds
-        backShadeMask.path = path
-        let frontFrame = CGRect(x: 0, y: tabH, width: w, height: h - tabH)
-        front.bounds = CGRect(origin: .zero, size: frontFrame.size)
-        front.position = CGPoint(x: frontFrame.minX, y: frontFrame.maxY)
-        let panel = CGPath(roundedRect: front.bounds, cornerWidth: r, cornerHeight: r, transform: nil)
-        frontPanel.frame = front.bounds
-        frontPanel.path = panel
-        frontPanel.lineWidth = line
-        frontShade.frame = front.bounds
-        frontShadeMask.frame = front.bounds
-        frontShadeMask.path = panel
-        // In the holder's space (the icon's), everything but the front panel; the margin keeps the
-        // turned square over the whole glyph.
-        backHolder.frame = CGRect(x: 0, y: 0, width: w, height: h)
-        frontHole.bounds = front.bounds
-        frontHole.position = front.position
-        let hole = CGMutablePath()
-        hole.addRect(front.bounds.insetBy(dx: -w, dy: -h))
-        hole.addPath(panel)
-        frontHole.path = hole
-        // In the front panel, on whole points so each dot is two pixels square at 1x.
-        dots.frame = bounds
-        let dotPath = CGMutablePath()
-        let y = (icon.frame.minY + frontFrame.midY).rounded(.down) - 1
-        for i in -1...1 { dotPath.addEllipse(in: CGRect(x: (bounds.width / 2).rounded(.down) + CGFloat(i) * 4 - 1, y: y, width: 2, height: 2)) }
-        dots.path = dotPath
-        CATransaction.commit()
-        mark.frame = NSRect(x: icon.frame.minX + (w - 7) / 2, y: icon.frame.minY + frontFrame.midY - 3.5, width: 7, height: 7)
     }
 }
 
@@ -907,6 +739,7 @@ struct TabRowModel: Equatable {
     var peekIcon: NSImage?
     /// Tidy Tab Titles just renamed it: the row plays Arc's rename once.
     var tidyRename: TidyTitlesService.Effect? = nil
+    var gitlabMark: Bool = false
 }
 
 final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
@@ -1222,8 +1055,8 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         guard let m = model else { return }
         if overIcon && !separating {
             favicon.show(m.homeIcon, flip: m.homeFlipIcon, colors: colors)
-        } else if m.githubMark {
-            favicon.showGitHubMark(colors: colors)
+        } else if m.githubMark || m.gitlabMark {
+            favicon.showGitHubMark(colors: colors, source: m.gitlabMark ? .gitlab : .github)
         } else {
             favicon.show(m.icon, flip: m.flipIcon, colors: colors)
         }
@@ -1380,17 +1213,16 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
             soundButton.frame = NSRect(x: x - (s.width - Self.soundGlyphWidth) / 2, y: (h - s.height) / 2, width: s.width, height: s.height)
             x += Self.soundGlyphWidth + 8
         }
-        // HStack(spacing: 11) with a Spacer(minLength: 4) between the text and the trailing items.
-        var right = bounds.width - 6
-        for v in accessories.reversed() {
-            // The unread dot is centred where the close button shows on hover, which is also
-            // under a live folder's refresh button (FolderRowView, Arc lines them up too).
+        // The unread dot and a peek badge are centred where the close button shows on hover, which
+        // is also under a live folder's refresh button (FolderRowView, Arc lines them up too).
+        let trailing = TabRowTrailing.layout(rowWidth: bounds.width, textX: x, controls: accessories.map {
+            TabRowTrailing.Control(width: $0.frame.width, slot: $0 === unreadDot || $0 === peekBadge ? Self.closeSize : nil)
+        })
+        for (v, vx) in zip(accessories, trailing.controlX) {
             let s = v.frame.size
-            let slot = v === unreadDot || v === peekBadge ? Self.closeSize : s.width
-            v.frame = NSRect(x: right - slot / 2 - s.width / 2, y: (h - s.height) / 2, width: s.width, height: s.height)
-            right = v.frame.minX - 11
+            v.frame = NSRect(x: vx, y: (h - s.height) / 2, width: s.width, height: s.height)
         }
-        let textWidth = max(0, right - 4 - 11 - x)
+        let textWidth = trailing.textWidth
         let th = titleLabel.intrinsicContentSize.height
         if shownSubtitle != nil {
             let sh = subtitleLabel.intrinsicContentSize.height
@@ -1525,6 +1357,8 @@ struct FolderRowModel: Equatable {
     /// Where the warning button signs in, when GitHub asked for that (else it tries again).
     var liveSignInURL: String?
     var liveHelp: String
+    var liveSource: LiveFolderSource? = nil
+    var symbol: FolderSymbol? = nil
 }
 
 final class FolderRowView: SidebarRowView, NSTextFieldDelegate {
@@ -1549,7 +1383,11 @@ final class FolderRowView: SidebarRowView, NSTextFieldDelegate {
         // The same folder opening or closing turns its glyph; a row taking another folder doesn't.
         let toggled = model.map { $0.id == m.id && $0.expanded != m.expanded } ?? false
         model = m
-        glyph.show(expanded: m.expanded, peeked: m.peeked, live: m.live, tint: m.tint, fillColor: m.fill, backColor: m.back, animated: toggled && window != nil)
+        let emblem: FolderEmblem? = m.live
+            ? FolderEmblem(image: m.liveSource == .gitlab ? GitLabMark.image : GitHubMark.image, coloring: .template)
+            : m.symbol.map { FolderEmblem(image: $0.image, coloring: .template) }
+        glyph.show(expanded: m.expanded, peeked: m.peeked, emblem: emblem,
+                   tint: m.tint, fillColor: m.fill, backColor: m.back, animated: toggled && window != nil)
         titleLabel.stringValue = m.title
         titleLabel.textColor = colors.textPrimary
         setAccessibilityLabel(m.title)
@@ -1565,6 +1403,7 @@ final class FolderRowView: SidebarRowView, NSTextFieldDelegate {
     }
 
     override var fillLeading: CGFloat { CGFloat(model?.depth ?? 0) * CraMetrics.indent }
+    var iconRect: NSRect { glyph.frame }
     override func baseFill() -> NSColor { isHovered ? colors.hoverFill : .clear }
 
     override func hoverChanged() {
@@ -1687,7 +1526,7 @@ final class FolderRowView: SidebarRowView, NSTextFieldDelegate {
     override func click(_ event: NSEvent, at point: NSPoint) {
         guard let m = model, let list else { return }
         if m.editing { commitRename() }
-        list.store.setExpanded(m.id, FolderPeek.clickOpens(expanded: m.expanded, peeked: m.peeked))
+        list.store.setExpanded(m.id, FolderPeek.clickOpens(expanded: m.expanded))
     }
 
     override func contextMenu(at point: NSPoint) -> NSMenu? {

@@ -1,0 +1,9 @@
+# Arc's "Block Cookie Banners" (Arc 1.172.1, off by default; docs/arc-parity.md): on, a consent
+# manager's banner on a page is hidden.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "blockCookieBanners": true}
+cra://open?url=${PAGE}?n=consent
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const d=document.createElement('div');d.id='onetrust-banner-sdk';d.textContent='We use cookies';document.body.append(d);const k=document.createElement('div');k.id='kept';document.body.append(k);return 'banner-'+getComputedStyle(d).display+'-'+getComputedStyle(k).display})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"banner-none-block"

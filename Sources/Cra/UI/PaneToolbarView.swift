@@ -10,6 +10,8 @@ import SwiftUI
 /// button under the pointer keeps its hover.
 @MainActor
 final class PaneToolbarView: NSView {
+    /// Between Arc's 32 pt right-hand boxes: a 36 pt pitch.
+    static let rightGap: CGFloat = 4
     /// Split view: the pane's tab (nil = the window's selected tab).
     var paneTabID: UUID? { didSet { if paneTabID != oldValue { sync() } } }
     private let store: SidebarStore
@@ -32,7 +34,6 @@ final class PaneToolbarView: NSView {
         var path = ""
         var sidebarVisible = true
         var pinned: [Ext] = []
-        var hasExtensions = false
         /// A WebKit page's service: its extension buttons dim (none run there).
         var protectedMedia: String?
         var fill = NSColor.clear
@@ -170,13 +171,14 @@ final class PaneToolbarView: NSView {
             m.host = AppSettings.siteKey(for: t.url) ?? human
             // Arc shows the host only unless "Show Full URL" is on (#88).
             m.path = store.settings.toolbarShowsFullURL && human.hasPrefix(m.host) ? String(human.dropFirst(m.host.count)) : ""
+            // An easel's bar shows its name (Arc 1.172.1).
+            if Easel.id(fromURL: t.url) != nil { m.host = item.displayTitle; m.path = "" }
         }
         m.protectedMedia = m.tabID.flatMap { ui.navState(for: $0).protectedMedia }
         let extensions = ExtensionStore.shared
         let profile = item.map { store.profileDirectoryName(item: $0.id) }
             ?? store.profileDirectoryName(space: store.focusedSpaceID(window: ui.windowID))
         let entries = extensions.entries(inProfile: profile)
-        m.hasExtensions = !entries.isEmpty
         m.pinned = extensions.pinnedIDs(inProfile: profile).compactMap { id in
             entries.first { $0.extensionID == id }.map {
                 Model.Ext(id: id, name: $0.name, icon: extensions.toolbarIcon(for: $0, profile: profile, tab: m.tabID),
@@ -272,9 +274,11 @@ final class PaneToolbarView: NSView {
         hairline.layer?.backgroundColor = m.hairline?.cgColor
         let bar = ToolbarComposition(kind: m.kind, inSplit: m.inSplit, sidebarVisible: m.sidebarVisible, focusedPane: m.focusedPane,
                                      hovered: m.hovered, canGoBack: m.canGoBack, canGoForward: m.canGoForward, isLoading: m.isLoading,
-                                     pinnedExtensions: m.pinned.map(\.id), hasExtensions: m.hasExtensions)
+                                     pinnedExtensions: m.pinned.map(\.id))
         // The no-tab bar and an empty pane show navigation that does nothing (Arc greys it out).
         let wide = m.kind == .noTab || m.kind == .emptyPane
+        // Arc's right-hand boxes: 32 pt, 4 pt apart (layout); 28 pt edge to edge on the developer bar.
+        let rightBox: CGFloat = m.kind == .developer ? 28 : 32
         func view(_ item: ToolbarComposition.Item) -> NSView {
             switch item {
             case .toggleSidebar:
@@ -304,7 +308,7 @@ final class PaneToolbarView: NSView {
                 // page it dims and says why (docs/protected-media.md).
                 b.configure(symbol: nil, image: ExtensionStore.shared.badged(e?.icon, e?.badge, tint: m.fgDim),
                             help: m.protectedMedia.map(ExtensionStore.offOnProtectedMedia) ?? "", enabled: m.protectedMedia == nil,
-                            width: 34, iconSize: 16, tint: m.fgDim, hover: m.hover)
+                            width: rightBox, iconSize: 16, tint: m.fgDim, hover: m.hover)
                 let pane = paneTabID
                 b.action = { [weak self] in
                     if let pane { self?.actions.paneRunExtension(pane, id) } else { self?.actions.runExtension(id) }
@@ -312,16 +316,16 @@ final class PaneToolbarView: NSView {
                 b.menuProvider = { ExtensionStore.shared.entries.first { $0.extensionID == id }.map(ExtensionsMenu.iconMenu) }
                 return b
             case .extensions:
-                return glyph("extensions", "slider.horizontal.2.square", help: "Extensions", width: 34, iconSize: 16) {
+                return glyph("extensions", "slider.horizontal.2.square", help: "Extensions", width: rightBox, iconSize: 16) {
                     if let pane = $0.paneTabID { $0.actions.paneExtensionsMenu(pane) } else { $0.actions.showExtensionsMenu() }
                 }
             case .addSplit:
-                return glyph("split", "square.split.2x1", help: "Add Split View (⌃⇧=)", width: 34, iconSize: 16) { $0.actions.performAction("addSplitView") }
+                return glyph("split", "square.split.2x1", help: "Add Split View (⌃⇧=)", width: rightBox, iconSize: 16) { $0.actions.performAction("addSplitView") }
             case .splitOptions:
-                return glyph("splitOptions", "rectangle.split.2x1", help: "Split View Options") { $0.showSplitMenu(from: $0.buttons["splitOptions"]) }
+                return glyph("splitOptions", "rectangle.split.2x1", help: "Split View Options", width: rightBox) { $0.showSplitMenu(from: $0.buttons["splitOptions"]) }
             case .closePane:
                 let id = paneTabID
-                return glyph("close", "xmark", help: "Close this Split Pane (⌃⇧-)", width: 30, iconSize: 14, tint: m.closeTint) {
+                return glyph("close", "xmark", help: "Close this Split Pane (⌃⇧-)", width: rightBox, iconSize: 14, tint: m.closeTint) {
                     if let id { $0.actions.closePane(id) }
                 }
             }
@@ -371,9 +375,12 @@ final class PaneToolbarView: NSView {
             b.cornerRadius = m.kind == .developer ? 6 : 7
             b.iconRowHeight = bh
         }
-        // Right group, from the trailing edge: pinned extensions … Split View 6 pt in; a split pane's
-        // close 4 pt in; developer copy | Console, Network, Inspect | spaced as in Arc 1.170 (#88).
-        var rx = w - (m.inSplit ? 4 : (right.isEmpty ? 0 : 6))
+        // Right group, from the trailing edge, 5 pt in (Arc 1.171, captures and AX reads 8 Nov 2026):
+        // pinned extensions … Split View as 32 pt boxes 4 pt apart (a 36 pt pitch), the last centred
+        // 21 pt from the card edge like the left group's first icon. A split pane ends in options and
+        // close, edge to edge, 4 pt after the sliders. The developer bar: Extensions, pins, Split View
+        // as 28 pt boxes edge to edge, after copy | Console, Network, Inspect | spaced as in #88.
+        var rx = w - (right.isEmpty ? 0 : 5)
         var trailing = right
         var devGroup: [NSView] = []
         if m.kind == .developer, let i = trailing.firstIndex(where: { $0 === devDivider }),
@@ -387,14 +394,21 @@ final class PaneToolbarView: NSView {
         let pins = trailing.filter { v in m.pinned.contains { buttons["ext:" + $0.id] === v } }
         let reload = left.first { $0 === buttons["reload"] }
         let settings = trailing.first { $0 === buttons["extensions"] }
+        // The gap after a box (to its right) when the next one along is a box too.
+        let isBox = { (v: NSView) in
+            m.kind != .developer && (pins.contains { $0 === v } || v === settings || v === self.buttons["split"] || v === self.buttons["splitOptions"])
+        }
+        let gapAfter = { (items: [NSView], i: Int) -> CGFloat in
+            i + 1 < items.count && isBox(items[i]) && isBox(items[i + 1]) ? PaneToolbarView.rightGap : 0
+        }
         // The copy glyph goes in every pane at the width where a focused pane loses its sliders
         // (Arc, 3-pane split): judged on that pane's full set, so all panes of a width agree.
         var showsCopy = true
         if m.kind == .normal {
             let fullLeft: CGFloat = 2.5 + 3 * 37 + 6
-            let fullRight: CGFloat = (m.inSplit ? 4 + 30 + 26 : 6 + 34) + 34 + 6
+            let fullRight: CGFloat = (m.inSplit ? 5 + 32 + 32 + 4 : 5 + 32 + 4) + 32 + 6
             let fullRoom = w - fullLeft - fullRight - 2 * (8 + 6)
-            showsCopy = !ToolbarRoom.plan(pins: [], reload: 37, settings: 34, needed: urlButton.idealWidth(withCopy: true),
+            showsCopy = !ToolbarRoom.plan(pins: [], reload: 37, settings: 32 + PaneToolbarView.rightGap, needed: urlButton.idealWidth(withCopy: true),
                                           room: fullRoom).hidesSettings
         }
         urlButton.showsCopy = showsCopy
@@ -402,8 +416,16 @@ final class PaneToolbarView: NSView {
         if m.kind == .normal {
             let start: CGFloat = 2.5
             let leftEnd = left.isEmpty ? 0 : start + left.reduce(0) { $0 + widthOf($1) }
-            let room = rx - trailing.reduce(0) { $0 + widthOf($1) } - 6 - (leftEnd + (left.isEmpty ? 0 : 6)) - 2 * (8 + 6)
-            plan = ToolbarRoom.plan(pins: pins.map(widthOf), reload: reload.map(widthOf), settings: settings.map(widthOf),
+            // Broken into sub-expressions: newer Swift type-checkers time out on the one-liner.
+            let trailingWidth: CGFloat = trailing.indices.reduce(0) { $0 + widthOf(trailing[$1]) + gapAfter(trailing, $1) }
+            let leftWidth: CGFloat = leftEnd + (left.isEmpty ? 0 : 6)
+            let room = rx - trailingWidth - 6 - leftWidth - 2 * (8 + 6)
+            // Each hidden box frees its width and the gap after it.
+            let slot = { (v: NSView) -> CGFloat in
+                let i = trailing.firstIndex { $0 === v }!
+                return widthOf(v) + gapAfter(trailing, i)
+            }
+            plan = ToolbarRoom.plan(pins: pins.map(slot), reload: reload.map(widthOf), settings: settings.map(slot),
                                     needed: urlButton.idealWidth, room: room)
         }
         for (i, v) in pins.enumerated() { v.isHidden = i < plan.hiddenPins }
@@ -419,9 +441,9 @@ final class PaneToolbarView: NSView {
             x += b.width
         }
         let leftEnd = shownLeft.isEmpty ? 0 : x
-        for v in trailing.reversed() {
+        for (i, v) in trailing.enumerated().reversed() {
             let bw = (v as? ToolbarGlyphButton)?.width ?? 26
-            rx -= bw
+            rx -= gapAfter(trailing, i) + bw
             v.frame = NSRect(x: rx, y: (h - bh) / 2, width: bw, height: bh)
         }
         if !devGroup.isEmpty {
@@ -490,18 +512,27 @@ final class PaneToolbarView: NSView {
         actions.performAction("copyURL")
     }
 
-    /// Arc's menu on the toolbar address: Copy URL, and Show Full URL / Hide Full URL for the
-    /// normal bar (the developer bar always shows it).
+    /// Arc's menu on the toolbar address (Arc 1.172.1): Copy URL, Capture…, Capture Full Page,
+    /// Manage Extensions…, then Show Full URL / Hide Full URL for the normal bar (the developer
+    /// bar always shows it) and Hide Toolbar. Arc's Share ▸ is in the Site Control Center here, and
+    /// Shared Quotes go through arc.net, so neither is listed.
     private func addressMenu() -> NSMenu? {
         guard model.kind == .normal || model.kind == .developer else { return nil }
         let menu = NSMenu()
+        let focus = { [weak self] in if let id = self?.paneTabID { self?.actions.focusPane(id) } }
         menu.addItem(ToolbarMenuAction.item("Copy URL", shortcut: "copyURL", { [weak self] in self?.copyURL() }))
+        menu.addItem(ToolbarMenuAction.item("Capture…", shortcut: "capturePage", { [weak self] in focus(); self?.actions.performAction("capturePage") }))
+        menu.addItem(ToolbarMenuAction.item("Capture Full Page", shortcut: "captureFullPage", { [weak self] in focus(); self?.actions.performAction("captureFullPage") }))
+        menu.addItem(.separator())
+        menu.addItem(ToolbarMenuAction.item("Manage Extensions…", { [weak self] in self?.actions.performAction("manageExtensions") }))
+        menu.addItem(.separator())
         if model.kind == .normal {
             let full = store.settings.toolbarShowsFullURL
             menu.addItem(ToolbarMenuAction.item(full ? "Hide Full URL" : "Show Full URL", { [weak self] in
                 self?.store.settings.toolbarShowsFullURL.toggle()
             }))
         }
+        menu.addItem(ToolbarMenuAction.item("Hide Toolbar", shortcut: "toggleToolbar", { [weak self] in self?.store.settings.showToolbar = false }))
         return menu
     }
 

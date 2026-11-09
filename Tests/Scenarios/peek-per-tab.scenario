@@ -1,0 +1,58 @@
+# A Peek belongs to the tab it came from, as Arc's (modalByWindowContent). A new-tab link inside the
+# Peek opens a tab (#202), and the Peek waits, hidden, on its pinned tab; back on that tab it is
+# there again with the same page. It goes when its tab goes (GitHub #242).
+# promise: #242
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "peekInEveryTab": true}
+
+cra://open?url=${PAGE}?n=hub
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/pinTab
+wait 0.5
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=peek'))","userGesture":true}
+expect-log peek: from
+wait 1.5
+cra://debug?peeks=open
+expect-log Cra peeks open: shown \S+n=peek$
+
+cra://debug?target=little&cdp=Runtime.evaluate&params={"expression":"document.body.style.height='4000px'; scrollTo(0, 1234); 'scrolled=' + scrollY"}
+expect-log "value":"scrolled=1234"
+
+# The link the reporter pulls out of the Peek: a tab, selected, and the Peek out of the way.
+cra://debug?target=little&cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=link'))","userGesture":true}
+wait 1.5
+cra://debug?peeks=left
+expect-log Cra peeks left: hidden \S+n=peek$
+cra://debug?peekShown=left
+expect-log Cra peek shown left: veiled=0 alpha=1\.00 scale=1\.000
+
+# Back on the pinned tab: the same Peek, over the page faded behind it.
+cra://action/previousTab
+wait 1
+cra://debug?peeks=back
+expect-log Cra peeks back: shown \S+n=peek$
+cra://debug?peekShown=back
+expect-log Cra peek shown back: veiled=1 alpha=0\.28
+# Arc leaves the sidebar to the sidebar: a click on another row opens that tab and the Peek waits.
+# Only the page area around the card catches the click that closes it.
+cra://debug?peekCatcher=back
+expect-log Cra peek catcher back: sidebar=clear
+# Where the reporter left it.
+cra://debug?target=little&cdp=Runtime.evaluate&params={"expression":"'kept=' + scrollY"}
+expect-log "value":"kept=1234"
+
+# A Peek from a Today tab goes when Clear Today archives its tab; the pinned tab's waits on.
+cra://open?url=${PAGE}?n=today
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=second'))","userGesture":true}
+wait 1.5
+cra://debug?target=little&cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=link2'))","userGesture":true}
+wait 1.5
+cra://debug?peeks=two
+expect-log Cra peeks two: hidden \S+n=peek, hidden \S+n=second$
+cra://action/clearToday
+wait 1
+cra://debug?peeks=cleared
+expect-log Cra peeks cleared: hidden \S+n=peek$

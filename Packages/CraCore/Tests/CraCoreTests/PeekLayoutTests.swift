@@ -23,6 +23,38 @@ struct PeekLayoutTests {
         #expect(PeekLayout.column(beside: card) == CGRect(x: 1603, y: buttons[2].minY, width: 34, height: buttons[0].maxY - buttons[2].minY))
     }
 
+    @Test func clicksNearTheEdgeResizeLikeArc() {
+        // Arc 1.172.1, a 1100 × 760 pt window: 1–3 pt inside an edge resize and keep the Peek, 4 pt
+        // in closes it.
+        let window = CGRect(x: 100, y: 80, width: 1100, height: 760)
+        let area = PeekLayout.dismissArea(covering: window)
+        for d: CGFloat in [1, 2, 3 - 0.01] {
+            for p in [CGPoint(x: window.maxX - d, y: window.midY), CGPoint(x: window.minX + d, y: window.midY),
+                      CGPoint(x: window.midX, y: window.maxY - d), CGPoint(x: window.midX, y: window.minY + d)] {
+                #expect(!area.contains(p), "\(d) pt in")
+            }
+        }
+        for p in [CGPoint(x: window.maxX - 4, y: window.midY), CGPoint(x: window.minX + 4, y: window.midY),
+                  CGPoint(x: window.midX, y: window.maxY - 4), CGPoint(x: window.midX, y: window.minY + 4)] {
+            #expect(area.contains(p))
+        }
+        #expect(window.contains(area))
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/242")) func aClickOnTheSidebarIsTheSidebars() {
+        // Arc 1.172.1, 8 Nov: a click on another tab's row with a Peek over the page opens that tab
+        // (the Peek waits on its own); only the page area closes the Peek.
+        let window = CGRect(x: 0, y: 33, width: 1728, height: 1084)
+        let area = PeekLayout.dismissArea(covering: window, contentMinX: 236)
+        for x: CGFloat in [1, 6, 114, 235] { #expect(!area.contains(CGPoint(x: x, y: 600)), "sidebar at \(x)") }
+        for x: CGFloat in [236, 300, 1724.99] { #expect(area.contains(CGPoint(x: x, y: 600)), "page at \(x)") }
+        // The resize band stays out at the top, right and bottom.
+        #expect(area.maxX == window.maxX - 3 && area.minY == window.minY + 3 && area.maxY == window.maxY - 3)
+        // With the sidebar hidden the page fills the window, and so does the area.
+        #expect(PeekLayout.dismissArea(covering: window, contentMinX: 0) == PeekLayout.dismissArea(covering: window))
+        #expect(PeekLayout.dismissArea(covering: window, contentMinX: 0).minX == 3)
+    }
+
     @Test func hiddenSidebarCentresOnTheWindow() {
         let card = PeekLayout.card(in: PeekLayout.area(window: Self.window, contentMinX: 0))
         #expect(card.midX == Self.window.width / 2)

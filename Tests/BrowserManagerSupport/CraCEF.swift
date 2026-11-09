@@ -4,6 +4,7 @@ import AppKit
 
 public protocol CraBrowserDelegate: AnyObject {
     func browserDidClose(_ browser: CraBrowser)
+    func browser(_ browser: CraBrowser, requestsPermissionForOrigin origin: String, kinds: UInt, completion: @escaping (Bool) -> Void)
     func browser(_ browser: CraBrowser, didChangeURL url: String)
     func browser(_ browser: CraBrowser, didChangeTitle title: String)
     func browser(_ browser: CraBrowser, didChangeLoading loading: Bool, canGoBack: Bool, canGoForward: Bool)
@@ -45,6 +46,14 @@ open class CraBrowser {
         self.profilePath = profilePath
     }
 
+    /// The saved back and forward list the page was made with (Cra.restoreHistory's params).
+    public private(set) var restoredHistory: [String: Any]?
+    public convenience init(frame: NSRect, url: String, delegate: CraBrowserDelegate?, incognito: Bool, profilePath: String?,
+                            history: [String: Any]?) {
+        self.init(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath)
+        restoredHistory = history
+    }
+
     public func close() { closeRequested = true; onClose?() }
     public func finishClose() { isClosed = true; delegate?.browserDidClose(self) }
     /// "show" / "close" / "apply <action>", in the order Cra asked.
@@ -74,6 +83,9 @@ open class CraBrowser {
         lastParams = params
         replies.append((method, completion))
     }
+    /// Scripts run in the page's own world (a Boost's JavaScript), in order.
+    public private(set) var scripts: [String] = []
+    public func executeJavaScript(_ script: String) { scripts.append(script) }
     public private(set) var lastIsolatedParams = ""
     /// Recorded as "<world>:Runtime.evaluate".
     public func evaluate(inIsolatedWorld world: String, params: String, completion: @escaping (String?, String?) -> Void) {

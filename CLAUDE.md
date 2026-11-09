@@ -2,8 +2,9 @@
 
 [CONTRIBUTING.md](CONTRIBUTING.md) says what fits (Arc parity by default, no cloud AI,
 nothing leaves the Mac) and how to send a change. [docs/development.md](docs/development.md)
-has the layout and the tests, and [docs/testing.md](docs/testing.md) has the test rules. This
-file holds the layer rules.
+has the layout and the tests, and [docs/testing.md](docs/testing.md) has the test rules.
+[docs/reviewing.md](docs/reviewing.md) is what a PR review checks (Arc parity, AppKit over
+SwiftUI, tests that fail without the fix) and how. This file holds the layer rules.
 
 ## Layers
 

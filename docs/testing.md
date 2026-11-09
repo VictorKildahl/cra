@@ -57,13 +57,15 @@ no page content), so it checks geometry, ink and fills.
 - **CraCore ≥ 85 % of lines.** There is no target for the whole repo: one would be met by
   testing the easy files.
 - **Mutation score ≥ 70 %** (`scripts/mutate.py`, weekly): one operator flipped at a time in
-  the pure code must fail a test.
+  the pure code must fail a test. About a thousand mutants are more than the CI job's hour, so
+  it tests a shuffled sample for 70 minutes (`CRA_MUTATION_MINUTES`), a new order each ISO week.
 - **Scenario invariants**, the same for every scenario: the app is still running at the end,
   no new crash report for its processes, no `fault:` line in `cra.log`, the sidebar sound
   (`SidebarIntegrity`), main-thread stalls inside the scenario's budget, Cra's memory inside
   its budget, helper processes back to baseline five seconds after tabs close, the performance
   recorder under 0.1 % of a core (`selfCost.cpuPct` in its perf.json, `budget perfcpu=`) with its
-  count of 250 ms stalls within a few of HitchMonitor's, and a quit within 20 seconds.
+  count of 250 ms stalls within a few of HitchMonitor's, and a quit within 20 seconds that ends
+  without a signal (#227: ReportCrash can take longer to write its report than the run waits).
   The budgets are for a release build (`scripts/build.sh`), which is what the nightly runs: a
   debug build's recorder costs about six times as much (0.16–0.22 % against 0.03–0.04 %, 6 Nov
   2026), so on a debug build the recorder line fails and means nothing.
@@ -111,8 +113,8 @@ one. Every launch checks the sidebar and logs a fault for each broken link.
     scripts/scenario.sh all             # every one, about 6 minutes
 
 A scenario (`Tests/Scenarios/*.scenario`) is a list of `cra://` commands plus a few
-directives (`wait`, `repeat`, `budget`, `helpers`, `relaunch`, `expect-log`, `snapshot`, `seed`, `env`, `home`;
-the header of `scripts/scenario.sh` lists them). It runs `build/Cra.app` on a throwaway data
+directives (`wait`, `repeat`, `budget`, `helpers`, `relaunch`, `expect-log`, `snapshot`, `seed`, `env`,
+`arg`, `extension`, `home`; the header of `scripts/scenario.sh` lists them). It runs `build/Cra.app` on a throwaway data
 folder, behind your windows (`CRA_TEST_BACKGROUND`), with the fixture pages served from
 127.0.0.1. Logs, hitch log and snapshots land in `build/scenarios/<name>/`. Adding a journey
 is a text file; the invariants come for free.
@@ -144,3 +146,10 @@ AddressSanitizer, ThreadSanitizer and UBSan (`CRA_TEST_SWIFTC_FLAGS`), 400 000 f
 (`scripts/fuzz.sh`), and on Mondays mutation testing. Xcode's toolchain has no libFuzzer on
 macOS, so the fuzzer mutates the fixtures itself with a fixed seed; a crash leaves its input
 in `build/fuzz/crash-input`.
+
+On GitHub's runners the scenarios run with `CRA_BUDGETS=report`: budgets (stalls, memory, the
+recorder's cost) and snapshot differences go in the job summary but don't fail the job, because
+they were set on a Mac and a runner VM measures differently (macOS 26.7.2 draws system symbols a
+few pixels apart; one system sample there costs 11–27 ms of CPU against under 1 ms on a Mac).
+What the app does fails it: `expect-log`, faults, crash reports, helper counts, quitting. Judge
+budgets and snapshots with a release build on a Mac.

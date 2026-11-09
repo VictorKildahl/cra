@@ -14,6 +14,10 @@ final class SidebarView: NSView {
 
     /// The URL field's sliders button (screen rect), nil while the toolbar has it.
     var siteControlsButtonFrameOnScreen: NSRect? { topBar.siteControlsButtonFrameOnScreen }
+    /// Scenario hooks (#226): the URL field as if the pointer were over the header, and a press on
+    /// one of its buttons. nil while the toolbar has the address.
+    func debugURLFieldHover(_ on: Bool) -> [ToolbarComposition.Item]? { topBar.debugURLFieldHover(on) }
+    func debugURLFieldPress(_ item: ToolbarComposition.Item) -> Bool { topBar.debugURLFieldPress(item) }
     private let pager: SpacePagerView
     private let trayHost: DownloadsTrayView
     private let player: NowPlayingTrayView
@@ -179,8 +183,17 @@ final class SidebarView: NSView {
                 host.animator().frame = bounds
                 tabs.animator().alphaValue = 0
             }
+            // Faded out isn't gone: the favorites' tracking areas would still show their tooltips and
+            // preview cards through the Library. Hidden once the 0.05 s fade is over (a timer, as an
+            // animation's completion can wait while the window is off screen).
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { [weak self] in
+                guard let self, self.shownLibrary != nil, self.ui.libraryReveal == nil else { return }
+                self.tabs.isHidden = true
+                CraLog.note("library covers the tab list")
+            }
         } else if let host = libraryHost {
             libraryHost = nil
+            tabs.isHidden = false
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.1
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
@@ -217,12 +230,14 @@ final class SidebarView: NSView {
                 host.alphaValue = 1
                 host.frame = bounds
                 tabs.alphaValue = 0
+                tabs.isHidden = true
                 if shownLibrary != page { host.focusSearch() }
                 shownLibrary = page
             } else {
                 libraryHost?.removeFromSuperview()
                 libraryHost = nil
                 tabs.alphaValue = 1
+                tabs.isHidden = false
                 shownLibrary = nil
             }
             return
@@ -232,6 +247,7 @@ final class SidebarView: NSView {
         host.page = page
         host.alphaValue = 1
         tabs.alphaValue = 1
+        tabs.isHidden = false
         // Neither page shows outside the column, under the card's inset.
         layer?.masksToBounds = true
         let base = ui.libraryRevealBase, library = ui.libraryRevealWidth
@@ -315,6 +331,14 @@ final class SidebarTopBarView: NSView {
         return NSRect(x: f.maxX - 5 - 28, y: f.minY + (f.height - 28) / 2, width: 28, height: 28)
     }
     private var hoverHeader = false { didSet { if hoverHeader != oldValue { pill.showAccessories = hoverHeader } } }
+
+    func debugURLFieldHover(_ on: Bool) -> [ToolbarComposition.Item]? {
+        hoverHeader = on
+        layoutSubtreeIfNeeded()
+        return pill.isHidden ? nil : pill.shownItems
+    }
+
+    func debugURLFieldPress(_ item: ToolbarComposition.Item) -> Bool { !pill.isHidden && pill.debugPress(item) }
     private var syncQueued = false
 
     var preferredHeight: CGFloat { CraMetrics.titleAreaHeight + (compact ? 2 + 36 + 8 : 0) }
@@ -419,7 +443,7 @@ final class SidebarTopBarView: NSView {
                 }
             }
             pill.show(text: text, url: url, hasTab: tab != nil, colors: colors, active: active,
-                      pinned: pinned, hasExtensions: !entries.isEmpty, protectedMedia: tab.flatMap { ui.navState(for: $0.id).protectedMedia })
+                      pinned: pinned, protectedMedia: tab.flatMap { ui.navState(for: $0.id).protectedMedia })
         }
         needsLayout = true
         if wasCompact != compact { superview?.superview?.needsLayout = true }
@@ -525,10 +549,12 @@ final class SidebarURLPill: NSView {
     private let label = NSTextField.sidebarLabel(size: 13)
     private let tip: ArcTooltipAnchorView
     private var accessories: [NSView] = []
+    /// What each of `accessories` is, in order.
+    private(set) var shownItems: [ToolbarComposition.Item] = []
     private var hovering = false { didSet { if hovering != oldValue { refreshFill() } } }
     private var colors = SidebarColors()
     private var hasTab = false
-    private var model: (pinned: [(String, String, NSImage?)], hasExtensions: Bool, active: Bool)?
+    private var model: (pinned: [(String, String, NSImage?)], active: Bool)?
 
     override init(frame: NSRect) {
         tip = ArcTooltipAnchorView(frame: .zero)
@@ -549,14 +575,14 @@ final class SidebarURLPill: NSView {
     override var mouseDownCanMoveWindow: Bool { false }
 
     func show(text: String, url: String, hasTab: Bool, colors: SidebarColors, active: Bool,
-              pinned: [(String, String, NSImage?)], hasExtensions: Bool, protectedMedia: String? = nil) {
+              pinned: [(String, String, NSImage?)], protectedMedia: String? = nil) {
         self.protectedMedia = protectedMedia
         self.colors = colors
         self.hasTab = hasTab
         tip.text = url
         label.stringValue = text
         label.textColor = hasTab ? colors.textPrimary : colors.textTertiary
-        model = (pinned, hasExtensions, active)
+        model = (pinned, active)
         refreshAccessories(animated: false)
         refreshFill()
         needsLayout = true
@@ -571,29 +597,38 @@ final class SidebarURLPill: NSView {
     /// A WebKit page's service: the pins dim and say why (docs/protected-media.md).
     private var protectedMedia: String?
 
-    /// Arc's URL-bar accessories: pinned extensions (while they leave the address room), Copy
-    /// Link, then the site controls.
+    /// Arc's URL-bar accessories (ToolbarComposition.urlFieldAccessories): pinned extensions
+    /// (while they leave the address room), Copy Link, then the Site Control Center's sliders,
+    /// which show with no extension installed too (#226).
     private func refreshAccessories(animated: Bool) {
         accessories.forEach { $0.removeFromSuperview() }
         accessories = []
+        shownItems = []
         guard showAccessories, hasTab, let m = model, let actions else { needsLayout = true; return }
         pinsInField = PinnedExtensionGrid.fitsInURLField(count: m.pinned.count, fieldWidth: bounds.width)
-        for (id, _, icon) in pinsInField ? m.pinned : [] {
-            let b = ToolbarGlyphButton()
-            // Arc's pinned extension buttons have no tooltip (#106), unless they can't run here.
-            b.configure(symbol: nil, image: icon, help: protectedMedia.map(ExtensionStore.offOnProtectedMedia) ?? "",
-                        enabled: protectedMedia == nil, width: 28, iconSize: 16, tint: colors.textSecondary)
-            b.action = { actions.runExtension(id) }
-            b.menuProvider = { ExtensionStore.shared.entries.first { $0.extensionID == id }.map(ExtensionsMenu.iconMenu) }
-            accessories.append(b)
-        }
-        let copy = SidebarGlyphButton(symbol: "link", size: 28, height: 28, iconSize: 14, weight: .regular, help: "Copy URL (⇧⌘C)", colors: colors) { actions.performAction("copyURL") }
-        copy.active = m.active
-        accessories.append(copy)
-        if m.hasExtensions {
-            let e = SidebarGlyphButton(symbol: "slider.horizontal.2.square", size: 28, height: 28, iconSize: 15, weight: .regular, help: "Extensions", colors: colors) { actions.showExtensionsMenu() }
-            e.active = m.active
-            accessories.append(e)
+        let icons = Dictionary(m.pinned.map { ($0.0, $0.2) }, uniquingKeysWith: { a, _ in a })
+        for item in ToolbarComposition.urlFieldAccessories(pinnedExtensions: m.pinned.map(\.0), fieldWidth: bounds.width) {
+            switch item {
+            case .pinnedExtension(let id):
+                let b = ToolbarGlyphButton()
+                // Arc's pinned extension buttons have no tooltip (#106), unless they can't run here.
+                b.configure(symbol: nil, image: icons[id] ?? nil, help: protectedMedia.map(ExtensionStore.offOnProtectedMedia) ?? "",
+                            enabled: protectedMedia == nil, width: 28, iconSize: 16, tint: colors.textSecondary)
+                b.action = { actions.runExtension(id) }
+                b.menuProvider = { ExtensionStore.shared.entries.first { $0.extensionID == id }.map(ExtensionsMenu.iconMenu) }
+                accessories.append(b)
+            case .copyURL:
+                let copy = SidebarGlyphButton(symbol: "link", size: 28, height: 28, iconSize: 14, weight: .regular, help: "Copy URL (⇧⌘C)", colors: colors) { actions.performAction("copyURL") }
+                copy.active = m.active
+                accessories.append(copy)
+            case .extensions:
+                let e = SidebarGlyphButton(symbol: "slider.horizontal.2.square", size: 28, height: 28, iconSize: 15, weight: .regular, help: "Extensions", colors: colors) { actions.showExtensionsMenu() }
+                e.active = m.active
+                accessories.append(e)
+            default:
+                continue
+            }
+            shownItems.append(item)
         }
         for v in accessories {
             addSubview(v)
@@ -639,13 +674,25 @@ final class SidebarURLPill: NSView {
         guard bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
         actions?.openCommandBar(hasTab ? .editURL : .newTab)
     }
+
+    /// Runs the shown button's own action, as a click on it would (scenario hook, #226).
+    func debugPress(_ item: ToolbarComposition.Item) -> Bool {
+        guard let i = shownItems.firstIndex(of: item) else { return false }
+        switch accessories[i] {
+        case let b as SidebarGlyphButton: b.action()
+        case let b as ToolbarGlyphButton: b.action()
+        default: return false
+        }
+        return true
+    }
 }
 
 // MARK: - Dock
 
 /// Bottom row like Arc's: the Library at the left, tiny space icons in the middle (inactive ones
-/// dimmed), "+" at the right. Arc 1.170 (SidebarDock, an NSCollectionView): 34×32 pt cells side
-/// by side with no gap, so a press anywhere between two icons still lands on a space.
+/// dimmed, icon-less ones dots), "+" at the right. Arc 1.170 (SidebarDock, an NSCollectionView):
+/// 34×32 pt cells side by side with no gap, so a press anywhere between two icons still lands on a
+/// space. Widths and what each cell draws come from CraCore's SpaceDock.
 final class SpaceDockView: NSView {
     static let cell = CGSize(width: 34, height: 32)
     private let store: SidebarStore
@@ -667,7 +714,11 @@ final class SpaceDockView: NSView {
         self.ui = ui
         self.actions = actions
         library = LibraryButtonView(ui: ui, actions: actions)
-        plus = SidebarGlyphButton(symbol: "plus", size: 28, iconSize: 13, help: "New Space", colors: SidebarColors()) { actions.editSpace(nil) }
+        // Arc 1.172: a Blank Window's + shows but does nothing.
+        plus = SidebarGlyphButton(symbol: "plus", size: 28, iconSize: 13, help: "New Space", colors: SidebarColors()) { [store, ui] in
+            guard !store.isBlank(window: ui.windowID) else { return }
+            actions.editSpace(nil)
+        }
         super.init(frame: .zero)
         addSubview(library)
         addSubview(plus)
@@ -686,8 +737,9 @@ final class SpaceDockView: NSView {
             incognito = store.window(ui.windowID).isIncognito
             let f = store.focusedSpaceID(window: ui.windowID)
             focused = f
-            // Arc's single-space mode drops the lone space icon along with the header.
-            spaces = incognito || store.hidesSpaceHeader(f) ? [] : store.orderedSpaces
+            // Arc's single-space mode drops the lone space icon along with the header; incognito and
+            // Blank Windows show no space icons (Arc 1.172 keeps the + in a Blank Window).
+            spaces = store.isStandalone(window: ui.windowID) || store.hidesSpaceHeader(f) ? [] : store.orderedSpaces
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self, !self.syncQueued else { return }
@@ -710,7 +762,7 @@ final class SpaceDockView: NSView {
                 addSubview(c)
                 return c
             }()
-            c.show(emoji: s.emoji, symbol: s.symbol, title: s.title)
+            c.show(icon: s.icon, title: s.title)
         }
         order = ids
         refreshCells()
@@ -718,23 +770,21 @@ final class SpaceDockView: NSView {
     }
 
     private func refreshCells() {
+        let squeezed = SpaceDock.isSqueezed(count: order.count, room: room)
         for (id, c) in cells {
-            c.setState(selected: id == focused, hovered: hovered == id && reorder == nil, pressed: reorder?.id == id, colors: colors)
+            c.setState(selected: id == focused, hovered: hovered == id && reorder == nil, pressed: reorder?.id == id,
+                       squeezed: squeezed, colors: colors)
         }
     }
 
-    /// Arc 1.171 with 5 to 22 spaces (31 Oct 2026): every space gets an equal share of the 217 pt
-    /// between the Library and + buttons (300 pt sidebar), in half points and at most 34 pt. Below
-    /// 22 pt the open space keeps 22 and the others split the rest: 17.5 pt each with 12 spaces, 13
-    /// with 16, 9 with 22. The strip stays centred, so it never runs past the buttons.
+    /// The room between the Library and + buttons: 217 pt in a 300 pt sidebar.
+    private var room: CGFloat { max(0, bounds.width - 63) }
+
+    /// SpaceDock's widths, Arc's: 34 pt each until the share drops under 22, then the open space
+    /// keeps 22 and the others split the rest. The strip stays centred, so it never runs past the
+    /// buttons.
     private var cellWidths: [CGFloat] {
-        let n = order.count
-        guard n > 0 else { return [] }
-        let room = max(0, bounds.width - 63)
-        let even = min(Self.cell.width, floor(room / CGFloat(n) * 2) / 2)
-        guard even < 22, n > 1 else { return Array(repeating: even, count: n) }
-        let rest = max(4, floor((room - 22) / CGFloat(n - 1) * 2) / 2)
-        return order.map { $0 == focused ? 22 : rest }
+        SpaceDock.widths(count: order.count, open: focused.flatMap { order.firstIndex(of: $0) }, room: room)
     }
 
     /// Left edges of the cells, in order.
@@ -752,6 +802,8 @@ final class SpaceDockView: NSView {
         let h = bounds.height
         library.frame = NSRect(x: 0, y: (h - 28) / 2, width: 28, height: 28)
         plus.frame = NSRect(x: bounds.width - 28, y: (h - 28) / 2, width: 28, height: 28)
+        // A narrower sidebar can squeeze the dock into dots.
+        refreshCells()
         placeCells(animated: false)
     }
 
@@ -893,9 +945,10 @@ final class SpaceDockView: NSView {
     }
 }
 
-/// One space in the dock: its emoji, dimmed and desaturated unless selected, hovered or pressed.
-/// A tab dragged onto it moves there; held over it, Arc switches to that space so the tab can be
-/// carried into its list.
+/// One space in the dock: its emoji or symbol, dimmed and desaturated unless selected, hovered or
+/// pressed, or Arc's dot: for a space with no icon, and for every space but the open one when the
+/// dock is squeezed (#252). A tab dragged onto it moves there; held over it, Arc switches to that
+/// space so the tab can be carried into its list.
 final class SpaceCellView: NSView, ArcTooltipTarget {
     private let spaceID: UUID
     private let store: SidebarStore
@@ -905,6 +958,10 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
     /// An Icon-tab glyph (Space.symbol) in the emoji's place.
     private let symbol = NSImageView()
     private var symbolName: String?
+    /// Arc's dot, outside `emojiHolder` so its own ink sets how faint it is.
+    private let dot = CALayer()
+    private var icon = SpaceIcon.none
+    private var mark = SpaceDockMark.dot(diameter: SpaceDock.dotDiameter)
     private var title = ""
     private var selected = false
     private var colors = SidebarColors()
@@ -924,6 +981,8 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
         emoji.alignment = .center
         emojiHolder.addSubview(emoji)
         addSubview(emojiHolder)
+        dot.actions = ["bounds": NSNull(), "position": NSNull(), "backgroundColor": NSNull(), "hidden": NSNull(), "cornerRadius": NSNull()]
+        layer?.addSublayer(dot)
         registerForDraggedTypes([.craSidebarItem])
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
@@ -933,27 +992,47 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    func show(emoji text: String, symbol name: String?, title: String) {
-        emoji.stringValue = text
-        if symbolName != name {
-            symbolName = name
-            symbol.image = name.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }
-            symbol.isHidden = name == nil
-            if symbol.superview == nil { symbol.imageScaling = .scaleNone; emojiHolder.addSubview(symbol) }
-        }
+    func show(icon: SpaceIcon, title: String) {
+        self.icon = icon
         self.title = title
         setAccessibilityLabel(title)
         needsLayout = true
     }
 
-    func setState(selected: Bool, hovered: Bool, pressed: Bool, colors: SidebarColors) {
+    /// `squeezed`: the dock is too narrow for icons, so every space but the open one is a dot.
+    func setState(selected: Bool, hovered: Bool, pressed: Bool, squeezed: Bool, colors: SidebarColors) {
         self.selected = selected
         self.colors = colors
         lit = selected || hovered || pressed
+        let mark = SpaceDock.mark(for: icon, isOpen: selected, squeezed: squeezed)
+        if mark != self.mark { self.mark = mark; needsLayout = true }
+        switch mark {
+        case .emoji(let e):
+            emoji.stringValue = e
+            showSymbol(nil)
+        case .symbol(let name):
+            emoji.stringValue = ""
+            showSymbol(name)
+        case .dot:
+            emoji.stringValue = ""
+            showSymbol(nil)
+        }
+        emojiHolder.isHidden = { if case .dot = mark { return true } else { return false } }()
+        dot.isHidden = !emojiHolder.isHidden
+        dot.backgroundColor = (colors.isDark ? NSColor.white : NSColor.black)
+            .withAlphaComponent(SpaceDock.dotAlpha(dark: colors.isDark, lit: lit)).cgColor
         emojiHolder.alphaValue = lit ? 1 : 0.45
         symbol.contentTintColor = colors.textPrimary
         emojiHolder.layer?.filters = lit ? nil : [CIFilter(name: "CIColorControls", parameters: ["inputSaturation": 0.2])!]
         refreshFill(hovered || pressed)
+    }
+
+    private func showSymbol(_ name: String?) {
+        guard symbolName != name else { return }
+        symbolName = name
+        symbol.image = name.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }
+        symbol.isHidden = name == nil
+        if symbol.superview == nil { symbol.imageScaling = .scaleNone; emojiHolder.addSubview(symbol) }
     }
 
     /// Arc's hovered/pressed cell on a dark space: white at ~7.8%, 6 pt corners.
@@ -966,13 +1045,18 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
     override func layout() {
         super.layout()
         emojiHolder.frame = bounds
-        // Squeezed cells (many spaces) shrink the emoji with them, like Arc's dots.
-        let size = min(13, max(5, (bounds.width * 0.62).rounded()))
+        // An icon only shows in a cell of 22 pt or more (squeezed cells are dots), so it keeps its size.
+        let size: CGFloat = 13
         if emoji.font?.pointSize != size { emoji.font = .systemFont(ofSize: size) }
         let h = emoji.intrinsicContentSize.height
         emoji.frame = NSRect(x: 0, y: (bounds.height - h) / 2, width: bounds.width, height: h)
         symbol.frame = bounds
         symbol.symbolConfiguration = .init(pointSize: size - 2, weight: .medium)
+        if case .dot(let d) = mark {
+            dot.bounds = CGRect(x: 0, y: 0, width: d, height: d)
+            dot.cornerRadius = d / 2
+            dot.position = CGPoint(x: bounds.midX, y: bounds.midY)
+        }
     }
 
     override func accessibilityPerformPress() -> Bool {
@@ -1044,9 +1128,11 @@ final class LibraryButtonView: NSView {
     private let bin = NSView()
     private let binImage = CALayer()
     private let binTip: ArcTooltipAnchorView
+    /// The ring on the bin's corner while downloads run (#272).
+    private let badge = DownloadProgressBadgeView()
     private var shownDownload: UInt32?
     private var hovering = false { didSet { if hovering != oldValue { refresh() } } }
-    var colors = SidebarColors() { didSet { if colors != oldValue { glyph.image = LibraryGlyph.image(dark: colors.isDark); refresh() } } }
+    var colors = SidebarColors() { didSet { if colors != oldValue { glyph.image = LibraryGlyph.image(dark: colors.isDark); badge.colors = colors; refresh() } } }
     static let binOffset = CGSize(width: 9, height: -12)
     /// The download bin's frame, for Tidy Downloads' card to point at.
     var binFrame: NSRect { bin.frame }
@@ -1075,10 +1161,27 @@ final class LibraryButtonView: NSView {
         binImage.contentsGravity = .resizeAspectFill
         bin.layer?.addSublayer(binImage)
         bin.addSubview(binTip)
+        bin.addSubview(badge)
         bin.isHidden = true
         addSubview(bin)
         ui.libraryAnchor = self
         observe()
+        observeProgress()
+    }
+
+    private struct Progress: Equatable {
+        var running: Double?
+        var bin: UInt32?
+    }
+
+    /// The badge follows every running download together; when the last one ends, a check if the
+    /// bin's download finished with a file, else it just goes.
+    private func observeProgress() {
+        observeChanges(of: { [ui] in Progress(running: DownloadHistory.shared.progress, bin: ui.recentDownload?.id) }) { [weak self] p in
+            guard let self else { return }
+            let finished = p.bin.map { id in !DownloadHistory.shared.live.contains { $0.id == id } } ?? false
+            self.badge.show(progress: p.bin == nil ? nil : p.running, finished: finished)
+        }
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -1129,6 +1232,9 @@ final class LibraryButtonView: NSView {
         bin.frame = NSRect(x: c.x - 16, y: c.y - 16, width: 32, height: 32)
         binImage.frame = bin.bounds
         binTip.frame = bin.bounds
+        // Over the bin's bottom right corner, 4 pt out (the bin isn't flipped).
+        let b = DownloadProgressBadgeView.size
+        badge.frame = NSRect(x: bin.bounds.maxX - b + 4, y: -4, width: b, height: b)
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {

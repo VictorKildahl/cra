@@ -75,7 +75,7 @@ private struct AppIconTile: View {
     @State private var hovering = false
 
     /// The tile; the images carry Apple's grid margin around it, as in the Dock.
-    private static let size: CGFloat = 56
+    private static let size: CGFloat = 72
     private static let canvas = size / AppIconManager.gridBody
     /// The icons' own corners: 14.3 of 64 units.
     private static let corner = size * 14.3 / 64

@@ -18,7 +18,8 @@ Notes for working on the code. How to send a change is in
 you.
 
 Requirements: macOS 14+ on Apple silicon, Xcode 16+, CMake (`brew install cmake`), about
-1 GB of disk for CEF and the build products.
+1 GB of disk for CEF and the build products. `CRA_ARCH=x86_64 scripts/build.sh` cross-compiles the
+Intel app into `build/x86_64/Cra.app` (another ~1 GB); every release ships both.
 
 `scripts/fetch-cef.sh` pins the CEF version and downloads it into `vendor/cef` (not
 committed). It fetches Cra's own CEF build, made by `scripts/build-cef.sh` with H.264/AAC
@@ -47,7 +48,8 @@ issue when a newer stable CEF is out; `scripts/update-cef.sh` moves the pin.
 - `vendor/cef` — CEF binary distribution (fetched, not committed)
 
 Data lives in `~/Library/Application Support/Cra`: the sidebar and archive as JSON,
-`keybindings.json`, cached favicons, the logs and a Chromium profile folder. Delete it to
+`keybindings.json`, each tab's back and forward list in `PageHistory/`, cached favicons, the logs
+and a Chromium profile folder. Delete it to
 start over.
 
 Settings ▸ General ▸ Sync keeps `sidebar.json`, `settings.json` (minus each Mac's own fields,
@@ -77,13 +79,14 @@ the save panel.
 
     scripts/test.sh                  # everything below except the smoke test, in seconds
     scripts/test.sh core             # only Packages/CraCore
+    scripts/test-folder-glyph.sh      # folder emblems: layer projection, colors and Retina resolution
     Tests/smoke-launch.sh            # launches build/Cra.app three times, about 30 s
     scripts/scenario.sh all          # user journeys in build/Cra.app, about 6 minutes
     scripts/scenario.sh sleep-tabs   # one of them (Tests/Scenarios/<name>.scenario)
     scripts/coverage.py              # line coverage, and the changed-lines gate against origin/main
     scripts/coverage.py --base <ref> # the same against another base (CI passes the PR's)
     scripts/fuzz.sh                  # mutated importer fixtures under AddressSanitizer
-    scripts/mutate.py [word]         # mutation testing of the pure code, minutes; a word limits it
+    scripts/mutate.py [word]         # mutation testing of the pure code, about an hour; a word limits it
 
 [testing.md](testing.md) has the rules, the layers, the gates and how to write a scenario.
 
@@ -107,6 +110,9 @@ to Markdown or `docs/` alone runs nothing.
   `ManualScheduler`, against the made-up Arc and Chromium profiles in `Tests/Fixtures`.
 - `scripts/test-policies.sh`: the decisions pulled out of the window controllers
   (`ExtensionLaunch`, `DevToolsToggle`, `FeatureFlags`).
+- `scripts/test-folder-glyph.sh`: the standalone folder component's real AppKit layers and image
+  pixels: emblems follow the front panel's perspective, keep their colors and proportions, and
+  update at 1x/Retina. No CEF or visible window; coverage uses the same harness as `scripts/test.sh`.
 - `scripts/test-perf.sh`: the performance recorder on a real main run loop: injected stalls,
   hang files with a `sample` stack, the session marker, ownership, the recording switch
   ([performance.md](performance.md)).
@@ -121,13 +127,18 @@ behave. Check those by hand, and say how in the PR.
 
 Scenario hooks for a command file (`cra://debug?…`): `checkStore=1` logs a fault per broken
 sidebar link, `pageJS=<js>` runs script in the focused page, `installExtension=<folder>` and
-`removeExtension=<id>`, `extensionAction=<id>`, `fullscreen=1|0`, `appActive=1|0` (the sidebar drawn as if
+`removeExtension=<id>`, `extensionAction=<id>`, `sidePanelJS=<js>` (the value in the extension side panel's
+page, to cra.log), `fullscreen=1|0`, `appActive=1|0` (the sidebar drawn as if
 Cra were in front or behind, e.g. the download bin's dimming), `windowSize=1280x800`,
 `snapshot=<ViewClass[,n]>&out=<png>`, `sleepTabs=<seconds>` (the 10 tabs used last too), `memoryPressure=warning|critical` (one
-memory-pressure sweep at that level, if Settings ▸ Tabs has it on), `stall=<ms>` (blocks the main
+memory-pressure sweep at that level, if Settings ▸ Tabs has it on), `sleep=1` (what the Mac going to
+sleep does: notes Chromium's audio service), `wake=1` (what waking the Mac does: the now-playing cards
+re-read their tabs' sound, a tab-sleeping pass runs and cra.log says whether the audio service lived), `stall=<ms>` (blocks the main
 thread), `perfReport=<path>` (the recorder's perf.json now), `systemAppearance=light|dark|system`
 (the appearance Auto space themes follow, without changing the Mac's), `themeEditor=1` (Edit
-Theme Color… for the focused space), `relaunch=1`, `quit=1`, and `nowPlaying=state|toggle|next|previous|pip|dismiss` (the sidebar player's
+Theme Color… for the focused space), `sidebarShown=<label>` (whether the window shows its sidebar,
+and the View menu's Hide/Show Sidebar row: its title and the key it answers to, an App Shortcut's
+when one names it), `relaunch=1`, `quit=1`, and `nowPlaying=state|toggle|next|previous|pip|dismiss` (the sidebar player's
 newest card, then a `Cra nowPlaying[<label>] <host> playing=… prev=… next=… video=… pip=…` line per card
 on stdout; `&label=` tells checks apart).
 
@@ -170,6 +181,14 @@ swipe (22 trackpad samples of 14 pt) and `cra://debug?scroll=30,30,150,700` scro
 scroll view at x 150, y 700 of the window (from its top left) 30 pt a frame for 30 frames.
 Measure them with `sample <pid> 6 1` and compare the main thread's busy time between builds.
 
+`CRA_TEST_SCREEN=<display>` opens every window of a test instance on that display instead of
+the one you are using: `left`, `right`, `main` (the menu bar's) or a display's name as System
+Settings ▸ Displays shows it (part of it is enough when only one display matches). Export it in
+`~/.zshenv` and every launcher that runs the binary directly passes it on (`scenario.sh`,
+`smoke-launch.sh`, `dev.sh`), so test copies started by agents stay on
+one screen. Saved window frames keep their place relative to their display; `clip.sh` ignores it.
+Unset, or naming no connected display, windows open as usual.
+
 Tidy Tabs needs Apple Intelligence. `CRA_TIDY_FAKE_MODEL=1` stands in a model that groups by
 site (after a 1.6 s pause), so a test instance on any Mac shows the button, the squiggle and the
 groups, Tidy Tab Titles names a pinned tab after its title's first part and Tidy Downloads tidies a
@@ -177,6 +196,13 @@ download's file name by hand; `CRA_TIDY_FAKE_MODEL=off` (or `preparing`, `inelig
 without Apple Intelligence would. `cra://debug?tidy=1` runs Tidy on the window's space without
 hovering the divider, `cra://debug?undoTidy=1` is ⌘Z's undo and `cra://debug?settingsPane=max`
 opens Settings on a pane.
+
+`cra://debug?dragEnd=<text>` ends a drag of the window's tab whose URL holds the text, let go
+with nothing taking it, the way a drag out of the sidebar ends: outside every Cra window it opens
+in a new Blank Window (`&at=x,y` picks the point, from the screen's top left).
+`cra://debug?blankMoveTo=<n>` picks the nth space in the Blank Window's "Move to…".
+`cra://debug?browserWindows=<label>` logs each browser window's kind (normal, blank, incognito),
+space, tabs, open tab and frame; cra.log gets the kinds and counts only.
 
 `cra://debug?menuAt=315,24` opens the menu a click at that window point would open (the
 developer-mode ⌄ here), and `&button=right` the context menu, a tab row's for instance.
@@ -221,7 +247,7 @@ Cra registers the `cra://` scheme so it can be driven from a shell:
 
     open "cra://action/newTab"              # any action id from KeyBindings.swift
     open "cra://commandbar?query=github"    # open the command bar with text
-    open "cra://open?url=https://example.com&background=1"
+    open "cra://open?url=https://example.com&background=1"   # a tab behind; Cra stays where it is
     open "cra://open?url=https://example.com&little=1"   # in a Little Window
     open "cra://open?url=https://example.com&space=<space id>"   # in that space (its id in sidebar.json)
     open "cra://import?source=arc&archive=1&settings=1"  # headless import
@@ -249,7 +275,7 @@ renders of them (so the multiply blends survive) used by `BrandMark`, and
 ## Releasing
 
 `scripts/release.sh` builds, signs with a Developer ID, notarizes, and packages a DMG and
-zip into `build/dist`. Pushing a `v*` tag runs the same through GitHub Actions and
+zip into `build/dist`, for Apple silicon and Intel. Pushing a `v*` tag runs the same through GitHub Actions and
 publishes a release. Releases with UI changes get short clips on the release notes first
 (`scripts/clips`, `.claude/skills/release-clips`). See [release.md](release.md) for the
 one-time certificate setup.
