@@ -59,7 +59,7 @@ enum TestRoot { case today }
     func markUnread(_ id: UUID, _ unread: Bool) {}
     @discardableResult
     func createTab(url: String, in space: UUID? = nil, select: Bool = false,
-                   parent: UUID? = nil, index: Int? = nil, window: UUID? = nil) -> TestItem {
+                   parent: UUID? = nil, index: Int? = nil, window: UUID? = nil, referrer: UUID? = nil) -> TestItem {
         let item = TestItem(id: UUID(), tab: TestTab(url: url))
         items[item.id] = item
         return item

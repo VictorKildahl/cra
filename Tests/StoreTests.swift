@@ -70,6 +70,7 @@ enum StoreTests {
         revealInSidebar()
         oneWindowAtLaunch()
         openLinkInSplit()
+        backToReferrer()
         print("Store: \(checks) checks passed")
     }
 
@@ -1817,6 +1818,45 @@ enum StoreTests {
                && !store.isPinned(fromPinned.id) && store.paneTabIDs(for: fromPinned.id).count == 2,
                "a pinned tab stays where it is: the split goes in Today with a copy of its page, as Add Split View does")
         expect(store.openLinkInSplit("https://example.com/x", from: UUID(), window: main) == nil, "no tab, no pane")
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    // promise: #273
+    /// Back on a tab a link opened (#273): once its page has nothing behind it, the tab closes to
+    /// the archive and the tab the link was clicked in shows again, as in Arc. Pages it went on to
+    /// come first, and a tab with nowhere to return to keeps Back off.
+    @MainActor
+    private static func backToReferrer() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let sid = store.createSpace(title: "Back", emoji: "↩️").id
+        let main = store.activeWindowID
+        let source = store.createTab(url: "https://example.com/list", in: sid, window: main)
+        let other = store.createTab(url: "https://example.com/other", in: sid, window: main)
+        store.selectTab(source.id, window: main)
+        let link = store.createTab(url: "https://example.com/post", in: sid, window: main, referrer: source.id)
+        expect(store.backStep(link.id, canGoBack: true) == .history, "a page with history goes back in it first")
+        expect(store.backStep(link.id, canGoBack: false) == .close(returnTo: source.id),
+               "on the page the link opened, Back is on and returns to the tab the link came from")
+        expect(store.backStep(source.id, canGoBack: false) == .none && store.backStep(other.id, canGoBack: false) == .none,
+               "a tab no link opened has nothing to go back to")
+        store.closeToReferrer(link.id, referrer: source.id, window: main)
+        expect(store.item(link.id) == nil && store.archive.first?.id == link.id && store.archive.first?.reason == .manual,
+               "the tab goes to the archive, as ⌘W, so ⇧⌘T brings it back")
+        expect(store.selectedTabID(window: main) == source.id, "and the tab the link came from is the one shown")
+
+        // Its own tab gone: from a third tab, opened from the link's tab before it closed.
+        let second = store.createTab(url: "https://example.com/post-2", in: sid, window: main, referrer: source.id)
+        let third = store.createTab(url: "https://example.com/post-3", in: sid, window: main, referrer: second.id)
+        store.archiveTab(second.id, reason: .manual)
+        expect(store.backStep(third.id, canGoBack: false) == .none, "the tab it came from was closed: Back stays off")
+        let restored = store.reopenLastArchived()
+        expect(restored?.id == second.id && store.backStep(second.id, canGoBack: false) == .none,
+               "a tab ⇧⌘T brings back no longer returns anywhere: its page history is gone with it")
+
+        let pinned = store.createTab(url: "https://example.com/pinned", in: sid, window: main, referrer: source.id)
+        store.togglePinned(pinned.id)
+        expect(store.isPinned(pinned.id) && store.backStep(pinned.id, canGoBack: false) == .none,
+               "a link's tab once pinned stays: closing a pinned tab would reset its page")
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 

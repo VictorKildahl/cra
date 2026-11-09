@@ -1098,6 +1098,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 for m in mainWindows { NSLog("Cra peeks %@: %@", label, m.peeksShown()) }
                 return
             }
+            // back=<label>: the front tab's page, whether Back is on for it, and the space's Today tab
+            // count; a link's tab closes to the tab it came from on Back (#273).
+            if let label = dict["back"] {
+                let today = store.tabs(under: store.focusedSpace(window: main.windowID).todayContainerID).count
+                CraLog.note("back \(label): selected=\(main.selectedTab?.tab?.url ?? "-") back=\(main.sidebarUI.canGoBack ? 1 : 0) today=\(today)")
+                return
+            }
             // peekCatcher=<label>: whether the shown Peek's click catcher leaves the sidebar alone (#242).
             if let label = dict["peekCatcher"] {
                 for m in mainWindows { NSLog("Cra peek catcher %@: %@", label, m.peekCatcherReadout()) }
@@ -1667,7 +1674,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "viewMedia": main.showLibrary(.media)
         case "viewEasels": main.showLibrary(.easels)
         case "viewBoosts": main.showLibrary(.boosts)
-        case "goBack": main.currentBrowser?.goBack()
+        case "goBack": main.goBack()
         case "goForward": main.currentBrowser?.goForward()
         case "pinTab": if let c = current, !main.isBlank { store.togglePinned(c) }
         case "favoriteTab":

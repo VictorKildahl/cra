@@ -1270,10 +1270,11 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                   case .today = store.rootContainer(of: id)! else { return nil }
             return (store.item(p)?.children.firstIndex(of: id) ?? -1) + 1
         }
-        // Links from a today tab open right below it (Arc); otherwise at the top.
+        // Links from a today tab open right below it (Arc); otherwise at the top. Back on the new
+        // tab, with no page behind, closes it and shows `source` again (#273).
         let tab = store.createTab(url: url, in: sourceSpace, select: !background,
                                   parent: parentIndex != nil ? source.flatMap { store.item($0)?.parentID } : nil,
-                                  index: parentIndex, window: windowID)
+                                  index: parentIndex, window: windowID, referrer: source)
         if background {
             store.markUnread(tab.id, true)
             ensureRuntime(for: tab.id)  // load it so the title and favicon fill in
@@ -1282,8 +1283,9 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     func browser(_ browser: CraBrowser, popupHostForURL url: String, inBackground background: Bool) -> CraBrowser? {
         if url.lowercased().hasPrefix("cra:") { return nil }
-        let sourceSpace = tabID(of: browser).flatMap { store.spaceID(ofItem: $0) }
-        let tab = store.createTab(url: url, in: sourceSpace, select: !background, window: windowID)
+        let source = tabID(of: browser)
+        let sourceSpace = source.flatMap { store.spaceID(ofItem: $0) }
+        let tab = store.createTab(url: url, in: sourceSpace, select: !background, window: windowID, referrer: source)
         if background { store.markUnread(tab.id, true) }
         let host = makePopupHost(for: tab.id, opener: browser)
         if !background { show(tab.id, focus: true) }

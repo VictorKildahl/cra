@@ -273,7 +273,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             guard let self else { return }
             self.app.tearOffTab(id, at: point, from: self)
         }
-        sidebarActions.goBack = { [weak self] in self?.currentBrowser?.goBack() }
+        sidebarActions.goBack = { [weak self] in self?.goBack() }
         sidebarActions.goForward = { [weak self] in self?.currentBrowser?.goForward() }
         sidebarActions.reload = { [weak self] in
             guard let b = self?.currentBrowser else { return }
@@ -326,7 +326,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             if self.selectedTabID != id { self.store.selectTab(id, window: windowID) }
             guard let b = self.browsers.runtime(for: id)?.browser else { return }
             switch what {
-            case "goBack": b.goBack()
+            case "goBack": self.goBack(id)
             case "goForward": b.goForward()
             case "reload": b.isLoading ? b.stopLoading() : b.reload()
             default: break
@@ -549,7 +549,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let audible = Set(app.mainWindows.flatMap { $0.browsers.runtimes.filter { $0.value.browser.isAudible }.keys })
         if audible != sidebarUI.audibleTabIDs { sidebarUI.audibleTabIDs = audible }
         let b = browsers.visibleRuntime?.browser
-        if sidebarUI.canGoBack != (b?.canGoBack ?? false) { sidebarUI.canGoBack = b?.canGoBack ?? false }
+        let canGoBack = canNavigateBack(browsers.visibleTabID, b)
+        if sidebarUI.canGoBack != canGoBack { sidebarUI.canGoBack = canGoBack }
         if sidebarUI.canGoForward != (b?.canGoForward ?? false) { sidebarUI.canGoForward = b?.canGoForward ?? false }
         if sidebarUI.isLoading != (b?.isLoading ?? false) { sidebarUI.isLoading = b?.isLoading ?? false }
         shell.setLoading(LoadingIndicator.Phase(isLoading: b?.isLoading ?? false, committed: b?.hasCommittedLoad ?? false),
@@ -620,7 +621,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         var nav: [UUID: TabNavState] = [:]
         for id in ids {
             guard let rt = browsers.runtime(for: id) else { continue }
-            nav[id] = TabNavState(canGoBack: rt.browser.canGoBack, canGoForward: rt.browser.canGoForward, isLoading: rt.browser.isLoading,
+            nav[id] = TabNavState(canGoBack: canNavigateBack(id, rt.browser), canGoForward: rt.browser.canGoForward, isLoading: rt.browser.isLoading,
                                   themeColor: rt.themeColor, protectedMedia: PageEngines.protectedMediaService(of: rt.browser))
         }
         if nav != sidebarUI.navStates { sidebarUI.navStates = nav }
@@ -1892,6 +1893,27 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 for p in store.paneTabIDs(for: id) { store.archiveTab(p, reason: .manual) }
             }
         }
+    }
+
+    /// Back (⌘[, the toolbar, the Go menu) on tab `id`, the one in front by default: the page's
+    /// own history, else a tab a link opened closes and the tab it came from shows again, as
+    /// Arc's navigateBackToReferrer (GitHub #273).
+    func goBack(_ id: UUID? = nil) {
+        guard let id = id ?? browsers.visibleTabID, let b = browsers.runtime(for: id)?.browser else { return }
+        switch store.backStep(id, canGoBack: b.canGoBack) {
+        case .history:
+            b.goBack()
+        case .close(let referrer):
+            store.closeToReferrer(id, referrer: referrer, window: windowID)
+        case .none:
+            break
+        }
+    }
+
+    /// Whether Back does anything on tab `id` showing `browser` (Arc: canNavigateBack).
+    private func canNavigateBack(_ id: UUID?, _ browser: CraBrowser?) -> Bool {
+        guard let id, let browser else { return false }
+        return store.backStep(id, canGoBack: browser.canGoBack) != .none
     }
 
     /// Today tabs are archived. Pinned tabs and favorites stay; they unload

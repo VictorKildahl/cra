@@ -50,6 +50,9 @@ final class SidebarStore {
     /// Per window, the tab shown before the selected one: a close goes back to it (CloseSuccessor).
     /// Not saved: after a relaunch it has no page, so Arc wouldn't go back to it either.
     @ObservationIgnored private var previousTab: [UUID: UUID] = [:]
+    /// The tab a link opened each tab from (Arc: referrerID), for Back (BackToReferrer, #273). Not
+    /// saved: Cra doesn't restore page history, so after a relaunch Back has no page to step through.
+    @ObservationIgnored private var referrers: [UUID: UUID] = [:]
     /// Per window and space, the pinned row a collapsed pinned section keeps in sight (PinnedPeek).
     /// Not saved, like Arc's peekedPinnedSidebarItemID. Observed: the collapsed list draws it.
     private var pinnedPeeks: [UUID: [UUID: UUID]] = [:]
@@ -561,7 +564,8 @@ final class SidebarStore {
 
     @discardableResult
     func createTab(url: String, title: String = "", in spaceID: UUID? = nil, pinned: Bool = false,
-                   select: Bool = true, parent: UUID? = nil, index: Int? = nil, window: UUID? = nil) -> SidebarItem {
+                   select: Bool = true, parent: UUID? = nil, index: Int? = nil, window: UUID? = nil,
+                   referrer: UUID? = nil) -> SidebarItem {
         let sid = spaceID ?? focusedSpaceID(window: window)
         let space = spaces[sid] ?? focusedSpace(window: window)
         let requestedParent = parent ?? (pinned ? space.pinnedContainerID : space.todayContainerID)
@@ -570,12 +574,27 @@ final class SidebarStore {
         tab.data = .tab({ var t = TabData(url: url, title: title); t.activeTabBeforeCreationID = selectedTabID(in: sid, window: window); return t }())
         tab.isUnread = !select
         items[tab.id] = tab
+        if let referrer { referrers[tab.id] = referrer }
         var p = items[parentID]!
         let at = index ?? (settings.newTabsAtTop && !pinned ? 0 : p.children.count)
         p.children.insert(tab.id, at: min(max(0, at), p.children.count))
         items[parentID] = p
         if select { selectTab(tab.id, window: window) } else { touch() }
         return tab
+    }
+
+    /// What Back does on tab `id`, whose page `canGoBack` or not: a tab a link opened, with no
+    /// page behind, closes to the tab it came from while that one is still in the sidebar (#273).
+    func backStep(_ id: UUID, canGoBack: Bool) -> BackToReferrer.Step {
+        let referrer = referrers[id].flatMap { items[$0]?.isTab == true ? $0 : nil }
+        return BackToReferrer.step(canGoBack: canGoBack, tab: id, referrer: referrer,
+                                   inSplit: splitContaining(id) != nil, pinned: isPinned(id))
+    }
+
+    /// Back's `.close`: the tab goes to the archive like ⌘W and `referrer` is shown in `window`.
+    func closeToReferrer(_ id: UUID, referrer: UUID, window: UUID?) {
+        archiveTab(id, reason: .manual)
+        selectTab(referrer, window: window)
     }
 
     func selectTab(_ id: UUID?, window: UUID? = nil) {
@@ -1892,6 +1911,7 @@ final class SidebarStore {
         }
         detach(id)
         items[id] = nil
+        referrers[id] = nil
         // Empty panes never had a page and incognito pages leave no trace: nothing for the Library.
         if !it.isEmptyTab, !isIncognito(space: sid) {
             archive.insert(ArchivedItem(archivedAt: clock.now, reason: reason, sourceSpaceID: sid, wasPinned: pinned, item: it,

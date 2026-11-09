@@ -3623,3 +3623,15 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
 - Cra (#266): `SidebarStore.dropIntoFolder` inserts at index 0 in the picks' order, leaves the folder's open state
   alone and peeks an open tab it took; the 0.6 s spring-loaded opening in `SpaceListView.dragUpdated` is gone.
   Not changed: Cra still doesn't open the tab a drag picks up (only a split drop does).
+
+### Back closes a link's tab (Arc 1.172.1, 9 Nov 2026, GitHub #273, static)
+- [O data] StorableSidebar.json: a tab a link opened keeps `referrerID` (the tab it came from, always equal to its
+  `activeTabBeforeCreationID`); 194 of Victor's tabs have one, pinned tabs too (Arc doesn't clear it on Pin).
+- [O strings] The toolbar's state has `_canNavigateBack` beside `_canGoBack`, and the tab close reasons include
+  `navigateBackToReferrer` (with `clearUnpinnedTabs`, `externalProtocolAutoClose`): Back is on for a link's tab
+  with no page behind it and closes that tab, showing the referrer.
+- Not observed: whether Back closes a pinned tab that has a referrer, and Arc's mouse back button over the page.
+- Cra: `BackToReferrer` (CraCore) decides history / close / nothing; `SidebarStore` keeps the link in memory only
+  (Cra restores no page history across a relaunch), set by `BrowserManager.openLinkTab` and popup tabs; a pinned
+  tab or a split's pane keeps Back on its own history. `MainWindowController.goBack` takes ⌘[, the toolbars and
+  the menu. Readout `cra://debug?back=<label>`.
