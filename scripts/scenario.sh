@@ -271,7 +271,8 @@ while IFS= read -r raw || [ -n "$raw" ]; do
       ! grep -Eq "$re" "$DATA"/cra*.log "$OUT/stdout.log" 2>/dev/null || problem "a log line matching: $re" ;;
     snapshot)
       shot="$OUT/snapshots/$3.png"; ref="$ROOT/Tests/Snapshots/$3.png"
-      mkdir -p "$OUT/snapshots"; send "cra://debug?snapshot=$2&out=$shot"
+      # A name shot twice (before and after a relaunch) must not find the first file and stop waiting.
+      mkdir -p "$OUT/snapshots"; rm -f "$shot"; send "cra://debug?snapshot=$2&out=$shot"
       for _ in $(seq 1 25); do [ -s "$shot" ] && break; sleep 0.2; done
       if [ ! -s "$shot" ]; then problem "no snapshot of $2"
       elif [ "${CRA_SNAPSHOT_RECORD:-}" = "1" ]; then mkdir -p "$ROOT/Tests/Snapshots"; cp "$shot" "$ref"; echo "  recorded $3"
