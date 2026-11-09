@@ -124,9 +124,10 @@ final class CommandBarView: NSView {
         let dark = self.dark
         text.update()
         attached = c.attached
-        // Keep a hint of the backdrop under Arc's nearly opaque charcoal surface.
+        // Arc 1.172.1 live: a neutral dark panel, (48,48,48)–(51,50,50) over light pages; Cra's hudWindow
+        // material under this tint (white ≈ 0.5 through 3 %) comes to ≈ (48,47,47).
         material.material = dark ? .hudWindow : .popover
-        tint.layer?.backgroundColor = (dark ? NSColor(srgbRed: 29 / 255, green: 27 / 255, blue: 30 / 255, alpha: 0.97) : NSColor.white.withAlphaComponent(0.94)).cgColor
+        tint.layer?.backgroundColor = (dark ? NSColor(srgbRed: 46 / 255, green: 45 / 255, blue: 45 / 255, alpha: 0.97) : NSColor.white.withAlphaComponent(0.94)).cgColor
         // Arc 1.172.1 live: the badge is the space's backgroundExtra, its glyph (148,146,140) on a gold space.
         let tones = self.tones(dark: dark)
         info.layer?.backgroundColor = Self.ink(tones.badge).cgColor
