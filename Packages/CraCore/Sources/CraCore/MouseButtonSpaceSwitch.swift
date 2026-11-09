@@ -5,8 +5,8 @@
 /// stay Chromium's history back and forward.
 ///
 /// An MX Master with Logi Options+ never emits those buttons. Options+ takes the HID report and,
-/// when Back is assigned a keystroke, types ⌥← (and ⌥→ for Forward). That key is what Chrome
-/// navigates on. It is not a mouse event, and a key's window is the focused page, so the sidebar
+/// when Back is assigned the keystroke ⌥←, types it (and ⌥→ for Forward). That is not a mouse
+/// event, and a key's window is the focused page, so the sidebar
 /// check has to be the pointer's, not the event's.
 public enum MouseButtonSpaceSwitch {
     /// AppKit's `buttonNumber` for a mouse's back button (the fourth button).
@@ -18,11 +18,12 @@ public enum MouseButtonSpaceSwitch {
     /// The right arrow's virtual key code (`kVK_RightArrow`).
     public static let forwardKeyCode: UInt16 = 124
 
-    /// What a side button does once it has been recognized: switch space, or go back or forward
-    /// in the tab. `offset` is −1 for back and +1 for forward.
+    /// What a side button does once it has been recognized: switch space, go back or forward in
+    /// the tab, or swallow a held button's repeat. `offset` is −1 for back and +1 for forward.
     public enum Action: Equatable {
         case switchSpace(Int)
         case history(Int)
+        case swallow
     }
 
     /// The space step a released button makes, −1 for the previous space and +1 for the next, or
@@ -47,11 +48,14 @@ public enum MouseButtonSpaceSwitch {
         return nil
     }
 
-    /// Over the sidebar the button switches spaces, even if a text field has the key. Over a
-    /// page it goes back or forward, unless that field has the key: ⌥← moves by word there.
-    public static func action(offset: Int, pointerOverSidebar: Bool, editingText: Bool) -> Action? {
-        if pointerOverSidebar { return .switchSpace(offset) }
+    /// What ⌥← or ⌥→ does, or nil to leave the key to whoever has it. A text field always keeps
+    /// it, wherever the pointer is: ⌥← moves by word, and the pointer rests on the sidebar while
+    /// someone renames a tab. Otherwise the sidebar switches spaces and a page goes back or
+    /// forward. A repeat of a key acted on is swallowed, so a held button doesn't walk every space,
+    /// while a held ⌥← in text keeps moving word by word.
+    public static func action(offset: Int, pointerOverSidebar: Bool, editingText: Bool, isRepeat: Bool) -> Action? {
         if editingText { return nil }
-        return .history(offset)
+        if isRepeat { return .swallow }
+        return pointerOverSidebar ? .switchSpace(offset) : .history(offset)
     }
 }

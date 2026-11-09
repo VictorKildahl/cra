@@ -1496,9 +1496,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// ⌥← and ⌥→, the keystrokes Logi Options+ types for an MX Master's back and forward
     /// buttons (issue #233). A key goes to the focused page, not the view under the pointer,
     /// so the sidebar check is the pointer's. Over the sidebar that is the previous or next
-    /// space; over a page it is history back and forward. A text field keeps the key (⌥←
-    /// moves by word) unless the pointer is over the sidebar. Repeats are swallowed: holding
-    /// the button must not walk every space.
+    /// space; over a page it is history back and forward. A text field always keeps the key
+    /// (⌥← moves by word, held or not). Other repeats are swallowed: holding the button must
+    /// not walk every space.
     private func installSideButtonKeyMonitor() {
         guard sideButtonKeyMonitor == nil else { return }
         sideButtonKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -1506,16 +1506,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             let key = Shortcut.press(event)?.key ?? ""
             guard let offset = MouseButtonSpaceSwitch.offset(key: key, keyCode: event.keyCode,
                                                               modifiers: event.modifierFlags.rawValue) else { return event }
-            if event.isARepeat { return nil }
             let which = offset < 0 ? "back" : "forward"
             let editing = self.textFieldHasKey(event)
             let overSidebar = self.mainWindows.contains { $0.pointerOverSidebar() }
             guard let action = MouseButtonSpaceSwitch.action(offset: offset, pointerOverSidebar: overSidebar,
-                                                              editingText: editing) else {
-                CraLog.note("mouse key \(which): left for text")
+                                                              editingText: editing, isRepeat: event.isARepeat) else {
+                if !event.isARepeat { CraLog.note("mouse key \(which): left for text") }
                 return event
             }
             switch action {
+            case .swallow:
+                return nil
             case .switchSpace(let step):
                 if let window = self.mainWindows.first(where: { $0.pointerOverSidebar() }) {
                     self.store.focusSpace(offset: step, window: window.windowID)

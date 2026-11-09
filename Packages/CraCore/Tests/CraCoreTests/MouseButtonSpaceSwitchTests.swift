@@ -48,14 +48,26 @@ struct MouseButtonSpaceSwitchTests {
     }
 
     /// The same key switches spaces when the pointer is over the sidebar, and goes back or
-    /// forward over a page. A text field keeps ⌥← (it moves by word) unless the pointer is
-    /// over the sidebar, where the button's job is the space.
+    /// forward over a page. A text field always keeps ⌥← (it moves by word), wherever the
+    /// pointer rests: someone renaming a tab has the pointer on the sidebar.
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/233"))
     func optionArrowSwitchesSpaceOverTheSidebarAndGoesBackOverAPage() {
-        #expect(MouseButtonSpaceSwitch.action(offset: -1, pointerOverSidebar: true, editingText: false) == .switchSpace(-1))
-        #expect(MouseButtonSpaceSwitch.action(offset: 1, pointerOverSidebar: true, editingText: true) == .switchSpace(1))
-        #expect(MouseButtonSpaceSwitch.action(offset: -1, pointerOverSidebar: false, editingText: false) == .history(-1))
-        #expect(MouseButtonSpaceSwitch.action(offset: 1, pointerOverSidebar: false, editingText: false) == .history(1))
-        #expect(MouseButtonSpaceSwitch.action(offset: -1, pointerOverSidebar: false, editingText: true) == nil)
+        #expect(MouseButtonSpaceSwitch.action(offset: -1, pointerOverSidebar: true, editingText: false, isRepeat: false) == .switchSpace(-1))
+        #expect(MouseButtonSpaceSwitch.action(offset: 1, pointerOverSidebar: true, editingText: false, isRepeat: false) == .switchSpace(1))
+        #expect(MouseButtonSpaceSwitch.action(offset: -1, pointerOverSidebar: false, editingText: false, isRepeat: false) == .history(-1))
+        #expect(MouseButtonSpaceSwitch.action(offset: 1, pointerOverSidebar: false, editingText: false, isRepeat: false) == .history(1))
+        #expect(MouseButtonSpaceSwitch.action(offset: -1, pointerOverSidebar: false, editingText: true, isRepeat: false) == nil)
+        #expect(MouseButtonSpaceSwitch.action(offset: 1, pointerOverSidebar: true, editingText: true, isRepeat: false) == nil)
+    }
+
+    /// Holding the button must not walk every space or the whole history, so a repeat of a key
+    /// the button acts on is swallowed. A repeat in a text field is someone holding ⌥← to move
+    /// word by word, and goes through like the first press.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/233"))
+    func aHeldButtonActsOnceButAHeldKeyInTextKeepsMoving() {
+        #expect(MouseButtonSpaceSwitch.action(offset: -1, pointerOverSidebar: true, editingText: false, isRepeat: true) == .swallow)
+        #expect(MouseButtonSpaceSwitch.action(offset: 1, pointerOverSidebar: false, editingText: false, isRepeat: true) == .swallow)
+        #expect(MouseButtonSpaceSwitch.action(offset: -1, pointerOverSidebar: false, editingText: true, isRepeat: true) == nil)
+        #expect(MouseButtonSpaceSwitch.action(offset: -1, pointerOverSidebar: true, editingText: true, isRepeat: true) == nil)
     }
 }

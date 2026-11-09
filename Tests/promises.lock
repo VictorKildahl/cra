@@ -365,8 +365,9 @@
 #231   Packages/CraCore/Tests/CraCoreTests/MenuBarModeTests.swift::theDockIconGoesOnlyWhileNothingIsOpen  ec75d372a707
 #231   Packages/CraCore/Tests/CraCoreTests/MenuBarModeTests.swift::withoutRestoringWindowsOnlyTheOneInUseIsKept  0f137ea8ee8d
 #231   Tests/Scenarios/menu-bar-mode.scenario  13a0ab0aae03
+#233   Packages/CraCore/Tests/CraCoreTests/MouseButtonSpaceSwitchTests.swift::aHeldButtonActsOnceButAHeldKeyInTextKeepsMoving  775e786ddd7e
 #233   Packages/CraCore/Tests/CraCoreTests/MouseButtonSpaceSwitchTests.swift::backGoesToThePreviousSpaceAndForwardToTheNext  10b4dc8a4a65
-#233   Packages/CraCore/Tests/CraCoreTests/MouseButtonSpaceSwitchTests.swift::optionArrowSwitchesSpaceOverTheSidebarAndGoesBackOverAPage  655ff988c41e
+#233   Packages/CraCore/Tests/CraCoreTests/MouseButtonSpaceSwitchTests.swift::optionArrowSwitchesSpaceOverTheSidebarAndGoesBackOverAPage  13306523e301
 #233   Packages/CraCore/Tests/CraCoreTests/MouseButtonSpaceSwitchTests.swift::optionLeftIsBackAndOptionRightIsForward  33a7f5c03930
 #233   Packages/CraCore/Tests/CraCoreTests/MouseButtonSpaceSwitchTests.swift::otherButtonsDoNotSwitch  07b725a8e6f5
 #233   Packages/CraCore/Tests/CraCoreTests/MouseButtonSpaceSwitchTests.swift::otherChordsAreNotTheMouseKey  378a3da1934b
