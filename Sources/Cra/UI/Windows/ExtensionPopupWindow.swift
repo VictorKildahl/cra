@@ -130,7 +130,10 @@ final class ExtensionPopupWindow: NSWindow {
         placing = true
         defer { placing = false }
         let inset = Self.bubbleInset
-        let size = NSSize(width: bubble.frame.width - 2 * inset, height: bubble.frame.height - 2 * inset + Self.titleBarHeight)
+        // The bottom margin hangs below the frame. Keep the top margin below the title
+        // bar because Chrome receives clicks even in the transparent part of its window.
+        let titleHeight = max(Self.titleBarHeight, self.frame.height - contentLayoutRect.maxY)
+        let size = NSSize(width: bubble.frame.width - 2 * inset, height: bubble.frame.height - inset + titleHeight)
         // Right edge on the anchor whatever width the page reports (Bitwarden grows after it loads).
         var topLeft = NSPoint(x: anchor.x - size.width + offset.x, y: anchor.y + offset.y)
         if let screen = (Self.screen(at: anchor) ?? bubble.screen ?? NSScreen.main)?.visibleFrame {
