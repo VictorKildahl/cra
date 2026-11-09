@@ -70,7 +70,14 @@ lists who the tiers promise a name in these notes (one-time $50 and up since the
 monthly $5 and up once a year), which Backers to ask first about the next big feature, and
 which companies need their logo on /support. Thank monthly sponsors with their `@login` in
 the sentence, so next year's run sees they were thanked. Private sponsors are counted, never
-named. It needs the VictorKildahl `gh` login with the `user` scope.
+named. It needs the VictorKildahl `gh` login with the `user` scope. Also list the public
+sponsors you thank in the release's `sponsors` field (`login` and `name`), which puts their
+GitHub avatars under the summary on the release's page.
+
+A run of fixes or small changes goes in a highlight's `items`, one fix per item with its
+issue and who reported it, never as a paragraph of sentences. A contributor thanked for the
+first time also goes in the website's `src/content/people.ts` (credited name → GitHub login),
+so the release page shows their avatar next to the thank-you.
 
 ### Clips in the release notes
 
@@ -88,6 +95,12 @@ It writes `public/releases/<version>/<name>.mp4` (H.264, silent, ≤1520 px) and
 `.jpg`, and prints a `media: {…}` entry to paste into that highlight in `releases.ts` (fill
 in `alt`). A `.png` works too, for still changes. The release notes page loops clips muted
 while they're on screen. Keep them under ~8 s and ~2 MB.
+
+Every clip is the whole clip window (1100 x 700 pt, encoded 1520 x 967): the release page
+shows clips on an 11:7 stage of that shape, and a sidebar crop or a strip shrinks to a sliver
+on it. The encoder refuses other shapes (landscape 1.5-1.65:1, at least 1400 px wide,
+density 2), the website build fails on them for releases after 0.1.37
+(`src/content/release-media-rules.ts`), and the hook below blocks the tag.
 
 A Claude Code hook (`.claude/settings.json` → `scripts/clips/check-release-media.sh`) blocks
 pushing a `v*` tag when `Sources/Cra/UI` changed since the previous tag and the release's

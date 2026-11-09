@@ -15,6 +15,12 @@ film, put `// no clip: <reason>` in the entry instead.
 
 - Record the real app, never the website's mockups or the launch reels.
 - Use the demo profile (`scripts/clips/seed-demo.py`), never Victor's own tabs.
+- Record the whole clip window (1100 x 700 pt), never a crop of the sidebar or a strip. The
+  release page shows every clip on an 11:7 stage, the window's shape, so a full-window clip
+  fills it and anything else shrinks to a sliver. `release-clip.sh` refuses other shapes
+  (landscape 1.5-1.65:1, at least 1400 px wide, density 2), the website build fails on them
+  for releases after 0.1.37, and the tag hook blocks them. Frame a small change by where the
+  pointer goes and what moves, not by cropping.
 - Record at 120 fps and encode with `FPS=120`. Move the pointer with `glide` (eased, 240 Hz),
   never `cliclick m:`/`dm:`, which jump and look laggy. Victor wants clips as smooth as possible.
 - Recording takes over the real pointer and keyboard. Ask Victor before taking the screen, and
@@ -47,7 +53,7 @@ film, put `// no clip: <reason>` in the entry instead.
    ```sh
    cd ../cra-website
    FPS=120 scripts/release-clip.sh 0.1.14 reorder-spaces "$R/dock.mov" 0.9 5.9
-   # CROP=w:h:x:y crops (recording pixels); DENSITY=1.5 for small sidebar crops
+   # no CROP or DENSITY: the whole window at density 2 (CROP=2200:1400:x:y only to trim a border)
    ```
 4. Preview with `next dev` (`/release-notes`), check the clip plays, then commit the website.
 

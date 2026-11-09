@@ -3,7 +3,9 @@
 # which changes the UI shows it in the release notes. Blocks (exit 2) when Sources/Cra/UI
 # changed since the previous tag and the version's entry in cra-website's releases.ts has no
 # `media:` clip. A release whose UI changes have nothing to film opts out with a comment in
-# its entry: `// no clip: <reason>`.
+# its entry: `// no clip: <reason>`. From 0.1.38 on, it also blocks a clip in an odd shape:
+# the release page shows clips on an 11:7 stage, so each must be landscape 1.5-1.65:1, at
+# least 1400 px wide and density 2 (cra-website's src/content/release-media-rules.ts).
 set -euo pipefail
 
 command="$(jq -r '.tool_input.command // empty')"
@@ -32,6 +34,31 @@ if [[ -z "$entry" ]]; then
   echo "Release $version has no entry in $releases yet. Add its release notes first (see docs/release.md)." >&2
   exit 2
 fi
+# Odd-shaped clips, for releases from 0.1.38 on (older ones shipped before the 11:7 stage).
+if [[ "$(printf '%s\n' 0.1.38 "${version#v}" | sort -V | head -1)" == 0.1.38 ]]; then
+  odd="$(awk '
+    /media: \{/ { inside = 1; w = h = 0; d = 2; src = "" }
+    inside && /src: "/ { src = $0; sub(/.*src: "/, "", src); sub(/".*/, "", src) }
+    inside && /width: [0-9]/ { w = $0; gsub(/[^0-9]/, "", w) }
+    inside && /height: [0-9]/ { h = $0; gsub(/[^0-9]/, "", h) }
+    inside && /density: [0-9]/ { d = $0; sub(/.*density: /, "", d); sub(/,.*/, "", d) }
+    inside && /^ *\},/ {
+      inside = 0
+      if (h > 0 && (w / h < 1.5 || w / h > 1.65 || w < 1400 || d + 0 != 2))
+        printf "  %s is %d x %d, density %s\n", src, w, h, d
+    }' <<<"$entry")"
+  if [[ -n "$odd" ]]; then
+    cat >&2 <<EOF
+Release $version has clips in an odd shape for the release page's 11:7 stage:
+$odd
+Record the whole clip window (1100 x 700 pt) and encode it with cra-website's
+scripts/release-clip.sh, which refuses other shapes: landscape 1.5-1.65:1, at least
+1400 px wide, density 2.
+EOF
+    exit 2
+  fi
+fi
+
 if grep -qE 'media: \{|// no clip:' <<<"$entry"; then
   exit 0
 fi
