@@ -19,10 +19,6 @@ enum DialogTests {
                "secondary buttons brighten on hover")
         if let directory = ProcessInfo.processInfo.environment["CRA_DIALOG_SNAPSHOTS"] { try snapshots(in: directory) }
         checkEaselDeletion()
-        if CommandLine.arguments.contains("--easel") {
-            print("Easel deletion dialog: \(checks) checks passed")
-            return
-        }
         let parent = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 900, height: 700),
                               styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         parent.isReleasedWhenClosed = false

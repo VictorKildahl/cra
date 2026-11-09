@@ -1,4 +1,6 @@
 #!/bin/bash
+# Easel canvas clicks: one click picks a text block, a double click edits it, Return/Escape end editing,
+# Delete removes the picked block and its size pill follows a drag.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 TEST_DIR="$(mktemp -d "${TMPDIR:-/tmp}/cra-easel-tests.XXXXXX")"
@@ -8,3 +10,4 @@ xcrun swiftc -swift-version 5 -parse-as-library ${CRA_TEST_SWIFTC_FLAGS:-} \
   Packages/CraCore/Sources/CraCore/SpaceTheme.swift Sources/Cra/UI/Easel/EaselCanvasView.swift \
   Tests/EaselCanvasSupport/AppServices.swift Tests/EaselCanvasTests.swift -o "$TEST_DIR/easel-tests"
 "$TEST_DIR/easel-tests"
+[ -z "${CRA_TEST_KEEP:-}" ] || cp "$TEST_DIR/easel-tests" "$CRA_TEST_KEEP/"
