@@ -981,6 +981,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 }
                 continue
             }
+            // Shown while drawing for releaseHiddenFrames: a child below this window until now,
+            // so it is attached above like any page window, opaque and clickable again.
+            if releasingFrames.remove(id) != nil {
+                Self.applyFrameRelease(HiddenFrameRelease.doneSteps(shown: true), to: w)
+            }
             if w.parent !== window {
                 // Borderless: a titled window gets macOS's rounded corners on all four sides,
                 // which shows under the toolbar and where the page meets DevTools.
@@ -1007,11 +1012,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // Hidden pages are not kept in step with the panes, so size this one before it shows.
             positionPageWindows(lastPaneFrames)
             w.contentView?.isHidden = false
-            // Shown while drawing for releaseHiddenFrames: opaque and clickable again now.
-            if releasingFrames.remove(id) != nil {
-                w.alphaValue = 1
-                w.ignoresMouseEvents = false
-            }
             embedPage(id, from: w)
             // Ordering a window that is already showing is a window server round trip too.
             if !w.isVisible { w.orderFront(nil) }
@@ -1040,7 +1040,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// kept the page's surface, and the page's tiles in the GPU process (~15 MB a tab), alive after
     /// Chromium evicted it: every tab ever shown kept them. Chrome detaches a background tab from its
     /// one window instead. Ordered in for a moment, transparent and below this window, the page
-    /// window draws a frame without the page and Chromium frees it (HiddenFrameRelease).
+    /// window draws a frame without the page and Chromium frees it (HiddenFrameRelease). It goes in
+    /// as a child below this window, transparent the whole time, so nothing of it shows, over a
+    /// full-screen window or in Stage Manager either (#261).
     func releaseHiddenFrames(now: Date) {
         let visible = Set(browsers.visibleTabIDs)
         let hidden = browsers.runtimes.values.compactMap { rt -> HiddenFrameRelease.Tab? in
@@ -1053,15 +1055,28 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                   !releasingFrames.contains(id) else { continue }
             rt.hiddenFrameReleasedFor = rt.hiddenAt
             releasingFrames.insert(id)
-            w.alphaValue = 0
-            w.ignoresMouseEvents = true
-            w.order(.below, relativeTo: window.windowNumber)
+            Self.applyFrameRelease(HiddenFrameRelease.drawSteps, to: w, below: window)
             // Two or three frames: the compositor unsuspends, paints and commits.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self, weak w] in
-                guard let self, let w, self.releasingFrames.remove(id) != nil else { return }
-                w.alphaValue = 1
-                w.ignoresMouseEvents = false
-                if !self.browsers.visibleTabIDs.contains(id), w.parent == nil { w.orderOut(nil) }
+                guard let w else { return }
+                // Taken by browserManagerPageWindowsChanged when the tab was shown meanwhile. With
+                // this controller gone the window still goes: left in, it stayed for good (#261).
+                if let self, self.releasingFrames.remove(id) == nil { return }
+                Self.applyFrameRelease(HiddenFrameRelease.doneSteps(shown: false), to: w)
+            }
+        }
+    }
+
+    /// Does HiddenFrameRelease's steps to a page window; `window` is the one it goes below.
+    private static func applyFrameRelease(_ steps: [HiddenFrameRelease.WindowStep], to w: NSWindow, below window: NSWindow? = nil) {
+        for step in steps {
+            switch step {
+            case .transparent: w.alphaValue = 0
+            case .opaque: w.alphaValue = 1
+            case .clickThrough(let on): w.ignoresMouseEvents = on
+            case .attachBelow: window?.addChildWindow(w, ordered: .below)
+            case .detach: w.parent?.removeChildWindow(w)
+            case .orderOut: w.orderOut(nil)
             }
         }
     }
@@ -1793,7 +1808,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let content = shell.contentContainer
         let center = CGPoint(x: content.bounds.midX, y: content.bounds.midY)
         PeekTransition.scaleBackdrop(content, around: center, to: look.scale, duration: duration, timing: timing)
-        let pages = browsers.runtimes.values.compactMap(\.hostWindow).filter { $0.parent === window }
+        // Not a window drawing for releaseHiddenFrames: a child below this one, it stays transparent.
+        let pages = browsers.runtimes.filter { !releasingFrames.contains($0.key) }.values.compactMap(\.hostWindow).filter { $0.parent === window }
         if let window {
             // Each page window shrinks around the same point on screen as the page's card.
             let screenCenter = window.convertPoint(toScreen: content.convert(center, to: nil))

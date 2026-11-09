@@ -33,3 +33,50 @@ struct HiddenFrameReleaseTests {
         #expect(HiddenFrameRelease.due(hidden, visible: 1, now: now) == [hidden[1].id])
     }
 }
+
+/// The page window drawing for a release is never seen (#261): over a full-screen window a grey
+/// pane flashed for a quarter second every minute or two, and Stage Manager showed a window come and go.
+struct HiddenFrameReleaseWindowTests {
+    /// The window as the window server has it.
+    private struct Window {
+        var onScreen = false
+        var alpha = 1.0
+        /// A child window of the browser window, ordered below it: it stays in the browser
+        /// window's Space and under it, and Stage Manager doesn't list it.
+        var childBelow = false
+        var clickThrough = false
+
+        /// A frame of it can show: drawn with any alpha, or on its own, where macOS puts it over a
+        /// full-screen window or moves it out to a Space of its own and Stage Manager lists it.
+        var seen: Bool { onScreen && (alpha > 0 || !childBelow) }
+
+        mutating func apply(_ step: HiddenFrameRelease.WindowStep) {
+            switch step {
+            case .transparent: alpha = 0
+            case .opaque: alpha = 1
+            case .clickThrough(let on): clickThrough = on
+            case .attachBelow: onScreen = true; childBelow = true
+            case .detach: childBelow = false
+            case .orderOut: onScreen = false; childBelow = false   // ordering a child out detaches it
+            }
+        }
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/261")) func aWindowDrawingForAReleaseIsNeverSeen() {
+        var w = Window()
+        for step in HiddenFrameRelease.drawSteps + HiddenFrameRelease.doneSteps(shown: false) {
+            w.apply(step)
+            #expect(!w.seen, "seen after \(step)")
+        }
+        // Back as any hidden tab's window: off screen, opaque and clickable for when it's shown.
+        #expect(!w.onScreen && w.alpha == 1 && !w.clickThrough && !w.childBelow)
+    }
+
+    /// The tab was selected during its quarter second: the window comes back as a page window,
+    /// not a child below the browser window, so it is attached above like any other.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/261")) func aTabShownWhileDrawingComesBackOpaqueAndOnItsOwn() {
+        var w = Window()
+        for step in HiddenFrameRelease.drawSteps + HiddenFrameRelease.doneSteps(shown: true) { w.apply(step) }
+        #expect(w.alpha == 1 && !w.clickThrough && !w.childBelow)
+    }
+}

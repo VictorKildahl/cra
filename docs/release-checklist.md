@@ -158,6 +158,10 @@ built release app with a test profile. Note anything that fails in the release's
 - **PR #254:** with the release app as the default browser, open a page in Safari on an iPhone
   signed in to the same Apple Account and click the Handoff icon in the Dock. The page opens in
   Cra, in the space Air Traffic Control picks, and not in Safari.
+- **#261, #195:** with Stage Manager on, use Cra full screen with 20 or more visited tabs for ten
+  minutes. No grey pane flashes and Stage Manager shows no window coming and going. After a
+  minute pass, the GPU helper's footprint (`footprint -p <pid>`) still drops as the hidden tabs
+  let go of their tiles (#195: 20 tabs, 386 → about 235 MB).
 
 ## Not pinned yet
 

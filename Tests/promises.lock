@@ -416,3 +416,5 @@
 #260   Packages/CraCore/Tests/CraCoreTests/PageDetentHapticsTests.swift::outAndBackTicksAtEachCrossing  ec81dca8ff4a
 #260   Packages/CraCore/Tests/CraCoreTests/PageDetentHapticsTests.swift::theLibraryIsAPage  5dd0f383c260
 #260   Packages/CraCore/Tests/CraCoreTests/PageDetentHapticsTests.swift::theRubberBandIsSilent  f36ce7aacbfc
+#261   Packages/CraCore/Tests/CraCoreTests/HiddenFrameReleaseTests.swift::aTabShownWhileDrawingComesBackOpaqueAndOnItsOwn  bec084944923
+#261   Packages/CraCore/Tests/CraCoreTests/HiddenFrameReleaseTests.swift::aWindowDrawingForAReleaseIsNeverSeen  b604023e16f8
