@@ -1409,8 +1409,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             if let f = dict["floatingSidebar"] { if f == "1" { main.floatingSidebar?.show() } else { main.floatingSidebar?.hide(animated: true) }; return }
             if let method = dict["bcdp"] {
+                // To cra.log: a scenario reads it after a relaunch too, when stdout isn't kept (#299).
                 CraCEFRuntime.sendBrowserDevToolsMethod(method, params: dict["params"] ?? "{}") { result, error in
-                    NSLog("Cra bcdp %@ → %@", method, result ?? "error: \(error ?? "?")")
+                    CraLog.note("bcdp \(method) → \(result ?? "error: \(error ?? "?")")")
                 }
                 return
             }

@@ -10,6 +10,7 @@ xcrun swiftc -swift-version 5 -parse-as-library ${CRA_TEST_SWIFTC_FLAGS:-} \
   -I "$TEST_DIR" -L "$TEST_DIR" -lCraCEF -Xlinker -rpath -Xlinker "$TEST_DIR" \
   Packages/CraCore/Sources/CraCore/ExtensionProfiles.swift \
   Packages/CraCore/Sources/CraCore/WebStoreInstalls.swift \
+  Packages/CraCore/Sources/CraCore/UnpackedCopies.swift \
   Packages/CraCore/Sources/CraCore/PinnedExtensions.swift \
   Packages/CraCore/Sources/CraCore/ExtensionActionState.swift \
   Packages/CraCore/Sources/CraCore/ExtensionBadge.swift \

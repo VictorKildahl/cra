@@ -492,3 +492,10 @@
 #298   Packages/CraCore/Tests/CraCoreTests/LinkSplitClickTests.swift::otherDownloadsStayDownloads  d9fe10373142
 #298   Tests/BrowserManagerLifecycleTests.swift::optionClickSplitCase  aa8e58149cbf
 #298   Tests/Scenarios/link-option-click-split.scenario  6d9f4aa10ef3
+#299   Packages/CraCore/Tests/CraCoreTests/UnpackedCopiesTests.swift::aManifestKeyGivesBothTheSameID  01c437e8c044
+#299   Packages/CraCore/Tests/CraCoreTests/UnpackedCopiesTests.swift::addUnpackedCopyOfAFolderLoadedInPlace  525ccb2ef3b7
+#299   Packages/CraCore/Tests/CraCoreTests/UnpackedCopiesTests.swift::importedCopyIsNamedAfterTheOriginalsID  4b08e525f482
+#299   Packages/CraCore/Tests/CraCoreTests/UnpackedCopiesTests.swift::onlyAnUnpackedInstallFromElsewhereCounts  488a8fe49c8e
+#299   Packages/CraCore/Tests/CraCoreTests/UnpackedCopiesTests.swift::theCopyStopsLoadingInThatProfileOnly  7878314f97fd
+#299   Tests/ExtensionStoreMigrationTests.swift::unpackedCopiesStepAside  e9a30c4a0209
+#299   Tests/Scenarios/unpacked-extension-copy.scenario  59ab5b7e11a8
