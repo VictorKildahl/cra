@@ -48,11 +48,47 @@ struct ModelFixtureTests {
         try decoder.decode(T.self, from: encoder.encode(value)) == value
     }
 
-    @Test(arguments: ["sidebar.json", "sidebar-legacy.json", "sidebar-stacked-icon.json", "sidebar-auto-theme.json"])
+    @Test(arguments: ["sidebar.json", "sidebar-legacy.json", "sidebar-stacked-icon.json", "sidebar-auto-theme.json",
+                     "sidebar-plugin-folder.json"])
     func sidebarLoadsAsRecorded(name: String) throws {
         let (loaded, recorded) = try Self.load(name, as: SidebarDocument.self)
         #expect(loaded == recorded)
         #expect(try Self.roundTrips(loaded))
+    }
+
+    /// sidebar.json as Cra 0.1.37 reads it: a live folder's `source` is github or gitlab, and any
+    /// other value fails the whole file (it is set aside as corrupt and the sidebar starts empty).
+    private struct OlderSidebar: Decodable {
+        struct Item: Decodable {
+            struct Live: Decodable {
+                enum Source: String, Decodable { case github, gitlab }
+                var source: Source?
+            }
+            var id: UUID
+            var liveFolder: Live?
+        }
+        var items: [Item]
+    }
+
+    /// A plugin's own folder (Jira here) saves under `pluginFolder`, so an older Cra still opens the
+    /// sidebar and shows it as a plain folder with its tabs; a migrated GitHub folder stays a GitHub one.
+    @Test func pluginFoldersStayReadableByOlderCra() throws {
+        let (loaded, _) = try Self.load("sidebar-plugin-folder.json", as: SidebarDocument.self)
+        let saved = try Self.encoder.encode(loaded)
+        let older = try Self.decoder.decode(OlderSidebar.self, from: saved)
+        let jira = UUID(uuidString: "D0000000-0000-0000-0000-0000000000A1")!
+        let github = UUID(uuidString: "D0000000-0000-0000-0000-000000000005")!
+        #expect(older.items.first { $0.id == jira }.map { $0.liveFolder == nil } == true)
+        #expect(older.items.first { $0.id == github }?.liveFolder?.source == .github)
+        let reloaded = try Self.decoder.decode(SidebarDocument.self, from: saved)
+        #expect(reloaded.items.first { $0.id == jira }?.liveFolder?.plugin?.id == "cra.jira")
+        #expect(reloaded.items.first { $0.id == jira }?.liveFolder?.source == .plugin)
+    }
+
+    /// A newer Cra's source this one doesn't know loads as a plugin folder, not as a corrupt file.
+    @Test func unknownLiveFolderSourceLoads() throws {
+        let live = try Self.decoder.decode(LiveFolderData.self, from: Data(#"{"source":"notion"}"#.utf8))
+        #expect(live.source == .plugin)
     }
 
     /// Auto spaces keep both halves through a load (#155). A dark half without its optional fields

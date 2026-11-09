@@ -1,0 +1,504 @@
+{
+  "items" : [
+    {
+      "children" : [
+        "D0000000-0000-0000-0000-000000000001"
+      ],
+      "createdAt" : "2026-10-01T08:00:00Z",
+      "data" : {
+        "container" : {
+          "_0" : {
+            "favorites" : {
+              "spaceID" : "A0000000-0000-0000-0000-000000000001"
+            }
+          }
+        }
+      },
+      "id" : "C0000000-0000-0000-0000-000000000001",
+      "isUnread" : false
+    },
+    {
+      "children" : [
+        "D0000000-0000-0000-0000-0000000000A1",
+        "D0000000-0000-0000-0000-000000000002",
+        "D0000000-0000-0000-0000-000000000005"
+      ],
+      "createdAt" : "2026-10-01T08:00:00Z",
+      "data" : {
+        "container" : {
+          "_0" : {
+            "pinned" : {
+              "spaceID" : "A0000000-0000-0000-0000-000000000001"
+            }
+          }
+        }
+      },
+      "id" : "C0000000-0000-0000-0000-000000000002",
+      "isUnread" : false
+    },
+    {
+      "children" : [
+        "D0000000-0000-0000-0000-000000000006",
+        "D0000000-0000-0000-0000-000000000009"
+      ],
+      "createdAt" : "2026-10-01T08:00:00Z",
+      "data" : {
+        "container" : {
+          "_0" : {
+            "today" : {
+              "spaceID" : "A0000000-0000-0000-0000-000000000001"
+            }
+          }
+        }
+      },
+      "id" : "C0000000-0000-0000-0000-000000000003",
+      "isUnread" : false
+    },
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2026-10-02T08:00:00Z",
+      "data" : {
+        "container" : {
+          "_0" : {
+            "favorites" : {
+              "spaceID" : "A0000000-0000-0000-0000-000000000002"
+            }
+          }
+        }
+      },
+      "id" : "C0000000-0000-0000-0000-000000000004",
+      "isUnread" : false
+    },
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2026-10-02T08:00:00Z",
+      "data" : {
+        "container" : {
+          "_0" : {
+            "pinned" : {
+              "spaceID" : "A0000000-0000-0000-0000-000000000002"
+            }
+          }
+        }
+      },
+      "id" : "C0000000-0000-0000-0000-000000000005",
+      "isUnread" : false
+    },
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2026-10-02T08:00:00Z",
+      "data" : {
+        "container" : {
+          "_0" : {
+            "today" : {
+              "spaceID" : "A0000000-0000-0000-0000-000000000002"
+            }
+          }
+        }
+      },
+      "id" : "C0000000-0000-0000-0000-000000000006",
+      "isUnread" : false
+    },
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2026-10-03T08:00:00Z",
+      "data" : {
+        "tab" : {
+          "_0" : {
+            "customIconKey" : "custom-mail",
+            "faviconKey" : "mail.example.com",
+            "muted" : true,
+            "savedTitle" : "Inbox (3)",
+            "savedURL" : "https:\/\/mail.example.com\/",
+            "tileColor" : "#E63333",
+            "timeLastActiveAt" : "2026-10-30T09:00:00Z",
+            "url" : "https:\/\/mail.example.com\/inbox"
+          }
+        }
+      },
+      "id" : "D0000000-0000-0000-0000-000000000001",
+      "isUnread" : false,
+      "parentID" : "C0000000-0000-0000-0000-000000000001"
+    },
+    {
+      "children" : [
+        "D0000000-0000-0000-0000-000000000003"
+      ],
+      "createdAt" : "2026-10-03T08:00:00Z",
+      "data" : {
+        "folder" : {
+
+        }
+      },
+      "folderIcon" : "white",
+      "folderSymbol" : "code",
+      "id" : "D0000000-0000-0000-0000-000000000002",
+      "isUnread" : false,
+      "parentID" : "C0000000-0000-0000-0000-000000000002",
+      "title" : "Reading"
+    },
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2026-10-03T08:00:00Z",
+      "data" : {
+        "tab" : {
+          "_0" : {
+            "activeTabBeforeCreationID" : "D0000000-0000-0000-0000-000000000001",
+            "faviconKey" : "blog.example.org",
+            "muted" : false,
+            "referrerID" : "D0000000-0000-0000-0000-000000000001",
+            "savedTitle" : "Post one",
+            "savedURL" : "https:\/\/blog.example.org\/",
+            "url" : "https:\/\/blog.example.org\/post\/1"
+          }
+        }
+      },
+      "id" : "D0000000-0000-0000-0000-000000000003",
+      "isUnread" : true,
+      "parentID" : "D0000000-0000-0000-0000-000000000002",
+      "title" : "My blog"
+    },
+    {
+      "children" : [
+        "D0000000-0000-0000-0000-000000000004"
+      ],
+      "createdAt" : "2026-10-04T08:00:00Z",
+      "data" : {
+        "folder" : {
+
+        }
+      },
+      "id" : "D0000000-0000-0000-0000-000000000005",
+      "isUnread" : false,
+      "liveFolder" : {
+        "enterprise" : "example-ent",
+        "filter" : {
+          "attributes" : 5,
+          "hiddenRepositories" : [
+            "example\/old"
+          ]
+        },
+        "hiddenItems" : [
+          "https:\/\/github.com\/example\/app\/pull\/7"
+        ],
+        "lastError" : "rateLimited",
+        "lastFetch" : "2026-10-31T10:00:00Z",
+        "plugin" : {
+          "emptyText" : "Pull requests from you and your team will show up here automatically",
+          "filters" : [
+            "authored",
+            "teamReview"
+          ],
+          "id" : "cra.github",
+          "instanceLabel" : "GitHub",
+          "sessionOrigins" : [
+            "https:\/\/github.com"
+          ],
+          "settings" : {
+
+          },
+          "signIn" : {
+            "title" : "Sign In to GitHub…",
+            "url" : "https:\/\/github.com\/enterprises\/example-ent\/sso"
+          },
+          "signInWarning" : "Sign back in to GitHub.",
+          "snapshot" : {
+            "actions" : [
+
+            ],
+            "items" : [
+              {
+                "createdAt" : "2026-10-30T10:00:00Z",
+                "group" : "example\/app",
+                "id" : "https:\/\/github.com\/example\/app\/pull\/9",
+                "subtitle" : "someone",
+                "title" : "Fix the thing",
+                "url" : "https:\/\/github.com\/example\/app\/pull\/9"
+              }
+            ],
+            "preservedGroups" : [
+
+            ]
+          },
+          "snapshotFilters" : [
+            "authored",
+            "teamReview"
+          ],
+          "state" : {
+            "enterprise" : "example-ent"
+          }
+        },
+        "source" : "github",
+        "ssoOrganizations" : [
+          "example-org"
+        ]
+      },
+      "parentID" : "C0000000-0000-0000-0000-000000000002",
+      "title" : "Reviews"
+    },
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2026-10-31T10:00:00Z",
+      "data" : {
+        "tab" : {
+          "_0" : {
+            "faviconKey" : "github.com",
+            "liveGoneAt" : "2026-10-31T12:00:00Z",
+            "liveItemURL" : "https:\/\/github.com\/example\/app\/pull\/9",
+            "liveSubtitle" : "someone",
+            "muted" : false,
+            "savedTitle" : "Fix the thing",
+            "savedURL" : "https:\/\/github.com\/example\/app\/pull\/9",
+            "url" : "https:\/\/github.com\/example\/app\/pull\/9"
+          }
+        }
+      },
+      "id" : "D0000000-0000-0000-0000-000000000004",
+      "isUnread" : false,
+      "parentID" : "D0000000-0000-0000-0000-000000000005"
+    },
+    {
+      "children" : [
+        "D0000000-0000-0000-0000-000000000007",
+        "D0000000-0000-0000-0000-000000000008"
+      ],
+      "createdAt" : "2026-10-05T08:00:00Z",
+      "data" : {
+        "split" : {
+          "_0" : {
+            "focusTabID" : "D0000000-0000-0000-0000-000000000008",
+            "orientation" : "vertical",
+            "timeLastActiveAt" : "2026-10-30T10:00:00Z",
+            "widthFactors" : [
+              "D0000000-0000-0000-0000-000000000007",
+              0.6
+            ]
+          }
+        }
+      },
+      "id" : "D0000000-0000-0000-0000-000000000006",
+      "isUnread" : false,
+      "parentID" : "C0000000-0000-0000-0000-000000000003"
+    },
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2026-10-05T08:00:00Z",
+      "data" : {
+        "tab" : {
+          "_0" : {
+            "faviconKey" : "docs.example.com",
+            "muted" : false,
+            "savedTitle" : "",
+            "savedURL" : "https:\/\/docs.example.com\/a",
+            "url" : "https:\/\/docs.example.com\/a"
+          }
+        }
+      },
+      "id" : "D0000000-0000-0000-0000-000000000007",
+      "isUnread" : false,
+      "parentID" : "D0000000-0000-0000-0000-000000000006"
+    },
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2026-10-05T08:00:00Z",
+      "data" : {
+        "tab" : {
+          "_0" : {
+            "muted" : false,
+            "savedTitle" : "",
+            "savedURL" : "about:blank",
+            "url" : "about:blank"
+          }
+        }
+      },
+      "id" : "D0000000-0000-0000-0000-000000000008",
+      "isUnread" : false,
+      "parentID" : "D0000000-0000-0000-0000-000000000006"
+    },
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2026-10-06T08:00:00Z",
+      "data" : {
+        "tab" : {
+          "_0" : {
+            "faviconKey" : "Shop.Example.co.uk",
+            "muted" : false,
+            "savedTitle" : "",
+            "savedURL" : "https:\/\/Shop.Example.co.uk\/basket?x=1",
+            "url" : "https:\/\/Shop.Example.co.uk\/basket?x=1"
+          }
+        }
+      },
+      "id" : "D0000000-0000-0000-0000-000000000009",
+      "isUnread" : false,
+      "parentID" : "C0000000-0000-0000-0000-000000000003"
+    },
+    {
+      "children" : [
+        "D0000000-0000-0000-0000-0000000000A2"
+      ],
+      "createdAt" : "2026-11-09T08:00:00Z",
+      "data" : {
+        "folder" : {
+
+        }
+      },
+      "id" : "D0000000-0000-0000-0000-0000000000A1",
+      "isUnread" : false,
+      "parentID" : "C0000000-0000-0000-0000-000000000002",
+      "pluginFolder" : {
+        "filter" : {
+          "attributes" : 7,
+          "hiddenRepositories" : [
+            "OPS"
+          ]
+        },
+        "hiddenItems" : [
+
+        ],
+        "lastFetch" : "2026-11-09T09:00:00Z",
+        "plugin" : {
+          "filters" : [
+            "assigned",
+            "todo",
+            "inProgress"
+          ],
+          "id" : "cra.jira",
+          "instanceLabel" : "Jira (jira.example.test:8443\/jira)",
+          "sessionOrigins" : [
+            "https:\/\/jira.example.test:8443"
+          ],
+          "settings" : {
+            "server" : "https:\/\/jira.example.test:8443\/jira"
+          },
+          "signIn" : {
+            "title" : "Sign In to Jira…",
+            "url" : "https:\/\/jira.example.test:8443\/jira\/login.jsp"
+          },
+          "snapshot" : {
+            "actions" : [
+
+            ],
+            "items" : [
+              {
+                "createdAt" : "2026-11-06T09:00:00Z",
+                "group" : "APP",
+                "id" : "10",
+                "subtitle" : "In Progress",
+                "title" : "APP-1 · Fix startup",
+                "url" : "https:\/\/jira.example.test:8443\/jira\/browse\/APP-1"
+              }
+            ],
+            "preservedGroups" : [
+
+            ]
+          },
+          "state" : {
+
+          }
+        },
+        "source" : "plugin",
+        "ssoOrganizations" : [
+
+        ]
+      },
+      "title" : "Issues"
+    },
+    {
+      "children" : [
+
+      ],
+      "createdAt" : "2026-11-09T09:00:00Z",
+      "data" : {
+        "tab" : {
+          "_0" : {
+            "faviconKey" : "jira.example.test",
+            "liveItemURL" : "https:\/\/jira.example.test:8443\/jira\/browse\/APP-1",
+            "liveSubtitle" : "In Progress",
+            "muted" : false,
+            "savedTitle" : "APP-1 · Fix startup",
+            "savedURL" : "https:\/\/jira.example.test:8443\/jira\/browse\/APP-1",
+            "url" : "https:\/\/jira.example.test:8443\/jira\/browse\/APP-1"
+          }
+        }
+      },
+      "id" : "D0000000-0000-0000-0000-0000000000A2",
+      "isUnread" : false,
+      "parentID" : "D0000000-0000-0000-0000-0000000000A1"
+    }
+  ],
+  "profiles" : [
+    {
+      "id" : "B0000000-0000-0000-0000-000000000001",
+      "name" : "Work"
+    }
+  ],
+  "spaceOrder" : [
+    "A0000000-0000-0000-0000-000000000001",
+    "A0000000-0000-0000-0000-000000000002"
+  ],
+  "spaces" : [
+    {
+      "createdAt" : "2026-10-01T08:00:00Z",
+      "emoji" : "🏠",
+      "favoritesContainerID" : "C0000000-0000-0000-0000-000000000001",
+      "id" : "A0000000-0000-0000-0000-000000000001",
+      "pinnedContainerID" : "C0000000-0000-0000-0000-000000000002",
+      "theme" : {
+        "appearance" : "light",
+        "colors" : [
+          "#F4F1EA",
+          "#29283D"
+        ],
+        "intensity" : 0.6,
+        "noise" : 0.15,
+        "solid" : false,
+        "vibrant" : false
+      },
+      "title" : "Home",
+      "todayContainerID" : "C0000000-0000-0000-0000-000000000003"
+    },
+    {
+      "createdAt" : "2026-10-02T08:00:00Z",
+      "emoji" : "",
+      "favoritesContainerID" : "C0000000-0000-0000-0000-000000000004",
+      "id" : "A0000000-0000-0000-0000-000000000002",
+      "pinnedContainerID" : "C0000000-0000-0000-0000-000000000005",
+      "profileID" : "B0000000-0000-0000-0000-000000000001",
+      "symbol" : "briefcase",
+      "theme" : {
+        "accent" : "#2861B3",
+        "appearance" : "dark",
+        "colors" : [
+          "#2861B3",
+          "#2861B3"
+        ],
+        "intensity" : 1,
+        "noise" : 0,
+        "solid" : true,
+        "vibrant" : true
+      },
+      "title" : "Work",
+      "todayContainerID" : "C0000000-0000-0000-0000-000000000006"
+    }
+  ],
+  "version" : 1
+}

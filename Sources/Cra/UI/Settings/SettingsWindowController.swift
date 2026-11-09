@@ -17,7 +17,7 @@ struct SettingsActions {
 /// (system integration) and Extensions take rows instead. Max is Arc's Max pane, for the
 /// features Cra runs on the Mac's own Apple Intelligence model.
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, tabs, max, privacy, profiles, extensions, shortcuts, performance, advanced
+    case general, tabs, max, privacy, profiles, extensions, plugins, shortcuts, performance, advanced
     var id: String { rawValue }
 
     var title: String {
@@ -28,6 +28,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .privacy: return "Privacy"
         case .profiles: return "Profiles"
         case .extensions: return "Extensions"
+        case .plugins: return "Plugins"
         case .shortcuts: return "Shortcuts"
         case .performance: return "Performance"
         case .advanced: return "Advanced"
@@ -44,6 +45,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .privacy: return "hand.raised"
         case .profiles: return "person"
         case .extensions: return "puzzlepiece.extension"
+        case .plugins: return "folder.badge.gearshape"
         case .shortcuts: return "keyboard"
         case .performance: return "gauge.with.dots.needle.67percent"
         case .advanced: return "gearshape.2"
@@ -257,6 +259,7 @@ struct SettingsContent: View {
                 case .privacy: PrivacyPane(actions: actions)
                 case .profiles: ProfilesPane(nav: nav, actions: actions)
                 case .extensions: ExtensionsPane(actions: actions)
+                case .plugins: PluginsPane()
                 case .shortcuts: ShortcutsPane()
                 case .performance: PerformancePane(nav: nav, actions: actions)
                 case .advanced: AdvancedPane(actions: actions)

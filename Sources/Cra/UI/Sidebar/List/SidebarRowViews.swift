@@ -431,10 +431,10 @@ final class SidebarFaviconView: NSImageView {
         }
     }
 
-    func showGitHubMark(colors: SidebarColors, color: NSColor? = nil, source: LiveFolderSource = .github) {
+    func showPluginMark(_ mark: NSImage, colors: SidebarColors, color: NSColor? = nil) {
         shown = nil
         imageScaling = .scaleProportionallyUpOrDown
-        image = source == .gitlab ? GitLabMark.image : GitHubMark.image
+        image = mark
         contentTintColor = color ?? colors.monoGlyph
         layer?.masksToBounds = false
     }
@@ -762,7 +762,7 @@ struct TabRowModel: Equatable {
     var subtitle: String?
     var icon: NSImage?
     var flipIcon: Bool
-    var githubMark: Bool
+    var liveIcon: NSImage?
     var editing: Bool
     var selected: Bool
     var highlighted: Bool
@@ -783,7 +783,6 @@ struct TabRowModel: Equatable {
     var peekIcon: NSImage?
     /// Tidy Tab Titles just renamed it: the row plays Arc's rename once.
     var tidyRename: TidyTitlesService.Effect? = nil
-    var gitlabMark: Bool = false
 }
 
 final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
@@ -1099,8 +1098,8 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         guard let m = model else { return }
         if overIcon && !separating {
             favicon.show(m.homeIcon, flip: m.homeFlipIcon, colors: colors)
-        } else if m.githubMark || m.gitlabMark {
-            favicon.showGitHubMark(colors: colors, source: m.gitlabMark ? .gitlab : .github)
+        } else if let icon = m.liveIcon {
+            favicon.showPluginMark(icon, colors: colors)
         } else {
             favicon.show(m.icon, flip: m.flipIcon, colors: colors)
         }
@@ -1401,7 +1400,7 @@ struct FolderRowModel: Equatable {
     /// Where the warning button signs in, when GitHub asked for that (else it tries again).
     var liveSignInURL: String?
     var liveHelp: String
-    var liveSource: LiveFolderSource? = nil
+    var liveIcon: NSImage? = nil
     var symbol: FolderSymbol? = nil
 }
 
@@ -1428,7 +1427,7 @@ final class FolderRowView: SidebarRowView, NSTextFieldDelegate {
         let toggled = model.map { $0.id == m.id && $0.expanded != m.expanded } ?? false
         model = m
         let emblem: FolderEmblem? = m.live
-            ? FolderEmblem(image: m.liveSource == .gitlab ? GitLabMark.image : GitHubMark.image, coloring: .template)
+            ? m.liveIcon.map { FolderEmblem(image: $0, coloring: .template) }
             : m.symbol.map { FolderEmblem(image: $0.image, coloring: .template) }
         glyph.show(expanded: m.expanded, peeked: m.peeked, emblem: emblem,
                    tint: m.tint, fillColor: m.fill, backColor: m.back, animated: toggled && window != nil)

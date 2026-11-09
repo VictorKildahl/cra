@@ -266,7 +266,7 @@ final class SpaceListView: NSView, NSDraggingSource {
                     tabCount: expanded ? 0 : store.tabs(under: item.id).count,
                     liveBusy: refreshing.contains(item.id), liveError: item.liveFolder.flatMap(LiveFolderText.warning)?.help,
                     liveSignInURL: item.liveFolder.flatMap(LiveFolderText.warning)?.signInURL,
-                    liveHelp: LiveFolderText.refreshHelp(item.liveFolder), liveSource: item.liveFolder?.source,
+                    liveHelp: LiveFolderText.refreshHelp(item.liveFolder), liveIcon: item.liveFolder.flatMap { LiveFolderPluginStore.shared.entry(for: $0)?.icon },
                     symbol: item.folderSymbol))
                 out.append(row)
                 guard expanded else {
@@ -297,11 +297,12 @@ final class SpaceListView: NSView, NSDraggingSource {
                 let subtitle = tidyRename != nil ? TidyTitlesService.subtitle : tab.sidebarSubtitle(developerMode: developerMode)
                 // Arc's tidy titles: a known site's page shows a shorter title unless the tab has a name.
                 let title = item.title == nil ? TidyTitleRules.arc.tidy(item.displayTitle, url: tab.url) : item.displayTitle
-                let liveSource = tab.liveItemURL != nil && tab.customIconKey == nil ? store.liveFolder(containing: parent)?.liveFolder?.source : nil
+                let liveIcon = tab.liveItemURL != nil && tab.customIconKey == nil
+                    ? store.liveFolder(containing: parent)?.liveFolder.flatMap { LiveFolderPluginStore.shared.entry(for: $0)?.icon } : nil
                 row.content = .tab(TabRowModel(
                     id: item.id, depth: depth, pinned: pinned, title: title, customTitle: item.title != nil,
                     renameText: item.title ?? title, subtitle: subtitle,
-                    icon: img, flipIcon: flip, githubMark: liveSource == .github,
+                    icon: img, flipIcon: flip, liveIcon: liveIcon,
                     editing: renaming == item.id, selected: selected,
                     highlighted: picks.isEmpty ? selected && !placeholder : picks.contains(item.id),
                     capturing: capturing.contains(item.id), audible: audible.contains(item.id), muted: tab.muted, unread: item.isUnread,
@@ -309,7 +310,7 @@ final class SpaceListView: NSView, NSDraggingSource {
                     focusRing: focusID == item.id, developerMode: developerMode, peeked: peeked,
                     homeIcon: homeImg, homeFlipIcon: homeFlip,
                     peekIcon: ui.peekBadges[item.id].flatMap { icon($0.iconKey).0 },
-                    tidyRename: tidyRename, gitlabMark: liveSource == .gitlab))
+                    tidyRename: tidyRename))
                 out.append(row)
             } else if item.isSplit {
                 let children = store.children(of: item.id).filter(\.isTab)
@@ -364,23 +365,12 @@ final class SpaceListView: NSView, NSDraggingSource {
     /// can't be read (Arc: "Sign back in to GitHub.", "Login with SSO to unlock this folder").
     private static func liveStatus(_ item: SidebarItem, hasTabs: Bool) -> (text: String, url: String?)? {
         guard let live = item.liveFolder, !hasTabs else { return nil }
-        // GitLab: the GitHub folder's lines, in GitLab's words.
-        if live.source == .gitlab {
-            switch live.lastError {
-            case .notSignedIn?: return ("Sign back in to GitLab.", live.signInURL)
-            case .some: return ("We’re having trouble connecting to GitLab; click here to see your Merge Requests.",
-                                live.serverURL.map { "\($0)/dashboard/merge_requests" })
-            case nil: return live.lastFetch == nil ? nil : ("Merge requests from you and your team will show up here automatically", nil)
-            }
-        }
-        switch live.lastError {
-        case .notSignedIn?: return ("Sign back in to GitHub.", live.signInURL)
-        case .some: return ("We’re having trouble connecting to GitHub; click here to see your Pull Requests.", "https://github.com/pulls")
-        case nil:
-            if let org = live.ssoOrganizations.first { return ("Login with SSO to unlock this folder", "https://github.com/orgs/\(org)/sso") }
-            if live.lastFetch == nil { return nil }
-            return ("Pull requests from you and your team will show up here automatically", nil)
-        }
+        guard let plugin = live.plugin else { return nil }
+        if live.lastError == .notSignedIn, let text = plugin.signInWarning { return (text, plugin.signIn?.url) }
+        if live.lastError != nil, let text = plugin.failureText { return (text, plugin.failureURL) }
+        if let text = plugin.snapshot?.warning { return (text, plugin.snapshot?.actions.first?.url) }
+        guard live.lastFetch != nil, let text = plugin.emptyText else { return nil }
+        return (text, nil)
     }
 
     /// Which list a drop lands in, when that pins or unpins the dragged item; that list
