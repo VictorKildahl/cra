@@ -21,6 +21,8 @@ final class TabRuntime {
     /// The tab switcher's thumbnail, taken while the page was last on screen.
     var snapshot: NSImage?
     var snapshotWork: DispatchWorkItem?
+    /// The page's back and forward list saved after it settles (PageHistory, #273).
+    var historyWork: ScheduledWork?
     /// The page probe for this time on screen, until it has run (BrowserManager.scheduleProbe).
     var probeWork: DispatchWorkItem?
     /// Cra votes to freeze the page (BrowserManager.freezeIdleTabs); Chromium decides.
@@ -149,10 +151,13 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         }
         log(tabID, "opens a page for \(site(tab.url, tabID))")
         if sleptTabs.remove(tabID) != nil { Perf.begin(.tabWake, tabID.uuidString) }
-        // Chromium, or WebKit for a DRM service (ProtectedMediaSites).
+        // Chromium, or WebKit for a DRM service (ProtectedMediaSites), with the back and forward
+        // list the tab had (PageHistory, #273): after a relaunch or a close, Back goes where it went.
+        let incognito = store.isIncognito(item: tabID)
+        let history = incognito ? nil : PageHistoryStore.shared.load(tabID)
         let browser = Perf.time(.pageCreate) {
-            PageEngines.makeBrowser(frame: container.bounds, url: tab.url, delegate: self, incognito: store.isIncognito(item: tabID),
-                                    profilePath: store.profilePath(item: tabID))
+            PageEngines.makeBrowser(frame: container.bounds, url: tab.url, delegate: self, incognito: incognito,
+                                    profilePath: store.profilePath(item: tabID), history: history)
         }
         return register(browser: browser, tabID: tabID)
     }
@@ -216,6 +221,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         rt.snapshotWork = nil
         rt.probeWork?.cancel()
         rt.probeWork = nil
+        rt.historyWork?.cancel()
+        rt.historyWork = nil
         if rt.browser.hasDevTools { rt.browser.closeDevTools() }
         devToolsViews[tabID] = nil
         devToolsPlaceholders[tabID] = nil
@@ -246,6 +253,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         let newSet = Set(tabIDs)
         for previous in visibleTabIDs where !newSet.contains(previous) {
             runtimes[previous]?.hiddenAt = clock.now
+            // Where the page was scrolled to goes with its history.
+            saveHistory(previous)
             if tabIDs.contains(where: { !visibleTabIDs.contains($0) && isSplitCopy($0, of: previous) }) {
                 hibernate(previous)
             } else {
@@ -347,6 +356,60 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     /// Chromium renders nothing for a hidden page, so thumbnails are taken while a tab is
     /// on screen: a moment after it appears or finishes loading, and when the switcher opens.
+    // MARK: Page history
+
+    /// The tab's back and forward list goes to its file a second after the page settles, so a
+    /// burst of loads (redirects, pushState) writes once.
+    private func scheduleHistorySave(_ id: UUID) {
+        guard let rt = runtimes[id], !rt.browser.isIncognito else { return }
+        rt.historyWork?.cancel()
+        rt.historyWork = clock.after(1) { [weak self] in self?.saveHistory(id) }
+    }
+
+    /// Asks the page for its back and forward list and saves it as the tab's (PageHistory, #273),
+    /// as Chrome's session service and Arc keep it: Chromium's serialized entries, or WKWebView's
+    /// interactionState. Incognito pages and easels keep none; a page with nothing committed
+    /// leaves the last saved list. `now` writes before `completion` (quit).
+    func saveHistory(_ id: UUID, now: Bool = false, completion: (() -> Void)? = nil) {
+        guard let rt = runtimes[id], !rt.browser.isIncognito, PageEngines.savesHistory(rt.browser), rt.browser.isCreated,
+              !rt.browser.isClosed, store.item(id)?.isTab == true else { completion?(); return }
+        rt.historyWork?.cancel()
+        rt.historyWork = nil
+        if let page = rt.browser as? WebKitBrowser {
+            if let state = page.savedInteractionState {
+                PageHistoryStore.shared.save(PageHistory(engine: .webKit, url: page.currentURL, state: state, savedAt: clock.now), for: id, now: now)
+            }
+            completion?()
+            return
+        }
+        rt.browser.sendDevToolsMethod("Cra.getHistory", params: "{}") { [weak self, weak rt] result, _ in
+            MainActor.assumeIsolated {
+                defer { completion?() }
+                guard let self, let rt, self.runtimes[id] === rt, let result,
+                      let reply = try? JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any],
+                      let encoded = reply["history"] as? String, let state = Data(base64Encoded: encoded), !state.isEmpty,
+                      let url = reply["url"] as? String else { return }
+                PageHistoryStore.shared.save(PageHistory(engine: .chromium, url: url, state: state, index: reply["index"] as? Int ?? 0,
+                                                         savedAt: self.clock.now), for: id, now: now)
+            }
+        }
+    }
+
+    /// Every page's list, written before `completion` (quit).
+    func saveAllHistory(completion: @escaping () -> Void) {
+        let group = DispatchGroup()
+        for id in runtimes.keys {
+            group.enter()
+            saveHistory(id, now: true) { group.leave() }
+        }
+        group.notify(queue: .main, execute: completion)
+    }
+
+    func browser(_ browser: CraBrowser, didRestoreHistoryEntries count: Int, error: String?) {
+        guard let id = tabID(of: browser) else { return }
+        if let error { log(id, "opens without its history: \(error)") } else { log(id, "opens with \(count) \(count == 1 ? "page" : "pages") of history") }
+    }
+
     private func scheduleSnapshot(_ id: UUID, after delay: TimeInterval = 1) {
         guard let rt = runtimes[id] else { return }
         rt.snapshotWork?.cancel()
@@ -1109,6 +1172,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         // A restored page has no address yet when it is shown.
         if id == visibleTabID { Perf.visibleSite(browser.isIncognito ? nil : SiteNames.siteHost(of: url)) }
         store.updateTab(id, url: url)
+        // A page's own address change (pushState) adds an entry without a load.
+        scheduleHistorySave(id)
         if !browser.isIncognito { LiveFolderManager.shared.pageChanged(tab: id, to: url) }
         delegate?.browserManagerDidUpdate(id)
     }
@@ -1122,6 +1187,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
             Perf.end(.tabWake, id.uuidString)
         }
         if !loading { runtimes[id]?.progress = 0 }
+        if !loading { scheduleHistorySave(id) }
         // Two seconds on, the page (a video player especially) has settled before it is captured.
         if !loading { scheduleSnapshot(id, after: 2) }
         if !loading, let rt = runtimes[id], rt.probeWork != nil { scheduleProbe(id, rt, after: 3) }

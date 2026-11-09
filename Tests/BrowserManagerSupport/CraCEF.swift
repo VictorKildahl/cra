@@ -45,6 +45,14 @@ open class CraBrowser {
         self.profilePath = profilePath
     }
 
+    /// The saved back and forward list the page was made with (Cra.restoreHistory's params).
+    public private(set) var restoredHistory: [String: Any]?
+    public convenience init(frame: NSRect, url: String, delegate: CraBrowserDelegate?, incognito: Bool, profilePath: String?,
+                            history: [String: Any]?) {
+        self.init(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath)
+        restoredHistory = history
+    }
+
     public func close() { closeRequested = true; onClose?() }
     public func finishClose() { isClosed = true; delegate?.browserDidClose(self) }
     /// "show" / "close" / "apply <action>", in the order Cra asked.

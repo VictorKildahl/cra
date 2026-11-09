@@ -430,8 +430,14 @@
 #273   Packages/CraCore/Tests/CraCoreTests/BackToReferrerTests.swift::backOnTheFirstPageReturnsToTheTabTheLinkCameFrom  481ce44dc954
 #273   Packages/CraCore/Tests/CraCoreTests/BackToReferrerTests.swift::backStaysOffWithNothingToReturnTo  42f2d768be03
 #273   Packages/CraCore/Tests/CraCoreTests/BackToReferrerTests.swift::theTabsOwnHistoryComesFirst  0bc72847a0fa
+#273   Packages/CraCore/Tests/CraCoreTests/PageHistoryTests.swift::aTabStillOnItsPageOpensWithItsHistory  0d05b11a0d19
+#273   Packages/CraCore/Tests/CraCoreTests/PageHistoryTests.swift::aTabThatMovedOnOrChangedEngineStartsFresh  f0907c5c1fd4
+#273   Packages/CraCore/Tests/CraCoreTests/PageHistoryTests.swift::closedTabsKeepTheirsForReopening  2803b8d77931
+#273   Tests/BrowserManagerLifecycleTests.swift::pageHistoryCase  4d1b6424e82c
 #273   Tests/Scenarios/back-to-referrer.scenario  0f6d794025d8
-#273   Tests/StoreTests.swift::backToReferrer  2720869dbbd9
+#273   Tests/Scenarios/page-history-relaunch.scenario  cf1852589121
+#273   Tests/Scenarios/page-history-webkit.scenario  cd70745574c7
+#273   Tests/StoreTests.swift::backToReferrer  73c5f89eb560
 #274   Tests/Scenarios/stays-in-background.scenario  6975e474034a
 #275   Packages/CraCore/Tests/CraCoreTests/TabSleepPolicyTests.swift::sweepThatClosesNothingSaysWhy  046eed78906d
 #275   Packages/CraCore/Tests/CraCoreTests/TabSleepPolicyTests.swift::wakeRunsOnePass  4414a5df9362

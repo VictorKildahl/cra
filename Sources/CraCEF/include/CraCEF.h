@@ -130,6 +130,9 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 - (void)browser:(CraBrowser *)browser didFindMatches:(NSInteger)count activeMatch:(NSInteger)activeMatch;
 /// The page started or stopped using the camera or microphone.
 - (void)browser:(CraBrowser *)browser didChangeMediaCapture:(BOOL)capturing;
+/// A page made with a saved history (-initWithFrame:…history:): `count` entries went in, or
+/// `error` says why none did and the page loaded its address instead.
+- (void)browser:(CraBrowser *)browser didRestoreHistoryEntries:(NSInteger)count error:(nullable NSString *)error;
 /// The page started or stopped playing sound (see `isAudible`).
 - (void)browser:(CraBrowser *)browser didChangeAudible:(BOOL)audible;
 /// The page's sound started or stopped as it happened, before the 2 s that `isAudible` and
@@ -206,6 +209,13 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 /// gives undefined, and `runtime.getContexts()` lists it as SIDE_PANEL (GitHub #265).
 - (instancetype)initWithFrame:(NSRect)frame extensionSidePanelURL:(NSString *)url
                      delegate:(nullable id<CraBrowserDelegate>)delegate profilePath:(nullable NSString *)profilePath;
+/// A page that opens with a saved back and forward list (GitHub #273): `history` is what
+/// Cra.getHistory returned ({"history": base64, "index": n}). The page is made without an
+/// address, the list goes in before anything loads, and the current entry loads; if the list
+/// can't go in (an older engine, a damaged file) `url` loads instead.
+- (instancetype)initWithFrame:(NSRect)frame url:(NSString *)url delegate:(nullable id<CraBrowserDelegate>)delegate
+                    incognito:(BOOL)incognito profilePath:(nullable NSString *)profilePath
+                      history:(nullable NSDictionary<NSString *, id> *)history;
 
 - (void)loadURL:(NSString *)url;
 - (void)goBack;

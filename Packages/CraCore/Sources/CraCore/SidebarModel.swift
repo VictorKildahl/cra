@@ -64,6 +64,9 @@ public struct TabData: Codable, Equatable {
     public var muted: Bool = false
     public var timeLastActiveAt: Date?
     public var activeTabBeforeCreationID: UUID?
+    /// The tab a link opened this one from (Arc: referrerID). Back with no page behind closes this
+    /// tab and shows that one (BackToReferrer, #273). Saved, as the page's history is (PageHistory).
+    public var referrerID: UUID?
     /// Favicon cache key: the host, then the page's own icon once it loads (FaviconKey, #211).
     public var faviconKey: String?
     /// Favicon cache key of an image the user picked; wins over the site's favicon.
@@ -875,6 +878,7 @@ extension TabData {
         muted = try c.decodeIfPresent(Bool.self, forKey: .muted) ?? false
         timeLastActiveAt = try c.decodeIfPresent(Date.self, forKey: .timeLastActiveAt)
         activeTabBeforeCreationID = try c.decodeIfPresent(UUID.self, forKey: .activeTabBeforeCreationID)
+        referrerID = try c.decodeIfPresent(UUID.self, forKey: .referrerID)
         faviconKey = try c.decodeIfPresent(String.self, forKey: .faviconKey) ?? URL(string: url)?.host
         customIconKey = try c.decodeIfPresent(String.self, forKey: .customIconKey)
         tileColor = try c.decodeIfPresent(String.self, forKey: .tileColor)

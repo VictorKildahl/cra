@@ -41,7 +41,7 @@
      "data": {"folder": {}}, "folderIcon": "white", "folderSymbol": "code"},
     {"id": "D0000000-0000-0000-0000-000000000003", "parentID": "D0000000-0000-0000-0000-000000000002", "title": "My blog", "children": [], "isUnread": true, "createdAt": "2026-10-03T08:00:00Z",
      "data": {"tab": {"_0": {"url": "https://blog.example.org/post/1", "savedURL": "https://blog.example.org/", "savedTitle": "Post one",
-       "activeTabBeforeCreationID": "D0000000-0000-0000-0000-000000000001", "faviconKey": "blog.example.org"}}}},
+       "activeTabBeforeCreationID": "D0000000-0000-0000-0000-000000000001", "referrerID": "D0000000-0000-0000-0000-000000000001", "faviconKey": "blog.example.org"}}}},
     {"id": "D0000000-0000-0000-0000-000000000005", "parentID": "C0000000-0000-0000-0000-000000000002", "title": "Reviews", "children": ["D0000000-0000-0000-0000-000000000004"], "isUnread": false, "createdAt": "2026-10-04T08:00:00Z",
      "data": {"folder": {}},
      "liveFolder": {"source": "github", "filter": {"attributes": 5, "hiddenRepositories": ["example/old"]}, "hiddenItems": ["https://github.com/example/app/pull/7"],

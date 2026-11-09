@@ -2135,6 +2135,10 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     NSString* _pendingURL;
     /// A side panel page, loaded once the page is marked as one (-adoptBrowser:).
     NSString* _sidePanelURL;
+    // The saved back and forward list a new page opens with (#273), until it has gone in.
+    NSDictionary<NSString*, id>* _pendingHistory;
+    // An address was asked for while the list was going in: a failed restore doesn't load over it.
+    BOOL _historySuperseded;
     BOOL _pendingFocus;
     BOOL _isPopupHost;
     NSMutableSet<NSNumber*>* _activeDownloads;
@@ -2152,19 +2156,27 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 
 - (instancetype)initWithFrame:(NSRect)frame url:(NSString*)url delegate:(id<CraBrowserDelegate>)delegate
                     incognito:(BOOL)incognito profilePath:(NSString*)profilePath {
-    return [self initWithFrame:frame url:url sidePanelURL:nil delegate:delegate incognito:incognito profilePath:profilePath];
+    return [self initWithFrame:frame url:url delegate:delegate incognito:incognito profilePath:profilePath history:nil];
+}
+
+- (instancetype)initWithFrame:(NSRect)frame url:(NSString*)url delegate:(id<CraBrowserDelegate>)delegate
+                    incognito:(BOOL)incognito profilePath:(NSString*)profilePath
+                      history:(NSDictionary<NSString*, id>*)history {
+    return [self initWithFrame:frame url:url sidePanelURL:nil history:history delegate:delegate incognito:incognito profilePath:profilePath];
 }
 
 - (instancetype)initWithFrame:(NSRect)frame extensionSidePanelURL:(NSString*)url
                      delegate:(id<CraBrowserDelegate>)delegate profilePath:(NSString*)profilePath {
     // Created with no page (CEF then doesn't navigate), so no script of the panel runs as a tab.
-    return [self initWithFrame:frame url:@"" sidePanelURL:url delegate:delegate incognito:NO profilePath:profilePath];
+    return [self initWithFrame:frame url:@"" sidePanelURL:url history:nil delegate:delegate incognito:NO profilePath:profilePath];
 }
 
 - (instancetype)initWithFrame:(NSRect)frame url:(NSString*)url sidePanelURL:(NSString*)sidePanelURL
+                      history:(NSDictionary<NSString*, id>*)history
                      delegate:(id<CraBrowserDelegate>)delegate incognito:(BOOL)incognito profilePath:(NSString*)profilePath {
     self = [super init];
     if (!self) return nil;
+    _pendingHistory = url && !incognito && [history[@"history"] isKindOfClass:NSString.class] ? [history copy] : nil;
     _delegate = delegate;
     _isIncognito = incognito;
     _profilePath = incognito ? nil : [profilePath copy];
@@ -2200,7 +2212,7 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
         CefBrowserSettings settings;
         CraPageSettings(settings);
         CefRefPtr<CefBrowserView> view = CefBrowserView::CreateBrowserView(
-            _client, CefStringFromNS(_pendingURL ?: @"about:blank"), settings, nullptr,
+            _client, CefStringFromNS([self initialURL]), settings, nullptr,
             [self requestContext], new CraChromeViewDelegate(self));
         CefWindow::CreateTopLevelWindow(new CraChromeWindowDelegate(self, view));
         return;
@@ -2212,8 +2224,46 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     if (g_useChromeStyle) windowInfo.runtime_style = CEF_RUNTIME_STYLE_CHROME;
     CefBrowserSettings settings;
     CraPageSettings(settings);
-    CefBrowserHost::CreateBrowser(windowInfo, _client, CefStringFromNS(_pendingURL ?: @"about:blank"), settings,
+    CefBrowserHost::CreateBrowser(windowInfo, _client, CefStringFromNS([self initialURL]), settings,
                                   nullptr, [self requestContext]);
+}
+
+/// What a new page is made with: no address when a saved history goes in first, which CEF
+/// makes without navigating at all.
+- (NSString*)initialURL {
+    return _pendingHistory ? @"" : (_pendingURL ?: @"about:blank");
+}
+
+/// The saved list goes in once the page exists, after the document start scripts (the
+/// protocol runs messages in order), and loads its current entry (Cra.restoreHistory in
+/// freezing-vote.patch). An engine without the method, or a list it can't read, loads the
+/// address instead.
+- (void)restorePendingHistory {
+    NSDictionary* history = _pendingHistory;
+    _pendingHistory = nil;
+    if (!history) return;
+    NSData* body = [NSJSONSerialization dataWithJSONObject:@{@"history": history[@"history"] ?: @"",
+                                                             @"index": history[@"index"] ?: @0} options:0 error:nil];
+    __weak CraBrowser* weakSelf = self;
+    __block BOOL done = NO;
+    void (^finish)(NSInteger, NSString*) = ^(NSInteger count, NSString* error) {
+        CraBrowser* s = weakSelf;
+        if (!s || done) return;
+        done = YES;
+        if (count <= 0 && s->_browser && !s->_historySuperseded) s->_browser->GetMainFrame()->LoadURL(CefStringFromNS(s->_pendingURL ?: @"about:blank"));
+        if ([s.delegate respondsToSelector:@selector(browser:didRestoreHistoryEntries:error:)])
+            [s.delegate browser:s didRestoreHistoryEntries:count error:count > 0 ? nil : (error ?: @"nothing restored")];
+    };
+    [self sendDevToolsMethod:@"Cra.restoreHistory" params:[[NSString alloc] initWithData:body encoding:NSUTF8StringEncoding]
+                  completion:^(NSString* result, NSString* error) {
+        NSDictionary* reply = result ? [NSJSONSerialization JSONObjectWithData:[result dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil] : nil;
+        finish([reply isKindOfClass:NSDictionary.class] ? [reply[@"restored"] integerValue] : 0, error);
+    }];
+    // A CEF without the method never answers (Chromium hands a method it doesn't know to the
+    // page's renderer, and a page made without an address has none): the address loads.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        finish(0, @"no answer");
+    });
 }
 
 - (CefRefPtr<CefRequestContext>)requestContext {
@@ -2269,6 +2319,7 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
             load(@"no answer");
         });
     }
+    [self restorePendingHistory];
     if (_pendingFocus) {
         _pendingFocus = NO;
         browser->GetHost()->SetFocus(true);
@@ -2317,6 +2368,9 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 - (BOOL)hasDevTools { return _browser ? _browser->GetHost()->HasDevTools() : NO; }
 
 - (void)loadURL:(NSString*)url {
+    // An address asked for now wins over the saved list still waiting to go in.
+    _pendingHistory = nil;
+    _historySuperseded = YES;
     if (_sidePanelURL) {
         _sidePanelURL = [url copy];  // still being marked: load this one instead
     } else if (_browser) {

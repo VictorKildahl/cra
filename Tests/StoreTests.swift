@@ -1824,7 +1824,8 @@ enum StoreTests {
     // promise: #273
     /// Back on a tab a link opened (#273): once its page has nothing behind it, the tab closes to
     /// the archive and the tab the link was clicked in shows again, as in Arc. Pages it went on to
-    /// come first, and a tab with nowhere to return to keeps Back off.
+    /// come first, and a tab with nowhere to return to keeps Back off. The link is saved with the
+    /// tab (Arc's referrerID), as its page history is, so it outlasts a relaunch and ⇧⌘T.
     @MainActor
     private static func backToReferrer() {
         let store = AppComposition(clock: ManualScheduler()).store
@@ -1850,8 +1851,15 @@ enum StoreTests {
         store.archiveTab(second.id, reason: .manual)
         expect(store.backStep(third.id, canGoBack: false) == .none, "the tab it came from was closed: Back stays off")
         let restored = store.reopenLastArchived()
-        expect(restored?.id == second.id && store.backStep(second.id, canGoBack: false) == .none,
-               "a tab ⇧⌘T brings back no longer returns anywhere: its page history is gone with it")
+        expect(restored?.id == second.id && store.backStep(second.id, canGoBack: false) == .close(returnTo: source.id),
+               "a tab ⇧⌘T brings back returns where it came from, as its history comes back with it")
+        expect(store.backStep(third.id, canGoBack: false) == .close(returnTo: second.id), "and so does the tab opened from it")
+
+        store.saveAll()
+        let reloaded = AppComposition(clock: ManualScheduler()).store
+        expect(reloaded.item(third.id)?.tab?.referrerID == second.id
+               && reloaded.backStep(third.id, canGoBack: false) == .close(returnTo: second.id),
+               "after a relaunch Back still returns to the tab the link came from (Arc saves referrerID)")
 
         let pinned = store.createTab(url: "https://example.com/pinned", in: sid, window: main, referrer: source.id)
         store.togglePinned(pinned.id)

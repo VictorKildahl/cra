@@ -3654,14 +3654,24 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
   alone and peeks an open tab it took; the 0.6 s spring-loaded opening in `SpaceListView.dragUpdated` is gone.
   Not changed: Cra still doesn't open the tab a drag picks up (only a split drop does).
 
-### Back closes a link's tab (Arc 1.172.1, 9 Nov 2026, GitHub #273, static)
+### Back closes a link's tab, and history outlasts a relaunch (Arc 1.172.1, 9 Nov 2026, GitHub #273)
 - [O data] StorableSidebar.json: a tab a link opened keeps `referrerID` (the tab it came from, always equal to its
   `activeTabBeforeCreationID`); 194 of Victor's tabs have one, pinned tabs too (Arc doesn't clear it on Pin).
 - [O strings] The toolbar's state has `_canNavigateBack` beside `_canGoBack`, and the tab close reasons include
-  `navigateBackToReferrer` (with `clearUnpinnedTabs`, `externalProtocolAutoClose`): Back is on for a link's tab
-  with no page behind it and closes that tab, showing the referrer.
-- Not observed: whether Back closes a pinned tab that has a referrer, and Arc's mouse back button over the page.
-- Cra: `BackToReferrer` (CraCore) decides history / close / nothing; `SidebarStore` keeps the link in memory only
-  (Cra restores no page history across a relaunch), set by `BrowserManager.openLinkTab` and popup tabs; a pinned
-  tab or a split's pane keeps Back on its own history. `MainWindowController.goBack` takes ⌘[, the toolbars and
-  the menu. Readout `cra://debug?back=<label>`.
+  `navigateBackToReferrer` (with `clearUnpinnedTabs`, `externalProtocolAutoClose`).
+- [O data] Page history: StorableSessionRestorationData.json maps each sidebar item (`itemId` + window/profile)
+  to a Chromium session tab id; Chromium's own session files (User Data/Default/Sessions/Session_*, Tabs_*) hold
+  that tab's navigations with their page state, so Back and the scroll position survive a relaunch.
+- [O live] Offline Arc (fake home, sidebar with referrerIDs, AX + real row clicks): a Today tab with a referrer
+  and no history shows Go back enabled; pressing it closes the tab (its row goes) and selects the referrer. A
+  pinned tab with a referrer and no history keeps Go back disabled, and pressing it does nothing. The mouse's back
+  button (a synthetic button-3 event over the page) did nothing on a referrer tab with no history, Go back
+  enabled: it stays the page's own history.
+- Cra: `BackToReferrer` (CraCore) decides history / close / nothing (pinned tabs and split panes: history only);
+  `TabData.referrerID` is saved, set by `BrowserManager.openLinkTab` and popup tabs. `PageHistory` (CraCore) +
+  `PageHistoryStore` keep each tab's list in PageHistory/<tab id>.json: Chromium's serialized navigations from
+  `Cra.getHistory` (freezing-vote.patch, the current entry ±6 like Chrome's session service, page state
+  included), put back with `Cra.restoreHistory` (NavigationController::Restore) into a page made without an
+  address; WebKit pages save WKWebView's interactionState. Saved a second after a load, when the tab is hidden
+  and at quit. `MainWindowController.goBack` takes ⌘[, the toolbars and the menu; the mouse button is
+  Chromium's. Readouts `cra://debug?back=<label>`, `cra://debug?scroll=<label>`.

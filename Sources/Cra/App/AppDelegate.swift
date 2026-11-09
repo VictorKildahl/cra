@@ -77,6 +77,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NotificationCenter.default.addObserver(forName: .craKeyBindingsChanged, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.buildMenus() }
         }
+        // Saved page histories of tabs that are gone, other than the latest closed (PageHistory, #273).
+        PageHistoryStore.shared.prune(keeping: PageHistory.kept(
+            sidebarTabs: Set(store.allTabs().map(\.id)), archive: store.archive.map(\.id)))
         // Arc's "When opening Arc, restore windows from previous session", off: one window comes back.
         if !store.settings.restoreWindows { store.keepOnlyActiveWindow() }
         // Settings ▸ Advanced "When opening Cra, start on a new tab": the window in front opens on
@@ -406,7 +409,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         for w in littleWindows { w.archivePage() }
         for w in mainWindows { w.saveFrameNow() }
         store.saveAll()
-        return .terminateNow
+        // Each page's back and forward list, scroll positions included, as it is now (PageHistory,
+        // #273). A page that doesn't answer in time keeps what was saved after its last load.
+        let group = DispatchGroup()
+        for w in mainWindows {
+            group.enter()
+            w.browsers.saveAllHistory { group.leave() }
+        }
+        var replied = false
+        let reply = {
+            guard !replied else { return }
+            replied = true
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        group.notify(queue: .main, execute: reply)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: reply)
+        return .terminateLater
     }
 
     func applicationWillShutdown() { store.saveAll() }
@@ -1160,6 +1178,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let label = dict["back"] {
                 let today = store.tabs(under: store.focusedSpace(window: main.windowID).todayContainerID).count
                 CraLog.note("back \(label): selected=\(main.selectedTab?.tab?.url ?? "-") back=\(main.sidebarUI.canGoBack ? 1 : 0) today=\(today)")
+                return
+            }
+            // scroll=<label>: how far the front page is scrolled, in cra.log, which a relaunched Cra
+            // still writes (its stdout isn't the scenario's): a restored history keeps it (#273).
+            if let label = dict["scroll"] {
+                main.currentBrowser?.sendDevToolsMethod("Runtime.evaluate", params: #"{"expression":"Math.round(scrollY)","returnByValue":true}"#) { result, error in
+                    let value = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+                        .flatMap { ($0["result"] as? [String: Any])?["value"] }
+                    CraLog.note("scroll \(label): \(value.map { "\($0)" } ?? error ?? "-")")
+                }
                 return
             }
             // peekCatcher=<label>: whether the shown Peek's click catcher leaves the sidebar alone (#242).

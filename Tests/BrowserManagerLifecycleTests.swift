@@ -134,6 +134,7 @@ enum BrowserManagerLifecycleTests {
         await sleepCase("malformed or missing replies cannot authorize sleeping", reply: nil) { _, _ in }
         await pageProbeCase()
         await pageEngineCase()
+        pageHistoryCase()
         print("Browser manager lifecycle: \(checks) checks passed")
     }
 
@@ -1366,6 +1367,49 @@ enum BrowserManagerLifecycleTests {
         manager.browser(other.browser, didFailLoadingURL: url, errorCode: -20)
         clock.advance(by: 60)
         expect(other.browser.loads.isEmpty, "an extension that is off in the tab's profile is not retried")
+        manager.closeAll()
+    }
+
+    /// #273: a tab's back and forward list comes from its page a second after it settles and when
+    /// it goes off screen, and a new page for the tab (after a relaunch, a close, a wake) opens with
+    /// it, as Arc's do. Not once the tab has moved elsewhere, and never for an incognito page.
+    // promise: #273
+    @MainActor
+    private static func pageHistoryCase() {
+        let store = SidebarStore()
+        let clock = ManualScheduler()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView(), clock: clock)
+        let id = store.createTab(url: "https://example.test/a").id
+        manager.show(id, focus: false)
+        let first = manager.runtime(for: id)!.browser
+        expect(first.restoredHistory == nil, "a tab with nothing saved opens at its address")
+        first.navigate(to: "https://example.test/b")
+        first.setLoading(true)
+        first.setLoading(false)
+        clock.advance(by: 1)
+        expect(first.replies.contains { $0.method == "Cra.getHistory" }, "a second after the page settles, Cra asks for its list")
+        let list = Data([9, 8, 7]).base64EncodedString()
+        first.reply(to: "Cra.getHistory", with: #"{"history":"\#(list)","index":1,"url":"https://example.test/b"}"#)
+
+        manager.unload(id)
+        manager.show(id, focus: false)
+        let second = manager.runtime(for: id)!.browser
+        expect(second.restoredHistory?["history"] as? String == list && second.restoredHistory?["index"] as? Int == 1,
+               "the tab's next page opens with the saved list, at the entry it was on")
+
+        store.updateTab(id, url: "https://example.test/elsewhere")
+        manager.unload(id)
+        manager.show(id, focus: false)
+        expect(manager.runtime(for: id)!.browser.restoredHistory == nil, "a tab that moved on since opens fresh at its address")
+
+        let secret = store.createTab(url: "https://example.test/secret").id
+        store.incognitoItems.insert(secret)
+        manager.show(secret, focus: false)
+        let page = manager.runtime(for: secret)!.browser
+        page.setLoading(false)
+        clock.advance(by: 1)
+        manager.show(id, focus: false)
+        expect(!page.replies.contains { $0.method == "Cra.getHistory" }, "an incognito page's history is never asked for")
         manager.closeAll()
     }
 

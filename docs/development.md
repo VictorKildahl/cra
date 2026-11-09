@@ -48,7 +48,8 @@ issue when a newer stable CEF is out; `scripts/update-cef.sh` moves the pin.
 - `vendor/cef` — CEF binary distribution (fetched, not committed)
 
 Data lives in `~/Library/Application Support/Cra`: the sidebar and archive as JSON,
-`keybindings.json`, cached favicons, the logs and a Chromium profile folder. Delete it to
+`keybindings.json`, each tab's back and forward list in `PageHistory/`, cached favicons, the logs
+and a Chromium profile folder. Delete it to
 start over.
 
 `cra.log` is Cra's own log: each tab's page opening, showing, loading, failing to load (with

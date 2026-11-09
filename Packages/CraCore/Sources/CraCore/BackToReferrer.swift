@@ -5,9 +5,8 @@ import Foundation
 /// `canGoBack`, and a Back with no page left behind closes the tab (close reason
 /// `navigateBackToReferrer`) and shows the one it came from.
 ///
-/// Arc saves the referrer with the tab and restores each page's history with it. Cra doesn't
-/// restore page history across a relaunch, so it keeps the link only while Cra runs: after a
-/// relaunch a tab several pages in would otherwise close on its first Back.
+/// Arc saves the referrer with the tab (TabData.referrerID) and the page's history with it
+/// (PageHistory), so after a relaunch Back still steps through the pages and then closes the tab.
 public enum BackToReferrer {
     public enum Step: Equatable {
         /// The page goes back in its own history.

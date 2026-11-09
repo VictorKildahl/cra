@@ -32,7 +32,8 @@ enum TestRoot { case today }
     var settings = Settings()
     var items: [UUID: TestItem] = [:]
     func item(_ id: UUID) -> TestItem? { items[id] }
-    func isIncognito(item: UUID) -> Bool { false }
+    var incognitoItems: Set<UUID> = []
+    func isIncognito(item: UUID) -> Bool { incognitoItems.contains(item) }
     func profilePath(item: UUID) -> String? { nil }
     func profileDirectoryName(item: UUID) -> String { "Default" }
     func spaceID(ofItem: UUID) -> UUID? { nil }
@@ -118,4 +119,10 @@ final class PictureInPictureChrome {
 final class WebKitBrowser: CraBrowser {
     var isContentFullscreen = false
     var serviceName = ""
+    var savedInteractionState: Data?
+    convenience init(frame: NSRect, url: String?, delegate: CraBrowserDelegate?, incognito: Bool, profilePath: String?,
+                     interactionState: Data?) {
+        self.init(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath)
+        savedInteractionState = interactionState
+    }
 }
