@@ -82,6 +82,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         installKeyFallbackMonitor()
         installCommandFileWatcher()
         composition.startPeriodicWork { [weak self] in self?.sleepIdleTabs() }
+        composition.sync.keybindingsChanged = { [weak self] in self?.bindings.reloadOverrides() }
+        composition.sync.start()
         logSidebarProblems()
         LiveFolderManager.shared.start(store: store)
         // A restart into an update while the user was away leaves the front app alone.
@@ -1256,7 +1258,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     guard let self, let w = self.settingsWindow else { return }
                     self.main.showNewProfileDialog(over: w)
                 })
-            let c = SettingsWindowController(store: store, bindings: bindings, actions: actions)
+            let c = SettingsWindowController(store: store, bindings: bindings, sync: composition.sync, actions: actions)
             settingsController = c
             settingsWindow = c.window
         }

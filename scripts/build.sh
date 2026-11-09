@@ -32,6 +32,10 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Framewor
 
 cp "$BIN/Cra" "$APP/Contents/MacOS/Cra"
 sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD_NUMBER/" resources/Info.plist > "$APP/Contents/Info.plist"
+# CRA_BUNDLE_ID builds under another identifier: a test build signed with one's own team and
+# a provisioning profile for it (docs/release.md, "iCloud sync"). The data folder stays Cra's,
+# so run such a build with CRA_DATA_DIR.
+[ -n "${CRA_BUNDLE_ID:-}" ] && /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $CRA_BUNDLE_ID" "$APP/Contents/Info.plist"
 # Only release builds (scripts/release.sh) check the update feed; a dev build would
 # otherwise replace itself with the latest release.
 [ "${CRA_RELEASE:-}" = 1 ] || /usr/libexec/PlistBuddy -c "Delete :SUFeedURL" "$APP/Contents/Info.plist"
@@ -128,6 +132,26 @@ if [ -n "${CRA_PROVISIONING_PROFILE:-}" ] && [ "$IDENTITY" != "-" ]; then
     $PB -c "Add :com.apple.developer.web-browser.public-key-credential bool true" "$APP_ENTITLEMENTS"
   else
     echo "Note: the provisioning profile has no web-browser.public-key-credential; iCloud Keychain passkeys stay off" >&2
+  fi
+  # iCloud sync (Settings ▸ General ▸ Sync) needs the container entitlements the profile grants
+  # once iCloud Documents is on for the App ID. The first container is also named in Info.plist,
+  # so the folder shows in iCloud Drive as "Cra".
+  if CONTAINER="$($PB -c "Print :Entitlements:com.apple.developer.ubiquity-container-identifiers:0" "$PROFILE" 2>/dev/null)"; then
+    for key in com.apple.developer.ubiquity-container-identifiers com.apple.developer.icloud-container-identifiers; do
+      $PB -c "Add :$key array" "$APP_ENTITLEMENTS"
+      i=0
+      while id="$($PB -c "Print :Entitlements:com.apple.developer.ubiquity-container-identifiers:$i" "$PROFILE" 2>/dev/null)"; do
+        $PB -c "Add :$key:$i string $id" "$APP_ENTITLEMENTS"
+        i=$((i + 1))
+      done
+    done
+    $PB -c "Add :com.apple.developer.icloud-services array" -c "Add :com.apple.developer.icloud-services:0 string CloudDocuments" "$APP_ENTITLEMENTS"
+    $PB -c "Add :NSUbiquitousContainers dict" -c "Add :NSUbiquitousContainers:$CONTAINER dict" \
+        -c "Add :NSUbiquitousContainers:$CONTAINER:NSUbiquitousContainerIsDocumentScopePublic bool true" \
+        -c "Add :NSUbiquitousContainers:$CONTAINER:NSUbiquitousContainerName string Cra" \
+        -c "Add :NSUbiquitousContainers:$CONTAINER:NSUbiquitousContainerSupportedFolderLevels string Any" "$APP/Contents/Info.plist"
+  else
+    echo "Note: the provisioning profile grants no iCloud container; iCloud sync stays off" >&2
   fi
 fi
 sign "$APP" "$APP_ENTITLEMENTS"
