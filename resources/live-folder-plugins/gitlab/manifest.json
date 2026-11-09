@@ -1,0 +1,15 @@
+{
+  "id": "cra.gitlab",
+  "name": "GitLab",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "entry": "main.js",
+  "legacySource": "gitlab",
+  "sessionSetting": "server",
+  "command": {
+    "title": "New GitLab Live Folder",
+    "description": "Add a folder that fills itself with your merge requests.",
+    "triggers": ["live folder", "merge requests", "gitlab"]
+  },
+  "sessionOrigins": []
+}

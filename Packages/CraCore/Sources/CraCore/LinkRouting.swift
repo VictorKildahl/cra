@@ -14,14 +14,27 @@ public enum LinkMatchStyle: String, Codable, CaseIterable, Identifiable {
 
 /// Arc's LinkDestination is `space(ProfileDestination)` or `littleArc(ProfileDestination)`
 /// with ProfileDestination `mostRecent | space(id) | profile(…)`. Its editor only offers
-/// space(mostRecent), space(id) and littleArc(mostRecent); a Little Arc given a space still
-/// opened with "Open in <most recent space>", so Cra has no profiles and no space here.
+/// space(mostRecent), space(id) and littleArc(mostRecent); a hand-written littleArc(space)
+/// only picked the page's profile and still said "Open in <most recent space>".
 /// A space destination opens a new foreground tab in that space's Today list (also when
 /// the URL is already open) and switches the window to the space.
+/// A Little Window may name a space (#258, past Arc): the page loads in that space's
+/// profile and "Open in" / ⌘O sends it there; nil is the space in use, as in Arc.
 public enum LinkDestination: Codable, Hashable {
     case mostRecentSpace
     case space(UUID)
-    case littleWindow
+    /// Saved as `{"littleWindow": {}}` without a space, as before #258, and
+    /// `{"littleWindow": {"space": "<id>"}}` with one, which older Cra reads as a plain
+    /// Little Window rather than dropping the routes.
+    case littleWindow(space: UUID?)
+
+    /// A Little Window in the space in use.
+    public static let littleWindowInUse = LinkDestination.littleWindow(space: nil)
+
+    public var isLittleWindow: Bool {
+        if case .littleWindow = self { return true }
+        return false
+    }
 }
 
 public struct LinkRoute: Codable, Identifiable, Equatable {

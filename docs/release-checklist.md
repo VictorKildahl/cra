@@ -33,8 +33,16 @@ built release app with a test profile. Note anything that fails in the release's
 - **#189:** colour swatches grow on hover and shrink when pressed; "Back to Pinned URL" slides
   in over 0.16 s.
 - **#88:** importing from Arc copies its Show Full URL setting.
+- **PR #269:** in Settings, the selected source-list row is inset 10 pt from both sidebar edges
+  (glyph 20 pt and label 49 pt from the edge, as in Dia 1.55.1), and scrolling Performance or Advanced
+  never draws under the back/forward pill or the pane title.
 
 ### Sidebar, tabs and the command bar
+
+- **PR #268, ⌘T:** next to Arc on a themed space and on a default one: the selected row is the
+  space's colour (gold on a gold space), white text and a white arrow tile; the info badge takes the
+  space's darkest tone. Recent open tabs show "Switch to Tab" before typing. Arrow through results
+  and check every row's inks follow the selection; long titles truncate before the trailing action.
 
 - **#196:** hover a Today tab and move onto its ✕ several times. The ✕ never vanishes before
   the click.
@@ -43,8 +51,14 @@ built release app with a test profile. Note anything that fails in the release's
   opens Downloads in the sidebar; Esc or the back arrow closes the Library.
 - **#233:** with a real mouse, its back button over the sidebar goes to the previous space and
   forward to the next, docked and in the hidden sidebar (⌘S); over a page they still go back and
-  forward in the tab's history. The scenario hands the button to the window's handler, so only a
-  real mouse proves the monitor sees it.
+  forward in the tab's history. A mouse that emits button 3/4 does this on mouse-up. An MX Master
+  with Logi Options+ does not: set Back/Forward to the keystrokes ⌥← and ⌥→ (a plain shortcut, not
+  the smart Back gesture) on the Cra profile. Console should log `Cra: mouse key back:`. The
+  scenario never sees a real button or that key, so only this check proves the monitor does.
+- **#260:** on a built-in trackpad, every space change by a two-finger swipe over the sidebar
+  ticks once: a short flick, a slow drag past half (the tick comes at half), and a swipe into
+  the Library and back out. A short drag that settles back is silent; a sideways wheel never
+  ticks (Arc). `PageDetentHaptics` holds the rule; only a finger feels the tick.
 - **#12:** a two-finger swipe in the hidden sidebar (⌘S) switches spaces, and the next space
   draws mid-swipe. There is one link bubble only, and the dashed ring shows only on a
   cross-space keyboard switch.
@@ -92,6 +106,9 @@ built release app with a test profile. Note anything that fails in the release's
   window leaves its Space first. ⌥⌘N from another app opens a Little Window at once, with the
   Dock icon. Closing it takes the icon away again. New Window in the item's menu brings the
   windows back, and Quit Cra there quits.
+- **#298:** in a tab on a DRM service (it opens in WebKit, docs/protected-media.md), Option-click a
+  link: it opens as a split pane beside the page, as it does in any other tab (that scenario's
+  posted click never reaches a WebKit page behind other windows).
 - **#172:** with a space on its own profile, a Little Window from that space and a Peek from its
   tab see that profile's cookies. The chip names the profile; switching it reloads the page in
   the other profile.
@@ -105,6 +122,10 @@ built release app with a test profile. Note anything that fails in the release's
   point, also in the first seconds; with the pointer away it is the bare video. On hover: Back to
   Tab on the left (with its words from 400 pt wide), the host centred and whole, Close on the
   right, one even dim layer.
+- **#262:** hover a YouTube PiP after a drag on its edges, a resize, a trip to another app's
+  full-screen Space and back, and a click on Cra's window: only Cra's controls show (no grey ±10,
+  no second ✕, no scrubber). Play/pause alone in a window under 280 pt wide, with the ±15 pair
+  and a bigger play/pause from 280 pt; `cra.log` has no "Chromium's window became key".
 - **#178:** in a split, the focused pane's ring shows (also over docked DevTools), and so does
   the card shadow.
 - **#90:** Capture on a second display and behind other windows isn't blank. It goes to the
@@ -134,6 +155,10 @@ built release app with a test profile. Note anything that fails in the release's
 - **#89:** in developer mode the ⌄ chevron lists Refresh ⌘R, Force Refresh ⇧⌘R, Clear Cookies
   and Refresh, Clear Cache and Refresh, View Source ⌥⌘U and Developer Tools ⌥⌘I. Tab row
   context menus show their shortcuts.
+- **#265:** signed in to a paid Claude plan, Claude in Chrome's toolbar button opens its panel
+  and Claude works in it: no "Claude isn't available on this page" and no "Can't reach Claude
+  in Chrome". The scenario covers what the extension checks, but only an account gets past
+  claude.ai's sign-in.
 
 ### Profiles, privacy, media and the engine
 
@@ -151,9 +176,18 @@ built release app with a test profile. Note anything that fails in the release's
   `secure dns: secure via dns.google` and chrome://settings/security shows the same choice.
 - **#190:** with Ask Where to Save Each File on, the save panel is a sheet on Cra's window, and
   Cancel cancels the download.
+- **#272:** download a large file. The bin over the Library button keeps a ring that fills as it
+  downloads; right-clicking its row in the tray and on Library ▸ Downloads offers Pause Download and
+  Cancel Download, and a paused row reads "Paused". ⌘Q while it runs asks "Downloads in progress";
+  Keep browsing keeps it going. Once it finishes, a check replaces the arrow, and its row's menu
+  reads Open / Copy <kind>, Show in Finder, Hide from Cra and Move to Trash.
 - **PR #254:** with the release app as the default browser, open a page in Safari on an iPhone
   signed in to the same Apple Account and click the Handoff icon in the Dock. The page opens in
   Cra, in the space Air Traffic Control picks, and not in Safari.
+- **#261, #195:** with Stage Manager on, use Cra full screen with 20 or more visited tabs for ten
+  minutes. No grey pane flashes and Stage Manager shows no window coming and going. After a
+  minute pass, the GPU helper's footprint (`footprint -p <pid>`) still drops as the hidden tabs
+  let go of their tiles (#195: 20 tabs, 386 → about 235 MB).
 
 ## Not pinned yet
 

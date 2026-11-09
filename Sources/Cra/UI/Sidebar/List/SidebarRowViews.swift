@@ -16,6 +16,7 @@ struct SidebarColors: Equatable {
     var selectedFill = NSColor.clear
     var separator = NSColor.separatorColor
     var pillFill = NSColor.clear
+    var pillHoverFill = NSColor.clear
     var countBadgeFill = NSColor.clear
 
     init() {}
@@ -29,11 +30,18 @@ struct SidebarColors: Equatable {
         selectedFill = NSColor(p.selectedFill)
         separator = NSColor(p.separator)
         pillFill = NSColor(p.pillFill)
+        pillHoverFill = NSColor(p.pillHoverFill)
         countBadgeFill = NSColor(p.countBadgeFill)
     }
 
     /// SidebarIconButton's glyph tone outside the header (no active state).
     var glyph: NSColor { isDark ? NSColor.white.withAlphaComponent(0.55) : NSColor.black.withAlphaComponent(0.26) }
+    /// The space header's title and a tab group's name, dimmer than other secondary text: white 0.45
+    /// on dark themes (1 Nov), black 0.46 on light ones (Arc 1.172.1 at 1x, 9 Nov, GitHub #293).
+    var sectionTitle: NSColor {
+        let t = SidebarTones.sectionTitle(dark: isDark)
+        return (t.white ? NSColor.white : NSColor.black).withAlphaComponent(t.alpha)
+    }
     /// A one-colour favicon or GitHub's mark on the sidebar.
     var monoGlyph: NSColor { isDark ? NSColor.white.withAlphaComponent(0.92) : NSColor.black.withAlphaComponent(0.85) }
 }
@@ -175,6 +183,8 @@ final class SidebarGlyphButton: NSView {
     var action: () -> Void
     let size: NSSize
     private let glyph = NSImageView()
+    /// The + that opens the creation menu, turned 45° into an × while it is open (Arc's PlusMenuIcon).
+    private var plusMark: CAShapeLayer?
     private var shownSymbol: String?
     /// Arc turns the refresh arrow while it is pressed (NSImageView.pressTurn).
     private var turnsOnPress = false
@@ -217,6 +227,28 @@ final class SidebarGlyphButton: NSView {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    /// Shows Arc's 14 × 14 pt menu + in place of the image; `open` turns it into an × on a spring.
+    func setMenuOpen(_ open: Bool, animated: Bool = true) {
+        let m: CAShapeLayer
+        if let plusMark {
+            m = plusMark
+        } else {
+            m = CAShapeLayer()
+            m.fillColor = nil
+            m.lineWidth = 2
+            m.lineCap = .round
+            m.actions = ["path": NSNull(), "strokeColor": NSNull(), "hidden": NSNull(), "bounds": NSNull(), "position": NSNull(), "transform": NSNull()]
+            layer?.addSublayer(m)
+            plusMark = m
+            needsLayout = true
+            refresh()
+        }
+        glyph.isHidden = true
+        mark?.isHidden = true
+        m.isHidden = false
+        SidebarPlusMark.turn(m, open: open, animated: animated && window != nil)
+    }
+
     /// `animated` swaps another symbol in the way Arc swaps refresh and stop.
     func setSymbol(_ symbol: String, iconSize: CGFloat, weight: NSFont.Weight = .medium, help: String, animated: Bool = false) {
         let image = SidebarSymbols.image(symbol, size: iconSize, weight: weight)
@@ -234,6 +266,7 @@ final class SidebarGlyphButton: NSView {
         shownSymbol = nil
         glyph.image = image
         glyph.isHidden = false
+        plusMark?.isHidden = true
         mark?.isHidden = true
         setHelp(help)
     }
@@ -252,6 +285,7 @@ final class SidebarGlyphButton: NSView {
         markMinus = minus
         shownSymbol = nil
         glyph.isHidden = true
+        plusMark?.isHidden = true
         mark?.isHidden = false
         needsLayout = true
         refresh()
@@ -275,24 +309,34 @@ final class SidebarGlyphButton: NSView {
             tint = enabled ? colors.glyph : colors.textTertiary.withAlphaComponent(colors.textTertiary.alphaComponent * 0.55)
         }
         glyph.contentTintColor = self.tint ?? tint
+        plusMark?.strokeColor = (self.tint ?? tint).cgColor
         mark?.strokeColor = (self.tint ?? tint).cgColor
         layer?.backgroundColor = ((hovering || highlighted) && enabled ? colors.hoverFill : .clear).cgColor
     }
 
     override func layout() {
         super.layout()
-        guard let mark else { return }
-        mark.frame = bounds
         // The centre on a whole point of the window: a dragged sidebar width is fractional.
         let mid = convert(CGPoint(x: bounds.midX, y: bounds.midY), to: nil)
         let centre = convert(CGPoint(x: mid.x.rounded(), y: mid.y.rounded()), from: nil)
+        if let plusMark {
+            // Turned about its own centre, so the layer sits on the glyph, not on the button.
+            plusMark.bounds = CGRect(x: 0, y: 0, width: 14, height: 14)
+            plusMark.position = centre
+            plusMark.path = SidebarPlusMark.path
+            plusMark.contentsScale = window?.backingScaleFactor ?? 2
+        }
+        guard let mark else { return }
+        mark.frame = bounds
         mark.path = SidebarSymbols.closeMark(minus: markMinus, centre: centre)
         mark.contentsScale = window?.backingScaleFactor ?? 2
     }
 
+
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
         mark?.contentsScale = window?.backingScaleFactor ?? 2
+        plusMark?.contentsScale = window?.backingScaleFactor ?? 2
     }
 
     override var mouseDownCanMoveWindow: Bool { false }
@@ -387,10 +431,10 @@ final class SidebarFaviconView: NSImageView {
         }
     }
 
-    func showGitHubMark(colors: SidebarColors, color: NSColor? = nil, source: LiveFolderSource = .github) {
+    func showPluginMark(_ mark: NSImage, colors: SidebarColors, color: NSColor? = nil) {
         shown = nil
         imageScaling = .scaleProportionallyUpOrDown
-        image = source == .gitlab ? GitLabMark.image : GitHubMark.image
+        image = mark
         contentTintColor = color ?? colors.monoGlyph
         layer?.masksToBounds = false
     }
@@ -718,7 +762,7 @@ struct TabRowModel: Equatable {
     var subtitle: String?
     var icon: NSImage?
     var flipIcon: Bool
-    var githubMark: Bool
+    var liveIcon: NSImage?
     var editing: Bool
     var selected: Bool
     var highlighted: Bool
@@ -739,7 +783,6 @@ struct TabRowModel: Equatable {
     var peekIcon: NSImage?
     /// Tidy Tab Titles just renamed it: the row plays Arc's rename once.
     var tidyRename: TidyTitlesService.Effect? = nil
-    var gitlabMark: Bool = false
 }
 
 final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
@@ -1055,8 +1098,8 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         guard let m = model else { return }
         if overIcon && !separating {
             favicon.show(m.homeIcon, flip: m.homeFlipIcon, colors: colors)
-        } else if m.githubMark || m.gitlabMark {
-            favicon.showGitHubMark(colors: colors, source: m.gitlabMark ? .gitlab : .github)
+        } else if let icon = m.liveIcon {
+            favicon.showPluginMark(icon, colors: colors)
         } else {
             favicon.show(m.icon, flip: m.flipIcon, colors: colors)
         }
@@ -1357,7 +1400,7 @@ struct FolderRowModel: Equatable {
     /// Where the warning button signs in, when GitHub asked for that (else it tries again).
     var liveSignInURL: String?
     var liveHelp: String
-    var liveSource: LiveFolderSource? = nil
+    var liveIcon: NSImage? = nil
     var symbol: FolderSymbol? = nil
 }
 
@@ -1384,7 +1427,7 @@ final class FolderRowView: SidebarRowView, NSTextFieldDelegate {
         let toggled = model.map { $0.id == m.id && $0.expanded != m.expanded } ?? false
         model = m
         let emblem: FolderEmblem? = m.live
-            ? FolderEmblem(image: m.liveSource == .gitlab ? GitLabMark.image : GitHubMark.image, coloring: .template)
+            ? m.liveIcon.map { FolderEmblem(image: $0, coloring: .template) }
             : m.symbol.map { FolderEmblem(image: $0.image, coloring: .template) }
         glyph.show(expanded: m.expanded, peeked: m.peeked, emblem: emblem,
                    tint: m.tint, fillColor: m.fill, backColor: m.back, animated: toggled && window != nil)
@@ -2656,7 +2699,7 @@ final class GroupHeaderRowView: SidebarRowView {
         guard m != model else { return }
         model = m
         titleLabel.stringValue = m.title
-        titleLabel.textColor = colors.isDark ? NSColor.white.withAlphaComponent(0.45) : colors.textSecondary
+        titleLabel.textColor = colors.sectionTitle
         setAccessibilityLabel(m.title)
         needsLayout = true
     }

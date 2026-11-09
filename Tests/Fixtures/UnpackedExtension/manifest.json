@@ -1,0 +1,7 @@
+{
+  "manifest_version": 3,
+  "name": "Cra Unpacked Fixture",
+  "version": "1.0",
+  "description": "Made up for scripts/scenario.sh: no key, so its ID comes from the folder it loads from (GitHub #299).",
+  "action": { "default_title": "Cra Unpacked Fixture" }
+}

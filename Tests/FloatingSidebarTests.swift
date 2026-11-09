@@ -20,7 +20,8 @@ enum FloatingSidebarTests {
         // and AppKit animation completions run with an offscreen disposable panel.
         sidebar.show()
         expect(sidebar.isShown && shell.sidebarDetached, "show attaches the sidebar to its panel")
-        let panel = window.childWindows!.first!
+        let panel = window.childWindows!.first { $0 is FloatingSidebarPanel }!
+        arcsReveal(window: window, sidebar: sidebar, panel: panel)
 
         sidebar.hide(animated: true)
         expect(!sidebar.isShown && shell.sidebarDetached, "animated hide remains in flight before completion")
@@ -45,6 +46,18 @@ enum FloatingSidebarTests {
                && abs(edge!.frame.maxX - shell.sidebarHost.frame.maxX) < 0.5,
                "the panel, sidebar and strip follow the new width")
         edge?.onDrag?(-40)
+        // A whole drag from the floating edge reaches the shell's handle too (#287: Arc's resize
+        // works from the start width and the pointer's speed).
+        var began = false, got: (CGFloat, CGFloat)?
+        shell.resizeHandle.onBegin = { began = true }
+        shell.resizeHandle.onResize = { t, v in got = (t, v); shell.sidebarWidth = 328 + t }
+        edge?.onBegin?()
+        edge?.onResize?(20, 15)
+        expect(began && got.map { $0 == 20 && $1 == 15 } == true && shell.sidebarHost.frame.width == 348,
+               "the floating edge hands the drag's start, translation and speed to the shell")
+        shell.resizeHandle.onResize?(0, 0)
+        shell.resizeHandle.onBegin = nil
+        shell.resizeHandle.onResize = nil
         shell.resizeHandle.onDrag = nil
         shell.resizeHandle.onEnd = nil
 
@@ -146,22 +159,99 @@ enum FloatingSidebarTests {
                "edge to edge: the reveal strip does not hide what it revealed")
         expect(!FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 17, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: 0),
                "the outside reveal strip does not hide what it revealed")
-        expect(!FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 380, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: 0),
+        expect(!FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 429, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: 0),
                "panel margin and leave slack are included in the retention boundary")
-        expect(FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 380.1, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: 0),
+        expect(FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 429.1, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: 0),
                "leaving the shared retention boundary hides after release")
         expect(FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 15.9, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: 0),
                "leaving the window hides after release")
         for button in [1, 2, 4] {
-            expect(!FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 380.1, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: button),
+            expect(!FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 429.1, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: button),
                    "button mask \(button) preserves the sidebar beyond the leave slack during a gesture")
             expect(!FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 15.9, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: button),
                    "button mask \(button) preserves the sidebar outside the moving window during a gesture")
         }
     }
 
+    // promise: #293
+    /// GitHub #293: the hidden sidebar is less jumpy, as in Arc 1.172.1 (120 fps, 9 Nov 2026). The pointer
+    /// waits 0.1 s in the strip before it comes out, so brushing the edge doesn't flash it; it stays out
+    /// until 81 pt past its width; it springs in and eases out on Arc's curves; and its shadow is a soft
+    /// one under it, not the hard outline a window shadow drew round the panel.
+    @MainActor
+    private static func arcsReveal(window: NSWindow, sidebar: FloatingSidebarController, panel: NSWindow) {
+        var dwell = FloatingSidebarRevealDwell()
+        expect(!dwell.sample(inStrip: true, at: 10.0), "arriving at the edge doesn't reveal at once")
+        expect(!dwell.sample(inStrip: true, at: 10.06), "nor 60 ms later")
+        expect(!dwell.sample(inStrip: false, at: 10.08), "leaving the strip doesn't reveal")
+        expect(!dwell.sample(inStrip: true, at: 10.12), "coming back starts the wait over")
+        expect(!dwell.sample(inStrip: true, at: 10.206), "a brush Arc ignored (86 ms) doesn't reveal")
+        expect(!dwell.sample(inStrip: true, at: 10.219), "nor anything shorter than Arc's wait")
+        expect(dwell.sample(inStrip: true, at: 10.22), "0.1 s in the strip reveals")
+        dwell.reset()
+        expect(!dwell.sample(inStrip: true, at: 11), "after a reveal the next one waits again")
+
+        let bounds = CGRect(x: 0, y: 0, width: 1728, height: 950)
+        expect(!FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 344, y: 300), in: bounds, sidebarWidth: 264, pressedMouseButtons: 0),
+               "a 264 pt sidebar stays out with the pointer at x 344, as in Arc")
+        expect(FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 346, y: 300), in: bounds, sidebarWidth: 264, pressedMouseButtons: 0),
+               "and goes at x 346, where Arc's went")
+
+        expect(!panel.hasShadow, "the sidebar's panel draws no window shadow (its rim outlined the sidebar)")
+        let shadow = window.childWindows!.first { $0 !== panel && $0.ignoresMouseEvents }
+        expect(shadow != nil, "a click-through panel carries the sidebar's shadow")
+        let order = window.childWindows!
+        let shell = sidebar.shell
+        expect(shadow.map { s in order.firstIndex { $0 === s }! < order.firstIndex { $0 === panel }! } == true,
+               "the shadow sits under the sidebar")
+        let layer = shadow?.contentView?.subviews.first?.layer
+        expect(layer.map { $0.shadowOpacity > 0 && $0.shadowPath != nil && $0.mask != nil } == true,
+               "the shadow is a soft layer shadow with the sidebar cut out of it")
+        let slider = shell_slider(panel)
+        let spring = slider?.layer?.animation(forKey: "slide") as? CASpringAnimation
+        expect(spring.map { $0.stiffness == 759 && $0.damping == 46.3 && $0.initialVelocity == 23.3 && $0.isAdditive } == true,
+               "the reveal is Arc's spring")
+        sidebar.hide(animated: true)
+        let ease = slider?.layer?.animation(forKey: "slide")
+        expect(ease.map { !($0 is CASpringAnimation) && abs($0.duration - 0.102) < 0.001 } == true, "the hide is Arc's 0.1 s ease")
+        expect(shadow?.parent === window, "the shadow leaves with the sidebar, not before it")
+        drainAnimations()
+        expect(shadow?.parent == nil && shadow?.isVisible == false, "and is gone once the sidebar is")
+        // The shell's own mouse-moved path waits too: it used to call show() at once, which is how the
+        // edge still flashed with the poll's wait in place.
+        var clock: TimeInterval = 100
+        sidebar.now = { clock }
+        sidebar.keyWindow = { window }
+        sidebar.hide(animated: false)
+        sidebar.edgeHovered()
+        expect(!sidebar.isShown, "a move into the strip doesn't reveal at once")
+        expect(sidebar.staged && shell.sidebarDetached && panel.parent === window && panel.ignoresMouseEvents,
+               "it stages the sidebar in its panel during the wait, out of sight and letting clicks through")
+        clock = 100.05
+        sidebar.edgeSample(inStrip: false)
+        expect(!sidebar.staged && !shell.sidebarDetached && panel.parent == nil && shell.sidebarHost.superview === shell,
+               "leaving the strip before the wait is over puts the sidebar back")
+        clock = 100.1
+        sidebar.edgeHovered()
+        clock = 100.18
+        sidebar.edgeHovered()
+        expect(!sidebar.isShown, "coming back waits again: 80 ms is not enough")
+        clock = 100.2
+        sidebar.edgeHovered()
+        expect(sidebar.isShown && !sidebar.staged && !panel.ignoresMouseEvents, "it reveals once the pointer has waited 0.1 s")
+        sidebar.now = { ProcessInfo.processInfo.systemUptime }
+        drainAnimations()
+        expect(sidebar.isShown && shadow?.parent === window, "the shadow comes back with the sidebar")
+    }
+
+    /// The view that slides inside the sidebar panel.
+    @MainActor
+    private static func shell_slider(_ panel: NSWindow) -> NSView? {
+        panel.contentView?.subviews.first
+    }
+
     private static func drainAnimations() {
-        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.3))
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.6))
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
@@ -197,6 +287,8 @@ final class CraTuning {
 
 final class ResizeHandleView: NSView {
     var onDrag: ((CGFloat) -> Void)?
+    var onBegin: (() -> Void)?
+    var onResize: ((_ translation: CGFloat, _ speed: CGFloat) -> Void)?
     var onEnd: (() -> Void)?
 }
 

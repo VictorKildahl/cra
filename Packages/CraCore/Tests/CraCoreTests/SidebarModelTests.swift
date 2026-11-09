@@ -122,8 +122,8 @@ struct SidebarModelTests {
     }
 
     @Test func thresholds() {
-        #expect(AutoArchiveThreshold.allCases.map(\.seconds) == [43_200, 86_400, 604_800, 2_592_000])
-        #expect(AutoArchiveThreshold.allCases.map(\.label) == ["12 hours", "24 hours", "7 days", "30 days"])
+        #expect(AutoArchiveThreshold.allCases.map(\.seconds) == [43_200, 86_400, 604_800, 2_592_000, 7_776_000, 15_552_000])
+        #expect(AutoArchiveThreshold.allCases.map(\.label) == ["12 hours", "24 hours", "7 days", "30 days", "90 days", "180 days"])
         #expect(AutoArchiveThreshold.allCases.map(\.id) == AutoArchiveThreshold.allCases.map(\.rawValue))
     }
 
@@ -213,7 +213,7 @@ struct SidebarModelTests {
         settings.openExternalLinksInLittleWindow = false
         #expect(settings.defaultLinkDestination == .mostRecentSpace)
         settings.openExternalLinksInLittleWindow = true
-        #expect(settings.defaultLinkDestination == .littleWindow)
+        #expect(settings.defaultLinkDestination == .littleWindowInUse)
     }
 
     @Test func incognitoWindowsAreNeverSaved() {

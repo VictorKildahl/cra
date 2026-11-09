@@ -44,9 +44,11 @@
 # for developer mode and tab sleep), ${WEBKIT} (that server as http://localhost:<port>, a host the
 # run treats as a DRM service, so its pages open in WebKit), ${EXTENSION_ID} (Tests/Fixtures/Extension) and
 # ${SIDE_PANEL_EXTENSION_ID} (Tests/Fixtures/SidePanelExtension) and ${DOWNLOAD_EXTENSION_ID}
-# (Tests/Fixtures/DownloadExtension) and ${WEB_STORE_COPY_ID} (Tests/Fixtures/WebStoreCopy) expand,
+# (Tests/Fixtures/DownloadExtension) and ${WEB_STORE_COPY_ID} (Tests/Fixtures/WebStoreCopy) and
+# ${TABS_CREATE_EXTENSION_ID} (Tests/Fixtures/TabsCreateExtension) expand,
 # and ${STALL}, an address on 127.0.0.1 that takes connections and never answers (a download
-# that never ends).
+# that never ends), and ${TRICKLE}, one that answers with a 10 MB file to save, sends the first
+# 64 KB and holds the rest back (a download that stays in progress).
 set -uo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
@@ -56,6 +58,7 @@ EXTENSION_ID="$(cat "$FIXTURES/Extension/ID")"
 SIDE_PANEL_EXTENSION_ID="$(cat "$FIXTURES/SidePanelExtension/ID")"
 DOWNLOAD_EXTENSION_ID="$(cat "$FIXTURES/DownloadExtension/ID")"
 WEB_STORE_COPY_ID="$(cat "$FIXTURES/WebStoreCopy/ID")"
+TABS_CREATE_EXTENSION_ID="$(cat "$FIXTURES/TabsCreateExtension/ID")"
 
 if [ "${1:-}" = "all" ]; then
   failed=()
@@ -153,7 +156,30 @@ STALLER=$!
 disown "$STALLER"
 for _ in $(seq 1 50); do STALL_PORT=$(head -1 "$OUT/stall.log"); [ -n "$STALL_PORT" ] && break; sleep 0.1; done
 STALL="http://127.0.0.1:${STALL_PORT:?stalling port did not open}"
-expand() { local s="$1"; s="${s//\$\{FIXTURES\}/$FIXTURES}"; s="${s//\$\{PAGE\}/$PAGE}"; s="${s//\$\{WEBKIT\}/$WEBKIT}"; s="${s//\$\{STALL\}/$STALL}"; s="${s//\$\{EXTENSION_ID\}/$EXTENSION_ID}"; s="${s//\$\{SIDE_PANEL_EXTENSION_ID\}/$SIDE_PANEL_EXTENSION_ID}"; s="${s//\$\{DOWNLOAD_EXTENSION_ID\}/$DOWNLOAD_EXTENSION_ID}"; s="${s//\$\{WEB_STORE_COPY_ID\}/$WEB_STORE_COPY_ID}"; printf '%s' "$s"; }
+python3 -I -u -c '
+import socket, threading, time
+s = socket.socket()
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(("127.0.0.1", 0))
+s.listen(16)
+print(s.getsockname()[1], flush=True)
+held = []
+def serve(c):
+    try:
+        c.recv(65536)
+        c.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: 10000000\r\n"
+                  b"Content-Disposition: attachment; filename=\"trickle.bin\"\r\n\r\n" + b"\0" * 65536)
+        held.append(c)
+    except OSError:
+        c.close()
+while True:
+    c, _ = s.accept()
+    threading.Thread(target=serve, args=(c,), daemon=True).start()' >"$OUT/trickle.log" 2>&1 &
+TRICKLER=$!
+disown "$TRICKLER"
+for _ in $(seq 1 50); do TRICKLE_PORT=$(head -1 "$OUT/trickle.log"); [ -n "$TRICKLE_PORT" ] && break; sleep 0.1; done
+TRICKLE="http://127.0.0.1:${TRICKLE_PORT:?trickle port did not open}"
+expand() { local s="$1"; s="${s//\$\{FIXTURES\}/$FIXTURES}"; s="${s//\$\{PAGE\}/$PAGE}"; s="${s//\$\{WEBKIT\}/$WEBKIT}"; s="${s//\$\{STALL\}/$STALL}"; s="${s//\$\{TRICKLE\}/$TRICKLE}"; s="${s//\$\{EXTENSION_ID\}/$EXTENSION_ID}"; s="${s//\$\{SIDE_PANEL_EXTENSION_ID\}/$SIDE_PANEL_EXTENSION_ID}"; s="${s//\$\{DOWNLOAD_EXTENSION_ID\}/$DOWNLOAD_EXTENSION_ID}"; s="${s//\$\{WEB_STORE_COPY_ID\}/$WEB_STORE_COPY_ID}"; s="${s//\$\{TABS_CREATE_EXTENSION_ID\}/$TABS_CREATE_EXTENSION_ID}"; printf '%s' "$s"; }
 app_args=()
 while read -r _ a; do app_args+=("$(expand "$a")"); done < <(grep '^arg ' "$FILE")
 while read -r _ f; do mkdir -p "$DATA/Extensions" && cp -R "$(expand "$f")" "$DATA/Extensions/"; done < <(grep '^extension ' "$FILE")
@@ -166,7 +192,7 @@ PIDS+=("$PID")
 
 cleanup() {
   for p in "${PIDS[@]}"; do kill -KILL "$p" 2>/dev/null; done
-  kill "$SERVER" "$STALLER" 2>/dev/null
+  kill "$SERVER" "$STALLER" "$TRICKLER" 2>/dev/null
   cp "$DATA"/cra*.log "$OUT/" 2>/dev/null
   rm -rf "$DATA"
 }
@@ -247,7 +273,8 @@ while IFS= read -r raw || [ -n "$raw" ]; do
       ! grep -Eq "$re" "$DATA"/cra*.log "$OUT/stdout.log" 2>/dev/null || problem "a log line matching: $re" ;;
     snapshot)
       shot="$OUT/snapshots/$3.png"; ref="$ROOT/Tests/Snapshots/$3.png"
-      mkdir -p "$OUT/snapshots"; send "cra://debug?snapshot=$2&out=$shot"
+      # A name shot twice (before and after a relaunch) must not find the first file and stop waiting.
+      mkdir -p "$OUT/snapshots"; rm -f "$shot"; send "cra://debug?snapshot=$2&out=$shot"
       for _ in $(seq 1 25); do [ -s "$shot" ] && break; sleep 0.2; done
       if [ ! -s "$shot" ]; then problem "no snapshot of $2"
       elif [ "${CRA_SNAPSHOT_RECORD:-}" = "1" ]; then mkdir -p "$ROOT/Tests/Snapshots"; cp "$shot" "$ref"; echo "  recorded $3"

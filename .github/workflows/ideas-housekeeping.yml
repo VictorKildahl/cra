@@ -1,0 +1,24 @@
+name: Ideas housekeeping
+
+# Weekly: closes Ideas discussions older than 60 days with fewer than 5 upvotes,
+# with a comment saying why (scripts/ideas-housekeeping.py has the rules).
+on:
+  schedule:
+    - cron: "17 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  discussions: write
+
+jobs:
+  close:
+    name: Close ideas that didn't find support
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Close due ideas
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ideas-housekeeping.py

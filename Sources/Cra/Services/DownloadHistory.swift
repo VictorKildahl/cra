@@ -1,4 +1,5 @@
 import AppKit
+import CraCEF
 import Observation
 import QuickLookThumbnailing
 
@@ -31,6 +32,8 @@ final class DownloadHistory {
     }
 
     private(set) var live: [Live] = []
+    /// When a download last stopped running (finished, failed or cancelled), for the bin.
+    @ObservationIgnored private(set) var lastEnded: Date?
 
     /// The hover list: newest downloads, oldest first: files still on disk, and running, failed
     /// or cancelled ones.
@@ -43,16 +46,22 @@ final class DownloadHistory {
         DownloadList.library(entries: entries, live: live, query: query) { FileManager.default.fileExists(atPath: $0) }
     }
 
+    /// Running or paused: quitting would cancel it.
     var hasRunningDownloads: Bool { live.contains(where: \.running) }
+
+    /// The ring on the Library button: the running downloads' progress together (#272).
+    var progress: Double? { DownloadList.progress(live) }
 
     /// Chromium's report on a download: running ones update their row, a finished one leaves for
     /// `add(path:)`, a failed or cancelled one stays listed for this session.
     func report(id: UInt32, name: String, path: String, received: Int64, total: Int64, percent: Int,
-                complete: Bool, cancelled: Bool, failed: Bool, now: Date = Date()) {
+                complete: Bool, cancelled: Bool, failed: Bool, paused: Bool = false, now: Date = Date()) {
         if complete {
+            if live.contains(where: { $0.id == id }) { lastEnded = now }
             live.removeAll { $0.id == id }
             return
         }
+        if (failed || cancelled), live.first(where: { $0.id == id })?.running ?? true { lastEnded = now }
         var l = live.first { $0.id == id } ?? Live(id: id, name: name, path: path, started: now, received: received, total: total,
                                                     percent: percent, updated: now)
         if l.sampleAt == .distantPast {
@@ -69,7 +78,40 @@ final class DownloadHistory {
         l.percent = percent
         l.failed = failed
         l.cancelled = cancelled
+        l.paused = paused && !failed && !cancelled
+        // A paused download has no speed; it starts measuring again when it resumes.
+        if l.paused { (l.bytesPerSecond, l.sampleAt) = (nil, .distantPast) }
         if let i = live.firstIndex(where: { $0.id == id }) { live[i] = l } else { live.append(l) }
+    }
+
+    // MARK: Acting on a row (#272)
+
+    /// Pauses, resumes or cancels a download still in progress; Chromium's next report shows it.
+    func control(_ id: UInt32, _ action: CraDownloadControl) {
+        guard CraCEFRuntime.controlDownload(id, action: action) else {
+            CraLog.note("download control: no download in progress by that id")
+            return
+        }
+        CraLog.note("download control: \(["pause", "resume", "cancel"][action.rawValue])")
+    }
+
+    /// Arc's Hide from Arc: the row leaves both lists, the file stays where it is.
+    func hide(_ row: Listed) {
+        switch row {
+        case .finished(let e):
+            entries.removeAll { $0.id == e.id }
+            file.save(entries)
+        case .live(let l):
+            live.removeAll { $0.id == l.id }
+        }
+    }
+
+    /// Arc's Move to Trash: the file goes to the Bin, the row with it.
+    func moveToTrash(_ e: Entry) {
+        NSWorkspace.shared.recycle([URL(fileURLWithPath: e.path)]) { [weak self] _, error in
+            guard error == nil else { return }
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.hide(.finished(e)) } }
+        }
     }
 
     @discardableResult

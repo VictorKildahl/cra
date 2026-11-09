@@ -1,7 +1,12 @@
+# promise: #265
 # An extension whose toolbar button opens Chrome's side panel (openPanelOnActionClick), as
 # MetaMask's does by default. Chrome's own panel never shows in CEF, so the click did nothing,
 # in Cra as in Arc; Cra now shows the panel beside the page. A second click closes it, and so
 # does the panel's close button (sidePanel=close), after which a click opens it again.
+# The panel is not a tab to its extension, as in Chrome (#265): tabs.getCurrent() gives
+# undefined, the worker sees no sender.tab on its messages and ports, and runtime.getContexts()
+# lists the panel as SIDE_PANEL with no tab. The panel page holds what it saw in `answers`; the
+# check is last, as reading the panel page held up the next extension action (PR #263).
 budget rss=700 stalls50=5
 cra://debug?installExtension=${FIXTURES}/SidePanelExtension
 relaunch
@@ -23,6 +28,9 @@ cra://debug?sidePanel=close
 wait 1
 cra://debug?extensionAction=${SIDE_PANEL_EXTENSION_ID}
 wait 2
+cra://debug?sidePanelJS=answers
+expect-log side panel evaluates answers to
+expect-log side panel evaluates answers to current-none-message-none-port-none-context-sidepanel$
 cra://debug?removeExtension=${SIDE_PANEL_EXTENSION_ID}
 wait 1
 reject-log fault:

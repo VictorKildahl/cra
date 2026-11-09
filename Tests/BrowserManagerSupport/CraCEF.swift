@@ -4,6 +4,7 @@ import AppKit
 
 public protocol CraBrowserDelegate: AnyObject {
     func browserDidClose(_ browser: CraBrowser)
+    func browser(_ browser: CraBrowser, requestsPermissionForOrigin origin: String, kinds: UInt, completion: @escaping (Bool) -> Void)
     func browser(_ browser: CraBrowser, didChangeURL url: String)
     func browser(_ browser: CraBrowser, didChangeTitle title: String)
     func browser(_ browser: CraBrowser, didChangeLoading loading: Bool, canGoBack: Bool, canGoForward: Bool)
@@ -43,6 +44,14 @@ open class CraBrowser {
         self.delegate = delegate
         isIncognito = incognito
         self.profilePath = profilePath
+    }
+
+    /// The saved back and forward list the page was made with (Cra.restoreHistory's params).
+    public private(set) var restoredHistory: [String: Any]?
+    public convenience init(frame: NSRect, url: String, delegate: CraBrowserDelegate?, incognito: Bool, profilePath: String?,
+                            history: [String: Any]?) {
+        self.init(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath)
+        restoredHistory = history
     }
 
     public func close() { closeRequested = true; onClose?() }

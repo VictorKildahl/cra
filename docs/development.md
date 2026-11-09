@@ -48,8 +48,20 @@ issue when a newer stable CEF is out; `scripts/update-cef.sh` moves the pin.
 - `vendor/cef` — CEF binary distribution (fetched, not committed)
 
 Data lives in `~/Library/Application Support/Cra`: the sidebar and archive as JSON,
-`keybindings.json`, cached favicons, the logs and a Chromium profile folder. Delete it to
+`keybindings.json`, each tab's back and forward list in `PageHistory/`, cached favicons, the logs
+and a Chromium profile folder. Delete it to
 start over.
+
+Settings ▸ General ▸ Sync keeps `sidebar.json`, `settings.json` (minus each Mac's own fields,
+`AppSettings.forSync`) and `keybindings.json` the same on the user's Macs, through iCloud
+(`Documents/Cra` in the app's iCloud Documents container; docs/release.md says how the signed
+build gets the entitlement) or through a folder a file provider syncs: `SettingsSyncService`
+writes them with a `manifest.json` into a `Cra` folder there and applies a newer bundle another
+Mac wrote (`SettingsSync` in CraCore decides). `sync.json` in the data folder holds the location
+and the last bundle written or applied. To try it on one Mac, run a second instance on another
+`CRA_DATA_DIR` with `CRA_SYNC_DEVICE=<name>` (a Mac is known in the folder by a hash of its
+hardware UUID, which two instances share);
+`CRA_SYNC_ICLOUD_DIR=<folder>` makes both treat that folder as the iCloud container.
 
 `cra.log` is Cra's own log: each tab's page opening, showing, loading, failing to load (with
 the net error and the extension that set the proxy) and closing, and three seconds after a tab
@@ -102,6 +114,19 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-folder-glyph.sh`: the standalone folder component's real AppKit layers and image
   pixels: emblems follow the front panel's perspective, keep their colors and proportions, and
   update at 1x/Retina. No CEF or visible window; coverage uses the same harness as `scripts/test.sh`.
+- `scripts/test-live-folder-plugins.sh`: the real `CraPluginHost` (sandboxed JavaScriptCore) and
+  the bundled GitHub, GitLab and Jira providers in `resources/live-folder-plugins`, through
+  `LiveFolderPluginProcess` with made-up session responses: permissions, timeouts, and each
+  provider's parsing and sign-in cases (`Tests/LiveFolderProviderTests.swift`).
+- `scripts/test-key-bindings.sh`: `KeyBindingRegistry`'s command list on a `keybindings.json` of its
+  own: the live folder plugins' commands after New Folder, and shortcuts kept through a synced file,
+  a reset and Reset All.
+- `scripts/test-sidebar-creation-menu.sh`: the sidebar + menu's real window and view off screen:
+  rows and keys, clicks on enabled and disabled rows, Arc's open and close timings, and the +
+  turning into an × on its spring.
+- `scripts/test-easel-canvas.sh`: the real `EaselSheetView` in an off-screen window, driven with
+  synthetic mouse and key events: one click picks a text block, a double click edits it, Return and
+  Escape end editing, Delete removes it, its size pill follows a drag.
 - `scripts/test-perf.sh`: the performance recorder on a real main run loop: injected stalls,
   hang files with a `sample` stack, the session marker, ownership, the recording switch
   ([performance.md](performance.md)).
@@ -116,10 +141,13 @@ behave. Check those by hand, and say how in the PR.
 
 Scenario hooks for a command file (`cra://debug?…`): `checkStore=1` logs a fault per broken
 sidebar link, `pageJS=<js>` runs script in the focused page, `installExtension=<folder>` and
-`removeExtension=<id>`, `extensionAction=<id>`, `fullscreen=1|0`, `appActive=1|0` (the sidebar drawn as if
+`removeExtension=<id>`, `extensionAction=<id>`, `sidePanelJS=<js>` (the value in the extension side panel's
+page, to cra.log), `fullscreen=1|0`, `appActive=1|0` (the sidebar drawn as if
 Cra were in front or behind, e.g. the download bin's dimming), `windowSize=1280x800`,
 `snapshot=<ViewClass[,n]>&out=<png>`, `sleepTabs=<seconds>` (the 10 tabs used last too), `memoryPressure=warning|critical` (one
-memory-pressure sweep at that level, if Settings ▸ Tabs has it on), `stall=<ms>` (blocks the main
+memory-pressure sweep at that level, if Settings ▸ Tabs has it on), `sleep=1` (what the Mac going to
+sleep does: notes Chromium's audio service), `wake=1` (what waking the Mac does: the now-playing cards
+re-read their tabs' sound, a tab-sleeping pass runs and cra.log says whether the audio service lived), `stall=<ms>` (blocks the main
 thread), `perfReport=<path>` (the recorder's perf.json now), `systemAppearance=light|dark|system`
 (the appearance Auto space themes follow, without changing the Mac's), `themeEditor=1` (Edit
 Theme Color… for the focused space), `sidebarShown=<label>` (whether the window shows its sidebar,
@@ -166,6 +194,14 @@ drive the sidebar without touching the pointer: `cra://debug?swipe=-14,22` plays
 swipe (22 trackpad samples of 14 pt) and `cra://debug?scroll=30,30,150,700` scrolls the
 scroll view at x 150, y 700 of the window (from its top left) 30 pt a frame for 30 frames.
 Measure them with `sample <pid> 6 1` and compare the main thread's busy time between builds.
+
+`CRA_TEST_SCREEN=<display>` opens every window of a test instance on that display instead of
+the one you are using: `left`, `right`, `main` (the menu bar's) or a display's name as System
+Settings ▸ Displays shows it (part of it is enough when only one display matches). Export it in
+`~/.zshenv` and every launcher that runs the binary directly passes it on (`scenario.sh`,
+`smoke-launch.sh`, `dev.sh`), so test copies started by agents stay on
+one screen. Saved window frames keep their place relative to their display; `clip.sh` ignores it.
+Unset, or naming no connected display, windows open as usual.
 
 Tidy Tabs needs Apple Intelligence. `CRA_TIDY_FAKE_MODEL=1` stands in a model that groups by
 site (after a 1.6 s pause), so a test instance on any Mac shows the button, the squiggle and the
@@ -225,7 +261,7 @@ Cra registers the `cra://` scheme so it can be driven from a shell:
 
     open "cra://action/newTab"              # any action id from KeyBindings.swift
     open "cra://commandbar?query=github"    # open the command bar with text
-    open "cra://open?url=https://example.com&background=1"
+    open "cra://open?url=https://example.com&background=1"   # a tab behind; Cra stays where it is
     open "cra://open?url=https://example.com&little=1"   # in a Little Window
     open "cra://open?url=https://example.com&space=<space id>"   # in that space (its id in sidebar.json)
     open "cra://import?source=arc&archive=1&settings=1"  # headless import

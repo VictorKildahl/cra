@@ -3,7 +3,8 @@ import SwiftUI
 /// Arc's Air Traffic Control sheet (Settings ▸ Links, Arc 1.170), measured from window
 /// captures and the accessibility tree: title and "New Route" over a hairline, one
 /// two-line route per entry ("🔗 URL [Contains ⌃⌄] [text] ⊖" / "↳ Open in [Space ⌃⌄]",
-/// 52 pt tall on a 76 pt pitch), then "Default" below a second hairline.
+/// 52 pt tall on a 76 pt pitch), then "Default" below a second hairline. Past Arc (#258):
+/// a Little Window destination gets a second popup under it that picks its space.
 struct AirTrafficControlView: View {
     @Environment(SidebarStore.self) private var store
     @Environment(\.dismiss) private var dismiss
@@ -32,7 +33,7 @@ struct AirTrafficControlView: View {
             Divider()
             routes
             Divider()
-            HStack(spacing: 0) {
+            HStack(alignment: .firstTextBaseline, spacing: 0) {
                 Text("Default").font(.system(size: 13))
                     .frame(width: 104, alignment: .leading)
                 destinationPicker($store.settings.defaultLinkDestination)
@@ -100,7 +101,7 @@ struct AirTrafficControlView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Remove")
             }
-            HStack(spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Label("Open in", systemImage: "arrow.turn.down.right")
                     .labelStyle(RouteLabelStyle())
                     .frame(width: 70, alignment: .leading)
@@ -111,28 +112,55 @@ struct AirTrafficControlView: View {
     }
 
     /// Arc's destination menu: an "Open in Space" header over Most Recent Space and
-    /// every space, then Little Arc after a separator.
+    /// every space, then Little Arc after a separator. With Little Window chosen, a second
+    /// popup below it names the space the window opens in (#258).
     private func destinationPicker(_ selection: Binding<LinkDestination>) -> some View {
         let spaces = store.orderedSpaces
-        // A route to a deleted space opens in the most recent one; show it that way.
+        func known(_ id: UUID?) -> UUID? { id.flatMap { id in spaces.contains { $0.id == id } ? id : nil } }
+        // A route to a deleted space opens in the most recent one; show it that way. The first
+        // popup shows any Little Window as "Little Window", and choosing it again keeps the space.
         let shown = Binding<LinkDestination>(
             get: {
-                if case .space(let sid) = selection.wrappedValue, !spaces.contains(where: { $0.id == sid }) { return .mostRecentSpace }
-                return selection.wrappedValue
-            },
-            set: { selection.wrappedValue = $0 })
-        return Picker("Open in", selection: shown) {
-            Section("Open in Space") {
-                Text("Most Recent Space").tag(LinkDestination.mostRecentSpace)
-                ForEach(spaces) { space in
-                    Text(space.labeled).tag(LinkDestination.space(space.id))
+                switch selection.wrappedValue {
+                case .space(let sid) where known(sid) == nil: return .mostRecentSpace
+                case .littleWindow: return .littleWindowInUse
+                default: return selection.wrappedValue
                 }
+            },
+            set: { new in
+                if new.isLittleWindow, selection.wrappedValue.isLittleWindow { return }
+                selection.wrappedValue = new
+            })
+        let littleSpace = Binding<UUID?>(
+            get: { if case .littleWindow(let sid) = selection.wrappedValue { return known(sid) } else { return nil } },
+            set: { selection.wrappedValue = .littleWindow(space: $0) })
+        return VStack(alignment: .leading, spacing: 4) {
+            Picker("Open in", selection: shown) {
+                Section("Open in Space") {
+                    Text("Most Recent Space").tag(LinkDestination.mostRecentSpace)
+                    ForEach(spaces) { space in
+                        Text(space.labeled).tag(LinkDestination.space(space.id))
+                    }
+                }
+                Divider()
+                Text("Little Window").tag(LinkDestination.littleWindowInUse)
             }
-            Divider()
-            Text("Little Window").tag(LinkDestination.littleWindow)
+            .labelsHidden()
+            .frame(width: 165)
+            if selection.wrappedValue.isLittleWindow {
+                Picker("Little Window space", selection: littleSpace) {
+                    Section("Little Window in") {
+                        Text("Most Recent Space").tag(UUID?.none)
+                        ForEach(spaces) { space in
+                            Text(space.labeled).tag(UUID?.some(space.id))
+                        }
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 165)
+                .help("The space the Little Window opens in: the page loads with its sign-ins, and ⌘O moves it there")
+            }
         }
-        .labelsHidden()
-        .frame(width: 165)
     }
 
     private func binding<T>(_ id: UUID, _ key: WritableKeyPath<LinkRoute, T>) -> Binding<T> {

@@ -152,6 +152,33 @@ struct TabSleepPolicyTests {
                 == "1 page refused lately, asked again later")
     }
 
+    /// A pressure sweep that asked its pages and had every one refuse says so, with the reasons
+    /// (#275: twelve sweeps after a wake, 3 pages asked and refused each time, wrote nothing but
+    /// their header). The minute's timer pass stays quiet; a page it closed reads as before.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/275")) func sweepThatClosesNothingSaysWhy() {
+        var pressure = TabSleepPolicy.PassLog(reason: .memoryPressure)
+        for refusal in ["playing", "typed", "playing"] { pressure.refused(refusal) }
+        #expect(pressure.lines == ["tab sleep for memory pressure closes nothing: 3 pages refused (playing 2, typed 1)"])
+        var timer = TabSleepPolicy.PassLog(reason: .timer)
+        timer.refused("typed")
+        #expect(timer.lines.isEmpty)
+        var mixed = TabSleepPolicy.PassLog(reason: .memoryPressure)
+        mixed.refused("call")
+        mixed.closed(host: "github.com", hiddenFor: 6 * 60, discarded: true, processEnded: false)
+        #expect(mixed.lines == ["tab sleep discards github.com (hidden 6 min, the Mac is short of memory)"])
+    }
+
+    /// Waking the Mac runs a pass at once (#275: the first sweep came 24 minutes after the wake),
+    /// and the timer's overdue fire right after it, or a second wake, doesn't run another.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/275")) func wakeRunsOnePass() {
+        #expect(TabSleepPolicy.passDue(lastPass: nil, now: now))
+        #expect(TabSleepPolicy.passDue(lastPass: now.addingTimeInterval(-7 * 3600), now: now), "a wake after a night runs a pass")
+        #expect(!TabSleepPolicy.passDue(lastPass: now.addingTimeInterval(-1), now: now), "the overdue timer right after the wake's pass doesn't")
+        #expect(!TabSleepPolicy.passDue(lastPass: now.addingTimeInterval(-20), now: now), "nor a second wake inside half a pass")
+        #expect(TabSleepPolicy.passDue(lastPass: now.addingTimeInterval(-TabSleepPolicy.passInterval + 5), now: now),
+                "the minute's timer, a little early, still runs")
+    }
+
     /// Chromium's freezing reasons that keep a page from sleeping; the rest (a Web Lock, recently
     /// visible, notification permission) don't.
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/153")) func freezingReasonsThatKeepAPage() {

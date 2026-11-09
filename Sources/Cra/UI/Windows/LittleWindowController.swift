@@ -250,8 +250,11 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             // Little Arc is a non-activating panel (AX subrole AXSystemDialog), so it opens over
             // the app in front even when that app is full screen (#186). An ordinary window can't
             // join another app's full-screen Space: macOS switched to the desktop to show it.
-            // Primary keeps the page's own full screen.
-            window.collectionBehavior = [.fullScreenPrimary, .fullScreenAuxiliary]
+            // Auxiliary only: AppKit puts a full-screen-primary window shown while one of Cra's
+            // windows is full screen into a full-screen Space of its own, a black screen with the
+            // card in the middle and no traffic lights (#277). The page's own full screen adds
+            // primary for as long as it lasts (browser(_:didChangeFullscreen:)).
+            window.collectionBehavior = [.fullScreenAuxiliary]
             placeWindow()
         }
 
@@ -389,7 +392,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private func placeWindow() {
         guard let window else { return }
         let mouse = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main ?? NSScreen.screens[0]
+        let screen = TestScreen.screen ?? NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main ?? NSScreen.screens[0]
         let vf = screen.visibleFrame
         var frame = window.frame
         frame.size.width = min(frame.width, vf.width - 40)
@@ -469,6 +472,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         shell.layoutSubtreeIfNeeded()
         pw.addChildWindow(window, ordered: .above)
         pw.addChildWindow(controls, ordered: .above)
+        parent.peekWindowsAttached()
         pw.makeMain()
         controls.orderFront(nil)
         window.makeKeyAndOrderFront(nil)
@@ -569,6 +573,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             pw.addChildWindow(w, ordered: .above)
             w.orderFront(nil)
         }
+        parent.peekWindowsAttached()
         repositionPeek()
         rejoinPage()
         if NSApp.isActive { window.makeKeyAndOrderFront(nil) }
@@ -714,7 +719,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         let prefill = hasPage ? currentURL : nil
         // Suggestions come from the normal profile even when an incognito window was in front.
         app.useNormalWindow()
-        commandBar.highlight = store.focusedSpace.theme.palette.commandHighlight
+        commandBar.theme = store.focusedSpace.theme.shown
         commandBar.focusedSpaceID = store.focusedSpaceID
         commandBar.open(mode: hasPage ? .editURL : .newTab, prefill: prefill)
         commandBar.attached = false
@@ -1106,7 +1111,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     /// Left with the green button or ⌃⌘F while a video was fullscreen: the page leaves too.
     func windowDidExitFullScreen(_ notification: Notification) {
-        guard (notification.object as? NSWindow) === window, pageFullscreen else { return }
+        guard let window, (notification.object as? NSWindow) === window else { return }
+        if !isPeek { window.collectionBehavior.remove(.fullScreenPrimary) }
+        guard pageFullscreen else { return }
         pageFullscreen = false
         browser?.exitFullscreen()
     }
@@ -1244,6 +1251,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     func browser(_ browser: CraBrowser, didChangeFullscreen fullscreen: Bool) {
         guard let window else { return }
         pageFullscreen = fullscreen
+        // Only a full-screen-primary window gets a full-screen Space of its own (#277: not while it opens).
+        if fullscreen, !isPeek { window.collectionBehavior.insert(.fullScreenPrimary) }
         if fullscreen != window.styleMask.contains(.fullScreen) { window.toggleFullScreen(nil) }
     }
 

@@ -7,6 +7,7 @@ import Foundation
 public enum DownloadRow {
     public enum State: Equatable {
         case downloading(received: Int64, total: Int64, bytesPerSecond: Double?)
+        case paused
         case failed
         case cancelled
         case finished(at: Date)
@@ -21,6 +22,8 @@ public enum DownloadRow {
             if total > 0 { s += " of " + bytes(total) }
             if let speed, speed > 0 { s += " — " + bytes(Int64(speed)) + "/s" }
             return s
+        // Arc 1.172's "Subtitle copy for a paused download".
+        case .paused: return "Paused"
         case .failed: return "Failed to Download"
         case .cancelled: return "Cancelled"
         // At least a second: a row read just as it finished said "in 0 seconds".

@@ -57,7 +57,13 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
     /// Cra's isolated world: PageScript's own script, plus what WebKit doesn't report natively.
     static let world = WKContentWorld.world(name: PageScript.world)
 
-    override init(frame: NSRect, url: String?, delegate: CraBrowserDelegate?, incognito: Bool, profilePath: String?) {
+    override convenience init(frame: NSRect, url: String?, delegate: CraBrowserDelegate?, incognito: Bool, profilePath: String?) {
+        self.init(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath, interactionState: nil)
+    }
+
+    /// `interactionState`: the back and forward list WKWebView saved for this tab (PageHistory,
+    /// #273). It goes in instead of loading `url`, and WebKit loads its current page.
+    init(frame: NSRect, url: String?, delegate: CraBrowserDelegate?, incognito: Bool, profilePath: String?, interactionState: Data?) {
         container = NSView(frame: frame)
         incognitoPage = incognito
         profile = incognito ? nil : profilePath
@@ -68,7 +74,29 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
         container.autoresizesSubviews = true
         container.layer?.backgroundColor = CraBrowser.pageCanvasColor.cgColor
         // nil: a popup host, filled by adoptPopup(configuration:) when WebKit opens the popup.
-        if let url { MainActor.assumeIsolated { makeWebView(configuration: nil); load(url) } }
+        if let url {
+            MainActor.assumeIsolated {
+                makeWebView(configuration: nil)
+                if let interactionState, !incognito {
+                    webView?.interactionState = interactionState
+                }
+                let list = webView?.backForwardList
+                let count = list?.currentItem == nil ? 0 : (list?.backList.count ?? 0) + 1 + (list?.forwardList.count ?? 0)
+                if count == 0 { load(url) }
+                // Reported once the page is its tab's (BrowserManager registers it after init).
+                if interactionState != nil {
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self else { return }
+                        self.delegate?.browser?(self, didRestoreHistoryEntries: count, error: count > 0 ? nil : "WebKit couldn't read it")
+                    }
+                }
+            }
+        }
+    }
+
+    /// The back and forward list as WKWebView saves it (PageHistory), nil before there is a page.
+    var savedInteractionState: Data? {
+        MainActor.assumeIsolated { webView?.backForwardList.currentItem == nil ? nil : webView?.interactionState as? Data }
     }
 
     override convenience init(frame: NSRect, url: String?, delegate: CraBrowserDelegate?) {
@@ -309,6 +337,8 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
 
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, preferences: WKWebpagePreferences,
                  decisionHandler: @escaping @MainActor (WKNavigationActionPolicy, WKWebpagePreferences) -> Void) {
+        // Before WebKit's download: an Option-clicked link with `download` opens a pane, as in Chromium.
+        if opensSplit(action) { return decisionHandler(.cancel, preferences) }
         if action.shouldPerformDownload { return decisionHandler(.download, preferences) }
         guard let url = action.request.url else { return decisionHandler(.allow, preferences) }
         let scheme = url.scheme?.lowercased() ?? ""
@@ -406,6 +436,16 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
         webView.reload()
     }
 
+    /// Option-click on a link (Arc) or ⌘⌥-click (Chromium): a pane beside this page, as in a
+    /// Chromium tab (#298). Not where the delegate has no split (a Little Window).
+    private func opensSplit(_ action: WKNavigationAction) -> Bool {
+        guard action.navigationType == .linkActivated, action.buttonNumber != 2, let url = action.request.url?.absoluteString,
+              LinkSplitClick.opensSplit(url, modifiers: action.modifierFlags.rawValue),
+              delegate?.responds(to: #selector(CraBrowserDelegate.browser(_:requestsSplitPaneWithURL:))) == true else { return false }
+        delegate?.browser?(self, requestsSplitPaneWithURL: url)
+        return true
+    }
+
     // MARK: Windows and popups
 
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for action: WKNavigationAction,
@@ -416,6 +456,7 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
         if AppLinkPrompt.handle(url, from: self, userGesture: true) { return nil }
         // A target=_blank link: a new tab without an opener, like Chrome's noopener default.
         if action.navigationType == .linkActivated {
+            if opensSplit(action) { return nil }
             let mods = action.modifierFlags
             if mods.contains(.command) || action.buttonNumber == 2 {
                 delegate?.browser(self, requestsNewTabWithURL: url, inBackground: !mods.contains(.shift))

@@ -1,0 +1,19 @@
+# Two tabs on one host whose icons are data: URLs, as GitLab draws its pipeline status (PR #291).
+# data: icons used to stay in memory only, so after a relaunch both tabs showed the host's
+# latest icon. Each tab now saves its own.
+budget rss=600 stalls50=10
+port 47124
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=orange
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?pageJS=document.title='Orange',fetch('icon-orange.png').then(r=>r.blob()).then(b=>new Promise(d=>{let f=new FileReader();f.onload=()=>d(f.result);f.readAsDataURL(b)})).then(u=>document.head.append(Object.assign(document.createElement('link'),{rel:'icon',href:u})))
+wait 3
+cra://open?url=${PAGE}?n=blue
+wait 3
+cra://debug?pageJS=document.title='Blue',fetch('icon-blue.png').then(r=>r.blob()).then(b=>new Promise(d=>{let f=new FileReader();f.onload=()=>d(f.result);f.readAsDataURL(b)})).then(u=>document.head.append(Object.assign(document.createElement('link'),{rel:'icon',href:u})))
+wait 3
+snapshot TabRowView,0 same-host-favicon-newer
+snapshot TabRowView,1 same-host-favicon-older
+relaunch
+wait 3
+snapshot TabRowView,1 same-host-favicon-older

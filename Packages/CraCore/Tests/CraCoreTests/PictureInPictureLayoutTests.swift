@@ -68,4 +68,25 @@ struct PictureInPictureLayoutTests {
                                                     visible: CGRect(x: 0, y: 0, width: 1728, height: 1084), remembered: nil)
         #expect(f == CGRect(x: 1728 - 10 - 782, y: 1084 - 10 - 440, width: 782, height: 440))
     }
+
+    /// The centre cluster follows Arc's size classes (#262). Arc's glyphs, measured on its windows:
+    /// play/pause only and about 23.5 pt at 224 and 277 pt wide; the ±15 pair in ~31 pt circles and a
+    /// 37–40 pt play/pause from 396 pt. Cra's fixed 22 pt play (14 pt of pause ink) and 17 pt skips
+    /// were smaller than Arc's smallest at every size, and the skips crowded a tiny window.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/262"))
+    func centreControlsGrowWithArcsSizeClasses() {
+        let tiny = PictureInPictureLayout.centreControls(width: 224)
+        #expect(!tiny.showsSkips && tiny.playPointSize == 28)
+        #expect(PictureInPictureLayout.centreControls(width: 279) == tiny)
+        let small = PictureInPictureLayout.centreControls(width: 285)
+        #expect(small.showsSkips && small.playPointSize == 44 && small.skipPointSize == 28)
+        #expect(PictureInPictureLayout.centreControls(width: 801).playPointSize == 44)
+        // Never smaller than before at any size, and the cluster, hover discs and all, fits between
+        // the corner buttons of the narrowest window that shows it.
+        for w in [224.0, 279, 280, 285, 399, 400, 801, 1066] {
+            let c = PictureInPictureLayout.centreControls(width: w)
+            #expect(c.playPointSize > 22 && c.playDiameter >= 48)
+            #expect(!c.showsSkips || (c.skipPointSize > 17 && c.clusterWidth <= w - 2 * PictureInPictureLayout.buttonCentreInset(width: w)))
+        }
+    }
 }

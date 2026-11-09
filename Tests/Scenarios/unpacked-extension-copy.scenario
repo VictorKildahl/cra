@@ -1,0 +1,23 @@
+# An unpacked extension added in Settings (Cra copies it into Extensions/) and loaded from its own
+# folder with chrome://extensions' "Load unpacked" is one extension after every restart, not two:
+# the copy stops loading where the folder loads in place (GitHub #299).
+# promise: #299
+cra://debug?installExtension=${FIXTURES}/UnpackedExtension
+cra://open?url=chrome://extensions/
+wait 3
+cra://debug?pageJS=chrome.developerPrivate.updateProfileConfiguration({inDeveloperMode:true})
+cra://debug?bcdp=Extensions.loadUnpacked&params={"path":"${FIXTURES}/UnpackedExtension"}
+wait 3
+# Loaded over the protocol, Chromium drops it at the next start; a reload installs it as "Load unpacked" does.
+cra://debug?pageJS=chrome.developerPrivate.getExtensionsInfo().then(l=>l.forEach(e=>chrome.developerPrivate.reload(e.id,{failQuietly:true})))
+wait 3
+relaunch
+wait 3
+expect-log extension UnpackedExtension is loaded unpacked from its own folder in Default; its copy stops loading there
+cra://debug?bcdp=Extensions.getExtensions
+expect-log bcdp Extensions.getExtensions → .*Fixtures\\/UnpackedExtension
+relaunch
+wait 3
+cra://debug?bcdp=Extensions.getExtensions
+wait 1
+reject-log bcdp Extensions.getExtensions → .*\},\{

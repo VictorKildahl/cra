@@ -54,7 +54,12 @@ APP="$STAGE/Cra.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
 
 cp "$BIN/Cra" "$APP/Contents/MacOS/Cra"
+cp "$BIN/CraPluginHost" "$APP/Contents/MacOS/CraPluginHost"
 sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD_NUMBER/" resources/Info.plist > "$APP/Contents/Info.plist"
+# CRA_BUNDLE_ID builds under another identifier: a test build signed with one's own team and
+# a provisioning profile for it (docs/release.md, "iCloud sync"). The data folder stays Cra's,
+# so run such a build with CRA_DATA_DIR.
+[ -n "${CRA_BUNDLE_ID:-}" ] && /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $CRA_BUNDLE_ID" "$APP/Contents/Info.plist"
 # Only release builds (scripts/release.sh) check the update feed; a dev build would
 # otherwise replace itself with the latest release. Intel copies have their own feed,
 # since each update archive holds one CPU's app (scripts/appcast.sh).
@@ -73,6 +78,7 @@ cp resources/Cra.sdef "$APP/Contents/Resources/Cra.sdef"
 [ -d resources/app-icons ] && cp -R resources/app-icons "$APP/Contents/Resources/app-icons"
 [ -d resources/licenses ] && cp -R resources/licenses "$APP/Contents/Resources/licenses"
 [ -d resources/fonts ] && cp -R resources/fonts "$APP/Contents/Resources/fonts"
+cp -R resources/live-folder-plugins "$APP/Contents/Resources/live-folder-plugins"
 
 FRAMEWORK_SRC="$ROOT/$CEF_DIR/Release/Chromium Embedded Framework.framework"
 cp -R "$FRAMEWORK_SRC" "$APP/Contents/Frameworks/"
@@ -109,7 +115,7 @@ cp "$BIN/libCraDockTile.dylib" "$DOCK_TILE/Contents/MacOS/CraDockTile"
 sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD_NUMBER/" resources/DockTile-Info.plist > "$DOCK_TILE/Contents/Info.plist"
 
 # Every executable must run on the CPU this build is for (Sparkle ships universal).
-for exe in "$APP/Contents/MacOS/Cra" "$APP"/Contents/Frameworks/*.app/Contents/MacOS/* \
+for exe in "$APP/Contents/MacOS/Cra" "$APP/Contents/MacOS/CraPluginHost" "$APP"/Contents/Frameworks/*.app/Contents/MacOS/* \
            "$DOCK_TILE/Contents/MacOS/CraDockTile" \
            "$APP/Contents/Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework" \
            "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/Sparkle"; do
@@ -138,6 +144,7 @@ SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
 sign "$SPARKLE/Versions/B/Autoupdate"
 sign "$SPARKLE/Versions/B/Updater.app"
 sign "$SPARKLE"
+sign "$APP/Contents/MacOS/CraPluginHost"
 for h in "$APP"/Contents/Frameworks/*.app; do sign "$h" "$ROOT/resources/CraHelper.entitlements"; done
 sign "$DOCK_TILE"
 # Passkeys need entitlements only a provisioning profile can grant: the Touch ID
@@ -165,6 +172,31 @@ if [ -n "${CRA_PROVISIONING_PROFILE:-}" ] && [ "$IDENTITY" != "-" ]; then
     $PB -c "Add :com.apple.developer.web-browser.public-key-credential bool true" "$APP_ENTITLEMENTS"
   else
     echo "Note: the provisioning profile has no web-browser.public-key-credential; iCloud Keychain passkeys stay off" >&2
+  fi
+  # iCloud sync (Settings ▸ General ▸ Sync) needs the container entitlements the profile grants
+  # once iCloud Documents is on for the App ID. The first container is also named in Info.plist,
+  # so the folder shows in iCloud Drive as "Cra".
+  if CONTAINER="$($PB -c "Print :Entitlements:com.apple.developer.ubiquity-container-identifiers:0" "$PROFILE" 2>/dev/null)"; then
+    for key in com.apple.developer.ubiquity-container-identifiers com.apple.developer.icloud-container-identifiers; do
+      $PB -c "Add :$key array" "$APP_ENTITLEMENTS"
+      i=0
+      while id="$($PB -c "Print :Entitlements:com.apple.developer.ubiquity-container-identifiers:$i" "$PROFILE" 2>/dev/null)"; do
+        $PB -c "Add :$key:$i string $id" "$APP_ENTITLEMENTS"
+        i=$((i + 1))
+      done
+    done
+    $PB -c "Add :com.apple.developer.icloud-services array" -c "Add :com.apple.developer.icloud-services:0 string CloudDocuments" "$APP_ENTITLEMENTS"
+    # A Developer ID profile grants Development and Production; a distributed build uses
+    # Production, as Xcode's Developer ID export claims it.
+    if $PB -c "Print :Entitlements:com.apple.developer.icloud-container-environment" "$PROFILE" >/dev/null 2>&1; then
+      $PB -c "Add :com.apple.developer.icloud-container-environment string Production" "$APP_ENTITLEMENTS"
+    fi
+    $PB -c "Add :NSUbiquitousContainers dict" -c "Add :NSUbiquitousContainers:$CONTAINER dict" \
+        -c "Add :NSUbiquitousContainers:$CONTAINER:NSUbiquitousContainerIsDocumentScopePublic bool true" \
+        -c "Add :NSUbiquitousContainers:$CONTAINER:NSUbiquitousContainerName string Cra" \
+        -c "Add :NSUbiquitousContainers:$CONTAINER:NSUbiquitousContainerSupportedFolderLevels string Any" "$APP/Contents/Info.plist"
+  else
+    echo "Note: the provisioning profile grants no iCloud container; iCloud sync stays off" >&2
   fi
 fi
 sign "$APP" "$APP_ENTITLEMENTS"

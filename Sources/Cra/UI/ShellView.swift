@@ -670,8 +670,10 @@ final class ShellView: NSView {
 
     func apply(_ f: Frames) {
         if !sidebarDetached { sidebarHost.frame = f.sidebar }
-        resizeHandle.frame = f.handle
-        resizeHandle.isHidden = f.handle.isEmpty || !sidebarResizable
+        if !resizeHandle.dragging {
+            resizeHandle.frame = f.handle
+            resizeHandle.isHidden = f.handle.isEmpty || !sidebarResizable
+        }
         contentContainer.frame = f.content
         placeLoadingIndicator(over: f.content)
         cardCornerRadius = f.cornerRadius
@@ -873,9 +875,20 @@ final class ShellView: NSView {
 /// Thin vertical strip between sidebar and content that drags the width.
 final class ResizeHandleView: NSView {
     var onDrag: ((CGFloat) -> Void)?
+    /// A press on the strip; `onResize` then gets the whole drag.
+    var onBegin: (() -> Void)?
+    /// Points from where the press began (+ wider) and the pointer's speed in points a second;
+    /// called instead of `onDrag` when set (the sidebar, #287: Arc keeps the edge under the
+    /// pointer, snaps at slow speeds and hides the sidebar when dragged far enough).
+    var onResize: ((_ translation: CGFloat, _ speed: CGFloat) -> Void)?
     var onEnd: (() -> Void)?
     private var lastX: CGFloat = 0
-    private var dragging = false
+    private var startX: CGFloat = 0
+    private var lastTime: TimeInterval = 0
+    private var speed: CGFloat = 0
+    /// A press on the strip is in progress. The shell keeps the strip in place meanwhile, even
+    /// when the drag hides the sidebar: a hidden view gets no more of the drag (#287).
+    private(set) var dragging = false
     private var tracking: NSTrackingArea?
 
     /// The window is movable by its background; this strip must own its drags.
@@ -897,16 +910,28 @@ final class ResizeHandleView: NSView {
     override func mouseEntered(with event: NSEvent) { NSCursor.resizeLeftRight.set() }
     override func mouseExited(with event: NSEvent) { if !dragging { NSCursor.arrow.set() } }
 
-    override func mouseDown(with event: NSEvent) { lastX = event.locationInWindow.x; dragging = true }
+    override func mouseDown(with event: NSEvent) {
+        lastX = event.locationInWindow.x
+        startX = lastX
+        lastTime = event.timestamp
+        speed = 0
+        dragging = true
+        onBegin?()
+    }
     override func mouseDragged(with event: NSEvent) {
         let x = event.locationInWindow.x
-        onDrag?(x - lastX)
+        let dt = event.timestamp - lastTime
+        // Smoothed like a pan recognizer's velocity, so one quick event doesn't read as a fling.
+        if dt > 0 { speed = speed * 0.5 + (x - lastX) / CGFloat(dt) * 0.5 }
+        if let onResize { onResize(x - startX, speed) } else { onDrag?(x - lastX) }
         lastX = x
+        lastTime = event.timestamp
         NSCursor.resizeLeftRight.set()
     }
     override func mouseUp(with event: NSEvent) {
         dragging = false
         onEnd?()
+        superview?.needsLayout = true
         if !bounds.contains(convert(event.locationInWindow, from: nil)) { NSCursor.arrow.set() }
     }
 }

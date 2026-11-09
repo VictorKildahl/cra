@@ -11,8 +11,9 @@ import Foundation
 public enum LiveFolderSource: String, Codable {
     case github
     case gitlab
+    case plugin
 
-    public var title: String { self == .github ? "GitHub" : "GitLab" }
+    public var title: String { self == .github ? "GitHub" : self == .gitlab ? "GitLab" : "Live Folder" }
 }
 
 /// Which pull requests a GitHub live folder shows. Arc saves `attributes` as a bit mask (7 = all three).
@@ -77,6 +78,7 @@ public enum GitLabLiveCategory: String, Codable, CaseIterable {
 }
 
 public struct LiveFolderData: Codable, Equatable {
+    public var plugin: LiveFolderPluginConfiguration?
     public var source: LiveFolderSource = .github
     /// GitLab: the instance's base URL (GitLabLiveClient.serverURL), gitlab.com or self-managed.
     public var serverURL: String?
@@ -94,6 +96,7 @@ public struct LiveFolderData: Codable, Equatable {
 
     /// Where to sign in again.
     public var signInURL: String {
+        if let url = plugin?.signIn?.url { return url }
         if source == .gitlab { return "\(serverURL ?? "https://gitlab.com")/users/sign_in" }
         if let enterprise { return "https://github.com/enterprises/\(enterprise)/sso" }
         return "https://github.com/login?return_to=%2Fpulls"
@@ -122,7 +125,12 @@ public struct LiveFolderData: Codable, Equatable {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        source = try c.decodeIfPresent(LiveFolderSource.self, forKey: .source) ?? .github
+        plugin = try? c.decodeIfPresent(LiveFolderPluginConfiguration.self, forKey: .plugin)
+        // A source this Cra doesn't know (a newer one's) reads as a plugin folder rather than
+        // failing the whole sidebar.json, which is what 0.1.37 and older do with "plugin".
+        if let raw = try c.decodeIfPresent(String.self, forKey: .source) {
+            source = LiveFolderSource(rawValue: raw) ?? .plugin
+        }
         serverURL = try c.decodeIfPresent(String.self, forKey: .serverURL)
         filter = try c.decodeIfPresent(GitHubLiveFilter.self, forKey: .filter) ?? GitHubLiveFilter()
         hiddenItems = try c.decodeIfPresent([String].self, forKey: .hiddenItems) ?? []

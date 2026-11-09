@@ -219,8 +219,7 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
 
     private func refresh() {
         let lit = hovering || menuOpen || renameField != nil
-        // Arc's dark header title is dimmer than its other secondary text (white 0.45, 1 Nov).
-        title.textColor = colors.isDark ? NSColor.white.withAlphaComponent(0.45) : colors.textSecondary
+        title.textColor = colors.sectionTitle
         done.textColor = colors.textTertiary
         chevron.contentTintColor = colors.textSecondary
         more.tint = colors.textSecondary
@@ -446,16 +445,7 @@ enum SpaceMenu {
             ui.renamingID = store.createFolder(named: "New Folder", in: space.pinnedContainerID, index: 0).id
         }
         let live = MenuItems.submenu(m, "Live Folders")
-        let github = store.liveFolder(.github, inSpace: id)
-        MenuItems.add(live, "GitHub", on: github != nil) {
-            if let github {
-                SidebarMenus.confirmDeleteLiveFolder(github, store: store, in: anchor.window)
-            } else if let f = store.createLiveFolder(.github, inSpace: id) {
-                store.setExpanded(f.id, true)
-                LiveFolderManager.shared.refresh(f.id)
-            }
-        }
-        SidebarMenus.addGitLabFolders(to: live, space: id, store: store, window: anchor.window)
+        SidebarMenus.addLiveFolderPlugins(to: live, space: id, store: store, window: anchor.window)
         m.addItem(.separator())
         let export = MenuItems.submenu(m, "Export “\(space.title)” into Folder")
         for s in store.orderedSpaces {
@@ -1092,6 +1082,9 @@ struct FavoriteTileModel: Equatable {
 
 enum FavoriteTileMetrics {
     static let corner: CGFloat = 13
+    /// A site's icon on a tile (Arc 1.172.1 at 1x, 9 Nov 2026, GitHub #293): 16 pt, centred with the
+    /// half point dropped, so 15 pt under the top of a 47 pt tile. Cra drew 20 pt, which looked heavy.
+    static let favicon: CGFloat = 16
     /// The cut between a split's cells (AppTrayItemMaskShape.lineWidth).
     static let cut: CGFloat = 2
 
@@ -1133,6 +1126,8 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
     private var hoveredCell: Int? { didSet { if hoveredCell != oldValue { ArcTooltipController.shared.mouseExited(self) } } }
     private var hovering = false { didSet { if hovering != oldValue { refresh() } } }
     private var press: NSEvent?
+    /// Scenarios (cra://debug?hover=FavoriteTileView,n): the tile as the pointer leaves it hovered (#293).
+    func debugHover() { hovering = true }
 
     init(itemID: UUID, spaceID: UUID, grid: FavoritesGridView) {
         self.itemID = itemID
@@ -1182,7 +1177,7 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         self.palette = palette
         setAccessibilityLabel(m.title)
         while favicons.count < m.cells.count {
-            let f = SidebarFaviconView(size: 20)
+            let f = SidebarFaviconView(size: FavoriteTileMetrics.favicon)
             favicons.append(f)
             addSubview(f)
         }
@@ -1211,7 +1206,7 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
             shade.backgroundColor = (m.selected || hovering ? (dark ? NSColor.white.withAlphaComponent(0.12) : NSColor.black.withAlphaComponent(0.07)) : .clear).cgColor
         } else {
             let fill: NSColor = m.selected ? (palette.isDark ? NSColor.white.withAlphaComponent(0.13) : NSColor.white.withAlphaComponent(0.38))
-                : (hovering ? (palette.isDark ? NSColor.white.withAlphaComponent(0.15) : NSColor.black.withAlphaComponent(0.09)) : NSColor(palette.pillFill))
+                : NSColor(hovering ? palette.pillHoverFill : palette.pillFill)
             layer?.backgroundColor = fill.cgColor
             shade.backgroundColor = NSColor.clear.cgColor
         }
@@ -1256,7 +1251,10 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
                              cornerWidth: FavoriteTileMetrics.corner - inset,
                              cornerHeight: FavoriteTileMetrics.corner - inset, transform: nil)
         let cells = cellFrames
-        for (f, r) in zip(favicons, cells) { f.frame = NSRect(x: (r.midX - 10).rounded(), y: (r.midY - 10).rounded(), width: 20, height: 20) }
+        let side = FavoriteTileMetrics.favicon
+        for (f, r) in zip(favicons, cells) {
+            f.frame = NSRect(x: (r.midX - side / 2).rounded(.down), y: (r.midY - side / 2).rounded(.down), width: side, height: side)
+        }
         if cells.count > 1, layer?.mask != nil {
             // The cuts are holes in the tile (even-odd), so fill, rim and focus ring all stop at them.
             let path = CGMutablePath()
@@ -1386,7 +1384,15 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         // A split opens with the pressed pane focused.
         let cells = model?.cells ?? []
         let i = cellIndex(at: convert(p.locationInWindow, from: nil))
-        grid.store.selectTab(cells.indices.contains(i) ? cells[i].id : itemID, window: grid.ui.windowID)
+        let id = cells.indices.contains(i) ? cells[i].id : itemID
+        grid.store.selectTab(id, window: grid.ui.windowID)
+        // A double-click on a favorite away from its pinned page goes back there (#264); in a
+        // split, the pressed pane.
+        let away = grid.store.item(id)?.tab.map { $0.url != $0.savedURL } ?? false
+        if FavoriteClick.action(clickCount: event.clickCount, navigatedAway: away) == .backToPinnedPage {
+            CraLog.note("favorite double-click: back to pinned page")
+            grid.actions.resetPinnedTab(id)
+        }
     }
 
     func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {

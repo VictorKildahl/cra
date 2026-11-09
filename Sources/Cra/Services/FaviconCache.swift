@@ -7,6 +7,7 @@ import Observation
 @MainActor
 @Observable
 final class FaviconCache {
+    private static let persistenceQueue = DispatchQueue(label: "dk.kildahl.cra.favicons", qos: .utility)
     private(set) var images: [String: NSImage] = [:]
     private var attemptedDiskLoad: Set<String> = []
 
@@ -151,11 +152,13 @@ final class FaviconCache {
 
     /// `persist` false keeps the icon in memory only (incognito pages).
     func store(_ image: NSImage, forKey key: String, persist: Bool = true) {
+        dominant[key] = nil
+        glyphTone[key] = nil
         images[key] = image
         selectionPalettes[key] = nil
         guard persist else { return }
         let file = AppPaths.favicons.appendingPathComponent(Self.fileName(key))
-        DispatchQueue.global(qos: .utility).async {
+        Self.persistenceQueue.async {
             guard let tiff = image.tiffRepresentation,
                   let rep = NSBitmapImageRep(data: tiff),
                   let png = rep.representation(using: .png, properties: [:]) else { return }

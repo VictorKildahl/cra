@@ -1,0 +1,28 @@
+# promise: #293
+# Jelena Jansson's sidebar list (#293), measured against Arc 1.172.1 on 9 Nov 2026: a favorite's icon is
+# 16 pt (Cra drew 20), the space header's title is black 0.46 on a light theme (was 0.5), and the URL pill
+# and the favorite tiles share one hover, black 0.09 on a light theme and white 0.145 on a dark one, white
+# 0.095 at rest there (the pill went near-white on light themes). The hidden sidebar's wait, curves, leave
+# boundary and shadow are pinned in Tests/FloatingSidebarTests.swift.
+budget rss=600 stalls50=10
+port 47124
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "autoArchiveEnabled": false}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Light","emoji":"☀️","theme":{"colors":["#F8D558","#F2C46B"],"intensity":0.8,"noise":0,"appearance":"light","accent":"#F8D558","solid":true,"key":["#F8D558"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-09T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Dark","emoji":"🌙","theme":{"colors":["#2B2734","#2B2734"],"intensity":1,"noise":0,"appearance":"dark","accent":"#01021F","solid":true,"key":["#2B2734"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-09T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":["E0000000-0000-0000-0000-000000000011","E0000000-0000-0000-0000-000000000012"],"isUnread":false,"createdAt":"2026-11-09T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"E0000000-0000-0000-0000-000000000011","parentID":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-09T08:00:00Z","data":{"tab":{"_0":{"url":"http://127.0.0.1:47124/?n=fav1","savedTitle":"Favorite 1"}}}},{"id":"E0000000-0000-0000-0000-000000000012","parentID":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-09T08:00:00Z","data":{"tab":{"_0":{"url":"http://127.0.0.1:47124/?n=fav2","savedTitle":"Favorite 2"}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-09T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-09T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":["E0000000-0000-0000-0000-000000000021","E0000000-0000-0000-0000-000000000022"],"isUnread":false,"createdAt":"2026-11-09T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"E0000000-0000-0000-0000-000000000021","parentID":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-09T08:00:00Z","data":{"tab":{"_0":{"url":"http://127.0.0.1:47124/?n=fav1","savedTitle":"Favorite 1"}}}},{"id":"E0000000-0000-0000-0000-000000000022","parentID":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-09T08:00:00Z","data":{"tab":{"_0":{"url":"http://127.0.0.1:47124/?n=fav2","savedTitle":"Favorite 2"}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-09T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-09T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+cra://debug?windowSize=1280x800
+wait 2
+snapshot FavoritesGridView sidebar-parity-favorites-light
+snapshot SpaceHeaderView sidebar-parity-header-light
+cra://open?url=${PAGE}?n=parity
+wait 3
+cra://debug?hover=SidebarURLPill
+snapshot SidebarURLPill sidebar-parity-url-pill-hover-light
+cra://debug?hover=FavoriteTileView,1
+snapshot FavoriteTileView,1 sidebar-parity-tile-hover-light
+cra://action/space2
+wait 2
+snapshot FavoritesGridView sidebar-parity-favorites-dark
+snapshot SpaceHeaderView sidebar-parity-header-dark
+cra://debug?hover=SidebarURLPill
+snapshot SidebarURLPill sidebar-parity-url-pill-hover-dark
+cra://debug?hover=FavoriteTileView,1
+snapshot FavoriteTileView,1 sidebar-parity-tile-hover-dark

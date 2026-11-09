@@ -58,6 +58,16 @@ final class ShinyToast {
     private let view = ToastView()
     private let pill = CAGradientLayer()
     private let label = CATextLayer()
+    /// A key cap inside the text and the words after it (Arc's tip after hiding the sidebar by
+    /// dragging: "You can use [⌘S] to easily show and hide your Sidebar!", #287; 1x capture, cap
+    /// about 36 × 25 pt, radius 6, 8 pt either side, a wash of the text colour).
+    private let cap = CALayer()
+    private let capLabel = CATextLayer()
+    private let labelAfter = CATextLayer()
+    static let capFont = NSFont.systemFont(ofSize: 13, weight: .semibold)
+    static let capHeight: CGFloat = 25
+    static let capPadding: CGFloat = 8
+    static let capGap: CGFloat = 8
     private let button = CALayer()
     private let buttonLabel = CATextLayer()
     private let buttonGlyph = CALayer()
@@ -92,6 +102,18 @@ final class ShinyToast {
         label.alignmentMode = .center
         label.foregroundColor = NSColor.black.cgColor
         pill.addSublayer(label)
+        for l in [labelAfter, capLabel] {
+            l.alignmentMode = .left
+            pill.addSublayer(l)
+        }
+        labelAfter.font = Self.font
+        labelAfter.fontSize = Self.font.pointSize
+        capLabel.font = Self.capFont
+        capLabel.fontSize = Self.capFont.pointSize
+        capLabel.alignmentMode = .center
+        cap.cornerRadius = 6
+        cap.cornerCurve = .continuous
+        pill.insertSublayer(cap, below: capLabel)
         button.cornerRadius = Self.buttonHeight / 2
         button.cornerCurve = .continuous
         buttonLabel.font = Self.buttonFont
@@ -128,17 +150,24 @@ final class ShinyToast {
 
     /// `onClose`: the toast stays until its ✕ is pressed (or its action runs), and this is told
     /// then; something Cra has to be sure the user saw. Without it, the toast goes on its time.
-    func show(_ text: String, action: Action? = nil, page: NSRect, in window: NSWindow, theme: SpaceTheme, onClose: (() -> Void)? = nil) {
-        show(text, action: action, page: page, in: window, colors: Self.colors(theme), onClose: onClose)
+    func show(_ text: String, keyCap: (keys: String, after: String)? = nil, action: Action? = nil, page: NSRect, in window: NSWindow,
+              theme: SpaceTheme, onClose: (() -> Void)? = nil) {
+        show(text, keyCap: keyCap, action: action, page: page, in: window, colors: Self.colors(theme), onClose: onClose)
     }
 
-    func show(_ text: String, action: Action? = nil, page: NSRect, in window: NSWindow, colors: Colors, onClose: (() -> Void)? = nil) {
+    /// `keyCap`: `text`, then the keys in a cap, then `after` (no button with it).
+    func show(_ text: String, keyCap: (keys: String, after: String)? = nil, action: Action? = nil, page: NSRect, in window: NSWindow,
+              colors: Colors, onClose: (() -> Void)? = nil) {
         self.action = action
         persistent = onClose != nil
         self.onClose = onClose
         let closeRoom = persistent ? Self.closeGap + Self.closeSize : 0
         let glyph = action?.symbol
-        let textWidth = ceil((text as NSString).size(withAttributes: [.font: Self.font]).width)
+        let measure = { (t: String, f: NSFont) in ceil((t as NSString).size(withAttributes: [.font: f]).width) }
+        let capWidth = keyCap.map { measure($0.keys, Self.capFont) + 2 * Self.capPadding }
+        let afterWidth = keyCap.map { measure($0.after, Self.font) } ?? 0
+        let lead = measure(text, Self.font)
+        let textWidth = capWidth.map { lead + Self.capGap + $0 + Self.capGap + afterWidth } ?? lead
         let buttonWidth = glyph != nil ? Self.glyphButton.width
             : action.map { ceil(($0.title as NSString).size(withAttributes: [.font: Self.buttonFont]).width) + 2 * Self.buttonPadding }
         let height = glyph != nil ? Self.glyphHeight : Self.height
@@ -164,6 +193,26 @@ final class ShinyToast {
         let lineHeight = ceil(Self.font.ascender - Self.font.descender)
         label.frame = CGRect(x: buttonWidth == nil ? 0 : glyph != nil ? Self.glyphPadding : Self.padding, y: (height - lineHeight) / 2,
                              width: buttonWidth == nil ? width : textWidth, height: lineHeight)
+        cap.isHidden = keyCap == nil
+        capLabel.isHidden = keyCap == nil
+        labelAfter.isHidden = keyCap == nil
+        if let keyCap, let capWidth {
+            label.alignmentMode = .left
+            label.frame = CGRect(x: Self.padding, y: (height - lineHeight) / 2, width: lead, height: lineHeight)
+            cap.frame = CGRect(x: Self.padding + lead + Self.capGap, y: (height - Self.capHeight) / 2, width: capWidth, height: Self.capHeight)
+            cap.backgroundColor = colors.text.withAlphaComponent(0.1).cgColor
+            let capLine = ceil(Self.capFont.ascender - Self.capFont.descender)
+            capLabel.frame = CGRect(x: cap.frame.minX, y: (height - capLine) / 2, width: capWidth, height: capLine)
+            capLabel.string = keyCap.keys
+            capLabel.foregroundColor = colors.text.cgColor
+            capLabel.contentsScale = scale
+            labelAfter.frame = CGRect(x: cap.frame.maxX + Self.capGap, y: (height - lineHeight) / 2, width: afterWidth, height: lineHeight)
+            labelAfter.string = keyCap.after
+            labelAfter.foregroundColor = colors.text.cgColor
+            labelAfter.contentsScale = scale
+        } else {
+            label.alignmentMode = .center
+        }
         button.isHidden = buttonWidth == nil
         buttonLabel.isHidden = glyph != nil
         buttonGlyph.isHidden = glyph == nil

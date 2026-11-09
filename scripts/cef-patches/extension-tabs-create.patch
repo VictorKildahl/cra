@@ -1,0 +1,181 @@
+diff --git a/cef/libcef/browser/chrome/browser_delegate.h b/cef/libcef/browser/chrome/browser_delegate.h
+--- a/cef/libcef/browser/chrome/browser_delegate.h
++++ b/cef/libcef/browser/chrome/browser_delegate.h
+@@ -116,6 +116,14 @@
+   virtual void SetAsDelegate(content::WebContents* web_contents,
+                              bool set_delegate) = 0;
+ 
++  // Cra: chrome.tabs.create with this browser as the extension's current
++  // window. Returns the new tab's WebContents, hosted the way a popup from this
++  // browser is, or nullptr to let Chrome open the tab its own way.
++  virtual content::WebContents* OpenExtensionTab(const GURL& url,
++                                                 bool active) {
++    return nullptr;
++  }
++
+   // Return true to show the status bubble. This should consistently return the
+   // same value for the lifespan of a Browser.
+   virtual bool ShowStatusBubble(bool show_by_default) {
+diff --git a/cef/libcef/browser/chrome/chrome_browser_delegate.cc b/cef/libcef/browser/chrome/chrome_browser_delegate.cc
+--- a/cef/libcef/browser/chrome/chrome_browser_delegate.cc
++++ b/cef/libcef/browser/chrome/chrome_browser_delegate.cc
+@@ -21,11 +21,13 @@
+ #include "cef/libcef/browser/views/window_impl.h"
+ #include "cef/libcef/common/app_manager.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/tab_contents/tab_util.h"
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_tabstrip.h"
+ #include "chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h"
+ #include "chrome/browser/ui/window_feature_controller/window_feature_controller.h"
+ #include "content/public/browser/global_routing_id.h"
++#include "content/public/browser/navigation_controller.h"
+ #include "third_party/blink/public/mojom/page/draggable_region.mojom.h"
+ 
+ ChromeBrowserDelegate::ChromeBrowserDelegate(
+@@ -198,6 +200,84 @@
+   auto browser = browser_host->browser();
+   CHECK(browser);
+   return browser;
++}
++
++// Cra: Chrome opens an extension's chrome.tabs.create in a tabbed Browser of
++// its own, which a client sees only as a browser with the default client. Cra
++// replaced it with a page of its own, and the extension was left with the id of
++// a tab that never loaded (GitHub #292). Here the new tab is offered to this
++// browser's client the way a window.open popup is: OnBeforePopup, with
++// "cra_extension_tab" in |extra_info|, which no page can set (a page picks its
++// popup's frame name). When the client takes it, the WebContents becomes a
++// Views-hosted popup Browser's only tab, the one the extension gets back. Steps
++// as in CreateDevToolsBrowser above.
++content::WebContents* ChromeBrowserDelegate::OpenExtensionTab(const GURL& url,
++                                                              bool active) {
++  if (!IsViewsHosted() || browser_->GetType() != Browser::TYPE_POPUP) {
++    return nullptr;
++  }
++  auto opener_host = ChromeBrowserHostImpl::GetBrowserForBrowser(browser_);
++  if (!opener_host) {
++    return nullptr;
++  }
++  auto opener_client = opener_host->GetClient();
++  auto life_span_handler =
++      opener_client ? opener_client->GetLifeSpanHandler() : nullptr;
++  if (!life_span_handler) {
++    return nullptr;
++  }
++
++  // 1. Ask the client, starting with the opener's client and settings.
++  CefBrowserCreateParams create_params;
++  create_params.client = opener_client;
++  create_params.settings = opener_host->settings();
++  create_params.extra_info = CefDictionaryValue::Create();
++  create_params.extra_info->SetBool("cra_extension_tab", true);
++  CefWindowInfo window_info;
++  CefBrowserCreateParams::InitWindowInfo(&window_info, opener_host.get());
++  CefPopupFeatures features;
++  bool no_javascript_access = false;
++  if (life_span_handler->OnBeforePopup(
++          opener_host.get(), opener_host->GetMainFrame(),
++          opener_host->GetNextPopupId(), url.spec(), CefString(),
++          active ? CEF_WOD_NEW_FOREGROUND_TAB : CEF_WOD_NEW_BACKGROUND_TAB,
++          /*user_gesture=*/false, features, window_info, create_params.client,
++          create_params.settings, create_params.extra_info,
++          &no_javascript_access) ||
++      !create_params.client) {
++    return nullptr;
++  }
++  create_params.MaybeSetWindowInfo(window_info, /*allow_alloy_style=*/false,
++                                   /*allow_chrome_style=*/true);
++  create_params.popup_with_views_hosted_opener =
++      CefBrowserInfoManager::ShouldCreateViewsHostedPopup(
++          opener_host, /*use_default_browser_creation=*/false);
++  create_params.popup_with_alloy_style_opener = false;
++  auto platform_delegate = CefBrowserPlatformDelegate::Create(create_params);
++  CHECK(platform_delegate);
++  CHECK(platform_delegate->IsChromeStyle());
++
++  // 2. The tab's WebContents, as chrome::Navigate makes one for a new tab, and
++  // its browser host. OnPopupBrowserViewCreated gives the client the view.
++  Profile* profile = browser_->GetProfile();
++  content::WebContents::CreateParams contents_params(
++      profile, tab_util::GetSiteInstanceForNewTab(profile, url));
++  contents_params.initially_hidden = !active;
++  std::unique_ptr<content::WebContents> contents =
++      content::WebContents::Create(contents_params);
++  content::WebContents* new_contents = contents.get();
++  auto browser_host = ChromeBrowserDelegate::CreateBrowserHostForPopup(
++      new_contents, create_params.settings, create_params.client,
++      create_params.extra_info, std::move(platform_delegate),
++      /*is_devtools_popup=*/false, opener_host);
++
++  // 3. The popup Browser, which adds the WebContents to its tab strip (tab
++  // helpers, the tab id, tabs.onCreated), then the page.
++  browser_host->AddNewContents(std::move(contents), std::nullopt);
++  content::NavigationController::LoadURLParams load(url);
++  load.transition_type = ui::PAGE_TRANSITION_LINK;
++  new_contents->GetController().LoadURLWithParams(load);
++  return new_contents;
+ }
+ 
+ std::unique_ptr<content::WebContents> ChromeBrowserDelegate::AddWebContents(
+diff --git a/cef/libcef/browser/chrome/chrome_browser_delegate.h b/cef/libcef/browser/chrome/chrome_browser_delegate.h
+--- a/cef/libcef/browser/chrome/chrome_browser_delegate.h
++++ b/cef/libcef/browser/chrome/chrome_browser_delegate.h
+@@ -69,6 +69,8 @@
+       content::WebContents* new_contents) override;
+   void SetAsDelegate(content::WebContents* web_contents,
+                      bool set_delegate) override;
++  content::WebContents* OpenExtensionTab(const GURL& url,
++                                         bool active) override;
+   bool ShowStatusBubble(bool show_by_default) override;
+   bool HandleCommand(int command_id,
+                      WindowOpenDisposition disposition) override;
+diff --git a/chrome/browser/extensions/api/tabs/tabs_api.cc b/chrome/browser/extensions/api/tabs/tabs_api.cc
+--- a/chrome/browser/extensions/api/tabs/tabs_api.cc
++++ b/chrome/browser/extensions/api/tabs/tabs_api.cc
+@@ -2457,8 +2457,43 @@
+   options.index = index_;
+   options.split_with_tab_id = split_with_tab_id_;
+ 
+-  base::expected<content::WebContents*, std::string> result =
+-      OpenTabHelper::OpenTab(validated_url_, browser, *this, options);
++  base::expected<content::WebContents*, std::string> result = nullptr;
++#if BUILDFLAG(ENABLE_CEF)
++  // Cra: every page is a Views-hosted popup Browser that takes no more tabs,
++  // so Chrome put this tab in a tabbed window of its own, which Cra replaced
++  // with a page of its own: the id given back never loaded (GitHub #292). The
++  // client opens the tab instead, as one of its pages: the extension's current
++  // window if it is one, else the page in use last on the same profile.
++  BrowserWindowInterface* cef_browser = nullptr;
++  if (!split_with_tab_id_) {
++    auto is_page = [&browser](BrowserWindowInterface* candidate) {
++      return candidate->GetProfile() == browser.GetProfile() &&
++             candidate->cef_delegate() &&
++             candidate->cef_delegate()->IsViewsHosted() &&
++             candidate->GetType() == BrowserWindowInterface::TYPE_POPUP;
++    };
++    if (is_page(&browser)) {
++      cef_browser = &browser;
++    } else {
++      ForEachCurrentBrowserWindowInterfaceOrderedByActivation(
++          [&](BrowserWindowInterface* candidate) {
++            if (!is_page(candidate)) {
++              return true;
++            }
++            cef_browser = candidate;
++            return false;
++          });
++    }
++  }
++  content::WebContents* cef_contents =
++      cef_browser ? cef_browser->cef_delegate()->OpenExtensionTab(
++                        validated_url_, active_.value_or(true))
++                  : nullptr;
++  if (cef_contents) {
++    result = cef_contents;
++  } else
++#endif
++  result = OpenTabHelper::OpenTab(validated_url_, browser, *this, options);
+   if (!result.has_value()) {
+     Respond(Error(result.error()));
+     return;

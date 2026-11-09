@@ -65,6 +65,21 @@ final class KeyBindingRegistry {
     private(set) var actions: [KeyAction]
     @ObservationIgnored private let overridesFile = JSONStore<[String: [Shortcut]]>("keybindings.json")
     @ObservationIgnored private var overrides: [String: [Shortcut]]
+    @ObservationIgnored private var pluginActions: [KeyAction] = []
+
+    private var defaultActions: [KeyAction] {
+        var defaults = Self.defaults
+        let index = defaults.firstIndex { $0.id == "newFolder" }.map { $0 + 1 } ?? defaults.endIndex
+        defaults.insert(contentsOf: pluginActions, at: index)
+        return defaults
+    }
+
+    func setPluginActions(_ values: [KeyAction]) {
+        pluginActions = values
+        actions = defaultActions
+        apply()
+        NotificationCenter.default.post(name: .craKeyBindingsChanged, object: nil)
+    }
 
     init() {
         actions = KeyBindingRegistry.defaults
@@ -92,16 +107,25 @@ final class KeyBindingRegistry {
     func resetShortcuts(for id: String) {
         overrides[id] = nil
         overridesFile.save(overrides)
-        if let d = KeyBindingRegistry.defaults.first(where: { $0.id == id }), let i = actions.firstIndex(where: { $0.id == id }) {
+        if let d = defaultActions.first(where: { $0.id == id }), let i = actions.firstIndex(where: { $0.id == id }) {
             actions[i].shortcuts = d.shortcuts
         }
+        NotificationCenter.default.post(name: .craKeyBindingsChanged, object: nil)
+    }
+
+    /// keybindings.json was written by another Mac's bundle (SettingsSyncService): read it again.
+    func reloadOverrides() {
+        overrides = overridesFile.load(or: { [:] })
+        // With the plugins' commands: the built-in list alone would drop New GitHub Live Folder and the rest.
+        actions = defaultActions
+        apply()
         NotificationCenter.default.post(name: .craKeyBindingsChanged, object: nil)
     }
 
     func resetOverrides() {
         overrides = [:]
         overridesFile.saveNow(overrides)
-        actions = KeyBindingRegistry.defaults
+        actions = defaultActions
         NotificationCenter.default.post(name: .craKeyBindingsChanged, object: nil)
     }
 
@@ -136,9 +160,9 @@ final class KeyBindingRegistry {
             KeyAction(id: "reopenClosedTab", name: "Restore Last Closed Tab", section: .file, shortcuts: [Shortcut("t", cmdShift)], triggers: ["reopen", "undo close", "restore"]),
             KeyAction(id: "editURL", name: "Open Command Bar", section: .file, shortcuts: [Shortcut("l", cmd)], triggers: ["url", "address", "command bar"]),
             KeyAction(id: "newFolder", name: "New Folder", section: .file, shortcuts: [], triggers: ["folder"]),
-            KeyAction(id: "newGitHubLiveFolder", name: "New GitHub Live Folder", section: .file, shortcuts: [],
-                      triggers: ["live folder", "pull requests", "github"]),
             KeyAction(id: "newSpace", name: "New Space…", section: .file, shortcuts: [], triggers: ["space"]),
+            // Arc: File ▸ New Profile, the dialog Set Profile ▸ New Profile… opens (#279).
+            KeyAction(id: "newProfile", name: "New Profile", section: .file, shortcuts: [], triggers: ["profile"]),
             // Arc's command bar: New Boost, the open site's boost.
             KeyAction(id: "newBoost", name: "New Boost", section: .none, shortcuts: [], triggers: ["boost", "restyle", "zap"],
                       symbol: "paintbrush.pointed"),
@@ -147,11 +171,13 @@ final class KeyBindingRegistry {
                       triggers: ["easel", "whiteboard", "canvas", "draw"]),
             KeyAction(id: "closeWindow", name: "Close Window", section: .file, shortcuts: [Shortcut("w", cmdShift)], inCommandBar: false),
             KeyAction(id: "closeTab", name: "Close Tab", section: .file, shortcuts: [Shortcut("w", cmd)], triggers: ["close", "archive tab"]),
+            // Arc: File ▸ Share…, the system's share list for the page (#279).
+            KeyAction(id: "share", name: "Share…", section: .file, shortcuts: [], triggers: ["share", "airdrop"]),
             KeyAction(id: "capturePage", name: "Capture…", section: .file, shortcuts: [Shortcut("2", cmdShift)], triggers: ["capture", "screenshot"]),
             // Arc: File ▸ Capture Full Page, Save Page As ⇧⌘S.
             KeyAction(id: "captureFullPage", name: "Capture Full Page", section: .file, shortcuts: [], triggers: ["full page", "screenshot"]),
             KeyAction(id: "capturePortrait", name: "Capture in Portrait Mode", section: .file, shortcuts: [], triggers: ["portrait", "mobile screenshot"]),
-            KeyAction(id: "savePageAs", name: "Save Page As…", section: .file, shortcuts: [Shortcut("s", cmdShift)], triggers: ["save page", "download page"]),
+            KeyAction(id: "savePageAs", name: "Save Page As", section: .file, shortcuts: [Shortcut("s", cmdShift)], triggers: ["save page", "download page"]),
             KeyAction(id: "print", name: "Print", section: .file, shortcuts: [Shortcut("p", cmd)]),
             // Edit
             KeyAction(id: "copyURL", name: "Copy URL", section: .edit, shortcuts: [Shortcut("c", cmdShift)], triggers: ["copy link"]),
