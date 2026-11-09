@@ -1809,6 +1809,10 @@ the arm64 slice. [O] = observed, [I] = inferred.
   Links ▸ "Air Traffic Control…" (`UI/Settings/AirTrafficControlView.swift`, Arc's geometry within 1 pt, 440 tall to
   fit Cra's Settings window, the window's own background instead of Arc's navy). The Arc import brings the routes
   and default along, matching spaces by title. Compare: docs/screenshots/compare-air-traffic-control.png.
+  Past Arc (#258): a Little Window destination can name a space, `littleWindow(space:)`, picked in a second popup
+  under "Little Window"; the page loads in that space's profile and "Open in" / ⌘O names it. Saved as
+  `{"littleWindow": {"space": "<id>"}}` (`{}` without one, as before), which older Cra reads as a plain Little
+  Window. An imported `littleArc(space(id))` keeps its space.
 
 ## Extension popups and extension windows (Arc 1.170, 26 Oct 2026, static)
 

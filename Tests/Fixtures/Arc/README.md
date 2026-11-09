@@ -5,3 +5,6 @@ Work on "Profile 2" (named "Client" in User Data/Local State), two favorites, a 
 a split view in Today, two archived tabs and a sidebar width. Each profile has its own
 extensions and pinned extensions in its Preferences: "Fixture Everywhere" in both, "Fixture
 Client" only in Profile 2, and "Fixture Personal Off" in Default, turned off.
+StorableLinkRouting.json holds three Air Traffic Control routes: Google Meet to the most recent
+space, work.example.com to a Little Arc in Work (written by hand in Arc, #258) and an
+"Is equal to" route to Home, with Little Arc as the default.

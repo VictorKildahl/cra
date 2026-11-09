@@ -213,7 +213,7 @@ struct SidebarModelTests {
         settings.openExternalLinksInLittleWindow = false
         #expect(settings.defaultLinkDestination == .mostRecentSpace)
         settings.openExternalLinksInLittleWindow = true
-        #expect(settings.defaultLinkDestination == .littleWindow)
+        #expect(settings.defaultLinkDestination == .littleWindowInUse)
     }
 
     @Test func incognitoWindowsAreNeverSaved() {

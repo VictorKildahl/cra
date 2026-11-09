@@ -97,7 +97,23 @@ enum StoreTests {
         let titles = composition.store.orderedSpaces.map(\.title)
         expect(titles.contains("Home") && titles.contains("Work"), "the imported spaces are in the sidebar")
         expect(composition.store.integrityProblems().isEmpty, "the imported sidebar is sound")
+        arcLinkRoutes(store: composition.store)
         arcProfiles(plan: plan, store: composition.store)
+    }
+
+    // promise: #258
+    /// Air Traffic Control comes over pointed at the spaces of the same name; a Little Arc that
+    /// names a space becomes a Little Window in it (#258).
+    @MainActor
+    private static func arcLinkRoutes(store: SidebarStore) {
+        let work = store.orderedSpaces.first { $0.title == "Work" }!.id, home = store.orderedSpaces.first { $0.title == "Home" }!.id
+        let routes = store.settings.linkRoutes.map { "\($0.match.rawValue) \($0.text)" }
+        expect(routes == ["contains meet.google.com", "contains work.example.com", "equals example.com/standup"],
+               "the routes come over in Arc's order, Meet once")
+        let to = { (text: String) in store.settings.linkRoutes.first { $0.text == text }?.destination }
+        expect(to("work.example.com") == .littleWindow(space: work), "a Little Arc in Work opens a Little Window in Work")
+        expect(to("example.com/standup") == .space(home) && to("meet.google.com") == .mostRecentSpace, "space routes keep their space")
+        expect(store.settings.defaultLinkDestination == .littleWindowInUse, "Little Arc as the default stays in the space in use")
     }
 
     // promise: #131

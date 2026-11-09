@@ -473,7 +473,7 @@ public struct AppSettings: Codable, Equatable {
     /// Air Traffic Control's "Default": where links from other apps open when no route
     /// matches. Arc's "Links from other apps open in Little Arc" switch is this set to
     /// Little Arc (on) or the most recent space (off).
-    public var defaultLinkDestination: LinkDestination = .littleWindow
+    public var defaultLinkDestination: LinkDestination = .littleWindowInUse
     /// Air Traffic Control routes, checked in order (LinkRouting.swift). Starts with Arc's
     /// Google Meet route.
     public var linkRoutes: [LinkRoute] = [.googleMeet]
@@ -605,8 +605,11 @@ public struct AppSettings: Codable, Equatable {
     /// Arc's "Links from other apps open in Little Arc" (URLs handed over by other apps
     /// open in a small disposable window instead of a sidebar tab).
     public var openExternalLinksInLittleWindow: Bool {
-        get { defaultLinkDestination == .littleWindow }
-        set { defaultLinkDestination = newValue ? .littleWindow : .mostRecentSpace }
+        get { defaultLinkDestination.isLittleWindow }
+        set {
+            guard newValue != openExternalLinksInLittleWindow else { return }
+            defaultLinkDestination = newValue ? .littleWindowInUse : .mostRecentSpace
+        }
     }
     /// Hosts Arc puts in Developer Mode by itself, on any port: localhost, 127.0.0.1 and any
     /// *.localhost, not [::1] (Arc 1.172, checked live 8 Nov 2026).

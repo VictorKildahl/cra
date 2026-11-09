@@ -420,8 +420,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // Arc's Air Traffic Control: the first matching route, else the default
         // ("Links from other apps open in Little Arc").
         switch store.settings.destination(forExternalURL: url) {
-        case .littleWindow:
-            openLittleWindow(url: url)
+        case .littleWindow(let space):
+            // #258: the route's space names the page's profile and where ⌘O sends it.
+            openLittleWindow(url: url, space: openableSpace(space))
             return
         case .space(let id) where store.space(id) != nil:
             store.createTab(url: url, in: id, select: true)
@@ -737,6 +738,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return littleWindows.first { !$0.isParked && ($0.window === front || $0.window === front.parent) }
     }
 
+    /// A space a link from outside may name (cra://open, an Air Traffic Control Little Window):
+    /// one that exists and isn't incognito, else nil, the space in use.
+    private func openableSpace(_ id: UUID?) -> UUID? {
+        id.flatMap { store.space($0) != nil && !store.isIncognito(space: $0) ? $0 : nil }
+    }
+
     /// Creates a little window without showing it (`url` nil = popup host).
     func makeLittleWindow(url: String?, opener: CraBrowser? = nil, space: UUID? = nil) -> LittleWindowController {
         leaveMenuBarForWindow()
@@ -835,7 +842,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             let background = q("background") == "1"
             // space=<id> (#168): a real, normal space, as Air Traffic Control routes to; an unknown
             // or incognito one opens where it did before, in the space in use.
-            let space = q("space").flatMap(UUID.init(uuidString:)).flatMap { store.space($0) != nil && !store.isIncognito(space: $0) ? $0 : nil }
+            let space = openableSpace(q("space").flatMap(UUID.init(uuidString:)))
             if little {
                 openLittleWindow(url: url, space: space)
             } else if let space {
@@ -1005,6 +1012,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // themes switch halves without changing the Mac's own setting (#155).
             if let v = dict["systemAppearance"] {
                 NSApp.appearance = v == "system" ? nil : NSAppearance(named: v == "dark" ? .darkAqua : .aqua)
+                return
+            }
+            // externalURL=<url>: a link as another app hands it over (Air Traffic Control, #258);
+            // the installed Cra would get one sent with `open`.
+            if let url = dict["externalURL"] { openExternalURL(url); return }
+            // airTrafficControl=<png path>: the Air Traffic Control sheet with the current routes,
+            // drawn off screen (#258), so its popups can be checked without taking the screen.
+            if let out = dict["airTrafficControl"] {
+                let host = NSHostingView(rootView: AirTrafficControlView().environment(store))
+                host.frame = NSRect(x: 0, y: 0, width: 508, height: 440)
+                let window = NSWindow(contentRect: NSRect(x: -10_000, y: -10_000, width: 508, height: 440),
+                                      styleMask: .borderless, backing: .buffered, defer: false)
+                window.isReleasedWhenClosed = false
+                window.contentView = host
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    host.layoutSubtreeIfNeeded()
+                    if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+                        host.cacheDisplay(in: host.bounds, to: rep)
+                        try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: out))
+                    }
+                    CraLog.note("air traffic control drawn to \(out)")
+                    window.close()
+                }
+                return
+            }
+            // littleShown=<label>: the newest Little Window's "Open in" space and page profile.
+            if let label = dict["littleShown"] {
+                var space = "-", profile = "-"
+                if let w = littleWindows.last {
+                    let state: LittleWindowState = w.state
+                    space = store.space(state.targetSpaceID)?.title ?? "-"
+                    let named: BrowserProfile? = store.profile(state.profileID)
+                    profile = named?.name ?? "Default"
+                }
+                CraLog.note("little shown \(label): windows=\(littleWindows.count) space=\(space) profile=\(profile)")
                 return
             }
             // themeShown=<label>: which half each window draws now (the space's theme, the window content

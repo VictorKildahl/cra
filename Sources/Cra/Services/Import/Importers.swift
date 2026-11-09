@@ -51,7 +51,7 @@ struct ImportedArchiveEntry {
 enum ImportedLinkDestination {
     case mostRecentSpace
     case space(title: String)
-    case littleWindow
+    case littleWindow(spaceTitle: String?)
 }
 
 struct ImportedLinkRoute {
@@ -299,17 +299,19 @@ enum ArcImporter {
     }
 
     /// `{littleArc: {_0: <profile>}}` or `{space: {_0: {mostRecent: {}}}}`; a specific
-    /// space is recognised by its id anywhere inside `space`.
+    /// space is recognised by its id anywhere inside either. Arc's editor never wrote a
+    /// Little Arc with a space, but one written by hand loaded in that space's profile;
+    /// Cra's Little Window route can name the space (#258).
     private static func linkDestination(_ value: Any?, spaceTitles: [String: String]) -> ImportedLinkDestination? {
         guard let d = value as? [String: Any] else { return nil }
-        if d["littleArc"] != nil { return .littleWindow }
-        guard let space = d["space"] else { return nil }
         func title(_ v: Any) -> String? {
             if let s = v as? String { return spaceTitles[s] }
             if let o = v as? [String: Any] { return o.values.lazy.compactMap(title).first }
             if let a = v as? [Any] { return a.lazy.compactMap(title).first }
             return nil
         }
+        if let little = d["littleArc"] { return .littleWindow(spaceTitle: title(little)) }
+        guard let space = d["space"] else { return nil }
         return title(space).map { .space(title: $0) } ?? .mostRecentSpace
     }
 
@@ -581,7 +583,7 @@ extension SidebarStore {
             func destination(_ d: ImportedLinkDestination) -> LinkDestination {
                 switch d {
                 case .mostRecentSpace: return .mostRecentSpace
-                case .littleWindow: return .littleWindow
+                case .littleWindow(let title): return .littleWindow(space: title.flatMap(spaceID(titled:)))
                 case .space(let title):
                     return spaceID(titled: title).map { .space($0) } ?? .mostRecentSpace
                 }
