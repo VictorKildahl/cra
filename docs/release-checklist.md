@@ -33,8 +33,16 @@ built release app with a test profile. Note anything that fails in the release's
 - **#189:** colour swatches grow on hover and shrink when pressed; "Back to Pinned URL" slides
   in over 0.16 s.
 - **#88:** importing from Arc copies its Show Full URL setting.
+- **PR #269:** in Settings, the selected source-list row is inset 10 pt from both sidebar edges
+  (glyph 20 pt and label 49 pt from the edge, as in Dia 1.55.1), and scrolling Performance or Advanced
+  never draws under the back/forward pill or the pane title.
 
 ### Sidebar, tabs and the command bar
+
+- **PR #268, ⌘T:** next to Arc on a themed space and on a default one: the selected row is the
+  space's colour (gold on a gold space), white text and a white arrow tile; the info badge takes the
+  space's darkest tone. Recent open tabs show "Switch to Tab" before typing. Arrow through results
+  and check every row's inks follow the selection; long titles truncate before the trailing action.
 
 - **#196:** hover a Today tab and move onto its ✕ several times. The ✕ never vanishes before
   the click.

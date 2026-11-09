@@ -576,7 +576,7 @@ extension SidebarStore {
 
         if includeSettings {
             if let a = plan.settings.autoArchive { settings.autoArchive = a }
-            if let w = plan.settings.sidebarWidth { prefs.sidebarWidth = min(max(w, 220), 520) }
+            if let w = plan.settings.sidebarWidth { prefs.sidebarWidth = SidebarWidth.clamped(w) }
             if let t = plan.settings.showToolbar { settings.showToolbar = t }
             if let f = plan.settings.toolbarShowsFullURL { settings.toolbarShowsFullURL = f }
             // Air Traffic Control, pointed at the spaces of the same name.

@@ -114,6 +114,12 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-folder-glyph.sh`: the standalone folder component's real AppKit layers and image
   pixels: emblems follow the front panel's perspective, keep their colors and proportions, and
   update at 1x/Retina. No CEF or visible window; coverage uses the same harness as `scripts/test.sh`.
+- `scripts/test-sidebar-creation-menu.sh`: the sidebar + menu's real window and view off screen:
+  rows and keys, clicks on enabled and disabled rows, Arc's open and close timings, and the +
+  turning into an × on its spring.
+- `scripts/test-easel-canvas.sh`: the real `EaselSheetView` in an off-screen window, driven with
+  synthetic mouse and key events: one click picks a text block, a double click edits it, Return and
+  Escape end editing, Delete removes it, its size pill follows a drag.
 - `scripts/test-perf.sh`: the performance recorder on a real main run loop: injected stalls,
   hang files with a `sample` stack, the session marker, ownership, the recording switch
   ([performance.md](performance.md)).

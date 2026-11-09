@@ -1134,6 +1134,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("little shown \(label): windows=\(littleWindows.count) space=\(space) profile=\(profile)")
                 return
             }
+            // windowState=<label>: each window's full screen, Space and traffic lights (#277). Lights are
+            // "hidden", or their alpha; "-" when a window has none.
+            if let label = dict["windowState"] {
+                func lights(_ w: NSWindow) -> String {
+                    [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].map { type in
+                        guard let b = w.standardWindowButton(type) else { return "-" }
+                        return b.isHidden ? "hidden" : String(format: "%.1f", b.alphaValue)
+                    }.joined(separator: ",")
+                }
+                func flag(_ b: Bool) -> Int { b ? 1 : 0 }
+                for (i, m) in mainWindows.enumerated() {
+                    guard let w = m.window else { continue }
+                    CraLog.note("window state \(label): main\(i) fullscreen=\(flag(w.styleMask.contains(.fullScreen))) "
+                        + "visible=\(flag(w.isVisible)) onSpace=\(flag(w.isOnActiveSpace)) "
+                        + "layout=\(flag(m.shell.windowFullscreen)) sidebarUI=\(flag(m.sidebarUI.windowFullscreen)) "
+                        + "lightsHidden=\(flag((w as? CraWindow)?.trafficLightsHidden ?? false)) lights=\(lights(w))")
+                }
+                for (i, l) in littleWindows.enumerated() where !l.isPeek {
+                    guard let w = l.window else { continue }
+                    CraLog.note("window state \(label): little\(i) fullscreen=\(flag(w.styleMask.contains(.fullScreen))) "
+                        + "primary=\(flag(w.collectionBehavior.contains(.fullScreenPrimary))) "
+                        + "visible=\(flag(w.isVisible)) onSpace=\(flag(w.isOnActiveSpace)) lights=\(lights(w))")
+                }
+                return
+            }
             // themeShown=<label>: which half each window draws now (the space's theme, the window content
             // and the sidebar), without redrawing first, so a missed macOS switch shows (#155).
             if let label = dict["themeShown"] {
@@ -1166,6 +1191,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                         .filter { m.keyEquivalentModifierMask.contains($0.0) }.map(\.1).joined()
                 } ?? ""
                 CraLog.note("sidebar shown \(label): visible=\(main.sidebarVisible ? 1 : 0) menu=\(item?.title ?? "-") key=\(mods)\(item?.keyEquivalent ?? "-")")
+                return
+            }
+            // menuRows=<menu>[&label=<label>]: a menu bar menu's rows as it draws them once validated
+            // (hidden rows left out), "|" between rows and "──" for a separator: Arc's File menu (#279).
+            if let title = dict["menuRows"] {
+                let menu = NSApp.mainMenu?.items.first { $0.title == title }?.submenu
+                menu?.update()
+                let rows = menu?.items.filter { !$0.isHidden }.map { $0.isSeparatorItem ? "──" : $0.title } ?? []
+                CraLog.note("menu rows \(dict["label"] ?? title): \(rows.joined(separator: "|"))")
                 return
             }
             // activations=<label>: whether Cra is the active app, and how many requests to bring it to
@@ -1539,7 +1573,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "allowAppleEventsJavaScript": item.state = store.settings.allowAppleEventsJavaScript ? .on : .off
         case "appearanceAutomatic", "appearanceLight", "appearanceDark":
             item.state = "appearance" + store.settings.websiteAppearance.title == item.representedObject as? String ? .on : .off
-        case "copyURLQuote", "savePageAs", "captureFullPage", "capturePortrait", "revealTab": return store.selectedTabID != nil
+        case "copyURLQuote", "savePageAs", "captureFullPage", "capturePortrait", "revealTab", "share": return store.selectedTabID != nil
+        case "closeTab":
+            // Arc shows Close Tab only while a tab is selected; ⌘W still closes the window (#279).
+            item.isHidden = !FileMenu.shows("closeTab", tabSelected: store.selectedTabID != nil)
+        case "newProfile": return !main.isIncognito
         case "clearArchive": return !store.archive.isEmpty
         case "resetSpaceTabs": return !main.isStandalone
         case "toggleDeveloperMode":
@@ -1701,6 +1739,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             store.setExpanded(f.id, true)
             if isNew { LiveFolderManager.shared.refresh(f.id) }
         case "newSpace": main.showSpaceEditor(space: nil)
+        case "newProfile": if !main.isIncognito, let w = main.window { main.showNewProfileDialog(over: w) }
+        case "share": main.shareSelectedPage()
         case "newBoost": main.openBoostEditor()
         case "newEasel":
             guard !main.isIncognito else { break }
@@ -1968,13 +2008,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         appMenu.addItem(std("Quit Cra", #selector(NSApplication.terminate(_:)), "q"))
         menubar.addItem(submenu: appMenu, title: "Cra")
 
+        // Arc's File menu, its sections and rows (FileMenu, #279).
         let file = NSMenu(title: "File")
-        for id in ["newTab", "newWindow", "newBlankWindow", "newIncognitoWindow", "newLittleWindow", "reopenClosedTab", "editURL", "newFolder", "newSpace", "newEasel"] { file.addItem(item(id)) }
-        file.addItem(.separator())
-        file.addItem(item("closeWindow")); file.addItem(item("closeTab"))
-        file.addItem(.separator())
-        // Arc: Capture…, Capture Full Page, Save Page As, Print.
-        for id in ["capturePage", "captureFullPage", "capturePortrait", "savePageAs", "print"] { file.addItem(item(id)) }
+        for (i, section) in FileMenu.sections.enumerated() {
+            if i > 0 { file.addItem(.separator()) }
+            for id in section { file.addItem(item(id)) }
+        }
         menubar.addItem(submenu: file, title: "File")
 
         let edit = NSMenu(title: "Edit")
@@ -2028,6 +2067,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         menubar.addItem(submenu: view, title: "View")
 
         let spaces = NSMenu(title: "Spaces")
+        // Arc: New Space… heads the Spaces menu (#279).
+        spaces.addItem(item("newSpace"))
         spaces.addItem(item("nextSpace")); spaces.addItem(item("previousSpace"))
         spaces.addItem(.separator())
         for id in ["editSpace", "changeProfile", "deleteSpace", "manageSpaces"] { spaces.addItem(item(id)) }
@@ -2038,7 +2079,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         menubar.addItem(submenu: spaces, title: "Spaces")
 
         let tabs = NSMenu(title: "Tabs")
-        for id in ["newTab", "pinTab", "nextTab", "previousTab", "revealTab", "recentTab", "clearToday", "resetSpaceTabs"] { tabs.addItem(item(id)) }
+        for id in ["newTab", "pinTab"] { tabs.addItem(item(id)) }
+        // Arc: Tabs ▸ New Folder… after Pin/Unpin Tab (#279).
+        let newFolder = item("newFolder")
+        newFolder.title = "New Folder…"
+        tabs.addItem(newFolder)
+        for id in ["nextTab", "previousTab", "revealTab", "recentTab", "clearToday", "resetSpaceTabs"] { tabs.addItem(item(id)) }
         tabs.addItem(.separator())
         for id in ["favoriteTab", "renameTab", "duplicateTab", "resetTab", "muteTab"] { tabs.addItem(item(id)) }
         tabs.addItem(.separator())

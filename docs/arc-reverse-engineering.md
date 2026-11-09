@@ -58,6 +58,16 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
 - [O] Actions: viewArchive, clearArchive, reopenClosedTab, resetSpace, archiveTab.
 
 ## Command bar (ARC_CommandBar.bundle + strings + StorableCommandBarAdditionalRanking.json)
+- [O live] ⌘T (9 Nov 2026, Arc 1.172.1 offline copy, 1x sRGB captures + AX, PR #268): panel 766 wide, radius
+  ≈12, 1 pt outline, fill ≈ (10,9,9) at ≈0.84 over the blurred page ((51,50,50) over white). Input row 64 pt
+  with a 1 pt divider (white ≈0.1); rows 46 tall on a 50 pt pitch, 6 pt under the divider, 10 pt in, radius ≈6,
+  bottom padding ≈11. Leading magnifier 12 pt, centred 32 pt in; placeholder "Search or Enter URL…" 18 pt,
+  ink (163,162,162); typed text (230,231,233); placeholder and row titles both start 52 pt in. The selected row
+  is the space's focus colour ((121,104,33) gold, (70,77,219) default theme; the dark palette on a dark Mac,
+  light spaces too), white title and trailing text, a white 24 pt arrow tile with the arrow in the row colour.
+  Unselected: titles (214,214,214), "Switch to Tab" / URLs (117,117,117), arrow (189,189,189) on a white-5 % tile
+  12 pt from the row's edge. "Switch to Tab" shows before typing. The info badge is a 24 pt circle 21 pt from the
+  edge in the space's backgroundExtra and stays while typing. Cra: CommandBarView, CraCore CommandBarTones.
 - [O] Entry points: keyboardShortcutT, keyboardShortcutL, keyboardShortcutFocusSidebar, keyboardShortcutCommandOptionG,
   sidebarDoubleClick, sidebarNewTabButton, placeholderClick, littleArcPlaceholderClick, topbar, appMenu*,
   toggleBetweenTypeTravelAndCommandBar.
@@ -171,6 +181,14 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   Previous ⌥⌘←, space N ⌃N. Tabs: Pin/Unpin ⌘D, Next Tab ⌥⌘↓, Previous Tab ⌥⌘↑, Clear Today ⇧⌘K, Go to Tab N ⌘N,
   Toggle recent tabs ⌃Tab. Archive: Go Back ⌘[ (shown as ⌘Æ on a Danish layout) / ⌘←, Go Forward ⌘] / ⌘→,
   View History ⌘Y. Window: Minimize ⌘M, Open Library ⇧⌘L, View Downloads ⇧⌘J.
+- [O] File menu, Arc 1.172.1 (AX dump plus window captures, 9 Nov 2026, #279): New Tab…, New Window, Blank Window,
+  New Incognito Window, New Little Arc Window, Restore Last Closed Tab | Open Command Bar | New Profile, New Easel |
+  Close Window, Close Tab ⌘W (shown only while a tab is selected) | Share…, Capture…, Capture Full Page, Capture in
+  Portrait Mode, Save Page As (no ellipsis), Print. AX also lists New Note ⌃⇧N, Archive Tab ⌘W and Send to Dia, which
+  never draw (hidden rows). Share… has no default key and opens the standard NSSharingServicePicker (Add to Reading
+  List, AirDrop, Mail, Notes | Copy, Edit Extensions…) hanging from the top centre of the page under the toolbar; with
+  no tab selected it stays enabled and does nothing. Spaces starts with New Space…; Tabs has New Folder… after
+  Open Little Arc or Peek in… ⌘O.
 
 ## Visual reference (Arc 1.168, measured at 2x from window captures)
 - [O] Sidebar 328pt wide. Row 1: traffic lights, sidebar toggle right after them (~93pt), nav ← → ↻ right-aligned when a
@@ -184,7 +202,7 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
 - [O] Command bar: ~766pt wide, vertically centered, dark translucent in dark mode. Input row 60pt with the top match's
   favicon; rows 50pt single-line "Title — url"; the completion row comes first, then the typed query, then matches; open
   tabs show "Switch to Tab" + arrow box (other-space tabs show the space name); the selected row is tinted with the
-  space color. ⌘L with the toolbar visible edits inline: dropdown hangs under the toolbar across the content width.
+  space color. (Re-measured 9 Nov 2026: input row 64, rows 46 on a 50 pt pitch; see the ⌘T entry.) ⌘L with the toolbar visible edits inline: dropdown hangs under the toolbar across the content width.
   Arc draws the bar inside the window, so it is light or dark with the space's theme; Cra's bar is a child panel,
   which takes macOS' appearance unless given the window's (it was dark over light spaces on a dark Mac until 4 Nov).
 
@@ -1676,6 +1694,11 @@ Dark mode only; light mode was not observed.
   `applicationShouldTerminate`, skipped on engine relaunch), `autoArchiveEnabled`.
 - [U] Light-mode colours, the popup option lists, the Shortcuts details pane, hover states
   (the source list has none), and the "Advanced Settings" ad-block dialog were not opened.
+- [O] Dia 1.55.1 (9 Nov 2026, AX + 2x window capture, PR #269): the sidebar is now an inset rounded panel
+  (x 8…204, 8 from the top) in a 778×600 window. AX rows are still 196×28 (the panel's width); the selected
+  fill is 10 pt inside the panel on both sides (x 18…194), 28 tall, corner ≈7, (0,141,255) sRGB; glyph 20×20
+  at +20 from the row, label at +49 (cap height 10 ≈ 14 pt). Cra keeps the full-height sidebar and maps
+  the same relationship onto it: the fill 10 pt inside the sidebar, the glyph 10 pt into the fill.
 
 ## Sidebar header with the toolbar hidden (Arc 1.170, 26 Oct 2026)
 
@@ -2075,6 +2098,17 @@ strings "Opens the tab switcher, where you can cycle through recent tabs like Co
   a 34 pt pitch inside a 68×32 section for two spaces, so the hit cells (34×32) touch with no gap. The strip is a
   263×50 scroll area centred between the 32×32 Library button (x 8, 9 pt above the bottom) and the 32×32 "+" button
   (8 pt from the sidebar edge).
+- [O live, 9 Nov 2026, Arc 1.172.1 offline copy, 1x sRGB captures + AX, PR #271] The + (`sidebarPlusButton`, no tooltip)
+  opens `ArcMenu`: a borderless 222×308 window whose fill is 210×290 (radius 12) with a 12 pt tail under it, 3.5 pt
+  left of the button's centre (194 pt into the fill), the tip 10 pt above the button. Rows 194×40 at y 8, 48 | 105,
+  145 | 202, 242, separators 1 pt at y 96 and 193 (x 10…200): New Space, New Folder | New Easel ⌃⇧E, New Boost |
+  New Split ⌃+, New Tab ⌘T. It opens with New Tab picked. Boost is off without a web page, Split without a tab.
+  Colours from the space's DARK semantic palette on light spaces too: fill backgroundExtra, hover and separators
+  hover at 0.48 over it, shortcuts subtitle, disabled (121,120,129); titles 13 pt semibold white 51 pt in,
+  shortcuts end 21 pt from the edge. Timings (static, disassembly): open 0.1 s scale from 0.95 + 0.05 s fade,
+  close 0.07 s, curve (0.215, 0.61, 0.355, 1). The + (14×14, 2 pt arms) turns 45° into × with ≈13 % overshoot,
+  settled ≈0.18 s. Glyphs for Space, Tab, Split and Boost are Arc's own PDFs; Cra uses the nearest SF Symbols.
+  Cra: SidebarCreationMenu, CraCore ArcMenuTones.
 - [O capture, Victor's screenshot] pressed cell: 34×32, ~6 pt circular corners, fill 39,33,51 over 21,14,34, i.e. white
   at ~7.8%.
 - [U] Arc's hover fill could not be recorded (live pointer runs were cut short while Victor was at the Mac); the pressed
@@ -3495,6 +3529,13 @@ Arc Max's renameDownloads: a finished download is renamed on disk and a card abo
 - [O, Cra test copy] Child windows: a child ordered in before its parent is on screen, or shown by its owner before it was
   attached (Chromium's page window), stays on the desktop Space. Making it key then switches Spaces. Ordering it
   out and adding it again as a child, after the parent is on screen, puts it on the parent's Space.
+- [O, Cra scenario little-window-fullscreen, 9 Nov 2026, #277] With `.fullScreenPrimary`, a Little Window shown while
+  Cra's own browser window is full screen got a full-screen Space of its own (`styleMask` .fullScreen, the browser
+  window off the active Space): a black screen with the card in the middle and no traffic lights. With
+  `.fullScreenAuxiliary` only, it joins the browser window's Space. The page's own full screen adds primary while it
+  lasts. Leaving that, macOS puts the Little Window on the desktop Space, not back over the full-screen browser
+  window (as before #277). Bringing the browser window's Space back works, but the panel stays tied to the desktop
+  Space even when ordered in with `.moveToActiveSpace`, and making it key switches back to the desktop.
 
 ## Little Arc's ⌥⌘N from any app, Capture scrolling, and clicks on a Peek's bar (Arc 1.171, 5 Nov 2026, issue #195)
 
@@ -3678,3 +3719,23 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
   address; WebKit pages save WKWebView's interactionState. Saved a second after a load, when the tab is hidden
   and at quit. `MainWindowController.goBack` takes ⌘[, the toolbars and the menu; the mouse button is
   Chromium's. Readouts `cra://debug?back=<label>`, `cra://debug?scroll=<label>`.
+
+## Sidebar width and the narrow header (Arc 1.17x, 9 Nov 2026, GitHub #287)
+- [O disasm] `WindowLayoutController.handleSidebarResizePanGestureRecognizer:` (arm64, 0x100221030): the new
+  width is `round(start + translation)`; under 82 pt the sidebar hides (drag-to-hide); otherwise it's clamped to
+  164…500 pt. Resize state has `canSnapToDefaultWidth`, `breakpointIndex`, `timeOfSnap`: a slow drag snapped back
+  6 pt at a few widths (274 → 256, 214 → 208 …), not studied further.
+- [O live AX] Offline Arc, toolbar hidden (`topBarURLEnabled` NO), drag in 6 pt steps from 274 to 164, offsets from
+  the sidebar's left edge. 214 pt and wider: toggle at 77, ← → ↻ 32 pt boxes 2 pt apart, ending 6 pt from the edge;
+  at 214 the toggle moves to 74 to keep 2 pt off ← . 208 pt and narrower (`SidebarHeaderWidthLayout.narrow`): no
+  toggle; ← → and "More options" (•••) 28 pt boxes touching, ending 6 pt from the edge, same centre line.
+  209–213 pt was never landed on (snapping), so the exact switch is [U].
+- [O 1x capture] ••• opens a popover (••• turns ✕): 200 × 96 pt body, radius ~12, a 12 × 6 pt arrow whose tip is
+  10 pt under the button, centred on it; 8 pt padding, rows 40 pt: Reload ⌘R (dimmed with no page), Toggle Sidebar
+  ⌘S, each an SF-style icon centred 27.5 pt in, 13 pt semibold title at 50.5 pt, shortcut "⌘ R" ending 21 pt from
+  the right. Tones on the yellow "Lab" theme (shadedDark 0.437, 0.336, −0.080): fill (17, 13, 0) = black + 15 %
+  shadedDark; hovered row (81, 70, 26) = fill + 41 % shadedDark + 13 % white, radius ~8, inset 8; disabled text
+  (121, 120, 129); a shortcut ≈ white 30 %. One theme only; the hover was seen on one row, not followed live.
+- Cra (#287): `SidebarWidth` (164…500, drag + Arc import), `SidebarHeaderLayout` (switch below 214, boxes, toggle
+  shift), `SidebarMoreMenu` (popover geometry and tones), drawn by `SidebarMorePanel`. Glyph columns match Arc's
+  within 1 px at 214, 208 and 164 pt. Not built: drag-to-hide under 82 pt and resize snapping.

@@ -196,7 +196,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         wireActions()
         shell.resizeHandle.onDrag = { [weak self] dx in
             guard let self else { return }
-            let w = min(max(CraMetrics.sidebarMinWidth, shell.sidebarWidth + dx), CraMetrics.sidebarMaxWidth)
+            let w = CGFloat(SidebarWidth.clamped(Double(shell.sidebarWidth + dx)))
             shell.sidebarWidth = w
             shell.layoutSubtreeIfNeeded()
         }
@@ -448,9 +448,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // alert and popover it presents, and those follow macOS as Arc's do, whatever the
             // space colour (#171).
             shell.appearance = NSAppearance(named: palette.isDark ? .darkAqua : .aqua)
-            // The command bar follows macOS (#187); only its highlight is the space's, also when
-            // the space changes under an open bar.
-            commandBar.highlight = palette.commandHighlight
+            // The command bar follows macOS (#187); only its selected row and info badge take the
+            // space's palette, also when the space changes under an open bar.
+            commandBar.theme = space.theme.shown
             // Vibrant themes see through to the desktop like Arc; others are opaque.
             shell.vibrancy.isHidden = !palette.vibrant
             shell.vibrancyLift.isHidden = !palette.vibrant
@@ -2059,6 +2059,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     private var captureOverlay: CaptureOverlay?
     private var captureStarting = false
+    /// File ▸ Share…'s list, kept while it is open.
+    private var sharePicker: NSSharingServicePicker?
 
     /// The focused page on screen, whether its view is embedded in the card or in its own window.
     private func pageScreenRect(_ rt: TabRuntime) -> NSRect? {
@@ -3016,6 +3018,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
     }
 
+    /// File ▸ Share… (GitHub #279): the system's whole share list for the page in front (Arc's has
+    /// Add to Reading List, AirDrop, Mail, Notes, Copy, Edit Extensions…), hanging from the top
+    /// centre of the page as Arc 1.172.1 shows it.
+    func shareSelectedPage() {
+        guard let url = selectedTabID.flatMap({ store.item($0)?.tab?.url }).flatMap(URL.init(string:)),
+              let window, let content = window.contentView else { return }
+        let page = browsers.visibleRuntime.flatMap(pageScreenRect).map { content.convert(window.convertFromScreen($0), from: nil) }
+            ?? content.bounds
+        let top = content.isFlipped ? page.minY : page.maxY
+        let anchor = NSRect(x: page.midX - 1, y: content.isFlipped ? top : top - 1, width: 2, height: 1)
+        let picker = NSSharingServicePicker(items: [url])
+        sharePicker = picker
+        picker.show(relativeTo: anchor, of: content, preferredEdge: content.isFlipped ? .maxY : .minY)
+    }
+
     /// The lock in the Site Control Center: the certificate of the page on screen.
     private func showCertificate() {
         guard let b = currentBrowser, let window else { return }
@@ -3359,7 +3376,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let fillingEmptyPane = selectedTab?.isEmptyTab == true
         let prefill = mode == .editURL && !fillingEmptyPane ? selectedTab?.tab?.url : nil
         let effectiveMode: CommandBarMode = (mode == .editURL && (selectedTab == nil || fillingEmptyPane)) ? .newTab : mode
-        commandBar.highlight = focusedSpace.theme.palette.commandHighlight
+        commandBar.theme = focusedSpace.theme.shown
         commandBar.focusedSpaceID = focusedSpaceID
         commandBar.open(mode: effectiveMode, prefill: prefill)
         // Arc draws the New Tab row as the active one while the bar makes a new tab; the
