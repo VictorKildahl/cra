@@ -277,7 +277,7 @@ private final class SpaceMoveHandle: NSView {
     }
 }
 
-/// The cards' row. Like the tab lists (SpaceListScrollView) it stays off responsive scrolling,
+/// The cards' row. Like the tab lists (SidebarListScrollView) it stays off responsive scrolling,
 /// which would take a gesture's events past the window's scroll monitor once it starts here:
 /// a swipe that starts with the cards at their end has to reach the monitor to leave the Library.
 final class SpacesStripScrollView: NSScrollView {

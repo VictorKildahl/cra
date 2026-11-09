@@ -16,12 +16,21 @@ public enum LibrarySwipe {
     public static let flickSpeed: CGFloat = 0.8
 
     /// The reveal for `travel` points of finger movement (+ toward the Library) from `start`, the
-    /// Library being `width` wide; nil when a swipe that began on the space goes the other way,
-    /// toward the next space.
-    public static func reveal(from start: CGFloat, travel: CGFloat, width: CGFloat) -> CGFloat? {
+    /// Library being `width` wide; nil once it is past the space on a swipe that counts from the
+    /// space, which then heads for the next space. A swipe counts from the page it began on, or
+    /// for one that caught the Library sliding, from the page the slide was `toward`: like a space
+    /// swipe, the release makes the page it lands on the current one, so a quick second swipe out
+    /// of the Library goes on to the next space. Out of the Library at rest it gives way.
+    public static func reveal(from start: CGFloat, travel: CGFloat, width: CGFloat, toward: CGFloat? = nil) -> CGFloat? {
         let r = start + travel / max(1, width)
-        if r < 0 { return start == 0 ? nil : -band(-r) }
+        if r < 0 { return (toward ?? start) == 0 ? nil : -band(-r) }
         return r > 1 ? 1 + band(r - 1) : r
+    }
+
+    /// The fingers' travel past the space for a swipe that left the Library from reveal `start`:
+    /// what is left to page the spaces with.
+    public static func travelPastSpace(from start: CGFloat, travel: CGFloat, width: CGFloat) -> CGFloat {
+        travel + start * max(1, width)
     }
 
     /// The space swipe's rubber band past either end: AppKit's resistance curve, halved.

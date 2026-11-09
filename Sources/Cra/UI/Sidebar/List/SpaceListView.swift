@@ -53,7 +53,7 @@ final class SpaceListView: NSView, NSDraggingSource {
     let actions: SidebarActions
     let favicons: FaviconCache
     private(set) var palette: SpacePalette
-    private let scrollView = SpaceListScrollView()
+    private let scrollView = SidebarListScrollView()
     private let document = SpaceListDocument()
     private(set) var rows: [Row] = []
     /// Rows before the divider (pinned and its placeholder).
@@ -1127,12 +1127,14 @@ enum SidebarListMetrics {
     static let timing = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.25, 1)
 }
 
-/// The list's scroll view. Space swipes are read by the window controller's scroll monitor,
-/// which has to see every event of a gesture: responsive scrolling takes a gesture's events
-/// off that path once it starts over the list, and a horizontal gesture never scrolls a list.
+/// The scroll view of every list in the sidebar: a space's tabs and the Library's pages. Space
+/// and Library swipes are read by the window controller's scroll monitor, which has to see every
+/// event of a gesture: responsive scrolling takes a gesture's events off that path once it starts
+/// over the list, and the swipe then never arrives, or loses its end and stays between two pages
+/// (over Library ▸ Downloads, 9 Nov 2026). A horizontal gesture never scrolls a list.
 /// It goes on up instead: on the Library's Spaces page the cards scroll sideways under the
 /// fingers, or under Shift and a mouse wheel, over a card's list too (Arc 1.171).
-final class SpaceListScrollView: NSScrollView {
+final class SidebarListScrollView: NSScrollView {
     override class var isCompatibleWithResponsiveScrolling: Bool { false }
 
     override func scrollWheel(with event: NSEvent) {
