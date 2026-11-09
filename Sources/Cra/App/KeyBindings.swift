@@ -98,6 +98,14 @@ final class KeyBindingRegistry {
         NotificationCenter.default.post(name: .craKeyBindingsChanged, object: nil)
     }
 
+    /// keybindings.json was written by another Mac's bundle (SettingsSyncService): read it again.
+    func reloadOverrides() {
+        overrides = overridesFile.load(or: { [:] })
+        actions = KeyBindingRegistry.defaults
+        apply()
+        NotificationCenter.default.post(name: .craKeyBindingsChanged, object: nil)
+    }
+
     func resetOverrides() {
         overrides = [:]
         overridesFile.saveNow(overrides)
