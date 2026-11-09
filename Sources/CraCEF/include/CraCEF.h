@@ -130,6 +130,9 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 - (void)browser:(CraBrowser *)browser didFindMatches:(NSInteger)count activeMatch:(NSInteger)activeMatch;
 /// The page started or stopped using the camera or microphone.
 - (void)browser:(CraBrowser *)browser didChangeMediaCapture:(BOOL)capturing;
+/// Chromium dropped the page's permission request before Cra answered it (the page navigated or
+/// closed, or a newer request replaced it): its sheet should go, and its completion does nothing.
+- (void)browserWithdrewPermissionRequest:(CraBrowser *)browser;
 /// A page made with a saved history (-initWithFrame:…history:): `count` entries went in, or
 /// `error` says why none did and the page loaded its address instead.
 - (void)browser:(CraBrowser *)browser didRestoreHistoryEntries:(NSInteger)count error:(nullable NSString *)error;

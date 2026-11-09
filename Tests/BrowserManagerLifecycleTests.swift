@@ -135,6 +135,7 @@ enum BrowserManagerLifecycleTests {
         await pageProbeCase()
         await pageEngineCase()
         pageHistoryCase()
+        await permissionWaitsForItsTabCase()
         print("Browser manager lifecycle: \(checks) checks passed")
     }
 
@@ -1369,6 +1370,93 @@ enum BrowserManagerLifecycleTests {
         expect(other.browser.loads.isEmpty, "an extension that is off in the tab's profile is not retried")
         manager.closeAll()
     }
+
+    // promise: #286
+    /// A page behind the tab in front asks nothing until its tab is shown, as in Chrome, and
+    /// sheets come one at a time (#286: a page reconnecting after the Mac woke put its
+    /// microphone sheet over the tab being read).
+    @MainActor
+    private static func permissionWaitsForItsTabCase() async {
+        AppDialog.presented = []
+        let store = SidebarStore()
+        let container = NSView()
+        let window = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 20, height: 20),
+                              styleMask: .borderless, backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        window.contentView!.addSubview(container)
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: container)
+        let behind = store.createTab(url: "https://meet.example/call").id
+        let front = store.createTab(url: "https://example.test/front").id
+        manager.show(behind, focus: false)
+        let caller = manager.runtime(for: behind)!.browser
+        manager.show(front, focus: false)
+        var answers: [String] = []
+        manager.browser(caller, requestsPermissionForOrigin: "https://meet.example", kinds: 2) { answers.append("mic \($0)") }
+        expect(AppDialog.presented.isEmpty && answers.isEmpty, "a page behind the tab in front asks nothing while it is behind")
+        manager.show(behind, focus: false)
+        expect(AppDialog.presented.map(\.title) == ["https://meet.example wants to use your microphone"],
+               "its tab coming to the front puts its sheet up")
+        manager.browser(caller, requestsPermissionForOrigin: "https://meet.example", kinds: 8) { answers.append("notifications \($0)") }
+        expect(AppDialog.presented.count == 1, "a second request waits for the sheet before it")
+        AppDialog.presented[0].answer(.alertFirstButtonReturn)
+        expect(answers == ["mic true"] && AppDialog.presented.map(\.title).last == "https://meet.example wants to show notifications",
+               "Allow answers the first request, and the next one asks")
+        AppDialog.presented[1].answer(.alertSecondButtonReturn)
+        expect(answers == ["mic true", "notifications false"], "Block answers the second")
+
+        // A request whose tab closes (or sleeps) before it is shown is dropped, never answered:
+        // Chromium forgets it with the page, and an answer would be remembered for the site.
+        let other = manager.ensureRuntime(for: front)!.browser
+        manager.browser(other, requestsPermissionForOrigin: "https://example.test", kinds: 1) { answers.append("camera \($0)") }
+        manager.unload(front)
+        await drainMainQueue()
+        manager.show(front, focus: false)
+        expect(AppDialog.presented.count == 2 && answers.count == 2, "a closed tab's waiting request never asks or answers")
+
+        // A page that moves to another window takes its waiting request along, and asks there
+        // once its tab is in front.
+        let mover = store.createTab(url: "https://call.example/room").id
+        manager.show(mover, focus: false)
+        let moving = manager.runtime(for: mover)!.browser
+        manager.show(front, focus: false)
+        manager.browser(moving, requestsPermissionForOrigin: "https://call.example", kinds: 1 | 2) { answers.append("call \($0)") }
+        let otherContainer = NSView()
+        let otherWindow = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 20, height: 20),
+                                   styleMask: .borderless, backing: .buffered, defer: true)
+        otherWindow.isReleasedWhenClosed = false
+        defer { otherWindow.close() }
+        otherWindow.contentView!.addSubview(otherContainer)
+        let otherManager = BrowserManager(store: store, favicons: FaviconCache(), container: otherContainer)
+        otherManager.takeRuntimeFromOtherWindow = { manager.release($0) }
+        otherManager.show(mover, focus: false)
+        await drainMainQueue()
+        expect(otherManager.runtime(for: mover)?.browser === moving
+               && AppDialog.presented.map(\.title).last == "https://call.example wants to use your camera and microphone",
+               "a page moved to another window asks there")
+        AppDialog.presented.last!.answer(.alertFirstButtonReturn)
+        expect(answers.last == "call true", "and its answer reaches the page")
+
+        // Chromium withdrew the request (the page navigated): its sheet goes and nothing answers.
+        manager.browser(page(manager, front), requestsPermissionForOrigin: "https://example.test", kinds: 4) { answers.append("location \($0)") }
+        let sheet = AppDialog.presented.last!
+        expect(sheet.title == "https://example.test wants to use your location" && sheet.isUp, "the tab in front asks at once")
+        manager.browserWithdrewPermissionRequest(page(manager, front))
+        expect(!sheet.isUp && answers.last == "call true", "a withdrawn request's sheet goes, unanswered")
+        manager.browser(caller, requestsPermissionForOrigin: "https://meet.example", kinds: 2) { answers.append("mic again \($0)") }
+        let before = AppDialog.presented.count
+        manager.browser(page(manager, front), requestsPermissionForOrigin: "https://example.test", kinds: 1) { answers.append("camera again \($0)") }
+        AppDialog.presented.last!.answer(.alertSecondButtonReturn)
+        manager.browserWithdrewPermissionRequest(caller)
+        manager.show(behind, focus: false)
+        expect(AppDialog.presented.count == before + 1 && answers.last == "camera again false",
+               "a withdrawn request waiting behind never asks")
+        manager.closeAll()
+        otherManager.closeAll()
+    }
+
+    @MainActor
+    private static func page(_ manager: BrowserManager, _ id: UUID) -> CraBrowser { manager.runtime(for: id)!.browser }
 
     /// #273: a tab's back and forward list comes from its page a second after it settles and when
     /// it goes off screen, and a new page for the tab (after a relaunch, a close, a wake) opens with

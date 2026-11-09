@@ -1,0 +1,28 @@
+# promise: #286
+# A page behind the tab in front that asks for the microphone waits until its tab is shown, as in
+# Chrome: Cra's sheet came up over the tab being read (#286, a call page reconnecting after the
+# Mac woke), with nothing saying which tab asked. cra.log names the site, the tab and what macOS
+# has said. Nobody answers the sheet, so macOS is never asked.
+budget rss=800 stalls50=30
+pace 0.5
+
+cra://open?url=${PAGE}?n=caller
+expect-log loaded 127\.0\.0\.1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"setTimeout(()=>navigator.mediaDevices.getUserMedia({audio:true}),4000),'armed'"}
+expect-log Cra cdp Runtime.evaluate .*"value":"armed"
+cra://open?url=${PAGE}?n=front
+expect-log loaded 127\.0\.0\.1
+expect-log permission: 127\.0\.0\.1 wants microphone \(tab [0-9A-F]+, behind[^)]*\) → waits for its tab
+wait 2
+reject-log wants microphone → asks
+cra://action/previousTab
+expect-log permission: 127\.0\.0\.1 wants microphone → asks now
+# The page reloads while its sheet is up: Chromium drops the request, and the sheet goes with it.
+cra://action/reload
+expect-log permission: 127\.0\.0\.1 microphone: withdrawn by the page
+
+# A sleep and a wake as the Mac's: cra.log says what became of Chromium's audio service.
+cra://debug?sleep=1
+expect-log the Mac sleeps; audio service: (pid [0-9]+|not running)
+cra://debug?wake=1
+expect-log audio service: (alive across the sleep \(pid [0-9]+\)|not running)

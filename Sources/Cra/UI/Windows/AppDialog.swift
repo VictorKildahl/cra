@@ -81,6 +81,9 @@ final class AppDialog {
         prepareWindow(over: parent).show()
     }
 
+    /// Takes a presented sheet down as if nothing was chosen: its completion gets `.abort`.
+    func close() { presentedWindow?.close() }
+
     func prepareWindow(over parent: NSWindow? = nil) -> DialogPanel {
         if let window = presentedWindow { return window }
         result = .abort

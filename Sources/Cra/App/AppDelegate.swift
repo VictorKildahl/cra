@@ -248,13 +248,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// one that is late, or held back by App Nap, left a full Mac alone for 24 minutes. The
     /// now-playing cards read their tabs' sound again.
     private func observeSystemWake() {
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.systemWillSleep() }
+        }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.systemDidWake() }
         }
     }
 
+    /// Chromium's audio service as the Mac went to sleep: waking says whether it lived (#286).
+    private var audioServiceBeforeSleep: pid_t?
+
+    private func systemWillSleep() {
+        audioServiceBeforeSleep = PerfProcessSampler.audioServicePID()
+        CraLog.note(AudioServiceWake.sleepLine(pid: audioServiceBeforeSleep))
+    }
+
     private func systemDidWake() {
         CraLog.note("tab sleep: the Mac woke")
+        CraLog.note(AudioServiceWake.line(beforeSleep: audioServiceBeforeSleep, now: PerfProcessSampler.audioServicePID()))
+        audioServiceBeforeSleep = nil
         for w in mainWindows { w.browsers.systemDidWake() }
         sleepIdleTabs()
     }
@@ -1213,6 +1226,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             // What waking the Mac does (#275), without sleeping it: the cards re-read, one pass.
+            if dict["sleep"] != nil { systemWillSleep(); return }
             if dict["wake"] != nil { systemDidWake(); return }
             // One memory-pressure sweep as if macOS reported this level (warning, critical), without
             // filling memory or waiting out the last sweep. The setting still decides.

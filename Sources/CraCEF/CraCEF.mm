@@ -1972,9 +1972,12 @@ public:
             return true;
         }
         CefRefPtr<CefPermissionPromptCallback> cb = callback;
+        open_prompts_.insert(prompt_id);
+        CefRefPtr<CraClient> me = this;
         [o.delegate browser:o requestsPermissionForOrigin:NSStringFromCef(requesting_origin)
                       kinds:CraPermissionKinds(requested_permissions)
                  completion:^(BOOL allowed) {
+            me->open_prompts_.erase(prompt_id);
             answering_prompt_ = true;
             cb->Continue(allowed ? CEF_PERMISSION_RESULT_ACCEPT : CEF_PERMISSION_RESULT_DENY);
             answering_prompt_ = false;
@@ -1982,9 +1985,22 @@ public:
         return true;
     }
 
+    // Runs for every prompt that ends, Cra's answers included. One Cra hasn't answered was
+    // dropped by Chromium: the page navigated or closed, or a newer request took its place.
+    // Cra's sheet for it goes, or it stops waiting for its tab (#286).
+    void OnDismissPermissionPrompt(CefRefPtr<CefBrowser> browser, uint64_t prompt_id,
+                                   cef_permission_request_result_t result) override {
+        if (open_prompts_.erase(prompt_id) == 0) return;
+        CraBrowser* o = owner_;
+        if (o && [o.delegate respondsToSelector:@selector(browserWithdrewPermissionRequest:)])
+            [o.delegate browserWithdrewPermissionRequest:o];
+    }
+
 private:
     // True while a prompt's answer runs (UI thread only).
     static inline bool answering_prompt_ = false;
+    // Chrome-style prompts shown to Cra and not yet answered (UI thread only).
+    std::set<uint64_t> open_prompts_;
     __weak CraBrowser* owner_;
     // Made without a CraBrowser: Document Picture in Picture's client (owner_ is weak, so it can't say).
     const bool ownerless_;

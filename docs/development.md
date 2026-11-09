@@ -121,8 +121,9 @@ sidebar link, `pageJS=<js>` runs script in the focused page, `installExtension=<
 page, to cra.log), `fullscreen=1|0`, `appActive=1|0` (the sidebar drawn as if
 Cra were in front or behind, e.g. the download bin's dimming), `windowSize=1280x800`,
 `snapshot=<ViewClass[,n]>&out=<png>`, `sleepTabs=<seconds>` (the 10 tabs used last too), `memoryPressure=warning|critical` (one
-memory-pressure sweep at that level, if Settings ▸ Tabs has it on), `wake=1` (what waking the Mac does:
-the now-playing cards re-read their tabs' sound and a tab-sleeping pass runs), `stall=<ms>` (blocks the main
+memory-pressure sweep at that level, if Settings ▸ Tabs has it on), `sleep=1` (what the Mac going to
+sleep does: notes Chromium's audio service), `wake=1` (what waking the Mac does: the now-playing cards
+re-read their tabs' sound, a tab-sleeping pass runs and cra.log says whether the audio service lived), `stall=<ms>` (blocks the main
 thread), `perfReport=<path>` (the recorder's perf.json now), `systemAppearance=light|dark|system`
 (the appearance Auto space themes follow, without changing the Mac's), `themeEditor=1` (Edit
 Theme Color… for the focused space), `sidebarShown=<label>` (whether the window shows its sidebar,

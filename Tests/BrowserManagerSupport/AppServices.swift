@@ -1,9 +1,24 @@
 import AppKit
 import CraCEF
 
+/// Records each sheet the manager puts up; a test answers it with `answer(_:)` or closes it.
 @MainActor final class AppDialog {
-    init(title: String, actions: [DialogAction]) {}
-    func present(over window: NSWindow, completion: @escaping (NSApplication.ModalResponse) -> Void) { completion(.abort) }
+    static var presented: [AppDialog] = []
+    let title: String
+    private(set) var completion: ((NSApplication.ModalResponse) -> Void)?
+    var isUp: Bool { completion != nil }
+    init(title: String, actions: [DialogAction]) { self.title = title }
+    func present(over window: NSWindow, completion: @escaping (NSApplication.ModalResponse) -> Void) {
+        self.completion = completion
+        Self.presented.append(self)
+    }
+    /// The production sheet's close(): ends it as Escape would (.abort) when nothing was chosen.
+    func close() { answer(.abort) }
+    func answer(_ response: NSApplication.ModalResponse) {
+        let done = completion
+        completion = nil
+        done?(response)
+    }
 }
 
 // Unrelated shell services required to typecheck the complete production manager.

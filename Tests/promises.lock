@@ -452,3 +452,6 @@
 #276   Packages/CraCore/Tests/CraCoreTests/PageMenuLabelsTests.swift::englishStillReadsLikeArc  19f1611a7dcc
 #276   Packages/CraCore/Tests/CraCoreTests/PageMenuLabelsTests.swift::imageSearchReadsInChromiumsLanguage  5dbb3f70b1bc
 #276   Packages/CraCore/Tests/CraCoreTests/ShippedSidebarTests.swift::linkTabsOpenBehindThePageUnlessAsked  e17aaf032b28
+#286   Packages/CraCore/Tests/CraCoreTests/PermissionAskTests.swift::onlyTheTabInFrontAsks  fc757adafaca
+#286   Tests/BrowserManagerLifecycleTests.swift::permissionWaitsForItsTabCase  47983328a052
+#286   Tests/Scenarios/permission-waits-for-its-tab.scenario  691141857a65

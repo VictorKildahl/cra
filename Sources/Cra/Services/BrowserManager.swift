@@ -94,6 +94,17 @@ protocol BrowserManagerDelegate: AnyObject {
     func browserManagerCaptureImage(at point: NSPoint, tabID: UUID)
 }
 
+/// A page's permission request on its way to Cra's sheet; `completion` answers it in Chromium.
+private struct PermissionRequest {
+    let tabID: UUID
+    let browser: CraBrowser
+    let origin: String
+    /// What cra.log calls the site: its host, or "(incognito)".
+    let logName: String
+    let kinds: UInt
+    let completion: (Bool) -> Void
+}
+
 /// Creates, shows, hides and tears down CEF browsers inside a container view.
 @MainActor
 final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
@@ -119,6 +130,11 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// A tab's page closed (the tab closed or went to sleep), with what Chromium kept for it.
     var pageClosed: (UUID) -> Void = { _ in }
     private var byBrowser: [ObjectIdentifier: UUID] = [:]
+    /// Pages' permission requests that haven't asked yet: their tab is behind, or another
+    /// request's sheet is up (PermissionAsk, #286).
+    private var waitingPermissions: [PermissionRequest] = []
+    /// The request whose sheet is up.
+    private var permissionSheet: (request: PermissionRequest, dialog: AppDialog)?
     /// CEF's client holds its owner weakly; keep retired browsers alive until teardown finishes.
     private var closingBrowsers: [ObjectIdentifier: CraBrowser] = [:]
 
@@ -229,6 +245,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         devToolsDockedState[tabID] = nil
         if visibleTabID == tabID { visibleTabID = nil }
         visibleTabIDs.removeAll { $0 == tabID }
+        handOffPermissions(of: tabID, browser: rt.browser)
         if let host = rt.hostWindow {
             // Embedded page views live in the pane card, outside their host window.
             // Detach them now; their cached identity remains available for a handoff.
@@ -322,6 +339,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         syncDevToolsVisibility()
         delegate?.browserManagerPageWindowsChanged(focus: focus)
         if wasVisible != Set(shown) { Perf.time(.tabSwitch, ms: Perf.ms(since: started) - creating) }
+        askNextPermission()
     }
 
     // MARK: Diagnostics
@@ -1532,11 +1550,91 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         downloadSourceTab = nil
     }
 
+    /// A page asks for the camera, microphone, notifications… Chrome asks in the tab that wants
+    /// it while that tab is in front; Cra's sheet covers the window, so a request from a tab
+    /// behind waits until its tab is shown, and sheets come one at a time (PermissionAsk, #286).
     func browser(_ browser: CraBrowser, requestsPermissionForOrigin origin: String, kinds: UInt, completion: @escaping (Bool) -> Void) {
-        let alert = AppDialog(title: PermissionPrompt.message(origin: origin, kinds: kinds),
+        guard let id = tabID(of: browser) else {
+            // A page Cra already closed: Chromium drops the request with it.
+            CraLog.note(PermissionAsk.outcomeLine(origin: browser.isIncognito ? "(incognito)" : origin, kinds: kinds, outcome: .tabGone))
+            return
+        }
+        let logName = site(origin, id, browser)
+        let shown = visibleTabIDs.contains(id)
+        let waits = PermissionAsk.waits(tabShown: shown, sheetUp: permissionSheet != nil)
+        CraLog.note(PermissionAsk.requestLine(origin: logName, kinds: kinds, tab: String(id.uuidString.prefix(8)), shown: shown, waits: waits,
+                                              camera: CaptureAccess.camera, microphone: CaptureAccess.microphone))
+        let request = PermissionRequest(tabID: id, browser: browser, origin: origin, logName: logName, kinds: kinds, completion: completion)
+        if waits { waitingPermissions.append(request) } else { askPermission(request) }
+    }
+
+    /// Chromium dropped the page's request (it navigated, or a newer request replaced it): its
+    /// sheet goes, or it no longer waits. Nothing is answered.
+    func browserWithdrewPermissionRequest(_ browser: CraBrowser) {
+        dropPermissions(.withdrawn) { $0.browser === browser }
+    }
+
+    private func askPermission(_ request: PermissionRequest) {
+        let alert = AppDialog(title: PermissionPrompt.message(origin: request.origin, kinds: request.kinds),
                               actions: [DialogAction("Allow"), DialogAction("Block", role: .cancel)])
-        guard let window = container.window else { completion(false); return }
-        alert.present(over: window) { resp in completion(resp == .alertFirstButtonReturn) }
+        guard let window = container.window else { request.completion(false); return }
+        permissionSheet = (request, alert)
+        alert.present(over: window) { [weak self] resp in
+            // A sheet Cra took down (the request was withdrawn) answers nothing.
+            guard let self, self.permissionSheet?.dialog === alert else { return }
+            self.permissionSheet = nil
+            let allowed = resp == .alertFirstButtonReturn
+            CraLog.note(PermissionAsk.outcomeLine(origin: request.logName, kinds: request.kinds, outcome: allowed ? .allowed : .blocked))
+            request.completion(allowed)
+            self.askNextPermission()
+        }
+    }
+
+    /// The oldest waiting request whose tab is on screen asks, once no sheet is up.
+    private func askNextPermission() {
+        guard permissionSheet == nil,
+              let i = waitingPermissions.firstIndex(where: { visibleTabIDs.contains($0.tabID) }) else { return }
+        let request = waitingPermissions.remove(at: i)
+        CraLog.note(PermissionAsk.shownLine(origin: request.logName, kinds: request.kinds))
+        askPermission(request)
+    }
+
+    /// The tab's page left this manager: it closed or slept, or it moved to another window or a
+    /// Little Window. Its requests go with the page to its new owner, once the move is done; a
+    /// page that is closing drops them unanswered, as Chromium does.
+    private func handOffPermissions(of tabID: UUID, browser: CraBrowser) {
+        var moving = waitingPermissions.filter { $0.tabID == tabID }
+        waitingPermissions.removeAll { $0.tabID == tabID }
+        if let sheet = permissionSheet, sheet.request.tabID == tabID {
+            permissionSheet = nil
+            sheet.dialog.close()
+            moving.insert(sheet.request, at: 0)
+        }
+        guard !moving.isEmpty else { return }
+        askNextPermission()
+        DispatchQueue.main.async { [weak self, weak browser] in
+            for r in moving {
+                guard let browser, let owner = browser.delegate, owner !== self || self?.tabID(of: browser) != nil else {
+                    CraLog.note(PermissionAsk.outcomeLine(origin: r.logName, kinds: r.kinds, outcome: .tabGone))
+                    continue
+                }
+                owner.browser(browser, requestsPermissionForOrigin: r.origin, kinds: r.kinds, completion: r.completion)
+            }
+        }
+    }
+
+    /// Requests that will never be answered: they leave the queue, and a sheet up for one goes.
+    private func dropPermissions(_ outcome: PermissionAsk.Outcome, where matches: (PermissionRequest) -> Bool) {
+        var dropped = waitingPermissions.filter(matches)
+        waitingPermissions.removeAll(where: matches)
+        if let sheet = permissionSheet, matches(sheet.request) {
+            permissionSheet = nil
+            sheet.dialog.close()
+            dropped.append(sheet.request)
+        }
+        guard !dropped.isEmpty else { return }
+        for r in dropped { CraLog.note(PermissionAsk.outcomeLine(origin: r.logName, kinds: r.kinds, outcome: outcome)) }
+        askNextPermission()
     }
 
     func browserDidReceiveFocus(_ browser: CraBrowser) {
