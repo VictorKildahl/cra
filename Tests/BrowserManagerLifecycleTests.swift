@@ -10,6 +10,7 @@ enum BrowserManagerLifecycleTests {
 
     @MainActor
     static func main() async {
+        await tabFaviconsCase()
         let store = SidebarStore()
         let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
         let observer = Observer()
@@ -137,6 +138,59 @@ enum BrowserManagerLifecycleTests {
         pageHistoryCase()
         await permissionWaitsForItsTabCase()
         print("Browser manager lifecycle: \(checks) checks passed")
+    }
+
+    @MainActor
+    private static func tabFaviconsCase() async {
+        let store = SidebarStore()
+        let cache = FaviconCache()
+        let manager = BrowserManager(store: store, favicons: cache, container: NSView())
+        defer { manager.closeAll() }
+        let first = store.createTab(url: "https://gitlab.com/projects/pr1").id
+        let second = store.createTab(url: "https://gitlab.com/projects/pr2").id
+        let firstBrowser = manager.ensureRuntime(for: first)!.browser
+        let secondBrowser = manager.ensureRuntime(for: second)!.browser
+        let orange = NSImage(contentsOfFile: "Tests/Fixtures/Pages/icon-orange.png")!
+        let blue = NSImage(contentsOfFile: "Tests/Fixtures/Pages/icon-blue.png")!
+        let iconURL = "https://gitlab.com/favicon.ico"
+        manager.browser(firstBrowser, didLoadFavicon: orange, forURL: iconURL)
+        manager.browser(secondBrowser, didLoadFavicon: blue, forURL: iconURL)
+        let firstKey = store.item(first)!.tab!.faviconKey!
+        let secondKey = store.item(second)!.tab!.faviconKey!
+        expect(firstKey != secondKey, "tabs with the same favicon URL have independent cache entries")
+        expect(cache.image(forKey: firstKey) === orange && cache.image(forKey: secondKey) === blue,
+               "loading the second project preserves the first project's icon")
+        let orangeColor = cache.dominantColor(forKey: firstKey)
+        let blueColor = cache.dominantColor(forKey: secondKey)
+        expect(orangeColor != nil && blueColor != nil && orangeColor != blueColor, "the fixture icons have different colors")
+        manager.browser(firstBrowser, didLoadFavicon: blue, forURL: "data:image/png;base64,blue")
+        expect(store.item(first)?.tab?.faviconKey == firstKey, "a dynamic favicon reuses the tab's cache entry")
+        expect(cache.dominantColor(forKey: firstKey) == blueColor, "an updated favicon refreshes its cached color")
+        manager.browser(secondBrowser, didLoadFavicon: orange, forURL: iconURL)
+        expect(cache.image(forKey: firstKey) === blue && cache.image(forKey: secondKey) === orange,
+               "updating a pipeline icon leaves the other project's icon unchanged")
+
+        let privateTab = store.createTab(url: "https://gitlab.com/projects/private").id
+        store.incognitoItems.insert(privateTab)
+        let privateBrowser = manager.ensureRuntime(for: privateTab)!.browser
+        manager.browser(privateBrowser, didLoadFavicon: blue, forURL: iconURL)
+        let privateKey = store.item(privateTab)!.tab!.faviconKey!
+        expect(privateKey != firstKey && privateKey != secondKey, "an incognito tab has its own favicon")
+        let disk = FaviconCache()
+        for _ in 0..<100 {
+            disk.reset()
+            if disk.dominantColor(forKey: firstKey) == blueColor && disk.dominantColor(forKey: secondKey) == orangeColor { break }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        expect(disk.dominantColor(forKey: firstKey) == blueColor && disk.dominantColor(forKey: secondKey) == orangeColor,
+               "a fresh cache restores each project's last icon, including a dynamic favicon")
+        expect([firstKey, secondKey].allSatisfy { FileManager.default.fileExists(atPath: AppPaths.favicons.appendingPathComponent(FaviconCache.fileName($0)).path) },
+               "each project has its own persisted favicon instead of relying on the host fallback")
+        expect(!FileManager.default.fileExists(atPath: AppPaths.favicons.appendingPathComponent(FaviconCache.fileName(privateKey)).path),
+               "an incognito favicon is never written to disk")
+        manager.unload(first)
+        manager.browser(firstBrowser, didLoadFavicon: orange, forURL: iconURL)
+        expect(cache.image(forKey: firstKey) === blue, "a retired browser cannot replace a tab's favicon")
     }
 
     // promise: #80

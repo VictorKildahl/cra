@@ -92,17 +92,9 @@ enum TestRoot { case today }
     var webStoreProfiles: [String] = []
     func installFromWebStore(using browser: CraBrowser, profile: String) { webStoreProfiles.append(profile) }
 }
-enum FaviconKey {
-    static func key(for url: String) -> String? { url }
-    static func key(site: String, iconURL: String) -> String { site + "#" + iconURL }
-    static func siteKey(of key: String) -> String { key }
-}
 enum BrowsingDataClear {
     enum Range { case allTime }
     static func historyRange(messageJSON: String, now: Date) -> Range? { nil }
-}
-final class FaviconCache {
-    func store(_ image: NSImage, forKey: String, persist: Bool) {}
 }
 enum TabSwitcherMetrics { static let thumbnail = NSSize(width: 320, height: 200) }
 enum HitchMonitor { static func mark(_ event: String) {} }

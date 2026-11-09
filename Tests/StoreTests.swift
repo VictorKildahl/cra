@@ -948,10 +948,10 @@ enum StoreTests {
     @MainActor
     private static func tabFavicons() {
         let store = AppComposition(clock: ManualScheduler()).store
-        let rds = store.createTab(url: "https://console.aws.amazon.com/rds/home", select: false)
-        let eks = store.createTab(url: "https://console.aws.amazon.com/eks/home", select: false)
-        let rdsIcon = FaviconKey.key(for: "https://console.aws.amazon.com/rds/home", iconURL: "https://console.aws.amazon.com/rds/favicon.ico")!
-        let eksIcon = FaviconKey.key(for: "https://console.aws.amazon.com/eks/home", iconURL: "https://console.aws.amazon.com/eks/favicon.ico")!
+        let rds = store.createTab(url: "https://console.aws.amazon.com/rds/home", pinned: true, select: false)
+        let eks = store.createTab(url: "https://console.aws.amazon.com/eks/home", pinned: true, select: false)
+        let rdsIcon = FaviconKey.key(site: "console.aws.amazon.com", tabID: rds.id)
+        let eksIcon = FaviconKey.key(site: "console.aws.amazon.com", tabID: eks.id)
         store.setFaviconKey(rds.id, rdsIcon)
         store.setFaviconKey(eks.id, eksIcon)
         expect(store.item(rds.id)?.tab?.iconKey == rdsIcon && store.item(eks.id)?.tab?.iconKey == eksIcon && rdsIcon != eksIcon,
