@@ -188,8 +188,10 @@ Dropbox or a similar service is the other option and needs nothing here). Apple 
 Documents to Developer ID apps through the provisioning profile (Supported capabilities,
 macOS). One-time setup, as the Account Holder:
 
-1. Identifiers → `dk.kildahl.cra` → Capabilities → tick **iCloud** with **iCloud Documents**
-   (CloudKit is not needed), container `iCloud.dk.kildahl.cra`. Save.
+1. Identifiers → `dk.kildahl.cra` → Capabilities → tick **iCloud**, keep **Include CloudKit
+   support** (the portal's default; Cra still claims only CloudDocuments), Configure → tick
+   container `iCloud.dk.kildahl.cra` (register it under Identifiers → iCloud Containers first if
+   the list is empty). Save. Done 9 Nov 2026.
 2. Profiles → the Developer ID profile for `dk.kildahl.cra` → Edit → Save, so it carries the
    iCloud entitlements, then download it. Check:
    `security cms -D -i Cra.provisionprofile | grep -A3 ubiquity`.
