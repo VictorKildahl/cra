@@ -3,7 +3,9 @@ import AppKit
 /// The popover under the narrow sidebar header's ••• (Arc 1.17x, issue #287): a dark panel in
 /// the space's tones with an arrow up to the button, one 40 pt row per command (icon, title,
 /// shortcut), the hovered row filled. Geometry and tones are in CraCore's `SidebarMoreMenu`.
-/// It closes on a pick, Escape, or a click anywhere else.
+/// It opens with the first enabled row highlighted; the highlight then follows the pointer over
+/// enabled rows and clears anywhere else. A pick or a click anywhere else closes it; keys don't
+/// (Arc 1.17x: Escape and the arrows left it open, live 9 Nov 2026).
 @MainActor
 final class SidebarMorePanel: NSPanel {
     struct Item {
@@ -51,13 +53,8 @@ final class SidebarMorePanel: NSPanel {
         setFrameOrigin(NSPoint(x: (button.midX - frame.width / 2).rounded(), y: tipY - frame.height))
         parent.addChildWindow(self, ordered: .above)
         orderFront(nil)
-        monitors.append(NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown, .keyDown]) { [weak self] e in
+        monitors.append(NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] e in
             guard let self else { return e }
-            if e.type == .keyDown {
-                if e.keyCode == 53 { self.dismiss(); return nil }
-                self.dismiss()
-                return e
-            }
             if e.window === self { return e }
             let onAnchor = self.anchor.contains(NSEvent.mouseLocation)
             self.dismiss()
@@ -111,6 +108,7 @@ private final class SidebarMoreMenuView: NSView {
         fill = NSColor(SidebarMoreMenu.fill(shadedDark: ink))
         highlight = NSColor(SidebarMoreMenu.highlight(shadedDark: ink))
         super.init(frame: frame)
+        hovered = items.firstIndex { $0.enabled }
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect],
                                        owner: self, userInfo: nil))
     }
@@ -126,6 +124,7 @@ private final class SidebarMoreMenuView: NSView {
                       width: bounds.width - 2 * m.inset, height: m.rowHeight)
     }
 
+    /// The enabled row under `p`; nil over a disabled row, the padding or outside.
     private func row(at p: NSPoint) -> Int? {
         items.indices.first { rowRect($0).contains(p) && items[$0].enabled }
     }

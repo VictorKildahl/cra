@@ -45,6 +45,18 @@ enum FloatingSidebarTests {
                && abs(edge!.frame.maxX - shell.sidebarHost.frame.maxX) < 0.5,
                "the panel, sidebar and strip follow the new width")
         edge?.onDrag?(-40)
+        // A whole drag from the floating edge reaches the shell's handle too (#287: Arc's resize
+        // works from the start width and the pointer's speed).
+        var began = false, got: (CGFloat, CGFloat)?
+        shell.resizeHandle.onBegin = { began = true }
+        shell.resizeHandle.onResize = { t, v in got = (t, v); shell.sidebarWidth = 328 + t }
+        edge?.onBegin?()
+        edge?.onResize?(20, 15)
+        expect(began && got.map { $0 == 20 && $1 == 15 } == true && shell.sidebarHost.frame.width == 348,
+               "the floating edge hands the drag's start, translation and speed to the shell")
+        shell.resizeHandle.onResize?(0, 0)
+        shell.resizeHandle.onBegin = nil
+        shell.resizeHandle.onResize = nil
         shell.resizeHandle.onDrag = nil
         shell.resizeHandle.onEnd = nil
 
@@ -197,6 +209,8 @@ final class CraTuning {
 
 final class ResizeHandleView: NSView {
     var onDrag: ((CGFloat) -> Void)?
+    var onBegin: (() -> Void)?
+    var onResize: ((_ translation: CGFloat, _ speed: CGFloat) -> Void)?
     var onEnd: (() -> Void)?
 }
 

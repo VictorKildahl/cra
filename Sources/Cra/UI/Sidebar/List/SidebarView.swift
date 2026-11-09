@@ -318,6 +318,8 @@ final class SidebarTopBarView: NSView {
     private var compact = false
     /// Toolbar hidden and the sidebar under 214 pt: ← → ••• with no toggle (#287).
     private var narrow = false
+    /// The sidebar is under 212 pt, whatever the header carries.
+    private var narrowWidth = false
     private var toggleShown = true
     private var morePanel: SidebarMorePanel?
     private var devNav = false
@@ -407,15 +409,19 @@ final class SidebarTopBarView: NSView {
         // Arc 1.171: the header always carries the sidebar toggle; the toolbar has one only while the
         // sidebar is hidden (PaneToolbarView), so a floating sidebar shows both.
         let help = store.window(ui.windowID).sidebarVisible ? "Hide Sidebar (⌘S)" : "Show Sidebar (⌘S)"
-        // Below 214 pt the toolbar-hidden header has no room for the toggle and ↻: Arc's narrow
-        // layout keeps ← → and puts Reload and Toggle Sidebar under a ••• (#287).
-        narrow = compact && SidebarHeaderLayout.isNarrow(width: Double(bounds.width))
+        // Below 212 pt Arc's header goes narrow (#287): where it carries ← → ↻ (toolbar hidden, or
+        // a Developer Mode page) the toggle goes and ← → ••• take its place, Reload and Toggle
+        // Sidebar under the •••; with only the toggle, the toggle shrinks to 28 pt.
+        narrowWidth = SidebarHeaderLayout.isNarrow(width: Double(bounds.width))
+        narrow = (compact || devNav) && narrowWidth
         if !narrow, let p = morePanel {
             morePanel = nil
             p.onClose = nil
             p.dismiss()
         }
-        let toggle = button("toggle", symbol: "sidebar.left", help: help, size: 32, height: 32, iconSize: 15.5, active: active) { [weak self] in self?.actions.toggleSidebar() }
+        let toggle = narrowWidth
+            ? button("toggleS", symbol: "sidebar.left", help: help, size: 28, height: 28, iconSize: 15.5, active: active) { [weak self] in self?.actions.toggleSidebar() }
+            : button("toggle", symbol: "sidebar.left", help: help, size: 32, height: 32, iconSize: 15.5, active: active) { [weak self] in self?.actions.toggleSidebar() }
         var shown = narrow ? [] : [toggle]
         if narrow {
             shown.append(button("nback", symbol: "arrow.left", help: "Go Back (⌘[)", size: 28, height: 28, iconSize: 15, active: active, enabled: ui.canGoBack) { [weak self] in self?.actions.goBack() })
@@ -437,11 +443,11 @@ final class SidebarTopBarView: NSView {
         }
         rowButtons = shown
         toggleShown = !narrow
-        if devNav, chevron == nil {
+        if devNav, !narrow, chevron == nil {
             let c = DevMenuChevron(actions: actions)
             addSubview(c)
             chevron = c
-        } else if !devNav, let c = chevron {
+        } else if !devNav || narrow, let c = chevron {
             c.removeFromSuperview()
             chevron = nil
         }
@@ -471,25 +477,33 @@ final class SidebarTopBarView: NSView {
     override func layout() {
         super.layout()
         let w = bounds.width
-        // A drag across 214 pt swaps the toolbar-hidden header's layout (#287).
-        if compact && SidebarHeaderLayout.isNarrow(width: Double(w)) != narrow { apply() }
+        // A drag across 212 pt swaps the header's layout (#287).
+        if SidebarHeaderLayout.isNarrow(width: Double(w)) != narrowWidth { apply() }
         // Row 1: 71 pt for the traffic lights, then the toggle. In fullscreen the lights are gone and
         // Arc draws it from 20 pt in (glyph 20–38.5 pt); the floating panel draws stand-in lights.
         // It moves left to stay 2 pt clear of ← when the sidebar is just wide enough for both.
         let lights = !fullscreen || window?.parent != nil
         let nav = toggleShown ? Array(rowButtons.dropFirst()) : rowButtons
+        let afterLights: CGFloat = lights ? 6 + 71 + 2 : 13
         if toggleShown, let t = rowButtons.first {
-            let x = compact ? SidebarHeaderLayout.toggleX(width: Double(w), afterLights: lights ? 6 + 71 + 2 : 13) : (lights ? 6 + 71 + 2 : 13)
-            t.frame = NSRect(x: x, y: CraMetrics.titleRowCenter - 17, width: 32, height: 32)
+            let size = t.size.width
+            t.frame = NSRect(x: afterLights, y: CraMetrics.titleRowCenter - 1 - size / 2, width: size, height: size)
+        }
+        if narrow {
+            for (b, box) in zip(nav, SidebarHeaderLayout.navButtons(width: Double(w))) {
+                b.frame = NSRect(x: box.x, y: CraMetrics.titleRowCenter - 1 - box.size / 2, width: box.size, height: box.size)
+            }
         }
         if compact {
             // ← → ↻ 2 pt apart (32 pt), or ← → ••• touching (28 pt) when narrow; 6 pt from the
             // edge, centred on the same line.
-            for (b, box) in zip(nav, SidebarHeaderLayout.navButtons(width: Double(w))) {
-                b.frame = NSRect(x: box.x, y: CraMetrics.titleRowCenter - 1 - box.size / 2, width: box.size, height: box.size)
+            if !narrow {
+                for (b, box) in zip(nav, SidebarHeaderLayout.navButtons(width: Double(w))) {
+                    b.frame = NSRect(x: box.x, y: CraMetrics.titleRowCenter - 1 - box.size / 2, width: box.size, height: box.size)
+                }
             }
             pill.frame = NSRect(x: 8, y: CraMetrics.titleAreaHeight + 2, width: w - 16, height: 36)
-        } else if devNav {
+        } else if devNav, !narrow {
             let y = CraMetrics.titleRowCenter - 14
             var x = w - 6
             if let c = chevron {
@@ -500,6 +514,10 @@ final class SidebarTopBarView: NSView {
                 x -= b.size.width
                 b.frame = NSRect(x: x, y: y + (28 - b.size.height) / 2, width: b.size.width, height: b.size.height)
             }
+        }
+        // The toggle steps left to stay 2 pt clear of ← (Arc, #287).
+        if toggleShown, compact || devNav, !narrow, let t = rowButtons.first {
+            t.frame.origin.x = SidebarHeaderLayout.toggleX(width: Double(w), afterLights: afterLights, developer: devNav)
         }
     }
 

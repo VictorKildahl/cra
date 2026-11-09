@@ -4,18 +4,19 @@ import Foundation
 /// three layouts (`SidebarHeaderWidthLayout`: regular, compact, narrow); measured live on an
 /// offline Arc over AX, 9 Nov 2026, from 274 pt down to its 164 pt minimum:
 ///
-/// - 214 pt and wider: the sidebar toggle after the traffic lights, then ← → ↻ as 32 pt
-///   boxes 2 pt apart, ending 6 pt from the sidebar's edge. At 214 the toggle moves left to
-///   stay 2 pt clear of ← (Arc's x 77 → 74).
-/// - 208 pt and narrower: no toggle; ← → and "More options" (•••) as 28 pt boxes with no gap,
+/// - 212 pt and wider: the sidebar toggle after the traffic lights, then ← → ↻ as 32 pt
+///   boxes 2 pt apart, ending 6 pt from the sidebar's edge. The toggle moves left to stay 2 pt
+///   clear of ← (Arc's x 77 → 74 at 214, 73 at 213, 72 at 212).
+/// - 211 pt and narrower: no toggle; ← → and "More options" (•••) as 28 pt boxes with no gap,
 ///   ending 6 pt from the edge, centred on the same line. ••• turns into ✕ while its popover
-///   (Reload ⌘R, Toggle Sidebar ⌘S) is open.
+///   (Reload ⌘R, Toggle Sidebar ⌘S) is open. Each of 213, 212, 211, 210 and 209 was opened
+///   on its own (the resize snapping skips some widths during a drag).
 ///
-/// Arc's resize snapping kept the drag from landing on 209–213 pt, so where between 208 and
-/// 214 the switch happens wasn't seen; Cra switches below 214, where the toggle would have to
-/// cover the traffic lights to keep its 2 pt gap.
+/// With the toolbar shown the header holds only the toggle, which is 28 pt under 212. On a
+/// Developer Mode page it holds toggle + ← → ↻ again (← at width − 107) and goes narrow
+/// below 212 the same way, ← → ••• included.
 public enum SidebarHeaderLayout {
-    public static let narrowBelow: Double = 214
+    public static let narrowBelow: Double = 212
     public static let edgeInset: Double = 6
 
     public static func isNarrow(width: Double) -> Bool { width < narrowBelow }
@@ -29,9 +30,11 @@ public enum SidebarHeaderLayout {
     }
 
     /// The toggle's x in the regular layout: right after the traffic lights (`afterLights`),
-    /// or further left when ← comes within 2 pt of it.
-    public static func toggleX(width: Double, afterLights: Double, toggleSize: Double = 32) -> Double {
-        min(afterLights, navButtons(width: width)[0].x - 2 - toggleSize)
+    /// or further left when ← comes within 2 pt of it. On a Developer Mode page Arc's ← sits
+    /// 1 pt further left (Arc: 71 beside ← at 105 for 212 pt).
+    public static func toggleX(width: Double, afterLights: Double, developer: Bool = false, toggleSize: Double = 32) -> Double {
+        let back = developer ? width - 107 : navButtons(width: width)[0].x
+        return min(afterLights, back - 2 - toggleSize)
     }
 }
 

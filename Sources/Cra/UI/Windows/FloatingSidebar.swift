@@ -177,6 +177,12 @@ final class FloatingSidebarController {
             shell.resizeHandle.onDrag?(dx)
             reposition()
         }
+        resizeHandle.onBegin = { [weak self] in self?.shell.resizeHandle.onBegin?() }
+        resizeHandle.onResize = { [weak self] translation, speed in
+            guard let self, let resize = shell.resizeHandle.onResize else { return }
+            resize(translation, speed)
+            reposition()
+        }
         resizeHandle.onEnd = { [weak self] in self?.shell.resizeHandle.onEnd?() }
         return p
     }

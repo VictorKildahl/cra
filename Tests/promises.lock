@@ -463,8 +463,14 @@
 #286   Tests/BrowserManagerLifecycleTests.swift::permissionWaitsForItsTabCase  47983328a052
 #286   Tests/Scenarios/permission-waits-for-its-tab.scenario  691141857a65
 #287   Packages/CraCore/Tests/CraCoreTests/SidebarHeaderLayoutTests.swift::moreMenuTones  27e6344399d8
-#287   Packages/CraCore/Tests/CraCoreTests/SidebarHeaderLayoutTests.swift::narrowBelow214  040e11794e63
+#287   Packages/CraCore/Tests/CraCoreTests/SidebarHeaderLayoutTests.swift::narrowAt208AndDown  023c871849c5
 #287   Packages/CraCore/Tests/CraCoreTests/SidebarHeaderLayoutTests.swift::regularDownTo214  38bc61ac3c72
+#287   Packages/CraCore/Tests/CraCoreTests/SidebarHeaderLayoutTests.swift::switchesBetween212And211  cfcb056accc4
+#287   Packages/CraCore/Tests/CraCoreTests/SidebarResizeTests.swift::aFastDragDoesNotSnap  735c24749e64
+#287   Packages/CraCore/Tests/CraCoreTests/SidebarResizeTests.swift::hidesUnder82AndComesBack  cbd8e5e53749
+#287   Packages/CraCore/Tests/CraCoreTests/SidebarResizeTests.swift::snapsOnceItReaches228OnTheWayUp  a8688543582d
+#287   Packages/CraCore/Tests/CraCoreTests/SidebarResizeTests.swift::snapsTo228OnTheWayDown  0c8fb2dfd21e
+#287   Packages/CraCore/Tests/CraCoreTests/SidebarResizeTests.swift::widthIsStartPlusDrag  f24a8e2ecf3c
 #287   Packages/CraCore/Tests/CraCoreTests/SidebarWidthTests.swift::goesAsNarrowAsArc  34e6aff5e22c
 #287   Packages/CraCore/Tests/CraCoreTests/SidebarWidthTests.swift::stopsWhereArcStops  16f9b497fbcd
 #288   Tests/Scenarios/tear-off-profile.scenario  c58e24dc060d
