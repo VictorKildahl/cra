@@ -42,4 +42,3 @@ struct LibraryGlyph: View {
         return img
     }
 }
-
