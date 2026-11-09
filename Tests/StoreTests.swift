@@ -1680,6 +1680,13 @@ enum StoreTests {
                && FileManager.default.fileExists(atPath: bundle.appendingPathComponent(SettingsSync.sidebarName).path),
                "the bundle sits in a Cra folder inside the chosen one")
         expect(syncA.isEnabled && syncA.lastSync == clockA.now, "sync is on and dated by the app's clock")
+        let relaunched = SettingsSyncService(store: a, clock: clockA, device: "Studio", deviceID: "studio")
+        expect(relaunched.folder?.standardizedFileURL == bundle.standardizedFileURL,
+               "after a relaunch the bundle still goes to the Cra folder, never over the chosen folder's own files")
+        try? FileManager.default.removeItem(at: bundle)
+        syncA.poll()
+        expect(FileManager.default.fileExists(atPath: bundle.appendingPathComponent(SettingsSync.manifestName).path),
+               "a Cra folder deleted from the provider is written again on the next look")
 
         let b = SidebarStore(clock: clockB)
         b.settings.setDownloadLocation(DownloadLocation(askWhereToSave: true), profileID: nil)

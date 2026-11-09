@@ -91,7 +91,7 @@ final class SettingsSyncService {
         self.deviceID = deviceID ?? testDevice ?? Self.hardwareDeviceID()
         state = stateFile.load(or: { State() })
         location = state.location
-        if case .folder(let path)? = state.location { folder = URL(fileURLWithPath: path, isDirectory: true) }
+        if case .folder(let path)? = state.location { folder = Self.bundleFolder(in: URL(fileURLWithPath: path, isDirectory: true)) }
         otherDevices = state.devices
         lastSync = state.lastWritten?.writtenAt
         // A test host: the folder stands in for the container, no entitlement needed.
@@ -236,6 +236,7 @@ final class SettingsSyncService {
     /// While iCloud still downloads a bundle, nothing is written over it.
     func poll() {
         guard let folder, pendingChoice == nil else { return }
+        var gone = false
         switch look(at: folder) {
         case .downloading:
             awaitingDownload = true
@@ -252,9 +253,11 @@ final class SettingsSyncService {
                 apply(manifest, bundle)
             }
         case .none:
+            // No bundle at all (the Cra folder was deleted, or emptied): this Mac's goes back.
+            gone = true
             awaitingDownload = false
         }
-        if localHashes() != state.lastWritten?.files { writeBundle() }
+        if gone || localHashes() != state.lastWritten?.files { writeBundle() }
     }
 
     // MARK: Export and import (the same bundle, in a folder the user picks)
@@ -350,6 +353,7 @@ final class SettingsSyncService {
     /// The files first, the manifest last: a reader with a manifest whose hashes match has it all.
     /// Through a file coordinator, so iCloud sees whole files (a plain folder does not mind).
     private func write(_ bundle: Bundle, to folder: URL) throws -> SyncManifest {
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let files = try files(of: bundle)
         for (name, data) in files { try coordinatedWrite(data, to: folder.appendingPathComponent(name)) }
         let manifest = SyncManifest(device: device, deviceID: deviceID, writtenAt: clock.now, files: files.mapValues(Self.hash))
