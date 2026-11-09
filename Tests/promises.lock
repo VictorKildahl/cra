@@ -457,6 +457,12 @@
 #276   Packages/CraCore/Tests/CraCoreTests/PageMenuLabelsTests.swift::imageSearchReadsInChromiumsLanguage  5dbb3f70b1bc
 #276   Packages/CraCore/Tests/CraCoreTests/ShippedSidebarTests.swift::linkTabsOpenBehindThePageUnlessAsked  e17aaf032b28
 #277   Tests/Scenarios/little-window-fullscreen.scenario  b8efbde3ee41
+#278   Packages/CraCore/Tests/CraCoreTests/AutoArchiveSettingTests.swift::aLongThresholdIsReadableByOlderCra  be113a727e26
+#278   Packages/CraCore/Tests/CraCoreTests/AutoArchiveSettingTests.swift::aLongThresholdSurvivesARelaunch  79214d2b1a21
+#278   Packages/CraCore/Tests/CraCoreTests/AutoArchiveSettingTests.swift::aValueFromANewerCraDoesNotResetTheFile  40ce9061ab2b
+#278   Packages/CraCore/Tests/CraCoreTests/AutoArchiveSettingTests.swift::whatLoadedIsWhatIsSaved  db175813c67a
+#278   Tests/Scenarios/long-auto-archive.scenario  b7df5580f706
+#278   Tests/StoreTests.swift::longAutoArchive  34bbe172ee08
 #279   Packages/CraCore/Tests/CraCoreTests/FileMenuTests.swift::arcSections  656af4dd9bf7
 #279   Tests/Scenarios/arc-file-menu.scenario  a38584c2b20a
 #286   Packages/CraCore/Tests/CraCoreTests/PermissionAskTests.swift::onlyTheTabInFrontAsks  fc757adafaca

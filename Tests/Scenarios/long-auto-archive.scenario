@@ -1,0 +1,12 @@
+# promise: #278
+# A settings.json from a newer Cra, with an archive threshold this one doesn't know, loads with the
+# longest threshold this Cra has and the rest of the file as written. Until #278 the whole file was
+# set aside as .corrupt (a fault) and the defaults archived every Today tab unused for 12 hours.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "autoArchive": "aValueFromTheFuture", "searchEngine": "aSearchEngineFromTheFuture"}
+wait 2
+reject-log unreadable, set aside as \.corrupt
+# What it saved (180 days as "thirtyDays" plus "autoArchiveDays", which Cra 0.1.36 reads) loads again.
+relaunch
+wait 2
+reject-log unreadable, set aside as \.corrupt
