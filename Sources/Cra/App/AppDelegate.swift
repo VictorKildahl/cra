@@ -1105,13 +1105,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let v = dict["fullscreen"], let w = main.window, (v == "1") != w.styleMask.contains(.fullScreen) { w.toggleFullScreen(nil); return }
             if let spec = dict["snapshot"], let out = dict["out"] { ViewSnapshot.write(spec, in: main.window, to: out); return }
             // hover=TabRowView,1: that sidebar row hovered as if the pointer were on it (snapshots of
-            // hover-only controls, #243) until the pointer moves or the sidebar changes.
+            // hover-only controls, #243) until the pointer moves or the sidebar changes. The URL pill
+            // and favorite tiles take it too (#293).
             if let spec = dict["hover"] {
-                guard let row = ViewSnapshot.find(spec, in: main.window) as? SidebarRowView else {
-                    CraLog.note("hover: no visible \(spec)")
-                    return
+                switch ViewSnapshot.find(spec, in: main.window) {
+                case let row as SidebarRowView: row.list?.debugHover(row)
+                case let pill as SidebarURLPill: pill.debugHover()
+                case let tile as FavoriteTileView: tile.debugHover()
+                default: CraLog.note("hover: no visible \(spec)")
                 }
-                row.list?.debugHover(row)
                 return
             }
             if let size = dict["windowSize"]?.split(separator: "x").compactMap({ Double($0) }), size.count == 2, let w = main.window {

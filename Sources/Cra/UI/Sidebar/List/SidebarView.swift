@@ -615,6 +615,8 @@ final class SidebarURLPill: NSView {
     private var hovering = false { didSet { if hovering != oldValue { refreshFill() } } }
     private var colors = SidebarColors()
     private var hasTab = false
+    /// Scenarios (cra://debug?hover=SidebarURLPill): the pill as the pointer leaves it hovered (#293).
+    func debugHover() { hovering = true }
     private var model: (pinned: [(String, String, NSImage?)], active: Bool)?
 
     override init(frame: NSRect) {
@@ -650,7 +652,7 @@ final class SidebarURLPill: NSView {
     }
 
     private func refreshFill() {
-        layer?.backgroundColor = (hovering ? colors.selectedFill : colors.pillFill).cgColor
+        layer?.backgroundColor = (hovering ? colors.pillHoverFill : colors.pillFill).cgColor
     }
 
     /// Whether the pins go in this field (else in the grid over the favorites), for its width.

@@ -20,7 +20,7 @@ In an isolated CraDev profile, verify:
 - Press Command-S while the floating sidebar is entering or leaving. It should
   anchor correctly, without disappearing after the old animation completes.
 - The sidebar should stay open while the pointer crosses its right margin and
-  should dismiss after leaving the shared 24pt slack or the browser window.
+  should dismiss after leaving the shared 73 pt slack (81 pt past the sidebar, as in Arc) or the browser window. Brushing the strip for less than 0.1 s should not reveal it (GitHub #293).
 - While holding a mouse button for a window drag, tab reorder or context gesture,
   move beyond those bounds. Automatic hover dismissal must wait until release;
   explicit hide, toggle and window actions must still work.
