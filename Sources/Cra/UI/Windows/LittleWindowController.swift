@@ -1075,23 +1075,46 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             copy("[\(browser?.currentTitle ?? state.title)](\(currentURL))")
             showToast("Copied URL as Markdown")
         case "viewSource": browser?.viewSource()
-        case "devTools", "jsConsole", "inspectElement":
-            browser?.devToolsAction = ["jsConsole": "console", "inspectElement": "inspect"][id]
+        case "devTools", "jsConsole", "networkPanel", "inspectElement":
+            browser?.devToolsAction = ["jsConsole": "console", "networkPanel": "network", "inspectElement": "inspect"][id]
             browser?.showDevTools()
         case "print": browser?.print()
+        // The rest of the page's commands run on this page, not on the browser window's tab (#333).
+        case "share": PageCommands.share(self)
+        case "copyURLQuote": PageCommands.copyURLAsQuote(self)
+        case "savePageAs": PageCommands.savePageAs(self)
+        case "captureFullPage": PageCommands.captureFullPage(self)
+        case "capturePortrait": PageCommands.capturePortrait(self)
+        case "jumpToSelection": PageCommands.jumpToSelection(browser)
+        case "pictureInPicture": browser?.requestPictureInPicture(automatic: false)
+        case "cast": if browser?.runChromeCommand("IDC_ROUTE_MEDIA") != true { showToast("Nothing to Cast") }
+        case "taskManager": if browser?.runChromeCommand("IDC_TASK_MANAGER") != true { showToast("Open a Page First") }
+        case "toggleDeveloperMode": if hasPage { store.settings.toggleDeveloperMode(url: currentURL) }
+        case "stayOnTop": toggleStayOnTop()
         case "promoteLittleWindow": promote(to: nil)
         // Arc's Show Little Arc "Open In" Menu (⇧⌘O): the ⌄ button's list of spaces.
         case "littleWindowOpenInMenu": if hasPage, !isPeek { togglePopup() }
         // Move Tab to Space N (⌃⌘N, #86) sends the page there, as the spaces popup does (#92).
         case let id where id.hasPrefix("moveTabToSpace"):
             if let n = Int(id.dropFirst(14)), n >= 1, n <= store.spaceOrder.count { promote(to: store.spaceOrder[n - 1]) }
-        // No find bar in little windows; keep it off the main window.
-        case "find", "findNext", "findPrevious", "toggleSidebar", "pinTab", "favoriteTab", "renameTab",
-             "duplicateTab", "resetTab", "muteTab", "clearToday", "nextTab", "previousTab", "recentTab", "recentTabBackward":
+        // No find bar, sidebar or split in little windows; keep them off the main window.
+        case "find", "findNext", "findPrevious", "useSelectionForFind", "toggleSidebar", "pinTab", "favoriteTab", "renameTab",
+             "duplicateTab", "resetTab", "muteTab", "clearToday", "nextTab", "previousTab", "recentTab", "recentTabBackward",
+             "revealTab", "collapsePinned", "collapseAllFolders", "expandAllFolders", "resetSpaceTabs",
+             "addSplitView", "closeSplitPane", "separateFromSplit", "flipSplitOrientation", "nextSplitPane", "previousSplitPane":
             break
+        case let id where id.hasPrefix("splitPane"): break
         default: return false
         }
         return true
+    }
+
+    /// Window ▸ Stay On Top floats this window over other apps' windows. A Peek rides on its
+    /// browser window, so that one floats with it.
+    var staysOnTop: Bool { isPeek ? peekParent?.staysOnTop ?? false : window?.level == .floating }
+    func toggleStayOnTop() {
+        if isPeek { peekParent?.toggleStayOnTop(); return }
+        window?.level = staysOnTop ? .normal : .floating
     }
 
     private func copy(_ s: String) {

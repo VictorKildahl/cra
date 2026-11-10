@@ -1208,8 +1208,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             // windowState=<label>: each window's full screen, Space, traffic lights (#277), whether a
-            // drag can move it (#308) and where the page card sits in it (#315). Lights are "hidden", or
-            // their alpha; "-" when a window has none.
+            // drag can move it (#308), where the page card sits in it (#315), whether it floats (Stay On
+            // Top) and has a sheet open (#333). Lights are "hidden", or their alpha; "-" when a window has none.
             if let label = dict["windowState"] {
                 func lights(_ w: NSWindow) -> String {
                     [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].map { type in
@@ -1232,13 +1232,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                         + "layout=\(flag(m.shell.windowFullscreen)) sidebarUI=\(flag(m.sidebarUI.windowFullscreen)) "
                         + "lightsHidden=\(flag((w as? CraWindow)?.trafficLightsHidden ?? false)) lights=\(lights(w)) "
                         + "movable=\(flag(w.isMovable)) backgroundMovable=\(flag(w.isMovableByWindowBackground)) "
-                        + "lightsIn=\(lightsPlace(w)) card=\(m.shell.cardReadout)")
+                        + "lightsIn=\(lightsPlace(w)) card=\(m.shell.cardReadout) "
+                        + "onTop=\(flag(m.staysOnTop)) sheet=\(flag(w.attachedSheet != nil))")
                 }
                 for (i, l) in littleWindows.enumerated() where !l.isPeek {
                     guard let w = l.window else { continue }
                     CraLog.note("window state \(label): little\(i) fullscreen=\(flag(w.styleMask.contains(.fullScreen))) "
                         + "primary=\(flag(w.collectionBehavior.contains(.fullScreenPrimary))) "
-                        + "visible=\(flag(w.isVisible)) onSpace=\(flag(w.isOnActiveSpace)) lights=\(lights(w))")
+                        + "visible=\(flag(w.isVisible)) onSpace=\(flag(w.isOnActiveSpace)) lights=\(lights(w)) "
+                        + "onTop=\(flag(w.level == .floating)) sheet=\(flag(w.attachedSheet != nil))")
                 }
                 return
             }
@@ -1295,11 +1297,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // menuRows=<menu>[&label=<label>]: a menu bar menu's rows as it draws them once validated
             // (hidden rows left out), "|" between rows and "──" for a separator: Arc's File menu (#279).
+            // marks=1 also puts ✓ before a checked row and " (off)" after a dimmed one (#333).
             if let title = dict["menuRows"] {
                 let menu = NSApp.mainMenu?.items.first { $0.title == title }?.submenu
                 menu?.update()
-                let rows = menu?.items.filter { !$0.isHidden }.map { $0.isSeparatorItem ? "──" : $0.title } ?? []
+                let marks = dict["marks"] == "1"
+                let rows: [String] = menu?.items.filter { !$0.isHidden }.map { item -> String in
+                    if item.isSeparatorItem { return "──" }
+                    guard marks else { return item.title }
+                    return (item.state == .on ? "✓" : "") + item.title + (item.isEnabled ? "" : " (off)")
+                } ?? []
                 CraLog.note("menu rows \(dict["label"] ?? title): \(rows.joined(separator: "|"))")
+                return
+            }
+            // endSheets=1: every open sheet (a save panel, a dialog) cancelled, as Escape would.
+            if dict["endSheets"] != nil {
+                for w in NSApp.windows { if let sheet = w.attachedSheet { w.endSheet(sheet, returnCode: .cancel) } }
                 return
             }
             // activations=<label>: whether Cra is the active app, and how many requests to bring it to
@@ -1702,11 +1715,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if let id = item.representedObject as? String, let title = flippingTitle(id), item.title != title { item.title = title }
         switch item.representedObject as? String {
         case "collapsePinned": return !main.isStandalone
-        case "stayOnTop": item.state = main.staysOnTop ? .on : .off
+        // A Little Window in front answers for itself (#333).
+        case "stayOnTop": item.state = (keyLittleWindow?.staysOnTop ?? main.staysOnTop) ? .on : .off
         case "allowAppleEventsJavaScript": item.state = store.settings.allowAppleEventsJavaScript ? .on : .off
         case "appearanceAutomatic", "appearanceLight", "appearanceDark":
             item.state = "appearance" + store.settings.websiteAppearance.title == item.representedObject as? String ? .on : .off
-        case "copyURLQuote", "savePageAs", "captureFullPage", "capturePortrait", "revealTab", "share": return store.selectedTabID != nil
+        case "copyURLQuote", "savePageAs", "captureFullPage", "capturePortrait", "share":
+            if let little = keyLittleWindow { return little.hasPage }
+            return store.selectedTabID != nil
+        case "revealTab": return store.selectedTabID != nil
         case "closeTab":
             // Arc shows Close Tab only while a tab is selected; ⌘W still closes the window (#279).
             item.isHidden = !FileMenu.shows("closeTab", tabSelected: store.selectedTabID != nil)
@@ -1714,7 +1731,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "clearArchive": return !store.archive.isEmpty
         case "resetSpaceTabs": return !main.isStandalone
         case "toggleDeveloperMode":
-            let on = store.selectedTab?.tab.map { store.settings.isDeveloperMode(url: $0.url) } ?? false
+            let url = keyLittleWindow.map { $0.hasPage ? $0.currentURL : nil } ?? store.selectedTab?.tab?.url
+            let on = url.map { store.settings.isDeveloperMode(url: $0) } ?? false
             item.title = on ? "Turn off Developer Mode for this Site" : "Turn on Developer Mode for this Site"
         case "pinTab":
             item.title = store.selectedTabID.map { store.isPinned($0) ? "Unpin Tab" : "Pin Tab" } ?? "Pin/Unpin Tab"
@@ -1723,7 +1741,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             SystemIntegration.shared.refresh()
             return !SystemIntegration.shared.isDefaultBrowser
         case "pictureInPicture":
-            item.title = main.currentBrowser?.isInPictureInPicture == true ? "Exit Picture in Picture" : "Picture in Picture"
+            let browser = keyLittleWindow.map { $0.browser } ?? main.currentBrowser
+            item.title = browser?.isInPictureInPicture == true ? "Exit Picture in Picture" : "Picture in Picture"
         case "promoteLittleWindow", "littleWindowOpenInMenu": return keyLittleWindow?.hasPage ?? false
         case "checkForUpdates": return SoftwareUpdater.shared.validateMenuItem(item)
         case "closeSplitPane", "separateFromSplit", "flipSplitOrientation":

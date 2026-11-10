@@ -2092,9 +2092,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     var captureOverlay: CaptureOverlay?
     var captureRequest: (id: UUID, window: NSWindow)?
 
-    /// File ▸ Share…'s list, kept while it is open.
-    private var sharePicker: NSSharingServicePicker?
-
     /// Send To… an easel: the capture goes on it, under what is there, and its tab comes forward
     /// (a new one when it has none open).
     private func sendCapture(_ png: Data, toEasel id: UUID) {
@@ -2136,7 +2133,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         switch action {
         case .copy?:
             guard let png else { return }
-            copyCapture(png)
+            PageCommands.copyCapture(png)
             if let peek { peek.showToast("Screenshot Copied to Clipboard") } else { showToast("Screenshot Copied to Clipboard") }
         case .save?:
             if let png { saveCapture(png, over: peek?.window) }
@@ -2164,30 +2161,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
     }
 
-    private func copyCapture(_ png: Data) {
-        let pasteboard = NSPasteboard.general
-        pasteboard.declareTypes([.png, .tiff], owner: nil)
-        pasteboard.setData(png, forType: .png)
-        if let tiff = NSImage(data: png)?.tiffRepresentation { pasteboard.setData(tiff, forType: .tiff) }
-    }
-
     /// Arc's "Send via iMessage…": Messages' compose sheet with the capture attached.
     private func sendCaptureViaMessages(_ png: Data) {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("Cra Captures", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let url = dir.appendingPathComponent(Self.captureFileName())
+        let url = dir.appendingPathComponent(PageCommands.captureFileName())
         guard (try? png.write(to: url)) != nil, let service = NSSharingService(named: .composeMessage),
               service.canPerform(withItems: [url]) else {
             showToast("Messages Isn't Available")
             return
         }
         service.perform(withItems: [url])
-    }
-
-    private static func captureFileName() -> String {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
-        return "Cra Capture \(f.string(from: Date())).png"
     }
 
     // MARK: Sidebar
@@ -3137,20 +3121,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
     }
 
-    /// File ▸ Share… (GitHub #279): the system's whole share list for the page in front (Arc's has
-    /// Add to Reading List, AirDrop, Mail, Notes, Copy, Edit Extensions…), hanging from the top
-    /// centre of the page as Arc 1.172.1 shows it.
-    func shareSelectedPage() {
-        guard let url = selectedTabID.flatMap({ store.item($0)?.tab?.url }).flatMap(URL.init(string:)),
-              let window, let content = window.contentView else { return }
-        let page = browsers.visibleRuntime.flatMap(pageScreenRect).map { content.convert(window.convertFromScreen($0), from: nil) }
-            ?? content.bounds
-        let top = content.isFlipped ? page.minY : page.maxY
-        let anchor = NSRect(x: page.midX - 1, y: content.isFlipped ? top : top - 1, width: 2, height: 1)
-        let picker = NSSharingServicePicker(items: [url])
-        sharePicker = picker
-        picker.show(relativeTo: anchor, of: content, preferredEdge: content.isFlipped ? .maxY : .minY)
-    }
+    /// File ▸ Share… (GitHub #279), on the open tab.
+    func shareSelectedPage() { PageCommands.share(self) }
 
     /// The lock in the Site Control Center: the certificate of the page on screen.
     private func showCertificate() {
@@ -3160,7 +3132,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         CertificateWindow.show(certificates, host: host, over: window)
     }
 
-    /// Arc's "Capture the full page": the whole document, beyond the viewport, as a PNG.
     // MARK: Boosts
 
     /// Arc's New Boost: the open site's boost (made if it has none) in the editor beside the page.
@@ -3320,124 +3291,24 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
     }
 
-    /// Arc's Edit ▸ Copy URL as Quote (⌃⇧⌘C): the page's selection in quotes with a link that
-    /// scrolls to it (CleanURL.quote; Arc's own link goes through arc.net).
-    func copyURLAsQuote() {
-        guard let b = currentBrowser, let url = selectedTabID.flatMap({ store.item($0)?.tab?.url }) else { return }
-        b.sendDevToolsMethod("Runtime.evaluate", params: #"{"expression":"getSelection().toString()","returnByValue":true}"#) { [weak self] result, _ in
-            MainActor.assumeIsolated {
-                let value = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
-                let text = (value?["result"] as? [String: Any])?["value"] as? String ?? ""
-                guard let quote = CleanURL.quote(text, url: url) else { self?.showToast("Select Text to Copy as a Quote"); return }
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(quote, forType: .string)
-                self?.showToast("Copied URL as Quote")
-            }
-        }
-    }
-
-    /// Arc's File ▸ Save Page As (⇧⌘S): Chrome's two formats, a single-file web archive or the
-    /// page's HTML.
-    func savePageAs() {
-        guard let b = currentBrowser, let window, let tab = selectedTabID.flatMap({ store.item($0) }) else { return }
-        let panel = NSSavePanel()
-        let format = SavePageFormat(panel: panel)
-        panel.accessoryView = format.view
-        let base = tab.displayTitle.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
-        panel.nameFieldStringValue = (base.isEmpty ? "Page" : base) + ".mhtml"
-        panel.canCreateDirectories = true
-        panel.beginSheetModal(for: window) { [weak self] response in
-            guard response == .OK, let dest = panel.url else { return }
-            let single = format.singleFile
-            let (method, params) = single
-                ? ("Page.captureSnapshot", #"{"format":"mhtml"}"#)
-                : ("Runtime.evaluate", #"{"expression":"'<!DOCTYPE html>\n'+document.documentElement.outerHTML","returnByValue":true}"#)
-            b.sendDevToolsMethod(method, params: params) { result, error in
-                MainActor.assumeIsolated {
-                    let o = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
-                    let text = single ? o?["data"] as? String : (o?["result"] as? [String: Any])?["value"] as? String
-                    guard let text, (try? Data(text.utf8).write(to: dest, options: .atomic)) != nil else {
-                        NSLog("Cra: save page failed: %@", error ?? "no data")
-                        self?.showToast("Couldn’t Save the Page")
-                        return
-                    }
-                    self?.showToast("Page Saved")
-                }
-            }
-        }
-    }
+    /// Arc's Edit ▸ Copy URL as Quote, Save Page As and the page captures, on the open tab (PageCommands).
+    func copyURLAsQuote() { PageCommands.copyURLAsQuote(self) }
+    func savePageAs() { PageCommands.savePageAs(self) }
 
     func captureFullPage() {
         captureOverlay?.close()
-        guard let b = currentBrowser else { return }
-        showToast("Capture in Progress")
-        // Both completions come on the main queue.
-        b.sendDevToolsMethod("Page.getLayoutMetrics", params: "{}") { [weak self] result, error in
-            guard let result, let m = try? JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any],
-                  let size = (m["cssContentSize"] ?? m["contentSize"]) as? [String: Any],
-                  let w = size["width"] as? Double, let h = size["height"] as? Double else {
-                MainActor.assumeIsolated { self?.finishCapture(nil, error: error) }
-                return
-            }
-            let params = #"{"format":"png","captureBeyondViewport":true,"clip":{"x":0,"y":0,"width":\#(w),"height":\#(min(h, 16384)),"scale":1}}"#
-            b.sendDevToolsMethod("Page.captureScreenshot", params: params) { shot, error in
-                MainActor.assumeIsolated { self?.finishCapture(shot, error: error) }
-            }
-        }
+        PageCommands.captureFullPage(self)
     }
 
-    /// Arc's File ▸ Capture in Portrait Mode: the page laid out at a phone's width (390 × 844 pt,
-    /// the layout a site gives an iPhone 15) and captured at 3x, then put back as it was.
     func capturePortrait() {
         captureOverlay?.close()
-        guard let b = currentBrowser else { return }
-        showToast("Capture in Progress")
-        let metrics = #"{"width":390,"height":844,"deviceScaleFactor":3,"mobile":true}"#
-        b.sendDevToolsMethod("Emulation.setDeviceMetricsOverride", params: metrics) { [weak self] _, error in
-            MainActor.assumeIsolated {
-                guard error == nil else { self?.finishCapture(nil, error: error); return }
-                // A layout pass and a paint at the new width before the shot.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    b.sendDevToolsMethod("Page.captureScreenshot", params: #"{"format":"png"}"#) { shot, error in
-                        b.sendDevToolsMethod("Emulation.clearDeviceMetricsOverride", params: "{}") { _, _ in }
-                        MainActor.assumeIsolated { self?.finishCapture(shot, error: error) }
-                    }
-                }
-            }
-        }
-    }
-
-    /// As Arc does with a capture: the image goes on the clipboard with the shutter sound, and
-    /// the toast's Save puts it in a file. Finder stays where it is (GitHub #90).
-    private func finishCapture(_ shot: String?, error: String?) {
-        guard let shot, let o = try? JSONSerialization.jsonObject(with: Data(shot.utf8)) as? [String: Any],
-              let b64 = o["data"] as? String, let png = Data(base64Encoded: b64), NSImage(data: png) != nil else {
-            NSLog("Cra: capture failed: %@", error ?? "no data")
-            showToast("Capture Failed")
-            return
-        }
-        copyCapture(png)
-        CaptureSound.play()
-        showToast("Screenshot Copied to Clipboard", action: ShinyToast.Action(title: "Save") { [weak self] in self?.saveCapture(png) })
+        PageCommands.capturePortrait(self)
     }
 
     /// The toast's Save: Arc's "Save Capture Image" panel, in Downloads.
     private func saveCapture(_ png: Data, over sourceWindow: NSWindow? = nil) {
         guard let window = sourceWindow ?? window else { return }
-        let panel = NSSavePanel()
-        panel.title = "Save Capture Image"
-        panel.nameFieldStringValue = Self.captureFileName()
-        panel.allowedContentTypes = [.png]
-        panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
-        panel.beginSheetModal(for: window) { [weak self] response in
-            guard response == .OK, let url = panel.url else { return }
-            do {
-                try png.write(to: url)
-            } catch {
-                NSLog("Cra: saving a capture failed: %@", error.localizedDescription)
-                self?.showToast("Failed to Save Capture")
-            }
-        }
+        PageCommands.saveCapture(png, over: window, host: self)
     }
 
     // MARK: Tab switcher
@@ -3760,10 +3631,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// Arc's (and Chrome's) Edit ▸ Find ▸ Jump to Selection (⌘J): the page scrolls its selection into view.
-    func jumpToSelection() {
-        currentBrowser?.executeJavaScript("(()=>{const s=getSelection();if(!s.rangeCount)return;const n=s.getRangeAt(0).startContainer;"
-            + "(n.nodeType===1?n:n.parentElement)?.scrollIntoView({block:'center'});})()")
-    }
+    func jumpToSelection() { PageCommands.jumpToSelection(currentBrowser) }
 
     func findNext(forward: Bool) {
         if !overlay.findVisible { showFindBar(); return }
@@ -4222,33 +4090,5 @@ final class CraWindow: NSWindow {
                 b.setFrameOrigin(target)
             }
         }
-    }
-}
-
-/// Save Page As's Format pop-up (Chrome's "Web Page, Single File" and "Web Page, HTML Only");
-/// switching it swaps the name's extension.
-@MainActor
-private final class SavePageFormat: NSObject {
-    let view: NSView
-    private let popup = NSPopUpButton(frame: .zero, pullsDown: false)
-    private weak var panel: NSSavePanel?
-    var singleFile: Bool { popup.indexOfSelectedItem == 0 }
-
-    init(panel: NSSavePanel) {
-        self.panel = panel
-        let label = NSTextField(labelWithString: "Format:")
-        popup.addItems(withTitles: ["Web Page, Single File", "Web Page, HTML Only"])
-        let row = NSStackView(views: [label, popup])
-        row.edgeInsets = NSEdgeInsets(top: 10, left: 20, bottom: 10, right: 20)
-        view = row
-        super.init()
-        popup.target = self
-        popup.action = #selector(changed)
-    }
-
-    @objc private func changed() {
-        guard let panel else { return }
-        let name = (panel.nameFieldStringValue as NSString).deletingPathExtension
-        panel.nameFieldStringValue = name + (singleFile ? ".mhtml" : ".html")
     }
 }
