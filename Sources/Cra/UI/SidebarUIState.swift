@@ -175,6 +175,8 @@ struct TabNavState: Equatable {
     /// The service a WebKit page plays ("Spotify"; docs/protected-media.md), nil for Chromium's:
     /// its extension buttons dim and the Site Control Center says why.
     var protectedMedia: String?
+    /// Chromium's translate state for the page (#310): Arc's translate button and popover.
+    var translation: PageTranslation?
 }
 
 /// Where a dragged tab or link would go in the split (Arc: SplitViewControllerLayout.DropTarget).
@@ -235,6 +237,8 @@ final class SidebarActions {
     var runExtension: (String) -> Void = { _ in }
     /// Toolbar Extensions button: the extensions menu, under the pointer.
     var showExtensionsMenu: () -> Void = {}
+    /// Arc's translate popover for a tab (#310), hung under its button (screen rect).
+    var showTranslate: (UUID, NSRect?) -> Void = { _, _ in }
     /// Split view: a pane's pinned extension or Extensions button. The pane takes the focus
     /// first, so the action and the Site Control Center describe its page (GitHub #178).
     var paneRunExtension: (UUID, String) -> Void = { _, _ in }

@@ -54,6 +54,8 @@ final class TabRuntime {
     var extensionPageRetries = 0
     /// The next of those loads (LiveScheduler runs work only while its handle is kept).
     var extensionPageRetry: ScheduledWork?
+    /// Chromium's translate state for the page (#310), for Arc's translate button and popover.
+    var translation: PageTranslation?
     /// Chrome-style hosting: the page's own window (nil until created, or for Alloy).
     var hostWindow: NSWindow? { browser.hostWindow }
     init(tabID: UUID, browser: CraBrowser) {
@@ -85,6 +87,8 @@ protocol BrowserManagerDelegate: AnyObject {
     /// An extension asked for this tab to be in front (chrome.tabs.update with active: true),
     /// or with byPage the page did (window.focus(), clients.focus() from a notification click).
     func browserManagerActivationRequested(_ tabID: UUID, byPage: Bool)
+    /// Arc's toast for the page's translation (#310): done, failed, or back to the original.
+    func browserManagerTranslationToast(_ tabID: UUID, text: String)
     /// Arc's Peek: a link the user clicked (or Shift-clicked) in `tabID`, whose page is at
     /// `pageURL`. Return true when it opens in a Peek instead.
     func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool, newTab: Bool) -> Bool
@@ -779,7 +783,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         }
     }
 
-    private func tabID(of browser: CraBrowser) -> UUID? {
+    func tabID(of browser: CraBrowser) -> UUID? {
         guard let id = byBrowser[ObjectIdentifier(browser)], runtimes[id]?.browser === browser else { return nil }
         return id
     }

@@ -1648,6 +1648,14 @@ public:
             }
             return true;
         }
+        // The page's translate state, as JSON (scripts/cef-patches/translate-ui.patch).
+        if (message->GetName() == "Cra.translate") {
+            CefRefPtr<CefListValue> args = message->GetArgumentList();
+            NSString* state = args->GetSize() > 0 ? NSStringFromCef(args->GetString(0)) : @"{}";
+            if (o && [o.delegate respondsToSelector:@selector(browser:didChangeTranslateState:)])
+                [o.delegate browser:o didChangeTranslateState:state];
+            return true;
+        }
         if (message->GetName() == "Cra.activate") {
             CefRefPtr<CefListValue> args = message->GetArgumentList();
             BOOL byPage = args->GetSize() > 0 && args->GetBool(0);

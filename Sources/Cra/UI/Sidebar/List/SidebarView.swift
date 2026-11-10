@@ -14,6 +14,10 @@ final class SidebarView: NSView {
 
     /// The URL field's sliders button (screen rect), nil while the toolbar has it.
     var siteControlsButtonFrameOnScreen: NSRect? { topBar.siteControlsButtonFrameOnScreen }
+    /// The URL field's "Translation Available" (screen rect), nil while it isn't shown (#310).
+    var translateFrameOnScreen: NSRect? { topBar.translateFrameOnScreen }
+    /// Scenario hook (#310): what the URL field's translate line says, nil while it isn't shown.
+    var debugTranslateLine: String? { topBar.debugTranslateLine }
     /// Scenario hooks (#226): the URL field as if the pointer were over the header, and a press on
     /// one of its buttons. nil while the toolbar has the address.
     func debugURLFieldHover(_ on: Bool) -> [ToolbarComposition.Item]? { topBar.debugURLFieldHover(on) }
@@ -349,7 +353,13 @@ final class SidebarTopBarView: NSView {
     func debugURLFieldPress(_ item: ToolbarComposition.Item) -> Bool { !pill.isHidden && pill.debugPress(item) }
     private var syncQueued = false
 
-    var preferredHeight: CGFloat { CraMetrics.titleAreaHeight + (compact ? 2 + 36 + 8 : 0) }
+    var preferredHeight: CGFloat { CraMetrics.titleAreaHeight + (compact ? 2 + pill.height + 8 : 0) }
+
+    var translateFrameOnScreen: NSRect? {
+        guard !pill.isHiddenOrHasHiddenAncestor, let window, let f = pill.translateFrame else { return nil }
+        return window.convertToScreen(pill.convert(f, to: nil))
+    }
+    var debugTranslateLine: String? { pill.isHidden ? nil : pill.translateTitle }
 
     init(store: SidebarStore, ui: SidebarUIState, actions: SidebarActions) {
         self.store = store
@@ -401,6 +411,7 @@ final class SidebarTopBarView: NSView {
 
     private func apply() {
         let wasCompact = compact
+        let wasHeight = preferredHeight
         compact = !store.settings.showToolbar
         colors = SidebarColors(store.focusedSpace(window: ui.windowID).theme.palette)
         let tab = store.selectedTab(window: ui.windowID)
@@ -469,11 +480,18 @@ final class SidebarTopBarView: NSView {
                                              ext.badge(for: $0, profile: profile, tab: tab?.id), tint: colors.textSecondary))
                 }
             }
+            let translation = tab.flatMap { ui.navState(for: $0.id).translation }
             pill.show(text: text, url: url, hasTab: tab != nil, colors: colors, active: active,
-                      pinned: pinned, protectedMedia: tab.flatMap { ui.navState(for: $0.id).protectedMedia })
+                      pinned: pinned, protectedMedia: tab.flatMap { ui.navState(for: $0.id).protectedMedia },
+                      translate: translation?.offersTranslation == true ? (narrowWidth ? "Translate" : "Translation Available") : nil)
+            let tabID = tab?.id
+            pill.onTranslate = { [weak self] in
+                guard let self, let tabID else { return }
+                self.actions.showTranslate(tabID, self.translateFrameOnScreen)
+            }
         }
         needsLayout = true
-        if wasCompact != compact { superview?.superview?.needsLayout = true }
+        if wasCompact != compact || wasHeight != preferredHeight { superview?.superview?.needsLayout = true }
     }
 
     override func layout() {
@@ -505,7 +523,7 @@ final class SidebarTopBarView: NSView {
                     b.frame = NSRect(x: box.x, y: CraMetrics.titleRowCenter - 1 - box.size / 2, width: box.size, height: box.size)
                 }
             }
-            pill.frame = NSRect(x: 8, y: CraMetrics.titleAreaHeight + 2, width: w - 16, height: 36)
+            pill.frame = NSRect(x: 8, y: CraMetrics.titleAreaHeight + 2, width: w - 16, height: pill.height)
         } else if devNav, !narrow {
             let y = CraMetrics.titleRowCenter - 14
             var x = w - 6
@@ -630,9 +648,11 @@ final class SidebarURLPill: NSView {
         layer?.cornerCurve = .continuous
         label.lineBreakMode = .byTruncatingMiddle
         addSubview(label)
+        translateLine.isHidden = true
         tip.followsCursor = true
         tip.autoresizingMask = [.width, .height]
         addSubview(tip)
+        addSubview(translateLine)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -640,9 +660,24 @@ final class SidebarURLPill: NSView {
     override var isFlipped: Bool { true }
     override var mouseDownCanMoveWindow: Bool { false }
 
+    /// Arc's "Translation Available" under the address (#310): a second line in the field, the
+    /// address's left edge, 17 pt tall, opening the translate popover. Arc 1.17x AX (10 Nov): the
+    /// address at 6 pt from the field's top, the line at 23 pt, the tab list 2 pt under it.
+    private let translateLine = TranslateLineButton()
+    var onTranslate: () -> Void = {}
+    var translateTitle: String? { translateLine.isHidden ? nil : translateLine.title }
+    var translateFrame: NSRect? { translateLine.isHidden ? nil : translateLine.frame }
+    /// 36 pt, or 42 with the translate line.
+    var height: CGFloat { translateLine.isHidden ? 36 : 42 }
+
     func show(text: String, url: String, hasTab: Bool, colors: SidebarColors, active: Bool,
-              pinned: [(String, String, NSImage?)], protectedMedia: String? = nil) {
+              pinned: [(String, String, NSImage?)], protectedMedia: String? = nil, translate: String? = nil) {
         self.protectedMedia = protectedMedia
+        translateLine.isHidden = translate == nil
+        translateLine.title = translate ?? ""
+        translateLine.tint = colors.textSecondary
+        translateLine.hoverTint = colors.textPrimary
+        translateLine.action = { [weak self] in self?.onTranslate() }
         self.colors = colors
         self.hasTab = hasTab
         tip.text = url
@@ -724,8 +759,13 @@ final class SidebarURLPill: NSView {
         }
         let x: CGFloat = 12
         let lh = label.intrinsicContentSize.height
-        label.frame = NSRect(x: x - SidebarText.inset, y: (h - lh) / 2, width: max(0, right - x) + 2 * SidebarText.inset, height: lh)
+        let labelY = translateLine.isHidden ? (h - lh) / 2 : 6 + (18 - lh) / 2
+        label.frame = NSRect(x: x - SidebarText.inset, y: labelY, width: max(0, right - x) + 2 * SidebarText.inset, height: lh)
         tip.frame = NSRect(x: 0, y: 0, width: right, height: h)
+        if !translateLine.isHidden {
+            let tw = min(translateLine.fittingWidth, max(0, right - x))
+            translateLine.frame = NSRect(x: x, y: 23, width: tw, height: 17)
+        }
     }
 
     override func updateTrackingAreas() {
@@ -750,6 +790,64 @@ final class SidebarURLPill: NSView {
         default: return false
         }
         return true
+    }
+}
+
+/// The URL field's "Translation Available" line (#310): plain text in the field's secondary ink,
+/// the primary on hover, that opens Arc's translate popover. Arc's AX frame is 122 × 17 pt, the
+/// width of the title in 12 pt.
+final class TranslateLineButton: NSView {
+    var action: () -> Void = {}
+    private let label = NSTextField.sidebarLabel(size: 12)
+    var tint = NSColor.secondaryLabelColor { didSet { refresh() } }
+    var hoverTint = NSColor.labelColor { didSet { refresh() } }
+    private var hovering = false { didSet { refresh() } }
+    var title: String {
+        get { label.stringValue }
+        set {
+            label.stringValue = newValue
+            setAccessibilityLabel(newValue)
+            needsLayout = true
+        }
+    }
+    /// The title's own width (Arc's button is as wide as its text).
+    var fittingWidth: CGFloat {
+        ceil((label.stringValue as NSString).size(withAttributes: [.font: label.font ?? .systemFont(ofSize: 12)]).width) + 1
+    }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        label.lineBreakMode = .byTruncatingTail
+        addSubview(label)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+        refresh()
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var isFlipped: Bool { true }
+    override var mouseDownCanMoveWindow: Bool { false }
+
+    private func refresh() { label.textColor = hovering ? hoverTint : tint }
+
+    override func layout() {
+        super.layout()
+        let h = label.intrinsicContentSize.height
+        label.frame = NSRect(x: -SidebarText.inset, y: (bounds.height - h) / 2, width: bounds.width + 2 * SidebarText.inset, height: h)
+    }
+
+    override func accessibilityPerformPress() -> Bool { action(); return true }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for t in trackingAreas where t.owner === self { removeTrackingArea(t) }
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
+    }
+    override func mouseEntered(with event: NSEvent) { hovering = true }
+    override func mouseExited(with event: NSEvent) { hovering = false }
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) {
+        if bounds.contains(convert(event.locationInWindow, from: nil)) { action() }
     }
 }
 

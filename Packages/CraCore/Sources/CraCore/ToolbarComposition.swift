@@ -33,6 +33,9 @@ public struct ToolbarComposition: Equatable, Sendable {
         case network
         case inspect
         case pinnedExtension(String)
+        /// Arc's translate button (`character.bubble`, "Translation Options"), while Chromium
+        /// can translate the page or it is translated (GitHub #310).
+        case translate
         case extensions
         case addSplit
         case splitOptions
@@ -43,8 +46,9 @@ public struct ToolbarComposition: Equatable, Sendable {
     public var right: [Item] = []
 
     /// `hovered`: the pointer is over this bar, which reveals an unfocused pane's controls.
+    /// `translatable`: the page offers translation (PageTranslation.offersTranslation).
     public init(kind: Kind, inSplit: Bool, sidebarVisible: Bool, focusedPane: Bool, hovered: Bool = false, canGoBack: Bool,
-                canGoForward: Bool, isLoading: Bool, pinnedExtensions: [String]) {
+                canGoForward: Bool, isLoading: Bool, pinnedExtensions: [String], translatable: Bool = false) {
         // Arc's essential controls only: a split pane that neither has the focus nor the pointer.
         let essentialOnly = inSplit && !focusedPane && !hovered
         // Never in a split pane or an empty one.
@@ -63,6 +67,8 @@ public struct ToolbarComposition: Equatable, Sendable {
         // Arc's right end: pinned extensions, the Extensions button, then Split View (not in a
         // split); also on the no-tab bar. The developer bar has the Extensions button first.
         if !essentialOnly, kind != .emptyPane {
+            // Arc 1.172: the translate button sits right before the sliders, 36 pt apart (#310).
+            if translatable, kind == .normal || kind == .developer { right.append(.translate) }
             let pins = pinnedExtensions.map(Item.pinnedExtension)
             right += kind == .developer ? [.extensions] + pins : pins + [.extensions]
             if !inSplit { right.append(.addSplit) }

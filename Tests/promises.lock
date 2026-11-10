@@ -525,6 +525,11 @@
 #307   Packages/CraCore/Tests/CraCoreTests/TabSearchScopeTests.swift::currentSpaceOnlySettingDefaultsOffAndRoundTrips  8465a635dabd
 #307   Tests/Scenarios/command-bar-space-scope.scenario  0b4de914ffa4
 #308   Tests/Scenarios/fullscreen-window-chrome.scenario  387fa799cbb9
+#310   Packages/CraCore/Tests/CraCoreTests/PageTranslationTests.swift::buttonOutlivesTheAutomaticOffer  8b6c61024b81
+#310   Packages/CraCore/Tests/CraCoreTests/PageTranslationTests.swift::decodesChromiumsState  b0c474fb3a4e
+#310   Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::translatablePageHasTheButton  e4b3dfaf2f19
+#310   Tests/BrowserManagerLifecycleTests.swift::translationCase  3179a30235a7
+#310   Tests/Scenarios/translate.scenario  acf981ce24a3
 #314   Tests/Scenarios/command-bar-site-controls.scenario  9df68b1d6db1
 #315   Packages/CraCore/Tests/CraCoreTests/CardFillTests.swift::fullScreenWithTheSidebarHiddenFillsTheScreen  58fb1af2d4ae
 #315   Packages/CraCore/Tests/CraCoreTests/CardFillTests.swift::theInsetStaysElsewhere  57091b70db87

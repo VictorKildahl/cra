@@ -103,3 +103,25 @@ struct ToolbarCompositionTests {
                               .pinnedExtension("b"), .addSplit])
     }
 }
+
+/// Arc's translate button (#310): on a page Chromium can translate, the first of the right-hand
+/// buttons, left of the sliders; not on an unfocused split pane's essentials.
+struct ToolbarTranslateTests {
+    typealias T = ToolbarComposition
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/310"))
+    func translatablePageHasTheButton() {
+        let bar = T(kind: .normal, inSplit: false, sidebarVisible: true, focusedPane: true, canGoBack: false, canGoForward: false,
+                    isLoading: false, pinnedExtensions: [], translatable: true)
+        #expect(bar.right == [.translate, .extensions, .addSplit])
+        let plain = T(kind: .normal, inSplit: false, sidebarVisible: true, focusedPane: true, canGoBack: false, canGoForward: false,
+                      isLoading: false, pinnedExtensions: [])
+        #expect(!plain.right.contains(.translate))
+    }
+
+    @Test func notOnAnUnfocusedPane() {
+        let pane = T(kind: .normal, inSplit: true, sidebarVisible: true, focusedPane: false, canGoBack: false, canGoForward: false,
+                     isLoading: false, pinnedExtensions: [], translatable: true)
+        #expect(pane.right == [.closePane])
+    }
+}

@@ -1456,6 +1456,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let v = dict["urlFieldHover"] { main.debugURLFieldHover(v == "1"); return }
             if let name = dict["urlFieldPress"] { main.debugURLFieldPress(name); return }
             if dict["commandBarBadge"] != nil { main.debugCommandBarBadgePress(); return }
+            // Arc's translate UI (#310): what shows, and a press on its parts.
+            if let step = dict["translate"] { main.debugTranslate(step); return }
             // The n-th space icon's tip, without a pointer.
             if let n = dict["spaceTip"].flatMap({ Int($0) }), let content = main.window?.contentView {
                 ArcTooltipController.shared.debugShowSpaceTip(n, in: content)

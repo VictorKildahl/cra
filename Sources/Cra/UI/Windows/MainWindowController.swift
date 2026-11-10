@@ -396,6 +396,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                                         : self.store.settings.showToolbar == false ? button?.minY : nil)
         }
         sidebarActions.showExtensionsMenu = { [weak self] in self?.showToolbarExtensionsMenu() }
+        sidebarActions.showTranslate = { [weak self] id, anchor in self?.showTranslate(id, from: anchor) }
         sidebarActions.paneRunExtension = { [weak self] pane, id in
             guard let self else { return }
             self.focusPaneNow(pane)
@@ -671,7 +672,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         for id in ids {
             guard let rt = browsers.runtime(for: id) else { continue }
             nav[id] = TabNavState(canGoBack: canNavigateBack(id, rt.browser), canGoForward: rt.browser.canGoForward, isLoading: rt.browser.isLoading,
-                                  themeColor: rt.themeColor, protectedMedia: PageEngines.protectedMediaService(of: rt.browser))
+                                  themeColor: rt.themeColor, protectedMedia: PageEngines.protectedMediaService(of: rt.browser),
+                                  translation: rt.translation)
         }
         if nav != sidebarUI.navStates { sidebarUI.navStates = nav }
         if let id = browsers.visibleTabID, let service = nav[id]?.protectedMedia { tellAboutProtectedMedia(service) }
@@ -1661,6 +1663,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     func browserManagerPageClosedTab(_ tabID: UUID) { closeTab(tabID) }
+
+    /// Arc's translation toasts (#310), for a page this window shows.
+    func browserManagerTranslationToast(_ tabID: UUID, text: String) {
+        guard store.visiblePaneTabIDs(in: focusedSpaceID, window: windowID).contains(tabID) else { return }
+        showToast(text)
+    }
 
     /// An extension brought one of this window's tabs to the front (SwitchyOmega's Options with
     /// its settings tab already open): selected, as in Arc (GitHub #38). A page that asked
@@ -2857,6 +2865,26 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     // MARK: Extensions
 
     private let siteControlCenter = SiteControlCenterPopover()
+    let translatePopover = TranslatePopover()
+
+    /// Arc's translate popover (#310) under the button that was pressed (screen rect): the
+    /// toolbar's, or the sidebar URL field's "Translation Available". The languages for its menu
+    /// come with the first one opened on the page.
+    func showTranslate(_ id: UUID, from anchor: NSRect?) {
+        guard let window, let content = window.contentView, let rt = browsers.runtime(for: id), let state = rt.translation,
+              let anchor = anchor ?? (shell.sidebarHost as? SidebarView)?.translateFrameOnScreen else { return }
+        let rect = content.convert(window.convertFromScreen(anchor), from: nil)
+        var actions = TranslateActions()
+        actions.translate = { [weak self] target in self?.browsers.translatePage(id, to: target) }
+        actions.showOriginal = { [weak self] in self?.browsers.revertTranslation(id) }
+        actions.neverTranslateSite = { [weak self] in self?.browsers.neverTranslateSite(id) }
+        actions.languageSettings = { [weak self] in self?.app.perform("languageSettings") }
+        let show = { [weak self] in
+            guard let self, let state = self.browsers.runtime(for: id)?.translation else { return }
+            self.translatePopover.toggle(relativeTo: rect, of: content, state: state, actions: actions)
+        }
+        if state.languages.isEmpty { browsers.refreshTranslation(id, then: show) } else { show() }
+    }
     /// The space the Site Control Center was opened in.
     private var siteControlCenterSpaceID: UUID?
 
@@ -3111,6 +3139,35 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let pressed = (shell.sidebarHost as? SidebarView)?.debugURLFieldPress(item) == true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
             CraLog.note("url field press \(name): pressed \(pressed), site control center \(self?.siteControlCenter.isShown == true ? "shown" : "not shown")")
+        }
+    }
+
+    /// Scenario hooks (#310). "line": the sidebar URL field's translate line ("translate line:
+    /// Translation Available", or "none"). "open": a press on it (or on the toolbar's button), then
+    /// "translate popover: <prompt> | <buttons>". "press:<title>": a press on a popover button.
+    /// "menu": the Options menu's items.
+    func debugTranslate(_ step: String) {
+        let sidebar = shell.sidebarHost as? SidebarView
+        switch step {
+        case "line":
+            CraLog.note("translate line: " + (sidebar?.debugTranslateLine ?? "none"))
+        case "open":
+            guard let id = browsers.visibleTabID else { return CraLog.note("translate popover: no tab") }
+            let toolbar = (shell.focusedCard?.toolbarHost as? PaneToolbarView)?.buttonFrameOnScreen("translate")
+            showTranslate(id, from: toolbar ?? sidebar?.translateFrameOnScreen)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+                guard let v = self?.translatePopover.content, self?.translatePopover.isShown == true else {
+                    return CraLog.note("translate popover: not shown")
+                }
+                CraLog.note("translate popover: \(v.prompt) | \(v.options.title), \(v.primary.title)")
+            }
+        case "menu":
+            guard let v = translatePopover.content else { return CraLog.note("translate menu: no popover") }
+            CraLog.note("translate menu: " + v.optionsMenu().items.map { $0.isSeparatorItem ? "|" : $0.title }.joined(separator: ", "))
+        default:
+            guard step.hasPrefix("press:"), let v = translatePopover.content else { return }
+            let title = String(step.dropFirst(6))
+            for b in [v.options, v.primary] where b.title == title { _ = b.accessibilityPerformPress() }
         }
     }
 

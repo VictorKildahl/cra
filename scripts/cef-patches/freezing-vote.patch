@@ -19,10 +19,10 @@ index 2018b0dc0..1045118b4 100644
      "//components/url_formatter",
      "//components/user_prefs",
 diff --git a/cef/libcef/browser/devtools/devtools_controller.cc b/cef/libcef/browser/devtools/devtools_controller.cc
-index c60f22d1a..d3d3d79b3 100644
+index c60f22d1a..254c8ee7d 100644
 --- a/cef/libcef/browser/devtools/devtools_controller.cc
 +++ b/cef/libcef/browser/devtools/devtools_controller.cc
-@@ -4,11 +4,570 @@
+@@ -4,11 +4,645 @@
  
  #include "cef/libcef/browser/devtools/devtools_controller.h"
  
@@ -46,6 +46,7 @@ index c60f22d1a..d3d3d79b3 100644
 +#include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
 +#include "chrome/browser/profiles/profile.h"
 +#include "chrome/browser/profiles/profile_observer.h"
++#include "chrome/browser/translate/chrome_translate_client.h"
 +#include "components/crx_file/id_util.h"
 +#include "components/performance_manager/freezing/freezing_policy.h"
 +#include "components/performance_manager/public/freezing/freezing.h"
@@ -53,6 +54,9 @@ index c60f22d1a..d3d3d79b3 100644
 +#include "components/sessions/content/content_serialized_navigation_builder.h"
 +#include "components/sessions/core/serialized_navigation_entry.h"
 +#include "components/sessions/core/session_constants.h"
++#include "components/translate/core/browser/translate_download_manager.h"
++#include "components/translate/core/browser/translate_manager.h"
++#include "components/translate/core/browser/translate_prefs.h"
 +#include "content/browser/media/session/media_session_impl.h"
  #include "content/public/browser/devtools_agent_host.h"
 +#include "content/public/browser/navigation_controller.h"
@@ -467,6 +471,68 @@ index c60f22d1a..d3d3d79b3 100644
 +  return true;
 +}
 +
++// Cra (GitHub #310): Arc's translate UI, which Cra draws itself. Every
++// method replies with the page's state (ChromeTranslateClient::
++// CraTranslateState); Cra.getTranslateState adds the languages Chrome can
++// translate to. Cra.translatePage translates to params.target, or to the
++// language Chrome would pick, as the bubble's Translate button does.
++// Cra.neverTranslateSite puts the page's host on Chrome's never-translate
++// list, or takes it off with params.never false.
++void HandleCraTranslate(content::WebContents* contents,
++                        const std::string& method,
++                        const base::DictValue* params,
++                        base::DictValue* result,
++                        std::string* error) {
++  ChromeTranslateClient* client =
++      ChromeTranslateClient::FromWebContents(contents);
++  translate::TranslateManager* manager =
++      client ? client->GetTranslateManager() : nullptr;
++  if (!manager) {
++    *error = "the page has no translate client";
++    return;
++  }
++  if (method == "Cra.translatePage") {
++    const std::string* target = params ? params->FindString("target") : nullptr;
++    std::optional<std::string> target_code;
++    if (target && !target->empty()) {
++      target_code = *target;
++    }
++    manager->ShowTranslateUI(std::nullopt, target_code,
++                             /*auto_translate=*/true,
++                             /*triggered_from_menu=*/true);
++  } else if (method == "Cra.revertTranslation") {
++    if (client->GetLanguageState().IsPageTranslated()) {
++      manager->RevertTranslation();
++    }
++  } else if (method == "Cra.neverTranslateSite") {
++    const GURL& url = contents->GetLastCommittedURL();
++    if (!url.has_host()) {
++      *error = "the page has no site";
++      return;
++    }
++    std::optional<bool> never =
++        params ? params->FindBool("never") : std::nullopt;
++    std::unique_ptr<translate::TranslatePrefs> prefs =
++        client->GetTranslatePrefs();
++    if (never.value_or(true)) {
++      prefs->AddSiteToNeverPromptList(url.host());
++    } else {
++      prefs->RemoveSiteFromNeverPromptList(url.host());
++    }
++  }
++  *result = client->CraTranslateState();
++  if (method == "Cra.getTranslateState") {
++    std::vector<std::string> codes;
++    translate::TranslateDownloadManager::GetSupportedLanguages(
++        /*translate_allowed=*/true, &codes);
++    base::ListValue languages;
++    for (const std::string& code : codes) {
++      languages.Append(code);
++    }
++    result->Set("languages", std::move(languages));
++  }
++}
++
 +bool HandleCraMethod(content::WebContents* contents,
 +                     std::string_view message,
 +                     int* message_id,
@@ -487,10 +553,19 @@ index c60f22d1a..d3d3d79b3 100644
 +       *method != "Cra.discard" && *method != "Cra.load" &&
 +       *method != "Cra.mediaSession" && *method != "Cra.autoPictureInPicture" &&
 +       *method != "Cra.extensionSidePanel" && *method != "Cra.getHistory" &&
-+       *method != "Cra.restoreHistory")) {
++       *method != "Cra.restoreHistory" && *method != "Cra.getTranslateState" &&
++       *method != "Cra.translatePage" && *method != "Cra.revertTranslation" &&
++       *method != "Cra.neverTranslateSite")) {
 +    return false;
 +  }
 +  *message_id = *id;
++  if (*method == "Cra.getTranslateState" || *method == "Cra.translatePage" ||
++      *method == "Cra.revertTranslation" ||
++      *method == "Cra.neverTranslateSite") {
++    HandleCraTranslate(contents, *method, dict->FindDict("params"), result,
++                       error);
++    return true;
++  }
 +  if (*method == "Cra.getHistory") {
 +    HandleCraGetHistory(contents, result);
 +    return true;
@@ -593,7 +668,7 @@ index c60f22d1a..d3d3d79b3 100644
  
  CefDevToolsController::CefDevToolsController(
      content::WebContents* inspected_contents)
-@@ -30,6 +589,38 @@ CefDevToolsController::~CefDevToolsController() {
+@@ -30,6 +664,38 @@ CefDevToolsController::~CefDevToolsController() {
  bool CefDevToolsController::SendDevToolsMessage(
      const std::string_view& message) {
    CEF_REQUIRE_UIT();

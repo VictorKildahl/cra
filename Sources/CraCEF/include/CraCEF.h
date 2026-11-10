@@ -157,6 +157,10 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 /// active: true; scripts/cef-patches/extension-tab-activate.patch), or with byPage the page
 /// did (window.focus(), or clients.focus() from a notification click; page-activate.patch).
 - (void)browserRequestsActivation:(CraBrowser *)browser byPage:(BOOL)byPage;
+/// The page's translate state changed, as JSON (CraCore's PageTranslation; GitHub #310,
+/// scripts/cef-patches/translate-ui.patch). Chromium shows no translate bubble of its own for
+/// Cra's pages: Cra draws Arc's button, popover and toasts from this.
+- (void)browser:(CraBrowser *)browser didChangeTranslateState:(NSString *)state;
 /// Arc's Peek: a link the user clicked (`shiftClick` NO: before it navigates the page or
 /// opens as a target=_blank tab) or Shift-clicked (YES, instead of a new window). Return
 /// YES to show it in a Peek; the page then stays where it is.

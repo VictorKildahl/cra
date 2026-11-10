@@ -138,6 +138,7 @@ enum BrowserManagerLifecycleTests {
         await sweepThatClosesNothingCase()
         devToolsCase()
         extensionTabActivationCase()
+        await translationCase()
         await beforeUnloadCase()
         nowPlayingCase()
         await nowPlayingAfterSleepCase()
@@ -928,6 +929,42 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    /// #310: Chromium's translate state reaches the page's runtime (Arc's button and popover read
+    /// it there), Arc's toasts go to the window, and Show Original says where the page went back to.
+    /// Cra.getTranslateState's languages survive the pushed states, which don't carry them.
+    // promise: #310
+    @MainActor
+    private static func translationCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let observer = Observer()
+        manager.delegate = observer
+        let id = store.createTab(url: "https://lenta.test/").id
+        manager.show(id, focus: false)
+        let rt = manager.runtime(for: id)!
+        manager.browser(rt.browser, didChangeTranslateState: #"{"url":"https://lenta.test/","source":"ru","current":"ru","target":"en","available":true,"step":"offer"}"#)
+        expect(rt.translation?.offersTranslation == true && observer.translationToasts.isEmpty,
+               "Chromium's offer gives the page its translate button, with no toast")
+        manager.refreshTranslation(id)
+        rt.browser.reply(to: "Cra.getTranslateState", with: #"{"url":"https://lenta.test/","source":"ru","current":"ru","target":"en","available":true,"languages":["de","en","ru"]}"#)
+        await drainMainQueue()
+        manager.translatePage(id, to: "de")
+        expect(rt.browser.lastParams == #"{"target":"de"}"#, "Choose Another Language translates to the one picked")
+        rt.browser.reply(to: "Cra.translatePage", with: #"{"url":"https://lenta.test/","source":"ru","current":"ru","target":"en","available":true,"pending":true}"#)
+        await drainMainQueue()
+        manager.browser(rt.browser, didChangeTranslateState: #"{"url":"https://lenta.test/","source":"ru","current":"de","target":"en","available":true,"translated":true,"step":"translated"}"#)
+        expect(observer.translationToasts == ["Translated to German"], "a finished translation gets Arc's toast")
+        expect(rt.translation?.languages == ["de", "en", "ru"], "the languages outlive the pushed state")
+        manager.revertTranslation(id)
+        rt.browser.reply(to: "Cra.revertTranslation", with: #"{"url":"https://lenta.test/","source":"ru","current":"ru","target":"en","available":true}"#)
+        await drainMainQueue()
+        expect(observer.translationToasts.last == "Translated back to Russian" && rt.translation?.translated == false,
+               "Show Original goes back to the page's language, with Arc's toast")
+        manager.browser(rt.browser, didChangeTranslateState: "{}")
+        expect(rt.translation?.offersTranslation == true, "a page with no translate client's empty state changes nothing")
+        manager.closeAll()
+    }
+
     /// ⌥⌘I pressed again while CEF is still closing DevTools opens them once they are gone,
     /// instead of closing them a second time. Console and Network switch panels on open DevTools.
     // promise: #138
@@ -1632,6 +1669,8 @@ private final class Observer: BrowserManagerDelegate {
     func browserManagerHandleUnhandledKey(_ event: NSEvent) -> Bool { false }
     func browserManagerFocusedBrowser(_ tabID: UUID) {}
     func browserManagerPageClosedTab(_ tabID: UUID) { closedTabs.append(tabID) }
+    var translationToasts: [String] = []
+    func browserManagerTranslationToast(_ tabID: UUID, text: String) { translationToasts.append(text) }
     func browserManagerActivationRequested(_ tabID: UUID, byPage: Bool) {
         activatedTabs.append(tabID)
         activatedByPage.append(byPage)

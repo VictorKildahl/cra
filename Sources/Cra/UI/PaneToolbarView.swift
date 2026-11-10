@@ -36,6 +36,8 @@ final class PaneToolbarView: NSView {
         var pinned: [Ext] = []
         /// A WebKit page's service: its extension buttons dim (none run there).
         var protectedMedia: String?
+        /// Chromium's translate state for the page (#310): the translate button.
+        var translation: PageTranslation?
         var fill = NSColor.clear
         var fg = NSColor.labelColor
         var fgDim = NSColor.secondaryLabelColor
@@ -175,6 +177,7 @@ final class PaneToolbarView: NSView {
             if Easel.id(fromURL: t.url) != nil { m.host = item.displayTitle; m.path = "" }
         }
         m.protectedMedia = m.tabID.flatMap { ui.navState(for: $0).protectedMedia }
+        m.translation = m.tabID.flatMap { ui.navState(for: $0).translation }
         let extensions = ExtensionStore.shared
         let profile = item.map { store.profileDirectoryName(item: $0.id) }
             ?? store.profileDirectoryName(space: store.focusedSpaceID(window: ui.windowID))
@@ -229,7 +232,7 @@ final class PaneToolbarView: NSView {
     /// The sliders button (screen rect), for the Site Control Center opened from elsewhere (a toast's Why?).
     func siteControlsButtonFrameOnScreen() -> NSRect? { buttonFrameOnScreen("extensions") }
 
-    private func buttonFrameOnScreen(_ key: String) -> NSRect? {
+    func buttonFrameOnScreen(_ key: String) -> NSRect? {
         guard let b = buttons[key], !b.isHiddenOrHasHiddenAncestor, b.frame.width > 0, let window else { return nil }
         return window.convertToScreen(b.convert(b.bounds, to: nil))
     }
@@ -274,7 +277,7 @@ final class PaneToolbarView: NSView {
         hairline.layer?.backgroundColor = m.hairline?.cgColor
         let bar = ToolbarComposition(kind: m.kind, inSplit: m.inSplit, sidebarVisible: m.sidebarVisible, focusedPane: m.focusedPane,
                                      hovered: m.hovered, canGoBack: m.canGoBack, canGoForward: m.canGoForward, isLoading: m.isLoading,
-                                     pinnedExtensions: m.pinned.map(\.id))
+                                     pinnedExtensions: m.pinned.map(\.id), translatable: m.translation?.offersTranslation == true)
         // The no-tab bar and an empty pane show navigation that does nothing (Arc greys it out).
         let wide = m.kind == .noTab || m.kind == .emptyPane
         // Arc's right-hand boxes: 32 pt, 4 pt apart (layout); 28 pt edge to edge on the developer bar.
@@ -315,6 +318,14 @@ final class PaneToolbarView: NSView {
                 }
                 b.menuProvider = { ExtensionStore.shared.entries.first { $0.extensionID == id }.map(ExtensionsMenu.iconMenu) }
                 return b
+            case .translate:
+                // Arc: `character.bubble`, filled on a translated page, "Translation Options" (#310).
+                let tab = m.tabID
+                return glyph("translate", m.translation?.translated == true ? "character.bubble.fill" : "character.bubble",
+                             help: "Translation Options", width: rightBox, iconSize: 16) { bar in
+                    guard let tab else { return }
+                    bar.actions.showTranslate(tab, bar.buttonFrameOnScreen("translate"))
+                }
             case .extensions:
                 return glyph("extensions", "slider.horizontal.2.square", help: "Extensions", width: rightBox, iconSize: 16) {
                     if let pane = $0.paneTabID { $0.actions.paneExtensionsMenu(pane) } else { $0.actions.showExtensionsMenu() }

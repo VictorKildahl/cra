@@ -3906,3 +3906,31 @@ screen on a click.
   its stand-in lights only outside full screen. `cra://debug?windowState` reports the card's insets
   (`card=l,b,r,t rRadius fills=0|1`); `fullscreen-hidden-sidebar.scenario` checks all three states. Cra's
   panel still sits 8 pt in (Arc 5), as before.
+
+## Page translation (Arc 1.17x, 10 Nov 2026, GitHub #310, strings + offline Arc, dark mode, 1x, AX)
+- [O static] Arc draws its own translate UI (Translation/TranslateFeature, TranslateBubblePopoverView) on Chromium's
+  translate state: "Translation Available" ("Title for the translation affordance below the URL", plus a narrow-sidebar
+  title), the toolbar's `contentToolbarTranslateButton` (`character.bubble`, `.fill` when translated, "Translation
+  Options"), the prompts "Translate this page to %@?" and "Translated from %@.", Options' "Choose Another Language",
+  "Never Translate This Site" and "Language Settings", and the toasts "Translated to %@", "Translated back to %@" and
+  "Translation error (%@)". Never Translate This Site is Arc's own defaults key `translateNeverHosts` (bare hosts);
+  Settings ▸ Advanced has "Reset Translated-site Prompts".
+- [O] Toolbar: the button shows only once Chromium knows the page's language and can translate it, per tab. 32 × 24 pt
+  on the nav buttons' line, right before the Site Control Center's sliders (frames 36 pt apart), ink 16 × 15 pt in the
+  sliders' tint. Chromium's own bubble never shows; no popover opened by itself on a reload.
+- [O] Popover: an NSPopover under the button, 262 × 128 pt with the arrow (tip on the button's centre, 10.5 pt tall),
+  body 236 × 102 pt from 13 pt under the button, continuous radius ~19, Arc's dark material (grey 110 over a white
+  page). A 32 pt badge (`textformat.alt`, 17 × 10) 10 pt in, 11 pt down; the question in 14 pt regular from 50 pt in,
+  two lines of 17 pt, centred on the badge; two 104 × 32 pt buttons 7 pt apart, 10 pt from the edges, 14 pt semibold:
+  Options flat (118 on 110, radius ~4) and Translate raised (148, hairline border, radius ~5.5). Translate closes it.
+- [O] Toolbar hidden: an AXButton "Translation Available", 122 × 17 pt, under the URL text and on its left edge (text at
+  6 pt from the field's top, the line at 23 pt); the tab list starts 2 pt under it.
+- [?] Not observed: the URL line's pixels, hover and narrow title; the translated state and the toasts (offline Arc
+  fails with a network error and shows nothing); Options' anchor; light mode.
+- Cra: PageTranslation (CraCore) on the state Chromium sends as "Cra.translate" and the Cra.getTranslateState /
+  translatePage / revertTranslation / neverTranslateSite methods (translate-ui.patch, freezing-vote.patch);
+  ToolbarComposition's `.translate`; TranslatePopover; SidebarURLPill's line (the field 42 pt tall with it). SDK 26
+  draws NSPopover as light glass, so the body is filled to Arc's material; the arrow stays the system's (full-size
+  content clipped the body's edges). Chromium
+  offers translation only with a Google API key (release builds' CRA_GOOGLE_API_KEY); dev builds show no button.
+

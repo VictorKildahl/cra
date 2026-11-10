@@ -1,0 +1,27 @@
+# promise: #310
+# GitHub #310: Cra draws Arc's translate UI from Chromium's translate state, instead of Chrome's
+# bubble that showed once when a foreign page first opened. A Russian page is offered (no bubble);
+# the sidebar's URL field says "Translation Available" for as long as the page can be translated;
+# it opens Arc's popover (Options, Translate), whose Translate starts a translation that ends
+# translated (online) or with Arc's error toast (offline). Chromium offers translation only with
+# a Google API key (release builds have one, CRA_GOOGLE_API_KEY), so the run sets a stand-in.
+env GOOGLE_API_KEY=cra-scenario
+cra://open?url=${PAGE}/../translate.html
+expect-log loaded 127.0.0.1
+expect-log translate: offer ru→en
+wait 1
+cra://debug?translate=line
+expect-log translate line: Translation Available
+cra://debug?cdp=Cra.getTranslateState&params={}
+expect-log Cra cdp Cra.getTranslateState .*"available":true
+cra://debug?translate=open
+expect-log translate popover: Translate this page to English\? \| Options, Translate
+cra://debug?translate=menu
+expect-log translate menu: Choose Another Language, Never Translate This Site, \|, Language Settings
+cra://debug?translate=press:Translate
+expect-log translate: (translated|error) ru→
+# An English page has no line.
+cra://open?url=${PAGE}
+wait 3
+cra://debug?translate=line
+expect-log translate line: none

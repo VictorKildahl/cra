@@ -1,0 +1,250 @@
+diff --git a/chrome/browser/translate/chrome_translate_client.cc b/chrome/browser/translate/chrome_translate_client.cc
+index f391095fa2..62f2614e19 100644
+--- a/chrome/browser/translate/chrome_translate_client.cc
++++ b/chrome/browser/translate/chrome_translate_client.cc
+@@ -8,6 +8,8 @@
+ #include <vector>
+ 
+ #include "base/check.h"
++#include "base/json/json_writer.h"
++#include "base/memory/raw_ptr.h"
+ #include "base/command_line.h"
+ #include "base/feature_list.h"
+ #include "base/functional/bind.h"
+@@ -66,6 +68,11 @@
+ #include "components/variations/service/variations_service.h"
+ #include "content/public/browser/navigation_entry.h"
+ #include "content/public/browser/web_contents.h"
++#include "cef/libcef/features/features.h"
++
++#if BUILDFLAG(ENABLE_CEF)
++#include "cef/libcef/browser/chrome/browser_delegate.h"
++#endif
+ #include "third_party/metrics_proto/translate_event.pb.h"
+ #include "url/gurl.h"
+ 
+@@ -123,6 +130,73 @@ bool IsAutomaticTranslationType(translate::TranslationType type) {
+ }
+ #endif  // BUILDFLAG(IS_ANDROID)
+ 
++#if BUILDFLAG(ENABLE_CEF)
++// Cra: the client draws Arc's translate UI itself, so the page's translate
++// steps and state go to it ("Cra.translate") instead of Chrome's bubble.
++cef::BrowserDelegate* CraTranslateDelegate(content::WebContents* contents) {
++  BrowserWindowInterface* browser =
++      contents
++          ? GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(contents)
++          : nullptr;
++  cef::BrowserDelegate* delegate = browser ? browser->cef_delegate() : nullptr;
++  return delegate && delegate->IsViewsHosted() ? delegate : nullptr;
++}
++
++const char* CraTranslateStepName(translate::TranslateStep step) {
++  switch (step) {
++    case translate::TRANSLATE_STEP_BEFORE_TRANSLATE:
++      return "offer";
++    case translate::TRANSLATE_STEP_TRANSLATING:
++      return "translating";
++    case translate::TRANSLATE_STEP_AFTER_TRANSLATE:
++      return "translated";
++    case translate::TRANSLATE_STEP_AFTER_UNDO:
++      return "reverted";
++    case translate::TRANSLATE_STEP_TRANSLATE_ERROR:
++      return "error";
++  }
++  return "";
++}
++
++// Sends the state, with `step` empty for a plain state change. False when
++// the page isn't one of the client's, which then keeps Chrome's bubble.
++bool CraSendTranslateState(ChromeTranslateClient* client,
++                           std::string_view step,
++                           translate::TranslateErrors error,
++                           bool user_gesture) {
++  cef::BrowserDelegate* delegate =
++      CraTranslateDelegate(client->web_contents());
++  if (!delegate) {
++    return false;
++  }
++  base::DictValue state = client->CraTranslateState();
++  state.Set("step", step);
++  state.Set("error", static_cast<int>(error));
++  state.Set("userGesture", user_gesture);
++  delegate->TranslateStateChanged(base::WriteJson(state).value_or("{}"));
++  return true;
++}
++
++class CraTranslationObserver
++    : public translate::ContentTranslateDriver::TranslationObserver {
++ public:
++  explicit CraTranslationObserver(ChromeTranslateClient* client)
++      : client_(client) {}
++
++  void OnIsPageTranslatedChanged(content::WebContents* source) override {
++    CraSendTranslateState(client_, "", translate::TranslateErrors::NONE,
++                          false);
++  }
++  void OnTranslateEnabledChanged(content::WebContents* source) override {
++    CraSendTranslateState(client_, "", translate::TranslateErrors::NONE,
++                          false);
++  }
++
++ private:
++  raw_ptr<ChromeTranslateClient> client_;
++};
++#endif  // BUILDFLAG(ENABLE_CEF)
++
+ }  // namespace
+ 
+ SidePanelUI* ChromeTranslateClient::GetSidePanelUIFromTab(
+@@ -210,9 +284,17 @@ ChromeTranslateClient::ChromeTranslateClient(content::WebContents* web_contents)
+               ->GetPrimaryModel())) {
+   translate_driver_->AddLanguageDetectionObserver(this);
+   translate_driver_->set_translate_manager(translate_manager_.get());
++#if BUILDFLAG(ENABLE_CEF)
++  cra_translation_observer_ = std::make_unique<CraTranslationObserver>(this);
++  translate_driver_->AddTranslationObserver(cra_translation_observer_.get());
++#endif
+ }
+ 
+ ChromeTranslateClient::~ChromeTranslateClient() {
++  if (cra_translation_observer_) {
++    translate_driver_->RemoveTranslationObserver(
++        cra_translation_observer_.get());
++  }
+   translate_driver_->RemoveLanguageDetectionObserver(this);
+   translate_driver_->set_translate_manager(nullptr);
+ }
+@@ -221,6 +303,27 @@ const translate::LanguageState& ChromeTranslateClient::GetLanguageState() {
+   return *translate_manager_->GetLanguageState();
+ }
+ 
++base::DictValue ChromeTranslateClient::CraTranslateState() {
++  base::DictValue state;
++  if (!translate_manager_ || !web_contents()) {
++    return state;
++  }
++  const translate::LanguageState& language = GetLanguageState();
++  std::string source, target;
++  GetTranslateLanguages(web_contents(), &source, &target,
++                        /*for_display=*/false);
++  const GURL& url = web_contents()->GetLastCommittedURL();
++  state.Set("url", url.spec());
++  state.Set("source", source);
++  state.Set("current", language.current_language());
++  state.Set("target", target);
++  state.Set("available", language.translate_enabled());
++  state.Set("translated", language.IsPageTranslated());
++  state.Set("pending", language.translation_pending());
++  state.Set("neverSite", url.has_host() && GetTranslatePrefs()->IsSiteOnNeverPromptList(url.host()));
++  return state;
++}
++
+ // static
+ std::unique_ptr<translate::TranslatePrefs>
+ ChromeTranslateClient::CreateTranslatePrefs(PrefService* prefs) {
+@@ -345,6 +448,13 @@ bool ChromeTranslateClient::ShowTranslateUI(
+     return false;
+   }
+ 
++#if BUILDFLAG(ENABLE_CEF)
++  if (CraSendTranslateState(this, CraTranslateStepName(step), error_type,
++                            triggered_from_menu)) {
++    return true;
++  }
++#endif
++
+   ShowTranslateBubbleResult result = ShowBubble(
+       step, source_language, target_language, error_type, triggered_from_menu);
+   if (result != ShowTranslateBubbleResult::kSuccess &&
+diff --git a/chrome/browser/translate/chrome_translate_client.h b/chrome/browser/translate/chrome_translate_client.h
+index 1cd5843f5c..a0f9f87444 100644
+--- a/chrome/browser/translate/chrome_translate_client.h
++++ b/chrome/browser/translate/chrome_translate_client.h
+@@ -11,6 +11,7 @@
+ #include "base/functional/callback_forward.h"
+ #include "base/gtest_prod_util.h"
+ #include "base/i18n/language_tag.h"
++#include "base/values.h"
+ #include "base/memory/weak_ptr.h"
+ #include "build/build_config.h"
+ #include "components/language/core/browser/accept_languages_service.h"
+@@ -133,6 +134,11 @@ class ChromeTranslateClient
+   // bubble.
+   void UndoTranslate();
+ 
++  // Cra: the page's translate state for the client's own translate UI
++  // (Arc's): languages, whether translation is offered or done, and whether
++  // the site is on the never-translate list.
++  base::DictValue CraTranslateState();
++
+   // TranslateDriver::LanguageDetectionObserver implementation.
+   void OnLanguageDetermined(
+       const translate::LanguageDetectionDetails& details) override;
+@@ -170,6 +176,10 @@ class ChromeTranslateClient
+       language_detection_driver_;
+   std::unique_ptr<translate::TranslateManager> translate_manager_;
+ 
++  // Cra: tells the client when the translate state changes.
++  std::unique_ptr<translate::ContentTranslateDriver::TranslationObserver>
++      cra_translation_observer_;
++
+ #if BUILDFLAG(IS_ANDROID)
+   // Whether to trigger a manual translation when ready.
+   // See ChromeTranslateClient::ManualTranslateOnReady
+diff --git a/cef/libcef/browser/chrome/browser_delegate.h b/cef/libcef/browser/chrome/browser_delegate.h
+--- a/cef/libcef/browser/chrome/browser_delegate.h
++++ b/cef/libcef/browser/chrome/browser_delegate.h
+@@ -145,6 +145,11 @@
+   // chrome/app/chrome_command_ids.h.
+   virtual bool IsAppMenuItemEnabled(int command_id) { return true; }
+ 
++  // Cra: the page's translate state changed, as JSON
++  // (ChromeTranslateClient::CraTranslateState plus the step shown, if any).
++  // The client shows its own translate UI instead of Chrome's bubble.
++  virtual void TranslateStateChanged(const std::string& state) {}
++
+   // Return true if the page action icon should be visible.
+   virtual bool IsPageActionIconVisible(PageActionIconType icon_type) {
+     return true;
+diff --git a/cef/libcef/browser/chrome/chrome_browser_delegate.cc b/cef/libcef/browser/chrome/chrome_browser_delegate.cc
+--- a/cef/libcef/browser/chrome/chrome_browser_delegate.cc
++++ b/cef/libcef/browser/chrome/chrome_browser_delegate.cc
+@@ -735,6 +735,24 @@
+     return cef_window_impl->cef_window_view();
+   }
+   return nullptr;
++}
++
++// Cra: delivered as a "Cra.translate" message from PID_BROWSER whose one
++// argument is the state's JSON.
++void ChromeBrowserDelegate::TranslateStateChanged(const std::string& state) {
++  auto browser = ChromeBrowserHostImpl::GetBrowserForBrowser(browser_);
++  if (!browser) {
++    return;
++  }
++  auto client = browser->GetClient();
++  if (!client) {
++    return;
++  }
++  CefRefPtr<CefProcessMessage> message =
++      CefProcessMessage::Create("Cra.translate");
++  message->GetArgumentList()->SetString(0, state);
++  client->OnProcessMessageReceived(browser.get(), browser->GetMainFrame(),
++                                   PID_BROWSER, message);
+ }
+ 
+ namespace cef {
+diff --git a/cef/libcef/browser/chrome/chrome_browser_delegate.h b/cef/libcef/browser/chrome/chrome_browser_delegate.h
+--- a/cef/libcef/browser/chrome/chrome_browser_delegate.h
++++ b/cef/libcef/browser/chrome/chrome_browser_delegate.h
+@@ -51,6 +51,9 @@
+ 
+   ~ChromeBrowserDelegate() override;
+ 
++  // Cra (cef::BrowserDelegate): see there.
++  void TranslateStateChanged(const std::string& state) override;
++
+   static Browser* CreateDevToolsBrowser(
+       Profile* profile,
+       BrowserWindowInterface* opener,
