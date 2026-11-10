@@ -1193,16 +1193,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // littleCommit=<typed>: the newest Little Window's command bar commits its "Switch to"
             // row for what was typed, as ↩ on it does (#316).
             if let typed = dict["littleCommit"] { littleWindows.last?.debugCommit(typed); return }
+            // littlePopup=<label>[&type=<text>]: the newest Little Window's "Open in" menu, opened if it
+            // isn't, with <text> typed into its search; logs its rows, heights and whether it scrolls (#331).
+            if let label = dict["littlePopup"] {
+                CraLog.note("little popup \(label): \(littleWindows.last?.debugPopup(typing: dict["type"]) ?? "no Little Window")")
+                return
+            }
             if let label = dict["littleShown"] {
-                var space = "-", profile = "-"
+                var space = "-", profile = "-", shown = ""
                 if let w = littleWindows.last {
                     w.refreshTarget()   // as when it takes focus
                     let state: LittleWindowState = w.state
                     space = store.space(state.targetSpaceID)?.title ?? "-"
                     let named: BrowserProfile? = store.profile(state.profileID)
                     profile = named?.name ?? "Default"
+                    shown = " onTop=\(w.staysOnTop ? 1 : 0) menuButton=\(state.showsMenuButton ? 1 : 0) \(w.debugReadout)"
                 }
-                CraLog.note("little shown \(label): windows=\(littleWindows.count) space=\(space) profile=\(profile)")
+                CraLog.note("little shown \(label): windows=\(littleWindows.count) space=\(space) profile=\(profile)\(shown)")
                 return
             }
             // windowState=<label>: each window's full screen, Space, traffic lights (#277), whether a
@@ -1696,6 +1703,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         if item.action == #selector(pasteAsPlainText(_:)) { return pageTakingPasteAndMatchStyle != nil }
         if let id = item.representedObject as? String, let title = flippingTitle(id), item.title != title { item.title = title }
+        // A Little Window in front answers for its own page (#333): the rows follow it, not the browser
+        // window's selection or checkmark, and are off for what it has no tabs, split view or sidebar for.
+        if let id = item.representedObject as? String, let little = keyLittleWindow, !little.isPeek {
+            if let enabled = little.validate(id, item: item) { return enabled }
+            if LittleWindowRouting.ignoredInLittleWindow.contains(id) { return false }
+        }
         switch item.representedObject as? String {
         case "collapsePinned": return !main.isStandalone
         case "stayOnTop": item.state = main.staysOnTop ? .on : .off
@@ -1720,7 +1733,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return !SystemIntegration.shared.isDefaultBrowser
         case "pictureInPicture":
             item.title = main.currentBrowser?.isInPictureInPicture == true ? "Exit Picture in Picture" : "Picture in Picture"
-        case "promoteLittleWindow", "littleWindowOpenInMenu": return keyLittleWindow?.hasPage ?? false
+        case "promoteLittleWindow": return keyLittleWindow?.hasPage ?? false
+        case "littleWindowOpenInMenu": return keyLittleWindow?.canOpenInMenu ?? false
         case "checkForUpdates": return SoftwareUpdater.shared.validateMenuItem(item)
         case "closeSplitPane", "separateFromSplit", "flipSplitOrientation":
             return store.selectedTabID.flatMap { store.splitContaining($0) } != nil

@@ -1,0 +1,48 @@
+# promise: #333
+# Commands about a page or a window act on a Little Window's own, not on the browser window behind
+# it (#333). With a Little Window in front, Window ▸ Stay On Top floated the browser window and left
+# the Little Window as it was (Share…, Save Page As… and the rest of LittleWindowRouting's list took
+# the browser window's selected tab). Now it floats the Little Window and its page together, and the
+# browser window stays put; closed again, Stay On Top is the browser window's and still works.
+# What has no meaning there (a tab list, split view) is ignored: Add Split View doesn't split the
+# browser window's page. Which action does what is LittleWindowRouting's; Tests/KeyBindingsTests
+# checks that every action the app lists is decided on.
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+pace 0.5
+
+cra://open?url=${PAGE}?n=main
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?externalURL=${PAGE}?n=little
+wait 2
+cra://debug?littleShown=open
+expect-log little shown open: windows=1 .* onTop=0
+
+# A Little Window in front: Stay On Top floats it, and its page, not the browser window.
+cra://action/stayOnTop
+wait 0.5
+cra://debug?littleShown=floating
+expect-log little shown floating: windows=1 .* onTop=1
+cra://debug?browserWindows=floating
+expect-log Cra browser windows floating: .* onTop=0
+
+# Again: back where it was.
+cra://action/stayOnTop
+wait 0.5
+cra://debug?littleShown=sunk
+expect-log little shown sunk: windows=1 .* onTop=0
+
+# No split view in a Little Window: the browser window's page isn't split behind it.
+cra://action/addSplitView
+wait 1
+cra://debug?browserWindows=split
+expect-log browser windows split: kind=normal listed=1 tabs=1 open=1 commandBar=0 pages=1
+
+# Without it, Stay On Top is the browser window's again.
+cra://action/closeLittleWindows
+wait 1
+cra://action/stayOnTop
+wait 0.5
+cra://debug?browserWindows=closed
+expect-log Cra browser windows closed: .* onTop=1
+cra://action/stayOnTop

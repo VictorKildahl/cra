@@ -660,6 +660,25 @@ LittleWindowController (LittleTooltip); hover is tracked by AppKit with an activ
 tracking area because SwiftUI's onHover sleeps while the Chrome page window is the key
 window.
 
+Arc 1.172.1 (build 90370), re-measured on 10 Nov 2026 from 2x window captures
+(`screencapture -l`, colours read from the PNGs' pixels) and a window-only recording at about
+45 fps; three things differ from 1.168 (GitHub #329, #330, #331):
+- the strip is a gradient, not #0C091C: #242438 at the left end of a 1185 pt window, #26243A,
+  #292839 and #2C2439 between, #312339 at the right end, identical after switching spaces. The
+  pill is a lighter wash over it (about #38394A on the left, #43394B on the right, white at
+  9–10 %). The traffic lights are grey discs (about #6A6A74) until the pointer is over the
+  group, with the window in front;
+- the pill reads the host only (`cra-measure.lvh.me` for `http://cra-measure.lvh.me:47110/page?e=link1`),
+  and for a page that isn't served over https an open padlock (orange, strokes about #E93700) on a
+  22 pt tile, 4 pt in from the pill's left and top, orange at about 10 %, replaces the magnifier;
+  while a first response is awaited the magnifier is back;
+- the "Open in" popover is about 244 pt wide with its 1 pt border (#050625 as before), 46 pt for the
+  header and for each row, tiles about 26 pt (radius about 6), names about 13 pt semibold, hanging
+  about 4 pt under the window's top edge and ending about 4.5 pt from its right edge. It is complete
+  in the first frame after the click: no fade shows at 21 ms spacing. From the disassembly (not seen
+  live): the list is `min(rows × 46, 350)` tall and scrolls, the ⌄ is hidden with a single destination,
+  and a search with no match shows "No results"; Cra does all three (LittlePopupGeometry).
+
 ### Live re-fit against Victor's full-screen screenshots (24 Oct, 20:21)
 
 Victor's side-by-side screenshots (Cra and Arc both at 1728×1084, each with the other

@@ -559,3 +559,6 @@
 #322   Packages/CraCore/Tests/CraCoreTests/CleanURLTests.swift::severalPicksCopyEveryPickInSidebarOrder  ac1ca14492fd
 #326   Packages/CraCore/Tests/CraCoreTests/SidebarModelTests.swift::automaticPictureInPictureIsPerSite  5dc70ea0af0b
 #326   Tests/BrowserManagerLifecycleTests.swift::pictureInPicturePerSiteCase  1260bcff5f0e
+#333   Packages/CraCore/Tests/CraCoreTests/LittleWindowRoutingTests.swift::commandsOnAPageAreTheLittleWindowsOwn  7d4b070e248b
+#333   Packages/CraCore/Tests/CraCoreTests/LittleWindowRoutingTests.swift::commandsOnTabsSplitsAndTheSidebarAreIgnored  c5a56683a229
+#333   Tests/Scenarios/little-window-actions.scenario  00fe53b3ea8d

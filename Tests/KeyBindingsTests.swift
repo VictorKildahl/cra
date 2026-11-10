@@ -15,6 +15,11 @@ enum KeyBindingsTests {
     static func main() {
         recordedShortcuts()
         let registry = KeyBindingRegistry.shared
+        // A Little Window in front handles each action, ignores it or leaves it to the app on purpose, so
+        // a new one can't fall through to the browser window behind it by default (#333).
+        for action in registry.actions {
+            expect(LittleWindowRouting.isClassified(action.id), "\(action.id) is decided on for a Little Window (CraCore LittleWindowRouting)")
+        }
         let builtIn = registry.actions.count
         let github = KeyAction(id: "newGitHubLiveFolder", name: "New GitHub Live Folder", section: .file, shortcuts: [], triggers: ["github"])
         let jira = KeyAction(id: "liveFolderPlugin:cra.jira", name: "New Jira Live Folder", section: .file, shortcuts: [], triggers: ["jira"])

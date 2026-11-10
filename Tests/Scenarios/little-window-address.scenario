@@ -1,0 +1,17 @@
+# The Little Window's address pill reads the host only, and a page that isn't served over https shows
+# Arc's open padlock in place of the magnifier, except while the window waits for the page's first
+# response (#330). The fixture pages are http on 127.0.0.1; ${STALL} takes the connection and never
+# answers.
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+pace 0.5
+
+cra://debug?externalURL=${PAGE}?e=link1
+wait 2
+cra://debug?littleShown=loaded
+expect-log little shown loaded: windows=1 .* padlock=1 address=127\.0\.0\.1$
+
+cra://debug?externalURL=${STALL}
+wait 2
+cra://debug?littleShown=waiting
+expect-log little shown waiting: windows=2 .* padlock=0 address=

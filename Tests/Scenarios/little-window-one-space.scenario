@@ -1,0 +1,16 @@
+# The Little Window's "Open in" menu follows Arc 1.172.1 (#331): its list is min(rows × 46, 350) tall
+# and scrolls past that, follows what the search leaves, and says "No results" for a search that
+# matches nothing; with a single space the button has no ⌄ and ⇧⌘O has no menu. Heights in points:
+# the 46 pt header plus the list. This one has a single space (the default).
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+pace 0.5
+
+# One space: no ⌄ on the button, and ⇧⌘O opens nothing.
+cra://debug?externalURL=${PAGE}?n=one
+wait 2
+cra://debug?littleShown=one
+expect-log little shown one: windows=1 .* menuButton=0
+cra://action/littleWindowOpenInMenu
+cra://debug?littlePopup=one
+expect-log little popup one: open=0
