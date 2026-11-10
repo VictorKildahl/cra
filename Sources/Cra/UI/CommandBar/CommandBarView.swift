@@ -19,7 +19,9 @@ final class CommandBarView: NSView {
     private let shape = CAShapeLayer()
     private let leadingIcon = NSImageView()
     private let text: CommandTextField
-    private let info = NSImageView()
+    /// Arc's Site Control Center button at the field's end ("command bar placeholder button that opens
+    /// site control center" in Arc's binary), drawn as Arc's info badge (#314).
+    private let info = CommandBarBadge()
     /// Scoped search: the scope's pill before the field, and "Search YouTube  Tab" at the end of
     /// the row while the typed text would enter it (Arc 1.170, measured at 2x).
     private let pill = NSView()
@@ -56,6 +58,7 @@ final class CommandBarView: NSView {
         info.layer?.cornerRadius = 12
         info.imageScaling = .scaleNone
         info.contentTintColor = .secondaryLabelColor
+        info.onPress = { [weak controller] in controller?.openSiteControls() }
         divider.wantsLayer = true
         pill.wantsLayer = true
         pill.layer?.cornerCurve = .continuous
@@ -89,6 +92,9 @@ final class CommandBarView: NSView {
     }
 
     static func ink(_ c: RGB, _ alpha: Double = 1) -> NSColor { NSColor(srgbRed: c.r, green: c.g, blue: c.b, alpha: alpha) }
+
+    var debugBadgeShown: Bool { !info.isHidden }
+    func debugPressBadge() -> Bool { info.accessibilityPerformPress() }
 
     override var isFlipped: Bool { true }
 
@@ -156,7 +162,9 @@ final class CommandBarView: NSView {
         let offered = scope == nil && c.previewText == nil && c.result.scope != .actions ? c.result.scope : nil
         hint.isHidden = offered == nil
         // Arc keeps the info badge while typing ("alpha", "golf"); a site's "Search …  Tab" takes its place.
-        info.isHidden = scope != nil || offered != nil
+        // Only while there's a page whose controls it can open: a ⌘T over no tab, an empty split pane
+        // and the Little Window have none.
+        info.isHidden = !c.siteControlsAvailable || scope != nil || offered != nil
         keycap.isHidden = offered == nil
         if let offered {
             hint.stringValue = "Search \(offered.name)"
@@ -540,5 +548,21 @@ final class CommandBarRowView: NSView {
     override func mouseDown(with event: NSEvent) {}
     override func mouseUp(with event: NSEvent) {
         if bounds.contains(convert(event.locationInWindow, from: nil)) { onClick() }
+    }
+}
+
+/// The info badge: a click (or an accessibility press) runs `onPress`, as the bar's rows do.
+private final class CommandBarBadge: NSImageView {
+    var onPress: () -> Void = {}
+
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) {
+        if bounds.contains(convert(event.locationInWindow, from: nil)) { onPress() }
+    }
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func accessibilityLabel() -> String? { "Site Control Center" }
+    override func accessibilityPerformPress() -> Bool {
+        onPress()
+        return true
     }
 }

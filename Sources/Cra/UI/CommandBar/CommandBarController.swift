@@ -46,6 +46,10 @@ final class CommandBarController {
     /// Opens the row as a split pane beside the current tab; false when it can't go there.
     var onOpenInSplit: (Suggestion?, String) -> Bool = { _, _ in false }
     var onClose: () -> Void = {}
+    /// The badge at the field's end is Arc's Site Control Center button: shown while the window has a
+    /// page whose controls it opens (set before `open`), and pressing it closes the bar first (#314).
+    var siteControlsAvailable = false
+    var onSiteControls: () -> Void = {}
 
     init(engine: SuggestionEngine, store: SidebarStore) {
         self.engine = engine
@@ -230,6 +234,12 @@ final class CommandBarController {
     func commit(_ suggestion: Suggestion) {
         close()
         onCommit(suggestion, query, mode)
+    }
+
+    func openSiteControls() {
+        guard siteControlsAvailable else { return }
+        close()
+        onSiteControls()
     }
 
     func close() {

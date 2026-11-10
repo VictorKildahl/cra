@@ -1438,6 +1438,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // The sidebar's URL field (toolbar hidden): hovered, and a press on one of its buttons (#226).
             if let v = dict["urlFieldHover"] { main.debugURLFieldHover(v == "1"); return }
             if let name = dict["urlFieldPress"] { main.debugURLFieldPress(name); return }
+            if dict["commandBarBadge"] != nil { main.debugCommandBarBadgePress(); return }
             // The n-th space icon's tip, without a pointer.
             if let n = dict["spaceTip"].flatMap({ Int($0) }), let content = main.window?.contentView {
                 ArcTooltipController.shared.debugShowSpaceTip(n, in: content)

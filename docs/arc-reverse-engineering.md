@@ -67,7 +67,9 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   light spaces too), white title and trailing text, a white 24 pt arrow tile with the arrow in the row colour.
   Unselected: titles (214,214,214), "Switch to Tab" / URLs (117,117,117), arrow (189,189,189) on a white-5 % tile
   12 pt from the row's edge. "Switch to Tab" shows before typing. The info badge is a 24 pt circle 21 pt from the
-  edge in the space's backgroundExtra and stays while typing. Cra: CommandBarView, CraCore CommandBarTones.
+  edge in the space's backgroundExtra and stays while typing. It is a button, not a picture: Arc's binary
+  names it the "command bar placeholder button that opens site control center" (CommandBarPlaceholderButtonsView,
+  #314). Cra: CommandBarView, CraCore CommandBarTones.
 - [O] Entry points: keyboardShortcutT, keyboardShortcutL, keyboardShortcutFocusSidebar, keyboardShortcutCommandOptionG,
   sidebarDoubleClick, sidebarNewTabButton, placeholderClick, littleArcPlaceholderClick, topbar, appMenu*,
   toggleBetweenTypeTravelAndCommandBar.

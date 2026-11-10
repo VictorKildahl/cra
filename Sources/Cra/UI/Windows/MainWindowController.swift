@@ -448,6 +448,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         commandBar.onOpenInBackground = { [weak self] s, typed in self?.openInBackground(s, typed: typed) ?? false }
         commandBar.onOpenInSplit = { [weak self] s, typed in self?.openInSplit(s, typed: typed) ?? false }
         commandBar.onClose = { [weak self] in self?.hideCommandPanel() }
+        commandBar.onSiteControls = { [weak self] in self?.showSiteControlsFromTheirButton() }
         commandBar.spaceName = { [weak self] id in self?.store.space(id)?.title ?? "" }
     }
 
@@ -3079,6 +3080,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func debugSiteControlsShown() -> Bool { siteControlCenter.isShown
     }
 
+    /// Scenario hook (#314): the command bar's badge pressed as a click would; logs whether it was
+    /// shown, took the press, closed the bar and opened the Site Control Center.
+    func debugCommandBarBadgePress() {
+        let shown = commandHost.debugBadgeShown
+        let pressed = commandHost.debugPressBadge()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+            guard let self else { return }
+            CraLog.note("command bar badge: shown \(shown), pressed \(pressed), bar \(self.commandBar.isOpen ? "open" : "closed"), "
+                + "site control center \(self.siteControlCenter.isShown ? "shown" : "not shown")")
+        }
+    }
+
     /// Scenario hooks (#226): the sidebar's URL field hovered, its buttons logged as
     /// "url field: copyURL extensions" ("url field: none" while the toolbar has the address).
     func debugURLFieldHover(_ on: Bool) {
@@ -3482,6 +3495,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let effectiveMode: CommandBarMode = (mode == .editURL && (selectedTab == nil || fillingEmptyPane)) ? .newTab : mode
         commandBar.theme = focusedSpace.theme.shown
         commandBar.focusedSpaceID = focusedSpaceID
+        commandBar.siteControlsAvailable = selectedTab?.tab != nil && !fillingEmptyPane
         commandBar.open(mode: effectiveMode, prefill: prefill)
         // Arc draws the New Tab row as the active one while the bar makes a new tab; the
         // sidebar scrolls to it (SpaceListView.revealActiveRow).
