@@ -23,6 +23,20 @@ struct PageHistoryTests {
         #expect(!empty.restores(into: .chromium, at: "https://example.com/b"))
     }
 
+    /// A tab on one of Chromium's own pages loads its address and starts fresh. Cra 0.1.38 crashed
+    /// at every launch when the selected tab was chrome://settings/privacy with a saved list:
+    /// Chromium builds such a page's WebUI while the list is restored, before the browser is ready.
+    @Test func aChromiumOwnPageStartsFresh() {
+        for url in ["chrome://settings/privacy", "chrome://extensions", "chrome-untrusted://print/", "devtools://devtools/bundled/inspector.html"] {
+            var own = saved
+            own.url = url
+            #expect(!own.restores(into: .chromium, at: url), "\(url)")
+        }
+        var extensionPage = saved
+        extensionPage.url = "chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html"
+        #expect(extensionPage.restores(into: .chromium, at: extensionPage.url))
+    }
+
     /// Sidebar tabs keep theirs, and so do the 25 latest closed tabs, for ⇧⌘T.
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/273"))
     func closedTabsKeepTheirsForReopening() {
