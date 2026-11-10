@@ -181,10 +181,12 @@ public enum LinkSummaryContent {
 /// The prompt and instructions given to Apple Intelligence (FoundationModels).
 public enum LinkSummaryPrompt {
     public static let instructions = """
-    You summarize destination webpages concisely into 2 to 3 informative bullet points so a user understands the main content without clicking the link. \
-    Focus on key facts, conclusions, and announcements in plain, clear language. \
-    Keep each bullet point to one or two sentences. \
-    Do not use introductory filler like 'This article discusses' or 'The page explains'. \
+    You summarize destination webpages into an Arc Max preview card. \
+    Format your response strictly as:
+    Line 1: A one-sentence takeaway or verdict summarizing the page.
+    Subsequent lines: 2 to 4 concise bullet points. Each bullet point MUST begin with a short keyword followed by a colon, like:
+    - Keyword: One clear sentence explanation.
+    Focus on concrete facts, features, and takeaways. Do not use filler like 'This article discusses'. \
     Respond in the language of the webpage content.
     """
 
@@ -199,12 +201,36 @@ public enum LinkSummaryPrompt {
         if !content.isEmpty {
             lines.append("Content:\n\(content)")
         }
-        lines.append("\nSummarize the page into 2 to 3 concise, self-contained bullet points.")
+        lines.append("\nSummarize into a 1-sentence verdict, then 2 to 4 bullet points formatted as '- Keyword: description'.")
         return lines.joined(separator: "\n")
     }
 
+    /// Parses the raw model text into a headline verdict and a list of bullet points.
+    public static func parseResponse(_ text: String, fallbackHeadline: String? = nil) -> (headline: String?, bullets: [String]) {
+        let lines = text.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        var headline: String?
+        var rawBullets: [String] = []
+
+        for line in lines {
+            if line.hasPrefix("- ") || line.hasPrefix("• ") || line.hasPrefix("* ") {
+                rawBullets.append(line)
+            } else if headline == nil && !line.hasPrefix("-") && !line.hasPrefix("•") && line.count > 15 && !line.lowercased().hasPrefix("title:") {
+                let h = line.replacingOccurrences(of: "(?i)^headline:\\s*", with: "", options: .regularExpression)
+                if !h.isEmpty { headline = h }
+            } else if line.contains(":") {
+                rawBullets.append(line)
+            }
+        }
+
+        let bullets = cleanBullets(rawBullets)
+        return (headline: headline ?? fallbackHeadline, bullets: bullets)
+    }
+
     /// Cleans and formats bullets returned by the model.
-    public static func cleanBullets(_ raw: [String]) -> [String] {
+    public static func cleanBullets(_ raw: [String], max: Int = 3) -> [String] {
         var cleaned: [String] = []
         for line in raw {
             var b = line.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -218,7 +244,7 @@ public enum LinkSummaryPrompt {
             if !b.isEmpty && b.count <= 300 {
                 cleaned.append(b)
             }
-            if cleaned.count >= 3 { break }
+            if cleaned.count >= max { break }
         }
         return cleaned
     }
@@ -232,6 +258,7 @@ public enum LinkSummaryPrompt {
     /// Provides realistic bullets for test runs when Apple Intelligence is simulated.
     public static func fakeAnswer(title: String, url: URL, content: LinkSummaryContent.Extracted) -> LinkSummaryResult {
         let cleanTitle = content.title ?? (title.isEmpty ? host(url) : title)
+        let headline = content.description ?? "Overview and key takeaways regarding \(cleanTitle)."
         var bullets: [String] = []
         if let desc = content.description, !desc.isEmpty {
             bullets.append(desc)
@@ -240,7 +267,7 @@ public enum LinkSummaryPrompt {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { $0.count > 25 && $0.count < 180 }
         for sentence in sentences {
-            if bullets.count >= 3 { break }
+            if bullets.count >= 4 { break }
             if !bullets.contains(sentence) {
                 bullets.append(sentence)
             }
@@ -251,21 +278,29 @@ public enum LinkSummaryPrompt {
                 "Key takeaways and information from \(host(url)).",
             ]
         }
-        return LinkSummaryResult(url: url.absoluteString, title: cleanTitle, host: host(url), bullets: bullets)
+        return LinkSummaryResult(
+            url: url.absoluteString,
+            title: cleanTitle,
+            host: host(url),
+            headline: headline,
+            bullets: bullets
+        )
     }
 }
 
-/// The structured summary of a link's destination page.
+/// The structured summary of a link's destination page matching Arc Max's preview card.
 public struct LinkSummaryResult: Codable, Equatable, Sendable {
     public var url: String
     public var title: String
     public var host: String
+    public var headline: String?
     public var bullets: [String]
 
-    public init(url: String, title: String, host: String, bullets: [String]) {
+    public init(url: String, title: String, host: String, headline: String? = nil, bullets: [String]) {
         self.url = url
         self.title = title
         self.host = host
+        self.headline = headline
         self.bullets = bullets
     }
 }

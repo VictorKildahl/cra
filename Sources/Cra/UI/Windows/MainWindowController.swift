@@ -765,7 +765,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             pageURL: activeURL,
             window: window,
             store: store,
-            profilePath: profilePath
+            profilePath: profilePath,
+            favicons: app.favicons
         )
     }
 

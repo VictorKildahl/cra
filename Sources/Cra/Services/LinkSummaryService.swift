@@ -88,8 +88,60 @@ final class LinkSummaryService {
         return html
     }
 
-    /// Fetches destination HTML through Chromium CEF with the space's profile, falling back to URLSession.
+    /// Fetches destination HTML through fast URLSession streaming (first 35KB slice), falling back to Chromium CEF.
     private func fetchHTMLDirect(url: URL, profilePath: String?) async -> String? {
+        if let html = await fetchViaURLSession(url: url) {
+            return html
+        }
+        return await fetchViaCEF(url: url, profilePath: profilePath)
+    }
+
+    /// Fast path: reads up to 35 KB via native URLSession, which takes ~150-300ms and cancels the stream early.
+    private func fetchViaURLSession(url: URL) async -> String? {
+        await withCheckedContinuation { continuation in
+            var resumed = false
+            let finish: (String?) -> Void = { res in
+                guard !resumed else { return }
+                resumed = true
+                continuation.resume(returning: res)
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+                finish(nil)
+            }
+
+            Task {
+                var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 1.8)
+                request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
+                request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+
+                do {
+                    let (asyncBytes, response) = try await URLSession.shared.bytes(for: request)
+                    guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                        finish(nil)
+                        return
+                    }
+
+                    var data = Data()
+                    data.reserveCapacity(35_000)
+                    for try await byte in asyncBytes {
+                        data.append(byte)
+                        if data.count >= 35_000 {
+                            break
+                        }
+                    }
+
+                    let str = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1)
+                    finish(str)
+                } catch {
+                    finish(nil)
+                }
+            }
+        }
+    }
+
+    /// Chromium CEF fallback for space profiles or authenticated sessions.
+    private func fetchViaCEF(url: URL, profilePath: String?) async -> String? {
         await withCheckedContinuation { (continuation: CheckedContinuation<String?, Never>) in
             var resumed = false
             let finish: (String?) -> Void = { result in
@@ -98,8 +150,7 @@ final class LinkSummaryService {
                 continuation.resume(returning: result)
             }
 
-            // Timeout after 2.5 seconds so slow/unresponsive servers don't stall the UI.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 finish(nil)
             }
 
@@ -107,18 +158,7 @@ final class LinkSummaryService {
                 if status == 200, !body.isEmpty {
                     finish(body)
                 } else {
-                    Task {
-                        var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 2.5)
-                        request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
-                        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-                        if let (data, response) = try? await URLSession.shared.data(for: request),
-                           (response as? HTTPURLResponse)?.statusCode == 200,
-                           let str = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) {
-                            finish(str)
-                        } else {
-                            finish(nil)
-                        }
-                    }
+                    finish(nil)
                 }
             }
         }
@@ -142,20 +182,19 @@ final class LinkSummaryService {
                 )
                 let response = try await session.respond(
                     to: prompt,
-                    generating: LinkSummaryModelAnswer.self,
-                    options: GenerationOptions(sampling: .greedy, maximumResponseTokens: 90)
+                    options: GenerationOptions(samplingMode: .greedy, maximumResponseTokens: 85)
                 )
-                let bullets = LinkSummaryPrompt.cleanBullets(response.content.bullets)
-                let cleanTitle = response.content.title.trimmingCharacters(in: .whitespacesAndNewlines)
-                let finalTitle = cleanTitle.isEmpty ? (content.title ?? title) : cleanTitle
+                let parsed = LinkSummaryPrompt.parseResponse(response.content, fallbackHeadline: content.description)
                 let host = LinkSummaryPrompt.host(url)
+                let finalTitle = (content.title ?? title).trimmingCharacters(in: .whitespacesAndNewlines)
 
-                CraLog.note("LinkSummary: summarized \(host) (\(bullets.count) points)")
+                CraLog.note("LinkSummary: summarized \(host) (\(parsed.bullets.count) points in Arc Max format)")
                 return LinkSummaryResult(
                     url: url.absoluteString,
                     title: finalTitle.isEmpty ? host : finalTitle,
                     host: host,
-                    bullets: bullets.isEmpty ? [content.description ?? "Overview of \(host)."] : bullets
+                    headline: parsed.headline ?? content.description ?? "Overview of \(host).",
+                    bullets: parsed.bullets.isEmpty ? [content.description ?? "Overview of \(host)."] : parsed.bullets
                 )
             } catch {
                 CraLog.note("LinkSummary: model failed: \(error)")
