@@ -1,6 +1,7 @@
 #!/bin/bash
 # Easel canvas clicks: one click picks a text block, a double click edits it, Return/Escape end editing,
-# Delete removes the picked block and its size pill follows a drag.
+# Delete removes the picked block and its size pill follows a drag. Then EaselBrowser on its own: a saved
+# Easel's colours in Peek, and again for the tab that takes it over with Peek's ⤢.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 TEST_DIR="$(mktemp -d "${TMPDIR:-/tmp}/cra-easel-tests.XXXXXX")"
@@ -24,3 +25,4 @@ xcrun swiftc -swift-version 5 -parse-as-library ${CRA_TEST_SWIFTC_FLAGS:-} -modu
   Sources/Cra/UI/Easel/EaselBrowser.swift Tests/EaselCanvasSupport/BrowserServices.swift \
   Tests/EaselBrowserTests.swift "$TEST_DIR/bridge.o" -o "$TEST_DIR/easel-browser-tests"
 CRA_DATA_DIR="$TEST_DIR/data" "$TEST_DIR/easel-browser-tests"
+[ -z "${CRA_TEST_KEEP:-}" ] || cp "$TEST_DIR/easel-browser-tests" "$CRA_TEST_KEEP/"

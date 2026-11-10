@@ -128,7 +128,9 @@ to Markdown or `docs/` alone runs nothing.
   turning into an × on its spring.
 - `scripts/test-easel-canvas.sh`: the real `EaselSheetView` in an off-screen window, driven with
   synthetic mouse and key events: one click picks a text block, a double click edits it, Return and
-  Escape end editing, Delete removes it, its size pill follows a drag.
+  Escape end editing, Delete removes it, its size pill follows a drag. Then `EaselBrowser` against
+  a stub `CraBrowser`: Peek's opaque canvas, and the clear page and dark bar it reports to the tab
+  that takes it over with ⤢.
 - `scripts/test-perf.sh`: the performance recorder on a real main run loop: injected stalls,
   hang files with a `sample` stack, the session marker, ownership, the recording switch
   ([performance.md](performance.md)).
