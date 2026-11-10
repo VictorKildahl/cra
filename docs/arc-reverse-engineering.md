@@ -645,6 +645,20 @@ from the focused space; Cra uses the measured values as a fixed palette):
   28pt chevron-up button (#5C5C71), then 54pt rows (40pt radius-9 tile in the space colour
   with the emoji, 15pt semibold name), highlighted row #161734; typing filters, ↩ moves the
   tab there;
+- [O] Arc 1.172.1 changed the menu (10 Nov, GitHub #331; offline copy with 10 spaces and with 1, AX
+  frames and 2x window captures). It is drawn in a transparent window the size of the Little Arc, so
+  no window animation. 244 pt wide with a hairline #1D1E37 border, 4 pt below the window's top and
+  4 pt in from its right edge. Header 46 pt: 14 pt magnifier 16 pt in, "Search Spaces..." (three periods, added in code) 13 pt
+  #8E8F9D from 46 pt in, an 18 pt #1D1E37 rule 38 pt from the right edge, then a plain ∧ (16 pt
+  button, glyph centred 22 pt from the right); glyphs #505166. No filled button any more. Rows
+  46 pt: 26 pt tile 10 pt in, centred; name 13 pt semibold at 46 pt, white ≈ 82 %; highlight
+  #161734 across the full width. The list (an AXScrollArea) is at most 350 pt and scrolls. The
+  space "Open in" names is the first row and highlighted, the rest follow in sidebar order (Work,
+  Victor, Alpha… with sidebar order Victor, Work, Alpha…). ↓ moves the highlight but doesn't
+  scroll the list to it (Cra does). Typing shrinks the menu to the matches ("al" → 46 + 46 pt);
+  with none, "No results" 13 pt centred in 64 pt. ⇧⌘O opens the same menu. With one space the
+  real ⌄ (the second `openInSpaceExpander`) isn't there: the button is "Open in Work ⌘O" alone.
+  Cra: `LittleMoveMenu` (CraCore) and `LittleSpacesPopup`.
 - ⌘O ("Open in <space>") moves the page into that space; ⌥⌘N makes an empty Little Arc;
   Window ▸ Close Little Arc Windows exists;
 - opening: the window grows from a small rectangle under the pointer to its full frame in
