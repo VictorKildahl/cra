@@ -2153,6 +2153,9 @@ Library button's hover list (downloads) and its click (the archive) showed diffe
   with `sidebarWidth` 200 and 450 in StorableWindows.json, Library opened by AXPress on the sidebar's Home
   button; both read sidebar group 417, search field x 164 w 235, list scroll area x 124 w 281. So at 450 the
   Library is narrower than the tab list. Cra had added 70 pt to the user's width (`LibraryWidth` now).
+- [O] Arc's narrowest window is 926 pt (split pane bars, 4 Nov), so the page always keeps at least 509 pt beside
+  the 417 pt Library and Arc never has to shrink it. Cra's window goes down to 640 pt: below 926 its Library gives
+  way so the page keeps 509, down to 320 pt (a 207 pt list), and follows the window while it resizes (franvz9, #302).
 - [U] Whether Arc lets the Library's edge be dragged (not tried; Cra keeps it fixed). The open animation's exact curve.
 - Cra: `LibraryView` in the sidebar (Downloads and Archived Tabs; Cra has no Media, Easels, Spaces or Boosts pages),
   `SidebarUIState.libraryPage` per window, `MainWindowController.showLibrary/closeLibrary`. The Library button and

@@ -503,7 +503,9 @@
 #300   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::padButtons  4e4cb24be35d
 #300   Tests/Scenarios/colourless-theme.scenario  44737220a5ce
 #302   Packages/CraCore/Tests/CraCoreTests/LibraryWidthTests.swift::libraryIsArcsWidth  a95bc15fcc1b
+#302   Packages/CraCore/Tests/CraCoreTests/LibraryWidthTests.swift::narrowWindowKeepsThePage  075b072d8630
 #302   Packages/CraCore/Tests/CraCoreTests/LibraryWidthTests.swift::spacesPageFitsItsCards  7da5934c4e79
+#302   Tests/Scenarios/library-narrow-window.scenario  1f6093766511
 #302   Tests/Scenarios/library-width.scenario  a2a4c5d53551
 #303   Packages/CraCore/Tests/CraCoreTests/MusicNotesTests.swift::arcsMusicSites  7073b0e92e72
 #303   Packages/CraCore/Tests/CraCoreTests/MusicNotesTests.swift::fieldIsCentredOnTheIconsTopEdge  ed1fe24fdf19

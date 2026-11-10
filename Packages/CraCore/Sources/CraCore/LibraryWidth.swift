@@ -13,12 +13,20 @@ public enum LibraryWidth {
     public static let rail: Double = 113
     /// What the page keeps beside the Spaces page, whatever the window's width (Arc 1.171).
     public static let pageRoom: Double = 56
+    /// The narrowest page Arc shows beside its Library: its narrowest window (926 pt) less 417.
+    public static let pageMinimum: Double = 509
+    /// The narrowest the Library gets in a narrow window: a 207 pt list beside the rail.
+    public static let minimum: Double = 320
 
     /// The sidebar's width with the Library open. The Spaces page widens to fit `spacesCards`
     /// (the width its cards need, rail included) while the window leaves the page `pageRoom`;
     /// its cards scroll sideways when they don't fit.
+    ///
+    /// The other pages are 417 pt in any window Arc allows. Cra's window goes down to 640 pt,
+    /// narrower than Arc's 926: there the Library gives way so the page keeps `pageMinimum`,
+    /// down to `minimum`, where the two share what is left (#302).
     public static func sidebar(spacesCards: Double? = nil, window: Double) -> Double {
-        guard let spacesCards else { return standard }
+        guard let spacesCards else { return min(standard, max(minimum, window - pageMinimum)) }
         return max(standard, min(spacesCards, window - pageRoom))
     }
 }

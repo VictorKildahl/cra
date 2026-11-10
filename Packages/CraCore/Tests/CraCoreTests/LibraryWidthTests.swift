@@ -19,4 +19,16 @@ struct LibraryWidthTests {
         #expect(LibraryWidth.sidebar(spacesCards: 2000, window: 1728) == 1672)
         #expect(LibraryWidth.sidebar(spacesCards: 2000, window: 400) == 417)
     }
+
+    /// Arc's narrowest window is 926 pt, so its page always keeps 926 − 417 = 509 pt beside the
+    /// Library. Cra's window goes down to 640 pt, where a fixed 417 pt Library left the page
+    /// 223 pt (franvz9 on #302): below 926 the Library gives way, down to 320 pt.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/302"))
+    func narrowWindowKeepsThePage() {
+        #expect(LibraryWidth.sidebar(window: 926) == 417)
+        #expect(LibraryWidth.sidebar(window: 900) == 391)
+        #expect(900 - LibraryWidth.sidebar(window: 900) == LibraryWidth.pageMinimum)
+        #expect(LibraryWidth.sidebar(window: 640) == LibraryWidth.minimum)
+        #expect(640 - LibraryWidth.sidebar(window: 640) == 320)
+    }
 }

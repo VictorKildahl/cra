@@ -2308,7 +2308,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// The sidebar's width with the Library in it: Arc's 417 pt whatever the tab sidebar's width
-    /// (#302), or on the Spaces page wide enough for every space's card (LibraryWidth).
+    /// (narrower only in a window narrower than Arc allows), or on the Spaces page wide enough
+    /// for every space's card (LibraryWidth, #302).
     private func libraryWidth(_ page: LibraryPage) -> CGFloat {
         let windowWidth = Double(window?.frame.width ?? 1280)
         guard page == .spaces else { return CGFloat(LibraryWidth.sidebar(window: windowWidth)) }
@@ -3837,8 +3838,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     func windowDidResize(_ notification: Notification) {
         guard (notification.object as? NSWindow) === window else { return }
-        // Arc's Spaces page keeps the page its 56 pt while the window resizes.
-        if sidebarUI.libraryPage == .spaces, sidebarUI.libraryReveal == nil { shell.sidebarWidth = libraryWidth(.spaces) }
+        // Arc's Spaces page keeps the page its 56 pt while the window resizes; in a window
+        // narrower than Arc allows, the other pages give way to the page too (LibraryWidth).
+        if let page = sidebarUI.libraryPage, sidebarUI.libraryReveal == nil, libraryWidth(page) != shell.sidebarWidth {
+            shell.sidebarWidth = libraryWidth(page)
+            if page != .spaces { CraLog.note("library is \(Int(shell.sidebarWidth)) pt wide in a \(Int(window?.frame.width ?? 0)) pt window") }
+        }
         shell.needsLayout = true
         browsers.layoutVisible()
         if commandBar.isOpen { positionCommandPanel() }

@@ -1,0 +1,14 @@
+# Arc's window is at least 926 pt, so its 417 pt Library always leaves the page 509 pt. Cra's
+# window goes down to 640 pt, where a fixed 417 pt Library left the page 223 pt. Below 926 the
+# Library gives way, down to 320 pt, and follows the window while it resizes.
+# promise: #302
+budget rss=700 stalls50=10
+cra://debug?windowSize=640x800
+cra://open?url=${PAGE}?n=one
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://action/viewDownloads
+expect-log library opens 320 pt wide beside a \d+ pt tab sidebar
+cra://debug?windowSize=900x800
+expect-log library is 391 pt wide in a 900 pt window
+cra://debug?windowSize=1280x800
+expect-log library is 417 pt wide in a 1280 pt window
