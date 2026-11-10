@@ -379,8 +379,8 @@ struct PersonalizationStep: View {
                 .foregroundStyle(c.body)
                 .offset(y: 228)
             HStack(spacing: 12) {
-                LayoutTile(toolbar: false, title: "Sidebar", model: model, c: c)
-                LayoutTile(toolbar: true, title: "Toolbar", model: model, c: c)
+                // Settings ▸ Tabs ▸ Address Bar offers the same two (#305).
+                ForEach(AddressBarPlacement.allCases, id: \.self) { LayoutTile(placement: $0, model: model, c: c) }
             }
             .offset(y: 252)
             PrimaryButton(title: "Continue", c: c, enabled: true) { model.continueFromPersonalization() }
@@ -392,14 +392,14 @@ struct PersonalizationStep: View {
 /// Dia's PersonalizationTabLayoutButton: the illustration at its 230×180 artwork size scaled to
 /// the column, a 3 pt ring when picked, the name in TabLayoutLabelText underneath.
 private struct LayoutTile: View {
-    let toolbar: Bool
-    let title: String
+    let placement: AddressBarPlacement
     @Bindable var model: ImportFlowModel
     let c: ImportColors
 
     private static let width: CGFloat = (ImportMetrics.columnWidth - 12) / 2
 
     var body: some View {
+        let toolbar = placement == .toolbar
         let selected = model.classicLayout == toolbar
         let k = Self.width / 230
         VStack(spacing: 7) {
@@ -408,14 +408,14 @@ private struct LayoutTile: View {
                 .scaleEffect(k, anchor: .topLeading)
                 .frame(width: 230 * k, height: 180 * k, alignment: .topLeading)
             // TabLayoutLabelText: black 53% / white 60%.
-            Text(title)
+            Text(placement.title)
                 .font(.system(size: 13))
                 .foregroundStyle(c.dark ? Color.white.opacity(0.6) : Color.black.opacity(0.53))
         }
         .contentShape(Rectangle())
         .onTapGesture { withAnimation(.easeOut(duration: 0.15)) { model.classicLayout = toolbar } }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(toolbar ? "Toolbar: the address bar above the page" : "Sidebar: the address bar at the top of the sidebar")
+        .accessibilityLabel("\(placement.title): the address bar \(placement.detail.lowercased())")
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction { model.classicLayout = toolbar }
     }

@@ -502,3 +502,7 @@
 #300   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::noColourIsArcsColourlessTheme  ee495dc0d003
 #300   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::padButtons  4e4cb24be35d
 #300   Tests/Scenarios/colourless-theme.scenario  44737220a5ce
+#305   Packages/CraCore/Tests/CraCoreTests/AddressBarPlacementTests.swift::bothChoicesAreNamed  36f4e5cee543
+#305   Packages/CraCore/Tests/CraCoreTests/AddressBarPlacementTests.swift::placementIsTheToolbarSwitch  b2e689828283
+#305   Packages/CraCore/Tests/CraCoreTests/AddressBarPlacementTests.swift::settingsFileKeepsShowToolbar  c852bda6b868
+#305   Packages/CraCore/Tests/CraCoreTests/AddressBarPlacementTests.swift::startsInTheSidebar  fb73715b0ab0
