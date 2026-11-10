@@ -499,3 +499,9 @@
 #299   Packages/CraCore/Tests/CraCoreTests/UnpackedCopiesTests.swift::theCopyStopsLoadingInThatProfileOnly  7878314f97fd
 #299   Tests/ExtensionStoreMigrationTests.swift::unpackedCopiesStepAside  e9a30c4a0209
 #299   Tests/Scenarios/unpacked-extension-copy.scenario  59ab5b7e11a8
+#303   Packages/CraCore/Tests/CraCoreTests/MusicNotesTests.swift::arcsMusicSites  7073b0e92e72
+#303   Packages/CraCore/Tests/CraCoreTests/MusicNotesTests.swift::fieldIsCentredOnTheIconsTopEdge  ed1fe24fdf19
+#303   Packages/CraCore/Tests/CraCoreTests/MusicNotesTests.swift::otherSites  10add4b90759
+#303   Packages/CraCore/Tests/CraCoreTests/MusicNotesTests.swift::playsOnlyWhatCanBeHeardOnAMusicSite  e257e0be4145
+#303   Tests/BrowserManagerLifecycleTests.swift::musicNotesPauseWithinHoldCase  a89980952d6f
+#303   Tests/Scenarios/music-notes.scenario  c3bee378ad93

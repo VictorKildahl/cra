@@ -4,7 +4,7 @@ import Testing
 @testable import CraCore
 
 struct MusicNotesTests {
-    @Test(arguments: [
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/303"), arguments: [
         "https://music.youtube.com/watch?v=abc",
         "https://open.spotify.com/track/1",
         "https://spotify.com/",
@@ -21,7 +21,7 @@ struct MusicNotesTests {
     }
 
     /// A video site, a look-alike host and a host that only ends in a music site's letters.
-    @Test(arguments: [
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/303"), arguments: [
         "https://www.youtube.com/watch?v=abc",
         "https://youtube.com/",
         "https://apple.com/music",
@@ -37,7 +37,7 @@ struct MusicNotesTests {
         #expect(!MusicNotes.isMusicSite(url))
     }
 
-    @Test func playsOnlyWhatCanBeHeardOnAMusicSite() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/303")) func playsOnlyWhatCanBeHeardOnAMusicSite() {
         let music = "https://open.spotify.com/", video = "https://www.youtube.com/watch?v=abc"
         #expect(MusicNotes.plays(url: music, soundPlaying: true, muted: false))
         #expect(!MusicNotes.plays(url: music, soundPlaying: false, muted: false), "paused, even during the speaker's audible hold")
@@ -59,7 +59,7 @@ struct MusicNotesTests {
 
     /// The emitter sits on the top edge of the 16 pt icon in the middle of the cell, and the
     /// view around it leaves 30 pt on every side of the tile.
-    @Test func fieldIsCentredOnTheIconsTopEdge() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/303")) func fieldIsCentredOnTheIconsTopEdge() {
         let tile = CGRect(x: 59, y: 55, width: 51, height: 47)
         let field = MusicNotes.field(over: tile)
         #expect(field == CGRect(x: 29, y: 17, width: 111, height: 107))

@@ -1,3 +1,4 @@
+# promise: #303
 # A music favorite shows notes while audible and unmuted. ${MUSIC} is the local fixture server
 # under nts.live. A 440 Hz tone, 60 dB below full volume, triggers Chromium's audible state.
 # Playback starts through the protocol's user gesture.

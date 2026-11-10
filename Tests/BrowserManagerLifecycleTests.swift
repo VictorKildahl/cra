@@ -979,6 +979,7 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #303
     /// Pausing hides music notes before the speaker's recently-audible hold expires.
     @MainActor
     private static func musicNotesPauseWithinHoldCase() {
