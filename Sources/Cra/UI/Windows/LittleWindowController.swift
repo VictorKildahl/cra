@@ -177,6 +177,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     var store: SidebarStore { app.store }
     var currentURL: String { browser?.currentURL ?? state.url }
     var hasPage: Bool { !currentURL.isEmpty && currentURL != "about:blank" }
+    var canCapturePage: Bool { isPeek && !isParked && !closingPeek && window?.isVisible == true }
 
     /// `url` nil makes a popup host: the browser adopts the next window.open
     /// CEF hands it (see `CraBrowserDelegate.browser:popupHostForURL:`).
@@ -362,7 +363,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         if let layer = w.contentView?.layer, layer.cornerRadius != shell.pageCornerRadius { layer.cornerRadius = shell.pageCornerRadius }
     }
 
-    private func focusPage() {
+    func focusPage() {
         guard let b = browser else { return }
         if let w = b.hostWindow, w.parent === window { w.makeKey() }
         b.setFocused(true)
@@ -527,6 +528,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     func parkPeek() {
         guard isPeek, !isParked, !closingPeek, let window, let parent = peekParent else { return }
         isParked = true
+        peekParent?.closeCapture(in: self)
         openingPeek = false
         transition?.remove()
         transition = nil
@@ -587,6 +589,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     func dropPeek() {
         guard isPeek, let window, !closingPeek else { return }
         closingPeek = true
+        peekParent?.closeCapture(in: self)
         transition?.remove()
         transition = nil
         guard windowShouldClose(window) else { return }
@@ -608,6 +611,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         guard let window, let parent = peekParent, let pw = parent.window else { finish(); return }
         let neverShown = openingPeek && transition == nil
         closingPeek = true
+        parent.closeCapture(in: self)
         transition?.remove()
         transition = nil
         // Closed while it was still finding its link: it goes without having been seen.
@@ -1054,14 +1058,15 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             browser?.devToolsAction = ["jsConsole": "console", "inspectElement": "inspect"][id]
             browser?.showDevTools()
         case "print": browser?.print()
+        case "capturePage": if isPeek { peekParent?.capturePage(in: self) }
         case "promoteLittleWindow": promote(to: nil)
         // Arc's Show Little Arc "Open In" Menu (⇧⌘O): the ⌄ button's list of spaces.
         case "littleWindowOpenInMenu": if hasPage, !isPeek { togglePopup() }
         // Move Tab to Space N (⌃⌘N, #86) sends the page there, as the spaces popup does (#92).
         case let id where id.hasPrefix("moveTabToSpace"):
             if let n = Int(id.dropFirst(14)), n >= 1, n <= store.spaceOrder.count { promote(to: store.spaceOrder[n - 1]) }
-        // No find bar or capture in little windows; keep them off the main window.
-        case "find", "findNext", "findPrevious", "capturePage", "toggleSidebar", "pinTab", "favoriteTab", "renameTab",
+        // No find bar in little windows; keep it off the main window.
+        case "find", "findNext", "findPrevious", "toggleSidebar", "pinTab", "favoriteTab", "renameTab",
              "duplicateTab", "resetTab", "muteTab", "clearToday", "nextTab", "previousTab", "recentTab", "recentTabBackward":
             break
         default: return false
@@ -1081,7 +1086,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     }
 
     /// The toast sits 8 pt under the window's top, over the toolbar (Arc's Little Arc).
-    private func showToast(_ text: String, action: ShinyToast.Action? = nil) {
+    func showToast(_ text: String, action: ShinyToast.Action? = nil) {
         guard let window, let content = window.contentView else { return }
         slowResponseShown = false
         toast.show(text, action: action, page: content.convert(content.bounds, to: nil), in: window, colors: LittlePalette.toast)

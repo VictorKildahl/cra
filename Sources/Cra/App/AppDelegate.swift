@@ -1450,6 +1450,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             if dict["siteControls"] != nil { main.debugSiteControls(); return }
+            if let label = dict["captureShown"] { main.debugCapture(label); return }
             // The sidebar's URL field (toolbar hidden): hovered, and a press on one of its buttons (#226).
             if let v = dict["urlFieldHover"] { main.debugURLFieldHover(v == "1"); return }
             if let name = dict["urlFieldPress"] { main.debugURLFieldPress(name); return }
