@@ -128,7 +128,7 @@ public struct UsageStats: Codable, Equatable, Sendable {
     public static let reportedSettings: Set<String> = [
         "autoArchive", "autoArchiveEnabled", "autoPictureInPicture", "blockAdsAndTrackers", "blockCookieBanners",
         "boostsEnabled", "calendarHoverPreview", "commandBarCurrentSpaceOnly", "calendarMeetingLink", "calendarTimeToNextMeeting", "chromeEngine",
-        "crashReports", "defaultLinkDestination", "edgeToEdgeContent", "favoriteLogoOutline", "favoritePreviews",
+        "crashReports", "defaultLinkDestination", "edgeToEdgeContent", "favoriteLogoOutline", "favoritePreviews", "fingerprintingProtection",
         "folderPreviews", "hapticFeedbackOnReorder", "httpsOnly", "keepInMenuBar", "littleWindowArchiveAfter",
         "littleWindowShortcutEverywhere", "liveCalendar", "mediaLibraryEnabled", "newTabButtonAtTop", "newTabsAtTop",
         "openLinksInForeground", "pageTopWindowDrag", "peekInEveryTab", "peekLinksToOtherSites", "peekOnShiftClick",

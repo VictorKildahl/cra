@@ -2,7 +2,8 @@ import SwiftUI
 
 /// Dia's Privacy pane: a "Content blocking" card of switches (Block ads / Block cookie banners /
 /// Block trackers) and a "Data" card, each setting a row with what it does under its name. Cra ships one
-/// ad-and-tracker domain list, so it has one switch. The Data card's usage-data row ("Share
+/// ad-and-tracker domain list, so it has one switch. Fingerprinting protection, under them, is Cra's
+/// own (neither Arc nor Dia has it). The Data card's usage-data row ("Share
 /// content data to help improve Dia") is Cra's usage stats, with crash reports under it; "Connections"
 /// is Chrome's "Always use secure connections". "Data" holds Arc's Clear Browsing Data (Arc keeps
 /// it in Settings ▸ Profiles and opens Chrome's Privacy and security page; Cra opens Chrome's
@@ -25,6 +26,11 @@ struct PrivacyPane: View {
                 SettingsToggleRow("Block cookie banners",
                                   detail: "Cookie banners from the common consent tools are hidden. Pages load again with the change.",
                                   isOn: $store.settings.blockCookieBanners)
+                SettingsCardDivider()
+                // Not in Arc: Cra's Chromium (fingerprinting-protection.patch).
+                SettingsToggleRow("Fingerprinting protection",
+                                  detail: "Sites that tell browsers apart by reading back drawings, 3D graphics or sound get faint noise in what they read, different for each site and each time Cra opens. Sites also see 8 processor cores.",
+                                  isOn: $store.settings.fingerprintingProtection)
             }
 
             SettingsHeader("Connections").padding(.top, 20)

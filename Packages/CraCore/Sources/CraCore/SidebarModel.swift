@@ -599,6 +599,10 @@ public struct AppSettings: Codable, Equatable {
     public var tabSleepOnMemoryPressure: Bool = false
     /// Privacy ▸ "Always use secure connections": Chrome's HTTPS-Only Mode.
     public var httpsOnly: Bool = false
+    /// Privacy ▸ "Fingerprinting protection" (not in Arc, off by default): Cra's Chromium adds
+    /// faint noise to what pages read back from canvas, WebGL and offline audio, and reports 8
+    /// processor cores, with a seed per site, profile and launch (fingerprinting-protection.patch).
+    public var fingerprintingProtection: Bool = false
     /// Arc's View ▸ Appearance: what websites see as the colour scheme.
     public var websiteAppearance: WebsiteAppearance = .automatic
     /// Arc's Settings ▸ Advanced "Play Arc sound effects" (the capture shutter), on by default.
@@ -894,6 +898,7 @@ extension AppSettings {
         tabSleepAfter = (try? c.decodeIfPresent(TabSleepThreshold.self, forKey: .tabSleepAfter)) ?? .fourHours
         tabSleepOnMemoryPressure = try c.decodeIfPresent(Bool.self, forKey: .tabSleepOnMemoryPressure) ?? false
         httpsOnly = try c.decodeIfPresent(Bool.self, forKey: .httpsOnly) ?? false
+        fingerprintingProtection = try c.decodeIfPresent(Bool.self, forKey: .fingerprintingProtection) ?? false
         websiteAppearance = (try? c.decodeIfPresent(WebsiteAppearance.self, forKey: .websiteAppearance)) ?? .automatic
         soundEffects = try c.decodeIfPresent(Bool.self, forKey: .soundEffects) ?? true
         mediaLibraryEnabled = try c.decodeIfPresent(Bool.self, forKey: .mediaLibraryEnabled) ?? false

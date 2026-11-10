@@ -332,9 +332,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         for w in mainWindows { w.browsers.sleepIdleTabs(policy) }
     }
 
-    /// Settings > Privacy > "Always use secure connections", live like content blocking.
+    /// Settings > Privacy > "Always use secure connections" and "Fingerprinting protection", live
+    /// like content blocking.
     private func observeHttpsOnly() {
         observeChanges(of: { [store] in store.settings.httpsOnly }, apply: CraCEFRuntime.setHttpsOnlyModeEnabled)
+        observeChanges(of: { [store] in store.settings.fingerprintingProtection },
+                       apply: CraCEFRuntime.setFingerprintingProtectionEnabled)
     }
 
     /// Chromium's secure DNS setting (Settings > Privacy, chrome://settings/security), left on
@@ -1429,6 +1432,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 if v == "off" { store.settings.setSharesToImproveCra(false) }
                 return
             }
+            // Settings ▸ Privacy ▸ Fingerprinting protection on or off, as its switch sets it.
+            if let v = dict["fingerprinting"] { store.settings.fingerprintingProtection = v == "on"; return }
             if let v = dict["banner"] { SoftwareUpdater.shared.debugUpdated(v == "none" ? nil : v); return }
             if let v = dict["bannerReady"] { SoftwareUpdater.shared.debugReady(v == "none" ? nil : v); return }
             if dict["switcher"] != nil { main.debugTabSwitcher(); return }
