@@ -18,6 +18,9 @@ cd "$(dirname "$0")/.."
 
 eval "$(grep -E '^CEF_VERSION=' scripts/fetch-cef.sh)"
 # 154.0.34+g14c5a08+chromium-154.0.8037.98: CEF commit 14c5a08 on branch 8037.
+# The Chromium tag is passed to automate-git, so a CEF commit can also be built on a newer
+# Chromium patch of its branch than CEF pins (an Extended Stable security update that CEF
+# hasn't picked up yet): 156.0.27+ga10dae3+chromium-156.0.8078.96.
 CEF_COMMIT="$(sed -E 's/.*\+g([0-9a-f]+)\+.*/\1/' <<<"$CEF_VERSION")"
 CEF_BRANCH="$(sed -E 's/.*chromium-[0-9]+\.[0-9]+\.([0-9]+)\..*/\1/' <<<"$CEF_VERSION")"
 # Builds for the host CPU; CEF_TARGET_ARCH=x64 (or arm64) cross-compiles. automate-git
@@ -68,6 +71,7 @@ automate() {
     --depot-tools-dir="$CEF_BUILD_DIR/depot_tools" \
     --branch="$CEF_BRANCH" \
     --checkout="$CEF_COMMIT" \
+    --chromium-checkout="refs/tags/${CEF_VERSION##*chromium-}" \
     "$ARCH_FLAG" \
     --no-chromium-history \
     --no-depot-tools-update \
@@ -83,13 +87,26 @@ cd "$CEF_BUILD_DIR"
 #    --no-chromium-history never moves an existing checkout, and gclient sync skips
 #    src as an unmanaged solution, so move it here. Reverting src and the repos CEF
 #    patches drops CEF's and Cra's patches; steps 2 and 3 put them back.
+#    The same goes for src/cef: automate-git copies the CEF checkout there only in the
+#    run that moves the CEF commit, so a run that stopped right after that left src/cef
+#    on the old commit with the last round's Cra edits, and every later run built it.
 CHROMIUM_VERSION="${CEF_VERSION##*chromium-}"
-if [ -f chromium/src/chrome/VERSION ] &&
-   [ "$(cut -d= -f2 chromium/src/chrome/VERSION | paste -sd. -)" != "$CHROMIUM_VERSION" ]; then
-  echo "Moving the Chromium checkout to $CHROMIUM_VERSION"
+revert_patched() {
   for repo in . $(sed -nE "s/.*'path': '([^']+)'.*/\1/p" chromium/src/cef/patch/patch.cfg | sort -u); do
     [ -d "chromium/src/$repo" ] && git -C "chromium/src/$repo" checkout -- .
   done
+}
+if [ -d chromium/src/cef/.git ] && [[ "$(git -C chromium/src/cef rev-parse HEAD)" != "$CEF_COMMIT"* ]]; then
+  echo "Moving chromium/src/cef to CEF $CEF_COMMIT"
+  revert_patched
+  git -C chromium/src/cef checkout -- .
+  git -C chromium/src/cef fetch origin "$CEF_BRANCH"
+  git -C chromium/src/cef checkout "$CEF_COMMIT"
+fi
+if [ -f chromium/src/chrome/VERSION ] &&
+   [ "$(cut -d= -f2 chromium/src/chrome/VERSION | paste -sd. -)" != "$CHROMIUM_VERSION" ]; then
+  echo "Moving the Chromium checkout to $CHROMIUM_VERSION"
+  revert_patched
   sed -i '' -E "s#(src\.git@)[0-9.]+#\1$CHROMIUM_VERSION#" chromium/.gclient
   git -C chromium/src fetch --depth 1 origin "refs/tags/$CHROMIUM_VERSION:refs/tags/$CHROMIUM_VERSION"
   git -C chromium/src checkout "$CHROMIUM_VERSION"
