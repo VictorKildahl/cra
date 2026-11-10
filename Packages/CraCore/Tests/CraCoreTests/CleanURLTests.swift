@@ -1,3 +1,4 @@
+import Foundation
 import CraCore
 import Testing
 
@@ -40,5 +41,32 @@ struct CleanURLTests {
 
     @Test func nothingSelectedIsNoQuote() {
         #expect(CleanURL.quote(" \n ", url: "https://example.com/") == nil)
+    }
+}
+
+/// Arc's ⇧⌘C with several tabs picked in the sidebar copies every picked tab's link, one per line
+/// ("Copied item links": "the links for the multi-selection have been copied", Arc 1.172).
+struct CopiedLinksTests {
+    let a = UUID(), b = UUID(), c = UUID(), d = UUID()
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/322"))
+    func severalPicksCopyEveryPickInSidebarOrder() {
+        #expect(CleanURL.tabsToCopy(picked: [c, a], listed: [a, b, c, d], open: b) == [a, c])
+        #expect(CleanURL.links(["https://a.example/?utm_source=x", "https://c.example/"])
+            == "https://a.example/\nhttps://c.example/")
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/322"))
+    func noPicksCopyTheOpenTab() {
+        #expect(CleanURL.tabsToCopy(picked: [], listed: [a, b], open: b) == [b])
+        #expect(CleanURL.tabsToCopy(picked: [], listed: [a, b], open: nil) == [])
+        #expect(CleanURL.links(["https://b.example/?fbclid=1"]) == "https://b.example/")
+    }
+
+    /// A pick hidden since (its folder closed) still counts, as ⌘W still closes it; it goes after
+    /// the listed picks.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/322"))
+    func picksNoLongerListedFollowTheListedOnes() {
+        #expect(CleanURL.tabsToCopy(picked: [d, b], listed: [a, b, c], open: a) == [b, d])
     }
 }

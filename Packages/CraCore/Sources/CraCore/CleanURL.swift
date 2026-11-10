@@ -26,6 +26,20 @@ public enum CleanURL {
         return String(url[..<q]) + (kept.isEmpty ? "" : "?" + kept.joined(separator: "&")) + String(url[hash...])
     }
 
+    /// The tabs Copy URL (⇧⌘C) copies (#322): with tabs picked in the sidebar, every pick in sidebar
+    /// order, as in Arc ("Copied item links"); otherwise the open tab. A pick no longer listed (its
+    /// folder closed since) still counts, as ⌘W still closes it, and goes after the listed ones.
+    public static func tabsToCopy(picked: Set<UUID>, listed: [UUID], open: UUID?) -> [UUID] {
+        guard !picked.isEmpty else { return open.map { [$0] } ?? [] }
+        let shown = listed.filter(picked.contains)
+        return shown + picked.subtracting(shown).sorted { $0.uuidString < $1.uuidString }
+    }
+
+    /// What ⇧⌘C puts on the clipboard for those tabs: each address without trackers, one per line.
+    public static func links(_ urls: [String]) -> String {
+        urls.map(withoutTrackers).joined(separator: "\n")
+    }
+
     /// Copy URL as Quote: the selection in curly quotes, then a link that scrolls to it and marks it
     /// (a text fragment, `#:~:text=`). Arc links to a quote card on arc.net; nothing leaves the Mac
     /// here, so the link is the page's own. Longer quotes link by their first and last five words.

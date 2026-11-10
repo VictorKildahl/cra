@@ -1938,8 +1938,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 store.reopenLastArchived()
             }
         case "copyURL":
-            // Arc: "Copy the current tab's URL without trackers".
-            if let url = current.flatMap({ store.item($0)?.tab?.url }).map(CleanURL.withoutTrackers) {
+            // Arc: "Copy the current tab's URL without trackers"; with tabs picked in the sidebar,
+            // every picked tab's, one per line ("Copied item links", #322).
+            let ids = CleanURL.tabsToCopy(picked: main.sidebarUI.multiSelection,
+                                          listed: store.listedTabIDs(in: main.focusedSpaceID), open: current)
+            let urls = ids.compactMap { store.item($0)?.tab?.url }
+            if urls.count > 1 {
+                copy(CleanURL.links(urls))
+                main.showToast("Copied item links")  // Arc's wording, lower case as in Arc
+            } else if let url = urls.first.map(CleanURL.withoutTrackers) {
                 copy(url)
                 main.showToast("Copied Current URL", action: .share(url))
             }
