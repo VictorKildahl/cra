@@ -1078,6 +1078,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let answer = dict["mcpAnswer"] { MCPServer.shared.answerPrompt(allow: answer == "allow"); return }
             // mcpScripts=on|off: Settings ▸ Advanced ▸ Let agents run JavaScript in pages.
             if let scripts = dict["mcpScripts"] { MCPServer.shared.allowsScripts = scripts == "on"; return }
+            // mcpHistory=on|off: Settings ▸ Advanced ▸ Let agents read your history.
+            if let history = dict["mcpHistory"] { MCPServer.shared.allowsHistory = history == "on"; return }
+            // mcpStop=1: the pill's Stop (every agent disconnects, MCP turns off).
+            if dict["mcpStop"] != nil { MCPServer.shared.stopFromPill(); return }
             // settingsPane=max: Settings opened on that pane.
             if let p = dict["settingsPane"].flatMap(SettingsPane.init(rawValue:)) {
                 showSettingsWindow()

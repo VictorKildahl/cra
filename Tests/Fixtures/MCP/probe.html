@@ -1,0 +1,15 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Automation probe</title>
+<!-- What a page can notice about an agent: navigator.webdriver, new globals and DOM changes it
+     didn't make. -->
+<h1>Probe</h1>
+<input id="field" aria-label="Probe field"> <button id="button">Probe button</button>
+<p id="text">Some text to read.</p>
+<script>
+  const globals = new Set(Object.getOwnPropertyNames(window));
+  const probe = window.probe = {webdriver: navigator.webdriver, mutations: 0, clicks: 0};
+  new MutationObserver(records => { probe.mutations += records.length; }).observe(document.documentElement, {subtree: true, childList: true, attributes: true, characterData: true});
+  document.getElementById('button').addEventListener('click', () => { probe.clicks++; });
+  probe.newGlobals = () => Object.getOwnPropertyNames(window).filter(name => !globals.has(name) && name !== 'probe');
+</script>

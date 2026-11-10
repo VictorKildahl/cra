@@ -160,7 +160,7 @@ try:
     quit_browser()
     launch(True)
     client = Client()
-    check("26 tools advertised", len(client.call("tools/list")["result"]["tools"]) == 26)
+    check("32 tools advertised (history off)", len(client.call("tools/list")["result"]["tools"]) == 32)
     check("socket mode 0600", socket_path.stat().st_mode & 0o777 == 0o600)
     command("cra://open?url=" + quote(url + "/regression", safe=""))
     tab = eventually(lambda: next((t["id"] for t in tabs(client) if t["url"] == url + "/regression"), None))
@@ -189,17 +189,18 @@ try:
     # macOS can occlude a just-launched window while the terminal regains focus.
     value(client.tool("tab_show", {"tabId": tab}))
     eventually(lambda: value(evaluate(client, tab, "document.visibilityState === 'visible' && document.hasFocus()"))["result"]["value"])
-    result = value(input_tool("page_fill", "#name", text="Mäx 🦊"))
+    # Paced like a person when asked (humanize); the checks below measure that pacing.
+    result = value(input_tool("page_fill", "#name", text="Mäx 🦊", humanize=True))
     check("native fill confirms trusted input", result["trustedEvents"]["input"] >= 5)
-    value(input_tool("page_press", "#name", key="End"))
-    value(input_tool("page_type", "#name", text="!"))
-    value(input_tool("page_click", "#go"))
+    value(input_tool("page_press", "#name", key="End", humanize=True))
+    value(input_tool("page_type", "#name", text="!", humanize=True))
+    value(input_tool("page_click", "#go", humanize=True))
     result = value(evaluate(client, tab, "document.querySelector('#out').textContent"))
     check("native Unicode typing and click", result["result"]["value"] == "Mäx 🦊!")
-    value(input_tool("page_fill", "#name", text="abcd"))
-    value(input_tool("page_press", "#name", key="Home"))
-    value(input_tool("page_press", "#name", key="ArrowRight"))
-    value(input_tool("page_type", "#name", text="X"))
+    value(input_tool("page_fill", "#name", text="abcd", humanize=True))
+    value(input_tool("page_press", "#name", key="Home", humanize=True))
+    value(input_tool("page_press", "#name", key="ArrowRight", humanize=True))
+    value(input_tool("page_type", "#name", text="X", humanize=True))
     check("typing preserves the established caret", value(evaluate(client, tab, "document.querySelector('#name').value"))["result"]["value"] == "aXbcd")
     events = value(evaluate(client, tab, "window.inputEvents"))["result"]["value"]
     check("fixture sees trusted mouse and keyboard", all(e["trusted"] for e in events) and {"mousedown", "mouseup", "click", "keydown", "keyup", "input"}.issubset({e["type"] for e in events}))
@@ -313,7 +314,7 @@ try:
     seen_paths.clear()
     client.next_id += 1
     fill_id = client.next_id
-    client.proc.stdin.write(json.dumps({"jsonrpc":"2.0", "id":fill_id, "method":"tools/call", "params":{"name":"page_fill", "arguments":{"tabId":tab,"selector":"#name","text":"c"*90}}}).encode() + b"\n")
+    client.proc.stdin.write(json.dumps({"jsonrpc":"2.0", "id":fill_id, "method":"tools/call", "params":{"name":"page_fill", "arguments":{"tabId":tab,"selector":"#name","text":"c"*90,"humanize":True}}}).encode() + b"\n")
     client.proc.stdin.flush()
     eventually(lambda: "/input-progress?length=3" in seen_paths)
     started = time.monotonic()
@@ -329,7 +330,7 @@ try:
     owner = Client()
     seen_paths.clear()
     owner.next_id += 1
-    owner.proc.stdin.write(json.dumps({"jsonrpc":"2.0", "id":owner.next_id, "method":"tools/call", "params":{"name":"page_fill", "arguments":{"tabId":tab, "selector":"#name", "text":"z"*90}}}).encode() + b"\n")
+    owner.proc.stdin.write(json.dumps({"jsonrpc":"2.0", "id":owner.next_id, "method":"tools/call", "params":{"name":"page_fill", "arguments":{"tabId":tab, "selector":"#name", "text":"z"*90, "humanize":True}}}).encode() + b"\n")
     owner.proc.stdin.flush()
     eventually(lambda: "/input-progress?length=3" in seen_paths)
     check("input is already underway before cancellation", client.tool("page_read", {"tabId":tab})["result"].get("isError"))

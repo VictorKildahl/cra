@@ -85,6 +85,8 @@ struct AdvancedPane: View {
                         get: { MCPServer.shared.allowsScripts }, set: { MCPServer.shared.allowsScripts = $0 }))
                     Text("A script can read anything a page holds, including passwords Cra fills in.")
                         .font(.system(size: 11)).foregroundStyle(.secondary)
+                    SettingsCheckbox(title: "Let agents read your history", isOn: Binding(
+                        get: { MCPServer.shared.allowsHistory }, set: { MCPServer.shared.allowsHistory = $0 }))
                     ForEach(MCPServer.shared.agents) { agent in
                         HStack(spacing: 8) {
                             Text(agent.via.isEmpty ? agent.name : "\(agent.name) in \(agent.via)").font(.system(size: 13))

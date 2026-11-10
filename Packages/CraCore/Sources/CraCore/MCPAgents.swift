@@ -50,15 +50,26 @@ public enum MCPAgents {
 public struct MCPSettings: Codable, Equatable, Sendable {
     /// page_evaluate on (Settings ▸ Advanced ▸ Let agents run JavaScript in pages).
     public var allowsScripts = false
+    /// history_search on (Settings ▸ Advanced ▸ Let agents read your history).
+    public var allowsHistory = false
     public var agents: [MCPAgent] = []
 
-    public init(allowsScripts: Bool = false, agents: [MCPAgent] = []) {
-        self.allowsScripts = allowsScripts; self.agents = agents
+    public init(allowsScripts: Bool = false, allowsHistory: Bool = false, agents: [MCPAgent] = []) {
+        self.allowsScripts = allowsScripts; self.allowsHistory = allowsHistory; self.agents = agents
+    }
+
+    /// The tools the user's answers leave off.
+    public var disabledTools: Set<String> {
+        var off: Set<String> = []
+        if !allowsScripts { off.insert("page_evaluate") }
+        if !allowsHistory { off.insert("history_search") }
+        return off
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         allowsScripts = try c.decodeIfPresent(Bool.self, forKey: .allowsScripts) ?? false
+        allowsHistory = try c.decodeIfPresent(Bool.self, forKey: .allowsHistory) ?? false
         agents = try c.decodeIfPresent([MCPAgent].self, forKey: .agents) ?? []
     }
 

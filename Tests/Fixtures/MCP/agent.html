@@ -110,5 +110,56 @@
   <div id="hov" style="padding:8px;background:#eee">Hover me <span id="hidden" style="display:none"><button id="revealed" onclick="log('revealed clicked')">Revealed</button></span></div>
   <script>const h=document.getElementById('hov'); h.addEventListener('mouseenter',()=>document.getElementById('hidden').style.display='inline'); </script>
 </section>
+<section>
+  <h2>Typed inputs</h2>
+  <input id="date" type="date" aria-label="Date"> <input id="time" type="time" aria-label="Time">
+  <input id="color" type="color" aria-label="Colour"> <input id="range" type="range" min="0" max="100" aria-label="Volume">
+</section>
+
+<section>
+  <h2>Custom dropdowns</h2>
+  <div class="combo">
+    <input id="fruit" role="combobox" aria-label="Fruit" aria-controls="fruits" aria-expanded="false" autocomplete="off">
+    <ul id="fruits" role="listbox" hidden></ul>
+  </div>
+  <div class="picker">
+    <button id="size" aria-haspopup="listbox" aria-controls="sizes">Size: none</button>
+    <ul id="sizes" role="listbox" hidden><li role="option">Small</li><li role="option">Medium</li><li role="option">Large</li></ul>
+  </div>
+  <script>
+    const fruits = ['Apple', 'Apricot', 'Banana', 'Blueberry', 'Cherry'];
+    const fruit = document.getElementById('fruit'), list = document.getElementById('fruits');
+    fruit.addEventListener('input', () => {
+      const q = fruit.value.toLowerCase();
+      list.innerHTML = fruits.filter(f => f.toLowerCase().includes(q)).map(f => '<li role="option">' + f + '</li>').join('');
+      list.hidden = !q; fruit.setAttribute('aria-expanded', String(!!q));
+    });
+    list.addEventListener('click', e => { if (e.target.matches('[role=option]')) { fruit.value = e.target.textContent; list.hidden = true; log('fruit=' + fruit.value + ' trusted=' + e.isTrusted); } });
+    const size = document.getElementById('size'), sizes = document.getElementById('sizes');
+    size.addEventListener('click', () => { sizes.hidden = !sizes.hidden; });
+    sizes.addEventListener('click', e => { if (e.target.matches('[role=option]')) { size.textContent = 'Size: ' + e.target.textContent; sizes.hidden = true; log('size=' + e.target.textContent); } });
+  </script>
+</section>
+
+<section>
+  <h2>Replaced on focus</h2>
+  <span id="swap-holder"><input id="swap" name="q2" placeholder="Search the wiki" aria-label="Wiki search"></span>
+  <script>
+    document.getElementById('swap').addEventListener('focus', function () {
+      const fresh = this.cloneNode(); fresh.id = 'swap-live';
+      fresh.addEventListener('input', () => log('swap-live=' + fresh.value));
+      this.replaceWith(fresh); fresh.focus();
+    }, {once: true});
+  </script>
+</section>
+
+<section>
+  <h2>Panel and saving</h2>
+  <button id="open-panel" onclick="document.getElementById('panel').hidden = false">Open panel</button>
+  <div id="panel" hidden><input aria-label="Panel title"> <button>Save panel</button></div>
+  <button id="post" onclick="fetch('/api/save?id=7&token=hunter2', {method: 'POST', body: 'x'}).then(r => log('posted ' + r.status))">Post it</button>
+  <span id="redraw-box"><button id="redraw-me">Redraw me</button></span>
+  <button id="redraw" onclick="document.getElementById('redraw-box').innerHTML = '<button>Redraw me</button>'">Redraw the button</button>
+</section>
 <div style="height:1200px"></div>
 <button id="bottom" onclick="log('bottom clicked')">Bottom button</button>

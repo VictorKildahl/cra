@@ -57,6 +57,13 @@ class Fixture(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.end_headers()
         self.wfile.write(page.read_bytes())
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length") or 0)
+        self.rfile.read(length)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(b'{"ok":true}')
     def log_message(self, *args):
         pass
 
@@ -93,9 +100,9 @@ class Client:
         self.proc.stdin.write(json.dumps(message).encode() + b"\n")
         self.proc.stdin.flush()
         return json.loads(self.proc.stdout.readline())
-    def tool(self, name, **arguments):
+    def tool(self, tool_name, /, **arguments):
         started = time.monotonic()
-        response = self.call("tools/call", {"name": name, "arguments": arguments})
+        response = self.call("tools/call", {"name": tool_name, "arguments": arguments})
         response["seconds"] = time.monotonic() - started
         return response
     def close(self):
@@ -157,12 +164,12 @@ try:
     check("a refused agent is refused again", "didn't allow other-agent" in failure(stranger.tool("tabs_list")))
     stranger.close()
 
-    check("26 tools advertised", len(client.call("tools/list")["result"]["tools"]) == 26)
+    check("32 tools advertised (history off)", len(client.call("tools/list")["result"]["tools"]) == 32)
     command("cra://debug?mcpScripts=off")
-    eventually(lambda: len(client.call("tools/list")["result"]["tools"]) == 25)
+    eventually(lambda: len(client.call("tools/list")["result"]["tools"]) == 31)
     check("page_evaluate is off unless the user turns it on", "page_evaluate is off" in failure(client.tool("page_evaluate", tabId="x", expression="1")))
     command("cra://debug?mcpScripts=on")
-    eventually(lambda: len(client.call("tools/list")["result"]["tools"]) == 26)
+    eventually(lambda: len(client.call("tools/list")["result"]["tools"]) == 32)
     def js(tab, expression):
         return value(client.tool("page_evaluate", tabId=tab, expression=expression))["result"].get("value")
     def events(tab):
@@ -272,6 +279,7 @@ try:
     value(client.tool("page_click", tabId=tab, selector="#revealed"))
     check("hover opens what it reveals", "revealed clicked" in events(tab))
     check("x/y outside the viewport is refused", "outside the viewport" in failure(client.tool("page_click", tabId=tab, x=99999, y=5)))
+    check("a hidden element is refused in plain words", "isn't shown on the page" in failure(client.tool("page_fill", tabId=tab, selector="#panel input", text="x")))
 
     # Dialogs: the page waits for them; the agent sees them and answers.
     opened = value(client.tool("page_click", tabId=tab, selector="#alert"))
@@ -294,6 +302,115 @@ try:
     value(client.tool("page_click", tabId=tab, selector="#warn"))
     errors = eventually(lambda: (lambda e: e if any("boom" in x["text"] for x in e) else None)(value(client.tool("page_console", tabId=tab, level="warning"))["entries"]))
     check("console reports warnings and uncaught errors", any(e["level"] == "warning" and "fixture warning" in e["text"] for e in errors) and any(e["level"] == "error" and "fixture boom" in e["text"] for e in errors))
+
+    # Instant input by default; paced like a person only when asked.
+    fast = client.tool("page_fill", tabId=tab, selector="#long", text="The quick brown fox jumps over the lazy dog, again and again.")
+    value(fast)
+    paced = client.tool("page_fill", tabId=tab, selector="#long", text="slow typing", humanize=True)
+    value(paced)
+    check("input is instant unless humanized", fast["seconds"] < 1.0 and paced["seconds"] > 0.25, [fast["seconds"], paced["seconds"]])
+
+    # Each action says what it changed: the panel's new fields with refs, and the form post.
+    opened = value(client.tool("page_click", tabId=tab, selector="#open-panel"))
+    added = opened["changes"].get("added", [])
+    check("a click reports the elements it revealed, with refs", any(line.startswith('textbox "Panel title"') and " e-" in line for line in added), opened["changes"])
+    posted = value(client.tool("page_click", tabId=tab, selector="#post"))
+    network = posted["changes"].get("network", [])
+    check("a click reports its form post, token hidden", any(n["method"] == "POST" and "token=…" in n["url"] and "hunter2" not in n["url"] and n.get("status") == "200" for n in network), posted["changes"])
+    quiet = value(client.tool("page_click", tabId=tab, selector="#dbl", changes=False))
+    check("changes=false skips the report", "changes" not in quiet)
+
+    # A field the page replaces when it's clicked (Wikipedia's search box) is followed.
+    swapped = value(client.tool("page_type", tabId=tab, selector="#swap", text="cra"))
+    check("typing follows a field replaced on focus", "retargeted" in swapped and js(tab, "document.getElementById('swap-live').value") == "cra", swapped)
+    elements = value(client.tool("page_snapshot", tabId=tab))["elements"]
+    old_ref = next(e["ref"] for e in elements if e["name"] == "Redraw me")
+    value(client.tool("page_click", tabId=tab, selector="#redraw"))
+    stale = failure(client.tool("page_click", tabId=tab, ref=old_ref))
+    check("a stale ref names its redrawn element", "redrew it" in stale and "e-" in stale.split("redrew it")[1], stale)
+
+    # Date, time, colour and range take their value directly.
+    value(client.tool("page_fill", tabId=tab, selector="#date", text="2026-11-09"))
+    value(client.tool("page_fill", tabId=tab, selector="#time", text="2:30 PM"))
+    value(client.tool("page_fill", tabId=tab, selector="#color", text="#3B82F6"))
+    value(client.tool("page_fill", tabId=tab, selector="#range", text="40"))
+    check("typed inputs take their values", js(tab, "[date.value, time.value, color.value, range.value].join(' ')") == "2026-11-09 14:30 #3b82f6 40")
+    check("a value in the wrong format is refused", "takes 2026-11-09" in failure(client.tool("page_fill", tabId=tab, selector="#date", text="9 Nov")))
+
+    # Custom dropdowns: a typeahead and a button that opens a listbox.
+    picked = value(client.tool("page_select", tabId=tab, selector="#fruit", label="Banana"))
+    check("a typeahead combobox picks its option", "fruit=Banana trusted=true" in events(tab), picked)
+    value(client.tool("page_select", tabId=tab, selector="#size", label="Medium"))
+    check("a button's listbox picks its option", "size=Medium" in events(tab))
+    check("an option that isn't there is refused with what shows", "Showing: Small | Medium | Large" in failure(client.tool("page_select", tabId=tab, selector="#size", label="Huge")))
+
+    # Several steps in one call; the first failure stops the rest.
+    batch = client.tool("page_batch", tabId=tab, steps=[
+        {"tool": "page_fill", "arguments": {"selector": "#kb", "text": "batched"}},
+        {"tool": "page_click", "arguments": {"selector": "#missing"}},
+        {"tool": "page_read", "arguments": {}}])
+    texts = [c["text"] for c in batch["result"]["content"] if c["type"] == "text"]
+    check("page_batch runs steps in order and stops at a failure", batch["result"]["isError"] and texts[0].startswith("1. page_fill: ")
+          and texts[1].startswith("2. page_click failed") and texts[2] == "3. page_read: not run" and js(tab, "document.getElementById('kb').value") == "batched", texts)
+
+    # The network log: writes only, token hidden, no headers.
+    started = value(client.tool("page_network", tabId=tab))
+    value(client.tool("page_click", tabId=tab, selector="#post", changes=False))
+    writes = eventually(lambda: value(client.tool("page_network", tabId=tab, writesOnly=True))["requests"])
+    check("page_network logs requests with tokens hidden", "Capture started" in started.get("note", "") and writes[-1]["method"] == "POST" and "token=…" in writes[-1]["url"], writes)
+
+    # Site notes: kept per site, shown at the top of snapshots.
+    value(client.tool("site_notes", action="set", tabId=tab, text="The fixture's search form submits on Enter."))
+    noted = value(client.tool("page_snapshot", tabId=tab, interactive=True))
+    check("a snapshot starts with the site's notes", "submits on Enter" in noted.get("notes", {}).get("text", ""), noted.get("notes"))
+    value(client.tool("site_notes", action="append", site="127.0.0.1:" + str(servers[0].server_port), text="Second line."))
+    got = value(client.tool("site_notes", action="get", site="127.0.0.1:" + str(servers[0].server_port)))
+    check("notes append and read back", got["notes"] == "The fixture's search form submits on Enter.\nSecond line.")
+    check("notes are listed", any(n["site"] == "127.0.0.1:" + str(servers[0].server_port) for n in value(client.tool("site_notes", action="list"))["sites"]))
+    check("a path isn't a site", "needs a site" in failure(client.tool("site_notes", action="get", site="../../etc")))
+    value(client.tool("site_notes", action="delete", tabId=tab))
+
+    # History: off until the user turns it on.
+    check("history_search is off by default", "history_search is off" in failure(client.tool("history_search", query="agent fixture")))
+    command("cra://debug?mcpHistory=on")
+    found = eventually(lambda: (lambda r: r if not r["result"]["isError"] and value(r)["count"] else None)(client.tool("history_search", query="agent fixture")))
+    check("history_search finds visited pages", any("agent.html" in e["url"] for e in value(found)["entries"]))
+    command("cra://debug?mcpHistory=off")
+
+    # Organizing tabs like the sidebar does.
+    spare = value(client.tool("tab_open", url=url + "/index.html?spare"))["tabId"]
+    value(client.tool("page_wait", tabId=spare))
+    value(client.tool("tab_move", tabId=spare, section="pinned"))
+    row = lambda: next(t for t in value(client.tool("tabs_list")) if t["id"] == spare)
+    check("tab_move pins a tab", row()["section"] == "pinned")
+    value(client.tool("folder_create", name="Agent work", tabIds=[spare]))
+    check("folder_create puts tabs in a new folder", row().get("folder") == "Agent work")
+    value(client.tool("tab_update", tabId=spare, title="Renamed by agent", muted=True))
+    check("tab_update renames", row()["title"] == "Renamed by agent")
+    value(client.tool("tab_update", tabId=spare, sleep=True))
+    check("tab_update puts a hidden tab to sleep", not row()["loaded"])
+    value(client.tool("tab_update", tabId=spare, sleep=False))
+    check("and wakes it in the background", eventually(lambda: row()["loaded"]))
+    value(client.tool("tab_move", tabId=spare, section="today"))
+    check("tab_move unpins it again", row()["section"] == "today" and "folder" not in row())
+    check("tab_move names the spaces when one isn't found", "Spaces:" in failure(client.tool("tab_move", tabId=spare, space="Nowhere")))
+
+    # Pages can't tell an agent is there. (Console capture's Runtime domain stays off until asked;
+    # Chromium 156 no longer reads the Error.stack bait pages once used to spot it, so it isn't checked.)
+    probe = value(client.tool("tab_open", url=url + "/probe.html"))["tabId"]
+    value(client.tool("page_wait", tabId=probe, selector="#button", state="visible"))
+    time.sleep(.5)
+    loaded = js(probe, "probe.mutations")  # what the page and Cra did while it loaded
+    value(client.tool("page_snapshot", tabId=probe))
+    value(client.tool("page_click", tabId=probe, selector="#button"))
+    value(client.tool("page_fill", tabId=probe, selector="#field", text="hello"))
+    value(client.tool("page_read", tabId=probe))
+    assert not client.tool("page_screenshot", tabId=probe)["result"]["isError"]
+    time.sleep(.5)
+    seen = js(probe, "({webdriver: probe.webdriver, mutations: probe.mutations, globals: probe.newGlobals(), clicks: probe.clicks})")
+    check("pages see no automation: webdriver, globals or DOM changes", seen["webdriver"] is False and seen["mutations"] == loaded
+          and seen["globals"] == [] and seen["clicks"] == 1, seen)
+    value(client.tool("tab_close", tabId=probe))
 
     # Only web pages: a browser or extension page in the sidebar is listed but out of reach.
     command("cra://open?url=chrome://version&background=1")
@@ -321,7 +438,11 @@ try:
     activation_check("activate=true does ask to bring Cra forward", lambda b, a: a > b, before)
     value(client.tool("tab_close", tabId=user_tab))
     check("a today tab closes", user_tab not in [t["id"] for t in value(client.tool("tabs_list"))])
-    client.close()
+
+    # The pill: Cra's toast names the agent while it acts; Stop ends every connection and MCP.
+    check("acting shows the pill with the agent's name", "mcp pill: cra-agent is using Cra" in (folder / "browser.log").read_text(errors="replace"))
+    command("cra://debug?mcpStop=1")
+    check("Stop disconnects agents and turns MCP off", eventually(lambda: client.proc.poll() is not None or not listening()) and eventually(lambda: not listening()))
     print("ALL " + str(len(checks)) + " CHECKS PASSED", flush=True)
 finally:
     if process.poll() is None:

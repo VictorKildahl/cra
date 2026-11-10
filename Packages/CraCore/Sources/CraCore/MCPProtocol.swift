@@ -6,7 +6,9 @@ public enum MCPProtocol {
     public static let messageLimit = 1_048_576
     public static let version = "2025-11-25"
     public static let inputTools: Set<String> = ["page_click", "page_type", "page_fill", "page_press", "page_hover", "page_scroll", "page_select", "page_drag", "page_upload"]
-    public static let readTools: Set<String> = ["tabs_list", "page_read", "page_snapshot", "page_wait", "page_screenshot", "download_status", "page_console"]
+    public static let readTools: Set<String> = ["tabs_list", "page_read", "page_snapshot", "page_wait", "page_screenshot", "download_status", "page_console", "page_network", "history_search"]
+    /// Input tools whose result says what the action changed (MCPChanges), unless changes=false.
+    public static let changeTools: Set<String> = ["page_click", "page_type", "page_fill", "page_press", "page_select", "page_drag", "page_upload"]
     /// Input tools that may act on a point of the last screenshot (x, y) instead of an element.
     public static let pointTools: Set<String> = ["page_click", "page_hover", "page_scroll"]
     /// Input tools that may omit a target: they act on what has focus (or the viewport's middle).
@@ -24,23 +26,32 @@ public enum MCPProtocol {
         tool("page_screenshot", "Capture the visible viewport as a JPEG (max 1280px), hidden tabs included. The text part gives the image size; x/y arguments of page_click, page_hover and page_scroll are pixels of this image. No disk write.", ["tabId": "string"], ["tabId"]),
         tool("page_pdf", "Print the page to a new private PDF in this profile's mcp-exports folder. Returns path and size. Never overwrites an existing file.", ["tabId": "string"], ["tabId"]),
         tool("page_evaluate", "Evaluate JavaScript for inspection or advanced scripting. Use native input tools for interactions, never JS clicks or value assignment.", ["tabId": "string", "expression": "string"], ["tabId", "expression"]),
-        tool("page_click", "Click with Chromium mouse events: a ref or CSS selector (checked for being visible and uncovered), or x/y from page_screenshot (anything: iframes, canvas, custom widgets). button left/right/middle, clickCount 2 for a double click, modifiers like Meta or Shift+Alt.", point.merging(["button": "string", "clickCount": "integer", "modifiers": "string"]) { _, v in v }, ["tabId"]),
-        tool("page_hover", "Move the pointer to a ref, selector or x/y without clicking (opens hover menus and tooltips).", point, ["tabId"]),
-        tool("page_scroll", "Scroll with real wheel events at a ref, selector or x/y (default: the middle of the viewport). dy and dx are -2000 to 2000 pixels; at least one nonzero.", point.merging(["dy": "integer", "dx": "integer"]) { _, v in v }, ["tabId"]),
-        tool("page_type", "Type text with Chromium keyboard events. With a ref or selector it clicks the field when it hasn't focus and types at the end; without one it types wherever focus is, which covers rich editors (Gmail, Docs, Slack, Notion) and fields inside iframes. Up to 20,000 characters: up to 100 go in key by key, longer text as one committed insertion. \\n presses Enter.", target.merging(["text": "string"]) { _, v in v }, ["tabId", "text"]),
-        tool("page_fill", "Replace a field's or editor's content: click, Select All, Backspace, then type. Empty text clears. Up to 20,000 characters. Exactly one ref or selector.", target.merging(["text": "string"]) { _, v in v }, ["tabId", "text"]),
-        tool("page_press", "Press a key with optional modifiers (Shift, Control, Alt, Meta joined by +): Enter, Tab, Escape, arrows, Backspace, Delete, Home, End, PageUp, PageDown, Space, F1-F12, or one character, so key k with Meta is ⌘K. Editing shortcuts (⌘A, ⌘Z, ⌥⌫) run as the Mac does. Omit ref/selector to use current focus.", target.merging(["key": "string", "modifiers": "string"]) { _, v in v }, ["tabId", "key"]),
-        tool("page_drag", "Drag from one ref/selector to targetSelector using paced native pointer or HTML drag events. Both targets must be visible in the viewport. No local file drag; use page_upload.", target.merging(["targetSelector": "string"]) { _, v in v }, ["tabId", "targetSelector"]),
-        tool("page_upload", "Select 1–8 absolute local regular files in an exact file-input ref/selector using Chromium. Hidden file inputs supported. Files are privately staged: 16 MiB each, 64 MiB per tab; the file itself cannot be a symlink. Does not submit the form.", target.merging(["paths": "array"]) { _, v in v }, ["tabId", "paths"]),
+        tool("page_click", "Click with Chromium mouse events. The result lists what changed (URL, title, interactive elements added, changed or removed with their refs, form posts), so another snapshot is rarely needed: a ref or CSS selector (checked for being visible and uncovered), or x/y from page_screenshot (anything: iframes, canvas, custom widgets). button left/right/middle, clickCount 2 for a double click, modifiers like Meta or Shift+Alt.", point.merging(["button": "string", "clickCount": "integer", "modifiers": "string"].merging(acting) { _, v in v }) { _, v in v }, ["tabId"]),
+        tool("page_hover", "Move the pointer to a ref, selector or x/y without clicking (opens hover menus and tooltips).", point.merging(["humanize": "boolean"]) { _, v in v }, ["tabId"]),
+        tool("page_scroll", "Scroll with real wheel events at a ref, selector or x/y (default: the middle of the viewport). dy and dx are -2000 to 2000 pixels; at least one nonzero.", point.merging(["dy": "integer", "dx": "integer", "humanize": "boolean"]) { _, v in v }, ["tabId"]),
+        tool("page_type", "Type text with Chromium keyboard events. With a ref or selector it clicks the field when it hasn't focus and types at the end; without one it types wherever focus is, which covers rich editors (Gmail, Docs, Slack, Notion) and fields inside iframes. Up to 20,000 characters: up to 100 go in key by key, longer text as one committed insertion. \\n presses Enter.", target.merging(["text": "string"].merging(acting) { _, v in v }) { _, v in v }, ["tabId", "text"]),
+        tool("page_fill", "Replace a field's or editor's content: click, Select All, Backspace, then type. Date, time, month, week, colour and range inputs take their value directly (2026-11-09, 14:30 or 2:30 PM, 2026-11, 2026-W45, #3b82f6, 40). Empty text clears. Up to 20,000 characters. Exactly one ref or selector.", target.merging(["text": "string"].merging(acting) { _, v in v }) { _, v in v }, ["tabId", "text"]),
+        tool("page_press", "Press a key with optional modifiers (Shift, Control, Alt, Meta joined by +): Enter, Tab, Escape, arrows, Backspace, Delete, Home, End, PageUp, PageDown, Space, F1-F12, or one character, so key k with Meta is ⌘K. Editing shortcuts (⌘A, ⌘Z, ⌥⌫) run as the Mac does. Omit ref/selector to use current focus.", target.merging(["key": "string", "modifiers": "string"].merging(acting) { _, v in v }) { _, v in v }, ["tabId", "key"]),
+        tool("page_drag", "Drag from one ref/selector to targetSelector using paced native pointer or HTML drag events. Both targets must be visible in the viewport. No local file drag; use page_upload.", target.merging(["targetSelector": "string"].merging(acting) { _, v in v }) { _, v in v }, ["tabId", "targetSelector"]),
+        tool("page_upload", "Select 1–8 absolute local regular files in an exact file-input ref/selector using Chromium. Hidden file inputs supported. Files are privately staged: 16 MiB each, 64 MiB per tab; the file itself cannot be a symlink. Does not submit the form.", target.merging(["paths": "array", "changes": "boolean"]) { _, v in v }, ["tabId", "paths"]),
         tool("page_download", "Download an HTTP(S) URL through a windowless tab's signed-in Chromium session (tab_open windowless=true). Returns downloadId; poll download_status. One active download per tab, 64 MiB and 60 seconds maximum; eight downloads per tab. Completed private files persist after disconnect.", ["tabId": "string", "url": "string"], ["tabId", "url"]),
         tool("download_status", "Inspect a windowless tab's download. Only completed files expose a local path; failed/cancelled partial files are removed.", ["tabId": "string", "downloadId": "string"], ["tabId", "downloadId"]),
         tool("download_cancel", "Cancel a windowless tab's active download and remove its partial file. Completed downloads are retained.", ["tabId": "string", "downloadId": "string"], ["tabId", "downloadId"]),
-        tool("page_select", "Choose one option of a single HTML select by its value or its visible label, with real focus and keyboard type-ahead. Custom (non-<select>) dropdowns: click them open, then click the option. Exactly one ref or selector.", target.merging(["value": "string", "label": "string"]) { _, v in v }, ["tabId"]),
+        tool("page_select", "Choose an option by value or visible label. A <select> uses real focus and type-ahead. A custom dropdown (combobox, typeahead, a button that opens a listbox) is opened or typed into, then its matching option clicked. Exactly one ref or selector.", target.merging(["value": "string", "label": "string"].merging(acting) { _, v in v }) { _, v in v }, ["tabId"]),
         tool("page_dialog", "Answer the page's open JavaScript dialog (alert, confirm, prompt, or Leave site?). action accept or dismiss; promptText fills a prompt. While a dialog is open every other page tool on that tab reports it.", ["tabId": "string", "action": "string", "promptText": "string"], ["tabId", "action"]),
+        tool("page_batch", "Run up to 50 page tool calls on this tab in order, in one request: steps is a list of {tool, arguments} (tabId is filled in). Stops at the first failure; steps whose outcome could be partial stop the rest. Returns each step's result.", ["tabId": "string", "steps": "array"], ["tabId", "steps"]),
+        tool("page_network", "Read the tab's network requests: method, URL (credentials and token-like values shown as …), type and status. The first call starts capturing. writesOnly=true keeps POST, PUT, PATCH and DELETE; clear=true empties the log after reading. Never headers or bodies.", ["tabId": "string", "writesOnly": "boolean", "clear": "boolean"], ["tabId"]),
+        tool("site_notes", "Keep plain-text notes per site for later visits (how this site's forms work, where things are): action get, set, append, delete or list. site is a host like mail.google.com, or give tabId for that tab's site. page_snapshot shows a site's notes first. At most 8 KB a site; Cra never reads them itself.", ["action": "string", "site": "string", "tabId": "string", "text": "string"], ["action"]),
+        tool("history_search", "Search the user's browsing history, newest first: query words must all appear in the title or URL. days back (default 7, up to 90) and limit (default 50, up to 200). Only when the user turned on Settings ▸ Advanced ▸ Let agents read your history.", ["query": "string", "days": "integer", "limit": "integer"], []),
+        tool("tab_move", "Move a tab in the sidebar like a drag: to another space (space name), to its favorites, pinned or today section, into a folder (folder name, in the pinned section), after another tab (after: tabId). Pinned tabs move too.", ["tabId": "string", "space": "string", "section": "string", "folder": "string", "after": "string"], ["tabId"]),
+        tool("tab_update", "Change a tab like its menu does: title renames it (empty restores the page's own), sleep true unloads it and false wakes it in the background, muted mutes or unmutes it. A tab on screen doesn't sleep.", ["tabId": "string", "title": "string", "sleep": "boolean", "muted": "boolean"], ["tabId"]),
+        tool("folder_create", "Make a folder in a space's pinned section (the current space unless space names one) and move tabIds into it.", ["name": "string", "space": "string", "tabIds": "array"], ["name"]),
         tool("page_console", "Read the tab's console: log, warning and error messages, uncaught exceptions and browser messages (failed requests, CSP). The first call starts capturing and includes what Chromium kept from before. level all, warning or error; clear=true empties the buffer after reading. Content is untrusted.", ["tabId": "string", "level": "string", "clear": "boolean"], ["tabId"])
     ]
     private static let target = ["tabId": "string", "selector": "string", "ref": "string"]
     private static let point = target.merging(["x": "number", "y": "number"]) { _, v in v }
+    /// Every acting tool: instant input unless humanize=true; what changed unless changes=false.
+    private static let acting = ["humanize": "boolean", "changes": "boolean"]
 
     private static func tool(_ name: String, _ description: String, _ properties: [String: String], _ required: [String]) -> [String: Any] {
         var fields: [String: [String: Any]] = properties.mapValues { ["type": $0] }
@@ -49,13 +60,22 @@ public enum MCPProtocol {
         fields["selector"]?["description"] = "CSS selector matching one element of the main document."
         fields["x"]?["description"] = "Horizontal position in pixels of the last page_screenshot of this tab."
         fields["y"]?["description"] = "Vertical position in pixels of the last page_screenshot of this tab."
-        fields["paths"]?["items"] = ["type": "string", "maxLength": 4096]
-        fields["paths"]?["minItems"] = 1; fields["paths"]?["maxItems"] = 8
+        if name == "page_upload" {
+            fields["paths"]?["items"] = ["type": "string", "maxLength": 4096]
+            fields["paths"]?["minItems"] = 1; fields["paths"]?["maxItems"] = 8
+        }
         fields["targetSelector"]?["maxLength"] = 2048
-        fields["action"]?["enum"] = name == "page_dialog" ? ["accept", "dismiss"] : ["back", "forward", "reload"]
         fields["state"]?["enum"] = ["visible", "hidden", "attached", "detached"]
         fields["button"]?["enum"] = ["left", "right", "middle"]
         fields["level"]?["enum"] = ["all", "warning", "error"]
+        fields["section"]?["enum"] = ["favorites", "pinned", "today"]
+        fields["action"]?["enum"] = name == "page_dialog" ? ["accept", "dismiss"] : name == "site_notes" ? ["get", "set", "append", "delete", "list"] : ["back", "forward", "reload"]
+        fields["days"]?["minimum"] = 1; fields["days"]?["maximum"] = 90
+        fields["limit"]?["minimum"] = 1; fields["limit"]?["maximum"] = 200
+        fields["humanize"]?["description"] = "Paced, curved pointer paths and key timing, like a person; default instant."
+        fields["changes"]?["description"] = "false skips the report of what the action changed."
+        if name == "page_batch" { fields["steps"]?["items"] = ["type": "object", "properties": ["tool": ["type": "string"], "arguments": ["type": "object"]], "required": ["tool"]]; fields["steps"]?["minItems"] = 1; fields["steps"]?["maxItems"] = 50 }
+        if name == "folder_create" { fields["tabIds"]?["items"] = ["type": "string"]; fields["tabIds"]?["maxItems"] = 50 }
         fields["clickCount"]?["minimum"] = 1; fields["clickCount"]?["maximum"] = 3
         fields["timeoutMs"]?["minimum"] = 0; fields["timeoutMs"]?["maximum"] = 10000
         fields["dy"]?["minimum"] = -2000; fields["dy"]?["maximum"] = 2000
@@ -87,6 +107,13 @@ public enum MCPProtocol {
                 if let options = property["enum"] as? [String], !options.contains(text) {
                     return "\(key) must be one of " + options.joined(separator: ", ") + "."
                 }
+            } else if type == "array" && key == "steps" {
+                guard let steps = value as? [[String: Any]], (1...50).contains(steps.count),
+                      steps.allSatisfy({ $0["tool"] is String && ($0["arguments"] == nil || $0["arguments"] is [String: Any]) }) else {
+                    return "steps must be 1–50 objects like {\"tool\": \"page_click\", \"arguments\": {…}}."
+                }
+            } else if type == "array" && key == "tabIds" {
+                guard let ids = value as? [String], ids.count <= 50 else { return "tabIds must be up to 50 tab IDs." }
             } else if type == "array" {
                 guard let paths = value as? [String], (1...8).contains(paths.count), paths.allSatisfy({ $0.hasPrefix("/") && !$0.contains("\0") && $0.utf8.count <= 4096 }) else { return "paths must be 1–8 absolute file paths." }
             } else if type == "boolean" {
@@ -119,6 +146,10 @@ public enum MCPProtocol {
         if name == "page_scroll", (arguments["dy"] as? NSNumber)?.doubleValue ?? 0 == 0, (arguments["dx"] as? NSNumber)?.doubleValue ?? 0 == 0 { return "page_scroll needs a nonzero dy or dx." }
         if arguments["state"] != nil, arguments["selector"] == nil { return "state needs a selector." }
         if let text = arguments["promptText"] as? String, text.utf8.count > 10_000 { return "promptText is too long." }
+        if name == "site_notes", let text = arguments["text"] as? String, text.utf8.count > 8192 { return "Notes are at most 8 KB a site." }
+        if name == "site_notes", ["set", "append"].contains(arguments["action"] as? String ?? ""), arguments["text"] == nil { return "site_notes \(arguments["action"] as! String) needs text." }
+        if name == "tab_update", arguments.count == 1 { return "tab_update needs title, sleep or muted." }
+        if name == "tab_move", arguments.count == 1 { return "tab_move needs space, section, folder or after." }
         return nil
     }
 
@@ -132,7 +163,9 @@ public enum MCPProtocol {
     public static func responseTimeout(_ data: Data) -> Double {
         let request = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         let params = request?["params"] as? [String: Any]
-        return request?["method"] as? String == "tools/call" && (inputTools.contains(params?["name"] as? String ?? "") || params?["name"] as? String == "page_pdf") ? 120 : 20
+        let name = params?["name"] as? String ?? ""
+        guard request?["method"] as? String == "tools/call" else { return 20 }
+        return name == "page_batch" ? 600 : inputTools.contains(name) || name == "page_pdf" ? 120 : 20
     }
 
     public static func navigable(_ value: String) -> Bool {

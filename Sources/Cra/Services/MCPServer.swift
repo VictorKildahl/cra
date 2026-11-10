@@ -21,6 +21,11 @@ final class MCPServer {
         get { settings.allowsScripts }
         set { settings.allowsScripts = newValue }
     }
+    /// history_search: off unless the user turns it on.
+    var allowsHistory: Bool {
+        get { settings.allowsHistory }
+        set { settings.allowsHistory = newValue }
+    }
     /// For this run only (launch arguments of isolated test copies): agents allowed without a
     /// prompt (-mcpApprovesAgents YES), and page_evaluate on (-mcpAllowsScripts YES).
     @ObservationIgnored private let approvesAgents = MCPServer.launchArgument("mcpApprovesAgents")
@@ -34,6 +39,7 @@ final class MCPServer {
     private static func loadSettings() -> MCPSettings {
         var loaded = MCPSettings.decode(try? Data(contentsOf: settingsFile))
         if launchArgument("mcpAllowsScripts") { loaded.allowsScripts = true }
+        if launchArgument("mcpAllowsHistory") { loaded.allowsHistory = true }
         return loaded
     }
     private static func save(_ settings: MCPSettings) {
@@ -125,8 +131,11 @@ final class MCPServer {
         let session = generation
         let peer = MCPPeer.of(socket: client)
         let protocolSession = MCPSession()
-        protocolSession.disabledTools = { [weak self] in self?.allowsScripts == true ? [] : ["page_evaluate"] }
-        protocolSession.offReason = { _ in "page_evaluate is off. The user can turn on Settings ▸ Advanced ▸ Let agents run JavaScript; until then use page_read, page_snapshot and page_screenshot." }
+        protocolSession.disabledTools = { [weak self] in self?.settings.disabledTools ?? ["page_evaluate", "history_search"] }
+        protocolSession.offReason = { name in
+            name == "history_search" ? "history_search is off. The user can turn on Settings ▸ Advanced ▸ Let agents read your history."
+                : "page_evaluate is off. The user can turn on Settings ▸ Advanced ▸ Let agents run JavaScript in pages; until then use page_read, page_snapshot and page_screenshot."
+        }
         let owner = UUID()
         let state = MCPClientState()
         let writer = DispatchQueue(label: "cra.mcp.writer")
@@ -158,6 +167,7 @@ final class MCPServer {
                         // Nothing runs before the user allowed this agent.
                         guard self.authorize(client: client, name: protocolSession.clientName ?? "", peer: peer, completion: completion) else { return }
                         self.lastTool = name
+                        self.noteActivity(agent: MCPAgents.displayName(protocolSession.clientName ?? ""), tool: name, arguments: arguments)
                         self.perform(name, arguments: arguments, owner: owner, canContinue: { [weak self] in
                             self?.enabled == true && self?.generation == session && reply.isPending && !reply.isCancelled
                                 && (!MCPProtocol.inputTools.contains(name) || MCPConnection.peerIsOpen(client))
@@ -342,8 +352,17 @@ final class MCPServer {
             completion(try! MCPCDP.content(["tabId": tab.id.uuidString, "status": "opened", "selected": select]))
             return
         }
+        if name == "site_notes" { notes(arguments, owner: owner, completion: completion); return }
+        if name == "history_search" { historySearch(arguments, completion: completion); return }
+        if name == "folder_create" { folderCreate(arguments, completion: completion); return }
         guard let text = arguments["tabId"] as? String, let id = UUID(uuidString: text), app.store.mcpTab(id) != nil || agentTabs[id]?.owner == owner else {
             completion(MCPProtocol.content("Normal tab unavailable.", failed: true)); return
+        }
+        if name == "page_batch" { batch(id, arguments, owner: owner, canContinue: canContinue, completion: completion); return }
+        if name == "tab_move" || name == "tab_update" {
+            guard agentTabs[id] == nil else { completion(MCPProtocol.content("Windowless pages aren't in the sidebar.", failed: true)); return }
+            name == "tab_move" ? tabMove(id, arguments, completion: completion) : tabUpdate(id, arguments, completion: completion)
+            return
         }
         guard busyTabs[id] == nil else {
             completion(MCPProtocol.content("Tab is busy with another MCP action. Inspect its result before continuing.", failed: true)); return
@@ -438,7 +457,7 @@ final class MCPServer {
             defer { if busyTabs[id] == lease { busyTabs.removeValue(forKey: id) } }
             await page.attach(cdp)
             do {
-                let result: [String: Any]
+                var result: [String: Any]
                 if name == "page_download" {
                     guard browser.isAgent else { throw MCPCDP.Failure(message: "Download tools need a windowless tab this connection opened (tab_open windowless=true).") }
                     if transfers[id] == nil {
@@ -465,8 +484,17 @@ final class MCPServer {
                         server?.transfers[id]?.discard(paths)
                         if server?.transfers[id]?.isEmpty == true { server?.transfers.removeValue(forKey: id) }
                     }, canContinue: cdp.canContinue)
+                    let before = MCPProtocol.changeTools.contains(name) && arguments["changes"] as? Bool != false ? await page.before(cdp) : nil
                     result = await input.run(name: name, arguments: arguments)
                     pointerPositions[id] = input.position
+                    if let before {
+                        if result["isError"] as? Bool == true || Self.text(result).contains("\"dialog_opened\"") { page.stopNetwork("watch") }
+                        else { result = Self.adding(await page.changes(since: before, cdp: cdp), to: result) }
+                    }
+                    if result["isError"] as? Bool == true, let ref = arguments["ref"] as? String, Self.text(result).contains("tale"),
+                       let fresh = await page.redrawn(ref, cdp: cdp) {
+                        result = MCPProtocol.content(Self.text(result) + " The page redrew it: \(fresh) has the same role and name.", failed: true)
+                    }
                 } else if name == "page_evaluate" {
                     let expression = arguments["expression"] as! String
                     // Non-input stdio EOF still drains the response, as the bridge contract promises.
@@ -476,7 +504,217 @@ final class MCPServer {
                     result = try await page.run(name, arguments: arguments, cdp: cdp)
                 }
                 completion(result)
-            } catch { completion(MCPProtocol.content(error.localizedDescription, failed: true)) }
+            } catch {
+                var message = error.localizedDescription
+                if let ref = arguments["ref"] as? String, message.contains("tale"), let fresh = await page.redrawn(ref, cdp: cdp) {
+                    message += " The page redrew it: \(fresh) has the same role and name."
+                }
+                completion(MCPProtocol.content(message, failed: true))
+            }
+        }
+    }
+
+    private static func text(_ result: [String: Any]) -> String {
+        ((result["content"] as? [[String: Any]])?.first { $0["type"] as? String == "text" }?["text"] as? String) ?? ""
+    }
+
+    /// A successful action's JSON result with `changes` added (an error or a dialog stays as it was).
+    private static func adding(_ changes: [String: Any], to result: [String: Any]) -> [String: Any] {
+        guard result["isError"] as? Bool != true,
+              var object = (try? JSONSerialization.jsonObject(with: Data(text(result).utf8))) as? [String: Any],
+              object["status"] as? String != "dialog_opened" else { return result }
+        object["changes"] = changes.isEmpty ? "Nothing on the page changed that an agent can act on." : changes
+        return (try? MCPCDP.content(object)) ?? result
+    }
+
+    // MARK: The pill
+
+    /// Cra's toast while an agent acts ("Claude Code is using Cra", Stop), in the window that
+    /// holds the tab it works in. Shown again at most every 3 s, so it stays up while the agent
+    /// works and goes ShinyToast.visibleFor after its last action. Reading never shows it.
+    @ObservationIgnored private var pillShown: [UUID: ContinuousClock.Instant] = [:]
+    private static let quietTools: Set<String> = ["site_notes", "tab_show", "tab_move", "tab_update", "folder_create", "page_dialog"]
+
+    private func noteActivity(agent: String, tool: String, arguments: [String: Any]) {
+        guard let app, !MCPProtocol.readTools.contains(tool), !Self.quietTools.contains(tool), tool != "page_snapshot" else { return }
+        let id = (arguments["tabId"] as? String).flatMap(UUID.init(uuidString:))
+        guard let window = id.flatMap({ tab in app.mainWindows.first { !$0.isIncognito && $0.browsers.runtime(for: tab) != nil } })
+                ?? app.mainWindows.first(where: { $0.windowID == app.store.lastNormalWindowID && !$0.isIncognito }) else { return }
+        let now = ContinuousClock.now
+        if let last = pillShown[window.windowID], now - last < .seconds(3) { return }
+        pillShown[window.windowID] = now
+        let text = "\(agent) is using Cra"
+        CraLog.note("mcp pill: \(text)")
+        window.showToast(text, action: ShinyToast.Action(title: "Stop") { [weak self] in self?.stopFromPill() })
+    }
+
+    /// Stop on the pill: every agent disconnects and MCP turns off until the user turns it on again.
+    func stopFromPill() {
+        CraLog.note("mcp: stopped from the pill")
+        setEnabled(false)
+        status = "Off — stopped from the page"
+    }
+
+    // MARK: Tools without a tab
+
+    private func notes(_ arguments: [String: Any], owner: UUID, completion: @escaping ([String: Any]) -> Void) {
+        guard let app else { return }
+        let action = arguments["action"] as! String
+        if action == "list" { completion((try? MCPCDP.content(["sites": MCPPage.allNotes()])) ?? MCPProtocol.content("[]")); return }
+        var site = (arguments["site"] as? String).flatMap(MCPSiteNotes.site)
+        if site == nil, let text = arguments["tabId"] as? String, let id = UUID(uuidString: text) {
+            let url = agentTabs[id].flatMap { $0.owner == owner ? $0.browser.currentURL : nil }
+                ?? (app.store.mcpTab(id) != nil ? app.runtime(for: id)?.browser.currentURL ?? app.store.mcpTab(id)?.tab?.url : nil)
+            site = url.flatMap(MCPSiteNotes.site)
+        }
+        guard let site else { completion(MCPProtocol.content("site_notes needs a site (a host like mail.google.com) or the tabId of a web page.", failed: true)); return }
+        do {
+            let current = MCPPage.notes(for: site) ?? ""
+            switch action {
+            case "get": completion(try MCPCDP.content(["site": site, "notes": current, "contentTrust": "untrusted"]))
+            case "set": try MCPPage.setNotes(arguments["text"] as? String, for: site); completion(try MCPCDP.content(["site": site, "status": "saved"]))
+            case "append":
+                let text = arguments["text"] as! String
+                try MCPPage.setNotes(current.isEmpty ? text : current + (current.hasSuffix("\n") ? "" : "\n") + text, for: site)
+                completion(try MCPCDP.content(["site": site, "status": "saved"]))
+            default: try MCPPage.setNotes(nil, for: site); completion(try MCPCDP.content(["site": site, "status": "deleted"]))
+            }
+        } catch { completion(MCPProtocol.content(error.localizedDescription, failed: true)) }
+    }
+
+    private func historySearch(_ arguments: [String: Any], completion: @escaping ([String: Any]) -> Void) {
+        guard let app else { return }
+        let days = arguments["days"] as? Int ?? 7
+        let found = MCPHistory.search(Array(app.store.history.values), query: arguments["query"] as? String,
+                                      since: Date().addingTimeInterval(-Double(days) * 86400), limit: arguments["limit"] as? Int ?? 50)
+        let formatter = ISO8601DateFormatter()
+        let rows: [[String: Any]] = found.map { ["title": String($0.title.prefix(300)), "url": String($0.url.prefix(2000)),
+                                                 "lastVisit": formatter.string(from: $0.lastVisit), "visits": $0.visitCount] }
+        completion((try? MCPCDP.content(["entries": rows, "count": rows.count, "contentTrust": "untrusted"])) ?? MCPProtocol.content("[]"))
+    }
+
+    private func space(named name: String?, window: UUID?) -> (id: UUID, error: String?) {
+        guard let app else { return (UUID(), "Browser is unavailable") }
+        guard let name else { return (app.store.focusedSpaceID(window: window), nil) }
+        if let sid = app.store.spaceOrder.first(where: { app.store.space($0)?.title.localizedCaseInsensitiveCompare(name) == .orderedSame }) { return (sid, nil) }
+        return (UUID(), "No space is called \(name). Spaces: " + app.store.spaceOrder.compactMap { app.store.space($0)?.title }.joined(separator: ", ") + ".")
+    }
+
+    private func folders(in sid: UUID) -> [SidebarItem] {
+        guard let app, let space = app.store.space(sid) else { return [] }
+        var out: [SidebarItem] = []
+        func walk(_ id: UUID) { for child in app.store.children(of: id) where child.isFolder { out.append(child); walk(child.id) } }
+        walk(space.pinnedContainerID); walk(space.favoritesContainerID)
+        return out
+    }
+
+    private func folderCreate(_ arguments: [String: Any], completion: @escaping ([String: Any]) -> Void) {
+        guard let app else { return }
+        let found = space(named: arguments["space"] as? String, window: app.store.lastNormalWindowID)
+        if let error = found.error { completion(MCPProtocol.content(error, failed: true)); return }
+        guard let space = app.store.space(found.id) else { return }
+        let ids = (arguments["tabIds"] as? [String] ?? []).compactMap(UUID.init(uuidString:))
+        guard ids.allSatisfy({ app.store.mcpTab($0) != nil && app.store.splitContaining($0) == nil }) else {
+            completion(MCPProtocol.content("tabIds must be tabs from tabs_list that aren't in a split.", failed: true)); return
+        }
+        let name = String((arguments["name"] as! String).trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
+        let folder = app.store.createFolder(named: name.isEmpty ? "New Folder" : name, in: space.pinnedContainerID)
+        for id in ids {
+            if app.store.spaceID(ofItem: id) != found.id { app.store.moveTab(id, toSpace: found.id) }
+            app.store.moveItem(id, to: folder.id, index: nil)
+        }
+        completion((try? MCPCDP.content(["folder": folder.displayTitle, "space": space.title, "tabs": ids.count])) ?? MCPProtocol.content("{}"))
+    }
+
+    private func tabMove(_ id: UUID, _ arguments: [String: Any], completion: @escaping ([String: Any]) -> Void) {
+        guard let app else { return }
+        let store = app.store
+        guard store.splitContaining(id) == nil else { completion(MCPProtocol.content("This tab is in a split; move the split in Cra.", failed: true)); return }
+        var sid = store.spaceID(ofItem: id) ?? store.focusedSpaceID(window: nil)
+        if let name = arguments["space"] as? String {
+            let found = space(named: name, window: nil)
+            if let error = found.error { completion(MCPProtocol.content(error, failed: true)); return }
+            if found.id != sid { store.moveTab(id, toSpace: found.id); sid = found.id }
+        }
+        guard let space = store.space(sid) else { return }
+        if let name = arguments["folder"] as? String {
+            let all = folders(in: sid)
+            guard let folder = all.first(where: { $0.displayTitle.localizedCaseInsensitiveCompare(name) == .orderedSame }) else {
+                completion(MCPProtocol.content("No folder is called \(name) in \(space.title). Folders: " + (all.isEmpty ? "none" : all.map(\.displayTitle).joined(separator: ", ")) + ". folder_create makes one.", failed: true)); return
+            }
+            store.moveItem(id, to: folder.id, index: nil)
+        } else if let section = arguments["section"] as? String {
+            let container = section == "favorites" ? space.favoritesContainerID : section == "pinned" ? space.pinnedContainerID : space.todayContainerID
+            store.moveItem(id, to: container, index: section == "today" ? 0 : nil)
+        }
+        if let text = arguments["after"] as? String {
+            guard let after = UUID(uuidString: text), after != id, store.mcpTab(after) != nil, let parent = store.item(after)?.parentID,
+                  let index = store.item(parent)?.children.firstIndex(of: after) else {
+                completion(MCPProtocol.content("after must be another tab from tabs_list.", failed: true)); return
+            }
+            let current = store.item(parent)?.children.firstIndex(of: id)
+            store.moveItem(id, to: parent, index: current.map { $0 < index ? index : index + 1 } ?? index + 1)
+        }
+        let section = store.isFavorite(id) ? "favorites" : store.isPinned(id) ? "pinned" : "today"
+        var row: [String: Any] = ["status": "moved", "space": store.space(store.spaceID(ofItem: id) ?? sid)?.title ?? "", "section": section]
+        if let parent = store.item(id)?.parentID, let folder = store.item(parent), folder.isFolder { row["folder"] = folder.displayTitle }
+        completion((try? MCPCDP.content(row)) ?? MCPProtocol.content("{}"))
+    }
+
+    private func tabUpdate(_ id: UUID, _ arguments: [String: Any], completion: @escaping ([String: Any]) -> Void) {
+        guard let app else { return }
+        var done: [String] = []
+        if let title = arguments["title"] as? String {
+            app.store.rename(id, to: title.isEmpty ? nil : String(title.prefix(200)))
+            done.append(title.isEmpty ? "title restored" : "renamed")
+        }
+        if let muted = arguments["muted"] as? Bool { app.store.setMuted(id, muted); done.append(muted ? "muted" : "unmuted") }
+        if let sleep = arguments["sleep"] as? Bool {
+            let window = app.mainWindows.first { !$0.isIncognito && $0.browsers.runtime(for: id) != nil }
+                ?? app.mainWindows.first { $0.windowID == app.store.lastNormalWindowID && !$0.isIncognito }
+            if sleep {
+                let shown = app.mainWindows.contains { app.store.visiblePaneTabIDs(in: app.store.focusedSpaceID(window: $0.windowID), window: $0.windowID).contains(id) }
+                if shown { completion(MCPProtocol.content("This tab is on screen, so it stays awake.", failed: true)); return }
+                if let page = pages.removeValue(forKey: id) { page.detach() }
+                window?.browsers.unload(id); done.append("asleep")
+            } else {
+                if app.runtime(for: id) != nil { window?.browsers.touchedByAgent(id) } else { window?.browsers.ensureRuntime(for: id) }
+                done.append("waking")
+            }
+        }
+        completion((try? MCPCDP.content(["status": done.joined(separator: ", ")])) ?? MCPProtocol.content("{}"))
+    }
+
+    /// page_batch: the steps one after another on this tab, each through perform() as if called
+    /// alone (its own checks and lease); the first failure stops the rest.
+    private func batch(_ id: UUID, _ arguments: [String: Any], owner: UUID, canContinue: @escaping () -> Bool, completion: @escaping ([String: Any]) -> Void) {
+        let steps = arguments["steps"] as? [[String: Any]] ?? []
+        Task { @MainActor in
+            var content: [[String: Any]] = []
+            var failed = false
+            for (index, step) in steps.enumerated() {
+                let tool = step["tool"] as? String ?? ""
+                var stepArguments = step["arguments"] as? [String: Any] ?? [:]
+                stepArguments["tabId"] = id.uuidString
+                var result: [String: Any]
+                if failed || !canContinue() {
+                    content.append(["type": "text", "text": "\(index + 1). \(tool): not run"]); continue
+                } else if !tool.hasPrefix("page_") || tool == "page_batch" || settings.disabledTools.contains(tool) {
+                    result = MCPProtocol.content("\(tool) can't run in a batch\(settings.disabledTools.contains(tool) ? " (it is turned off)" : ""): only this tab's page_ tools.", failed: true)
+                } else if let problem = MCPProtocol.problem(name: tool, arguments: stepArguments) {
+                    result = MCPProtocol.content(problem, failed: true)
+                } else {
+                    result = await withCheckedContinuation { continuation in
+                        self.perform(tool, arguments: stepArguments, owner: owner, canContinue: canContinue) { continuation.resume(returning: $0) }
+                    }
+                }
+                failed = result["isError"] as? Bool == true
+                for item in result["content"] as? [[String: Any]] ?? [] {
+                    if item["type"] as? String == "text" { content.append(["type": "text", "text": "\(index + 1). \(tool)\(failed ? " failed" : ""): " + (item["text"] as? String ?? "")]) }
+                    else { content.append(item) }
+                }
+            }
+            completion(["content": content, "isError": failed])
         }
     }
 

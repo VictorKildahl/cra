@@ -19,6 +19,11 @@ agent (its name and the code-signing team of the program that started it, so an 
 ask again) in `mcp.json` in the data folder. Settings ▸ Advanced lists the agents you answered;
 **Forget** asks again next time and closes the agent's open connections.
 
+While an agent acts in a page, Cra's toast says so in the window it works in ("Claude Code is
+using Cra"), with **Stop**: every agent disconnects and MCP turns off until you turn it on again.
+The toast stays while the agent works and goes a few seconds after its last action; reading,
+organizing tabs and notes never show it.
+
 ## How an agent works in Cra
 
 An agent works next to you, not on your screen. Every tool works on hidden tabs, in covered
@@ -37,6 +42,9 @@ or minimised windows and with Cra in the background:
   `selected` marks each window's shown tab.
 - `tab_close` closes today tabs, as ⌘W does (Reopen Closed Tab brings one back). Pinned tabs,
   favorites and tabs in a split stay.
+- `tab_move`, `tab_update` and `folder_create` organize the sidebar as a drag or a menu does:
+  move a tab to another space, to its favorites, pinned or today section, into a folder or after
+  another tab; rename, mute, put to sleep or wake it; make a folder in a space's pinned section.
 
 Private tabs and Little Windows are never listed or reachable, even with a known ID. Agents
 work only in web pages (http and https): Chrome's settings and password pages, extension pages,
@@ -60,7 +68,12 @@ extension's frame inside a page (a password manager's menu) are refused too.
 | `page_type` | Type text, into a target or wherever focus is (rich editors, iframes) |
 | `page_fill` | Replace a field's or editor's content |
 | `page_press` | A named key or any one character with modifiers, so ⌘K, ⌘A, ⇧Tab |
-| `page_select` | Choose a `<select>` option by value or by its visible label |
+| `page_select` | Choose an option by value or label: a `<select>`, a typeahead combobox, or a button that opens a listbox |
+| `page_batch` | Up to 50 page tool calls on one tab in one request; the first failure stops the rest |
+| `page_network` | Requests since capture started: method, URL with tokens hidden, type, status |
+| `site_notes` | Plain-text notes the agent keeps per site, shown at the top of that site's snapshots |
+| `history_search` | Your history, newest first, only with **Let agents read your history** on (off by default) |
+| `tab_move`, `tab_update`, `folder_create` | Organize the sidebar (see above) |
 | `page_dialog` | Accept or dismiss an alert, confirm, prompt or Leave Site? |
 | `page_console` | Console messages, uncaught exceptions and browser messages |
 | `page_drag`, `page_upload` | Native HTML or pointer drags; choose files for a file input |
@@ -94,31 +107,71 @@ personal data. Everything a page returns is marked untrusted.
 
 Input goes through Chromium's own input path (DevTools `Input.dispatchMouseEvent`,
 `Input.dispatchKeyEvent` and `Input.insertText`), so pages see trusted events. Cra never clicks
-from JavaScript, sets a field's value or dispatches synthetic DOM events. An isolated world finds
-targets and counts the trusted events that arrived.
+from JavaScript or dispatches synthetic DOM events; the one value it sets directly is a date,
+time, month, week, colour or range input (below). An isolated world finds targets and counts the
+trusted events that arrived, waiting up to half a second for them.
 
-- **Clicks** move the pointer on a short eased path (60–240 ms) and hold the button for
-  30–70 ms. With a ref or selector the target must be visible, enabled and uncovered (Cra
-  looks through shadow roots), and it must not move while the button is down. A right-click
-  reaches the page's `contextmenu` handler, but no native menu opens over your screen.
-- **Typing** up to 100 pieces goes in key by key (8–25 ms holds, 6–30 ms gaps), so search boxes
-  and autocompletes react as they would to you. Longer text, up to 20,000 characters, goes in
-  as committed text per line, like a paste, in well under a second. `\n` is the Enter key: a
-  new line in a textarea or editor, a submit in a one-line field. Text into an input,
-  textarea or plain editable element is checked against the expected value; into a rich
-  editor, the editor must show the typed text; into a cross-site frame, nothing can be checked.
+Input is instant by default: the pointer jumps to the target and keys go in without pauses.
+`humanize=true` paces it like a person: a short eased path (60–240 ms), a 30–70 ms press, keys
+held 8–25 ms with 6–30 ms gaps.
+
+- **Clicks**: with a ref or selector the target must be visible, enabled and uncovered (Cra
+  looks through shadow roots), and it must not move while the button is down. A target is
+  scrolled into view and given two frames to settle first. A right-click reaches the page's
+  `contextmenu` handler, but no native menu opens over your screen.
+- **Typing** up to 100 pieces goes in key by key, so search boxes and autocompletes react as they
+  would to you. Longer text, up to 20,000 characters, goes in as committed text per line, like a
+  paste. `\n` is the Enter key: a new line in a textarea or editor, a submit in a one-line field.
+  Text into an input, textarea or plain editable element is checked against the expected value;
+  into a rich editor, the editor must show the typed text; into a cross-site frame, nothing can
+  be checked. A field the page replaces when it is clicked (Wikipedia's search box) is followed
+  when focus lands on one of the same kind that shares its id, name, placeholder, label or title;
+  the result says `retargeted`. Anything else is an error and nothing is typed.
+- **Date, time, month, week, colour and range inputs** can't be typed into, so `page_fill` checks
+  the value's format (2026-11-09, 14:30 or 2:30 PM, 2026-11, 2026-W45, #3b82f6, a number), focuses
+  the field natively, sets the value, reads it back and fires `input` and `change`, as
+  Playwright's fill does. A value in another format, or one the input refuses, changes nothing.
 - **Keys** with ⌘ on the Mac run Chromium's editing commands where the Mac has one (⌘A selects
   all, ⌘Z undoes, ⌥⌫ deletes a word), and are page shortcuts otherwise (⌘K).
-- **Selects** use focus and the select's own type-ahead, never its popup: Cra types the
-  shortest unique start of the option's label. When options share a start, the page sees a
-  change event for each option passed on the way, and the result says how many.
+- **Selects**: a `<select>` uses focus and its own type-ahead, never its popup: Cra types the
+  shortest unique start of the option's label, and the result says how many options the page saw
+  on the way. A custom dropdown is typed into (a typeahead) or clicked open (a button), then the
+  matching option clicked: only an option of the popup the control owns (`aria-controls`,
+  `aria-owns`, `aria-activedescendant`), else the one list inside its component or on screen.
+  Several or no matches are refused with what's showing.
 - **Dialogs**: while a JavaScript dialog is open the page waits for it, so every other tool on
   that tab returns at once with the dialog's text, and `tabs_list` shows it. The click or key
   that opened one returns `dialog_opened`. Answer it with `page_dialog`.
 
 An error may follow input that partly happened; the result says so ("Input may be partial").
 Read the page before trying again; never replay blindly. If the page navigates during input,
-the result is `navigation_observed`.
+the result is `navigation_observed`. A stale ref whose element the page redrew (one element with
+the same role and name) is named in the error.
+
+### What an action changed
+
+`page_click`, `page_type`, `page_fill`, `page_press`, `page_select`, `page_drag` and `page_upload`
+end with `changes`, so an agent rarely needs another snapshot: the URL and title when they
+changed, the interactive elements added (with refs, ready to use), changed (with what they were)
+and removed, and the writes the action sent (POST, PUT, PATCH, DELETE: method, URL with
+credentials and token-like values shown as `…`, status). Cra compares the interactive snapshot
+from before the action with one taken after the requests it started are answered and a new page
+has loaded, at most 1.5 s. A long run of one role (a menu's 48 options) is one line. A new page
+lists its controls, and the site's notes when it's another site. `changes=false` skips it.
+
+### Batches, network, notes and history
+
+- `page_batch` runs up to 50 page tool calls on one tab in order, each checked and run as if
+  alone; the first failure stops the rest, which are reported as not run.
+- `page_network` starts capturing on its first call (Cra's own DevTools session; pages can't see
+  it) and returns the last 100 of up to 1,000 requests: method, redacted URL, type, status or
+  failure. Headers and bodies are never read. `writesOnly` and `clear` narrow and reset it.
+- `site_notes` keeps plain text per site (`host[:port]`) in `Notes/` in the data folder (0700
+  folder, 0600 files, 8 KB a site) for the agent's next visit. `page_snapshot` shows them first.
+  They count as page content: a page could have talked an agent into writing them. Cra never
+  reads them itself.
+- `history_search` reads Cra's history (web pages only, newest first), only while **Let agents
+  read your history** is on.
 
 ### Windowless pages
 
@@ -192,7 +245,7 @@ live suites run the real app with a temporary profile and local pages, behind ot
 scripts/build.sh release
 python3 Tests/mcp_integration.py --app build/Cra.app   # protocol, input, refs, cancellation, restart
 python3 Tests/mcp_extended.py --app build/Cra.app      # windowless pages, uploads, downloads, permissions
-python3 Tests/mcp_agent.py --app build/Cra.app         # hidden tabs, editors, frames, keys, dialogs, console
+python3 Tests/mcp_agent.py --app build/Cra.app         # hidden tabs, editors, frames, dialogs, changes, notes, sidebar, a probe that pages can't detect agents
 ```
 
 `mcp_extended.py --with-pip` also checks Document Picture in Picture, which floats a window over

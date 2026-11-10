@@ -177,6 +177,7 @@ final class MCPPage {
         Self.dialogWaiters.removeValue(forKey: ObjectIdentifier(browser))
         guard !browser.isClosed else { return }
         if !browser.isAgent { browser.sendDevToolsMethod("Emulation.setFocusEmulationEnabled", params: #"{"enabled":false}"#) { _, _ in } }
+        if !networkUsers.isEmpty { networkUsers.removeAll(); browser.sendDevToolsMethod("Network.disable", params: "{}") { _, _ in } }
         if capturingConsole {
             browser.sendDevToolsMethod("Runtime.disable", params: "{}") { _, _ in }
             browser.sendDevToolsMethod("Log.disable", params: "{}") { _, _ in }
@@ -195,6 +196,8 @@ final class MCPPage {
             for fire in waiters.values { fire() }
         case "Page.javascriptDialogClosed":
             Self.dialogs.removeValue(forKey: id)
+        case "Network.requestWillBeSent", "Network.responseReceived", "Network.loadingFinished", "Network.loadingFailed":
+            if !networkUsers.isEmpty, let object = Self.json(params) { networkEvent(method, object) }
         case "Runtime.consoleAPICalled" where capturingConsole:
             guard let object = Self.json(params) else { return }
             let args = (object["args"] as? [[String: Any]] ?? []).map { arg -> String in
@@ -304,6 +307,8 @@ final class MCPPage {
             var result: [String: Any] = ["status": accept ? "accepted" : "dismissed"]
             if let dialog { result["dialog"] = dialog }
             return try MCPCDP.content(result)
+        case "page_network":
+            return try MCPCDP.content(await networkLog(writesOnly: arguments["writesOnly"] as? Bool == true, clear: arguments["clear"] as? Bool == true, cdp: cdp))
         case "page_console":
             var note: String?
             if !capturingConsole {
@@ -383,6 +388,19 @@ final class MCPPage {
         "slider", "spinbutton", "menuitem", "menuitemcheckbox", "menuitemradio", "tab", "option", "listbox", "treeitem", "heading", "Iframe"]
 
     private func snapshot(_ cdp: MCPCDP, interactive: Bool = false, query: String? = nil) async throws -> [String: Any] {
+        var result = try await collect(cdp, interactive: interactive, query: query)
+        if let url = result["url"] as? String, let site = MCPSiteNotes.site(url), let notes = MCPPage.notes(for: site), !notes.isEmpty {
+            // Notes the agent kept for this site come first (they're page content: a page could have dictated them).
+            result["notes"] = ["site": site, "text": String(notes.prefix(1000)), "more": notes.count > 1000 ? "site_notes get for all of it" : nil].compactMapValues { $0 }
+        }
+        return try MCPCDP.content(result)
+    }
+
+    /// Role and name each ref had when last shown, so a stale ref can point at its redrawn self.
+    private var refInfo: [String: (role: String, name: String)] = [:]
+
+    /// The snapshot's rows and facts, unformatted (page_snapshot, and the changes after an action).
+    func collect(_ cdp: MCPCDP, interactive: Bool = false, query: String? = nil) async throws -> [String: Any] {
         let needle = query?.lowercased().trimmingCharacters(in: .whitespaces)
         let frame = try await cdp.frame()
         guard let document = frame["loaderId"] as? String else { throw MCPCDP.Failure(message: "No document identity.") }
@@ -438,7 +456,10 @@ final class MCPPage {
                        let value = (property["value"] as? [String: Any])?["value"] { row[key] = value }
                 }
                 let backend = node["backendDOMNodeId"] as? Int
-                if !["StaticText", "LineBreak"].contains(role), let backend, let ref = references.reference(node: backend, document: document) { row["ref"] = ref }
+                if !["StaticText", "LineBreak"].contains(role), let backend, let ref = references.reference(node: backend, document: document) {
+                    row["ref"] = ref
+                    refInfo[ref] = (role, String(name.prefix(500)))
+                }
                 if let backend, crossSite.contains(backend) { row["crossSite"] = "Content of another site: use page_screenshot and x/y." }
                 let keep = (!interactive || Self.interactiveRoles.contains(role))
                     && (needle.map { $0.isEmpty || name.lowercased().contains($0) || role.lowercased() == $0 } ?? true)
@@ -454,9 +475,200 @@ final class MCPPage {
         let after = try await cdp.frame()
         guard after["loaderId"] as? String == document else { throw MCPCDP.Failure(message: "Document changed during snapshot. Take a new snapshot.") }
         var result: [String: Any] = ["url": frame["url"] ?? "", "elements": elements, "truncated": truncated,
-                                     "frames": trees.count - 1, "contentTrust": "untrusted"]
+                                     "frames": trees.count - 1, "contentTrust": "untrusted", "document": document]
         if truncated { result["hint"] = "Cut off at 600 elements. Narrow it with interactive=true (controls and headings) or query (words of a name)." }
-        return try MCPCDP.content(result)
+        return result
+    }
+
+    // MARK: Stale refs
+
+    /// For a ref whose node is gone: the one element now on the page with the same role and name.
+    func redrawn(_ ref: String, cdp: MCPCDP) async -> String? {
+        guard let info = refInfo[ref], !info.name.isEmpty,
+              let rows = try? await collect(cdp, interactive: false)["elements"] as? [[String: Any]] else { return nil }
+        let same = rows.filter { $0["role"] as? String == info.role && $0["name"] as? String == info.name && $0["ref"] as? String != ref }
+        return same.count == 1 ? same[0]["ref"] as? String : nil
+    }
+
+    // MARK: Changes after an action
+
+    struct Before {
+        let url: String
+        let title: String
+        let document: String
+        let elements: [MCPChanges.Element]
+        let network: Int
+    }
+
+    static func elements(_ rows: [[String: Any]]) -> [MCPChanges.Element] {
+        rows.compactMap { row in
+            guard let ref = row["ref"] as? String, let role = row["role"] as? String, role != "RootWebArea" else { return nil }
+            let state = ["checked", "selected", "expanded", "disabled", "focused", "required"].compactMap { key in
+                row[key].map { "\(key)=\($0)" } }.joined(separator: ", ")
+            return MCPChanges.Element(ref: ref, role: role, name: row["name"] as? String ?? "", state: state)
+        }
+    }
+
+    func before(_ cdp: MCPCDP) async -> Before? {
+        guard let rows = try? await collect(cdp, interactive: true) else { return nil }
+        startNetwork("watch", cdp: cdp)
+        return Before(url: rows["url"] as? String ?? "", title: browser.currentTitle, document: rows["document"] as? String ?? "",
+                      elements: Self.elements(rows["elements"] as? [[String: Any]] ?? []), network: networkSequence)
+    }
+
+    /// What changed since `before`: waits (at most 1.5 s) for the requests the action started and
+    /// for a new document to load, then compares the interactive elements.
+    func changes(since before: Before, cdp: MCPCDP) async -> [String: Any] {
+        defer { stopNetwork("watch") }
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .milliseconds(1500))
+        var unsettled = false
+        while true {
+            let pending = network.filter { ($0["seq"] as? Int ?? 0) > before.network && $0["state"] as? String == "pending" }
+            let quiet = clock.now - lastNetworkEvent > .milliseconds(network.contains { ($0["seq"] as? Int ?? 0) > before.network } ? 120 : 50)
+            let ready = (try? await cdp.inspect("document.readyState")) as? String ?? "loading"
+            if pending.isEmpty, quiet, ready != "loading" { break }
+            if clock.now >= deadline { unsettled = true; break }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        var out: [String: Any] = [:]
+        guard let rows = try? await collect(cdp, interactive: true) else { return ["error": "The page's state after the action couldn't be read."] }
+        let url = rows["url"] as? String ?? ""
+        if url != before.url { out["url"] = ["from": before.url, "to": url] }
+        if browser.currentTitle != before.title { out["title"] = ["from": before.title, "to": browser.currentTitle] }
+        let after = Self.elements(rows["elements"] as? [[String: Any]] ?? [])
+        if rows["document"] as? String != before.document {
+            out["document"] = "new"
+            out.merge(MCPChanges.diff(before: [], after: after, limit: 150)) { $1 }
+        } else {
+            out.merge(MCPChanges.diff(before: before.elements, after: after)) { $1 }
+        }
+        let writes = network.filter { ($0["seq"] as? Int ?? 0) > before.network && !["GET", "HEAD", "OPTIONS"].contains($0["method"] as? String ?? "") }
+        if !writes.isEmpty { out["network"] = writes.prefix(20).map(Self.describe) }
+        if unsettled { out["unsettled"] = "The page was still busy 1.5 s after the action; read it again to be sure." }
+        if let site = MCPSiteNotes.site(url), url != before.url, MCPSiteNotes.site(before.url) != site,
+           let notes = MCPPage.notes(for: site), !notes.isEmpty { out["notes"] = String(notes.prefix(1000)) }
+        return out
+    }
+
+    // MARK: Network
+
+    private var network: [[String: Any]] = []
+    private var networkByID: [String: Int] = [:]
+    private var networkSequence = 0
+    private var networkDropped = 0
+    private var networkUsers: Set<String> = []
+    private var lastNetworkEvent = ContinuousClock.now
+
+    /// The Network domain of Cra's own DevTools session (pages can't see it), on while a capture
+    /// (page_network) or an action's watch needs it. Headers and bodies are never kept.
+    func startNetwork(_ user: String, cdp: MCPCDP) {
+        let first = networkUsers.isEmpty
+        networkUsers.insert(user)
+        if first { browser.sendDevToolsMethod("Network.enable", params: #"{"maxTotalBufferSize":0,"maxResourceBufferSize":0}"#) { _, _ in } }
+    }
+
+    func stopNetwork(_ user: String) {
+        guard networkUsers.remove(user) != nil, networkUsers.isEmpty, !browser.isClosed else { return }
+        browser.sendDevToolsMethod("Network.disable", params: "{}") { _, _ in }
+    }
+
+    private func networkEvent(_ method: String, _ object: [String: Any]) {
+        guard let id = object["requestId"] as? String else { return }
+        lastNetworkEvent = .now
+        switch method {
+        case "Network.requestWillBeSent":
+            guard let request = object["request"] as? [String: Any] else { return }
+            if let index = networkByID[id], let redirect = object["redirectResponse"] as? [String: Any], index < network.count {
+                var statuses = network[index]["statuses"] as? [Int] ?? []
+                if let status = redirect["status"] as? Int { statuses.append(status) }
+                network[index]["statuses"] = statuses
+                network[index]["url"] = MCPRedaction.url(request["url"] as? String ?? "")
+                return
+            }
+            networkSequence += 1
+            network.append(["seq": networkSequence, "method": request["method"] as? String ?? "GET",
+                            "url": MCPRedaction.url(request["url"] as? String ?? ""), "type": object["type"] as? String ?? "Other",
+                            "statuses": [Int](), "state": "pending"])
+            if network.count > 1000 {
+                network.removeFirst(network.count - 1000); networkDropped += 1
+                networkByID = networkByID.compactMapValues { $0 >= 1 ? $0 - 1 : nil }
+            }
+            networkByID[id] = network.count - 1
+        case "Network.responseReceived":
+            guard let index = networkByID[id], index < network.count, let response = object["response"] as? [String: Any] else { return }
+            network[index]["statuses"] = (network[index]["statuses"] as? [Int] ?? []) + [response["status"] as? Int ?? 0]
+            network[index]["state"] = "answered"
+        case "Network.loadingFinished":
+            guard let index = networkByID[id], index < network.count else { return }
+            if network[index]["state"] as? String == "pending" { network[index]["state"] = "answered" }
+        case "Network.loadingFailed":
+            guard let index = networkByID[id], index < network.count else { return }
+            network[index]["state"] = object["canceled"] as? Bool == true ? "canceled" : "failed"
+            network[index]["error"] = String((object["errorText"] as? String ?? "").prefix(200))
+        default: break
+        }
+    }
+
+    private static func describe(_ entry: [String: Any]) -> [String: Any] {
+        var out: [String: Any] = ["method": entry["method"] ?? "", "url": entry["url"] ?? "", "type": entry["type"] ?? ""]
+        let statuses = entry["statuses"] as? [Int] ?? []
+        if !statuses.isEmpty { out["status"] = statuses.map(String.init).joined(separator: " → ") }
+        let state = entry["state"] as? String ?? ""
+        if state != "answered" { out["state"] = state }
+        if let error = entry["error"] as? String, !error.isEmpty { out["error"] = error }
+        return out
+    }
+
+    func networkLog(writesOnly: Bool, clear: Bool, cdp: MCPCDP) async -> [String: Any] {
+        var note: String?
+        if !networkUsers.contains("capture") {
+            startNetwork("capture", cdp: cdp)
+            note = "Capture started with this call; requests before it aren't in the log. Call again after acting."
+        }
+        let entries = network.filter { !writesOnly || !["GET", "HEAD", "OPTIONS"].contains($0["method"] as? String ?? "") }
+        var out: [String: Any] = ["requests": entries.suffix(100).map(Self.describe), "count": entries.count, "contentTrust": "untrusted"]
+        if entries.count > 100 { out["truncated"] = "Showing the last 100." }
+        if networkDropped > 0 { out["dropped"] = networkDropped }
+        if let note { out["note"] = note }
+        if clear { network.removeAll(); networkByID.removeAll(); networkDropped = 0 }
+        return out
+    }
+
+    // MARK: Site notes
+
+    /// `<data>/Notes/<host[_port]>.md`, the folder 0700 and each file 0600.
+    static var notesFolder: URL { AppPaths.file("Notes") }
+
+    static func notes(for site: String) -> String? {
+        let url = notesFolder.appendingPathComponent(MCPSiteNotes.fileName(site))
+        var info = stat()
+        guard lstat(url.path, &info) == 0, info.st_mode & S_IFMT == S_IFREG, info.st_uid == getuid() else { return nil }
+        return try? String(contentsOf: url, encoding: .utf8)
+    }
+
+    static func setNotes(_ text: String?, for site: String) throws {
+        let folder = notesFolder
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        var info = stat()
+        guard lstat(folder.path, &info) == 0, info.st_mode & S_IFMT == S_IFDIR, info.st_uid == getuid() else {
+            throw MCPCDP.Failure(message: "The notes folder isn't a private folder of this user.")
+        }
+        let url = folder.appendingPathComponent(MCPSiteNotes.fileName(site))
+        guard let text, !text.isEmpty else { try? FileManager.default.removeItem(at: url); return }
+        guard text.utf8.count <= MCPSiteNotes.limit else { throw MCPCDP.Failure(message: "Notes are at most 8 KB a site; nothing was written.") }
+        try Data(text.utf8).write(to: url, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+    }
+
+    static func allNotes() -> [[String: Any]] {
+        let files = (try? FileManager.default.contentsOfDirectory(at: notesFolder, includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey])) ?? []
+        return files.filter { $0.pathExtension == "md" }.sorted { $0.lastPathComponent < $1.lastPathComponent }.map { url in
+            let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+            let site = url.deletingPathExtension().lastPathComponent.replacingOccurrences(of: "_", with: ":")
+            return ["site": site, "bytes": values?.fileSize ?? 0,
+                    "modified": values?.contentModificationDate.map { ISO8601DateFormatter().string(from: $0) } ?? ""]
+        }
     }
 
     private func wait(_ arguments: [String: Any], cdp: MCPCDP) async throws -> [String: Any] {

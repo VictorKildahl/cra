@@ -64,7 +64,7 @@ struct MCPProtocolTests {
         #expect(MCPProtocol.validate(name: "tab_open", arguments: ["url": "https://a.b", "space": "Work", "select": true, "activate": false]))
         #expect(MCPProtocol.validate(name: "tab_show", arguments: ["tabId": "id", "activate": true]))
         #expect(MCPProtocol.readTools.contains("page_console") && !MCPProtocol.readTools.contains("page_dialog"))
-        #expect(MCPProtocol.tools.count == 26)
+        #expect(MCPProtocol.tools.count == 33)
     }
 
     @Test func navigationSchemes() {

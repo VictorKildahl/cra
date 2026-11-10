@@ -51,6 +51,7 @@ final class MCPInput {
             do { try await Task.sleep(for: .seconds(MCPInputPlan.durationBudget(text: arguments["text"] as? String ?? ""))); expired = true } catch {}
         }
         defer { deadline.cancel() }
+        humanize = arguments["humanize"] as? Bool == true
         button = arguments["button"] as? String ?? "left"
         clickCount = arguments["clickCount"] as? Int ?? 1
         if name == "page_click" { mouseModifiers = (arguments["modifiers"] as? String).flatMap(MCPProtocol.modifierFlags) ?? 0 }
@@ -104,12 +105,16 @@ final class MCPInput {
             return try await finish(.none, mouse: false)
         }
         if name == "page_select" { return try await select(value: arguments["value"] as? String, label: arguments["label"] as? String) }
+        if editing, initial["kind"] as? String == "typed" {
+            return try await setTypedValue(arguments["text"] as! String, type: initial["inputType"] as? String ?? "")
+        }
         let untargeted = arguments["ref"] == nil && arguments["selector"] == nil
         let clicked = name == "page_click" || name == "page_fill" || !untargeted && initial["focused"] as? Bool != true
         if name == "page_press", clicked, initial["editable"] as? Bool != true {
             throw Failure(message: "An unfocused non-editable target would be activated by clicking. Use page_press without a target for current focus, or focus it explicitly first.")
         }
         if clicked { try await click(editing: editing) }
+        if editing, clicked, try await followReplacement() { retargeted = true }
         if name == "page_click" { return try await finish(.none) }
         if name == "page_press" {
             if !untargeted { _ = try await inspect(focused: true) }
@@ -162,7 +167,46 @@ final class MCPInput {
             if let navigated = await navigated() { return navigated }
             throw error
         }
-        return try await finish(verify, keyboard: keys && kind != "frame" && !text.isEmpty, inserted: !keys && kind != "frame", mouse: clicked)
+        return try await finish(verify, keyboard: keys && kind != "frame" && !text.isEmpty, inserted: !keys && kind != "frame", mouse: clicked && !retargeted)
+    }
+
+    /// The focused field took the replaced one's place (state.retarget): input goes there now.
+    private var retargeted = false
+    private func followReplacement() async throws -> Bool {
+        let response = try await function("function(){return this.retarget()}")
+        guard (response["result"] as? [String: Any])?["value"] as? Bool == true else { return false }
+        let element = try await function("function(){return this.node}", value: false)
+        node = (element["result"] as? [String: Any])?["objectId"] as? String
+        return true
+    }
+
+    /// Date, time, month, week, colour and range inputs can't be typed into (a segmented date
+    /// field stores the wrong date): the value's format is checked, the field focused natively,
+    /// the value set and read back, then input and change fire, as Playwright's fill does.
+    private func setTypedValue(_ text: String, type: String) async throws -> [String: Any] {
+        guard let value = MCPFieldValue.normalized(type: type, value: text) else {
+            let formats = ["date": "2026-11-09", "time": "14:30 or 2:30 PM", "datetime-local": "2026-11-09T14:30",
+                           "month": "2026-11", "week": "2026-W45", "color": "#3b82f6", "range": "a number"]
+            throw Failure(message: "A \(type) input takes \(formats[type] ?? "its own format"), not \"\(text.prefix(60))\". Nothing was changed.")
+        }
+        guard let node else { throw Failure(message: "No target node.") }
+        dispatched = true
+        _ = try await call("DOM.focus", ["objectId": node])
+        let response = try await function("""
+        function(value) {
+          const n = this.node, old = n.value;
+          n.value = value;
+          if (value !== '' && n.value !== value && n.type !== 'range' && n.type !== 'color') { n.value = old; return {ok: false, value: n.value}; }
+          n.dispatchEvent(new Event('input', {bubbles: true, composed: true}));
+          n.dispatchEvent(new Event('change', {bubbles: true}));
+          return {ok: true, value: n.value};
+        }
+        """, arguments: [value])
+        let state = (response["result"] as? [String: Any])?["value"] as? [String: Any] ?? [:]
+        guard state["ok"] as? Bool == true else { throw Failure(message: "The \(type) input refused \"\(value)\" (min, max or step?). It was put back.") }
+        var result: [String: Any] = ["status": "completed", "input": "value", "value": state["value"] ?? value]
+        if let held = state["value"] as? String, held != value { result["note"] = "The input holds \(held) (it rounds or snaps values)." }
+        return content(result)
     }
 
     /// A point of the viewport in CSS pixels: anything at all, iframes and canvas included. The
@@ -183,8 +227,8 @@ final class MCPInput {
         if hit["tag"] as? String == "SELECT", name == "page_click" {
             throw Failure(message: "That is a <select>. Use page_select with its ref (page_snapshot) so no native menu opens.")
         }
-        for step in MCPInputPlan.movement(from: position, to: point, variation: Double.random(in: 0...1)) {
-            try await pause(step.delay)
+        for step in path(to: point) {
+            try await pace(step.delay)
             dispatched = true
             _ = try await call("Input.dispatchMouseEvent", ["type": "mouseMoved", "x": step.point.x, "y": step.point.y, "buttons": 0])
             position = step.point
@@ -268,7 +312,7 @@ final class MCPInput {
                     try await key(key: piece, code: identity?.code, virtual: identity?.virtual,
                                   text: piece, modifiers: identity?.modifiers ?? 0, unmodified: identity?.unmodified)
                 }
-                try await pause(MCPInputPlan.keyGap(Double.random(in: 0...1)))
+                try await pace(MCPInputPlan.keyGap(Double.random(in: 0...1)))
             }
             return true
         }
@@ -312,14 +356,30 @@ final class MCPInput {
             dispatched = true
             _ = try await call("Input.dispatchMouseEvent", ["type": "mouseWheel", "x": position.x, "y": position.y,
                                                            "deltaX": Double(dx) / Double(steps), "deltaY": Double(dy) / Double(steps)])
-            try await pause(0.012 + Double.random(in: 0...0.012))
+            try await pace(0.012 + Double.random(in: 0...0.012))
         }
+        // Chromium scrolls a wheel step over a few frames; let it land before the result reads it.
+        try await pause(0.2)
     }
 
     private func check() throws {
         guard !Task.isCancelled, !expired, canContinue() else {
             throw Failure(message: "Input cancelled: connection, tab or server is no longer available, or the action timed out.")
         }
+    }
+
+    /// Paced, human-like input (humanize=true); otherwise input goes in at once, like Playwright's.
+    private var humanize = false
+
+    /// A pause that only paced input takes.
+    private func pace(_ seconds: Double) async throws {
+        if humanize { try await pause(seconds) } else { try check() }
+    }
+
+    /// The pointer's way to `end`: a curved, eased path when humanized, else one move.
+    private func path(to end: CGPoint) -> [MCPInputPlan.Move] {
+        humanize ? MCPInputPlan.movement(from: position, to: end, variation: Double.random(in: 0...1))
+            : Array(MCPInputPlan.movement(from: position, to: end, variation: 0.5).suffix(1))
     }
 
     private func pause(_ seconds: Double) async throws {
@@ -336,7 +396,8 @@ final class MCPInput {
     }
 
     private func rawCall(_ method: String, _ parameters: [String: Any] = [:]) async throws -> [String: Any] {
-        try await MCPCDP(browser, canContinue: canContinue).call(method, parameters, cleanup: true)
+        // A busy renderer can take a moment to acknowledge input; other calls answer within 2 s.
+        try await MCPCDP(browser, canContinue: canContinue).call(method, parameters, timeout: method.hasPrefix("Input.") ? 5 : 2, cleanup: true)
     }
 
     private func prepare(selector: String?, scroll: Bool = true) async throws {
@@ -379,7 +440,7 @@ final class MCPInput {
           const types = ['mousemove','mousedown','mouseup','click','dblclick','auxclick','contextmenu','keydown','keyup','beforeinput','input','wheel','change','dragstart','dragover','drop','pointermove','pointerup'];
           const observe = event => {
             if (!event.isTrusted) return;
-            const target = event.composedPath().includes(node);
+            const target = event.composedPath().includes(state.node);
             if (event.type === 'keyup' && state.downKeys.has(event.key)) {
               state.counts.keyup = (state.counts.keyup || 0) + 1; state.downKeys.delete(event.key); return;
             }
@@ -389,6 +450,21 @@ final class MCPInput {
           };
           for (const type of types) window.addEventListener(type, observe, true);
           state.stop = () => { for (const type of types) window.removeEventListener(type, observe, true); };
+          // A page that swaps a field for a new one on focus (Wikipedia's search box): follow focus
+          // only to an editable field of the same kind that shares an id, name, placeholder,
+          // label or title with the old one. Anything else stays an error; nothing is typed.
+          state.retarget = () => {
+            const old = state.node;
+            if (old.isConnected) return false;
+            let a = document.activeElement;
+            while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement;
+            const editable = a && (a instanceof HTMLInputElement || a instanceof HTMLTextAreaElement || a.isContentEditable);
+            const same = editable && a.tagName === old.tagName && (a.type || '') === (old.type || '')
+              && ['id', 'name', 'placeholder', 'aria-label', 'title'].some(k => old.getAttribute(k) && old.getAttribute(k) === a.getAttribute(k));
+            if (!same) throw Error('The page replaced the field when it was clicked, and focus is not on a matching one. Take a new snapshot; nothing was typed.');
+            state.node = a;
+            return true;
+          };
           return state;
         })
         """
@@ -407,7 +483,13 @@ final class MCPInput {
         guard let node else { throw Failure(message: "No target node.") }
         if scroll {
             _ = try await inspect()
-            _ = try await call("DOM.scrollIntoViewIfNeeded", ["objectId": node])
+            do { _ = try await call("DOM.scrollIntoViewIfNeeded", ["objectId": node]) }
+            catch let failure as MCPCDP.Failure where failure.message.contains("layout object") {
+                throw Failure(message: "That element isn't shown on the page (it has no box): something may reveal it, like a menu or a search icon. Take a screenshot or snapshot.")
+            }
+            // The compositor applies a scroll a frame later; input sent sooner hits what was there.
+            _ = try? await call("Runtime.evaluate", ["expression": "new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(1))))",
+                                                    "awaitPromise": true, "contextId": context, "timeout": 500])
         }
     }
 
@@ -431,7 +513,8 @@ final class MCPInput {
           }
           const plain = n.isContentEditable && Array.from(n.children).every(c => c.tagName === 'BR');
           const field = plain || n instanceof HTMLTextAreaElement || n instanceof HTMLInputElement && ['text','search','email','url','tel','password','number'].includes(n.type);
-          const kind = field ? 'field' : n.isContentEditable ? 'rich' : (n instanceof HTMLIFrameElement || n instanceof HTMLFrameElement) ? 'frame' : 'none';
+          const typed = n instanceof HTMLInputElement && ['date','time','datetime-local','month','week','color','range'].includes(n.type);
+          const kind = field ? 'field' : typed ? 'typed' : n.isContentEditable ? 'rich' : (n instanceof HTMLIFrameElement || n instanceof HTMLFrameElement) ? 'frame' : 'none';
           if (editing && kind === 'none') throw Error('Nothing editable here. Click a field or editor first, or pass its ref or selector.');
           if (editing && n.readOnly) throw Error('Target is read-only.');
           if (focused && active !== n) throw Error('Focus changed; refusing to type into another element.');
@@ -454,7 +537,7 @@ final class MCPInput {
             } else if (!n.textContent) { start = 0; end = 0; }
           }
           const value = plain ? n.textContent.replace(/\\u00a0/g,' ') : field ? n.value || '' : kind === 'rich' ? n.innerText : '';
-          return {x,y,kind,editable:kind !== 'none',value,start,end,multiline:n instanceof HTMLTextAreaElement || kind === 'rich',focused:active === n,src:kind === 'frame' ? n.src : ''};
+          return {x,y,kind,editable:kind !== 'none',value,start,end,multiline:n instanceof HTMLTextAreaElement || kind === 'rich',focused:active === n,src:kind === 'frame' ? n.src : '',inputType:n instanceof HTMLInputElement ? n.type : ''};
         }
         """, arguments: [editing, focused, hit])
         guard let value = (response["result"] as? [String: Any])?["value"] as? [String: Any] else {
@@ -466,8 +549,8 @@ final class MCPInput {
     private func move(editing: Bool, settle: Bool = true) async throws {
         let target = try await inspect(editing: editing, hit: true)
         let end = CGPoint(x: target["x"] as? Double ?? 0, y: target["y"] as? Double ?? 0)
-        for move in MCPInputPlan.movement(from: position, to: end, variation: Double.random(in: 0...1)) {
-            try await pause(move.delay)
+        for move in path(to: end) {
+            try await pace(move.delay)
             dispatched = true
             _ = try await call("Input.dispatchMouseEvent", ["type": "mouseMoved", "x": move.point.x, "y": move.point.y, "buttons": 0])
             position = move.point
@@ -483,7 +566,10 @@ final class MCPInput {
     private func click(editing: Bool) async throws {
         try await move(editing: editing)
         try await pressMouse(at: position) { [self] in
-            // The press can run page code. Never release over a newly substituted target.
+            // The press can run page code. Never release over a newly substituted target. A field
+            // the page replaced on focus is released where it was (followReplacement() then checks).
+            if editing, let gone = try? await function("function(){return !this.node.isConnected}"),
+               (gone["result"] as? [String: Any])?["value"] as? Bool == true { return }
             let released = try await inspect(editing: editing, hit: true)
             guard abs((released["x"] as? Double ?? -100) - position.x) < 2,
                   abs((released["y"] as? Double ?? -100) - position.y) < 2 else {
@@ -501,7 +587,7 @@ final class MCPInput {
             dispatched = true
             _ = try await call("Input.dispatchMouseEvent", ["type": "mousePressed", "x": point.x, "y": point.y, "modifiers": mouseModifiers,
                                                            "button": button, "buttons": buttons, "clickCount": count])
-            try await pause(count < clickCount ? 0.03 : MCPInputPlan.clickHold(Double.random(in: 0...1)))
+            try await pace(count < clickCount ? 0.03 : MCPInputPlan.clickHold(Double.random(in: 0...1)))
             if count == clickCount { try await between?() }
             _ = try await call("Input.dispatchMouseEvent", ["type": "mouseReleased", "x": point.x, "y": point.y, "modifiers": mouseModifiers,
                                                            "button": button, "buttons": 0, "clickCount": count])
@@ -511,6 +597,10 @@ final class MCPInput {
     }
 
     private func select(value: String?, label: String?) async throws -> [String: Any] {
+        let isNative = try await function("function(){return this.node instanceof HTMLSelectElement}")
+        if (isNative["result"] as? [String: Any])?["value"] as? Bool != true {
+            return try await customSelect(value ?? label ?? "")
+        }
         // Type-ahead with the shortest prefix of the option's label that no other enabled option
         // starts with; a label that is the start of another needs all of it.
         let response = try await function("""
@@ -554,7 +644,7 @@ final class MCPInput {
             let identity = piece.unicodeScalars.count == 1 ? piece.first.flatMap(MCPInputPlan.textKey) : nil
             try await key(key: piece, code: identity?.code, virtual: identity?.virtual, text: piece,
                           modifiers: identity?.modifiers ?? 0, unmodified: identity?.unmodified)
-            try await pause(MCPInputPlan.keyGap(Double.random(in: 0...1)))
+            try await pace(MCPInputPlan.keyGap(Double.random(in: 0...1)))
         }
         let final = try await function("function(){return this.node.value}")
         guard (final["result"] as? [String: Any])?["value"] as? String == target else { throw Failure(message: "Select did not reach the requested option.") }
@@ -570,6 +660,76 @@ final class MCPInput {
                               "note": "Type-ahead passed through \((counts["change"] ?? 1) - 1) other option(s) on the way, each with a change event."])
         }
         return result
+    }
+
+    /// A dropdown that isn't a <select>: a typeahead is typed into, anything else clicked open;
+    /// then the option the control owns (aria-controls, aria-owns, aria-activedescendant, or the
+    /// one listbox inside its component, else the one listbox on screen) whose text, label or
+    /// value matches is clicked. Several or no matches are refused with what's showing.
+    private func customSelect(_ wanted: String) async throws -> [String: Any] {
+        let kind = try await function("""
+        function() {
+          const n = this.node;
+          const typeable = n instanceof HTMLInputElement && ['text','search','email','url','tel',''].includes(n.type) || n.isContentEditable;
+          return typeable ? 'type' : 'click';
+        }
+        """)
+        let typeable = (kind["result"] as? [String: Any])?["value"] as? String == "type"
+        try await click(editing: typeable)
+        if typeable {
+            try await key(key: "a", code: "KeyA", virtual: 65, modifiers: 4, commands: ["selectAll"])
+            _ = try await typeText(wanted)
+        }
+        let finder = """
+        function(wanted) {
+          const n = this.node, norm = s => (s || '').trim().replace(/\\s+/g, ' ').toLocaleLowerCase();
+          const shown = el => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
+          const ids = [n.getAttribute('aria-controls'), n.getAttribute('aria-owns')].join(' ').split(/\\s+/).filter(Boolean);
+          let popups = ids.map(id => document.getElementById(id)).filter(Boolean);
+          const active = n.getAttribute('aria-activedescendant') && document.getElementById(n.getAttribute('aria-activedescendant'));
+          if (active) popups.push(active.closest('[role=listbox],[role=menu],[role=tree],[role=grid]') || active.parentElement);
+          if (!popups.length) {
+            for (let a = n.parentElement, i = 0; a && i < 4 && !popups.length; a = a.parentElement, i++) {
+              const lists = Array.from(a.querySelectorAll('[role=listbox],[role=menu]')).filter(shown);
+              if (lists.length === 1) popups = lists;
+            }
+          }
+          if (!popups.length) { const lists = Array.from(document.querySelectorAll('[role=listbox],[role=menu]')).filter(shown); if (lists.length === 1) popups = lists; }
+          const options = popups.flatMap(p => Array.from(p.querySelectorAll('[role=option],[role=menuitem],[role=menuitemradio],[role=treeitem],li'))).filter(shown);
+          if (!options.length) return {found: 0, showing: []};
+          const label = o => [o.innerText, o.getAttribute('aria-label'), o.getAttribute('data-value'), o.getAttribute('value')];
+          const w = norm(wanted);
+          let hits = options.filter(o => label(o).some(t => norm(t) === w));
+          if (!hits.length) hits = options.filter(o => norm(o.innerText).includes(w));
+          const showing = options.slice(0, 20).map(o => (o.innerText || o.getAttribute('aria-label') || '').trim().slice(0, 60));
+          if (hits.length !== 1) return {found: hits.length, showing};
+          hits[0].scrollIntoView({block: 'nearest'});
+          const r = hits[0].getBoundingClientRect();
+          return {found: 1, x: r.left + r.width / 2, y: r.top + r.height / 2, text: (hits[0].innerText || '').trim().slice(0, 80)};
+        }
+        """
+        var state: [String: Any] = [:]
+        for _ in 0..<27 {
+            try await pause(0.15)
+            let response = try await function(finder, arguments: [wanted])
+            state = (response["result"] as? [String: Any])?["value"] as? [String: Any] ?? [:]
+            if state["found"] as? Int == 1 { break }
+        }
+        guard state["found"] as? Int == 1, let x = state["x"] as? Double, let y = state["y"] as? Double else {
+            let showing = (state["showing"] as? [String] ?? []).joined(separator: " | ")
+            throw Failure(message: (state["found"] as? Int ?? 0) > 1
+                ? "Several options match \"\(wanted)\": \(showing). Use a fuller label, or page_click the option."
+                : showing.isEmpty ? "No options appeared for this control. Open it with page_click and click the option." : "No option matches \"\(wanted)\". Showing: \(showing).")
+        }
+        let point = CGPoint(x: x, y: y)
+        for step in path(to: point) {
+            try await pace(step.delay)
+            _ = try await call("Input.dispatchMouseEvent", ["type": "mouseMoved", "x": step.point.x, "y": step.point.y, "buttons": 0])
+            position = step.point
+        }
+        button = "left"; clickCount = 1
+        try await pressMouse(at: point)
+        return content(["status": "completed", "input": "chromium", "picked": state["text"] ?? wanted])
     }
 
     private func press(_ name: String, modifiers: Int = 0) async throws {
@@ -602,7 +762,7 @@ final class MCPInput {
         heldKey = up
         dispatched = true
         _ = try await call("Input.dispatchKeyEvent", down)
-        try await pause(MCPInputPlan.keyHold(Double.random(in: 0...1)))
+        try await pace(MCPInputPlan.keyHold(Double.random(in: 0...1)))
         _ = try await call("Input.dispatchKeyEvent", up)
         heldKey = nil
     }
@@ -625,16 +785,25 @@ final class MCPInput {
                     throw Failure(message: "The editor doesn't show the typed text (the page may have transformed or rejected input).")
                 }
             }
-            let response = try await function("function(){return this.counts}")
-            let counts = (response["result"] as? [String: Any])?["value"] as? [String: Int] ?? [:]
-            let clicked = button == "right" ? (counts["contextmenu"] ?? 0) > 0 : button == "middle" ? true : (counts["click"] ?? 0) > 0
-            guard !mouse || (counts["mousedown"] ?? 0) > 0 && (counts["mouseup"] ?? 0) > 0 && clicked,
-                  !mouse || clickCount < 2 || (counts["dblclick"] ?? 0) > 0,
-                  !keyboard || (counts["keydown"] ?? 0) > 0 && counts["keydown"] == counts["keyup"],
-                  !inserted || (counts["input"] ?? 0) > 0 else {
-                throw Failure(message: "The page did not confirm the expected trusted input events.")
+            // Instant input can be read back before the page has handled all of it: wait up to
+            // half a second for the events to arrive (a dialog opening meanwhile ends the wait).
+            var counts: [String: Int] = [:]
+            var confirmed = false
+            for attempt in 0..<11 {
+                if attempt > 0 { try await pause(0.05) }
+                let response = try await function("function(){return this.counts}")
+                counts = (response["result"] as? [String: Any])?["value"] as? [String: Int] ?? [:]
+                let clicked = button == "right" ? (counts["contextmenu"] ?? 0) > 0 : button == "middle" ? true : (counts["click"] ?? 0) > 0
+                confirmed = (!mouse || (counts["mousedown"] ?? 0) > 0 && (counts["mouseup"] ?? 0) > 0 && clicked)
+                    && (!mouse || clickCount < 2 || (counts["dblclick"] ?? 0) > 0)
+                    && (!keyboard || (counts["keydown"] ?? 0) > 0 && counts["keydown"] == counts["keyup"])
+                    && (!inserted || (counts["input"] ?? 0) > 0)
+                if confirmed { break }
             }
-            return content(["status": "completed", "input": "chromium", "trustedEvents": counts])
+            guard confirmed else { throw Failure(message: "The page did not confirm the expected trusted input events.") }
+            var result: [String: Any] = ["status": "completed", "input": "chromium", "trustedEvents": counts]
+            if retargeted { result["retargeted"] = "The page replaced the field when it was clicked; the text went into its replacement." }
+            return content(result)
         } catch {
             // A committed navigation destroys the observer. Report that explicitly, never replay.
             if dispatched, !mouseDown, heldKey == nil, let navigated = await navigated() { return navigated }
@@ -698,10 +867,10 @@ final class MCPInput {
             _ = try await call("Input.setInterceptDrags", ["enabled": true])
             mouseDown = true; dispatched = true
             _ = try await call("Input.dispatchMouseEvent", ["type": "mousePressed", "x": position.x, "y": position.y, "button": "left", "buttons": 1, "clickCount": 1])
-            try await pause(MCPInputPlan.clickHold(Double.random(in: 0...1)))
+            try await pace(MCPInputPlan.clickHold(Double.random(in: 0...1)))
             var dragData: [String: Any]?
             for step in MCPInputPlan.movement(from: position, to: end, variation: Double.random(in: 0...1)) {
-                try await pause(step.delay)
+                try await pace(step.delay)
                 let current = try await target.inspect(hit: true)
                 guard abs((current["x"] as? Double ?? -100) - end.x) < 2, abs((current["y"] as? Double ?? -100) - end.y) < 2 else {
                     throw Failure(message: "Drop target moved. Drag aborted; cleanup sends Escape and releases the button.")
