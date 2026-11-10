@@ -4,24 +4,33 @@ import Foundation
 /// module): a card that summarizes the page behind a link, done here by the Mac's own Apple
 /// Intelligence model instead of Arc's server.
 ///
-/// Arc shows a card on its own for some links on three sites (`HoverCardsSupportedDomain`: Google,
-/// X and Hacker News), and for any link while Shift is held. Its settings text: "Instant summaries
-/// appear when you hover over links on certain websites. Or hold Shift while hovering to preview
-/// any link." Nothing is fetched before one of those triggers.
+/// Arc's settings text: "Instant summaries appear when you hover over links on certain websites.
+/// Or hold Shift while hovering to preview any link." Measured on Arc 1.171 (10 Nov 2026): a card
+/// opens after the pointer rests 1 s on one of Arc's links on Google, X or Hacker News, or on any
+/// link the pointer reaches with Shift already held (pressing Shift on a link does nothing). With
+/// Shift, a link to the page's own site gets the small card (title and address); any other link
+/// the summary. Nothing is fetched before a card opens.
 public enum LinkSummaryPolicy {
-    /// The sites where a hover alone shows a card.
+    /// The sites where a hover alone shows a card (`HoverCardsSupportedDomain`).
     public enum Site: Equatable, Sendable {
         case google, x, hackerNews
     }
 
-    /// Arc's supported domains. On Google only the results page counts: Arc's selector there
-    /// (`g-section-with-header a [role=heading]`) is a search result's heading.
+    /// The two cards: Arc's answer card, and its small card for a link within the site.
+    public enum Kind: Equatable, Sendable {
+        case summary, link
+    }
+
+    /// How long the pointer rests on a link before its card opens: 0.97 and 1.2 s in two
+    /// recordings of Arc on Hacker News (60 fps).
+    public static let rest: Duration = .seconds(1)
+
     public static func autoSite(page: URL?) -> Site? {
         guard let page, let host = page.host()?.lowercased() else { return nil }
         let h = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
         if h == "news.ycombinator.com" { return .hackerNews }
         if ["x.com", "twitter.com", "mobile.x.com", "mobile.twitter.com"].contains(h) { return .x }
-        if isGoogleSearchHost(h), page.path().hasPrefix("/search") { return .google }
+        if isGoogleSearchHost(h) { return .google }
         return nil
     }
 
@@ -32,27 +41,59 @@ public enum LinkSummaryPolicy {
         return site == host
     }
 
-    /// Hosts whose links on a results page are ads, not results.
-    static let adHosts: Set<String> = ["googleadservices.com", "doubleclick.net", "googlesyndication.com"]
-
-    /// Whether resting on this link shows a card without Shift. Arc picks the links by selector:
-    /// Hacker News's story titles (`.title .titleline > a`), links in a post on X
-    /// (`[data-testid=tweetText] a`, link cards), Google's result headings. Cra only learns the
-    /// hovered URL, so it takes the links that leave the site: a story's page, a t.co link, a
-    /// result. The site's own links (comments, profiles, "hide", "login") and ads stay out.
-    public static func autoHovers(link: URL, page: URL?) -> Bool {
-        guard let site = autoSite(page: page), let page,
-              let linkSite = SiteKey.site(of: link.absoluteString),
-              let pageSite = SiteKey.site(of: page.absoluteString), linkSite != pageSite else { return false }
-        if adHosts.contains(linkSite) { return false }
-        if site == .google, isGoogleSearchHost(linkSite) { return false }
-        if site == .x, linkSite == "x.com" || linkSite == "twitter.com" { return false }
-        return true
+    /// Arc's links per site, as its binary lists them: Hacker News's story titles, the links in a
+    /// post and its link card on X, and the links in Google's results (#search, #tvcap above them,
+    /// #topstuff and #botstuff), not its side panel (an organic result opened a card in Arc, a
+    /// side-panel link didn't).
+    public static func selectors(for site: Site) -> [String] {
+        switch site {
+        case .hackerNews: [".title .titleline > a"]
+        case .x: ["[data-testid=tweetText] a[role=link][target=_blank]", "[data-testid='card.wrapper'] a[role=link]",
+                  "a[role=link][rel='nofollow noreferrer'][target=_blank]"]
+        case .google: ["#search a", "#tvcap a", "#topstuff a", "#botstuff a", "g-section-with-header a [role=heading]"]
+        }
     }
 
-    /// Whether a hover shows a card: Shift anywhere, or one of the links above.
-    public static func shouldTrigger(link: URL, page: URL?, shiftHeld: Bool) -> Bool {
-        shiftHeld || autoHovers(link: link, page: page)
+    /// The page script run when the pointer has rested on a link: the link under `pointer`
+    /// (fractions of the view, y down), its rect in fractions of the viewport, and whether it is one
+    /// of Arc's links for `site`. Answers null when no link is there. Runs in Cra's isolated world.
+    public static func hoverScript(pointer: CGPoint, site: Site?) -> String {
+        let selectors = site.map(selectors(for:)) ?? []
+        let list = (try? JSONSerialization.data(withJSONObject: selectors)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+        return """
+        (() => {
+          const vv = visualViewport;
+          const el = document.elementFromPoint(\(Double(pointer.x)) * vv.width + vv.offsetLeft, \(Double(pointer.y)) * vv.height + vv.offsetTop);
+          const a = el && el.closest && el.closest('a[href], area[href]');
+          if (!a) return null;
+          const arc = \(list).some(s => [...document.querySelectorAll(s)].some(m => (m.closest('a') || m) === a));
+          const r = a.getBoundingClientRect();
+          return {x: (r.left - vv.offsetLeft) / vv.width, y: (r.top - vv.offsetTop) / vv.height,
+                  width: r.width / vv.width, height: r.height / vv.height, arc, href: a.href};
+        })()
+        """
+    }
+
+    /// Which card a rested hover opens, if any. `shiftHeld` is Shift as the pointer reached the
+    /// link; `arcLink` is the page script's answer.
+    public static func kind(link: URL, page: URL?, shiftHeld: Bool, arcLink: Bool) -> Kind? {
+        if shiftHeld {
+            guard let page, let a = SiteKey.site(of: link.absoluteString), let b = SiteKey.site(of: page.absoluteString) else { return .summary }
+            return a == b ? .link : .summary
+        }
+        return autoSite(page: page) != nil && arcLink ? .summary : nil
+    }
+
+    /// Whether resting on a link may open a card at all, before asking the page.
+    public static func mayOpen(page: URL?, shiftHeld: Bool) -> Bool { shiftHeld || autoSite(page: page) != nil }
+
+    /// The address as the small card shows it: host and path without the scheme or "www.".
+    public static func displayAddress(_ url: URL) -> String {
+        var s = url.absoluteString
+        for prefix in ["https://", "http://"] where s.hasPrefix(prefix) { s.removeFirst(prefix.count) }
+        if s.hasPrefix("www.") { s.removeFirst(4) }
+        if s.hasSuffix("/"), s.filter({ $0 == "/" }).count == 1 { s.removeLast() }
+        return s
     }
 
     /// Whether the link can be previewed at all: a web page on the public internet that isn't the
@@ -106,7 +147,7 @@ public enum LinkSummaryPolicy {
 
     /// The search on a Google results page, which Arc hands the model as the question to focus on.
     public static func searchQuery(page: URL?) -> String? {
-        guard autoSite(page: page) == .google, let page,
+        guard autoSite(page: page) == .google, let page, page.path().hasPrefix("/search"),
               let raw = URLComponents(url: page, resolvingAgainstBaseURL: false)?.percentEncodedQueryItems?.first(where: { $0.name == "q" })?.value,
               // A form's + is a space; URLComponents leaves it.
               let q = raw.replacingOccurrences(of: "+", with: " ").removingPercentEncoding,
@@ -323,37 +364,6 @@ public enum LinkSummaryPrompt {
     }
 }
 
-/// A card's content.
-public struct LinkSummaryResult: Equatable, Sendable {
-    public struct Detail: Equatable, Sendable {
-        /// Arc's examples: "Price", "Story", "Solution 1", "Highlights", "Criticism".
-        public var label: String
-        /// An SF Symbol name the model chose; the card falls back when the system has no such symbol.
-        public var icon: String
-        public var info: String
-
-        public init(label: String, icon: String, info: String) {
-            self.label = label
-            self.icon = icon
-            self.info = info
-        }
-    }
-
-    public var url: String
-    public var title: String
-    public var host: String
-    public var quickSummary: String?
-    public var details: [Detail]
-
-    public init(url: String, title: String, host: String, quickSummary: String?, details: [Detail]) {
-        self.url = url
-        self.title = title
-        self.host = host
-        self.quickSummary = quickSummary
-        self.details = details
-    }
-}
-
 /// Summaries already made, newest last, so hovering a link again shows its card at once without
 /// growing for as long as Cra runs.
 public struct LinkSummaryCache: Sendable {
@@ -373,35 +383,4 @@ public struct LinkSummaryCache: Sendable {
     }
 
     public var count: Int { entries.count }
-}
-
-/// The card's size and place, measured on Arc 1.171 (10 Nov 2026, a Hacker News story on a 2x
-/// display): 300 pt wide, a 100 pt banner, 15 pt margins, rows indented to 39 pt, 6 pt between
-/// rows, 12 pt corners. It hangs 6 pt under the link, 7 pt left of the link's start.
-public enum LinkSummaryCardLayout {
-    public static let width: CGFloat = 300
-    public static let bannerHeight: CGFloat = 100
-    public static let cornerRadius: CGFloat = 12
-    public static let margin: CGFloat = 15
-    public static let rowIndent: CGFloat = 39
-    public static let rowGap: CGFloat = 6
-    public static let lineHeight: CGFloat = 18.5
-    /// Room under the last row for the share button (32 pt, its centre 24 pt from the right and
-    /// 25 pt from the bottom).
-    public static let bottomInset: CGFloat = 40
-    public static let shareButton: CGFloat = 32
-    static let gapBelowLink: CGFloat = 6
-    static let leadBeforeLink: CGFloat = 7
-
-    /// Where the card goes, in screen coordinates (y up). Under the link when it fits on the
-    /// screen, else above it; without the link's frame, under the pointer. Kept 8 pt inside the screen.
-    public static func origin(size: CGSize, link: CGRect?, pointer: CGPoint, screen: CGRect) -> CGPoint {
-        let anchor = link ?? CGRect(x: pointer.x - 20, y: pointer.y - 10, width: 40, height: 20)
-        var x = anchor.minX - leadBeforeLink
-        var y = anchor.minY - gapBelowLink - size.height
-        if y < screen.minY + 8 { y = anchor.maxY + gapBelowLink }
-        x = min(max(x, screen.minX + 8), screen.maxX - 8 - size.width)
-        y = min(max(y, screen.minY + 8), screen.maxY - 8 - size.height)
-        return CGPoint(x: x.rounded(), y: y.rounded())
-    }
 }

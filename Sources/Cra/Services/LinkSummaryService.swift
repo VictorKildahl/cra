@@ -26,6 +26,7 @@ final class LinkSummaryService {
     private var cards = LinkSummaryCache()
     private var images: [String: NSImage] = [:]
     private var imageOrder: [String] = []
+    private var titles: [String: String] = [:]
 
     /// Banner pictures come over a session that keeps nothing on disk and sends no cookies.
     private let imageSession = URLSession(configuration: .ephemeral)
@@ -48,7 +49,10 @@ final class LinkSummaryService {
         guard isAvailable else { return }
         let started = Date()
         let fetchURL = LinkSummaryPolicy.fetchURL(for: link, httpsOnly: httpsOnly)
-        guard let html = await Self.fetch(fetchURL, profilePath: profilePath), !Task.isCancelled else { return }
+        guard let html = await Self.fetch(fetchURL, profilePath: profilePath), !Task.isCancelled else {
+            CraLog.note("5-Second Previews: no page (\(Task.isCancelled ? "cancelled" : "didn't load"))")
+            return
+        }
         let content = await Task.detached(priority: .userInitiated) { LinkSummaryContent.extractText(from: html) }.value
         let host = LinkSummaryPrompt.displayHost(link)
         // One card that the picture and the streamed answer both fill in.
@@ -78,6 +82,18 @@ final class LinkSummaryService {
         // Counts and time only: the links people hover stay out of the log (it goes into diagnostics).
         CraLog.note(String(format: "5-Second Previews: %@ in %.1f s", box.card.result.map { "\($0.details.count) details" } ?? "no preview",
                            Date().timeIntervalSince(started)))
+    }
+
+    /// The small card's title: the page's <title>, nil when the page didn't load.
+    func title(link: URL, profilePath: String?, httpsOnly: Bool) async -> String? {
+        if let known = titles[link.absoluteString] { return known }
+        guard let html = await Self.fetch(LinkSummaryPolicy.fetchURL(for: link, httpsOnly: httpsOnly), profilePath: profilePath) else { return nil }
+        let title = await Task.detached(priority: .userInitiated) { LinkSummaryContent.extractText(from: html).title }.value
+        if let title {
+            if titles.count >= 40 { titles.removeAll() }
+            titles[link.absoluteString] = title
+        }
+        return title
     }
 
     /// The page's HTML, or nil when it isn't an HTML page that loaded.

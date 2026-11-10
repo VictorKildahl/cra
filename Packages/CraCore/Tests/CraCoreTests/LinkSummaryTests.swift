@@ -15,49 +15,48 @@ struct LinkSummaryTests {
         #expect(LinkSummaryPolicy.autoSite(page: u("https://www.google.com/search?q=swift")) == .google)
         #expect(LinkSummaryPolicy.autoSite(page: u("https://www.google.co.uk/search?q=london")) == .google)
         #expect(LinkSummaryPolicy.autoSite(page: u("https://google.fr/search?q=paris")) == .google)
-        // Google outside its results page, and sites Arc's binary has no hover cards for.
-        for s in ["https://www.google.com/maps", "https://mail.google.com/mail/u/0/", "https://google.evil.com/search?q=x",
-                  "https://duckduckgo.com/?q=x", "https://www.bing.com/search?q=x", "https://www.threads.net/",
-                  "https://github.com/VictorKildahl/cra", "file:///tmp/page.html"] {
+        for s in ["https://mail.google.com/mail/u/0/", "https://google.evil.com/search?q=x", "https://duckduckgo.com/?q=x",
+                  "https://www.bing.com/search?q=x", "https://www.threads.net/", "https://github.com/VictorKildahl/cra",
+                  "file:///tmp/page.html"] {
             #expect(LinkSummaryPolicy.autoSite(page: u(s)) == nil, "\(s)")
         }
         #expect(LinkSummaryPolicy.autoSite(page: nil) == nil)
     }
 
-    @Test func hoverAloneTakesOnlyLinksThatLeaveTheSite() {
-        let hn = u("https://news.ycombinator.com/news")
-        #expect(LinkSummaryPolicy.autoHovers(link: u("https://www.blender.org/download/releases/5-3/"), page: hn))
-        for s in ["https://news.ycombinator.com/item?id=1", "https://news.ycombinator.com/hide?id=1",
-                  "https://news.ycombinator.com/login?goto=news", "https://news.ycombinator.com/user?id=pg"] {
-            #expect(!LinkSummaryPolicy.autoHovers(link: u(s), page: hn), "\(s)")
-        }
-
-        let x = u("https://x.com/home")
-        #expect(LinkSummaryPolicy.autoHovers(link: u("https://t.co/abc123"), page: x))
-        #expect(!LinkSummaryPolicy.autoHovers(link: u("https://x.com/someone"), page: x))
-        #expect(!LinkSummaryPolicy.autoHovers(link: u("https://twitter.com/someone"), page: x))
-
-        let google = u("https://www.google.com/search?q=cra+browser")
-        #expect(LinkSummaryPolicy.autoHovers(link: u("https://crabrowser.app/"), page: google))
-        #expect(LinkSummaryPolicy.autoHovers(link: u("https://www.youtube.com/watch?v=1"), page: google))
-        // Ads, Google's own pages and its other country sites.
-        for s in ["https://www.googleadservices.com/pagead/aclk?sa=L", "https://ad.doubleclick.net/x",
-                  "https://www.google.com/search?q=next", "https://maps.google.com/", "https://accounts.google.com/",
-                  "https://www.google.de/search?q=x"] {
-            #expect(!LinkSummaryPolicy.autoHovers(link: u(s), page: google), "\(s)")
-        }
-
-        // Anywhere else, a hover alone does nothing.
-        #expect(!LinkSummaryPolicy.autoHovers(link: u("https://example.org/"), page: u("https://github.com/")))
-        #expect(!LinkSummaryPolicy.autoHovers(link: u("https://example.org/"), page: nil))
+    @Test func arcsSelectorsPickTheLinksPerSite() {
+        #expect(LinkSummaryPolicy.selectors(for: .hackerNews) == [".title .titleline > a"])
+        #expect(LinkSummaryPolicy.selectors(for: .x).count == 3)
+        #expect(LinkSummaryPolicy.selectors(for: .google).first == "#search a")
+        #expect(!LinkSummaryPolicy.selectors(for: .google).contains { $0.contains("rhs") })
+        let script = LinkSummaryPolicy.hoverScript(pointer: CGPoint(x: 0.25, y: 0.5), site: .hackerNews)
+        #expect(script.contains(#"[".title .titleline > a"]"#))
+        #expect(script.contains("elementFromPoint(0.25 * vv.width"))
+        #expect(LinkSummaryPolicy.hoverScript(pointer: .zero, site: nil).contains("const arc = [].some"))
     }
 
-    @Test func shiftPreviewsAnyLink() {
-        let page = u("https://en.wikipedia.org/wiki/Earth")
-        let link = u("https://example.org/")
-        #expect(!LinkSummaryPolicy.shouldTrigger(link: link, page: page, shiftHeld: false))
-        #expect(LinkSummaryPolicy.shouldTrigger(link: link, page: page, shiftHeld: true))
-        #expect(LinkSummaryPolicy.shouldTrigger(link: u("https://www.blender.org/"), page: u("https://news.ycombinator.com/"), shiftHeld: false))
+    @Test func whichCardARestedHoverOpens() {
+        let hn = u("https://news.ycombinator.com/news")
+        let story = u("https://www.blender.org/")
+        let comments = u("https://news.ycombinator.com/item?id=1")
+        // A hover alone: only Arc's links on its sites.
+        #expect(LinkSummaryPolicy.kind(link: story, page: hn, shiftHeld: false, arcLink: true) == .summary)
+        #expect(LinkSummaryPolicy.kind(link: comments, page: hn, shiftHeld: false, arcLink: false) == nil)
+        #expect(LinkSummaryPolicy.kind(link: story, page: u("https://example.com/"), shiftHeld: false, arcLink: true) == nil)
+        // Shift held as the pointer arrived: the summary, or the small card within the site.
+        #expect(LinkSummaryPolicy.kind(link: comments, page: hn, shiftHeld: true, arcLink: false) == .link)
+        #expect(LinkSummaryPolicy.kind(link: u("https://www.iana.org/help/example-domains"), page: u("https://example.com/"),
+                                       shiftHeld: true, arcLink: false) == .summary)
+        #expect(LinkSummaryPolicy.kind(link: story, page: nil, shiftHeld: true, arcLink: false) == .summary)
+        #expect(LinkSummaryPolicy.mayOpen(page: hn, shiftHeld: false))
+        #expect(!LinkSummaryPolicy.mayOpen(page: u("https://example.com/"), shiftHeld: false))
+        #expect(LinkSummaryPolicy.mayOpen(page: u("https://example.com/"), shiftHeld: true))
+        #expect(LinkSummaryPolicy.rest == .seconds(1))
+    }
+
+    @Test func smallCardShowsTheAddressWithoutScheme() {
+        #expect(LinkSummaryPolicy.displayAddress(u("https://news.ycombinator.com/item?id=50422069")) == "news.ycombinator.com/item?id=50422069")
+        #expect(LinkSummaryPolicy.displayAddress(u("http://www.example.com/")) == "example.com")
+        #expect(LinkSummaryPolicy.displayAddress(u("https://example.com/a/")) == "example.com/a/")
     }
 
     // MARK: - Which links may be fetched
@@ -223,6 +222,39 @@ struct LinkSummaryTests {
         // A second screen to the left (negative x).
         let left = CGRect(x: -1920, y: 0, width: 1920, height: 1080)
         #expect(LinkSummaryCardLayout.origin(size: size, link: CGRect(x: -1925, y: 500, width: 50, height: 16), pointer: .zero, screen: left).x == -1912)
+    }
+
+    // MARK: - Share menu
+
+    @Test func copyAsTextIsArcsFormat() {
+        // Arc 1.171's Copy as Text for a Google result (10 Nov 2026), with Cra's attribution.
+        let r = LinkSummaryResult(url: "https://www.youtube.com/watch?v=0tR7dlqDu3E", title: "T", host: "youtube.com",
+                                  quickSummary: "Best paper airplane for distance.", details: [
+            .init(label: "Record Holder", icon: "trophy", info: "2026 world record for distance."),
+            .init(label: "Video Link", icon: "video", info: "Watch on YouTube for instructions."),
+            .init(label: "Technique", icon: "pencil", info: "Learn folding techniques for optimal flight."),
+            .init(label: "Materials", icon: "paperplane", info: "Use lightweight paper for best results."),
+        ])
+        #expect(LinkSummaryShare.text(r, attribution: "AI Summary by Cra") == """
+            Best paper airplane for distance.
+            🏆 Record Holder: 2026 world record for distance.
+            📹 Video Link: Watch on YouTube for instructions.
+            ✏️ Technique: Learn folding techniques for optimal flight.
+            ✈️ Materials: Use lightweight paper for best results.
+            AI Summary by Cra
+            https://www.youtube.com/watch?v=0tR7dlqDu3E
+            """)
+    }
+
+    @Test func symbolsBecomeEmoji() {
+        #expect(LinkSummaryShare.emoji(forSymbol: "trophy.fill") == "🏆")
+        #expect(LinkSummaryShare.emoji(forSymbol: "video.circle") == "📹")
+        #expect(LinkSummaryShare.emoji(forSymbol: "fork.knife") == "🍴")
+        #expect(LinkSummaryShare.emoji(forSymbol: "Fork.Knife.Circle") == "🍴")
+        #expect(LinkSummaryShare.emoji(forSymbol: "person.2.fill") == "👥")
+        #expect(LinkSummaryShare.emoji(forSymbol: "building.2") == "🏢")
+        #expect(LinkSummaryShare.emoji(forSymbol: "no.such.symbol") == "•")
+        #expect(LinkSummaryShare.emoji(forSymbol: "") == "•")
     }
 
     // MARK: - Cache

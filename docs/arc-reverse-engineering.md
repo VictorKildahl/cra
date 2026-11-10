@@ -3559,40 +3559,51 @@ Arc Max's renameDownloads: a finished download is renamed on disk and a card abo
   pointer is on it, then for what was left of its 8 s but at least 3 s. On a dark space the label and the old name are #929BFF, not
   Arc's #343BD1, which reads at 2.6:1 on the card (PR #197, Quinn Battersby; Victor, 5 Nov 2026).
 
-## 5-Second Previews (Arc 1.171, 10 Nov 2026, Arc's binary + Victor's Arc on a Hacker News story, 2x, 60 fps recording)
+## 5-Second Previews (Arc 1.171, 10 Nov 2026, Arc's binary + Victor's Arc: Hacker News, Google, example.com; 2x, 60 fps)
 
 Arc Max's 5-Second Previews are hover cards inside Arc: the HoverCards module (HoverCardsController,
 HoverCardWindow, HoverCardViewModel), pref `hoverCardsEnabled` (1 in Victor's Arc), remote flags
-`hoverCardsLLMDelayInterval` and `hoverCardsShareEnabled`.
+`hoverCardsLLMDelayInterval` and `hoverCardsShareEnabled`. Arc's server still answered.
 - [B] Settings text: "Instant summaries appear when you hover over links on [certain websites.](…) Or hold Shift
   while hovering to preview any link."
-- [B] Sites (`HoverCardsSupportedDomain`): google.com, x.com / twitter.com, news.ycombinator.com. Not DuckDuckGo,
-  Bing or Threads. Only some links: `.title .titleline > a` (HN story titles), `[data-testid=tweetText] a[role=link][target=_blank]`,
-  `[data-testid='card.wrapper'] a[role=link]`, `a[role=link][rel='nofollow noreferrer'][target=_blank]` (X), and
-  `g-section-with-header a [role=heading]` (Google results). Cra sees only the hovered URL, so it takes the links on
-  those sites that leave the site and aren't ads (LinkSummaryPolicy.autoHovers).
+- [B] Sites (`HoverCardsSupportedDomain`): google.com, x.com / twitter.com, news.ycombinator.com, each with its links:
+  `.title .titleline > a` (HN story titles); `[data-testid=tweetText] a[role=link][target=_blank]`,
+  `[data-testid='card.wrapper'] a[role=link]`, `a[role=link][rel='nofollow noreferrer'][target=_blank]` (X);
+  `g-section-with-header a [role=heading]`, and `#search a`, `#tvcap a`, `#topstuff a`, `#botstuff a` (Google).
+- [O] Which hovers: an HN story title and a Google organic result open a card; HN's "comments" link and a Google
+  side-panel link don't; a link on example.com doesn't. Shift must be held as the pointer reaches the link
+  (pressing it while on a link does nothing). With Shift, example.com's iana.org link got the answer card, and HN's
+  "comments" link (same site) got the small card: the page's title in bold and its address without the scheme.
 - [B] Prompt (HoverCardViewModel.loadSummary): "As a concise and helpful summarizer, create a glanceable "answer card"
   containing the most important information from the webpage. Capture the tone, perspective and POV of the writer."
   JSON `Response {blocked, quickSummary? (3-8 words), details: Detail[] (2-4)}`, `Detail {label ("Price:", "Story:", …),
   icon (an SF Symbol name), info (5-10 words)}`, the page between `<webpage>` tags, the user's Google search as
-  `userQuestion`, "Write responses … in <language>". `blocked` shows "No preview available". The card's footer string
-  is "AI Summary by Arc Browser".
-- [O] Timing: the first card came 4.1 s after the pointer came to rest on the link (Arc loads the page for its picture
-  first), grew in from the link over 0.27 s with the banner and grey placeholder rows, and the answer streamed into
-  the rows until 6.9 s.
-- [O] Card: 300 × 335 pt, 12 pt corners. The page's picture (og:image) fills a 100 pt banner. Under it, the quick
-  summary in bold 13 pt white, 15 pt margins; then a row per detail: the model's SF Symbol in white at about 40 %,
-  the text at 39 pt, bold label + regular info, 13 pt on 18.5 pt lines, 6 pt between rows. A 32 pt dark share button,
-  its centre 24 pt from the right and 25 pt from the bottom. The fill is the space's dark tooltip tone at about 90 %
-  (#322c15 over Hacker News's page in a beige space; TooltipTones gives #302913), with the page faintly through it.
-  It hangs 6 pt under the link, 7 pt left of the link's start.
-- Cra (LinkSummaryPolicy, LinkSummaryPrompt, LinkSummaryCardLayout in CraCore; LinkSummaryService,
-  LinkSummaryPreview): the on-device model with Arc's prompt and schema (streamed); Chromium fetches the page in the
-  tab's profile only after a trigger (a 0.5 s rest on one of the links above, or Shift), never for hosts on the Mac
-  or the local network, upgraded to https with Always use secure connections, never in incognito spaces. Deviations:
-  a page without an og:image gets its title in place of the banner (Arc shows a snapshot of the page); the share
-  button shares the link, not a picture of the card; the rest before a hover alone fetches is Cra's (Arc's
-  `hoverCardsLLMDelayInterval` is remote). Settings ▸ Max ▸ 5-Second Previews, off by default like Arc Max.
+  `userQuestion`, "Write responses … in <language>". `blocked` shows "No preview available".
+- [O] Timing: a loading card 0.97–1.2 s after the pointer comes to rest (300 × 52 pt, two grey bars 7 pt thick and
+  15 pt apart); it grows down from its top edge from about a tenth of its height in 0.25 s, opaque from its second or
+  third frame. The answer streams in (rows fade in as they come, the card grows down) over the next 1–3 s. Leaving the
+  link closes it at once unless the pointer is on the card: it squashes toward its top edge to about a third, still
+  nearly opaque, and fades at the end, in 0.14 s. With no room under the link it hangs above it.
+- [O] Card: 300 pt wide, 12 pt corners. The page's picture (og:image) fills a 100 pt banner; a page without one gets no
+  banner. The quick summary in bold 13 pt white, 15 pt margins; a row per detail: the model's SF Symbol in white at
+  about 40 %, the text at 39 pt, bold label + regular info, 13 pt on 18.5 pt lines, 6 pt between rows. A 32 pt grey
+  share button with a faint rim, its centre 24 pt from the right and 25 pt from the bottom. The fill is the space's dark
+  tooltip tone at about 90 % (#322c15 over Hacker News's page in a beige space; TooltipTones gives #302913). It hangs
+  6 pt under the link, 7 pt left of the link's start. The small card: 300 × 86 pt, title on 16 pt lines, 10 pt above
+  the address.
+- [O] Share button: a dark menu at the click, Copy as Text (doc.on.doc), Copy as Image (photo.on.rectangle),
+  Share ▸ (the share services). Copy as Text puts plain text and flat RTFD on the pasteboard: the quick summary, a line
+  per detail led by an emoji for its symbol (trophy 🏆, video 📹, pencil ✏️, paperplane ✈️), "AI Summary by Arc Browser",
+  the link. Copy as Image is a 3x TIFF of the card in light: 304 pt wide, the picture at its own aspect inset 2 pt with
+  8 pt corners, #191B1F text, #BBBBBC symbols, a dashed #CFD0FB line (4 pt on, 6 off, a 3 pt gap first) and a 50 pt
+  #F6F6FF footer with the favicon and host left and "Arc Browser" bold right, both #9A9AB3.
+- Cra (LinkSummaryPolicy, LinkSummaryPrompt, LinkSummaryCardLayout, LinkSummaryShare in CraCore; LinkSummaryService,
+  LinkSummaryPreview, LinkSummaryShareImage): all of the above, on the Mac's Apple Intelligence model with Arc's
+  prompt and schema (streamed). The page script checks Arc's selectors on the hovered link. Chromium fetches the page in
+  the tab's profile only once a card opens, never for hosts on the Mac or the local network, upgraded to https with
+  Always use secure connections, never in incognito spaces. Differences that stay: "Cra" in place of Arc's name in
+  the copies; the emoji table is Cra's (Arc's isn't readable; it matches the four Arc produced); the model writes
+  its own answers. Settings ▸ Max ▸ 5-Second Previews, off by default like Arc Max.
 
 ## Little Arc over a full-screen app (Arc 1.171, 5 Nov 2026, issue #186, Victor's Arc + a test full-screen app)
 

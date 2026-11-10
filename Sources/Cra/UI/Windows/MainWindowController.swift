@@ -776,20 +776,26 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             let f = host.frame, m = NSEvent.mouseLocation
             return f.contains(m) ? CGPoint(x: (m.x - f.minX) / f.width, y: (f.maxY - m.y) / f.height) : nil
         }
+        let site = LinkSummaryPolicy.autoSite(page: page)
         LinkSummaryPreviewController.shared.linkHoverChanged(.init(
             link: url, page: page, window: window,
             profilePath: tabID.flatMap { store.profilePath(item: $0) } ?? store.profilePath(space: space),
             httpsOnly: store.settings.httpsOnly, theme: store.spaces[space]?.theme ?? focusedSpace.theme,
-            locate: { [weak rt] done in
-                // The link's frame from the page, as a Peek finds its link (PeekLayout.sourceScript).
+            shiftHeld: NSEvent.modifierFlags.contains(.shift),
+            favicon: app.favicons.image(for: url.absoluteString)
+                ?? FaviconKey.key(for: url.absoluteString).flatMap { app.favicons.image(forKey: FaviconKey.siteKey(of: $0)) },
+            inspect: { [weak rt] done in
+                // The link under the pointer, its frame, and whether it is one of Arc's (LinkSummaryPolicy.hoverScript).
                 guard let rt, let host = rt.hostWindow, host.isVisible, let pointer = pointerInPage(host) else { done(nil); return }
-                let params = (try? JSONSerialization.data(withJSONObject: ["expression": PeekLayout.sourceScript(pointer: pointer), "returnByValue": true]))
+                let params = (try? JSONSerialization.data(withJSONObject: [
+                    "expression": LinkSummaryPolicy.hoverScript(pointer: pointer, site: site), "returnByValue": true]))
                     .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
                 rt.browser.evaluate(inIsolatedWorld: PageScript.world, params: params) { [weak host] result, _ in
-                    let fraction = PeekSource.value(result).flatMap(PeekLayout.fraction(fromScript:))
+                    let value = PeekSource.value(result)
                     DispatchQueue.main.async {
-                        guard let host, let fraction else { done(nil); return }
-                        done(PeekLayout.source(fraction: fraction, in: host.frame))
+                        guard let host, let value else { done(nil); return }
+                        let rect = PeekLayout.fraction(fromScript: value).flatMap { PeekLayout.source(fraction: $0, in: host.frame) }
+                        done(.init(rect: rect, arcLink: value["arc"] as? Bool ?? false))
                     }
                 }
             }))
