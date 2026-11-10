@@ -1,0 +1,41 @@
+# promise: #308
+# A full-screen browser window is the system's to place (#308): a drag on its background, its
+# toolbar or the sidebar's top strip no longer moves it inside the Space, and it is movable again
+# once it leaves full screen. With the sidebar hidden, the lights are gone in a window (Arc) but
+# come back for full screen, so the title bar the pointer reveals at the top carries them, as in
+# Arc; leaving full screen hides them again.
+# It takes over a Space, so it runs only with CRA_SCENARIO_SCREEN=1 (CI).
+requires screen
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://open?url=${PAGE}?n=main
+wait 3
+cra://debug?windowState=windowed
+expect-log window state windowed: main0 fullscreen=0 .* lightsHidden=0 lights=1.0,1.0,1.0 movable=1 backgroundMovable=1
+
+cra://debug?fullscreen=1
+wait 3
+cra://debug?windowState=full
+expect-log window state full: main0 fullscreen=1 visible=1 onSpace=1 layout=1 .* lights=1.0,1.0,1.0 movable=0 backgroundMovable=0
+
+cra://action/toggleSidebar
+wait 2
+cra://debug?windowState=full-no-sidebar
+expect-log window state full-no-sidebar: main0 fullscreen=1 .* lightsHidden=1 lights=1.0,1.0,1.0 movable=0
+
+cra://debug?fullscreen=0
+wait 3
+cra://debug?windowState=windowed-no-sidebar
+expect-log window state windowed-no-sidebar: main0 fullscreen=0 .* lightsHidden=1 lights=hidden,hidden,hidden movable=1 backgroundMovable=1
+
+cra://debug?fullscreen=1
+wait 3
+cra://debug?windowState=full-from-hidden
+expect-log window state full-from-hidden: main0 fullscreen=1 .* lightsHidden=1 lights=1.0,1.0,1.0 movable=0 backgroundMovable=0
+
+cra://action/toggleSidebar
+wait 2
+cra://debug?fullscreen=0
+wait 3
+cra://debug?windowState=back
+expect-log window state back: main0 fullscreen=0 .* lightsHidden=0 lights=1.0,1.0,1.0 movable=1 backgroundMovable=1

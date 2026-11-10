@@ -198,6 +198,10 @@ built release app with a test profile. Note anything that fails in the release's
   minutes. No grey pane flashes and Stage Manager shows no window coming and going. After a
   minute pass, the GPU helper's footprint (`footprint -p <pid>`) still drops as the hidden tabs
   let go of their tiles (#195: 20 tabs, 386 → about 235 MB).
+- **#308:** in full screen, drag the toolbar, the sidebar's top strip and the page's margin by
+  hand. The window stays put. With the sidebar hidden, the pointer at the top of the screen
+  reveals the title bar with the traffic lights in it. The `fullscreen-window-chrome` scenario
+  checks the window's flags; only a hand drag shows that AppKit honours them.
 
 ## Not pinned yet
 

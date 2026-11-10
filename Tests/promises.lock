@@ -522,3 +522,4 @@
 #307   Packages/CraCore/Tests/CraCoreTests/TabSearchScopeTests.swift::commandBarTabsFollowTheSetting  316e28600e93
 #307   Packages/CraCore/Tests/CraCoreTests/TabSearchScopeTests.swift::currentSpaceOnlySettingDefaultsOffAndRoundTrips  8465a635dabd
 #307   Tests/Scenarios/command-bar-space-scope.scenario  0b4de914ffa4
+#308   Tests/Scenarios/fullscreen-window-chrome.scenario  387fa799cbb9

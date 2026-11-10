@@ -1183,8 +1183,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("little shown \(label): windows=\(littleWindows.count) space=\(space) profile=\(profile)")
                 return
             }
-            // windowState=<label>: each window's full screen, Space and traffic lights (#277). Lights are
-            // "hidden", or their alpha; "-" when a window has none.
+            // windowState=<label>: each window's full screen, Space, traffic lights (#277) and whether a
+            // drag can move it (#308). Lights are "hidden", or their alpha; "-" when a window has none.
             if let label = dict["windowState"] {
                 func lights(_ w: NSWindow) -> String {
                     [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].map { type in
@@ -1193,12 +1193,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     }.joined(separator: ",")
                 }
                 func flag(_ b: Bool) -> Int { b ? 1 : 0 }
+                // Where the close button sits in the bar that holds it: its frame and the bar's bounds.
+                func lightsPlace(_ w: NSWindow) -> String {
+                    guard let b = w.standardWindowButton(.closeButton), let bar = b.superview else { return "-" }
+                    let f = b.frame
+                    return String(format: "%.0f,%.0f,%.0fx%.0f/%.0fx%.0f/%@", f.minX, f.minY, f.width, f.height,
+                                  bar.bounds.width, bar.bounds.height, b.window.map { String(describing: type(of: $0)) } ?? "-")
+                }
                 for (i, m) in mainWindows.enumerated() {
                     guard let w = m.window else { continue }
                     CraLog.note("window state \(label): main\(i) fullscreen=\(flag(w.styleMask.contains(.fullScreen))) "
                         + "visible=\(flag(w.isVisible)) onSpace=\(flag(w.isOnActiveSpace)) "
                         + "layout=\(flag(m.shell.windowFullscreen)) sidebarUI=\(flag(m.sidebarUI.windowFullscreen)) "
-                        + "lightsHidden=\(flag((w as? CraWindow)?.trafficLightsHidden ?? false)) lights=\(lights(w))")
+                        + "lightsHidden=\(flag((w as? CraWindow)?.trafficLightsHidden ?? false)) lights=\(lights(w)) "
+                        + "movable=\(flag(w.isMovable)) backgroundMovable=\(flag(w.isMovableByWindowBackground)) "
+                        + "lightsIn=\(lightsPlace(w))")
                 }
                 for (i, l) in littleWindows.enumerated() where !l.isPeek {
                     guard let w = l.window else { continue }

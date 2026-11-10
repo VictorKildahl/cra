@@ -3913,10 +3913,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     // The sidebar header's toggle moves into the traffic lights' place while they are gone (Arc).
-    func windowWillEnterFullScreen(_ notification: Notification) { sidebarUI.windowFullscreen = true; shell.windowFullscreen = true }
+    func windowWillEnterFullScreen(_ notification: Notification) {
+        sidebarUI.windowFullscreen = true; shell.windowFullscreen = true
+        (window as? CraWindow)?.fullScreenChanged()
+    }
     func windowWillExitFullScreen(_ notification: Notification) { sidebarUI.windowFullscreen = false; shell.windowFullscreen = false }
-    func windowDidEnterFullScreen(_ notification: Notification) { shell.needsLayout = true }
+    func windowDidEnterFullScreen(_ notification: Notification) {
+        (window as? CraWindow)?.fullScreenChanged()
+        shell.needsLayout = true
+    }
     func windowDidExitFullScreen(_ notification: Notification) {
+        (window as? CraWindow)?.fullScreenChanged()
         // Left with the green button or ⌃⌘F while a video was fullscreen: the page leaves too.
         if let id = contentFullscreenTab { browsers.runtime(for: id)?.browser.exitFullscreen() }
         contentFullscreenTab = nil
@@ -4096,6 +4103,26 @@ final class CraWindow: NSWindow {
         (contentView as? ShellView)?.edgeToEdge == true ? 4 : CraMetrics.contentInset + 4
     }
 
+    /// Full screen is the system's to place (#308): no drag moves the window inside its Space,
+    /// whether AppKit's own (title bar, background) or one of ours (`performDrag` from the title
+    /// strip, the toolbar and the sidebar's top). Arc's full-screen window stays put the same way.
+    /// The flags the sidebar sets while the pointer is over a draggable row stay as they were and
+    /// apply again once the window leaves full screen.
+    override var isMovable: Bool {
+        get { super.isMovable && !styleMask.contains(.fullScreen) }
+        set { super.isMovable = newValue }
+    }
+
+    override var isMovableByWindowBackground: Bool {
+        get { super.isMovableByWindowBackground && !styleMask.contains(.fullScreen) }
+        set { super.isMovableByWindowBackground = newValue }
+    }
+
+    override func performDrag(with event: NSEvent) {
+        guard isMovable else { return }
+        super.performDrag(with: event)
+    }
+
     override func sendEvent(_ event: NSEvent) {
         if event.type == .leftMouseDown, !styleMask.contains(.fullScreen),
            let content = contentView, event.locationInWindow.y >= content.bounds.height - titleStripHeight,
@@ -4124,6 +4151,12 @@ final class CraWindow: NSWindow {
         didSet { if trafficLightsHidden != oldValue { updateTrafficLights(animated: isVisible) } }
     }
     private var appliedTrafficLightsHidden = false
+
+    /// Entering or leaving full screen changes whether the lights show (#308), so they are
+    /// recomputed then rather than waiting for a layout pass to reach `layoutIfNeeded`.
+    func fullScreenChanged() {
+        updateTrafficLights(animated: false)
+    }
 
     private func updateTrafficLights(animated: Bool) {
         let hide = trafficLightsHidden && !styleMask.contains(.fullScreen)
