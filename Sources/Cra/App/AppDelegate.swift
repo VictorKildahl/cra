@@ -1196,6 +1196,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let typed = dict["littleCommit"] { littleWindows.last?.debugCommit(typed); return }
             // littleMenu=<step>: the newest Little Window's "Open in" menu, see debugMenu (#331).
             if let step = dict["littleMenu"] { littleWindows.last?.debugMenu(step); return }
+            if let step = dict["littleBar"] { littleWindows.last?.debugBar(step); return }
             if let label = dict["littleShown"] {
                 var space = "-", profile = "-", shown = ""
                 if let w = littleWindows.last {

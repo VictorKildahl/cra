@@ -1,0 +1,32 @@
+# promise: #336
+# A Little Window with no page goes away with its command bar: when the bar loses focus or Esc closes
+# it, as Arc's card does (nothing is left to show). Before, only the bar closed and the empty window
+# stayed on screen. A window with a page keeps it.
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+pace 0.5
+
+# ⌥⌘N: an empty window with its bar open; the bar loses focus.
+cra://action/newLittleWindow
+cra://debug?littleShown=empty
+expect-log little shown empty: windows=1
+cra://debug?littleBar=blur
+wait 1
+cra://debug?littleShown=blurred
+expect-log little shown blurred: windows=0
+
+# Esc closes the bar of another empty window.
+cra://action/newLittleWindow
+cra://debug?littleBar=cancel
+wait 1
+cra://debug?littleShown=cancelled
+expect-log little shown cancelled: windows=0
+
+# A window with a page stays when its bar loses focus.
+cra://debug?externalURL=${PAGE}?e=336
+wait 2
+cra://debug?littleBar=open
+cra://debug?littleBar=blur
+wait 1
+cra://debug?littleShown=page
+expect-log little shown page: windows=1

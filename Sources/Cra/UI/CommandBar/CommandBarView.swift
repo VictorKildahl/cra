@@ -33,6 +33,8 @@ final class CommandBarView: NSView {
     private let divider = NSView()
     private var rows: [CommandBarRowView] = []
     private var syncQueued = false
+    /// The badge is the card's ✕ (#337).
+    private var showsClose = false
     private var attached = false
     /// The scope shown last, to bounce when Tab enters one or Backspace leaves it.
     private var shownScope: CommandBarScope?
@@ -59,7 +61,10 @@ final class CommandBarView: NSView {
         info.layer?.cornerRadius = 12
         info.imageScaling = .scaleNone
         info.contentTintColor = .secondaryLabelColor
-        info.onPress = { [weak controller] in controller?.showNotice() }
+        info.onPress = { [weak controller] in
+            guard let controller else { return }
+            if controller.cardStyle != nil { controller.cancel() } else { controller.showNotice() }
+        }
         notice.onSettings = { [weak controller] in controller?.openNoticeSettings() }
         notice.onDismiss = { [weak controller] in controller?.dismissNotice() }
         notice.onLearnMore = { [weak controller] in controller?.openNoticeLearnMore() }
@@ -139,10 +144,11 @@ final class CommandBarView: NSView {
         // Arc 1.172.1 live: a neutral dark panel, (48,48,48)–(51,50,50) over light pages; Cra's hudWindow
         // material under this tint (white ≈ 0.5 through 3 %) comes to ≈ (48,47,47).
         material.material = dark ? .hudWindow : .popover
-        tint.layer?.backgroundColor = (dark ? NSColor(srgbRed: 46 / 255, green: 45 / 255, blue: 45 / 255, alpha: 0.97) : NSColor.white.withAlphaComponent(0.94)).cgColor
+        material.isHidden = c.cardStyle != nil   // the card's veil lets the window's gradient through, not a blurred grey
+        tint.layer?.backgroundColor = (c.cardStyle?.tint ?? (dark ? NSColor(srgbRed: 46 / 255, green: 45 / 255, blue: 45 / 255, alpha: 0.97) : NSColor.white.withAlphaComponent(0.94))).cgColor
         // Arc 1.172.1 live: the badge is the space's backgroundExtra, its glyph (148,146,140) on a gold space.
         let tones = self.tones(dark: dark)
-        info.layer?.backgroundColor = Self.ink(tones.badge).cgColor
+        info.layer?.backgroundColor = (c.cardStyle != nil ? LittlePalette.cardClose : Self.ink(tones.badge)).cgColor
         info.contentTintColor = dark ? NSColor.white.withAlphaComponent(0.55) : NSColor.labelColor.withAlphaComponent(0.55)
         border.strokeColor = NSColor.labelColor.withAlphaComponent(dark ? 0.12 : 0.08).cgColor
         divider.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.08).cgColor
@@ -169,7 +175,13 @@ final class CommandBarView: NSView {
         hint.isHidden = offered == nil
         // Arc keeps the badge while typing ("alpha", "golf"); a site's "Search …  Tab" takes its place,
         // and so does the banner it opens (CraCore SearchSuggestionsNotice).
-        info.isHidden = !c.showsNoticeBadge
+        let card = c.cardStyle != nil
+        info.isHidden = !(card || c.showsNoticeBadge)
+        if card != showsClose {
+            showsClose = card
+            info.image = SidebarSymbols.image(card ? "xmark" : "info.circle", size: card ? 12 : 15, weight: .medium)
+            info.layer?.cornerRadius = card ? 7 : 12
+        }
         notice.isHidden = !c.showsNoticeBanner
         if !notice.isHidden { notice.apply(tones: tones) }
         keycap.isHidden = offered == nil
@@ -237,7 +249,8 @@ final class CommandBarView: NSView {
         material.frame = b
         tint.frame = b
         let top: CGFloat = attached ? 10 : 12
-        let path = Self.path(b, top: top, bottom: 12)
+        let radius = controller.cardStyle?.radius
+        let path = Self.path(b, top: radius ?? top, bottom: radius ?? 12)
         shape.frame = b
         shape.path = path
         border.frame = b

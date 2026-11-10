@@ -163,7 +163,7 @@ final class CommandTextField {
                 controller.commitInSplit()
                 return true
             case #selector(NSResponder.cancelOperation(_:)):
-                if controller.scope != nil { controller.cancelScope() } else { controller.close() }
+                if controller.scope != nil { controller.cancelScope() } else { controller.cancel() }
                 return true
             case #selector(NSResponder.insertTab(_:)) where controller.enterScope():
                 return true

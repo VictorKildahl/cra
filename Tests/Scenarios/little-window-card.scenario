@@ -1,0 +1,20 @@
+# promise: #337
+# ⌥⌘N with nothing to load opens Arc's compact card, not a full Little Window: 490 × 329 pt, 20 pt from
+# the right edge of the screen's visible frame and 20 pt below its top (Arc 1.172.1: x 1218, y 53 on a
+# 1728 × 1117 pt screen), with only the command bar in it. Picking a page grows the same window to the
+# Little Window's size with its top-right corner where it was (Arc: x 523 to 1708, y 53). Before, the
+# empty window opened at 1400 × 900 pt in the middle of the screen with a strip and a blank page.
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+pace 0.5
+
+cra://action/newLittleWindow
+cra://debug?littleBar=card
+expect-log little card: card=1 size=490x329 right=20 top=20
+
+cra://debug?littleBar=go:${PAGE}?e=337
+wait 2
+cra://debug?littleBar=card
+expect-log little card: card=0 size=\d+x\d+ right=20 top=20
+cra://debug?littleShown=grown
+expect-log little shown grown: windows=1 .* address=127\.0\.0\.1$

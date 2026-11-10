@@ -101,6 +101,15 @@ enum LittlePalette {
     /// From the capture attached to #330: strokes about #E93700, and a tile that reads #4B3B45 over the
     /// pill's #3A3A4B, which is that orange at about 10 %.
     static let insecure = NSColor(srgbRed: 233 / 255, green: 55 / 255, blue: 0, alpha: 1)
+    /// The empty window's card (#337; Arc 1.172.1, 10 Nov 2026, window captures at 2x): its body runs from
+    /// #0C0B1A at the top left to #1C0E20 at the bottom right, and the command bar over it is #14141C.
+    static let cardTop = NSColor(srgbRed: 0x0C / 255, green: 0x0B / 255, blue: 0x1A / 255, alpha: 1)
+    static let cardBottom = NSColor(srgbRed: 0x1C / 255, green: 0x0E / 255, blue: 0x20 / 255, alpha: 1)
+    /// The bar is a veil over the window's gradient, not a fill: a #181B1B at 50 % over the card's gradient
+    /// gives Arc's #13131B at the left to #15141C along the field row (fitted to the 2x captures).
+    static let cardBar = NSColor(srgbRed: 24 / 255, green: 27 / 255, blue: 27 / 255, alpha: 0.5)
+    /// The card's ✕ tile (#28262D, glyph about #9C9A9E).
+    static let cardClose = NSColor(srgbRed: 0x28 / 255, green: 0x26 / 255, blue: 0x2D / 255, alpha: 1)
     static let iconHover = Color(red: 65 / 255, green: 57 / 255, blue: 70 / 255)
     static let icon = Color(red: 110 / 255, green: 111 / 255, blue: 128 / 255)
     static let iconHot = Color(red: 170 / 255, green: 168 / 255, blue: 180 / 255)
@@ -191,6 +200,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// named, matching the page's profile, or the one picked in this window's command bar (#316),
     /// else the window used last's.
     private var target: LittleWindowTarget
+    /// Arc's card for an empty window (#337): 490 × 329 pt at the top right with only the command bar
+    /// in it, until a page is asked for and the window grows to `expandedSize`.
+    private(set) var isCard: Bool
+    private let expandedSize: NSSize
 
     var store: SidebarStore { app.store }
     var currentURL: String { browser?.currentURL ?? state.url }
@@ -217,7 +230,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             .flatMap { $0 == LittleMetrics.legacyDefaultSize ? nil : $0 }
             .map { NSSize(width: max(LittleMetrics.minSize.width, $0.width), height: max(LittleMetrics.minSize.height, $0.height)) }
             ?? LittleMetrics.defaultSize
-        let window = LittleWindow(contentRect: NSRect(origin: .zero, size: size),
+        expandedSize = size
+        isCard = parent == nil && url == ""
+        let window = LittleWindow(contentRect: NSRect(origin: .zero, size: isCard ? LittleCard.size : size),
                                   styleMask: parent != nil ? [.borderless]
                                       : [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView, .nonactivatingPanel],
                                   backing: .buffered, defer: false)
@@ -227,7 +242,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true
-        window.minSize = LittleMetrics.minSize
+        window.minSize = isCard ? LittleCard.size : LittleMetrics.minSize
         window.isReleasedWhenClosed = false
         window.tabbingMode = .disallowed
         window.title = "Little Window"
@@ -261,6 +276,11 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         shell.openButtonWidth = { [weak self] in self?.state.openButtonWidth ?? 160 }
         shell.profileChipWidth = { [weak self] in self?.state.profileChipWidth ?? 0 }
         shell.showsChevron = { [weak self] in self?.state.showsChevron ?? true }
+        if isCard {
+            shell.isCard = true
+            window.styleMask.remove(.resizable)
+            for t in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] { window.standardWindowButton(t)?.isHidden = true }
+        }
         if parent != nil {
             // A Peek is part of its window: no minimizing or zooming it on its own.
             window.isMovableByWindowBackground = false
@@ -291,6 +311,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         commandPanel.delegate = self
         commandBar.onCommit = { [weak self] s, typed, mode in self?.handleCommit(s, typed: typed, mode: mode) }
         commandBar.onClose = { [weak self] in self?.hideCommandPanel() }
+        commandBar.onCancel = { [weak self] in if self?.isCard == true { self?.closeWindow() } }
         commandBar.spaceName = { [weak self] id in self?.store.space(id)?.title ?? "" }
         commandBar.onNoticeSettings = { [weak self] in self?.app.showSettingsWindow(on: .advanced) }
         commandBar.onNoticeLearnMore = { [weak self] in self?.app.openInNormalWindow(MainWindowController.privacyPage) }
@@ -356,8 +377,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         // CEF hands the page window over at its own small frame: shown during a Peek's open it
         // flashed as a black block in the corner.
         // A Peek waiting on its tab shows it when it is back (unparkPeek).
-        if openingPeek || isParked { w.contentView?.isHidden = true }
-        w.ignoresMouseEvents = isParked
+        if openingPeek || isParked || isCard { w.contentView?.isHidden = true }   // the card shows no page until it grows
+        w.ignoresMouseEvents = isParked || isCard
         window.addChildWindow(w, ordered: .above)
         ChromiumChildFocus.attach(w)
         positionHostWindow(shell.convert(shell.page.frame, to: nil))
@@ -416,6 +437,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         let mouse = NSEvent.mouseLocation
         let screen = TestScreen.screen ?? NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main ?? NSScreen.screens[0]
         let vf = screen.visibleFrame
+        if isCard { window.setFrame(LittleCard.frame(in: vf), display: false); return }
         var frame = window.frame
         frame.size.width = min(frame.width, vf.width - 40)
         frame.size.height = min(frame.height, vf.height - 40)
@@ -435,6 +457,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         var start = NSRect(x: mouse.x - 24, y: mouse.y - 15, width: 48, height: 30)
         start.origin.x = min(max(final.minX, start.minX), final.maxX - start.width)
         start.origin.y = min(max(final.minY, start.minY), final.maxY - start.height)
+        if isCard { start = final }   // the card appears where it is
         // Content stays laid out at the full size (Arc clips it); a Chrome page
         // window would stick out of the growing frame, so it waits until the end.
         shell.frozenSize = final.size
@@ -749,7 +772,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         commandBar.spaceShown = isPeek ? nil : state.targetSpaceID
         commandBar.open(mode: hasPage ? .editURL : .newTab, prefill: prefill)
         commandBar.attached = false
-        commandBar.panelWidth = min(LittleMetrics.commandBarWidth, window.frame.width - 40)
+        commandBar.panelWidth = isCard ? window.frame.width : min(LittleMetrics.commandBarWidth, window.frame.width - 40)
+        commandBar.cardStyle = isCard ? CommandBarCardStyle(radius: (window as? LittleWindow)?.systemCornerRadius ?? LittleMetrics.cornerRadius, tint: LittlePalette.cardBar) : nil
+        commandPanel.hasShadow = !isCard
         positionCommandPanel()
         if commandPanel.parent == nil { window.addChildWindow(commandPanel, ordered: .above) }
         commandBarOpenedAt = Date()
@@ -773,13 +798,30 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         }
     }
 
-    /// Arc puts the bar's top a third of the way down the window.
+    /// Arc puts the bar's top a third of the way down the window; in the card it fills the window's
+    /// width from its top edge.
     private func positionCommandPanel() {
         guard let window else { return }
         let h = CommandBarView.height(forRows: commandBar.rowPlaces)
         let w = commandBar.panelWidth
         let wf = window.frame
-        commandPanel.setFrame(NSRect(x: wf.midX - w / 2, y: wf.maxY - wf.height / 3 - h, width: w, height: h), display: true)
+        let frame = isCard ? NSRect(x: wf.minX, y: wf.maxY - h, width: w, height: h)
+                           : NSRect(x: wf.midX - w / 2, y: wf.maxY - wf.height / 3 - h, width: w, height: h)
+        commandPanel.setFrame(frame, display: true)
+    }
+
+    /// Enter in the card: the same window becomes the Little Window in one frame, its top-right corner
+    /// where it was (Arc 1.172.1; #337).
+    private func growFromCard() {
+        guard isCard, let window else { return }
+        isCard = false
+        shell.isCard = false
+        window.styleMask.insert(.resizable)
+        window.minSize = LittleMetrics.minSize
+        for t in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] { window.standardWindowButton(t)?.isHidden = false }
+        let visible = (window.screen ?? NSScreen.main)?.visibleFrame ?? window.frame
+        window.setFrame(LittleCard.grown(from: window.frame, to: expandedSize, in: visible), display: true)
+        if let host = browser?.hostWindow { host.contentView?.isHidden = false; host.ignoresMouseEvents = isParked }
     }
 
     private func hideCommandPanel() {
@@ -796,6 +838,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     }
 
     private func handleCommit(_ s: Suggestion?, typed: String, mode: CommandBarMode) {
+        // A pick that loads nothing here (a tab, an action) leaves the card with nothing to show.
+        defer { if isCard, !commandBar.isOpen { closeWindow() } }
         let query = commandBar.query
         func open(_ url: String) {
             store.recordQuerySelection(query: query, url: url)
@@ -855,6 +899,31 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         if let row { handleCommit(row, typed: typed, mode: .newTab) }
     }
 
+    /// cra://debug?littleBar=<step>: open (the command bar over the page), blur (it loses focus, with
+    /// the grace over) or cancel (Esc), for the empty window that goes away with its bar (#336).
+    func debugBar(_ step: String) {
+        switch step {
+        case "open": openCommandBar()
+        case "blur":
+            commandBarOpenedAt = .distantPast
+            windowDidResignKey(Notification(name: NSWindow.didResignKeyNotification, object: commandPanel))
+        case "cancel": commandBar.cancel()
+        case "card": CraLog.note("little card: \(debugCard)")
+        case _ where step.hasPrefix("go:"):
+            commandBar.close()   // as Return does, before the pick
+            handleCommit(nil, typed: String(step.dropFirst(3)), mode: .newTab)
+        default: break
+        }
+    }
+
+    /// For cra://debug?littleBar=card (#337): whether this is the card, its size, and how far its top-right
+    /// corner is from its screen's visible frame's.
+    var debugCard: String {
+        guard let window else { return "card=-" }
+        let vf = (window.screen ?? NSScreen.main)?.visibleFrame ?? .zero, f = window.frame
+        return "card=\(isCard ? 1 : 0) size=\(Int(f.width))x\(Int(f.height)) right=\(Int(vf.maxX - f.maxX)) top=\(Int(vf.maxY - f.maxY))"
+    }
+
     /// cra://debug?littleMenu=<step>: drives the "Open in" menu (#331) and logs what it shows.
     /// open (as the ⌄ or ⇧⌘O), down<n> (↓ n times), type:<text> (the filter), close.
     func debugMenu(_ step: String) {
@@ -876,6 +945,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     }
 
     private func navigate(_ url: String) {
+        growFromCard()
         state.url = url
         browser?.loadURL(url)
         focusPage()
@@ -1249,7 +1319,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             }
             return
         }
-        commandBar.close()
+        if isCard { closeWindow() } else { commandBar.close() }   // the card is its bar (#336)
     }
 
     // MARK: CraBrowserDelegate
@@ -1469,15 +1539,31 @@ final class LittleShellView: NSView {
             needsLayout = true
         }
     }
-    private var barHeight: CGFloat { hidesBar ? 0 : (isPeek ? PeekLayout.barHeight : LittleMetrics.barHeight) }
+    private var barHeight: CGFloat { hidesBar || isCard ? 0 : (isPeek ? PeekLayout.barHeight : LittleMetrics.barHeight) }
     /// A page with no toolbar over it (an easel in Peek).
-    var hidesBar = false { didSet { toolbarHost.isHidden = hidesBar; needsLayout = true } }
+    var hidesBar = false { didSet { toolbarHost.isHidden = hidesBar || isCard; needsLayout = true } }
+    /// Arc's card for an empty window (#337): no strip and no page, the window's own gradient behind
+    /// the command bar.
+    var isCard = false {
+        didSet {
+            toolbarHost.isHidden = hidesBar || isCard
+            page.isHidden = isCard
+            cardGradient.isHidden = !isCard
+            needsLayout = true
+        }
+    }
+    private let cardGradient = CAGradientLayer()
     private var trackingArea: NSTrackingArea?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
         layer?.backgroundColor = LittlePalette.barNS.cgColor
+        cardGradient.colors = [LittlePalette.cardTop.cgColor, LittlePalette.cardBottom.cgColor]
+        cardGradient.startPoint = CGPoint(x: 0, y: 1)
+        cardGradient.endPoint = CGPoint(x: 1, y: 0)
+        cardGradient.isHidden = true
+        layer?.addSublayer(cardGradient)
         addSubview(toolbarHost)
         page.wantsLayer = true
         page.layer?.cornerCurve = .continuous
@@ -1520,7 +1606,7 @@ final class LittleShellView: NSView {
 
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
-        guard !isPeek else { return }
+        guard !isPeek, !isCard else { return }
         let p = convert(event.locationInWindow, from: nil)
         let inBar = p.y > bounds.height - LittleMetrics.barHeight
         onHover?(inBar ? hoverTarget(x: p.x, y: bounds.height - p.y) : .none)
@@ -1553,6 +1639,7 @@ final class LittleShellView: NSView {
 
     override func layout() {
         super.layout()
+        cardGradient.frame = bounds
         let size = frozenSize ?? bounds.size
         let b = NSRect(x: 0, y: bounds.height - size.height, width: size.width, height: size.height)
         let fullscreen = window?.styleMask.contains(.fullScreen) ?? false

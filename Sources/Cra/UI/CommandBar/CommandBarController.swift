@@ -2,6 +2,11 @@ import AppKit
 import Observation
 import SwiftUI
 
+struct CommandBarCardStyle {
+    var radius: CGFloat
+    var tint: NSColor
+}
+
 /// State + behaviour of the ⌘T / ⌘L bar. The panel and SwiftUI view read
 /// from here; MainWindowController owns commits.
 @MainActor
@@ -48,6 +53,11 @@ final class CommandBarController {
     /// Opens the row as a split pane beside the current tab; false when it can't go there.
     var onOpenInSplit: (Suggestion?, String) -> Bool = { _, _ in false }
     var onClose: () -> Void = {}
+    /// An empty Little Window's card (#337): the bar takes the window's corners and a darker fill, and a ✕
+    /// ends it, in place of the (i).
+    var cardStyle: CommandBarCardStyle?
+    /// Esc closed the bar without a pick: a host with nothing behind it can go with it (an empty Little Window, #336).
+    var onCancel: () -> Void = {}
     /// Arc's search-suggestions notice (CraCore SearchSuggestionsNotice, #314): the (i) at the field's end
     /// opens a banner in the bottom row's place for this ⌘T.
     private(set) var noticePressed = false
@@ -288,6 +298,11 @@ final class CommandBarController {
         let n = SearchSuggestionsNotice.rowsListed(r.items.count, maxRows: SuggestionEngine.maxRows, banner: showsNoticeBanner)
         if n < r.items.count { r.items.removeLast(r.items.count - n) }
         return r
+    }
+
+    func cancel() {
+        close()
+        onCancel()
     }
 
     func close() {

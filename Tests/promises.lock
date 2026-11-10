@@ -572,3 +572,5 @@
 #332   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::reopensInACornerWhenLeftHalfOffScreen  85f63a3542a2
 #332   Tests/Scenarios/pip-drop-corner.scenario  e5b8bd44d942
 #333   Tests/Scenarios/little-window-menu-actions.scenario  159077f207b0
+#336   Tests/Scenarios/little-window-empty-dismiss.scenario  2b3d62cb0b67
+#337   Tests/Scenarios/little-window-card.scenario  1e436b306d47
