@@ -9,6 +9,11 @@ public enum SpaceThemeVariants {
     /// to Auto stuck on one side. An imported Arc `single` stays on its side (ArcThemeImport, #171).
     public static func theme(key: [String], intensity: Double, noise: Double, appearance: String) -> SpaceTheme {
         var t: SpaceTheme
+        if key.isEmpty {
+            t = colourless(intensity: intensity, noise: noise, appearance: appearance)
+            t.key = key
+            return t
+        }
         switch appearance {
         case "light": t = light(key: key, intensity: intensity, noise: noise)
         case "dark": t = dark(key: key, intensity: intensity, noise: noise)
@@ -16,6 +21,21 @@ public enum SpaceThemeVariants {
         }
         t.key = key
         return t
+    }
+
+    /// Arc's colourless theme, what its editor saves with no colour on the pad ("Tap to pick a color
+    /// for this space", #300): the default space's two halves, base #C8CAFF / #FFE5E5 light and
+    /// #01021F / #1A001F dark, as ArcThemeImport draws them (pinned against Arc's own file by
+    /// `noColourIsArcsColourlessTheme`). Auto follows macOS; Light or Dark keeps that half. The
+    /// intensity slider still sets the light half's.
+    public static func colourless(intensity: Double, noise: Double, appearance: String) -> SpaceTheme {
+        let light = SpaceTheme(colors: ["#CDCDFC", "#FFE5E5"], intensity: intensity, noise: noise, appearance: "light", accent: "#C8CAFF")
+        let dark = SpaceTheme(colors: ["#2C273B", "#32263A"], intensity: 1, noise: noise, appearance: "dark", accent: "#010220")
+        switch appearance {
+        case "light": return light
+        case "dark": return dark
+        default: return SpaceTheme(light: light, dark: dark)
+        }
     }
 
     /// The half shown while macOS is light, from the pad's colours: the colours themselves (Arc

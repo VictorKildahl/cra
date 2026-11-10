@@ -4,7 +4,8 @@ import SwiftUI
 /// Arc 1.171's theme editor (SpaceStyleEditor), which Edit Theme Color… opens beside the
 /// sidebar and the Edit Space sheet shows inline. Measured from 2x captures of an offline Arc
 /// (1 Nov): a 355 × 503 pt card, the window behind it darkened by ~58%; a 340 pt dotted colour pad
-/// with Auto / Light / Dark on top and − / + (one to three colours) at the bottom; nine swatches
+/// with Auto / Light / Dark on top and − / + (none to three colours; none is Arc's colourless
+/// theme, SpaceThemeVariants.colourless) at the bottom; nine swatches
 /// between paging arrows, five pages of Arc's catalog colours (SpaceColorPresets); a wave slider
 /// for the intensity and a dotted dial for the grain. Every change goes to `onChange` at once (the
 /// caller previews it); nothing here writes. Like Arc's editor state it keeps the pad's colours,
@@ -192,8 +193,9 @@ private struct ColorPad: View {
                     AppearanceToggles(appearance: $pad.appearance).padding(.top, 24)
                     Spacer()
                     HStack(spacing: 16) {
-                        padButton("minus", enabled: pad.key.count > 1) { pad.key.removeLast() }
-                        padButton("plus", enabled: !pad.key.isEmpty && pad.key.count < 3) { addColor() }
+                        // − takes the last colour too: an empty pad is Arc's colourless theme (#300).
+                        padButton("minus", label: "Remove a color", enabled: SpaceColorWheel.canRemove(pad.key.count)) { pad.key.removeLast() }
+                        padButton("plus", label: "Add a color", enabled: SpaceColorWheel.canAdd(pad.key.count)) { addColor() }
                     }
                     .padding(.bottom, 20)
                 }
@@ -201,13 +203,14 @@ private struct ColorPad: View {
         }
     }
 
-    private func padButton(_ symbol: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+    private func padButton(_ symbol: String, label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol).font(.system(size: 15, weight: .medium)).frame(width: 24, height: 24)
                 .contentShape(Rectangle())
         }
         .buttonStyle(SpaceStyleButtonStyle(opacity: enabled ? 0.55 : 0.18, enabled: enabled))
         .disabled(!enabled)
+        .accessibilityLabel(label)
     }
 
     /// Handle `i` goes under the pointer; the others keep their place around it.

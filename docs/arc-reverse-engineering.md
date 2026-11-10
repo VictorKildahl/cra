@@ -3125,6 +3125,10 @@ properties {URL:…}`) on a local server that answers after 40 s; window capture
 - Cra deviates on purpose (Victor, 6 Nov 2026, #155): the editor's Auto always builds both halves, one colour too.
   Arc saves a swatch picked on Auto as a fixed `single`; Cra copied that in 0.1.30–0.1.32, and a space set to Auto
   stopped following macOS. Pinned by `everySwatchOnAutoFollowsMacOS` and the `auto-theme` scenario.
+- Cra (#300): the pad's − takes the last colour too, as Arc's does, and an empty pad saves that colourless theme
+  (`SpaceThemeVariants.colourless`: the imported halves of Arc's default, both on Auto, one on Light or Dark) with an
+  empty `key`, so the editor reopens on "Tap to pick a color for this space". Before, − stopped at one colour.
+  Pinned by `noColourIsArcsColourlessTheme` and `padButtons`.
 - [?] Not worked out: how Arc's editor maps a picked colour to its halves (the pad's `lightnessRange` and the bias
   value). Cra's halves are fitted to Arc's default theme only.
 

@@ -499,3 +499,6 @@
 #299   Packages/CraCore/Tests/CraCoreTests/UnpackedCopiesTests.swift::theCopyStopsLoadingInThatProfileOnly  7878314f97fd
 #299   Tests/ExtensionStoreMigrationTests.swift::unpackedCopiesStepAside  e9a30c4a0209
 #299   Tests/Scenarios/unpacked-extension-copy.scenario  59ab5b7e11a8
+#300   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::noColourIsArcsColourlessTheme  ee495dc0d003
+#300   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::padButtons  4e4cb24be35d
+#300   Tests/Scenarios/colourless-theme.scenario  44737220a5ce
