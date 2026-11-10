@@ -26,7 +26,9 @@ you can send. Code is welcome too, within the few rules below.
   Cra in your language, upvote the
   [localization idea](https://github.com/VictorKildahl/cra/discussions/240) instead of
   opening an issue or a PR.
-- **No account, no server, no telemetry.** Everything stays on the user's Mac.
+- **No account, and nothing shared without asking.** Everything stays on the user's Mac. The
+  one exception is opt-in: anonymous usage stats and crash reports, off until the user turns
+  them on ([docs/sharing.md](docs/sharing.md)). A feature doesn't add to what they send.
 - **Native first.** The app is AppKit and SwiftUI; web content is Chromium through CEF.
 
 For anything bigger than a bug fix, open an issue or a
@@ -47,8 +49,9 @@ new feature fits when:
 - **It looks like Arc could have shipped it.** It's built from Arc's own parts: its rows,
   pills, menus, spacing and motion. If it needs its own visual language, it probably doesn't
   fit.
-- **Nothing leaves the Mac.** No account, server, telemetry or cloud AI. On-device Apple
-  Intelligence is fine, and the feature stays hidden when it's off, like Tidy Tabs.
+- **Nothing leaves the Mac.** No account, server or cloud AI, and no new data in the opt-in
+  usage stats. On-device Apple Intelligence is fine, and the feature stays hidden when it's
+  off, like Tidy Tabs.
 - **It stays out of the way.** People who never use it don't see new settings, badges or
   prompts.
 - **One person can keep it working.** Cra has one maintainer and a UI that changes most

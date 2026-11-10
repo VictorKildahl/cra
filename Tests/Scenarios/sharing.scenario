@@ -1,0 +1,27 @@
+# Settings ▸ Privacy ▸ Data and onboarding's "Help improve Cra" row: with sharing on, the usage
+# report and a new crash report reach the endpoint (the fixture server stands in for
+# crabrowser.app); turned off, nothing goes out. The crash report is a made-up one in the
+# throwaway home, written after the last look (sharing.json). What each report holds is
+# CraCore's SharingTests.
+home
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "shareUsageStats": true, "crashReports": "send"}
+seed sharing.json {"crashesSeenUntil": "2001-01-01T00:00:00Z"}
+crash-report ${FIXTURES}/CrashReports/Cra-2026-11-10-120000.ips
+env CRA_SHARING_ENDPOINT=${ORIGIN}
+expect-log sharing: stats on, crash reports send
+cra://debug?sharing=stats
+wait 2
+expect-log sharing: usage stats sent
+cra://debug?sharing=crash
+wait 2
+expect-log sharing: 1 new crash reports, send
+expect-log sharing: crash report sent
+# The same crash report isn't sent twice.
+cra://debug?sharing=crash
+wait 1
+reject-log sharing: 2 new crash reports
+# Off, as the onboarding row unticked: nothing is sent.
+cra://debug?sharing=off
+cra://debug?sharing=stats
+wait 1
+expect-log sharing: usage stats off, nothing sent

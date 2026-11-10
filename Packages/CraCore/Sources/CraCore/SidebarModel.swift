@@ -670,6 +670,12 @@ public struct AppSettings: Codable, Equatable {
     /// Arc's per-profile Download location (#190), by DownloadLocation.key(profileID:). A profile
     /// that isn't here saves to the Downloads folder without asking.
     public var downloadLocations: [String: DownloadLocation] = [:]
+    /// Settings ▸ Privacy ▸ "Share anonymous usage stats" and onboarding's Privacy step (Dia's
+    /// "Help improve Dia" row): a daily UsageStats report. Off unless the user turns it on.
+    public var shareUsageStats: Bool = false
+    /// Settings ▸ Privacy ▸ Crash reports: after a crash Cra asks before sending the report
+    /// (CrashReports.reduce), sends it without asking, or never.
+    public var crashReports: CrashReportChoice = .ask
 
     public func downloadLocation(profileID: UUID?) -> DownloadLocation {
         downloadLocations[DownloadLocation.key(profileID: profileID)] ?? DownloadLocation()
@@ -896,6 +902,8 @@ extension AppSettings {
         tidyTabTitles = try c.decodeIfPresent(Bool.self, forKey: .tidyTabTitles) ?? false
         tidyDownloads = try c.decodeIfPresent(Bool.self, forKey: .tidyDownloads) ?? false
         downloadLocations = (try? c.decodeIfPresent([String: DownloadLocation].self, forKey: .downloadLocations)) ?? [:]
+        shareUsageStats = try c.decodeIfPresent(Bool.self, forKey: .shareUsageStats) ?? false
+        crashReports = (try? c.decodeIfPresent(CrashReportChoice.self, forKey: .crashReports)) ?? .ask
     }
 }
 

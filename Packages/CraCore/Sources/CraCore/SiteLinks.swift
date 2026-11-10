@@ -19,6 +19,8 @@ public enum SiteLinks {
         case helpMenu = "help-menu"
         /// "Learn more" on the site control center's protected-media card.
         case protectedMedia = "protected-media"
+        /// "Learn more" under onboarding's sharing row and in Settings ▸ Privacy.
+        case privacy
     }
 
     /// `url` with Cra's tag when it points at crabrowser.app; any other URL (GitHub, a typo)

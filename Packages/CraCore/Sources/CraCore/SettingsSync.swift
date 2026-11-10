@@ -106,10 +106,12 @@ public extension SidebarDocument {
 
 public extension AppSettings {
     /// The settings as written to the sync folder: what is the same on every Mac. Download
-    /// folders, the engine choice (a restart), the performance recorder and the one-time prompts
-    /// and migrations are each Mac's own.
+    /// folders, the engine choice (a restart), the performance recorder, what the Mac shares
+    /// (each Mac's own consent) and the one-time prompts and migrations are each Mac's own.
     func forSync() -> AppSettings {
         var s = self
+        s.shareUsageStats = false
+        s.crashReports = .ask
         s.downloadLocations = [:]
         s.hasSeenImportPrompt = false
         s.chromeEngine = AppSettings().chromeEngine
@@ -123,6 +125,8 @@ public extension AppSettings {
     /// Settings from another Mac, with this Mac's own fields kept.
     func applyingSynced(_ remote: AppSettings) -> AppSettings {
         var s = remote
+        s.shareUsageStats = shareUsageStats
+        s.crashReports = crashReports
         s.downloadLocations = downloadLocations
         s.hasSeenImportPrompt = hasSeenImportPrompt
         s.chromeEngine = chromeEngine

@@ -14,7 +14,9 @@ below passed, which failed, and how each was checked.
 - **One thing.** A PR that also refactors, renames or reformats around its change is split, or
   the extra part is dropped.
 - **In scope.** No cloud AI, no account, no server, no telemetry: nothing leaves the Mac
-  (CONTRIBUTING.md has the one exception, Tidy Tabs on Apple Intelligence). A feature bigger
+  (CONTRIBUTING.md has the exceptions: Tidy Tabs on Apple Intelligence, and the opt-in usage
+  stats and crash reports of docs/sharing.md, which a PR doesn't add fields to without the
+  privacy page changing with it). A feature bigger
   than a bug fix had an issue or a discussion first.
 - **Off-limits unless it's the point:** the release pipeline, signing, the CEF pin in
   `scripts/fetch-cef.sh`, `scripts/cef-patches`. A change that needs a new CEF patch is

@@ -122,8 +122,10 @@ Google Docs works. The [full list](https://crabrowser.app/shortcuts) is on the s
 
 ## Privacy and security
 
-Cra has no account and no server, and the app collects no analytics. Spaces, tabs and the
-archive are plain JSON in `~/Library/Application Support/Cra`. A built-in blocker stops
+Cra has no account, and it shares nothing about how you use it unless you turn that on:
+anonymous daily usage stats and crash reports, never the sites you visit
+([what they hold](docs/sharing.md)). Spaces, tabs and the archive are plain JSON in
+`~/Library/Application Support/Cra`. A built-in blocker stops
 requests to more than 22,000 ad and tracker domains.
 
 Pages run in Chromium's sandbox with site isolation, passwords and cookies are encrypted

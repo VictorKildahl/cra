@@ -123,6 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         composition.startPeriodicWork { [weak self] in self?.sleepIdleTabs() }
         composition.sync.keybindingsChanged = { [weak self] in self?.bindings.reloadOverrides() }
         composition.sync.start()
+        SharingService.shared.start(store: store, clock: composition.clock)
         observeSystemWake()
         logSidebarProblems()
         LiveFolderManager.shared.start(store: store)
@@ -1384,6 +1385,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // The sidebar as if Cra were in front (1) or behind (0), until the app's next activation change:
             // a background test copy is in either state depending on what it was sent.
             if let v = dict["appActive"] { main.sidebarUI.appActive = v == "1"; return }
+            // Settings ▸ Privacy sharing now, not in 30 s or tomorrow (only with CRA_SHARING_ENDPOINT
+            // in a test copy): stats sends the usage report, crash looks for new crash reports,
+            // off unticks onboarding's "Help improve Cra" row.
+            if let v = dict["sharing"] {
+                if v == "stats" { SharingService.shared.sendStatsIfDue(force: true) }
+                if v == "crash" { SharingService.shared.checkCrashReports() }
+                if v == "off" { store.settings.setSharesToImproveCra(false) }
+                return
+            }
             if let v = dict["banner"] { SoftwareUpdater.shared.debugUpdated(v == "none" ? nil : v); return }
             if let v = dict["bannerReady"] { SoftwareUpdater.shared.debugReady(v == "none" ? nil : v); return }
             if dict["switcher"] != nil { main.debugTabSwitcher(); return }

@@ -61,8 +61,11 @@ struct CoverStep: View {
     }
 }
 
-// MARK: - Privacy (Dia's DisclosureView, ad blocker half)
+// MARK: - Privacy (Dia's DisclosureView)
 
+/// Dia's two checkboxes: the ad blocker, and sharing to help improve the browser, with "Learn more
+/// about our commitment to privacy." under them. Cra's sharing row is unticked until the user
+/// ticks it, where Dia's is ticked.
 struct PrivacyStep: View {
     @Bindable var model: ImportFlowModel
     let c: ImportColors
@@ -70,12 +73,26 @@ struct PrivacyStep: View {
         ZStack(alignment: .topLeading) {
             TwoLineHeader(title: "Privacy in Cra,\nyou're in control",
                           subtitle: "Cra works fully signed out. Your spaces, tabs and archive are plain files on your Mac.", c: c)
-            SelectableRow(c: c, checked: model.blockAdsAndTrackers, toggle: { model.blockAdsAndTrackers.toggle() }) {
-                RowSymbol(name: "hand.raised.fill", c: c)
-                RowTitle(title: "Block third-party ads and trackers",
-                         caption: "You won't see them. And they won't see you.", c: c)
+            VStack(alignment: .leading, spacing: 8) {
+                SelectableRow(c: c, checked: model.blockAdsAndTrackers, toggle: { model.blockAdsAndTrackers.toggle() }) {
+                    RowSymbol(name: "hand.raised.fill", c: c)
+                    RowTitle(title: "Block third-party ads and trackers",
+                             caption: "You won't see them. And they won't see you.", c: c)
+                }
+                SelectableRow(c: c, checked: model.sharesToImproveCra, toggle: { model.sharesToImproveCra.toggle() }) {
+                    RowSymbol(name: "chart.bar.fill", c: c)
+                    RowTitle(title: "Help improve Cra by sharing usage stats",
+                             caption: "And crash reports. Never the sites you visit.", c: c)
+                }
+                Link(destination: URL(string: SiteLinks.tagged("https://crabrowser.app/privacy", from: .privacy))!) {
+                    (Text("Learn more").underline() + Text(" about what Cra shares and what it never does."))
+                        .font(.system(size: 12))
+                        .foregroundStyle(c.body)
+                }
+                .padding(.top, 4)
+                .padding(.leading, 2)
             }
-            .frame(width: ImportMetrics.columnWidth)
+            .frame(width: ImportMetrics.columnWidth, alignment: .leading)
             .offset(y: ImportMetrics.listTop)
             PrimaryButton(title: "Continue", c: c, enabled: true) { model.continueFromPrivacy() }
                 .offset(x: -1, y: ImportMetrics.buttonTop)

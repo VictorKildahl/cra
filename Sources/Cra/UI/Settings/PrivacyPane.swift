@@ -2,7 +2,8 @@ import SwiftUI
 
 /// Dia's Privacy pane: a "Content blocking" card of switch rows with coloured glyphs
 /// (Block ads / Block cookie banners / Block trackers) and a "Data" card. Cra ships one
-/// ad-and-tracker domain list, so it has one switch and no usage-data row; "Connections"
+/// ad-and-tracker domain list, so it has one switch. The Data card's usage-data row ("Share
+/// content data to help improve Dia") is Cra's usage stats, with crash reports under it; "Connections"
 /// is Chrome's "Always use secure connections". "Data" holds Arc's Clear Browsing Data (Arc keeps
 /// it in Settings ▸ Profiles and opens Chrome's Privacy and security page; Cra opens Chrome's
 /// Delete browsing data dialog itself, the step after). "Connections" also holds Chromium's
@@ -67,8 +68,41 @@ struct PrivacyPane: View {
                 } trailing: {
                     Button("Clear Browsing Data…") { actions.openURL(BrowsingDataClear.pageURL) }
                 }
+                SettingsCardDivider()
+                SettingsCardRow {
+                    HStack(spacing: 5.5) {
+                        SettingsGlyph(symbol: "chart.bar.fill", color: Color(nsColor: .systemBlue))
+                        Text("Share anonymous usage stats").font(.system(size: 13))
+                    }
+                } trailing: {
+                    Toggle("Share anonymous usage stats", isOn: $store.settings.shareUsageStats)
+                        .toggleStyle(.switch).labelsHidden()
+                }
+                SettingsCardDivider()
+                SettingsCardRow {
+                    HStack(spacing: 5.5) {
+                        SettingsGlyph(symbol: "exclamationmark.triangle.fill", color: Color(nsColor: .systemOrange))
+                        Text("Crash reports").font(.system(size: 13))
+                    }
+                } trailing: {
+                    Picker("Crash reports", selection: $store.settings.crashReports) {
+                        Text("Ask each time").tag(CrashReportChoice.ask)
+                        Text("Send automatically").tag(CrashReportChoice.send)
+                        Text("Never send").tag(CrashReportChoice.never)
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                }
             }
             SettingsFootnote("Delete history, cookies and cached files for the current space’s profile. History you delete also leaves the command bar.")
+            SettingsFootnote("Usage stats go out once a day: your Cra and macOS versions, the kind of Mac, rough counts of spaces, tabs and extensions, and which settings you changed. Never the sites you visit, what you search or anything on a page. Each report has a new random ID, so reports can’t be tied together or to you. Crash reports show what Cra was doing when it crashed, without your name, file paths or anything that identifies this Mac.")
+            HStack(spacing: 12) {
+                Button("Show What’s Sent") { SharingService.shared.showStats() }
+                Link("How Cra handles your data", destination: URL(string: SiteLinks.tagged("https://crabrowser.app/privacy", from: .privacy))!)
+                    .font(.system(size: 12))
+            }
+            .controlSize(.small)
+            .padding(.top, 6)
         }
     }
 

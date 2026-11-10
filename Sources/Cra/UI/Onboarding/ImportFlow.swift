@@ -196,6 +196,13 @@ final class ImportFlowModel {
         set { store.settings.blockAdsAndTrackers = newValue }
     }
 
+    /// Dia's disclosure step, its other checkbox ("Help improve Dia by sharing content data"):
+    /// usage stats and crash reports together, off until ticked (CraCore Sharing).
+    var sharesToImproveCra: Bool {
+        get { store.settings.sharesToImproveCra }
+        set { store.settings.setSharesToImproveCra(newValue) }
+    }
+
     func continueFromPrivacy() { go(.source) }
 
     /// Skipping the import on first launch still shows the rest of the onboarding.
