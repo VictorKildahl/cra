@@ -550,3 +550,6 @@
 #316   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::reopensOnTheDisplayItWasLeftOn  bcc683102ab9
 #316   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::unpluggedDisplayFallsBackToTheCorner  51c44c1dbb84
 #316   Tests/Scenarios/little-window-space-pick.scenario  052a6261ccd6
+#317   Packages/CraCore/Tests/CraCoreTests/SidebarSlidePageTests.swift::onceDrawnEverySampleCounts  52a6340f01e3
+#317   Packages/CraCore/Tests/CraCoreTests/SidebarSlidePageTests.swift::thePictureFromBeforeTheSlideIsNotMovement  84e7b8b52fd7
+#317   Tests/Scenarios/sidebar-slide.scenario  dd44e90d466a

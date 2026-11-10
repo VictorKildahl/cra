@@ -1179,7 +1179,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if views.contains(where: { $0.superview !== target }) {
             for v in views { target.addSubview(v) }
         }
-        let bounds = shell.paneCards.first { $0.webArea === target }?.frozenWebBounds ?? target.bounds
+        let bounds = shell.paneCards.first { $0.webArea === target }?.pageBounds ?? target.bounds
         EmbeddedPages.place(views, in: bounds)
         if embedFocusTab == id { focusEmbeddedPage(id) }
     }

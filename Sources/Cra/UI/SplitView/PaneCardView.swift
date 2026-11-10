@@ -59,7 +59,13 @@ final class PaneCardView: NSView {
     /// The no-tab stand-in: toolbar on the gradient, no card at all.
     var transparent = false { didSet { refreshBackground(); syncShadow() } }
     /// While a pane is being dragged open/closed its page keeps its last size.
-    var frozenWebBounds: NSRect?
+    var frozenWebBounds: NSRect? { didSet { if frozenWebBounds == nil { frozenPageInWindow = nil } } }
+    /// The page's final frame in the window while the sidebar slides. Cleared with `frozenWebBounds`.
+    var frozenPageInWindow: NSRect?
+    var pageBounds: NSRect {
+        if let f = frozenPageInWindow, window != nil { return webArea.convert(f, from: nil) }
+        return frozenWebBounds ?? webArea.bounds
+    }
     /// The page is on screen in another window: Arc keeps the tab selected here and shows a
     /// blurred snapshot of it (BlurredItemContent) until this window is used again.
     var elsewhereSnapshot: NSImage? {
@@ -203,8 +209,7 @@ final class PaneCardView: NSView {
         elsewhereView.frame = fill
         elsewhereView.layer?.cornerRadius = pageBackground.layer?.cornerRadius ?? 0
         elsewhereView.layer?.maskedCorners = pageBackground.layer?.maskedCorners ?? []
-        let wb = frozenWebBounds ?? webArea.bounds
-        EmbeddedPages.place(webArea.subviews, in: wb)
+        EmbeddedPages.place(webArea.subviews, in: pageBounds)
         ring.frame = b
     }
 
