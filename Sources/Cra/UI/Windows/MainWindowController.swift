@@ -594,6 +594,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if capturing != sidebarUI.capturingTabIDs { sidebarUI.capturingTabIDs = capturing }
         let audible = Set(app.mainWindows.flatMap { $0.browsers.runtimes.filter { $0.value.browser.isAudible }.keys })
         if audible != sidebarUI.audibleTabIDs { sidebarUI.audibleTabIDs = audible }
+        let soundPlaying = Set(app.mainWindows.flatMap { $0.browsers.runtimes.filter { $0.value.soundPlaying }.keys })
+        if soundPlaying != sidebarUI.soundPlayingTabIDs { sidebarUI.soundPlayingTabIDs = soundPlaying }
         let b = browsers.visibleRuntime?.browser
         let canGoBack = canNavigateBack(browsers.visibleTabID, b)
         if sidebarUI.canGoBack != canGoBack { sidebarUI.canGoBack = canGoBack }

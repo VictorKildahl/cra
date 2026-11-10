@@ -1120,6 +1120,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
+            // musicNotes=<label>: report visible note overlays and their offsets from tile centers.
+            if let label = dict["musicNotes"] {
+                var tiles: [FavoriteTileView] = [], notes: [MusicNotesView] = []
+                func collect(_ v: NSView) {
+                    if let t = v as? FavoriteTileView { tiles.append(t) }
+                    if let n = v as? MusicNotesView, !n.isHiddenOrHasHiddenAncestor { notes.append(n) }
+                    v.subviews.forEach(collect)
+                }
+                main.window?.contentView.map(collect)
+                func middle(_ v: NSView) -> NSPoint { v.convert(NSPoint(x: v.bounds.midX, y: v.bounds.midY), to: nil) }
+                let places = notes.map { n -> String in
+                    let at = middle(n)
+                    guard let tile = tiles.map(middle).min(by: { hypot($0.x - at.x, $0.y - at.y) < hypot($1.x - at.x, $1.y - at.y) }) else { return "no tile" }
+                    return String(format: "%.1f across, %.1f up", at.x - tile.x, at.y - tile.y)
+                }
+                NSLog("Cra music notes %@: %d%@", label, notes.count, places.isEmpty ? "" : " (" + places.joined(separator: "; ") + ")")
+                return
+            }
             if let size = dict["windowSize"]?.split(separator: "x").compactMap({ Double($0) }), size.count == 2, let w = main.window {
                 w.setFrame(NSRect(x: w.frame.minX, y: w.frame.maxY - size[1], width: size[0], height: size[1]), display: true)
                 return
