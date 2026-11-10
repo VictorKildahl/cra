@@ -28,7 +28,7 @@ extension Shortcut {
 
     /// Build a shortcut from a recorded key press (nil for bare letters without ⌘/⌃/⌥).
     static func from(event e: NSEvent) -> Shortcut? {
-        guard let chars = press(e)?.key else { return nil }
+        guard let chars = press(e)?.recordedKey else { return nil }
         let flags = e.modifierFlags.intersection([.command, .shift, .option, .control])
         let special = [tab, left, right, up, down].contains(chars) || (chars.unicodeScalars.first.map { $0.value >= 0xF704 && $0.value <= 0xF71F } ?? false)
         guard special || !flags.intersection([.command, .control, .option]).isEmpty else { return nil }

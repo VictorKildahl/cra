@@ -51,6 +51,13 @@ public struct KeyChord: Codable, Hashable {
             let lower = characters.lowercased()
             return KeyChord.unshift[lower] ?? lower
         }
+
+        public var recordedKey: String {
+            if Modifiers(rawValue: modifiers).contains(.shift), let digit = KeyChord.digitKeyCode[keyCode] {
+                return digit
+            }
+            return key
+        }
     }
 
     /// The digit row's virtual key codes (the same on ANSI and ISO keyboards).

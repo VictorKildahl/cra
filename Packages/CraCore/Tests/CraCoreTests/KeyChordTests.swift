@@ -139,6 +139,7 @@ struct KeyChordTests {
     func shiftedDigitsAreTheirDigit(chars: String, code: UInt16, digit: String) {
         let mods = KeyChord.Modifiers([.control, .shift]).rawValue
         let press = KeyChord.Press(characters: chars, keyCode: code, modifiers: mods)
+        #expect(press.recordedKey == digit)
         #expect(KeyChord(key: digit, modifiers: mods).match(press, typable: { _ in true }) == .position)
         let ctrl = KeyChord.Modifiers.control.rawValue
         #expect(KeyChord(key: digit, modifiers: ctrl).match(KeyChord.Press(characters: chars, keyCode: code, modifiers: ctrl),
