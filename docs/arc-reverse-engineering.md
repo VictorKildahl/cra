@@ -3953,3 +3953,39 @@ screen on a click.
   content clipped the body's edges). Chromium
   offers translation only with a Google API key (release builds' CRA_GOOGLE_API_KEY); dev builds show no button.
 
+## Page-top window dragging (Arc 1.172.2, build 90755, 10 Nov 2026, arm64 static analysis)
+
+- [O static] `WindowContentViewController` installs an `ARCUI.WindowContentGrabber` when
+  `contentWindowDraggingEnabled` changes to true; its delegate also decides whether grabbing is allowed.
+- [O static] The grabber's eligibility helper at `0x100b21f24` compares `NSCursor.current` with
+  `NSCursor.arrow` using NSObject equality, then combines that result with the delegate's permission.
+  Its `hitTest:` path at `0x100b21c54` and `mouseDragged:` path at `0x100b2210c` call this helper before
+  `performWindowDragWithEvent:`. Text, pointing-hand and resize cursors therefore fail this check.
+- [O static] Layout helper `0x100412cf4` makes the grabber's frame start at x = 0 with
+  width = content width minus 14 pt (`fmov d1, #-14` at `0x100412f68`). The frame stored at
+  layout offset `0xf0` is applied to `grabberView` by `setFrame:` at `0x100412988`.
+  The rightmost 14 pt therefore stay outside the grabber even with an arrow cursor, leaving the
+  vertical scrollbar to the page. Cra reserves the same strip through `PageTopDrag.trailingInset`.
+- [I] This path distinguishes page actions by their cursor, rather than by a list of DOM element tags.
+  An element that forces the ordinary arrow does not receive the same exclusion as a text or link cursor.
+- Cra: `WindowContentGrabber` lets the press reach the page immediately, checks the cursor again before
+  starting a system drag of the browser window, and leaves the window's native resize edge band free.
+  The existing 56 pt page band is still `PageTopDrag.band`; no new live Arc measurements were made here.
+
+- [O AppKit probe, 10 Nov 2026] On a 1000 × 700 pt titled, resizable full-size-content window,
+  `_resizeDirectionForMouseLocation:` reports a corner resize 8 pt inward from both the top and right
+  edges. A uniform 3 pt inset therefore misses part of the rounded corner's target.
+  [Chromium's frame-view handler](https://chromium.googlesource.com/chromium/src/+/master/components/remote_cocoa/app_shim/native_widget_mac_nswindow.mm)
+  checks this same AppKit method before moving the window (`-1` means no resize). Cra's
+  `WindowDragRegion` now uses that check in the owner window's coordinates, with the 3 pt inset
+  only as a fallback when the selector is unavailable.
+
+- [O Cra runtime, 10 Nov 2026] The remaining page-corner drag bypassed both the page grabber
+  and `CraWindow.performDrag`: `windowWillMove` arrived through AppKit's
+  `NSAppInstallWindowWillDragEventMonitor`. Changing movement flags during `sendEvent` did not stop it.
+  Chromium's original `BridgedContentView` excludes its bounds from server-side titlebar dragging through
+  [`_opaqueRectForWindowMoveWhenInTitlebar`](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/components/remote_cocoa/app_shim/bridged_content_view.mm).
+  Cra leaves that container behind when embedding the page, so `WindowContentGrabber` now preserves the exclusion.
+  A native AppKit drag-region query reproduces the unwanted corner region before attachment, excludes it with
+  the grabber attached, and restores it after detachment. The user confirmed the corner fix in CraDev.
+

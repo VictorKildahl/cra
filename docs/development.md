@@ -117,6 +117,9 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-folder-glyph.sh`: the standalone folder component's real AppKit layers and image
   pixels: emblems follow the front panel's perspective, keep their colors and proportions, and
   update at 1x/Retina. No CEF or visible window; coverage uses the same harness as `scripts/test.sh`.
+- `scripts/test-window-content-grabber.sh`: the page-top grabber on AppKit windows:
+  clicks reach the page immediately, non-arrow cursors keep the gesture, native resize edges and rounded corners stay free,
+  a child page's drag starts in its browser window's coordinates, and the page stays outside WindowServer's native drag region.
 - `scripts/test-music-notes.sh`: the production note sprites over fixed white and black backgrounds
   at 1x and 2x, checking light-theme contrast and the dark-theme tint without CEF or a visible window.
 - `scripts/test-live-folder-plugins.sh`: the real `CraPluginHost` (sandboxed JavaScriptCore) and

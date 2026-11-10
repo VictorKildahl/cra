@@ -21,8 +21,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var spaceEditor: NSWindow?
     private var importWindow: ImportWindowController?
     private var scrollMonitor: Any?
-    private var pageTopDragMonitor: Any?
-    private var replayingPageClick = false
     private var childClickMonitor: Any?
     private var middleClickMonitor: Any?
     private enum SwipeAxis { case undecided, horizontal, vertical }
@@ -252,7 +250,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
         installSwipeMonitor()
         installChildClickMonitor()
-        installPageTopDragMonitor()
         installFloatingSidebar()
         observeStore()
         refresh()
@@ -1038,7 +1035,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let visibleIDs = Set(browsers.visibleTabIDs)
         let focused = browsers.visibleRuntime?.hostWindow
         for (id, rt) in browsers.runtimes {
-            guard let w = rt.hostWindow else { continue }
+            guard let w = rt.hostWindow else {
+                if visibleIDs.contains(id) { updatePageTopGrabber(id, from: nil) }
+                continue
+            }
             // Chromium never learns that an ordered-out window is hidden (it checks for a hidden
             // NSView ancestor), so hidden tabs stayed "visible": background tabs autoplayed video
             // and ran at full speed. A hidden content view makes the tab hidden like Chrome's
@@ -1092,6 +1092,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             positionPageWindows(lastPaneFrames)
             w.contentView?.isHidden = false
             embedPage(id, from: w)
+            updatePageTopGrabber(id, from: w)
             // Ordering a window that is already showing is a window server round trip too.
             if !w.isVisible { w.orderFront(nil) }
             if focus, w === focused, EmbeddedPages.isEnabled, browsers.visibleDevToolsWindow == nil {
@@ -1110,6 +1111,22 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         } else {
             raiseOverlayPanels()
         }
+    }
+
+    private func updatePageTopGrabber(_ id: UUID, from host: NSWindow?) {
+        guard let window, let card = shell.card(for: id) else { return }
+        let grabber = card.pageTopGrabber
+        guard let page = EmbeddedPages.webContentsView(in: card.webArea)
+            ?? host?.contentView.flatMap(EmbeddedPages.webContentsView(in:)) else {
+            grabber.removeFromSuperview()
+            return
+        }
+        grabber.isEnabled = { [weak self] in
+            guard let self else { return false }
+            return !self.isTornDown && self.store.settings.pageTopWindowDrag
+                && !self.shell.panesShowBars && !self.shell.contentFullscreen
+        }
+        grabber.attach(to: page, owner: window)
     }
 
     /// Page windows drawing once, hidden, so their last frame lets go of an evicted page (#195).
@@ -1272,7 +1289,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let devTools = browsers.visibleDevToolsWindows
         let live = pageWindowsFollowLive || shell.devToolsFrontendDocked || !devTools.isEmpty
         for id in browsers.visibleTabIDs {
-            guard let w = browsers.runtime(for: id)?.hostWindow else { continue }
+            guard let w = browsers.runtime(for: id)?.hostWindow else {
+                updatePageTopGrabber(id, from: nil)
+                continue
+            }
             let body = frames[id] ?? focusRect
             let page = pageRect(forBody: body, tab: id)
             let target = window.convertToScreen(page)
@@ -1282,6 +1302,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             updatePageCorners(w, page: page, body: body)
             // A switch can show the page before its card exists; the card is laid out by now.
             embedPage(id, from: w)
+            updatePageTopGrabber(id, from: w)
             if shell.devToolsFrontendDocked, w.isVisible {
                 devToolsLog("page win \(w.windowNumber) '\(w.title)' tab \(id.uuidString.prefix(8)) visible=\(browsers.visibleTabIDs.contains(id)) body \(body) page \(page) style \(w.styleMask.rawValue) parent \(w.parent?.windowNumber ?? -1)")
             }
@@ -2332,61 +2353,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             self.middleClickClose(id)
             return nil
         }
-    }
-
-    /// Arc's "Allow window dragging from the top of webpages" (PageTopDrag): with no bar above the
-    /// page, a plain click in its top 56 pt waits. Moved past the slop, the window moves with the
-    /// pointer; let go first, the page gets the click as it was, from the press on.
-    private func installPageTopDragMonitor() {
-        pageTopDragMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
-            guard let self, !self.replayingPageClick, let window = self.window, let target = event.window,
-                  !window.styleMask.contains(.fullScreen), let depth = self.depthIntoPage(event, in: target, of: window) else { return event }
-            let modifiers = !event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty
-            guard PageTopDrag.holds(enabled: self.store.settings.pageTopWindowDrag,
-                                    barAbovePage: self.store.settings.showToolbar || self.shell.panesShowBars,
-                                    depthIntoPage: depth, clickCount: event.clickCount, modifiers: modifiers) else { return event }
-            self.trackPageTopPress(event, page: target, owner: window)
-            return nil
-        }
-    }
-
-    /// How far below the top of the page under it a press is, or nil when it isn't on a page:
-    /// a Chrome-style page's own child window, or a page view inside this window.
-    private func depthIntoPage(_ event: NSEvent, in target: NSWindow, of window: NSWindow) -> Double? {
-        if target.parent === window {
-            return CraCEFRuntime.isPageWindow(target) ? target.frame.height - event.locationInWindow.y : nil
-        }
-        guard target === window, let content = window.contentView,
-              var view = content.hitTest(content.convert(event.locationInWindow, from: nil)) else { return nil }
-        // Chromium's page view, reparented into the pane card (Chrome-style hosting): its
-        // WebContentsViewCocoa is the page's frame.
-        while NSStringFromClass(type(of: view)) != "WebContentsViewCocoa" {
-            guard let up = view.superview else { return nil }
-            view = up
-        }
-        return view.convert(view.bounds, to: nil).maxY - event.locationInWindow.y
-    }
-
-    private func trackPageTopPress(_ down: NSEvent, page: NSWindow, owner: NSWindow) {
-        let start = NSEvent.mouseLocation
-        var last = start, dragging = false
-        var up: NSEvent?
-        page.trackEvents(matching: [.leftMouseDragged, .leftMouseUp], timeout: NSEvent.foreverDuration, mode: .eventTracking) { event, stop in
-            guard let event else { stop.pointee = true; return }
-            if event.type == .leftMouseUp { up = event; stop.pointee = true; return }
-            let now = NSEvent.mouseLocation
-            if !dragging, PageTopDrag.isDrag(dx: now.x - start.x, dy: now.y - start.y) { dragging = true }
-            if dragging { owner.setFrameOrigin(NSPoint(x: owner.frame.minX + now.x - last.x, y: owner.frame.minY + now.y - last.y)) }
-            last = now
-        }
-        CraLog.note("page-top press: \(dragging ? "moved the window" : "a click for the page")")
-        guard !dragging else { return }
-        // A click after all: the page gets the press and the release, in its own window.
-        replayingPageClick = true
-        if !page.isKeyWindow, page.canBecomeKey { page.makeKey() }
-        page.sendEvent(down)
-        if let up { page.sendEvent(up) }
-        replayingPageClick = false
     }
 
     /// What the row's hover button does: close every picked tab when this is one of them;
@@ -4074,8 +4040,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             other.takePage(rt)
         }
         browsers.closeAll()
-        for monitor in [scrollMonitor, childClickMonitor, middleClickMonitor, pageTopDragMonitor].compactMap({ $0 }) { NSEvent.removeMonitor(monitor) }
-        pageTopDragMonitor = nil
+        for card in shell.paneCards { card.pageTopGrabber.removeFromSuperview() }
+        for monitor in [scrollMonitor, childClickMonitor, middleClickMonitor].compactMap({ $0 }) { NSEvent.removeMonitor(monitor) }
         scrollMonitor = nil
         childClickMonitor = nil
         middleClickMonitor = nil
@@ -4143,7 +4109,7 @@ final class CraWindow: NSWindow {
     }
 
     override func sendEvent(_ event: NSEvent) {
-        if event.type == .leftMouseDown, !styleMask.contains(.fullScreen),
+        if event.type == .leftMouseDown, WindowDragRegion.allows(event, in: self),
            let content = contentView, event.locationInWindow.y >= content.bounds.height - titleStripHeight,
            isTitleStrip(content.hitTest(content.convert(event.locationInWindow, from: nil))) {
             if event.clickCount == 2 { performTitleDoubleClickAction() } else { performDrag(with: event) }
@@ -4152,12 +4118,13 @@ final class CraWindow: NSWindow {
         super.sendEvent(event)
     }
 
-    /// False over the sidebar (its header handles its own clicks) and while the page
-    /// fills the window (no margin, no toolbar).
+    /// The sidebar, web content and native controls handle their own presses. Content
+    /// fullscreen also leaves no title strip to drag.
     private func isTitleStrip(_ view: NSView?) -> Bool {
         var v = view
         while let current = v {
-            if current is SidebarView { return false }
+            if current is SidebarView || current is NSControl || current is NSTextView
+                || NSStringFromClass(type(of: current)) == "WebContentsViewCocoa" { return false }
             if let shell = current as? ShellView, shell.contentFullscreen { return false }
             v = current.superview
         }
