@@ -1189,22 +1189,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
-            // littleShown=<label>: the newest Little Window's "Open in" space and page profile.
+            // littleShown=<label>: the newest Little Window's "Open in" space, page profile, and its address
+            // pill's padlock and text (#330).
             // littleCommit=<typed>: the newest Little Window's command bar commits its "Switch to"
             // row for what was typed, as ↩ on it does (#316).
             if let typed = dict["littleCommit"] { littleWindows.last?.debugCommit(typed); return }
             // littleMenu=<step>: the newest Little Window's "Open in" menu, see debugMenu (#331).
             if let step = dict["littleMenu"] { littleWindows.last?.debugMenu(step); return }
             if let label = dict["littleShown"] {
-                var space = "-", profile = "-"
+                var space = "-", profile = "-", shown = ""
                 if let w = littleWindows.last {
                     w.refreshTarget()   // as when it takes focus
                     let state: LittleWindowState = w.state
                     space = store.space(state.targetSpaceID)?.title ?? "-"
                     let named: BrowserProfile? = store.profile(state.profileID)
                     profile = named?.name ?? "Default"
+                    shown = " \(w.debugReadout)"
                 }
-                CraLog.note("little shown \(label): windows=\(littleWindows.count) space=\(space) profile=\(profile)")
+                CraLog.note("little shown \(label): windows=\(littleWindows.count) space=\(space) profile=\(profile)\(shown)")
                 return
             }
             // windowState=<label>: each window's full screen, Space, traffic lights (#277), whether a

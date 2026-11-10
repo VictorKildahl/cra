@@ -9,9 +9,11 @@ import SwiftUI
 /// space's Today list, moving the live browser into the main window.
 ///
 /// Geometry and colours were measured from Arc 1.168's Little Arc on 24 Oct
-/// 2026 (docs/arc-reverse-engineering.md, "Little Arc"): a 46pt navy strip with
+/// 2026 (docs/arc-reverse-engineering.md, "Little Arc"): a 46pt strip with
 /// muted traffic lights, one full-width search pill, and a split
 /// "Open in <Space> ⌘O | ⌄" button; the page fills the rest, inside the window's rim.
+/// Arc 1.172.1 (10 Nov 2026) changed the strip's colour, the pill's address and the "Open in"
+/// menu's sizes; those come from its captures (#329, #330, #331).
 @MainActor
 @Observable
 final class LittleWindowState {
@@ -38,6 +40,8 @@ final class LittleWindowState {
     var profileChipWidth: CGFloat = 0
     /// The button has its ⌄ only while there is another space to pick (Arc 1.172.1, #331).
     var showsChevron = true
+    /// The window waits for the page's first response: the address pill keeps its magnifier (#330).
+    var awaitsFirstResponse = false
 
     init(targetSpaceID: UUID) { self.targetSpaceID = targetSpaceID }
 }
@@ -82,9 +86,21 @@ enum LittleMetrics {
 /// Arc renders Little Arc with the default profile's dark palette whatever the
 /// focused space's theme is (observed with the light "Victor" space focused).
 enum LittlePalette {
-    static let bar = Color(red: 12 / 255, green: 9 / 255, blue: 28 / 255)
-    static let pill = Color(red: 37 / 255, green: 34 / 255, blue: 52 / 255)
-    static let pillHover = Color(red: 45 / 255, green: 46 / 255, blue: 62 / 255)
+    /// The strip, left to right: one gradient in every space (the same pixels after switching spaces).
+    /// Arc 1.172.1, 10 Nov 2026, window captures at 2x, pixels read along the strip's top edge of a
+    /// 1185 pt window: #242438 at the left end, #26243A, #292839 and #2C2439 between, #312339 at the
+    /// right. The values wobble by a few units rather than rise, so two stops stay within them; 1.168's
+    /// flat #0C091C is gone (#329).
+    static let stripLeft = NSColor(srgbRed: 0x24 / 255, green: 0x24 / 255, blue: 0x38 / 255, alpha: 1)
+    static let stripRight = NSColor(srgbRed: 0x31 / 255, green: 0x23 / 255, blue: 0x39 / 255, alpha: 1)
+    /// The address pill is a lighter wash over the strip (about #38394A on the left, #43394B on the
+    /// right, which is white at 9–10 %), so it follows the gradient. The hover is not measured.
+    static let pill = Color.white.opacity(0.09)
+    static let pillHover = Color.white.opacity(0.14)
+    /// The open padlock for an http page (Arc's `hasInsecureContext`): orange on a pale orange wash.
+    /// From the capture attached to #330: strokes about #E93700, and a tile that reads #4B3B45 over the
+    /// pill's #3A3A4B, which is that orange at about 10 %.
+    static let insecure = NSColor(srgbRed: 233 / 255, green: 55 / 255, blue: 0, alpha: 1)
     static let iconHover = Color(red: 65 / 255, green: 57 / 255, blue: 70 / 255)
     static let icon = Color(red: 110 / 255, green: 111 / 255, blue: 128 / 255)
     static let iconHot = Color(red: 170 / 255, green: 168 / 255, blue: 180 / 255)
@@ -109,7 +125,8 @@ enum LittlePalette {
     static let toast: ShinyToast.Colors = (NSColor(srgbRed: 41 / 255, green: 18 / 255, blue: 77 / 255, alpha: 1),
                                            NSColor(srgbRed: 33 / 255, green: 16 / 255, blue: 61 / 255, alpha: 1),
                                            NSColor(srgbRed: 33 / 255, green: 14 / 255, blue: 66 / 255, alpha: 1), .white)
-    static let barNS = NSColor(red: 12 / 255, green: 9 / 255, blue: 28 / 255, alpha: 1)
+    /// Behind the strip and around the page, where no gradient is drawn.
+    static let barNS = stripLeft
     static let buttonNS = NSColor(red: 5 / 255, green: 6 / 255, blue: 37 / 255, alpha: 1)
 
     /// The space name in "Open in Victor": the target theme's light foreground
@@ -827,6 +844,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     /// `cra://debug?littleCommit=<typed>`: the bar's "Switch to" row for `typed`, committed as ↩
     /// on it does; logs the rows found (#316).
+    /// For `cra://debug?littleShown`: the address pill's padlock and text (#330).
+    var debugReadout: String { (shell.toolbarHost as? LittleToolbarView)?.debugReadout ?? "" }
+
     func debugCommit(_ typed: String) {
         let shown = isPeek ? nil : state.targetSpaceID
         let rows = commandBar.engine.suggestions(for: typed, mode: .newTab, currentTabID: nil, spaceShown: shown).items
@@ -1267,6 +1287,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         } else {
             slowResponse.update(.hidden, navigation: 0, now: now)
         }
+        let waiting = slowResponse.waitingSince != nil
+        if state.awaitsFirstResponse != waiting { state.awaitsFirstResponse = waiting }
         slowResponseCheck?.cancel()
         slowResponseCheck = nil
         if let due = slowResponse.showsAt, due > now {
@@ -1551,14 +1573,17 @@ final class LittleShellView: NSView {
     }
 }
 
-/// Traffic lights at Arc's spots (x 17/39/61, centred on the strip), always in
-/// colour like the main window.
+/// Traffic lights at Arc's spots (x 17/39/61, centred on the strip), grey until the pointer is
+/// over them.
 /// A panel like Little Arc's, so it can open on another app's full-screen Space (#186), that
 /// otherwise acts as the window it was: main when titled, Escape left to the page and the app.
 final class LittleWindow: NSPanel {
-    /// Window buttons stay coloured while inactive (see CraWindow).
+    /// The traffic lights are grey until the pointer is over them (Arc 1.172.1, 10 Nov 2026: three grey
+    /// discs at rest, red ×, yellow − and green over the group, even with the window in front). Reporting
+    /// them inactive draws the grey; AppKit colours the group while the pointer is on it (#329). The
+    /// browser window keeps its lights coloured (see CraWindow).
     @objc(_hasActiveAppearanceForStandardWindowButton:)
-    func hasActiveAppearance(forStandardWindowButton type: UInt) -> Bool { true }
+    func hasActiveAppearance(forStandardWindowButton type: UInt) -> Bool { false }
     /// Arc's open animation: ~120 ms from a small rectangle to the full frame.
     override func animationResizeTime(_ newFrame: NSRect) -> TimeInterval { LittleMetrics.openDuration }
     /// A Peek is borderless (Arc's card has no title bar) but still takes the keyboard, unless it
@@ -1715,8 +1740,13 @@ final class LittleToolbarView: NSView {
     private let state: LittleWindowState
     private let actions: LittleWindowActions
     private let store: SidebarStore
+    private let gradient = CAGradientLayer()
     private let pill = NSView()
+    /// The magnifier, or the open padlock for a page that isn't served over https (#330).
     private let search = NSImageView()
+    private var isInsecure = false
+    /// For `cra://debug?littleShown`: the padlock and the pill's text.
+    var debugReadout: String { "padlock=\(isInsecure ? 1 : 0) address=\(urlLabel.stringValue)" }
     private let urlLabel = NSTextField.sidebarLabel(size: 13)
     private let puzzle = LittleIconView(symbol: "puzzlepiece.extension", size: 15)
     private let link = LittleIconView(symbol: "link", size: 14)
@@ -1738,14 +1768,19 @@ final class LittleToolbarView: NSView {
         self.store = store
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.backgroundColor = LittlePalette.barNS.cgColor
+        gradient.colors = [LittlePalette.stripLeft.cgColor, LittlePalette.stripRight.cgColor]
+        gradient.startPoint = CGPoint(x: 0, y: 0.5)
+        gradient.endPoint = CGPoint(x: 1, y: 0.5)
+        layer?.insertSublayer(gradient, at: 0)
         pill.wantsLayer = true
         pill.layer?.cornerRadius = 8
         pill.layer?.cornerCurve = .continuous
         addSubview(pill)
-        search.image = SidebarSymbols.image("magnifyingglass", size: 13, weight: .medium)
-        search.contentTintColor = NSColor(LittlePalette.icon)
+        search.wantsLayer = true
+        search.layer?.cornerRadius = 5
+        search.layer?.cornerCurve = .continuous
         search.imageScaling = .scaleNone
+        showSecurity(insecure: false)
         pill.addSubview(search)
         urlLabel.textColor = NSColor(LittlePalette.text)
         urlLabel.alignment = .center
@@ -1788,10 +1823,10 @@ final class LittleToolbarView: NSView {
     override var isFlipped: Bool { true }
 
     private func observe() {
-        let (url, hover, popupOpen, space, spaces, profile) = withObservationTracking {
+        let (url, hover, popupOpen, space, spaces, profile, waiting) = withObservationTracking {
             (state.url, state.hover, state.popupOpen, store.space(state.targetSpaceID) ?? store.focusedSpace, store.spaceOrder.count,
              // Arc's shouldShowProfileIndicators: only once there is a profile besides Default.
-             store.profiles.isEmpty ? nil : store.profile(state.profileID)?.name ?? "Default")
+             store.profiles.isEmpty ? nil : store.profile(state.profileID)?.name ?? "Default", state.awaitsFirstResponse)
         } onChange: { [weak self] in
             Task { @MainActor in self?.observe() }
         }
@@ -1799,7 +1834,10 @@ final class LittleToolbarView: NSView {
         if state.showsChevron != chevronShown { state.showsChevron = chevronShown }
         divider.isHidden = !chevronShown
         chevronPart.isHidden = !chevronShown
-        urlLabel.stringValue = url.isEmpty ? "" : SuggestionEngine.humanURL(url)
+        // Arc shows the host alone; a page without one (an internal page, a file) keeps its address.
+        urlLabel.stringValue = url.isEmpty ? "" : LittleAddress.host(of: url) ?? SuggestionEngine.humanURL(url)
+        // Arc keeps the magnifier while a first response is awaited.
+        showSecurity(insecure: !waiting && LittleAddress.isInsecure(url))
         pill.toolTip = url
         pill.layer?.backgroundColor = NSColor(hover == .pill ? LittlePalette.pillHover : LittlePalette.pill).cgColor
         puzzle.hovered = hover == .puzzle
@@ -1819,8 +1857,21 @@ final class LittleToolbarView: NSView {
         needsLayout = true
     }
 
+    /// The pill starts with a magnifier; a page that isn't served over https gets Arc's open padlock
+    /// instead, orange on a pale orange tile (#330).
+    private func showSecurity(insecure: Bool) {
+        isInsecure = insecure
+        search.layer?.backgroundColor = insecure ? LittlePalette.insecure.withAlphaComponent(0.10).cgColor : nil
+        search.image = SidebarSymbols.image(insecure ? "lock.open" : "magnifyingglass", size: 13, weight: .medium)
+        search.contentTintColor = insecure ? LittlePalette.insecure : NSColor(LittlePalette.icon)
+    }
+
     override func layout() {
         super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        gradient.frame = bounds
+        CATransaction.commit()
         let w = bounds.width, ch = LittleMetrics.controlHeight, y: CGFloat = 8
         // Open button: 10 + "Open in <space>" + 6 + ⌘O (5 + text + 5) + 8 | 1 | 29 (no ⌄ with one space).
         let tw = ceil(openLabel.attributedStringValue.size().width)
@@ -1839,7 +1890,8 @@ final class LittleToolbarView: NSView {
         // The pill fills the rest from x 83.
         let pillW = max(0, openButton.frame.minX - LittleMetrics.pillGap - LittleMetrics.pillLeft)
         pill.frame = NSRect(x: LittleMetrics.pillLeft, y: y, width: pillW, height: ch)
-        search.frame = NSRect(x: 0, y: 0, width: 34, height: ch)
+        // The padlock's tile sits 4 pt in from the pill's left and top, 22 pt square.
+        search.frame = isInsecure ? NSRect(x: 4, y: 4, width: 22, height: ch - 8) : NSRect(x: 0, y: 0, width: 34, height: ch)
         // The URL is centred over the whole pill, 80 pt clear of each end.
         link.frame = NSRect(x: pillW - 2 - 26, y: 2, width: 26, height: 26)
         puzzle.frame = NSRect(x: pillW - 2 - 26 - 5 - 26, y: 2, width: 26, height: 26)
