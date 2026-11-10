@@ -52,6 +52,23 @@ public extension AppSettings {
     }
 }
 
+/// The sidebar's "Help improve Cra" card (above the space dock, below the update banners): asks a
+/// Mac that never answered onboarding's row, such as one that updated from before 0.1.39, until it
+/// answers. Only the released app asks, since only it reports (Sharing.mayReport).
+public enum SharingPrompt {
+    public static func shows(_ settings: AppSettings, mayReport: Bool, onboarding: Bool) -> Bool {
+        mayReport && !onboarding && !settings.shareUsageStats && !settings.askedToShare
+    }
+}
+
+public extension AppSettings {
+    /// The card's Share row (true) or its ✕ (false). Usage stats only: crash reports keep asking.
+    mutating func answerSharingPrompt(share: Bool) {
+        if share { shareUsageStats = true }
+        askedToShare = true
+    }
+}
+
 // MARK: - Usage stats
 
 /// The daily report: one per UTC day, so a day's reports count that day's users per version. A
@@ -127,7 +144,7 @@ public struct UsageStats: Codable, Equatable, Sendable {
     public static let unreportedSettings: Set<String> = [
         "developerHosts", "disabledDefaultDeveloperHosts", "autoPictureInPictureSites", "linkRoutes", "mediaFolders", "mediaHidden",
         "downloadLocations", "hasSeenImportPrompt", "toolbarDefaultMigrated", "newTabButtonDefaultMigrated",
-        "autoArchiveDays", "shareUsageStats",
+        "autoArchiveDays", "shareUsageStats", "askedToShare",
     ]
 
     public static func changedSettings(_ settings: AppSettings) -> [String: String] {

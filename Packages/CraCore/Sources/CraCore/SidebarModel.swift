@@ -680,6 +680,9 @@ public struct AppSettings: Codable, Equatable {
     /// Settings ▸ Privacy ▸ Crash reports: after a crash Cra asks before sending the report
     /// (CrashReports.reduce), sends it without asking, or never.
     public var crashReports: CrashReportChoice = .ask
+    /// The sidebar's "Help improve Cra" card was answered (Share, its ✕) or onboarding's Privacy
+    /// step was passed: the card doesn't come back (SharingPrompt).
+    public var askedToShare: Bool = false
 
     public func downloadLocation(profileID: UUID?) -> DownloadLocation {
         downloadLocations[DownloadLocation.key(profileID: profileID)] ?? DownloadLocation()
@@ -923,6 +926,7 @@ extension AppSettings {
         downloadLocations = (try? c.decodeIfPresent([String: DownloadLocation].self, forKey: .downloadLocations)) ?? [:]
         shareUsageStats = try c.decodeIfPresent(Bool.self, forKey: .shareUsageStats) ?? false
         crashReports = (try? c.decodeIfPresent(CrashReportChoice.self, forKey: .crashReports)) ?? .ask
+        askedToShare = try c.decodeIfPresent(Bool.self, forKey: .askedToShare) ?? false
     }
 }
 

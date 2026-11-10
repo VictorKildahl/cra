@@ -21,6 +21,7 @@ final class UpdateBannerView: NSView {
     private enum Kind: Equatable {
         case ready(title: String, subtitle: String)
         case updated
+        case sharing
     }
 
     /// What the banner says, or nil when there is nothing to say.
@@ -31,6 +32,7 @@ final class UpdateBannerView: NSView {
         switch kind {
         case .ready?: return 8 + ReadyCard.height
         case .updated?: return 8 + UpdatedCard.height
+        case .sharing?: return 8 + SharingCard.height
         case nil: return 0
         }
     }
@@ -39,6 +41,10 @@ final class UpdateBannerView: NSView {
         let u = SoftwareUpdater.shared
         if let n = u.notice { return .ready(title: n.title, subtitle: n.subtitle) }
         if u.updatedTo != nil { return .updated }
+        if let app = NSApp.delegate as? AppDelegate,
+           SharingPrompt.shows(app.store.settings, mayReport: SharingService.shared.mayReport, onboarding: app.isOnboarding) {
+            return .sharing
+        }
         return nil
     }
 
@@ -72,8 +78,9 @@ final class UpdateBannerView: NSView {
         switch kind {
         case let .ready(title, subtitle): c = ReadyCard(title: title, subtitle: subtitle)
         case .updated: c = UpdatedCard()
+        case .sharing: c = SharingCard()
         }
-        c.onClose = { SoftwareUpdater.shared.dismissBanner() }
+        c.onClose = kind == .sharing ? { SharingCard.answer(share: false) } : { SoftwareUpdater.shared.dismissBanner() }
         addSubview(c)
         card = c
         refresh()
@@ -89,7 +96,7 @@ final class UpdateBannerView: NSView {
     override func layout() {
         super.layout()
         guard let card else { return }
-        let h = card is UpdatedCard ? UpdatedCard.height : ReadyCard.height
+        let h = card is UpdatedCard ? UpdatedCard.height : card is SharingCard ? SharingCard.height : ReadyCard.height
         card.frame = NSRect(x: 8, y: 8, width: max(0, bounds.width - 16), height: h)
     }
 
@@ -507,6 +514,70 @@ final class UpdatedCard: BannerCard {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if window != nil { sparkles.start() } else { sparkles.stop() }
+    }
+
+    override func mouseUp(with event: NSEvent) { _ = handleClose(event) }
+}
+
+// MARK: - Help improve Cra
+
+/// Asks a Mac that never answered onboarding's "Help improve Cra" row (one updated from before
+/// 0.1.39) to share usage stats, in the updated card's style: a title, a line on what it means,
+/// a row that turns stats on and one to the privacy page. Share or the ✕ answers it for good
+/// (SharingPrompt); it waits behind the update banners.
+@MainActor
+final class SharingCard: BannerCard {
+    static let height: CGFloat = 116
+    private let title = NSTextField.sidebarLabel(size: 14, weight: .medium)
+    private let subtitle = NSTextField.sidebarLabel(size: 11)
+    private let rows: [BannerRow]
+
+    /// The card's Share row (true) or ✕ (false); also cra://debug?sharing=card-share|card-close.
+    static func answer(share: Bool) {
+        guard let app = NSApp.delegate as? AppDelegate else { return }
+        app.store.settings.answerSharingPrompt(share: share)
+        CraLog.note("sharing: the sidebar card was answered, \(share ? "share" : "not now")")
+        if share { app.main.showToast("Thanks! Usage stats are on") }
+    }
+
+    init() {
+        rows = [BannerRow(symbol: "chart.bar", text: "Share usage stats") { SharingCard.answer(share: true) },
+                BannerRow(symbol: "lock", text: "What’s sent") {
+                    guard let app = NSApp.delegate as? AppDelegate else { return }
+                    app.store.createTab(url: SiteLinks.tagged("https://crabrowser.app/privacy", from: .sharingCard), select: true)
+                    app.main.showWindow(nil)
+                }]
+        super.init(frame: .zero)
+        title.stringValue = "Help improve Cra"
+        subtitle.stringValue = "Anonymous, never the sites you visit"
+        subtitle.lineBreakMode = .byTruncatingTail
+        close.image = SidebarSymbols.image("xmark", size: 12, weight: .regular)
+        addSubview(title)
+        addSubview(subtitle)
+        for r in rows { addSubview(r) }
+        addSubview(close, positioned: .above, relativeTo: nil)
+        CraLog.note("sharing: the sidebar card asks")
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func apply(_ p: BannerPalette) {
+        super.apply(p)
+        title.textColor = p.title
+        subtitle.textColor = p.secondary
+        for r in rows { r.apply(p) }
+    }
+
+    override func layout() {
+        super.layout()
+        let w = bounds.width
+        let tw = max(0, w - 12 - 34)
+        title.frame = NSRect(x: 12 - SidebarText.inset, y: 18.5 - 9, width: tw + 2 * SidebarText.inset, height: 18)
+        subtitle.frame = NSRect(x: 12 - SidebarText.inset, y: 29, width: tw + 2 * SidebarText.inset, height: 15)
+        close.frame = NSRect(x: w - 17 - 7, y: 19 - 7, width: 14, height: 14)
+        for (i, r) in rows.enumerated() {
+            r.frame = NSRect(x: 4, y: 63.4 + CGFloat(i) * 31.7 - 15, width: w - 8, height: 30)
+        }
     }
 
     override func mouseUp(with event: NSEvent) { _ = handleClose(event) }

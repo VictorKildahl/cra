@@ -12,8 +12,13 @@ here, in CraCore's `Sharing.swift` and on the privacy page together.
 - **Settings ▸ Privacy ▸ Data.** "Share anonymous usage stats" (`shareUsageStats`, off) and
   "Crash reports": Ask each time (the default), Send automatically, Never send (`crashReports`).
   "Show What’s Sent" opens the next usage report in TextEdit, byte for byte.
+- **The sidebar's "Help improve Cra" card**, above the space dock and behind the update banners,
+  for a Mac that never answered (one that updated from before 0.1.39 skipped onboarding).
+  "Share usage stats" turns on usage stats only (crash reports keep asking) and "What’s sent"
+  opens the privacy page. Share, the ✕, onboarding's Privacy step or turning stats on in
+  Settings answers it for good (`askedToShare`, `SharingPrompt`).
 
-Both settings are each Mac's own: settings sync neither sends nor applies them.
+Both settings, and the card's answer, are each Mac's own: settings sync neither sends nor applies them.
 
 ## Who sends
 

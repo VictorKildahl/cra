@@ -71,6 +71,40 @@ struct SharingTests {
         #expect(s.crashReports == .never)
     }
 
+    /// The sidebar's "Help improve Cra" card: on the released app, after onboarding, until the Mac
+    /// has answered. People who updated from before 0.1.39 never saw onboarding's row.
+    @Test func theSharingCardAsksUntilAnswered() throws {
+        var s = AppSettings()
+        #expect(SharingPrompt.shows(s, mayReport: true, onboarding: false))
+        #expect(!SharingPrompt.shows(s, mayReport: false, onboarding: false), "dev builds and test copies don't ask")
+        #expect(!SharingPrompt.shows(s, mayReport: true, onboarding: true), "onboarding asks itself")
+        s.shareUsageStats = true
+        #expect(!SharingPrompt.shows(s, mayReport: true, onboarding: false), "already sharing")
+        s = AppSettings()
+        s.askedToShare = true
+        #expect(!SharingPrompt.shows(s, mayReport: true, onboarding: false), "answered")
+        let old = try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8))
+        #expect(!old.askedToShare, "settings from before the card haven't answered it")
+    }
+
+    @Test func answeringTheCardIsFinal() {
+        var yes = AppSettings()
+        yes.answerSharingPrompt(share: true)
+        #expect(yes.shareUsageStats && yes.askedToShare)
+        #expect(yes.crashReports == .ask, "the card is about usage stats; crash reports still ask")
+        var no = AppSettings()
+        no.answerSharingPrompt(share: false)
+        #expect(!no.shareUsageStats && no.askedToShare)
+    }
+
+    @Test func eachMacAnswersTheCardItself() {
+        var mine = AppSettings()
+        mine.askedToShare = true
+        #expect(mine.forSync().askedToShare == false)
+        #expect(mine.applyingSynced(AppSettings()).askedToShare == true)
+        #expect(AppSettings().applyingSynced(mine).askedToShare == false)
+    }
+
     /// sharing.json loads as recorded, and a missing or empty one means nothing was sent yet.
     @Test func sharingFileLoadsAsRecorded() throws {
         let (loaded, recorded) = try ModelFixtureTests.load("sharing.json", as: SharingState.self)

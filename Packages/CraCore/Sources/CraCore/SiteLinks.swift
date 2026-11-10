@@ -23,6 +23,8 @@ public enum SiteLinks {
         case privacy
         /// "here" on the command bar's search-suggestions banner (#314).
         case commandBarNotice = "command-bar-notice"
+        /// "What’s sent" on the sidebar's "Help improve Cra" card.
+        case sharingCard = "sharing-card"
     }
 
     /// `url` with Cra's tag when it points at crabrowser.app; any other URL (GitHub, a typo)

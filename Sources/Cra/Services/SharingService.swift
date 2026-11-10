@@ -49,8 +49,10 @@ final class SharingService {
         // Turned on while Cra runs (onboarding's row, Settings ▸ Privacy): today's report now, not
         // in six hours. The first read is the launch value, which the check above covers.
         var launched = false
-        observeChanges(of: { [store] in store.settings.shareUsageStats }) { [weak self] on in
+        observeChanges(of: { [store] in store.settings.shareUsageStats }) { [weak self, weak store] on in
             defer { launched = true }
+            // On from anywhere (Settings too) answers the sidebar's card for good.
+            if on, store?.settings.askedToShare == false { store?.settings.askedToShare = true }
             if launched, on { self?.sendStatsIfDue() }
         }
     }

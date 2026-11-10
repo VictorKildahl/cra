@@ -203,7 +203,11 @@ final class ImportFlowModel {
         set { store.settings.setSharesToImproveCra(newValue) }
     }
 
-    func continueFromPrivacy() { go(.source) }
+    /// Ticked or not, the row was the question: the sidebar's sharing card doesn't ask again.
+    func continueFromPrivacy() {
+        store.settings.askedToShare = true
+        go(.source)
+    }
 
     /// Skipping the import on first launch still shows the rest of the onboarding.
     func skipImport() {

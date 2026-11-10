@@ -109,6 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // First launch: the default browser step and the import are the onboarding and
         // the browser window appears once they are done (Dia does the same).
         if needsOnboarding {
+            isOnboarding = true
             main.showImport(firstRun: true)
         } else {
             // The window in use last comes up in front.
@@ -199,6 +200,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// A fresh install runs Dia's onboarding (cover, default browser, privacy,
     /// import, pinned tabs, personalization, outro).
+    /// This launch shows the onboarding, until it ends: the sidebar's sharing card waits.
+    private(set) var isOnboarding = false
+
     var needsOnboarding: Bool {
         !store.settings.hasSeenImportPrompt && store.allTabs().count <= 2
     }
@@ -206,7 +210,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// End of the import flow. Onboarding counts as done only here, so quitting halfway
     /// shows it again on the next launch.
     func importFinished(_ outcome: ImportOutcome, firstRun: Bool) {
-        if firstRun { store.settings.hasSeenImportPrompt = true }
+        if firstRun {
+            isOnboarding = false
+            store.settings.hasSeenImportPrompt = true
+        }
         if let id = outcome.focusSpaceID { store.focusSpace(id) }
         // Chromium reads --load-extension only at start-up, and imported passwords
         // and cookies go into its databases before it starts (CredentialImport).
@@ -1398,6 +1405,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 if v == "stats" { SharingService.shared.sendStatsIfDue(force: true) }
                 if v == "crash" { SharingService.shared.checkCrashReports() }
                 if v == "on" { store.settings.setSharesToImproveCra(true) }
+                if v == "card-share" { SharingCard.answer(share: true) }
+                if v == "card-close" { SharingCard.answer(share: false) }
                 if v == "off" { store.settings.setSharesToImproveCra(false) }
                 return
             }
