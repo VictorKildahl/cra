@@ -19,6 +19,13 @@ public struct LiveFolderPluginPackage: Sendable {
         self.script = script
     }
 
+    /// Whether the package sits inside `root`, such as the app's built-in plugins folder. `root`
+    /// is resolved the way `directory` is, so an app run from a path under /private (App
+    /// Translocation, /private/tmp) still knows its own plugins.
+    public func isInside(_ root: URL) -> Bool {
+        directory.path.hasPrefix(root.resolvingSymlinksInPath().standardizedFileURL.path + "/")
+    }
+
     public func resource(_ path: String) throws -> URL {
         try Self.resource(path, under: directory)
     }

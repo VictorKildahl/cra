@@ -25,7 +25,7 @@ final class LiveFolderPluginStore {
     func isEnabled(_ id: String) -> Bool { !disabled.contains(id) }
 
     func isBundled(_ package: LiveFolderPluginPackage) -> Bool {
-        package.directory.path.hasPrefix(Bundle.main.resourceURL!.resolvingSymlinksInPath().path + "/")
+        package.isInside(Bundle.main.resourceURL!)
     }
 
     func setEnabled(_ enabled: Bool, id: String) async {
@@ -129,7 +129,7 @@ final class LiveFolderPluginStore {
         var loadedEntries: [String: Entry] = [:]
         for package in catalog.packages {
             do {
-                if !package.directory.path.hasPrefix(builtin.path + "/"),
+                if !package.isInside(builtin),
                    package.manifest.legacySource != nil || package.manifest.legacyCommand != nil {
                     throw LiveFolderPluginError.invalidManifest("Legacy migration metadata is reserved for bundled plugins")
                 }

@@ -20,6 +20,23 @@ struct LiveFolderPluginTests {
         #expect(catalog.packages.count == 1 && catalog.failures.count == 2)
     }
 
+    /// An app run from a path under /private (App Translocation from Downloads or the DMG,
+    /// /private/tmp) saw its own GitHub and GitLab plugins as installed ones and refused them:
+    /// the package path is resolved to /tmp/…, the bundle's path is not.
+    @Test func builtInPluginsStayBuiltInUnderASymlinkedPath() throws {
+        let root = URL(fileURLWithPath: "/private/tmp/cra-plugins-\(UUID().uuidString)/Resources/live-folder-plugins")
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent().deletingLastPathComponent()) }
+        let github = root.appendingPathComponent("github")
+        try FileManager.default.createDirectory(at: github, withIntermediateDirectories: true)
+        try Data(#"{"id":"cra.github","name":"GitHub","version":"1","apiVersion":1,"entry":"main.js","sessionOrigins":[]}"#.utf8)
+            .write(to: github.appendingPathComponent("manifest.json"))
+        try Data("return {};".utf8).write(to: github.appendingPathComponent("main.js"))
+        let package = try LiveFolderPluginPackage(directory: github)
+        #expect(package.isInside(root))
+        #expect(package.isInside(root.deletingLastPathComponent()))
+        #expect(!package.isInside(URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library")))
+    }
+
     @Test func pluginConfigurationRoundTripsWithSessionIsolation() throws {
         var folder = LiveFolderData()
         folder.plugin = LiveFolderPluginConfiguration(id: "custom.feed", settings: ["server": "https://example.test:8443/app"],
