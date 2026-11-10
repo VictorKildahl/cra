@@ -2149,8 +2149,11 @@ Library button's hover list (downloads) and its click (the archive) showed diffe
 - [O] reopening shows the page last used (left on Archived Tabs, reopened on Archived Tabs).
 - [O 60 fps] opening: the Library is in place within 2–3 frames, sliding in from a little to the left. Closing: it
   slides left and fades while the tab list fades back in, ~6 frames, the card edge easing from 417 to 347.
-- [U] Whether the list column keeps a fixed 304 pt or follows the sidebar width (both give 417 pt at 347); Cra adds
-  70 pt to the user's width. The open animation's exact curve.
+- [O live AX, Arc 1.172, 10 Nov 2026, #302] The Library is 417 pt whatever the tab sidebar's width: offline Arc
+  with `sidebarWidth` 200 and 450 in StorableWindows.json, Library opened by AXPress on the sidebar's Home
+  button; both read sidebar group 417, search field x 164 w 235, list scroll area x 124 w 281. So at 450 the
+  Library is narrower than the tab list. Cra had added 70 pt to the user's width (`LibraryWidth` now).
+- [U] Whether Arc lets the Library's edge be dragged (not tried; Cra keeps it fixed). The open animation's exact curve.
 - Cra: `LibraryView` in the sidebar (Downloads and Archived Tabs; Cra has no Media, Easels, Spaces or Boosts pages),
   `SidebarUIState.libraryPage` per window, `MainWindowController.showLibrary/closeLibrary`. The Library button and
   ⇧⌘L toggle it on the last page, ⇧⌘J opens Downloads, "View Archive" opens Archived Tabs, Esc and the back arrow

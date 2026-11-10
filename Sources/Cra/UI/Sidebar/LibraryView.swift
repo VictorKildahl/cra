@@ -48,7 +48,7 @@ enum LibraryPage: String, CaseIterable {
 /// Arc's Library: not a window but a mode of the sidebar (WindowState+Library, HomeButton/*),
 /// so it never ends up behind the browser. Measured on Arc 1.170 (window captures + AX tree,
 /// 1728×1084 window, 27 Oct 2026):
-/// - The sidebar widens from 347 to 417 pt: a 113 pt rail (a faint white wash brightening
+/// - The sidebar becomes 417 pt whatever the tab sidebar's width (LibraryWidth): a 113 pt rail (a faint white wash brightening
 ///   toward its right edge, ending in a 1 pt hairline) and the page's list.
 /// - Rail buttons 97×80 at x 8, 100 pt apart, the group centred vertically: an 18 pt glyph
 ///   22 pt from the top, the 12 pt semibold label under it (white 60 %). The page shown gets
@@ -62,9 +62,7 @@ enum LibraryPage: String, CaseIterable {
 /// - Opening takes 2–3 frames (the Library slides in from a little to the left); closing slides
 ///   it left over ~0.1 s while the tab list fades back in.
 enum LibraryMetrics {
-    static let rail: CGFloat = 113
-    /// Arc's Library sidebar was 70 pt wider than the 347 pt tab sidebar.
-    static let extraWidth: CGFloat = 70
+    static let rail = CGFloat(LibraryWidth.rail)
 }
 
 /// The Library column: the page rail on the left, the page's search and list on the right.

@@ -1,0 +1,9 @@
+# The Library is Arc's 417 pt whatever the tab sidebar's width. With a 218 pt sidebar it was
+# 218 + 70 = 288 pt, leaving the list beside the 113 pt rail about 175 pt.
+# promise: #302
+budget rss=700 stalls50=10
+seed windows.json {"sidebarWidth": 218}
+cra://open?url=${PAGE}?n=one
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://action/viewDownloads
+expect-log library opens 417 pt wide beside a 218 pt tab sidebar

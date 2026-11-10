@@ -14,8 +14,6 @@ enum SpacesManagerMetrics {
     static let plus: CGFloat = 29
     static let plusGap: CGFloat = 34
     static let trail: CGFloat = 37.5
-    /// What the page keeps beside the Spaces page, whatever the window's width (Arc 1.171).
-    static let pageRoom: CGFloat = 56
 
     /// The Library's width on this page: Arc widens the sidebar to fit every card.
     static func width(spaces n: Int) -> CGFloat {
