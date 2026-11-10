@@ -290,4 +290,23 @@ struct SpaceThemeAppearanceTests {
         let lifted = SpaceThemeVariants.light(key: ["#0000F2"], intensity: 0.5, noise: 0)
         #expect(!lifted.isDark && close(lifted.colors.first, "#CCCCFF"))
     }
+
+    /// No colour on the pad (the pad's − took the last one) is Arc's colourless theme: on Auto the
+    /// purple light half and the dark half Arc's own default space has, following macOS, as Cra
+    /// imports them; Light or Dark keeps that one half. It is saved with an empty pad, so the editor
+    /// reopens on "Tap to pick a color for this space". Before, it drew a flat grey (#300).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/300"), arguments: ["auto", "light", "dark"])
+    func noColourIsArcsColourlessTheme(appearance: String) throws {
+        let arc = try #require(ArcThemeImportTests.theme("gradientAppearanceBasedDark"))
+        let theme = SpaceThemeVariants.theme(key: [], intensity: 0.5, noise: 0, appearance: appearance)
+        #expect(theme.key == [] && theme.appearance == appearance)
+        let saved = try JSONDecoder().decode(SpaceTheme.self, from: JSONEncoder().encode(theme))
+        #expect(saved == theme)
+        for systemDark in [false, true] {
+            let shownDark = appearance == "auto" ? systemDark : appearance == "dark"
+            var shown = saved.resolved(systemDark: systemDark)
+            shown.key = nil
+            #expect(shown == arc.resolved(systemDark: shownDark))
+        }
+    }
 }

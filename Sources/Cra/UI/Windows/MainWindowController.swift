@@ -2294,6 +2294,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         commandBar.close()
         shell.sidebarResizable = false
         let width = libraryWidth(page)
+        CraLog.note("library opens \(Int(width)) pt wide beside a \(Int(store.prefs.sidebarWidth)) pt tab sidebar")
         if sidebarVisible {
             shell.sidebarWidth = width
             shell.animateSidebar(visible: true, floating: false, fullscreen: shell.contentFullscreen, width: width)
@@ -2306,15 +2307,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         window?.makeKey()
     }
 
-    /// The sidebar's width with the Library in it: 70 pt wider for the rail, or on the Spaces page
-    /// wide enough for every space's card, leaving the page 56 pt (Arc 1.171; the cards scroll
-    /// sideways when they don't fit).
+    /// The sidebar's width with the Library in it: Arc's 417 pt whatever the tab sidebar's width
+    /// (#302), or on the Spaces page wide enough for every space's card (LibraryWidth).
     private func libraryWidth(_ page: LibraryPage) -> CGFloat {
-        let base = CGFloat(store.prefs.sidebarWidth) + LibraryMetrics.extraWidth
-        guard page == .spaces else { return base }
+        let windowWidth = Double(window?.frame.width ?? 1280)
+        guard page == .spaces else { return CGFloat(LibraryWidth.sidebar(window: windowWidth)) }
         let n = store.orderedSpaces.filter { !store.isIncognito(space: $0.id) }.count
-        let room = (window?.frame.width ?? 1280) - SpacesManagerMetrics.pageRoom
-        return max(base, min(SpacesManagerMetrics.width(spaces: n), room))
+        return CGFloat(LibraryWidth.sidebar(spacesCards: Double(SpacesManagerMetrics.width(spaces: n)), window: windowWidth))
     }
 
     func closeLibrary() {

@@ -9,6 +9,17 @@ struct TabsPane: View {
     var body: some View {
         @Bindable var store = store
         SettingsFormPane {
+            // #305: onboarding's "Choose where the address bar goes", which was only the
+            // "Show toolbar above the page" checkbox here. Arc keeps it in View ▸ Show Toolbar.
+            SettingsFormRow(label: "Address Bar:") {
+                Picker("Address bar placement", selection: $store.settings.addressBarPlacement) {
+                    ForEach(AddressBarPlacement.allCases, id: \.self) { Text($0.detail).tag($0) }
+                }
+                .pickerStyle(.radioGroup)
+                .labelsHidden()
+                Text("\(KeyBindingRegistry.shared.action("toggleToolbar")?.primary?.display ?? "⇧⌘D") in any window, or the View menu’s Show Toolbar, switches it too.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            }
             SettingsFormRow(label: "General:") {
                 SettingsCheckbox(title: "Add new tabs to the top", isOn: $store.settings.newTabsAtTop)
                 SettingsCheckbox(title: "Show the New Tab button above tabs", isOn: $store.settings.newTabButtonAtTop)
@@ -17,7 +28,6 @@ struct TabsPane: View {
                 // Arc: Settings ▸ General ▸ Previews (Gmail's unread mail on its favorite).
                 SettingsCheckbox(title: "Preview unread Gmail when hovering its favorite", isOn: $store.settings.favoritePreviews)
                 SettingsCheckbox(title: "Outline the open favorite in its logo’s colors", isOn: $store.settings.favoriteLogoOutline)
-                SettingsCheckbox(title: "Show toolbar above the page", isOn: $store.settings.showToolbar)
                 SettingsCheckbox(title: "Pages fill the window edge to edge", isOn: $store.settings.edgeToEdgeContent)
                 SettingsCheckbox(title: "Enable Picture in Picture when you leave a video tab", isOn: $store.settings.autoPictureInPicture)
             }
