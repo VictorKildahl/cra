@@ -189,11 +189,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         isPeek = parent != nil
         peekParent = parent
         peekSourceTab = parent == nil ? nil : fromTab
-        // Little Windows are normal browsing: they target the last normal window's space (a Peek:
-        // the space of the window it covers; a cra://open: the space it names; else the space
-        // picked in a Little Window this session, #316).
-        app.littleWindowSession.forget { app.store.space($0) != nil && !app.store.isIncognito(space: $0) }
-        target = parent == nil ? LittleWindowTarget(session: app.littleWindowSession, requested: space) : LittleWindowTarget()
+        // Little Windows are normal browsing: they target the last normal window's space
+        // (a Peek: the space of the window it covers; a cra://open: the space it names).
+        target = LittleWindowTarget(requested: parent == nil ? space : nil)
         state = LittleWindowState(targetSpaceID: parent?.focusedSpaceID
             ?? target.space(lastUsed: app.store.focusedSpaceID(window: app.store.lastNormalWindowID)))
         commandBar = CommandBarController(engine: app.engine, store: app.store)
@@ -804,12 +802,13 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             app.perform(id)
         case .switchSpace(let id):
             // Switching spaces in a Little Window switches its own "Open in", not the browser
-            // window's space, and the next Little Window opens on it (#316). A Peek's follows the
-            // window it covers, and an incognito space switches the window as before.
+            // window's space (#316); the next Little Window follows the window used last again.
+            // A Peek's follows the window it covers, and an incognito space switches the window
+            // as before.
             if isPeek || store.isIncognito(space: id) {
                 store.focusSpace(id)
             } else {
-                target.pick(id, session: &app.littleWindowSession)
+                target.pick(id)
             }
             refreshTarget()
         case .moveToSpace(let id):

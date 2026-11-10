@@ -1,7 +1,9 @@
 # promise: #316
 # A space picked in a Little Window stays its own (#316): "Switch to <space>" in its command bar
 # changes its "Open in", not the browser window's space, and the browser window's space no longer
-# moves it. The next Little Window of the session opens on the picked space, in its profile.
+# moves it. Only that window's: the next Little Window opens in the space in use again, so a link
+# from another app doesn't land in a space (and its sign-ins) picked earlier. Air Traffic Control
+# is where a Little Window's space is set for good (#258, little-window-route).
 # Before, the pick switched the browser window and "Open in" followed whatever it showed.
 # Personal is on Default, Random on the profile Hobbies (as in little-window-route).
 budget rss=700 stalls50=20
@@ -31,10 +33,10 @@ expect-log little shown back: windows=1 space=Personal profile=Default
 cra://debug?littleCommit=random
 expect-log little commit random: Switch to Random
 
-# The next Little Window opens on Random, in Hobbies' sign-ins.
+# The next Little Window opens in the space in use, with its sign-ins; the first keeps Random.
 cra://debug?externalURL=${PAGE}?n=second
 wait 2
 cra://debug?littleShown=second
-expect-log little shown second: windows=2 space=Random profile=Hobbies
+expect-log little shown second: windows=2 space=Personal profile=Default
 cra://debug?themeShown=second
 expect-log Cra theme shown second: space=Personal

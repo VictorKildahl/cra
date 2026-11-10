@@ -26,8 +26,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private lazy var extensionsMenu = ExtensionsMenu(app: self)
     /// Arc's Little Arc windows: small, sidebar-less, disposable (see LittleWindowController).
     private(set) var littleWindows: [LittleWindowController] = []
-    /// The space picked in a Little Window this session, where the next one opens (#316).
-    var littleWindowSession = LittleWindowSession()
     /// When each Little Window was last the key window, for Arc's "Archive Little Arcs after:".
     private var littleWindowLastUsed: [ObjectIdentifier: Date] = [:]
     private var littleWindowArchiveCheck: ScheduledWork?

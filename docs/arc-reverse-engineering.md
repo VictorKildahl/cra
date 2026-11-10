@@ -2839,8 +2839,10 @@ popover driven by AX (the chevron is `openInSpaceExpander`, the rows are AXButto
   Move Tab to Space N (⌃⌘1–9, #86), which in a Little Window sends its page (#92, Cra's own like ⌃⌘N itself). The
   Little Window's target follows the window used last when it takes focus (`refreshTarget`), as Arc's does.
   Until a space is picked in it (#316, Cra's own): "Switch to <space>" in a Little Window's command bar changes its
-  "Open in" and not the browser window's space, the browser window no longer moves it, and the next Little Window of
-  the session opens on it (CraCore `LittleWindowTarget`; scenario little-window-space-pick).
+  "Open in" and not the browser window's space, and the browser window no longer moves it. Only that window's: the
+  next Little Window follows the window used last again, so a link from another app doesn't open in a space (and its
+  sign-ins) picked earlier; Air Traffic Control's Default (Little Window + space) sets that for good (CraCore
+  `LittleWindowTarget`; scenario little-window-space-pick).
 
 ## ⌘Return in the command bar and closed folders that keep their tab (Arc 1.171, 2 Nov 2026, issue #85)
 
