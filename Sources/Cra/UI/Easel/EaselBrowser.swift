@@ -46,11 +46,7 @@ final class EaselBrowser: CraBrowser, NativePage {
             self.delegate?.browser?(self, didChangeCommittedLoad: true)
             self.delegate?.browser(self, didChangeLoading: false, canGoBack: false, canGoForward: false)
             self.delegate?.browser(self, didFinishLoadingURL: self.address, title: title, statusCode: 200)
-            // Arc's canvas is the window's backdrop under a 50 % black veil (#63614B over a gold
-            // space's #C6BE96 sidebar): the card lets the backdrop through, the canvas veils it.
-            self.delegate?.browser?(self, didReportBackgroundColor: "clear")
-            // A dark bar colour, so the toolbar's glyphs and address are light over the veil.
-            self.delegate?.browser(self, didReportThemeColor: "#1E1E1E")
+            self.probeBackgroundColor()
         }
     }
 
@@ -87,7 +83,13 @@ final class EaselBrowser: CraBrowser, NativePage {
     override func setFocused(_ focused: Bool) {
         MainActor.assumeIsolated { if focused { canvas.focus() } }
     }
-    override func probeBackgroundColor() {}
+    override func probeBackgroundColor() {
+        // Arc's canvas is the window's backdrop under a 50 % black veil (#63614B over a gold
+        // space's #C6BE96 sidebar): the card lets the backdrop through, the canvas veils it.
+        delegate?.browser?(self, didReportBackgroundColor: "clear")
+        // A dark bar colour, so the toolbar's glyphs and address are light over the veil.
+        delegate?.browser(self, didReportThemeColor: "#1E1E1E")
+    }
     override func executeJavaScript(_ script: String) {}
     override func evaluate(inIsolatedWorld world: String, params: String, completion: @escaping (String?, String?) -> Void) {
         DispatchQueue.main.async { completion(nil, "an Easel has no page") }
