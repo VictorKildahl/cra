@@ -47,12 +47,6 @@ final class CaptureOverlay {
     var isOpen: Bool { !closed }
     var parentWindow: NSWindow? { parent }
 
-    var debugSummary: String {
-        let little = parent?.windowController as? LittleWindowController
-        let kind = little.map { $0.isPeek ? "peek" : "little" } ?? "main"
-        return "open parent=\(kind) visible=\(panel.isVisible ? 1 : 0) source=\(view.sourceURL ?? "-")"
-    }
-
     func close() { finish(nil, nil) }
 
     /// Capture Image…: takes the image at `rect` (page points) straight away (CaptureView.lift).
@@ -126,7 +120,6 @@ final class CaptureView: NSView {
     /// The page as shown: taken again while it scrolls under the mode (#195).
     private var shot: CGImage
     private weak var browser: CraBrowser?
-    var sourceURL: String? { browser?.currentURL }
     private let scale: CGFloat
     private var mode: Mode = .selecting
 

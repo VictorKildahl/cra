@@ -149,7 +149,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     var dimFrame: NSRect? { dim?.frame }
     private var controls: PeekControlsPanel?
     /// The Peek is on its way out (closePeekAnimated).
-    private var closingPeek = false
+    private(set) var closingPeek = false
     /// The Peek is shrinking into place; a page window attaching now waits for the end.
     private var openingPeek = false
     /// The pictures moving while the Peek opens or closes.
@@ -177,7 +177,6 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     var store: SidebarStore { app.store }
     var currentURL: String { browser?.currentURL ?? state.url }
     var hasPage: Bool { !currentURL.isEmpty && currentURL != "about:blank" }
-    var canCapturePage: Bool { isPeek && !isParked && !closingPeek && window?.isVisible == true }
 
     /// `url` nil makes a popup host: the browser adopts the next window.open
     /// CEF hands it (see `CraBrowserDelegate.browser:popupHostForURL:`).
@@ -1036,6 +1035,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// Menu / key actions while this window is key. Returns false for actions
     /// that are not the little window's (the app handles those).
     func handle(action id: String) -> Bool {
+        if handleCapture(action: id) { return true }
         switch id {
         case "closeTab", "closeWindow": closeWindow()
         case "newTab", "editURL": openCommandBar()
@@ -1058,7 +1058,6 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             browser?.devToolsAction = ["jsConsole": "console", "inspectElement": "inspect"][id]
             browser?.showDevTools()
         case "print": browser?.print()
-        case "capturePage": if isPeek { peekParent?.capturePage(in: self) }
         case "promoteLittleWindow": promote(to: nil)
         // Arc's Show Little Arc "Open In" Menu (⇧⌘O): the ⌄ button's list of spaces.
         case "littleWindowOpenInMenu": if hasPage, !isPeek { togglePopup() }
