@@ -939,7 +939,7 @@ final class ShellView: NSView {
     private func sampleSlidingPage() {
         guard let layer = focusedCard?.webArea.subviews.first?.layer else { return }
         let drawn = layer.presentation() ?? layer
-        slidingPage?.record(drawn.convert(drawn.bounds, to: nil))
+        slidingPage?.record(drawn.convert(drawn.bounds, to: nil), drawn: drawn.frame == layer.frame)
     }
 
     private func endSlideReadout() {

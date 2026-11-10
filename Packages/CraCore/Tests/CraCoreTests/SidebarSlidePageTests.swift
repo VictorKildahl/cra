@@ -29,6 +29,27 @@ struct SidebarSlidePageTests {
         }
     }
 
+    /// Full screen, 10 Nov: a sample taken before the slide's first layout was drawn still showed the
+    /// page where it was before ⌘S, and the readout called that 328 pt of movement.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/317"))
+    func thePictureFromBeforeTheSlideIsNotMovement() {
+        var slide = SidebarSlidePage()
+        slide.record(CGRect(x: 328, y: 10, width: 1582, height: 1060), drawn: false)
+        #expect(slide.isEmpty)
+        for _ in 0..<5 { slide.record(CGRect(x: 0, y: 0, width: 1920, height: 1080), drawn: true) }
+        slide.record(CGRect(x: 0, y: 0, width: 1920, height: 1080), drawn: false)
+        #expect(slide.drift == 0)
+        #expect(slide.samples == 6)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/317"))
+    func onceDrawnEverySampleCounts() {
+        var slide = SidebarSlidePage()
+        slide.record(CGRect(x: 10, y: 0, width: 100, height: 10), drawn: true)
+        slide.record(CGRect(x: 60, y: 0, width: 100, height: 10), drawn: false)
+        #expect(slide.drift == 50)
+    }
+
     @Test func eitherEdgeMovingCounts() {
         var slide = SidebarSlidePage()
         slide.record(CGRect(x: 10, y: 0, width: 100, height: 10))

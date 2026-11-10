@@ -8,7 +8,11 @@ public struct SidebarSlidePage: Equatable, Sendable {
 
     public init() {}
 
-    public mutating func record(_ frameInWindow: CGRect) {
+    /// `drawn` is false while the page's own layer still shows its frame from before the slide
+    /// (the slide's first layout not yet committed). Until the first drawn sample, that is the
+    /// picture from before ⌘S, not the page moving, so it is skipped; after it every sample counts.
+    public mutating func record(_ frameInWindow: CGRect, drawn: Bool = true) {
+        guard drawn || minX != nil else { return }
         samples += 1
         minX = Self.widen(minX, frameInWindow.minX)
         maxX = Self.widen(maxX, frameInWindow.maxX)
