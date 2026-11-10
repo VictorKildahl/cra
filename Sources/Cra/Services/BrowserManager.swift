@@ -841,7 +841,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// automatic picture-in-picture applies. Any other page gets the video request; `video: false`
     /// skips that (a silent page when the window goes out of sight).
     private func leaveTab(_ tabID: UUID, video: Bool = true) {
-        guard store.settings.autoPictureInPicture, let rt = runtimes[tabID], !rt.browser.isInPictureInPicture else { return }
+        guard let rt = runtimes[tabID], store.settings.isAutoPictureInPicture(url: rt.browser.currentURL),
+              !rt.browser.isInPictureInPicture else { return }
         rt.pendingAutoPictureInPicture = true
         guard rt.browser.isCapturingMedia, !(rt.browser is WebKitBrowser) else {
             if video { requestPictureInPicture(tabID, automatic: true) }

@@ -139,6 +139,30 @@ struct SidebarModelTests {
         #expect(engine.suggestURL("a b&c")?.absoluteString == suggest)
     }
 
+    /// #326: the site controls turn automatic Picture in Picture off for one site, the
+    /// others and the global switch keep theirs.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/326"))
+    func autoPictureInPictureIsPerSite() {
+        var settings = AppSettings()
+        settings.toggleAutoPictureInPicture(url: "https://music.youtube.com/watch?v=1")
+        #expect(!settings.isAutoPictureInPicture(url: "https://music.youtube.com/"))
+        #expect(settings.isAutoPictureInPicture(url: "https://www.youtube.com/watch?v=2"))
+        #expect(settings.autoPictureInPicture, "the global switch stays on")
+        settings.toggleAutoPictureInPicture(url: "https://music.youtube.com/")
+        #expect(settings.autoPictureInPictureDisabledHosts.isEmpty)
+        settings.autoPictureInPicture = false
+        #expect(!settings.isAutoPictureInPicture(url: "https://www.youtube.com/"))
+        settings.toggleAutoPictureInPicture(url: "https://www.youtube.com/")
+        #expect(settings.autoPictureInPicture && settings.isAutoPictureInPicture(url: "https://youtube.com/"))
+    }
+
+    @Test func autoPictureInPictureSitesSurviveASave() throws {
+        var settings = AppSettings()
+        settings.toggleAutoPictureInPicture(url: "https://music.youtube.com/")
+        let loaded = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
+        #expect(loaded.autoPictureInPictureDisabledHosts == ["music.youtube.com"])
+    }
+
     @Test func developerModeIsPerSite() {
         var settings = AppSettings()
         #expect(AppSettings.siteKey(for: "https://www.Example.com/a") == "example.com")

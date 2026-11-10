@@ -573,6 +573,9 @@ public struct AppSettings: Codable, Equatable {
     public var folderPreviews: Bool = true
     /// Arc: "Enable Picture in Picture when you leave a video tab".
     public var autoPictureInPicture: Bool = true
+    /// Sites where the site controls turned automatic Picture in Picture off, like Arc's
+    /// per-site switch (#326): YouTube Music without it, YouTube with it.
+    public var autoPictureInPictureDisabledHosts: Set<String> = []
     /// Dia's onboarding privacy choice "Block third-party ads and trackers": requests
     /// to listed ad and tracker domains are cancelled unless they are first-party.
     public var blockAdsAndTrackers: Bool = true
@@ -715,6 +718,25 @@ public struct AppSettings: Codable, Equatable {
     public func showsBar(above url: String?) -> Bool {
         showToolbar || url.map(isDeveloperMode) == true
     }
+    /// The global switch, less the sites turned off in the site controls (#326).
+    public func isAutoPictureInPicture(url: String) -> Bool {
+        guard autoPictureInPicture else { return false }
+        guard let k = AppSettings.siteKey(for: url) else { return true }
+        return !autoPictureInPictureDisabledHosts.contains(k)
+    }
+    /// The site controls' switch: this site only. With the global switch off, it turns
+    /// the global switch back on for this site, the others keep their state.
+    public mutating func toggleAutoPictureInPicture(url: String) {
+        guard let k = AppSettings.siteKey(for: url) else { autoPictureInPicture.toggle(); return }
+        if !autoPictureInPicture {
+            autoPictureInPicture = true
+            autoPictureInPictureDisabledHosts.remove(k)
+        } else if autoPictureInPictureDisabledHosts.contains(k) {
+            autoPictureInPictureDisabledHosts.remove(k)
+        } else {
+            autoPictureInPictureDisabledHosts.insert(k)
+        }
+    }
     public mutating func toggleDeveloperMode(url: String) {
         guard let k = AppSettings.siteKey(for: url) else { return }
         let on = isDeveloperMode(url: url)
@@ -852,6 +874,7 @@ extension AppSettings {
         disabledDefaultDeveloperHosts = try c.decodeIfPresent(Set<String>.self, forKey: .disabledDefaultDeveloperHosts) ?? []
         chromeEngine = try c.decodeIfPresent(Bool.self, forKey: .chromeEngine) ?? true
         autoPictureInPicture = try c.decodeIfPresent(Bool.self, forKey: .autoPictureInPicture) ?? true
+        autoPictureInPictureDisabledHosts = try c.decodeIfPresent(Set<String>.self, forKey: .autoPictureInPictureDisabledHosts) ?? []
         blockAdsAndTrackers = try c.decodeIfPresent(Bool.self, forKey: .blockAdsAndTrackers) ?? true
         if let d = try? c.decodeIfPresent(LinkDestination.self, forKey: .defaultLinkDestination) {
             defaultLinkDestination = d

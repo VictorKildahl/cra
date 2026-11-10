@@ -170,13 +170,14 @@ final class SiteControlCenterView: NSView {
         // Settings: three switch rows.
         let settings = SiteSectionView(title: "Settings", hoverText: nil, colors: colors, onHeaderClick: {})
         let developer = store.settings.isDeveloperMode(url: url)
+        let autoPiP = store.settings.isAutoPictureInPicture(url: url)
         let store = store, url = url
         var rowsSpec: [(String, String, String, Bool, () -> Void)] = [
             ("hammer.fill", "Developer Mode", developer ? "On" : "Off", developer, { store.settings.toggleDeveloperMode(url: url) }),
             ("shield.fill", "Block Ads & Trackers", store.settings.blockAdsAndTrackers ? "On" : "Off",
              store.settings.blockAdsAndTrackers, { store.settings.blockAdsAndTrackers.toggle() }),
-            ("gearshape.fill", "Automatic Picture-In-Picture", store.settings.autoPictureInPicture ? "Allowed" : "Disabled",
-             store.settings.autoPictureInPicture, { store.settings.autoPictureInPicture.toggle() }),
+            ("gearshape.fill", "Automatic Picture-In-Picture", autoPiP ? "Allowed" : "Disabled",
+             autoPiP, { store.settings.toggleAutoPictureInPicture(url: url) }),
         ]
         // Chromium's blocker doesn't see a WebKit page: no switch that does nothing there.
         if protectedMedia != nil { rowsSpec.remove(at: 1) }
