@@ -35,7 +35,7 @@ struct MaxPane: View {
                 MaxFeatureRow(title: "5-Second Previews", isOn: $store.settings.fiveSecondPreviews, enabled: available) {
                     FiveSecondPreviewsPicture()
                 } description: {
-                    Text("Press Shift or hover over any link to generate a summary of the webpage, without a single click. On certain sites, this feature runs automatically and only hover is required. This includes Google, DuckDuckGo and Bing Search results, X (Twitter) links, Threads, and HackerNews.")
+                    Text("Instant summaries appear when you hover over links on certain websites (Google results, X and Hacker News). Or hold Shift while hovering to preview any link.")
                 }
             }
             MaxFooter(status: service.status) { service.openSystemSettings() }

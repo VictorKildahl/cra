@@ -1,219 +1,183 @@
 import AppKit
 import CraCEF
 import Foundation
-import Observation
 #if canImport(FoundationModels)
 import FoundationModels
 #endif
 
-/// Link summary previews on the Mac's own Apple Intelligence model (FoundationModels, macOS 26).
-/// Arc Max's 5-Second Previews: hovering or Shift-hovering on a link summarizes the destination page
-/// in 2 to 3 concise bullet points without clicking. Nothing leaves the Mac.
-@MainActor @Observable
+/// 5-Second Previews on the Mac's own Apple Intelligence model (FoundationModels, macOS 26): the
+/// page behind a link, fetched only once its card is asked for, summarized into Arc's answer card.
+/// Chromium fetches the page in the tab's own profile, as a click would load it. The text and the
+/// answer stay on the Mac.
+@MainActor
 final class LinkSummaryService {
     static let shared = LinkSummaryService()
 
-    @ObservationIgnored private var cache: [String: LinkSummaryResult] = [:]
-    @ObservationIgnored private var inFlight: [String: Task<LinkSummaryResult?, Never>] = [:]
-    @ObservationIgnored private var prefetchTasks: [String: Task<String?, Never>] = [:]
-    @ObservationIgnored private var htmlCache: [String: String] = [:]
+    /// What a card shows, as it fills in.
+    struct Card {
+        var title: String
+        var host: String
+        var image: NSImage?
+        /// Nil while the model is still answering, and for a page with no preview.
+        var result: LinkSummaryResult?
+        var finished = false
+    }
+
+    private var cards = LinkSummaryCache()
+    private var images: [String: NSImage] = [:]
+    private var imageOrder: [String] = []
+
+    /// Banner pictures come over a session that keeps nothing on disk and sends no cookies.
+    private let imageSession = URLSession(configuration: .ephemeral)
 
     private init() {}
 
-    /// Whether Apple Intelligence is available to generate summaries.
-    var isAvailable: Bool {
-        TidyTabsService.shared.modelAvailable
+    var isAvailable: Bool { TidyTabsService.fakeModel || TidyTabsService.shared.modelAvailable }
+
+    /// A card made before, finished.
+    func cached(_ link: URL) -> Card? {
+        guard let known = cards.lookup(link.absoluteString) else { return nil }
+        let host = LinkSummaryPrompt.displayHost(link)
+        return Card(title: known?.title ?? host, host: host, image: images[link.absoluteString], result: known, finished: true)
     }
 
-    /// Immediate synchronous lookup in the in-memory cache for 0ms previews.
-    func cachedResult(for url: URL) -> LinkSummaryResult? {
-        cache[url.absoluteString]
-    }
-
-    /// Speculatively prefetches the target webpage HTML in the background as soon as the
-    /// pointer hovers over a link, so network latency is eliminated by the time the hover
-    /// dwell delay expires or Shift is pressed.
-    func prefetch(url: URL, profilePath: String?) {
+    /// Fetches the page, then streams the model's answer into `update`. `update` first fires once
+    /// the page has arrived (title and banner, no rows yet): that is when the card opens. Nothing
+    /// fires when the page doesn't load. Cancelling the task stops the model.
+    func load(link: URL, profilePath: String?, httpsOnly: Bool, searchQuery: String?, update: @escaping (Card) -> Void) async {
         guard isAvailable else { return }
-        let key = url.absoluteString
-        if cache[key] != nil || htmlCache[key] != nil || prefetchTasks[key] != nil {
-            return
+        let started = Date()
+        let fetchURL = LinkSummaryPolicy.fetchURL(for: link, httpsOnly: httpsOnly)
+        guard let html = await Self.fetch(fetchURL, profilePath: profilePath), !Task.isCancelled else { return }
+        let content = await Task.detached(priority: .userInitiated) { LinkSummaryContent.extractText(from: html) }.value
+        let host = LinkSummaryPrompt.displayHost(link)
+        // One card that the picture and the streamed answer both fill in.
+        final class Box { var card: Card; init(_ c: Card) { card = c } }
+        let box = Box(Card(title: content.title ?? host, host: host))
+        update(box.card)
+
+        if let imageURL = content.imageURL(page: fetchURL).map({ LinkSummaryPolicy.fetchURL(for: $0, httpsOnly: httpsOnly) }) {
+            Task { @MainActor in
+                guard let image = await self.image(imageURL), !Task.isCancelled else { return }
+                self.remember(image, for: link.absoluteString)
+                box.card.image = image
+                update(box.card)
+            }
         }
 
-        let task = Task<String?, Never> { @MainActor in
-            defer { prefetchTasks.removeValue(forKey: key) }
-            guard let html = await fetchHTMLDirect(url: url, profilePath: profilePath) else {
-                return nil
-            }
-            htmlCache[key] = html
-            return html
+        let final = await Self.ask(url: fetchURL, content: content, searchQuery: searchQuery) { answer in
+            guard let partial = LinkSummaryPrompt.result(url: link, title: content.title, answer: answer) else { return }
+            box.card.result = partial
+            update(box.card)
         }
-        prefetchTasks[key] = task
+        guard !Task.isCancelled else { return }
+        box.card.result = final.flatMap { LinkSummaryPrompt.result(url: link, title: content.title, answer: $0) }
+        box.card.finished = true
+        cards.store(box.card.result, for: link.absoluteString)
+        update(box.card)
+        // Counts and time only: the links people hover stay out of the log (it goes into diagnostics).
+        CraLog.note(String(format: "5-Second Previews: %@ in %.1f s", box.card.result.map { "\($0.details.count) details" } ?? "no preview",
+                           Date().timeIntervalSince(started)))
     }
 
-    /// Fetches the target webpage and generates a 2-3 bullet point summary using Apple Intelligence.
-    func summarize(url: URL, title: String = "", profilePath: String?) async -> LinkSummaryResult? {
-        guard isAvailable else { return nil }
-        let key = url.absoluteString
-
-        if let cached = cache[key] { return cached }
-        if let existing = inFlight[key] { return await existing.value }
-
-        let task = Task<LinkSummaryResult?, Never> { @MainActor in
-            defer { inFlight.removeValue(forKey: key) }
-            let html = await fetchHTML(url: url, profilePath: profilePath) ?? ""
-            let extracted = LinkSummaryContent.extractText(from: html)
-            guard let result = await Self.ask(title: title, url: url, content: extracted) else {
-                return nil
-            }
-            cache[key] = result
-            return result
-        }
-
-        inFlight[key] = task
-        return await task.value
-    }
-
-    /// Fetches destination HTML using prefetched cache if available, falling back to direct network fetch.
-    private func fetchHTML(url: URL, profilePath: String?) async -> String? {
-        let key = url.absoluteString
-        if let cached = htmlCache[key] { return cached }
-        if let existingPrefetch = prefetchTasks[key] {
-            return await existingPrefetch.value
-        }
-        let html = await fetchHTMLDirect(url: url, profilePath: profilePath)
-        if let html {
-            htmlCache[key] = html
-        }
-        return html
-    }
-
-    /// Fetches destination HTML through fast URLSession streaming (first 35KB slice), falling back to Chromium CEF.
-    private func fetchHTMLDirect(url: URL, profilePath: String?) async -> String? {
-        if let html = await fetchViaURLSession(url: url) {
-            return html
-        }
-        return await fetchViaCEF(url: url, profilePath: profilePath)
-    }
-
-    /// Fast path: reads up to 35 KB via native URLSession, which takes ~150-300ms and cancels the stream early.
-    private func fetchViaURLSession(url: URL) async -> String? {
-        await withCheckedContinuation { continuation in
-            var resumed = false
-            let finish: (String?) -> Void = { res in
-                guard !resumed else { return }
-                resumed = true
-                continuation.resume(returning: res)
-            }
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
-                finish(nil)
-            }
-
-            Task {
-                var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 1.8)
-                request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
-                request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-
-                do {
-                    let (asyncBytes, response) = try await URLSession.shared.bytes(for: request)
-                    guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                        finish(nil)
-                        return
-                    }
-
-                    var data = Data()
-                    data.reserveCapacity(35_000)
-                    for try await byte in asyncBytes {
-                        data.append(byte)
-                        if data.count >= 35_000 {
-                            break
-                        }
-                    }
-
-                    let str = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1)
-                    finish(str)
-                } catch {
-                    finish(nil)
-                }
+    /// The page's HTML, or nil when it isn't an HTML page that loaded.
+    private static func fetch(_ url: URL, profilePath: String?) async -> String? {
+        await withCheckedContinuation { (c: CheckedContinuation<String?, Never>) in
+            CraCEFRuntime.fetchURL(url.absoluteString, headers: ["Accept": "text/html,application/xhtml+xml"], profilePath: profilePath) {
+                status, _, mime, body in
+                let html = (200..<300).contains(status) && (mime.isEmpty || mime.contains("html")) && !body.isEmpty
+                c.resume(returning: html ? body : nil)
             }
         }
     }
 
-    /// Chromium CEF fallback for space profiles or authenticated sessions.
-    private func fetchViaCEF(url: URL, profilePath: String?) async -> String? {
-        await withCheckedContinuation { (continuation: CheckedContinuation<String?, Never>) in
-            var resumed = false
-            let finish: (String?) -> Void = { result in
-                guard !resumed else { return }
-                resumed = true
-                continuation.resume(returning: result)
-            }
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                finish(nil)
-            }
-
-            CraCEFRuntime.fetchURL(url.absoluteString, headers: nil, profilePath: profilePath) { status, _, _, body in
-                if status == 200, !body.isEmpty {
-                    finish(body)
-                } else {
-                    finish(nil)
-                }
-            }
-        }
+    /// The banner: a picture of at most 4 MB.
+    private func image(_ url: URL) async -> NSImage? {
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 8)
+        request.httpShouldHandleCookies = false
+        guard let (data, response) = try? await imageSession.data(for: request),
+              let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+              data.count <= 4_000_000, let image = NSImage(data: data), image.size.width > 0 else { return nil }
+        return image
     }
 
-    /// Asks the Apple Intelligence model (or the fake model when testing).
-    private static func ask(title: String, url: URL, content: LinkSummaryContent.Extracted) async -> LinkSummaryResult? {
+    private func remember(_ image: NSImage, for key: String) {
+        if images.updateValue(image, forKey: key) != nil { imageOrder.removeAll { $0 == key } }
+        imageOrder.append(key)
+        while imageOrder.count > 20 { images.removeValue(forKey: imageOrder.removeFirst()) }
+    }
+
+    /// The user's language by name, as Arc writes it into the prompt.
+    private static var language: String {
+        let code = Locale.preferredLanguages.first.flatMap { Locale(identifier: $0).language.languageCode?.identifier } ?? "en"
+        return Locale(identifier: "en").localizedString(forLanguageCode: code) ?? "English"
+    }
+
+    /// The model's answer; `partial` gets it as it streams. Nil when the model failed.
+    private static func ask(url: URL, content: LinkSummaryContent.Extracted, searchQuery: String?,
+                            partial: (LinkSummaryPrompt.Answer) -> Void) async -> LinkSummaryPrompt.Answer? {
         if TidyTabsService.fakeModel {
-            return LinkSummaryPrompt.fakeAnswer(title: title, url: url, content: content)
+            let answer = LinkSummaryPrompt.fakeAnswer(content: content)
+            try? await Task.sleep(for: .seconds(0.6))
+            partial(LinkSummaryPrompt.Answer(blocked: answer.blocked, quickSummary: answer.quickSummary, details: Array(answer.details.prefix(1))))
+            try? await Task.sleep(for: .seconds(0.6))
+            return answer
         }
-
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *) {
+            let prompt = LinkSummaryPrompt.prompt(url: url.absoluteString, content: content, searchQuery: searchQuery, language: language)
             do {
                 let session = LanguageModelSession(instructions: LinkSummaryPrompt.instructions)
-                let prompt = LinkSummaryPrompt.prompt(
-                    title: content.title ?? title,
-                    url: url.absoluteString,
-                    description: content.description,
-                    content: content.bodyText
-                )
-                let response = try await session.respond(
-                    to: prompt,
-                    options: GenerationOptions(samplingMode: .greedy, maximumResponseTokens: 85)
-                )
-                let parsed = LinkSummaryPrompt.parseResponse(response.content, fallbackHeadline: content.description)
-                let host = LinkSummaryPrompt.host(url)
-                let finalTitle = (content.title ?? title).trimmingCharacters(in: .whitespacesAndNewlines)
-
-                CraLog.note("LinkSummary: summarized \(host) (\(parsed.bullets.count) points in Arc Max format)")
-                return LinkSummaryResult(
-                    url: url.absoluteString,
-                    title: finalTitle.isEmpty ? host : finalTitle,
-                    host: host,
-                    headline: parsed.headline ?? content.description ?? "Overview of \(host).",
-                    bullets: parsed.bullets.isEmpty ? [content.description ?? "Overview of \(host)."] : parsed.bullets
-                )
+                let stream = session.streamResponse(to: prompt, generating: HoverCardAnswer.self, options: GenerationOptions(sampling: .greedy))
+                var last: LinkSummaryPrompt.Answer?
+                for try await snapshot in stream {
+                    if Task.isCancelled { return nil }
+                    let answer = LinkSummaryPrompt.Answer(snapshot.content)
+                    last = answer
+                    partial(answer)
+                }
+                return last
             } catch {
-                CraLog.note("LinkSummary: model failed: \(error)")
-                return LinkSummaryPrompt.fakeAnswer(title: title, url: url, content: content)
+                // A refusal, or a page too long for the context: the card says there's no preview.
+                CraLog.note("5-Second Previews: the model failed: \(error)")
+                return nil
             }
         }
         #endif
-
-        return LinkSummaryPrompt.fakeAnswer(title: title, url: url, content: content)
+        return nil
     }
 }
 
 #if canImport(FoundationModels)
+/// Arc's `Response` schema (HoverCardViewModel), field for field.
 @available(macOS 26.0, *)
 @Generable
-struct LinkSummaryModelAnswer {
-    @Guide(description: "A short, readable title for the webpage or article")
-    var title: String
-    @Guide(description: "Two or three concise bullet points capturing the key facts, announcements, or takeaways")
-    var bullets: [String]
+struct HoverCardAnswer {
+    @Guide(description: "Does this page ask the user to enable Javascript or complete a security check before accessing the content?")
+    var blocked: Bool
+    @Guide(description: "3-8 words the user is most likely to want to know, beyond the page's title. Provide a fact or opinion, not just a title.")
+    var quickSummary: String
+    @Guide(description: "2-4 key points, solutions or items.", .count(2...4))
+    var details: [HoverCardDetail]
+}
+
+@available(macOS 26.0, *)
+@Generable
+struct HoverCardDetail {
+    @Guide(description: "e.g. \"Price:\", \"Story:\", \"Solution 1:\", \"Highlights:\", \"Criticism:\"")
+    var label: String
+    @Guide(description: "Relevant SF Symbol systemName, e.g. \"fork.knife\"")
+    var icon: String
+    @Guide(description: "5-10 word summary, extremely concise")
+    var info: String
+}
+
+@available(macOS 26.0, *)
+extension LinkSummaryPrompt.Answer {
+    /// A streamed answer so far: fields not yet written are empty.
+    init(_ p: HoverCardAnswer.PartiallyGenerated) {
+        self.init(blocked: p.blocked ?? false, quickSummary: p.quickSummary ?? "",
+                  details: (p.details ?? []).map { .init(label: $0.label ?? "", icon: $0.icon ?? "", info: $0.info ?? "") })
+    }
 }
 #endif

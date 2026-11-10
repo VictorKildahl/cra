@@ -3,218 +3,250 @@ import Foundation
 import Testing
 
 struct LinkSummaryTests {
-    // MARK: - Auto-hover sites policy
+    private func u(_ s: String) -> URL { URL(string: s)! }
 
-    @Test func autoHoverMatchesAllRequiredSites() {
-        let autoURLs = [
-            "https://www.google.com/search?q=apple+intelligence",
-            "https://google.com/search?q=swift",
-            "https://google.fr/search?q=paris",
-            "https://google.co.uk/search?q=london",
-            "https://duckduckgo.com/?q=cra+browser",
-            "https://html.duckduckgo.com/html/?q=test",
-            "https://www.bing.com/search?q=bing",
-            "https://bing.com/",
-            "https://twitter.com/TheBrowserComp",
-            "https://x.com/TheBrowserComp",
-            "https://mobile.twitter.com/someone",
-            "https://www.threads.net/@zuck",
-            "https://threads.net/t/12345",
-            "https://news.ycombinator.com/",
-            "https://news.ycombinator.com/item?id=40000000",
-            "https://hacker-news.firebaseio.com/v0/item/1.json",
-        ]
-        for s in autoURLs {
-            let url = URL(string: s)!
-            #expect(LinkSummaryPolicy.isAutoHoverSite(url: url), "Expected auto-hover for \(s)")
+    // MARK: - Which hovers show a card
+
+    @Test func autoSitesAreArcsThree() {
+        #expect(LinkSummaryPolicy.autoSite(page: u("https://news.ycombinator.com/")) == .hackerNews)
+        #expect(LinkSummaryPolicy.autoSite(page: u("https://news.ycombinator.com/item?id=1")) == .hackerNews)
+        #expect(LinkSummaryPolicy.autoSite(page: u("https://x.com/home")) == .x)
+        #expect(LinkSummaryPolicy.autoSite(page: u("https://twitter.com/someone/status/1")) == .x)
+        #expect(LinkSummaryPolicy.autoSite(page: u("https://www.google.com/search?q=swift")) == .google)
+        #expect(LinkSummaryPolicy.autoSite(page: u("https://www.google.co.uk/search?q=london")) == .google)
+        #expect(LinkSummaryPolicy.autoSite(page: u("https://google.fr/search?q=paris")) == .google)
+        // Google outside its results page, and sites Arc's binary has no hover cards for.
+        for s in ["https://www.google.com/maps", "https://mail.google.com/mail/u/0/", "https://google.evil.com/search?q=x",
+                  "https://duckduckgo.com/?q=x", "https://www.bing.com/search?q=x", "https://www.threads.net/",
+                  "https://github.com/VictorKildahl/cra", "file:///tmp/page.html"] {
+            #expect(LinkSummaryPolicy.autoSite(page: u(s)) == nil, "\(s)")
         }
+        #expect(LinkSummaryPolicy.autoSite(page: nil) == nil)
     }
 
-    @Test func otherSitesRequireShift() {
-        let otherURLs = [
-            "https://en.wikipedia.org/wiki/Earth",
-            "https://github.com/VictorKildahl/cra",
-            "https://apple.com/apple-intelligence",
-            "https://nytimes.com/article/today",
-            "https://reddit.com/r/mac",
-            "https://crabrowser.app",
-        ]
-        for s in otherURLs {
-            let url = URL(string: s)!
-            #expect(!LinkSummaryPolicy.isAutoHoverSite(url: url), "Expected NOT auto-hover for \(s)")
-            // Without Shift, should NOT trigger
-            #expect(!LinkSummaryPolicy.shouldTrigger(pageURL: url, isShiftPressed: false))
-            // With Shift, should trigger
-            #expect(LinkSummaryPolicy.shouldTrigger(pageURL: url, isShiftPressed: true))
+    @Test func hoverAloneTakesOnlyLinksThatLeaveTheSite() {
+        let hn = u("https://news.ycombinator.com/news")
+        #expect(LinkSummaryPolicy.autoHovers(link: u("https://www.blender.org/download/releases/5-3/"), page: hn))
+        for s in ["https://news.ycombinator.com/item?id=1", "https://news.ycombinator.com/hide?id=1",
+                  "https://news.ycombinator.com/login?goto=news", "https://news.ycombinator.com/user?id=pg"] {
+            #expect(!LinkSummaryPolicy.autoHovers(link: u(s), page: hn), "\(s)")
         }
+
+        let x = u("https://x.com/home")
+        #expect(LinkSummaryPolicy.autoHovers(link: u("https://t.co/abc123"), page: x))
+        #expect(!LinkSummaryPolicy.autoHovers(link: u("https://x.com/someone"), page: x))
+        #expect(!LinkSummaryPolicy.autoHovers(link: u("https://twitter.com/someone"), page: x))
+
+        let google = u("https://www.google.com/search?q=cra+browser")
+        #expect(LinkSummaryPolicy.autoHovers(link: u("https://crabrowser.app/"), page: google))
+        #expect(LinkSummaryPolicy.autoHovers(link: u("https://www.youtube.com/watch?v=1"), page: google))
+        // Ads, Google's own pages and its other country sites.
+        for s in ["https://www.googleadservices.com/pagead/aclk?sa=L", "https://ad.doubleclick.net/x",
+                  "https://www.google.com/search?q=next", "https://maps.google.com/", "https://accounts.google.com/",
+                  "https://www.google.de/search?q=x"] {
+            #expect(!LinkSummaryPolicy.autoHovers(link: u(s), page: google), "\(s)")
+        }
+
+        // Anywhere else, a hover alone does nothing.
+        #expect(!LinkSummaryPolicy.autoHovers(link: u("https://example.org/"), page: u("https://github.com/")))
+        #expect(!LinkSummaryPolicy.autoHovers(link: u("https://example.org/"), page: nil))
     }
 
-    @Test func autoHoverSitesTriggerWithoutShift() {
-        let google = URL(string: "https://www.google.com/search?q=query")!
-        #expect(LinkSummaryPolicy.shouldTrigger(pageURL: google, isShiftPressed: false))
-        #expect(LinkSummaryPolicy.shouldTrigger(pageURL: google, isShiftPressed: true))
-
-        let hn = URL(string: "https://news.ycombinator.com/news")!
-        #expect(LinkSummaryPolicy.shouldTrigger(pageURL: hn, isShiftPressed: false))
+    @Test func shiftPreviewsAnyLink() {
+        let page = u("https://en.wikipedia.org/wiki/Earth")
+        let link = u("https://example.org/")
+        #expect(!LinkSummaryPolicy.shouldTrigger(link: link, page: page, shiftHeld: false))
+        #expect(LinkSummaryPolicy.shouldTrigger(link: link, page: page, shiftHeld: true))
+        #expect(LinkSummaryPolicy.shouldTrigger(link: u("https://www.blender.org/"), page: u("https://news.ycombinator.com/"), shiftHeld: false))
     }
 
-    // MARK: - Link validity
+    // MARK: - Which links may be fetched
 
-    @Test func canSummarizeFiltersInvalidAndSamePageLinks() {
-        let page = URL(string: "https://example.com/blog/article")!
-
-        // Valid external links
-        #expect(LinkSummaryPolicy.canSummarize(targetURL: URL(string: "https://example.org/about"), pageURL: page))
-        #expect(LinkSummaryPolicy.canSummarize(targetURL: URL(string: "http://example.com/other"), pageURL: page))
-
-        // Same page fragment
-        #expect(!LinkSummaryPolicy.canSummarize(targetURL: URL(string: "https://example.com/blog/article#comments"), pageURL: page))
-
-        // Unsupported schemes
-        #expect(!LinkSummaryPolicy.canSummarize(targetURL: URL(string: "javascript:void(0)"), pageURL: page))
-        #expect(!LinkSummaryPolicy.canSummarize(targetURL: URL(string: "mailto:hello@example.com"), pageURL: page))
-        #expect(!LinkSummaryPolicy.canSummarize(targetURL: URL(string: "cra://settings"), pageURL: page))
-        #expect(!LinkSummaryPolicy.canSummarize(targetURL: URL(string: "about:blank"), pageURL: page))
-
-        // Local hosts
-        #expect(!LinkSummaryPolicy.canSummarize(targetURL: URL(string: "http://localhost:3000/app"), pageURL: page))
-        #expect(!LinkSummaryPolicy.canSummarize(targetURL: URL(string: "http://127.0.0.1:8080/"), pageURL: page))
+    @Test func onlyPublicWebPagesArePreviewed() {
+        let page = u("https://example.com/blog/article?x=1")
+        #expect(LinkSummaryPolicy.canPreview(link: u("https://example.org/about"), page: page))
+        #expect(LinkSummaryPolicy.canPreview(link: u("http://example.com/other"), page: page))
+        #expect(LinkSummaryPolicy.canPreview(link: u("https://8.8.8.8/"), page: page))
+        #expect(!LinkSummaryPolicy.canPreview(link: u("https://example.com/blog/article?x=1#comments"), page: page))
+        #expect(!LinkSummaryPolicy.canPreview(link: nil))
+        for s in ["javascript:void(0)", "mailto:hello@example.com", "cra://settings", "about:blank", "file:///etc/hosts",
+                  "http://localhost:3000/", "http://app.localhost/", "http://127.0.0.1:8080/", "http://127.1:8765/",
+                  "http://[::1]:8765/", "http://[fe80::1]/", "http://10.0.0.1/", "http://172.16.4.2/", "http://172.31.0.1/",
+                  "http://192.168.1.1/", "http://169.254.169.254/latest/meta-data", "http://100.64.0.1/", "http://0.0.0.0/",
+                  "http://router/", "http://printer.local/", "http://nas.lan/", "http://wiki.corp/", "http://x.home.arpa/",
+                  "http://localhost./"] {
+            #expect(!LinkSummaryPolicy.canPreview(link: u(s), page: page), "\(s)")
+        }
+        #expect(LinkSummaryPolicy.isPublicHost("172.32.0.1"))
+        #expect(LinkSummaryPolicy.isPublicHost("crabrowser.app."))
     }
 
-    // MARK: - HTML Content Extraction
+    @Test func httpsOnlyUpgradesTheFetch() {
+        #expect(LinkSummaryPolicy.fetchURL(for: u("http://example.com/a?b=1"), httpsOnly: true) == u("https://example.com/a?b=1"))
+        #expect(LinkSummaryPolicy.fetchURL(for: u("http://example.com:80/a"), httpsOnly: true) == u("https://example.com/a"))
+        #expect(LinkSummaryPolicy.fetchURL(for: u("http://example.com/a"), httpsOnly: false) == u("http://example.com/a"))
+        #expect(LinkSummaryPolicy.fetchURL(for: u("https://example.com/a"), httpsOnly: true) == u("https://example.com/a"))
+    }
 
-    @Test func extractsTitleDescriptionAndBodyText() {
+    @Test func googleSearchQueryFocusesTheCard() {
+        #expect(LinkSummaryPolicy.searchQuery(page: u("https://www.google.com/search?q=best+pizza+oslo&hl=en")) == "best pizza oslo")
+        #expect(LinkSummaryPolicy.searchQuery(page: u("https://www.google.com/search?q=c%2B%2B+%26+rust")) == "c++ & rust")
+        #expect(LinkSummaryPolicy.searchQuery(page: u("https://www.google.com/search?hl=en")) == nil)
+        #expect(LinkSummaryPolicy.searchQuery(page: u("https://news.ycombinator.com/?q=x")) == nil)
+    }
+
+    // MARK: - Page text
+
+    @Test func extractsTitleDescriptionAndArticleText() {
         let html = """
-        <!DOCTYPE html>
-        <html>
-        <head>
+        <!DOCTYPE html><html><head>
             <title>Swift 6.0 Released &amp; Details &mdash; Swift.org</title>
-            <meta name="description" content="Swift 6 brings full concurrency checks and new language features.">
+            <meta content='Swift 6 brings "complete" concurrency checks.' name='description'>
             <style>body { font-size: 14px; }</style>
             <script>console.log("analytics");</script>
-        </head>
-        <body>
-            <noscript>Turn on JavaScript</noscript>
-            <header><nav><a href="/">Home</a></nav></header>
-            <main>
+        </head><body>
+            <nav><a href="/">Home</a> Blog Docs</nav>
+            <article>
                 <h1>Swift 6</h1>
-                <p>Swift 6 is now available. This release introduces complete data-race safety by default.</p>
-                <p>It also enhances interoperability with C++ and includes standard testing libraries.</p>
-            </main>
-            <footer>&copy; 2026 Apple Inc.</footer>
-        </body>
-        </html>
+                <p>Swift 6 is now available. It brings data-race safety by default.</p>
+                <script>track()</script><!-- hidden -->
+            </article>
+            <footer>&copy; 2026 Apple Inc. &#8212; &#x2014;</footer>
+        </body></html>
         """
-
-        let extracted = LinkSummaryContent.extractText(from: html)
-        #expect(extracted.title == "Swift 6.0 Released & Details — Swift.org")
-        #expect(extracted.description == "Swift 6 brings full concurrency checks and new language features.")
-        #expect(!extracted.bodyText.contains("console.log"))
-        #expect(!extracted.bodyText.contains("font-size"))
-        #expect(!extracted.bodyText.contains("<p>"))
-        #expect(extracted.bodyText.contains("Swift 6 is now available"))
-        #expect(extracted.bodyText.contains("complete data-race safety"))
+        let e = LinkSummaryContent.extractText(from: html)
+        #expect(e.title == "Swift 6.0 Released & Details — Swift.org")
+        #expect(e.description == "Swift 6 brings \"complete\" concurrency checks.")
+        #expect(e.bodyText == "Swift 6 Swift 6 is now available. It brings data-race safety by default.")
     }
 
-    @Test func extractsOpenGraphMetaDescription() {
+    @Test func fallsBackToOpenGraphAndWholeBody() {
         let html = """
-        <html>
-        <head>
-            <meta property="og:description" content="A fast, modern native browser for macOS.">
-        </head>
-        <body>
-            <p>Welcome to Cra.</p>
-        </body>
-        </html>
+        <html><head><meta property="og:title" content="Cra"><meta property="og:description" content="A native browser for macOS."></head>
+        <body><p>Welcome to&nbsp;Cra &#8212; fast.</p></body></html>
         """
-        let extracted = LinkSummaryContent.extractText(from: html)
-        #expect(extracted.description == "A fast, modern native browser for macOS.")
+        let e = LinkSummaryContent.extractText(from: html)
+        #expect(e.title == "Cra")
+        #expect(e.description == "A native browser for macOS.")
+        #expect(e.bodyText == "Welcome to Cra — fast.")
     }
 
-    @Test func decodesEntitiesAndCleansWhitespace() {
-        let raw = "  Hello &amp; welcome &quot;friends&quot; &ndash; &#39;Cra&#39;   "
-        let clean = LinkSummaryContent.cleanHTMLText(raw)
-        #expect(clean == "Hello & welcome \"friends\" – 'Cra'")
+    @Test func bannerPictureIsThePagesShareImage() {
+        let page = u("https://foldableflight.com/planes/")
+        let html = #"<html><head><meta property="og:image" content="/img/hero.png?w=1&amp;h=2"><meta name="twitter:image" content="https://x.example/t.png"></head><body></body></html>"#
+        let e = LinkSummaryContent.extractText(from: html)
+        #expect(e.image == "/img/hero.png?w=1&h=2")
+        #expect(e.imageURL(page: page) == u("https://foldableflight.com/img/hero.png?w=1&h=2"))
+        #expect(LinkSummaryContent.extractText(from: #"<head><meta name="twitter:image" content="https://x.example/t.png"></head>"#).image == "https://x.example/t.png")
+        #expect(LinkSummaryContent.Extracted(image: "http://192.168.1.1/cam.jpg").imageURL(page: page) == nil)
+        #expect(LinkSummaryContent.Extracted(image: "data:image/png;base64,AAAA").imageURL(page: page) == nil)
+        #expect(LinkSummaryContent.Extracted().imageURL(page: page) == nil)
     }
 
-    // MARK: - Prompt & Bullets
-
-    @Test func promptContainsTitleUrlAndContent() {
-        let p = LinkSummaryPrompt.prompt(title: "Article Title", url: "https://example.com/post", content: "Paragraph text.")
-        #expect(p.contains("Title: Article Title"))
-        #expect(p.contains("URL: https://example.com/post"))
-        #expect(p.contains("Content:\nParagraph text."))
-
-        let withDesc = LinkSummaryPrompt.prompt(
-            title: "Article Title",
-            url: "https://example.com/post",
-            description: "High-level summary description.",
-            content: "Paragraph text."
-        )
-        #expect(withDesc.contains("Description: High-level summary description."))
+    @Test func decodesEntitiesOnce() {
+        #expect(LinkSummaryContent.cleanHTMLText("  Hello &amp; welcome &quot;friends&quot; &ndash; &#39;Cra&#39;   ") == "Hello & welcome \"friends\" – 'Cra'")
+        // &amp;lt; is the text "&lt;", not "<".
+        #expect(LinkSummaryContent.cleanHTMLText("a &amp;lt; b &#xZZ; &#128512;") == "a &lt; b &#xZZ; 😀")
     }
 
-    @Test func extractTextHandlesLargeHTMLSwiftly() {
-        var bigHTML = "<html><head><title>Large Page Title</title><meta name=\"description\" content=\"Fast summary metadata.\"></head><body>"
-        // Append 200 KB of repetitive paragraphs
-        let chunk = "<p>Here is some long repeated paragraph content for testing performance on heavy web pages.</p>"
-        for _ in 0..<2000 {
-            bigHTML.append(chunk)
-        }
-        bigHTML.append("</body></html>")
-
-        let start = Date()
-        let extracted = LinkSummaryContent.extractText(from: bigHTML)
-        let duration = Date().timeIntervalSince(start)
-
-        #expect(extracted.title == "Large Page Title")
-        #expect(extracted.description == "Fast summary metadata.")
-        #expect(extracted.bodyText.count <= LinkSummaryContent.maxContentLength)
-        #expect(duration < 0.1, "HTML extraction should complete in under 100ms on large pages")
+    @Test func caps() {
+        let big = "<html><head><title>Big</title></head><body>" + String(repeating: "<p>Some long paragraph text here.</p>", count: 20_000)
+            + "<p>FAR AWAY</p></body></html>"
+        let e = LinkSummaryContent.extractText(from: big)
+        #expect(e.title == "Big")
+        #expect(e.bodyText.count == LinkSummaryContent.maxContentLength)
+        #expect(!e.bodyText.contains("FAR AWAY"))
+        #expect(LinkSummaryContent.extractText(from: "").bodyText.isEmpty)
     }
 
-    @Test func cleanBulletsStripsMarkersAndLimitsCount() {
-        let raw = [
-            "• First key takeaway with important fact.",
-            "- Second point summarizing consequences.",
-            "1. Third point outlining next steps.",
-            "4. Extra bullet point that exceeds limit.",
-        ]
-        let cleaned = LinkSummaryPrompt.cleanBullets(raw)
-        #expect(cleaned.count == 3)
-        #expect(cleaned[0] == "First key takeaway with important fact.")
-        #expect(cleaned[1] == "Second point summarizing consequences.")
-        #expect(cleaned[2] == "Third point outlining next steps.")
+    // MARK: - The model's answer
+
+    @Test func promptIsArcsWithTheSearchAndLanguage() {
+        let content = LinkSummaryContent.Extracted(title: "Pizza", description: "Best slices", bodyText: "Text.")
+        let p = LinkSummaryPrompt.prompt(url: "https://example.com/p", content: content, searchQuery: "pizza oslo", language: "English")
+        #expect(p.contains("<webpage>\nURL: https://example.com/p\nTitle: Pizza\nDescription: Best slices\nText.\n</webpage>"))
+        #expect(p.contains("'pizza oslo'"))
+        #expect(p.hasSuffix("Write responses in English."))
+        let bare = LinkSummaryPrompt.prompt(url: "https://e.com", content: .init(), searchQuery: nil, language: "Danish")
+        #expect(!bare.contains("search query"))
+        #expect(LinkSummaryPrompt.instructions.contains("glanceable \"answer card\""))
     }
 
-    @Test func fakeAnswerGeneratesMeaningfulSummary() {
-        let url = URL(string: "https://news.ycombinator.com/item?id=123")!
-        let content = LinkSummaryContent.Extracted(
-            title: "Show HN: Cra Browser",
-            description: "Native macOS browser matching Arc.",
-            bodyText: "Discussion regarding the open source release of Cra for macOS. Many users praised the sidebar and tab management."
-        )
-        let result = LinkSummaryPrompt.fakeAnswer(title: "Show HN", url: url, content: content)
-        #expect(result.host == "news.ycombinator.com")
-        #expect(result.title == "Show HN: Cra Browser")
-        #expect(result.bullets.count >= 2)
-        #expect(result.bullets[0] == "Native macOS browser matching Arc.")
+    @Test func answerBecomesACard() {
+        let url = u("https://www.blender.org/download/releases/5-3/")
+        let answer = LinkSummaryPrompt.Answer(blocked: false, quickSummary: " **Gaussian splats** arrive ", details: [
+            .init(label: "Highlights:", icon: "sparkles", info: "Splat rendering in Cycles and EEVEE"),
+            .init(label: "Empty", icon: "x", info: "  "),
+            .init(label: "Price", icon: "tag", info: "\"Free and open source\""),
+            .init(label: "3", icon: "3.circle", info: "Three"),
+            .init(label: "4", icon: "4.circle", info: "Four"),
+            .init(label: "5", icon: "5.circle", info: "Five"),
+        ])
+        let r = LinkSummaryPrompt.result(url: url, title: " Blender 5.3 ", answer: answer)
+        #expect(r?.title == "Blender 5.3")
+        #expect(r?.host == "blender.org")
+        #expect(r?.quickSummary == "Gaussian splats arrive")
+        #expect(r?.details.map(\.label) == ["Highlights", "Price", "3", "4"])
+        #expect(r?.details[1].info == "Free and open source")
+        #expect(LinkSummaryPrompt.result(url: url, title: nil, answer: answer)?.title == "blender.org")
+    }
+
+    @Test func blockedOrEmptyAnswerHasNoPreview() {
+        let url = u("https://example.com/")
+        let detail = LinkSummaryResult.Detail(label: "A", icon: "a.circle", info: "Something")
+        #expect(LinkSummaryPrompt.result(url: url, title: "T", answer: .init(blocked: true, quickSummary: "Hi", details: [detail])) == nil)
+        #expect(LinkSummaryPrompt.result(url: url, title: "T", answer: .init(blocked: false, quickSummary: " ", details: [])) == nil)
+        #expect(LinkSummaryPrompt.result(url: url, title: "T", answer: .init(blocked: false, quickSummary: "Only this", details: []))?.details == [])
+    }
+
+    @Test func fakeModelAnswersFromThePage() {
+        let a = LinkSummaryPrompt.fakeAnswer(content: .init(title: "T", description: "D", bodyText: "First sentence here. Second one is here too."))
+        #expect(a.quickSummary == "D")
+        #expect(a.details.map(\.info) == ["First sentence here", "Second one is here too"])
+        #expect(LinkSummaryPrompt.fakeAnswer(content: .init()).blocked)
+    }
+
+    // MARK: - Placement
+
+    @Test func cardHangsUnderTheLinkLikeArcs() {
+        let screen = CGRect(x: 0, y: 0, width: 1728, height: 1117)
+        let size = CGSize(width: 300, height: 335)
+        // Arc's measured card: the link's text starts at 416 pt, the card at 409; 6 pt under the link.
+        let link = CGRect(x: 416, y: 900, width: 280, height: 16)
+        #expect(LinkSummaryCardLayout.origin(size: size, link: link, pointer: .zero, screen: screen) == CGPoint(x: 409, y: 559))
+        // No room under it: above the link.
+        let low = CGRect(x: 416, y: 100, width: 280, height: 16)
+        #expect(LinkSummaryCardLayout.origin(size: size, link: low, pointer: .zero, screen: screen) == CGPoint(x: 409, y: 122))
+        // Near the right edge and with no link frame: under the pointer, kept on the screen.
+        let right = LinkSummaryCardLayout.origin(size: size, link: nil, pointer: CGPoint(x: 1700, y: 700), screen: screen)
+        #expect(right == CGPoint(x: 1420, y: 349))
+        // A second screen to the left (negative x).
+        let left = CGRect(x: -1920, y: 0, width: 1920, height: 1080)
+        #expect(LinkSummaryCardLayout.origin(size: size, link: CGRect(x: -1925, y: 500, width: 50, height: 16), pointer: .zero, screen: left).x == -1912)
+    }
+
+    // MARK: - Cache
+
+    @Test func cacheKeepsTheNewest() {
+        var c = LinkSummaryCache(limit: 2)
+        let r = LinkSummaryResult(url: "a", title: "A", host: "a", quickSummary: nil, details: [])
+        c.store(r, for: "a")
+        c.store(nil, for: "b")
+        #expect(c.lookup("b") == .some(nil))
+        c.store(r, for: "a")  // touched again: "b" is now the oldest
+        c.store(r, for: "c")
+        #expect(c.count == 2)
+        #expect(c.lookup("b") == nil)
+        #expect(c.lookup("a") == .some(r))
     }
 
     // MARK: - Settings
 
-    @Test func fiveSecondPreviewsDefaultIsOff() throws {
-        let s = AppSettings()
-        #expect(s.fiveSecondPreviews == false)
-
-        let encoded = try JSONEncoder().encode(s)
-        let decoded = try JSONDecoder().decode(AppSettings.self, from: encoded)
-        #expect(decoded.fiveSecondPreviews == false)
-
-        var enabled = AppSettings()
-        enabled.fiveSecondPreviews = true
-        let encEnabled = try JSONEncoder().encode(enabled)
-        let decEnabled = try JSONDecoder().decode(AppSettings.self, from: encEnabled)
-        #expect(decEnabled.fiveSecondPreviews == true)
+    @Test func fiveSecondPreviewsIsOffByDefaultAndRoundTrips() throws {
+        #expect(AppSettings().fiveSecondPreviews == false)
+        #expect(try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8)).fiveSecondPreviews == false)
+        var on = AppSettings()
+        on.fiveSecondPreviews = true
+        #expect(try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(on)).fiveSecondPreviews)
     }
 }

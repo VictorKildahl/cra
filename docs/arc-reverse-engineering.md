@@ -3559,25 +3559,40 @@ Arc Max's renameDownloads: a finished download is renamed on disk and a card abo
   pointer is on it, then for what was left of its 8 s but at least 3 s. On a dark space the label and the old name are #929BFF, not
   Arc's #343BD1, which reads at 2.6:1 on the card (PR #197, Quinn Battersby; Victor, 5 Nov 2026).
 
-## 5-Second Previews (Arc 1.171, 10 Nov 2026, Swift metadata + Arc Max, on-device Apple Intelligence)
+## 5-Second Previews (Arc 1.171, 10 Nov 2026, Arc's binary + Victor's Arc on a Hacker News story, 2x, 60 fps recording)
 
-Arc Max's 5-Second Previews (`fiveSecondPreviewsEnabled`): hovering over a link generates a concise summary
-of the destination webpage without navigating or clicking.
-- [O] Arc's cloud AI sent the destination URL and page text to Arc's server; Cra asks the Mac's own
-  on-device Apple Intelligence model instead (FoundationModels, macOS 26, `SystemLanguageModel.default`).
-- [O] Behaviour:
-  - On certain search and social platforms (Google, DuckDuckGo, Bing Search, X/Twitter, Threads, and
-    HackerNews), only hover is required: resting the pointer on a link for ~0.5 s automatically triggers
-    the preview.
-  - On all other sites, pressing or holding Shift while hovering triggers the preview card.
-- [O] Card: floating NSPanel positioned near the cursor, 320 pt wide with rounded corners and a hudWindow
-  blur background. Displays the destination host, the page title, 2–3 concise bullet points outlining the
-  key facts or conclusions, and an Apple Intelligence badge.
-- [O] Dismissal: moving the pointer away dismisses the card after a short grace period; moving the pointer
-  inside the card keeps it visible. Escape or clicking anywhere outside immediately closes it.
-- Cra: LinkSummaryPolicy, LinkSummaryContent and LinkSummaryPrompt (CraCore), LinkSummaryService
-  (FoundationModels, on-device guided generation), LinkSummaryPreviewController and LinkSummaryPanel.
-  Settings ▸ Max ▸ 5-Second Previews, off by default like Arc Max.
+Arc Max's 5-Second Previews are hover cards inside Arc: the HoverCards module (HoverCardsController,
+HoverCardWindow, HoverCardViewModel), pref `hoverCardsEnabled` (1 in Victor's Arc), remote flags
+`hoverCardsLLMDelayInterval` and `hoverCardsShareEnabled`.
+- [B] Settings text: "Instant summaries appear when you hover over links on [certain websites.](…) Or hold Shift
+  while hovering to preview any link."
+- [B] Sites (`HoverCardsSupportedDomain`): google.com, x.com / twitter.com, news.ycombinator.com. Not DuckDuckGo,
+  Bing or Threads. Only some links: `.title .titleline > a` (HN story titles), `[data-testid=tweetText] a[role=link][target=_blank]`,
+  `[data-testid='card.wrapper'] a[role=link]`, `a[role=link][rel='nofollow noreferrer'][target=_blank]` (X), and
+  `g-section-with-header a [role=heading]` (Google results). Cra sees only the hovered URL, so it takes the links on
+  those sites that leave the site and aren't ads (LinkSummaryPolicy.autoHovers).
+- [B] Prompt (HoverCardViewModel.loadSummary): "As a concise and helpful summarizer, create a glanceable "answer card"
+  containing the most important information from the webpage. Capture the tone, perspective and POV of the writer."
+  JSON `Response {blocked, quickSummary? (3-8 words), details: Detail[] (2-4)}`, `Detail {label ("Price:", "Story:", …),
+  icon (an SF Symbol name), info (5-10 words)}`, the page between `<webpage>` tags, the user's Google search as
+  `userQuestion`, "Write responses … in <language>". `blocked` shows "No preview available". The card's footer string
+  is "AI Summary by Arc Browser".
+- [O] Timing: the first card came 4.1 s after the pointer came to rest on the link (Arc loads the page for its picture
+  first), grew in from the link over 0.27 s with the banner and grey placeholder rows, and the answer streamed into
+  the rows until 6.9 s.
+- [O] Card: 300 × 335 pt, 12 pt corners. The page's picture (og:image) fills a 100 pt banner. Under it, the quick
+  summary in bold 13 pt white, 15 pt margins; then a row per detail: the model's SF Symbol in white at about 40 %,
+  the text at 39 pt, bold label + regular info, 13 pt on 18.5 pt lines, 6 pt between rows. A 32 pt dark share button,
+  its centre 24 pt from the right and 25 pt from the bottom. The fill is the space's dark tooltip tone at about 90 %
+  (#322c15 over Hacker News's page in a beige space; TooltipTones gives #302913), with the page faintly through it.
+  It hangs 6 pt under the link, 7 pt left of the link's start.
+- Cra (LinkSummaryPolicy, LinkSummaryPrompt, LinkSummaryCardLayout in CraCore; LinkSummaryService,
+  LinkSummaryPreview): the on-device model with Arc's prompt and schema (streamed); Chromium fetches the page in the
+  tab's profile only after a trigger (a 0.5 s rest on one of the links above, or Shift), never for hosts on the Mac
+  or the local network, upgraded to https with Always use secure connections, never in incognito spaces. Deviations:
+  a page without an og:image gets its title in place of the banner (Arc shows a snapshot of the page); the share
+  button shares the link, not a picture of the card; the rest before a hover alone fetches is Cra's (Arc's
+  `hoverCardsLLMDelayInterval` is remote). Settings ▸ Max ▸ 5-Second Previews, off by default like Arc Max.
 
 ## Little Arc over a full-screen app (Arc 1.171, 5 Nov 2026, issue #186, Victor's Arc + a test full-screen app)
 
