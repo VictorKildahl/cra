@@ -13,6 +13,9 @@
 #include <vector>
 
 #include "include/cef_app.h"
+#include "include/cef_task.h"
+#include "include/cef_jsdialog_handler.h"
+#include "include/cef_dialog_handler.h"
 #include "include/cef_application_mac.h"
 #include "include/cef_browser.h"
 #include "include/cef_client.h"
@@ -22,6 +25,7 @@
 #include "include/cef_context_menu_handler.h"
 #include "include/cef_display_handler.h"
 #include "include/cef_download_handler.h"
+#include "include/cef_render_handler.h"
 #include "include/cef_find_handler.h"
 #include "include/cef_focus_handler.h"
 #include "include/cef_keyboard_handler.h"
@@ -220,6 +224,8 @@ static CraClient* AsCraClient(CefClient* c) {
 - (void)runDevToolsAction;
 - (void)browserClosed;
 - (void)downloadUpdated:(CraDownloadInfo*)download;
+- (BOOL)agentDownloadBefore:(CefRefPtr<CefDownloadItem>)item callback:(CefRefPtr<CefBeforeDownloadCallback>)callback;
+- (void)agentDownloadUpdated:(CefRefPtr<CefDownloadItem>)item callback:(CefRefPtr<CefDownloadItemCallback>)callback;
 - (CefRefPtr<CefBrowser>)cefBrowser;
 - (CefRefPtr<CefClient>)cefClient;
 - (void)createNow;
@@ -1196,6 +1202,7 @@ static const char kLoadingBackgroundProbe[] =
 // "Open <app>?" with "Always allow" like Chrome and Arc.
 class CraContentBlockingHandler : public CefResourceRequestHandler {
 public:
+    explicit CraContentBlockingHandler(bool external = true) : external_(external) {}
     ReturnValue OnBeforeResourceLoad(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
                                      CefRefPtr<CefRequest> request, CefRefPtr<CefCallback> callback) override {
         if (!cra_blocker::Enabled().load(std::memory_order_relaxed)) return RV_CONTINUE;
@@ -1211,10 +1218,11 @@ public:
                              bool& allow_os_execution) override {
         // cra:// is Cra's own scripting scheme; a page must not drive it.
         std::string url = request->GetURL().ToString();
-        allow_os_execution = url.compare(0, 4, "cra:") != 0;
+        allow_os_execution = external_ && url.compare(0, 4, "cra:") != 0;
     }
 
 private:
+    const bool external_;
     IMPLEMENT_REFCOUNTING(CraContentBlockingHandler);
 };
 
@@ -1262,6 +1270,30 @@ static NSUInteger CraPermissionKinds(uint32_t requested) {
     return requested ? kinds | 16 : kinds;
 }
 
+// Continue must run after CEF attaches the prompt; it is synchronous inside this task.
+// Snapshot and restore within one UI task, so another user decision cannot interleave.
+class CraIgnoreAgentPermission : public CefTask {
+public:
+    CraIgnoreAgentPermission(CefRefPtr<CefRequestContext> context, CefString origin,
+                             CefRefPtr<CefPermissionPromptCallback> callback)
+        : context_(context), origin_(origin), callback_(callback) {}
+    void Execute() override {
+        CEF_REQUIRE_UI_THREAD();
+        if (completed_) return;
+        completed_ = true;
+        auto previous = context_->GetWebsiteSetting(origin_, CefString(), CEF_CONTENT_SETTING_TYPE_PERMISSION_AUTOBLOCKER_DATA);
+        if (previous) previous = previous->Copy();
+        callback_->Continue(CEF_PERMISSION_RESULT_IGNORE);
+        context_->SetWebsiteSetting(origin_, CefString(), CEF_CONTENT_SETTING_TYPE_PERMISSION_AUTOBLOCKER_DATA, previous);
+    }
+private:
+    bool completed_ = false;
+    CefRefPtr<CefRequestContext> context_;
+    CefString origin_;
+    CefRefPtr<CefPermissionPromptCallback> callback_;
+    IMPLEMENT_REFCOUNTING(CraIgnoreAgentPermission);
+};
+
 class CraClient : public CefClient,
                   public CefLifeSpanHandler,
                   public CefLoadHandler,
@@ -1273,13 +1305,15 @@ class CraClient : public CefClient,
                   public CefFocusHandler,
                   public CefPermissionHandler,
                   public CefFindHandler,
-                  public CefJSDialogHandler {
+                  public CefRenderHandler,
+                  public CefJSDialogHandler,
+                  public CefDialogHandler {
 public:
     CraBrowser* owner() { return owner_; }
     /// Cra closed this page (-[CraBrowser close]). Kept here rather than read from the owner:
     /// the CraBrowser can be gone before Chromium asks.
     void SetCloseRequested() { close_requested_ = true; }
-    explicit CraClient(CraBrowser* owner) : owner_(owner), ownerless_(owner == nil) { CraClientRegistry().insert(static_cast<const void*>(static_cast<CefClient*>(this))); }
+    explicit CraClient(CraBrowser* owner) : windowless_(owner.isAgent), owner_(owner), ownerless_(owner == nil), blocker_(new CraContentBlockingHandler(!owner.isAgent)) { CraClientRegistry().insert(static_cast<const void*>(static_cast<CefClient*>(this))); }
     ~CraClient() override { CraClientRegistry().erase(static_cast<const void*>(static_cast<CefClient*>(this))); }
 
     CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
@@ -1300,12 +1334,30 @@ public:
     // Chromium still asked "Leave site?" (a shop with something in its cart): DevTools close
     // first and the page's beforeunload ran anyway. The tab was already gone, so its page window
     // stayed over the next tab, and after Cancel it never closed. A page Cra closes leaves.
-    // Everything else (reloads, navigations, other dialogs) keeps Chrome's own prompts.
+    // Normal pages keep Chrome's prompts for everything else; windowless agents never show them.
     bool OnBeforeUnloadDialog(CefRefPtr<CefBrowser> browser, const CefString& message_text, bool is_reload,
                               CefRefPtr<CefJSDialogCallback> callback) override {
-        if (!close_requested_) return false;
+        if (!windowless_ && !close_requested_) return false;
         callback->Continue(true, CefString());
         return true;
+    }
+
+    CefRefPtr<CefRenderHandler> GetRenderHandler() override { return windowless_ ? this : nullptr; }
+    void GetViewRect(CefRefPtr<CefBrowser>, CefRect& rect) override { rect = CefRect(0, 0, 1280, 800); }
+    void OnPaint(CefRefPtr<CefBrowser>, PaintElementType, const RectList&, const void*, int, int) override {
+        // Chromium owns the surface; MCP captures it through Page.captureScreenshot.
+    }
+
+    CefRefPtr<CefDialogHandler> GetDialogHandler() override { return windowless_ ? this : nullptr; }
+    bool OnJSDialog(CefRefPtr<CefBrowser>, const CefString&, JSDialogType, const CefString&,
+                    const CefString&, CefRefPtr<CefJSDialogCallback>, bool& suppress) override {
+        if (windowless_) suppress = true;
+        return false;
+    }
+    bool OnFileDialog(CefRefPtr<CefBrowser>, FileDialogMode, const CefString&, const CefString&,
+                      const std::vector<CefString>&, const std::vector<CefString>&,
+                      const std::vector<CefString>&, CefRefPtr<CefFileDialogCallback> callback) override {
+        callback->Cancel(); return true;
     }
 
     // Life span -----------------------------------------------------------
@@ -1314,10 +1366,19 @@ public:
         CEF_REQUIRE_UI_THREAD();
         g_liveBrowsers++;
         if (CraBrowser* o = owner_) [o adoptBrowser:browser];
+        // Document PiP deliberately has no owner; a tab whose weak owner vanished must close.
+        else if (!ownerless_) browser->GetHost()->CloseBrowser(true);
         if (ownerless_) FloatDocumentPictureInPicture(browser, 0);
     }
 
-    bool DoClose(CefRefPtr<CefBrowser> browser) override { return false; }
+    void FinishAgentPermission() {
+        if (!agent_permission_) return;
+        auto pending = agent_permission_;
+        agent_permission_ = nullptr;
+        pending->Execute();
+    }
+
+    bool DoClose(CefRefPtr<CefBrowser> browser) override { FinishAgentPermission(); return false; }
 
     void OnBeforeClose(CefRefPtr<CefBrowser> browser) override {
         CEF_REQUIRE_UI_THREAD();
@@ -1648,6 +1709,7 @@ public:
 
     bool OnBeforeBrowse(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request,
                         bool user_gesture, bool is_redirect) override {
+        FinishAgentPermission();
         CraBrowser* o = owner_;
         if (!o || !frame->IsMain()) return false;
         if (OpensPeek(o, request, user_gesture, is_redirect)) return true;
@@ -1753,6 +1815,16 @@ public:
     }
 
     // Context menu --------------------------------------------------------
+
+    // Windowless agents must never open native menus; normal pages use Chromium's menu.
+    bool RunContextMenu(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>,
+                        CefRefPtr<CefContextMenuParams>, CefRefPtr<CefMenuModel>,
+                        CefRefPtr<CefRunContextMenuCallback> callback) override {
+        CraBrowser* o = owner_;
+        if (!windowless_ && !o.suppressesContextMenu) return false;
+        callback->Cancel();
+        return true;
+    }
 
     // Chrome-style pages get Chrome's own context menu, shown by Chrome as in Chrome and Arc:
     // extension icons, Look Up, Speech, Services, Writing Tools and AutoFill come with it. A page
@@ -1960,6 +2032,10 @@ public:
 
     bool OnBeforeDownload(CefRefPtr<CefBrowser> browser, CefRefPtr<CefDownloadItem> download_item,
                           const CefString& suggested_name, CefRefPtr<CefBeforeDownloadCallback> callback) override {
+        if (windowless_) {
+            if (CraBrowser* o = owner_) return [o agentDownloadBefore:download_item callback:callback];
+            return true; // Owner closed: never fall through to the user's Downloads folder.
+        }
         NSString* name = NSStringFromCef(suggested_name);
         if (name.length == 0) name = @"download";
         // Cra picks the profile's folder, or asks with a save panel; the callback waits for it.
@@ -1995,6 +2071,13 @@ public:
 
     void OnDownloadUpdated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefDownloadItem> item,
                            CefRefPtr<CefDownloadItemCallback> callback) override {
+        CraBrowser* o = owner_;
+        if (windowless_) {
+            if (o) [o agentDownloadUpdated:item callback:callback];
+            else callback->Cancel();
+            return;
+        }
+        // Save-panel cancellations belong to ordinary downloads, never agent transfers.
         if (g_cancelledDownloads.count(item->GetId())) {
             if (item->IsInProgress()) callback->Cancel();
             else g_cancelledDownloads.erase(item->GetId());
@@ -2002,7 +2085,6 @@ public:
         }
         if (item->IsInProgress()) g_downloadCallbacks[item->GetId()] = callback;
         else g_downloadCallbacks.erase(item->GetId());
-        CraBrowser* o = owner_;
         if (!o) return;
         CraDownloadInfo* info = [CraDownloadInfo new];
         info.identifier = item->GetId();
@@ -2032,6 +2114,7 @@ public:
                                         const CefString& requesting_origin, uint32_t requested_permissions,
                                         CefRefPtr<CefMediaAccessCallback> callback) override {
         CraBrowser* o = owner_;
+        if (windowless_) { callback->Continue(CEF_MEDIA_PERMISSION_NONE); return true; }
         if (!o || !o.delegate) return false;
         // Chrome-style pages use Chrome's permission flow: camera and microphone come back
         // through OnShowPermissionPrompt and Chrome remembers the answer per site (answered
@@ -2054,6 +2137,13 @@ public:
                                 const CefString& requesting_origin, uint32_t requested_permissions,
                                 CefRefPtr<CefPermissionPromptCallback> callback) override {
         CraBrowser* o = owner_;
+        if (windowless_) {
+            // IGNORE alone increments embargo counters in the user's shared profile.
+            FinishAgentPermission();
+            agent_permission_ = new CraIgnoreAgentPermission(browser->GetHost()->GetRequestContext(), requesting_origin, callback);
+            CefPostTask(TID_UI, agent_permission_);
+            return true;
+        }
         if (!o || !o.delegate) return false;
         // A page's <usermedia> or <permission> element (Meet's "Use microphone and camera")
         // asks again for the requests just allowed, from inside Continue, when macOS has not
@@ -2093,6 +2183,8 @@ public:
 private:
     // True while a prompt's answer runs (UI thread only).
     static inline bool answering_prompt_ = false;
+    CefRefPtr<CraIgnoreAgentPermission> agent_permission_;
+    const bool windowless_;
     // Chrome-style prompts shown to Cra and not yet answered (UI thread only).
     std::set<uint64_t> open_prompts_;
     __weak CraBrowser* owner_;
@@ -2100,7 +2192,7 @@ private:
     const bool ownerless_;
     bool close_requested_ = false;
     CefRefPtr<FaviconState> favicon_ = new FaviconState();
-    CefRefPtr<CefResourceRequestHandler> blocker_ = new CraContentBlockingHandler();
+    CefRefPtr<CefResourceRequestHandler> blocker_;
     IMPLEMENT_REFCOUNTING(CraClient);
 };
 
@@ -2218,6 +2310,24 @@ private:
 /// -sendDevToolsMethod: (one observer per browser, registered on first use).
 class CraDevToolsObserver : public CefDevToolsMessageObserver {
    public:
+    __weak CraBrowser* owner;
+    void OnDevToolsEvent(CefRefPtr<CefBrowser>, const CefString& method, const void* params, size_t size) override {
+        if (method != "Input.dragIntercepted") {
+            CraBrowser* o = owner;
+            void (^handler)(NSString*, NSString*) = o.devToolsEventHandler;
+            if (!handler || size > 262144) return;
+            NSString* body = [[NSString alloc] initWithBytes:params length:size encoding:NSUTF8StringEncoding] ?: @"{}";
+            handler(NSStringFromCef(method), body);
+            return;
+        }
+        if (size > 65536) { owner.interceptedDragData = @"{\"oversized\":true}"; return; }
+        NSData* data = [NSData dataWithBytes:params length:size];
+        NSDictionary* payload = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+        NSDictionary* drag = [payload isKindOfClass:NSDictionary.class] ? payload[@"data"] : nil;
+        if (![drag isKindOfClass:NSDictionary.class]) return;
+        NSData* encoded = [NSJSONSerialization dataWithJSONObject:drag options:0 error:nil];
+        owner.interceptedDragData = [[NSString alloc] initWithData:encoded encoding:NSUTF8StringEncoding];
+    }
     NSMutableDictionary<NSNumber*, void (^)(NSString*, NSString*)>* pending = [NSMutableDictionary dictionary];
     void OnDevToolsMethodResult(CefRefPtr<CefBrowser>, int message_id, bool success, const void* result,
                                 size_t result_size) override {
@@ -2254,6 +2364,14 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     NSMutableSet<NSNumber*>* _activeDownloads;
     BOOL _parked;
     NSUInteger _audibleChanges;
+    NSString* _agentDownloadURL;
+    NSString* _agentDownloadPath;
+    uint32_t _agentDownloadID;
+    std::set<uint32_t> _agentFinishedDownloadIDs;
+    BOOL _agentDownloadCancelled;
+    BOOL _agentDownloadActive;
+    void (^_agentDownloadUpdate)(CraDownloadInfo*);
+    CefRefPtr<CefDownloadItemCallback> _agentDownloadCallback;
 }
 
 - (instancetype)initWithFrame:(NSRect)frame url:(NSString*)url delegate:(id<CraBrowserDelegate>)delegate {
@@ -2269,26 +2387,32 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     return [self initWithFrame:frame url:url delegate:delegate incognito:incognito profilePath:profilePath history:nil];
 }
 
+- (instancetype)initAgentWithURL:(NSString*)url profilePath:(NSString*)profilePath {
+    return [self initWithFrame:NSMakeRect(0, 0, 1280, 800) url:url sidePanelURL:nil history:nil delegate:nil incognito:NO profilePath:profilePath agent:YES];
+}
+
 - (instancetype)initWithFrame:(NSRect)frame url:(NSString*)url delegate:(id<CraBrowserDelegate>)delegate
                     incognito:(BOOL)incognito profilePath:(NSString*)profilePath
                       history:(NSDictionary<NSString*, id>*)history {
-    return [self initWithFrame:frame url:url sidePanelURL:nil history:history delegate:delegate incognito:incognito profilePath:profilePath];
+    return [self initWithFrame:frame url:url sidePanelURL:nil history:history delegate:delegate incognito:incognito profilePath:profilePath agent:NO];
 }
 
 - (instancetype)initWithFrame:(NSRect)frame extensionSidePanelURL:(NSString*)url
                      delegate:(id<CraBrowserDelegate>)delegate profilePath:(NSString*)profilePath {
     // Created with no page (CEF then doesn't navigate), so no script of the panel runs as a tab.
-    return [self initWithFrame:frame url:@"" sidePanelURL:url history:nil delegate:delegate incognito:NO profilePath:profilePath];
+    return [self initWithFrame:frame url:@"" sidePanelURL:url history:nil delegate:delegate incognito:NO profilePath:profilePath agent:NO];
 }
 
 - (instancetype)initWithFrame:(NSRect)frame url:(NSString*)url sidePanelURL:(NSString*)sidePanelURL
                       history:(NSDictionary<NSString*, id>*)history
-                     delegate:(id<CraBrowserDelegate>)delegate incognito:(BOOL)incognito profilePath:(NSString*)profilePath {
+                     delegate:(id<CraBrowserDelegate>)delegate incognito:(BOOL)incognito profilePath:(NSString*)profilePath
+                        agent:(BOOL)agent {
     self = [super init];
     if (!self) return nil;
     _pendingHistory = url && !incognito && [history[@"history"] isKindOfClass:NSString.class] ? [history copy] : nil;
     _delegate = delegate;
     _isIncognito = incognito;
+    _isAgent = agent;
     _profilePath = incognito ? nil : [profilePath copy];
     _currentURL = sidePanelURL ?: url ?: @"";
     _currentTitle = @"";
@@ -2318,6 +2442,15 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     // CreateTopLevelWindow.
     if (_isClosed || _browser || g_quitting) return;
     if (!_isIncognito && !ProfileReady(_profilePath, self)) return;
+    if (_isAgent) {
+        CefWindowInfo info;
+        info.SetAsWindowless(nullptr);
+        CefBrowserSettings settings;
+        CraPageSettings(settings);
+        settings.windowless_frame_rate = 30;
+        CefBrowserHost::CreateBrowser(info, _client, CefStringFromNS(_pendingURL), settings, nullptr, [self requestContext]);
+        return;
+    }
     if (g_chromeHosting) {
         CefBrowserSettings settings;
         CraPageSettings(settings);
@@ -2402,7 +2535,13 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 
 - (void)adoptBrowser:(CefRefPtr<CefBrowser>)browser {
     _browser = browser;
+    if (_isClosed || _closeRequested) { browser->GetHost()->CloseBrowser(true); return; }
     self.isCreated = YES;
+    if (_isAgent) {
+        browser->GetHost()->WasHidden(false);
+        browser->GetHost()->SetFocus(true);
+        browser->GetHost()->SetAudioMuted(true);
+    }
     // The page agent runs new-document scripts only while its domain is enabled.
     if (g_documentStartParams.count) [self sendDevToolsMethod:@"Page.enable" params:@"{}" completion:^(NSString*, NSString*) {}];
     for (NSString* params in g_documentStartParams)
@@ -2438,6 +2577,13 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 
 - (void)browserClosed {
     _browser = nullptr;
+    _agentDownloadCallback = nullptr;
+    _agentDownloadUpdate = nil;
+    _agentDownloadActive = NO;
+    _agentDownloadURL = nil;
+    _agentDownloadPath = nil;
+    // Closing during asynchronous creation can reach this method again from OnBeforeClose.
+    if (_isClosed) return;
     self.isClosed = YES;
     self.closedByPage = !self.closeRequested && !g_quitting;
     [g_allBrowsers removeObject:self];
@@ -2789,6 +2935,7 @@ static NSView* FindRenderWidgetHostView(NSView* root) {
     if (!_browser) { completion(nil, @"no browser"); return; }
     if (!_cdpObserver) {
         _cdpObserver = new CraDevToolsObserver();
+        _cdpObserver->owner = self;
         _cdpRegistration = _browser->GetHost()->AddDevToolsMessageObserver(_cdpObserver);
     }
     int messageID = ++_cdpNextID + 100000;  // clear of ids Chromium's own clients use
@@ -2832,9 +2979,70 @@ static NSView* FindRenderWidgetHostView(NSView* root) {
     }];
 }
 
+
+- (BOOL)startAgentDownload:(NSString*)url path:(NSString*)path update:(void (^)(CraDownloadInfo*))update {
+    if (!_isAgent || !_browser || _isClosed || _agentDownloadActive) return NO;
+    CefURLParts parts;
+    if (!CefParseURL(CefStringFromNS(url), parts)) return NO;
+    _agentDownloadActive = YES;
+    _agentDownloadURL = NSStringFromCef(CefString(&parts.spec)); _agentDownloadPath = [path copy];
+    if (_agentDownloadID) _agentFinishedDownloadIDs.insert(_agentDownloadID);
+    _agentDownloadID = 0; _agentDownloadCancelled = NO; _agentDownloadCallback = nullptr;
+    _agentDownloadUpdate = [update copy];
+    _browser->GetHost()->StartDownload(CefStringFromNS(_agentDownloadURL));
+    return YES;
+}
+
+- (BOOL)agentDownloadReady { return !_agentDownloadActive; }
+
+- (void)cancelAgentDownload {
+    if (_isClosed) return;
+    _agentDownloadCancelled = YES;
+    if (_agentDownloadCallback) _agentDownloadCallback->Cancel();
+    _agentDownloadCallback = nullptr;
+}
+
+- (BOOL)agentDownloadBefore:(CefRefPtr<CefDownloadItem>)item callback:(CefRefPtr<CefBeforeDownloadCallback>)callback {
+    if (!_agentFinishedDownloadIDs.count(item->GetId()) && !_agentDownloadCancelled && _agentDownloadURL &&
+        [_agentDownloadURL isEqualToString:NSStringFromCef(item->GetOriginalUrl())] &&
+        (!_agentDownloadID || _agentDownloadID == item->GetId())) {
+        _agentDownloadID = item->GetId();
+        callback->Continue(CefStringFromNS(_agentDownloadPath), false);
+    }
+    // Not continuing cancels unsolicited or already-cancelled agent downloads.
+    return true;
+}
+
+- (void)agentDownloadUpdated:(CefRefPtr<CefDownloadItem>)item callback:(CefRefPtr<CefDownloadItemCallback>)callback {
+    if (_agentFinishedDownloadIDs.count(item->GetId())) { if (item->IsInProgress()) callback->Cancel(); return; }
+    if (!_agentDownloadURL || ![_agentDownloadURL isEqualToString:NSStringFromCef(item->GetOriginalUrl())] ||
+        (_agentDownloadID && _agentDownloadID != item->GetId())) { callback->Cancel(); return; }
+    _agentDownloadID = item->GetId();
+    if (_agentDownloadCancelled || item->GetReceivedBytes() > 64 * 1024 * 1024 || item->GetTotalBytes() > 64 * 1024 * 1024) {
+        _agentDownloadCancelled = YES;
+        callback->Cancel();
+    }
+    _agentDownloadCallback = callback;
+    CraDownloadInfo* info = [CraDownloadInfo new];
+    info.identifier = item->GetId(); info.url = NSStringFromCef(item->GetURL());
+    info.fullPath = NSStringFromCef(item->GetFullPath()); info.suggestedName = NSStringFromCef(item->GetSuggestedFileName());
+    info.receivedBytes = item->GetReceivedBytes(); info.totalBytes = item->GetTotalBytes(); info.percent = item->GetPercentComplete();
+    if (item->IsComplete() && !_agentDownloadCancelled) info.state = CraDownloadStateComplete;
+    else if (item->IsCanceled() || _agentDownloadCancelled) info.state = CraDownloadStateCancelled;
+    else if (item->IsInterrupted()) info.state = CraDownloadStateInterrupted;
+    else info.state = CraDownloadStateInProgress;
+    if (_agentDownloadUpdate) _agentDownloadUpdate(info);
+    if (info.state != CraDownloadStateInProgress) { _agentDownloadActive = NO; _agentDownloadCallback = nullptr; _agentDownloadUpdate = nil; }
+}
+
 - (void)notifyMoveOrResizeStarted { if (_browser) _browser->GetHost()->NotifyMoveOrResizeStarted(); }
 
 - (void)close {
+    if (_isAgent) {
+        if (_client) _client->FinishAgentPermission();
+        [self cancelAgentDownload];
+        for (NSMutableArray* waiting in g_waitingForProfile.allValues) [waiting removeObject:self];
+    }
     if (_isClosed || _parked) return;
     self.closeRequested = YES;
     if (CraClient* c = _browser ? AsCraClient(_browser->GetHost()->GetClient().get()) : nullptr) c->SetCloseRequested();
@@ -3028,6 +3236,7 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
     // Renderer, GPU and utility processes run in Chromium's seatbelt sandbox
     // (CraHelper enters it before loading the framework).
     settings.no_sandbox = false;
+    settings.windowless_rendering_enabled = true;
     CefString(&settings.cache_path) = CefStringFromNS(cachePath);
     CefString(&settings.root_cache_path) = CefStringFromNS(cachePath);
     settings.persist_session_cookies = true;

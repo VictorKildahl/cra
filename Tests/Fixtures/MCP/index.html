@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Cra · MCP playground</title>
+<style>
+/* Palette and type follow crabrowser.app. Only locally installed fonts: nothing is fetched. */
+:root {
+  --paper: #f6f7fb; --card: #fff; --ink: #000000d9; --muted: #0009; --line: #0000001a; --line-soft: #0000000d;
+  --hero: #2f55f0; --hero-deep: #1d3ed1; --hero-light: #dfe7ff; --hero-pale: #eef2ff;
+  --serif: "Instrument Serif", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --sans: "Geist", -apple-system, BlinkMacSystemFont, "Helvetica Neue", system-ui, sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --radius: 20px;
+  color-scheme: light; font-family: var(--sans); color: var(--ink); background: var(--paper);
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+/* No smooth scrolling, entrance fades, hover transforms or sticky bars: Cra's MCP input
+   scrolls a target into view, refuses zero-opacity ancestors and checks that the target
+   stays under the pointer, so anything that moves or covers a target breaks the tests. */
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: radial-gradient(1100px 460px at 50% -160px, var(--hero-pale), transparent 72%), var(--paper); line-height: 1.5; }
+::selection { background: var(--hero-light); }
+a { color: var(--hero-deep); }
+:focus-visible { outline: 2px solid var(--hero); outline-offset: 3px; border-radius: 6px; }
+.skip { position: absolute; left: 16px; top: -100px; z-index: 2; padding: 10px 14px; border-radius: 10px; background: var(--ink); color: #fff; font-size: 13px; text-decoration: none; }
+.skip:focus { top: 16px; }
+
+.page { max-width: 1160px; margin: 0 auto; padding: 28px 40px 40px; }
+.masthead { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+.wordmark { display: flex; align-items: center; gap: 10px; }
+.mark { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--hero); color: #fff; }
+.wordmark b { font-family: var(--serif); font-size: 26px; font-weight: 400; letter-spacing: -.02em; line-height: 1; }
+.wordmark span { color: var(--muted); font-size: 14px; }
+.masthead-end { display: flex; align-items: center; gap: 18px; }
+.topnav { display: flex; gap: 4px; }
+.topnav a { padding: 6px 12px; border-radius: 999px; color: var(--muted); font-size: 13px; font-weight: 500; text-decoration: none; transition: background-color .15s, color .15s; }
+.topnav a:hover { color: var(--ink); background: var(--line-soft); }
+.topnav a[aria-current="page"] { color: var(--hero-deep); background: var(--hero-light); }
+.badge { display: inline-flex; align-items: center; gap: 8px; padding: 5px 11px; border: 1px solid var(--line); border-radius: 999px; background: #ffffffb3; font: 500 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.ring { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--hero); }
+
+.hero { display: grid; grid-template-columns: minmax(0, 1fr) 248px; gap: 56px; align-items: end; padding: 64px 0 44px; }
+.eyebrow { margin: 0 0 18px; font: 500 11.5px/1.2 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--hero-deep); }
+h1 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: clamp(52px, 8.2vw, 104px); line-height: .98; letter-spacing: -.035em; }
+.intro { margin: 22px 0 0; max-width: 34em; font-size: 17px; line-height: 1.6; color: var(--muted); }
+.intro a { color: var(--hero-deep); text-decoration: none; font-family: var(--mono); font-size: 12px; vertical-align: super; padding: 0 2px; }
+.lab-note { margin: 18px 0 0; max-width: 40em; padding: 12px 16px; border-left: 2px solid var(--hero); background: #ffffffb3; border-radius: 0 12px 12px 0; font-size: 14px; color: var(--ink); }
+.contents { padding: 18px 0 2px; border-top: 1px solid var(--ink); }
+.contents-title, .kicker, .tile-kicker, .field-label, .result-label, .route-caption, .expect, .footnote, .brief b { font-family: var(--mono); }
+.contents-title { margin: 0 0 10px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.contents ol { list-style: none; margin: 0; padding: 0; }
+.contents a { display: flex; align-items: baseline; gap: 14px; padding: 9px 0; border-bottom: 1px solid var(--line); color: var(--ink); text-decoration: none; font-family: var(--serif); font-size: 22px; letter-spacing: -.01em; transition: color .15s; }
+.contents a:hover { color: var(--hero-deep); }
+.num { font-family: var(--mono); font-size: 11px; color: var(--hero-deep); letter-spacing: .04em; }
+
+section { scroll-margin-top: 24px; }
+.workspace { display: grid; grid-template-columns: 7fr 5fr; gap: 20px; }
+.card, .tile { border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); box-shadow: 0 1px 2px #0000000a, 0 18px 40px -28px #1d3ed133; }
+.card { padding: 30px; }
+.kicker { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.kicker .num { display: grid; place-items: center; width: 26px; height: 22px; border-radius: 7px; background: var(--hero-pale); }
+h2 { margin: 18px 0 8px; font-family: var(--serif); font-weight: 400; font-size: 32px; line-height: 1.12; letter-spacing: -.025em; text-wrap: balance; }
+.hint { margin: 0 0 24px; max-width: 36em; font-size: 14px; color: var(--muted); }
+
+.field-label { display: block; margin: 0 0 8px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.input-row { display: flex; gap: 8px; }
+input, textarea, select, .rich { font: inherit; font-size: 15px; color: var(--ink); border: 1px solid #00000024; border-radius: 12px; background: #fbfbfd; transition: border-color .15s, box-shadow .15s, background-color .15s; }
+input:not([type="checkbox"]) { width: 100%; min-width: 0; height: 46px; padding: 0 14px; }
+input::placeholder, textarea::placeholder { color: #00000070; }
+input:hover:not(:disabled), textarea:hover, select:hover, .rich:hover { border-color: #00000038; }
+input:focus-visible:not([type="checkbox"]), textarea:focus-visible, select:focus-visible, .rich:focus-visible { outline: none; border-color: var(--hero); background: #fff; box-shadow: 0 0 0 4px var(--hero-light); }
+button { height: 46px; padding: 0 18px; border: 0; border-radius: 12px; background: var(--hero); color: #fff; font: 500 14px/1 var(--sans); white-space: nowrap; cursor: pointer; transition: background-color .15s; }
+button:hover { background: var(--hero-deep); }
+button.quiet { background: var(--hero-pale); color: var(--hero-deep); box-shadow: inset 0 0 0 1px var(--hero-light); }
+button.quiet:hover { background: var(--hero-light); }
+.result { margin-top: 18px; padding: 16px 18px; border-radius: 14px; background: var(--hero-pale); }
+.result-label { display: flex; justify-content: space-between; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--hero-deep); }
+#out { margin: 6px 0 0; min-height: 34px; overflow-wrap: anywhere; font-family: var(--serif); font-size: 28px; line-height: 1.2; letter-spacing: -.015em; }
+.check { color: var(--hero); }
+
+.route { display: flex; align-items: center; gap: 14px; padding: 8px 0 0; }
+.route-node { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 15px; background: var(--hero-pale); color: var(--hero-deep); box-shadow: inset 0 0 0 1px var(--hero-light); }
+.route-line { flex: 1; position: relative; border-top: 1.5px dashed #2f55f066; }
+.route-line::after { content: ""; position: absolute; right: 0; top: -4.5px; width: 7px; height: 7px; border-top: 1.5px solid var(--hero); border-right: 1.5px solid var(--hero); transform: rotate(45deg); }
+.route-caption { display: flex; justify-content: space-between; margin: 10px 0 26px; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.next { display: flex; justify-content: space-between; align-items: center; padding: 16px 0 2px; border-top: 1px solid var(--line); font-size: 15px; font-weight: 500; text-decoration: none; transition: color .15s; }
+.next:hover { color: var(--hero); }
+
+.section-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 26em); gap: 32px; align-items: end; margin: 76px 0 24px; }
+.section-head h2 { margin-bottom: 0; font-size: clamp(32px, 4vw, 44px); }
+.section-head .hint { margin: 0; }
+.controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: "check choice scroll" "rich rich scroll" "delay download scroll"; gap: 16px; }
+.tile { display: flex; flex-direction: column; gap: 12px; padding: 22px; }
+.tile-kicker { margin: 0; font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--hero-deep); }
+.tile-note { margin: auto 0 0; font-size: 13px; color: var(--muted); }
+.t-check { grid-area: check; } .t-choice { grid-area: choice; } .t-rich { grid-area: rich; } .t-scroll { grid-area: scroll; } .t-delay { grid-area: delay; } .t-download { grid-area: download; }
+.check-row { display: flex; align-items: center; gap: 12px; font-size: 15px; cursor: pointer; }
+input[type="checkbox"] { flex: none; width: 20px; height: 20px; margin: 0; accent-color: var(--hero); cursor: pointer; }
+select { width: 100%; height: 46px; padding: 0 40px 0 14px; appearance: none; cursor: pointer; background: #fbfbfd url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%231d3ed1' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m1 1.5 5 5 5-5'/%3E%3C/svg%3E") no-repeat right 15px center; }
+.rich { min-height: 112px; padding: 12px 14px; line-height: 1.55; overflow-wrap: anywhere; cursor: text; }
+.scroll-box { flex: 1 1 0; min-height: 210px; overflow-y: auto; overscroll-behavior: contain; margin: 0 -6px; padding: 0 6px; border-radius: 12px; }
+.scroll-box ol { list-style: none; margin: 0; padding: 0; }
+.scroll-box li { display: grid; grid-template-columns: 46px 1fr; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--line-soft); font-size: 14px; }
+.scroll-box time { font-family: var(--mono); font-size: 11.5px; line-height: 1.9; color: var(--hero-deep); }
+#scroll-end { margin: 0; padding: 14px 0 4px; font-family: var(--serif); font-size: 18px; color: var(--muted); }
+.delay-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+#delayed-status { margin: 0; font-family: var(--serif); font-size: 21px; color: var(--muted); }
+#delayed-status[data-state="ready"] { color: var(--hero-deep); }
+.download { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border: 1px solid var(--hero-light); border-radius: 14px; background: var(--hero-pale); text-decoration: none; transition: background-color .15s, border-color .15s; }
+.download:hover { background: var(--hero-light); border-color: #2f55f04d; }
+.download svg { flex: none; }
+.download span { display: flex; flex-direction: column; font-size: 15px; font-weight: 500; }
+.download small { font-family: var(--mono); font-size: 12px; font-weight: 400; color: var(--muted); }
+
+/* The edge-case lab is only rendered on /regression (body.regression). */
+.lab-only { display: none; }
+body.regression .lab-only { display: revert; }
+.lab { margin-top: 76px; padding: 32px; border-radius: calc(var(--radius) + 8px); background: #ffffff8c; box-shadow: inset 0 0 0 1px var(--line); }
+.lab .section-head { margin-top: 0; }
+.specimens { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 14px; }
+.specimen { display: flex; flex-direction: column; gap: 10px; padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--card); }
+.specimen-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.specimen-name, .specimen label { font-size: 14px; font-weight: 500; }
+.expect { flex: none; padding: 3px 8px; border-radius: 999px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; background: var(--line-soft); color: var(--muted); }
+.expect.accepts { background: var(--hero-pale); color: var(--hero-deep); }
+.slot { position: relative; min-height: 46px; }
+.slot.empty { border: 1px dashed #00000033; border-radius: 12px; }
+.slot.empty .ghost { position: absolute; inset: 0; display: grid; place-items: center; font: 12px var(--mono); color: var(--muted); pointer-events: none; }
+.specimen-note { margin: 0; font-size: 12.5px; color: var(--muted); }
+input:disabled { color: #00000059; background: repeating-linear-gradient(135deg, #0000000a 0 6px, transparent 6px 12px); cursor: not-allowed; }
+input[readonly] { background: var(--paper); }
+.specimen button { height: auto; min-height: 46px; padding: 10px 14px; line-height: 1.3; white-space: normal; }
+.cover { position: absolute; inset: 0; display: grid; place-items: center; border-radius: 12px; background: repeating-linear-gradient(135deg, var(--hero-pale) 0 8px, #fff 8px 16px); box-shadow: inset 0 0 0 1px var(--hero-light); font: 12px var(--mono); color: var(--hero-deep); }
+textarea { display: block; width: 100%; min-height: 84px; padding: 10px 14px; resize: vertical; }
+
+.brief { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; margin-top: 64px; padding: 26px 0; border-top: 1px solid var(--ink); }
+.brief div { display: flex; flex-direction: column; gap: 6px; }
+.brief b { font-size: 11px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--hero-deep); }
+.brief span { font-family: var(--serif); font-size: 20px; line-height: 1.25; letter-spacing: -.01em; }
+footer { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px 40px; flex-wrap: wrap; padding-top: 20px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.session { display: flex; align-items: center; gap: 8px; margin: 0; }
+.session .ring { border-color: var(--muted); }
+.footnote { margin: 0; max-width: 46em; font-size: 11.5px; line-height: 1.7; }
+.footnote sup { color: var(--hero-deep); }
+footer a { text-decoration: none; }
+
+@media (max-width: 960px) {
+  .controls { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "check choice" "rich rich" "scroll scroll" "delay download"; }
+}
+@media (max-width: 860px) {
+  .page { padding: 24px 28px 32px; }
+  .hero { grid-template-columns: 1fr; gap: 32px; padding: 48px 0 36px; }
+  .contents ol { display: flex; flex-wrap: wrap; gap: 0 20px; }
+  .contents a { font-size: 19px; border-bottom: 0; }
+  .workspace, .section-head { grid-template-columns: 1fr; }
+  .section-head { gap: 10px; margin-top: 60px; }
+  .brief { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lab { padding: 22px; margin-top: 60px; }
+}
+@media (max-width: 560px) {
+  .page { padding: 18px 18px 28px; }
+  .card { padding: 22px; }
+  .masthead-end { width: 100%; justify-content: space-between; }
+  .input-row, .delay-row { flex-direction: column; align-items: stretch; }
+  .controls { grid-template-columns: 1fr; grid-template-areas: "check" "choice" "rich" "scroll" "delay" "download"; }
+  .brief { grid-template-columns: 1fr; gap: 18px; }
+  .lab { padding: 16px; }
+  h2 { font-size: 28px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<script>document.body.classList.toggle('regression', location.pathname.replace(/\/+$/, '') === '/regression');</script>
+<a class="skip" href="#try">Skip to the playground</a>
+<div class="page">
+<header class="masthead">
+  <div class="wordmark"><span class="mark" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M18 6a8 8 0 1 0 0 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><circle cx="18" cy="12" r="2" fill="#dfe7ff"/></svg></span><b>Cra</b><span>/ playground</span></div>
+  <div class="masthead-end">
+    <nav class="topnav" aria-label="Routes"><a href="/" data-route="/">Playground</a><a href="/regression" data-route="/regression">Edge cases</a></nav>
+    <span class="badge"><span class="ring" aria-hidden="true"></span>Local demo</span>
+  </div>
+</header>
+<main>
+<section class="hero" aria-labelledby="title">
+  <div>
+    <p class="eyebrow" id="step">A space to explore</p>
+    <h1 id="title">MCP integration</h1>
+    <p class="intro">A quiet page for trying an agent you connect to Cra yourself. Cra has no AI built in. Everything here is synthetic and served locally.<a href="#source-note" aria-label="Source note">*</a></p>
+    <p class="lab-note lab-only">This is the regression route: the same playground, with the edge cases the MCP tests rely on <a href="#lab">at the end of the page</a>.</p>
+  </div>
+  <nav class="contents" aria-label="On this page">
+    <p class="contents-title">On this page</p>
+    <ol>
+      <li><a href="#try"><span class="num">01</span>Interact</a></li>
+      <li><a href="#travel"><span class="num">02</span>Navigate</a></li>
+      <li><a href="#controls"><span class="num">03</span>Controls</a></li>
+      <li class="lab-only"><a href="#lab"><span class="num">04</span>Edge cases</a></li>
+    </ol>
+  </nav>
+</section>
+
+<div class="workspace">
+  <section class="card" id="try" aria-labelledby="interaction-title">
+    <p class="kicker"><span class="num">01</span>Interact</p>
+    <h2 id="interaction-title">A small action, a visible result.</h2>
+    <p class="hint">Enter a name yourself, or ask your connected agent to do it.</p>
+    <form id="demo-form">
+      <label class="field-label" for="name">Your name</label>
+      <div class="input-row"><input id="name" autocomplete="off" placeholder="What should we call you?"><button id="go" type="submit">Run demo <span aria-hidden="true">↗</span></button></div>
+    </form>
+    <div class="result" role="status" aria-live="polite"><div class="result-label"><span>Last input</span><span id="result-icon" aria-hidden="true">—</span></div><p id="out">Ready</p></div>
+  </section>
+  <section class="card" id="travel" aria-labelledby="navigation-title">
+    <p class="kicker"><span class="num">02</span>Navigate</p>
+    <h2 id="navigation-title">Keep the connection.</h2>
+    <p class="hint" id="navigation-hint">Move to the next page. Your demo session travels with you.</p>
+    <div class="route" aria-hidden="true"><div class="route-node"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M8 9v11"/></svg></div><span class="route-line"></span><div class="route-node"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="8"/><path d="m9 12 2 2 4-4"/></svg></div></div>
+    <div class="route-caption" aria-hidden="true"><span>This page</span><span>Same session</span></div>
+    <a class="next" href="/next" id="next"><span>Explore the next page</span><span aria-hidden="true">→</span></a>
+  </section>
+</div>
+
+<section id="controls" aria-labelledby="controls-title">
+  <div class="section-head">
+    <div><p class="kicker"><span class="num">03</span>Controls</p><h2 id="controls-title">A few more things to touch.</h2></div>
+    <p class="hint">Ordinary page controls, each with a visible label. Nothing here is saved or sent anywhere.</p>
+  </div>
+  <div class="controls">
+    <div class="tile t-check">
+      <p class="tile-kicker">Checkbox</p>
+      <label class="check-row" for="check"><input id="check" type="checkbox">Keep this tab in the sidebar</label>
+      <p class="tile-note">Starts unchecked.</p>
+    </div>
+    <div class="tile t-choice">
+      <label class="tile-kicker" for="choice">Pick a space</label>
+      <select id="choice"><option value="one">First</option><option value="two">Second</option><option value="three">Third</option></select>
+      <p class="tile-note">Three options, the first selected.</p>
+    </div>
+    <div class="tile t-rich">
+      <p class="tile-kicker" aria-hidden="true">Notes</p>
+      <div id="rich" class="rich" contenteditable="true" role="textbox" aria-label="Notes" aria-multiline="true"></div>
+      <p class="tile-note">An editable region rather than a form field.</p>
+    </div>
+    <div class="tile t-scroll">
+      <p class="tile-kicker" id="scroll-label">Reading log</p>
+      <div id="scroll-box" class="scroll-box" tabindex="0" role="region" aria-labelledby="scroll-label">
+        <ol>
+          <li><time>09:00</time>Opened a new space for reading</li>
+          <li><time>09:04</time>Pinned the weekly planning doc</li>
+          <li><time>09:11</time>Split two tabs side by side</li>
+          <li><time>09:17</time>Moved a link into Favourites</li>
+          <li><time>09:25</time>Archived yesterday’s tabs</li>
+          <li><time>09:32</time>Renamed a folder to “Later”</li>
+          <li><time>09:40</time>Filled in the name field</li>
+          <li><time>09:41</time>Followed a link to the next page</li>
+          <li><time>09:42</time>Came back with the session intact</li>
+          <li><time>09:50</time>Picked option two</li>
+          <li><time>09:58</time>Wrote a short note</li>
+          <li><time>10:03</time>Waited for a status to settle</li>
+          <li><time>10:09</time>Saved sample.txt</li>
+          <li><time>10:15</time>Collapsed a space header</li>
+          <li><time>10:22</time>Searched from the command bar</li>
+          <li><time>10:30</time>Reopened a closed tab</li>
+          <li><time>10:36</time>Dragged a tab between spaces</li>
+          <li><time>10:44</time>Scrolled to the end of the log</li>
+        </ol>
+        <p id="scroll-end">End of the log.</p>
+      </div>
+    </div>
+    <div class="tile t-delay">
+      <p class="tile-kicker">Delayed status</p>
+      <div class="delay-row"><button id="delay-button" class="quiet" type="button">Prepare</button><p id="delayed-status" role="status" aria-live="polite">Not started</p></div>
+      <p class="tile-note">Settles after a short pause.</p>
+    </div>
+    <div class="tile t-download">
+      <p class="tile-kicker">Download</p>
+      <a id="download" class="download" href="/download/sample.txt" download><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14"/></svg><span>Download sample.txt<small>From this local server</small></span></a>
+    </div>
+  </div>
+</section>
+
+<section class="lab lab-only" id="lab" aria-labelledby="lab-title">
+  <div class="section-head">
+    <div><p class="kicker"><span class="num">04</span>Edge cases</p><h2 id="lab-title">Fields that should say no.</h2></div>
+    <p class="hint">Input regression fixtures. An agent should refuse most of these and handle the rest with care.</p>
+  </div>
+  <div class="specimens" aria-label="Input regression fixtures" role="group">
+    <div class="specimen"><div class="specimen-head"><span class="specimen-name">Disabled</span><span class="expect">Refuses</span></div><div class="slot"><input id="disabled" disabled aria-label="Disabled field" placeholder="Disabled"></div></div>
+    <div class="specimen"><div class="specimen-head"><span class="specimen-name">Read-only</span><span class="expect">Refuses</span></div><div class="slot"><input id="readonly" readonly aria-label="Read-only field" placeholder="Read only"></div></div>
+    <div class="specimen"><div class="specimen-head"><span class="specimen-name">Hidden</span><span class="expect">Refuses</span></div><div class="slot empty"><input id="hidden" style="display:none" aria-label="Hidden field"><span class="ghost">display: none</span></div></div>
+    <div class="specimen"><div class="specimen-head"><span class="specimen-name">Transparent</span><span class="expect">Refuses</span></div><div class="slot empty"><div style="opacity:0"><input id="transparent-field" aria-label="Transparent field"></div></div><p class="specimen-note">The field is here at opacity 0.</p></div>
+    <div class="specimen"><div class="specimen-head"><span class="specimen-name">Inert</span><span class="expect">Refuses</span></div><div class="slot" inert><input id="inert-field" aria-label="Inert field" placeholder="Inside an inert block"></div></div>
+    <div class="specimen"><div class="specimen-head"><span class="specimen-name">Covered</span><span class="expect">Refuses</span></div><div class="slot"><input id="covered" aria-label="Covered field"><div class="cover">Covered target</div></div></div>
+    <div class="specimen"><div class="specimen-head"><label for="multiline">Multiline test</label><span class="expect accepts">Keeps newlines</span></div><textarea id="multiline"></textarea></div>
+    <div class="specimen"><div class="specimen-head"><label for="replace-on-focus">Replaced on focus</label><span class="expect">Aborts</span></div><div class="slot"><input id="replace-on-focus" onfocus="this.replaceWith(this.cloneNode(true));document.querySelector('#replace-on-focus').removeAttribute('onfocus')"></div></div>
+    <div class="specimen"><div class="specimen-head"><span class="specimen-name">Ambiguous selector</span><span class="expect">Refuses “button”</span></div><button id="other-button" class="quiet" type="button">Another button for ambiguity testing</button></div>
+  </div>
+</section>
+
+<div class="brief">
+  <div><b>Tabs</b><span>See what is already open.</span></div>
+  <div><b>Read</b><span>Text and links, in context.</span></div>
+  <div><b>Act</b><span>Fill a field. Press a button.</span></div>
+  <div><b>Go</b><span>Continue in the same tab.</span></div>
+</div>
+</main>
+<footer>
+  <p class="session"><span class="ring" aria-hidden="true"></span><span id="session">Checking demo session</span></p>
+  <p class="footnote" id="source-note"><sup>*</sup> Synthetic test data. This page is <code>Tests/Fixtures/MCP/index.html</code>, served on 127.0.0.1 by Cra’s MCP tests; its look follows crabrowser.app. It loads no fonts, images or scripts from the network. <a href="/regression">Edge cases</a> · <a href="/">Playground</a></p>
+</footer>
+</div>
+<script>
+window.inputEvents = [];
+for (const type of ['mousemove','mousedown','mouseup','click','keydown','keyup','beforeinput','input']) {
+  document.addEventListener(type, e => {
+    window.inputEvents.push({type:e.type,trusted:e.isTrusted,time:performance.now(),key:e.key,code:e.code});
+    if (type === 'input' && e.target.id === 'name') fetch('/input-progress?length=' + e.target.value.length);
+  }, true);
+}
+document.cookie = 'mcp_fixture=session;path=/;SameSite=Strict';
+document.querySelector('#session').textContent = document.cookie.includes('mcp_fixture=session') ? 'Demo session available' : 'Demo cookie unavailable';
+document.querySelector('#demo-form').addEventListener('submit', event => {
+  event.preventDefault();
+  document.querySelector('#out').textContent = document.querySelector('#name').value;
+  document.querySelector('#result-icon').textContent = '✓';
+  document.querySelector('#result-icon').className = 'check';
+});
+let delay;
+document.querySelector('#delay-button').addEventListener('click', () => {
+  const status = document.querySelector('#delayed-status');
+  clearTimeout(delay);
+  status.textContent = 'Preparing…';
+  delete status.dataset.state;
+  delay = setTimeout(() => { status.textContent = 'Ready to continue'; status.dataset.state = 'ready'; }, 300);
+});
+const route = location.pathname.replace(/\/+$/, '') || '/';
+for (const link of document.querySelectorAll('[data-route]')) {
+  if (link.dataset.route === route) link.setAttribute('aria-current', 'page');
+}
+if (route === '/regression') document.querySelector('#step').textContent = 'Regression route · edge cases below';
+if (location.pathname === '/next') {
+  document.querySelector('#step').textContent = 'Next page · same browser';
+  document.querySelector('#navigation-hint').textContent = 'You made it. Your demo session is still here. Try another interaction or head back.';
+  document.querySelector('#next').href = '/';
+  document.querySelector('#next span').textContent = 'Back to the first page';
+}
+</script>
+</body>
+</html>

@@ -31,7 +31,7 @@ if [ ! -d "$DIR/Release" ]; then
   echo "Downloading ${NAME} from ${URL%/*}..."
   rm -rf "$DIR-download"
   mkdir -p "$DIR-download"
-  curl -fL --progress-bar -o "$DIR-download/${NAME}.tar.bz2" "$URL"
+  python3 scripts/download-cef.py "$URL" "$DIR-download/${NAME}.tar.bz2"
   tar -xjf "$DIR-download/${NAME}.tar.bz2" -C "$DIR-download"
   rm -rf "$DIR"
   mv "$DIR-download/${NAME}" "$DIR"

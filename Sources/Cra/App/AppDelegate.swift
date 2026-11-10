@@ -119,6 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         installKeyFallbackMonitor()
         installSideButtonKeyMonitor()
         installCommandFileWatcher()
+        MCPServer.shared.start(app: self)
         composition.startPeriodicWork { [weak self] in self?.sleepIdleTabs() }
         composition.sync.keybindingsChanged = { [weak self] in self?.bindings.reloadOverrides() }
         composition.sync.start()
@@ -462,7 +463,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return .terminateLater
     }
 
-    func applicationWillShutdown() { store.saveAll() }
+    func applicationWillShutdown() { MCPServer.shared.stop(); store.saveAll() }
 
     /// Sparkle quits Cra to install an update and starts it again: no quit confirmation.
     func prepareForUpdateRelaunch() {
@@ -1075,6 +1076,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let p = dict["boostPick"] { main.debugPick(p); return }
             // captureToEasel=1: the page's screenshot, then the capture menu's New Easel.
             if let how = dict["captureToEasel"] { main.debugCaptureToEasel(send: how == "send"); return }
+            // mcpAnswer=allow|deny: answers MCP's open "Let … use Cra?" prompt (test copies).
+            if let answer = dict["mcpAnswer"] { MCPServer.shared.answerPrompt(allow: answer == "allow"); return }
+            // mcpScripts=on|off: Settings ▸ Advanced ▸ Let agents run JavaScript in pages.
+            if let scripts = dict["mcpScripts"] { MCPServer.shared.allowsScripts = scripts == "on"; return }
+            // mcpHistory=on|off: Settings ▸ Advanced ▸ Let agents read your history.
+            if let history = dict["mcpHistory"] { MCPServer.shared.allowsHistory = history == "on"; return }
+            // mcpStop=1: the pill's Stop (every agent disconnects, MCP turns off).
+            if dict["mcpStop"] != nil { MCPServer.shared.stopFromPill(); return }
             // settingsPane=max: Settings opened on that pane.
             if let p = dict["settingsPane"].flatMap(SettingsPane.init(rawValue:)) {
                 showSettingsWindow()
@@ -1578,6 +1587,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     let line = "Cra windows: \(w.windowController.map { String(describing: type(of: $0)) } ?? "-") '\(w.title)' frame=\(NSStringFromRect(w.frame)) parent=\(w.parent.map { NSStringFromRect($0.frame) } ?? "-") visible=\(w.isVisible) key=\(w.isKeyWindow) mask=\(w.styleMask.rawValue) class=\(NSStringFromClass(type(of: w))) children=\(w.childWindows?.count ?? 0) contentView=\(w.contentView.map { NSStringFromClass(type(of: $0)) } ?? "-")"
                     NSLog("%@", line)
                 }
+                NSLog("Cra windows: liveBrowsers=%ld", CraCEFRuntime.liveBrowserCount())
                 let summary = "Cra windows: little=\(littleWindows.count) tabs=\(store.allTabs().count) runtimes=\(main.browsers.runtimes.count) hosts=\(main.browsers.runtimes.values.map { $0.browser.hostWindow.map { NSStringFromRect($0.frame) } ?? "nil" })"
                 NSLog("%@", summary)
                 return

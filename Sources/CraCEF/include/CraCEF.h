@@ -202,6 +202,21 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 @property (nonatomic, strong, nullable) id userInfo;
 /// Runs in the shared off-the-record profile (+[CraCEFRuntime endIncognitoSession]).
 @property (nonatomic, readonly) BOOL isIncognito;
+/// Windowless agent page. Shares a normal profile, never creates an AppKit window.
+@property (nonatomic, readonly) BOOL isAgent;
+- (instancetype)initAgentWithURL:(NSString *)url profilePath:(nullable NSString *)profilePath NS_SWIFT_NAME(init(agentURL:profilePath:));
+/// Last native HTML drag payload from DevTools interception. Cleared by each MCP drag.
+@property (nonatomic, copy, nullable) NSString *interceptedDragData;
+/// DevTools protocol events of this browser's own session (method, params JSON), on the main
+/// thread. Set while an MCP client works in the page; nil otherwise, so nothing is encoded.
+@property (nonatomic, copy, nullable) void (^devToolsEventHandler)(NSString *method, NSString *params);
+/// While set, a context menu the page asks for is cancelled instead of shown: an MCP client's
+/// right-click reaches the page (contextmenu event) without a native menu over the user's screen.
+@property (nonatomic) BOOL suppressesContextMenu;
+/// Explicit download in an agent tab. Site-initiated downloads are blocked in agent tabs.
+- (BOOL)startAgentDownload:(NSString *)url path:(NSString *)path update:(void (^)(CraDownloadInfo *))update;
+- (void)cancelAgentDownload;
+@property (nonatomic, readonly) BOOL agentDownloadReady;
 /// The profile folder this page's cookies, logins and storage live in (a space's own
 /// profile, under the cache root), or nil for the Default profile.
 @property (nonatomic, readonly, copy, nullable) NSString *profilePath;

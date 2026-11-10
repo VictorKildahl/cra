@@ -51,6 +51,12 @@ public enum PerfCounter: String, Codable, CaseIterable, Sendable {
 public enum PerfProcessKind: String, Codable, CaseIterable, Sendable {
     case browser, renderer, gpu, utility, other
 
+    /// Named renderer/GPU helpers already identify their role. Only generic helpers need
+    /// a process-argument lookup; avoid reading every renderer's full argument/environment buffer.
+    public static func needsType(name: String) -> Bool {
+        name.contains("Helper") && !name.hasSuffix("(Renderer)") && !name.hasSuffix("(GPU)")
+    }
+
     /// Chromium's `--type=` argument says what a helper is: CEF runs its GPU process from the plain
     /// `Cra Helper` app, so the app's name alone would call it a utility. Without one (it couldn't
     /// be read), the name decides: `Cra Helper (Renderer)`, `(GPU)`, other helpers are utilities, and

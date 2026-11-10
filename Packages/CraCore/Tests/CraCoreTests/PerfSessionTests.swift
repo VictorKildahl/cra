@@ -83,6 +83,17 @@ struct PerfProcessTableTests {
         #expect(PerfProcessKind.of(name: "Cra", isSelf: true, type: type) == .browser)
     }
 
+    @Test(arguments: [("Cra", true, "", PerfProcessKind.browser),
+                      ("CraDev Helper (Renderer)", false, "renderer", .renderer),
+                      ("Cra Helper (GPU)", false, "gpu-process", .gpu),
+                      ("Cra Helper", false, "gpu-process", .gpu),
+                      ("Cra Helper (Plugin)", false, "utility", .utility),
+                      ("sample", false, "", .other)])
+    func cheapClassificationPreservesProcessRoles(name: String, isSelf: Bool, type: String, kind: PerfProcessKind) {
+        let argument = !isSelf && PerfProcessKind.needsType(name: name) ? type : nil
+        #expect(PerfProcessKind.of(name: name, isSelf: isSelf, type: argument) == kind)
+    }
+
     @Test func cpuIsMeasuredOverTheIntervalAndChurnCountsComingAndGoing() throws {
         var t = PerfProcessTable()
         let first = t.update([reading(1, .browser, cpuMs: 1000), reading(2, .renderer, cpuMs: 500), reading(3, .renderer, cpuMs: 0)],

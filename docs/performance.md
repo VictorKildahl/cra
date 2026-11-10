@@ -182,3 +182,15 @@ real export. On `fifty-tabs` the 13.5 ms were: observer 6.7, process sample 5.1 
 6. The harness lists that compile `Perf.swift` and `CraCore/Perf/*.swift`
    (`Tests/test-browser-manager.sh`, `scripts/test-store.sh`, `scripts/fuzz.sh`), and the
    perf invariant in `scripts/scenario.sh`.
+
+### Recorder cost reduction (November 2026)
+
+The process sampler reads Chromium arguments only for helpers whose names do not
+identify their renderer/GPU role. The main-loop observer uses a stable allocated
+unfair lock directly on its hot path, preserving the same pass boundaries,
+watchdog, histogram and one-in-256 wall-clock cost sampling. The system sampler
+uses `statfs` for available blocks instead of Foundation’s important-usage
+capacity estimate. `freeDiskBytes` now describes immediately available filesystem
+space, excluding potentially reclaimable/purgeable data. The one-minute cache
+interval and unknown-on-error behavior remain unchanged. The scenario’s 0.1%
+recorder budget and build configuration are unchanged.

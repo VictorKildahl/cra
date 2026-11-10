@@ -70,6 +70,34 @@ struct AdvancedPane: View {
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            SettingsFormRow(label: "MCP:") {
+                SettingsCheckbox(title: "Allow local agents to control Cra", isOn: Binding(
+                    get: { MCPServer.shared.enabled }, set: { MCPServer.shared.setEnabled($0) }))
+                Text("Connected agents can read pages and act using your signed-in sessions.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(MCPServer.shared.status).font(.system(size: 11))
+                if MCPServer.shared.enabled {
+                    Button("Copy MCP Configuration") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(MCPServer.shared.configuration, forType: .string)
+                    }
+                    Text("Last tool: \(MCPServer.shared.lastTool.isEmpty ? "None" : MCPServer.shared.lastTool)")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                    SettingsCheckbox(title: "Let agents run JavaScript in pages", isOn: Binding(
+                        get: { MCPServer.shared.allowsScripts }, set: { MCPServer.shared.allowsScripts = $0 }))
+                    Text("A script can read anything a page holds, including passwords Cra fills in.")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                    SettingsCheckbox(title: "Let agents read your history", isOn: Binding(
+                        get: { MCPServer.shared.allowsHistory }, set: { MCPServer.shared.allowsHistory = $0 }))
+                    ForEach(MCPServer.shared.agents) { agent in
+                        HStack(spacing: 8) {
+                            Text(agent.via.isEmpty ? agent.name : "\(agent.name) in \(agent.via)").font(.system(size: 13))
+                            Text(agent.allowed ? "Allowed" : "Not allowed").font(.system(size: 11)).foregroundStyle(.secondary)
+                            Button("Forget") { MCPServer.shared.forget(agent) }
+                        }
+                    }
+                }
+            }
             SettingsFormRow(label: "About:") {
                 Text("Cra \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")").font(.system(size: 13))
                 Text("Chromium \(CraCEFRuntime.chromiumVersion()) · CEF \(CraCEFRuntime.cefVersion())")

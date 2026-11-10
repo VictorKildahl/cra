@@ -473,6 +473,13 @@ final class SidebarStore {
 
     func allTabs() -> [SidebarItem] { items.values.filter { $0.isTab } }
 
+    /// Both MCP discovery and direct ID access use the same private-tab boundary.
+    func mcpTab(_ id: UUID) -> SidebarItem? {
+        guard let item = items[id], item.isTab, !isIncognito(item: id),
+              spaceID(ofItem: id) != nil else { return nil }
+        return item
+    }
+
     /// Tab rows of a space's pinned and today lists in sidebar order, open
     /// folders included (what a ⇧-click range spans).
     func listedTabIDs(in spaceID: UUID) -> [UUID] {

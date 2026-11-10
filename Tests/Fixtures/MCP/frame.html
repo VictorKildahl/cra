@@ -1,0 +1,11 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Frame</title>
+<body style="font:13px system-ui">
+<button id="fb">Frame button</button> <input id="fi" aria-label="Frame input">
+<span id="fs"></span>
+<script>
+  document.getElementById('fb').addEventListener('click', e => { document.getElementById('fs').textContent = 'frame click trusted=' + e.isTrusted; parent.postMessage('frame click trusted=' + e.isTrusted, '*'); });
+  document.getElementById('fi').addEventListener('input', e => { document.getElementById('fs').textContent = 'frame input=' + e.target.value; parent.postMessage('frame input=' + e.target.value, '*'); });
+</script>
+</body>

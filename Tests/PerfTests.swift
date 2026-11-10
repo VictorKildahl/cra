@@ -11,6 +11,7 @@ enum PerfTests {
     @MainActor
     static func main() {
         defer { try? FileManager.default.removeItem(at: root) }
+        availableFilesystemCapacityIsSampled()
         stallsAreRecordedWithTheirBreadcrumbs()
         aHangIsWrittenWhileItLastsWithItsStack()
         aSessionThatNeverQuitIsAbnormalNextLaunch()
@@ -61,6 +62,14 @@ enum PerfTests {
             }
         }
         if x < 0 { print(x) }
+    }
+
+    static func availableFilesystemCapacityIsSampled() {
+        let folder = FileManager.default.temporaryDirectory
+        var sampler = PerfSystemSampler()
+        expect((sampler.read(dataFolder: folder).freeDiskBytes ?? -1) > 0, "available filesystem blocks sampled")
+        expect(PerfSystemSampler.availableDisk(root.appendingPathComponent("absent-volume-path")) == nil,
+               "missing filesystem path has unknown capacity")
     }
 
     // promise: #91
