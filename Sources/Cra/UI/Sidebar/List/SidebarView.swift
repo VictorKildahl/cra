@@ -145,16 +145,18 @@ final class SidebarView: NSView {
     private var bannerHeight: CGFloat = 0
 
     /// DownloadsTrayMask: the tab list is hidden from 3 pt above the downloads list's first row
-    /// and fades back in over the 170 pt above that.
+    /// and fades back in over the 170 pt above that. This mask also clips the pager, leaving
+    /// `MusicNotes.overhang` above the top favorites for notes to rise under the URL field.
     private func updateTrayMask(open: Bool, rows: Int) {
         let h = max(pager.bounds.height, 1)
         let clearTop = max(0, h - DownloadsTrayMetrics.listHeight(rows: rows) - 1)
         let fadeTop = max(0, clearTop - DownloadsTrayMetrics.fade)
+        let over = MusicNotes.overhang
         CATransaction.begin()
         CATransaction.setAnimationDuration(open ? 0.18 : 0.13)
         if !open { CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut)) }
-        trayMask.frame = pager.bounds
-        trayMask.locations = [0, NSNumber(value: Double(fadeTop / h)), NSNumber(value: Double(clearTop / h)), 1]
+        trayMask.frame = NSRect(x: 0, y: -over, width: pager.bounds.width, height: pager.bounds.height + over)
+        trayMask.locations = [0, NSNumber(value: Double((fadeTop + over) / (h + over))), NSNumber(value: Double((clearTop + over) / (h + over))), 1]
         let opaque = NSColor.black.cgColor, clear = NSColor.clear.cgColor
         trayMask.colors = open ? [opaque, opaque, clear, clear] : [opaque, opaque, opaque, opaque]
         CATransaction.commit()

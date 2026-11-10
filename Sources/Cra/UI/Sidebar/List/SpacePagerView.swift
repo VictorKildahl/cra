@@ -47,7 +47,7 @@ final class SpacePagerView: NSView {
         self.favicons = favicons
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.masksToBounds = true
+        // SidebarView's mask clips the pages with room above the top favorites for notes.
         strip.wantsLayer = true
         addSubview(strip)
         ui.observeSpaceSwipe { [weak self] in self?.swipeChanged() }

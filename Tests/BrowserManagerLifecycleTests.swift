@@ -142,6 +142,7 @@ enum BrowserManagerLifecycleTests {
         nowPlayingCase()
         await nowPlayingAfterSleepCase()
         await nowPlayingResumeWithinHoldCase()
+        musicNotesPauseWithinHoldCase()
         await nowPlayingPictureInPictureCase()
         nowPlayingSkipsPictureInPictureCase()
         await leaveVideoTabPictureInPictureCase()
@@ -975,6 +976,30 @@ enum BrowserManagerLifecycleTests {
         runtime.browser.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"beforeunload"}}"#)
         await drainMainQueue()
         expect(manager.runtime(for: id) != nil, "a page with its own onbeforeunload stays awake")
+        manager.closeAll()
+    }
+
+    // promise: #303
+    /// Pausing hides music notes before the speaker's recently-audible hold expires.
+    @MainActor
+    private static func musicNotesPauseWithinHoldCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let id = store.createTab(url: "https://music.youtube.com/watch?v=test").id
+        let runtime = manager.ensureRuntime(for: id)!
+        runtime.browser.isAudible = true
+        runtime.soundPlaying = true
+
+        manager.browser(runtime.browser, didChangeSoundPlaying: false)
+        expect(!runtime.soundPlaying && runtime.browser.isAudible,
+               "music notes stop on pause while the speaker is still recently audible")
+        manager.browser(runtime.browser, didChangeSoundPlaying: true)
+        expect(runtime.soundPlaying, "music notes resume within the audible hold without a player card")
+
+        manager.unload(id)
+        let replacement = manager.ensureRuntime(for: id)!
+        manager.browser(runtime.browser, didChangeSoundPlaying: true)
+        expect(!replacement.soundPlaying, "a retired page's sound cannot start the replacement's notes")
         manager.closeAll()
     }
 
