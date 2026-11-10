@@ -55,6 +55,14 @@ final class AppIconManager {
         if selectedID != Self.defaultID { NSApp.applicationIconImage = image(for: selectedID) }
     }
 
+    /// Cra just came back to the Dock (Keep Cra in the menu bar, #231). macOS registers the app
+    /// anew with the bundle's icon, so the ⌘-Tab switcher shows Segments until the icon is set
+    /// again (GitHub #319).
+    func applyAfterReturningToDock() {
+        NSApp.applicationIconImage = selectedID == Self.defaultID ? nil : image(for: selectedID)
+        CraLog.note("app icon: \(selectedID) set again, back in the Dock")
+    }
+
     func image(for id: String) -> NSImage? {
         // app-icons/segments.png is the bundled icon on the grid, for the picker; the Dock
         // gets AppIcon.icns itself (apply()).

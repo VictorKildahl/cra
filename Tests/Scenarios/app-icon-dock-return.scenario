@@ -1,0 +1,17 @@
+# The app icon picked in Settings comes back with the Dock icon (GitHub #319). With "Keep Cra in the
+# menu bar", ⌘Q takes Cra out of the Dock and New Window brings it back. macOS registers it anew with
+# the bundle's icon then, and the ⌘-Tab switcher showed Segments until the icon was picked again.
+# What ⌘-Tab draws can't be read here (docs/release-checklist.md), so this pins that Cra sets the
+# icon again on the way back.
+# promise: #319
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "keepInMenuBar": true}
+cra://open?url=${PAGE}?n=icon
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+reject-log app icon: \S+ set again
+cra://debug?quit=menu
+wait 2
+expect-log menu bar: quit keeps Cra in the menu bar
+cra://action/newWindow
+wait 3
+expect-log menu bar: browser windows back
+expect-log app icon: \S+ set again, back in the Dock

@@ -622,6 +622,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private func leaveMenuBarForWindow() {
         guard NSApp.activationPolicy() != .regular else { return }
         NSApp.setActivationPolicy(.regular)
+        AppIconManager.shared.applyAfterReturningToDock()
         if NSApp.isHidden { NSApp.unhide(nil) }
     }
 
