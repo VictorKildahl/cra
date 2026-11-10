@@ -147,6 +147,7 @@ enum BrowserManagerLifecycleTests {
         await nowPlayingPictureInPictureCase()
         nowPlayingSkipsPictureInPictureCase()
         await leaveVideoTabPictureInPictureCase()
+        await pictureInPicturePerSiteCase()
         await splitCopySleepsPinnedTabCase()
         await coveredWindowPictureInPictureCase()
         await callPictureInPictureCase()
@@ -1218,6 +1219,28 @@ enum BrowserManagerLifecycleTests {
         store.settings.autoPictureInPicture = false
         manager.show(b, focus: false)
         expect(!ra.browser.replies.contains { $0.method.hasSuffix("Runtime.evaluate") }, "with the setting off, leaving the tab asks nothing")
+        manager.closeAll()
+    }
+
+    /// The Site Control Center's Automatic Picture-In-Picture switch is per site (GitHub #326): a tab
+    /// on a site turned off goes out of sight without Picture in Picture, and a tab on another site
+    /// still opens it.
+    // promise: #326
+    @MainActor
+    private static func pictureInPicturePerSiteCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let music = store.createTab(url: "https://music.example.test/song").id, video = store.createTab(url: "https://video.example.test/film").id
+        let other = store.createTab(url: "https://example.test/other").id
+        let rm = manager.ensureRuntime(for: music)!, rv = manager.ensureRuntime(for: video)!
+        store.settings.autoPictureInPicture = true
+        store.settings.autoPictureInPictureOff = ["music.example.test"]
+        manager.show(music, focus: false)
+        manager.show(other, focus: false)
+        expect(!rm.browser.replies.contains { $0.method == "Runtime.evaluate" }, "a site turned off isn't asked for Picture in Picture")
+        manager.show(video, focus: false)
+        manager.show(other, focus: false)
+        expect(rv.browser.replies.contains { $0.method == "Runtime.evaluate" }, "another site still is")
         manager.closeAll()
     }
 

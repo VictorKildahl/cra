@@ -571,8 +571,12 @@ public struct AppSettings: Codable, Equatable {
     /// Arc's Previews ▸ Folders (folderPreviewEnabled): resting the pointer on a closed folder
     /// lists its tabs, most recent first, with a search field.
     public var folderPreviews: Bool = true
-    /// Arc: "Enable Picture in Picture when you leave a video tab".
+    /// Arc: "Enable Picture in Picture when you leave a video tab". The default for every site
+    /// without a choice of its own in `autoPictureInPictureSites`.
     public var autoPictureInPicture: Bool = true
+    /// The Site Control Center's Automatic Picture-In-Picture switch, per site like Arc's (#326):
+    /// a site's own choice, which outlasts a change to `autoPictureInPicture`.
+    public var autoPictureInPictureSites: [String: Bool] = [:]
     /// Dia's onboarding privacy choice "Block third-party ads and trackers": requests
     /// to listed ad and tracker domains are cancelled unless they are first-party.
     public var blockAdsAndTrackers: Bool = true
@@ -723,6 +727,17 @@ public struct AppSettings: Codable, Equatable {
             if on { disabledDefaultDeveloperHosts.insert(k) } else { disabledDefaultDeveloperHosts.remove(k) }
         } else if on { developerHosts.remove(k) } else { developerHosts.insert(k) }
     }
+    /// Whether leaving a video tab on this page's site opens Picture in Picture.
+    public func allowsAutoPictureInPicture(url: String) -> Bool {
+        AppSettings.siteKey(for: url).flatMap { autoPictureInPictureSites[$0] } ?? autoPictureInPicture
+    }
+    /// The Site Control Center's switch: flips this site only. A site switched back to the setting
+    /// for every site follows that setting again.
+    public mutating func toggleAutoPictureInPicture(url: String) {
+        guard let k = AppSettings.siteKey(for: url) else { return }
+        let on = !allowsAutoPictureInPicture(url: url)
+        autoPictureInPictureSites[k] = on == autoPictureInPicture ? nil : on
+    }
     /// Settings saved without `toolbarDefaultMigrated` take the toolbar from Arc's View ▸
     /// Show Toolbar (nil without Arc: off), once. Arc's preference is read only then.
     public mutating func migrateToolbarDefault(arcShowsToolbar: @autoclosure () -> Bool?) {
@@ -852,6 +867,7 @@ extension AppSettings {
         disabledDefaultDeveloperHosts = try c.decodeIfPresent(Set<String>.self, forKey: .disabledDefaultDeveloperHosts) ?? []
         chromeEngine = try c.decodeIfPresent(Bool.self, forKey: .chromeEngine) ?? true
         autoPictureInPicture = try c.decodeIfPresent(Bool.self, forKey: .autoPictureInPicture) ?? true
+        autoPictureInPictureSites = (try? c.decodeIfPresent([String: Bool].self, forKey: .autoPictureInPictureSites)) ?? [:]
         blockAdsAndTrackers = try c.decodeIfPresent(Bool.self, forKey: .blockAdsAndTrackers) ?? true
         if let d = try? c.decodeIfPresent(LinkDestination.self, forKey: .defaultLinkDestination) {
             defaultLinkDestination = d

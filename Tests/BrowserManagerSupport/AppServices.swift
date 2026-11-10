@@ -37,6 +37,11 @@ enum TestRoot { case today }
 @MainActor final class SidebarStore {
     struct Settings {
         var autoPictureInPicture = false
+        /// Hosts whose Site Control Center switch turned automatic Picture in Picture off.
+        var autoPictureInPictureOff: Set<String> = []
+        func allowsAutoPictureInPicture(url: String) -> Bool {
+            autoPictureInPicture && !autoPictureInPictureOff.contains(URL(string: url)?.host ?? "")
+        }
         var shareThemeWithWebsites = true
         var blockCookieBanners = false
     }

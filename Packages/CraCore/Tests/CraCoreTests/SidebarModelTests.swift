@@ -179,6 +179,41 @@ struct SidebarModelTests {
         #expect(!settings.isDeveloperMode(url: "http://localhost/"))
     }
 
+    /// #326 (CallMeAl3x): the Site Control Center's Automatic Picture-In-Picture switch is per site
+    /// in Arc. Turning it off on music.youtube.com left youtube.com, every other site and Settings ▸
+    /// Tabs' "Enable Picture in Picture when you leave a video tab" (the default) as they were.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/326"))
+    func automaticPictureInPictureIsPerSite() throws {
+        var settings = AppSettings()
+        #expect(settings.autoPictureInPicture)
+        #expect(settings.allowsAutoPictureInPicture(url: "https://music.youtube.com/watch?v=1"))
+        settings.toggleAutoPictureInPicture(url: "https://music.youtube.com/watch?v=1")
+        #expect(!settings.allowsAutoPictureInPicture(url: "https://music.youtube.com/playlist"), "off for that site")
+        #expect(settings.allowsAutoPictureInPicture(url: "https://www.youtube.com/watch?v=2"), "another site keeps it")
+        #expect(settings.autoPictureInPicture, "the setting for every site stays on")
+        let saved = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
+        #expect(!saved.allowsAutoPictureInPicture(url: "https://music.youtube.com/"), "turned off stays off")
+
+        // Off everywhere, a site can still be turned on, and the site turned off stays off.
+        settings.autoPictureInPicture = false
+        #expect(!settings.allowsAutoPictureInPicture(url: "https://www.youtube.com/"))
+        settings.toggleAutoPictureInPicture(url: "https://www.youtube.com/")
+        #expect(settings.allowsAutoPictureInPicture(url: "https://youtube.com/watch"))
+        #expect(!settings.allowsAutoPictureInPicture(url: "https://example.com/"))
+        #expect(!settings.allowsAutoPictureInPicture(url: "https://music.youtube.com/"))
+        #expect(!settings.autoPictureInPicture)
+
+        // A site switched back to the setting follows it again; music.youtube.com's own choice stays.
+        settings.toggleAutoPictureInPicture(url: "https://www.youtube.com/")
+        #expect(settings.autoPictureInPictureSites == ["music.youtube.com": false])
+        settings.autoPictureInPicture = true
+        #expect(!settings.allowsAutoPictureInPicture(url: "https://music.youtube.com/"), "its own choice outlasts the setting")
+        settings.toggleAutoPictureInPicture(url: "https://music.youtube.com/")
+        #expect(settings.autoPictureInPictureSites.isEmpty)
+        settings.toggleAutoPictureInPicture(url: "notes")
+        #expect(settings.autoPictureInPictureSites.isEmpty && settings.autoPictureInPicture, "no host, nothing to toggle")
+    }
+
     /// #185: Developer Mode from the Site Control Center showed nothing with the toolbar hidden
     /// (Cra's default). Arc shows its developer bar above that site's pages anyway.
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/185"))

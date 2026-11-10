@@ -125,7 +125,7 @@ public struct UsageStats: Codable, Equatable, Sendable {
     /// Lists, folders, sites and one-time marks: never in a report. Sharing itself is always on
     /// when a report goes out.
     public static let unreportedSettings: Set<String> = [
-        "developerHosts", "disabledDefaultDeveloperHosts", "linkRoutes", "mediaFolders", "mediaHidden",
+        "developerHosts", "disabledDefaultDeveloperHosts", "autoPictureInPictureSites", "linkRoutes", "mediaFolders", "mediaHidden",
         "downloadLocations", "hasSeenImportPrompt", "toolbarDefaultMigrated", "newTabButtonDefaultMigrated",
         "autoArchiveDays", "shareUsageStats",
     ]
