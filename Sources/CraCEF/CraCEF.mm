@@ -80,6 +80,33 @@ static NSMutableSet<CraBrowser*>* g_parkedBrowsers = nil;
 static void (^g_strayPageHandler)(NSString*, NSString*) = nil;
 static CraBrowser* (^g_extensionTabHandler)(NSString*, NSString*, BOOL, CraBrowser*) = nil;
 static BOOL (^g_appLinkHandler)(CraBrowser*, NSString*, BOOL) = nil;
+// The last click (left mouse-up) or Return in any window, for the download Chromium makes of an
+// Option-clicked link (#298): where it landed and the keys held. Set in -[CraApplication sendEvent:].
+static __weak NSWindow* g_lastPressWindow = nil;
+static __weak NSView* g_lastPressView = nil;
+static NSEventModifierFlags g_lastPressModifiers = 0;
+static NSTimeInterval g_lastPressTime = -1;
+
+static BOOL CraIsInPageView(NSView* v);
+
+static void CraNoteLastPress(NSEvent* event) {
+    BOOL click = event.type == NSEventTypeLeftMouseUp;
+    BOOL enter = event.type == NSEventTypeKeyDown && (event.keyCode == 36 || event.keyCode == 76);  // Return, Enter
+    if (!click && !enter) return;
+    NSWindow* window = event.window;
+    NSView* view = nil;
+    if (click) {
+        NSView* root = window.contentView.superview ?: window.contentView;
+        view = [root hitTest:event.locationInWindow];
+    } else if ([window.firstResponder isKindOfClass:[NSView class]]) {
+        view = (NSView*)window.firstResponder;
+    }
+    g_lastPressWindow = window;
+    g_lastPressView = view;
+    g_lastPressModifiers = event.modifierFlags;
+    g_lastPressTime = event.timestamp;
+}
+
 // Downloads whose save panel was cancelled (#190): cancelled on their next update, never shown.
 static std::set<uint32_t> g_cancelledDownloads;
 // Each download in progress, to pause, resume or cancel from its row (#272). Chromium's callback
@@ -1404,6 +1431,7 @@ public:
         }
         // Another app's address (spotify:) opens no tab: Cra asks "Open <app>?" over this page.
         if (g_appLinkHandler && g_appLinkHandler(o, NSStringFromCef(target_url), user_gesture)) return true;
+        if (OpensSplitPane(o, target_url, target_disposition, user_gesture)) return true;
         // A target=_blank link the user clicked (Shift-clicked: a new window) may open in a
         // Peek; window.open with features (a sign-in popup) is CEF_WOD_NEW_POPUP and stays one.
         if (user_gesture && (target_disposition == CEF_WOD_NEW_FOREGROUND_TAB || target_disposition == CEF_WOD_NEW_WINDOW)
@@ -1712,6 +1740,7 @@ public:
                           WindowOpenDisposition target_disposition, bool user_gesture) override {
         CraBrowser* o = owner_;
         if (!o) return false;
+        if (OpensSplitPane(o, target_url, target_disposition, user_gesture)) return true;
         // Shift-click (Chrome: a new window).
         if (user_gesture && target_disposition == CEF_WOD_NEW_WINDOW
             && [o.delegate respondsToSelector:@selector(browser:opensPeekForURL:shiftClick:newTab:)]
@@ -1963,6 +1992,43 @@ public:
     }
 
     // Downloads -----------------------------------------------------------
+
+    // Chromium makes an Option-clicked link a download of it; Arc opens it in Split View (#298).
+    // The click that asked is the last one in this page, a moment ago.
+    bool CanDownload(CefRefPtr<CefBrowser> browser, const CefString& url, const CefString& request_method) override {
+        CraBrowser* o = owner_;
+        if (!o || ![o.delegate respondsToSelector:@selector(browser:opensSplitForDownloadURL:clickModifiers:clickAge:)])
+            return true;
+        // Chromium's page view, in this page's window: in its card (EmbeddedPages moves it out of
+        // Chrome's window) or in that window. Split panes share a window; the first pane to
+        // download takes the click.
+        NSWindow* window = g_lastPressWindow;
+        NSView* view = g_lastPressView;
+        BOOL inWindow = window && (window == o.containerView.window || window == o.hostWindow);
+        BOOL inPage = view && ([view isDescendantOf:o.containerView] || (inWindow && CraIsInPageView(view)));
+        NSTimeInterval age = inPage && g_lastPressTime >= 0 ? NSProcessInfo.processInfo.systemUptime - g_lastPressTime : -1;
+        if (![o.delegate browser:o opensSplitForDownloadURL:NSStringFromCef(url)
+                  clickModifiers:inPage ? g_lastPressModifiers : 0 clickAge:age]) return true;
+        g_lastPressTime = -1;  // one click, one pane
+        return false;
+    }
+
+    // ⌘⌥-click: Chromium's split view, a pane beside this page as an Option-click opens (#298).
+    // After Chromium's call returns: the pane makes a page of its own.
+    static bool OpensSplitPane(CraBrowser* o, const CefString& target_url, WindowOpenDisposition disposition,
+                               bool user_gesture) {
+        if (!user_gesture || disposition != CEF_WOD_NEW_SPLIT_VIEW
+            || ![o.delegate respondsToSelector:@selector(browser:requestsSplitPaneWithURL:)]) return false;
+        NSString* url = NSStringFromCef(target_url);
+        NSString* scheme = [NSURL URLWithString:url].scheme.lowercaseString;
+        if (![scheme isEqualToString:@"http"] && ![scheme isEqualToString:@"https"]) return false;
+        __weak CraBrowser* weak = o;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            CraBrowser* b = weak;
+            if (b) [b.delegate browser:b requestsSplitPaneWithURL:url];
+        });
+        return true;
+    }
 
     bool OnBeforeDownload(CefRefPtr<CefBrowser> browser, CefRefPtr<CefDownloadItem> download_item,
                           const CefString& suggested_name, CefRefPtr<CefBeforeDownloadCallback> callback) override {
@@ -3476,6 +3542,7 @@ static BOOL CraIsSystemHotKey(NSEvent* event) {
 // shortcuts (CraIsSystemHotKey) always take the normal path, as in Chrome and Arc.
 - (void)sendEvent:(NSEvent*)event {
     CefScopedSendingEvent sendingEventScoper;
+    CraNoteLastPress(event);
     if ([_forwardedKeyEvents containsObject:event]) {
         [_forwardedKeyEvents removeObject:event];
         [super sendEvent:event];

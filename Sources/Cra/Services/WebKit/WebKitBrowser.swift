@@ -337,6 +337,8 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
 
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, preferences: WKWebpagePreferences,
                  decisionHandler: @escaping @MainActor (WKNavigationActionPolicy, WKWebpagePreferences) -> Void) {
+        // Before WebKit's download: an Option-clicked link with `download` opens a pane, as in Chromium.
+        if opensSplit(action) { return decisionHandler(.cancel, preferences) }
         if action.shouldPerformDownload { return decisionHandler(.download, preferences) }
         guard let url = action.request.url else { return decisionHandler(.allow, preferences) }
         let scheme = url.scheme?.lowercased() ?? ""
@@ -434,6 +436,16 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
         webView.reload()
     }
 
+    /// Option-click on a link (Arc) or ⌘⌥-click (Chromium): a pane beside this page, as in a
+    /// Chromium tab (#298). Not where the delegate has no split (a Little Window).
+    private func opensSplit(_ action: WKNavigationAction) -> Bool {
+        guard action.navigationType == .linkActivated, action.buttonNumber != 2, let url = action.request.url?.absoluteString,
+              LinkSplitClick.opensSplit(url, modifiers: action.modifierFlags.rawValue),
+              delegate?.responds(to: #selector(CraBrowserDelegate.browser(_:requestsSplitPaneWithURL:))) == true else { return false }
+        delegate?.browser?(self, requestsSplitPaneWithURL: url)
+        return true
+    }
+
     // MARK: Windows and popups
 
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for action: WKNavigationAction,
@@ -444,6 +456,7 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
         if AppLinkPrompt.handle(url, from: self, userGesture: true) { return nil }
         // A target=_blank link: a new tab without an opener, like Chrome's noopener default.
         if action.navigationType == .linkActivated {
+            if opensSplit(action) { return nil }
             let mods = action.modifierFlags
             if mods.contains(.command) || action.buttonNumber == 2 {
                 delegate?.browser(self, requestsNewTabWithURL: url, inBackground: !mods.contains(.shift))

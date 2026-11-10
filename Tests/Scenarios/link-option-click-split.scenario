@@ -1,0 +1,43 @@
+# Option-click on a link opens it in Split View beside the page, as in Arc (GitHub #298). Chromium
+# makes an Option-click "download this link"; Cra opens the pane instead and nothing downloads. A
+# target=_blank link does the same, and so does ⌘⌥-click (Chromium's own split view click). The
+# clicks go through the app's event queue, as the pointer's do. A WebKit tab's posted click never
+# reaches its page behind other windows: docs/release-checklist.md has that one.
+# promise: #298
+budget rss=900 stalls50=40
+pace 0.5
+home
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=source
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+# A link over the whole page, so a click anywhere on it lands on the link.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='${PAGE}?n=optionLink',a.textContent='link',a.style.cssText='position:fixed;inset:0;z-index:9;background:pink',document.body.append(a),'placed'))(document.createElement('a'))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"placed"
+cra://debug?clickAt=760,400&mods=524288
+wait 2
+cra://debug?split=option
+expect-log split option: panes=\S+n=source \| \S+n=optionLink selected=\S+n=optionLink downloads=0$
+
+# target=_blank, in a tab of its own.
+cra://open?url=${PAGE}?n=blankSource
+wait 1.5
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='${PAGE}?n=blankLink',a.target='_blank',a.textContent='link',a.style.cssText='position:fixed;inset:0;z-index:9;background:pink',document.body.append(a),'placed'))(document.createElement('a'))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"placed"
+cra://debug?clickAt=760,400&mods=524288
+wait 2
+cra://debug?split=blank
+expect-log split blank: panes=\S+n=blankSource \| \S+n=blankLink selected=\S+n=blankLink downloads=0$
+
+# ⌘⌥-click.
+cra://open?url=${PAGE}?n=commandSource
+wait 1.5
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='${PAGE}?n=commandLink',a.textContent='link',a.style.cssText='position:fixed;inset:0;z-index:9;background:pink',document.body.append(a),'placed'))(document.createElement('a'))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"placed"
+cra://debug?clickAt=760,400&mods=1572864
+wait 2
+cra://debug?split=command
+expect-log split command: panes=\S+n=commandSource \| \S+n=commandLink selected=\S+n=commandLink downloads=0$
+

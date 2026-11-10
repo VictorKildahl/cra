@@ -2149,8 +2149,11 @@ Library button's hover list (downloads) and its click (the archive) showed diffe
 - [O] reopening shows the page last used (left on Archived Tabs, reopened on Archived Tabs).
 - [O 60 fps] opening: the Library is in place within 2–3 frames, sliding in from a little to the left. Closing: it
   slides left and fades while the tab list fades back in, ~6 frames, the card edge easing from 417 to 347.
-- [U] Whether the list column keeps a fixed 304 pt or follows the sidebar width (both give 417 pt at 347); Cra adds
-  70 pt to the user's width. The open animation's exact curve.
+- [O live AX, Arc 1.172, 10 Nov 2026, #302] The Library is 417 pt whatever the tab sidebar's width: offline Arc
+  with `sidebarWidth` 200 and 450 in StorableWindows.json, Library opened by AXPress on the sidebar's Home
+  button; both read sidebar group 417, search field x 164 w 235, list scroll area x 124 w 281. So at 450 the
+  Library is narrower than the tab list. Cra had added 70 pt to the user's width (`LibraryWidth` now).
+- [U] Whether Arc lets the Library's edge be dragged (not tried; Cra keeps it fixed). The open animation's exact curve.
 - Cra: `LibraryView` in the sidebar (Downloads and Archived Tabs; Cra has no Media, Easels, Spaces or Boosts pages),
   `SidebarUIState.libraryPage` per window, `MainWindowController.showLibrary/closeLibrary`. The Library button and
   ⇧⌘L toggle it on the last page, ⇧⌘J opens Downloads, "View Archive" opens Archived Tabs, Esc and the back arrow
@@ -3125,6 +3128,10 @@ properties {URL:…}`) on a local server that answers after 40 s; window capture
 - Cra deviates on purpose (Victor, 6 Nov 2026, #155): the editor's Auto always builds both halves, one colour too.
   Arc saves a swatch picked on Auto as a fixed `single`; Cra copied that in 0.1.30–0.1.32, and a space set to Auto
   stopped following macOS. Pinned by `everySwatchOnAutoFollowsMacOS` and the `auto-theme` scenario.
+- Cra (#300): the pad's − takes the last colour too, as Arc's does, and an empty pad saves that colourless theme
+  (`SpaceThemeVariants.colourless`: the imported halves of Arc's default, both on Auto, one on Light or Dark) with an
+  empty `key`, so the editor reopens on "Tap to pick a color for this space". Before, − stopped at one colour.
+  Pinned by `noColourIsArcsColourlessTheme` and `padButtons`.
 - [?] Not worked out: how Arc's editor maps a picked colour to its halves (the pad's `lightnessRange` and the bias
   value). Cra's halves are fitted to Arc's default theme only.
 
@@ -3806,3 +3813,63 @@ ScreenCaptureKit region recorder that also drives the pointer and logs each move
   no-tab window, measured against the gradient 80 pt further right). Cra now draws that as a layer shadow in a
   click-through panel under the sidebar's, with the sidebar cut out of it.
 - Not changed: Arc's folder names read semibold in both spaces (Cra regular); not part of #293.
+
+### Music notes on a playing favorite (Arc 1.172.1, build 90370, 10 Nov 2026)
+
+Reference: `strings` and Swift field metadata on the arm64 binary, `assetutil` on ARCUI's Assets.car,
+and lldb's disassembler for constants, with Objective-C calls resolved through selector metadata.
+Visual references: paired YouTube Music footage in dark spaces and light-theme screenshots,
+10 Nov 2026. Full-window coverage at both 1x and 2x is still pending.
+
+- [O static] The top-apps item state has `shouldShowMusicalAnimation`, and `AppTrayItemViewAppKit` a lazy
+  `musicIconAnimationView`: an `ARCUI.ParticleNSView` (ParticlesView.swift), a `CAEmitterLayer` filled from a
+  `ParticleTemplate` (cases `pulse` and `musicNotes`). The tile also removes that view from its superview and
+  drops it; [I] that is what happens when the flag turns off, so the notes go at once.
+- [O static] Music sites, a static array of 8 hosts beside ARCUI's `MusicalIcon`: bandcamp.com,
+  music.apple.com, music.youtube.com, nts.live, pandora.com, soundcloud.com, spotify.com, tidal.com. A URL
+  matches when its host is one of them, ends in "." + one of them, or has one among its dot-separated labels.
+  youtube.com is not there.
+- [I] The flag is "the tab plays audio and its URL is a music site" (`_isAudible` and `browserIsPlayingAudio`
+  exist; where they meet the list wasn't traced). [U] Whether a muted tab keeps its notes. Cra shows none.
+- [O static] `ParticleTemplate.musicNotes` is two cells that differ in image and birth rate: `MusicSprite1`
+  (one eighth note) 1.4 a second, `MusicSprite2` (two notes under a beam) 1.0. Both: lifetime 2, lifetimeRange
+  0, scale 0, scaleRange 0.2, scaleSpeed 1, alphaRange 0.15, alphaSpeed −0.5, emissionLongitude π/2,
+  emissionLatitude 0, emissionRange π/3, velocity 20, velocityRange 5; no spin, no acceleration. The emitter
+  layer's `beginTime` is not set, so it shows as if it had been running.
+- [O static] The sprites are 6 × 6 pt template images (12 × 12 px, a 2x rendition only, gray). Each is redrawn
+  in the tint with `NSImage(size:flipped:drawingHandler:)` (the sprite, then a `sourceIn` fill) and given to the
+  cell as a CGImage. Tint: white 0.8 when the tile's effective appearance is dark, else black 0.6.
+- [O static] On the tile: `emitterShape` circle, `emitterSize` 6 × 6, `emitterPosition` the
+  particle view's centre, set on layout; the view's frame is the tile's bounds grown 30 pt on every side, then
+  `CGRectOffset` by (0, −8).
+- [O still] 2x still, a YouTube Music favorite in the top row (tile 50 × 47 pt, icon 16 pt): one sharp note about
+  4 × 6.5 pt some 12 pt above the icon's centre, and soft, fainter ones 11–12 pt across about 24 pt above it,
+  cut off 8 pt above the tile, where the URL field ends. No note over the icon. [I] So −8 is up (the tile is
+  flipped): the emitter sits on the icon's top edge. And the cell's image is 12 px drawn 12 pt wide at scale 1
+  (about 0.55 at 0.45 s, 1 at 1 s with alpha near 0.4), which is why a grown note is soft on a 2x display; a
+  6 px image would put the large notes at 1.9 s, when they are all but faded out.
+- Cra implementation: `MusicNotes` holds the host policy, particle values and placement geometry.
+  `MusicNotesView` uses a `CAEmitterLayer` with two independently drawn notes on a 12 px grid.
+  `FavoritesGridView` keeps the overlays above the tiles; a split emits from its first eligible playing
+  pane. The pager mask allows 8 pt above the top row, following the still; empty columns keep their
+  original clipping.
+- Cra policy choices: require an exact music host or its subdomain, current sound playback and an
+  unmuted tab; hide notes with Reduce Motion on. Notes follow the immediate sound callback so pausing
+  removes them before the speaker's 2 s recently-audible hold expires. Arc's full trigger is inferred
+  above; its muted-tab and Reduce Motion behavior remain unverified.
+- [O capture, 10 Nov] Paired dark-theme footage (12.32 s, Arc left, CraDev right) shows notes above
+  each music icon, growing softer and fading under the URL field. The grids have different tile
+  counts, so widths differ. Live pause/resume was checked in CraDev.
+- Cra's independent artwork uses black 0.3 on light tiles, a visual fit to the paired light-theme
+  screenshots rather than Arc's static tint value above. Dark notes remain white 0.8. The pixel
+  harness checks both sprites on fixed backgrounds at 1x and 2x: about 179/255 on white for light
+  notes, 204/255 on black for dark notes. It fails with the previous, heavier light tint.
+- Validation: `scripts/test.sh` passed, including a browser-manager regression test that failed on
+  the pause delay before the fix. The release build and `music-notes` scenario passed with no faults.
+  The scenario plays a quiet tone from the local fixture server mapped to nts.live and reads
+  `cra://debug?musicNotes=`. It covers a non-music host, an idle music favorite, playing, muting,
+  unmuting, pausing, quick resuming and the emitter's offset. Paused readouts poll for one second,
+  before the speaker's hold expires, to allow Chromium's asynchronous sound event to arrive.
+- Pending: full-window coverage at both 1x and 2x and the remaining states in
+  [release-checklist.md](release-checklist.md#sidebar-tabs-and-the-command-bar). The captures provide
+  qualitative comparisons; exact particle timing and display-scale coverage remain unverified.

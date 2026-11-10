@@ -37,6 +37,7 @@ or Arc-only service), per CONTRIBUTING.md.
 | Archive Little Arcs after | Settings ▸ Links (6 hours default) | done | Settings ▸ Tabs ▸ Links; a Little Window left alone that long closes into the archive. |
 | Previews (Gmail, Calendar on Favorites) | Settings ▸ General ▸ Previews Settings…, a Calendar favorite's menu ▸ Live Calendar | done | Gmail: the unread mail from Gmail's Atom feed (the space's own sign-in) in Arc's card, rows, ＋ and motion, measured on Victor's signed-in Arc 8 Nov. Calendar: Arc's timeline card, gear menu, Live Calendar ▸ submenu, tile countdown and meeting link; events read through Google's Calendar embed (Arc's own fetch says "Failed to update" in 1.172.1). See "Previews, measured". |
 | Join Meeting ⌃⌘J | Shortcuts | done | The call on now, else the next one today, from a Live Calendar favorite. |
+| Music notes on a playing favorite | A favorite on a music site, while it plays | partial | Core Animation notes rise above the playing icon, stop on pause or mute, and stay hidden with Reduce Motion on. Dark-theme footage and light-theme screenshots compared with Arc; light notes use 30% black, dark notes 80% white. Full-window 1x/2x and remaining manual checks are pending. |
 | Troubleshooting menu | Help ▸ Troubleshooting: Record Trace, Open Task Manager, Reveal Arc Data, Copy Arc Info | done | Export Diagnostics…, Open Task Manager (Chrome's), Reveal Cra Data, Copy Cra Info; Record Trace is Arc-internal. |
 | Help menu | Getting Started, Release Notes, Contact the Team, Visit Help Center, Restore Data | done | Cra Help (Arc's Help Center and Getting Started guide), Release Notes, Report an Issue… (Contact the Team), Essential Keyboard Shortcuts, Troubleshooting ▸ Task Manager / Reveal Data / Copy Info. *skip*: Restore Data and Export Arc Notes (Arc's account and Notes), Record Trace (chrome://tracing is a developer tool). |
 | Ad blocker upsell card, Sync, Account, Membership card, Share Arc, Sign Out, Send to Dia, Share Space | | *skip* | Account/cloud. |
@@ -109,6 +110,17 @@ gains "New Profile".
   86–92 / 96–98 % showing. ffmpeg's avfoundation capture misses window moves; `screencapture -V` doesn't.
 
 - Previews cards, 8 Nov 2026: see "Previews, measured".
+
+- Music notes over a playing favorite, 10 Nov 2026 (MusicNotes, MusicNotesView): particle values, the
+  music-site list and placement reference Arc 1.172.1; methods and uncertainties are in
+  [the research notes](arc-reverse-engineering.md#music-notes-on-a-playing-favorite-arc-11721-build-90370-10-nov-2026).
+  Paired dark-theme footage and light-theme screenshots of YouTube Music were compared with Arc;
+  live pause/resume was checked in CraDev. The independently drawn light notes use 0.3 black opacity,
+  visually fitted to those captures; dark notes use 0.8 white. `scripts/test.sh`, the release build
+  and the `music-notes` scenario passed. Tests cover host eligibility, immediate sound state,
+  mute/pause/resume, placement and sprite tint at 1x/2x. Full-window display-scale coverage and the
+  remaining manual state checks are still pending; see
+  [release-checklist.md](release-checklist.md#sidebar-tabs-and-the-command-bar).
 
 Not re-measured in this sweep: earlier sessions measured the command bar, split view,
 Peek, Little Arc, PiP, folders, space dock, Library swipe, dialogs, toasts and toolbar against Arc

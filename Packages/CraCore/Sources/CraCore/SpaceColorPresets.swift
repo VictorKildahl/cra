@@ -64,6 +64,13 @@ public enum SpaceColorWheel {
     /// The hue offset of pad colour `i`: 0 for the first, then +spread, −spread.
     public static func offset(_ i: Int) -> Double { i == 0 ? 0 : (i == 1 ? spread : -spread) }
 
+    /// Whether the pad's − is on with `count` colours on the pad. Arc's takes the last one too, which
+    /// leaves the pad empty: Arc's colourless theme (SpaceThemeVariants.colourless, #300).
+    public static func canRemove(_ count: Int) -> Bool { count > 0 }
+
+    /// Whether the pad's + is on with `count` colours on the pad.
+    public static func canAdd(_ count: Int) -> Bool { count >= 1 && count < 3 }
+
     public static func hsb(_ hex: String) -> (hue: Double, saturation: Double, brightness: Double) {
         let c = HexColor.components(hex) ?? (0.5, 0.5, 0.5)
         let mx = max(c.r, c.g, c.b), mn = min(c.r, c.g, c.b), d = mx - mn

@@ -33,6 +33,8 @@ final class TabRuntime {
     var hiddenFrameReleasedFor: Date?
     /// When the page last started or stopped playing sound; tab sleeping waits as long after it.
     var audibleAt: Date?
+    /// Immediate sound state for music notes; the speaker's audible state has a 2 s hold.
+    var soundPlaying = false
     /// Tab sleeping discarded the page in place (Cra.discard): Chromium keeps its history and
     /// scroll position and loads it again when the tab is shown.
     var discarded = false
@@ -596,6 +598,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                 }
                 guard discarded else { return self.unload(id) }
                 rt.discarded = true
+                rt.soundPlaying = false
                 rt.sleepRefusal = nil
                 // Its page is gone, as a closed one's is: the card would play nothing (#275).
                 self.nowPlaying?.remove(id)
@@ -1005,13 +1008,15 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         delegate?.browserManagerDidUpdate(id)
     }
 
-    /// The page's sound starting or stopping as it happens, before the 2 s hold `didChangeAudible`
-    /// waits out. Sound starting marks the tab's card playing: paused from the card and played
-    /// again on the page within the hold, the tab never went quiet, so `didChangeAudible` doesn't
-    /// come. Cards come and go only with the held state.
+    /// Music notes follow sound immediately; the speaker and player cards keep the audible hold.
+    /// A card paused then resumed within that hold also needs the immediate start event.
     func browser(_ browser: CraBrowser, didChangeSoundPlaying playing: Bool) {
-        guard playing, let id = tabID(of: browser), nowPlaying?.entries.contains(where: { $0.id == id && !$0.playing }) == true else { return }
-        nowPlaying?.update(id) { $0.playing = true }
+        guard let id = tabID(of: browser), let rt = runtimes[id] else { return }
+        let changed = rt.soundPlaying != playing
+        rt.soundPlaying = playing
+        let resumesCard = playing && nowPlaying?.entries.contains(where: { $0.id == id && !$0.playing }) == true
+        if resumesCard { nowPlaying?.update(id) { $0.playing = true } }
+        guard changed || resumesCard else { return }
         delegate?.browserManagerDidUpdate(id)
     }
 
@@ -1370,6 +1375,15 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     func browser(_ browser: CraBrowser, requestsSplitPaneWithURL url: String) {
         guard let id = tabID(of: browser) else { return }
         delegate?.browserManagerOpenLinkInSplit(url, fromTab: id)
+    }
+
+    /// An Option-clicked link, which Chromium downloads, opens in Split View as in Arc (#298).
+    func browser(_ browser: CraBrowser, opensSplitForDownloadURL url: String, clickModifiers: UInt, clickAge: TimeInterval) -> Bool {
+        guard let id = tabID(of: browser),
+              LinkSplitClick.opensSplit(downloadOf: url, clickModifiers: clickModifiers, clickAge: clickAge) else { return false }
+        // After Chromium's call returns: the pane makes a page of its own.
+        DispatchQueue.main.async { [weak self] in self?.delegate?.browserManagerOpenLinkInSplit(url, fromTab: id) }
+        return true
     }
 
     /// A link that asks for a new tab, from `source`'s page or from a Peek over it (#202): a

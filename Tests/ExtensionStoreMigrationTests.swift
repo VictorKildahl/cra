@@ -60,6 +60,84 @@ enum ExtensionStoreMigrationTests {
         try body(Install(id: id, copy: copy, profile: profile))
     }
 
+    /// A data folder with a keyless extension's own folder, "Load unpacked" in Default, and the
+    /// copy Add Unpacked Extension… made of it in Extensions/ (GitHub #299).
+    static func unpackedCopy(_ name: String, manifestName: String = "My Extension",
+                             _ body: (_ copy: URL, _ original: URL, _ profile: URL) throws -> Void) throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["CRA_DATA_DIR"]!, isDirectory: true)
+        AppPaths.supportDir = root.appendingPathComponent(name, isDirectory: true)
+        CraCEFRuntime.settingsByProfile = [:]
+        let fm = FileManager.default
+        let original = root.appendingPathComponent("\(name)-code/my-extension", isDirectory: true)
+        let copy = ExtensionStore.directory.appendingPathComponent("my-extension", isDirectory: true)
+        for (folder, title) in [(original, "My Extension"), (copy, manifestName)] {
+            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+            try JSONSerialization.data(withJSONObject: ["manifest_version": 3, "name": title, "version": "1.0"])
+                .write(to: folder.appendingPathComponent("manifest.json"))
+        }
+        let profile = AppPaths.chromiumCache.appendingPathComponent("Default", isDirectory: true)
+        try fm.createDirectory(at: profile, withIntermediateDirectories: true)
+        try body(copy, original, profile)
+    }
+
+    static func writeSettings(_ settings: [String: Any], in profile: URL) throws {
+        try FileManager.default.createDirectory(at: profile, withIntermediateDirectories: true)
+        try JSONSerialization.data(withJSONObject: ["extensions": ["settings": settings]])
+            .write(to: profile.appendingPathComponent("Secure Preferences"))
+    }
+
+    // promise: #299
+    static func unpackedCopiesStepAside() throws {
+        func inPlace(_ original: URL) -> [String: Any] {
+            [ExtensionStore.chromiumID(key: nil, folder: original): ["location": 4, "path": original.path]]
+        }
+        func asCommandLine(_ copy: URL) -> [String: Any] {
+            [ExtensionStore.chromiumID(key: nil, folder: copy): ["location": 8, "path": copy.path]]
+        }
+
+        try unpackedCopy("unpacked-copy-in-place") { copy, original, profile in
+            try writeSettings(inPlace(original).merging(asCommandLine(copy)) { a, _ in a }, in: profile)
+            check(ExtensionStore.loadList().paths.isEmpty,
+                  "a copy of a folder Default loads unpacked is not loaded again with --load-extension (#299)")
+            check(!FileManager.default.fileExists(atPath: copy.path), "a copy no profile loads goes")
+            check(FileManager.default.fileExists(atPath: original.appendingPathComponent("manifest.json").path), "the person's own folder stays")
+            let entries = ExtensionStore().entries
+            check(entries.count == 1 && entries.first?.url.standardizedFileURL == original.standardizedFileURL,
+                  "the extension is listed once, from its own folder")
+        }
+
+        try unpackedCopy("unpacked-copy-profile-busy") { copy, original, profile in
+            try writeSettings(inPlace(original), in: profile)
+            check(ExtensionStore.loadList(profileIsFree: false).paths == [copy.path],
+                  "another Cra that owns the profile keeps the copy it may be reading")
+            check(FileManager.default.fileExists(atPath: copy.path), "nothing is deleted while the profile is in use")
+        }
+
+        try unpackedCopy("unpacked-copy-other-profile") { copy, original, profile in
+            try writeSettings(inPlace(original), in: profile)
+            try writeSettings(asCommandLine(copy), in: AppPaths.chromiumCache.appendingPathComponent("Profile 1", isDirectory: true))
+            let list = ExtensionStore.loadList()
+            check(list.paths == [copy.path] && list.profiles == "Profile 1",
+                  "the copy keeps loading in a profile that doesn't load the folder in place")
+        }
+
+        try unpackedCopy("unpacked-copy-live") { copy, original, _ in
+            // This session loaded the copy, then the person loaded the folder in chrome://extensions.
+            let live = inPlace(original).merging(asCommandLine(copy)) { a, _ in a }
+            CraCEFRuntime.settingsByProfile["Default"] = String(decoding: try JSONSerialization.data(withJSONObject: live), as: UTF8.self)
+            let store = ExtensionStore()
+            store.reload()
+            check(store.entries.count == 1 && store.entries.first?.managedByChrome == true,
+                  "Cra's extension list shows the extension once while both are loaded")
+            check(FileManager.default.fileExists(atPath: copy.path), "the copy Chromium has loaded stays until the next launch")
+        }
+
+        try unpackedCopy("unpacked-copy-other-extension", manifestName: "Not My Extension") { copy, original, profile in
+            try writeSettings(inPlace(original), in: profile)
+            check(ExtensionStore.loadList().paths == [copy.path], "another extension in a folder of the same name keeps loading")
+        }
+    }
+
     static func main() throws {
         try run("live-reload") { install in
             try install.installStoreCopy()
@@ -232,6 +310,8 @@ enum ExtensionStoreMigrationTests {
             let listAgain = ExtensionStore.loadList()
             check(listAgain.paths == list.paths && listAgain.profiles == list.profiles, "a second launch preserves the remaining profile's copy")
         }
+
+        try unpackedCopiesStepAside()
 
         print("ExtensionStoreMigrationTests: \(checks) checks, \(failures.count) failures")
         if !failures.isEmpty { exit(1) }

@@ -315,6 +315,9 @@ public struct Space: Identifiable, Codable, Equatable {
     /// The Blank Window this space belongs to (Arc: a `standalone` sidebar container keyed by its
     /// window). Such a space is in no window's space list and goes when its window closes (BlankWindow).
     public var standaloneWindowID: UUID? = nil
+    /// GitHub #306, not in Arc (one engine per profile there): the Chromium keyword of the engine
+    /// the command bar searches in this space; nil searches the profile's default.
+    public var searchEngine: String? = nil
 
     public init(id: UUID, title: String, emoji: String, theme: SpaceTheme, favoritesContainerID: UUID, pinnedContainerID: UUID,
                 todayContainerID: UUID, createdAt: Date, profileID: UUID? = nil, symbol: String? = nil, standaloneWindowID: UUID? = nil) {
@@ -621,6 +624,9 @@ public struct AppSettings: Codable, Equatable {
     public var boostsEnabled: Bool = true
     /// Arc's Settings ▸ General ▸ Previews: hovering a Gmail favorite shows its unread mail.
     public var favoritePreviews: Bool = true
+    /// Cra's addition (PR #267, Dia-like): the open favorite's rim takes its logo's colours.
+    /// Off keeps Arc's neutral 2 pt rim.
+    public var favoriteLogoOutline: Bool = false
     /// Arc's Live Calendar on a Google Calendar favorite (the favorite's menu ▸ Live Calendar), on
     /// until "Disable Live Calendar".
     public var liveCalendar: Bool = true
@@ -633,6 +639,9 @@ public struct AppSettings: Codable, Equatable {
     /// Arc's searchSuggestEnabled: the command bar asks the search engine for suggestions
     /// as you type and fills its rows with them.
     public var searchSuggestions: Bool = true
+    /// GitHub #307, not in Arc: ⌘T searches and lists only the open tabs of the window's space
+    /// (`TabSearchScope.commandBarTabs`). Off is Arc's bar, which finds a tab in any space.
+    public var commandBarCurrentSpaceOnly: Bool = false
     /// Arc's showSpaceHeaderOnSingleUnnamedSpaces: with only one space, its header (and the
     /// dock's lone space icon) can be hidden, for people who don't use spaces.
     public var showSpaceHeaderOnSingleSpace: Bool = true
@@ -871,11 +880,13 @@ extension AppSettings {
         pageTopWindowDrag = try c.decodeIfPresent(Bool.self, forKey: .pageTopWindowDrag) ?? true
         boostsEnabled = try c.decodeIfPresent(Bool.self, forKey: .boostsEnabled) ?? true
         favoritePreviews = try c.decodeIfPresent(Bool.self, forKey: .favoritePreviews) ?? true
+        favoriteLogoOutline = try c.decodeIfPresent(Bool.self, forKey: .favoriteLogoOutline) ?? false
         liveCalendar = try c.decodeIfPresent(Bool.self, forKey: .liveCalendar) ?? true
         calendarHoverPreview = try c.decodeIfPresent(Bool.self, forKey: .calendarHoverPreview) ?? true
         calendarTimeToNextMeeting = try c.decodeIfPresent(Bool.self, forKey: .calendarTimeToNextMeeting) ?? true
         calendarMeetingLink = (try? c.decodeIfPresent(CalendarPreview.LinkTiming.self, forKey: .calendarMeetingLink)) ?? .twoMinutes
         searchSuggestions = try c.decodeIfPresent(Bool.self, forKey: .searchSuggestions) ?? true
+        commandBarCurrentSpaceOnly = try c.decodeIfPresent(Bool.self, forKey: .commandBarCurrentSpaceOnly) ?? false
         showSpaceHeaderOnSingleSpace = try c.decodeIfPresent(Bool.self, forKey: .showSpaceHeaderOnSingleSpace) ?? true
         sharedFavorites = try c.decodeIfPresent(Bool.self, forKey: .sharedFavorites) ?? false
         edgeToEdgeContent = try c.decodeIfPresent(Bool.self, forKey: .edgeToEdgeContent) ?? false
@@ -938,6 +949,7 @@ extension Space {
         profileID = try c.decodeIfPresent(UUID.self, forKey: .profileID)
         symbol = try c.decodeIfPresent(String.self, forKey: .symbol)
         standaloneWindowID = try c.decodeIfPresent(UUID.self, forKey: .standaloneWindowID)
+        searchEngine = try c.decodeIfPresent(String.self, forKey: .searchEngine)
         // Edit Space… → Save in 0.1.31 and older wrote 🌱 beside a space's symbol, and the sidebar
         // drew both stacked (#205). The symbol was the space's icon, so the emoji beside it goes.
         if symbol?.isEmpty == false { emoji = "" }

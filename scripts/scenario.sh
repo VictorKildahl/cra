@@ -42,7 +42,9 @@
 #   port <n>                    serve ${PAGE} on a fixed port (snapshots show the address)
 # ${FIXTURES}, ${PAGE} (Tests/Fixtures/Pages/page.html from a local server, so it has a host
 # for developer mode and tab sleep), ${WEBKIT} (that server as http://localhost:<port>, a host the
-# run treats as a DRM service, so its pages open in WebKit), ${EXTENSION_ID} (Tests/Fixtures/Extension) and
+# run treats as a DRM service, so its pages open in WebKit), ${MUSIC} (that server as
+# http://nts.live:<port>, a recognized music host, for a scenario whose `arg` maps the name to
+# 127.0.0.1), ${EXTENSION_ID} (Tests/Fixtures/Extension) and
 # ${SIDE_PANEL_EXTENSION_ID} (Tests/Fixtures/SidePanelExtension) and ${DOWNLOAD_EXTENSION_ID}
 # (Tests/Fixtures/DownloadExtension) and ${WEB_STORE_COPY_ID} (Tests/Fixtures/WebStoreCopy) and
 # ${TABS_CREATE_EXTENSION_ID} (Tests/Fixtures/TabsCreateExtension) expand,
@@ -144,6 +146,9 @@ PAGE="http://127.0.0.1:${PORT:?http server did not start}/page.html"
 # The same server under another host, which the run lists as a DRM service (CRA_WEBKIT_HOSTS):
 # its pages open in WebKit, the way Spotify and Netflix do (ProtectedMediaSites).
 WEBKIT="http://localhost:${PORT}"
+# A music host recognized by MusicNotes, mapped to this Mac by the scenario:
+#   arg --host-resolver-rules=MAP nts.live 127.0.0.1
+MUSIC="http://nts.live:${PORT}"
 # A port that accepts connections (the kernel's backlog does) and never answers one.
 python3 -I -u -c '
 import socket, time
@@ -179,8 +184,10 @@ TRICKLER=$!
 disown "$TRICKLER"
 for _ in $(seq 1 50); do TRICKLE_PORT=$(head -1 "$OUT/trickle.log"); [ -n "$TRICKLE_PORT" ] && break; sleep 0.1; done
 TRICKLE="http://127.0.0.1:${TRICKLE_PORT:?trickle port did not open}"
-expand() { local s="$1"; s="${s//\$\{FIXTURES\}/$FIXTURES}"; s="${s//\$\{PAGE\}/$PAGE}"; s="${s//\$\{WEBKIT\}/$WEBKIT}"; s="${s//\$\{STALL\}/$STALL}"; s="${s//\$\{TRICKLE\}/$TRICKLE}"; s="${s//\$\{EXTENSION_ID\}/$EXTENSION_ID}"; s="${s//\$\{SIDE_PANEL_EXTENSION_ID\}/$SIDE_PANEL_EXTENSION_ID}"; s="${s//\$\{DOWNLOAD_EXTENSION_ID\}/$DOWNLOAD_EXTENSION_ID}"; s="${s//\$\{WEB_STORE_COPY_ID\}/$WEB_STORE_COPY_ID}"; s="${s//\$\{TABS_CREATE_EXTENSION_ID\}/$TABS_CREATE_EXTENSION_ID}"; printf '%s' "$s"; }
-app_args=()
+expand() { local s="$1"; s="${s//\$\{FIXTURES\}/$FIXTURES}"; s="${s//\$\{PAGE\}/$PAGE}"; s="${s//\$\{WEBKIT\}/$WEBKIT}"; s="${s//\$\{MUSIC\}/$MUSIC}"; s="${s//\$\{STALL\}/$STALL}"; s="${s//\$\{TRICKLE\}/$TRICKLE}"; s="${s//\$\{EXTENSION_ID\}/$EXTENSION_ID}"; s="${s//\$\{SIDE_PANEL_EXTENSION_ID\}/$SIDE_PANEL_EXTENSION_ID}"; s="${s//\$\{DOWNLOAD_EXTENSION_ID\}/$DOWNLOAD_EXTENSION_ID}"; s="${s//\$\{WEB_STORE_COPY_ID\}/$WEB_STORE_COPY_ID}"; s="${s//\$\{TABS_CREATE_EXTENSION_ID\}/$TABS_CREATE_EXTENSION_ID}"; printf '%s' "$s"; }
+# AppKit asks "reopen windows?" after a test copy was killed, and that modal blocks every command;
+# Cra restores its own windows from windows.json, so AppKit's restoration is off.
+app_args=(-ApplePersistenceIgnoreState YES)
 while read -r _ a; do app_args+=("$(expand "$a")"); done < <(grep '^arg ' "$FILE")
 while read -r _ f; do mkdir -p "$DATA/Extensions" && cp -R "$(expand "$f")" "$DATA/Extensions/"; done < <(grep '^extension ' "$FILE")
 
@@ -274,9 +281,15 @@ while IFS= read -r raw || [ -n "$raw" ]; do
     snapshot)
       shot="$OUT/snapshots/$3.png"; ref="$ROOT/Tests/Snapshots/$3.png"
       # A name shot twice (before and after a relaunch) must not find the first file and stop waiting.
-      mkdir -p "$OUT/snapshots"; rm -f "$shot"; send "cra://debug?snapshot=$2&out=$shot"
-      for _ in $(seq 1 25); do [ -s "$shot" ] && break; sleep 0.2; done
-      if [ ! -s "$shot" ]; then problem "no snapshot of $2"
+      shot1x="$OUT/snapshots/$3.1x.png"
+      mkdir -p "$OUT/snapshots"; rm -f "$shot" "$shot1x"; send "cra://debug?snapshot=$2&out=$shot"
+      for _ in $(seq 1 25); do [ -s "$shot" ] || [ -s "$shot1x" ] && break; sleep 0.2; done
+      # References are 2x. On a 1x display (an external monitor, CRA_TEST_SCREEN) text and images
+      # are only scaled up, so every one would differ; say that instead, and never record it.
+      if [ -s "$shot1x" ]; then
+        if [ "${CRA_SNAPSHOT_RECORD:-}" = "1" ]; then problem "snapshot $3: the window is on a 1x display; record on a Retina one"
+        else budget_problem "snapshot $3: not compared, the window is on a 1x display (references are 2x; use a Retina screen)"; fi
+      elif [ ! -s "$shot" ]; then problem "no snapshot of $2"
       elif [ "${CRA_SNAPSHOT_RECORD:-}" = "1" ]; then mkdir -p "$ROOT/Tests/Snapshots"; cp "$shot" "$ref"; echo "  recorded $3"
       elif [ ! -f "$ref" ]; then problem "no reference Tests/Snapshots/$3.png (CRA_SNAPSHOT_RECORD=1 records one)"
       else

@@ -27,6 +27,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var middleClickMonitor: Any?
     private enum SwipeAxis { case undecided, horizontal, vertical }
     private var swipeAxis = SwipeAxis.vertical
+    /// A space or Library swipe is under the fingers: begun, its release not yet seen.
+    private var swipeTracking = false
     private var swipeX: CGFloat = 0
     private var swipeY: CGFloat = 0
     /// Points travelled since the space swipe locked, and recent deltas for its release speed.
@@ -39,6 +41,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// The Library's reveal a swipe started from: 0 on the first space, 1 in the Library; nil
     /// when the swipe can only page between spaces.
     private var librarySwipeFrom: CGFloat?
+    /// Where the Library was sliding when the swipe caught it (LibrarySwipe.reveal's `toward`).
+    private var librarySwipeToward: CGFloat?
     private var librarySettleSpring: (start: CFTimeInterval, from: CGFloat, velocity: CGFloat, target: CGFloat)?
     private var librarySettleLink: CADisplayLink?
     /// Shows the lists' overlay knob again once a swipe's scroller flash has faded.
@@ -590,6 +594,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if capturing != sidebarUI.capturingTabIDs { sidebarUI.capturingTabIDs = capturing }
         let audible = Set(app.mainWindows.flatMap { $0.browsers.runtimes.filter { $0.value.browser.isAudible }.keys })
         if audible != sidebarUI.audibleTabIDs { sidebarUI.audibleTabIDs = audible }
+        let soundPlaying = Set(app.mainWindows.flatMap { $0.browsers.runtimes.filter { $0.value.soundPlaying }.keys })
+        if soundPlaying != sidebarUI.soundPlayingTabIDs { sidebarUI.soundPlayingTabIDs = soundPlaying }
         let b = browsers.visibleRuntime?.browser
         let canGoBack = canNavigateBack(browsers.visibleTabID, b)
         if sidebarUI.canGoBack != canGoBack { sidebarUI.canGoBack = canGoBack }
@@ -2288,6 +2294,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         commandBar.close()
         shell.sidebarResizable = false
         let width = libraryWidth(page)
+        CraLog.note("library opens \(Int(width)) pt wide beside a \(Int(store.prefs.sidebarWidth)) pt tab sidebar")
         if sidebarVisible {
             shell.sidebarWidth = width
             shell.animateSidebar(visible: true, floating: false, fullscreen: shell.contentFullscreen, width: width)
@@ -2300,15 +2307,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         window?.makeKey()
     }
 
-    /// The sidebar's width with the Library in it: 70 pt wider for the rail, or on the Spaces page
-    /// wide enough for every space's card, leaving the page 56 pt (Arc 1.171; the cards scroll
-    /// sideways when they don't fit).
+    /// The sidebar's width with the Library in it: Arc's 417 pt whatever the tab sidebar's width
+    /// (#302), or on the Spaces page wide enough for every space's card (LibraryWidth).
     private func libraryWidth(_ page: LibraryPage) -> CGFloat {
-        let base = CGFloat(store.prefs.sidebarWidth) + LibraryMetrics.extraWidth
-        guard page == .spaces else { return base }
+        let windowWidth = Double(window?.frame.width ?? 1280)
+        guard page == .spaces else { return CGFloat(LibraryWidth.sidebar(window: windowWidth)) }
         let n = store.orderedSpaces.filter { !store.isIncognito(space: $0.id) }.count
-        let room = (window?.frame.width ?? 1280) - SpacesManagerMetrics.pageRoom
-        return max(base, min(SpacesManagerMetrics.width(spaces: n), room))
+        return CGFloat(LibraryWidth.sidebar(spacesCards: Double(SpacesManagerMetrics.width(spaces: n)), window: windowWidth))
     }
 
     func closeLibrary() {
@@ -2461,7 +2466,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // main window has this monitor), so a scroll that starts there never reaches the
             // phase switch below; a stale .horizontal would eat the page's momentum and
             // scrolling would stop dead the moment the fingers lift.
-            if event.phase == .began || event.phase == .mayBegin { self.swipeAxis = .vertical }
+            if event.phase == .began || event.phase == .mayBegin {
+                // A swipe whose end never came (a view took the gesture's last events) is let go
+                // now, so the sidebar isn't left between two pages.
+                if self.swipeTracking { self.endSpaceSwipe() }
+                self.swipeAxis = .vertical
+            }
             // A mouse wheel only ever scrolls.
             if !event.hasPreciseScrollingDeltas { self.showListKnobs() }
             // The momentum tail of a space swipe belongs to the swipe, not the tab list.
@@ -2544,11 +2554,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     private func beginSpaceSwipe() {
+        swipeTracking = true
         swipeTravel = 0
         swipeSamples = []
         swipeHaptics = PageDetentHaptics()
         sidebarUI.spaceSettleVelocity = 0
         // A swipe during a Library settle picks it up where it shows.
+        librarySwipeToward = librarySettleSpring?.target
         stopLibrarySettle()
         let shown = sidebarUI.libraryReveal
         librarySwipeFrom = nil
@@ -2591,9 +2603,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Library they push it back out. Returns false when the swipe is one between spaces.
     private func trackLibrarySwipe() -> Bool {
         guard let from = librarySwipeFrom else { return false }
-        guard let r = LibrarySwipe.reveal(from: from, travel: swipeTravel, width: sidebarUI.libraryRevealWidth) else {
-            // Back on the space and beyond: the swipe heads for the next space instead.
-            if sidebarUI.libraryReveal != nil {
+        let width = sidebarUI.libraryRevealWidth
+        guard let r = LibrarySwipe.reveal(from: from, travel: swipeTravel, width: width, toward: librarySwipeToward) else {
+            // Back on the space and beyond: the swipe heads for the next space instead. One that
+            // caught the Library sliding out lets it land first and pages with what's left.
+            if from != 0 {
+                swipeTravel = LibrarySwipe.travelPastSpace(from: from, travel: swipeTravel, width: width)
+                librarySwipeFrom = 0
+                librarySwipeToward = nil
+                finishLibrarySwipe(at: 0)
+            } else if sidebarUI.libraryReveal != nil {
                 setLibraryReveal(0)
                 sidebarUI.libraryReveal = nil
                 shell.thawPages()
@@ -2793,6 +2812,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     private func endSpaceSwipe() {
         HitchMonitor.mark("swipe-lift")
+        swipeTracking = false
         if let r = sidebarUI.libraryReveal, librarySwipeFrom != nil { return endLibrarySwipe(r) }
         librarySwipeFrom = nil
         let width = max(1, shell.sidebarWidth)
@@ -3752,7 +3772,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // Arc's New Space starts on the profile of the space it was opened from.
         let initialProfile = space == nil && !isStandalone ? SpaceProfiles.forNewSpace(from: store.focusedSpace, profiles: store.profiles) : nil
         let store = self.store
-        let view = SpaceEditorView(existing: space, profiles: store.profiles, initialProfile: initialProfile, onSave: { [weak panel] title, icon, theme, profile, newName in
+        let profilePath = space.flatMap { store.profilePath(space: $0.id) } ?? store.profilePath(profile: initialProfile)
+        let defaultEngine = SearchEngines.shared.defaultEngine(profilePath: profilePath, legacy: store.settings.searchEngine)
+        let engines = ChromiumSearchEngine.spaceChoices(among: SearchEngines.shared.keywords(profilePath: profilePath))
+        let view = SpaceEditorView(existing: space, profiles: store.profiles, initialProfile: initialProfile, searchEngines: engines,
+                                   defaultEngineName: defaultEngine.name, onSave: { [weak panel] title, icon, theme, profile, newName, searchEngine in
             let id: UUID
             if let sid = space?.id, var s = store.space(sid) {
                 s.title = title; s.icon = icon; s.theme = theme
@@ -3765,6 +3789,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             case .existing(let p): store.setProfile(p, forSpace: id)
             case .new: store.setProfile(store.createProfile(name: newName).id, forSpace: id)
             }
+            store.setSearchEngine(searchEngine, forSpace: id)
             if let panel { window.endSheet(panel) }
         }, onCancel: { [weak panel] in if let panel { window.endSheet(panel) } }, onPreview: { theme in
             // A new space has nothing to draw on yet; the sheet's own preview shows it.
@@ -3888,10 +3913,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     // The sidebar header's toggle moves into the traffic lights' place while they are gone (Arc).
-    func windowWillEnterFullScreen(_ notification: Notification) { sidebarUI.windowFullscreen = true; shell.windowFullscreen = true }
+    func windowWillEnterFullScreen(_ notification: Notification) {
+        sidebarUI.windowFullscreen = true; shell.windowFullscreen = true
+        (window as? CraWindow)?.fullScreenChanged()
+    }
     func windowWillExitFullScreen(_ notification: Notification) { sidebarUI.windowFullscreen = false; shell.windowFullscreen = false }
-    func windowDidEnterFullScreen(_ notification: Notification) { shell.needsLayout = true }
+    func windowDidEnterFullScreen(_ notification: Notification) {
+        (window as? CraWindow)?.fullScreenChanged()
+        shell.needsLayout = true
+    }
     func windowDidExitFullScreen(_ notification: Notification) {
+        (window as? CraWindow)?.fullScreenChanged()
         // Left with the green button or ⌃⌘F while a video was fullscreen: the page leaves too.
         if let id = contentFullscreenTab { browsers.runtime(for: id)?.browser.exitFullscreen() }
         contentFullscreenTab = nil
@@ -4071,6 +4103,26 @@ final class CraWindow: NSWindow {
         (contentView as? ShellView)?.edgeToEdge == true ? 4 : CraMetrics.contentInset + 4
     }
 
+    /// Full screen is the system's to place (#308): no drag moves the window inside its Space,
+    /// whether AppKit's own (title bar, background) or one of ours (`performDrag` from the title
+    /// strip, the toolbar and the sidebar's top). Arc's full-screen window stays put the same way.
+    /// The flags the sidebar sets while the pointer is over a draggable row stay as they were and
+    /// apply again once the window leaves full screen.
+    override var isMovable: Bool {
+        get { super.isMovable && !styleMask.contains(.fullScreen) }
+        set { super.isMovable = newValue }
+    }
+
+    override var isMovableByWindowBackground: Bool {
+        get { super.isMovableByWindowBackground && !styleMask.contains(.fullScreen) }
+        set { super.isMovableByWindowBackground = newValue }
+    }
+
+    override func performDrag(with event: NSEvent) {
+        guard isMovable else { return }
+        super.performDrag(with: event)
+    }
+
     override func sendEvent(_ event: NSEvent) {
         if event.type == .leftMouseDown, !styleMask.contains(.fullScreen),
            let content = contentView, event.locationInWindow.y >= content.bounds.height - titleStripHeight,
@@ -4099,6 +4151,12 @@ final class CraWindow: NSWindow {
         didSet { if trafficLightsHidden != oldValue { updateTrafficLights(animated: isVisible) } }
     }
     private var appliedTrafficLightsHidden = false
+
+    /// Entering or leaving full screen changes whether the lights show (#308), so they are
+    /// recomputed then rather than waiting for a layout pass to reach `layoutIfNeeded`.
+    func fullScreenChanged() {
+        updateTrafficLights(animated: false)
+    }
 
     private func updateTrafficLights(animated: Bool) {
         let hide = trafficLightsHidden && !styleMask.contains(.fullScreen)

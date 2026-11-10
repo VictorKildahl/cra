@@ -27,6 +27,8 @@ struct AdvancedPane: View {
             SettingsFormRow(label: "Address Bar:") {
                 SearchEnginePicker(store: store, openURL: actions.openURL)
                 SettingsCheckbox(title: "Show search suggestions", isOn: $store.settings.searchSuggestions)
+                // GitHub #307, not in Arc: ⌘T finds tabs in the window's space only.
+                SettingsCheckbox(title: "Search only the current space’s tabs", isOn: $store.settings.commandBarCurrentSpaceOnly)
             }
             SettingsFormRow(label: "Sounds:") {
                 // Arc: Settings ▸ Advanced "Play Arc sound effects".

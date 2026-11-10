@@ -43,4 +43,29 @@ struct TabSearchScopeTests {
         #expect(TabSearchScope.rank([C](), typed: false).isEmpty)
         #expect(TabSearchScope.rank([C(id: "a", score: 10, lastActive: now)], typed: true).isEmpty)
     }
+
+    /// ⌘T's scope (#307): off, Arc's bar finds a tab in any space; on, only the window's space's
+    /// tabs are searched and listed, in the order given.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/307"))
+    func commandBarTabsFollowTheSetting() {
+        let home = UUID(), work = UUID()
+        let tabs: [(name: String, space: UUID?)] = [("home-a", home), ("work-a", work), ("loose", nil), ("home-b", home)]
+        func listed(currentSpaceOnly: Bool, window: UUID) -> [String] {
+            TabSearchScope.commandBarTabs(tabs, space: \.space, windowSpace: window, currentSpaceOnly: currentSpaceOnly).map(\.name)
+        }
+        #expect(listed(currentSpaceOnly: false, window: home) == ["home-a", "work-a", "loose", "home-b"])
+        #expect(listed(currentSpaceOnly: true, window: home) == ["home-a", "home-b"])
+        #expect(listed(currentSpaceOnly: true, window: work) == ["work-a"])
+    }
+
+    /// The setting is off in a settings.json written before #307 and survives a save.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/307"))
+    func currentSpaceOnlySettingDefaultsOffAndRoundTrips() throws {
+        let decoder = JSONDecoder()
+        let older = try decoder.decode(AppSettings.self, from: Data("{}".utf8))
+        #expect(!older.commandBarCurrentSpaceOnly)
+        var on = older
+        on.commandBarCurrentSpaceOnly = true
+        #expect(try decoder.decode(AppSettings.self, from: JSONEncoder().encode(on)).commandBarCurrentSpaceOnly)
+    }
 }

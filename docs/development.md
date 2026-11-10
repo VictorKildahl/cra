@@ -117,6 +117,8 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-folder-glyph.sh`: the standalone folder component's real AppKit layers and image
   pixels: emblems follow the front panel's perspective, keep their colors and proportions, and
   update at 1x/Retina. No CEF or visible window; coverage uses the same harness as `scripts/test.sh`.
+- `scripts/test-music-notes.sh`: the production note sprites over fixed white and black backgrounds
+  at 1x and 2x, checking light-theme contrast and the dark-theme tint without CEF or a visible window.
 - `scripts/test-live-folder-plugins.sh`: the real `CraPluginHost` (sandboxed JavaScriptCore) and
   the bundled GitHub, GitLab and Jira providers in `resources/live-folder-plugins`, through
   `LiveFolderPluginProcess` with made-up session responses: permissions, timeouts, and each
@@ -129,7 +131,9 @@ to Markdown or `docs/` alone runs nothing.
   turning into an × on its spring.
 - `scripts/test-easel-canvas.sh`: the real `EaselSheetView` in an off-screen window, driven with
   synthetic mouse and key events: one click picks a text block, a double click edits it, Return and
-  Escape end editing, Delete removes it, its size pill follows a drag.
+  Escape end editing, Delete removes it, its size pill follows a drag. Then `EaselBrowser` against
+  a stub `CraBrowser`: Peek's opaque canvas, and the clear page and dark bar it reports to the tab
+  that takes it over with ⤢.
 - `scripts/test-perf.sh`: the performance recorder on a real main run loop: injected stalls,
   hang files with a `sample` stack, the session marker, ownership, the recording switch
   ([performance.md](performance.md)).

@@ -44,6 +44,16 @@ built release app with a test profile. Note anything that fails in the release's
   space's darkest tone. Recent open tabs show "Switch to Tab" before typing. Arrow through results
   and check every row's inks follow the selection; long titles truncate before the trailing action.
 
+- **Music notes:** on a release build, play a favorite on YouTube Music, SoundCloud or Spotify.
+  Compare Arc and Cra in light and dark spaces at 1x and 2x: origin, density, speed, growth, fading
+  and clipping. Notes rise from the icon's top edge and stop 8 pt above the top row; in lower rows
+  they drift over the tile above. Check split favorites in both orientations, dragging, space
+  swipes and a space with no favorites for clipping regressions. Mute or pause: notes disappear
+  as sound stops; a quick resume brings them back. A regular YouTube video shows none. Toggle
+  Reduce Motion during playback: notes disappear and return when it is off. Dark footage, light
+  screenshots and live pause/resume were checked on 10 Nov; full-window 1x/2x and the other states
+  remain. Arc's mute and Reduce Motion behavior are unverified; record differences when comparing.
+
 - **#196:** hover a Today tab and move onto its ✕ several times. The ✕ never vanishes before
   the click.
 - **#7:** click a tab while moving the pointer a few points on a trackpad. It opens.
@@ -106,6 +116,9 @@ built release app with a test profile. Note anything that fails in the release's
   window leaves its Space first. ⌥⌘N from another app opens a Little Window at once, with the
   Dock icon. Closing it takes the icon away again. New Window in the item's menu brings the
   windows back, and Quit Cra there quits.
+- **#298:** in a tab on a DRM service (it opens in WebKit, docs/protected-media.md), Option-click a
+  link: it opens as a split pane beside the page, as it does in any other tab (that scenario's
+  posted click never reaches a WebKit page behind other windows).
 - **#172:** with a space on its own profile, a Little Window from that space and a Peek from its
   tab see that profile's cookies. The chip names the profile; switching it reloads the page in
   the other profile.
@@ -185,6 +198,10 @@ built release app with a test profile. Note anything that fails in the release's
   minutes. No grey pane flashes and Stage Manager shows no window coming and going. After a
   minute pass, the GPU helper's footprint (`footprint -p <pid>`) still drops as the hidden tabs
   let go of their tiles (#195: 20 tabs, 386 → about 235 MB).
+- **#308:** in full screen, drag the toolbar, the sidebar's top strip and the page's margin by
+  hand. The window stays put. With the sidebar hidden, the pointer at the top of the screen
+  reveals the title bar with the traffic lights in it. The `fullscreen-window-chrome` scenario
+  checks the window's flags; only a hand drag shows that AppKit honours them.
 
 ## Not pinned yet
 

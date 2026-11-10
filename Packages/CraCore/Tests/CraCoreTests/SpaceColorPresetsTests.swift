@@ -65,6 +65,15 @@ struct SpaceColorPresetsTests {
         }
     }
 
+    /// The pad's − takes colours off down to none, Arc's colourless theme; + adds a second and third
+    /// to a colour on the pad (an empty pad gets its first from a tap or a swatch). Before, − stopped
+    /// at one colour, so a space could never go back to no colour (#300).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/300"))
+    func padButtons() {
+        #expect((0...3).map(SpaceColorWheel.canRemove) == [false, true, true, true])
+        #expect((0...3).map(SpaceColorWheel.canAdd) == [false, true, true, false])
+    }
+
     /// hsb and hex are inverse to the byte.
     @Test(arguments: SpaceColorPresets.brand + SpaceColorPresets.pastel + SpaceColorPresets.greyscale)
     func wheelRoundTrips(hex: String) {

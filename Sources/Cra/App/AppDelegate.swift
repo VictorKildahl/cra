@@ -1028,8 +1028,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     CraLog.note("mouse \(b) at \(Int(g[0])),\(Int(g[1])): \(taken ? "switched space" : "passed on")")
                     return
                 }
-                // clicks=2: a double-click there (a favorite's Back to Pinned Page, #264).
-                TestGesture.click(at: point, in: w, clicks: dict["clicks"].flatMap(Int.init) ?? 1)
+                // clicks=2: a double-click there (a favorite's Back to Pinned Page, #264); mods=<modifier
+                // bits>: keys held through it (524288, Option: a link opens in Split View, #298).
+                TestGesture.click(at: point, in: w, clicks: dict["clicks"].flatMap(Int.init) ?? 1,
+                                  modifiers: NSEvent.ModifierFlags(rawValue: dict["mods"].flatMap(UInt.init) ?? 0))
                 return
             }
             if let st = dict["status"] { main.browserManager(statusMessage: st); return }
@@ -1127,6 +1129,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
+            // musicNotes=<label>: report visible note overlays and their offsets from tile centers.
+            if let label = dict["musicNotes"] {
+                var tiles: [FavoriteTileView] = [], notes: [MusicNotesView] = []
+                func collect(_ v: NSView) {
+                    if let t = v as? FavoriteTileView { tiles.append(t) }
+                    if let n = v as? MusicNotesView, !n.isHiddenOrHasHiddenAncestor { notes.append(n) }
+                    v.subviews.forEach(collect)
+                }
+                main.window?.contentView.map(collect)
+                func middle(_ v: NSView) -> NSPoint { v.convert(NSPoint(x: v.bounds.midX, y: v.bounds.midY), to: nil) }
+                let places = notes.map { n -> String in
+                    let at = middle(n)
+                    guard let tile = tiles.map(middle).min(by: { hypot($0.x - at.x, $0.y - at.y) < hypot($1.x - at.x, $1.y - at.y) }) else { return "no tile" }
+                    return String(format: "%.1f across, %.1f up", at.x - tile.x, at.y - tile.y)
+                }
+                NSLog("Cra music notes %@: %d%@", label, notes.count, places.isEmpty ? "" : " (" + places.joined(separator: "; ") + ")")
+                return
+            }
             if let size = dict["windowSize"]?.split(separator: "x").compactMap({ Double($0) }), size.count == 2, let w = main.window {
                 w.setFrame(NSRect(x: w.frame.minX, y: w.frame.maxY - size[1], width: size[0], height: size[1]), display: true)
                 return
@@ -1172,8 +1192,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("little shown \(label): windows=\(littleWindows.count) space=\(space) profile=\(profile)")
                 return
             }
-            // windowState=<label>: each window's full screen, Space and traffic lights (#277). Lights are
-            // "hidden", or their alpha; "-" when a window has none.
+            // windowState=<label>: each window's full screen, Space, traffic lights (#277) and whether a
+            // drag can move it (#308). Lights are "hidden", or their alpha; "-" when a window has none.
             if let label = dict["windowState"] {
                 func lights(_ w: NSWindow) -> String {
                     [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].map { type in
@@ -1182,12 +1202,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     }.joined(separator: ",")
                 }
                 func flag(_ b: Bool) -> Int { b ? 1 : 0 }
+                // Where the close button sits in the bar that holds it: its frame and the bar's bounds.
+                func lightsPlace(_ w: NSWindow) -> String {
+                    guard let b = w.standardWindowButton(.closeButton), let bar = b.superview else { return "-" }
+                    let f = b.frame
+                    return String(format: "%.0f,%.0f,%.0fx%.0f/%.0fx%.0f/%@", f.minX, f.minY, f.width, f.height,
+                                  bar.bounds.width, bar.bounds.height, b.window.map { String(describing: type(of: $0)) } ?? "-")
+                }
                 for (i, m) in mainWindows.enumerated() {
                     guard let w = m.window else { continue }
                     CraLog.note("window state \(label): main\(i) fullscreen=\(flag(w.styleMask.contains(.fullScreen))) "
                         + "visible=\(flag(w.isVisible)) onSpace=\(flag(w.isOnActiveSpace)) "
                         + "layout=\(flag(m.shell.windowFullscreen)) sidebarUI=\(flag(m.sidebarUI.windowFullscreen)) "
-                        + "lightsHidden=\(flag((w as? CraWindow)?.trafficLightsHidden ?? false)) lights=\(lights(w))")
+                        + "lightsHidden=\(flag((w as? CraWindow)?.trafficLightsHidden ?? false)) lights=\(lights(w)) "
+                        + "movable=\(flag(w.isMovable)) backgroundMovable=\(flag(w.isMovableByWindowBackground)) "
+                        + "lightsIn=\(lightsPlace(w))")
                 }
                 for (i, l) in littleWindows.enumerated() where !l.isPeek {
                     guard let w = l.window else { continue }
@@ -1210,6 +1239,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     NSLog("Cra theme shown %@: space=%@ follows=%d theme=%@ shell=%@ sidebar=%@", label, space.title, space.theme.followsSystem ? 1 : 0,
                           side(space.theme.shown.isDark), side(m.shell.isDarkTheme), drawn)
                 }
+                return
+            }
+            // commandBarRows=<label>: the open command bar's rows, top to bottom, each as kind:address
+            // (the title when it has none), so a scenario reads which tabs ⌘T found (#307).
+            if let label = dict["commandBarRows"] {
+                let bar = main.commandBar
+                let rows = bar.result.items.map { row -> String in
+                    let kind: String
+                    switch row.kind {
+                    case .switchToTab: kind = "tab"
+                    case .archived: kind = "archived"
+                    case .history: kind = "history"
+                    default: kind = "other"
+                    }
+                    return "\(kind):\(row.url ?? row.title)"
+                }
+                NSLog("Cra command bar rows %@: open=%d %@", label, bar.isOpen ? 1 : 0, rows.joined(separator: " | "))
                 return
             }
             // sidebarShown=<label>: whether the main window shows its sidebar, and the View menu's
@@ -1262,6 +1308,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // back=<label>: the front tab's page, whether Back is on for it, and the space's Today tab
             // count; a link's tab closes to the tab it came from on Back (#273).
+            // split=<label>: the selected tab's split, its panes' pages in order, and how many
+            // downloads there are (an Option-clicked link opens a pane, not a download, #298).
+            if let label = dict["split"] {
+                let selected = main.selectedTab
+                let panes = selected.map { store.paneTabIDs(for: $0.id) } ?? []
+                let urls = panes.count > 1 ? panes.compactMap { store.item($0)?.tab?.url }.joined(separator: " | ") : "none"
+                CraLog.note("split \(label): panes=\(urls) selected=\(selected?.tab?.url ?? "-") downloads=\(DownloadHistory.shared.live.count + DownloadHistory.shared.entries.count)")
+                return
+            }
             if let label = dict["back"] {
                 let today = store.tabs(under: store.focusedSpace(window: main.windowID).todayContainerID).count
                 CraLog.note("back \(label): selected=\(main.selectedTab?.tab?.url ?? "-") back=\(main.sidebarUI.canGoBack ? 1 : 0) today=\(today)")
@@ -1407,8 +1462,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             if let f = dict["floatingSidebar"] { if f == "1" { main.floatingSidebar?.show() } else { main.floatingSidebar?.hide(animated: true) }; return }
             if let method = dict["bcdp"] {
+                // To cra.log: a scenario reads it after a relaunch too, when stdout isn't kept (#299).
                 CraCEFRuntime.sendBrowserDevToolsMethod(method, params: dict["params"] ?? "{}") { result, error in
-                    NSLog("Cra bcdp %@ → %@", method, result ?? "error: \(error ?? "?")")
+                    CraLog.note("bcdp \(method) → \(result ?? "error: \(error ?? "?")")")
                 }
                 return
             }
@@ -1448,6 +1504,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 if let e = SearchEngines.shared.keywords(profilePath: nil).first(where: { $0.keyword == keyword }) {
                     SearchEngines.shared.setDefault(e, store: store)
                 }
+                return
+            }
+            // The focused space's own engine by keyword, as its Search Engine menu sets it (#306); empty is Default.
+            if let keyword = dict["spaceSearchEngine"] {
+                store.setSearchEngine(keyword, forSpace: store.focusedSpaceID)
                 return
             }
             if let spikeURL = dict["chromeSpike"] {

@@ -14,8 +14,6 @@ enum SpacesManagerMetrics {
     static let plus: CGFloat = 29
     static let plusGap: CGFloat = 34
     static let trail: CGFloat = 37.5
-    /// What the page keeps beside the Spaces page, whatever the window's width (Arc 1.171).
-    static let pageRoom: CGFloat = 56
 
     /// The Library's width on this page: Arc widens the sidebar to fit every card.
     static func width(spaces n: Int) -> CGFloat {
@@ -277,7 +275,7 @@ private final class SpaceMoveHandle: NSView {
     }
 }
 
-/// The cards' row. Like the tab lists (SpaceListScrollView) it stays off responsive scrolling,
+/// The cards' row. Like the tab lists (SidebarListScrollView) it stays off responsive scrolling,
 /// which would take a gesture's events past the window's scroll monitor once it starts here:
 /// a swipe that starts with the cards at their end has to reach the monitor to leave the Library.
 final class SpacesStripScrollView: NSScrollView {

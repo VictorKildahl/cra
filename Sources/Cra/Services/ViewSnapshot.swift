@@ -26,13 +26,20 @@ enum ViewSnapshot {
         return index < found.count ? found[index] : nil
     }
 
-    /// The view `find` picks, drawn to a PNG at `path`.
+    /// The view `find` picks, drawn to a PNG at `path`. The references are 2x: on a 1x display the
+    /// text and images are drawn at 1x and only scaled up, so that drawing goes to `<name>.1x.png`
+    /// instead, and scripts/scenario.sh says so rather than comparing it.
     static func write(_ spec: String, in window: NSWindow?, to path: String) {
         guard let view = find(spec, in: window), let png = render(view) else {
             CraLog.note("snapshot: no visible \(spec)")
             return
         }
-        do { try png.write(to: URL(fileURLWithPath: path)) } catch { CraLog.note("snapshot: \(error.localizedDescription)") }
+        var out = path
+        if let scale = view.window?.backingScaleFactor, scale < 2, path.hasSuffix(".png") {
+            out = String(path.dropLast(4)) + ".1x.png"
+            CraLog.note("snapshot: \(spec) is on a \(Int(scale))x display; written to \(out)")
+        }
+        do { try png.write(to: URL(fileURLWithPath: out)) } catch { CraLog.note("snapshot: \(error.localizedDescription)") }
     }
 
     private static func render(_ view: NSView) -> Data? {

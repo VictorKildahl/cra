@@ -27,6 +27,7 @@ final class SpaceColumnView: NSView {
         header = SpaceHeaderView(spaceID: spaceID, store: store, ui: ui, actions: actions)
         list = SpaceListView(spaceID: spaceID, store: store, ui: ui, actions: actions, favicons: favicons)
         super.init(frame: .zero)
+        wantsLayer = true
         favorites.onHeightChange = { [weak self] animated in self?.relayout(animated: animated) }
         header.onHiddenChange = { [weak self] in self?.relayout(animated: true) }
         list.header = header
@@ -79,6 +80,8 @@ final class SpaceColumnView: NSView {
         let set = { (v: NSView, f: NSRect) in if v.frame != f { animated ? (v.animator().frame = f) : (v.frame = f) } }
         set(favorites, NSRect(x: 8 + favoritesShift, y: 0, width: w - 16, height: fh))
         let tiles = favorites.tilesBottom(forWidth: w - 16)
+        // Keep empty columns clipped at their own top; only favorite notes use the pager's overhang.
+        layer?.masksToBounds = tiles == nil
         // A Blank Window (Arc 1.172 captures, 6 Nov): its header sits 5 pt higher than a space's
         // with no favorites, and its tabs 1.5 pt closer under it.
         let blank = store.isBlank(space: spaceID)
@@ -440,6 +443,7 @@ enum SpaceMenu {
         }
         profiles.addItem(.separator())
         MenuItems.add(profiles, "New Profile…") { actions.newProfile(id) }
+        addSearchEngines(to: MenuItems.submenu(m, "Search Engine"), space: space, store: store)
         m.addItem(.separator())
         MenuItems.add(m, action: "newFolder") {
             ui.renamingID = store.createFolder(named: "New Folder", in: space.pinnedContainerID, index: 0).id
@@ -460,6 +464,22 @@ enum SpaceMenu {
         m.addItem(.separator())
         MenuItems.add(m, action: "deleteSpace", title: "Delete Space") { actions.deleteSpace(space) }
         return m
+    }
+}
+
+extension SpaceMenu {
+    /// GitHub #306, not in Arc: the engine the command bar searches in this space, in the Set Profile
+    /// submenu's form. "Default" follows Settings ▸ Advanced's engine (the profile's).
+    static func addSearchEngines(to menu: NSMenu, space: Space, store: SidebarStore) {
+        let profile = store.profilePath(space: space.id)
+        let fallback = SearchEngines.shared.defaultEngine(profilePath: profile, legacy: store.settings.searchEngine)
+        let choices = ChromiumSearchEngine.spaceChoices(among: SearchEngines.shared.keywords(profilePath: profile))
+        let current = space.searchEngine?.lowercased()
+        MenuItems.add(menu, "Default (\(fallback.name))", on: current == nil) { store.setSearchEngine(nil, forSpace: space.id) }
+        menu.addItem(.separator())
+        for e in choices {
+            MenuItems.add(menu, e.name, on: current == e.keyword.lowercased()) { store.setSearchEngine(e.keyword, forSpace: space.id) }
+        }
     }
 }
 
@@ -528,6 +548,16 @@ final class FavoritesGridView: NSView {
     private var favoritesID: UUID?
     private(set) var palette: SpacePalette?
     private var syncQueued = false
+    /// Keep notes above the tiles and pinned extensions so they can drift over the row above.
+    private let notesHost = MusicNotesHost()
+    private var notes: [UUID: MusicNotesView] = [:]
+    private var playing: [UUID: Playing] = [:]
+    /// The pane of a tile that plays, among how many and cut which way.
+    private struct Playing: Equatable {
+        let cell: Int
+        let count: Int
+        let vertical: Bool
+    }
     /// A sidebar item dragged over the tiles and the slot held open for it (#176).
     private var drop: Drop? { didSet { if drop != oldValue { dropChanged(from: oldValue) } } }
     private struct Drop: Equatable {
@@ -562,6 +592,7 @@ final class FavoritesGridView: NSView {
         card.isHidden = true
         addSubview(strip)
         addSubview(card)
+        addSubview(notesHost)
         registerForDraggedTypes([.craSidebarItem])
         sync()
     }
@@ -577,6 +608,7 @@ final class FavoritesGridView: NSView {
         var dismissed = true
         var pins: [Pin] = []
         var protectedMedia: String?
+        var playing: [UUID: Playing] = [:]
         withObservationTracking {
             guard let space = store.space(spaceID) else { return }
             palette = space.theme.palette
@@ -597,20 +629,30 @@ final class FavoritesGridView: NSView {
             favoritesID = space.favoritesContainerID
             dismissed = store.isStandalone(space: spaceID) || store.isFavoritesEmptyStateDismissed(space.favoritesContainerID)
             // A favorite split is one tile with a cell per pane (Arc: AppItem.childItems).
+            let logoOutline = store.settings.favoriteLogoOutline
+            let soundPlaying = ui.soundPlayingTabIDs
             for item in store.children(of: space.favoritesContainerID) where item.isTab || item.isSplit {
                 let panes = item.isSplit ? store.children(of: item.id).filter(\.isTab) : [item]
                 guard !panes.isEmpty else { continue }
+                // A split emits notes from its first playing music pane.
+                if let cell = panes.firstIndex(where: { p in
+                    p.tab.map { MusicNotes.plays(url: $0.url, soundPlaying: soundPlaying.contains(p.id), muted: $0.muted) } ?? false
+                }) {
+                    playing[item.id] = Playing(cell: cell, count: panes.count, vertical: item.split?.orientation == .vertical)
+                }
                 let cells = panes.map { p in
                     let key = p.tab?.iconKey
                     let icon = favicons.image(forKey: key)
                     return FavoriteTileModel.Cell(id: p.id, title: p.displayTitle, icon: icon,
-                                                  glyphDark: icon == nil ? nil : favicons.glyphIsDark(forKey: key))
+                                                  glyphDark: icon == nil ? nil : favicons.glyphIsDark(forKey: key),
+                                                  selectionColors: logoOutline ? favicons.selectionColors(forKey: key) : nil)
                 }
                 let open = panes.first { store.isSelected($0.id, inSpace: spaceID, window: ui.windowID) }?.id
                 let title = item.isSplit && item.title == nil ? panes.map(\.displayTitle).joined(separator: " | ") : item.displayTitle
                 models.append((item.id, FavoriteTileModel(title: title, cells: cells, vertical: item.split?.orientation == .vertical,
                                                           tileColor: item.tab?.tileColor, selected: open != nil, openCell: open,
-                                                          unread: panes.contains(where: \.isUnread), focus: ui.keyboardFocusID == item.id)))
+                                                          unread: panes.contains(where: \.isUnread), focus: ui.keyboardFocusID == item.id,
+                                                          logoOutline: logoOutline)))
             }
         } onChange: { [weak self] in
             Task { @MainActor in
@@ -633,11 +675,12 @@ final class FavoritesGridView: NSView {
             let t = tiles[id] ?? {
                 let t = FavoriteTileView(itemID: id, spaceID: spaceID, grid: self)
                 tiles[id] = t
-                addSubview(t)
+                addSubview(t, positioned: .below, relativeTo: notesHost)
                 return t
             }()
             if let palette { t.show(m, palette: palette) }
         }
+        showNotes(playing)
         order = ids
         if let palette { strip.palette = palette; card.palette = palette }
         strip.hasFavorites = !ids.isEmpty
@@ -646,6 +689,25 @@ final class FavoritesGridView: NSView {
         card.isHidden = !showsCard
         needsLayout = true
         if countChanged { onHeightChange(false) }
+    }
+
+    /// Keep an overlay only while its favorite plays; `placeTiles` positions it over the playing pane.
+    private func showNotes(_ playing: [UUID: Playing]) {
+        self.playing = playing
+        for (id, v) in notes where playing[id] == nil {
+            v.removeFromSuperview()
+            notes[id] = nil
+        }
+        for id in playing.keys {
+            guard let dark = tiles[id]?.tileIsDark else { continue }
+            if let v = notes[id] {
+                v.dark = dark
+            } else {
+                let v = MusicNotesView(dark: dark)
+                notes[id] = v
+                notesHost.addSubview(v)
+            }
+        }
     }
 
     private struct Pin { let id: String; let name: String; let icon: NSImage?; let badge: ExtensionBadge? }
@@ -666,7 +728,7 @@ final class FavoritesGridView: NSView {
             let b = extensionButtons[p.id] ?? {
                 let b = ToolbarGlyphButton()
                 extensionButtons[p.id] = b
-                addSubview(b)
+                addSubview(b, positioned: .below, relativeTo: notesHost)
                 return b
             }()
             // On a WebKit page they dim and say why (docs/protected-media.md).
@@ -734,6 +796,7 @@ final class FavoritesGridView: NSView {
         }
         let top = ext.favoritesOffset
         let grid = grid(forWidth: w)
+        notesHost.frame = bounds
         placeTiles(grid, top: top, animated: false)
         strip.frame = NSRect(x: 0, y: top + grid.gridHeight + (order.isEmpty ? 0 : 4), width: w, height: strip.height)
         card.frame = NSRect(x: 0, y: top, width: w, height: FavoritesEmptyCard.height)
@@ -748,11 +811,18 @@ final class FavoritesGridView: NSView {
             let f = grid.frame(at: FavoritesLayout.slot(ofTile: i, opening: open)).offsetBy(dx: 0, dy: top)
             // A tile that just came in, or was hidden, has no place to move from.
             if animated && t.frame != .zero && t.alphaValue > 0 { t.animator().frame = f } else { t.frame = f }
+            if let v = notes[id], let p = playing[id] {
+                // The notes rise from the playing pane's icon and slide along with their tile.
+                let cells = FavoriteTileMetrics.cellFrames(in: NSRect(origin: .zero, size: f.size), count: p.count, vertical: p.vertical)
+                let field = MusicNotes.field(over: cells[min(p.cell, cells.count - 1)].offsetBy(dx: f.minX, dy: f.minY))
+                if animated && v.frame != .zero && !v.isHidden { v.animator().frame = field } else { v.frame = field }
+            }
         }
         for (id, t) in tiles {
             let dragged = drop?.id == id
             if dragged, let open { t.frame = grid.frame(at: open).offsetBy(dx: 0, dy: top) }
             t.alphaValue = dragged ? 0 : 1
+            notes[id]?.isHidden = dragged
         }
     }
 
@@ -1066,6 +1136,7 @@ struct FavoriteTileModel: Equatable {
         var title: String
         var icon: NSImage?
         var glyphDark: Bool?
+        var selectionColors: [String]?
     }
     var title: String
     var cells: [Cell]
@@ -1076,6 +1147,8 @@ struct FavoriteTileModel: Equatable {
     var openCell: UUID?
     var unread: Bool
     var focus: Bool
+    /// Settings ▸ Tabs "Outline the open favorite in its logo’s colors" (off: Arc's neutral rim).
+    var logoOutline = false
 }
 
 enum FavoriteTileMetrics {
@@ -1103,14 +1176,16 @@ enum FavoriteTileMetrics {
 
 /// A favorite tile. Arc 1.170: 13 pt circular corners; the active tile is the hover fill with a
 /// 2 pt darker rim; inactive tiles sit ~4.5% darker than the sidebar. A picked tile colour keeps
-/// its hue in every state; hover and selection shade it.
+/// its hue in every state; hover and selection shade it. With the logo outline setting on, the
+/// rim is a Dia-like gradient of the open site's logo colours instead (PR #267).
 final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
     let itemID: UUID
     private let spaceID: UUID
     private weak var grid: FavoritesGridView?
     private let shade = CALayer()
-    /// The selected tile's 2 pt rim, under the focus ring (a layer border would draw over it).
-    private let rim = CALayer()
+    /// The selected tile's colored rim stays under the keyboard focus ring.
+    private let rim = CAGradientLayer()
+    private let rimMask = CAShapeLayer()
     private var favicons: [SidebarFaviconView] = []
     /// Cuts a split's tile into its cells.
     private let cutMask = CAShapeLayer()
@@ -1136,7 +1211,13 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         layer?.cornerRadius = FavoriteTileMetrics.corner
         shade.cornerRadius = FavoriteTileMetrics.corner
         layer?.addSublayer(shade)
-        rim.cornerRadius = FavoriteTileMetrics.corner
+        rim.type = .conic
+        rim.startPoint = CGPoint(x: 0.5, y: 0.5)
+        rim.endPoint = CGPoint(x: 0.5, y: 0)
+        rimMask.fillColor = nil
+        rimMask.strokeColor = NSColor.black.cgColor
+        rimMask.lineWidth = 2
+        rim.mask = rimMask
         rim.zPosition = 5
         layer?.addSublayer(rim)
         cutMask.fillRule = .evenOdd
@@ -1182,7 +1263,8 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         refresh()
     }
 
-    private var tileIsDark: Bool {
+    /// Share the tile's effective tone with its note overlay.
+    var tileIsDark: Bool {
         guard let m = model, let palette else { return false }
         return m.tileColor.flatMap(HexColor.luminance).map { $0 < 0.5 } ?? palette.isDark
     }
@@ -1202,8 +1284,17 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
             layer?.backgroundColor = fill.cgColor
             shade.backgroundColor = NSColor.clear.cgColor
         }
-        rim.borderWidth = m.selected ? 2 : 0
-        rim.borderColor = (dark ? NSColor.white.withAlphaComponent(0.14) : NSColor.black.withAlphaComponent(0.17)).cgColor
+        if m.logoOutline {
+            let selectedCell = m.cells.first { $0.id == m.openCell } ?? m.cells.first
+            rim.colors = FavoriteSelectionTint.colors(iconColors: selectedCell?.selectionColors, dark: dark)
+                .map { NSColor(hex: $0).cgColor }
+            rim.opacity = 0.72
+        } else {
+            let arcRim = (dark ? NSColor.white.withAlphaComponent(0.14) : NSColor.black.withAlphaComponent(0.17)).cgColor
+            rim.colors = [arcRim, arcRim]
+            rim.opacity = 1
+        }
+        rim.isHidden = !m.selected
         var faviconColors = colors
         faviconColors.isDark = dark
         for (f, c) in zip(favicons, m.cells) { f.show(c.icon, flip: c.icon != nil && c.glyphDark == dark, colors: faviconColors) }
@@ -1234,6 +1325,11 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         CATransaction.setDisableActions(true)
         shade.frame = bounds
         rim.frame = bounds
+        rimMask.frame = bounds
+        let inset = rimMask.lineWidth / 2
+        rimMask.path = CGPath(roundedRect: bounds.insetBy(dx: inset, dy: inset),
+                             cornerWidth: FavoriteTileMetrics.corner - inset,
+                             cornerHeight: FavoriteTileMetrics.corner - inset, transform: nil)
         let cells = cellFrames
         let side = FavoriteTileMetrics.favicon
         for (f, r) in zip(favicons, cells) {

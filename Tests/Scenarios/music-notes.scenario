@@ -1,0 +1,55 @@
+# promise: #303
+# A music favorite shows notes while audible and unmuted. ${MUSIC} is the local fixture server
+# under nts.live. A 440 Hz tone, 60 dB below full volume, triggers Chromium's audible state.
+# Playback starts through the protocol's user gesture.
+budget rss=800 stalls50=30
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+arg --host-resolver-rules=MAP nts.live 127.0.0.1
+pace 0.5
+cra://debug?windowSize=1280x800
+
+# The same tone on a favorite that isn't a music site floats nothing.
+cra://open?url=${PAGE}?n=video
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://action/favoriteTab
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"(async()=>{const n=16000,b=new ArrayBuffer(44+n),v=new DataView(b),w=(o,s)=>[...s].forEach((c,i)=>v.setUint8(o+i,c.charCodeAt(0)));w(0,'RIFF');v.setUint32(4,36+n,true);w(8,'WAVE');w(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,8000,true);v.setUint32(28,16000,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,n,true);for(let i=0;i<8000;i++)v.setInt16(44+2*i,Math.round(33*Math.sin(2*Math.PI*440*i/8000)),true);const a=document.createElement('audio');a.loop=true;a.src=URL.createObjectURL(new Blob([b],{type:'audio/wav'}));document.body.append(a);await a.play();return 'video:'+(a.paused?'paused':'playing')})()"}
+expect-log "value":"video:playing"
+wait 3
+cra://debug?musicNotes=video
+expect-log Cra music notes video: 0
+
+# On a music site it floats them over that favorite's tile, from the top edge of its icon: the
+# emitter is 8 pt above the middle of the tile.
+cra://open?url=${MUSIC}/page.html?n=radio
+expect-log loaded nts\.live \(HTTP 200\)
+cra://action/favoriteTab
+wait 1
+cra://debug?musicNotes=quiet
+expect-log Cra music notes quiet: 0
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"(async()=>{const n=16000,b=new ArrayBuffer(44+n),v=new DataView(b),w=(o,s)=>[...s].forEach((c,i)=>v.setUint8(o+i,c.charCodeAt(0)));w(0,'RIFF');v.setUint32(4,36+n,true);w(8,'WAVE');w(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,8000,true);v.setUint32(28,16000,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,n,true);for(let i=0;i<8000;i++)v.setInt16(44+2*i,Math.round(33*Math.sin(2*Math.PI*440*i/8000)),true);const a=document.createElement('audio');a.loop=true;a.src=URL.createObjectURL(new Blob([b],{type:'audio/wav'}));document.body.append(a);await a.play();return 'radio:'+(a.paused?'paused':'playing')})()"}
+expect-log "value":"radio:playing"
+wait 3
+cra://debug?musicNotes=playing
+expect-log Cra music notes playing: 1 \(0\.0 across, 8\.0 up\)
+
+# A muted tab plays nothing, though Chromium still counts it audible.
+cra://action/muteTab
+wait 1
+cra://debug?musicNotes=muted
+expect-log Cra music notes muted: 0
+cra://action/muteTab
+wait 1
+cra://debug?musicNotes=unmuted
+expect-log Cra music notes unmuted: 1
+
+# Poll during Chromium's asynchronous sound update, within the speaker's 2 s hold.
+pace 0.2
+cra://debug?cdp=Runtime.evaluate&params={"returnByValue":true,"expression":"document.querySelector('audio').pause(), 'radio:paused'"}
+expect-log "value":"radio:paused"
+repeat 5 cra://debug?musicNotes=paused
+expect-log Cra music notes paused: 0
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"document.querySelector('audio').play().then(() => 'radio:resumed')"}
+expect-log "value":"radio:resumed"
+repeat 3 cra://debug?musicNotes=resumed
+expect-log Cra music notes resumed: 1
+cra://debug?checkStore=1

@@ -2393,6 +2393,15 @@ final class SidebarStore {
         touch()
     }
 
+    /// The space's own search engine by Chromium keyword (GitHub #306); nil searches the default.
+    func setSearchEngine(_ keyword: String?, forSpace id: UUID) {
+        let keyword = keyword?.isEmpty == true ? nil : keyword
+        guard var s = spaces[id], s.searchEngine != keyword else { return }
+        s.searchEngine = keyword
+        spaces[id] = s
+        touch()
+    }
+
     /// Arc: only profiles no space uses can be deleted. Chromium may still hold the
     /// folder open, so it goes at the next launch (ProfileCleanup).
     func deleteProfile(_ id: UUID) {
