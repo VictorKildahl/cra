@@ -1119,12 +1119,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let spec = dict["snapshot"], let out = dict["out"] { ViewSnapshot.write(spec, in: main.window, to: out); return }
             // hover=TabRowView,1: that sidebar row hovered as if the pointer were on it (snapshots of
             // hover-only controls, #243) until the pointer moves or the sidebar changes. The URL pill
-            // and favorite tiles take it too (#293).
+            // and favorite tiles take it too (#293), and the space dock's cells (#252).
             if let spec = dict["hover"] {
                 switch ViewSnapshot.find(spec, in: main.window) {
                 case let row as SidebarRowView: row.list?.debugHover(row)
                 case let pill as SidebarURLPill: pill.debugHover()
                 case let tile as FavoriteTileView: tile.debugHover()
+                case let cell as SpaceCellView: (cell.superview as? SpaceDockView)?.debugHover(cell)
                 default: CraLog.note("hover: no visible \(spec)")
                 }
                 return

@@ -390,10 +390,12 @@
 #246   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::sizeStaysInArcsLimits  f3363f2b0bcf
 #246   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::topBarIsArcs  ac06153d1f62
 #246   Tests/Scenarios/pip-title-strip.scenario  3aab46cf7e80
+#252   Packages/CraCore/Tests/CraCoreTests/SpaceDockTests.swift::aHoveredSqueezedDotTakesTheWideCell  bd71414025c3
 #252   Packages/CraCore/Tests/CraCoreTests/SpaceDockTests.swift::aSpaceWithNoIconIsADot  a262c9d5ab89
 #252   Packages/CraCore/Tests/CraCoreTests/SpaceDockTests.swift::aSqueezedDockIsDots  dacb46c4921a
 #252   Packages/CraCore/Tests/CraCoreTests/SpaceDockTests.swift::dotInk  61062698ad64
 #252   Packages/CraCore/Tests/CraCoreTests/SpaceIconTests.swift::menuLabel  0de091f7ac16
+#252   Tests/Scenarios/space-dots-hover.scenario  22e9959ac346
 #252   Tests/Scenarios/space-dots.scenario  6d228947e52a
 #252   Tests/StoreTests.swift::arcSpaceWithoutAnIconImportsAsADot  14c68aa6e846
 #253   Tests/Scenarios/app-shortcuts.scenario  f21d8bb94bb5

@@ -870,7 +870,7 @@ final class SpaceDockView: NSView {
     private var focused: UUID?
     private var incognito = false
     private var colors = SidebarColors()
-    private var hovered: UUID? { didSet { if hovered != oldValue { refreshCells() } } }
+    private var hovered: UUID? { didSet { if hovered != oldValue { hoverChanged() } } }
     private var reorder: (id: UUID, from: Int, to: Int, start: NSPoint, moved: Bool)?
     private var syncQueued = false
 
@@ -967,11 +967,43 @@ final class SpaceDockView: NSView {
         needsLayout = true
     }
 
-    private func refreshCells() {
+    /// Scenarios (cra://debug?hover=SpaceCellView,n): that space hovered as if the pointer were on
+    /// it, until the pointer moves (#252: a squeezed dot takes the wide cell and shows its icon).
+    func debugHover(_ cell: SpaceCellView) {
+        hovered = cells.first { $0.value === cell }?.key
+        // The readout the space-dots-hover scenario checks: what each cell draws, at what width.
+        let ws = cellWidths
+        let drawn = order.enumerated().map { i, id in "\(cells[id]?.markLabel ?? "?")@\(String(format: "%g", ws[i]))" }
+        let order = order
+        let place = { (id: UUID?) in id.flatMap { order.firstIndex(of: $0) }.map { "\($0 + 1)" } ?? "-" }
+        CraLog.note("space dock: hovered \(place(hovered)), wide \(place(wide)): \(drawn.joined(separator: " "))")
+    }
+
+    /// A squeezed dock hands its wide cell to the hovered space (#252): the cells slide over
+    /// Arc's ~0.2 s while the icons trade places.
+    private func hoverChanged() {
+        guard SpaceDock.isSqueezed(count: order.count, room: room), reorder == nil else { return refreshCells() }
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            ctx.allowsImplicitAnimation = true
+            refreshCells(animated: true)
+            placeCells(animated: true)
+        }
+    }
+
+    /// The space in a squeezed dock's wide cell: the hovered one, else the open one (#252). A
+    /// pressed space keeps it, so the release still lands in its cell; a dragged one gives it back.
+    private var wide: UUID? {
+        SpaceDock.wide(open: focused, hovered: reorder.map { $0.moved ? nil : $0.id } ?? hovered)
+    }
+
+    private func refreshCells(animated: Bool = false) {
         let squeezed = SpaceDock.isSqueezed(count: order.count, room: room)
+        let wide = wide
         for (id, c) in cells {
             c.setState(selected: id == focused, hovered: hovered == id && reorder == nil, pressed: reorder?.id == id,
-                       squeezed: squeezed, colors: colors)
+                       wide: id == wide, squeezed: squeezed, colors: colors, animated: animated)
         }
     }
 
@@ -979,10 +1011,10 @@ final class SpaceDockView: NSView {
     private var room: CGFloat { max(0, bounds.width - 63) }
 
     /// SpaceDock's widths, Arc's: 34 pt each until the share drops under 22, then the open space
-    /// keeps 22 and the others split the rest. The strip stays centred, so it never runs past the
-    /// buttons.
+    /// (or the hovered one, #252) keeps 22 and the others split the rest. The strip stays centred,
+    /// so it never runs past the buttons.
     private var cellWidths: [CGFloat] {
-        SpaceDock.widths(count: order.count, open: focused.flatMap { order.firstIndex(of: $0) }, room: room)
+        SpaceDock.widths(count: order.count, open: wide.flatMap { order.firstIndex(of: $0) }, room: room)
     }
 
     /// Left edges of the cells, in order.
@@ -992,7 +1024,7 @@ final class SpaceDockView: NSView {
         return ws.map { w in defer { x += w }; return x }
     }
 
-    /// The width a dragged space moves by per cell (the cells other than the open one).
+    /// The width a dragged space moves by per cell (the cells other than the wide one).
     private var pitch: CGFloat { cellWidths.min() ?? Self.cell.width }
 
     override func layout() {
@@ -1075,6 +1107,7 @@ final class SpaceDockView: NSView {
         let p = point(event)
         let dx = p.x - r.start.x
         if !r.moved && abs(dx) < 3 && abs(p.y - r.start.y) < 3 { return }
+        let started = !r.moved
         r.moved = true
         let w = pitch
         let clamped = min(max(dx, -CGFloat(r.from) * w), CGFloat(order.count - 1 - r.from) * w)
@@ -1082,6 +1115,8 @@ final class SpaceDockView: NSView {
         let changed = to != r.to
         r.to = to
         reorder = r
+        // A drag gives a squeezed dock's wide cell back to the open space (#252).
+        if started { refreshCells() }
         if changed {
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.2
@@ -1145,8 +1180,9 @@ final class SpaceDockView: NSView {
 }
 
 /// One space in the dock: its emoji or symbol, dimmed and desaturated unless selected, hovered or
-/// pressed, or Arc's dot: for a space with no icon, and for every space but the open one when the
-/// dock is squeezed (#252). A tab dragged onto it moves there; held over it, Arc switches to that
+/// pressed, or Arc's dot: for a space with no icon, and for every space but the one in the wide
+/// cell when the dock is squeezed (#252): the open space, or the hovered one while there is one.
+/// A tab dragged onto it moves there; held over it, Arc switches to that
 /// space so the tab can be carried into its list.
 final class SpaceCellView: NSView, ArcTooltipTarget {
     private let spaceID: UUID
@@ -1161,6 +1197,14 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
     private let dot = CALayer()
     private var icon = SpaceIcon.none
     private var mark = SpaceDockMark.dot(diameter: SpaceDock.dotDiameter)
+    /// What the cell draws, for the dock's debug readout: the emoji, the symbol's name or `dot8`.
+    var markLabel: String {
+        switch mark {
+        case .emoji(let e): return e
+        case .symbol(let s): return s
+        case .dot(let d): return "dot\(Int(d))"
+        }
+    }
     private var title = ""
     private var selected = false
     private var colors = SidebarColors()
@@ -1198,13 +1242,25 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
         needsLayout = true
     }
 
-    /// `squeezed`: the dock is too narrow for icons, so every space but the open one is a dot.
-    func setState(selected: Bool, hovered: Bool, pressed: Bool, squeezed: Bool, colors: SidebarColors) {
+    /// `squeezed`: the dock is too narrow for icons, so every space but the one in the `wide` cell
+    /// is a dot. `animated`: the hovered space took the wide cell, so the icon and dot cross-fade
+    /// as the cells slide.
+    func setState(selected: Bool, hovered: Bool, pressed: Bool, wide: Bool, squeezed: Bool, colors: SidebarColors,
+                  animated: Bool = false) {
         self.selected = selected
         self.colors = colors
-        lit = selected || hovered || pressed
-        let mark = SpaceDock.mark(for: icon, isOpen: selected, squeezed: squeezed)
-        if mark != self.mark { self.mark = mark; needsLayout = true }
+        lit = SpaceDock.isLit(isOpen: selected, hovered: hovered, pressed: pressed, isWide: wide, squeezed: squeezed)
+        let mark = SpaceDock.mark(for: icon, isOpen: wide, squeezed: squeezed)
+        if mark != self.mark {
+            self.mark = mark
+            needsLayout = true
+            if animated {
+                let fade = CATransition()
+                fade.type = .fade
+                fade.duration = 0.2
+                layer?.add(fade, forKey: "mark")
+            }
+        }
         switch mark {
         case .emoji(let e):
             emoji.stringValue = e
@@ -1223,7 +1279,8 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
         emojiHolder.alphaValue = lit ? 1 : 0.45
         symbol.contentTintColor = colors.textPrimary
         emojiHolder.layer?.filters = lit ? nil : [CIFilter(name: "CIColorControls", parameters: ["inputSaturation": 0.2])!]
-        refreshFill(hovered || pressed)
+        // Arc fills a hovered cell only when the dock has room; a squeezed one shows the icon instead.
+        refreshFill(pressed || (hovered && !squeezed))
     }
 
     private func showSymbol(_ name: String?) {

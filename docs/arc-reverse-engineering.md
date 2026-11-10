@@ -2529,8 +2529,14 @@ Theme palettes in a hand-built space can be borrowed; only the `background` styl
   light #CDB68F and dark #2A2536 sidebars): a space with no icon (`customInfo.iconType` absent, Remove Icon) is
   an 8 pt dot centred in its cell, level with the + glyph. Ink: black on light, white on dark, 0.5 for the open
   space, 0.25 (light) / 0.18 (dark) for the rest. Squeezed (cells under 22 pt), every space but the open one is
-  a 4 pt dot in the same ink, emoji spaces too; the open space keeps its emoji, or its 8 pt dot. Not observed:
-  hover over a dot. Cra: CraCore `SpaceDock` (widths, `mark`, `dotAlpha`), drawn by `SpaceCellView`; the Arc
+  a 4 pt dot in the same ink, emoji spaces too; the open space keeps its emoji, or its 8 pt dot.
+- [O] Hover in a squeezed dock (Arc 1.171, 10 Nov 2026, #252; offline Arc with 12 spaces, real pointer, window
+  captures and a recording): the hovered space takes the 22 pt cell (the others close up to 17.5) and shows its
+  emoji in full colour, or an icon-less space its 8 pt dot at the open ink (0.5); the open space shrinks to a
+  4 pt dot at the others' ink (0.25 light / 0.18 dark) until the pointer leaves. No hover fill (a dock with room
+  keeps its fill). The swap takes ~0.2 s: cells slide, the hovered emoji grows in from small while the open
+  one fades to its dot. The usual tooltip (name + ⌘n) shows above. Cra: `SpaceDock.wide` / `isLit`, the cells
+  slide and cross-fade over 0.2 s (no grow), pinned by the space-dots-hover scenario. Cra: CraCore `SpaceDock` (widths, `mark`, `dotAlpha`), drawn by `SpaceCellView`; the Arc
   importer keeps an icon-less space icon-less (it used to get 🗂️). Pinned by the space-dots and solid-spaces
   scenarios.
 

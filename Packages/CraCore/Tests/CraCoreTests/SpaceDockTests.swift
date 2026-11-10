@@ -44,6 +44,29 @@ struct SpaceDockTests {
         #expect(SpaceDock.mark(for: .none, isOpen: true, squeezed: true) == .dot(diameter: 8))
     }
 
+    /// Arc 1.171 (10 Nov 2026, 12 spaces): hovering a squeezed dot gives that space the wide cell
+    /// and its icon, an icon-less space its 8 pt dot, lit; the open space becomes a plain 4 pt dot
+    /// until the pointer leaves (#252, erkage).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/252"))
+    func aHoveredSqueezedDotTakesTheWideCell() {
+        let open = 0, mail = 2, plain = 4
+        #expect(SpaceDock.wide(open: open, hovered: nil) == open)
+        #expect(SpaceDock.wide(open: open, hovered: mail) == mail)
+        #expect(SpaceDock.widths(count: 12, open: SpaceDock.wide(open: open, hovered: mail), room: Self.room)
+                == [17.5, 17.5, 22] + Array(repeating: 17.5, count: 9))
+        let wide = SpaceDock.wide(open: open, hovered: mail)
+        #expect(SpaceDock.mark(for: .emoji("📮"), isOpen: mail == wide, squeezed: true) == .emoji("📮"))
+        #expect(SpaceDock.mark(for: .emoji("🧑‍💻"), isOpen: open == wide, squeezed: true) == .dot(diameter: 4))
+        #expect(SpaceDock.mark(for: .none, isOpen: plain == SpaceDock.wide(open: open, hovered: plain), squeezed: true)
+                == .dot(diameter: 8))
+        #expect(SpaceDock.isLit(isOpen: false, hovered: true, pressed: false, isWide: true, squeezed: true))
+        #expect(!SpaceDock.isLit(isOpen: true, hovered: false, pressed: false, isWide: false, squeezed: true),
+                "the open space's dot takes the others' ink while another is hovered")
+        #expect(SpaceDock.isLit(isOpen: true, hovered: false, pressed: false, isWide: true, squeezed: true))
+        #expect(SpaceDock.isLit(isOpen: true, hovered: false, pressed: false, isWide: false, squeezed: false),
+                "a dock with room keeps the open space lit")
+    }
+
     /// Arc's dot ink over the sidebar: 50 % for the open space, 25 % (light) or 18 % (dark) for
     /// the others (#252).
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/252"))
