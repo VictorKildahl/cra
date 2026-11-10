@@ -151,7 +151,14 @@ extension PictureInPictureLayout {
     /// does: on the display it was left on, at the same place on it, even after the displays were
     /// rearranged; a frame without a display, on the display it lies on. Otherwise (nothing left,
     /// or that display unplugged) Arc's default corner of `current`, the display Chromium opened it on.
+    /// A remembered frame partly off the screen (0.1.38 kept wherever a drag let it go, or the
+    /// displays changed since) opens in the nearest corner instead, as a drop there lands (#332).
     public static func initialFrame(aspect: CGFloat, displays: [Display], current: Display, remembered: Placement?) -> CGRect {
+        let frame = rememberedFrame(aspect: aspect, displays: displays, current: current, remembered: remembered)
+        return landing(afterDropping: frame, displays: displays.isEmpty ? [current] : displays)?.frame ?? frame
+    }
+
+    static func rememberedFrame(aspect: CGFloat, displays: [Display], current: Display, remembered: Placement?) -> CGRect {
         if let r = remembered, !r.frame.isEmpty {
             if let id = r.display, let d = displays.first(where: { $0.id == id }) {
                 let was = r.displayFrame ?? d.frame
@@ -169,5 +176,43 @@ extension PictureInPictureLayout {
     static func overlap(_ a: CGRect, _ b: CGRect) -> CGFloat {
         let i = a.intersection(b)
         return i.isNull ? 0 : i.width * i.height
+    }
+}
+
+extension PictureInPictureLayout {
+    /// Where a window let go partly off the screen comes to rest: a corner of a display and the
+    /// frame there.
+    public struct Landing: Equatable, Sendable {
+        public var corner: PictureInPictureThrow.Corner
+        public var frame: CGRect
+
+        public init(corner: PictureInPictureThrow.Corner, frame: CGRect) {
+            self.corner = corner
+            self.frame = frame
+        }
+    }
+
+    /// A window dropped by a mouse drag with part of it past the screen's edge (off every
+    /// display) springs back into the nearest corner of the display most of it is on, 10 pt in,
+    /// as Arc's does (#332). Wholly on screen, under the menu bar or the Dock or across two
+    /// displays, it stays where it was let go: nil.
+    public static func landing(afterDropping frame: CGRect, displays: [Display]) -> Landing? {
+        guard !frame.isEmpty, !displays.isEmpty else { return nil }
+        // Mirrored displays share a frame; count the screen once.
+        var screens: [CGRect] = []
+        for d in displays where !screens.contains(d.frame) { screens.append(d.frame) }
+        let shown = screens.reduce(0) { $0 + overlap($1, frame) }
+        guard shown < frame.width * frame.height - 0.5 else { return nil }
+        let centre = CGPoint(x: frame.midX, y: frame.midY)
+        let display = displays.max { a, b in
+            let oa = overlap(a.frame, frame), ob = overlap(b.frame, frame)
+            return oa != ob ? oa < ob : distance(centre, a.frame) > distance(centre, b.frame)
+        }!
+        let corner = PictureInPictureThrow.corner(for: frame, velocity: .zero, in: display.visible)
+        return Landing(corner: corner, frame: PictureInPictureThrow.frame(in: corner, size: frame.size, visible: display.visible, margin: edgeMargin))
+    }
+
+    static func distance(_ p: CGPoint, _ r: CGRect) -> CGFloat {
+        hypot(max(r.minX - p.x, 0, p.x - r.maxX), max(r.minY - p.y, 0, p.y - r.maxY))
     }
 }

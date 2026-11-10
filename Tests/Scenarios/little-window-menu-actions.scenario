@@ -1,0 +1,45 @@
+# promise: #333
+# With a Little Window in front, the menu's page and window commands act on the Little Window,
+# not on the browser window behind it (#333). Window ▸ Stay On Top floats the Little Window and
+# its checkmark follows the Little Window. File ▸ Share…, the captures and Save Page As… are on
+# for the Little Window's page even when the browser window has no tab open, and Save Page As…
+# opens its sheet on the Little Window. The browser window stays as it was throughout.
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+cra://open?url=${PAGE}?n=main
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+# The browser window keeps no tab, so nothing there can answer for the Little Window.
+cra://action/closeTab
+wait 1
+cra://debug?externalURL=${PAGE}?n=little
+wait 3
+cra://debug?littleShown=front
+expect-log little shown front: windows=1
+
+cra://action/stayOnTop
+cra://debug?windowState=top
+expect-log window state top: main0 .* onTop=0
+expect-log window state top: little0 .* onTop=1
+cra://debug?menuRows=Window&marks=1&label=top
+expect-log menu rows top: ✓Stay On Top\|
+cra://action/stayOnTop
+cra://debug?windowState=down
+expect-log window state down: main0 .* onTop=0
+expect-log window state down: little0 .* onTop=0
+cra://debug?menuRows=Window&marks=1&label=down
+expect-log menu rows down: Stay On Top\|
+
+cra://debug?menuRows=File&marks=1&label=file
+expect-log menu rows file: .*\|Share…\|Capture…\|Capture Full Page\|Capture in Portrait Mode\|Save Page As\|Print
+
+cra://action/savePageAs
+wait 2
+cra://debug?windowState=save
+expect-log window state save: main0 .* sheet=0
+expect-log window state save: little0 .* sheet=1
+cra://debug?endSheets=1
+wait 1
+cra://debug?windowState=saved
+expect-log window state saved: little0 .* sheet=0
+cra://action/closeLittleWindows
+wait 2

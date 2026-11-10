@@ -15,15 +15,16 @@ struct SettingsActions {
 /// The panes in Dia's Settings sidebar (Dia 1.54.2: Account, Tabs, Privacy, Profiles, Skills,
 /// Apps, Shortcuts, Advanced). Cra has no account or AI skills/apps; General
 /// (system integration) and Extensions take rows instead. Max is Arc's Max pane, for the
-/// features Cra runs on the Mac's own Apple Intelligence model.
+/// features Cra runs on the Mac's own Apple Intelligence model; Links is Arc's Links pane.
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, tabs, max, privacy, profiles, extensions, plugins, shortcuts, performance, advanced
+    case general, tabs, links, max, privacy, profiles, extensions, plugins, shortcuts, performance, advanced
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .general: return "General"
         case .tabs: return "Tabs"
+        case .links: return "Links"
         case .max: return "Max"
         case .privacy: return "Privacy"
         case .profiles: return "Profiles"
@@ -40,6 +41,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         switch self {
         case .general: return "gearshape"
         case .tabs: return "square.on.square"
+        case .links: return "link"
         // macOS 15.1 added Apple's mark; before it, sparkles.
         case .max: return NSImage(systemSymbolName: "apple.intelligence", accessibilityDescription: nil) != nil ? "apple.intelligence" : "sparkles"
         case .privacy: return "hand.raised"
@@ -256,6 +258,7 @@ struct SettingsContent: View {
                 switch nav.pane {
                 case .general: GeneralPane()
                 case .tabs: TabsPane()
+                case .links: LinksPane()
                 case .max: MaxPane()
                 case .privacy: PrivacyPane(actions: actions)
                 case .profiles: ProfilesPane(nav: nav, actions: actions)

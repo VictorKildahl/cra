@@ -38,8 +38,8 @@ final class LittleWindowState {
     var openButtonWidth: CGFloat = 160
     /// Width of the profile chip (0 = hidden), reported the same way.
     var profileChipWidth: CGFloat = 0
-    /// The "Open in" button's ⌄: only with more than one space to move the page to (LittlePopupGeometry).
-    var showsMenuButton = true
+    /// The button has its ⌄ only while there is another space to pick (Arc 1.172.1, #331).
+    var showsChevron = true
     /// The window waits for the page's first response: the address pill keeps its magnifier (#330).
     var awaitsFirstResponse = false
 
@@ -90,7 +90,7 @@ enum LittlePalette {
     /// Arc 1.172.1, 10 Nov 2026, window captures at 2x, pixels read along the strip's top edge of a
     /// 1185 pt window: #242438 at the left end, #26243A, #292839 and #2C2439 between, #312339 at the
     /// right. The values wobble by a few units rather than rise, so two stops stay within them; 1.168's
-    /// flat #0C091C is gone.
+    /// flat #0C091C is gone (#329).
     static let stripLeft = NSColor(srgbRed: 0x24 / 255, green: 0x24 / 255, blue: 0x38 / 255, alpha: 1)
     static let stripRight = NSColor(srgbRed: 0x31 / 255, green: 0x23 / 255, blue: 0x39 / 255, alpha: 1)
     /// The address pill is a lighter wash over the strip (about #38394A on the left, #43394B on the
@@ -111,7 +111,9 @@ enum LittlePalette {
     static let buttonHover = Color(red: 22 / 255, green: 23 / 255, blue: 52 / 255)
     static let badge = Color(red: 23 / 255, green: 24 / 255, blue: 50 / 255)
     static let badgeText = Color(red: 139 / 255, green: 140 / 255, blue: 153 / 255)
-    static let popupButton = Color(red: 92 / 255, green: 92 / 255, blue: 113 / 255)
+    /// The "Open in" menu's magnifier, ∧ and "No results", and its placeholder (Arc 1.172.1, #331).
+    static let moveMenuGlyph = Color(red: 80 / 255, green: 81 / 255, blue: 102 / 255)
+    static let moveMenuPlaceholder = Color(red: 142 / 255, green: 143 / 255, blue: 157 / 255)
     // Hover tips (measured): navy pill, lavender-white text, pale key caps with blue glyphs.
     static let tooltip = Color(red: 10 / 255, green: 13 / 255, blue: 75 / 255)
     static let tooltipText = Color(red: 222 / 255, green: 223 / 255, blue: 253 / 255)
@@ -251,16 +253,14 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         } else {
             shell.setToolbar(LittleToolbarView(state: state, actions: actions, store: app.store))
         }
-        shell.onHover = { [weak self] hovered in
-            guard let self else { return }
-            // Without the ⌄ the button's right end is "Open in" too.
-            let h = hovered == .chevron && !self.state.showsMenuButton ? LittleHover.open : hovered
-            guard self.state.hover != h else { return }
+        shell.onHover = { [weak self] h in
+            guard let self, self.state.hover != h else { return }
             self.state.hover = h
             self.scheduleTooltip(for: h)
         }
         shell.openButtonWidth = { [weak self] in self?.state.openButtonWidth ?? 160 }
         shell.profileChipWidth = { [weak self] in self?.state.profileChipWidth ?? 0 }
+        shell.showsChevron = { [weak self] in self?.state.showsChevron ?? true }
         if parent != nil {
             // A Peek is part of its window: no minimizing or zooming it on its own.
             window.isMovableByWindowBackground = false
@@ -844,6 +844,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     /// `cra://debug?littleCommit=<typed>`: the bar's "Switch to" row for `typed`, committed as ↩
     /// on it does; logs the rows found (#316).
+    /// For `cra://debug?littleShown`: the address pill's padlock and text (#330).
+    var debugReadout: String { (shell.toolbarHost as? LittleToolbarView)?.debugReadout ?? "" }
+
     func debugCommit(_ typed: String) {
         let shown = isPeek ? nil : state.targetSpaceID
         let rows = commandBar.engine.suggestions(for: typed, mode: .newTab, currentTabID: nil, spaceShown: shown).items
@@ -852,17 +855,25 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         if let row { handleCommit(row, typed: typed, mode: .newTab) }
     }
 
-    /// `cra://debug?littlePopup`: opens the "Open in" menu if it isn't open, types `typed` into its
-    /// search, and describes it (rows, heights, scrolling, "No results"); closed when it can't open.
-    func debugPopup(typing typed: String?) -> String {
-        if popup == nil, canOpenInMenu { openPopup() }
-        guard let view = popup?.contentView as? LittleSpacesPopup else { return "open=0" }
-        view.debugType(typed ?? "")
-        return "open=1 \(view.debugSummary)"
+    /// cra://debug?littleMenu=<step>: drives the "Open in" menu (#331) and logs what it shows.
+    /// open (as the ⌄ or ⇧⌘O), down<n> (↓ n times), type:<text> (the filter), close.
+    func debugMenu(_ step: String) {
+        switch step {
+        case "open": if popup == nil { openPopup() }
+        case "close": closePopup()
+        case let s where s.hasPrefix("down"): (popup?.contentView as? LittleSpacesPopup)?.debugMove(down: Int(s.dropFirst(4)) ?? 1)
+        case let s where s.hasPrefix("type:"): (popup?.contentView as? LittleSpacesPopup)?.debugType(String(s.dropFirst(5)))
+        default: break
+        }
+        var line = "chevron=\(state.showsChevron ? 1 : 0)"
+        if let panel = popup, let window, let menu = panel.contentView as? LittleSpacesPopup {
+            let f = panel.frame, w = window.frame
+            line += String(format: " menu=%.0fx%.0f top=%.0f right=%.0f ", f.width, f.height, w.maxY - f.maxY, w.maxX - f.maxX) + menu.debugState
+        } else {
+            line += " menu=closed"
+        }
+        CraLog.note("little menu \(step): \(line)")
     }
-
-    /// For `cra://debug?littleShown`: the address pill's padlock and text.
-    var debugReadout: String { (shell.toolbarHost as? LittleToolbarView)?.debugReadout ?? "" }
 
     private func navigate(_ url: String) {
         state.url = url
@@ -922,11 +933,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         if popup != nil { closePopup() } else { openPopup() }
     }
 
-    /// ⇧⌘O and the ⌄ need a page to move and a second space to move it to.
-    var canOpenInMenu: Bool { hasPage && !isPeek && state.showsMenuButton }
-
     private func openPopup() {
-        guard let window, popup == nil else { return }
+        guard let window, popup == nil, state.showsChevron else { return }
         tooltipTimer?.invalidate(); hideTooltip()
         commandBar.close()
         let panel = LittlePopupPanel()
@@ -934,8 +942,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
                                               onPick: { [weak self] sid in self?.closePopup(); self?.promote(to: sid) },
                                               onClose: { [weak self] in self?.closePopup() })
         panel.delegate = self
-        // Arc 1.172.1: 4 pt under the window's top edge, 4.5 pt short of its right one (#331).
-        panel.setFrame(LittlePopupGeometry.frame(inWindow: window.frame, rows: store.orderedSpaces.count), display: true)
+        panel.setFrame(LittleMoveMenu.frame(rows: store.orderedSpaces.count, in: window.frame), display: true)
         window.addChildWindow(panel, ordered: .above)
         popup = panel
         state.popupOpen = true
@@ -1088,26 +1095,46 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             copy("[\(browser?.currentTitle ?? state.title)](\(currentURL))")
             showToast("Copied URL as Markdown")
         case "viewSource": browser?.viewSource()
-        case "devTools", "jsConsole", "inspectElement":
-            browser?.devToolsAction = ["jsConsole": "console", "inspectElement": "inspect"][id]
+        case "devTools", "jsConsole", "networkPanel", "inspectElement":
+            browser?.devToolsAction = ["jsConsole": "console", "networkPanel": "network", "inspectElement": "inspect"][id]
             browser?.showDevTools()
         case "print": browser?.print()
+        // The rest of the page's commands run on this page, not on the browser window's tab (#333).
+        case "share": PageCommands.share(self)
+        case "copyURLQuote": PageCommands.copyURLAsQuote(self)
+        case "savePageAs": PageCommands.savePageAs(self)
+        case "captureFullPage": PageCommands.captureFullPage(self)
+        case "capturePortrait": PageCommands.capturePortrait(self)
+        case "jumpToSelection": PageCommands.jumpToSelection(browser)
+        case "pictureInPicture": browser?.requestPictureInPicture(automatic: false)
+        case "cast": if browser?.runChromeCommand("IDC_ROUTE_MEDIA") != true { showToast("Nothing to Cast") }
+        case "taskManager": if browser?.runChromeCommand("IDC_TASK_MANAGER") != true { showToast("Open a Page First") }
+        case "toggleDeveloperMode": if hasPage { store.settings.toggleDeveloperMode(url: currentURL) }
+        case "stayOnTop": toggleStayOnTop()
         case "promoteLittleWindow": promote(to: nil)
         // Arc's Show Little Arc "Open In" Menu (⇧⌘O): the ⌄ button's list of spaces.
-        case "littleWindowOpenInMenu": if canOpenInMenu { togglePopup() }
+        case "littleWindowOpenInMenu": if hasPage, !isPeek { togglePopup() }
         // Move Tab to Space N (⌃⌘N, #86) sends the page there, as the spaces popup does (#92).
         case let id where id.hasPrefix("moveTabToSpace"):
             if let n = Int(id.dropFirst(14)), n >= 1, n <= store.spaceOrder.count { promote(to: store.spaceOrder[n - 1]) }
-        // What a Little Window has no find bar, sidebar or tabs for is ignored, and what is about its own
-        // page and window is its own (#333): none of it reaches the browser window behind it.
-        default:
-            switch LittleWindowRouting.route(id, inPeek: isPeek) {
-            case .window: return handleOwnPage(action: id)
-            case .ignored: break
-            case .app: return false
-            }
+        // No find bar, sidebar or split in little windows; keep them off the main window.
+        case "find", "findNext", "findPrevious", "useSelectionForFind", "toggleSidebar", "pinTab", "favoriteTab", "renameTab",
+             "duplicateTab", "resetTab", "muteTab", "clearToday", "nextTab", "previousTab", "recentTab", "recentTabBackward",
+             "revealTab", "collapsePinned", "collapseAllFolders", "expandAllFolders", "resetSpaceTabs",
+             "addSplitView", "closeSplitPane", "separateFromSplit", "flipSplitOrientation", "nextSplitPane", "previousSplitPane":
+            break
+        case let id where id.hasPrefix("splitPane"): break
+        default: return false
         }
         return true
+    }
+
+    /// Window ▸ Stay On Top floats this window over other apps' windows. A Peek rides on its
+    /// browser window, so that one floats with it.
+    var staysOnTop: Bool { isPeek ? peekParent?.staysOnTop ?? false : window?.level == .floating }
+    func toggleStayOnTop() {
+        if isPeek { peekParent?.toggleStayOnTop(); return }
+        window?.level = staysOnTop ? .normal : .floating
     }
 
     private func copy(_ s: String) {
@@ -1430,6 +1457,7 @@ final class LittleShellView: NSView {
     var openButtonWidth: () -> CGFloat = { 160 }
     /// The profile chip's width in the pill, 0 while it is hidden.
     var profileChipWidth: () -> CGFloat = { 0 }
+    var showsChevron: () -> Bool = { true }
     /// While the window grows open, lay out for this (final) size anchored top-left.
     var frozenSize: NSSize? { didSet { needsLayout = true } }
     /// Arc's Peek card: its own 32 pt bar, the page edge to edge, 8 pt corners all round.
@@ -1513,7 +1541,7 @@ final class LittleShellView: NSView {
             return .pill
         }
         if x >= buttonLeft, x < w - LittleMetrics.rightMargin {
-            return x >= w - LittleMetrics.rightMargin - LittleMetrics.chevronWidth ? .chevron : .open
+            return showsChevron() && x >= w - LittleMetrics.rightMargin - LittleMetrics.chevronWidth ? .chevron : .open
         }
         return .none
     }
@@ -1686,7 +1714,7 @@ final class LittlePopupPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
     init() {
-        super.init(contentRect: NSRect(x: 0, y: 0, width: LittlePopupGeometry.width, height: 150),
+        super.init(contentRect: NSRect(x: 0, y: 0, width: LittleMoveMenu.width, height: 150),
                    styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView], backing: .buffered, defer: false)
         isFloatingPanel = true
         level = .floating
@@ -1694,7 +1722,7 @@ final class LittlePopupPanel: NSPanel {
         isOpaque = false
         hasShadow = true
         hidesOnDeactivate = false
-        // Complete in the first frame after the click: no fade shows at 21 ms spacing in Arc 1.172.1.
+        // Arc's menu is whole in the first frame after the click (#331): no system fade.
         animationBehavior = .none
         collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace]
     }
@@ -1717,6 +1745,7 @@ final class LittleToolbarView: NSView {
     /// The magnifier, or the open padlock for a page that isn't served over https (#330).
     private let search = NSImageView()
     private var isInsecure = false
+    /// For `cra://debug?littleShown`: the padlock and the pill's text.
     var debugReadout: String { "padlock=\(isInsecure ? 1 : 0) address=\(urlLabel.stringValue)" }
     private let urlLabel = NSTextField.sidebarLabel(size: 13)
     private let puzzle = LittleIconView(symbol: "puzzlepiece.extension", size: 15)
@@ -1794,23 +1823,21 @@ final class LittleToolbarView: NSView {
     override var isFlipped: Bool { true }
 
     private func observe() {
-        let (url, hover, popupOpen, space, profile, destinations, waiting) = withObservationTracking {
-            (state.url, state.hover, state.popupOpen, store.space(state.targetSpaceID) ?? store.focusedSpace,
+        let (url, hover, popupOpen, space, spaces, profile, waiting) = withObservationTracking {
+            (state.url, state.hover, state.popupOpen, store.space(state.targetSpaceID) ?? store.focusedSpace, store.spaceOrder.count,
              // Arc's shouldShowProfileIndicators: only once there is a profile besides Default.
-             store.profiles.isEmpty ? nil : store.profile(state.profileID)?.name ?? "Default",
-             store.orderedSpaces.count, state.awaitsFirstResponse)
+             store.profiles.isEmpty ? nil : store.profile(state.profileID)?.name ?? "Default", state.awaitsFirstResponse)
         } onChange: { [weak self] in
             Task { @MainActor in self?.observe() }
         }
+        let chevronShown = LittleMoveMenu.showsChevron(spaces: spaces)
+        if state.showsChevron != chevronShown { state.showsChevron = chevronShown }
+        divider.isHidden = !chevronShown
+        chevronPart.isHidden = !chevronShown
         // Arc shows the host alone; a page without one (an internal page, a file) keeps its address.
         urlLabel.stringValue = url.isEmpty ? "" : LittleAddress.host(of: url) ?? SuggestionEngine.humanURL(url)
         // Arc keeps the magnifier while a first response is awaited.
         showSecurity(insecure: !waiting && LittleAddress.isInsecure(url))
-        // With one space there is nothing to choose: ⌘O is the whole button, and ⇧⌘O has no menu.
-        let more = destinations > 1
-        if state.showsMenuButton != more { state.showsMenuButton = more }
-        chevronPart.isHidden = !more
-        divider.isHidden = !more
         pill.toolTip = url
         pill.layer?.backgroundColor = NSColor(hover == .pill ? LittlePalette.pillHover : LittlePalette.pill).cgColor
         puzzle.hovered = hover == .puzzle
@@ -1846,11 +1873,11 @@ final class LittleToolbarView: NSView {
         gradient.frame = bounds
         CATransaction.commit()
         let w = bounds.width, ch = LittleMetrics.controlHeight, y: CGFloat = 8
-        // Open button: 10 + "Open in <space>" + 6 + ⌘O (5 + text + 5) + 8 | 1 | 29.
+        // Open button: 10 + "Open in <space>" + 6 + ⌘O (5 + text + 5) + 8 | 1 | 29 (no ⌄ with one space).
         let tw = ceil(openLabel.attributedStringValue.size().width)
         let bw = ceil(badgeLabel.attributedStringValue.size().width) + 10
         let partW = 10 + tw + 6 + bw + 8
-        let openW = partW + (state.showsMenuButton ? 1 + LittleMetrics.chevronWidth : 0)
+        let openW = partW + (state.showsChevron ? 1 + LittleMetrics.chevronWidth : 0)
         if state.openButtonWidth != openW { state.openButtonWidth = openW }
         openButton.frame = NSRect(x: w - LittleMetrics.rightMargin - openW, y: y, width: openW, height: ch)
         openPart.frame = NSRect(x: 0, y: 0, width: partW, height: ch)
@@ -1984,9 +2011,9 @@ private final class LittleIconView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
-/// Arc's LittleBrowserMoveMenu: "Search Spaces…" with a chevron-up button, then one 46 pt row per
-/// space (a 26 pt tile with the emoji on the space colour). The list is `min(rows × 46, 350)` tall and
-/// scrolls past that, follows what the search leaves, and says "No results" when nothing matches.
+/// Arc's LittleBrowserMoveMenu (`LittleMoveMenu`): "Search Spaces…" with a chevron-up button, then
+/// one 46 pt row per space (a 26 pt tile with the emoji on the space colour) in a list that
+/// scrolls past 350 pt, or "No results". The space "Open in" names leads, highlighted.
 @MainActor
 final class LittleSpacesPopup: NSView, NSTextFieldDelegate {
     private let state: LittleWindowState
@@ -1995,25 +2022,14 @@ final class LittleSpacesPopup: NSView, NSTextFieldDelegate {
     private let onClose: () -> Void
     private let field = NSTextField()
     private let close = NSView()
+    private let divider = NSView()
     private let scroll = NSScrollView()
     private let listView = FlippedView()
-    private let noResults = NSTextField.sidebarLabel(size: 13, weight: .medium)
+    private let empty = NSTextField.sidebarLabel(size: 13)
     private var rows: [NSView] = []
     private var list: [Space] = []
-    private var selected = 0 { didSet { refreshSelection() } }
-
-    /// What the menu readout (`cra://debug?littlePopup`) and the scenarios look at.
-    var debugSummary: String {
-        layoutSubtreeIfNeeded()
-        return "rows=\(rows.count) listHeight=\(Int(scroll.frame.height)) height=\(Int(frame.height)) noResults=\(noResults.isHidden ? 0 : 1) "
-            + "scrolls=\(listView.frame.height > scroll.frame.height ? 1 : 0)"
-    }
-
-    /// Types into the search field, as the keyboard would (scenarios).
-    func debugType(_ text: String) {
-        field.stringValue = text
-        controlTextDidChange(Notification(name: NSControl.textDidChangeNotification))
-    }
+    private var selected = 0 { didSet { refreshSelection(); revealSelected() } }
+    private var revealOnLayout = true
 
     init(state: LittleWindowState, store: SidebarStore, onPick: @escaping (UUID) -> Void, onClose: @escaping () -> Void) {
         self.state = state
@@ -2023,52 +2039,50 @@ final class LittleSpacesPopup: NSView, NSTextFieldDelegate {
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = LittlePalette.buttonNS.cgColor
-        layer?.cornerRadius = 12
+        layer?.cornerRadius = LittleMoveMenu.cornerRadius
         layer?.cornerCurve = .continuous
         layer?.masksToBounds = true
-        layer?.borderWidth = 1
+        layer?.borderWidth = LittleMoveMenu.border
         layer?.borderColor = NSColor(LittlePalette.buttonBorder).cgColor
-        let h = LittlePopupGeometry.headerHeight
-        let glass = NSImageView(frame: NSRect(x: 14, y: 0, width: 16, height: h))
+        let h = LittleMoveMenu.headerHeight
+        let glass = NSImageView(frame: NSRect(x: 16, y: 0, width: 14, height: h))
         glass.image = SidebarSymbols.image("magnifyingglass", size: 13, weight: .medium)
-        glass.contentTintColor = NSColor(LittlePalette.icon)
+        glass.contentTintColor = NSColor(LittlePalette.moveMenuGlyph)
         glass.imageScaling = .scaleNone
         addSubview(glass)
         field.isBordered = false
         field.drawsBackground = false
         field.focusRingType = .none
-        field.font = .systemFont(ofSize: 14)
+        field.font = .systemFont(ofSize: 13)
         field.textColor = NSColor.white.withAlphaComponent(0.9)
-        field.placeholderString = "Search Spaces…"
+        field.placeholderAttributedString = NSAttributedString(string: "Search Spaces...", attributes: [
+            .font: NSFont.systemFont(ofSize: 13), .foregroundColor: NSColor(LittlePalette.moveMenuPlaceholder)])
         field.usesSingleLineMode = true
         field.cell?.isScrollable = true
         field.delegate = self
         addSubview(field)
-        close.wantsLayer = true
-        close.layer?.cornerRadius = 6
-        close.layer?.cornerCurve = .continuous
-        close.layer?.backgroundColor = NSColor(LittlePalette.popupButton).cgColor
-        let up = NSImageView(frame: NSRect(x: 0, y: 0, width: 28, height: 28))
-        up.image = SidebarSymbols.image("chevron.up", size: 11, weight: .bold)
-        up.contentTintColor = NSColor.white.withAlphaComponent(0.9)
+        // Arc 1.172.1: a plain ∧ after an 18 pt rule (1.168 had a filled 28 pt button).
+        divider.wantsLayer = true
+        divider.layer?.backgroundColor = NSColor(LittlePalette.buttonBorder).cgColor
+        addSubview(divider)
+        let up = NSImageView(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
+        up.image = SidebarSymbols.image("chevron.up", size: 11, weight: .semibold)
+        up.contentTintColor = NSColor(LittlePalette.moveMenuGlyph)
         up.imageScaling = .scaleNone
         close.addSubview(up)
         addSubview(close)
         scroll.drawsBackground = false
-        scroll.borderType = .noBorder
+        scroll.contentView.drawsBackground = false
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
         scroll.scrollerStyle = .overlay
         scroll.verticalScrollElasticity = .allowed
         scroll.documentView = listView
         addSubview(scroll)
-        noResults.stringValue = "No results"
-        noResults.textColor = NSColor(LittlePalette.label)
-        noResults.alignment = .center
-        noResults.isHidden = true
-        addSubview(noResults)
-        // Set in init, so didSet doesn't run: highlight by hand.
-        selected = max(0, store.orderedSpaces.firstIndex { $0.id == state.targetSpaceID } ?? 0)
+        empty.stringValue = "No results"
+        empty.alignment = .center
+        empty.textColor = NSColor(LittlePalette.moveMenuGlyph)
+        addSubview(empty)
         rebuild()
     }
 
@@ -2080,96 +2094,119 @@ final class LittleSpacesPopup: NSView, NSTextFieldDelegate {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         window?.makeFirstResponder(field)
-        scrollSelectionIntoView()
     }
 
     private func rebuild() {
         let q = field.stringValue.trimmingCharacters(in: .whitespaces).lowercased()
-        list = q.isEmpty ? store.orderedSpaces : store.orderedSpaces.filter { $0.title.lowercased().contains(q) }
+        let spaces = LittleMoveMenu.order(store.orderedSpaces.map(\.id), target: state.targetSpaceID).compactMap(store.space)
+        list = q.isEmpty ? spaces : spaces.filter { $0.title.lowercased().contains(q) }
         rows.forEach { $0.removeFromSuperview() }
-        // Arc 1.172.1 (10 Nov 2026): 46 pt rows, tiles of about 26 pt with a radius of about 6, names of
-        // about 13 pt semibold (1.168: 54, 40, 9 and 15). The emoji and glyph keep the tile's proportions.
-        let tileSize: CGFloat = 26
+        let rh = LittleMoveMenu.rowHeight, ts = LittleMoveMenu.tileSize
         rows = list.map { s in
             let row = FlippedView()
             row.wantsLayer = true
-            let tile = NSView(frame: NSRect(x: 14, y: (LittlePopupGeometry.rowHeight - tileSize) / 2, width: tileSize, height: tileSize))
+            let tile = NSView(frame: NSRect(x: LittleMoveMenu.tileX, y: (rh - ts) / 2, width: ts, height: ts))
             tile.wantsLayer = true
-            tile.layer?.cornerRadius = 6
+            tile.layer?.cornerRadius = LittleMoveMenu.tileRadius
             tile.layer?.cornerCurve = .continuous
             tile.layer?.backgroundColor = NSColor(hex: s.theme.shown.accent ?? s.theme.shown.colors.first ?? "#888888").cgColor
-            let emoji = NSTextField.sidebarLabel(size: 13)
+            // Arc 1.172.1: a 12 pt emoji, centred (a 🍎 12.5 pt wide in the 26 pt tile).
+            let emoji = NSTextField.sidebarLabel(size: 12)
             emoji.stringValue = s.emoji
             emoji.alignment = .center
-            emoji.frame = NSRect(x: -SidebarText.inset, y: (tileSize - 16) / 2, width: tileSize + 2 * SidebarText.inset, height: 16)
+            emoji.frame = NSRect(x: -SidebarText.inset, y: (ts - 15) / 2 + 1, width: ts + 2 * SidebarText.inset, height: 15)
             tile.addSubview(emoji)
             if let name = s.symbol {
-                let glyph = NSImageView(frame: NSRect(x: 0, y: 0, width: tileSize, height: tileSize))
+                let glyph = NSImageView(frame: NSRect(x: 0, y: 0, width: ts, height: ts))
                 glyph.image = SidebarSymbols.image(name, size: 11, weight: .medium)
                 glyph.imageScaling = .scaleNone
                 glyph.contentTintColor = .white
                 tile.addSubview(glyph)
             }
             row.addSubview(tile)
-            let title = NSTextField.sidebarLabel(size: 13, weight: .semibold)
+            let title = NSTextField.sidebarLabel(size: LittleMoveMenu.titleSize, weight: .semibold)
             title.stringValue = s.title
-            title.textColor = NSColor.white.withAlphaComponent(0.88)
-            title.frame = NSRect(x: 14 + tileSize + 12 - SidebarText.inset, y: (LittlePopupGeometry.rowHeight - 16) / 2,
-                                 width: LittlePopupGeometry.width - (14 + tileSize + 12) - 14 + 2 * SidebarText.inset, height: 16)
+            title.textColor = NSColor.white.withAlphaComponent(0.82)
+            let tx = LittleMoveMenu.textX
+            title.frame = NSRect(x: tx - SidebarText.inset, y: (rh - 16) / 2,
+                                 width: LittleMoveMenu.width - tx - 14 + 2 * SidebarText.inset, height: 16)
             row.addSubview(title)
             listView.addSubview(row)
             return row
         }
-        noResults.isHidden = !list.isEmpty
-        selected = min(selected, max(0, list.count - 1))
-        fitWindow()
+        empty.isHidden = !list.isEmpty
+        // The menu grows and shrinks with the list, its top edge where it was.
+        if let window {
+            let f = window.frame, h = LittleMoveMenu.frame(rows: list.count, in: .zero).height
+            if f.height != h { window.setFrame(NSRect(x: f.minX, y: f.maxY - h, width: f.width, height: h), display: true) }
+        }
         needsLayout = true
         refreshSelection()
-    }
-
-    /// The menu takes the height its rows need, keeping its top where it hangs.
-    private func fitWindow() {
-        guard let window else { return }
-        let height = LittlePopupGeometry.height(rows: list.count)
-        guard abs(window.frame.height - height) > 0.5 else { return }
-        var f = window.frame
-        f.origin.y = f.maxY - height
-        f.size.height = height
-        window.setFrame(f, display: true)
     }
 
     private func refreshSelection() {
         for (i, r) in rows.enumerated() {
             r.layer?.backgroundColor = i == selected ? NSColor(LittlePalette.buttonHover).cgColor : nil
         }
-        scrollSelectionIntoView()
     }
 
-    private func scrollSelectionIntoView() {
+    /// Scrolls the list so the selected row is whole (arrow keys past the visible rows).
+    private func revealSelected() {
         guard rows.indices.contains(selected) else { return }
-        listView.scrollToVisible(rows[selected].frame)
+        let clip = scroll.contentView
+        let y = LittleMoveMenu.scrollOffset(showing: selected, from: clip.bounds.minY, rows: rows.count)
+        guard y != clip.bounds.minY else { return }
+        clip.scroll(to: NSPoint(x: 0, y: y))
+        scroll.reflectScrolledClipView(clip)
     }
 
     override func layout() {
         super.layout()
-        let h = LittlePopupGeometry.headerHeight, w = bounds.width
-        close.frame = NSRect(x: w - 9 - 28, y: (h - 28) / 2, width: 28, height: 28)
-        let fx: CGFloat = 14 + 16 + 10
+        let h = LittleMoveMenu.headerHeight, w = bounds.width
+        // Measured from the menu's right edge: the ∧ centred 22 pt in, the rule 38 pt in.
+        close.frame = NSRect(x: w - 22 - 8, y: (h - 16) / 2, width: 16, height: 16)
+        divider.frame = NSRect(x: w - 38, y: (h - 18) / 2, width: 1, height: 18)
+        let fx = LittleMoveMenu.textX
         let fh = ceil(field.intrinsicContentSize.height)
-        field.frame = NSRect(x: fx - SidebarText.inset, y: (h - fh) / 2, width: close.frame.minX - 10 - fx + 2 * SidebarText.inset, height: fh)
+        field.frame = NSRect(x: fx - SidebarText.inset, y: (h - fh) / 2, width: divider.frame.minX - 8 - fx + 2 * SidebarText.inset, height: fh)
+        let rh = LittleMoveMenu.rowHeight
         scroll.frame = NSRect(x: 0, y: h, width: w, height: max(0, bounds.height - h))
-        listView.frame = NSRect(x: 0, y: 0, width: w, height: CGFloat(rows.count) * LittlePopupGeometry.rowHeight)
+        listView.frame = NSRect(x: 0, y: 0, width: w, height: CGFloat(rows.count) * rh)
         for (i, r) in rows.enumerated() {
-            r.frame = NSRect(x: 0, y: CGFloat(i) * LittlePopupGeometry.rowHeight, width: w, height: LittlePopupGeometry.rowHeight)
+            r.frame = NSRect(x: 0, y: CGFloat(i) * rh, width: w, height: rh)
         }
-        noResults.frame = NSRect(x: 0, y: h + (LittlePopupGeometry.rowHeight - 16) / 2, width: w, height: 16)
+        empty.frame = NSRect(x: -SidebarText.inset, y: h + (LittleMoveMenu.noResultsHeight - 16) / 2, width: w + 2 * SidebarText.inset, height: 16)
+        if revealOnLayout { revealOnLayout = false; revealSelected() }
+    }
+
+    // MARK: Debug (cra://debug?littleMenu=…)
+
+    /// rows, the first row, the highlighted one, how far the list is scrolled and whether the
+    /// highlighted row is whole in view.
+    var debugState: String {
+        layoutSubtreeIfNeeded()
+        let clip = scroll.contentView.bounds
+        let shown = rows.indices.contains(selected) && clip.contains(rows[selected].frame)
+        let name = { (i: Int) in self.list.indices.contains(i) ? self.list[i].title : "-" }
+        return String(format: "rows=%d first=%@ selected=%@ scroll=%.0f inView=%d empty=%d", list.count, name(0), name(selected),
+                      clip.minY, shown ? 1 : 0, empty.isHidden ? 0 : 1)
+    }
+
+    func debugMove(down n: Int) {
+        for _ in 0..<n where !list.isEmpty { selected = (selected + 1) % list.count }
+    }
+
+    func debugType(_ text: String) {
+        field.stringValue = text
+        controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: field))
     }
 
     // MARK: Keys and pointer
 
     func controlTextDidChange(_ obj: Notification) {
-        selected = 0
         rebuild()
+        layoutSubtreeIfNeeded()
+        selected = 0
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
@@ -2194,23 +2231,32 @@ final class LittleSpacesPopup: NSView, NSTextFieldDelegate {
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeAlways, .inVisibleRect], owner: self, userInfo: nil))
     }
 
-    /// The row under the pointer: the list scrolls, so the point is read in its own coordinates.
+    /// The row under the pointer, if it is over the visible list.
     private func row(at event: NSEvent) -> Int? {
-        let p = convert(event.locationInWindow, from: nil)
-        guard scroll.frame.contains(p) else { return nil }
-        let q = listView.convert(event.locationInWindow, from: nil)
-        return rows.firstIndex { $0.frame.contains(q) }
+        guard scroll.frame.contains(convert(event.locationInWindow, from: nil)) else { return nil }
+        let p = listView.convert(event.locationInWindow, from: nil)
+        return rows.firstIndex { $0.frame.contains(p) }
     }
 
     override func mouseMoved(with event: NSEvent) {
         if let i = row(at: event), i != selected { selected = i }
     }
 
+    /// Clicks on the list land here (the rows only draw); its scroller keeps its own.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        if let hit, hit !== scroll, hit.isDescendant(of: scroll), !(hit is NSScroller) { return self }
+        return hit
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        if scroll.frame.contains(convert(event.locationInWindow, from: nil)) { scroll.scrollWheel(with: event) }
+    }
+
     override func mouseDown(with event: NSEvent) {}
 
     override func mouseUp(with event: NSEvent) {
-        let p = convert(event.locationInWindow, from: nil)
-        if close.frame.contains(p) { onClose(); return }
+        if close.frame.contains(convert(event.locationInWindow, from: nil)) { onClose(); return }
         if let i = row(at: event), list.indices.contains(i) { onPick(list[i].id) }
     }
 }

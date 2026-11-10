@@ -2092,9 +2092,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     var captureOverlay: CaptureOverlay?
     var captureRequest: (id: UUID, window: NSWindow)?
 
-    /// File ▸ Share…'s list, kept while it is open.
-    private var sharePicker: NSSharingServicePicker?
-
     /// Send To… an easel: the capture goes on it, under what is there, and its tab comes forward
     /// (a new one when it has none open).
     private func sendCapture(_ png: Data, toEasel id: UUID) {
@@ -2139,9 +2136,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             PageCommands.copyCapture(png)
             if let peek { peek.showToast("Screenshot Copied to Clipboard") } else { showToast("Screenshot Copied to Clipboard") }
         case .save?:
-            if let png, let over = peek?.window ?? window {
-                PageCommands.saveCapture(png, over: over) { [weak self] in self?.showToast($0) }
-            }
+            if let png { saveCapture(png, over: peek?.window) }
         case .message?:
             if let png { sendCaptureViaMessages(png) }
         case .newEasel?:
@@ -3126,20 +3121,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
     }
 
-    /// File ▸ Share… (GitHub #279): the system's whole share list for the page in front (Arc's has
-    /// Add to Reading List, AirDrop, Mail, Notes, Copy, Edit Extensions…), hanging from the top
-    /// centre of the page as Arc 1.172.1 shows it.
-    func shareSelectedPage() {
-        guard let url = selectedTabID.flatMap({ store.item($0)?.tab?.url }).flatMap(URL.init(string:)),
-              let window, let content = window.contentView else { return }
-        let page = browsers.visibleRuntime.flatMap(pageScreenRect).map { content.convert(window.convertFromScreen($0), from: nil) }
-            ?? content.bounds
-        let top = content.isFlipped ? page.minY : page.maxY
-        let anchor = NSRect(x: page.midX - 1, y: content.isFlipped ? top : top - 1, width: 2, height: 1)
-        let picker = NSSharingServicePicker(items: [url])
-        sharePicker = picker
-        picker.show(relativeTo: anchor, of: content, preferredEdge: content.isFlipped ? .maxY : .minY)
-    }
+    /// File ▸ Share… (GitHub #279), on the open tab.
+    func shareSelectedPage() { PageCommands.share(self) }
 
     /// The lock in the Site Control Center: the certificate of the page on screen.
     private func showCertificate() {
@@ -3149,7 +3132,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         CertificateWindow.show(certificates, host: host, over: window)
     }
 
-    /// Arc's "Capture the full page": the whole document, beyond the viewport, as a PNG.
     // MARK: Boosts
 
     /// Arc's New Boost: the open site's boost (made if it has none) in the editor beside the page.
@@ -3309,34 +3291,25 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
     }
 
-    /// Arc's Edit ▸ Copy URL as Quote (⌃⇧⌘C): the page's selection in quotes with a link that
-    /// scrolls to it (PageCommands.copyURLAsQuote).
-    func copyURLAsQuote() {
-        guard let b = currentBrowser, let url = selectedTabID.flatMap({ store.item($0)?.tab?.url }) else { return }
-        PageCommands.copyURLAsQuote(browser: b, url: url, toast: pageToast)
-    }
-
-    /// Arc's File ▸ Save Page As (⇧⌘S).
-    func savePageAs() {
-        guard let b = currentBrowser, let window, let tab = selectedTabID.flatMap({ store.item($0) }) else { return }
-        PageCommands.savePageAs(browser: b, title: tab.displayTitle, over: window, toast: pageToast)
-    }
+    /// Arc's Edit ▸ Copy URL as Quote, Save Page As and the page captures, on the open tab (PageCommands).
+    func copyURLAsQuote() { PageCommands.copyURLAsQuote(self) }
+    func savePageAs() { PageCommands.savePageAs(self) }
 
     func captureFullPage() {
         captureOverlay?.close()
-        guard let b = currentBrowser, let window else { return }
-        PageCommands.captureFullPage(browser: b, over: window, toast: pageToast)
+        PageCommands.captureFullPage(self)
     }
 
-    /// Arc's File ▸ Capture in Portrait Mode.
     func capturePortrait() {
         captureOverlay?.close()
-        guard let b = currentBrowser, let window else { return }
-        PageCommands.capturePortrait(browser: b, over: window, toast: pageToast)
+        PageCommands.capturePortrait(self)
     }
 
-    /// How PageCommands toasts in this window.
-    private var pageToast: PageCommands.Toast { { [weak self] text, action in self?.showToast(text, action: action) } }
+    /// The toast's Save: Arc's "Save Capture Image" panel, in Downloads.
+    private func saveCapture(_ png: Data, over sourceWindow: NSWindow? = nil) {
+        guard let window = sourceWindow ?? window else { return }
+        PageCommands.saveCapture(png, over: window, host: self)
+    }
 
     // MARK: Tab switcher
 
@@ -3658,9 +3631,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// Arc's (and Chrome's) Edit ▸ Find ▸ Jump to Selection (⌘J): the page scrolls its selection into view.
-    func jumpToSelection() {
-        currentBrowser.map(PageCommands.jumpToSelection(browser:))
-    }
+    func jumpToSelection() { PageCommands.jumpToSelection(currentBrowser) }
 
     func findNext(forward: Bool) {
         if !overlay.findVisible { showFindBar(); return }
@@ -4119,33 +4090,5 @@ final class CraWindow: NSWindow {
                 b.setFrameOrigin(target)
             }
         }
-    }
-}
-
-/// Save Page As's Format pop-up (Chrome's "Web Page, Single File" and "Web Page, HTML Only");
-/// switching it swaps the name's extension.
-@MainActor
-final class SavePageFormat: NSObject {
-    let view: NSView
-    private let popup = NSPopUpButton(frame: .zero, pullsDown: false)
-    private weak var panel: NSSavePanel?
-    var singleFile: Bool { popup.indexOfSelectedItem == 0 }
-
-    init(panel: NSSavePanel) {
-        self.panel = panel
-        let label = NSTextField(labelWithString: "Format:")
-        popup.addItems(withTitles: ["Web Page, Single File", "Web Page, HTML Only"])
-        let row = NSStackView(views: [label, popup])
-        row.edgeInsets = NSEdgeInsets(top: 10, left: 20, bottom: 10, right: 20)
-        view = row
-        super.init()
-        popup.target = self
-        popup.action = #selector(changed)
-    }
-
-    @objc private func changed() {
-        guard let panel else { return }
-        let name = (panel.nameFieldStringValue as NSString).deletingPathExtension
-        panel.nameFieldStringValue = name + (singleFile ? ".mhtml" : ".html")
     }
 }

@@ -31,19 +31,18 @@ struct SyncSection: View {
 
     @ViewBuilder private var content: some View {
         SettingsHeader("Sync")
-        SettingsCard {
-            SettingsCardRow {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Sync with iCloud").font(.system(size: 13))
-                    Text(sync.iCloudAvailable ? "Uses the iCloud account signed in on this Mac." : iCloudUnavailableReason)
-                        .font(.system(size: 11)).foregroundStyle(.secondary)
-                }
-            } trailing: {
-                // macOS doesn't tell apps which Apple Account is signed in; System Settings shows it.
-                Button("iCloud Settings…") { NSWorkspace.shared.open(Self.appleAccountSettings) }
+        SettingsFeatureCard {
+            SettingsPlainRow("Sync with iCloud",
+                               detail: sync.iCloudAvailable
+                                   ? "Your spaces, pinned tabs, favorites, settings and shortcuts stay the same on every Mac signed in to this iCloud account."
+                                   : iCloudUnavailableReason,
+                               trailing: {
                 Toggle("Sync with iCloud", isOn: Binding(get: { sync.location == .iCloud }, set: { on in on ? enableICloud() : sync.disable() }))
                     .toggleStyle(.switch).labelsHidden()
                     .disabled(!sync.iCloudAvailable)
+            }) {
+                // macOS doesn't tell apps which Apple Account is signed in; System Settings shows it.
+                Button("iCloud Settings…") { NSWorkspace.shared.open(Self.appleAccountSettings) }
             }
             if case .folder(let path)? = sync.location {
                 SettingsCardDivider()
