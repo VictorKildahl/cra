@@ -79,9 +79,13 @@ one of the dropped ids is refused (400).
 
 - Stats become one event in Phantom's "Cra app" site (a site of its own, so app reports never mix
   with the website's visits), sent server to server with no IP. The event is named after the
-  version (`Cra 0.1.38`) and carries the rest as its data. Each report's new id makes it a new
+  version (`Cra 0.1.38`) and carries the report as readable fields, in the order Phantom's
+  card shows them: Version, Chip (Apple silicon or Intel), macOS (`macOS 26.7`), Memory (`32 GB`),
+  Tabs, Spaces, Profiles, Extensions, Build and Changed settings (`readable()` in
+  `src/lib/app-reports.ts`). Each report's new id makes it a new
   visitor, so **visitors per day are the day's users who share**, and Phantom's events report
-  (grouped by name) splits them by version for any day or range.
+  (grouped by name) splits them by version. Phantom's event properties card shows every field at
+  once: users, then each field's values with counts and shares, and users a day over longer ranges.
 - Crash reports are stored in the private Vercel Blob store `cra-crash-reports` (Frankfurt) as
   `crashes/<day>/<id>.json`, and nowhere else: a crash event in Phantom would count as one more
   user. `node --env-file=.env.local scripts/crashes.mjs [days]` in cra-website counts them by
