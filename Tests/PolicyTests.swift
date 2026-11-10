@@ -19,6 +19,7 @@ enum PolicyTests {
         extensionLaunch()
         devToolsToggle()
         featureFlags()
+        liveScheduler()
         try webHandoff()
         print("Policies: \(checks) checks passed")
     }
@@ -137,6 +138,25 @@ enum PolicyTests {
         expect(bar.run(.toggle) == (.close, nil), "⌥⌘I closes")
         var plain = DevToolsToggle()
         expect(plain.run(.toggle) == (.show, nil), "⌥⌘I opens DevTools as they were")
+    }
+
+    /// The app's clock: work runs whether or not the caller keeps the handle, and only cancel()
+    /// stops it. SharingService's first usage report, 30 s after launch, was dropped because its
+    /// handle wasn't kept, so 0.1.38 sent no stats until six hours in.
+    @MainActor
+    private static func liveScheduler() {
+        let clock = LiveScheduler()
+        var dropped = false, kept = false, cancelled = false
+        _ = clock.after(0.05) { dropped = true }
+        let handle = clock.after(0.05) { kept = true }
+        clock.after(0.05) { cancelled = true }.cancel()
+        let until = Date().addingTimeInterval(2)
+        while !(dropped && kept), Date() < until { RunLoop.main.run(until: Date().addingTimeInterval(0.02)) }
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        expect(kept, "kept work runs")
+        expect(dropped, "work whose handle was let go still runs")
+        expect(!cancelled, "cancelled work doesn't run")
+        _ = handle
     }
 
     private static func featureFlags() {

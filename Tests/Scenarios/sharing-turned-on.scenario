@@ -1,0 +1,12 @@
+# Usage stats turned on while Cra runs (onboarding's "Help improve Cra" row or Settings ▸
+# Privacy): today's report goes out within seconds, not at the next launch or six hours later.
+# The launch check (30 s in) has passed with stats off first, so only the switch can send it.
+home
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+env CRA_SHARING_ENDPOINT=${ORIGIN}
+expect-log sharing: stats off, crash reports ask
+wait 33
+reject-log sharing: usage stats sent
+cra://debug?sharing=on
+wait 3
+expect-log sharing: usage stats sent

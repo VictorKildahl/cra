@@ -1392,10 +1392,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let v = dict["appActive"] { main.sidebarUI.appActive = v == "1"; return }
             // Settings ▸ Privacy sharing now, not in 30 s or tomorrow (only with CRA_SHARING_ENDPOINT
             // in a test copy): stats sends the usage report, crash looks for new crash reports,
-            // off unticks onboarding's "Help improve Cra" row.
+            // on and off tick and untick onboarding's "Help improve Cra" row.
             if let v = dict["sharing"] {
                 if v == "stats" { SharingService.shared.sendStatsIfDue(force: true) }
                 if v == "crash" { SharingService.shared.checkCrashReports() }
+                if v == "on" { store.settings.setSharesToImproveCra(true) }
                 if v == "off" { store.settings.setSharesToImproveCra(false) }
                 return
             }

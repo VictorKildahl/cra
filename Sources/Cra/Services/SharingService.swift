@@ -46,6 +46,13 @@ final class SharingService {
             self?.sendStatsIfDue()
         }
         repeating = clock.every(6 * 3600) { [weak self] in self?.sendStatsIfDue() }
+        // Turned on while Cra runs (onboarding's row, Settings ▸ Privacy): today's report now, not
+        // in six hours. The first read is the launch value, which the check above covers.
+        var launched = false
+        observeChanges(of: { [store] in store.settings.shareUsageStats }) { [weak self] on in
+            defer { launched = true }
+            if launched, on { self?.sendStatsIfDue() }
+        }
     }
 
     // MARK: - Usage stats

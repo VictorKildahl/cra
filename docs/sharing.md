@@ -25,8 +25,8 @@ purpose; the `sharing` scenario does that.
 
 ## Usage stats
 
-`POST https://crabrowser.app/api/stats`, once per UTC day the app runs (checked 30 s after launch
-and every 6 hours; `sharing.json` in the data folder keeps `statsSentAt`), so a day's reports
+`POST https://crabrowser.app/api/stats`, once per UTC day the app runs (checked 30 s after launch,
+every 6 hours and when the user turns usage stats on; `sharing.json` in the data folder keeps `statsSentAt`), so a day's reports
 count that day's users who share, per version, chip and macOS. The body is `UsageStats`:
 
 | Field | Example | Notes |

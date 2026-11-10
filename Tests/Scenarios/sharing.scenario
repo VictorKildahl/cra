@@ -9,6 +9,10 @@ seed sharing.json {"crashesSeenUntil": "2001-01-01T00:00:00Z"}
 crash-report ${FIXTURES}/CrashReports/Cra-2026-11-10-120000.ips
 env CRA_SHARING_ENDPOINT=${ORIGIN}
 expect-log sharing: stats on, crash reports send
+# Unforced, 30 s after launch, as a real Mac sends it (0.1.38 dropped this timer and sent nothing).
+wait 5
+expect-log sharing: usage stats sent
+expect-log sharing: crash report sent
 cra://debug?sharing=stats
 wait 2
 expect-log sharing: usage stats sent
