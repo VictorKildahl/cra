@@ -1,0 +1,32 @@
+# Dragged with the mouse half past the screen's edge and let go, Arc's Picture in Picture window
+# springs back into the nearest corner, 10 pt in; a two-finger swipe already threw it there. Cra
+# left it half off the screen and opened the next video there too (GitHub #332). Here the window is
+# let go half past the right edge, then the left, the way a mouse drag ends (no pointer: the test
+# copy runs in the background), and must fly fully on screen; the next PiP must open on screen.
+# promise: #332
+cra://open?url=file://${FIXTURES}/Pages/video.html
+expect-log loaded file:
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.getElementById('v').requestPictureInPicture().then(()=>'pip:open')","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"pip:open"
+wait 1
+cra://debug?pip=open
+expect-log Cra pip open: windows=1 .* onScreen=1
+cra://debug?pipDrop=right
+expect-log pip: dropped past the edge, to (topRight|bottomRight)
+wait 2
+cra://debug?pip=right
+expect-log Cra pip right: windows=1 .* onScreen=1
+cra://debug?pipDrop=left
+expect-log pip: dropped past the edge, to (topLeft|bottomLeft)
+wait 2
+cra://debug?pip=left
+expect-log Cra pip left: windows=1 .* onScreen=1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.exitPictureInPicture().then(()=>'pip:closed')","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"pip:closed"
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.getElementById('v').requestPictureInPicture().then(()=>'pip:again')","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"pip:again"
+wait 1
+cra://debug?pip=again
+expect-log Cra pip again: windows=1 .* onScreen=1

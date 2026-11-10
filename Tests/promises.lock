@@ -559,3 +559,7 @@
 #322   Packages/CraCore/Tests/CraCoreTests/CleanURLTests.swift::severalPicksCopyEveryPickInSidebarOrder  ac1ca14492fd
 #326   Packages/CraCore/Tests/CraCoreTests/SidebarModelTests.swift::automaticPictureInPictureIsPerSite  5dc70ea0af0b
 #326   Tests/BrowserManagerLifecycleTests.swift::pictureInPicturePerSiteCase  1260bcff5f0e
+#332   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::droppedAcrossDisplaysStaysAndPastTheFarEdgeUsesThatDisplay  74a3c50f8118
+#332   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::droppedPastAnEdgeGoesToTheNearestCorner  166c9670aa7c
+#332   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::reopensInACornerWhenLeftHalfOffScreen  85f63a3542a2
+#332   Tests/Scenarios/pip-drop-corner.scenario  e5b8bd44d942

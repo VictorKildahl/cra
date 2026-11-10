@@ -109,6 +109,56 @@ struct PictureInPictureLayoutTests {
         #expect(f == CGRect(x: 1728 - 10 - 782, y: 1084 - 10 - 440, width: 782, height: 440))
     }
 
+    /// Dropped by a mouse drag half past an edge, the window springs back into the nearest corner
+    /// of the display, 10 pt in, as Arc's does (its swipe already did). Cra left it where it was
+    /// let go, half off the screen (#332).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/332"))
+    func droppedPastAnEdgeGoesToTheNearestCorner() {
+        let size = CGSize(width: 480, height: 270)
+        let displays = [builtIn]
+        func landing(_ x: CGFloat, _ y: CGFloat) -> PictureInPictureLayout.Landing? {
+            PictureInPictureLayout.landing(afterDropping: CGRect(origin: CGPoint(x: x, y: y), size: size), displays: displays)
+        }
+        // Half past the right edge, low on the screen: bottom right (the reporter's Arc clip).
+        #expect(landing(1728 - 240, 100) == .init(corner: .bottomRight, frame: CGRect(x: 1728 - 10 - 480, y: 10, width: 480, height: 270)))
+        // Past the right edge, high up: top right, below the menu bar.
+        #expect(landing(1500, 900)?.corner == .topRight)
+        #expect(landing(1500, 900)?.frame == CGRect(x: 1238, y: 1084 - 10 - 270, width: 480, height: 270))
+        // The left, top and bottom edges as well.
+        #expect(landing(-200, 400)?.corner == .bottomLeft)
+        #expect(landing(-200, 600)?.corner == .topLeft)
+        #expect(landing(300, 1000)?.corner == .topLeft)
+        #expect(landing(1200, -100)?.corner == .bottomRight)
+        // Wholly on the screen it stays where it was let go, under the menu bar or Dock too.
+        #expect(landing(600, 400) == nil)
+        #expect(landing(600, 1117 - 270) == nil)
+        #expect(landing(0, 0) == nil)
+    }
+
+    /// Across two displays side by side it is on screen: it stays. Past the far edge of the second,
+    /// it goes to that display's corner, not the first one's.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/332"))
+    func droppedAcrossDisplaysStaysAndPastTheFarEdgeUsesThatDisplay() {
+        let size = CGSize(width: 480, height: 270)
+        let both = [builtIn, external]
+        #expect(PictureInPictureLayout.landing(afterDropping: CGRect(origin: CGPoint(x: 1600, y: 300), size: size), displays: both) == nil)
+        let far = PictureInPictureLayout.landing(afterDropping: CGRect(origin: CGPoint(x: 1728 + 1920 - 200, y: 100), size: size), displays: both)
+        #expect(far == .init(corner: .bottomRight, frame: CGRect(x: 1728 + 1920 - 10 - 480, y: 10, width: 480, height: 270)))
+        // A mirrored display (the same frame twice) doesn't count as covering the part that's off.
+        #expect(PictureInPictureLayout.landing(afterDropping: CGRect(origin: CGPoint(x: 1300, y: 100), size: size),
+                                               displays: [builtIn, builtIn]) != nil)
+    }
+
+    /// A frame left half off the screen (0.1.38 saved where it was dropped, or the displays changed)
+    /// opens in the nearest corner, not at that spot again (#332).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/332"))
+    func reopensInACornerWhenLeftHalfOffScreen() {
+        let off = PictureInPictureLayout.Placement(frame: CGRect(x: 1728 - 240, y: 100, width: 480, height: 270), display: "BUILTIN",
+                                                   displayFrame: builtIn.frame)
+        let f = PictureInPictureLayout.initialFrame(aspect: 16.0 / 9, displays: [builtIn], current: builtIn, remembered: off)
+        #expect(f == CGRect(x: 1728 - 10 - 480, y: 10, width: 480, height: 270))
+    }
+
     @Test func firstOpensTopRightTenPointsIn() {
         let f = PictureInPictureLayout.initialFrame(aspect: 16.0 / 9, screen: CGRect(x: 0, y: 0, width: 1728, height: 1117),
                                                     visible: CGRect(x: 0, y: 0, width: 1728, height: 1084), remembered: nil)
