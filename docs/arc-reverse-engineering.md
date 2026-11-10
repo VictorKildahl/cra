@@ -3559,6 +3559,26 @@ Arc Max's renameDownloads: a finished download is renamed on disk and a card abo
   pointer is on it, then for what was left of its 8 s but at least 3 s. On a dark space the label and the old name are #929BFF, not
   Arc's #343BD1, which reads at 2.6:1 on the card (PR #197, Quinn Battersby; Victor, 5 Nov 2026).
 
+## 5-Second Previews (Arc 1.171, 10 Nov 2026, Swift metadata + Arc Max, on-device Apple Intelligence)
+
+Arc Max's 5-Second Previews (`fiveSecondPreviewsEnabled`): hovering over a link generates a concise summary
+of the destination webpage without navigating or clicking.
+- [O] Arc's cloud AI sent the destination URL and page text to Arc's server; Cra asks the Mac's own
+  on-device Apple Intelligence model instead (FoundationModels, macOS 26, `SystemLanguageModel.default`).
+- [O] Behaviour:
+  - On certain search and social platforms (Google, DuckDuckGo, Bing Search, X/Twitter, Threads, and
+    HackerNews), only hover is required: resting the pointer on a link for ~0.5 s automatically triggers
+    the preview.
+  - On all other sites, pressing or holding Shift while hovering triggers the preview card.
+- [O] Card: floating NSPanel positioned near the cursor, 320 pt wide with rounded corners and a hudWindow
+  blur background. Displays the destination host, the page title, 2–3 concise bullet points outlining the
+  key facts or conclusions, and an Apple Intelligence badge.
+- [O] Dismissal: moving the pointer away dismisses the card after a short grace period; moving the pointer
+  inside the card keeps it visible. Escape or clicking anywhere outside immediately closes it.
+- Cra: LinkSummaryPolicy, LinkSummaryContent and LinkSummaryPrompt (CraCore), LinkSummaryService
+  (FoundationModels, on-device guided generation), LinkSummaryPreviewController and LinkSummaryPanel.
+  Settings ▸ Max ▸ 5-Second Previews, off by default like Arc Max.
+
 ## Little Arc over a full-screen app (Arc 1.171, 5 Nov 2026, issue #186, Victor's Arc + a test full-screen app)
 
 - [O] With another app full screen on its own Space, `open -a Arc https://example.com/…` (a link from another app)

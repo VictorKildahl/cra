@@ -758,6 +758,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         overlay.status = statusMessage
         shell.statusVisible = !statusMessage.isEmpty
         shell.layoutContentChildren()
+        let activeURL = currentBrowser?.currentURL ?? ""
+        let profilePath = store.profilePath(space: focusedSpaceID)
+        LinkSummaryPreviewController.shared.linkHoverChanged(
+            url: statusMessage,
+            pageURL: activeURL,
+            window: window,
+            store: store,
+            profilePath: profilePath,
+            favicons: app.favicons
+        )
     }
 
     func browserManager(findMatches count: Int, activeMatch: Int) {
@@ -4011,6 +4021,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     func windowWillClose(_ notification: Notification) {
         guard (notification.object as? NSWindow) === window else { return }
+        LinkSummaryPreviewController.shared.dismiss()
         tabSwitcher.cancel()
         app.mainWindowWillClose(self)
     }
