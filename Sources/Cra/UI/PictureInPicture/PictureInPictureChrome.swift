@@ -38,6 +38,9 @@ final class PictureInPictureChrome {
     static let cornerRadius: CGFloat = 6
     static let edgeMargin = PictureInPictureLayout.edgeMargin
     private static let frameKey = "CraPictureInPictureFrame"
+    /// The display the frame was left on and that display's frame then (#316).
+    private static let displayKey = "CraPictureInPictureDisplay"
+    private static let displayFrameKey = "CraPictureInPictureDisplayFrame"
 
     private var overlays: [ObjectIdentifier: PictureInPictureOverlay] = [:]
     private var observers: [ObjectIdentifier: [NSObjectProtocol]] = [:]
@@ -142,7 +145,7 @@ final class PictureInPictureChrome {
         let shown = overlays.values.compactMap { o in o.parent.map { (o, $0) } }
         guard !shown.isEmpty else { return "windows=0" }
         return "windows=\(shown.count) " + shown.map { o, w in
-            "key=\(w.isKeyWindow ? 1 : 0) appKey=\(NSApp.keyWindow === w ? 1 : 0) mouse=\(w.ignoresMouseEvents ? 0 : 1) preventKey=\(Self.preventsKey(w) ? 1 : 0) width=\(Int(w.frame.width)) \(o.controls.readout)"
+            "key=\(w.isKeyWindow ? 1 : 0) appKey=\(NSApp.keyWindow === w ? 1 : 0) mouse=\(w.ignoresMouseEvents ? 0 : 1) preventKey=\(Self.preventsKey(w) ? 1 : 0) width=\(Int(w.frame.width)) \(o.controls.readout) frame=\(Int(w.frame.minX)),\(Int(w.frame.minY)),\(Int(w.frame.width)),\(Int(w.frame.height))"
         }.joined(separator: " | ")
     }
 
@@ -198,17 +201,48 @@ final class PictureInPictureChrome {
         // #246); without that it stayed until a click reached this window, which never happens.
     }
 
-    /// Last frame the user left the window at, else Arc's default (PictureInPictureLayout).
+    /// Last frame the user left the window at, on the display it was left on (#316), else Arc's
+    /// default on `screen` (PictureInPictureLayout).
     func initialFrame(aspect: CGFloat, screen: NSScreen?) -> NSRect {
-        let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1728, height: 1084)
-        let remembered = UserDefaults.standard.string(forKey: Self.frameKey).map(NSRectFromString)
-        let frame = PictureInPictureLayout.initialFrame(aspect: aspect, screen: screen?.frame ?? visible, visible: visible, remembered: remembered)
-        CraLog.note("pip: opens at \(Int(frame.width))×\(Int(frame.height))\(remembered == nil ? "" : " (remembered)")")
+        let current = screen.map(Self.display) ?? .init(id: nil, frame: NSRect(x: 0, y: 0, width: 1728, height: 1117),
+                                                         visible: NSRect(x: 0, y: 0, width: 1728, height: 1084))
+        let defaults = UserDefaults.standard
+        let remembered = defaults.string(forKey: Self.frameKey).map(NSRectFromString).map {
+            PictureInPictureLayout.Placement(frame: $0, display: defaults.string(forKey: Self.displayKey),
+                                             displayFrame: defaults.string(forKey: Self.displayFrameKey).map(NSRectFromString))
+        }
+        let displays = NSScreen.screens.map(Self.display)
+        let frame = PictureInPictureLayout.initialFrame(aspect: aspect, displays: displays, current: current, remembered: remembered)
+        let on = displays.firstIndex { $0.frame.intersects(frame) }.map { "display \($0 + 1)/\(displays.count)" } ?? "no display"
+        CraLog.note("pip: opens at \(Int(frame.width))×\(Int(frame.height)) on \(on)\(remembered == nil ? "" : " (remembered)")")
         return frame
     }
 
     func remember(_ frame: NSRect) {
-        UserDefaults.standard.set(NSStringFromRect(frame), forKey: Self.frameKey)
+        let defaults = UserDefaults.standard
+        defaults.set(NSStringFromRect(frame), forKey: Self.frameKey)
+        // The display most of the window is on, as AppKit's `screen` picks it.
+        let screen = NSScreen.screens.max { PictureInPictureChrome.overlap($0.frame, frame) < PictureInPictureChrome.overlap($1.frame, frame) }
+        if let screen, let id = Self.display(screen).id {
+            defaults.set(id, forKey: Self.displayKey)
+            defaults.set(NSStringFromRect(screen.frame), forKey: Self.displayFrameKey)
+        } else {
+            defaults.removeObject(forKey: Self.displayKey)
+            defaults.removeObject(forKey: Self.displayFrameKey)
+        }
+    }
+
+    private static func overlap(_ a: NSRect, _ b: NSRect) -> CGFloat {
+        let i = a.intersection(b)
+        return i.isNull ? 0 : i.width * i.height
+    }
+
+    /// A display by its UUID, which stays the same across launches, reconnects and rearranging.
+    static func display(_ screen: NSScreen) -> PictureInPictureLayout.Display {
+        let number = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
+        let id = number.flatMap { CGDisplayCreateUUIDFromDisplayID($0)?.takeRetainedValue() }
+            .flatMap { CFUUIDCreateString(nil, $0) as String? }
+        return .init(id: id, frame: screen.frame, visible: screen.visibleFrame)
     }
 
     private func prune() {

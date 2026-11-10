@@ -117,3 +117,57 @@ public enum PictureInPictureLayout {
         return u.host ?? ""
     }
 }
+
+extension PictureInPictureLayout {
+    /// A display as AppKit reports it: `id` names it across launches and rearrangements
+    /// (CGDisplayCreateUUIDFromDisplayID), the frames are in screen coordinates (y up).
+    public struct Display: Equatable, Sendable {
+        public var id: String?
+        public var frame: CGRect
+        public var visible: CGRect
+
+        public init(id: String?, frame: CGRect, visible: CGRect) {
+            self.id = id
+            self.frame = frame
+            self.visible = visible
+        }
+    }
+
+    /// Where the user last left the window: its frame, the display it was on and that display's
+    /// frame then. Frames saved before #316 have no display.
+    public struct Placement: Equatable, Sendable {
+        public var frame: CGRect
+        public var display: String?
+        public var displayFrame: CGRect?
+
+        public init(frame: CGRect, display: String?, displayFrame: CGRect?) {
+            self.frame = frame
+            self.display = display
+            self.displayFrame = displayFrame
+        }
+    }
+
+    /// Where the window opens, among all connected displays (#316), as Arc's "absolute" placement
+    /// does: on the display it was left on, at the same place on it, even after the displays were
+    /// rearranged; a frame without a display, on the display it lies on. Otherwise (nothing left,
+    /// or that display unplugged) Arc's default corner of `current`, the display Chromium opened it on.
+    public static func initialFrame(aspect: CGFloat, displays: [Display], current: Display, remembered: Placement?) -> CGRect {
+        if let r = remembered, !r.frame.isEmpty {
+            if let id = r.display, let d = displays.first(where: { $0.id == id }) {
+                let was = r.displayFrame ?? d.frame
+                let frame = r.frame.offsetBy(dx: d.frame.minX - was.minX, dy: d.frame.maxY - was.maxY)
+                return initialFrame(aspect: aspect, screen: d.frame, visible: d.visible, remembered: frame)
+            }
+            if r.display == nil, let d = displays.max(by: { overlap($0.visible, r.frame) < overlap($1.visible, r.frame) }),
+               overlap(d.visible, r.frame) > 0 {
+                return initialFrame(aspect: aspect, screen: d.frame, visible: d.visible, remembered: r.frame)
+            }
+        }
+        return initialFrame(aspect: aspect, screen: current.frame, visible: current.visible, remembered: nil)
+    }
+
+    static func overlap(_ a: CGRect, _ b: CGRect) -> CGFloat {
+        let i = a.intersection(b)
+        return i.isNull ? 0 : i.width * i.height
+    }
+}

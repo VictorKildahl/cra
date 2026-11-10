@@ -169,9 +169,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private var slowResponse = SlowResponseNotice()
     private var slowResponseShown = false
     private var slowResponseCheck: ScheduledWork?
-    /// The space a cra://open named: "Open in" stays on it, matching the page's profile,
-    /// until the user switches spaces from this window's command bar.
-    private var requestedSpaceID: UUID?
+    /// The space "Open in" names (CraCore LittleWindowTarget): the one a cra://open or a route
+    /// named, matching the page's profile, or the one picked in this window's command bar (#316),
+    /// else the window used last's.
+    private var target: LittleWindowTarget
 
     var store: SidebarStore { app.store }
     var currentURL: String { browser?.currentURL ?? state.url }
@@ -188,11 +189,13 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         isPeek = parent != nil
         peekParent = parent
         peekSourceTab = parent == nil ? nil : fromTab
-        requestedSpaceID = parent == nil ? space : nil
-        // Little Windows are normal browsing: they target the last normal window's space
-        // (a Peek: the space of the window it covers; a cra://open: the space it names).
-        state = LittleWindowState(targetSpaceID: parent?.focusedSpaceID ?? requestedSpaceID
-            ?? app.store.focusedSpaceID(window: app.store.lastNormalWindowID))
+        // Little Windows are normal browsing: they target the last normal window's space (a Peek:
+        // the space of the window it covers; a cra://open: the space it names; else the space
+        // picked in a Little Window this session, #316).
+        app.littleWindowSession.forget { app.store.space($0) != nil && !app.store.isIncognito(space: $0) }
+        target = parent == nil ? LittleWindowTarget(session: app.littleWindowSession, requested: space) : LittleWindowTarget()
+        state = LittleWindowState(targetSpaceID: parent?.focusedSpaceID
+            ?? target.space(lastUsed: app.store.focusedSpaceID(window: app.store.lastNormalWindowID)))
         commandBar = CommandBarController(engine: app.engine, store: app.store)
         let size = app.store.prefs.littleWindowSize.map { NSSizeFromString($0) }
             .flatMap { $0 == LittleMetrics.legacyDefaultSize ? nil : $0 }
@@ -721,6 +724,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         app.useNormalWindow()
         commandBar.theme = store.focusedSpace.theme.shown
         commandBar.focusedSpaceID = store.focusedSpaceID
+        commandBar.spaceShown = isPeek ? nil : state.targetSpaceID
         commandBar.open(mode: hasPage ? .editURL : .newTab, prefill: prefill)
         commandBar.attached = false
         commandBar.panelWidth = min(LittleMetrics.commandBarWidth, window.frame.width - 40)
@@ -799,14 +803,30 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         case .command(let id):
             app.perform(id)
         case .switchSpace(let id):
-            store.focusSpace(id)
-            requestedSpaceID = nil
+            // Switching spaces in a Little Window switches its own "Open in", not the browser
+            // window's space, and the next Little Window opens on it (#316). A Peek's follows the
+            // window it covers, and an incognito space switches the window as before.
+            if isPeek || store.isIncognito(space: id) {
+                store.focusSpace(id)
+            } else {
+                target.pick(id, session: &app.littleWindowSession)
+            }
             refreshTarget()
         case .moveToSpace(let id):
             promote(to: id)
         case .moveToFolder:
             break
         }
+    }
+
+    /// `cra://debug?littleCommit=<typed>`: the bar's "Switch to" row for `typed`, committed as ↩
+    /// on it does; logs the rows found (#316).
+    func debugCommit(_ typed: String) {
+        let shown = isPeek ? nil : state.targetSpaceID
+        let rows = commandBar.engine.suggestions(for: typed, mode: .newTab, currentTabID: nil, spaceShown: shown).items
+        let row = rows.first { if case .switchSpace = $0.kind { true } else { false } }
+        CraLog.note("little commit \(typed): \(row?.title ?? "no Switch to row")")
+        if let row { handleCommit(row, typed: typed, mode: .newTab) }
     }
 
     private func navigate(_ url: String) {
@@ -898,10 +918,11 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     // MARK: Promote / close
 
     /// Arc's Little Arc names the space of the browser window used last and updates when it
-    /// takes focus again (Arc 1.171: switched in the main window, "Open in" followed; #92).
+    /// takes focus again (Arc 1.171: switched in the main window, "Open in" followed; #92),
+    /// until a space is picked in this window (#316).
     func refreshTarget() {
-        if let r = requestedSpaceID, store.space(r) == nil { requestedSpaceID = nil }
-        let id = peekParent?.focusedSpaceID ?? requestedSpaceID ?? store.focusedSpaceID(window: store.lastNormalWindowID)
+        target.forget { store.space($0) != nil }
+        let id = peekParent?.focusedSpaceID ?? target.space(lastUsed: store.focusedSpaceID(window: store.lastNormalWindowID))
         if state.targetSpaceID != id { state.targetSpaceID = id }
     }
 

@@ -63,6 +63,52 @@ struct PictureInPictureLayoutTests {
         #expect(wide.size == CGSize(width: 1184, height: 666))
     }
 
+    // A built-in display at the origin and an external one to its right, AppKit coordinates.
+    let builtIn = PictureInPictureLayout.Display(id: "BUILTIN", frame: CGRect(x: 0, y: 0, width: 1728, height: 1117),
+                                                 visible: CGRect(x: 0, y: 0, width: 1728, height: 1084))
+    let external = PictureInPictureLayout.Display(id: "EXTERNAL", frame: CGRect(x: 1728, y: 0, width: 1920, height: 1080),
+                                                  visible: CGRect(x: 1728, y: 0, width: 1920, height: 1055))
+
+    /// Left on the external display, the next video opens there at the same spot, though Chromium
+    /// put its window on the display Cra's window is on. Cra checked the remembered frame against
+    /// that display only, so it opened in the built-in display's top-right corner (#316).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/316"))
+    func reopensOnTheDisplayItWasLeftOn() {
+        let left = CGRect(x: 1728 + 100, y: 300, width: 480, height: 270)
+        let placement = PictureInPictureLayout.Placement(frame: left, display: "EXTERNAL", displayFrame: external.frame)
+        let f = PictureInPictureLayout.initialFrame(aspect: 16.0 / 9, displays: [builtIn, external], current: builtIn, remembered: placement)
+        #expect(f == left)
+        // A frame saved before Cra kept its display opens on the display it lies on.
+        let old = PictureInPictureLayout.Placement(frame: left, display: nil, displayFrame: nil)
+        #expect(PictureInPictureLayout.initialFrame(aspect: 16.0 / 9, displays: [builtIn, external], current: builtIn, remembered: old) == left)
+        // Arc's limits are the external display's: 61.7 % of 1920 wide, not of 1728.
+        let big = PictureInPictureLayout.Placement(frame: CGRect(x: 1728, y: 100, width: 1184, height: 666), display: "EXTERNAL",
+                                                   displayFrame: external.frame)
+        #expect(PictureInPictureLayout.initialFrame(aspect: 16.0 / 9, displays: [builtIn, external], current: builtIn, remembered: big).width == 1184)
+    }
+
+    /// The display moved (arranged to the left in System Settings): the window goes with it, at
+    /// the same place on that display.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/316"))
+    func followsTheDisplayWhenItIsRearranged() {
+        let before = CGRect(x: 1728 + 100, y: 300, width: 480, height: 270)
+        let placement = PictureInPictureLayout.Placement(frame: before, display: "EXTERNAL", displayFrame: external.frame)
+        var moved = external
+        moved.frame.origin.x = -1920
+        moved.visible.origin.x = -1920
+        let f = PictureInPictureLayout.initialFrame(aspect: 16.0 / 9, displays: [builtIn, moved], current: builtIn, remembered: placement)
+        #expect(f == CGRect(x: -1920 + 100, y: 300, width: 480, height: 270))
+    }
+
+    /// The display it was left on isn't connected: Arc's default corner on the display in use.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/316"))
+    func unpluggedDisplayFallsBackToTheCorner() {
+        let placement = PictureInPictureLayout.Placement(frame: CGRect(x: 1728 + 100, y: 300, width: 480, height: 270), display: "EXTERNAL",
+                                                         displayFrame: external.frame)
+        let f = PictureInPictureLayout.initialFrame(aspect: 16.0 / 9, displays: [builtIn], current: builtIn, remembered: placement)
+        #expect(f == CGRect(x: 1728 - 10 - 782, y: 1084 - 10 - 440, width: 782, height: 440))
+    }
+
     @Test func firstOpensTopRightTenPointsIn() {
         let f = PictureInPictureLayout.initialFrame(aspect: 16.0 / 9, screen: CGRect(x: 0, y: 0, width: 1728, height: 1117),
                                                     visible: CGRect(x: 0, y: 0, width: 1728, height: 1084), remembered: nil)

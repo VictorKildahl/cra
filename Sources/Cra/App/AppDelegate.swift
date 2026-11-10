@@ -26,6 +26,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private lazy var extensionsMenu = ExtensionsMenu(app: self)
     /// Arc's Little Arc windows: small, sidebar-less, disposable (see LittleWindowController).
     private(set) var littleWindows: [LittleWindowController] = []
+    /// The space picked in a Little Window this session, where the next one opens (#316).
+    var littleWindowSession = LittleWindowSession()
     /// When each Little Window was last the key window, for Arc's "Archive Little Arcs after:".
     private var littleWindowLastUsed: [ObjectIdentifier: Date] = [:]
     private var littleWindowArchiveCheck: ScheduledWork?
@@ -1182,9 +1184,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             // littleShown=<label>: the newest Little Window's "Open in" space and page profile.
+            // littleCommit=<typed>: the newest Little Window's command bar commits its "Switch to"
+            // row for what was typed, as ↩ on it does (#316).
+            if let typed = dict["littleCommit"] { littleWindows.last?.debugCommit(typed); return }
             if let label = dict["littleShown"] {
                 var space = "-", profile = "-"
                 if let w = littleWindows.last {
+                    w.refreshTarget()   // as when it takes focus
                     let state: LittleWindowState = w.state
                     space = store.space(state.targetSpaceID)?.title ?? "-"
                     let named: BrowserProfile? = store.profile(state.profileID)

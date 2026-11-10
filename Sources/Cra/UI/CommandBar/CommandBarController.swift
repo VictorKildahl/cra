@@ -28,6 +28,8 @@ final class CommandBarController {
     /// The space whose palette colours the selected row and the info badge (CraCore CommandBarTones).
     var theme: SpaceTheme?
     var focusedSpaceID: UUID?
+    /// The space "Switch to" leaves out when it isn't the focused one: a Little Window's (#316).
+    var spaceShown: UUID?
     var spaceName: (UUID) -> String = { _ in "" }
     /// Arc's scoped search: Tab on "youtube" scopes the bar to YouTube, on "%" to the space's open
     /// tabs, on the empty field to the browser's actions (a pill before the field) until Backspace
@@ -76,7 +78,7 @@ final class CommandBarController {
         allowCompletion = false
         selectedIndex = 0
         previewText = nil
-        result = engine.suggestions(for: query, mode: mode, currentTabID: store.selectedTabID)
+        result = engine.suggestions(for: query, mode: mode, currentTabID: store.selectedTabID, spaceShown: spaceShown)
         isOpen = true
     }
 
@@ -98,7 +100,7 @@ final class CommandBarController {
             case .tabs:
                 result = engine.suggestions(for: newQuery, inTabsOf: focusedSpaceID ?? store.focusedSpaceID, currentTabID: store.selectedTabID)
             case .actions:
-                result = engine.suggestions(forActionsMatching: newQuery, currentTabID: store.selectedTabID)
+                result = engine.suggestions(forActionsMatching: newQuery, currentTabID: store.selectedTabID, spaceShown: spaceShown)
             }
             selectedIndex = 0
             previewText = nil
@@ -110,7 +112,7 @@ final class CommandBarController {
             guard let self, self.isOpen, self.query == typed else { return }
             self.relist()
         }
-        result = engine.suggestions(for: newQuery, mode: mode, currentTabID: store.selectedTabID)
+        result = engine.suggestions(for: newQuery, mode: mode, currentTabID: store.selectedTabID, spaceShown: spaceShown)
         if !allowCompletion { result.inlineCompletion = nil }
         selectedIndex = 0
         previewText = nil
@@ -120,7 +122,7 @@ final class CommandBarController {
     private func relist() {
         guard scope == nil else { return }
         let selectedID = result.items.indices.contains(selectedIndex) ? result.items[selectedIndex].id : nil
-        result = engine.suggestions(for: query, mode: mode, currentTabID: store.selectedTabID)
+        result = engine.suggestions(for: query, mode: mode, currentTabID: store.selectedTabID, spaceShown: spaceShown)
         if !allowCompletion { result.inlineCompletion = nil }
         if let i = result.items.firstIndex(where: { $0.id == selectedID }) {
             selectedIndex = i

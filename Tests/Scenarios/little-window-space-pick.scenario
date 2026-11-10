@@ -1,0 +1,40 @@
+# promise: #316
+# A space picked in a Little Window stays its own (#316): "Switch to <space>" in its command bar
+# changes its "Open in", not the browser window's space, and the browser window's space no longer
+# moves it. The next Little Window of the session opens on the picked space, in its profile.
+# Before, the pick switched the browser window and "Open in" followed whatever it showed.
+# Personal is on Default, Random on the profile Hobbies (as in little-window-route).
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Personal","emoji":"🏠","favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}},{"id":"A0000000-0000-0000-0000-000000000002","title":"Random","emoji":"🎲","favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z","profileID":"B0000000-0000-0000-0000-000000000001","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}}],"profiles":[{"id":"B0000000-0000-0000-0000-000000000001","name":"Hobbies"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+pace 0.5
+
+# Nothing picked: the space in use.
+cra://debug?externalURL=${PAGE}?n=first
+wait 2
+cra://debug?littleShown=first
+expect-log little shown first: windows=1 space=Personal profile=Default
+
+# Picked in the Little Window: "Open in Random", and the browser window stays on Personal.
+cra://debug?littleCommit=random
+expect-log little commit random: Switch to Random
+cra://debug?littleShown=picked
+expect-log little shown picked: windows=1 space=Random profile=Default
+cra://debug?themeShown=picked
+expect-log Cra theme shown picked: space=Personal
+
+# Back to Personal from the Little Window, though it is the browser window's space, and to Random again.
+cra://debug?littleCommit=personal
+expect-log little commit personal: Switch to Personal
+cra://debug?littleShown=back
+expect-log little shown back: windows=1 space=Personal profile=Default
+cra://debug?littleCommit=random
+expect-log little commit random: Switch to Random
+
+# The next Little Window opens on Random, in Hobbies' sign-ins.
+cra://debug?externalURL=${PAGE}?n=second
+wait 2
+cra://debug?littleShown=second
+expect-log little shown second: windows=2 space=Random profile=Hobbies
+cra://debug?themeShown=second
+expect-log Cra theme shown second: space=Personal

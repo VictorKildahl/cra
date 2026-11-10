@@ -691,6 +691,9 @@ the Extensions ▸ Picture in Picture menu item and the page's own `requestPictu
   display, first shown 10 pt from the top and right of the visible frame. `LastPiPPosition`
   (defaults, JSON) stores `{"screen":{"_0":{"topRight":{}},"_1":[782,440],"_2":0}}` and switches to
   `{"absolute":{"_0":[[x,y],[w,h]]}}` (bottom-left origin) once the window has been handled.
+  Cra (#316) saves the display too (`CraPictureInPictureDisplay`, its CGDisplay UUID, and that display's frame):
+  the next video opens on the display it was left on, even when Chromium opens its window on another one and after
+  the displays are rearranged; with that display unplugged, Arc's top-right corner of the display in use.
 - [O] Appears in a single frame (120 Hz recording: luminance over the window area jumps from
   20.7 to 138.5 between two consecutive frames; no scale or fade).
 - [O] Nothing is drawn on hover, click or Space-pause: captures at 0, 0.3, 0.8, 2 s after
@@ -2835,6 +2838,9 @@ popover driven by AX (the chevron is `openInSpaceExpander`, the rows are AXButto
   does, else the one in use, which switches. It applies to ⌘O, the popover, the command bar's Move to <space> and
   Move Tab to Space N (⌃⌘1–9, #86), which in a Little Window sends its page (#92, Cra's own like ⌃⌘N itself). The
   Little Window's target follows the window used last when it takes focus (`refreshTarget`), as Arc's does.
+  Until a space is picked in it (#316, Cra's own): "Switch to <space>" in a Little Window's command bar changes its
+  "Open in" and not the browser window's space, the browser window no longer moves it, and the next Little Window of
+  the session opens on it (CraCore `LittleWindowTarget`; scenario little-window-space-pick).
 
 ## ⌘Return in the command bar and closed folders that keep their tab (Arc 1.171, 2 Nov 2026, issue #85)
 

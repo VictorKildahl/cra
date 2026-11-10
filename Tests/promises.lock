@@ -526,3 +526,9 @@
 #307   Tests/Scenarios/command-bar-space-scope.scenario  0b4de914ffa4
 #308   Tests/Scenarios/fullscreen-window-chrome.scenario  387fa799cbb9
 #314   Tests/Scenarios/command-bar-site-controls.scenario  9df68b1d6db1
+#316   Packages/CraCore/Tests/CraCoreTests/LittleWindowTargetTests.swift::aDeletedSpaceIsForgotten  5864303b2c55
+#316   Packages/CraCore/Tests/CraCoreTests/LittleWindowTargetTests.swift::aPickedSpaceStaysAndCarriesToTheNextLittleWindow  72a239324df4
+#316   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::followsTheDisplayWhenItIsRearranged  a6a666786be3
+#316   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::reopensOnTheDisplayItWasLeftOn  bcc683102ab9
+#316   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::unpluggedDisplayFallsBackToTheCorner  51c44c1dbb84
+#316   Tests/Scenarios/little-window-space-pick.scenario  d0e43ee84d38
