@@ -15,12 +15,40 @@ final class LinkSummaryService {
 
     @ObservationIgnored private var cache: [String: LinkSummaryResult] = [:]
     @ObservationIgnored private var inFlight: [String: Task<LinkSummaryResult?, Never>] = [:]
+    @ObservationIgnored private var prefetchTasks: [String: Task<String?, Never>] = [:]
+    @ObservationIgnored private var htmlCache: [String: String] = [:]
 
     private init() {}
 
     /// Whether Apple Intelligence is available to generate summaries.
     var isAvailable: Bool {
         TidyTabsService.shared.modelAvailable
+    }
+
+    /// Immediate synchronous lookup in the in-memory cache for 0ms previews.
+    func cachedResult(for url: URL) -> LinkSummaryResult? {
+        cache[url.absoluteString]
+    }
+
+    /// Speculatively prefetches the target webpage HTML in the background as soon as the
+    /// pointer hovers over a link, so network latency is eliminated by the time the hover
+    /// dwell delay expires or Shift is pressed.
+    func prefetch(url: URL, profilePath: String?) {
+        guard isAvailable else { return }
+        let key = url.absoluteString
+        if cache[key] != nil || htmlCache[key] != nil || prefetchTasks[key] != nil {
+            return
+        }
+
+        let task = Task<String?, Never> { @MainActor in
+            defer { prefetchTasks.removeValue(forKey: key) }
+            guard let html = await fetchHTMLDirect(url: url, profilePath: profilePath) else {
+                return nil
+            }
+            htmlCache[key] = html
+            return html
+        }
+        prefetchTasks[key] = task
     }
 
     /// Fetches the target webpage and generates a 2-3 bullet point summary using Apple Intelligence.
@@ -46,8 +74,22 @@ final class LinkSummaryService {
         return await task.value
     }
 
-    /// Fetches destination HTML through Chromium CEF with the space's profile, falling back to URLSession.
+    /// Fetches destination HTML using prefetched cache if available, falling back to direct network fetch.
     private func fetchHTML(url: URL, profilePath: String?) async -> String? {
+        let key = url.absoluteString
+        if let cached = htmlCache[key] { return cached }
+        if let existingPrefetch = prefetchTasks[key] {
+            return await existingPrefetch.value
+        }
+        let html = await fetchHTMLDirect(url: url, profilePath: profilePath)
+        if let html {
+            htmlCache[key] = html
+        }
+        return html
+    }
+
+    /// Fetches destination HTML through Chromium CEF with the space's profile, falling back to URLSession.
+    private func fetchHTMLDirect(url: URL, profilePath: String?) async -> String? {
         await withCheckedContinuation { (continuation: CheckedContinuation<String?, Never>) in
             var resumed = false
             let finish: (String?) -> Void = { result in
@@ -56,8 +98,8 @@ final class LinkSummaryService {
                 continuation.resume(returning: result)
             }
 
-            // Timeout after 3.5 seconds so a slow server doesn't leave the preview hung.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+            // Timeout after 2.5 seconds so slow/unresponsive servers don't stall the UI.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
                 finish(nil)
             }
 
@@ -66,7 +108,10 @@ final class LinkSummaryService {
                     finish(body)
                 } else {
                     Task {
-                        if let (data, response) = try? await URLSession.shared.data(from: url),
+                        var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 2.5)
+                        request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
+                        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+                        if let (data, response) = try? await URLSession.shared.data(for: request),
                            (response as? HTTPURLResponse)?.statusCode == 200,
                            let str = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) {
                             finish(str)
@@ -92,12 +137,13 @@ final class LinkSummaryService {
                 let prompt = LinkSummaryPrompt.prompt(
                     title: content.title ?? title,
                     url: url.absoluteString,
+                    description: content.description,
                     content: content.bodyText
                 )
                 let response = try await session.respond(
                     to: prompt,
                     generating: LinkSummaryModelAnswer.self,
-                    options: GenerationOptions(sampling: .greedy)
+                    options: GenerationOptions(sampling: .greedy, maximumResponseTokens: 90)
                 )
                 let bullets = LinkSummaryPrompt.cleanBullets(response.content.bullets)
                 let cleanTitle = response.content.title.trimmingCharacters(in: .whitespacesAndNewlines)

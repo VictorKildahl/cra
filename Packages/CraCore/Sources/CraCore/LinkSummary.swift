@@ -76,16 +76,21 @@ public enum LinkSummaryContent {
     }
 
     /// Maximum text length passed to the Apple Intelligence prompt to stay within token budgets.
-    public static let maxContentLength = 2000
+    public static let maxContentLength = 800
 
     /// Extracts title, meta description, and cleaned body text from HTML.
+    /// Optimized for high speed: scans the document header (<head> slice) for metadata
+    /// and processes only the early body slice instead of running regexes across megabytes of HTML.
     public static func extractText(from html: String) -> Extracted {
         var title: String?
         var description: String?
 
+        // Fast head isolation: metadata is always in <head> or the first 32 KB.
+        let scanSlice = String(html.prefix(32_000))
+
         // Title tag: <title>(.*?)</title>
-        if let titleRange = html.range(of: "(?i)<title[^>]*>(.*?)</title>", options: .regularExpression) {
-            let tagContent = html[titleRange]
+        if let titleRange = scanSlice.range(of: "(?i)<title[^>]*>(.*?)</title>", options: .regularExpression) {
+            let tagContent = scanSlice[titleRange]
             if let start = tagContent.firstIndex(of: ">"), let end = tagContent.lastIndex(of: "<"), start < end {
                 let inner = String(tagContent[tagContent.index(after: start)..<end])
                 let clean = cleanHTMLText(inner)
@@ -100,8 +105,8 @@ public enum LinkSummaryContent {
         ]
         for pattern in descPatterns {
             if description != nil { break }
-            if let match = html.range(of: pattern, options: .regularExpression) {
-                let tag = String(html[match])
+            if let match = scanSlice.range(of: pattern, options: .regularExpression) {
+                let tag = String(scanSlice[match])
                 if let contentRange = tag.range(of: "(?i)content=[\"']([^\"']*)[\"']", options: .regularExpression) {
                     let sub = tag[contentRange]
                     if let firstQuote = sub.firstIndex(where: { $0 == "\"" || $0 == "'" }),
@@ -115,8 +120,17 @@ public enum LinkSummaryContent {
             }
         }
 
+        // Fast body isolation: only clean the first 20 KB of the body to keep regexes sub-millisecond.
+        let bodySource: String
+        if let headEnd = html.range(of: "(?i)</head>", options: .regularExpression) {
+            let afterHead = html[headEnd.upperBound...]
+            bodySource = String(afterHead.prefix(20_000))
+        } else {
+            bodySource = String(html.prefix(20_000))
+        }
+
         // Strip non-content blocks: scripts, styles, svg, noscript
-        var cleaned = html
+        var cleaned = bodySource
         let stripPatterns = [
             "(?is)<script[^>]*>.*?</script>",
             "(?is)<style[^>]*>.*?</style>",
@@ -175,10 +189,13 @@ public enum LinkSummaryPrompt {
     """
 
     /// Formats the prompt sent to the Apple Intelligence model.
-    public static func prompt(title: String, url: String, content: String) -> String {
+    public static func prompt(title: String, url: String, description: String? = nil, content: String) -> String {
         var lines: [String] = []
         if !title.isEmpty { lines.append("Title: \(title)") }
         lines.append("URL: \(url)")
+        if let description, !description.isEmpty {
+            lines.append("Description: \(description)")
+        }
         if !content.isEmpty {
             lines.append("Content:\n\(content)")
         }

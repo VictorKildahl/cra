@@ -25,8 +25,8 @@ final class LinkSummaryPreviewController {
     private(set) var isPointerInside = false
 
     /// Hover wait time before triggering automatically on search / social sites.
-    static let autoHoverDelay: TimeInterval = 0.5
-    static let shiftHoverDelay: TimeInterval = 0.05
+    static let autoHoverDelay: TimeInterval = 0.35
+    static let shiftHoverDelay: TimeInterval = 0.02
     static let dismissGracePeriod: TimeInterval = 0.25
 
     private init() {
@@ -93,6 +93,9 @@ final class LinkSummaryPreviewController {
         dismissTask?.cancel()
         dismissTask = nil
 
+        // Speculative prefetch begins at t=0ms in background
+        LinkSummaryService.shared.prefetch(url: targetURL, profilePath: profilePath)
+
         let isShift = NSEvent.modifierFlags.contains(.shift)
         let auto = LinkSummaryPolicy.isAutoHoverSite(url: page)
 
@@ -115,13 +118,45 @@ final class LinkSummaryPreviewController {
             guard !Task.isCancelled, let self, self.currentHoveredURL == url else { return }
             guard let window = self.currentWindow ?? window else { return }
 
-            guard let result = await LinkSummaryService.shared.summarize(url: url, profilePath: profile) else {
+            // If result is already in memory cache, present instantly (0ms)
+            if let cached = LinkSummaryService.shared.cachedResult(for: url) {
+                self.present(result: cached, near: mouseAtStart, over: window)
                 return
             }
-            guard !Task.isCancelled, self.currentHoveredURL == url || self.isPointerInside else { return }
 
+            // Immediately display the HUD card with skeleton shimmer for 0ms perceived latency
+            self.presentLoading(url: url, near: mouseAtStart, over: window)
+
+            // Await Apple Intelligence summary (HTML network prefetch already in progress or completed)
+            guard let result = await LinkSummaryService.shared.summarize(url: url, profilePath: profile) else {
+                if self.currentHoveredURL == url && !self.isPointerInside {
+                    self.dismiss()
+                }
+                return
+            }
+
+            guard !Task.isCancelled, self.currentHoveredURL == url || self.isPointerInside else { return }
             self.present(result: result, near: mouseAtStart, over: window)
         }
+    }
+
+    private func presentLoading(url: URL, near screenPoint: NSPoint, over parentWindow: NSWindow) {
+        dismissTask?.cancel()
+        dismissTask = nil
+
+        let p = panel ?? LinkSummaryPanel()
+        panel = p
+        p.summaryView.configureLoading(url: url)
+
+        let size = p.summaryView.calculateSize(isLoading: true)
+        let origin = computeOrigin(for: size, near: screenPoint, in: parentWindow)
+
+        p.setFrame(NSRect(origin: origin, size: size), display: true)
+
+        if p.parent == nil {
+            parentWindow.addChildWindow(p, ordered: .above)
+        }
+        p.present()
     }
 
     private func present(result: LinkSummaryResult, near screenPoint: NSPoint, over parentWindow: NSWindow) {
@@ -132,7 +167,21 @@ final class LinkSummaryPreviewController {
         panel = p
         p.summaryView.configure(with: result)
 
-        let size = p.summaryView.calculateSize()
+        let size = p.summaryView.calculateSize(isLoading: false)
+        let origin = computeOrigin(for: size, near: screenPoint, in: parentWindow)
+
+        if p.isVisible {
+            p.updateFrame(origin: origin, size: size, animated: true)
+        } else {
+            p.setFrame(NSRect(origin: origin, size: size), display: true)
+            if p.parent == nil {
+                parentWindow.addChildWindow(p, ordered: .above)
+            }
+            p.present()
+        }
+    }
+
+    private func computeOrigin(for size: NSSize, near screenPoint: NSPoint, in parentWindow: NSWindow) -> NSPoint {
         let screen = parentWindow.screen ?? NSScreen.main ?? NSScreen.screens[0]
         let visible = screen.visibleFrame
 
@@ -146,13 +195,7 @@ final class LinkSummaryPreviewController {
         if origin.x < visible.minX {
             origin.x = visible.minX + 8
         }
-
-        p.setFrame(NSRect(origin: origin, size: size), display: true)
-
-        if p.parent == nil {
-            parentWindow.addChildWindow(p, ordered: .above)
-        }
-        p.present()
+        return origin
     }
 
     func pointerEnteredPanel() {
@@ -224,6 +267,19 @@ final class LinkSummaryPanel: NSPanel {
         }
     }
 
+    func updateFrame(origin: NSPoint, size: NSSize, animated: Bool) {
+        let targetRect = NSRect(origin: origin, size: size)
+        if animated && isVisible {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.15
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                animator().setFrame(targetRect, display: true)
+            }
+        } else {
+            setFrame(targetRect, display: true)
+        }
+    }
+
     func dismiss() {
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.12
@@ -248,6 +304,7 @@ final class LinkSummaryView: NSView {
     private let titleLabel = NSTextField(labelWithString: "")
     private let divider = NSView()
     private var bulletViews: [NSView] = []
+    private var skeletonViews: [NSView] = []
     private var trackingAreaRef: NSTrackingArea?
 
     override init(frame: NSRect) {
@@ -357,9 +414,72 @@ final class LinkSummaryView: NSView {
         LinkSummaryPreviewController.shared.pointerLeftPanel()
     }
 
+    func configureLoading(url: URL) {
+        let h = LinkSummaryPrompt.host(url)
+        hostLabel.stringValue = h.isEmpty ? "link" : h
+        titleLabel.stringValue = "Generating preview…"
+        titleLabel.textColor = .tertiaryLabelColor
+
+        for v in bulletViews { v.removeFromSuperview() }
+        bulletViews.removeAll()
+
+        for v in skeletonViews {
+            v.layer?.removeAllAnimations()
+            v.removeFromSuperview()
+        }
+        skeletonViews.removeAll()
+
+        let line1 = makeSkeletonLine(width: 250)
+        let line2 = makeSkeletonLine(width: 180)
+        addSubview(line1)
+        addSubview(line2)
+        skeletonViews.append(contentsOf: [line1, line2])
+
+        NSLayoutConstraint.activate([
+            line1.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            line1.topAnchor.constraint(equalTo: divider.bottomAnchor, constant: 12),
+            line1.heightAnchor.constraint(equalToConstant: 8),
+            line1.widthAnchor.constraint(equalToConstant: 250),
+
+            line2.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            line2.topAnchor.constraint(equalTo: line1.bottomAnchor, constant: 8),
+            line2.heightAnchor.constraint(equalToConstant: 8),
+            line2.widthAnchor.constraint(equalToConstant: 180),
+        ])
+    }
+
+    private func makeSkeletonLine(width: CGFloat) -> NSView {
+        let view = NSView()
+        view.wantsLayer = true
+        view.translatesAutoresizingMaskIntoConstraints = false
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        view.layer?.cornerRadius = 4
+        view.layer?.masksToBounds = true
+        view.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.09).cgColor
+        CATransaction.commit()
+
+        let pulse = CABasicAnimation(keyPath: "opacity")
+        pulse.fromValue = 0.35
+        pulse.toValue = 0.8
+        pulse.duration = 0.8
+        pulse.autoreverses = true
+        pulse.repeatCount = .infinity
+        pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        view.layer?.add(pulse, forKey: "shimmer")
+        return view
+    }
+
     func configure(with result: LinkSummaryResult) {
+        for v in skeletonViews {
+            v.layer?.removeAllAnimations()
+            v.removeFromSuperview()
+        }
+        skeletonViews.removeAll()
+
         hostLabel.stringValue = result.host
         titleLabel.stringValue = result.title
+        titleLabel.textColor = .labelColor
 
         for v in bulletViews { v.removeFromSuperview() }
         bulletViews.removeAll()
@@ -416,8 +536,11 @@ final class LinkSummaryView: NSView {
         return row
     }
 
-    func calculateSize() -> NSSize {
+    func calculateSize(isLoading: Bool = false) -> NSSize {
         let width: CGFloat = 320
+        if isLoading {
+            return NSSize(width: width, height: 114)
+        }
         // Compute content height
         layoutSubtreeIfNeeded()
         var h: CGFloat = 12 + 16 + 5 + 34 + 8 + 0.5 + 8 // top padding + host + gap + title + gap + divider + gap

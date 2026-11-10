@@ -144,6 +144,33 @@ struct LinkSummaryTests {
         #expect(p.contains("Title: Article Title"))
         #expect(p.contains("URL: https://example.com/post"))
         #expect(p.contains("Content:\nParagraph text."))
+
+        let withDesc = LinkSummaryPrompt.prompt(
+            title: "Article Title",
+            url: "https://example.com/post",
+            description: "High-level summary description.",
+            content: "Paragraph text."
+        )
+        #expect(withDesc.contains("Description: High-level summary description."))
+    }
+
+    @Test func extractTextHandlesLargeHTMLSwiftly() {
+        var bigHTML = "<html><head><title>Large Page Title</title><meta name=\"description\" content=\"Fast summary metadata.\"></head><body>"
+        // Append 200 KB of repetitive paragraphs
+        let chunk = "<p>Here is some long repeated paragraph content for testing performance on heavy web pages.</p>"
+        for _ in 0..<2000 {
+            bigHTML.append(chunk)
+        }
+        bigHTML.append("</body></html>")
+
+        let start = Date()
+        let extracted = LinkSummaryContent.extractText(from: bigHTML)
+        let duration = Date().timeIntervalSince(start)
+
+        #expect(extracted.title == "Large Page Title")
+        #expect(extracted.description == "Fast summary metadata.")
+        #expect(extracted.bodyText.count <= LinkSummaryContent.maxContentLength)
+        #expect(duration < 0.1, "HTML extraction should complete in under 100ms on large pages")
     }
 
     @Test func cleanBulletsStripsMarkersAndLimitsCount() {
