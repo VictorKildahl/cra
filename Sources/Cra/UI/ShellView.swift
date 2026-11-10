@@ -765,7 +765,7 @@ final class ShellView: NSView {
         if let focus, showDev {
             for v in [devToolsHost, devToolsDivider, devToolsHandle] where v.superview !== focus { v.removeFromSuperview(); focus.addSubview(v) }
             focus.webArea.frame = NSRect(x: 0, y: 0, width: fb.width - devW, height: bodyH)
-            EmbeddedPages.place(focus.webArea.subviews, in: focus.frozenWebBounds ?? focus.webArea.bounds)
+            EmbeddedPages.place(focus.webArea.subviews, in: focus.pageBounds)
         }
         // A frontend-docked DevTools paints its own split; the shell's dock chrome stays hidden.
         devToolsHost.isHidden = !showDev || selfDock
@@ -854,35 +854,100 @@ final class ShellView: NSView {
             var w = f.width
             if c.tabID == focusedPaneID, devToolsVisible, !devToolsFrontendDocked, f.width > 640 { w -= min(max(320, devToolsWidth), f.width * 0.7) }
             let toolbarH: CGFloat = barsShown(panes: paneCards.count, fullscreen: fullscreen) ? c.toolbarHeight : 0
-            c.frozenWebBounds = NSRect(x: 0, y: 0, width: w, height: max(0, f.height - toolbarH))
-            webTargets[c.tabID] = convert(NSRect(x: target.content.minX + f.minX, y: target.content.minY + f.minY, width: w, height: max(0, f.height - toolbarH)), to: nil)
+            let page = convert(NSRect(x: target.content.minX + f.minX, y: target.content.minY + f.minY, width: w, height: max(0, f.height - toolbarH)), to: nil)
+            webTargets[c.tabID] = page
+            c.frozenWebBounds = NSRect(x: 0, y: 0, width: w, height: page.height)
+            c.frozenPageInWindow = page
         }
+        cardCornerRadius = target.cornerRadius
+        if paneCards.count == 1, let c = paneCards.first { c.cornerRadius = target.cornerRadius }
         layoutContentChildren()
+        startSlideReadout()
         animatingFrames = true
         // Arc 1.172.1's ⌘S at 60 fps (CraCore SidebarMotion): about 43 / 72 / 89 / 97 % of the travel
         // after frames 1–4.
         let c = SidebarMotion.curve
         let timing = CAMediaTimingFunction(controlPoints: Float(c.0), Float(c.1), Float(c.2), Float(c.3))
         onAnimatePaneFrames?(webTargets, duration, timing)
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = duration
-            ctx.timingFunction = timing
-            ctx.allowsImplicitAnimation = true
-            if !sidebarDetached { sidebarHost.animator().frame = target.sidebar }
-            contentContainer.animator().frame = target.content
-            loadingIndicator.animator().frame = loadingIndicatorFrame(over: target.content)
-            cardCornerRadius = target.cornerRadius
-            if paneCards.count == 1, let c = paneCards.first { c.cornerRadius = target.cornerRadius }
-        } completionHandler: { [weak self] in
-            guard let self else { return }
-            self.animatingFrames = false
-            for c in self.paneCards { c.frozenWebBounds = nil }
-            self.sidebarVisible = visible
-            self.floatingSidebar = floating
-            self.contentFullscreen = fullscreen
-            self.needsLayout = true
-            self.layoutSubtreeIfNeeded()
+        // Real frames each display frame: a layer animation left the toolbar and page at their final size.
+        sidebarSlide = SidebarSlide(fromSidebar: sidebarHost.frame, toSidebar: target.sidebar, fromContent: contentContainer.frame,
+                                    toContent: target.content, start: CACurrentMediaTime(), duration: duration,
+                                    visible: visible, floating: floating, fullscreen: fullscreen)
+        guard duration > 0, window != nil else { return finishSidebarSlide() }
+        if sidebarSlideLink == nil {
+            let link = displayLink(target: self, selector: #selector(stepSidebarSlide))
+            link.add(to: .main, forMode: .common)
+            sidebarSlideLink = link
         }
+        // A display link stops when the window leaves the screen; the slide still ends.
+        let id = sidebarSlide!.start
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.25) { [weak self] in
+            if self?.sidebarSlide?.start == id { self?.finishSidebarSlide() }
+        }
+    }
+
+    private struct SidebarSlide {
+        let fromSidebar: NSRect, toSidebar: NSRect, fromContent: NSRect, toContent: NSRect
+        let start: CFTimeInterval, duration: TimeInterval
+        let visible: Bool, floating: Bool, fullscreen: Bool
+    }
+
+    private var sidebarSlide: SidebarSlide?
+    private var sidebarSlideLink: CADisplayLink?
+
+    @objc private func stepSidebarSlide(_ link: CADisplayLink) {
+        guard let s = sidebarSlide else { return finishSidebarSlide() }
+        let t = link.targetTimestamp - s.start
+        guard t < s.duration else { return finishSidebarSlide() }
+        let p = SidebarMotion.progress(at: t, duration: s.duration)
+        let content = SidebarSlidePage.frame(from: s.fromContent, to: s.toContent, progress: p)
+        if !sidebarDetached { sidebarHost.frame = SidebarSlidePage.frame(from: s.fromSidebar, to: s.toSidebar, progress: p) }
+        contentContainer.frame = content
+        loadingIndicator.frame = loadingIndicatorFrame(over: content)
+        layoutContentChildren()
+    }
+
+    private func finishSidebarSlide() {
+        sidebarSlideLink?.invalidate()
+        sidebarSlideLink = nil
+        guard let s = sidebarSlide else { return }
+        sidebarSlide = nil
+        animatingFrames = false
+        for c in paneCards { c.frozenWebBounds = nil }
+        sidebarVisible = s.visible
+        floatingSidebar = s.floating
+        contentFullscreen = s.fullscreen
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+        endSlideReadout()
+    }
+
+    /// Logged as "sidebar slide: page moved N pt" for the sidebar-slide scenario.
+    private var slidingPage: SidebarSlidePage?
+    private var slideSampler: Timer?
+
+    private func startSlideReadout() {
+        slideSampler?.invalidate()
+        slidingPage = SidebarSlidePage()
+        let timer = Timer(timeInterval: 1.0 / 240, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.sampleSlidingPage() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        slideSampler = timer
+    }
+
+    private func sampleSlidingPage() {
+        guard let layer = focusedCard?.webArea.subviews.first?.layer else { return }
+        let drawn = layer.presentation() ?? layer
+        slidingPage?.record(drawn.convert(drawn.bounds, to: nil))
+    }
+
+    private func endSlideReadout() {
+        sampleSlidingPage()
+        slideSampler?.invalidate()
+        slideSampler = nil
+        if let slide = slidingPage, !slide.isEmpty { CraLog.note("sidebar slide: page moved \(Int(slide.drift.rounded())) pt over \(slide.samples) frames") }
+        slidingPage = nil
     }
 }
 
