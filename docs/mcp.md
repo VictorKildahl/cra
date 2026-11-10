@@ -13,6 +13,12 @@ then **Copy MCP Configuration** and add that entry to the agent's MCP settings. 
 Keep Cra running. Copy the configuration again after moving the app or changing profiles.
 CraDev has its own profile and socket.
 
+The first time an agent connects, Cra asks: **Let "Claude Code" use Cra?** with the app it runs
+in. Until you answer, its calls are refused with a message to wait. Cra remembers the answer per
+agent (its name and the code-signing team of the program that started it, so an update doesn't
+ask again) in `mcp.json` in the data folder. Settings ▸ Advanced lists the agents you answered;
+**Forget** asks again next time and closes the agent's open connections.
+
 ## How an agent works in Cra
 
 An agent works next to you, not on your screen. Every tool works on hidden tabs, in covered
@@ -32,7 +38,10 @@ or minimised windows and with Cra in the background:
 - `tab_close` closes today tabs, as ⌘W does (Reopen Closed Tab brings one back). Pinned tabs,
   favorites and tabs in a split stay.
 
-Private tabs and Little Windows are never listed or reachable, even with a known ID.
+Private tabs and Little Windows are never listed or reachable, even with a known ID. Agents
+work only in web pages (http and https): Chrome's settings and password pages, extension pages,
+DevTools and local files are listed (`webPage: false`) but refused, and clicks or typing into an
+extension's frame inside a page (a password manager's menu) are refused too.
 
 ## Tools
 
@@ -57,7 +66,7 @@ Private tabs and Little Windows are never listed or reachable, even with a known
 | `page_drag`, `page_upload` | Native HTML or pointer drags; choose files for a file input |
 | `page_pdf` | Print to a new private PDF in the profile's `mcp-exports` folder |
 | `page_download`, `download_status`, `download_cancel` | Signed-in downloads in a windowless tab |
-| `page_evaluate` | JavaScript, for reading the page; never for clicks or typing |
+| `page_evaluate` | JavaScript, only with **Let agents run JavaScript in pages** on (off by default) |
 
 Arguments are checked before anything happens, and a refused call says why (`page_click needs
 a target: ref, selector or x/y.`).
@@ -150,10 +159,20 @@ exclusive lock keeps a second instance from taking a live socket. Eight clients 
 in flight per client are admitted. A socket path is limited to 104 bytes, so a data folder
 deep in the file system can't run MCP (Settings shows the error).
 
-Turning MCP on lets any program running as your user read your pages and act as you in them.
-It is not a per-site permission system, and Cra doesn't ask before a purchase or a message is
-sent. Set confirmations in the agent, and treat page content as untrusted: a page can contain
+Turning MCP on lets the agents you allow read your pages and act as you in them. It is not a
+per-site permission system, and Cra doesn't ask before a purchase or a message is sent. Set
+confirmations in the agent, and treat page content as untrusted: a page can contain
 instructions meant for the agent. Settings shows the last tool called.
+
+What an agent can't read: field values are left out of snapshots, page text and point
+descriptions, password fields are masked in screenshots, and Chromium doesn't let a password be
+copied. A script can read them, though: a click in a login form makes Chromium fill a saved
+password, and JavaScript on the page can then read it. That is why `page_evaluate` is off until
+you turn on **Let agents run JavaScript in pages**.
+
+The approval prompt keeps out programs you didn't mean to connect. It isn't a wall against
+software already running as you: a program like that can start an allowed agent itself, or edit
+Cra's files and preferences.
 
 Clients can use MCP 2024-11-05, 2025-03-26, 2025-06-18 or 2025-11-25. Messages are at most
 1 MiB, text results 200,000 UTF-8 bytes. Input calls may run up to 100 seconds, PDFs 120,

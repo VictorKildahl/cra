@@ -83,7 +83,7 @@ def command(value):
 def launch(enabled):
     global process
     environment = dict(os.environ, CRA_DATA_DIR=str(profile), CRA_COMMAND_FILE=str(commands), CRA_TEST_BACKGROUND="1")
-    process = subprocess.Popen([str(executable), "-mcpEnabled", "YES" if enabled else "NO"],
+    process = subprocess.Popen([str(executable), "-mcpEnabled", "YES" if enabled else "NO", "-mcpApprovesAgents", "YES", "-mcpAllowsScripts", "YES"],
                                env=environment, stdout=log, stderr=log)
     marker = ("pid " + str(process.pid) + " reads commands from CRA_COMMAND_FILE").encode()
     eventually(lambda: marker in (folder / "browser.log").read_bytes())

@@ -164,7 +164,9 @@ final class MCPPage {
             MainActor.assumeIsolated { self?.event(method, params, id: id) }
         }
         _ = try? await cdp.call("Page.enable", cleanup: true)
-        _ = try? await cdp.call("Emulation.setFocusEmulationEnabled", ["enabled": true], cleanup: true)
+        // A windowless page always paints (it is never hidden), so it doesn't need emulation;
+        // leaving it off also keeps it out of Chromium's capture bookkeeping when it closes.
+        if !browser.isAgent { _ = try? await cdp.call("Emulation.setFocusEmulationEnabled", ["enabled": true], cleanup: true) }
     }
 
     func detach() {
@@ -174,7 +176,7 @@ final class MCPPage {
         Self.dialogs.removeValue(forKey: ObjectIdentifier(browser))
         Self.dialogWaiters.removeValue(forKey: ObjectIdentifier(browser))
         guard !browser.isClosed else { return }
-        browser.sendDevToolsMethod("Emulation.setFocusEmulationEnabled", params: #"{"enabled":false}"#) { _, _ in }
+        if !browser.isAgent { browser.sendDevToolsMethod("Emulation.setFocusEmulationEnabled", params: #"{"enabled":false}"#) { _, _ in } }
         if capturingConsole {
             browser.sendDevToolsMethod("Runtime.disable", params: "{}") { _, _ in }
             browser.sendDevToolsMethod("Log.disable", params: "{}") { _, _ in }

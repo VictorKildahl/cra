@@ -68,7 +68,7 @@ other_site = servers[1].server_port  # served as localhost: another site, so ano
 
 environment = dict(os.environ, CRA_DATA_DIR=str(profile), CRA_COMMAND_FILE=str(commands), CRA_TEST_BACKGROUND="1")
 log = (folder / "browser.log").open("ab")
-process = subprocess.Popen([str(executable), "-mcpEnabled", "YES"], env=environment, stdout=log, stderr=log)
+process = subprocess.Popen([str(executable), "-mcpEnabled", "YES", "-mcpAllowsScripts", "YES"], env=environment, stdout=log, stderr=log)
 
 def listening():
     try:
@@ -79,10 +79,10 @@ def listening():
         return False
 
 class Client:
-    def __init__(self):
+    def __init__(self, name="cra-agent"):
         self.proc = subprocess.Popen([str(executable), "--mcp", str(socket_path)], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         self.next_id = 0
-        assert "result" in self.call("initialize", {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "cra-agent", "version": "1"}})
+        assert "result" in self.call("initialize", {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": name, "version": "1"}})
         self.proc.stdin.write(b'{"jsonrpc":"2.0","method":"notifications/initialized"}\n')
         self.proc.stdin.flush()
     def call(self, method, params=None):
@@ -127,10 +127,42 @@ def activation_check(name, condition_from, before):
         return
     check(name, condition_from(before, after))
 
+def command(line):
+    with commands.open("a") as file:
+        file.write(line + "\n")
+
+def window_titles():
+    script = ("import CoreGraphics; let l = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as! [[String: Any]]; "
+              "for w in l where (w[kCGWindowOwnerPID as String] as? Int32) == " + str(process.pid) + " { print(w[kCGWindowName as String] as? String ?? \"\") }")
+    return subprocess.run(["swift", "-e", script], capture_output=True, text=True).stdout
+
 try:
     eventually(listening, timeout=30)
     client = Client()
+    # A new agent gets nothing until the user allows it; Cra asks once and remembers.
+    asked = client.tool("tabs_list")
+    check("a new agent waits for the user's answer", "asking the user to allow cra-agent" in failure(asked))
+    check("Cra asks the user", eventually(lambda: "Let \u201ccra-agent\u201d use Cra?" in window_titles(), timeout=20))
+    command("cra://debug?mcpAnswer=allow")
+    eventually(lambda: not client.tool("tabs_list")["result"]["isError"])
+    client.close()
+    client = Client()
+    check("an allowed agent is remembered", not client.tool("tabs_list")["result"]["isError"])
+    stranger = Client("other-agent")
+    stranger.tool("tabs_list")
+    eventually(lambda: "other-agent" in window_titles(), timeout=20)
+    command("cra://debug?mcpAnswer=deny")
+    check("refusing an agent closes its connection", eventually(lambda: stranger.proc.poll() is not None))
+    stranger = Client("other-agent")
+    check("a refused agent is refused again", "didn't allow other-agent" in failure(stranger.tool("tabs_list")))
+    stranger.close()
+
     check("26 tools advertised", len(client.call("tools/list")["result"]["tools"]) == 26)
+    command("cra://debug?mcpScripts=off")
+    eventually(lambda: len(client.call("tools/list")["result"]["tools"]) == 25)
+    check("page_evaluate is off unless the user turns it on", "page_evaluate is off" in failure(client.tool("page_evaluate", tabId="x", expression="1")))
+    command("cra://debug?mcpScripts=on")
+    eventually(lambda: len(client.call("tools/list")["result"]["tools"]) == 26)
     def js(tab, expression):
         return value(client.tool("page_evaluate", tabId=tab, expression=expression))["result"].get("value")
     def events(tab):
@@ -262,6 +294,12 @@ try:
     value(client.tool("page_click", tabId=tab, selector="#warn"))
     errors = eventually(lambda: (lambda e: e if any("boom" in x["text"] for x in e) else None)(value(client.tool("page_console", tabId=tab, level="warning"))["entries"]))
     check("console reports warnings and uncaught errors", any(e["level"] == "warning" and "fixture warning" in e["text"] for e in errors) and any(e["level"] == "error" and "fixture boom" in e["text"] for e in errors))
+
+    # Only web pages: a browser or extension page in the sidebar is listed but out of reach.
+    command("cra://open?url=chrome://version&background=1")
+    browser_page = eventually(lambda: next((t for t in value(client.tool("tabs_list")) if t["url"].startswith("chrome://")), None))
+    check("a browser page is marked as not a web page", browser_page.get("webPage") is False)
+    check("agents can't work in browser pages", "isn't a web page" in failure(client.tool("page_read", tabId=browser_page["id"])))
 
     # A sleeping tab wakes in the background for the request that needs it.
     sleepy = value(client.tool("tab_open", url=url + "/index.html?sleepy"))["tabId"]

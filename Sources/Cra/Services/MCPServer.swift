@@ -9,6 +9,40 @@ final class MCPServer {
     private(set) var enabled = false
     private(set) var status = "Off"
     private(set) var lastTool = ""
+    /// The user's answers (mcp.json in the data folder, so a test copy's stay its own).
+    private var settings = MCPServer.loadSettings() {
+        didSet { MCPServer.save(settings) }
+    }
+    /// Agents the user answered, remembered by identity (MCPAgents). Settings lists and forgets them.
+    var agents: [MCPAgent] { settings.agents }
+    /// page_evaluate: off unless the user turns it on, since a script can read anything a page
+    /// holds, passwords Chromium filled in included (an agent's click counts as the user's gesture).
+    var allowsScripts: Bool {
+        get { settings.allowsScripts }
+        set { settings.allowsScripts = newValue }
+    }
+    /// For this run only (launch arguments of isolated test copies): agents allowed without a
+    /// prompt (-mcpApprovesAgents YES), and page_evaluate on (-mcpAllowsScripts YES).
+    @ObservationIgnored private let approvesAgents = MCPServer.launchArgument("mcpApprovesAgents")
+
+    /// A YES/NO launch argument (-key YES), never a saved preference.
+    private static func launchArgument(_ key: String) -> Bool {
+        UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)[key] != nil && UserDefaults.standard.bool(forKey: key)
+    }
+
+    private static var settingsFile: URL { AppPaths.file("mcp.json") }
+    private static func loadSettings() -> MCPSettings {
+        var loaded = MCPSettings.decode(try? Data(contentsOf: settingsFile))
+        if launchArgument("mcpAllowsScripts") { loaded.allowsScripts = true }
+        return loaded
+    }
+    private static func save(_ settings: MCPSettings) {
+        let url = settingsFile
+        try? settings.encoded().write(to: url, options: .atomic)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+    }
+    @ObservationIgnored private var asking: [String: AppDialog] = [:]
+    @ObservationIgnored private var identities: [Int32: String] = [:]
     @ObservationIgnored private weak var app: AppDelegate?
     @ObservationIgnored private var endpoint: MCPListener?
     @ObservationIgnored private var listener: DispatchSourceRead?
@@ -89,7 +123,10 @@ final class MCPServer {
         setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout.size(ofValue: one)))
         clients.insert(client)
         let session = generation
+        let peer = MCPPeer.of(socket: client)
         let protocolSession = MCPSession()
+        protocolSession.disabledTools = { [weak self] in self?.allowsScripts == true ? [] : ["page_evaluate"] }
+        protocolSession.offReason = { _ in "page_evaluate is off. The user can turn on Settings ▸ Advanced ▸ Let agents run JavaScript; until then use page_read, page_snapshot and page_screenshot." }
         let owner = UUID()
         let state = MCPClientState()
         let writer = DispatchQueue(label: "cra.mcp.writer")
@@ -118,6 +155,8 @@ final class MCPServer {
                     }
                     if let key { state.requests[key] = reply }
                     protocolSession.receive(line, perform: { name, arguments, completion in
+                        // Nothing runs before the user allowed this agent.
+                        guard self.authorize(client: client, name: protocolSession.clientName ?? "", peer: peer, completion: completion) else { return }
                         self.lastTool = name
                         self.perform(name, arguments: arguments, owner: owner, canContinue: { [weak self] in
                             self?.enabled == true && self?.generation == session && reply.isPending && !reply.isCancelled
@@ -146,6 +185,7 @@ final class MCPServer {
             shutdown(client, SHUT_RDWR)
             Task { @MainActor [weak self] in
                 self?.clients.remove(client)
+                self?.identities.removeValue(forKey: client)
                 self?.ownedTabs.removeValue(forKey: owner)
                 // The last client gone: pages stop emulating focus and reporting events.
                 if let self, self.clients.isEmpty {
@@ -162,6 +202,69 @@ final class MCPServer {
                 close(client)
             }
         }
+    }
+
+    /// Whether this connection's agent may use Cra. The first time an agent connects Cra asks
+    /// (Allow / Don't Allow) and remembers the answer; until then calls get a message to wait.
+    private func authorize(client: Int32, name: String, peer: MCPPeer, completion: @escaping ([String: Any]) -> Void) -> Bool {
+        let id = MCPAgents.identity(clientName: name, signer: peer.signer)
+        identities[client] = id
+        if approvesAgents { return true }
+        let display = MCPAgents.displayName(name)
+        switch MCPAgents.decision(for: id, in: agents) {
+        case true?: return true
+        case false?:
+            completion(MCPProtocol.content("The user didn't allow \(display) to use Cra. They can change that in Settings ▸ Advanced.", failed: true))
+            return false
+        case nil:
+            ask(id: id, name: display, via: peer.via)
+            completion(MCPProtocol.content("Cra is asking the user to allow \(display). Wait for their answer, then try again.", failed: true))
+            return false
+        }
+    }
+
+    private func ask(id: String, name: String, via: String) {
+        guard asking[id] == nil else { return }
+        let from = via.isEmpty ? "" : " It's asking from \(via)."
+        let dialog = AppDialog(title: "Let \u{201C}\(name)\u{201D} use Cra?",
+                               message: "While it runs, it can open tabs, read your pages and act in them, signed in as you.\(from) You can take this back in Settings ▸ Advanced.",
+                               actions: [DialogAction("Allow"), DialogAction("Don\u{2019}t Allow", role: .cancel)])
+        asking[id] = dialog
+        let answer: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard let self else { return }
+            self.asking.removeValue(forKey: id)
+            guard response != .abort else { return }  // closed unanswered: ask again next time
+            self.record(MCPAgent(id: id, name: name, via: via, allowed: response == .alertFirstButtonReturn, decided: Date()))
+        }
+        // A security question waits for the user, so this is the one time MCP brings Cra forward.
+        guard let window = app?.mainWindows.first(where: { !$0.isIncognito })?.window else {
+            NSApp.activate(ignoringOtherApps: true)
+            answer(dialog.runModal(over: nil)); return
+        }
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.requestUserAttention(.criticalRequest)
+        dialog.present(over: window, completion: answer)
+    }
+
+    /// Answers the open approval prompt as the user would (cra://debug?mcpAnswer=allow|deny, test copies).
+    func answerPrompt(allow: Bool) {
+        asking.values.first?.select(allow ? 0 : 1)
+    }
+
+    private func record(_ agent: MCPAgent) {
+        settings.agents = MCPAgents.recording(agent, in: settings.agents)
+        if !agent.allowed { disconnect(agent.id) }
+    }
+
+    /// Forgets an answer: the agent is asked again next time, and its open connections close now.
+    func forget(_ agent: MCPAgent) {
+        settings.agents.removeAll { $0.id == agent.id }
+        disconnect(agent.id)
+    }
+
+    private func disconnect(_ id: String) {
+        for (fd, identity) in identities where identity == id { shutdown(fd, SHUT_RDWR) }
     }
 
     private func perform(_ name: String, arguments: [String: Any], owner: UUID, canContinue: @escaping () -> Bool,
@@ -191,6 +294,7 @@ final class MCPServer {
                         if !folders.isEmpty { row["folder"] = folders.joined(separator: " / ") }
                         if selected.contains(item.id) { row["selected"] = true }
                         if item.id == activeTab { row["active"] = true }
+                        if let url = item.tab?.url, !url.isEmpty, !MCPProtocol.navigable(url) { row["webPage"] = false }
                         if let runtime = app.runtime(for: item.id), let dialog = MCPPage.dialog(of: runtime.browser) { row["dialog"] = dialog }
                         tabs.append(row)
                     }
@@ -306,6 +410,11 @@ final class MCPServer {
         }
         guard browser.isCreated, !browser.isClosed, !browser.isIncognito else {
             completion(MCPProtocol.content("Page is not ready or has closed.", failed: true)); return
+        }
+        // Only web pages: Chrome's settings and password pages, extension pages (a password
+        // manager's vault), DevTools and local files stay out of an agent's reach.
+        guard MCPProtocol.navigable(browser.currentURL) else {
+            completion(MCPProtocol.content("This tab isn't a web page (\(browser.currentURL.prefix(40))). Agents only work in http and https pages.", failed: true)); return
         }
         for tabID in Array(transfers.keys) where agentTabs[tabID] == nil && (app.store.mcpTab(tabID) == nil || app.runtime(for: tabID)?.browser !== pages[tabID]?.browser) {
             transfers.removeValue(forKey: tabID)?.close()

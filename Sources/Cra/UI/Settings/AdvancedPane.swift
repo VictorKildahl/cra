@@ -81,6 +81,17 @@ struct AdvancedPane: View {
                     }
                     Text("Last tool: \(MCPServer.shared.lastTool.isEmpty ? "None" : MCPServer.shared.lastTool)")
                         .font(.system(size: 11)).foregroundStyle(.secondary)
+                    SettingsCheckbox(title: "Let agents run JavaScript in pages", isOn: Binding(
+                        get: { MCPServer.shared.allowsScripts }, set: { MCPServer.shared.allowsScripts = $0 }))
+                    Text("A script can read anything a page holds, including passwords Cra fills in.")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                    ForEach(MCPServer.shared.agents) { agent in
+                        HStack(spacing: 8) {
+                            Text(agent.via.isEmpty ? agent.name : "\(agent.name) in \(agent.via)").font(.system(size: 13))
+                            Text(agent.allowed ? "Allowed" : "Not allowed").font(.system(size: 11)).foregroundStyle(.secondary)
+                            Button("Forget") { MCPServer.shared.forget(agent) }
+                        }
+                    }
                 }
             }
             SettingsFormRow(label: "About:") {

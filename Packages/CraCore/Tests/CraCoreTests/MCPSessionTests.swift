@@ -24,6 +24,28 @@ struct MCPSessionTests {
         }
     }
 
+    @Test func clientNameAndTurnedOffTools() throws {
+        let session = MCPSession()
+        session.disabledTools = { ["page_evaluate"] }
+        session.offReason = { "\($0) is off here." }
+        #expect(session.clientName == nil)
+        _ = try initialize(session)
+        notify(session, method: "notifications/initialized")
+        #expect(session.clientName == "test")
+        let tools = try #require((try request(session, "tools/list")["result"] as? [String: Any])?["tools"] as? [[String: Any]])
+        #expect(tools.count == MCPProtocol.tools.count - 1 && !tools.contains { $0["name"] as? String == "page_evaluate" })
+        var ran = false
+        let data = try JSONSerialization.data(withJSONObject: ["jsonrpc": "2.0", "id": 9, "method": "tools/call",
+                                                               "params": ["name": "page_evaluate", "arguments": ["tabId": "t", "expression": "1"]]])
+        var response: Data?
+        session.receive(data, perform: { _, _, done in ran = true; done([:]) }) { response = $0 }
+        let bytes = try #require(response)
+        let object = try JSONSerialization.jsonObject(with: bytes) as? [String: Any]
+        let result = try #require(object?["result"] as? [String: Any])
+        #expect(!ran && result["isError"] as? Bool == true)
+        #expect(((result["content"] as? [[String: Any]])?.first?["text"] as? String) == "page_evaluate is off here.")
+    }
+
     @Test func handshakeAndTools() throws {
         let session = MCPSession()
         #expect(try request(session, "ping")["result"] != nil)

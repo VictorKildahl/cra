@@ -92,6 +92,7 @@ final class MCPInput {
         if name == "page_drag" { return try await drag(to: arguments["targetSelector"] as! String) }
         let editing = name == "page_fill" || name == "page_type"
         let initial = try await inspect(editing: editing)
+        if initial["kind"] as? String == "frame", let src = initial["src"] as? String, !src.isEmpty, !Self.isWeb(src) { throw Self.notWeb }
         if name == "page_hover" || name == "page_scroll" {
             // A hovered element may grow or move (a menu opens): that's the point of hovering.
             try await move(editing: false, settle: false)
@@ -178,6 +179,7 @@ final class MCPInput {
         }
         try await prepare(selector: "html", scroll: false)
         let hit = await describe(point)
+        if let frame = hit["frame"] as? String, !Self.isWeb(frame) { throw Self.notWeb }
         if hit["tag"] as? String == "SELECT", name == "page_click" {
             throw Failure(message: "That is a <select>. Use page_select with its ref (page_snapshot) so no native menu opens.")
         }
@@ -245,6 +247,13 @@ final class MCPInput {
     }
 
     private func cdp() -> MCPCDP { MCPCDP(browser, canContinue: canContinue) }
+
+    /// Frames agents may act in: web pages, and the blank frames pages write into themselves.
+    private static func isWeb(_ url: String) -> Bool {
+        let lower = url.lowercased()
+        return lower.hasPrefix("http://") || lower.hasPrefix("https://") || lower.hasPrefix("about:") || lower.hasPrefix("data:") || lower.hasPrefix("blob:http")
+    }
+    private static let notWeb = Failure(message: "That is an extension's or the browser's own frame (a password manager's menu, say). Agents can't use those; the user can.")
 
     /// Types at the focus: key by key up to MCPInputPlan.keyTypingLimit pieces, else committed
     /// text per line with Enter between. Returns whether keys were used.
@@ -445,7 +454,7 @@ final class MCPInput {
             } else if (!n.textContent) { start = 0; end = 0; }
           }
           const value = plain ? n.textContent.replace(/\\u00a0/g,' ') : field ? n.value || '' : kind === 'rich' ? n.innerText : '';
-          return {x,y,kind,editable:kind !== 'none',value,start,end,multiline:n instanceof HTMLTextAreaElement || kind === 'rich',focused:active === n};
+          return {x,y,kind,editable:kind !== 'none',value,start,end,multiline:n instanceof HTMLTextAreaElement || kind === 'rich',focused:active === n,src:kind === 'frame' ? n.src : ''};
         }
         """, arguments: [editing, focused, hit])
         guard let value = (response["result"] as? [String: Any])?["value"] as? [String: Any] else {

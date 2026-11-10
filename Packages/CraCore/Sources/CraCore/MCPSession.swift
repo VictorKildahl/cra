@@ -6,6 +6,11 @@ import CoreFoundation
 public final class MCPSession {
     private enum Phase { case fresh, initializing, ready }
     private var phase = Phase.fresh
+    /// The name the client gave in `initialize`, once it has.
+    public private(set) var clientName: String?
+    /// Tools the user turned off: left out of tools/list and refused by tools/call with `offReason`.
+    public var disabledTools: () -> Set<String> = { [] }
+    public var offReason: (String) -> String = { "\($0) is turned off in Cra." }
     public init() {}
 
     public func receive(_ data: Data,
@@ -58,6 +63,7 @@ public final class MCPSession {
             }
             let versions = ["2024-11-05", "2025-03-26", "2025-06-18", MCPProtocol.version]
             phase = .initializing
+            clientName = client["name"] as? String
             send(MCPProtocol.result(id: id, value: [
                 "protocolVersion": versions.contains(requested) ? requested : MCPProtocol.version,
                 "capabilities": ["tools": [:]],
@@ -73,11 +79,16 @@ public final class MCPSession {
             }
             switch method {
             case "tools/list":
-                send(MCPProtocol.result(id: id, value: ["tools": MCPProtocol.tools]))
+                let off = disabledTools()
+                send(MCPProtocol.result(id: id, value: ["tools": MCPProtocol.tools.filter { !off.contains($0["name"] as? String ?? "") }]))
             case "tools/call":
                 guard let name = params["name"] as? String,
                       let arguments = (params["arguments"] ?? [:]) as? [String: Any] else {
                     send(MCPProtocol.error(id: id, code: -32602, message: "tools/call needs a tool name and an arguments object."))
+                    return
+                }
+                if disabledTools().contains(name) {
+                    send(MCPProtocol.result(id: id, value: MCPProtocol.content(offReason(name), failed: true)))
                     return
                 }
                 if let problem = MCPProtocol.problem(name: name, arguments: arguments) {
