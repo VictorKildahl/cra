@@ -515,6 +515,10 @@
 #305   Packages/CraCore/Tests/CraCoreTests/AddressBarPlacementTests.swift::placementIsTheToolbarSwitch  b2e689828283
 #305   Packages/CraCore/Tests/CraCoreTests/AddressBarPlacementTests.swift::settingsFileKeepsShowToolbar  c852bda6b868
 #305   Packages/CraCore/Tests/CraCoreTests/AddressBarPlacementTests.swift::startsInTheSidebar  fb73715b0ab0
+#306   Packages/CraCore/Tests/CraCoreTests/SpaceSearchEngineTests.swift::aSpaceSearchesItsOwnEngine  2162c1ba580b
+#306   Packages/CraCore/Tests/CraCoreTests/SpaceSearchEngineTests.swift::theEngineIsSavedWithTheSpace  0e82d53e86b9
+#306   Packages/CraCore/Tests/CraCoreTests/SpaceSearchEngineTests.swift::withoutOneTheSpaceInheritsTheDefault  862d2c21caef
+#306   Tests/Scenarios/space-search-engine.scenario  305a5e5abcd0
 #307   Packages/CraCore/Tests/CraCoreTests/TabSearchScopeTests.swift::commandBarTabsFollowTheSetting  316e28600e93
 #307   Packages/CraCore/Tests/CraCoreTests/TabSearchScopeTests.swift::currentSpaceOnlySettingDefaultsOffAndRoundTrips  8465a635dabd
 #307   Tests/Scenarios/command-bar-space-scope.scenario  0b4de914ffa4

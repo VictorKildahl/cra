@@ -443,6 +443,7 @@ enum SpaceMenu {
         }
         profiles.addItem(.separator())
         MenuItems.add(profiles, "New Profile…") { actions.newProfile(id) }
+        addSearchEngines(to: MenuItems.submenu(m, "Search Engine"), space: space, store: store)
         m.addItem(.separator())
         MenuItems.add(m, action: "newFolder") {
             ui.renamingID = store.createFolder(named: "New Folder", in: space.pinnedContainerID, index: 0).id
@@ -463,6 +464,22 @@ enum SpaceMenu {
         m.addItem(.separator())
         MenuItems.add(m, action: "deleteSpace", title: "Delete Space") { actions.deleteSpace(space) }
         return m
+    }
+}
+
+extension SpaceMenu {
+    /// GitHub #306, not in Arc: the engine the command bar searches in this space, in the Set Profile
+    /// submenu's form. "Default" follows Settings ▸ Advanced's engine (the profile's).
+    static func addSearchEngines(to menu: NSMenu, space: Space, store: SidebarStore) {
+        let profile = store.profilePath(space: space.id)
+        let fallback = SearchEngines.shared.defaultEngine(profilePath: profile, legacy: store.settings.searchEngine)
+        let choices = ChromiumSearchEngine.spaceChoices(among: SearchEngines.shared.keywords(profilePath: profile))
+        let current = space.searchEngine?.lowercased()
+        MenuItems.add(menu, "Default (\(fallback.name))", on: current == nil) { store.setSearchEngine(nil, forSpace: space.id) }
+        menu.addItem(.separator())
+        for e in choices {
+            MenuItems.add(menu, e.name, on: current == e.keyword.lowercased()) { store.setSearchEngine(e.keyword, forSpace: space.id) }
+        }
     }
 }
 

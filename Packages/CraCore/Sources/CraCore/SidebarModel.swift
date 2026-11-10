@@ -315,6 +315,9 @@ public struct Space: Identifiable, Codable, Equatable {
     /// The Blank Window this space belongs to (Arc: a `standalone` sidebar container keyed by its
     /// window). Such a space is in no window's space list and goes when its window closes (BlankWindow).
     public var standaloneWindowID: UUID? = nil
+    /// GitHub #306, not in Arc (one engine per profile there): the Chromium keyword of the engine
+    /// the command bar searches in this space; nil searches the profile's default.
+    public var searchEngine: String? = nil
 
     public init(id: UUID, title: String, emoji: String, theme: SpaceTheme, favoritesContainerID: UUID, pinnedContainerID: UUID,
                 todayContainerID: UUID, createdAt: Date, profileID: UUID? = nil, symbol: String? = nil, standaloneWindowID: UUID? = nil) {
@@ -946,6 +949,7 @@ extension Space {
         profileID = try c.decodeIfPresent(UUID.self, forKey: .profileID)
         symbol = try c.decodeIfPresent(String.self, forKey: .symbol)
         standaloneWindowID = try c.decodeIfPresent(UUID.self, forKey: .standaloneWindowID)
+        searchEngine = try c.decodeIfPresent(String.self, forKey: .searchEngine)
         // Edit Space… → Save in 0.1.31 and older wrote 🌱 beside a space's symbol, and the sidebar
         // drew both stacked (#205). The symbol was the space's icon, so the emoji beside it goes.
         if symbol?.isEmpty == false { emoji = "" }

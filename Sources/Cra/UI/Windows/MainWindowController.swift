@@ -3772,7 +3772,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // Arc's New Space starts on the profile of the space it was opened from.
         let initialProfile = space == nil && !isStandalone ? SpaceProfiles.forNewSpace(from: store.focusedSpace, profiles: store.profiles) : nil
         let store = self.store
-        let view = SpaceEditorView(existing: space, profiles: store.profiles, initialProfile: initialProfile, onSave: { [weak panel] title, icon, theme, profile, newName in
+        let profilePath = space.flatMap { store.profilePath(space: $0.id) } ?? store.profilePath(profile: initialProfile)
+        let defaultEngine = SearchEngines.shared.defaultEngine(profilePath: profilePath, legacy: store.settings.searchEngine)
+        let engines = ChromiumSearchEngine.spaceChoices(among: SearchEngines.shared.keywords(profilePath: profilePath))
+        let view = SpaceEditorView(existing: space, profiles: store.profiles, initialProfile: initialProfile, searchEngines: engines,
+                                   defaultEngineName: defaultEngine.name, onSave: { [weak panel] title, icon, theme, profile, newName, searchEngine in
             let id: UUID
             if let sid = space?.id, var s = store.space(sid) {
                 s.title = title; s.icon = icon; s.theme = theme
@@ -3785,6 +3789,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             case .existing(let p): store.setProfile(p, forSpace: id)
             case .new: store.setProfile(store.createProfile(name: newName).id, forSpace: id)
             }
+            store.setSearchEngine(searchEngine, forSpace: id)
             if let panel { window.endSheet(panel) }
         }, onCancel: { [weak panel] in if let panel { window.endSheet(panel) } }, onPreview: { theme in
             // A new space has nothing to draw on yet; the sheet's own preview shows it.

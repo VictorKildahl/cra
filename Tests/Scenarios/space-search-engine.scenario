@@ -1,0 +1,25 @@
+# A space can search its own engine (GitHub #306): typed text in the command bar goes to the space's
+# engine, and a space without one searches the default, as before. The space menu's Search Engine
+# submenu and Edit Space's picker set it; here the debug hook does, by keyword.
+# promise: #306
+budget rss=700 stalls50=10
+home
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+
+cra://debug?windowSize=1200x800
+wait 2
+cra://debug?suggest=cra%20browser
+expect-log Cra suggest cra browser .*search=\S*google\.com/search\?q=cra%20browser
+cra://debug?spaceSearchEngine=duckduckgo.com
+wait 0.5
+cra://debug?suggest=cra%20browser
+expect-log Cra suggest cra browser .*search=https://duckduckgo\.com/\?q=cra%20browser
+cra://debug?spaceSearchEngine=bing.com
+wait 0.5
+cra://debug?suggest=cra%20browser
+expect-log Cra suggest cra browser .*search=https://www\.bing\.com/search\?q=cra%20browser
+# Back to Default: the global engine again.
+cra://debug?spaceSearchEngine=
+wait 0.5
+cra://debug?suggest=cra%20again
+expect-log Cra suggest cra again .*search=\S*google\.com/search\?q=cra%20again

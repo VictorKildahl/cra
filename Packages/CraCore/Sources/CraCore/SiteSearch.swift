@@ -173,6 +173,30 @@ public struct ChromiumSearchEngine: Equatable, Sendable {
     }
 }
 
+// MARK: A space's own engine (GitHub #306)
+
+extension ChromiumSearchEngine {
+    /// What a space's Search Engine menu offers: the profile's built-in engines and those the user
+    /// added on the settings page, not the sites Chromium picks up while browsing or the starter
+    /// pack. Before the profile's Web Data can be read, Cra's own list stands in.
+    public static func spaceChoices(among engines: [ChromiumSearchEngine]) -> [ChromiumSearchEngine] {
+        let picked = engines.filter { $0.starterPackID == 0 && $0.isActive != 2 && ($0.isBuiltIn || !$0.safeForAutoreplace) }
+        return picked.isEmpty ? SearchEngine.allCases.map { ChromiumSearchEngine($0) } : picked
+    }
+
+    /// The engine typed text searches in a space: the space's own (`keyword`) where its profile
+    /// has that engine, else the one Cra's list knows by that keyword, else the profile's default,
+    /// which a space without one, or with an engine since removed, falls back to.
+    public static func forSpace(keyword: String?, default fallback: ChromiumSearchEngine,
+                                among engines: [ChromiumSearchEngine]) -> ChromiumSearchEngine {
+        guard let wanted = keyword?.lowercased(), !wanted.isEmpty else { return fallback }
+        if fallback.keyword.lowercased() == wanted { return fallback }
+        return engines.first { $0.keyword.lowercased() == wanted && $0.starterPackID == 0 }
+            ?? SearchEngine.allCases.map({ ChromiumSearchEngine($0) }).first { $0.keyword == wanted }
+            ?? fallback
+    }
+}
+
 /// What Tab scopes the command bar to on a site (Arc's Site Search): one of Arc's sites, or one
 /// of Chromium's keywords.
 public struct SiteSearch: Equatable, Sendable {

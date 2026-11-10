@@ -229,12 +229,14 @@ final class SuggestionEngine {
     private var enginesRead: (default: ChromiumSearchEngine, keywords: [ChromiumSearchEngine])?
 
     /// Chromium's, in the window's space's profile (an incognito window's are its Default's),
-    /// read when the bar opens.
+    /// read when the bar opens. The default is the space's own engine where it has one (#306).
     private var engines: (default: ChromiumSearchEngine, keywords: [ChromiumSearchEngine]) {
         if let enginesRead { return enginesRead }
-        let profile = store.profilePath(space: store.focusedSpaceID)
-        let read = (SearchEngines.shared.defaultEngine(profilePath: profile, legacy: store.settings.searchEngine),
-                    SearchEngines.shared.keywords(profilePath: profile))
+        let space = store.focusedSpaceID
+        let profile = store.profilePath(space: space)
+        let keywords = SearchEngines.shared.keywords(profilePath: profile)
+        let fallback = SearchEngines.shared.defaultEngine(profilePath: profile, legacy: store.settings.searchEngine)
+        let read = (ChromiumSearchEngine.forSpace(keyword: store.space(space)?.searchEngine, default: fallback, among: keywords), keywords)
         enginesRead = read
         return read
     }
