@@ -2089,79 +2089,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         b.setZoomLevel(b.zoomLevel() + delta)
     }
 
-    /// Arc's Capture (⇧⌘2 again closes it): the page dims, a click takes the element under the
-    /// pointer and a drag a rectangle, then a menu copies, saves or sends it (CaptureOverlay).
-    /// Chromium draws the picture it works on (Page.captureScreenshot), so it holds the page
-    /// whatever display the window is on and whatever is in front of it.
-    /// `liftImageAt` (Capture Image… on an image, page points from its top left): the image there
-    /// is taken at once and moves to the middle of the page with the menu beside it, as in Arc.
-    func capturePage(liftImageAt point: NSPoint? = nil) {
-        if let open = captureOverlay, open.isOpen {
-            open.close()
-            if point == nil { return }
-        }
-        guard !captureStarting, let rt = browsers.visibleRuntime, rt.browser.isCreated, !rt.browser.isClosed,
-              pageScreenRect(rt) != nil else { return }
-        let b = rt.browser
-        captureStarting = true
-        guard let point else { takeCapture(b, liftImageAt: nil); return }
-        // Where the image is first: the picture is taken with the menu already closed.
-        let scale = window?.backingScaleFactor ?? 2
-        let script = ContentCapture.imageRectScript(x: point.x * scale, y: point.y * scale)
-        let params = (try? JSONSerialization.data(withJSONObject: ["expression": script, "returnByValue": true]))
-            .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
-        b.evaluate(inIsolatedWorld: PageScript.world, params: params) { [weak self, weak b] result, _ in
-            MainActor.assumeIsolated {
-                guard let self, let b else { return }
-                let value = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
-                    .flatMap { ($0["result"] as? [String: Any])?["value"] as? [String: Any] }
-                guard let value, let rt = self.browsers.visibleRuntime, rt.browser === b, let page = self.pageScreenRect(rt),
-                      let rect = ContentCapture.elementRect(fromPicker: value, scale: scale, pageBounds: CGRect(origin: .zero, size: page.size))
-                else { self.captureStarting = false; return }
-                self.takeCapture(b, liftImageAt: rect)
-            }
-        }
-    }
+    var captureOverlay: CaptureOverlay?
+    var captureRequest: (id: UUID, window: NSWindow)?
 
-    private func takeCapture(_ b: CraBrowser, liftImageAt image: CGRect?) {
-        let lift = image
-        b.sendDevToolsMethod("Page.captureScreenshot", params: #"{"format":"png","captureBeyondViewport":false}"#) { [weak self, weak b] shot, error in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                self.captureStarting = false
-                guard let b, let window = self.window, let rt = self.browsers.visibleRuntime, rt.browser === b,
-                      let rect = self.pageScreenRect(rt) else { return }
-                guard let image = Self.screenshotImage(shot) else {
-                    NSLog("Cra: capture failed: %@", error ?? "no data")
-                    self.showToast("Capture Failed")
-                    return
-                }
-                let overlay = CaptureOverlay(over: window, pageRect: rect, shot: image, browser: b)
-                overlay.onFinish = { [weak self] action, png in self?.captureFinished(action, png) }
-                self.captureOverlay = overlay
-                if let lift { overlay.lift(lift) }
-            }
-        }
-    }
-
-    private var captureOverlay: CaptureOverlay?
-    private var captureStarting = false
     /// File ▸ Share…'s list, kept while it is open.
     private var sharePicker: NSSharingServicePicker?
-
-    /// The focused page on screen, whether its view is embedded in the card or in its own window.
-    private func pageScreenRect(_ rt: TabRuntime) -> NSRect? {
-        let view = rt.hostWindow.flatMap { EmbeddedPages.pageViews(of: $0)?.last } ?? rt.browser.containerView
-        guard let w = view.window, !view.isHiddenOrHasHiddenAncestor, view.bounds.width > 1, view.bounds.height > 1 else { return nil }
-        return w.convertToScreen(view.convert(view.bounds, to: nil))
-    }
-
-    static func screenshotImage(_ shot: String?) -> CGImage? {
-        guard let shot, let o = try? JSONSerialization.jsonObject(with: Data(shot.utf8)) as? [String: Any],
-              let b64 = o["data"] as? String, let png = Data(base64Encoded: b64),
-              let source = CGImageSourceCreateWithData(png as CFData, nil) else { return nil }
-        return CGImageSourceCreateImageAtIndex(source, 0, nil)
-    }
 
     /// Send To… an easel: the capture goes on it, under what is there, and its tab comes forward
     /// (a new one when it has none open).
@@ -2193,9 +2125,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// The capture menu's choice, once the overlay is down.
-    private func captureFinished(_ action: CaptureOverlay.Action?, _ png: Data?) {
+    func captureFinished(_ action: CaptureOverlay.Action?, _ png: Data?, in peek: LittleWindowController? = nil) {
         captureOverlay = nil
-        if action != nil || NSApp.isActive, window?.isVisible == true {
+        if let peek {
+            if peek.canCapturePage, action != nil || NSApp.isActive { peek.focusPage() }
+        } else if action != nil || NSApp.isActive, window?.isVisible == true {
             window?.makeKey()
             currentBrowser?.setFocused(true)
         }
@@ -2203,9 +2137,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         case .copy?:
             guard let png else { return }
             copyCapture(png)
-            showToast("Screenshot Copied to Clipboard")
+            if let peek { peek.showToast("Screenshot Copied to Clipboard") } else { showToast("Screenshot Copied to Clipboard") }
         case .save?:
-            if let png { saveCapture(png) }
+            if let png { saveCapture(png, over: peek?.window) }
         case .message?:
             if let png { sendCaptureViaMessages(png) }
         case .newEasel?:
@@ -2224,7 +2158,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             }
             menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
         case .retake?:
-            capturePage()
+            capturePage(in: peek)
         case nil:
             break
         }
@@ -3488,8 +3422,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// The toast's Save: Arc's "Save Capture Image" panel, in Downloads.
-    private func saveCapture(_ png: Data) {
-        guard let window else { return }
+    private func saveCapture(_ png: Data, over sourceWindow: NSWindow? = nil) {
+        guard let window = sourceWindow ?? window else { return }
         let panel = NSSavePanel()
         panel.title = "Save Capture Image"
         panel.nameFieldStringValue = Self.captureFileName()

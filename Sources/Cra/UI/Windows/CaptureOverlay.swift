@@ -45,6 +45,7 @@ final class CaptureOverlay {
     }
 
     var isOpen: Bool { !closed }
+    var parentWindow: NSWindow? { parent }
 
     func close() { finish(nil, nil) }
 
