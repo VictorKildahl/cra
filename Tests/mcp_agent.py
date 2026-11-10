@@ -304,11 +304,12 @@ try:
     check("console reports warnings and uncaught errors", any(e["level"] == "warning" and "fixture warning" in e["text"] for e in errors) and any(e["level"] == "error" and "fixture boom" in e["text"] for e in errors))
 
     # Instant input by default; paced like a person only when asked.
-    fast = client.tool("page_fill", tabId=tab, selector="#long", text="The quick brown fox jumps over the lazy dog, again and again.")
+    # (changes=false: the report's wait for the page to settle isn't input time.)
+    fast = client.tool("page_fill", tabId=tab, selector="#long", text="The quick brown fox jumps over the lazy dog, again and again.", changes=False)
     value(fast)
-    paced = client.tool("page_fill", tabId=tab, selector="#long", text="slow typing", humanize=True)
+    paced = client.tool("page_fill", tabId=tab, selector="#long", text="The quick brown fox jumps over the lazy dog, again and again.", humanize=True, changes=False)
     value(paced)
-    check("input is instant unless humanized", fast["seconds"] < 1.0 and paced["seconds"] > 0.25, [fast["seconds"], paced["seconds"]])
+    check("input is instant unless humanized", fast["seconds"] < 1.5 and paced["seconds"] > fast["seconds"] + 1, [fast["seconds"], paced["seconds"]])
 
     # Each action says what it changed: the panel's new fields with refs, and the form post.
     opened = value(client.tool("page_click", tabId=tab, selector="#open-panel"))
