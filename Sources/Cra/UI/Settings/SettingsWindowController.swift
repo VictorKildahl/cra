@@ -96,6 +96,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
     private let nav = SettingsNavigation()
 
     func show(_ pane: SettingsPane) { nav.show(pane) }
+    var debugPane: String { nav.pane.rawValue }
     func didShow() { nav.didShow() }
 
     init(store: SidebarStore, bindings: KeyBindingRegistry, sync: SettingsSyncService, actions: SettingsActions) {

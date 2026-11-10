@@ -449,7 +449,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         commandBar.onOpenInBackground = { [weak self] s, typed in self?.openInBackground(s, typed: typed) ?? false }
         commandBar.onOpenInSplit = { [weak self] s, typed in self?.openInSplit(s, typed: typed) ?? false }
         commandBar.onClose = { [weak self] in self?.hideCommandPanel() }
-        commandBar.onSiteControls = { [weak self] in self?.showSiteControlsFromTheirButton() }
+        commandBar.onNoticeSettings = { [weak self] in self?.app.showSettingsWindow(on: .advanced) }
+        commandBar.onNoticeLearnMore = { [weak self] in self?.openTab(Self.privacyPage) }
         commandBar.spaceName = { [weak self] id in self?.store.space(id)?.title ?? "" }
     }
 
@@ -3113,15 +3114,20 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func debugSiteControlsShown() -> Bool { siteControlCenter.isShown
     }
 
-    /// Scenario hook (#314): the command bar's badge pressed as a click would; logs whether it was
-    /// shown, took the press, closed the bar and opened the Site Control Center.
-    func debugCommandBarBadgePress() {
-        let shown = commandHost.debugBadgeShown
-        let pressed = commandHost.debugPressBadge()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+    /// Cra's privacy page, where the command bar's search-suggestions banner says "Learn more".
+    static let privacyPage = SiteLinks.tagged("https://crabrowser.app/privacy", from: .commandBarNotice)
+
+    /// Scenario hook (#314): the command bar's (i) ("badge") or a banner button ("settings", "dismiss",
+    /// "learnMore") pressed as a click would, then the bar as it stands:
+    /// "command bar notice badge: pressed true, badge false, banner true, rows 4, bar open, dismissed false".
+    func debugCommandBarNotice(_ step: String) {
+        let pressed = step == "badge" ? commandHost.debugPressBadge() : step == "state" ? true : commandHost.debugPressNotice(step)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
             guard let self else { return }
-            CraLog.note("command bar badge: shown \(shown), pressed \(pressed), bar \(self.commandBar.isOpen ? "open" : "closed"), "
-                + "site control center \(self.siteControlCenter.isShown ? "shown" : "not shown")")
+            CraLog.note("command bar notice \(step): pressed \(pressed), badge \(self.commandHost.debugBadgeShown), "
+                + "banner \(self.commandHost.debugNoticeShown), rows \(self.commandBar.result.items.count), "
+                + "bar \(self.commandBar.isOpen ? "open" : "closed"), dismissed \(self.store.prefs.searchSuggestionsNoticeDismissed), "
+                + "settings \(self.app.debugSettingsPane ?? "closed")")
         }
     }
 
@@ -3557,7 +3563,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let effectiveMode: CommandBarMode = (mode == .editURL && (selectedTab == nil || fillingEmptyPane)) ? .newTab : mode
         commandBar.theme = focusedSpace.theme.shown
         commandBar.focusedSpaceID = focusedSpaceID
-        commandBar.siteControlsAvailable = selectedTab?.tab != nil && !fillingEmptyPane
         commandBar.open(mode: effectiveMode, prefill: prefill)
         // Arc draws the New Tab row as the active one while the bar makes a new tab; the
         // sidebar scrolls to it (SpaceListView.revealActiveRow).
@@ -3580,7 +3585,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         guard !commandObserving else { return }
         commandObserving = true
         withObservationTracking {
-            _ = commandBar.result.items.count
+            _ = commandBar.rowPlaces
             _ = commandBar.isOpen
         } onChange: { [weak self] in
             Task { @MainActor in
@@ -3594,8 +3599,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     private func positionCommandPanel() {
         guard let window else { return }
-        let rows = commandBar.result.items.count
-        let h = CommandBarView.height(forRows: rows)
+        let h = CommandBarView.height(forRows: commandBar.rowPlaces)
         let w = commandBar.panelWidth
         let wf = window.frame
         // The field stays put and rows hang below it: centred as a full bar would be, so a

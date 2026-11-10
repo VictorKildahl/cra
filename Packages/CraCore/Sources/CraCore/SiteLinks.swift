@@ -21,6 +21,8 @@ public enum SiteLinks {
         case protectedMedia = "protected-media"
         /// "Learn more" under onboarding's sharing row and in Settings ▸ Privacy.
         case privacy
+        /// "here" on the command bar's search-suggestions banner (#314).
+        case commandBarNotice = "command-bar-notice"
     }
 
     /// `url` with Cra's tag when it points at crabrowser.app; any other URL (GitHub, a typo)

@@ -1087,8 +1087,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if dict["mcpStop"] != nil { MCPServer.shared.stopFromPill(); return }
             // settingsPane=max: Settings opened on that pane.
             if let p = dict["settingsPane"].flatMap(SettingsPane.init(rawValue:)) {
-                showSettingsWindow()
-                settingsController?.show(p)
+                showSettingsWindow(on: p)
                 return
             }
             // Scenario hooks (scripts/scenario.sh): what a journey needs without a pointer.
@@ -1453,7 +1452,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // The sidebar's URL field (toolbar hidden): hovered, and a press on one of its buttons (#226).
             if let v = dict["urlFieldHover"] { main.debugURLFieldHover(v == "1"); return }
             if let name = dict["urlFieldPress"] { main.debugURLFieldPress(name); return }
-            if dict["commandBarBadge"] != nil { main.debugCommandBarBadgePress(); return }
+            if let step = dict["commandBarNotice"] { main.debugCommandBarNotice(step); return }
             // Arc's translate UI (#310): what shows, and a press on its parts.
             if let step = dict["translate"] { main.debugTranslate(step); return }
             // The n-th space icon's tip, without a pointer.
@@ -2097,6 +2096,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     // MARK: Windows
+
+    /// Settings opened on `pane` (the command bar's Search Settings… opens Advanced, #314).
+    func showSettingsWindow(on pane: SettingsPane) {
+        showSettingsWindow()
+        settingsController?.show(pane)
+    }
+
+    /// Scenario readout: the Settings pane on screen, nil while Settings is closed.
+    var debugSettingsPane: String? { settingsWindow?.isVisible == true ? settingsController?.debugPane : nil }
+
+    /// A page opened in a new tab of a normal window, from a Little Window too.
+    func openInNormalWindow(_ url: String) {
+        let window = useNormalWindow()
+        _ = store.createTab(url: url, select: true, window: window.windowID)
+        window.showWindow(nil)
+    }
 
     func showSettingsWindow() {
         if settingsController == nil {

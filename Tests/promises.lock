@@ -530,7 +530,13 @@
 #310   Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::translatablePageHasTheButton  e4b3dfaf2f19
 #310   Tests/BrowserManagerLifecycleTests.swift::translationCase  3179a30235a7
 #310   Tests/Scenarios/translate.scenario  acf981ce24a3
-#314   Tests/Scenarios/command-bar-site-controls.scenario  9df68b1d6db1
+#314   Packages/CraCore/Tests/CraCoreTests/SearchSuggestionsNoticeTests.swift::aScopeOrASiteSearchTakesTheBadgesPlace  547c0b046d2b
+#314   Packages/CraCore/Tests/CraCoreTests/SearchSuggestionsNoticeTests.swift::nothingToTellWithSuggestionsOff  f767ba0f97df
+#314   Packages/CraCore/Tests/CraCoreTests/SearchSuggestionsNoticeTests.swift::theBadgeShowsUntilPressedAndNeverAfterDismiss  40f6f335a938
+#314   Packages/CraCore/Tests/CraCoreTests/SearchSuggestionsNoticeTests.swift::theBannerTakesTheLastRowsPlace  4659c381b144
+#314   Packages/CraCore/Tests/CraCoreTests/SearchSuggestionsNoticeTests.swift::theButtonsTakeTheSpacesFocusColour  65308939eabe
+#314   Packages/CraCore/Tests/CraCoreTests/SearchSuggestionsNoticeTests.swift::theDismissalIsKeptInWindowsJSON  605e3ce2449f
+#314   Tests/Scenarios/command-bar-notice.scenario  3eeac687280e
 #315   Packages/CraCore/Tests/CraCoreTests/CardFillTests.swift::fullScreenWithTheSidebarHiddenFillsTheScreen  58fb1af2d4ae
 #315   Packages/CraCore/Tests/CraCoreTests/CardFillTests.swift::theInsetStaysElsewhere  57091b70db87
 #315   Tests/FloatingSidebarTests.swift::noStandInLightsInFullScreen  5cc2f110a378

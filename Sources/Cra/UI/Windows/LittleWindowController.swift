@@ -273,6 +273,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         commandBar.onCommit = { [weak self] s, typed, mode in self?.handleCommit(s, typed: typed, mode: mode) }
         commandBar.onClose = { [weak self] in self?.hideCommandPanel() }
         commandBar.spaceName = { [weak self] id in self?.store.space(id)?.title ?? "" }
+        commandBar.onNoticeSettings = { [weak self] in self?.app.showSettingsWindow(on: .advanced) }
+        commandBar.onNoticeLearnMore = { [weak self] in self?.app.openInNormalWindow(MainWindowController.privacyPage) }
 
         // The page's sign-ins (#172). Arc's Little Arc takes the profile of the space it opens into
         // and keeps it; a Peek uses its tab's, so a shared favorite peeks in its list's profile. A
@@ -737,7 +739,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         guard !commandObserving else { return }
         commandObserving = true
         withObservationTracking {
-            _ = commandBar.result.items.count
+            _ = commandBar.rowPlaces
             _ = commandBar.isOpen
         } onChange: { [weak self] in
             Task { @MainActor in
@@ -752,7 +754,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// Arc puts the bar's top a third of the way down the window.
     private func positionCommandPanel() {
         guard let window else { return }
-        let h = CommandBarView.height(forRows: commandBar.result.items.count)
+        let h = CommandBarView.height(forRows: commandBar.rowPlaces)
         let w = commandBar.panelWidth
         let wf = window.frame
         commandPanel.setFrame(NSRect(x: wf.midX - w / 2, y: wf.maxY - wf.height / 3 - h, width: w, height: h), display: true)

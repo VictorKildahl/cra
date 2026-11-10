@@ -67,9 +67,20 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   light spaces too), white title and trailing text, a white 24 pt arrow tile with the arrow in the row colour.
   Unselected: titles (214,214,214), "Switch to Tab" / URLs (117,117,117), arrow (189,189,189) on a white-5 % tile
   12 pt from the row's edge. "Switch to Tab" shows before typing. The info badge is a 24 pt circle 21 pt from the
-  edge in the space's backgroundExtra and stays while typing. It is a button, not a picture: Arc's binary
-  names it the "command bar placeholder button that opens site control center" (CommandBarPlaceholderButtonsView,
-  #314). Cra: CommandBarView, CraCore CommandBarTones.
+  edge in the space's backgroundExtra and stays while typing. It is a button, not a picture (#314).
+  Cra: CommandBarView, CraCore CommandBarTones.
+- [O live] The (i) badge (10 Nov 2026, Arc 1.172.1 offline copy, real clicks, 2x captures, #314) is the
+  search-suggestions notice (`CommandBar.SearchSuggestionsPrivacyView`), not a Site Control Center button (the
+  binary's "placeholder button that opens site control center" is another `CommandBarPlaceholderButtonsView`
+  button; it didn't show in ⌘T). Hover does nothing. A click hides the badge and puts a black banner (opaque
+  (0,0,0), 60 pt, edge to edge, flush with the bar's bottom) in the last row's place: four rows instead of five,
+  same bar height. Inside: a 13 pt (i) circle (ink ≈115) centred 24 pt in; "We talk to your search engine to help
+  us suggest results." 13 pt bold (237) from 46.5 pt; "Learn more about your data on Arc here." 12 pt (126), "here"
+  underlined (privacy policy); Search Settings… (130.5 × 37 pt, Arc's General pane) and Dismiss (71 × 37 pt), 10 pt
+  apart and 10 pt from the edge, corners ≈5, fill (48,47,99) inside a (99,98,174) outline on the default theme
+  (focus (70,77,219)), labels (235,235,239). Dismiss writes `commandBarSearchSuggestionsPrivacyHasBeenExplicitlyDismissed`
+  = 1 and the badge never comes back. Not seen: whether an undismissed banner reopens with the bar, and the
+  badge with search suggestions off. Cra: CraCore SearchSuggestionsNotice, CommandBarView.
 - [O] Entry points: keyboardShortcutT, keyboardShortcutL, keyboardShortcutFocusSidebar, keyboardShortcutCommandOptionG,
   sidebarDoubleClick, sidebarNewTabButton, placeholderClick, littleArcPlaceholderClick, topbar, appMenu*,
   toggleBetweenTypeTravelAndCommandBar.

@@ -761,6 +761,9 @@ public struct WindowPrefs: Codable, Equatable {
     /// Arc's topAppsEmptyStateDismissedForProfiles: favorites containers whose empty-state card
     /// ("Drag to add Favorites") was closed with its ×. It stays closed.
     public var favoritesEmptyStateDismissed: Set<UUID> = []
+    /// Arc's commandBarSearchSuggestionsPrivacyHasBeenExplicitlyDismissed: Dismiss on the command bar's
+    /// "We talk to your search engine…" banner. The (i) that opens it stays gone (SearchSuggestionsNotice).
+    public var searchSuggestionsNoticeDismissed: Bool = false
     /// Closed folders that keep tabs in sight (FolderPeek): folder → its peeked tabs.
     public var peekedFolders: [UUID: [UUID]] = [:]
     /// Open browser windows, restored at launch. Never empty.
@@ -917,6 +920,7 @@ extension WindowPrefs {
         expandedFolders = try c.decodeIfPresent(Set<UUID>.self, forKey: .expandedFolders) ?? []
         collapsedPinnedSpaces = try c.decodeIfPresent(Set<UUID>.self, forKey: .collapsedPinnedSpaces) ?? []
         favoritesEmptyStateDismissed = try c.decodeIfPresent(Set<UUID>.self, forKey: .favoritesEmptyStateDismissed) ?? []
+        searchSuggestionsNoticeDismissed = try c.decodeIfPresent(Bool.self, forKey: .searchSuggestionsNoticeDismissed) ?? false
         peekedFolders = (try? c.decodeIfPresent([UUID: [UUID]].self, forKey: .peekedFolders)) ?? [:]
         if let saved = try? c.decodeIfPresent([WindowSession].self, forKey: .windows), !saved.isEmpty {
             windows = saved
