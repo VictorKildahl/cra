@@ -1,0 +1,34 @@
+# promise: #307
+# Settings ▸ Advanced "Search only the current space’s tabs" (#307, not in Arc):
+# ⌘T searches and lists the open tabs of the window's space only, typed and with nothing typed.
+# Home holds home-a and home-b (in front), Work holds work-a; after the window goes to Work the
+# bar finds work-a and none of Home's. A page open only in another space comes back as a history
+# row, which opens it here. Off (Arc's bar) finds a tab in any space (TabSearchScopeTests). The last
+# readout allows open=0: a background copy can close the bar when its window changes space.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "commandBarCurrentSpaceOnly": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Work","emoji":"💼","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+cra://open?url=${PAGE}?n=home-a
+cra://open?url=${PAGE}?n=work-a&space=A0000000-0000-0000-0000-000000000002&background=1
+cra://open?url=${PAGE}?n=home-b
+wait 2
+cra://commandbar?query=fixture
+wait 1
+cra://debug?commandBarRows=home-typed
+expect-log Cra command bar rows home-typed: open=1 .*tab:[^ ]*n=home-a
+reject-log Cra command bar rows home-typed:.*tab:[^ ]*n=work-a
+cra://dismiss
+cra://commandbar
+wait 1
+cra://debug?commandBarRows=home-empty
+expect-log Cra command bar rows home-empty: open=1 .*tab:[^ ]*n=home-a
+reject-log Cra command bar rows home-empty:.*tab:[^ ]*n=work-a
+cra://dismiss
+cra://open?url=${PAGE}?n=work-b&space=A0000000-0000-0000-0000-000000000002
+wait 2
+cra://commandbar?query=fixture
+wait 1
+cra://debug?commandBarRows=work-typed
+expect-log Cra command bar rows work-typed: open=[01] .*tab:[^ ]*n=work-a
+reject-log Cra command bar rows work-typed:.*tab:[^ ]*n=home-
+cra://dismiss
