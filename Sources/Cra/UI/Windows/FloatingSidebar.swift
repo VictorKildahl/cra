@@ -17,6 +17,8 @@ final class FloatingSidebarController {
     /// Something beside the sidebar still belongs to it (a folder preview): the pointer may leave.
     var staysShown: () -> Bool = { false }
     var palette: () -> SpacePalette
+    /// Whether the browser window is in macOS full screen; the tests stand one in.
+    lazy var windowFullScreen: () -> Bool = { [unowned self] in self.window.styleMask.contains(.fullScreen) }
     /// Called after the panel is attached so the overlay panel can be re-ordered above it.
     var didAttachPanel: (() -> Void)?
 
@@ -121,14 +123,14 @@ final class FloatingSidebarController {
     var isPolling: Bool { poll != nil }
 
     private func pointerMoved() {
-        guard NSApp.isActive, !shell.contentFullscreen, window.isVisible else { return }
+        guard NSApp.isActive, window.isVisible else { return }
         guard isShown || sidebarHidden() else { return }
         let screenPoint = NSEvent.mouseLocation
         let p = shell.convert(window.convertPoint(fromScreen: screenPoint), from: nil)
         if !isShown {
-            edgeSample(inStrip: sidebarHidden() && isKey && FloatingSidebarGeometry.shouldReveal(at: p, in: shell.bounds, edgeToEdge: shell.edgeToEdge))
+            edgeSample(inStrip: sidebarHidden() && isKey && FloatingSidebarGeometry.shouldReveal(at: p, in: shell.bounds, edgeToEdge: shell.fillsWindow))
         } else if !staysShown(), FloatingSidebarGeometry.shouldHide(at: p, in: shell.bounds, sidebarWidth: shell.sidebarWidth,
-                                                    pressedMouseButtons: NSEvent.pressedMouseButtons, edgeToEdge: shell.edgeToEdge) {
+                                                    pressedMouseButtons: NSEvent.pressedMouseButtons, edgeToEdge: shell.fillsWindow) {
             hide(animated: true)
         }
     }
@@ -412,9 +414,11 @@ final class FloatingSidebarController {
         host.layer?.cornerRadius = 0
         slider.addSubview(host)
         // The window's own traffic lights hide with the sidebar; these stand in at the
-        // same spot in the sidebar's top row.
+        // same spot in the sidebar's top row. Full screen has none: Arc's floating sidebar there
+        // starts with the toggle, as the docked one does (#315).
         if let lights = trafficLights {
             lights.setFrameOrigin(NSPoint(x: 13, y: slider.bounds.height - CraMetrics.titleRowCenter - lights.frame.height / 2))
+            lights.isHidden = windowFullScreen()
             slider.addSubview(lights, positioned: .above, relativeTo: host)
         }
         let w = Metrics.resizeHandleWidth

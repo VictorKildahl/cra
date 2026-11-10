@@ -894,6 +894,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     func browserManager(fullscreen: Bool, tabID: UUID) {
         guard let window else { return }
+        // A sidebar that came out over the page's full screen goes home when the shown one comes back (#315).
+        if !fullscreen, sidebarVisible { floatingSidebar?.hide(animated: false) }
         shell.contentFullscreen = fullscreen
         contentFullscreenTab = fullscreen ? tabID : nil
         if fullscreen, !window.styleMask.contains(.fullScreen) {
@@ -1401,7 +1403,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if !layer.masksToBounds { layer.masksToBounds = true }
         // Edge to edge the card is square, but a page window is not clipped by the main
         // window: where it meets the window's corners it takes their radius.
-        if shell.edgeToEdge {
+        if shell.fillsWindow {
             roundAtWindowCorners(layer, rect: page, flipped: cv.isFlipped)
             return
         }
@@ -1546,7 +1548,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         guard let layer = cv.layer else { return }
         layer.cornerCurve = .continuous
         layer.masksToBounds = true
-        if shell.edgeToEdge, let window {
+        if shell.fillsWindow, let window {
             roundAtWindowCorners(layer, rect: window.convertFromScreen(w.frame), flipped: cv.isFlipped)
             return
         }
@@ -1896,7 +1898,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     private func applyPeekVeil(duration: TimeInterval, timing: CAMediaTimingFunction? = nil) {
-        let look = PeekLayout.backdrop(veiled: peekVeil.isOn, edgeToEdge: shell.edgeToEdge)
+        let look = PeekLayout.backdrop(veiled: peekVeil.isOn, edgeToEdge: shell.fillsWindow)
         let content = shell.contentContainer
         let center = CGPoint(x: content.bounds.midX, y: content.bounds.midY)
         PeekTransition.scaleBackdrop(content, around: center, to: look.scale, duration: duration, timing: timing)
@@ -2338,7 +2340,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     private func setFloatingSidebar(_ show: Bool) {
         guard let floatingSidebar else { return }
-        if show { if !sidebarVisible { floatingSidebar.edgeHovered() } } else { floatingSidebar.hide(animated: true) }
+        if show { floatingSidebar.edgeHovered() } else { floatingSidebar.hide(animated: true) }
     }
 
     private func installFloatingSidebar() {
@@ -2346,7 +2348,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let f = FloatingSidebarController(shell: shell, window: window, palette: { [weak self] in
             self?.focusedSpace.theme.palette ?? SpaceTheme.presets[0].palette
         })
-        f.sidebarHidden = { [weak self] in self.map { !$0.sidebarVisible } ?? false }
+        // Also over a page in full screen, where the sidebar is out of sight (#315).
+        f.sidebarHidden = { [weak self] in
+            self.map { FloatingSidebarGeometry.mayReveal(sidebarShown: $0.sidebarVisible, pageFullscreen: $0.shell.contentFullscreen) } ?? false
+        }
         f.staysShown = { FolderPreviewController.shared.isOpen }
         f.didAttachPanel = { [weak self] in
             // Keep the find bar above the floating sidebar.

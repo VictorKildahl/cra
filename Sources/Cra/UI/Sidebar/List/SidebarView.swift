@@ -365,7 +365,7 @@ final class SidebarTopBarView: NSView {
 
     override var isFlipped: Bool { true }
 
-    // The floating panel and the window place the toggle differently in fullscreen.
+    // Moving between the window and the floating panel lays the header out again.
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         needsLayout = true
@@ -482,9 +482,10 @@ final class SidebarTopBarView: NSView {
         // A drag across 212 pt swaps the header's layout (#287).
         if SidebarHeaderLayout.isNarrow(width: Double(w)) != narrowWidth { apply() }
         // Row 1: 71 pt for the traffic lights, then the toggle. In fullscreen the lights are gone and
-        // Arc draws it from 20 pt in (glyph 20–38.5 pt); the floating panel draws stand-in lights.
+        // Arc draws it from 20 pt in (glyph 20–38.5 pt), in the floating panel too (#315); a windowed
+        // floating panel draws stand-in lights.
         // It moves left to stay 2 pt clear of ← when the sidebar is just wide enough for both.
-        let lights = !fullscreen || window?.parent != nil
+        let lights = !fullscreen
         let nav = toggleShown ? Array(rowButtons.dropFirst()) : rowButtons
         let afterLights: CGFloat = lights ? 6 + 71 + 2 : 13
         if toggleShown, let t = rowButtons.first {

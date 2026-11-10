@@ -3884,3 +3884,25 @@ Visual references: paired YouTube Music footage in dark spaces and light-theme s
 - Pending: full-window coverage at both 1x and 2x and the remaining states in
   [release-checklist.md](release-checklist.md#sidebar-tabs-and-the-command-bar). The captures provide
   qualitative comparisons; exact particle timing and display-scale coverage remain unverified.
+
+## Full screen: the page edge to edge, the sidebar over it (Arc 1.172.1, 10 Nov 2026, GitHub #315, offline Arc on a fake home)
+Offline Arc, View ▸ Enter Full Screen and View ▸ Hide Sidebar over AX, the pointer moved with cliclick; screen
+captures on a 1920 × 1080 display at 1x and on the built-in display at 2x. A local page asks for element full
+screen on a click.
+- [O] Full screen, sidebar shown: the card keeps the window's 10 pt inset and its rounding (1x: card at
+  x 228–1910, y 10–1070 beside a 228 pt sidebar).
+- [O] Full screen, sidebar hidden: the card fills the screen, square, with no inset and no shadow; the toolbar
+  runs along the screen's top edge. A window keeps the 10 pt inset with the sidebar hidden (25 Oct, above).
+- [O] With the sidebar hidden in full screen, the pointer at the left edge (1–2 pt in, moving) brings the
+  floating sidebar out over the page, which doesn't move; it goes when the pointer moves away.
+- [O] A page in element full screen (Cra's `contentFullscreen`): the same edge brings the floating sidebar out
+  over it too.
+- [O] The floating sidebar in full screen has no traffic lights: its toggle glyph is 20–38 pt into the panel, as
+  in the docked full-screen sidebar. The panel sits 5 pt in, with a 1 px light rim (1x).
+- [U] A sidebar shown before a page went element full screen: whether the edge brings it out then. Cra lets it.
+- Cra: CraCore `CardFill.fillsWindow` (edge to edge, or full screen with the sidebar hidden) sets the card's
+  inset, rounding and shadow, the page windows' corners, Peek's backdrop and the 5 pt reveal strip;
+  `FloatingSidebarGeometry.mayReveal` lets the edge reveal over a full-screen page; the floating panel draws
+  its stand-in lights only outside full screen. `cra://debug?windowState` reports the card's insets
+  (`card=l,b,r,t rRadius fills=0|1`); `fullscreen-hidden-sidebar.scenario` checks all three states. Cra's
+  panel still sits 8 pt in (Arc 5), as before.

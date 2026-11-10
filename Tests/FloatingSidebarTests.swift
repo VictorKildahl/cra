@@ -7,6 +7,7 @@ enum FloatingSidebarTests {
     @MainActor
     static func main() {
         geometry()
+        revealsOverAFullscreenPage()
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
         let window = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 1400, height: 880),
@@ -96,6 +97,7 @@ enum FloatingSidebarTests {
                "an uninterrupted hide still reattaches the sidebar normally")
 
         onlyTheKeyWindowReveals(window: window, sidebar: sidebar, panel: panel)
+        noStandInLightsInFullScreen(sidebar: sidebar, panel: panel)
 
         // #136: the pointer is sampled only while Cra is the active app.
         sidebar.install()
@@ -173,6 +175,22 @@ enum FloatingSidebarTests {
         }
     }
 
+    // promise: #315
+    /// GitHub #315: the hidden sidebar comes out at the left edge over a page in full screen (a video),
+    /// as in Arc 1.172.1 (offline copy, 10 Nov 2026: the floating sidebar over a full-screen element).
+    /// A sidebar shown beside the page is out of sight while the page is full screen, so it may come
+    /// out then too (inferred, not measured).
+    private static func revealsOverAFullscreenPage() {
+        expect(FloatingSidebarGeometry.mayReveal(sidebarShown: false, pageFullscreen: true),
+               "the hidden sidebar comes out over a page in full screen")
+        expect(FloatingSidebarGeometry.mayReveal(sidebarShown: true, pageFullscreen: true),
+               "a shown sidebar, out of sight under the page's full screen, comes out too")
+        expect(FloatingSidebarGeometry.mayReveal(sidebarShown: false, pageFullscreen: false),
+               "the hidden sidebar comes out in a window")
+        expect(!FloatingSidebarGeometry.mayReveal(sidebarShown: true, pageFullscreen: false),
+               "a sidebar beside the page doesn't float")
+    }
+
     // promise: #293
     /// GitHub #293: the hidden sidebar is less jumpy, as in Arc 1.172.1 (120 fps, 9 Nov 2026). The pointer
     /// waits 0.1 s in the strip before it comes out, so brushing the edge doesn't flash it; it stays out
@@ -244,6 +262,25 @@ enum FloatingSidebarTests {
         expect(sidebar.isShown && shadow?.parent === window, "the shadow comes back with the sidebar")
     }
 
+    // promise: #315
+    /// GitHub #315: in full screen Arc's floating sidebar has no traffic lights (Arc 1.172.1, offline
+    /// copy, 10 Nov 2026: the toggle 20 pt into the panel, as in the docked full-screen sidebar); in a
+    /// window it draws them where the hidden window's lights were.
+    @MainActor
+    private static func noStandInLightsInFullScreen(sidebar: FloatingSidebarController, panel: NSWindow) {
+        func lightsShown() -> Bool {
+            shell_slider(panel)?.subviews.contains { $0 is FloatingTrafficLights && !$0.isHidden } == true
+        }
+        sidebar.show()
+        expect(lightsShown(), "a windowed floating sidebar draws stand-in lights")
+        sidebar.hide(animated: false)
+        sidebar.windowFullScreen = { true }
+        sidebar.show()
+        expect(!lightsShown(), "a full-screen floating sidebar has no lights")
+        sidebar.hide(animated: false)
+        sidebar.windowFullScreen = { false }
+    }
+
     /// The view that slides inside the sidebar panel.
     @MainActor
     private static func shell_slider(_ panel: NSWindow) -> NSView? {
@@ -299,6 +336,8 @@ final class ShellView: NSView {
     var sidebarResizable = true
     var contentFullscreen = false
     var edgeToEdge = false
+    /// The app's: edge to edge, or full screen with the sidebar hidden (#315).
+    var fillsWindow: Bool { edgeToEdge }
     var sidebarDetached = false
     var floatingSidebar = false
     struct Frames { let sidebar: NSRect }

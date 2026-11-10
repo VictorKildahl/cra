@@ -19,7 +19,7 @@ final class ShellView: NSView {
     /// so NSVisualEffectView, and with it Arc's sidebar, swaps its capture for the desktop
     /// tint (CAChameleonLayer). We do the same (GitHub #83).
     private var desktopTintLayer: CALayer?
-    var windowFullscreen = false { didSet { if windowFullscreen != oldValue { refreshLift() } } }
+    var windowFullscreen = false { didSet { if windowFullscreen != oldValue { refreshLift(); needsLayout = true } } }
     /// AppKit's answer to whether the window draws its active look (MainWindowController.materialActiveNow).
     let activeAppearance = ActiveAppearanceProbe()
     private var loggedBackdrop: String?
@@ -123,6 +123,19 @@ final class ShellView: NSView {
     var contentFullscreen = false { didSet { needsLayout = true } }
     /// Settings ▸ "Pages fill the window edge to edge" (GitHub #24): no margin, square cards.
     var edgeToEdge = false { didSet { needsLayout = true } }
+    /// The card fills the window: edge to edge, or full screen with the sidebar hidden, as in Arc
+    /// (CraCore CardFill, #315), or a page in full screen.
+    var fillsWindow: Bool { contentFullscreen || fills(sidebarVisible: sidebarVisible) }
+    private func fills(sidebarVisible: Bool) -> Bool {
+        CardFill.fillsWindow(edgeToEdge: edgeToEdge, fullScreen: windowFullscreen, sidebarShown: sidebarVisible)
+    }
+    /// For `cra://debug?windowState`: how far the card sits from the window's left, bottom, right and
+    /// top edges, its corner radius and whether it fills the window, e.g. `0,0,0,0 r0 fills=1`.
+    var cardReadout: String {
+        let f = contentContainer.frame
+        return String(format: "%.0f,%.0f,%.0f,%.0f r%.0f fills=%d", f.minX, f.minY, bounds.maxX - f.maxX, bounds.maxY - f.maxY,
+                      cardCornerRadius, fillsWindow ? 1 : 0)
+    }
     /// Whether a lone page has a bar: the toolbar, or the developer bar on a Developer Mode site
     /// (AppSettings.showsBar(above:), #185).
     var showToolbar = true { didSet { needsLayout = true } }
@@ -591,11 +604,11 @@ final class ShellView: NSView {
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
         let p = convert(event.locationInWindow, from: nil)
-        guard !sidebarVisible, !contentFullscreen else { return }
-        if !floatingSidebar, FloatingSidebarGeometry.shouldReveal(at: p, in: bounds, edgeToEdge: edgeToEdge) {
+        guard FloatingSidebarGeometry.mayReveal(sidebarShown: sidebarVisible, pageFullscreen: contentFullscreen) else { return }
+        if !floatingSidebar, FloatingSidebarGeometry.shouldReveal(at: p, in: bounds, edgeToEdge: fillsWindow) {
             onEdgeHover?(true)
         } else if floatingSidebar, FloatingSidebarGeometry.shouldHide(at: p, in: bounds, sidebarWidth: sidebarWidth,
-                                                                     pressedMouseButtons: NSEvent.pressedMouseButtons, edgeToEdge: edgeToEdge) {
+                                                                     pressedMouseButtons: NSEvent.pressedMouseButtons, edgeToEdge: fillsWindow) {
             onEdgeHover?(false)
         }
     }
@@ -628,9 +641,10 @@ final class ShellView: NSView {
                           handle: .zero, content: b, cornerRadius: 0, sidebarCorner: 0)
         }
         // Edge to edge the card fills what the sidebar leaves, square; the window's own
-        // corners round it where they meet.
-        let inset = edgeToEdge ? 0 : CraMetrics.contentInset
-        let radius = edgeToEdge ? 0 : CraMetrics.contentCornerRadius
+        // corners round it where they meet. Full screen with the sidebar hidden too (Arc, #315).
+        let fill = fills(sidebarVisible: sidebarVisible)
+        let inset = fill ? 0 : CraMetrics.contentInset
+        let radius = fill ? 0 : CraMetrics.contentCornerRadius
         if sidebarVisible {
             let content = NSRect(x: width, y: inset, width: max(0, b.width - width - inset), height: max(0, b.height - 2 * inset))
             return Frames(sidebar: NSRect(x: 0, y: 0, width: width, height: b.height),
@@ -717,10 +731,10 @@ final class ShellView: NSView {
         for c in paneCards {
             c.showToolbar = toolbarVisible
             // Arc's cards cast a soft shadow on the window; edge to edge there is no margin for it.
-            c.castsShadow = !edgeToEdge && !contentFullscreen
+            c.castsShadow = !fillsWindow && !contentFullscreen
             // Several panes: every card is rounded; a single card follows the window state (square in fullscreen).
             // Edge to edge every card is square.
-            c.cornerRadius = paneCards.count > 1 && !edgeToEdge ? CraMetrics.contentCornerRadius : cardCornerRadius
+            c.cornerRadius = paneCards.count > 1 && !fillsWindow ? CraMetrics.contentCornerRadius : cardCornerRadius
             if !animatingPanes, let f = layout.frames[c.tabID] {
                 if animated { c.animator().frame = f } else if c.frame != f { c.frame = f }
             }
@@ -792,8 +806,8 @@ final class ShellView: NSView {
         let gap = SplitPaneLayout.Constants.gap
         let f = NSRect(x: cb.maxX - w, y: cb.minY, width: w, height: cb.height)
         if sidePanel.frame != f { sidePanel.frame = f }
-        sidePanel.cornerRadius = edgeToEdge ? 0 : CraMetrics.contentCornerRadius
-        sidePanel.castsShadow = !edgeToEdge
+        sidePanel.cornerRadius = fillsWindow ? 0 : CraMetrics.contentCornerRadius
+        sidePanel.castsShadow = !fillsWindow
         sidePanel.layoutSubtreeIfNeeded()
         // The handle covers the gap and reaches a little into the cards on both sides.
         sidePanelHandle.frame = NSRect(x: f.minX - gap - 3, y: cb.minY, width: gap + 6, height: cb.height)

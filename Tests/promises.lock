@@ -526,6 +526,11 @@
 #307   Tests/Scenarios/command-bar-space-scope.scenario  0b4de914ffa4
 #308   Tests/Scenarios/fullscreen-window-chrome.scenario  387fa799cbb9
 #314   Tests/Scenarios/command-bar-site-controls.scenario  9df68b1d6db1
+#315   Packages/CraCore/Tests/CraCoreTests/CardFillTests.swift::fullScreenWithTheSidebarHiddenFillsTheScreen  58fb1af2d4ae
+#315   Packages/CraCore/Tests/CraCoreTests/CardFillTests.swift::theInsetStaysElsewhere  57091b70db87
+#315   Tests/FloatingSidebarTests.swift::noStandInLightsInFullScreen  5cc2f110a378
+#315   Tests/FloatingSidebarTests.swift::revealsOverAFullscreenPage  5fbe0fb46aab
+#315   Tests/Scenarios/fullscreen-hidden-sidebar.scenario  89e6bb41266c
 #316   Packages/CraCore/Tests/CraCoreTests/LittleWindowTargetTests.swift::aDeletedSpaceIsForgotten  5864303b2c55
 #316   Packages/CraCore/Tests/CraCoreTests/LittleWindowTargetTests.swift::aPickedSpaceStaysAndCarriesToTheNextLittleWindow  72a239324df4
 #316   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::followsTheDisplayWhenItIsRearranged  a6a666786be3

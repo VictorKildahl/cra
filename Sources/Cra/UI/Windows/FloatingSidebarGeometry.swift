@@ -20,6 +20,14 @@ enum FloatingSidebarGeometry {
     /// reveal at all (GitHub #293). Cra revealed on the first sample, so passing the edge made it flicker.
     static let revealDwell: TimeInterval = 0.1
 
+    /// Whether the pointer may bring the sidebar out at all: the sidebar is hidden, or a page is in full
+    /// screen over it. Arc 1.172.1 brings it out over a full-screen element (a video) as well (offline
+    /// copy, 10 Nov 2026, GitHub #315); Cra left it in. A sidebar shown beside the page is out of sight
+    /// while the page is full screen, so it comes out then too (inferred, not measured).
+    static func mayReveal(sidebarShown: Bool, pageFullscreen: Bool) -> Bool {
+        !sidebarShown || pageFullscreen
+    }
+
     static func shouldReveal(at point: CGPoint, in bounds: CGRect, edgeToEdge: Bool = false) -> Bool {
         point.y >= bounds.minY && point.y <= bounds.maxY
             && point.x >= bounds.minX - revealOutside && point.x <= bounds.minX + (edgeToEdge ? revealInsideEdgeToEdge : revealInside)
