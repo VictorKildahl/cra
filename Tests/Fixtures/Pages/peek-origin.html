@@ -1,0 +1,19 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Peek origin</title>
+<!-- Where a Peek grows from (GitHub #359): a link in the page, one in an open shadow root (as
+     Reddit's posts) and one in a closed shadow root, which no page script can see into. -->
+<style>
+  body { margin: 0; font: 16px -apple-system, sans-serif; }
+  .spot { position: fixed; width: 20vw; height: 10vh; }
+  a { display: block; width: 100%; height: 100%; background: #dde; }
+</style>
+<div class="spot" style="left: 10vw; top: 10vh"><a id="plain" href="https://example.com/plain">plain</a></div>
+<div class="spot" id="open" style="left: 10vw; top: 40vh"></div>
+<div class="spot" id="closed" style="left: 60vw; top: 40vh"></div>
+<script>
+  for (const [id, mode] of [["open", "open"], ["closed", "closed"]]) {
+    const root = document.getElementById(id).attachShadow({ mode });
+    root.innerHTML = `<style>a { display: block; width: 100%; height: 100%; background: #ede; }</style><a href="https://example.com/${id}">${id}</a>`;
+  }
+</script>

@@ -184,11 +184,13 @@ final class PeekControlButton: NSView {
 }
 
 /// The link a Peek came from: where it is in the browser window (window coordinates) and a picture
-/// of it, at the window's scale (MainWindowController.peekSource).
+/// of it, at the window's scale (MainWindowController.peekSource). Not `fromLink`: the page couldn't
+/// name the link, and `rect` is where it was clicked (#359), which the Peek closes back into.
 struct PeekSource {
     let tabID: UUID
     let rect: NSRect
     let image: CGImage?
+    let fromLink: Bool
     /// How long a Peek waits for Chromium's answers before it opens or closes without them.
     static let wait: TimeInterval = 0.09
 

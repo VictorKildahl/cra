@@ -153,6 +153,48 @@ struct PeekLayoutTests {
         #expect(PeekLayout.source(fraction: CGRect(x: 0.5, y: -0.02, width: 0.1, height: 0.05), in: page)?.maxY == page.maxY)
     }
 
+    // MARK: Where it grows from when the page can't say (GitHub #359)
+
+    static let page = CGRect(x: 347, y: 0, width: 1381, height: 1084)
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/359")) func aLinkThePageFoundWins() {
+        #expect(PeekLayout.origin(link: Self.link, pointer: CGPoint(x: 900, y: 500), sinceMouseDown: 0.1, page: Self.page) == .link(Self.link))
+        #expect(PeekLayout.origin(link: Self.link, pointer: nil, sinceMouseDown: .infinity, page: Self.page) == .link(Self.link))
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/359")) func aClickThePageCantPlaceGrowsFromThePointer() {
+        // A link in a shadow root the page script can't open, in another site's frame, or a page too
+        // busy to answer in time: the click was still on the link, so the card grows from there,
+        // not from the window's whole area.
+        let p = CGPoint(x: 900, y: 500)
+        let o = PeekLayout.origin(link: nil, pointer: p, sinceMouseDown: 0.2, page: Self.page)
+        #expect(o == .click(CGRect(x: 890, y: 490, width: 20, height: 20)))
+        #expect(o?.rect.size == PeekLayout.clickSourceSize)
+        // Kept on the page near its edge.
+        let edge = PeekLayout.origin(link: nil, pointer: CGPoint(x: Self.page.minX + 2, y: Self.page.maxY - 1), sinceMouseDown: 0.2, page: Self.page)
+        #expect(edge.map { Self.page.contains($0.rect) } == true)
+        #expect(edge?.rect.size == PeekLayout.clickSourceSize)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/359")) func noClickNoLinkStillGrowsFromTheArea() {
+        // Return on a link nobody focused, or a page's own window.open: no click to grow from, so the
+        // whole area, as before (withoutALinkItGrowsFromTheArea).
+        let p = CGPoint(x: 900, y: 500)
+        #expect(PeekLayout.origin(link: nil, pointer: p, sinceMouseDown: PeekLayout.clickRecency + 0.01, page: Self.page) == nil)
+        #expect(PeekLayout.origin(link: nil, pointer: nil, sinceMouseDown: 0.1, page: Self.page) == nil)
+        // The pointer off the page (on the sidebar) is not where the link was.
+        #expect(PeekLayout.origin(link: nil, pointer: CGPoint(x: 100, y: 500), sinceMouseDown: 0.1, page: Self.page) == nil)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/359")) func theScriptLooksInsideShadowRoots() {
+        // Reddit's post links sit in open shadow roots: elementFromPoint and activeElement stop at the
+        // host, and closest() never leaves a root. The script goes in, and back out through hosts.
+        let s = PeekLayout.sourceScript(pointer: CGPoint(x: 0.25, y: 0.5))
+        #expect(s.contains(".shadowRoot"))
+        #expect(s.contains(".host"))
+        #expect(!s.contains("e.closest("))
+    }
+
     @Test func scriptAnswersParse() {
         #expect(PeekLayout.fraction(fromScript: ["x": 0.1, "y": 0.2, "width": 0.05, "height": 0.03]) == CGRect(x: 0.1, y: 0.2, width: 0.05, height: 0.03))
         #expect(PeekLayout.fraction(fromScript: ["x": "0.1", "y": 0.2, "width": 0.05, "height": 0.03]) == nil)

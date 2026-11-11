@@ -1404,6 +1404,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
+            // peekFrom=<label>&x=&y=[&clicked=1]: where a Peek from the selected tab would grow from with
+            // the pointer at x, y (fractions of the page, y down), just clicked or resting: "link W×H",
+            // "click W×H" or "area" (#359).
+            if let label = dict["peekFrom"] {
+                let x = dict["x"].flatMap(Double.init) ?? 0.5, y = dict["y"].flatMap(Double.init) ?? 0.5
+                main.peekSourceReadout(x: x, y: y, clicked: dict["clicked"] == "1") { CraLog.note("peek from \(label): \($0)") }
+                return
+            }
             // peekCatcher=<label>: whether the shown Peek's click catcher leaves the sidebar alone (#242).
             if let label = dict["peekCatcher"] {
                 for m in mainWindows { NSLog("Cra peek catcher %@: %@", label, m.peekCatcherReadout()) }

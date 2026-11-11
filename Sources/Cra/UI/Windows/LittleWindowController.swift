@@ -810,7 +810,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         var started = false
         // The card's screenshot and the link's place now, asked together.
         var shot: CGImage??
-        var linkNow: NSRect?? = peekSource == nil ? .some(nil) : nil
+        // No link to look for again: the area, or the place the Peek was clicked open (#359).
+        var linkNow: NSRect?? = peekSource.map { $0.fromLink ? nil : .some($0.rect) } ?? .some(nil)
         let start: (CGImage?) -> Void = { [weak self] page in
             guard let self, !started else { return }
             started = true
@@ -846,7 +847,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             guard !started, timedOut || (shot != nil && linkNow != nil) else { return }
             start(shot ?? nil)
         }
-        if let source = peekSource {
+        if let source = peekSource, source.fromLink {
             parent.peekSourceAgain(source) { r in
                 if linkNow == nil { linkNow = .some(r) }
                 ready(false)

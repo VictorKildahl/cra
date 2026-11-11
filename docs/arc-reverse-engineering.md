@@ -3399,9 +3399,12 @@ links, A near the top left and B near the bottom right, real HID Shift-clicks (`
 - Cra: PeekLayout.opening / closing / content / column (CraCore) sample the motion; PeekTransition plays it as
   Core Animation keyframes at 120 Hz. MainWindowController.peekSource finds the link under the pointer (else
   the focused link) with a script in Cra's isolated world and cuts its picture out of Chromium's screenshot,
-  within 90 ms; without one (or in a WebKit tab) the card grows from the whole area and fades itself, as from
-  Arc's page-sized link. Closing asks where the link is now (the page may have scrolled) and goes back there;
-  out to the whole area when it's gone. Recorded the same way in a test copy: the card's left edge went .65,
+  within 90 ms. The script looks inside open shadow roots (Reddit's post links, GitHub #359). When it finds no
+  link but a mouse button went down on the page under a second ago (a closed shadow root, another site's
+  frame, a page too busy to answer in time), the card grows from a 20 pt square at the click, fading itself,
+  and closes back there (PeekLayout.origin). With neither (or in a WebKit tab) the card grows from the whole
+  area and fades itself, as from Arc's page-sized link. Closing asks where the link is now (the page may have
+  scrolled) and goes back there; out to the whole area when it's gone. Recorded the same way in a test copy: the card's left edge went .65,
   .77, .84, .91, .93, .98 of the way a frame apart (Arc .60, .77, .85, .91, .95, .97), its bottom edge .34,
   .59, .71, .80, .87, .91 (Arc .31, .54, .73, .82, .89, .94), and it closed back into the link.
 

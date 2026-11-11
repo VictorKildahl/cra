@@ -1,0 +1,20 @@
+# A Peek grows out of the link it was clicked open from and closes back into it (Arc, #204). Reddit
+# keeps its post links in shadow roots, where the page script didn't look, and those Peeks grew from
+# the window's whole area instead. The script now looks inside open shadow roots; a link it still
+# can't see (a closed root, another site's frame, a page too slow to answer) grows from the click.
+# Without a click or a link (a script's window.open) it is still the whole area (GitHub #359).
+# promise: #359
+budget rss=900 stalls50=40
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+
+cra://open?url=${ORIGIN}/peek-origin.html
+wait 2
+
+cra://debug?peekFrom=plain&x=0.2&y=0.15
+expect-log peek from plain: link \d+×\d+$
+cra://debug?peekFrom=open&x=0.2&y=0.45
+expect-log peek from open: link \d+×\d+$
+cra://debug?peekFrom=closed&x=0.7&y=0.45&clicked=1
+expect-log peek from closed: click 20×20$
+cra://debug?peekFrom=resting&x=0.7&y=0.45
+expect-log peek from resting: area$

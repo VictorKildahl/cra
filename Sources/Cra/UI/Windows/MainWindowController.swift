@@ -1894,10 +1894,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// The link a Peek opens from (GitHub #204): Arc grows the card out of it and closes it back in.
     /// The link under the pointer in `tabID`'s page, else the page's focused link, found by
-    /// PeekLayout's script in Cra's isolated world, with a picture of it cut from Chromium's
-    /// screenshot. Answers within `PeekSource.wait` whatever Chromium does: nil without a link (the
-    /// Peek then grows from the whole area), no picture when the screenshot is late.
-    func peekSource(fromTab tabID: UUID?, completion: @escaping (PeekSource?) -> Void) {
+    /// PeekLayout's script in Cra's isolated world (inside open shadow roots too), with a picture of
+    /// it cut from Chromium's screenshot. Answers within `PeekSource.wait` whatever Chromium does.
+    /// When the page names no link but the Peek came from a click on it (a closed shadow root,
+    /// another site's frame, a page too busy to answer), the card grows from the click instead
+    /// (GitHub #359); with neither, nil, and it grows from the whole area. No picture when the
+    /// screenshot is late. `pointer` (screen coordinates) and `sinceMouseDown` stand in for the
+    /// mouse's own for cra://debug?peekFrom.
+    func peekSource(fromTab tabID: UUID?, pointer: NSPoint? = nil, sinceMouseDown: Double? = nil,
+                    completion: @escaping (PeekSource?) -> Void) {
         guard let tabID, let window, let rt = browsers.runtimes[tabID], let host = rt.hostWindow, host.parent === window,
               host.isVisible, rt.browser.isCreated, !rt.browser.isClosed else {
             CraLog.note("peek: from the whole area (no page to find the link in)")
@@ -1905,30 +1910,38 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             return
         }
         let completion: (PeekSource?) -> Void = { source in
-            CraLog.note(source.map { "peek: from a link at \(Int($0.rect.minX)),\(Int($0.rect.minY)) \(Int($0.rect.width))×\(Int($0.rect.height))\($0.image == nil ? ", no picture" : "")" }
+            CraLog.note(source.map { "peek: from \($0.fromLink ? "a link" : "the click") at \(Int($0.rect.minX)),\(Int($0.rect.minY)) \(Int($0.rect.width))×\(Int($0.rect.height))\($0.fromLink && $0.image == nil ? ", no picture" : "")" }
                 ?? "peek: from the whole area (no link under the pointer or focused)")
             completion(source)
         }
         let pageFrame = host.frame
-        let m = NSEvent.mouseLocation
-        let pointer = pageFrame.contains(m)
+        let m = pointer ?? NSEvent.mouseLocation
+        let clickAge = sinceMouseDown ?? CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .leftMouseDown)
+        let fractionPointer = pageFrame.contains(m)
             ? CGPoint(x: (m.x - pageFrame.minX) / pageFrame.width, y: (pageFrame.maxY - m.y) / pageFrame.height) : nil
         var fraction: CGRect??
         var picture: CGImage??
         var answered = false
         let finish: (Bool) -> Void = { [weak window] timedOut in
             guard !answered, let window else { return }
-            guard case .some(let found) = fraction else {
-                if timedOut { answered = true; completion(nil) }
-                return
-            }
-            if picture == nil, !timedOut { return }
+            if fraction == nil, !timedOut { return }
+            // The picture is only for a link: without one, the click or the area needs none.
+            if picture == nil, !timedOut, (fraction ?? nil) != nil { return }
             answered = true
-            guard let found, let rect = PeekLayout.source(fraction: found, in: window.convertFromScreen(pageFrame)) else { completion(nil); return }
-            let image = (picture ?? nil).flatMap { PeekSource.crop($0, to: found) }
-            completion(PeekSource(tabID: tabID, rect: rect, image: image))
+            let page = window.convertFromScreen(pageFrame)
+            let found = fraction ?? nil
+            let link = found.flatMap { PeekLayout.source(fraction: $0, in: page) }
+            switch PeekLayout.origin(link: link, pointer: window.convertPoint(fromScreen: m), sinceMouseDown: clickAge, page: page) {
+            case .link(let rect)?:
+                let image = (found.flatMap { f in (picture ?? nil).flatMap { PeekSource.crop($0, to: f) } })
+                completion(PeekSource(tabID: tabID, rect: rect, image: image, fromLink: true))
+            case .click(let rect)?:
+                completion(PeekSource(tabID: tabID, rect: rect, image: nil, fromLink: false))
+            case nil:
+                completion(nil)
+            }
         }
-        let script = PeekLayout.sourceScript(pointer: pointer)
+        let script = PeekLayout.sourceScript(pointer: fractionPointer)
         let params = (try? JSONSerialization.data(withJSONObject: ["expression": script, "returnByValue": true]))
             .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
         rt.browser.evaluate(inIsolatedWorld: PageScript.world, params: params) { result, _ in
@@ -1940,6 +1953,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             DispatchQueue.main.async { if picture == nil { picture = .some(image) }; finish(false) }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + PeekSource.wait) { finish(true) }
+    }
+
+    /// cra://debug?peekFrom: where a Peek from the selected tab would grow from with the pointer at
+    /// `x`, `y` (fractions of the page, y down), `clicked` or resting there: "link W×H", "click W×H"
+    /// or "area" (#359).
+    func peekSourceReadout(x: Double, y: Double, clicked: Bool, completion: @escaping (String) -> Void) {
+        guard let tab = selectedTab?.id, let host = browsers.runtimes[tab]?.hostWindow else { completion("no page"); return }
+        let f = host.frame
+        let pointer = NSPoint(x: f.minX + x * f.width, y: f.maxY - y * f.height)
+        peekSource(fromTab: tab, pointer: pointer, sinceMouseDown: clicked ? 0 : .infinity) { source in
+            completion(source.map { "\($0.fromLink ? "link" : "click") \(Int($0.rect.width.rounded()))×\(Int($0.rect.height.rounded()))" } ?? "area")
+        }
     }
 
     /// Where the link a Peek came from is now (the page may have scrolled), in this window's

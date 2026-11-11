@@ -190,19 +190,55 @@ public enum PeekLayout {
         return r.isNull || r.width < 1 || r.height < 1 ? nil : r
     }
 
+    /// Where a Peek grows from and closes back into: the link the page found, or the place it was
+    /// clicked when the page couldn't say which link that was (GitHub #359).
+    public enum Origin: Equatable, Sendable {
+        case link(CGRect)
+        case click(CGRect)
+        public var rect: CGRect {
+            switch self { case .link(let r), .click(let r): r }
+        }
+    }
+
+    /// The square a Peek grows from at the click when its link can't be found: about a line of link text.
+    public static let clickSourceSize = CGSize(width: 20, height: 20)
+    /// How recent a mouse-down must be for the pointer to be where the Peek's link was clicked.
+    public static let clickRecency: Double = 1
+
+    /// Where a Peek grows from (all in window coordinates; `page` is the page's view): the `link` the
+    /// page found; else, when a mouse button went down less than `clickRecency` ago
+    /// (`sinceMouseDown`, seconds) with the `pointer` on the page, a `clickSourceSize` square there,
+    /// kept on the page; else nil, the whole area. The page can miss a link the user clicked: one in
+    /// a closed shadow root or another site's frame, or a page too busy to answer in time
+    /// (`PeekSource.wait`). Without a click (Return on an unfocused link, a script's window.open)
+    /// the pointer is only where it rests.
+    public static func origin(link: CGRect?, pointer: CGPoint?, sinceMouseDown: Double, page: CGRect) -> Origin? {
+        if let link { return .link(link) }
+        guard let pointer, sinceMouseDown < clickRecency, page.contains(pointer),
+              page.width >= clickSourceSize.width, page.height >= clickSourceSize.height else { return nil }
+        let w = clickSourceSize.width, h = clickSourceSize.height
+        let x = min(max(pointer.x - w / 2, page.minX), page.maxX - w)
+        let y = min(max(pointer.y - h / 2, page.minY), page.maxY - h)
+        return .click(CGRect(x: x, y: y, width: w, height: h))
+    }
+
     /// The page script that finds the link a Peek opens from: the link under `pointer` (fractions
-    /// of the view, y down; nil without one), else the focused one (Return on a link). Its answer
-    /// is the link's rect in fractions of the visual viewport, or null. It keeps the link for
-    /// `sourceAgainScript`. Runs in Cra's isolated world, where the page can't replace the DOM's
-    /// functions.
+    /// of the view, y down; nil without one), else the focused one (Return on a link). Both are
+    /// looked for inside open shadow roots, where sites built from web components keep their links
+    /// (Reddit's posts, GitHub #359). Its answer is the link's rect in fractions of the visual
+    /// viewport, or null. It keeps the link for `sourceAgainScript`. Runs in Cra's isolated world,
+    /// where the page can't replace the DOM's functions.
     public static func sourceScript(pointer: CGPoint?) -> String {
         let x = pointer.map { "\(Double($0.x))" } ?? "NaN", y = pointer.map { "\(Double($0.y))" } ?? "NaN"
         return """
         (() => {
           const vv = visualViewport;
-          const link = e => e && e.closest && e.closest('a[href], area[href]');
-          let a = isFinite(\(x)) ? link(document.elementFromPoint(\(x) * vv.width + vv.offsetLeft, \(y) * vv.height + vv.offsetTop)) : null;
-          if (!a) a = link(document.activeElement);
+          const up = e => e.parentElement || (e.parentNode && e.parentNode.host) || null;
+          const link = e => { for (; e; e = up(e)) if (e.matches && e.matches('a[href], area[href]')) return e; return null; };
+          const deep = find => { let e = find(document); while (e && e.shadowRoot) { const i = find(e.shadowRoot); if (!i || i === e) break; e = i; } return e; };
+          const px = \(x) * vv.width + vv.offsetLeft, py = \(y) * vv.height + vv.offsetTop;
+          let a = isFinite(px) ? link(deep(r => r.elementFromPoint(px, py))) : null;
+          if (!a) a = link(deep(r => r.activeElement));
           window.__craPeekSource = a || null;
           return a ? \(sourceRectJS) : null;
         })()

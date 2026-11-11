@@ -637,5 +637,10 @@
 #356   Tests/Scenarios/picked-tabs-menu.scenario  4a41e1119a25
 #357   Packages/CraCore/Tests/CraCoreTests/FolderShareLinkTests.swift::sharesTheFolderAsTheSidebarShowsIt  c6c447a9a8f8
 #357   Packages/CraCore/Tests/CraCoreTests/FolderShareLinkTests.swift::versionOneStillOpens  6a2b1a89faba
+#359   Packages/CraCore/Tests/CraCoreTests/PeekLayoutTests.swift::aClickThePageCantPlaceGrowsFromThePointer  c1c7baa978b8
+#359   Packages/CraCore/Tests/CraCoreTests/PeekLayoutTests.swift::aLinkThePageFoundWins  f2c298126543
+#359   Packages/CraCore/Tests/CraCoreTests/PeekLayoutTests.swift::noClickNoLinkStillGrowsFromTheArea  b6cc083cb5dc
+#359   Packages/CraCore/Tests/CraCoreTests/PeekLayoutTests.swift::theScriptLooksInsideShadowRoots  04cd51ba759d
+#359   Tests/Scenarios/peek-origin.scenario  b4ac690a0977
 #362   Packages/CraCore/Tests/CraCoreTests/WebsiteAppearanceTests.swift::lightAndDarkTurnTheBrowserToo  387cfc6e5ff6
 #362   Tests/Scenarios/switch-appearance.scenario  1835332daadb
