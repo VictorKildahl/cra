@@ -315,37 +315,53 @@ enum WindowContentGrabberTests {
         typealias Contains = @convention(c) (NSWindow, Selector, NSPoint) -> Bool
         let contains = unsafeBitCast(method_getImplementation(method), to: Contains.self)
         func update() {
+            root.layoutSubtreeIfNeeded()
             window.displayIfNeeded()
             NSApp.updateWindows()
-            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
         }
         func pagePoint(right: CGFloat, top: CGFloat) -> NSPoint {
             page.convert(NSPoint(x: page.bounds.maxX - right, y: page.bounds.maxY - top), to: nil)
         }
         update()
         let corner = pagePoint(right: 5, top: 5)
-        expect(contains(window, selector, corner), "the control window reproduces server-side dragging over the page corner")
+        let points = [corner, pagePoint(right: 1, top: 15), pagePoint(right: 300, top: 5), pagePoint(right: 300, top: 200)]
+        let originalFrame = window.frame
+        let originalRegion = points.map { contains(window, selector, $0) }
         let chrome = NSPoint(x: 50, y: window.frame.height - 15)
-        expect(contains(window, selector, chrome), "the control window has draggable chrome outside the page")
+        let chromeWasDraggable = contains(window, selector, chrome)
 
         let grabber = WindowContentGrabber()
+        let exclusionSelector = NSSelectorFromString("_opaqueRectForWindowMoveWhenInTitlebar")
+        guard let exclusionMethod = class_getInstanceMethod(type(of: grabber), exclusionSelector) else {
+            fatalError("the grabber must expose AppKit's titlebar exclusion selector")
+        }
+        typealias Exclusion = @convention(c) (NSView, Selector) -> NSRect
+        let exclusion = unsafeBitCast(method_getImplementation(exclusionMethod), to: Exclusion.self)
+        func excludedRect() -> NSRect {
+            grabber.convert(exclusion(grabber, exclusionSelector), to: nil)
+        }
         grabber.isEnabled = { false }
         grabber.attach(to: page, owner: window)
         update()
-        for point in [corner, pagePoint(right: 1, top: 15), pagePoint(right: 300, top: 5), pagePoint(right: 300, top: 200)] {
+        for point in points {
+            expect(excludedRect().contains(point), "AppKit's titlebar exclusion covers the page even with grabbing disabled")
             expect(!contains(window, selector, point), "the page is excluded from WindowServer's drag region even with grabbing disabled")
         }
-        expect(contains(window, selector, chrome) && window.isMovableByWindowBackground,
+        expect(!excludedRect().contains(chrome), "the titlebar exclusion leaves the surrounding chrome free")
+        expect(contains(window, selector, chrome) == chromeWasDraggable && window.isMovableByWindowBackground,
                "excluding the page preserves native dragging over the rest of the window")
         expect(root.hitTest(root.superview!.convert(corner, from: nil)) === page,
                "the server-side exclusion does not intercept the page's mouse events")
 
         window.setContentSize(NSSize(width: 1200, height: 800))
         update()
+        expect(excludedRect().contains(pagePoint(right: 5, top: 5)), "AppKit's titlebar exclusion follows a resized page corner")
         expect(!contains(window, selector, pagePoint(right: 5, top: 5)), "the exclusion follows a resized page corner")
         grabber.removeFromSuperview()
+        window.setFrame(originalFrame, display: false)
         update()
-        expect(contains(window, selector, pagePoint(right: 5, top: 5)), "detaching the grabber restores the control window's drag region")
+        expect(points.map { contains(window, selector, $0) } == originalRegion,
+               "detaching the grabber restores the control window's drag region")
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
