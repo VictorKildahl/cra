@@ -1,0 +1,23 @@
+# A tab on one of Chromium's own pages opens after a relaunch (PR #325). Its saved back and forward
+# list is left out (PageHistory.restores): putting it back made Chromium build the page's WebUI
+# inside the page's creation, and Cra 0.1.38 and 0.1.39 crashed at every launch with
+# chrome://settings/privacy selected, until the tab's file in PageHistory/ was removed.
+budget rss=900 stalls50=40
+pace 0.5
+
+cra://open?url=chrome://settings
+wait 4
+cra://debug?cdp=Runtime.evaluate&params={"expression":"location.href='chrome://settings/privacy'","userGesture":true}
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"location.href='chrome://settings/clearBrowserData'","userGesture":true}
+wait 2
+cra://action/goBack
+wait 2
+cra://debug?back=before
+expect-log back before: selected=chrome://settings/privacy back=1
+
+relaunch
+wait 3
+reject-log tab \S+ opens with \d+ pages? of history
+cra://debug?back=relaunched
+expect-log back relaunched: selected=chrome://settings/privacy
