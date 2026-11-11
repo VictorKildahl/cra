@@ -19,6 +19,8 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     private var lastOffset: CGFloat = 0
     private let pullIndicator = UIImageView(image: UIImage(systemName: "arrow.clockwise", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)))
 
+    /// Browse for Me is making this tab's page.
+    var isBrowsing = false
     private(set) var isLoading = false
     private(set) var progress: Double = 0
     /// "Request Desktop Site": applied to every navigation of this tab while it is on.

@@ -379,3 +379,29 @@ final class ReadingTests: BrowserTestCase {
         XCTAssertFalse(app.webViews["reader"].waitForExistence(timeout: 2))
     }
 }
+
+final class BrowseForMeTests: BrowserTestCase {
+    /// "Browse for Me" on a suggestion shows the sites being read, then the page made from them,
+    /// in a tab of its own.
+    func testBrowseForMeReadsSitesAndMakesAPage() {
+        launch(["-CraFakeModel", "YES"])
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.typeText("pizza ovens")
+        let chip = app.buttons["browse-for-me"].firstMatch
+        XCTAssertTrue(chip.waitForExistence(timeout: 5))
+        chip.tap()
+        XCTAssertTrue(app.staticTexts["browse-reading"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["browse-reading"].label, "Reading 3 web pages")
+        XCTAssertEqual(app.staticTexts["browse-query"].label, "pizza ovens")
+        XCTAssertTrue(app.staticTexts["alpha.example"].exists)
+        keep("browse-loading")
+        XCTAssertTrue(app.webViews.staticTexts["About pizza ovens"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.webViews.staticTexts["Read 3 web pages"].exists)
+        sleep(1)
+        keep("browse-page")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["tab-card-0"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["tab-card-0"].label, "About pizza ovens")
+    }
+}

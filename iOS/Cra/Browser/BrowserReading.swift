@@ -98,6 +98,59 @@ extension BrowserViewController {
         return CGAffineTransform(translationX: 0, y: cardCentreY - bounds.midY).scaledBy(x: scale, y: scale)
     }
 
+    // MARK: Browse for Me
+
+    private static func browseCache(_ id: UUID) -> URL {
+        let folder = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Browse", isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        return folder.appendingPathComponent("\(id.uuidString).html")
+    }
+
+    /// Fills a Browse for Me tab: its saved page when there is one, otherwise the loading screen
+    /// while the page is made. When no answer comes, the tab becomes the search for the query.
+    func browse(for query: String, in page: WebPage) {
+        let id = page.tabID
+        let incognito = store.tabs.first { $0.id == id }?.isIncognito ?? false
+        if !incognito, let saved = try? String(contentsOf: Self.browseCache(id), encoding: .utf8) {
+            page.webView.loadHTMLString(saved, baseURL: nil)
+            return
+        }
+        page.isBrowsing = true
+        store.update(id, url: nil, title: query)
+        let loading = BrowseLoadingView(query: query)
+        loading.tabID = id
+        loading.frame = pageContainer.bounds
+        loading.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        pageContainer.addSubview(loading)
+        browseLoading?.removeFromSuperview()
+        browseLoading = loading
+        let engine = settings.value.searchEngine
+        Task { @MainActor [weak self] in
+            await BrowseForMe.run(query: query, engine: engine) { step in
+                switch step {
+                case .reading(let sites): loading.showReading(sites)
+                case .making: loading.showMaking()
+                case .done(let html, _):
+                    page.isBrowsing = false
+                    page.webView.loadHTMLString(html, baseURL: nil)
+                    if !incognito { try? html.write(to: Self.browseCache(id), atomically: true, encoding: .utf8) }
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    UIView.animate(withDuration: 0.4, delay: 0.25, options: []) { loading.alpha = 0 } completion: { _ in
+                        loading.removeFromSuperview()
+                        if self?.browseLoading === loading { self?.browseLoading = nil }
+                    }
+                case .failed:
+                    page.isBrowsing = false
+                    page.load(engine.searchURL(query))
+                    UIView.animate(withDuration: 0.3) { loading.alpha = 0 } completion: { _ in
+                        loading.removeFromSuperview()
+                        if self?.browseLoading === loading { self?.browseLoading = nil }
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: Pinch to Summarize
 
     @objc func pagePinched(_ pinch: UIPinchGestureRecognizer) {

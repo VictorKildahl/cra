@@ -20,7 +20,7 @@ ended). "Measured" means the numbers come from Arc Search footage, not from a de
 | Site matches as rows (favicon and title) | missing | |
 | Favorites / pinned sites under an empty field | missing | |
 | Scrolling the suggestions updates the field | missing | |
-| "Browse for Me" button on each search row | partial | Shown only where Apple Intelligence is on; opens the search for now. |
+| "Browse for Me" button on each search row | done | Shown only where Apple Intelligence is on. |
 | Pill grows into the search field | partial | The morph exists; timing and the side icons' fade are not compared yet. |
 | Tap above the sheet closes it | done | UI test `testThePillOpensSearchAndATapAboveClosesIt`. |
 | Swipe the sheet down to close | done | The sheet follows the finger; the keyboard leaves on release. |
@@ -29,6 +29,17 @@ ended). "Measured" means the numbers come from Arc Search footage, not from a de
 | Call Arc | *skip* | Removed from Arc Search itself. |
 | Default search engine: Google, Bing, DuckDuckGo, Ecosia, Perplexity, Kagi, custom | partial | The six engines in App Settings ▸ Search Engine (`MobileSearchEngine`); no custom engines, no "Browse for Me" as an engine. |
 | Fidget-spinner logo | missing | |
+
+## Browse for Me
+
+| Arc Search | Cra | Notes |
+|---|---|---|
+| Reads several pages and makes one page of the answer | done | All on the phone (`MobileBrowseForMe`, `BrowseForMe`): results from DuckDuckGo's plain HTML page, six sites fetched and read, the device's own model writes the title, key points and sections. No answer (no results, no network, a refusal) falls back to the search engine. The query therefore goes to DuckDuckGo whatever the search engine setting is. |
+| Loading screen: query, rising gradient, "Reading N web pages", the sites, "Making a website for you" | partial | Built to the 1.0 footage (positions measured, SF Rounded standing in for Arc's own typeface). The 1.22 redesign with query editing was not seen. |
+| Result page: query capsule, pictures, "Read N web pages", source cards, blue title, emoji key points, sections | partial | In that order. No video carousel, "Learn more", follow-up chips, list format, instant answers or feedback block. |
+| Toggle between Browse for Me and the search engine | partial | The query capsule opens the search engine's results; no floating two-segment control. |
+| Its own tab, restored after a relaunch | done | The page is kept in the caches folder; incognito pages are not. |
+| Browse for Me as the search engine, from selected text, from the share sheet, Shortcuts | missing | |
 
 ## Page
 

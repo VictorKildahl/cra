@@ -417,3 +417,72 @@ struct MobileSummaryTests {
         #expect(MobileSummary.fakeAnswer(title: "T", text: "One. Two. Three.").sections.map(\.body) == ["Two.", "Three."])
     }
 }
+
+struct MobileBrowseForMeTests {
+    /// DuckDuckGo's HTML results, trimmed to two results and an ad (its markup, 11 Nov 2026).
+    static let results = """
+    <div class="result results_links results_links_deep result--ad">
+      <a rel="nofollow" class="result__a" href="https://duckduckgo.com/y.js?ad_domain=shop.example&amp;u3=x">Buy Pizza Ovens</a>
+      <a class="result__snippet" href="https://duckduckgo.com/y.js?ad_domain=shop.example">An ad.</a>
+    </div>
+    <div class="result results_links results_links_deep web-result">
+      <h2 class="result__title"><a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.example.com%2Fpizza%3Fa%3D1%26b%3D2&amp;rut=abc">Neapolitan <b>pizza</b> &amp; its dough</a></h2>
+      <a class="result__snippet" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.example.com%2Fpizza">A soft, thin <b>pizza</b> from Naples.</a>
+    </div>
+    <div class="result results_links results_links_deep web-result">
+      <h2 class="result__title"><a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.example.com%2Fother&amp;rut=def">Same site again</a></h2>
+      <a class="result__snippet" href="#">More.</a>
+    </div>
+    <div class="result results_links results_links_deep web-result">
+      <h2 class="result__title"><a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fen.wikipedia.org%2Fwiki%2FPizza&amp;rut=ghi">Pizza - Wikipedia</a></h2>
+      <a class="result__snippet" href="#">Pizza is a dish.</a>
+    </div>
+    """
+
+    @Test func readsTheResultsAndLeavesAdsOut() {
+        let hits = MobileBrowseForMe.hits(fromResultsHTML: Self.results)
+        #expect(hits.map(\.url) == ["https://www.example.com/pizza?a=1&b=2", "https://www.example.com/other", "https://en.wikipedia.org/wiki/Pizza"])
+        #expect(hits[0].title == "Neapolitan pizza & its dough")
+        #expect(hits[0].snippet == "A soft, thin pizza from Naples.")
+        #expect(hits[0].host == "example.com")
+        #expect(MobileBrowseForMe.pick(hits).map(\.host) == ["example.com", "en.wikipedia.org"])
+        #expect(MobileBrowseForMe.hits(fromResultsHTML: "<html>nothing</html>").isEmpty)
+    }
+
+    @Test func theQueryGoesToDuckDuckGosPlainResults() {
+        #expect(MobileBrowseForMe.searchURL("what to do & see")?.absoluteString == "https://html.duckduckgo.com/html/?q=what%20to%20do%20%26%20see")
+    }
+
+    @Test func thePromptGivesEachPageItsSiteAndAClippedText() {
+        let source = MobileBrowseForMe.Source(hit: .init(title: "T", url: "https://www.example.com/a"), title: "Pizza", text: String(repeating: "Dough rests. ", count: 100))
+        let prompt = MobileBrowseForMe.prompt(query: "pizza", sources: [source], language: "English")
+        #expect(prompt.hasPrefix("Answer in English.\n\nQUESTION: pizza\n\nWEB PAGES:\n<page 1 site=\"example.com\">\nPizza\nDough rests."))
+        #expect(prompt.count < 700)
+    }
+
+    @Test func aTabRemembersItsQuery() {
+        let address = MobileBrowseForMe.tabAddress(query: "what to do at joshua tree?")
+        #expect(MobileBrowseForMe.query(fromTabAddress: address) == "what to do at joshua tree?")
+        #expect(URL(string: address)?.host == nil)
+        #expect(MobileBrowseForMe.query(fromTabAddress: "https://example.com") == nil)
+    }
+
+    @Test func thePageEscapesWhatItWasGiven() {
+        let source = MobileBrowseForMe.Source(hit: .init(title: "Hit", url: "https://example.com/a?x=1&y=2"), title: "<b>Title</b>", text: "", image: "/pic.jpg")
+        let answer = MobileBrowseForMe.Answer(title: "A <script>", points: [.init(emoji: "🍕", term: "Dough", text: "Rests & rises.")],
+                                              sections: [.init(heading: "Oven", text: "400 \"degrees\".")])
+        let html = MobileBrowseForMe.pageHTML(query: "pizza <i>", answer: answer, sources: [source], searchURL: "https://duckduckgo.com/?q=pizza")
+        #expect(html.contains("<title>A &lt;script&gt;</title>"))
+        #expect(html.contains("<span>pizza &lt;i&gt;</span>"))
+        #expect(html.contains("<b>Dough</b> — Rests &amp; rises."))
+        #expect(html.contains("href=\"https://example.com/a?x=1&amp;y=2\""))
+        #expect(html.contains("src=\"https://example.com/pic.jpg\""))
+        #expect(html.contains("Read 1 web page<"))
+        #expect(!html.contains("<script>"))
+    }
+
+    @Test func anAnswerWithNothingInItIsNoAnswer() {
+        #expect(MobileBrowseForMe.Answer(title: "T", points: [.init(emoji: "", term: "", text: " ")], sections: []).cleaned == nil)
+        #expect(MobileBrowseForMe.readingLabel(6) == "Reading 6 web pages")
+    }
+}

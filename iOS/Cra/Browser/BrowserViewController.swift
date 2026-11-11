@@ -29,6 +29,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     // Reader and Summarize (BrowserReading.swift).
     var readerView: ReaderView?
     var summaryHost: UIViewController?
+    var browseLoading: BrowseLoadingView?
     var isSearching = false
     var incognitoSearch = false
     var keyboardHeight: CGFloat = 0
@@ -246,7 +247,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     func searchSheet(_ sheet: SearchSheet, didAskToBrowseFor row: MobileSuggestions.Row) {
-        open(MobileSuggestions.destination(for: row, engine: settings.value.searchEngine))
+        open(MobileBrowseForMe.tabAddress(query: row.text))
     }
 
     func searchSheetDidToggleIncognito(_ sheet: SearchSheet) {
@@ -279,7 +280,17 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         page.webView.allowsBackForwardNavigationGestures = false
         page.webView.frame = pageContainer.bounds
         pageContainer.addSubview(page.webView)
-        if page.webView.url == nil { page.load(tab.url) }
+        if page.webView.url == nil, !page.isBrowsing {
+            if let query = MobileBrowseForMe.query(fromTabAddress: tab.url) {
+                browse(for: query, in: page)
+            } else {
+                page.load(tab.url)
+            }
+        }
+        if let browseLoading {
+            browseLoading.isHidden = browseLoading.tabID != page.tabID
+            pageContainer.bringSubviewToFront(browseLoading)
+        }
         barHiddenByScroll = false
         scrollTravel = 0
         view.setNeedsLayout()
@@ -562,7 +573,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             // Reader belongs to the page it was opened on.
             if page.isLoading { closeReader() }
         }
-        store.update(page.tabID, url: page.webView.url?.absoluteString, title: page.webView.title)
+        // A Browse for Me page has no address of its own: the tab keeps the one that names its query.
+        let address = page.webView.url?.absoluteString
+        store.update(page.tabID, url: address == "about:blank" ? nil : address, title: page.webView.title)
     }
 
     func webPage(_ page: WebPage, didFinishLoading success: Bool) {
