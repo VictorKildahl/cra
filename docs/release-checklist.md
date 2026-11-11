@@ -224,6 +224,14 @@ built release app with a test profile. Note anything that fails in the release's
   reveals the title bar with the traffic lights in it. The `fullscreen-window-chrome` scenario
   checks the window's flags; only a hand drag shows that AppKit honours them.
 
+### Sync
+
+- **PR #289:** with a signed build on two Macs and Sync with iCloud on, a tab opened on one Mac
+  shows on the other within about a minute, and back, five times in a row. Settings ▸ General
+  shows "Synced" on both and never asks which sidebar to keep after the first answer. Needs
+  real iCloud: the harness only stands in for a file that is still downloading.
+- **PR #289:** the same with a folder in Dropbox, OneDrive or a similar service instead of iCloud.
+
 ## Not pinned yet
 
 Each of these needs a change to production code before a test can pin it: a move into
