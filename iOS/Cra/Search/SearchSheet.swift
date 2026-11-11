@@ -21,6 +21,7 @@ final class SearchSheet: UIView, UITextFieldDelegate {
     private let fieldBackground = FieldBackgroundView()
     private let clearButton = UIButton(type: .custom)
     private let incognitoButton = UIButton(type: .custom)
+    private let incognitoNote = UILabel()
     private var rowViews: [SuggestionRowView] = []
 
     /// The pill's frame in this view's coordinates, for the closed end of the morph.
@@ -56,7 +57,17 @@ final class SearchSheet: UIView, UITextFieldDelegate {
         incognitoButton.addTarget(self, action: #selector(toggleIncognito), for: .touchUpInside)
         incognitoButton.accessibilityLabel = "Incognito"
         incognitoButton.accessibilityIdentifier = "search-incognito"
+        incognitoButton.semanticContentAttribute = .forceRightToLeft
+        incognitoButton.contentHorizontalAlignment = .right
         addSubview(incognitoButton)
+
+        incognitoNote.text = "You're browsing Incognito"
+        incognitoNote.font = .systemFont(ofSize: 17, weight: .medium)
+        incognitoNote.textColor = Palette.rgb(0xc9c8cd)
+        incognitoNote.textAlignment = .center
+        incognitoNote.accessibilityIdentifier = "incognito-note"
+        incognitoNote.isHidden = true
+        addSubview(incognitoNote)
 
         for index in 0..<MobileSearchSheet.visibleRows {
             let row = SuggestionRowView()
@@ -121,11 +132,24 @@ final class SearchSheet: UIView, UITextFieldDelegate {
         let empty = text.isEmpty
         clearButton.isHidden = empty
         incognitoButton.isHidden = !empty
+        incognitoNote.isHidden = !(empty && isIncognito)
     }
 
+    /// Incognito turns the sheet dark, names itself beside the mask, and brings the dark keyboard.
     private func applyIncognito() {
+        overrideUserInterfaceStyle = isIncognito ? .dark : .unspecified
         incognitoButton.setImage(Self.incognitoImage(on: isIncognito), for: .normal)
+        incognitoButton.setAttributedTitle(isIncognito ? NSAttributedString(string: "Incognito    ", attributes: [
+            .font: UIFont.systemFont(ofSize: 17, weight: .medium), .foregroundColor: Palette.rgb(0xd0d0d4),
+        ]) : nil, for: .normal)
         incognitoButton.accessibilityValue = isIncognito ? "On" : "Off"
+        let appearance: UIKeyboardAppearance = isIncognito ? .dark : .default
+        if field.keyboardAppearance != appearance {
+            field.keyboardAppearance = appearance
+            field.reloadInputViews()
+        }
+        updateAccessories()
+        setNeedsLayout()
     }
 
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
@@ -157,9 +181,13 @@ final class SearchSheet: UIView, UITextFieldDelegate {
         field.alpha = t
         let accessory = CGRect(x: frame.maxX - 29.5 - 22, y: frame.midY - 22, width: 44, height: 44)
         clearButton.frame = accessory
-        incognitoButton.frame = accessory
+        // With its "Incognito" label the toggle reaches left from the same right edge.
+        incognitoButton.frame = isIncognito ? CGRect(x: accessory.maxX - 11 - 130, y: accessory.minY, width: 130, height: 44) : accessory
         clearButton.alpha = t
         incognitoButton.alpha = t
+        // Arc Search's note sits 187 pt below the sheet's top edge.
+        incognitoNote.frame = CGRect(x: 0, y: 187 - 12, width: bounds.width, height: 24)
+        incognitoNote.alpha = t
 
         let top = open.maxY + MobileSearchSheet.rowsTopGap
         for (index, row) in rowViews.enumerated() {
@@ -192,7 +220,7 @@ final class SearchSheet: UIView, UITextFieldDelegate {
         let size = CGSize(width: 22, height: 14)
         return UIGraphicsImageRenderer(size: size).image { context in
             let cg = context.cgContext
-            (on ? Palette.primaryText : Palette.incognitoOff).setFill()
+            (on ? Palette.rgb(0xd8d8dc) : Palette.incognitoOff).setFill()
             for (x, angle) in [(CGFloat(5.5), CGFloat(0.16)), (16.5, -0.16)] {
                 cg.saveGState()
                 cg.translateBy(x: x, y: 7)

@@ -66,7 +66,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
     // MARK: Along the bar: the neighbouring tab
 
     private func neighbour(_ step: Int) -> MobileTab? {
-        let tabs = store.tabs
+        let tabs = store.rowTabs
         guard let current = store.selected, let index = tabs.firstIndex(where: { $0.id == current.id }),
               tabs.indices.contains(index + step) else { return nil }
         return tabs[index + step]

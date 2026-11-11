@@ -52,6 +52,9 @@ final class TabStore {
         changed()
     }
 
+    /// The tab row's tabs: incognito tabs are never in it.
+    var rowTabs: [MobileTab] { document.rowTabs }
+
     func close(_ id: UUID) {
         document.close(id)
         pages[id] = nil
@@ -107,6 +110,11 @@ final class TabStore {
     }
 
     private func changed() {
+        // An incognito tab that is no longer on screen has no way back, so it closes.
+        for id in document.closeIncognitoTabsLeftBehind() {
+            pages[id] = nil
+            snapshots[id] = nil
+        }
         scheduleSave()
         onChange?()
     }

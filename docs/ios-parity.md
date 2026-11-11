@@ -24,7 +24,7 @@ ended). "Measured" means the numbers come from Arc Search footage, not from a de
 | Pill grows into the search field | partial | The morph exists; timing and the side icons' fade are not compared yet. |
 | Tap above the sheet closes it | done | UI test `testThePillOpensSearchAndATapAboveClosesIt`. |
 | Swipe the sheet down to close | done | The sheet follows the finger; the keyboard leaves on release. |
-| Incognito toggle in the field | partial | Toggles and opens private tabs; no dark sheet, label or "You're browsing Incognito" yet. |
+| Incognito toggle in the field | done | The sheet turns dark with "Incognito" beside the mask, "You're browsing Incognito" and the dark keyboard; colours from the store screenshot. Suggestions are not fetched while it is on. |
 | Voice search (hold the pill, mic in the field) | missing | |
 | Call Arc | *skip* | Removed from Arc Search itself. |
 | Default search engine: Google, Bing, DuckDuckGo, Ecosia, Perplexity, Kagi, custom | partial | The six engines in App Settings ▸ Search Engine (`MobileSearchEngine`); no custom engines, no "Browse for Me" as an engine. |
@@ -80,7 +80,7 @@ ended). "Measured" means the numbers come from Arc Search footage, not from a de
 | Switcher bar: Spaces, "+", Settings | partial | The gear opens App Settings. The left button is still the archive of the 1.0 footage, not Spaces. |
 | Auto-archive: 12 hours, 1 day, 3 days, 7 days, 30 days | done | App Settings ▸ Archive Inactive Tabs; applied at launch. |
 | Archive list: search, day groups, edit, swipe to delete | done | `MobileArchive`; a tap reopens the tab. UI test `testAnArchivedTabComesBackFromTheArchive`. |
-| Incognito tabs kept out of the switcher and off disk | partial | Never saved; still shown in the switcher. |
+| Incognito tabs kept out of the switcher and off disk | done | Not in the row, the Archive or `tabs.json`, on a private data store. One that is left closes (inferred: with no card there is no way back to it). How an incognito page's own chrome differs was not seen. |
 | Clear Browsing Data | done | Clear History empties the archive; Clear Cookies and Site Data empties WebKit's store. |
 | Export Data | done | The open tabs as text through the share sheet. |
 

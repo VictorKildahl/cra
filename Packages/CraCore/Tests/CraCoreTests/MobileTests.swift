@@ -136,6 +136,17 @@ struct MobileTabsTests {
         #expect(document.archived.isEmpty)
     }
 
+    @Test func anIncognitoTabClosesOnceItIsLeftAndNeverShowsInTheRow() {
+        var document = MobileTabsDocument()
+        let plain = Self.tab("plain", hoursAgo: 1), secret = Self.tab("secret", hoursAgo: 0, incognito: true)
+        [plain, secret].forEach { document.open($0) }
+        #expect(document.rowTabs.map(\.title) == ["plain"])
+        #expect(document.closeIncognitoTabsLeftBehind().isEmpty, "the tab on screen stays")
+        document.select(plain.id, now: Self.start)
+        #expect(document.closeIncognitoTabsLeftBehind() == [secret.id])
+        #expect(document.tabs.map(\.title) == ["plain"] && document.archived.isEmpty)
+    }
+
     @Test func aSavedDocumentLoadsBack() throws {
         var document = MobileTabsDocument()
         document.open(Self.tab("a", hoursAgo: 1))

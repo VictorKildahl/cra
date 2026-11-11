@@ -12,17 +12,18 @@ enum Palette {
     }
 
     /// The search sheet's surface.
-    static let sheet = dynamic(light: rgb(0xfcfcfc), dark: rgb(0x1c1c1e))
+    /// Dark is Arc Search's incognito sheet, which is also how the sheet looks in dark mode.
+    static let sheet = dynamic(light: rgb(0xfcfcfc), dark: rgb(0x2d2c31))
     /// The search field's fill runs from lavender on the left to pink on the right.
-    static let fieldLeading = dynamic(light: rgb(0xede9f4), dark: rgb(0x2b2a33))
-    static let fieldTrailing = dynamic(light: rgb(0xf5ecf0), dark: rgb(0x332a2f))
-    static let fieldBorder = dynamic(light: rgb(0xd9d2dc), dark: rgb(0x3a3840))
+    static let fieldLeading = dynamic(light: rgb(0xede9f4), dark: rgb(0x46454a))
+    static let fieldTrailing = dynamic(light: rgb(0xf5ecf0), dark: rgb(0x46454a))
+    static let fieldBorder = dynamic(light: rgb(0xd9d2dc), dark: rgb(0x504f54))
     /// The caret and selection.
     static let accent = dynamic(light: rgb(0x4a5fe6), dark: rgb(0x7f8eff))
     static let primaryText = dynamic(light: .black, dark: .white)
     /// The typed part of a completion, and the placeholder.
     static let secondaryText = dynamic(light: rgb(0x6f6e73), dark: rgb(0x9a999f))
-    static let placeholder = dynamic(light: rgb(0xa2a0a5), dark: rgb(0x6e6d73))
+    static let placeholder = dynamic(light: rgb(0xa2a0a5), dark: rgb(0x97979e))
     static let glyph = dynamic(light: rgb(0x2e2e30), dark: rgb(0xe6e6ea))
     /// The round clear button in the field.
     static let clearFill = dynamic(light: rgb(0xc1b7bc), dark: rgb(0x5a565c))

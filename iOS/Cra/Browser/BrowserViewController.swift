@@ -200,6 +200,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         if searching {
             if let incognito { incognitoSearch = incognito }
             sheet.isIncognito = incognitoSearch
+            backdrop.isIncognito = incognitoSearch
             sheet.text = ""
             sheet.setRows([])
             sheet.offersBrowseForMe = BrowseForMe.isAvailable
@@ -252,7 +253,13 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     func searchSheetDidToggleIncognito(_ sheet: SearchSheet) {
         incognitoSearch.toggle()
-        sheet.isIncognito = incognitoSearch
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        UIView.transition(with: sheet, duration: 0.25, options: [.transitionCrossDissolve, .allowUserInteraction]) {
+            sheet.isIncognito = self.incognitoSearch
+        }
+        UIView.transition(with: backdrop, duration: 0.25, options: [.transitionCrossDissolve]) {
+            self.backdrop.isIncognito = self.incognitoSearch
+        }
     }
 
     // MARK: Tabs and pages
@@ -297,7 +304,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     func refreshTabStack() {
-        let tabs = store.tabs
+        let tabs = store.rowTabs
         let front = store.selected ?? tabs.last
         let back = tabs.last { $0.id != front?.id }
         bar.tabsButton.setSnapshots(front: front.flatMap { store.snapshot($0.id) }, back: back.flatMap { store.snapshot($0.id) })
@@ -320,10 +327,12 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         let present = { [self] in
             let switcher = TabSwitcherView(frame: view.bounds)
             switcher.delegate = self
-            switcher.setTabs(store.tabs, focus: store.selected?.id, snapshot: store.snapshot, favicon: { self.favicons.icon(for: $0.url) })
+            let onRow = store.selected.map { !$0.isIncognito } ?? false
+            switcher.setTabs(store.rowTabs, focus: store.selected?.id, snapshot: store.snapshot, favicon: { self.favicons.icon(for: $0.url) })
             // Starts as the page itself: the focused card fills the screen, then shrinks into the row.
-            switcher.expandedID = store.selected?.id
-            switcher.expansion = store.selected == nil ? 0 : 1
+            // An incognito page has no card to shrink into; the row just appears.
+            switcher.expandedID = onRow ? store.selected?.id : nil
+            switcher.expansion = onRow ? 1 : 0
             view.insertSubview(switcher, aboveSubview: pageContainer)
             switcher.layoutIfNeeded()
             self.switcher = switcher

@@ -405,3 +405,32 @@ final class BrowseForMeTests: BrowserTestCase {
         XCTAssertEqual(app.buttons["tab-card-0"].label, "About pizza ovens")
     }
 }
+
+final class IncognitoTests: BrowserTestCase {
+    /// The mask in the search field turns the sheet incognito; a page opened then stays out of
+    /// the tab row and out of the Archive, and is gone once it is left.
+    func testAnIncognitoTabStaysOutOfTheRowAndTheArchive() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        app.buttons["bar-search"].tap()
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["incognito-note"].exists)
+        app.buttons["search-incognito"].tap()
+        XCTAssertTrue(app.staticTexts["incognito-note"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.staticTexts["incognito-note"].label, "You're browsing Incognito")
+        XCTAssertEqual(app.buttons["search-incognito"].value as? String, "On")
+        sleep(1)
+        keep("incognito")
+        field.typeText(Self.page("Secret") + "\n")
+        waitForPage("Secret")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["tab-card-0"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["tab-card-0"].label, "First")
+        XCTAssertFalse(app.buttons["tab-card-1"].exists)
+        app.buttons["bar-settings"].tap()
+        app.buttons["settings-archive"].tap()
+        XCTAssertTrue(app.staticTexts["No Archived Tabs"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["archive-row-Secret"].exists)
+    }
+}

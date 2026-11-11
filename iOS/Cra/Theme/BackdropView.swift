@@ -5,6 +5,8 @@ import UIKit
 final class BackdropView: UIView {
     private let base = CAGradientLayer()
     private let bloom = CAGradientLayer()
+    /// Incognito drains the colour: Arc Search's backdrop turns a flat grey-lavender.
+    var isIncognito = false { didSet { applyColors() } }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -35,7 +37,10 @@ final class BackdropView: UIView {
         let dark = traitCollection.userInterfaceStyle == .dark
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        if dark {
+        if isIncognito {
+            base.colors = [Palette.rgb(0xb0aec5).cgColor, Palette.rgb(0xaaa8bd).cgColor]
+            bloom.colors = [UIColor.clear.cgColor, UIColor.clear.cgColor]
+        } else if dark {
             base.colors = [Palette.rgb(0x25233a).cgColor, Palette.rgb(0x1d1b2b).cgColor]
             bloom.colors = [Palette.rgb(0x4a2f44, alpha: 0.9).cgColor, Palette.rgb(0x4a2f44, alpha: 0).cgColor]
         } else {
