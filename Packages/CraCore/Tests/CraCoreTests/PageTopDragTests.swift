@@ -19,4 +19,10 @@ struct PageTopDragTests {
         #expect(!PageTopDrag.isDrag(dx: 2, dy: 2))
         #expect(PageTopDrag.isDrag(dx: 3, dy: 1))
     }
+
+    @Test(arguments: [(-1.0, false), (0.0, false), (13.9, false), (14.0, false), (14.1, true), (30.0, true)])
+    func theRight14PointsStayWithThePage(distance: Double, holds: Bool) {
+        #expect(PageTopDrag.holds(enabled: true, barAbovePage: false, depthIntoPage: 20,
+                                  clickCount: 1, modifiers: false, distanceFromRight: distance) == holds)
+    }
 }

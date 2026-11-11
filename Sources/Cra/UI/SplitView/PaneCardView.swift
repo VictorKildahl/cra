@@ -12,6 +12,7 @@ final class PaneCardView: NSView {
     let toolbarHost: NSView
     /// Where the Chromium view lives (or where the page window is positioned).
     let webArea = NSView()
+    let pageTopGrabber = WindowContentGrabber()
     /// Hairline under the toolbar when the pane has no page (Arc draws it on the tinted card).
     private let hairline = NSView()
     /// The card behind the toolbar, in the toolbar's colour. A card with a page paints nothing else:
@@ -97,6 +98,7 @@ final class PaneCardView: NSView {
             if shadowView.superview !== superview { superview.addSubview(shadowView, positioned: .below, relativeTo: self) }
         } else {
             shadowView.removeFromSuperview()
+            pageTopGrabber.removeFromSuperview()
         }
         syncShadow()
     }

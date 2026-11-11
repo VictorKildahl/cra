@@ -117,6 +117,9 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-folder-glyph.sh`: the standalone folder component's real AppKit layers and image
   pixels: emblems follow the front panel's perspective, keep their colors and proportions, and
   update at 1x/Retina. No CEF or visible window; coverage uses the same harness as `scripts/test.sh`.
+- `scripts/test-window-content-grabber.sh`: the page-top grabber on AppKit windows:
+  clicks reach the page immediately, non-arrow cursors keep the gesture, native resize edges and rounded corners stay free,
+  a child page's drag starts in its browser window's coordinates, and the page stays outside WindowServer's native drag region.
 - `scripts/test-link-summary-share.sh`: 5-Second Previews' Copy as Image (`LinkSummaryShareImage`)
   against Arc's own copy of a card: size at 3x, the picture's inset, the dashed line's pattern and place,
   the footer colour.
