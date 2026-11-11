@@ -581,3 +581,8 @@
 #339   Packages/CraCore/Tests/CraCoreTests/SpaceMenuLayoutTests.swift::dockOpensTheSpaceForItsListAndHeader  cd0d0aed9120
 #339   Packages/CraCore/Tests/CraCoreTests/SpaceMenuLayoutTests.swift::dockShowsArcsWholeSpaceMenu  074df60c8297
 #341   Tests/FloatingSidebarTests.swift::staysInsideTheWindowsCorners  47752aeeee63
+#344   Packages/CraCore/Tests/CraCoreTests/SidebarAddressEditTests.swift::aPinnedTabSendsAnotherHostToANewTab  52bb16a0739c
+#344   Packages/CraCore/Tests/CraCoreTests/SidebarAddressEditTests.swift::clickEditsInPlaceOnlyWhenTurnedOnAndATabIsSelected  dbb45b4d979e
+#344   Packages/CraCore/Tests/CraCoreTests/SidebarAddressEditTests.swift::returnLoadsAnAddressOrASearchInTheTab  5fcf3ee80d37
+#344   Packages/CraCore/Tests/CraCoreTests/SidebarAddressEditTests.swift::settingDefaultsOffAndRoundTrips  9ec60d7e8be1
+#344   Tests/Scenarios/sidebar-address-edit-in-place.scenario  da9bfe866e18

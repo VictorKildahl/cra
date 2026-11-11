@@ -247,6 +247,9 @@ final class SidebarActions {
     var paneExtensionsMenu: (UUID) -> Void = { _ in }
     /// The developer bar's address field: a typed URL or search, in the selected tab.
     var loadTyped: (String) -> Void = { _ in }
+    /// The sidebar URL field edited in place (#344): Return with what was typed, in the selected
+    /// tab or, for another host from a pinned tab, a new one (SidebarAddressEdit.commit).
+    var commitAddress: (String) -> Void = { _ in }
     /// A typed URL or search in a new tab (⌘ + New Tab pastes the clipboard's text).
     var openTyped: (String) -> Void = { _ in }
 }

@@ -1490,6 +1490,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // The sidebar's URL field (toolbar hidden): hovered, and a press on one of its buttons (#226).
             if let v = dict["urlFieldHover"] { main.debugURLFieldHover(v == "1"); return }
             if let name = dict["urlFieldPress"] { main.debugURLFieldPress(name); return }
+            // The URL field edited in place (#344): a click on it, then typing and Return or Escape.
+            if let step = dict["urlFieldEdit"] { main.debugURLFieldEdit(step); return }
             if let step = dict["commandBarNotice"] { main.debugCommandBarNotice(step); return }
             // Arc's translate UI (#310): what shows, and a press on its parts.
             if let step = dict["translate"] { main.debugTranslate(step); return }

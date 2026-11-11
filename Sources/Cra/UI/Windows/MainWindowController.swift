@@ -355,6 +355,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             guard !t.isEmpty else { return }
             self.loadInSelectedTab(SuggestionEngine.looksLikeURL(t) ? SuggestionEngine.urlFromInput(t) : self.commandBar.engine.searchURL(t))
         }
+        sidebarActions.commitAddress = { [weak self] typed in
+            guard let self, let tab = self.selectedTab, let id = self.selectedTabID else { return }
+            switch SidebarAddressEdit.commit(typed: typed, currentURL: tab.tab?.url ?? "", pinned: self.store.isPinned(id),
+                                             searchURL: self.commandBar.engine.searchURL) {
+            case .none: break
+            case .load(let url): self.loadInSelectedTab(url)
+            case .newTab(let url): self.store.createTab(url: url, window: self.windowID)
+            }
+        }
         sidebarActions.openTyped = { [weak self] typed in
             guard let self else { return }
             let t = typed.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3058,6 +3067,20 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// A press on the URL field's button by name ("siteControls", "copyURL"), then whether the
     /// Site Control Center is open once it had time to (it waits up to 0.3 s on the page).
+    /// Scenario hooks (#344): "click" logs what a click on the sidebar URL field did ("url field
+    /// click: editing <text>", "not editing" when it opened the command bar); "type:<text>" or
+    /// "escape:<text>" types into the field being edited, then presses Return or Escape.
+    func debugURLFieldEdit(_ step: String) {
+        let sidebar = shell.sidebarHost as? SidebarView
+        if step == "click" {
+            CraLog.note("url field click: " + (sidebar?.debugURLFieldClick() ?? "none") + ", command bar " + (commandBar.isOpen ? "open" : "closed"))
+            return
+        }
+        let commit = step.hasPrefix("type:")
+        let text = String(step.drop(while: { $0 != ":" }).dropFirst())
+        CraLog.note("url field \(commit ? "return" : "escape"): " + (sidebar?.debugURLFieldType(text, commit: commit) == true ? "done" : "not editing"))
+    }
+
     func debugURLFieldPress(_ name: String) {
         let item: ToolbarComposition.Item = name == "copyURL" ? .copyURL : .extensions
         let pressed = (shell.sidebarHost as? SidebarView)?.debugURLFieldPress(item) == true
