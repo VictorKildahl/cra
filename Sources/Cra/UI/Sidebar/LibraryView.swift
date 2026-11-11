@@ -837,6 +837,9 @@ extension LibraryListView: NSMenuDelegate {
             // Arc 1.172.1: Rename (in place) and Delete.
             let cell = table.view(atColumn: 0, row: row, makeIfNecessary: false) as? BoostRowCell
             MenuItems.add(menu, "Rename") { cell?.beginRename() }
+            // Cra's own: the boost's look in a crabrowser.app link (SharedBoost), like Share Folder….
+            let toast = actions.showToast
+            MenuItems.add(menu, "Share Boost…", enabled: BoostInstall.canShare(b)) { BoostInstall.share(b, toast: toast) }
             MenuItems.add(menu, "Delete") { BoostStore.shared.delete(b.id) }
         case .archived(let e):
             let actions = actions, store = store

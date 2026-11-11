@@ -1,0 +1,10 @@
+{
+  "v": 1,
+  "name": "Book",
+  "host": "wikipedia.org",
+  "about": "Articles in Palatino, a little larger, like a printed page.",
+  "by": "VictorKildahl",
+  "preview": "https://en.wikipedia.org/wiki/Web_browser",
+  "font": "Palatino",
+  "textScale": 1.1
+}

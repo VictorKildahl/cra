@@ -1,0 +1,9 @@
+{
+  "v": 1,
+  "name": "Readable",
+  "host": "news.ycombinator.com",
+  "about": "A narrower column with bigger text and more space between stories and comments.",
+  "by": "VictorKildahl",
+  "preview": "https://news.ycombinator.com/",
+  "css": "#hnmain { width: min(100%, 880px) !important; }\n.titleline { font-size: 15px !important; }\n.subtext, .subline { font-size: 11px !important; }\ntr.athing td.title { padding-top: 6px; }\n.commtext { font-size: 14px !important; line-height: 1.5; }"
+}

@@ -31,6 +31,13 @@ final class BoostStore {
         BoostStore.changed?(boost.host)
     }
 
+    /// A boost from a link or the gallery (BoostInstall): added, or put in place of the one with its id.
+    func add(_ boost: Boost) {
+        if let i = boosts.firstIndex(where: { $0.id == boost.id }) { boosts[i] = boost } else { boosts.append(boost) }
+        file.save(boosts)
+        BoostStore.changed?(boost.host)
+    }
+
     func delete(_ id: UUID) {
         let host = boost(id)?.host
         boosts.removeAll { $0.id == id }

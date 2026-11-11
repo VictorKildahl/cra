@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "name": "Hide Shorts",
+  "host": "youtube.com",
+  "about": "Hides Shorts shelves in search and on Home, and Shorts in the side menu.",
+  "by": "VictorKildahl",
+  "preview": "https://www.youtube.com/results?search_query=mac+browser&hl=en&gl=US",
+  "zapped": [
+    "grid-shelf-view-model:has(ytm-shorts-lockup-view-model)",
+    "ytd-reel-shelf-renderer",
+    "ytd-rich-section-renderer:has(ytm-shorts-lockup-view-model)",
+    "ytd-guide-entry-renderer:has(a[title=\"Shorts\"])",
+    "ytd-mini-guide-entry-renderer:has(a[title=\"Shorts\"])"
+  ]
+}

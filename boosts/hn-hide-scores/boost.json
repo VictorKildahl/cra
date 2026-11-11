@@ -1,0 +1,11 @@
+{
+  "v": 1,
+  "name": "Hide Points",
+  "host": "news.ycombinator.com",
+  "about": "Hides the points on stories, so you pick by title, not by votes.",
+  "by": "VictorKildahl",
+  "preview": "https://news.ycombinator.com/",
+  "zapped": [
+    ".score"
+  ]
+}

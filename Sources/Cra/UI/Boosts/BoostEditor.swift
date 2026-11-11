@@ -277,6 +277,10 @@ private struct BoostEditorView: View {
                 Button("Reset all Edits") { model.resetAll() }
                 Button("Delete this Boost") { delete() }
                 Divider()
+                Button("Share Boost…") {
+                    BoostInstall.share(model.boost) { text in (NSApp.delegate as? AppDelegate)?.main?.showToast(text) }
+                }
+                .disabled(!BoostInstall.canShare(model.boost))
                 Button("All Boosts…") { NotificationCenter.default.post(name: .craShowBoostsLibrary, object: nil) }
             } label: {
                 HStack(spacing: 4) {

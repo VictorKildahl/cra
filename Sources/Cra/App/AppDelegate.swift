@@ -530,6 +530,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // A link from another app soon after starting on a new tab: its tab is what the window
         // shows, so the bar that was waiting for a new tab goes.
         if store.settings.startOnNewTab, let m = main, m.commandBar.isOpen, m.selectedTab == nil { m.commandBar.close() }
+        // The gallery's Open in Cra (crabrowser.app/boosts) from any browser: asked about first.
+        if BoostInstall.isBoostLink(url) {
+            main.showWindow(nil)
+            if !HitchMonitor.background { NSApp.activate(ignoringOtherApps: true) }
+            BoostInstall.offer(url, over: main.window, from: "another app")
+            return
+        }
         if let u = URL(string: url), u.scheme?.lowercased() == "cra" {
             if Self.isUserFacing(u) || UserDefaults.standard.bool(forKey: "scriptingURLs") {
                 handleInternalURL(u)

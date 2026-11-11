@@ -1800,6 +1800,13 @@ public:
         FinishAgentPermission();
         CraBrowser* o = owner_;
         if (!o || !frame->IsMain()) return false;
+        // The boost gallery's Open in Cra (cra-boost:) in a same-tab link: Cra asks about the boost
+        // itself (BoostInstall) instead of Chrome's "Open Cra?" handing it to whichever Cra macOS picks.
+        std::string target = request->GetURL().ToString();
+        if (g_appLinkHandler && target.compare(0, 10, "cra-boost:") == 0) {
+            g_appLinkHandler(o, NSStringFromCef(request->GetURL()), user_gesture && !is_redirect);
+            return true;
+        }
         if (OpensPeek(o, request, user_gesture, is_redirect)) return true;
         // A page Cra shows in another engine (ProtectedMediaSites, WebKit for DRM services):
         // cancelled before the request goes out, so a sign-in's one-time code isn't spent here.

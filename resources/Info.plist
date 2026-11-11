@@ -97,6 +97,16 @@
 				<string>cra</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLName</key>
+			<string>Cra Boost</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>cra-boost</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleDocumentTypes</key>
 	<array>
