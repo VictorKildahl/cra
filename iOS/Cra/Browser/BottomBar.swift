@@ -8,6 +8,12 @@ final class BottomBar: UIView {
     let tabsButton = TabStackButton()
     let pill = BarButton(symbol: "plus", pointSize: 16, weight: .semibold)
     let menuButton = BarButton(symbol: "chevron.up", pointSize: 16, weight: .semibold)
+    /// In the tab switcher the tab stack gives way to the archive, and the menu to Settings.
+    let archiveButton = BarButton(symbol: "archivebox", pointSize: 14, weight: .semibold)
+    let settingsButton = BarButton(symbol: "gearshape", pointSize: 15, weight: .semibold)
+
+    enum Mode { case page, tabs }
+    var mode: Mode = .page { didSet { applyMode() } }
     private let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterial))
     private let hairline = UIView()
 
@@ -15,9 +21,7 @@ final class BottomBar: UIView {
     /// is kept (the sheet's field stands in for it).
     var controlsVisibility: CGFloat = 1 {
         didSet {
-            tabsButton.alpha = controlsVisibility
-            menuButton.alpha = controlsVisibility
-            blur.alpha = controlsVisibility
+            applyMode()
         }
     }
 
@@ -32,7 +36,33 @@ final class BottomBar: UIView {
         pill.accessibilityLabel = "New tab"
         menuButton.accessibilityIdentifier = "bar-menu"
         menuButton.accessibilityLabel = "Menu"
-        [tabsButton, pill, menuButton].forEach(addSubview)
+        archiveButton.accessibilityIdentifier = "bar-archive"
+        archiveButton.accessibilityLabel = "Archived tabs"
+        settingsButton.accessibilityIdentifier = "bar-settings"
+        settingsButton.accessibilityLabel = "Settings"
+        [tabsButton, archiveButton, pill, menuButton, settingsButton].forEach(addSubview)
+        applyMode()
+    }
+
+    /// Shows the page's controls or the tab switcher's. Animates inside an animation block.
+    private func applyMode() {
+        let visible = controlsVisibility
+        let tabs = mode == .tabs
+        tabsButton.alpha = tabs ? 0 : visible
+        menuButton.alpha = tabs ? 0 : visible
+        archiveButton.alpha = tabs ? visible : 0
+        settingsButton.alpha = tabs ? visible : 0
+        // Over the switcher the bar has no slab of its own: the buttons float on the backdrop,
+        // tinted with its lavender (Arc Search: pill #dfddf2, circles #f0effd on #fcfafd).
+        blur.alpha = tabs ? 0 : visible
+        pill.backgroundColor = tabs ? Palette.switcherPillFill : Palette.barControlFill
+        archiveButton.backgroundColor = Palette.switcherButtonFill
+        settingsButton.backgroundColor = Palette.switcherButtonFill
+        let small = CGAffineTransform(scaleX: 0.6, y: 0.6)
+        tabsButton.transform = tabs ? small : .identity
+        menuButton.transform = tabs ? small : .identity
+        archiveButton.transform = tabs ? .identity : small
+        settingsButton.transform = tabs ? .identity : small
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -46,9 +76,15 @@ final class BottomBar: UIView {
         hairline.frame = CGRect(x: 0, y: 0, width: bounds.width, height: 1 / UIScreen.main.scale)
         // The bar's frames are worked out for a view that ends at the screen's bottom edge.
         let frames = MobileBottomBar.frames(in: bounds.size, safeBottom: bounds.height - MobileBottomBar.height)
+        let transforms = [tabsButton, menuButton, archiveButton, settingsButton].map(\.transform)
+        [tabsButton, menuButton, archiveButton, settingsButton].forEach { $0.transform = .identity }
         tabsButton.frame = frames.tabs.insetBy(dx: -6, dy: -6)
         pill.frame = frames.pill
         menuButton.frame = frames.menu
+        // The switcher's round buttons are 32 pt, a little smaller than the page's menu button.
+        archiveButton.frame = frames.tabs.insetBy(dx: 1.5, dy: 1.5)
+        settingsButton.frame = frames.menu.insetBy(dx: 1.5, dy: 1.5)
+        zip([tabsButton, menuButton, archiveButton, settingsButton], transforms).forEach { $0.transform = $1 }
     }
 
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {

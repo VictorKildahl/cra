@@ -60,6 +60,16 @@ struct MobileSuggestionsTests {
         #expect(MobileSuggestions.destination(forTyped: " a b ", engine: .google) == "https://www.google.com/search?q=a%20b")
     }
 
+    /// Arc Search's engines, in its menu's order; the two the Mac app lacks have their own addresses.
+    @Test func searchEnginesAreArcSearchs() {
+        #expect(MobileSearchEngine.allCases.map(\.label) == ["Google", "Bing", "DuckDuckGo", "Ecosia", "Perplexity", "Kagi"])
+        #expect(MobileSearchEngine.ecosia.searchURL("a b&c") == "https://www.ecosia.org/search?q=a%20b%26c")
+        #expect(MobileSearchEngine.perplexity.searchURL("a b") == "https://www.perplexity.ai/search?q=a%20b")
+        #expect(MobileSearchEngine.perplexity.suggestURL("a") == nil)
+        #expect(MobileSearchEngine.kagi.searchURL("a") == SearchEngine.kagi.searchURL("a"))
+        #expect(MobileSearchEngine.ecosia.suggestURL("a b")?.absoluteString == "https://ac.ecosia.org/autocomplete?q=a%20b&type=list")
+    }
+
     @Test func readsOpenSearchAnswers() {
         let google = Data(#")]}'["wh",["whatsapp","weather","whatsapp.com"],["","",""],[],{"google:suggesttype":["QUERY","QUERY","NAVIGATION"]}]"#.utf8)
         #expect(MobileSuggestions.completions(fromOpenSearch: google) == ["whatsapp", "weather"])
@@ -98,7 +108,9 @@ struct MobileTabsTests {
         #expect(document.archiveStale(after: .oneDay, now: Self.start) == 3)
         #expect(document.tabs.map(\.title) == ["fresh", "on-screen"])
         #expect(document.archived.map(\.title) == ["old", "older"])
-        #expect(document.archiveStale(after: .never, now: Self.start.addingTimeInterval(1e7)) == 0)
+        #expect(document.archiveStale(after: .thirtyDays, now: Self.start) == 0)
+        #expect(MobileArchiveAfter.allCases.map(\.label) == ["12 hours", "1 day", "3 days", "7 days", "30 days"])
+        #expect(MobileArchiveAfter.oneDay.settingValue == "After 1 day")
     }
 
     @Test func restoringAnArchivedTabShowsIt() {
@@ -110,6 +122,18 @@ struct MobileTabsTests {
         #expect(document.archived.isEmpty)
         #expect(document.selectedTab?.title == "old")
         #expect(document.selectedTab?.lastActive == Self.start)
+    }
+
+    @Test func aClosedTabGoesToTheArchiveAndAnIncognitoOneDoesNot() {
+        var document = MobileTabsDocument()
+        let plain = Self.tab("plain", hoursAgo: 1), secret = Self.tab("secret", hoursAgo: 1, incognito: true)
+        [plain, secret].forEach { document.open($0) }
+        #expect(document.exportText == "plain\nhttps://plain.example")
+        document.archive(secret.id)
+        document.archive(plain.id)
+        #expect(document.tabs.isEmpty && document.archived.map(\.title) == ["plain"])
+        document.removeArchived([plain.id])
+        #expect(document.archived.isEmpty)
     }
 
     @Test func aSavedDocumentLoadsBack() throws {
@@ -130,18 +154,135 @@ struct MobileSettingsTests {
         let loaded = try JSONDecoder().decode(MobileSettings.self, from: Data(#"{"searchEngine":"duckduckgo","archiveAfter":"someday"}"#.utf8))
         #expect(loaded.searchEngine == .duckduckgo)
         #expect(loaded.archiveAfter == .oneDay)
-        #expect(loaded.opensKeyboardOnLaunch && loaded.blockAds && loaded.blockTrackers && loaded.blockCookieBanners)
+        #expect(loaded.opensKeyboardOnLaunch && loaded.siteDefaults == MobileSiteOptions())
+        #expect(loaded.siteDefaults.blockAds && loaded.siteDefaults.blockTrackers && loaded.siteDefaults.blockCookieBanners)
+        #expect(loaded.siteDefaults.swipeToNavigate == .fromAnywhere && loaded.openAppLinksIn == .nativeApp)
         let saved = try JSONEncoder().encode(loaded)
         #expect(try JSONDecoder().decode(MobileSettings.self, from: saved) == loaded)
     }
 
-    @Test func aSiteKeepsItsOwnBlockingUntilItMatchesTheDefaultsAgain() {
+    @Test func aSiteKeepsItsOwnChoicesUntilTheyMatchTheGlobalOnesAgain() {
         var settings = MobileSettings()
-        settings.setBlocking({ $0.blockAds = false }, for: "www.Example.com")
-        #expect(settings.blocking(for: "example.com").ads == false)
-        #expect(settings.blocking(for: "example.com").trackers == true)
-        #expect(settings.blocking(for: "other.example").ads == true)
-        settings.setBlocking({ $0.blockAds = true }, for: "example.com")
-        #expect(settings.siteExceptions.isEmpty)
+        var site = settings.options(for: "www.Example.com")
+        site.blockAds = false
+        site.swipeToNavigate = .fromEdges
+        settings.setOptions(site, for: "www.Example.com")
+        #expect(settings.options(for: "example.com").blockAds == false)
+        #expect(settings.options(for: "example.com").swipeToNavigate == .fromEdges)
+        #expect(settings.options(for: "example.com").blockTrackers == true)
+        #expect(settings.options(for: "other.example").blockAds == true)
+        // A global change reaches the site where it made no choice of its own.
+        settings.siteDefaults.collapseBottomBar = false
+        #expect(settings.options(for: "example.com").collapseBottomBar == false)
+        settings.setOptions(settings.siteDefaults, for: "example.com")
+        #expect(settings.siteOverrides.isEmpty)
+    }
+}
+
+struct MobileArchiveTests {
+    static let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Copenhagen")!
+        return calendar
+    }()
+    /// Wednesday 11 November 2026, 21:00 in Copenhagen.
+    static let now = Date(timeIntervalSince1970: 1_794_427_200)
+
+    static func tab(_ title: String, hoursAgo: Double) -> MobileTab {
+        MobileTab(url: "https://\(title.lowercased()).example/page", title: title, lastActive: now.addingTimeInterval(-hoursAgo * 3600))
+    }
+
+    /// Arc Search's Archive: "TODAY", "YESTERDAY", then each older day by its date.
+    @Test func archiveIsGroupedByDayNewestFirst() {
+        let tabs = [Self.tab("Morning", hoursAgo: 10), Self.tab("Evening", hoursAgo: 1), Self.tab("Tuesday", hoursAgo: 30),
+                    Self.tab("LastWeek", hoursAgo: 24 * 6)]
+        let sections = MobileArchive.sections(tabs, matching: "", now: Self.now, calendar: Self.calendar, locale: Locale(identifier: "en_US"))
+        #expect(sections.map(\.title) == ["TODAY", "YESTERDAY", "THURSDAY, NOVEMBER 5"])
+        #expect(sections[0].tabs.map(\.title) == ["Evening", "Morning"])
+    }
+
+    @Test func searchMatchesTitleAndAddress() {
+        let tabs = [Self.tab("Pizza", hoursAgo: 1), Self.tab("Pasta", hoursAgo: 2)]
+        let byTitle = MobileArchive.sections(tabs, matching: "piz", now: Self.now, calendar: Self.calendar, locale: Locale(identifier: "en_US"))
+        #expect(byTitle.flatMap(\.tabs).map(\.title) == ["Pizza"])
+        let byAddress = MobileArchive.sections(tabs, matching: "PASTA.example", now: Self.now, calendar: Self.calendar, locale: Locale(identifier: "en_US"))
+        #expect(byAddress.flatMap(\.tabs).map(\.title) == ["Pasta"])
+    }
+
+    @Test func aRowShowsTheAddressWithoutItsScheme() {
+        #expect(MobileArchive.subtitle(for: Self.tab("Pizza", hoursAgo: 1)) == "pizza.example/page")
+    }
+}
+
+struct MobileTabCarouselTests {
+    static let phone = CGSize(width: 393, height: 852)
+
+    /// Arc Search's row at rest on an iPhone 15 Pro.
+    @Test func cardsSitWhereArcSearchPutsThem() {
+        let focus = MobileTabCarousel.placement(relative: 0, in: Self.phone)
+        #expect(focus.frame == CGRect(x: 393 * 0.2112, y: 852 * 0.5147 - 277.5, width: 273, height: 555))
+        #expect(abs(focus.frame.minX - 83) < 0.1 && abs(focus.frame.minY - 161) < 0.1)
+        #expect(focus.scale == 1 && focus.dim == 0)
+        let next = MobileTabCarousel.placement(relative: 1, in: Self.phone)
+        #expect(abs(next.frame.minX - 304.1) < 0.1 && next.scale > 1 && next.dim == 0)
+        let previous = MobileTabCarousel.placement(relative: -1, in: Self.phone)
+        #expect(abs(previous.frame.minX - 10) < 0.1 && abs(previous.scale - 0.977) < 0.001)
+        #expect(previous.dim == MobileTabCarousel.maximumDim)
+        #expect(MobileTabCarousel.placement(relative: -0.5, in: Self.phone).dim == 0.08)
+    }
+
+    @Test func draggingFollowsTheFingerAndResistsPastTheEnds() {
+        let pitch = MobileTabCarousel.pitch(in: Self.phone)
+        #expect(MobileTabCarousel.position(start: 1, translation: -pitch, count: 3, in: Self.phone) == 2)
+        #expect(MobileTabCarousel.position(start: 0, translation: pitch * 3, count: 3, in: Self.phone) == -1)
+        #expect(MobileTabCarousel.position(start: 2, translation: -pitch * 3, count: 3, in: Self.phone) == 3)
+    }
+
+    @Test func aFlickGoesToTheNextCardAndStopsAtTheEnds() {
+        #expect(MobileTabCarousel.restingIndex(position: 1.2, velocity: 0, count: 4, in: Self.phone) == 1)
+        #expect(MobileTabCarousel.restingIndex(position: 1.2, velocity: -900, count: 4, in: Self.phone) == 2)
+        #expect(MobileTabCarousel.restingIndex(position: 1.8, velocity: 900, count: 4, in: Self.phone) == 1)
+        #expect(MobileTabCarousel.restingIndex(position: 3.3, velocity: -2000, count: 4, in: Self.phone) == 3)
+        #expect(MobileTabCarousel.restingIndex(position: -0.2, velocity: 2000, count: 4, in: Self.phone) == 0)
+    }
+
+    @Test func aCardIsThrownAwayByDistanceOrByAFlick() {
+        #expect(MobileTabCarousel.closes(translation: -130, velocity: 0))
+        #expect(MobileTabCarousel.closes(translation: -40, velocity: -900))
+        #expect(!MobileTabCarousel.closes(translation: -40, velocity: -100))
+        #expect(!MobileTabCarousel.closes(translation: 200, velocity: 900))
+    }
+}
+
+struct MobilePageMenuTests {
+    /// Arc Search's menu with "Find on Page" and two more rows starts 413 pt down an iPhone 15
+    /// Pro: three rows there (one group of one and one of two, 16 pt apart).
+    @Test func heightMatchesArcSearch() {
+        #expect(abs(MobilePageMenu.height(rows: 3, safeBottom: 34) + 16 - (852 - 413)) < 0.5)
+        #expect(abs(MobilePageMenu.height(safeBottom: 34) - 519) < 0.001)
+    }
+
+    @Test func fourTilesSitAsMeasuredAndThreeStayCentred() {
+        let four = MobilePageMenu.tileFrames(count: 4, width: 393)
+        #expect(four.map { ($0.minX * 10).rounded() / 10 } == [21.3, 115.3, 209.4, 303.4])
+        #expect(four[0].minY == 81)
+        let three = MobilePageMenu.tileFrames(count: 3, width: 393)
+        #expect(abs(three[1].midX - 196.5) < 0.01)
+        #expect(abs((three[1].minX - three[0].minX) - (four[1].minX - four[0].minX)) < 0.01)
+        #expect(MobilePageMenu.tiles(canSummarize: false) == [.reader, .copyLink, .share])
+    }
+
+    @Test func zoomStepsByTenthsWithinLimits() {
+        #expect(MobilePageMenu.zoom(1, stepping: true) == 1.1)
+        #expect(MobilePageMenu.zoom(1.1, stepping: false) == 1)
+        #expect(MobilePageMenu.zoom(0.5, stepping: false) == 0.5)
+        #expect(MobilePageMenu.zoom(3, stepping: true) == 3)
+        #expect(MobilePageMenu.zoomLabel(1) == nil)
+        #expect(MobilePageMenu.zoomLabel(1.3) == "130%")
+    }
+
+    @Test func blockedCountReadsAsArcSearchs() {
+        #expect(MobilePageMenu.blockedLabel(0) == nil)
+        #expect(MobilePageMenu.blockedLabel(6) == "Scrubbed 6 ads and trackers")
     }
 }

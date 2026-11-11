@@ -44,12 +44,12 @@ public enum MobileSuggestions {
     }
 
     /// Where a row goes: the address itself, or the engine's results for the text.
-    public static func destination(for row: Row, engine: SearchEngine) -> String {
+    public static func destination(for row: Row, engine: MobileSearchEngine) -> String {
         destination(forTyped: row.text, engine: engine, kind: row.kind)
     }
 
     /// Where the keyboard's Go key sends what was typed.
-    public static func destination(forTyped typed: String, engine: SearchEngine, kind: Row.Kind? = nil) -> String {
+    public static func destination(forTyped typed: String, engine: MobileSearchEngine, kind: Row.Kind? = nil) -> String {
         let query = typed.trimmingCharacters(in: .whitespaces)
         let isAddress = kind.map { $0 == .address } ?? TypedURL.looksLikeURL(query)
         return isAddress ? TypedURL.fromInput(query) : engine.searchURL(query)

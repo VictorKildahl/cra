@@ -6,7 +6,8 @@
 #   scripts/ios.sh run [args…]        # build, install, launch; args go to the app
 #                                     # (-CraDataDir fresh, -CraOpenURL https://example.com)
 #   scripts/ios.sh shot <file.png>    # screenshot of the simulator
-#   scripts/ios.sh test [only…]       # the UI tests (iOS/CraUITests); `only` as CraUITests/Class/test
+#   scripts/ios.sh test [only…]       # the UI tests (iOS/CraUITests); `only` as CraUITests/Class/test.
+#                                     # Their screenshots land in build/ios/test-screens
 #   scripts/ios.sh open               # show the Simulator window
 #
 # CRA_IOS_SIM names the simulator (default "Cra iPhone 17"); it is created on the newest
@@ -70,17 +71,36 @@ case "$command" in
     boot "$UDID"
     only=()
     for name in "$@"; do only+=("-only-testing:$name"); done
+    rm -rf "$DERIVED/test.xcresult" "$DERIVED/test-screens"
     xcodebuild -project iOS/Cra.xcodeproj -scheme Cra -configuration Debug \
       -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$DERIVED" \
+      -resultBundlePath "$DERIVED/test.xcresult" \
       ${only[@]+"${only[@]}"} test 2>&1 |
       grep -E "error|Test Case .*(passed|failed)|Executed|TEST (SUCCEEDED|FAILED)|BUILD FAILED" || true
+    # The screenshots the tests attached, as build/ios/test-screens/<name>.png.
+    if [ -d "$DERIVED/test.xcresult" ]; then
+      xcrun xcresulttool export attachments --path "$DERIVED/test.xcresult" --output-path "$DERIVED/test-screens" >/dev/null 2>&1 || true
+      python3 -I - "$DERIVED/test-screens" <<'PY' || true
+import json, os, sys
+folder = sys.argv[1]
+manifest = os.path.join(folder, "manifest.json")
+if os.path.exists(manifest):
+    for test in json.load(open(manifest)):
+        for item in test.get("attachments", []):
+            name = item.get("suggestedHumanReadableName", "")
+            source = os.path.join(folder, item.get("exportedFileName", ""))
+            if name and os.path.exists(source):
+                # "name_0_<uuid>.png" as attached by XCTest: keep the name the test gave it.
+                os.replace(source, os.path.join(folder, name.split("_0_")[0] + ".png"))
+PY
+    fi
     ;;
   open)
     boot "$UDID"
     open -a Simulator --args -CurrentDeviceUDID "$UDID"
     ;;
   *)
-    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac

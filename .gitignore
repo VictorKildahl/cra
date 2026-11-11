@@ -2,7 +2,7 @@
 build/
 vendor/
 *.xcodeproj
-# The iPhone app is an Xcode project (iOS/README.md); the Mac app is built by scripts.
+# The iPhone app is an Xcode project (docs/ios.md); the Mac app is built by scripts.
 !iOS/Cra.xcodeproj
 xcuserdata/
 *.xcworkspace

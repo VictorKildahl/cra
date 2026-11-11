@@ -1,64 +1,136 @@
 import Foundation
 
-/// `settings.json` in the iPhone app's data folder. Every field has a default, so a file from an
-/// older build loads and a missing file is the defaults.
-public struct MobileSettings: Codable, Equatable {
-    public var searchEngine: SearchEngine = .google
-    public var archiveAfter: MobileArchiveAfter = .oneDay
-    /// Arc Search comes up ready to type.
-    public var opensKeyboardOnLaunch = true
+/// What Arc Search's Site Settings sheet switches: the three blockers, then how the page behaves.
+/// Each has a value for every site (Global Site Settings) that a single site can override.
+public struct MobileSiteOptions: Codable, Equatable {
     public var blockAds = true
-    public var blockTrackers = true
     public var blockCookieBanners = true
-    /// Hosts where a block is switched off, per kind.
-    public var siteExceptions: [String: SiteBlocking] = [:]
-
-    public struct SiteBlocking: Codable, Equatable {
-        public var blockAds: Bool?
-        public var blockTrackers: Bool?
-        public var blockCookieBanners: Bool?
-
-        public init(blockAds: Bool? = nil, blockTrackers: Bool? = nil, blockCookieBanners: Bool? = nil) {
-            self.blockAds = blockAds
-            self.blockTrackers = blockTrackers
-            self.blockCookieBanners = blockCookieBanners
-        }
-
-        var isEmpty: Bool { blockAds == nil && blockTrackers == nil && blockCookieBanners == nil }
-    }
+    public var blockTrackers = true
+    public var pinchToSummarize = true
+    public var collapseBottomBar = true
+    public var swipeToNavigate: MobileSwipeToNavigate = .fromAnywhere
 
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case searchEngine, archiveAfter, opensKeyboardOnLaunch, blockAds, blockTrackers, blockCookieBanners, siteExceptions
+        case blockAds, blockCookieBanners, blockTrackers, pinchToSummarize, collapseBottomBar, swipeToNavigate
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        searchEngine = (try? c.decodeIfPresent(SearchEngine.self, forKey: .searchEngine)) ?? .google
+        blockAds = try c.decodeIfPresent(Bool.self, forKey: .blockAds) ?? true
+        blockCookieBanners = try c.decodeIfPresent(Bool.self, forKey: .blockCookieBanners) ?? true
+        blockTrackers = try c.decodeIfPresent(Bool.self, forKey: .blockTrackers) ?? true
+        pinchToSummarize = try c.decodeIfPresent(Bool.self, forKey: .pinchToSummarize) ?? true
+        collapseBottomBar = try c.decodeIfPresent(Bool.self, forKey: .collapseBottomBar) ?? true
+        swipeToNavigate = (try? c.decodeIfPresent(MobileSwipeToNavigate.self, forKey: .swipeToNavigate)) ?? .fromAnywhere
+    }
+}
+
+/// Where a sideways swipe goes back and forward: anywhere on the page, or only from its edges.
+public enum MobileSwipeToNavigate: String, Codable, CaseIterable, Identifiable {
+    case fromAnywhere, fromEdges
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .fromAnywhere: return "From Anywhere"
+        case .fromEdges: return "From Edges"
+        }
+    }
+}
+
+/// One site's own choices: only what differs from the global options is kept.
+public struct MobileSiteOverride: Codable, Equatable {
+    public var blockAds: Bool?
+    public var blockCookieBanners: Bool?
+    public var blockTrackers: Bool?
+    public var pinchToSummarize: Bool?
+    public var collapseBottomBar: Bool?
+    public var swipeToNavigate: MobileSwipeToNavigate?
+
+    public init() {}
+
+    var isEmpty: Bool { self == MobileSiteOverride() }
+
+    func applied(to global: MobileSiteOptions) -> MobileSiteOptions {
+        var options = global
+        options.blockAds = blockAds ?? global.blockAds
+        options.blockCookieBanners = blockCookieBanners ?? global.blockCookieBanners
+        options.blockTrackers = blockTrackers ?? global.blockTrackers
+        options.pinchToSummarize = pinchToSummarize ?? global.pinchToSummarize
+        options.collapseBottomBar = collapseBottomBar ?? global.collapseBottomBar
+        options.swipeToNavigate = swipeToNavigate ?? global.swipeToNavigate
+        return options
+    }
+
+    /// The override that turns `global` into `options`.
+    init(_ options: MobileSiteOptions, over global: MobileSiteOptions) {
+        blockAds = options.blockAds == global.blockAds ? nil : options.blockAds
+        blockCookieBanners = options.blockCookieBanners == global.blockCookieBanners ? nil : options.blockCookieBanners
+        blockTrackers = options.blockTrackers == global.blockTrackers ? nil : options.blockTrackers
+        pinchToSummarize = options.pinchToSummarize == global.pinchToSummarize ? nil : options.pinchToSummarize
+        collapseBottomBar = options.collapseBottomBar == global.collapseBottomBar ? nil : options.collapseBottomBar
+        swipeToNavigate = options.swipeToNavigate == global.swipeToNavigate ? nil : options.swipeToNavigate
+    }
+}
+
+/// Where a tapped link to a site with an installed app goes: Arc Search's "Open App Links in...".
+public enum MobileAppLinks: String, Codable, CaseIterable, Identifiable {
+    case browser, nativeApp
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .browser: return "Cra"
+        case .nativeApp: return "Native App"
+        }
+    }
+}
+
+/// `settings.json` in the iPhone app's data folder. Every field has a default, so a file from an
+/// older build loads and a missing file is the defaults.
+public struct MobileSettings: Codable, Equatable {
+    public var searchEngine: MobileSearchEngine = .google
+    public var archiveAfter: MobileArchiveAfter = .oneDay
+    /// Arc Search comes up ready to type.
+    public var opensKeyboardOnLaunch = true
+    public var openAppLinksIn: MobileAppLinks = .nativeApp
+    /// Global Site Settings.
+    public var siteDefaults = MobileSiteOptions()
+    /// Sites that differ, keyed by `siteKey`.
+    public var siteOverrides: [String: MobileSiteOverride] = [:]
+    public var hasSeenOnboarding = false
+
+    public init() {}
+
+    private enum CodingKeys: String, CodingKey {
+        case searchEngine, archiveAfter, opensKeyboardOnLaunch, openAppLinksIn, siteDefaults, siteOverrides, hasSeenOnboarding
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        searchEngine = (try? c.decodeIfPresent(MobileSearchEngine.self, forKey: .searchEngine)) ?? .google
         archiveAfter = (try? c.decodeIfPresent(MobileArchiveAfter.self, forKey: .archiveAfter)) ?? .oneDay
         opensKeyboardOnLaunch = try c.decodeIfPresent(Bool.self, forKey: .opensKeyboardOnLaunch) ?? true
-        blockAds = try c.decodeIfPresent(Bool.self, forKey: .blockAds) ?? true
-        blockTrackers = try c.decodeIfPresent(Bool.self, forKey: .blockTrackers) ?? true
-        blockCookieBanners = try c.decodeIfPresent(Bool.self, forKey: .blockCookieBanners) ?? true
-        siteExceptions = try c.decodeIfPresent([String: SiteBlocking].self, forKey: .siteExceptions) ?? [:]
+        openAppLinksIn = (try? c.decodeIfPresent(MobileAppLinks.self, forKey: .openAppLinksIn)) ?? .nativeApp
+        siteDefaults = try c.decodeIfPresent(MobileSiteOptions.self, forKey: .siteDefaults) ?? MobileSiteOptions()
+        siteOverrides = try c.decodeIfPresent([String: MobileSiteOverride].self, forKey: .siteOverrides) ?? [:]
+        hasSeenOnboarding = try c.decodeIfPresent(Bool.self, forKey: .hasSeenOnboarding) ?? false
     }
 
-    /// What is blocked on `host`: the site's own choice where it made one, the default otherwise.
-    public func blocking(for host: String?) -> (ads: Bool, trackers: Bool, cookieBanners: Bool) {
-        let site = host.flatMap { siteExceptions[Self.siteKey($0)] }
-        return (site?.blockAds ?? blockAds, site?.blockTrackers ?? blockTrackers, site?.blockCookieBanners ?? blockCookieBanners)
+    /// What applies on `host`: the site's own choices over the global ones.
+    public func options(for host: String?) -> MobileSiteOptions {
+        guard let host, let site = siteOverrides[Self.siteKey(host)] else { return siteDefaults }
+        return site.applied(to: siteDefaults)
     }
 
-    /// Records a site's choice, and forgets the site once it matches the defaults again.
-    public mutating func setBlocking(_ change: (inout SiteBlocking) -> Void, for host: String) {
-        let key = Self.siteKey(host)
-        var site = siteExceptions[key] ?? SiteBlocking()
-        change(&site)
-        if site.blockAds == blockAds { site.blockAds = nil }
-        if site.blockTrackers == blockTrackers { site.blockTrackers = nil }
-        if site.blockCookieBanners == blockCookieBanners { site.blockCookieBanners = nil }
-        siteExceptions[key] = site.isEmpty ? nil : site
+    /// Records a site's choices, and forgets the site once it matches the global options again.
+    public mutating func setOptions(_ options: MobileSiteOptions, for host: String) {
+        let override = MobileSiteOverride(options, over: siteDefaults)
+        siteOverrides[Self.siteKey(host)] = override.isEmpty ? nil : override
     }
 
     /// A site is its host without `www.`, lowercased.

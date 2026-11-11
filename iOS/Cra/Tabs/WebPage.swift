@@ -20,6 +20,8 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
 
     private(set) var isLoading = false
     private(set) var progress: Double = 0
+    /// "Request Desktop Site": applied to every navigation of this tab while it is on.
+    var wantsDesktopSite = false
 
     init(tab: MobileTab) {
         tabID = tab.id
@@ -69,7 +71,25 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
         webView.takeSnapshot(with: configuration) { image, _ in done(image) }
     }
 
+    /// The icons the page names for itself, largest first.
+    func iconCandidates(_ done: @escaping ([String]) -> Void) {
+        let script = """
+        (() => {
+          const links = [...document.querySelectorAll('link[rel~="apple-touch-icon"], link[rel~="apple-touch-icon-precomposed"], link[rel~="icon"]')];
+          const size = l => parseInt((l.getAttribute('sizes') || '0').split('x')[0]) || (l.rel.includes('apple') ? 180 : 16);
+          return links.filter(l => l.href && !l.href.endsWith('.svg')).sort((a, b) => size(b) - size(a)).slice(0, 3).map(l => l.href);
+        })()
+        """
+        webView.evaluateJavaScript(script) { value, _ in done(value as? [String] ?? []) }
+    }
+
     // MARK: Navigation
+
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, preferences: WKWebpagePreferences,
+                 decisionHandler: @escaping (WKNavigationActionPolicy, WKWebpagePreferences) -> Void) {
+        preferences.preferredContentMode = wantsDesktopSite ? .desktop : .mobile
+        decisionHandler(.allow, preferences)
+    }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         delegate?.webPage(self, didFinishLoading: true)

@@ -35,31 +35,36 @@ public struct MobileTab: Codable, Equatable, Identifiable {
     }
 }
 
-/// How long a tab stays open without being looked at. Arc Search's choices.
+/// How long a tab stays open without being looked at: Arc Search's "Archive Inactive Tabs"
+/// choices, one day unless changed.
 public enum MobileArchiveAfter: String, Codable, CaseIterable, Identifiable {
-    case twelveHours, oneDay, sevenDays, thirtyDays, never
+    case twelveHours, oneDay, threeDays, sevenDays, thirtyDays
 
     public var id: String { rawValue }
 
-    public var interval: TimeInterval? {
+    public var interval: TimeInterval {
         switch self {
         case .twelveHours: return 12 * 3600
         case .oneDay: return 24 * 3600
+        case .threeDays: return 3 * 24 * 3600
         case .sevenDays: return 7 * 24 * 3600
         case .thirtyDays: return 30 * 24 * 3600
-        case .never: return nil
         }
     }
 
+    /// The choice as the menu words it.
     public var label: String {
         switch self {
-        case .twelveHours: return "12 Hours"
-        case .oneDay: return "1 Day"
-        case .sevenDays: return "7 Days"
-        case .thirtyDays: return "30 Days"
-        case .never: return "Never"
+        case .twelveHours: return "12 hours"
+        case .oneDay: return "1 day"
+        case .threeDays: return "3 days"
+        case .sevenDays: return "7 days"
+        case .thirtyDays: return "30 days"
         }
     }
+
+    /// The row's value in Settings: "After 1 day".
+    public var settingValue: String { "After \(label)" }
 }
 
 /// `tabs.json` in the iPhone app's data folder: the open tabs, oldest first, the one on screen,
@@ -115,7 +120,7 @@ public struct MobileTabsDocument: Codable, Equatable {
     /// they close.
     @discardableResult
     public mutating func archiveStale(after: MobileArchiveAfter, now: Date, archiveLimit: Int = 500) -> Int {
-        guard let interval = after.interval else { return 0 }
+        let interval = after.interval
         let stale = tabs.filter { $0.id != selected && now.timeIntervalSince($0.lastActive) >= interval }
         guard !stale.isEmpty else { return 0 }
         let ids = Set(stale.map(\.id))
@@ -131,5 +136,29 @@ public struct MobileTabsDocument: Codable, Equatable {
         var tab = archived.remove(at: index)
         tab.lastActive = now
         open(tab)
+    }
+}
+
+extension MobileTabsDocument {
+    /// Closes a tab into the archive, as a swipe up on its card does. Incognito tabs just close.
+    public mutating func archive(_ id: UUID) {
+        guard let tab = tabs.first(where: { $0.id == id }) else { return }
+        close(id)
+        guard !tab.isIncognito else { return }
+        archived.insert(tab, at: 0)
+    }
+
+    public mutating func removeArchived(_ ids: Set<UUID>) {
+        archived.removeAll { ids.contains($0.id) }
+    }
+
+    /// Export Data: the open tabs as text, a title and an address each. Incognito tabs stay out.
+    public var exportText: String {
+        tabs.filter { !$0.isIncognito }.map { "\($0.displayTitle)\n\($0.url)" }.joined(separator: "\n\n")
+    }
+
+    /// Clear History: the archive goes, the open tabs stay.
+    public mutating func clearArchive() {
+        archived.removeAll()
     }
 }

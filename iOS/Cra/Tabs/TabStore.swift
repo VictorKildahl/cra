@@ -60,6 +60,31 @@ final class TabStore {
         changed()
     }
 
+    var archived: [MobileTab] { document.archived }
+
+    /// Closes a tab into the archive, as throwing its card away does.
+    func archive(_ id: UUID) {
+        document.archive(id)
+        pages[id] = nil
+        snapshots[id] = nil
+        changed()
+    }
+
+    func restore(_ id: UUID) {
+        document.restore(id, now: now())
+        changed()
+    }
+
+    func removeArchived(_ ids: Set<UUID>) {
+        document.removeArchived(ids)
+        ids.forEach { try? FileManager.default.removeItem(at: snapshotFile($0)) }
+        changed()
+    }
+
+    func clearArchive() {
+        removeArchived(Set(document.archived.map(\.id)))
+    }
+
     func update(_ id: UUID, url: String?, title: String?) {
         guard let index = document.tabs.firstIndex(where: { $0.id == id }) else { return }
         var tab = document.tabs[index]
