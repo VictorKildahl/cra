@@ -17,6 +17,7 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     weak var delegate: WebPageDelegate?
     private var observations: [NSKeyValueObservation] = []
     private var lastOffset: CGFloat = 0
+    private let pullIndicator = UIImageView(image: UIImage(systemName: "arrow.clockwise", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)))
 
     private(set) var isLoading = false
     private(set) var progress: Double = 0
@@ -47,6 +48,9 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.scrollView.delegate = self
+        pullIndicator.alpha = 0
+        pullIndicator.sizeToFit()
+        webView.scrollView.addSubview(pullIndicator)
         let controller = webView.configuration.userContentController
         controller.add(WeakScriptHandler(self), name: "craBlocked")
         controller.addUserScript(WKUserScript(source: Self.failedRequestScript, injectionTime: .atDocumentStart, forMainFrameOnly: false))
@@ -175,8 +179,27 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
 
     // MARK: Scrolling
 
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        // Pull to refresh acts on release: dragged back up first, nothing happens.
+        let pull = -(scrollView.contentOffset.y + scrollView.adjustedContentInset.top)
+        if MobileSwipe.refreshes(pullAtRelease: pull) {
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            webView.reload()
+        }
+        pullIndicator.alpha = 0
+    }
+
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         let offset = scrollView.contentOffset.y + scrollView.adjustedContentInset.top
+        if scrollView.isTracking, offset < 0 {
+            // The reload arrow turns as the page is pulled and is whole once letting go reloads.
+            let progress = min(1, -offset / MobileSwipe.pullToRefreshDistance)
+            pullIndicator.alpha = progress
+            pullIndicator.transform = CGAffineTransform(rotationAngle: progress * .pi * 1.5)
+            pullIndicator.tintColor = progress >= 1 ? .label : .secondaryLabel
+            // Halfway down the gap the pull opens above the page.
+            pullIndicator.center = CGPoint(x: scrollView.bounds.midX, y: offset / 2)
+        }
         let delta = offset - lastOffset
         lastOffset = offset
         guard scrollView.isTracking || scrollView.isDecelerating else { return }

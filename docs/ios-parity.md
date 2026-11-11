@@ -23,7 +23,7 @@ ended). "Measured" means the numbers come from Arc Search footage, not from a de
 | "Browse for Me" button on each search row | partial | Shown only where Apple Intelligence is on; opens the search for now. |
 | Pill grows into the search field | partial | The morph exists; timing and the side icons' fade are not compared yet. |
 | Tap above the sheet closes it | done | UI test `testThePillOpensSearchAndATapAboveClosesIt`. |
-| Swipe the sheet down to close | missing | |
+| Swipe the sheet down to close | done | The sheet follows the finger; the keyboard leaves on release. |
 | Incognito toggle in the field | partial | Toggles and opens private tabs; no dark sheet, label or "You're browsing Incognito" yet. |
 | Voice search (hold the pill, mic in the field) | missing | |
 | Call Arc | *skip* | Removed from Arc Search itself. |
@@ -37,10 +37,10 @@ ended). "Measured" means the numbers come from Arc Search footage, not from a de
 | Full-height page, no address bar | done | |
 | Bottom bar: tab stack, pill, up arrow | done | Measured: 76 pt bar, 76 × 39 pill, 35 pt circle, stack of two leaning cards. |
 | Bar hides on scroll down, returns on scroll up | done | Follows the site's "Collapse Bottom Bar" switch. |
-| Swipe on the bar to cycle recent tabs | missing | |
-| Swipe to navigate, from anywhere | partial | WebKit's edge swipe only. |
-| Swipe back on a tab's first page archives it; opposite reopens | missing | |
-| Pull to refresh | missing | |
+| Swipe on the bar to cycle recent tabs | done | The neighbouring tab in the row slides in beside the page (`MobileSwipe.tabStep`). Arc Search's own motion was not seen. |
+| Swipe to navigate, from anywhere | partial | Back and forward from anywhere or from the edges, per site. The page slides off and the next one fades in; WebKit's own snapshot transition is not used, and Arc Search's was not seen. |
+| Swipe back on a tab's first page archives it; opposite reopens | done | `MobileSwipe.navigation`; UI test in `GestureTests`. |
+| Pull to refresh | done | Acts on release past 96 pt, so dragging back up cancels. The reload arrow is Cra's own: Arc Search's indicator was not seen. |
 | Page menu ("Tab Controls"): address capsule, tiles, rows, footer | done | Measured from Arc Search screenshots (`MobilePageMenu`): 48 pt capsule, 68 × 77 tiles, 48 pt rows. Back, forward, reload and the link glyph work. "Gift Arc" has no counterpart. UI tests in `PageMenuTests`. |
 | Reader | missing | The tile is there and does nothing yet. |
 | Find on Page | done | The system find bar; Arc Search's own bar was not seen in any source. |
@@ -51,6 +51,7 @@ ended). "Measured" means the numbers come from Arc Search footage, not from a de
 | Block ads, trackers, cookie banners, per site | done | The Mac app's domain list compiled into WebKit content rules (`MobileBlocklist`), cookie banners hidden by their containers; each page gets the lists its site's switches ask for. The list does not say which domain is an ad and which a tracker, so the split is by name. Cookie prompts are hidden, not answered (Arc Search 1.38 denies them). |
 | "Reload without ad blockers", blocked count | done | The tab shows the site unblocked until it leaves it. The footer counts requests to listed domains that failed while their blocker was on. UI test in `BlockingTests`. |
 | Link long-press preview and menu | partial | WebKit's default preview. |
+| Hold the up arrow for the share sheet | done | |
 | New-window links open a tab | done | |
 | Downloads, Wallet passes, .ics | missing | |
 | Picture in picture, HTTP auth, certificate bypass | missing | |

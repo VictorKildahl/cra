@@ -346,3 +346,47 @@ struct MobileBlocklistTests {
         #expect(MobileBlocklist.ruleLists(for: options) == ["trackers"])
     }
 }
+
+struct MobileSwipeTests {
+    @Test func aDragCommitsByDistanceOrByAFlickInItsOwnDirection() {
+        #expect(MobileSwipe.direction(translation: 150, velocity: 0, width: 393) == 1)
+        #expect(MobileSwipe.direction(translation: -150, velocity: 0, width: 393) == -1)
+        #expect(MobileSwipe.direction(translation: 60, velocity: 0, width: 393) == 0)
+        #expect(MobileSwipe.direction(translation: 60, velocity: 900, width: 393) == 1)
+        #expect(MobileSwipe.direction(translation: 60, velocity: -900, width: 393) == 0)
+        #expect(MobileSwipe.direction(translation: 10, velocity: 2000, width: 393) == 0)
+    }
+
+    @Test func theBarSwipeMovesAlongTheTabRow() {
+        #expect(MobileSwipe.tabStep(translation: 200, velocity: 0, width: 393, hasOlder: true, hasNewer: true) == -1)
+        #expect(MobileSwipe.tabStep(translation: -200, velocity: 0, width: 393, hasOlder: true, hasNewer: true) == 1)
+        #expect(MobileSwipe.tabStep(translation: 200, velocity: 0, width: 393, hasOlder: false, hasNewer: true) == 0)
+    }
+
+    /// Arc Search: back on a tab's first page archives the tab; the opposite swipe reopens it.
+    @Test func backOnTheFirstPageArchivesTheTabAndForwardBringsItBack() {
+        func swipe(_ translation: CGFloat, back: Bool = false, forward: Bool = false, other: Bool = true, reopen: Bool = false) -> MobileSwipe.Navigation {
+            MobileSwipe.navigation(translation: translation, velocity: 0, width: 393, canGoBack: back, canGoForward: forward,
+                                   hasOtherTab: other, canReopenTab: reopen)
+        }
+        #expect(swipe(200, back: true) == .back)
+        #expect(swipe(200) == .archiveTab)
+        #expect(swipe(200, other: false) == .none)
+        #expect(swipe(-200, forward: true, reopen: true) == .forward)
+        #expect(swipe(-200, reopen: true) == .reopenTab)
+        #expect(swipe(-200) == .none)
+        #expect(swipe(40, back: true) == .none)
+    }
+
+    @Test func edgesOnlyKeepsTheSwipeToTheSides() {
+        #expect(MobileSwipe.mayStart(at: 200, width: 393, mode: .fromAnywhere))
+        #expect(!MobileSwipe.mayStart(at: 200, width: 393, mode: .fromEdges))
+        #expect(MobileSwipe.mayStart(at: 10, width: 393, mode: .fromEdges))
+        #expect(MobileSwipe.mayStart(at: 385, width: 393, mode: .fromEdges))
+    }
+
+    @Test func pullToRefreshActsOnRelease() {
+        #expect(MobileSwipe.refreshes(pullAtRelease: 100))
+        #expect(!MobileSwipe.refreshes(pullAtRelease: 60))
+    }
+}

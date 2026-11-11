@@ -245,3 +245,82 @@ final class BlockingTests: BrowserTestCase {
         XCTAssertNotEqual(card.label, "script-stopped")
     }
 }
+
+final class GestureTests: BrowserTestCase {
+    private func drag(fromX: CGFloat, toX: CGFloat, y: CGFloat) {
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: fromX, dy: y))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: toX, dy: y))
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .fast, thenHoldForDuration: 0)
+    }
+
+    private func openSecondTab() {
+        app.buttons["bar-search"].tap()
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.typeText(Self.page("Second") + "\n")
+        waitForPage("Second")
+    }
+
+    /// The title of the tab on screen: opens the tab row, reads the focused card (the selected
+    /// tab) and goes back into it.
+    private func shownTabTitle() -> String {
+        app.buttons["bar-tabs"].tap()
+        let cards = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'tab-card-'"))
+        XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 5))
+        sleep(1)
+        // The focused card is the one whose left edge is 83 pt in.
+        let focused = cards.allElementsBoundByIndex.first { abs($0.frame.minX - 83) < 3 }
+        let title = focused?.label ?? ""
+        focused?.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(app.buttons["bar-tabs"].waitForExistence(timeout: 5))
+        sleep(1)
+        return title
+    }
+
+    /// A swipe along the bottom bar goes to the neighbouring tab: right for the older one, left
+    /// for the newer.
+    func testSwipingTheBarMovesBetweenTabs() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        openSecondTab()
+        drag(fromX: 0.3, toX: 0.9, y: 0.95)
+        sleep(1)
+        XCTAssertEqual(shownTabTitle(), "First")
+        drag(fromX: 0.8, toX: 0.2, y: 0.95)
+        sleep(1)
+        XCTAssertEqual(shownTabTitle(), "Second")
+    }
+
+    /// A swipe right across a tab's first page archives the tab and shows the one before it; the
+    /// swipe back left reopens it.
+    func testSwipingBackOnAFirstPageArchivesTheTabAndTheOppositeSwipeReopensIt() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        openSecondTab()
+        drag(fromX: 0.3, toX: 0.95, y: 0.5)
+        sleep(1)
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["tab-card-0"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["tab-card-0"].label, "First")
+        XCTAssertFalse(app.buttons["tab-card-1"].exists, "the swiped tab left the row")
+        app.buttons["tab-card-0"].tap()
+        XCTAssertTrue(app.buttons["bar-tabs"].waitForExistence(timeout: 5))
+        sleep(1)
+        drag(fromX: 0.8, toX: 0.1, y: 0.5)
+        sleep(1)
+        XCTAssertEqual(shownTabTitle(), "Second")
+    }
+
+    /// Dragging the search sheet down puts it away when there is a page behind it.
+    func testDraggingTheSearchSheetDownClosesIt() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        app.buttons["bar-search"].tap()
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        let start = field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 180)), withVelocity: .fast, thenHoldForDuration: 0)
+        XCTAssertTrue(app.buttons["bar-search"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.keyboards.firstMatch.waitForExistence(timeout: 1))
+    }
+}

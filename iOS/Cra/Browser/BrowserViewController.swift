@@ -7,27 +7,31 @@ import WebKit
 /// bar's pill when the keyboard comes up.
 final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPageDelegate, TabSwitcherDelegate, PageMenuDelegate {
     let store: TabStore
-    private let settings: MobileSettingsStore
-    private let suggestions = SuggestionService()
-    private let favicons = FaviconStore()
+    let settings: MobileSettingsStore
+    let suggestions = SuggestionService()
+    let favicons = FaviconStore()
 
-    private let backdrop = BackdropView()
-    private let logo = UIImageView(image: UIImage(named: "LaunchMark"))
-    private let pageContainer = UIView()
-    private let dismissArea = UIControl()
-    private let bar = BottomBar()
-    private let sheet = SearchSheet()
+    let backdrop = BackdropView()
+    let logo = UIImageView(image: UIImage(named: "LaunchMark"))
+    let pageContainer = UIView()
+    let dismissArea = UIControl()
+    let bar = BottomBar()
+    let sheet = SearchSheet()
 
-    private var shownPage: WebPage?
-    private var switcher: TabSwitcherView?
-    private var menuHost: SheetHost?
-    private var menuView: PageMenuView?
-    private(set) var isSearching = false
-    private var incognitoSearch = false
-    private var keyboardHeight: CGFloat = 0
-    private var keyboardDroveLayout = false
-    private var barHiddenByScroll = false
-    private var scrollTravel: CGFloat = 0
+    var shownPage: WebPage?
+    var switcher: TabSwitcherView?
+    var menuHost: SheetHost?
+    var menuView: PageMenuView?
+    // Swipes (BrowserGestures.swift).
+    var swipeNeighbour: UIImageView?
+    var swipeNeighbourStep = 0
+    var tabArchivedBySwipe: UUID?
+    var isSearching = false
+    var incognitoSearch = false
+    var keyboardHeight: CGFloat = 0
+    var keyboardDroveLayout = false
+    var barHiddenByScroll = false
+    var scrollTravel: CGFloat = 0
 
     init(store: TabStore, settings: MobileSettingsStore) {
         self.store = store
@@ -63,6 +67,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         sheet.isHidden = true
         view.addSubview(sheet)
 
+        installGestures()
+
         let center = NotificationCenter.default
         center.addObserver(self, selector: #selector(keyboardWillChange(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
         center.addObserver(self, selector: #selector(appWillResignActive), name: UIApplication.willResignActiveNotification, object: nil)
@@ -87,7 +93,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         }
     }
 
-    private var didOfferSearchOnLaunch = false
+    var didOfferSearchOnLaunch = false
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
@@ -99,7 +105,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     // MARK: Layout
 
     /// Puts the bar and the sheet where the current state says. Called inside animation blocks.
-    private func layoutChrome() {
+    func layoutChrome() {
         let bounds = view.bounds
         backdrop.frame = bounds
         pageContainer.frame = bounds
@@ -127,7 +133,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     /// Lets the page scroll clear of the bar.
-    private func updatePageInsets() {
+    func updatePageInsets() {
         guard let scroll = shownPage?.webView.scrollView else { return }
         let inset = barHiddenByScroll ? 0 : MobileBottomBar.height
         if scroll.contentInset.bottom != inset {
@@ -136,7 +142,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         }
     }
 
-    private func animateChrome(duration: TimeInterval, options: UIView.AnimationOptions) {
+    func animateChrome(duration: TimeInterval, options: UIView.AnimationOptions) {
         UIView.animate(withDuration: duration, delay: 0, options: options.union([.beginFromCurrentState, .allowUserInteraction])) {
             self.layoutChrome()
             self.bar.layoutIfNeeded()
@@ -146,13 +152,13 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         }
     }
 
-    private func chromeSettled() {
+    func chromeSettled() {
         guard !isSearching else { return }
         sheet.isHidden = true
         bar.pill.alpha = 1
     }
 
-    @objc private func keyboardWillChange(_ note: Notification) {
+    @objc func keyboardWillChange(_ note: Notification) {
         guard let info = note.userInfo, let end = info[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
         let duration = info[UIResponder.keyboardAnimationDurationUserInfoKey] as? TimeInterval ?? 0.25
         let curve = info[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt ?? 7
@@ -167,18 +173,18 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         }
     }
 
-    @objc private func appWillResignActive() {
+    @objc func appWillResignActive() {
         captureSnapshot()
         store.saveNow()
     }
 
     // MARK: Search
 
-    @objc private func startSearch() {
+    @objc func startSearch() {
         setSearching(true, incognito: store.selected?.isIncognito ?? false)
     }
 
-    @objc private func dismissSearch() {
+    @objc func dismissSearch() {
         // With no page or tab row to go back to, the sheet stays: there is nothing else to show.
         guard store.selected != nil || switcher != nil else { return }
         setSearching(false)
@@ -257,7 +263,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         refreshTabStack()
     }
 
-    private func show(_ tab: MobileTab) {
+    func show(_ tab: MobileTab) {
         let page = store.page(for: tab)
         page.siteOptions = { [weak self] host in self?.settings.value.options(for: host) ?? MobileSiteOptions() }
         guard page !== shownPage else { return }
@@ -265,6 +271,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         shownPage?.delegate = nil
         shownPage = page
         page.delegate = self
+        page.webView.allowsBackForwardNavigationGestures = false
         page.webView.frame = pageContainer.bounds
         pageContainer.addSubview(page.webView)
         if page.webView.url == nil { page.load(tab.url) }
@@ -273,14 +280,14 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         view.setNeedsLayout()
     }
 
-    private func refreshTabStack() {
+    func refreshTabStack() {
         let tabs = store.tabs
         let front = store.selected ?? tabs.last
         let back = tabs.last { $0.id != front?.id }
         bar.tabsButton.setSnapshots(front: front.flatMap { store.snapshot($0.id) }, back: back.flatMap { store.snapshot($0.id) })
     }
 
-    private func captureSnapshot() {
+    func captureSnapshot() {
         guard let page = shownPage else { return }
         let id = page.tabID
         page.takeSnapshot { [weak self] image in
@@ -292,7 +299,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     // MARK: Tab switcher
 
-    @objc private func showTabs() {
+    @objc func showTabs() {
         guard switcher == nil, !isSearching else { return }
         let present = { [self] in
             let switcher = TabSwitcherView(frame: view.bounds)
@@ -363,7 +370,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     // MARK: Settings and archive
 
-    @objc private func showArchive() {
+    @objc func showArchive() {
         let model = ArchiveModel(tabs: store.archived)
         model.favicon = { [weak self] in self?.favicons.icon(for: $0.url) }
         model.removeTabs = { [weak self] in self?.store.removeArchived($0) }
@@ -384,12 +391,12 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     /// App Settings from the tab switcher's gear; Site Settings (which leads on to them) from a page.
-    @objc private func showSettings() {
+    @objc func showSettings() {
         presentSettings(site: nil, startingAtSite: false)
     }
 
     /// `host` is the page's site; a page without one (a `data:` page, say) edits the global options.
-    private func presentSettings(site host: String?, startingAtSite: Bool) {
+    func presentSettings(site host: String?, startingAtSite: Bool) {
         let model = SettingsModel(store: settings, host: host, canSummarize: BrowseForMe.isAvailable)
         model.done = { [weak self] in self?.dismiss(animated: true) }
         model.showArchive = { [weak self] in self?.showArchive() }
@@ -421,14 +428,14 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     /// The controller on top, so a sheet can be put over another sheet.
-    private var topPresenter: UIViewController {
+    var topPresenter: UIViewController {
         var top: UIViewController = self
         while let next = top.presentedViewController, !next.isBeingDismissed { top = next }
         return top
     }
 
     /// Drops the tab row at once because a page is taking its place.
-    private func leaveSwitcherForPage() {
+    func leaveSwitcherForPage() {
         guard let switcher else { return }
         self.switcher = nil
         pageContainer.isHidden = false
@@ -438,7 +445,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     // MARK: Page menu
 
-    @objc private func showMenu() {
+    @objc func showMenu() {
         guard let page = shownPage, menuHost == nil, !isSearching else { return }
         let menu = PageMenuView(state: menuState(for: page))
         menu.delegate = self
@@ -453,24 +460,24 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         host.present(in: view)
     }
 
-    private func menuState(for page: WebPage) -> PageMenuState {
+    func menuState(for page: WebPage) -> PageMenuState {
         let host = page.webView.url?.host.map(MobileSettings.siteKey) ?? ""
         return PageMenuState(host: host, canGoBack: page.webView.canGoBack, canGoForward: page.webView.canGoForward,
                              zoom: Double(page.webView.pageZoom), isDesktopSite: page.wantsDesktopSite,
                              canSummarize: BrowseForMe.isAvailable, blockedCount: page.blockedCount)
     }
 
-    private func refreshMenu() {
+    func refreshMenu() {
         guard let page = shownPage, let menuView else { return }
         menuView.apply(menuState(for: page))
     }
 
     /// The page's address as it is handed out: without tracking parameters.
-    private var shareableAddress: String? {
+    var shareableAddress: String? {
         shownPage?.webView.url.map { CleanURL.withoutTrackers($0.absoluteString) }
     }
 
-    private func copyLink() {
+    func copyLink() {
         guard let address = shareableAddress else { return }
         UIPasteboard.general.string = address
         UINotificationFeedbackGenerator().notificationOccurred(.success)
