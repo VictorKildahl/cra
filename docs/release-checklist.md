@@ -127,7 +127,9 @@ built release app with a test profile. Note anything that fails in the release's
   windows back, and Quit Cra there quits.
 - **#319:** with a custom app icon and Keep Cra in the menu bar on, ⌘Q, then New Window from the
   item's menu: ⌘-Tab and the Dock show the custom icon, not Segments
-  (app-icon-dock-return.scenario only sees that Cra set it again).
+  (app-icon-dock-return.scenario only sees that Cra set it again). Then download a file: during
+  and after the download, ⌘-Tab and the Dock still show the custom icon, with Chromium's progress
+  badge on it while it runs (app-icon-download.scenario reads what Cra draws, not what the Dock shows).
 - **#298:** in a tab on a DRM service (it opens in WebKit, docs/protected-media.md), Option-click a
   link: it opens as a split pane beside the page, as it does in any other tab (that scenario's
   posted click never reaches a WebKit page behind other windows).

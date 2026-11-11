@@ -1,0 +1,35 @@
+# The app icon picked in Settings stays in the Dock and the ⌘-Tab switcher once a download has
+# run (GitHub #319). Chromium shows download progress on the Dock tile with a view of its own,
+# which drew the bundle's icon: from the first download on, ⌘-Tab showed Segments until the
+# icon was picked again. Midnight comes in through the argument domain, so the run never
+# writes the defaults the installed Cra reads. Setting the icon again (here on the way back
+# from the menu bar) keeps Chromium's view on the tile, so its download badge isn't lost.
+# promise: #319
+home
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "keepInMenuBar": true}
+arg -appIcon
+arg midnight
+cra://debug?dockTile=before
+expect-log dock tile before: view=\S+ draws=picked
+cra://open?url=${TRICKLE}/trickle.bin
+wait 2
+cra://debug?downloadState=started
+expect-log download state started: running=true
+cra://debug?dockTile=downloading
+expect-log dock tile downloading: view=\S+ draws=picked
+cra://debug?download=cancel
+expect-log download control: cancel
+wait 1
+cra://debug?dockTile=after
+expect-log dock tile after: view=\S+ draws=picked
+cra://debug?quit=menu
+wait 2
+expect-log menu bar: quit keeps Cra in the menu bar
+cra://action/newWindow
+wait 3
+expect-log app icon: \S+ set again, back in the Dock
+# The window's tab comes back on the file and downloads it again, under Chromium's badge.
+cra://debug?dockTile=returned
+expect-log dock tile returned: view=DockTileView draws=picked
+cra://debug?download=cancel
+wait 1
