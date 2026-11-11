@@ -97,6 +97,7 @@ enum FloatingSidebarTests {
                "an uninterrupted hide still reattaches the sidebar normally")
 
         onlyTheKeyWindowReveals(window: window, sidebar: sidebar, panel: panel)
+        pointerPastTheLeftEdge(window: window, sidebar: sidebar)
         noStandInLightsInFullScreen(sidebar: sidebar, panel: panel)
         staysInsideTheWindowsCorners(window: window, sidebar: sidebar, panel: panel)
 
@@ -166,14 +167,119 @@ enum FloatingSidebarTests {
                "panel margin and leave slack are included in the retention boundary")
         expect(FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 429.1, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: 0),
                "leaving the shared retention boundary hides after release")
-        expect(FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 15.9, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: 0),
+        // Beside the window, left of it, the sidebar stays out since #350; above, below and further left it goes.
+        expect(FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 22, y: 9.9), in: bounds, sidebarWidth: 328, pressedMouseButtons: 0)
+               && FloatingSidebarGeometry.shouldHide(at: CGPoint(x: -300.1, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: 0),
                "leaving the window hides after release")
         for button in [1, 2, 4] {
             expect(!FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 429.1, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: button),
                    "button mask \(button) preserves the sidebar beyond the leave slack during a gesture")
-            expect(!FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 15.9, y: 100), in: bounds, sidebarWidth: 328, pressedMouseButtons: button),
+            expect(!FloatingSidebarGeometry.shouldHide(at: CGPoint(x: 22, y: 9.9), in: bounds, sidebarWidth: 328, pressedMouseButtons: button),
                    "button mask \(button) preserves the sidebar outside the moving window during a gesture")
         }
+    }
+
+    // promise: #350
+    /// GitHub #350: a pointer thrown past the window's left edge brings the hidden sidebar out, and it
+    /// stays out while the pointer is beside the window, as in Arc 1.172.2 (the reporter's recording,
+    /// and Arc driven at 120 fps, 11 Nov 2026). Cra revealed only in a 14 pt strip at the edge, so a
+    /// hand that overshot a window standing clear of the screen's edge got nothing.
+    @MainActor
+    private static func pointerPastTheLeftEdge(window: NSWindow, sidebar: FloatingSidebarController) {
+        // Arc's zone for a 264 pt sidebar: out at 250 pt left of the window, not at 270; a sidebar
+        // that is out leaves at 252-257. The strip's own 4 pt outside the window are not part of it.
+        let bounds = CGRect(x: 20, y: 10, width: 1400, height: 880)
+        func off(_ x: CGFloat, _ y: CGFloat = 100) -> Bool {
+            FloatingSidebarGeometry.isOffLeftEdge(CGPoint(x: x, y: y), in: bounds, sidebarWidth: 264)
+        }
+        expect(off(15.9) && off(-80) && off(-230), "beside the window, left of it, is off the edge")
+        expect(off(-236) && !off(-236.1), "as far out as the sidebar is wide, less its margin (256 pt for 264)")
+        expect(!off(16) && !off(20) && !off(300), "the strip and the window are not")
+        expect(!off(-80, 9.9) && !off(-80, 890.1), "nor is anything above or below the window")
+        expect(!FloatingSidebarGeometry.shouldHide(at: CGPoint(x: -80, y: 100), in: bounds, sidebarWidth: 264, pressedMouseButtons: 0),
+               "a sidebar that is out stays out with the pointer beside the window")
+        expect(FloatingSidebarGeometry.shouldHide(at: CGPoint(x: -236.1, y: 100), in: bounds, sidebarWidth: 264, pressedMouseButtons: 0),
+               "further left than that it goes")
+        expect(FloatingSidebarGeometry.shouldHide(at: CGPoint(x: -80, y: 890.1), in: bounds, sidebarWidth: 264, pressedMouseButtons: 0),
+               "above the window it goes")
+
+        // The poll's samples, in the shell's coordinates (328 pt sidebar: 320 pt of room).
+        let shell = sidebar.shell
+        var clock: TimeInterval = 500
+        sidebar.now = { clock }
+        sidebar.keyWindow = { window }
+        sidebar.hide(animated: false)
+        let mid = shell.bounds.midY
+        func sample(_ x: CGFloat, _ y: CGFloat, at t: TimeInterval) {
+            clock = t
+            sidebar.pointerSample(at: CGPoint(x: x, y: y))
+        }
+        // A throw from the page to 100 pt outside the window, then at rest.
+        sample(300, mid, at: 500)
+        expect(!sidebar.isShown && !sidebar.staged, "the pointer over the page leaves the sidebar in")
+        sample(-100, mid, at: 500.033)
+        expect(!sidebar.isShown && sidebar.staged, "past the left edge the wait starts, as it does in the strip")
+        sample(-100, mid, at: 500.1)
+        expect(!sidebar.isShown, "it waits for the pointer to rest out there")
+        sample(-100, mid, at: 500.133)
+        expect(sidebar.isShown, "then the sidebar comes out with the pointer 100 pt outside the window")
+        sample(-100, mid + 150, at: 501)
+        expect(sidebar.isShown, "and stays out while the pointer is beside the window")
+        sample(120, mid, at: 501.1)
+        expect(sidebar.isShown, "coming back in over the sidebar keeps it")
+        sample(-100, mid, at: 501.2)
+        sample(-100, shell.bounds.maxY + 30, at: 501.3)
+        expect(!sidebar.isShown, "above the window's top it goes, as in Arc")
+        sidebar.hide(animated: false)
+        // Arc: a pointer that arrives beside the window from outside brings nothing out.
+        for (i, t) in [502.0, 502.2, 502.5].enumerated() { sample(-100 - CGFloat(i), mid, at: t) }
+        expect(!sidebar.isShown && !sidebar.staged, "coming back down beside the window brings nothing out")
+        sample(-400, mid, at: 503)
+        for (i, t) in [503.1, 503.3, 503.6].enumerated() { sample(-60 - CGFloat(i), mid, at: t) }
+        expect(!sidebar.isShown && !sidebar.staged, "nor does a pointer that comes from further left")
+        // Still moving out there: Arc starts ~70 ms later than for a pointer at rest.
+        sample(300, mid, at: 510)
+        for (i, t) in [510.033, 510.067, 510.1, 510.133, 510.167].enumerated() { sample(-20 - 15 * CGFloat(i), mid, at: t) }
+        expect(!sidebar.isShown && sidebar.staged, "a pointer that keeps moving waits longer than one at rest")
+        sample(-100, mid, at: 510.2)
+        expect(sidebar.isShown, "and brings it out 0.15 s after it left the window")
+        sidebar.hide(animated: false)
+        // Out 40 pt and straight back over the page: nothing (Arc, out and in within 30 ms).
+        sample(300, mid, at: 520)
+        sample(-40, mid, at: 520.02)
+        expect(sidebar.staged, "out past the edge")
+        sample(60, mid, at: 520.05)
+        sample(60, mid, at: 520.3)
+        expect(!sidebar.isShown && !sidebar.staged, "a pointer that is back over the page before the wait ends shows nothing")
+        // A slow exit goes through the strip; the wait carries on outside.
+        sample(300, mid, at: 530)
+        sample(4, mid, at: 530.03)
+        sample(-10, mid, at: 530.06)
+        expect(sidebar.staged && !sidebar.isShown, "through the strip and out: still waiting")
+        sample(-10, mid, at: 530.15)
+        expect(sidebar.isShown, "at rest 10 pt outside the window it comes out")
+        sample(700, mid, at: 531)
+        expect(!sidebar.isShown, "on to the page sends it away")
+        sidebar.hide(animated: false)
+        // Another app comes to the front with the pointer beside the window: the sidebar goes (Arc: 85 ms
+        // later). Cra's poll stops then, so nothing else would send it away.
+        sample(300, mid, at: 535)
+        for t in [535.03, 535.2] { sample(-100, mid, at: t) }
+        expect(sidebar.isShown, "out, the pointer beside the window")
+        sidebar.resignedActive(pointerAt: CGPoint(x: -100, y: mid))
+        expect(!sidebar.isShown, "Cra no longer the active app: it goes")
+        sidebar.hide(animated: false)
+        sidebar.show()
+        sidebar.resignedActive(pointerAt: CGPoint(x: 120, y: mid))
+        expect(sidebar.isShown, "with the pointer over the window it stays, as before")
+        sidebar.hide(animated: false)
+        // Only the key window's sidebar comes out, out there as at the edge (#82).
+        sidebar.keyWindow = { nil }
+        sample(300, mid, at: 540)
+        for t in [540.03, 540.2, 540.4] { sample(-100, mid, at: t) }
+        expect(!sidebar.isShown && !sidebar.staged, "a window that isn't key brings nothing out")
+        sidebar.keyWindow = { window }
+        sidebar.now = { ProcessInfo.processInfo.systemUptime }
     }
 
     // promise: #315

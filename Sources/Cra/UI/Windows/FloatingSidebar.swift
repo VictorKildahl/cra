@@ -38,6 +38,8 @@ final class FloatingSidebarController {
     private let shadowClip = CALayer()
     /// The pointer's wait in the reveal strip (#293).
     private var dwell = FloatingSidebarRevealDwell()
+    /// The pointer's way out past the window's left edge, and its wait there (#350).
+    private var offEdge = FloatingSidebarOffEdge()
     /// The clock the wait runs on; the tests stand one in.
     var now: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     /// The sidebar's rounded body; it slides inside the panel (see `panelFrame`).
@@ -101,7 +103,10 @@ final class FloatingSidebarController {
         let center = NotificationCenter.default
         activation = [(NSApplication.didBecomeActiveNotification, true), (NSApplication.didResignActiveNotification, false)].map { name, on in
             center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.setPolling(on) }
+                MainActor.assumeIsolated {
+                    self?.setPolling(on)
+                    if !on { self?.resignedActive() }
+                }
             }
         }
         setPolling(NSApp.isActive)
@@ -131,13 +136,42 @@ final class FloatingSidebarController {
         guard NSApp.isActive, window.isVisible else { return }
         guard isShown || sidebarHidden() else { return }
         let screenPoint = NSEvent.mouseLocation
-        let p = shell.convert(window.convertPoint(fromScreen: screenPoint), from: nil)
+        pointerSample(at: shell.convert(window.convertPoint(fromScreen: screenPoint), from: nil))
+    }
+
+    /// One look at the pointer, in the shell's coordinates: the poll's, wherever the pointer is on
+    /// screen (the tests stand one in).
+    func pointerSample(at p: CGPoint) {
+        guard isShown || sidebarHidden() else { return }
         if !isShown {
-            edgeSample(inStrip: sidebarHidden() && isKey && FloatingSidebarGeometry.shouldReveal(at: p, in: shell.bounds, edgeToEdge: shell.fillsWindow))
+            let t = now()
+            guard sidebarHidden(), isKey else {
+                offEdge.reset()
+                wait(atEdge: false, over: dwell.sample(inStrip: false, at: t))
+                return
+            }
+            let inStrip = FloatingSidebarGeometry.shouldReveal(at: p, in: shell.bounds, edgeToEdge: shell.fillsWindow)
+            // Thrown past the edge, out of the window: it comes out there as well (#350).
+            let off = offEdge.sample(p, in: shell.bounds, sidebarWidth: shell.sidebarWidth, at: t)
+            let stripOver = dwell.sample(inStrip: inStrip, at: t)
+            wait(atEdge: inStrip || off != .away, over: stripOver || off == .reveal)
         } else if !staysShown(), FloatingSidebarGeometry.shouldHide(at: p, in: shell.bounds, sidebarWidth: shell.sidebarWidth,
                                                     pressedMouseButtons: NSEvent.pressedMouseButtons, edgeToEdge: shell.fillsWindow) {
             hide(animated: true)
         }
+    }
+
+    /// Cra stopped being the active app, and with it the poll that sends the sidebar away. One the
+    /// pointer keeps out from beside the window goes now, as in Arc 1.172.2 (11 Nov 2026, #350: out with
+    /// the pointer 100 pt left of the window, another app activated, back in 85 ms later). Over the
+    /// window it stays as it did.
+    func resignedActive(pointerAt p: CGPoint) {
+        guard isShown, !staysShown(), !shell.bounds.contains(p) else { return }
+        hide(animated: true)
+    }
+
+    private func resignedActive() {
+        resignedActive(pointerAt: shell.convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil))
     }
 
     /// The shell saw the pointer move in the strip: a sample toward the same wait as the poll's, so a
@@ -151,12 +185,16 @@ final class FloatingSidebarController {
     /// panel, tucked out of sight), so the costly part of a reveal happens during the wait: done at the
     /// reveal, it held the first frame back ~90 ms. Leaving before the wait is over puts it back.
     func edgeSample(inStrip: Bool) {
-        guard !isShown else { return }
         // The wait runs from the sample, not from after the staging: that takes ~90 ms on the main thread.
-        let t = now()
-        if inStrip, !shell.sidebarDetached { stage() }
-        if !inStrip, staged { unstage() }
-        if dwell.sample(inStrip: inStrip, at: t) { show() }
+        wait(atEdge: inStrip, over: dwell.sample(inStrip: inStrip, at: now()))
+    }
+
+    /// The pointer is at the edge (in the strip, or thrown past it) or not, and its wait is over or not.
+    private func wait(atEdge: Bool, over: Bool) {
+        guard !isShown else { return }
+        if atEdge, !shell.sidebarDetached { stage() }
+        if !atEdge, staged { unstage() }
+        if over { show() }
     }
 
     /// Whether the sidebar waits in its panel, tucked away, for the pointer's wait to end.
@@ -408,6 +446,7 @@ final class FloatingSidebarController {
         isShown = true
         staged = false
         dwell.reset()
+        offEdge.reset()
         transitionGeneration &+= 1
         panel?.ignoresMouseEvents = false
         slide(shown: true, entering: tucked) {}
@@ -478,6 +517,7 @@ final class FloatingSidebarController {
         isShown = false
         staged = false
         dwell.reset()
+        offEdge.reset()
         transitionGeneration &+= 1
         let generation = transitionGeneration
         let finish = { [weak self] in
@@ -500,6 +540,7 @@ final class FloatingSidebarController {
         isShown = false
         staged = false
         dwell.reset()
+        offEdge.reset()
         for l in [slider.layer, shadowView.layer] { l?.removeAnimation(forKey: Self.slideKey) }
         detachPanels()
         reattach(floating: true)

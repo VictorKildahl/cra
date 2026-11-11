@@ -13,7 +13,7 @@
 #21    Tests/StoreTests.swift::reopenClosedTabs  1b97b17bcf25
 #22    Tests/PolicyTests.swift::extensionLaunch  8f21949f730d
 #24    Packages/CraCore/Tests/CraCoreTests/ShippedThemesTests.swift::edgeToEdgeIsOffUnlessChosen  96da512d440f
-#24    Tests/FloatingSidebarTests.swift::geometry  188ce9bcd23d
+#24    Tests/FloatingSidebarTests.swift::geometry  eec2ad04b484
 #28    Tests/BrowserManagerLifecycleTests.swift::audiblePageStaysAwakeCase  124ac2fe284e
 #29    Packages/CraCore/Tests/CraCoreTests/FavoritesLayoutTests.swift::columnsByCountMatchArc  9ab00f8c8434
 #30    Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::solidThemeKeepsItsColour  02956e3cc1bb
@@ -608,3 +608,12 @@
 #349   Packages/CraCore/Tests/CraCoreTests/ExtensionIconsTests.swift::retinaTakesTheNextSizeUp  6e1e7d7bcd07
 #349   Packages/CraCore/Tests/CraCoreTests/ExtensionIconsTests.swift::threeTimesTakesTheLargerStill  26e4ac9aef72
 #349   Tests/Scenarios/extension-dialogs.scenario  63311e149d3c
+#350   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarGeometryTests.swift::aPointerThatKeepsMovingWaitsLonger  fb5962313913
+#350   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarGeometryTests.swift::aSidebarThatIsOutStaysWhileThePointerIsBesideTheWindow  5dce2e770a2e
+#350   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarGeometryTests.swift::aThrowPastTheEdgeBringsItOutOnceThePointerRests  c795e65cb81a
+#350   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarGeometryTests.swift::backOverThePageBeforeTheWaitEndsIsNothing  0d8d69299d2f
+#350   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarGeometryTests.swift::besideTheWindowIsOffTheEdge  d50f3547363f
+#350   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarGeometryTests.swift::leavingTheZoneOutsideTheWindowEndsIt  dbc576fe32d0
+#350   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarGeometryTests.swift::onlyAPointerThatLeftTheWindowCounts  449fefe51fb5
+#350   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarGeometryTests.swift::theStripLeadsOutToo  964e38f91bde
+#350   Tests/FloatingSidebarTests.swift::pointerPastTheLeftEdge  4be954b9cf6b

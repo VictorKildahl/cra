@@ -4089,3 +4089,62 @@ screen on a click.
   7 drags in 7 moved the window, and a drag starting on a button no longer pressed it. [U] Arc's own behaviour on an
   inactive window: its grabber makes the same cursor test, not measured.
 
+## The hidden sidebar from past the window's edge (Arc 1.172.2, 11 Nov 2026, GitHub #350, live Arc, real pointer at 120 fps)
+
+The reporter's recording (60 fps, 2x): a pointer thrown out past the left edge of a window that stands
+clear of the screen's edge, 95 pt out and then to the screen's edge 154 pt out, brings the sidebar out,
+and it stays while the pointer is out there. Cra revealed only in its 14 pt strip.
+
+Measured on Arc with the sidebar hidden (View ▸ Hide Sidebar), a 264 pt sidebar, the window at x 420,
+y 120, 1100 × 800, a local page in the tab. One tool drove the pointer (HID mouse-moved events, 4 ms
+steps) and read the window's frames (ScreenCaptureKit, 1x, 120 fps) on one clock; coordinates below are
+points from the window's left edge (negative = outside) and from its top. Names in the binary:
+`offLeftEdgeZoneRect`, `innerLeftEdgeZoneRect`, `innerTopLeftEdgeZoneRect`,
+`floatingSidebarOuterLeftEdgeHoverState`, `HoverRegionTracker` (ARCUI), and a region enum with
+`offLeftEdge`, `windowTrafficLightRegion`, `innerLeftEdge`, `innerTopLeftEdge`, `sidebar`.
+
+- [O] Thrown from the page to x −100 (80 ms), at rest there: out, first frame 135–160 ms after the pointer
+  stopped (nine runs). It stays out while the pointer moves beside the window (y 200 to 400).
+- [O] Out with the pointer at rest at x −3, −20, −60, −150 and −250; not at −270, −290, −300, −330 or −410.
+  A sidebar that is out, the pointer moving left at 150 pt/s: it starts back in with the pointer at −257
+  (Arc takes ~35 ms to react, so it let go at about −252). The zone is ~256 pt wide: the sidebar's width
+  less its 8 pt margin. [U] other sidebar widths.
+- [O] Up and down, at x −50 and −100: out when the pointer leaves the window at y 45, 60, 740, 792; not at
+  y 8, 15 or 30. Out, moving up at 50 pt/s it starts back in at y 30; moving down at 150 pt/s at y 823
+  (23 pt under the window). So Arc's zone runs from ~32 pt under the window's top to ~17 pt under its
+  bottom: the sidebar's height, set ~24 pt low. Cra uses the window's own height.
+- [O] Only a pointer that comes out of the window counts. One that reaches the zone from above (x −100,
+  y −60 to 400), from below (x −60, y 900 to 400) or from further left (a jump from −350 to −100, then
+  nudged and moved on to −150) brings nothing out in 1–2 s. From x −60 on to −2 it does come out: the
+  window still gets mouse-moved events 2–4 pt outside its frame, where the 5 pt strip's rule holds
+  (the "2–4 pt outside" measured on 29 Oct).
+- [O] The wait. A pointer that stops: ~145–160 ms after its last move (thrown to −10, −40 or −100, a jump
+  with no move after it, 300 pt/s stopped at −10: 142 ms). One that keeps moving outward at 100, 200, 300,
+  600 or 1500 pt/s: 218–227 ms after it crossed the edge, every time, wherever it was by then (x −22 to
+  −200). Stopped at −40 after 131 ms outside: 231 ms after crossing. So the wait starts over while the
+  pointer moves, but only for its first ~75 ms outside. In the strip, stopped at x 3: 147 ms.
+- [O] Out 40 pt and in again to x 60 within 30 ms: nothing. Thrown to −300 or on to −410: nothing.
+- [O] Above the window's top (x −100, y −60) the sidebar leaves; back beside the window it stays in.
+- [O] The reveal and the hide are the curves fitted on 9 Nov (#293): right edge per frame 9, 39, 72, 107,
+  139, 193, 214, 231, 244, 254, 262, 267, 270, 272, peak 274, rest 270; back in within ~0.1 s.
+- [O] Nothing came out from the window's top-left corner (x 3–400, y 3–60, 0.7 s each), whatever
+  `innerTopLeftEdge` and `windowTrafficLightRegion` are for.
+- [O] Out with the pointer at rest at x −100, another app brought to the front (activated, no click): the
+  sidebar starts back in 85 ms later and stays in while the pointer moves on beside the window.
+- [U] A second display left of the window; a window in full screen; two windows side by side.
+- Cra: `FloatingSidebarGeometry.isOffLeftEdge` (the sidebar's width less its margin, beside the window)
+  and `FloatingSidebarOffEdge` (CraCore): armed by a sample over the window or in its strip, the wait
+  `offEdgeRest` (0.085 s) from the pointer's last move or `offEdgeLongestWait` (0.15 s) from leaving the
+  window, whichever ends first (three and five looks of the 30 Hz poll after the first); `shouldHide` keeps a sidebar that is out while the pointer is in the zone.
+  The 30 Hz poll feeds it (`FloatingSidebarController.pointerSample`); the sidebar stages during the wait
+  as it does in the strip. When Cra stops being the active app the poll stops, so a sidebar the pointer
+  keeps out from beside the window is sent away then (`resignedActive`).
+- [O Cra, the same tool and plans, a 322 pt sidebar] Before: nothing comes out past the edge (thrown to
+  −100, jumped there, 200–1500 pt/s exits), and a 100 pt/s exit flashes the sidebar 86 pt out and back.
+  After: out 131–156 ms after a thrown pointer's last move (Arc 135–160) and 212–240 ms after the edge for
+  one that keeps moving (Arc 218–231); stays beside the window, leaves above it, nothing from above, below
+  or further left, nothing for out-and-back; gone 28 ms after another app comes to the front. Kept
+  apart from Arc: the zone is the window's height (Arc's sits ~24 pt lower), and a 100 pt/s exit comes out
+  from the 10 pt strip 60 ms after the edge (Arc's 5 pt strip lets it pass: 220 ms). The reveal's frames
+  are Arc's one frame ahead, as on 9 Nov, but never past the resting edge: the panel ends there, so the
+  spring's 1.5 % overshoot (Arc: 274 for 270) is cut off. Not changed here.

@@ -62,6 +62,5 @@ touches it anyway, not as a side errand.
   imports AppKit for `Shortcut`'s event matching.
 - `Services/Import/`: the parsers for other browsers' files. Tested on `Tests/Fixtures` by
   `scripts/test-store.sh`.
-- `UI/Windows/ExtensionLaunch.swift`, `Services/DevToolsToggle.swift` and
-  `UI/Windows/FloatingSidebarGeometry.swift`: policies, tested by
-  `scripts/test-policies.sh` and `scripts/test-floating-sidebar.sh`.
+- `UI/Windows/ExtensionLaunch.swift` and `Services/DevToolsToggle.swift`: policies, tested by
+  `scripts/test-policies.sh`.
