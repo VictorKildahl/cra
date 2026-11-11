@@ -7,6 +7,8 @@ import Foundation
 public enum PageTopDrag {
     /// How far into the page the band reaches (Arc: 56 pt drags, 58 pt doesn't).
     public static let band: Double = 56
+    /// How much of the page's right edge stays out of the band, for the scrollbar (Arc's grabber is
+    /// the content's width less 14 pt).
     public static let trailingInset: Double = 14
     /// How far the pointer moves before a press is a drag (AppKit's and Cra's window-drag slop).
     public static let slop: Double = 3

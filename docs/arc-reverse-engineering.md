@@ -4068,3 +4068,17 @@ screen on a click.
   A native AppKit drag-region query reproduces the unwanted corner region before attachment, excludes it with
   the grabber attached, and restores it after detachment. The user confirmed the corner fix in CraDev.
 
+- [O static, 11 Nov 2026, the same build, read again for the review of #335] `WindowContentGrabber` overrides
+  only `hitTest:` and `mouseDragged:`: no `mouseDown:` or `mouseUp:`, no stored event and nothing replayed. On a
+  left press over a window with content `hitTest:` returns nil, so the page gets the press at once, and the
+  grabber only notes whether the press was eligible (`dragState = .beganInValidState`). On the first eligible
+  drag event it calls `performWindowDragWithEvent:` with no distance threshold (Cra keeps its 3 pt slop), then a
+  local monitor swallows the drags and the release. The delegate's permission is asked on the press only; on a
+  drag the test is the arrow cursor alone.
+- [O static] The band's far edge is 60 pt in the controller's view (`60 − y`, y the bar's bottom edge: 0 with no
+  bar). That fits the 56 pt measured in the page on 7 Nov if the page starts 4 pt down. [U] not measured again.
+- [O Cra, real pointer events, 11 Nov 2026] On #335's build, toolbar hidden: an arrow drag in the band moved the
+  window and the page saw the press; a click reached a button there; a drag over text selected it; the right
+  14 pt and a press 130 pt down stayed with the page; the window's top-right corner resized. On the build
+  before it, the text drag, the right strip and the corner all moved the window.
+
