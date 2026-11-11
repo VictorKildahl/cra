@@ -75,9 +75,10 @@ server-address field. `legacySource` and `legacyCommand` are reserved for bundle
 ## JavaScript API
 
 The entry script returns an object with synchronous functions. Each invocation runs in a fresh
-JavaScriptCore helper process, outside the UI process. The helper enters macOS’s `pure-computation`
-sandbox before it reads the script: no files, no network, no other processes; its only way out is
-the pipe to Cra, which checks every session request against the folder’s origins. This is not a Node.js or DOM environment;
+JavaScriptCore helper process, outside the UI process. The helper applies a macOS Seatbelt profile
+that denies new resource access before it reads the script: no files, no network, no other processes.
+Its only way out is the pipe to Cra, which checks every session request against the folder’s origins.
+This is not a Node.js or DOM environment;
 imports, filesystem access and browser globals are not exposed. Promise results are rejected.
 
 | Method | Input | Result |
@@ -144,4 +145,6 @@ scripts/dev.sh --once
 The plugin harness (part of `scripts/test.sh`) executes the real, sandboxed helper and tests transport,
 permissions, exceptions, timeout, the sandbox, and each bundled provider’s requests, parsing, failures and
 migration (`Tests/LiveFolderProviderTests.swift`). The store harness checks native tab reconciliation separately.
+The helper uses an explicit `(deny default)` profile: macOS terminates binaries built with SDK 27 or
+newer that select a legacy named profile such as `pure-computation` (see `sandbox_init(3)`).
 The dev build uses `build/CraDev.app` and `build/dev-data` by default.

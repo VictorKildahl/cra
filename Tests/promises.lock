@@ -599,3 +599,12 @@
 #346   Tests/Scenarios/screenshot-window-pick.scenario  bf271139d3c5
 #348   Packages/CraCore/Tests/CraCoreTests/ViewSourceTests.swift::pageOpensItsSource  a8206dcf8756
 #348   Tests/Scenarios/view-source.scenario  c8591c290ad4
+#349   Packages/CraCore/Tests/CraCoreTests/ChromiumDialogTests.swift::hangsWhereASheetDoes  c4438e2ff53c
+#349   Packages/CraCore/Tests/CraCoreTests/ChromiumDialogTests.swift::othersAreNot  b1da0b8bf52e
+#349   Packages/CraCore/Tests/CraCoreTests/ChromiumDialogTests.swift::staysOnTheScreen  635a7aec06bf
+#349   Packages/CraCore/Tests/CraCoreTests/ChromiumDialogTests.swift::tallerThanTheScreenKeepsItsTitle  f3c07297be40
+#349   Packages/CraCore/Tests/CraCoreTests/ChromiumDialogTests.swift::theInstallPromptIsOne  075faa411fd2
+#349   Packages/CraCore/Tests/CraCoreTests/ExtensionIconsTests.swift::choice  08a4f85120f2
+#349   Packages/CraCore/Tests/CraCoreTests/ExtensionIconsTests.swift::retinaTakesTheNextSizeUp  6e1e7d7bcd07
+#349   Packages/CraCore/Tests/CraCoreTests/ExtensionIconsTests.swift::threeTimesTakesTheLargerStill  26e4ac9aef72
+#349   Tests/Scenarios/extension-dialogs.scenario  63311e149d3c

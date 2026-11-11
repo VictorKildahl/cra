@@ -1,0 +1,17 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Web Store</title>
+<!-- Made up for scripts/scenario.sh: a page on the address --apps-gallery-url names, so Chromium
+     takes it for the Web Store and lets it ask for an install the way the store's own page does
+     (webstorePrivate). It asks for Tests/Fixtures/Extension (same key, same ID) with permissions
+     added, so Chromium's install prompt has a list. Nothing is downloaded unless it is accepted. -->
+<p>Made-up store page</p>
+<script>
+const manifest = "{\"manifest_version\": 3, \"name\": \"Cra Scenario Fixture\", \"version\": \"1.0\", \"description\": \"Made up for scripts/scenario.sh: a popup, an options page, nothing else.\", \"key\": \"MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArrHe8/bGDOAVbyjlzsPuq0Nb8Vh6M3P9bsaB8yP4q92PGXq8TkxmPiPGET9gyUOHxUdbMSSNlS6qxkm89gueuIFNTmXLKARMRMlCc2QvF6v+FZJfVZuXBCHWbdSe0SGAlptOWLoS/HFJQLT4q0hEcOXOyr27+XNpL2zp0awUaGlvYEfmmlGxwKwfhovl2odDdWdbM4Coe9IxnzIj6BP/1PvBtwdLDC8Z79wTrRXh/fo+LG3wQmsZzgIqFtqua+90zEqNskZOnJ6+c4iuF7bnfwKudWCSQt9SWEHCc/y7sIK2e2Xo7CL6nqPjbrtvyntHlCbKhV0WQo+VdEAVwp6SqQIDAQAB\", \"action\": {\"default_popup\": \"popup.html\", \"default_title\": \"Cra Scenario Fixture\"}, \"options_ui\": {\"page\": \"options.html\", \"open_in_tab\": true}, \"permissions\": [\"tabs\", \"storage\", \"history\", \"bookmarks\", \"downloads\", \"notifications\"], \"host_permissions\": [\"<all_urls>\"]}";
+function ask() {
+  chrome.webstorePrivate.beginInstallWithManifest3(
+    { id: "jeackjeedkojbpbfclolioidbpgjnnjg", manifest, localizedName: "Cra Scenario Fixture" },
+    result => { document.title = "answered: " + result; });
+  return "asked";
+}
+</script>

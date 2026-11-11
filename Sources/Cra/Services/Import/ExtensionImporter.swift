@@ -141,4 +141,25 @@ enum ExtensionImporter {
         guard let pick = sized.first(where: { $0.0 >= minPixels }) ?? sized.last else { return nil }
         return NSImage(contentsOf: folder.appendingPathComponent(pick.1))
     }
+
+    /// The manifest icons Chromium draws at `points` on 1x and 2x screens, in one image of that
+    /// size: AppKit draws whichever file suits the screen. One 16 px file drawn on a Retina screen
+    /// was twice its size and blurred (GitHub #349).
+    static func icon(manifest: [String: Any], folder: URL, points: Int) -> NSImage? {
+        guard let icons = manifest["icons"] as? [String: String] else { return nil }
+        var image: NSImage?
+        for file in ExtensionIcons.files(icons, points: points) {
+            guard let loaded = NSImage(contentsOf: folder.appendingPathComponent(file)) else { continue }
+            for rep in loaded.representations {
+                // The first file's shape sets the image's; a square icon is points × points.
+                let aspect = rep.pixelsWide > 0 && rep.pixelsHigh > 0 ? Double(rep.pixelsHigh) / Double(rep.pixelsWide)
+                    : loaded.size.width > 0 ? loaded.size.height / loaded.size.width : 1
+                let size = image?.size ?? NSSize(width: Double(points), height: Double(points) * aspect)
+                if image == nil { image = NSImage(size: size) }
+                rep.size = size
+                image?.addRepresentation(rep)
+            }
+        }
+        return image
+    }
 }

@@ -228,7 +228,9 @@ struct LiveFolderPluginProcessTests {
         }
         precondition(String(decoding: line, as: UTF8.self).contains("\"fetch\""), "the plugin is running")
         precondition(sandbox_check(process.processIdentifier, nil, 0) != 0, "the plugin host is sandboxed")
-        for operation in ["file-read-data", "file-write-data", "network-outbound", "process-exec"] {
+        // The profile is the host's own text now: an `allow` added to it has to fail here.
+        for operation in ["file-read-data", "file-read-metadata", "file-write-data", "network-outbound", "network-inbound",
+                          "process-exec", "process-fork", "mach-lookup", "mach-register", "sysctl-write"] {
             precondition(sandbox_check(process.processIdentifier, operation, 0) != 0, "the plugin host may not \(operation)")
         }
     }

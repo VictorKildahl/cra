@@ -424,6 +424,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             guard let main = app?.main, let window = main.window, let key = NSApp.keyWindow, key === window || key.parent === window else { return nil }
             return main.extensionPopupAnchor(id)
         }
+        // Chromium's install and removal prompts come without a parent window (#349): they hang
+        // over the browser window in use, where a sheet does.
+        ChromiumDialogs.start { [weak app] in app?.main?.window }
         ExtensionActions.shared.watchActions { [weak app] in
             app?.mainWindows.flatMap { $0.browsers.runtimes.values.map { (tab: $0.tabID, browser: $0.browser) } } ?? []
         }
@@ -1066,6 +1069,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // A Peek (and its dimming) stays above everything else in the window but the hidden sidebar
         // slid out at the edge: that one is the sidebar, whose rows stay in reach of a Peek (#242, #295).
         let wanted = panels.compactMap { $0 } + peeks.flatMap(\.peekWindows) + (floatingSidebar?.attachedPanels ?? [])
+            + ChromiumDialogs.dialogs(over: window)
         // Already the last children, in order, and showing: re-adding each one rebuilt the
         // window's ordering group, a window server round trip, on every tab switch.
         let children = window.childWindows ?? []
