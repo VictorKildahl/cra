@@ -36,6 +36,11 @@ enum ViewSnapshot {
             CraLog.note("snapshot: no visible \(spec)")
             return
         }
+        // Where it is, from the window's top left as clickAt counts, for a scenario's clicks.
+        if let w = view.window {
+            let r = view.convert(view.bounds, to: nil)
+            CraLog.note("snapshot: \(spec) at \(Int(r.minX)),\(Int(w.frame.height - r.maxY)) size \(Int(r.width))x\(Int(r.height))")
+        }
         var out = path
         if let scale = view.window?.backingScaleFactor, scale < 2, path.hasSuffix(".png") {
             out = String(path.dropLast(4)) + ".1x.png"

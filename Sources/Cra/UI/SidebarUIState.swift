@@ -9,6 +9,10 @@ import UniformTypeIdentifiers
 final class SidebarUIState {
     /// The browser window this sidebar belongs to (its space and open tab, see WindowSession).
     @ObservationIgnored var windowID = UUID()
+    /// The tab whose last click in the sidebar went back to its pinned page from its favicon: the
+    /// second press of that double-click does nothing (#345). Kept per window: held on the row
+    /// view, it was gone by the second press of a real double-click.
+    @ObservationIgnored var iconWentBack: UUID?
     var renamingID: UUID?
     /// Rename Space… chosen in the dock (#339): that space's header turns its name into a field.
     var renamingSpaceID: UUID?
