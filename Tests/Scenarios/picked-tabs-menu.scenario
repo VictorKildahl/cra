@@ -1,8 +1,10 @@
 # promise: #356
-# Tabs picked with ⌘/⇧-click get Arc's menu for all of them at once: Copy URLs puts every link on
-# the clipboard, one per line and without trackers (as ⇧⌘C does), and Share N Items hands them all
-# to the Mac's share services. The menu is the one a right-click on a picked row builds; Today
-# lists the newest tab first.
+# Tabs picked with ⌘/⇧-click get Arc's menu for all of them at once: Copy Links puts every link on
+# the clipboard, one per line and without trackers (as ⇧⌘C does), and Share N Items… copies one
+# link to all of them (crabrowser.app/folder#…, as Share Folder… does). The menu is the one a
+# right-click on a picked row builds; Today lists the newest tab first. Rows as Arc 1.17x draws
+# them (read over AX, 11 Nov 2026); with a pinned tab among the picks the tab-only rows go and
+# Archive Tabs becomes Archive Items.
 budget rss=700 stalls50=10
 cra://open?url=${PAGE}?n=one
 expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
@@ -10,6 +12,18 @@ cra://open?url=${PAGE}?n=two%26utm_source=x
 cra://open?url=${PAGE}?n=three
 wait 2
 cra://debug?pickedMenu=2&label=two
-expect-log picked menu two: Open in Split View\|Duplicate\|──\|Copy URLs\|Share 2 Items ▸\|──\|Move to Space ▸\|New Folder with 2 Items\|──\|Change Icon \(off\)\|Mute\|──\|Close 2 Tabs\|Deselect All$
-cra://debug?pickedMenu=3&label=copy&run=Copy URLs
-expect-log picked menu copy ran Copy URLs: \S*n=three⏎\S*n=two⏎\S*n=one picks=3$
+expect-log picked menu two: Copy Links\|Share 2 Items…\|──\|Change Icon… \(off\)\|Mute \(off\)\|──\|Open in Split View\|Duplicate\|Move to ▸\|New Folder with 2 Items\|──\|Archive Tabs\|Archive Tabs Below \(off\)$
+cra://debug?pickedMenu=3&label=copy&run=Copy Links
+expect-log picked menu copy ran Copy Links: \S*n=three⏎\S*n=two⏎\S*n=one picks=3$
+cra://debug?pickedMenu=2&label=share&run=Share 2 Items
+expect-log picked menu share ran Share 2 Items: https://crabrowser\.app/folder#[A-Za-z0-9_-]+ picks=2$
+# The newest tab pinned: picked with a Today tab, Arc leaves out the tab-only rows.
+cra://action/pinTab
+wait 1
+cra://debug?pickedMenu=2&label=pinned
+expect-log picked menu pinned: Copy Links\|Share 2 Items…\|──\|Open in Split View\|Move to ▸\|New Folder with 2 Items\|──\|Archive Items$
+# Archive Items archives the pinned pick too, not only the Today one.
+cra://debug?pickedMenu=2&label=archive&run=Archive Items
+wait 1
+cra://debug?browserWindows=after-archive
+expect-log browser windows after-archive: kind=normal .*tabs=\[\S*n=one\] 

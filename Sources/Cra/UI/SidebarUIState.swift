@@ -207,6 +207,8 @@ final class SidebarActions {
     var goForward: () -> Void = {}
     var reload: () -> Void = {}
     var editSpace: (Space?) -> Void = { _ in }
+    /// Move to ▸ New Space… on picked tabs: the new space sheet, and the tabs go to the space it makes.
+    var newSpaceWith: ([UUID]) -> Void = { _ in }
     /// Arc's space menu: the icon picker under the header, the theme editor, a new profile for
     /// the space, the Library's Spaces page, and deleting this space (not the focused one).
     var changeSpaceIcon: (Space, NSView) -> Void = { _, _ in }

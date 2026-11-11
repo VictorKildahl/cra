@@ -73,6 +73,19 @@ public enum FolderShareLink {
         return clip(item.title ?? "") ?? clip(page) ?? URL(string: url)?.host ?? url
     }
 
+    /// Share N Items… on tabs picked in the sidebar (#356). Arc made an arc.net link for the
+    /// selection ("Copied Shared URL"); Cra puts the picks in a folder link of their own, titled
+    /// "N Tabs", so the site's page opens it as it opens a shared folder. Each pick shares the page
+    /// it is on now, as Copy URLs does (without trackers), under the name the sidebar shows; a pick
+    /// that isn't a web page is left out.
+    public static func picked(_ items: [SidebarItem]) -> Folder {
+        let links: [Node] = items.compactMap { item in
+            guard let tab = item.tab, let url = webURL(CleanURL.withoutTrackers(tab.liveItemURL ?? tab.url)) else { return nil }
+            return .link(title: clip(item.displayTitle) ?? URL(string: url)?.host ?? url, url: url)
+        }
+        return Folder(title: "\(links.count) Tabs", items: links)
+    }
+
     // MARK: The link
 
     /// The link to copy, or nil for a folder with no web pages in it.

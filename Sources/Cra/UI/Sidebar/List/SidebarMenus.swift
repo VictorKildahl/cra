@@ -137,20 +137,43 @@ enum SidebarMenus {
         return menu
     }
 
-    /// The menu on a tab that is one of several picked with ⌘/⇧-click (#356): Arc's sections for
-    /// every pick at once, from PickedTabsMenu. `ids` are the picks in sidebar order.
+    /// The menu on a tab that is one of several picked with ⌘/⇧-click (#356): Arc's rows for every
+    /// pick at once, from PickedTabsMenu. `ids` are the picks in sidebar order.
     static func picked(_ ids: [UUID], list: SpaceListView) -> NSMenu {
         let store = list.store, ui = list.ui, actions = list.actions
         let menu = menu()
         let tabs = ids.compactMap { id in store.item(id)?.tab.map { (id, $0) } }
-        let folders = store.children(of: store.focusedSpace(window: ui.windowID).pinnedContainerID).filter { $0.isFolder && !$0.isLiveFolder }
-        let picks = PickedTabsMenu.Picks(count: ids.count, allMuted: !tabs.isEmpty && tabs.allSatisfy { $0.1.muted },
-                                         hasFolders: !folders.isEmpty, anyInSplit: ids.contains { store.splitContaining($0) != nil })
+        let picks = PickedTabsMenu.Picks(count: ids.count, anyPinned: ids.contains(where: store.isPinned),
+                                         allMuted: !tabs.isEmpty && tabs.allSatisfy { $0.1.muted },
+                                         anySound: tabs.contains { $0.1.muted || ui.audibleTabIDs.contains($0.0) },
+                                         anyInSplit: ids.contains { store.splitContaining($0) != nil })
         for (i, section) in PickedTabsMenu.shown(for: picks).enumerated() {
             if i > 0 { menu.addItem(.separator()) }
             for row in section {
-                let title = PickedTabsMenu.title(row, for: picks), enabled = PickedTabsMenu.isEnabled(row)
+                let title = PickedTabsMenu.title(row, for: picks), enabled = PickedTabsMenu.isEnabled(row, for: picks)
                 switch row {
+                case "copyLinks":
+                    // What ⇧⌘C copies with tabs picked (#322): each link without trackers, one per line.
+                    add(menu, title) {
+                        copy(CleanURL.links(tabs.map { $0.1.url }))
+                        actions.showToast("Copied item links")
+                    }
+                case "share":
+                    // Arc's Share N Items… copied an arc.net link ("Copied Shared URL"); Cra's link
+                    // carries the picks after its #, as Share Folder… does (FolderShareLink, #357).
+                    let link = FolderShareLink.url(for: FolderShareLink.picked(ids.compactMap(store.item)))
+                    add(menu, title, enabled: link != nil) {
+                        guard let link else { return }
+                        copy(link)
+                        actions.showToast("Copied Shared URL")
+                    }
+                case "mute":
+                    add(menu, title, enabled: enabled) {
+                        for (id, _) in tabs {
+                            store.setMuted(id, !picks.allMuted)
+                            actions.performAction("muteTab:\(id)")
+                        }
+                    }
                 case "openInSplitView":
                     add(menu, title) {
                         guard let split = store.createSplit(with: ids) else { return }
@@ -158,48 +181,34 @@ enum SidebarMenus {
                         store.selectTab(store.paneID(for: ids[0], in: split) ?? ids[0], window: ui.windowID)
                     }
                 case "duplicate":
-                    add(menu, action: "duplicateTab", title) { for id in ids { _ = store.duplicateTab(id) } }
-                case "copyURLs":
-                    // What ⇧⌘C copies with tabs picked (#322): each link without trackers, one per line.
-                    add(menu, action: "copyURL", title) {
-                        copy(CleanURL.links(tabs.map { $0.1.url }))
-                        actions.showToast("Copied item links")
-                    }
-                case "share":
-                    let urls = tabs.compactMap { URL(string: CleanURL.withoutTrackers($0.1.url)) }.filter { $0.scheme?.hasPrefix("http") == true }
-                    SharePicker.addMenu(to: menu, urls: urls, title: title)
-                case "moveToSpace":
+                    add(menu, title) { for id in ids { _ = store.duplicateTab(id) } }
+                case "moveTo":
+                    // Arc: the spaces, the picks' own checked, then New Space… (which takes them along).
                     let sub = submenu(menu, title)
+                    let own = store.spaceID(ofItem: ids[0])
                     for s in store.orderedSpaces {
-                        add(sub, s.labeled, enabled: !ids.allSatisfy { store.isInSpace($0, s.id) }) {
+                        add(sub, s.labeled, on: s.id == own) {
+                            guard s.id != own else { return }
                             for id in ids { store.moveTab(id, toSpace: s.id, window: ui.windowID) }
                             ui.clearPicks()
                         }
                     }
-                case "moveToFolder":
-                    let sub = submenu(menu, title)
-                    for f in folders {
-                        add(sub, f.title ?? "Folder", enabled: !ids.allSatisfy { store.item($0)?.parentID == f.id }) {
-                            store.moveItems(ids, to: f.id, index: nil)
-                        }
-                    }
+                    sub.addItem(.separator())
+                    add(sub, "New Space…") { actions.newSpaceWith(ids) }
                 case "newFolder":
                     add(menu, title) { ui.renamingID = store.createFolder(with: ids).id }
-                case "changeIcon":
-                    add(menu, title, enabled: enabled) {}
-                case "mute":
-                    add(menu, action: "muteTab", title) {
-                        for (id, _) in tabs {
-                            store.setMuted(id, !picks.allMuted)
-                            actions.performAction("muteTab:\(id)")
+                case "archive":
+                    // A Today tab archives as ⌘W does; Arc's Archive Items also archives the pinned ones.
+                    add(menu, title) {
+                        let open = store.selectedTabID(window: ui.windowID)
+                        for id in ids.filter({ $0 != open }) + ids.filter({ $0 == open }) {
+                            if store.isPinned(id) { store.archiveTab(id, reason: .manual) } else { actions.closeTab(id) }
                         }
+                        ui.clearPicks()
                     }
-                case "closeTabs":
-                    add(menu, title) { list.closeTabs(ids) }
-                case "deselectAll":
-                    add(menu, title) { ui.clearPicks() }
                 default:
-                    break
+                    // Change Icon… and Archive Tabs Below: dimmed, as Arc draws them for several tabs.
+                    add(menu, title, enabled: enabled) {}
                 }
             }
         }

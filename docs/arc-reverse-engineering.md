@@ -1051,6 +1051,17 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
   in Split View, Duplicate, Move to, New Folder with 2 Items, Archive Tabs…). Issue #356's screenshot of two
   Today tabs, in sections: Open in Split View, Duplicate | Copy URLs ⇧⌘C, Share 2 Items… | Move to ›, New Folder
   with 2 Items | Change Icon › (dimmed), Mute | Archive Tabs. Cra: PickedTabsMenu.
+- [O strings] Arc 1.17x binary: Share N Items… shows "Generating Link..." then the toast "Copied Shared URL"
+  ("Letting user know that the sharable URL has been copied"; `itemsToShare`); Move to is "Menu Item that shows a
+  user's root spaces in a submenu" (SidebarMenu+MoveMenu.swift, which also has "Move selected items to a new folder
+  in a subspace"); the archive row is "Archive sidebar items"; Copy links/item links as Markdown exist as titles.
+- [O] Arc 1.17x live, 11 Nov 2026 (Victor's Arc, read-only: ⌘-click, right-click, AX read, AXCancel). Two Today
+  tabs: Copy Links, Share 2 Items… | Change Icon… (dimmed), Mute (dimmed, nothing playing) | Open in Split View,
+  Duplicate, Move to ›, New Folder with 2 Items | Archive Tabs, Archive Tabs Below (dimmed). No ⇧⌘C on Copy
+  Links any more. Move to ›: every space, ✓ on the picks' own, ──, New Space…. With a pinned tab added (3 picks):
+  Copy Links, Share 3 Items… | Open in Split View, Move to ›, New Folder with 3 Items | Archive Items. AX also
+  lists Archive Other Tabs and Archive Tabs Above in the Today menu, which are not drawn (hidden rows). Not tried:
+  what Archive Items and Share do (destructive / online), five or more picks.
 - [?] Not measured: the drag-over fill on a dark theme, coloured dark themes (the star's colour there), 1x.
 - Cra: FavoritesEmptyCard, dismissed per favorites container (WindowPrefs.favoritesEmptyStateDismissed, since
   Cra's favorites are per space). Badge, title, subtitle and × land within 1 px of Arc's at 2x. The dashed line

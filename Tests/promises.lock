@@ -633,8 +633,10 @@
 #350   Tests/FloatingSidebarTests.swift::theRevealSwingsPastItsEdge  9009fb6ed80f
 #354   Packages/CraCore/Tests/CraCoreTests/PageWindowStartTests.swift::aNewPageWindowStartsOnTheWindowInUseNotOnThePrimaryDisplay  54a52c06fe08
 #354   Tests/Scenarios/page-windows-open-on-cra.scenario  57616ba445a7
-#356   Packages/CraCore/Tests/CraCoreTests/PickedTabsMenuTests.swift::twoPicksGetArcsRowsWithCopyAndShare  7b321e44a08d
-#356   Tests/Scenarios/picked-tabs-menu.scenario  4a41e1119a25
+#356   Packages/CraCore/Tests/CraCoreTests/PickedTabsMenuTests.swift::aPinnedPickLeavesOutTheTabOnlyRows  e76117488527
+#356   Packages/CraCore/Tests/CraCoreTests/PickedTabsMenuTests.swift::shareLinksThePicksCurrentPages  3b29cf95bb9c
+#356   Packages/CraCore/Tests/CraCoreTests/PickedTabsMenuTests.swift::todayTabsGetArcsRows  631808b39e75
+#356   Tests/Scenarios/picked-tabs-menu.scenario  59e80126bfd2
 #357   Packages/CraCore/Tests/CraCoreTests/BlockedPopupsTests.swift::blockedPopupsWaitToBeOpened  ed1d6b577d86
 #357   Packages/CraCore/Tests/CraCoreTests/BlockedPopupsTests.swift::navigationClearsTheList  fb5691b9fa28
 #357   Packages/CraCore/Tests/CraCoreTests/FolderShareLinkTests.swift::sharesTheFolderAsTheSidebarShowsIt  c6c447a9a8f8
