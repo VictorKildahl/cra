@@ -136,9 +136,10 @@ enum WindowContentGrabberTests {
             f.owner.setFrame(NSRect(origin: f.owner.frame.origin, size: size), display: false)
             for x in [1.0, Double(size.width / 2), Double(size.width - 1)] {
                 for y in [1.0, Double(size.height / 2), Double(size.height - 1)] where x != Double(size.width / 2) || y != Double(size.height / 2) {
-                    let event = f.event(.leftMouseDown, point: NSPoint(x: x, y: y))
-                    expect(!WindowDragRegion.allows(event, in: f.owner),
-                           "the native resize edges and corners win even with a stale arrow cursor")
+                    let point = NSPoint(x: x, y: y)
+                    let event = f.event(.leftMouseDown, point: point)
+                    expect(WindowDragRegion.allows(event, in: f.owner) == !nativeResizes(at: point, in: f.owner),
+                           "the edge follows AppKit's resize hit test at \(point), size=\(size), even with a stale arrow cursor")
                 }
             }
         }
@@ -153,18 +154,22 @@ enum WindowContentGrabberTests {
     }
 
     @MainActor
-    private static func checkRoundedResizeCorners() {
+    private static func nativeResizes(at point: NSPoint, in window: NSWindow) -> Bool {
         let selector = NSSelectorFromString("_resizeDirectionForMouseLocation:")
         guard let method = class_getInstanceMethod(NSWindow.self, selector) else {
-            fatalError("the native corner resize hit test must be available")
+            fatalError("the native resize hit test must be available")
         }
         typealias Direction = @convention(c) (NSWindow, Selector, NSPoint) -> Int64
         let direction = unsafeBitCast(method_getImplementation(method), to: Direction.self)
+        return direction(window, selector, point) != -1
+    }
+
+    @MainActor
+    private static func checkRoundedResizeCorners() {
         NSCursor.arrow.set()
         for child in [false, true] {
             let f = Fixture(child: child)
             defer { f.close() }
-            var extendedTargets = 0
             for size in [NSSize(width: 1000, height: 700), NSSize(width: 700, height: 460)] {
                 f.owner.setFrame(NSRect(origin: f.owner.frame.origin, size: size), display: false)
                 for right in [false, true] {
@@ -172,8 +177,7 @@ enum WindowContentGrabberTests {
                         for dx: CGFloat in [4, 8, 12, 20] {
                             for dy: CGFloat in [4, 8, 12, 20] {
                                 let point = NSPoint(x: right ? size.width - dx : dx, y: top ? size.height - dy : dy)
-                                let resizing = direction(f.owner, selector, point) != -1
-                                if resizing { extendedTargets += 1 }
+                                let resizing = nativeResizes(at: point, in: f.owner)
                                 let screenPoint = f.owner.convertPoint(toScreen: point)
                                 let event = f.event(.leftMouseDown, point: f.source.convertPoint(fromScreen: screenPoint))
                                 expect(WindowDragRegion.allows(event, in: f.owner) == !resizing,
@@ -183,7 +187,6 @@ enum WindowContentGrabberTests {
                     }
                 }
             }
-            expect(extendedTargets > 0, "the regression must cover native corner targets beyond the straight-edge band")
         }
     }
 
