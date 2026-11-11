@@ -1273,6 +1273,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                         + "visible=\(flag(w.isVisible)) onSpace=\(flag(w.isOnActiveSpace)) lights=\(lights(w)) "
                         + "onTop=\(flag(w.level == .floating)) sheet=\(flag(w.attachedSheet != nil))")
                 }
+                if let w = settingsWindow {
+                    CraLog.note("window state \(label): settings visible=\(flag(w.isVisible)) front=\(flag(settingsInFront))")
+                }
                 for (i, w) in NSApp.windows.filter({ CraCEFRuntime.isExtensionWindow($0) }).enumerated() {
                     CraLog.note("window state \(label): extension\(i) visible=\(flag(w.isVisible)) onSpace=\(flag(w.isOnActiveSpace)) "
                         + "auxiliary=\(flag(w.collectionBehavior.contains(.fullScreenAuxiliary))) "
@@ -1990,6 +1993,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             key.performClose(nil)
             return
         }
+        // Settings in front closes on ⌘W, not the tab in the browser window behind it. With a
+        // sheet up (an open panel) nothing closes: the sheet is answered first.
+        if ["closeTab", "closeWindow"].contains(id), settingsInFront {
+            if let settings = settingsWindow, settings.attachedSheet == nil { settings.performClose(nil) }
+            return
+        }
         // A key Little Window takes the page/window actions first (⌘W, ⌘L, ⌘R…).
         if let little = keyLittleWindow, little.handle(action: id) { return }
         if let entry = LiveFolderPluginStore.shared.entry(forCommand: id) {
@@ -2209,6 +2218,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     func showSettingsWindow(on pane: SettingsPane) {
         showSettingsWindow()
         settingsController?.show(pane)
+    }
+
+    /// Settings is the window in front: the key window, or the frontmost one while Cra isn't
+    /// active (as keyLittleWindow reads it). A sheet on Settings (an open panel) counts as Settings.
+    var settingsInFront: Bool {
+        guard let settings = settingsWindow, settings.isVisible else { return false }
+        let front = NSApp.keyWindow ?? NSApp.orderedWindows.first { $0.isVisible && !($0 is NSPanel) }
+        return front === settings || front?.sheetParent === settings
     }
 
     /// Scenario readout: the Settings pane on screen, nil while Settings is closed.
