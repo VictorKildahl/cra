@@ -99,6 +99,7 @@ enum FloatingSidebarTests {
         onlyTheKeyWindowReveals(window: window, sidebar: sidebar, panel: panel)
         pointerPastTheLeftEdge(window: window, sidebar: sidebar)
         theRevealSwingsPastItsEdge(window: window, sidebar: sidebar, panel: panel)
+        thePanelsStayInsideTheWindow(window: window, sidebar: sidebar, panel: panel)
         noStandInLightsInFullScreen(sidebar: sidebar, panel: panel)
         staysInsideTheWindowsCorners(window: window, sidebar: sidebar, panel: panel)
 
@@ -309,6 +310,42 @@ enum FloatingSidebarTests {
         drainAnimations()
         expect(sidebar.isShown && panel.frame.width == resting, "a reveal after an interrupted one settles the same way")
         sidebar.hide(animated: false)
+    }
+
+    // promise: #350
+    /// GitHub #350, seen by Victor with the window zoomed to the screen: as the hidden sidebar came out,
+    /// the window's shadow and its dark outline went away along its whole top edge, and came back when
+    /// the sidebar left. The click-through panel that carries the sidebar's shadow reached 11 pt above
+    /// the window (8 before the sidebar moved 3 pt out), under the menu bar, and macOS gives the menu
+    /// bar its frosted backing over any window that lies under it, which covers the shadow behind it.
+    /// What reaches past the window is cut off by the window's outline anyway (#341).
+    @MainActor
+    private static func thePanelsStayInsideTheWindow(window: NSWindow, sidebar: FloatingSidebarController, panel: NSWindow) {
+        sidebar.hide(animated: false)
+        sidebar.show()
+        let shadow = window.childWindows!.first { $0 !== panel && $0.ignoresMouseEvents }!
+        for (name, p) in [("sidebar", panel), ("shadow", shadow)] {
+            expect(window.frame.contains(p.frame), "the \(name) panel stays inside the window's frame while the sidebar comes out")
+        }
+        drainAnimations()
+        for (name, p) in [("sidebar", panel), ("shadow", shadow)] {
+            expect(window.frame.contains(p.frame), "the \(name) panel stays inside the window's frame at rest")
+        }
+        let slider = shell_slider(panel)!, carrier = shadow.contentView!.subviews.first!
+        let body = panel.convertToScreen(slider.convert(slider.bounds, to: nil))
+        let cast = shadow.convertToScreen(carrier.convert(carrier.bounds, to: nil))
+        expect(abs(body.minX - cast.minX) < 0.01 && abs(body.minY - cast.minY) < 0.01 && body.size == cast.size,
+               "the shadow still sits under the sidebar")
+        expect(shadow.frame.maxX > panel.frame.maxX && shadow.frame.maxX <= window.frame.maxX,
+               "with room for it beside the sidebar, inside the window")
+        // A window barely wider than its sidebar: neither panel passes its right edge.
+        let wide = sidebar.shell.sidebarWidth
+        sidebar.hide(animated: false)
+        sidebar.shell.sidebarWidth = window.frame.width - 6
+        sidebar.show()
+        expect(window.frame.contains(panel.frame) && window.frame.contains(shadow.frame), "nor in a window as narrow as its sidebar")
+        sidebar.hide(animated: false)
+        sidebar.shell.sidebarWidth = wide
     }
 
     // promise: #315

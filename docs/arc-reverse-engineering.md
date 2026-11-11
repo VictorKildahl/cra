@@ -4185,3 +4185,13 @@ points from the window's left edge (negative = outside) and from its top. Names 
   spring runs and ends at the resting edge again once it settles.
 - [O Cra after, the same 2x capture] Right edge at rest 325.0, peak 329.0, back at 325 within ~0.1 s of the
   peak; in no frame does the page show left of the sidebar.
+- Victor, with the window zoomed to the screen: "when I hover to reveal it, the shadow that the Cra window
+  drops disappears. Arc's shadow is there all the time." [O Cra, real hover, screen captures] With the
+  window at 0, 33, 1728 × 1084 the band above its top edge (the window's shadow, seen through the menu
+  bar) goes from dark (0x58 down to 0x33) to flat 0x6c and the black 1 px outline goes, along the whole
+  edge, for as long as the sidebar is out; in a window standing clear of the menu bar nothing changes. The
+  click-through panel that carries the sidebar's soft shadow reached `shadowPad` past the sidebar, 11 pt
+  above the window (8 pt since #293), so it lay under the menu bar, and macOS gives the menu bar its frosted
+  backing over any window beneath it. Cra: both floating panels are cut to the window's frame
+  (`panelFrame`, `shadowPanelFrame`); what reached past it was masked by the window's outline already
+  (#341).

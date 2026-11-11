@@ -219,6 +219,7 @@ final class FloatingSidebarController {
     private var panelFrame: NSRect {
         let t = targetFrame
         return NSRect(x: window.frame.minX, y: t.minY, width: t.maxX - window.frame.minX + revealRoom, height: t.height)
+            .intersection(window.frame)
     }
 
     /// Room right of the sidebar's resting edge while the reveal's spring runs: it swings ~4 pt past
@@ -234,9 +235,14 @@ final class FloatingSidebarController {
 
     /// The shadow panel: the sidebar panel with room for the shadow right, above and below. It
     /// starts at the window's edge too, so the shadow is clipped there with the sidebar.
+    /// Never past the window's frame: what would reach past it is cut off by the window's outline
+    /// anyway, and a panel that reached above a window zoomed to the screen lay under the menu bar,
+    /// where macOS backs the menu bar over any window beneath it. That hid the browser window's own
+    /// shadow and dark outline along its top edge for as long as the sidebar was out (#350).
     private var shadowPanelFrame: NSRect {
         let f = panelFrame, pad = Metrics.shadowPad
         return NSRect(x: f.minX, y: f.minY - pad, width: f.width + pad, height: f.height + 2 * pad)
+            .intersection(window.frame)
     }
 
     /// Each panel is clipped to the window's rounded outline. A child window is not clipped by its
@@ -279,9 +285,11 @@ final class FloatingSidebarController {
     /// The shadow follows the sidebar's frame, inside the shadow panel.
     private func placeShadow() {
         let s = slider.frame, pad = Metrics.shadowPad
+        // The shadow panel starts lower than the sidebar's by its room below, as far as the window lets it.
+        let below = panelFrame.minY - shadowPanelFrame.minY
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        shadowView.frame = NSRect(x: s.minX, y: s.minY + pad, width: s.width, height: s.height)
+        shadowView.frame = NSRect(x: s.minX, y: s.minY + below, width: s.width, height: s.height)
         if let l = shadowView.layer {
             l.shadowColor = NSColor.black.cgColor
             l.shadowOpacity = Metrics.shadowOpacity

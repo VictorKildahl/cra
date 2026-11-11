@@ -628,6 +628,7 @@
 #350   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarGeometryTests.swift::theSpringIsArcsUpToArcsTravelAndDampedMorePastIt  8b4ebac59f30
 #350   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarGeometryTests.swift::theStripLeadsOutToo  964e38f91bde
 #350   Tests/FloatingSidebarTests.swift::pointerPastTheLeftEdge  4be954b9cf6b
+#350   Tests/FloatingSidebarTests.swift::thePanelsStayInsideTheWindow  73d72ca99e68
 #350   Tests/FloatingSidebarTests.swift::theRevealSwingsPastItsEdge  9009fb6ed80f
 #354   Packages/CraCore/Tests/CraCoreTests/PageWindowStartTests.swift::aNewPageWindowStartsOnTheWindowInUseNotOnThePrimaryDisplay  54a52c06fe08
 #354   Tests/Scenarios/page-windows-open-on-cra.scenario  57616ba445a7
