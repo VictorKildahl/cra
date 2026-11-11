@@ -78,6 +78,7 @@ static NSHashTable<CraBrowser*>* g_allBrowsers = nil;
 /// Closed tabs whose page stays alive until its downloads end (see -[CraBrowser close]).
 static NSMutableSet<CraBrowser*>* g_parkedBrowsers = nil;
 static void (^g_strayPageHandler)(NSString*, NSString*) = nil;
+static NSRect (^g_pageWindowStartHandler)(NSSize) = nil;
 static CraBrowser* (^g_extensionTabHandler)(NSString*, NSString*, BOOL, CraBrowser*) = nil;
 static BOOL (^g_appLinkHandler)(CraBrowser*, NSString*, BOOL) = nil;
 // The last click (left mouse-up) or Return in any window, for the download Chromium makes of an
@@ -2262,13 +2263,49 @@ private:
 // MARK: - Chrome-style hosting (Views). One frameless Chrome window per page; the
 // shell attaches it as a child window over the content card.
 
+// Where and how Chromium showed each new page or DevTools window, before Cra attached it:
+// cra://debug?pageWindows= (#354). `away` counts the ones shown off every Cra window on screen,
+// `animated` the ones macOS animates in and out.
+static NSInteger g_pageWindowsShown = 0, g_pageWindowsShownAway = 0, g_pageWindowsShownAnimated = 0;
+
+static void NotePageWindowShown(NSWindow* page) {
+    if (!page) return;
+    g_pageWindowsShown++;
+    if (page.animationBehavior != NSWindowAnimationBehaviorNone) g_pageWindowsShownAnimated++;
+    NSPoint centre = NSMakePoint(NSMidX(page.frame), NSMidY(page.frame));
+    BOOL anyCraWindow = NO;
+    for (NSWindow* w in NSApp.windows) {
+        // Not another page's own window, a panel attached to a window, or a stray one made unseeable.
+        if (w == page || !w.isVisible || w.parentWindow || w.alphaValue == 0 || [CraCEFRuntime isPageWindow:w]) continue;
+        if (NSPointInRect(centre, w.frame)) return;
+        anyCraWindow = YES;
+    }
+    if (anyCraWindow) g_pageWindowsShownAway++;
+}
+
+// Chromium makes a page's window in the top left corner of the primary display and would show it
+// there. A window shown on a display brings that display to a desktop, so with Cra on a second
+// display, each new page pulled the primary one off another app's full-screen Space (#354). The
+// app says where it starts instead: on the Cra window in use.
+static void PlaceNewPageWindow(CefRefPtr<CefWindow> window) {
+    NSWindow* page = ((__bridge NSView*)window->GetWindowHandle()).window;
+    if (!page) return;
+    NSRect frame = g_pageWindowStartHandler ? g_pageWindowStartHandler(page.frame.size) : NSZeroRect;
+    if (!NSIsEmptyRect(frame)) [page setFrame:frame display:NO];
+    // Ordered out as soon as it shows (a tab opened behind), a window plays macOS's closing
+    // animation, which the window server draws beside the primary display: that switched it too.
+    page.animationBehavior = NSWindowAnimationBehaviorNone;
+}
+
 class CraDevToolsWindowDelegate : public CefWindowDelegate {
 public:
     CraDevToolsWindowDelegate(CraBrowser* owner, CefRefPtr<CefBrowserView> view) : owner_(owner), view_(view) {}
     void OnWindowCreated(CefRefPtr<CefWindow> window) override {
         window->AddChildView(view_);
+        PlaceNewPageWindow(window);
         window->Show();
         NSView* v = (__bridge NSView*)window->GetWindowHandle();
+        NotePageWindowShown(v.window);
         if (CraBrowser* o = owner_) [o.delegate browser:o didCreateDevToolsView:v];
     }
     bool IsFrameless(CefRefPtr<CefWindow> window) override { return true; }
@@ -2348,10 +2385,12 @@ public:
     void OnWindowCreated(CefRefPtr<CefWindow> window) override {
         window->AddChildView(view_);
         if (CefRefPtr<CefView> toolbar = view_->GetChromeToolbar()) toolbar->SetVisible(false);
+        PlaceNewPageWindow(window);
         g_showingPageWindow++;
         window->Show();
         g_showingPageWindow--;
         NSView* v = (__bridge NSView*)window->GetWindowHandle();
+        NotePageWindowShown(v.window);
         if (CraBrowser* o = owner_) [o hostWindowCreated:v.window];
     }
     bool IsFrameless(CefRefPtr<CefWindow> window) override { return true; }
@@ -3336,6 +3375,7 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 + (BOOL)anotherInstanceWasNotified { return g_alreadyRunning; }
 + (void)setRelaunchHandler:(void (^)(NSArray<NSString*>*))handler { g_relaunchHandler = [handler copy]; }
 + (void)setStrayPageHandler:(void (^)(NSString*, NSString*))handler { g_strayPageHandler = [handler copy]; }
++ (void)setPageWindowStartHandler:(NSRect (^)(NSSize))handler { g_pageWindowStartHandler = [handler copy]; }
 + (void)setExtensionTabHandler:(CraBrowser* (^)(NSString*, NSString*, BOOL, CraBrowser*))handler {
     g_extensionTabHandler = [handler copy];
 }
@@ -3360,6 +3400,10 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 }
 
 + (void)floatOverFullScreenSpaces:(NSWindow*)window { FloatOverFullScreenSpaces(window); }
++ (NSString*)pageWindowsReadout {
+    return [NSString stringWithFormat:@"shown=%ld away=%ld animated=%ld", (long)g_pageWindowsShown, (long)g_pageWindowsShownAway,
+                                      (long)g_pageWindowsShownAnimated];
+}
 
 + (void)runMessageLoop { CefRunMessageLoop(); }
 + (void)quitMessageLoop { CraQuitMessageLoop(); }

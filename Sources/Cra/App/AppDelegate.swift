@@ -156,6 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             NSLog("Cra: dropped start-up page from an extension: %@", url)
             return true
         }
+        PageWindowStart.install()
         CraCEFRuntime.setStrayPageHandler { [weak self] url, profile in
             Task { @MainActor in
                 guard let self, !dropsStartUpPage(url) else { return }
@@ -1339,6 +1340,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("activations \(label): active=\(NSApp.isActive ? 1 : 0) background=\(CraApplication.backgroundActivations)")
                 return
             }
+            // pageWindows=<label>: the page windows Chromium has shown, how many it showed away from every
+            // Cra window on screen, and how many macOS animates in and out (#354).
+            if let label = dict["pageWindows"] { CraLog.note("page windows \(label): \(CraCEFRuntime.pageWindowsReadout)"); return }
             // pip=<label>: Chromium's Picture in Picture window as Cra keeps it; pipKey=space|force asks
             // it to become key the ways Chromium can leave it open to that (#262); pipDrop=left|right|top|bottom
             // lets it go half past that edge of its display, as a mouse drag does (#332).

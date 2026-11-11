@@ -1,0 +1,32 @@
+# promise: #354
+# A new page's window opens on the Cra window in use, and without macOS's window animation (#354).
+# Every page is a Chromium window of its own, and Chromium showed each new one in the top left
+# corner of the primary display before Cra laid it over its window. With Cra on a second display
+# and another app full screen on the primary one, that corner window switched the primary display
+# to a desktop: for every link that opened a tab, every tab whose page had to load, a Peek,
+# DevTools. A tab opened behind did it a second way: its window is ordered out as soon as it
+# shows, and macOS played a document window's closing animation on it, off to the side of the
+# primary display. `away` counts the page and DevTools windows shown off every Cra window on
+# screen, `animated` the ones macOS animates in and out. The Spaces themselves take two displays:
+# docs/release-checklist.md.
+budget rss=700 stalls50=10
+cra://open?url=${PAGE}?n=first
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+
+# A tab opened in front, as a link that opens a new tab does.
+cra://open?url=${PAGE}?n=front
+wait 2
+cra://debug?pageWindows=front
+expect-log page windows front: shown=[2-9] away=0 animated=0
+
+# A tab opened behind, as ⌘-click on a link does.
+cra://open?url=${PAGE}?n=behind&background=1
+wait 2
+cra://debug?pageWindows=behind
+expect-log page windows behind: shown=[3-9] away=0 animated=0
+
+# DevTools are a Chromium window too.
+cra://action/devTools
+wait 4
+cra://debug?pageWindows=devtools
+expect-log page windows devtools: shown=[4-9] away=0 animated=0

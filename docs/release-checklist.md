@@ -120,6 +120,9 @@ built release app with a test profile. Note anything that fails in the release's
   the window closes it.
 - **#186:** send a link from a full-screen app. The Little Window opens centred on that Space
   with no switch to the desktop, and a video in it can still go full screen.
+- **#354:** on two displays, with another app full screen on the primary one and Cra on the
+  other: a link that opens a tab, a ⌘-click that opens one behind, a tab whose page has to load,
+  a Peek and DevTools all leave the primary display on its full-screen Space.
 - **#231:** with Keep Cra in the menu bar on, the C shows in the menu bar in light and dark.
   ⌘Q takes the windows and the Dock icon away, and focus goes to the app behind. A full-screen
   window leaves its Space first. ⌥⌘N from another app opens a Little Window at once, with the

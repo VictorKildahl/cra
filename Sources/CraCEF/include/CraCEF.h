@@ -422,6 +422,10 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 /// ("Default", "Profile <id>"; nil off the record); Chrome's own window for it is closed.
 /// Popup-type windows (windows.create({type: "popup"})) stay Chrome's windows.
 + (void)setStrayPageHandler:(void (^)(NSString *url, NSString * _Nullable profile))handler;
+/// Where a new page's (or DevTools') Chromium window is first shown, in screen coordinates, given
+/// its size; an empty rect leaves it where Chromium made it, the top left corner of the primary
+/// display (GitHub #354). Asked on the main thread, before the window shows.
++ (void)setPageWindowStartHandler:(NSRect (^)(NSSize size))handler;
 /// A new tab or window a page asks for (target=_blank, window.open) at another app's address
 /// (spotify:): the handler gets the page's browser, the address and whether a click asked, and
 /// returns YES when it took it (Cra's "Open <app>?"); then no tab opens (GitHub #207). On the
@@ -448,6 +452,10 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 /// Lets one of Chromium's Picture in Picture windows show over another app's full-screen Space,
 /// as Arc's non-activating PiP panel does (GitHub #206). Chromium only makes it join every desktop Space.
 + (void)floatOverFullScreenSpaces:(NSWindow *)window;
+/// "shown=<n> away=<n> animated=<n>": the page and DevTools windows Chromium has shown, how many of
+/// them it showed off every Cra window that was on screen, and how many macOS animates in and out
+/// (GitHub #354), for cra://debug?pageWindows=.
+@property (class, nonatomic, readonly) NSString *pageWindowsReadout;
 + (NSString *)chromiumVersion;
 + (NSString *)cefVersion;
 /// YES when the browser-level DevTools pipe is up (it needs fds 3/4 free at start-up).
