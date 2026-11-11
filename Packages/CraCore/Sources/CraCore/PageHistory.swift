@@ -30,8 +30,17 @@ public struct PageHistory: Codable, Equatable, Sendable {
     /// Whether a new page for a tab now at `tabURL`, made in `engine`, opens with this history.
     /// Only while it ends where the tab is: a pinned tab put back on its page, a tab whose page
     /// moved on after the last save or a page reopened in the other engine starts fresh there.
+    /// Not on one of Chromium's own pages either (chrome://settings and the like): Chromium builds
+    /// such a page's WebUI as the restored entry starts to load, inside the page's creation, and
+    /// crashed there at every launch (0.1.38, a tab left on chrome://settings/privacy).
     public func restores(into engine: PageEngine, at tabURL: String) -> Bool {
-        engine == self.engine && !state.isEmpty && url == tabURL
+        engine == self.engine && !state.isEmpty && url == tabURL && !Self.isChromiumOwnPage(tabURL)
+    }
+
+    /// Whether `url` is a page Chromium serves itself, with a WebUI behind it.
+    static func isChromiumOwnPage(_ url: String) -> Bool {
+        let scheme = url.prefix { $0 != ":" }.lowercased()
+        return ["chrome", "chrome-untrusted", "devtools"].contains(scheme)
     }
 
     /// The tabs whose saved history stays on disk: every tab in the sidebar, and the tabs most
