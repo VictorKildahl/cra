@@ -1511,12 +1511,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         }
     }
 
-    /// Chrome's docked frontend reported where the page goes: `bounds` are points with a
-    /// top-left origin inside a DevTools window whose content measured `frontendSize`.
-    struct DevToolsPlaceholder: Equatable {
-        var bounds: NSRect
-        var frontendSize: NSSize
-    }
+    /// Chrome's docked frontend reported where the page goes (CraCore DevToolsPlaceholder): `bounds`
+    /// are points with a top-left origin inside a DevTools window whose content measured `frontendSize`.
     private(set) var devToolsPlaceholders: [UUID: DevToolsPlaceholder] = [:]
     /// False once the user undocked Chrome's frontend into its own window.
     private(set) var devToolsDockedState: [UUID: Bool] = [:]

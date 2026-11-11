@@ -255,6 +255,14 @@ empty, click-through and never key. Pages go back into their window while DevToo
 `CRA_EMBED_PAGES=0` (or `defaults write dk.kildahl.cra embedPages -bool NO`) keeps pages in
 their own child windows, the hosting before 0.1.17, for comparing the two.
 
+DevTools are a Chromium window too, made 10 pt square in a corner of the screen. Whoever owns
+the page hangs it over the page's area and lays the page's window over the room the docked
+frontend leaves (`DevToolsPlaceholder` in CraCore, `DevToolsWindowChrome`): `MainWindowController`
+for a pane, `LittleWindowController` for a Little Window and a Peek (#348).
+`cra://debug?inspectAt=x,y` is Inspect in the page's right-click menu (`&target=little` for the
+newest Little Window or Peek) and `cra://debug?devToolsShown=<label>` logs where each Little
+Window's DevTools are.
+
 ### Cleaning up after test copies
 
 A renamed test copy leaves files outside its own folder: a 300 MB–1 GB code sign clone in

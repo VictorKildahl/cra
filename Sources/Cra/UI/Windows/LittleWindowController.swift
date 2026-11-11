@@ -210,6 +210,16 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private var cardFading = false
     /// The size the window takes when the card opens a page: the one the user left it at, or the default.
     private let openSize: NSSize
+    /// The page's DevTools, docked in the page area as the browser window docks them in a pane
+    /// (#348). ⌥⌘I opens and closes them (DevToolsToggle).
+    private var devTools = DevToolsToggle()
+    /// Chromium's window for the DevTools frontend, while they are open.
+    private var devToolsView: NSView?
+    /// The frontend is docked, Chrome's default; false once "Undock into separate window" is picked.
+    private var devToolsDocked = true
+    /// The room the docked frontend left for the page.
+    private var devToolsPlaceholder: DevToolsPlaceholder?
+    private var devToolsClickMonitor: Any?
 
     var store: SidebarStore { app.store }
     var currentURL: String { browser?.currentURL ?? state.url }
@@ -367,14 +377,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         w.isOpaque = false
         w.backgroundColor = .clear
         ChromiumChildFullscreen.attach(w)
-        if let cv = w.contentView {
-            cv.isHidden = false   // a background tab's page (MainWindowController hides it)
-            cv.wantsLayer = true
-            cv.layer?.cornerCurve = .continuous
-            // Chromium's content view is flipped, so its layer's MaxY edge is the bottom.
-            cv.layer?.maskedCorners = cv.isFlipped ? [.layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMinYCorner, .layerMaxXMinYCorner]
-            cv.layer?.masksToBounds = true
-        }
+        w.contentView?.isHidden = false   // a background tab's page (MainWindowController hides it)
         // CEF hands the page window over at its own small frame: shown during a Peek's open it
         // flashed as a black block in the corner.
         // A Peek waiting on its tab shows it when it is back (unparkPeek).
@@ -382,16 +385,40 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         w.ignoresMouseEvents = isParked || isCard
         window.addChildWindow(w, ordered: .above)
         ChromiumChildFocus.attach(w)
-        positionHostWindow(shell.convert(shell.page.frame, to: nil))
+        layoutPageWindows()
         w.orderFront(nil)
         rejoinPage()
         // The command bar and the spaces popup stay above the page window.
         if commandPanel.parent === window { window.removeChildWindow(commandPanel); window.addChildWindow(commandPanel, ordered: .above) }
     }
 
+    /// Chromium's windows hung on this one: the page's and, docked, its DevTools' under it. They
+    /// hide, fade and let clicks through together.
+    private var pageWindows: [NSWindow] {
+        guard let window else { return [] }
+        return [devToolsView?.window, browser?.hostWindow].compactMap { $0 }.filter { $0.parent === window }
+    }
+
+    private func layoutPageWindows() { positionHostWindow(shell.convert(shell.page.frame, to: nil)) }
+
+    /// Lays Chromium's windows over the page area (`rectInWindow`): the page's own over all of it,
+    /// or, with DevTools docked, their window over it and the page where their frontend left room.
     private func positionHostWindow(_ rectInWindow: NSRect) {
-        guard let window, let w = browser?.hostWindow, w.parent === window, !rectInWindow.isEmpty else { return }
-        let onScreen = window.convertToScreen(rectInWindow)
+        guard let window, !rectInWindow.isEmpty else { return }
+        let area = window.convertToScreen(rectInWindow)
+        var page = area
+        if let view = devToolsView, let dev = view.window, dev.parent === window {
+            place(dev, at: area, corners: .bottom)
+            if let cv = dev.contentView, view.frame != cv.bounds { view.frame = cv.bounds }
+            if let hole = devToolsPlaceholder { page = hole.pageRect(in: area) }
+        }
+        guard let w = browser?.hostWindow, w.parent === window else { return }
+        // The window's bottom corners are the page's only where it reaches them: beside DevTools
+        // its edge is straight.
+        place(w, at: page, corners: AreaCorners.shared(by: page, with: area).intersection(.bottom))
+    }
+
+    private func place(_ w: NSWindow, at onScreen: NSRect, corners: AreaCorners) {
         if w.frame != onScreen { w.setFrame(onScreen, display: true) }
         // Chrome leaves its content view where the title bar ended (22 pt down), which
         // showed as a strip above the page and cut off its bottom.
@@ -402,7 +429,17 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             w.styleMask.remove([.titled, .resizable])
             ChromiumWindowCorners.setSquare(true, for: w)
         }
-        if let layer = w.contentView?.layer, layer.cornerRadius != shell.pageCornerRadius { layer.cornerRadius = shell.pageCornerRadius }
+        guard let cv = w.contentView else { return }
+        cv.wantsLayer = true
+        guard let layer = cv.layer else { return }
+        if layer.cornerCurve != .continuous { layer.cornerCurve = .continuous }
+        if !layer.masksToBounds { layer.masksToBounds = true }
+        if layer.cornerRadius != shell.pageCornerRadius { layer.cornerRadius = shell.pageCornerRadius }
+        // Chromium's content view is flipped, so its layer's MaxY edge is the bottom.
+        var mask: CACornerMask = []
+        if corners.contains(.bottomLeft) { mask.insert(cv.isFlipped ? .layerMinXMaxYCorner : .layerMinXMinYCorner) }
+        if corners.contains(.bottomRight) { mask.insert(cv.isFlipped ? .layerMaxXMaxYCorner : .layerMaxXMinYCorner) }
+        if layer.maskedCorners != mask { layer.maskedCorners = mask }
     }
 
     func focusPage() {
@@ -422,12 +459,22 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// desktop, and making it key switched Spaces (#186). Ordered in again as this window's
     /// child, it joins this window's Space.
     private func rejoinPage() {
-        guard let window, window.isVisible, window.isOnActiveSpace,
-              let host = browser?.hostWindow, host.parent === window, !host.isOnActiveSpace else { return }
-        window.removeChildWindow(host)
-        host.orderOut(nil)
-        window.addChildWindow(host, ordered: .above)
-        host.orderFront(nil)
+        guard let window, window.isVisible, window.isOnActiveSpace else { return }
+        // DevTools first, so the page's window ends above them.
+        let away = pageWindows.filter { !$0.isOnActiveSpace }
+        guard !away.isEmpty else { return }
+        for w in away {
+            window.removeChildWindow(w)
+            w.orderOut(nil)
+            window.addChildWindow(w, ordered: .above)
+            w.orderFront(nil)
+        }
+        // Only DevTools were away: the page's window goes back over them, without leaving the
+        // screen (ordered out and back, Chromium scrolls the page to the top).
+        if let host = browser?.hostWindow, host.parent === window, !away.contains(where: { $0 === host }) {
+            window.removeChildWindow(host)
+            window.addChildWindow(host, ordered: .above)
+        }
         if commandPanel.parent === window { window.removeChildWindow(commandPanel); window.addChildWindow(commandPanel, ordered: .above) }
     }
 
@@ -481,9 +528,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         window.minSize = LittleMetrics.minSize
         let screen = window.screen ?? placementScreen
         window.setFrame(LittleCard.expanded(from: window.frame, to: openSize, in: screen.visibleFrame), display: true)
-        if let host = browser?.hostWindow, host.parent === window {
-            host.ignoresMouseEvents = false
-            host.contentView?.isHidden = false
+        for w in pageWindows {
+            w.ignoresMouseEvents = false
+            w.contentView?.isHidden = false
         }
         // A bar still open (the page navigated on its own) goes back to the browser window's look.
         if commandBar.isOpen { commandBar.close() }
@@ -511,6 +558,27 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         return String(format: "card=%d size=%.0fx%.0f corner=%.0f,%.0f strip=%d lights=%d", isCard ? 1 : 0, f.width, f.height,
                       vf.maxX - f.maxX, vf.maxY - f.maxY, shell.hidesBar ? 0 : 1,
                       window.standardWindowButton(.closeButton)?.isHidden == false ? 1 : 0)
+    }
+
+    /// For cra://debug?devToolsShown: the page's DevTools as they are on screen, read from Chromium's
+    /// windows. `docked`: their window hangs on this one and covers the page area, with the page's
+    /// own window inside it and smaller (the frontend's split). `pageFills`: the page has the whole
+    /// area (#348).
+    var debugDevTools: String {
+        guard let window else { return "peek=\(isPeek ? 1 : 0) open=-" }
+        let area = window.convertToScreen(shell.convert(shell.page.frame, to: nil))
+        func same(_ a: NSRect, _ b: NSRect) -> Bool {
+            abs(a.minX - b.minX) < 1 && abs(a.minY - b.minY) < 1 && abs(a.width - b.width) < 1 && abs(a.height - b.height) < 1
+        }
+        let page = browser?.hostWindow.flatMap { $0.parent === window ? $0.frame : nil } ?? .zero
+        var out = "peek=\(isPeek ? 1 : 0) parked=\(isParked ? 1 : 0) open=\(browser?.hasDevTools == true ? 1 : 0)"
+        if let dev = browser?.devToolsWindow {
+            let split = area.insetBy(dx: -1, dy: -1).contains(page) && (page.width < area.width - 1 || page.height < area.height - 1)
+            out += " docked=\(dev.parent === window && same(dev.frame, area) && split ? 1 : 0)"
+                + " shown=\(dev.isVisible && dev.alphaValue > 0 && dev.contentView?.isHidden == false ? 1 : 0)"
+                + String(format: " size=%.0fx%.0f", dev.frame.width, dev.frame.height)
+        }
+        return out + " pageFills=\(same(page, area) ? 1 : 0)" + String(format: " area=%.0fx%.0f", area.width, area.height)
     }
 
     /// cra://debug?littleCard=<step>: `go:<typed>` is Return on what was typed in the card's bar,
@@ -604,7 +672,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         NSApp.activate(ignoringOtherApps: true)
         openingPeek = true
         // Hidden, not transparent: Chromium sets its page window's alpha back to 1 as it shows it.
-        if let host = browser?.hostWindow, host.parent === window { host.contentView?.isHidden = true }
+        for w in pageWindows { w.contentView?.isHidden = true }
         if hasPage || isPopupHost { focusPage() } else { openCommandBar() }
         // The card waits, invisible at its place, for the link it grows out of (at most
         // PeekSource.wait); a close meanwhile ends it unseen (closePeekAnimated).
@@ -635,7 +703,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             guard let self, let window = self.window, !self.closingPeek else { return }
             self.openingPeek = false
             window.alphaValue = 1
-            if let host = self.browser?.hostWindow, host.parent === window { host.contentView?.isHidden = false }
+            for w in self.pageWindows { w.contentView?.isHidden = false }
             self.controls?.alphaValue = 1
             // The real card is on screen a frame later; the picture goes after it.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
@@ -669,9 +737,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         window.alphaValue = 0
         window.ignoresMouseEvents = true
         (window as? LittleWindow)?.isParked = true
-        if let host = browser?.hostWindow, host.parent === window {
-            host.contentView?.isHidden = true
-            host.ignoresMouseEvents = true
+        for w in pageWindows {
+            w.contentView?.isHidden = true
+            w.ignoresMouseEvents = true
         }
         parent.parkPeekVeil(for: peekID)
         // The keyboard goes back to the window (also in the background, where actions follow the key window).
@@ -687,10 +755,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         window.alphaValue = 1
         window.ignoresMouseEvents = false
         (window as? LittleWindow)?.isParked = false
-        if let host = browser?.hostWindow, host.parent === window {
-            host.contentView?.isHidden = false
-            host.alphaValue = 1
-            host.ignoresMouseEvents = false
+        for w in pageWindows {
+            w.contentView?.isHidden = false
+            w.alphaValue = 1
+            w.ignoresMouseEvents = false
         }
         controls?.alphaValue = 1
         // The click catcher under the card, the buttons over it, all above the window's other children.
@@ -769,7 +837,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             // The picture is on screen (the same pixels) before the real card goes, so nothing blinks.
             DispatchQueue.main.asyncAfter(deadline: .now() + PeekTransition.lead) {
                 window.alphaValue = 0
-                if let host = self.browser?.hostWindow { host.alphaValue = 0 }
+                for w in self.pageWindows { w.alphaValue = 0 }
                 self.controls?.alphaValue = 0
                 parent.hidePeekVeil(for: self.peekID)
             }
@@ -832,6 +900,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         let tab = store.createTab(url: b.currentURL, title: b.currentTitle, in: sid, select: false, window: parent.windowID)
         if let favicon, let key = FaviconKey.key(for: b.currentURL) { app.favicons.store(favicon, forKey: key) }
         promoted = true
+        endDevTools(of: b)
         browser = nil
         parent.browsers.adopt(b, for: tab.id)
         window?.close()
@@ -1114,6 +1183,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         let tab = store.createTab(url: b.currentURL, title: b.currentTitle, in: sid, select: true, window: target.windowID)
         if let favicon, let key = FaviconKey.key(for: b.currentURL) { app.favicons.store(favicon, forKey: key) }
         promoted = true
+        endDevTools(of: b)
         browser = nil
         target.browsers.adopt(b, for: tab.id)
         window?.close()
@@ -1170,6 +1240,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// change, or a navigation the other engine has to show).
     private func replacePage(at url: String) {
         guard let old = browser else { return }
+        endDevTools(of: old)
         old.delegate = nil
         if let w = old.hostWindow, w.parent === window { window?.removeChildWindow(w); w.orderOut(nil) }
         old.containerView.removeFromSuperview()
@@ -1224,9 +1295,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             copy("[\(browser?.currentTitle ?? state.title)](\(currentURL))")
             showToast("Copied URL as Markdown")
         case "viewSource": browser?.viewSource()
-        case "devTools", "jsConsole", "networkPanel", "inspectElement":
-            browser?.devToolsAction = ["jsConsole": "console", "networkPanel": "network", "inspectElement": "inspect"][id]
-            browser?.showDevTools()
+        case "devTools": runDevTools(.toggle)
+        case "jsConsole": runDevTools(.console)
+        case "networkPanel": runDevTools(.network)
+        case "inspectElement": runDevTools(.inspect)
         case "print": browser?.print()
         // The rest of the page's commands run on this page, not on the browser window's tab (#333).
         case "share": PageCommands.share(self)
@@ -1314,7 +1386,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         archivePage()
         if let b = browser {
             b.containerView.isHidden = true
-            if let w = b.hostWindow, w.parent === sender { sender.removeChildWindow(w); w.orderOut(nil) }
+            // Its DevTools close with the page, an undocked window of theirs too.
+            for w in pageWindows { sender.removeChildWindow(w); w.orderOut(nil) }
             b.close()  // -browserDidClose: drops the controller
         }
         return true
@@ -1481,9 +1554,6 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     }
     func browser(_ browser: CraBrowser, didChangeStatusMessage message: String) {}
 
-    // Little windows never dock DevTools (CEF opens its own window for them).
-    func browser(_ browser: CraBrowser, devToolsPageBounds bounds: NSRect) {}
-    func browser(_ browser: CraBrowser, devToolsDocked docked: Bool) {}
     func browser(_ browser: CraBrowser, didChangeFullscreen fullscreen: Bool) {
         guard let window else { return }
         pageFullscreen = fullscreen
@@ -1544,13 +1614,155 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         return w.browser
     }
 
-    func devToolsHostView(for browser: CraBrowser) -> NSView? { nil }
-    func browser(_ browser: CraBrowser, didCreateDevToolsView view: NSView) {}
     func browser(_ browser: CraBrowser, didCreateHostWindow window: NSWindow) {
         attachHostWindow(window)
         if hasPage || isPopupHost, self.window?.isKeyWindow == true || window.isKeyWindow { focusPage() }
     }
-    func browserDidCloseDevTools(_ browser: CraBrowser) {}
+
+    // MARK: DevTools
+
+    /// ⌥⌘I, ⌥⌘J, ⌥⌘C and their menu items on this window's page, as BrowserManager.runDevTools
+    /// has them for a tab: ⌥⌘I closes DevTools that are open.
+    private func runDevTools(_ command: DevToolsToggle.Command) {
+        guard let b = browser else { return }
+        // WebKit's inspector (a DRM service's page) reports nothing back: it is only ever asked to show.
+        guard b.hostWindow != nil else {
+            b.showDevTools()
+            return
+        }
+        let (effect, frontend) = devTools.run(command)
+        // A press made while DevTools close is done when they reopen (DevToolsToggle.didClose),
+        // one made while they open once the frontend is up.
+        b.devToolsAction = frontend
+        perform(effect)
+    }
+
+    private func perform(_ effect: DevToolsToggle.Effect) {
+        switch effect {
+        case .show: browser?.showDevTools()
+        case .close: browser?.closeDevTools()
+        case .frontend: browser?.applyDevToolsAction()
+        case .none: break
+        }
+    }
+
+    /// Only an Alloy page asks; it gets CEF's own DevTools window.
+    func devToolsHostView(for browser: CraBrowser) -> NSView? { nil }
+
+    /// Chromium made the DevTools window: 10 pt square in the top left corner of the primary
+    /// display, where it stayed for a Little Window and a Peek (#348). It docks over the page
+    /// area, as in the browser window.
+    func browser(_ browser: CraBrowser, didCreateDevToolsView view: NSView) {
+        guard browser === self.browser else { return }
+        devToolsView = view
+        devToolsDocked = true
+        devToolsPlaceholder = nil
+        devTools.didOpen()
+        syncDevToolsWindow()
+    }
+
+    func browserDidCloseDevTools(_ browser: CraBrowser) {
+        guard browser === self.browser else { return }
+        clearDevTools()
+        layoutPageWindows()
+        perform(devTools.didClose())
+    }
+
+    /// The docked frontend placed the page (also streamed while its splitter is dragged).
+    func browser(_ browser: CraBrowser, devToolsPageBounds bounds: NSRect) {
+        // Undocked frontends still report bounds (device mode); only setIsDocked changes the dock state.
+        guard browser === self.browser, devToolsDocked, let dev = devToolsView?.window else { return }
+        let size = dev.contentView?.bounds.size ?? NSSize(width: bounds.maxX, height: bounds.maxY)
+        devToolsPlaceholder = DevToolsPlaceholder(bounds: bounds, frontendSize: size)
+        layoutPageWindows()
+    }
+
+    func browser(_ browser: CraBrowser, devToolsDocked docked: Bool) {
+        guard browser === self.browser else { return }
+        if !docked { devToolsPlaceholder = nil }
+        guard devToolsDocked != docked else { return }
+        devToolsDocked = docked
+        syncDevToolsWindow()
+    }
+
+    func browser(_ browser: CraBrowser, devToolsShowsPanel panel: String) {
+        if browser === self.browser { devTools.didShowPanel(panel) }
+    }
+
+    /// Hangs the DevTools window on this one over the page area, under the page's own window, or,
+    /// once the frontend's "Undock into separate window" is picked, lets it go as a window of its own.
+    private func syncDevToolsWindow() {
+        guard let window, let dev = devToolsView?.window else { layoutPageWindows(); return }
+        if !devToolsDocked {
+            guard dev.parent === window else { return }
+            window.removeChildWindow(dev)
+            dev.contentView?.isHidden = false
+            dev.alphaValue = 1
+            dev.ignoresMouseEvents = false
+            DevToolsWindowChrome.undock(dev, over: window, pageURL: currentURL)
+            browser?.executeJavaScript(DevToolsWindowChrome.titleBarInsetScript(for: dev), inDevTools: true)
+            layoutPageWindows()
+            dev.makeKeyAndOrderFront(nil)
+            return
+        }
+        if dev.parent !== window {
+            DevToolsWindowChrome.dock(dev)
+            // As the page's window: out of sight while a Peek opens or waits on its tab.
+            if openingPeek || isParked || isCard { dev.contentView?.isHidden = true }
+            dev.ignoresMouseEvents = isParked || isCard
+            window.addChildWindow(dev, ordered: .above)
+            browser?.executeJavaScript(DevToolsWindowChrome.titleBarInsetScript(for: nil), inDevTools: true)
+            dev.orderFront(nil)
+            // Child windows ignore orderWindow:relativeTo:; re-adding a child puts it above its
+            // siblings. The page's window goes over DevTools, the command bar over both.
+            if let host = browser?.hostWindow, host.parent === window {
+                window.removeChildWindow(host)
+                window.addChildWindow(host, ordered: .above)
+                host.orderFront(nil)
+            }
+            if commandPanel.parent === window { window.removeChildWindow(commandPanel); window.addChildWindow(commandPanel, ordered: .above) }
+            installDevToolsClickMonitor()
+        }
+        layoutPageWindows()
+        rejoinPage()
+    }
+
+    /// The page leaves for a tab, or another takes its place: its DevTools close, as a tab's do
+    /// when its page moves to another window (BrowserManager.release).
+    private func endDevTools(of b: CraBrowser) {
+        if let dev = devToolsView?.window, dev.parent === window {
+            window?.removeChildWindow(dev)
+            dev.orderOut(nil)
+        }
+        if b.hasDevTools { b.closeDevTools() }
+        clearDevTools()
+        devTools = DevToolsToggle()
+        layoutPageWindows()
+    }
+
+    private func clearDevTools() {
+        devToolsView = nil
+        devToolsPlaceholder = nil
+        devToolsDocked = true
+        if let monitor = devToolsClickMonitor { NSEvent.removeMonitor(monitor) }
+        devToolsClickMonitor = nil
+    }
+
+    /// The page and its DevTools are separate Chromium windows, and Chromium drops a click on a
+    /// window that isn't key. In Chrome they share one window, so going from one to the other
+    /// never costs a click: the one clicked becomes key first, while focus is already in this
+    /// window (as MainWindowController.installChildClickMonitor does for a pane).
+    private func installDevToolsClickMonitor() {
+        guard devToolsClickMonitor == nil else { return }
+        devToolsClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
+            guard let self, let window = self.window, let target = event.window,
+                  self.pageWindows.contains(where: { $0 === target }),
+                  !target.isKeyWindow, target.canBecomeKey, NSApp.isActive,
+                  let key = NSApp.keyWindow, key === window || key.parent === window else { return event }
+            target.makeKey()
+            return event
+        }
+    }
     func browser(_ browser: CraBrowser, handleKeyEvent event: NSEvent) -> Bool {
         // Escape leaves the page's element fullscreen, as in the main window.
         if pageFullscreen, event.keyCode == 53, event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty {
@@ -1584,6 +1796,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         browser.containerView.removeFromSuperview()
         guard self.browser === browser else { return }
         self.browser = nil
+        clearDevTools()
         if let window, window.isVisible {
             // The page closed itself (window.close()); the window goes with it.
             archivePage()

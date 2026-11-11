@@ -2722,6 +2722,10 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 }
 
 - (BOOL)hasDevTools { return _browser ? _browser->GetHost()->HasDevTools() : NO; }
+- (NSWindow*)devToolsWindow {
+    if (!_devToolsBrowser) return nil;
+    return ((__bridge NSView*)_devToolsBrowser->GetHost()->GetWindowHandle()).window;
+}
 
 - (void)loadURL:(NSString*)url {
     // An address asked for now wins over the saved list still waiting to go in.

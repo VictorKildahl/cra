@@ -597,7 +597,15 @@
 #345   Tests/Scenarios/pinned-icon-double-click.scenario  e0383d787f7c
 #346   Packages/CraCore/Tests/CraCoreTests/ScreenshotPickTests.swift::aPickOverThePageTakesTheMainWindow  916c67b02ac1
 #346   Tests/Scenarios/screenshot-window-pick.scenario  bf271139d3c5
+#348   Packages/CraCore/Tests/CraCoreTests/DevToolsPlaceholderTests.swift::aHoleInTheMiddleKeepsItsMargins  e281cbd0aaee
+#348   Packages/CraCore/Tests/CraCoreTests/DevToolsPlaceholderTests.swift::aHoleOutsideTheAreaGivesThePageAllOfIt  3a0f4dda2441
+#348   Packages/CraCore/Tests/CraCoreTests/DevToolsPlaceholderTests.swift::aResizedAreaGrowsThePageNotDevTools  746a2e32946a
+#348   Packages/CraCore/Tests/CraCoreTests/DevToolsPlaceholderTests.swift::aSmallAreaStillHoldsThePage  3148260fec5a
+#348   Packages/CraCore/Tests/CraCoreTests/DevToolsPlaceholderTests.swift::dockedBottomLeavesThePageTheTop  a3ca0df4b098
+#348   Packages/CraCore/Tests/CraCoreTests/DevToolsPlaceholderTests.swift::dockedRightLeavesThePageTheLeft  b4527a6c2478
+#348   Packages/CraCore/Tests/CraCoreTests/DevToolsPlaceholderTests.swift::thePageRoundsOnlyTheCornersItSharesWithItsArea  de6492820d94
 #348   Packages/CraCore/Tests/CraCoreTests/ViewSourceTests.swift::pageOpensItsSource  a8206dcf8756
+#348   Tests/Scenarios/little-window-devtools.scenario  b9e686b01fd2
 #348   Tests/Scenarios/view-source.scenario  c8591c290ad4
 #349   Packages/CraCore/Tests/CraCoreTests/ChromiumDialogTests.swift::hangsWhereASheetDoes  c4438e2ff53c
 #349   Packages/CraCore/Tests/CraCoreTests/ChromiumDialogTests.swift::othersAreNot  b1da0b8bf52e

@@ -1,0 +1,65 @@
+# promise: #348
+# Inspect in a Little Window or a Peek opens DevTools docked in it, beside the page, as in the
+# browser window (#348, a comment on it). Chromium makes the DevTools window 10 pt square in the
+# top left corner of the primary display, and only the browser window laid it over its page: from
+# a Little Window or a Peek it stayed there, a speck in the corner of the screen, and nothing
+# opened. `docked` is read from Chromium's windows: DevTools hang on the Little Window over its
+# page area, and the page's own window sits inside them, smaller.
+budget rss=900 stalls50=40
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}, "peekInEveryTab": true}
+cra://open?url=${PAGE}?n=main
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+
+# A Little Window: Inspect in the page's right-click menu.
+cra://debug?externalURL=${PAGE}?n=little
+wait 3
+cra://debug?devToolsShown=before
+expect-log little devtools before: little0 peek=0 parked=0 open=0 pageFills=1
+cra://debug?target=little&inspectAt=40,40
+wait 5
+cra://debug?devToolsShown=little
+expect-log little devtools little: little0 peek=0 parked=0 open=1 docked=1 shown=1
+
+# ⌥⌘I closes them again, as in the browser window, and the page has its area back.
+cra://action/devTools
+wait 3
+cra://debug?devToolsShown=closed
+expect-log little devtools closed: little0 peek=0 parked=0 open=0 pageFills=1
+
+# ⌥⌘I opens them too. Open in Space takes the page without them: they close, as a tab's do when
+# its page moves to another window, and the page is the tab.
+cra://action/devTools
+wait 5
+cra://debug?devToolsShown=again
+expect-log little devtools again: little0 peek=0 parked=0 open=1 docked=1 shown=1
+cra://action/promoteLittleWindow
+wait 3
+cra://debug?devToolsShown=promoted
+expect-log tab devtools promoted: windows=0 open=0
+cra://debug?back=promoted
+expect-log back promoted: selected=\S+n=little
+
+# A Peek.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=peek'))","userGesture":true}
+expect-log peek: from
+wait 2
+cra://debug?target=little&inspectAt=40,40
+wait 5
+cra://debug?devToolsShown=peek
+expect-log little devtools peek: little0 peek=1 parked=0 open=1 docked=1 shown=1
+
+# Another tab on screen: the Peek waits out of sight, and so do its DevTools.
+cra://open?url=${PAGE}?n=other
+wait 2
+cra://debug?devToolsShown=parked
+expect-log little devtools parked: little0 peek=1 parked=1 open=1 docked=1 shown=0
+cra://action/nextTab
+wait 2
+cra://debug?devToolsShown=back
+expect-log little devtools back: little0 peek=1 parked=0 open=1 docked=1 shown=1
+
+# Closed from the Peek, the page has the card to itself again.
+cra://action/devTools
+wait 3
+cra://debug?devToolsShown=done
+expect-log little devtools done: little0 peek=1 parked=0 open=0 pageFills=1

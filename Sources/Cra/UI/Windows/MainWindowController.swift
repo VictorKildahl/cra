@@ -1488,12 +1488,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         guard browsers.devToolsViews[tab] != nil, browsers.runtime(for: tab)?.hostWindow != nil,
               browsers.devToolsDockedState[tab] ?? true,
               let p = browsers.devToolsPlaceholders[tab] else { return body }
-        let right = max(0, p.frontendSize.width - p.bounds.maxX)
-        let bottom = max(0, p.frontendSize.height - p.bounds.maxY)
-        let w = max(1, body.width - p.bounds.minX - right)
-        let h = max(1, body.height - p.bounds.minY - bottom)
-        let r = NSRect(x: body.minX + p.bounds.minX, y: body.minY + bottom, width: w, height: h).intersection(body)
-        return r.isEmpty ? body : r
+        return p.pageRect(in: body)
     }
 
     /// Only the page corners that are card corners get rounded (a page docked beside
@@ -1635,21 +1630,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         guard let window else { return }
         if w.parent !== window {
             // CEF made a normal window; strip its chrome so only the DevTools content shows.
-            // Not resizable: the edge zone outside a resizable window would take drags
-            // meant for the frontend's splitter (undocking makes it resizable again).
-            w.styleMask.remove([.titled, .resizable])
-            w.styleMask.insert(.fullSizeContentView)
-            ChromiumWindowCorners.setSquare(true, for: w)
-            ChromiumChildHover.setDocked(true, for: w)
-            w.styleMask.remove([.closable, .miniaturizable])
-            w.titlebarAppearsTransparent = true
-            w.titleVisibility = .hidden
-            for type in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] { w.standardWindowButton(type)?.isHidden = true }
-            w.hasShadow = false
-            w.isMovable = false
-            w.isMovableByWindowBackground = false
-            w.isOpaque = false
-            w.backgroundColor = .clear
+            DevToolsWindowChrome.dock(w)
             window.addChildWindow(w, ordered: .above)
             fillContentView(w)
             if selfDock { setDevToolsTitleBarInset(nil, tab: tab) }
@@ -1686,42 +1667,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             return
         }
         window.removeChildWindow(w)
-        // A normal titled window, like Chrome's undocked "DevTools - <url>" (the
-        // frontend draws under a real title bar; attach strips all of this again).
-        w.styleMask.remove(.fullSizeContentView)
-        w.styleMask.insert([.titled, .closable, .miniaturizable, .resizable])
-        ChromiumWindowCorners.setSquare(false, for: w)
-        ChromiumChildHover.setDocked(false, for: w)
-        w.titlebarAppearsTransparent = false
-        w.titleVisibility = .visible
-        if let url = browsers.runtime(for: tab)?.browser.currentURL, !url.isEmpty {
-            w.title = "DevTools - " + url.replacingOccurrences(of: "^[a-z]+://", with: "", options: .regularExpression)
-        }
-        for type in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] { w.standardWindowButton(type)?.isHidden = false }
-        w.hasShadow = true
-        w.isMovable = true
-        w.isOpaque = true
-        w.backgroundColor = .windowBackgroundColor
-        if let cv = w.contentView {
-            cv.layer?.cornerRadius = 0
-            cv.layer?.masksToBounds = false
-        }
-        let f = window.frame
-        let size = NSSize(width: min(1100, f.width * 0.8), height: min(760, f.height * 0.8))
-        w.setFrame(NSRect(x: f.midX - size.width / 2 + 40, y: f.midY - size.height / 2 - 20, width: size.width, height: size.height), display: true)
+        DevToolsWindowChrome.undock(w, over: window, pageURL: browsers.runtime(for: tab)?.browser.currentURL)
         setDevToolsTitleBarInset(w, tab: tab)
         w.makeKeyAndOrderFront(nil)
     }
 
-    /// CEF's frame view keeps a frameless window's content view at full window size, so
-    /// the undocked window's title bar covers the top of the frontend; move the
-    /// frontend's layout down by the title bar's height instead (0 when docked).
+    /// The undocked window's title bar covers the top of the frontend: its layout moves down by
+    /// the bar's height (0 when docked, `w` nil).
     private func setDevToolsTitleBarInset(_ w: NSWindow?, tab: UUID) {
-        let inset = w.map { max(0, $0.frame.height - $0.contentLayoutRect.height) } ?? 0
-        let css = inset > 0 ? "body{margin-top:\(Int(inset))px!important;height:calc(100% - \(Int(inset))px)!important}" : ""
-        browsers.runtime(for: tab)?.browser.executeJavaScript("(function(){var s=document.getElementById('cra-titlebar-inset');"
-            + "if(!s){s=document.createElement('style');s.id='cra-titlebar-inset';document.head.appendChild(s);}"
-            + "s.textContent='\(css)';})();", inDevTools: true)
+        browsers.runtime(for: tab)?.browser.executeJavaScript(DevToolsWindowChrome.titleBarInsetScript(for: w), inDevTools: true)
     }
 
     /// Page windows go above the DevTools windows (each spans its pane's body when the

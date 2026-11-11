@@ -1206,6 +1206,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let step = dict["littleMenu"] { littleWindows.last?.debugMenu(step); return }
             // littleCard=<step>: the newest Little Window's card, see debugCardStep (#337).
             if let step = dict["littleCard"] { littleWindows.last?.debugCardStep(step); return }
+            // inspectAt=x,y: Inspect in the page's right-click menu at that point of the page (the
+            // newest Little Window's or Peek's with target=little); devToolsShown=<label>: where each
+            // Little Window's and Peek's DevTools are, and whether the front tab has any (#348).
+            if let g = dict["inspectAt"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2 {
+                let b = dict["target"] == "little" ? littleWindows.last?.browser : main.currentBrowser
+                b?.showDevToolsInspectingPoint(NSPoint(x: g[0], y: g[1]))
+                return
+            }
+            if let label = dict["devToolsShown"] {
+                for (i, l) in littleWindows.enumerated() { CraLog.note("little devtools \(label): little\(i) \(l.debugDevTools)") }
+                CraLog.note("tab devtools \(label): windows=\(littleWindows.count) open=\(main.currentBrowser?.hasDevTools == true ? 1 : 0)")
+                return
+            }
             if let label = dict["littleShown"] {
                 var space = "-", profile = "-", shown = ""
                 if let w = littleWindows.last {

@@ -202,6 +202,9 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 /// YES once the page closed itself (window.close()) rather than through -close.
 @property (nonatomic, readonly) BOOL closedByPage;
 @property (nonatomic, readonly) BOOL hasDevTools;
+/// Chromium's window for this page's DevTools frontend while they are open, wherever Cra put it
+/// (docked over the page area, or a window of its own); nil when closed.
+@property (nonatomic, readonly, nullable) NSWindow *devToolsWindow;
 /// Anything you want to hang on the browser (Swift stores the tab id).
 @property (nonatomic, strong, nullable) id userInfo;
 /// Runs in the shared off-the-record profile (+[CraCEFRuntime endIncognitoSession]).
