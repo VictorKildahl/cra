@@ -678,6 +678,10 @@ public struct AppSettings: Codable, Equatable {
     /// Arc Max's Tidy Downloads (renameDownloadsEnabled): a finished download gets a readable name from
     /// the Mac's Apple Intelligence model. Off by default, like Arc Max.
     public var tidyDownloads: Bool = false
+    /// Arc Max's 5-Second Previews (fiveSecondPreviewsEnabled / fiveSecondPreviews): hover or Shift-hover
+    /// on a link generates a summary of the webpage using the Mac's Apple Intelligence model.
+    /// Off by default, like Arc Max.
+    public var fiveSecondPreviews: Bool = false
     /// Arc's per-profile Download location (#190), by DownloadLocation.key(profileID:). A profile
     /// that isn't here saves to the Downloads folder without asking.
     public var downloadLocations: [String: DownloadLocation] = [:]
@@ -932,6 +936,7 @@ extension AppSettings {
         tidyTabs = try c.decodeIfPresent(Bool.self, forKey: .tidyTabs) ?? true
         tidyTabTitles = try c.decodeIfPresent(Bool.self, forKey: .tidyTabTitles) ?? false
         tidyDownloads = try c.decodeIfPresent(Bool.self, forKey: .tidyDownloads) ?? false
+        fiveSecondPreviews = try c.decodeIfPresent(Bool.self, forKey: .fiveSecondPreviews) ?? false
         downloadLocations = (try? c.decodeIfPresent([String: DownloadLocation].self, forKey: .downloadLocations)) ?? [:]
         shareUsageStats = try c.decodeIfPresent(Bool.self, forKey: .shareUsageStats) ?? false
         crashReports = (try? c.decodeIfPresent(CrashReportChoice.self, forKey: .crashReports)) ?? .ask

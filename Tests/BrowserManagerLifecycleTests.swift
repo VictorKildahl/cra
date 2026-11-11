@@ -1680,7 +1680,7 @@ private final class Observer: BrowserManagerDelegate {
     var activatedByPage: [Bool] = []
     var onPageWindowsChanged: (() -> Void)?
     func browserManagerDidUpdate(_ tabID: UUID) {}
-    func browserManager(statusMessage: String) {}
+    func browserManager(statusMessage: String, tabID: UUID?) {}
     func browserManager(findMatches count: Int, activeMatch: Int) {}
     func browserManager(download: CraDownloadInfo) {}
     func browserManager(fullscreen: Bool, tabID: UUID) {}

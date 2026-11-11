@@ -763,10 +763,51 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         return bars
     }
 
-    func browserManager(statusMessage: String) {
+    func browserManager(statusMessage: String, tabID: UUID?) {
         overlay.status = statusMessage
         shell.statusVisible = !statusMessage.isEmpty
         shell.layoutContentChildren()
+        linkHovered(statusMessage, tabID: tabID ?? browsers.visibleRuntime?.tabID)
+    }
+
+    /// 5-Second Previews: the hovered link, with the page it is on and the profile that would load
+    /// it. Incognito spaces get no previews: their pages load in no profile a fetch could use.
+    private func linkHovered(_ link: String, tabID: UUID?) {
+        let space = tabID.flatMap { store.spaceID(ofItem: $0) } ?? focusedSpaceID
+        let rt = tabID.flatMap { browsers.runtime(for: $0) }
+        let page = (rt?.browser.currentURL ?? currentBrowser?.currentURL).flatMap(URL.init(string:))
+        guard store.settings.fiveSecondPreviews, LinkSummaryService.shared.isAvailable, !store.isIncognito(space: space),
+              let url = URL(string: link), LinkSummaryPolicy.canPreview(link: url, page: page) else {
+            LinkSummaryPreviewController.shared.linkHoverChanged(nil)
+            return
+        }
+        let pointerInPage = { (host: NSWindow) -> CGPoint? in
+            let f = host.frame, m = NSEvent.mouseLocation
+            return f.contains(m) ? CGPoint(x: (m.x - f.minX) / f.width, y: (f.maxY - m.y) / f.height) : nil
+        }
+        let site = LinkSummaryPolicy.autoSite(page: page)
+        LinkSummaryPreviewController.shared.linkHoverChanged(.init(
+            link: url, page: page, window: window,
+            profilePath: tabID.flatMap { store.profilePath(item: $0) } ?? store.profilePath(space: space),
+            httpsOnly: store.settings.httpsOnly, theme: store.spaces[space]?.theme ?? focusedSpace.theme,
+            shiftHeld: NSEvent.modifierFlags.contains(.shift),
+            favicon: app.favicons.image(for: url.absoluteString)
+                ?? FaviconKey.key(for: url.absoluteString).flatMap { app.favicons.image(forKey: FaviconKey.siteKey(of: $0)) },
+            inspect: { [weak rt] done in
+                // The link under the pointer, its frame, and whether it is one of Arc's (LinkSummaryPolicy.hoverScript).
+                guard let rt, let host = rt.hostWindow, host.isVisible, let pointer = pointerInPage(host) else { done(nil); return }
+                let params = (try? JSONSerialization.data(withJSONObject: [
+                    "expression": LinkSummaryPolicy.hoverScript(pointer: pointer, site: site), "returnByValue": true]))
+                    .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+                rt.browser.evaluate(inIsolatedWorld: PageScript.world, params: params) { [weak host] result, _ in
+                    let value = PeekSource.value(result)
+                    DispatchQueue.main.async {
+                        guard let host, let value else { done(nil); return }
+                        let rect = PeekLayout.fraction(fromScript: value).flatMap { PeekLayout.source(fraction: $0, in: host.frame) }
+                        done(.init(rect: rect, arcLink: value["arc"] as? Bool ?? false))
+                    }
+                }
+            }))
     }
 
     func browserManager(findMatches count: Int, activeMatch: Int) {
@@ -3931,6 +3972,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     func windowWillClose(_ notification: Notification) {
         guard (notification.object as? NSWindow) === window else { return }
+        LinkSummaryPreviewController.shared.stop()
         tabSwitcher.cancel()
         app.mainWindowWillClose(self)
     }
