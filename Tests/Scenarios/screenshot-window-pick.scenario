@@ -1,0 +1,20 @@
+# Screenshot apps like iShot capture "the window under the pointer" on its own: they list the
+# screen's windows front to back and take the first ordinary one at the point. Over a page that
+# was a clear window laid over it, the status bubble's page-sized panel or the empty Chromium
+# window whose page had moved into the card, so the shot came out blank white (GitHub #346).
+# Anywhere over the page outside the bubble's strip the pick is the main window, which draws
+# the page in its card; the bubble's panel is only its strip at the page's bottom left.
+# promise: #346
+budget rss=700 stalls50=5
+cra://debug?windowSize=1200x800
+wait 1
+cra://open?url=${PAGE}?n=screenshot
+wait 2
+# The page area spans x 328…1190 from y 10 (debugger-infobar), the strip its bottom left.
+cra://debug?screenshotPick=760,400
+expect-log screenshot pick at 760,400: main window
+cra://debug?screenshotPick=1100,780
+expect-log screenshot pick at 1100,780: main window
+cra://debug?screenshotPick=340,780
+expect-log screenshot pick at 340,780: window [0-9]+ 540x34
+reject-log fault:

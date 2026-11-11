@@ -789,7 +789,8 @@ final class ShellView: NSView {
             }
         }
         statusHost.isHidden = !statusVisible
-        statusHost.frame = NSRect(x: wb.minX, y: wb.minY, width: min(540, wb.width), height: 34)
+        // In the overlay panel this fills it: the panel is just this strip of the page (#346).
+        statusHost.frame = StatusBubbleStrip.frame(inPage: wb)
         if findHost.superview === overlayParent {
             let size = CraMetrics.findBarSize, inset = CraMetrics.findBarInset
             findHost.isHidden = !findVisible

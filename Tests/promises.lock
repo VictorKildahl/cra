@@ -586,3 +586,5 @@
 #344   Packages/CraCore/Tests/CraCoreTests/SidebarAddressEditTests.swift::returnLoadsAnAddressOrASearchInTheTab  5fcf3ee80d37
 #344   Packages/CraCore/Tests/CraCoreTests/SidebarAddressEditTests.swift::settingDefaultsOffAndRoundTrips  9ec60d7e8be1
 #344   Tests/Scenarios/sidebar-address-edit-in-place.scenario  da9bfe866e18
+#346   Packages/CraCore/Tests/CraCoreTests/ScreenshotPickTests.swift::aPickOverThePageTakesTheMainWindow  916c67b02ac1
+#346   Tests/Scenarios/screenshot-window-pick.scenario  bf271139d3c5

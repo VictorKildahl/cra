@@ -30,6 +30,10 @@ enum EmbeddedPages {
         // Its views moved out and it is clear and borderless, so it shows nothing. It keeps
         // alpha 1: Chrome pops page context menus up from it, and an alpha 0 window gets none.
         window.ignoresMouseEvents = true
+        // Left out of screen capture: a screenshot app's "window under the pointer" skipped it
+        // then, and takes the main window, whose card draws the page. Captured, this clear window
+        // over the card came out blank white (#346). Its popups are windows of their own.
+        if window.sharingType != .none { window.sharingType = .none }
     }
 
     /// The page went back into its window (DevTools docked in it).
@@ -37,6 +41,7 @@ enum EmbeddedPages {
         guard hosts.contains(window) else { return }
         hosts.remove(window)
         window.ignoresMouseEvents = false
+        window.sharingType = .readOnly
     }
 
     static func isHost(_ window: NSWindow?) -> Bool { window.map { hosts.contains($0) } ?? false }

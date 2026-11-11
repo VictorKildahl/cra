@@ -930,9 +930,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     // MARK: Chrome-style page windows
 
-    /// Page-sized and always click-through: it covers the whole page, so if it ever took
-    /// mouse events every click on the page would land in it. Anything clickable over the
-    /// page gets its own panel just its size (the find bar).
+    /// The link status bubble's panel, over the focused page's bottom left and always
+    /// click-through: a click on a link under the bubble goes to the page. Anything clickable over
+    /// the page gets its own panel just its size (the find bar). Only the bubble's strip, not
+    /// the page: screenshot apps take the front window under the pointer, and a page-sized clear
+    /// panel made every shot of the page blank white (#346).
     private var overlayPanel: NSPanel?
     private var findPanel: FindBarPanel?
     /// The focused pane's ring while its page is in a window of its own (DevTools docked in it):
@@ -1030,6 +1032,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             window.addChildWindow(panel, ordered: .above)
             panel.orderFront(nil)
         }
+    }
+
+    /// The status bubble's screen frame: its strip at the focused page's bottom left.
+    private func overlayPanelFrame(page: NSRect) -> NSRect {
+        StatusBubbleStrip.frame(inPage: page)
     }
 
     /// The find bar's screen frame: the top trailing corner of the focused page.
@@ -1216,6 +1223,28 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     private var pageInsetsReadouts = 0
 
+    /// `cra://debug?screenshotPick=x,y`: the window a screenshot app's "window under the pointer"
+    /// takes at that point of this window (from its top left), read from the window list it reads.
+    /// Over a page that is this window, whose card draws the page (#346). Only Cra's windows
+    /// count: a test copy runs behind other apps.
+    func screenshotPickReadout(at p: CGPoint) -> String {
+        guard let window else { return "screenshot pick: no window" }
+        let pid = Int(ProcessInfo.processInfo.processIdentifier)
+        let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
+        let mine = list.compactMap { d -> ScreenshotPick.Window? in
+            guard (d[kCGWindowOwnerPID as String] as? Int) == pid, let number = d[kCGWindowNumber as String] as? Int,
+                  let bounds = d[kCGWindowBounds as String] as? NSDictionary,
+                  let frame = CGRect(dictionaryRepresentation: bounds as CFDictionary) else { return nil }
+            return .init(number: number, frame: frame, layer: d[kCGWindowLayer as String] as? Int ?? 0,
+                         alpha: d[kCGWindowAlpha as String] as? Double ?? 1,
+                         shared: (d[kCGWindowSharingState as String] as? Int ?? 1) != 0)
+        }
+        guard let me = mine.first(where: { $0.number == window.windowNumber }) else { return "screenshot pick: window not listed" }
+        let pick = ScreenshotPick.window(at: CGPoint(x: me.frame.minX + p.x, y: me.frame.minY + p.y), in: mine)
+        let name = pick.map { $0.number == window.windowNumber ? "main window" : "window \($0.number) \(Int($0.frame.width))x\(Int($0.frame.height))" } ?? "none"
+        return "screenshot pick at \(Int(p.x)),\(Int(p.y)): \(name)"
+    }
+
     /// `cra://debug?embedDump=1`: where every page view is, for EmbeddedPages work.
     func embeddedPagesDump() -> String {
         func tree(_ v: NSView, _ depth: Int) -> String {
@@ -1298,7 +1327,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let pr: NSRect? = shell.devToolsFrontendDocked ? focusPage : nil
         if shell.frontendPageRect != pr { shell.frontendPageRect = pr }
         let focusOnScreen = window.convertToScreen(focusPage)
-        if let panel = overlayPanel, panel.frame != focusOnScreen { panel.setFrame(focusOnScreen, display: true) }
+        if let panel = overlayPanel, panel.frame != overlayPanelFrame(page: focusOnScreen) { panel.setFrame(overlayPanelFrame(page: focusOnScreen), display: true) }
         syncRingPanel()
         if let find = findPanel, find.frame != findPanelFrame(page: focusOnScreen) { find.setFrame(findPanelFrame(page: focusOnScreen), display: true) }
     }
@@ -1336,7 +1365,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 guard browsers.runtime(for: id)?.hostWindow != nil, let body = frames[id] else { continue }
                 dev.animator().setFrame(window.convertToScreen(body), display: true)
             }
-            overlayPanel?.animator().setFrame(window.convertToScreen(focusPage), display: true)
+            overlayPanel?.animator().setFrame(overlayPanelFrame(page: window.convertToScreen(focusPage)), display: true)
             findPanel?.animator().setFrame(findPanelFrame(page: window.convertToScreen(focusPage)), display: true)
         }
     }
