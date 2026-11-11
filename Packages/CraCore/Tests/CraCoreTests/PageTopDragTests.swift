@@ -25,4 +25,12 @@ struct PageTopDragTests {
         #expect(PageTopDrag.holds(enabled: true, barAbovePage: false, depthIntoPage: 20,
                                   clickCount: 1, modifiers: false, distanceFromRight: distance) == holds)
     }
+
+    /// A press on an inactive Cra, or the one that made it active, can't go by the cursor: it is the one
+    /// Cra left behind. Found with real drags on #335: such a drag moved the window only every other time.
+    @Test(arguments: [(false, 0.0, 10.0, false), (true, 10.02, 10.0, false), (true, 9.95, 10.0, false),
+                      (true, 9.8, 10.0, true), (true, 0.0, 10.0, true)])
+    func theCursorCountsOnlyOnceCraHasBeenActive(active: Bool, becameActiveAt: Double, pressedAt: Double, counts: Bool) {
+        #expect(PageTopDrag.cursorIsCurrent(appActive: active, becameActiveAt: becameActiveAt, pressedAt: pressedAt) == counts)
+    }
 }
