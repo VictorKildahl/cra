@@ -23,3 +23,18 @@ chrome.action.onClicked.addListener(async (tab) => {
   const found = await chrome.tabs.get(opened.id).then(() => 'found', () => 'missing');
   await chrome.tabs.create({ url: `${origin}/page.html?n=answer-loaded-${loaded}-get-${found}-created-${created}` });
 });
+
+chrome.runtime.onMessage.addListener((message, sender, reply) => {
+  if (!sender.tab) return;
+  let action;
+  if (message === 'popup-window') {
+    action = chrome.windows.create({ url: chrome.runtime.getURL('popup.html'), type: 'popup', width: 400, height: 300 });
+  } else if (message === 'close-popup') {
+    action = chrome.windows.getAll({ windowTypes: ['popup'] }).then((windows) =>
+      Promise.all(windows.map((window) => chrome.windows.remove(window.id))));
+  } else {
+    return;
+  }
+  action.then(() => reply(true), (error) => { console.error(error); reply(false); });
+  return true;
+});

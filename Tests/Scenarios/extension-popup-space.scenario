@@ -1,0 +1,13 @@
+# An extension's separate window keeps its identity and resize API, and can join the
+# browser's full-screen Space rather than activating a desktop Space.
+budget rss=700 stalls50=5
+cra://debug?installExtension=${FIXTURES}/TabsCreateExtension
+relaunch
+cra://open?url=${PAGE}?n=popup-window
+wait 3
+cra://debug?windowState=popup
+expect-log window state popup: extension0 visible=1 .*auxiliary=1 movesToActiveSpace=1 primary=0 managed=0 title=Popup fixture: id-type-resize-preserved
+cra://open?url=${PAGE}?n=close-popup
+wait 1
+cra://debug?windowState=closed
+reject-log window state closed: extension[0-9]+ visible=1

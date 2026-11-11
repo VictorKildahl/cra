@@ -342,6 +342,12 @@ public:
         // Chrome's window exists by the first navigation (not yet in OnAfterCreated).
         NSWindow* window = ((__bridge NSView*)browser->GetHost()->GetWindowHandle()).window;
         if (window && !(window.styleMask & NSWindowStyleMaskFullSizeContentView)) {
+            NSWindowCollectionBehavior behavior = window.collectionBehavior;
+            behavior &= ~(NSWindowCollectionBehaviorPrimary | NSWindowCollectionBehaviorFullScreenPrimary
+                          | NSWindowCollectionBehaviorFullScreenAllowsTiling | NSWindowCollectionBehaviorManaged
+                          | NSWindowCollectionBehaviorCanJoinAllSpaces);
+            behavior |= NSWindowCollectionBehaviorFullScreenAuxiliary | NSWindowCollectionBehaviorMoveToActiveSpace;
+            window.collectionBehavior = behavior;
             windows_[browser->GetIdentifier()] = browser;
             if (!g_extensionWindows) g_extensionWindows = [NSHashTable weakObjectsHashTable];
             [g_extensionWindows addObject:window];
