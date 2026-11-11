@@ -408,6 +408,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         sidebarActions.showExtensionsMenu = { [weak self] in self?.showToolbarExtensionsMenu() }
         sidebarActions.showTranslate = { [weak self] id, anchor in self?.showTranslate(id, from: anchor) }
+        sidebarActions.showBlockedPopups = { [weak self] id, anchor in self?.showBlockedPopups(id, from: anchor) }
         sidebarActions.paneRunExtension = { [weak self] pane, id in
             guard let self else { return }
             self.focusPaneNow(pane)
@@ -725,7 +726,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             guard let rt = browsers.runtime(for: id) else { continue }
             nav[id] = TabNavState(canGoBack: canNavigateBack(id, rt.browser), canGoForward: rt.browser.canGoForward, isLoading: rt.browser.isLoading,
                                   themeColor: rt.themeColor, protectedMedia: PageEngines.protectedMediaService(of: rt.browser),
-                                  translation: rt.translation)
+                                  translation: rt.translation, blockedPopups: rt.blockedPopups.waiting.count)
         }
         if nav != sidebarUI.navStates { sidebarUI.navStates = nav }
         if let id = browsers.visibleTabID, let service = nav[id]?.protectedMedia { tellAboutProtectedMedia(service) }
@@ -2877,6 +2878,44 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         if state.languages.isEmpty { browsers.refreshTranslation(id, then: show) } else { show() }
     }
+    /// The blocked pop-ups menu (#357) under the button that was pressed (screen rect): the
+    /// toolbar's, or the sidebar URL field's "Pop-ups Blocked".
+    func showBlockedPopups(_ id: UUID, from anchor: NSRect?) {
+        guard let window, let content = window.contentView,
+              let anchor = anchor ?? (shell.sidebarHost as? SidebarView)?.blockedPopupsFrameOnScreen else { return }
+        let rect = content.convert(window.convertFromScreen(anchor), from: nil)
+        blockedPopupsMenu(id).popUp(positioning: nil, at: NSPoint(x: rect.minX, y: rect.minY - 4), in: content)
+    }
+
+    /// Chrome's blocked pop-ups bubble as a menu: the pop-ups (each opens as a tab below the page),
+    /// Open All, and the site's Always Allow switch.
+    func blockedPopupsMenu(_ id: UUID) -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        let popups = browsers.blockedPopups(id)
+        let heading = NSMenuItem(title: BlockedPopups.heading(count: popups.count), action: nil, keyEquivalent: "")
+        heading.isEnabled = false
+        menu.addItem(heading)
+        for p in popups {
+            let item = BlockMenuItem(title: BlockedPopups.menuTitle(url: p.url)) { [weak self] in self?.browsers.openBlockedPopups(id, popup: p.id) }
+            item.toolTip = p.url
+            menu.addItem(item)
+        }
+        if popups.count > 1 {
+            menu.addItem(.separator())
+            menu.addItem(BlockMenuItem(title: BlockedPopups.openAllTitle(count: popups.count)) { [weak self] in self?.browsers.openBlockedPopups(id) })
+        }
+        let pageURL = browsers.runtime(for: id)?.browser.currentURL ?? ""
+        if let title = BlockedPopups.allowTitle(pageURL: pageURL) {
+            menu.addItem(.separator())
+            let allowed = browsers.popupsAllowed(id)
+            let allow = BlockMenuItem(title: title) { [weak self] in self?.browsers.setPopupsAllowed(id, !allowed) }
+            allow.state = allowed ? .on : .off
+            menu.addItem(allow)
+        }
+        return menu
+    }
+
     /// The space the Site Control Center was opened in.
     private var siteControlCenterSpaceID: UUID?
 

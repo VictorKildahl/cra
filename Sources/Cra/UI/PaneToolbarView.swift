@@ -38,6 +38,8 @@ final class PaneToolbarView: NSView {
         var protectedMedia: String?
         /// Chromium's translate state for the page (#310): the translate button.
         var translation: PageTranslation?
+        /// Pop-ups Chromium blocked on the page, not opened yet (#357): the blocked pop-ups button.
+        var blockedPopups = 0
         var fill = NSColor.clear
         var fg = NSColor.labelColor
         var fgDim = NSColor.secondaryLabelColor
@@ -178,6 +180,7 @@ final class PaneToolbarView: NSView {
         }
         m.protectedMedia = m.tabID.flatMap { ui.navState(for: $0).protectedMedia }
         m.translation = m.tabID.flatMap { ui.navState(for: $0).translation }
+        m.blockedPopups = m.tabID.map { ui.navState(for: $0).blockedPopups } ?? 0
         let extensions = ExtensionStore.shared
         let profile = item.map { store.profileDirectoryName(item: $0.id) }
             ?? store.profileDirectoryName(space: store.focusedSpaceID(window: ui.windowID))
@@ -277,7 +280,8 @@ final class PaneToolbarView: NSView {
         hairline.layer?.backgroundColor = m.hairline?.cgColor
         let bar = ToolbarComposition(kind: m.kind, inSplit: m.inSplit, sidebarVisible: m.sidebarVisible, focusedPane: m.focusedPane,
                                      hovered: m.hovered, canGoBack: m.canGoBack, canGoForward: m.canGoForward, isLoading: m.isLoading,
-                                     pinnedExtensions: m.pinned.map(\.id), translatable: m.translation?.offersTranslation == true)
+                                     pinnedExtensions: m.pinned.map(\.id), translatable: m.translation?.offersTranslation == true,
+                                     blockedPopups: m.blockedPopups > 0)
         // The no-tab bar and an empty pane show navigation that does nothing (Arc greys it out).
         let wide = m.kind == .noTab || m.kind == .emptyPane
         // Arc's right-hand boxes: 32 pt, 4 pt apart (layout); 28 pt edge to edge on the developer bar.
@@ -318,6 +322,14 @@ final class PaneToolbarView: NSView {
                 }
                 b.menuProvider = { ExtensionStore.shared.entries.first { $0.extensionID == id }.map(ExtensionsMenu.iconMenu) }
                 return b
+            case .blockedPopups:
+                // Chrome's blocked pop-ups icon in the address bar: a window crossed out (#357).
+                let tab = m.tabID
+                return glyph("blockedPopups", "rectangle.on.rectangle.slash", help: BlockedPopups.buttonTitle(count: m.blockedPopups),
+                             width: rightBox, iconSize: 15) { bar in
+                    guard let tab else { return }
+                    bar.actions.showBlockedPopups(tab, bar.buttonFrameOnScreen("blockedPopups"))
+                }
             case .translate:
                 // Arc: `character.bubble`, filled on a translated page, "Translation Options" (#310).
                 let tab = m.tabID

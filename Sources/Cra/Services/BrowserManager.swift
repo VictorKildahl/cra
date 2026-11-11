@@ -56,6 +56,8 @@ final class TabRuntime {
     var extensionPageRetry: ScheduledWork?
     /// Chromium's translate state for the page (#310), for Arc's translate button and popover.
     var translation: PageTranslation?
+    /// Pop-ups Chromium's blocker held back on the page (#357), for the blocked pop-ups button.
+    var blockedPopups = BlockedPopups()
     /// Chrome-style hosting: the page's own window (nil until created, or for Alloy).
     var hostWindow: NSWindow? { browser.hostWindow }
     init(tabID: UUID, browser: CraBrowser) {
@@ -1122,23 +1124,36 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// Picture doesn't reliably reach it; the protocol's user gesture does. Only a player in an
     /// iframe falls back to the page path. Leaving a tab takes only an audible, playing video of
     /// some size, as the page path does (muted ones are hover previews or GIF-like loops).
+    ///
+    /// The gesture goes only to a page that has such a video: a first look runs without one. A
+    /// user gesture is a page's licence to open pop-ups for the next few seconds, and leaving any
+    /// tab handed one out, so a page could open a window as it was left (#357).
     private func requestPictureInPicture(_ id: UUID, automatic: Bool) {
         guard let browser = runtimes[id]?.browser else { return }
-        let js = """
-        ((auto) => {
+        let script = { (request: Bool) in """
+        ((auto, request) => {
           if (document.pictureInPictureElement) return 'ok';
           const area = v => { const r = v.getBoundingClientRect(); return r.width * r.height; };
           const v = [...document.querySelectorAll('video')].filter(v => !v.disablePictureInPicture && v.readyState >= 1)
             .filter(v => !auto || (!v.paused && !v.ended && !v.muted && v.volume > 0 && v.videoWidth > 0 && area(v) >= 20000))
             .sort((a, b) => ((b.paused ? 0 : 1) - (a.paused ? 0 : 1)) || (area(b) - area(a)))[0];
-          return v ? v.requestPictureInPicture().then(() => 'ok', e => e.name + ': ' + e.message) : 'none';
-        })(\(automatic))
-        """
-        let params: [String: Any] = ["expression": js, "returnByValue": true, "awaitPromise": true, "userGesture": true]
-        let json = String(data: try! JSONSerialization.data(withJSONObject: params), encoding: .utf8)!
-        browser.sendDevToolsMethod("Runtime.evaluate", params: json) { [weak browser] result, _ in
-            DispatchQueue.main.async {
-                let answer = Self.stringResult(result)
+          if (!v) return 'none';
+          return request ? v.requestPictureInPicture().then(() => 'ok', e => e.name + ': ' + e.message) : 'video';
+        })(\(automatic), \(request))
+        """ }
+        func evaluate(_ request: Bool, then: @escaping (String?) -> Void) {
+            let params: [String: Any] = ["expression": script(request), "returnByValue": true, "awaitPromise": true, "userGesture": request]
+            let json = String(data: try! JSONSerialization.data(withJSONObject: params), encoding: .utf8)!
+            browser.sendDevToolsMethod("Runtime.evaluate", params: json) { result, _ in
+                DispatchQueue.main.async { then(Self.stringResult(result)) }
+            }
+        }
+        evaluate(false) { [weak browser] look in
+            guard look == "video" else {
+                if look == nil || look == "none" { browser?.requestPictureInPicture(automatic: automatic) }
+                return
+            }
+            evaluate(true) { [weak browser] answer in
                 if answer == nil || answer == "none" { browser?.requestPictureInPicture(automatic: automatic) }
                 else if let answer, answer != "ok" { NSLog("Cra: Picture in Picture request failed: %@", answer) }
             }

@@ -16,6 +16,8 @@ final class SidebarView: NSView {
     var siteControlsButtonFrameOnScreen: NSRect? { topBar.siteControlsButtonFrameOnScreen }
     /// The URL field's "Translation Available" (screen rect), nil while it isn't shown (#310).
     var translateFrameOnScreen: NSRect? { topBar.translateFrameOnScreen }
+    /// The URL field's "Pop-ups Blocked" (#357), on the translate line's place.
+    var blockedPopupsFrameOnScreen: NSRect? { topBar.translateFrameOnScreen }
     /// Scenario hook (#310): what the URL field's translate line says, nil while it isn't shown.
     var debugTranslateLine: String? { topBar.debugTranslateLine }
     /// Scenario hooks (#226): the URL field as if the pointer were over the header, and a press on
@@ -499,16 +501,22 @@ final class SidebarTopBarView: NSView {
                 }
             }
             let translation = tab.flatMap { ui.navState(for: $0.id).translation }
+            // Blocked pop-ups (#357) take the translate line while they wait: they go with the
+            // page's next navigation.
+            let popups = tab.map { ui.navState(for: $0.id).blockedPopups } ?? 0
+            let line = popups > 0 ? BlockedPopups.buttonTitle(count: popups)
+                : translation?.offersTranslation == true ? (narrowWidth ? "Translate" : "Translation Available") : nil
             pill.show(text: text, url: url, hasTab: tab != nil, colors: colors, active: active,
                       pinned: pinned, protectedMedia: tab.flatMap { ui.navState(for: $0.id).protectedMedia },
-                      translate: translation?.offersTranslation == true ? (narrowWidth ? "Translate" : "Translation Available") : nil,
+                      translate: line,
                       tabID: tab?.id,
                       // An empty split pane has no address: the bar's "Search or Enter URL…" fills it.
                       editInPlace: store.settings.editAddressInPlace && tab?.isEmptyTab != true)
             let tabID = tab?.id
             pill.onTranslate = { [weak self] in
                 guard let self, let tabID else { return }
-                self.actions.showTranslate(tabID, self.translateFrameOnScreen)
+                if popups > 0 { self.actions.showBlockedPopups(tabID, self.translateFrameOnScreen) }
+                else { self.actions.showTranslate(tabID, self.translateFrameOnScreen) }
             }
         }
         needsLayout = true

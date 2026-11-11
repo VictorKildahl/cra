@@ -223,6 +223,8 @@ static CraClient* AsCraClient(CefClient* c) {
 @property (nonatomic) BOOL isAudible;
 - (void)audibleChanged:(BOOL)audible;
 - (void)requestPictureInPictureInFrame:(CefRefPtr<CefFrame>)frame automatic:(BOOL)automatic x:(int)x y:(int)y;
+/// The key press that lends the page user activation, for a frame that has a video to show.
+- (void)nudgeUserActivation;
 - (void)adoptBrowser:(CefRefPtr<CefBrowser>)browser;
 - (void)devToolsBrowserCreated:(CefRefPtr<CefBrowser>)browser;
 - (void)devToolsBrowserClosed;
@@ -1583,6 +1585,10 @@ public:
                 o.isPictureInPicturePlaying = playing;
                 if ([o.delegate respondsToSelector:@selector(browser:didChangePictureInPicturePlayback:)])
                     [o.delegate browser:o didChangePictureInPicturePlayback:playing];
+            } else if (v == "want") {
+                // A frame has a video to put in Picture in Picture: only now does the page get
+                // the key press that lends it user activation (see PictureInPictureScript).
+                if (!o.isInPictureInPicture) [o nudgeUserActivation];
             } else if (v.compare(0, 3, "err") == 0) {
                 NSLog(@"CraCEF: Picture in Picture %s", v.c_str());
             }
@@ -1712,6 +1718,22 @@ public:
             NSString* state = args->GetSize() > 0 ? NSStringFromCef(args->GetString(0)) : @"{}";
             if (o && [o.delegate respondsToSelector:@selector(browser:didChangeTranslateState:)])
                 [o.delegate browser:o didChangeTranslateState:state];
+            return true;
+        }
+        // Pop-ups Chromium's blocker holds back: ids and URLs (scripts/cef-patches/blocked-popups.patch).
+        if (message->GetName() == "Cra.popups") {
+            CefRefPtr<CefListValue> args = message->GetArgumentList();
+            NSMutableArray<NSNumber*>* ids = [NSMutableArray array];
+            NSMutableArray<NSString*>* urls = [NSMutableArray array];
+            if (args->GetSize() > 1 && args->GetType(0) == VTYPE_LIST && args->GetType(1) == VTYPE_LIST) {
+                CefRefPtr<CefListValue> idList = args->GetList(0), urlList = args->GetList(1);
+                for (size_t i = 0; i < idList->GetSize() && i < urlList->GetSize(); i++) {
+                    [ids addObject:@(idList->GetInt(i))];
+                    [urls addObject:NSStringFromCef(urlList->GetString(i))];
+                }
+            }
+            if (o && [o.delegate respondsToSelector:@selector(browser:didChangeBlockedPopups:urls:)])
+                [o.delegate browser:o didChangeBlockedPopups:ids urls:urls];
             return true;
         }
         if (message->GetName() == "Cra.activate") {
@@ -2762,6 +2784,23 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 - (void)goBack { if (_browser) _browser->GoBack(); }
 - (void)goForward { if (_browser) _browser->GoForward(); }
 - (void)reload { if (_browser) _browser->Reload(); }
+
+// Chrome keys the setting by the page that opens the pop-up (PopupBlocker's opener URL).
+- (BOOL)popupsAllowed {
+    if (!_browser) return NO;
+    CefRefPtr<CefRequestContext> context = _browser->GetHost()->GetRequestContext();
+    CefString url = _browser->GetMainFrame()->GetURL();
+    return context && context->GetContentSetting(url, url, CEF_CONTENT_SETTING_TYPE_POPUPS) == CEF_CONTENT_SETTING_VALUE_ALLOW;
+}
+
+- (void)setPopupsAllowed:(BOOL)allowed {
+    if (!_browser) return;
+    CefRefPtr<CefRequestContext> context = _browser->GetHost()->GetRequestContext();
+    CefString url = _browser->GetMainFrame()->GetURL();
+    if (!context || url.empty()) return;
+    context->SetContentSetting(url, url, CEF_CONTENT_SETTING_TYPE_POPUPS,
+                               allowed ? CEF_CONTENT_SETTING_VALUE_ALLOW : CEF_CONTENT_SETTING_VALUE_DEFAULT);
+}
 - (void)reloadIgnoringCache { if (_browser) _browser->ReloadIgnoreCache(); }
 - (void)stopLoading { if (_browser) _browser->StopLoad(); }
 - (void)exitFullscreen { if (_browser) _browser->GetHost()->ExitFullscreen(true); }
@@ -2906,9 +2945,12 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 //
 // Chromium only lets a page enter Picture in Picture while it holds a user
 // activation, which clicks in Cra's own UI never give the page. Cra therefore
-// first sends the page a harmless key (F19: no page or Chromium shortcut
-// listens to it), which the renderer counts as an interaction, then runs the
-// request once `navigator.userActivation` reports active. `x`/`y` (view DIPs,
+// sends the page a harmless key (F19: no page or Chromium shortcut listens to
+// it), which the renderer counts as an interaction, and the frame runs the
+// request once `navigator.userActivation` reports active. The key goes only to
+// a page that may have a video to show: one making sound when its tab is left,
+// or one whose frame reports a video ("pip:want"). The activation also lets
+// the page open pop-ups for a few seconds (#357). `x`/`y` (view DIPs,
 // -1 for none) pick the video under a context-menu click; otherwise the
 // playing, largest video wins. Automatic requests (leaving the tab) take only
 // an audible, playing video of some size: muted ones are hover previews
@@ -2925,6 +2967,7 @@ static NSString* PictureInPictureScript(BOOL automatic, int x, int y) {
         "if(x>=0){v=c.filter(function(e){var r=e.getBoundingClientRect();return x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom;}).sort(function(a,b){return area(a)-area(b);})[0]||null;}"
         "if(!v){c.sort(function(a,b){return ((b.paused?0:1)-(a.paused?0:1))||(area(b)-area(a));});v=c[0];}"
         "var go=function(){v.requestPictureInPicture().then(function(){send('pip:ok');}).catch(function(e){send('pip:err '+e.name+': '+e.message);});};"
+        "send('pip:want');"
         "var n=0;var t=setInterval(function(){if((navigator.userActivation&&navigator.userActivation.isActive)||++n>20){clearInterval(t);go();}},50);"
         "}catch(e){send('pip:err '+e);}})", automatic ? 1 : 0, x, y];
 }
@@ -2977,7 +3020,11 @@ static NSView* FindRenderWidgetHostView(NSView* root) {
         if (!automatic) [self exitPictureInPicture];
         return;
     }
-    [self nudgeUserActivation];
+    // Leaving a tab takes only a video that plays aloud, so the key press goes at once to a page
+    // making sound, while it is still on screen to get it. Any other page gets it only when one
+    // of its frames reports a video to show ("pip:want", HandlePageMessage): the activation also
+    // lets a page open pop-ups for a few seconds, and leaving any tab handed one out (#357).
+    if (automatic && self.isAudible) [self nudgeUserActivation];
     double zoom = pow(1.2, _browser->GetHost()->GetZoomLevel());  // view DIPs → CSS px
     NSString* hit = PictureInPictureScript(automatic, x < 0 ? -1 : (int)(x / zoom), y < 0 ? -1 : (int)(y / zoom));
     NSString* any = PictureInPictureScript(automatic, -1, -1);

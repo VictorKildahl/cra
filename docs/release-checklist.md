@@ -106,6 +106,12 @@ built release app with a test profile. Note anything that fails in the release's
   address and "Open in": each works on the first click. Capture and scroll: the page moves and
   the grey picture and the lens follow. With another app full screen, ⌥⌘N opens a Little
   Window over it, and doesn't when Settings ▸ Tabs ▸ Links is off.
+- **#357:** play an embedded YouTube video aloud on a blog (the player in an iframe), switch tabs:
+  it goes into Picture in Picture. A background test copy can't hand the iframe its key press,
+  before or after #357; the pip-leave-tab scenario covers a player in the page itself.
+- **#357:** on crabrowser.app/folder with a 4-tab folder, Open All opens one tab and the toolbar's
+  crossed-out windows button (or "Pop-ups Blocked" under the sidebar's address) shows; its menu
+  opens the rest, and Always Allow Pop-ups from crabrowser.app lets the next Open All open all.
 - **#202:** in a Peek, ⌘-click a `target=_blank` link: a background tab opens and the Peek
   stays. A plain click on it takes the Peek away and selects the new tab below the source tab.
 - **#242:** Peek a link from a pinned tab, scroll the Peek, click a `target=_blank` link in it: the

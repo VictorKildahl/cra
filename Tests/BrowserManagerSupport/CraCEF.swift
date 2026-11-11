@@ -29,6 +29,9 @@ open class CraBrowser {
     public var isPictureInPicturePlaying = false
     public var isCapturingMedia = false
     public var isAudible = false
+    /// Chrome's pop-up site setting (#357).
+    public private(set) var popupsAllowed = false
+    public func setPopupsAllowed(_ allowed: Bool) { popupsAllowed = allowed }
     public var hasDevTools = false
     public var closedByPage = false
     public let isIncognito: Bool

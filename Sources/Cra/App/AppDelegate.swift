@@ -1392,6 +1392,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("split \(label): panes=\(urls) selected=\(selected?.tab?.url ?? "-") downloads=\(DownloadHistory.shared.live.count + DownloadHistory.shared.entries.count)")
                 return
             }
+            // popups=<label>[&run=open|openAll|allow|block]: the front tab's blocked pop-ups, its
+            // toolbar button and URL-field line, the menu's rows, Chrome's site setting and the
+            // Today tab count; run= picks a menu row first (#357).
+            if let label = dict["popups"], let id = main.selectedTab?.id {
+                switch dict["run"] {
+                case "open": main.browsers.openBlockedPopups(id, popup: main.browsers.blockedPopups(id).first?.id)
+                case "openAll": main.browsers.openBlockedPopups(id)
+                case "allow": main.browsers.setPopupsAllowed(id, true)
+                case "block": main.browsers.setPopupsAllowed(id, false)
+                default: break
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak main] in
+                    guard let main else { return }
+                    let waiting = main.browsers.blockedPopups(id)
+                    let rows = main.blockedPopupsMenu(id).items.map { $0.isSeparatorItem ? "-" : $0.title + ($0.state == .on ? "✓" : "") }
+                    let today = self.store.tabs(under: self.store.focusedSpace(window: main.windowID).todayContainerID).count
+                    CraLog.note("popups \(label): waiting=\(waiting.count) urls=\(waiting.map(\.url).joined(separator: " ")) "
+                                + "button=\(main.sidebarUI.navState(for: id).blockedPopups) line=\((main.shell.sidebarHost as? SidebarView)?.debugTranslateLine ?? "-") "
+                                + "allowed=\(main.browsers.popupsAllowed(id) ? 1 : 0) today=\(today) menu=\(rows.joined(separator: " | "))")
+                }
+                return
+            }
             if let label = dict["back"] {
                 let today = store.tabs(under: store.focusedSpace(window: main.windowID).todayContainerID).count
                 CraLog.note("back \(label): selected=\(main.selectedTab?.tab?.url ?? "-") back=\(main.sidebarUI.canGoBack ? 1 : 0) today=\(today)")

@@ -161,6 +161,10 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 /// scripts/cef-patches/translate-ui.patch). Chromium shows no translate bubble of its own for
 /// Cra's pages: Cra draws Arc's button, popover and toasts from this.
 - (void)browser:(CraBrowser *)browser didChangeTranslateState:(NSString *)state;
+/// The pop-ups Chromium's pop-up blocker holds back on the page changed: one was blocked, or the
+/// list was cleared by a navigation (scripts/cef-patches/blocked-popups.patch). `ids` and `urls`
+/// pair up, oldest first; both are empty when nothing is blocked (CraCore's BlockedPopups).
+- (void)browser:(CraBrowser *)browser didChangeBlockedPopups:(NSArray<NSNumber *> *)ids urls:(NSArray<NSString *> *)urls;
 /// Arc's Peek: a link the user clicked (`shiftClick` NO: before it navigates the page or
 /// opens as a target=_blank tab) or Shift-clicked (YES, instead of a new window). Return
 /// YES to show it in a Peek; the page then stays where it is.
@@ -253,6 +257,10 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 - (void)goBack;
 - (void)goForward;
 - (void)reload;
+/// Chrome's pop-up setting for the page's site: YES once pop-ups are always allowed there.
+@property (nonatomic, readonly) BOOL popupsAllowed;
+/// Always allows pop-ups on the page's site (Chrome's site setting), or goes back to blocking.
+- (void)setPopupsAllowed:(BOOL)allowed;
 - (void)reloadIgnoringCache;
 - (void)stopLoading;
 /// Leaves element fullscreen (a video), as Esc does.

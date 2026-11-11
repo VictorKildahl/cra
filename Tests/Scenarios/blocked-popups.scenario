@@ -1,0 +1,48 @@
+# Pop-ups Chromium's blocker holds back (GitHub #357): a shared folder's Open All may open one tab
+# per click, and Cra lost the others without a word. Now they wait behind the blocked pop-ups
+# button (toolbar, or the URL field's line), whose menu opens them as tabs below the page and
+# always allows the site; a navigation clears the list, as in Chrome.
+# promise: #357
+budget rss=900 stalls50=40
+pace 0.5
+
+cra://open?url=${PAGE}?n=source
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?popups=none
+expect-log popups none: waiting=0 urls= button=0 .*allowed=0 today=1
+
+# One click, three tabs: the first opens, Chromium blocks the other two.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"[1,2,3].map(n=>!!window.open('${PAGE}?n=p'+n)).join()","userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"true,false,false"
+wait 1.5
+cra://action/goBack
+wait 1
+cra://debug?popups=blocked
+expect-log popups blocked: waiting=2 urls=\S+n=p2 \S+n=p3 button=2 .*allowed=0 today=1 menu=2 Pop-ups Blocked on This Page \| \S+n=p2 \| \S+n=p3 \| - \| Open All 2 Pop-ups \| - \| Always Allow Pop-ups from 127\.0\.0\.1$
+expect-log page 127\.0\.0\.1 blocked 1 pop-up$
+
+# Open All: both open as tabs, and the button goes. The first is shown, which leaves the page.
+cra://debug?popups=opened&run=openAll
+expect-log popups opened: waiting=0 urls= button=0 .*today=3
+cra://action/goBack
+wait 1
+
+# A script's pop-up with no click is blocked too, also right after Cra left the page and came
+# back: leaving a tab looked for a video to put in Picture in Picture with a user gesture, which
+# let the page open pop-ups for the next five seconds. The page's next navigation clears the list.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=p4'))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"false"
+wait 1
+cra://debug?popups=script
+expect-log popups script: waiting=1 urls=\S+n=p4 button=1
+cra://action/reload
+wait 1.5
+cra://debug?popups=reloaded
+expect-log popups reloaded: waiting=0 urls= button=0
+
+# Always Allow: Chrome's site setting, and the site's pop-ups open from then on.
+cra://debug?popups=allowed&run=allow
+expect-log popups allowed: waiting=0 .*allowed=1 .*Always Allow Pop-ups from 127\.0\.0\.1✓$
+cra://debug?cdp=Runtime.evaluate&params={"expression":"[5,6].map(n=>!!window.open('${PAGE}?n=p'+n)).join()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"true,true"

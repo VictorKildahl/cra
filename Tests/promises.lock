@@ -302,7 +302,7 @@
 #195   Packages/CraCore/Tests/CraCoreTests/HiddenFrameReleaseTests.swift::tabsHiddenLongerThanTheCullAreDue  eda41aed2bc6
 #195   Packages/CraCore/Tests/CraCoreTests/HiddenFrameReleaseTests.swift::tabsPastTheCapAreDueOldestFirst  faab2afe4a8c
 #195   Packages/CraCore/Tests/CraCoreTests/ShippedWindowsTests.swift::littleWindowShortcutWorksFromAnyAppUnlessTurnedOff  d7c46d24f219
-#198   Tests/BrowserManagerLifecycleTests.swift::callPictureInPictureCase  bac93fb0309d
+#198   Tests/BrowserManagerLifecycleTests.swift::callPictureInPictureCase  86106e6d910d
 #202   Packages/CraCore/Tests/CraCoreTests/PeekTriggerTests.swift::aNewTabLinkInsideThePeekLeavesIt  97e7217fdf7d
 #203   Packages/CraCore/Tests/CraCoreTests/WebStoreInstallsTests.swift::folderStopsLoadingWhereTheStoreHasIt  7dd24962094b
 #203   Packages/CraCore/Tests/CraCoreTests/WebStoreInstallsTests.swift::onlyStoreCopiesNamedAfterTheirID  d8e4376933ca
@@ -635,8 +635,14 @@
 #354   Tests/Scenarios/page-windows-open-on-cra.scenario  57616ba445a7
 #356   Packages/CraCore/Tests/CraCoreTests/PickedTabsMenuTests.swift::twoPicksGetArcsRowsWithCopyAndShare  7b321e44a08d
 #356   Tests/Scenarios/picked-tabs-menu.scenario  4a41e1119a25
+#357   Packages/CraCore/Tests/CraCoreTests/BlockedPopupsTests.swift::blockedPopupsWaitToBeOpened  ed1d6b577d86
+#357   Packages/CraCore/Tests/CraCoreTests/BlockedPopupsTests.swift::navigationClearsTheList  fb5691b9fa28
 #357   Packages/CraCore/Tests/CraCoreTests/FolderShareLinkTests.swift::sharesTheFolderAsTheSidebarShowsIt  c6c447a9a8f8
 #357   Packages/CraCore/Tests/CraCoreTests/FolderShareLinkTests.swift::versionOneStillOpens  6a2b1a89faba
+#357   Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::blockedPopupsHaveTheButton  4663f2d12820
+#357   Tests/BrowserManagerLifecycleTests.swift::leaveVideoTabPictureInPictureCase  a12153424813
+#357   Tests/Scenarios/blocked-popups.scenario  14bed5aa2b3a
+#357   Tests/Scenarios/pip-leave-tab.scenario  c4d89f9ecfb9
 #359   Packages/CraCore/Tests/CraCoreTests/PeekLayoutTests.swift::aClickThePageCantPlaceGrowsFromThePointer  c1c7baa978b8
 #359   Packages/CraCore/Tests/CraCoreTests/PeekLayoutTests.swift::aLinkThePageFoundWins  f2c298126543
 #359   Packages/CraCore/Tests/CraCoreTests/PeekLayoutTests.swift::noClickNoLinkStillGrowsFromTheArea  b6cc083cb5dc

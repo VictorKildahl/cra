@@ -1,0 +1,175 @@
+diff --git a/components/blocked_content/popup_blocker_tab_helper.cc b/components/blocked_content/popup_blocker_tab_helper.cc
+index 1f155a7cee..3f1a38e90b 100644
+--- a/components/blocked_content/popup_blocker_tab_helper.cc
++++ b/components/blocked_content/popup_blocker_tab_helper.cc
+@@ -7,7 +7,9 @@
+ #include <iterator>
+ #include <string>
+ 
++#include "base/functional/callback.h"
+ #include "base/metrics/histogram_macros.h"
++#include "base/no_destructor.h"
+ #include "build/build_config.h"
+ #include "components/back_forward_cache/back_forward_cache_disable.h"
+ #include "components/blocked_content/list_item_position.h"
+@@ -27,6 +29,26 @@
+ namespace blocked_content {
+ const size_t kMaximumNumberOfPopups = 25;
+ 
++namespace {
++base::RepeatingCallback<void(content::WebContents*)>& CraListChanged() {
++  static base::NoDestructor<base::RepeatingCallback<void(content::WebContents*)>>
++      callback;
++  return *callback;
++}
++}  // namespace
++
++// static
++void PopupBlockerTabHelper::SetCraListChangedCallback(
++    base::RepeatingCallback<void(content::WebContents*)> callback) {
++  CraListChanged() = std::move(callback);
++}
++
++void PopupBlockerTabHelper::NotifyCraListChanged() {
++  if (CraListChanged()) {
++    CraListChanged().Run(web_contents());
++  }
++}
++
+ struct PopupBlockerTabHelper::BlockedRequest {
+   BlockedRequest(std::unique_ptr<PopupNavigationDelegate> delegate,
+                  const blink::mojom::WindowFeatures& window_features,
+@@ -63,6 +85,7 @@ void PopupBlockerTabHelper::DidFinishNavigation(
+   if (!blocked_popups_.empty()) {
+     blocked_popups_.clear();
+     HidePopupNotification();
++    NotifyCraListChanged();
+ 
+     // With back-forward cache we can restore the page, but |blocked_popups_|
+     // are lost here and can't be restored at the moment.
+@@ -103,6 +126,7 @@ void PopupBlockerTabHelper::AddBlockedPopup(
+   auto* raw_delegate = blocked_popups_[id]->delegate.get();
+ 
+   manager_.NotifyObservers(id, raw_delegate->GetURL());
++  NotifyCraListChanged();
+ 
+   raw_delegate->OnPopupBlocked(web_contents(), GetBlockedPopupsCount());
+ }
+@@ -144,6 +168,7 @@ void PopupBlockerTabHelper::ShowBlockedPopup(
+   blocked_popups_.erase(id);
+   if (blocked_popups_.empty())
+     HidePopupNotification();
++  NotifyCraListChanged();
+ }
+ 
+ void PopupBlockerTabHelper::ShowAllBlockedPopups() {
+diff --git a/components/blocked_content/popup_blocker_tab_helper.h b/components/blocked_content/popup_blocker_tab_helper.h
+index 132714620b..a2273e5206 100644
+--- a/components/blocked_content/popup_blocker_tab_helper.h
++++ b/components/blocked_content/popup_blocker_tab_helper.h
+@@ -11,6 +11,7 @@
+ #include <map>
+ #include <memory>
+ 
++#include "base/functional/callback_forward.h"
+ #include "components/blocked_content/popup_blocker.h"
+ #include "components/blocked_content/url_list_manager.h"
+ #include "content/public/browser/web_contents_observer.h"
+@@ -84,6 +85,12 @@ class PopupBlockerTabHelper
+ 
+   blocked_content::UrlListManager* manager() { return &manager_; }
+ 
++  // Cra: run with the tab's WebContents whenever its blocked list changes (a
++  // popup blocked or shown, or the list cleared by a navigation), so the
++  // embedder can show the list without Chrome's location bar.
++  static void SetCraListChangedCallback(
++      base::RepeatingCallback<void(content::WebContents*)> callback);
++
+  private:
+   struct BlockedRequest;
+   friend class content::WebContentsUserData<PopupBlockerTabHelper>;
+@@ -93,6 +100,9 @@ class PopupBlockerTabHelper
+   // Called when the blocked popup notification is hidden.
+   void HidePopupNotification();
+ 
++  // Cra: runs the callback SetCraListChangedCallback set, if any.
++  void NotifyCraListChanged();
++
+   blocked_content::UrlListManager manager_;
+ 
+   // Note, this container should be sorted based on the position in the popup
+diff --git a/cef/libcef/browser/chrome/chrome_browser_main_extra_parts_cef.cc b/cef/libcef/browser/chrome/chrome_browser_main_extra_parts_cef.cc
+index 7c96eb632..92fa87033 100644
+--- a/cef/libcef/browser/chrome/chrome_browser_main_extra_parts_cef.cc
++++ b/cef/libcef/browser/chrome/chrome_browser_main_extra_parts_cef.cc
+@@ -4,8 +4,10 @@
+ 
+ #include "cef/libcef/browser/chrome/chrome_browser_main_extra_parts_cef.h"
+ 
++#include "base/functional/bind.h"
+ #include "base/task/thread_pool.h"
+ #include "cef/libcef/browser/alloy/dialogs/alloy_constrained_window_views_client.h"
++#include "cef/libcef/browser/browser_host_base.h"
+ #include "cef/libcef/browser/chrome/chrome_context_menu_handler.h"
+ #include "cef/libcef/browser/chrome/chrome_startup_browser_creator.h"
+ #include "cef/libcef/browser/context.h"
+@@ -14,6 +16,7 @@
+ #include "cef/libcef/common/app_manager.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/views/chrome_constrained_window_views_client.h"
++#include "components/blocked_content/popup_blocker_tab_helper.h"
+ #include "components/constrained_window/constrained_window_views.h"
+ 
+ #if BUILDFLAG(IS_LINUX)
+@@ -25,6 +28,40 @@
+ #include "chrome/browser/win/app_icon.h"
+ #endif
+ 
++namespace {
++
++// Cra: the popups Chrome's popup blocker holds back for a page, which Chrome
++// lists from its location bar and CEF has no callback for. Delivered as a
++// "Cra.popups" message from PID_BROWSER whenever the list changes, with the
++// popup ids (argument 0) and their URLs (argument 1), both in Chrome's order.
++void SendCraBlockedPopups(content::WebContents* web_contents) {
++  auto browser = CefBrowserHostBase::GetBrowserForContents(web_contents);
++  auto client = browser ? browser->GetClient() : nullptr;
++  if (!client) {
++    return;
++  }
++  auto* helper =
++      blocked_content::PopupBlockerTabHelper::FromWebContents(web_contents);
++  CefRefPtr<CefListValue> ids = CefListValue::Create();
++  CefRefPtr<CefListValue> urls = CefListValue::Create();
++  if (helper) {
++    size_t index = 0;
++    for (const auto& [id, url] : helper->GetBlockedPopupRequests()) {
++      ids->SetInt(index, id);
++      urls->SetString(index, url.spec());
++      ++index;
++    }
++  }
++  CefRefPtr<CefProcessMessage> message =
++      CefProcessMessage::Create("Cra.popups");
++  message->GetArgumentList()->SetList(0, ids);
++  message->GetArgumentList()->SetList(1, urls);
++  client->OnProcessMessageReceived(browser.get(), browser->GetMainFrame(),
++                                   PID_BROWSER, message);
++}
++
++}  // namespace
++
+ ChromeBrowserMainExtraPartsCef::ChromeBrowserMainExtraPartsCef() = default;
+ 
+ ChromeBrowserMainExtraPartsCef::~ChromeBrowserMainExtraPartsCef() {
+@@ -60,6 +97,10 @@ void ChromeBrowserMainExtraPartsCef::PostBrowserStart() {
+   // allows ProcessSingleton to begin processing messages.
+   startup_browser_creator::RegisterProcessCommandLineCallback();
+ 
++  // Cra: blocked popups reach the client (SendCraBlockedPopups).
++  blocked_content::PopupBlockerTabHelper::SetCraListChangedCallback(
++      base::BindRepeating(&SendCraBlockedPopups));
++
+ #if BUILDFLAG(IS_LINUX)
+   // This may be called indirectly via StartupBrowserCreator::LaunchBrowser.
+   // Call it here before blocking is disallowed to avoid assertions.

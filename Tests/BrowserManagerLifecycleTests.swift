@@ -1168,7 +1168,8 @@ enum BrowserManagerLifecycleTests {
 
     /// The player's Picture in Picture button asks the off-screen page through the protocol, as a
     /// user gesture; only a page with no video of its own (a player in an iframe) gets the
-    /// context menu's request.
+    /// context menu's request. The gesture goes only to a page that has a video: a first look runs
+    /// without one, since a gesture also lets the page open pop-ups for a few seconds (#357).
     @MainActor
     private static func nowPlayingPictureInPictureCase() async {
         let store = SidebarStore()
@@ -1181,9 +1182,18 @@ enum BrowserManagerLifecycleTests {
                                           ("none", 1, "a page with no video of its own")] {
             let before = ra.browser.pictureInPictureRequests
             manager.performNowPlaying(a, .pictureInPicture)
-            expect(ra.browser.lastParams.contains(#""userGesture":true"#), "the player's request runs as a user gesture")
-            ra.browser.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"\#(answer)"}}"#)
-            await drainMainQueue()
+            expect(ra.browser.lastParams.contains(#""userGesture":false"#), "the first look at the page runs with no user gesture")
+            if answer == "none" {
+                ra.browser.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"none"}}"#)
+                await drainMainQueue()
+                expect(ra.browser.lastParams.contains(#""userGesture":false"#), "a page with no video gets no user gesture")
+            } else {
+                ra.browser.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"video"}}"#)
+                await drainMainQueue()
+                expect(ra.browser.lastParams.contains(#""userGesture":true"#), "the player's request runs as a user gesture")
+                ra.browser.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"\#(answer)"}}"#)
+                await drainMainQueue()
+            }
             expect(ra.browser.pictureInPictureRequests - before == fallback,
                    "\(label) \(fallback == 1 ? "falls back to" : "does not also get") the page request")
         }
@@ -1192,7 +1202,10 @@ enum BrowserManagerLifecycleTests {
 
     /// Leaving a video tab (Arc's automatic Picture in Picture) asks the page through the protocol as
     /// a user gesture, for an audible playing video only. The key press the page path lends the page
-    /// raced the tab going hidden, so PiP sometimes never opened (X report, 2 Nov 2026).
+    /// raced the tab going hidden, so PiP sometimes never opened (X report, 2 Nov 2026). Only a page
+    /// with such a video gets the gesture: leaving any tab handed one out, and with it the right to
+    /// open pop-ups for a few seconds (#357).
+    // promise: #357
     @MainActor
     private static func leaveVideoTabPictureInPictureCase() async {
         let store = SidebarStore()
@@ -1207,11 +1220,20 @@ enum BrowserManagerLifecycleTests {
             let before = ra.browser.automaticPictureInPictureRequests
             manager.show(b, focus: false)
             expect(!ra.browser.replies.contains { $0.method == "Cra.autoPictureInPicture" }, "a page that isn't capturing goes straight to the video request")
-            expect(ra.browser.lastParams.contains(#""userGesture":true"#), "leaving a video tab asks as a user gesture")
-            expect(ra.browser.lastParams.contains("})(true)"), "leaving a video tab takes only an audible, playing video")
+            expect(ra.browser.lastParams.contains(#""userGesture":false"#), "leaving a tab looks for a video with no user gesture")
+            expect(ra.browser.lastParams.contains("})(true, false)"), "leaving a video tab takes only an audible, playing video")
+            if answer == "ok" {
+                ra.browser.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"video"}}"#)
+                await drainMainQueue()
+                expect(ra.browser.lastParams.contains(#""userGesture":true"#), "a page with such a video is asked as a user gesture")
+                expect(ra.browser.lastParams.contains("})(true, true)"), "and asked for Picture in Picture")
+            }
             let reply = answer.map { #"{"result":{"type":"string","value":"\#($0)"}}"# }
             ra.browser.reply(to: "Runtime.evaluate", with: reply)
             await drainMainQueue()
+            if answer != "ok" {
+                expect(ra.browser.lastParams.contains(#""userGesture":false"#), "\(label) gets no user gesture")
+            }
             expect(ra.browser.automaticPictureInPictureRequests - before == fallback,
                    "\(label) \(fallback == 1 ? "falls back to" : "does not also get") the page request")
             manager.show(a, focus: false)
@@ -1340,7 +1362,7 @@ enum BrowserManagerLifecycleTests {
             manager.show(b, focus: false)
             if let reply { ra.browser.reply(to: "Cra.autoPictureInPicture", with: reply) } else { ra.browser.fail("Cra.autoPictureInPicture", with: "not found") }
             await drainMainQueue()
-            expect(evaluations() == 1 && ra.browser.lastParams.contains("})(true)"), "leaving its tab falls back to the video request")
+            expect(evaluations() == 1 && ra.browser.lastParams.contains("})(true, false)"), "leaving its tab falls back to the video request")
             ra.browser.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"none"}}"#)
             await drainMainQueue()
             manager.show(a, focus: false)
@@ -1436,7 +1458,7 @@ enum BrowserManagerLifecycleTests {
 
         ra.browser.isAudible = true
         manager.windowVisibilityChanged(covered: true)
-        expect(ra.browser.lastParams.contains(#""userGesture":true"#) && ra.browser.lastParams.contains("})(true)"),
+        expect(ra.browser.lastParams.contains(#""userGesture":false"#) && ra.browser.lastParams.contains("})(true, false)"),
                "a covered window asks its playing page for automatic Picture in Picture")
         ra.browser.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"ok"}}"#)
         await drainMainQueue()

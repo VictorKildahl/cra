@@ -1,0 +1,16 @@
+# Leaving a tab whose video plays aloud puts the video in Picture in Picture. Only a page with such
+# a video gets the user gesture the request needs: leaving any tab handed one out, which let the
+# page open pop-ups as it was left (#357; blocked-popups covers that side).
+# promise: #357
+budget rss=900 stalls50=40
+pace 0.5
+
+cra://open?url=file://${FIXTURES}/Pages/video.html
+expect-log loaded file:
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(v=>(v.muted=false,v.volume=1,'unmuted'))(document.getElementById('v'))","userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"unmuted"
+# The unmute's own activation runs out after five seconds.
+wait 6
+cra://open?url=${PAGE}?n=away
+expect-log enters Picture in Picture

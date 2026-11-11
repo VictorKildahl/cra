@@ -125,3 +125,22 @@ struct ToolbarTranslateTests {
         #expect(pane.right == [.closePane])
     }
 }
+
+/// The blocked pop-ups button (#357): while Chromium holds back pop-ups, before the translate
+/// button; not on an unfocused split pane's essentials.
+struct ToolbarBlockedPopupsTests {
+    typealias T = ToolbarComposition
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/357"))
+    func blockedPopupsHaveTheButton() {
+        let bar = T(kind: .normal, inSplit: false, sidebarVisible: true, focusedPane: true, canGoBack: false, canGoForward: false,
+                    isLoading: false, pinnedExtensions: [], translatable: true, blockedPopups: true)
+        #expect(bar.right == [.blockedPopups, .translate, .extensions, .addSplit])
+        let plain = T(kind: .normal, inSplit: false, sidebarVisible: true, focusedPane: true, canGoBack: false, canGoForward: false,
+                      isLoading: false, pinnedExtensions: [])
+        #expect(!plain.right.contains(.blockedPopups))
+        let pane = T(kind: .normal, inSplit: true, sidebarVisible: true, focusedPane: false, canGoBack: false, canGoForward: false,
+                     isLoading: false, pinnedExtensions: [], blockedPopups: true)
+        #expect(pane.right == [.closePane])
+    }
+}
