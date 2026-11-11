@@ -59,9 +59,9 @@ struct AdvancedPane: View {
                                   detail: "Sites that ask can read your space’s colors and match their pages to them.",
                                   isOn: $store.settings.shareThemeWithWebsites)
                 SettingsCardDivider()
-                // Arc: "Allow window dragging from the top of webpages" (with the toolbar hidden).
+                // Arc: "Allow window dragging from the top of webpages" (under the toolbar too, #363).
                 SettingsToggleRow("Drag the window by the page’s top",
-                                  detail: "With the toolbar hidden, drag the top edge of a page to move the window.",
+                                  detail: "Drag the top edge of a page to move the window.",
                                   isOn: $store.settings.pageTopWindowDrag)
                 SettingsCardDivider()
                 // Arc: "Enable Boosts on websites you visit".

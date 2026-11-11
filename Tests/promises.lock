@@ -654,5 +654,6 @@
 #361   Packages/CraCore/Tests/CraCoreTests/CopyCheckTests.swift::springMatchesTheCapture  8cd896255e14
 #362   Packages/CraCore/Tests/CraCoreTests/WebsiteAppearanceTests.swift::lightAndDarkTurnTheBrowserToo  387cfc6e5ff6
 #362   Tests/Scenarios/switch-appearance.scenario  1835332daadb
+#363   Packages/CraCore/Tests/CraCoreTests/PageTopDragTests.swift::underABarTheBandIsWhatIsLeftOf60Points  5f3b649778c7
 #363   Tests/Scenarios/page-top-click.scenario  ee4243bd50dc
-#363   Tests/WindowContentGrabberTests.swift::checkClicksAndDrag  d4446653e531
+#363   Tests/WindowContentGrabberTests.swift::checkClicksAndDrag  4ed1aa99b31d

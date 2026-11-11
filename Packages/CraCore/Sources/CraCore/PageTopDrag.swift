@@ -1,24 +1,27 @@
 import Foundation
 
-/// Arc's Settings ▸ Advanced "Allow window dragging from the top of webpages" (on by default; Arc
-/// 1.172.1, measured with real drags on 7 Nov 2026): with the toolbar hidden, a drag that starts in
-/// the top 56 pt of the page moves the window (58 pt in it no longer does). Arc's WindowContentGrabber
-/// only takes drags with the ordinary arrow cursor; the page receives the press immediately.
+/// Arc's Settings ▸ Advanced "Allow window dragging from the top of webpages" (on by default). Arc 1.172.2,
+/// measured with real drags on 11 Nov 2026 (#363): a drag that starts within 60 pt of the pane card's top,
+/// its bar included, moves the window. With the toolbar hidden that is the top 60 pt of the page (59 moved,
+/// 60 didn't); under the 32 pt toolbar it is the top 28 pt (27 moved, 28 didn't). Arc's WindowContentGrabber
+/// only takes drags with the ordinary arrow cursor; the page receives the press immediately, the first drag
+/// event starts the window drag, and the page gets the release.
 public enum PageTopDrag {
-    /// How far into the page the band reaches (Arc: 56 pt drags, 58 pt doesn't).
-    public static let band: Double = 56
+    /// How far down from the card's top the band reaches, the bar included (Arc's controller: `60 − y`, y the
+    /// bar's bottom edge).
+    public static let reach: Double = 60
     /// How much of the page's right edge stays out of the band, for the scrollbar (Arc's grabber is
     /// the content's width less 14 pt).
     public static let trailingInset: Double = 14
-    /// How far the pointer moves before a press is a drag (AppKit's and Cra's window-drag slop).
-    public static let slop: Double = 3
 
-    /// Whether a press can start a window drag: a plain single left click in the
-    /// band of a page that has no bar above it, with the setting on.
-    public static func holds(enabled: Bool, barAbovePage: Bool, depthIntoPage: Double, clickCount: Int, modifiers: Bool,
+    /// How far into the page the band reaches under a bar of that height (none: the whole 60 pt).
+    public static func band(barHeight: Double) -> Double { max(0, reach - barHeight) }
+
+    /// Whether a press can start a window drag: a plain single left click in the band, with the setting on.
+    public static func holds(enabled: Bool, barHeight: Double, depthIntoPage: Double, clickCount: Int, modifiers: Bool,
                              distanceFromRight: Double = .infinity) -> Bool {
-        enabled && !barAbovePage && clickCount == 1 && !modifiers
-            && depthIntoPage >= 0 && depthIntoPage < band && distanceFromRight > trailingInset
+        enabled && clickCount == 1 && !modifiers
+            && depthIntoPage >= 0 && depthIntoPage < band(barHeight: barHeight) && distanceFromRight > trailingInset
     }
 
     /// How long before a press Cra must have been active for the cursor to count.
@@ -32,7 +35,4 @@ public enum PageTopDrag {
     public static func cursorIsCurrent(appActive: Bool, becameActiveAt: Double, pressedAt: Double) -> Bool {
         appActive && becameActiveAt < pressedAt - activationSlack
     }
-
-    /// Whether the pointer has moved far enough from the press to move the window.
-    public static func isDrag(dx: Double, dy: Double) -> Bool { (dx * dx + dy * dy).squareRoot() > slop }
 }

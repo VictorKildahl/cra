@@ -45,10 +45,14 @@ enum WindowDragRegion {
 
 /// Arc's WindowContentGrabber leaves the press with the page and only takes a drag while the
 /// cursor is the ordinary arrow. A text, link or resize cursor keeps the gesture for its target.
+/// As in Arc (real drags, 11 Nov 2026, #363): the first drag event moves the window, however small,
+/// from where that event is, and the release goes to the page, so a slipped click still clicks.
 final class WindowContentGrabber: NSView {
     weak var owner: NSWindow?
     weak var pageView: NSView?
     var isEnabled: () -> Bool = { false }
+    /// The height of the bar above the page in its card (0 with none): the band is what is left of 60 pt.
+    var barHeight: () -> CGFloat = { 0 }
     private var monitor: Any?
     private var press: NSEvent?
     private var dragging = false
@@ -102,27 +106,28 @@ final class WindowContentGrabber: NSView {
             let depth = page.convert(page.bounds, to: nil).maxY - event.locationInWindow.y
             let distanceFromRight = page.bounds.maxX - page.convert(event.locationInWindow, from: nil).x
             let modifiers = !event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty
-            if PageTopDrag.holds(enabled: true, barAbovePage: false, depthIntoPage: depth,
+            if PageTopDrag.holds(enabled: true, barHeight: Double(barHeight()), depthIntoPage: depth,
                                  clickCount: event.clickCount, modifiers: modifiers,
                                  distanceFromRight: distanceFromRight) { press = event }
             return event
         }
         guard event.window === window else { return event }
         if event.type == .leftMouseUp {
-            // `dragging` lasts until the next press: a drag that began on an inactive Cra ends with
-            // two releases, and the page took the second for a click on what the drag started on.
+            // The page gets the release of a window drag, as Arc's does. Not one that brought Cra forward:
+            // it ends with two releases 3 ms apart, and `dragging` lasts until the next press so both stay away.
             press = nil
-            return dragging ? nil : event
+            return dragging && !pressCursorIsCurrent ? nil : event
         }
+        // The window drag's own drag events stay away from the page, as Arc's monitor keeps them.
+        if event.type == .leftMouseDragged, dragging { return nil }
         guard event.type == .leftMouseDragged, let down = press else { return event }
         guard let owner, let target = event.window, isEnabled(),
               WindowDragRegion.allows(event, in: owner, cursorIsCurrent: pressCursorIsCurrent) else {
             press = nil
             return event
         }
-        guard PageTopDrag.isDrag(dx: event.locationInWindow.x - down.locationInWindow.x,
-                                 dy: event.locationInWindow.y - down.locationInWindow.y) else { return event }
-        let location = owner.convertPoint(fromScreen: target.convertPoint(toScreen: down.locationInWindow))
+        // From this drag event on, as Arc's performWindowDragWithEvent: its own movement doesn't move the window.
+        let location = owner.convertPoint(fromScreen: target.convertPoint(toScreen: event.locationInWindow))
         guard let drag = NSEvent.mouseEvent(with: .leftMouseDown, location: location, modifierFlags: down.modifierFlags,
                                             timestamp: down.timestamp, windowNumber: owner.windowNumber, context: nil,
                                             eventNumber: down.eventNumber, clickCount: down.clickCount, pressure: down.pressure) else { return event }

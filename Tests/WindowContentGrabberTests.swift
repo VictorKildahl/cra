@@ -14,6 +14,8 @@ enum WindowContentGrabberTests {
         let cursor = NSCursor.current
         defer { cursor.set() }
         checkClicksAndDrag()
+        checkInactiveRelease()
+        checkBandUnderABar()
         checkCursors()
         checkCursorChange()
         checkActivatingPress()
@@ -30,8 +32,10 @@ enum WindowContentGrabberTests {
     }
 
     // promise: #363
-    /// The page gets a press in its top band at once, so a click on a button there lands; 0.1.39 held
-    /// it until the release and moved the window once the pointer slipped 3 pt (#363).
+    /// Arc 1.172.2 with real drags (11 Nov 2026, #363): the page gets the press at once, the first drag
+    /// event starts the window drag however small it is, the window follows the pointer from that event
+    /// on, and the release goes to the page. A slipped click on a button moves the window a point and
+    /// still clicks the button; 0.1.39 held the press until the release, and 0.1.40 lost the release.
     @MainActor
     private static func checkClicksAndDrag() {
         let f = Fixture()
@@ -41,31 +45,69 @@ enum WindowContentGrabberTests {
         NSApp.sendEvent(down)
         expect(f.source.delivered.count == 1 && f.source.delivered[0] === down,
                "the page receives the original press immediately")
-        let small = f.mouse(.leftMouseDragged, dx: 2, dy: 1)
-        NSApp.sendEvent(small)
-        let up = f.mouse(.leftMouseUp, dx: 2, dy: 1)
+        let up = f.mouse(.leftMouseUp)
         NSApp.sendEvent(up)
-        expect(f.source.delivered.count == 3 && f.source.delivered.last === up && f.owner.drags.isEmpty,
-               "a click and movement within the slop stay with the page")
+        expect(f.source.delivered.count == 2 && f.source.delivered.last === up && f.owner.drags.isEmpty,
+               "a click with no movement stays with the page")
 
         f.source.delivered.removeAll()
         NSApp.sendEvent(f.mouse(.leftMouseDown))
+        let slip = f.mouse(.leftMouseDragged, dx: 1)
+        NSApp.sendEvent(slip)
+        expect(f.owner.drags.count == 1, "the first drag event starts the window drag, even 1 pt (Arc has no slop)")
+        expect(f.owner.drags[0].type == .leftMouseDown && f.owner.drags[0].locationInWindow == slip.locationInWindow,
+               "the system drag starts from a mouse-down at that drag event, so its own movement doesn't move the window")
         NSApp.sendEvent(f.mouse(.leftMouseDragged, dx: 12))
-        NSApp.sendEvent(f.mouse(.leftMouseUp, dx: 12))
-        expect(f.source.delivered.map(\.type) == [.leftMouseDown],
-               "the local monitor consumes the window drag and its release")
-        expect(f.owner.drags.count == 1 && f.owner.drags[0].type == .leftMouseDown,
-               "the system drag starts from a mouse-down event")
-        // A drag that began on an inactive Cra ends with two releases, 3 ms apart (seen with real drags):
-        // the second one reached the page, which took it for a click on what the drag started on.
-        NSApp.sendEvent(f.mouse(.leftMouseUp, dx: 12))
-        expect(f.source.delivered.map(\.type) == [.leftMouseDown],
-               "a second release after a window drag stays away from the page too")
+        let release = f.mouse(.leftMouseUp, dx: 12)
+        NSApp.sendEvent(release)
+        expect(f.source.delivered.map(\.type) == [.leftMouseDown, .leftMouseUp] && f.source.delivered.last === release,
+               "the drags go to the window and the release to the page, which clicks what the press was on")
         NSApp.sendEvent(f.mouse(.leftMouseDown))
         let nextUp = f.mouse(.leftMouseUp)
         NSApp.sendEvent(nextUp)
         expect(f.source.delivered.last === nextUp && f.owner.drags.count == 1,
-               "the next click is not swallowed after a window drag")
+               "the next click is not a window drag")
+    }
+
+    /// A press that brings Cra forward still drags the window, and nothing of the drag reaches the page
+    /// after the press: such a drag ends with two releases 3 ms apart (seen with real drags on #335), and the
+    /// page took one for a click on what the drag started on. Arc's page gets no event at all there.
+    @MainActor
+    private static func checkInactiveRelease() {
+        let f = Fixture()
+        defer {
+            f.close()
+            WindowDragRegion.appIsActive = { true }
+        }
+        NSCursor.arrow.set()
+        WindowDragRegion.appIsActive = { false }
+        NSApp.sendEvent(f.mouse(.leftMouseDown))
+        NSApp.sendEvent(f.mouse(.leftMouseDragged, dx: 12))
+        NSApp.sendEvent(f.mouse(.leftMouseUp, dx: 12))
+        NSApp.sendEvent(f.mouse(.leftMouseUp, dx: 12))
+        expect(f.owner.drags.count == 1 && f.source.delivered.map(\.type) == [.leftMouseDown],
+               "neither release of a drag that brought Cra forward reaches the page")
+        WindowDragRegion.appIsActive = { true }
+        NSApp.sendEvent(f.mouse(.leftMouseDown))
+        let up = f.mouse(.leftMouseUp)
+        NSApp.sendEvent(up)
+        expect(f.source.delivered.last === up, "the next click reaches the page")
+    }
+
+    /// Under a bar the band is what is left of Arc's 60 pt from the card's top (#363): 28 pt under the 32 pt toolbar.
+    @MainActor
+    private static func checkBandUnderABar() {
+        let f = Fixture()
+        defer { f.close() }
+        NSCursor.arrow.set()
+        f.grabber.barHeight = { 32 }
+        for (depth, moves) in [(27.0, true), (28.0, false), (40.0, false)] {
+            let drags = f.owner.drags.count
+            NSApp.sendEvent(f.mouse(.leftMouseDown, depth: depth))
+            NSApp.sendEvent(f.mouse(.leftMouseDragged, depth: depth, dx: 15))
+            NSApp.sendEvent(f.mouse(.leftMouseUp, depth: depth, dx: 15))
+            expect((f.owner.drags.count == drags + 1) == moves, "under a 32 pt bar a drag \(depth) pt into the page \(moves ? "moves" : "keeps") the window")
+        }
     }
 
     @MainActor
@@ -136,13 +178,13 @@ enum WindowContentGrabberTests {
         let f = Fixture()
         defer { f.close() }
         NSCursor.arrow.set()
-        for depth in [56.0, 58.0, 150.0] {
+        for depth in [60.0, 62.0, 150.0] {
             f.source.delivered.removeAll()
             NSApp.sendEvent(f.mouse(.leftMouseDown, depth: depth))
             NSApp.sendEvent(f.mouse(.leftMouseDragged, depth: depth, dx: 15))
             NSApp.sendEvent(f.mouse(.leftMouseUp, depth: depth, dx: 15))
             expect(f.source.delivered.count == 3 && f.owner.drags.isEmpty,
-                   "drags starting outside the top 56 points belong to the page")
+                   "drags starting outside the top 60 points belong to the page")
         }
         for modifiers: NSEvent.ModifierFlags in [.command, .shift, .option, .control] {
             f.source.delivered.removeAll()
@@ -256,7 +298,7 @@ enum WindowContentGrabberTests {
             NSApp.sendEvent(f.mouse(.leftMouseDown, dx: dx))
             NSApp.sendEvent(f.mouse(.leftMouseDragged, dx: dx - 16))
             NSApp.sendEvent(f.mouse(.leftMouseUp, dx: dx - 16))
-            expect(f.owner.drags.count == 1 && f.source.delivered.count == 1,
+            expect(f.owner.drags.count == 1 && f.source.delivered.count == 2,
                    "window dragging still works immediately to the left of Arc's reserved strip")
         }
     }
@@ -288,16 +330,17 @@ enum WindowContentGrabberTests {
         defer { f.close() }
         NSCursor.arrow.set()
         let down = f.mouse(.leftMouseDown)
-        let screenPoint = f.source.convertPoint(toScreen: down.locationInWindow)
+        let dragged = f.mouse(.leftMouseDragged, dx: 15)
+        let screenPoint = f.source.convertPoint(toScreen: dragged.locationInWindow)
         NSApp.sendEvent(down)
-        NSApp.sendEvent(f.mouse(.leftMouseDragged, dx: 15))
+        NSApp.sendEvent(dragged)
         NSApp.sendEvent(f.mouse(.leftMouseUp, dx: 15))
-        expect(f.source.delivered.count == 1 && f.source.delivered[0] === down,
-               "a separate Chromium page window receives the original press")
+        expect(f.source.delivered.count == 2 && f.source.delivered[0] === down,
+               "a separate Chromium page window receives the original press and the release")
         expect(f.owner.drags.count == 1 && f.source.drags.isEmpty, "dragging a child page moves its browser window")
         let drag = f.owner.drags[0]
         expect(drag.window === f.owner && drag.locationInWindow == f.owner.convertPoint(fromScreen: screenPoint),
-               "the press is translated from the child page into the owner's coordinates")
+               "the drag event is translated from the child page into the owner's coordinates")
     }
 
     @MainActor
@@ -305,10 +348,10 @@ enum WindowContentGrabberTests {
         let f = Fixture(flipped: true)
         defer { f.close() }
         NSCursor.arrow.set()
-        NSApp.sendEvent(f.mouse(.leftMouseDown, depth: 55))
-        NSApp.sendEvent(f.mouse(.leftMouseDragged, depth: 55, dx: 15))
-        NSApp.sendEvent(f.mouse(.leftMouseUp, depth: 55, dx: 15))
-        expect(f.owner.drags.count == 1 && f.source.delivered.count == 1,
+        NSApp.sendEvent(f.mouse(.leftMouseDown, depth: 59))
+        NSApp.sendEvent(f.mouse(.leftMouseDragged, depth: 59, dx: 15))
+        NSApp.sendEvent(f.mouse(.leftMouseUp, depth: 59, dx: 15))
+        expect(f.owner.drags.count == 1 && f.source.delivered.count == 2,
                "a flipped Chromium view still measures the band from the top")
     }
 

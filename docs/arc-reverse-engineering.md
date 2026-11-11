@@ -4094,7 +4094,7 @@ screen on a click.
   local monitor swallows the drags and the release. The delegate's permission is asked on the press only; on a
   drag the test is the arrow cursor alone.
 - [O static] The band's far edge is 60 pt in the controller's view (`60 − y`, y the bar's bottom edge: 0 with no
-  bar). That fits the 56 pt measured in the page on 7 Nov if the page starts 4 pt down. [U] not measured again.
+  bar). Measured on 11 Nov: 60 pt into the page with no bar, 28 under the toolbar (below).
 - [O Cra, real pointer events, 11 Nov 2026] On #335's build, toolbar hidden: an arrow drag in the band moved the
   window and the page saw the press; a click reached a button there; a drag over text selected it; the right
   14 pt and a press 130 pt down stayed with the page; the window's top-right corner resized. On the build
@@ -4106,6 +4106,31 @@ screen on a click.
   brings it to the front (`PageTopDrag.cursorIsCurrent`), and keeps every release after a window drag from the page:
   7 drags in 7 moved the window, and a drag starting on a button no longer pressed it. [U] Arc's own behaviour on an
   inactive window: its grabber makes the same cursor test, not measured.
+- [O live, Arc 1.172.2 and Cra side by side, real pointer, 11 Nov 2026, #363] Same 1300 × 640 window at 40,440 on the
+  2x built-in display, a local page whose top 64 pt row holds a text field, a button with the arrow cursor, one with
+  the pointing hand and blank space; the page logs every press, release and click by its distance from its top, the
+  window's frame is read over AX after each gesture (rig in build/issue-363-rig). Drags are 60 × 30 pt over 250 ms.
+  - Band: toolbar hidden (card 10 pt below the window's top), drags 57, 58 and 59 pt into the page moved the window,
+    60 and 61 didn't. Toolbar shown (page 42 pt down, under the 32 pt bar), 25–27 pt moved it, 28–30 didn't. Both fit
+    `60 − bar`: the band ends 60 pt below the card's top, and the grabber works under the toolbar too. The 7 Nov
+    "56 pt, 58 no" was off by a few points; Cra had 56 and no band under a bar.
+  - Start: the first drag event starts the window drag, however small: 1, 2 and 3 pt glides (several events) moved the
+    window 0–2 pt, and the window lagged the pointer by the first event's movement (a 60 pt drag moved it 59). A
+    single 5 pt drag event moved nothing. Cra waited for 3 pt and moved the window from the press.
+  - Release: after a window drag the page gets the release and a click (a drag that starts on the arrow-cursor
+    button clicks it). Cra swallowed the release, so a click that slipped 5 pt on the button moved the window and
+    never clicked: the "lost click" of #363 on 0.1.40.
+  - Same in both: clicks 1–20 pt down on any control reach the page; a drag on the text field selects text and one
+    on the pointing-hand button stays with the page; the right 7 pt stay with the page, 20 pt in moves; a click in the
+    10 pt margin above the card does nothing, a drag there moves the window and a double-click zooms it; a
+    double-click in the band goes to the page.
+  - Inactive window (a windowless app in front): Arc's page gets no event from a first click anywhere, 4, 100 or 200
+    pt down; a drag in the band moves the window. That is Arc not taking the first click at all, not the grabber.
+    Cra passes a first click to the page; left as is (window-wide, not the band).
+- Cra (11 Nov 2026): `PageTopDrag.band(barHeight:)` = 60 − the card's bar (`WindowContentGrabber.barHeight`); the
+  grabber starts the drag on the first drag event, from that event's point; the page gets the release unless the
+  press brought Cra forward (the two releases above). [U] Arc's split panes and its 40 pt developer bar: the same
+  `60 − y` rule read statically, not measured.
 
 ## The hidden sidebar from past the window's edge (Arc 1.172.2, 11 Nov 2026, GitHub #350, live Arc, real pointer at 120 fps)
 

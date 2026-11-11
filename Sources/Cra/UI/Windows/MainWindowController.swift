@@ -1230,8 +1230,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         grabber.isEnabled = { [weak self] in
             guard let self else { return false }
-            return !self.isTornDown && self.store.settings.pageTopWindowDrag
-                && !self.shell.panesShowBars && !self.shell.contentFullscreen
+            return !self.isTornDown && self.store.settings.pageTopWindowDrag && !self.shell.contentFullscreen
+        }
+        // Arc's band reaches 60 pt from the card's top with its bar (#363): 28 pt under the toolbar.
+        grabber.barHeight = { [weak card] in
+            guard let card, card.showToolbar else { return 0 }
+            return card.toolbarHeight
         }
         grabber.attach(to: page, owner: window)
     }
