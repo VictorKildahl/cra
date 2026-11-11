@@ -758,7 +758,12 @@ final class SidebarURLPill: NSView, NSTextFieldDelegate {
                 b.menuProvider = { ExtensionStore.shared.entries.first { $0.extensionID == id }.map(ExtensionsMenu.iconMenu) }
                 accessories.append(b)
             case .copyURL:
-                let copy = SidebarGlyphButton(symbol: "link", size: 28, height: 28, iconSize: 14, weight: .regular, help: "Copy URL (⇧⌘C)", colors: colors) { actions.performAction("copyURL") }
+                let copy = SidebarGlyphButton(symbol: "link", size: 28, height: 28, iconSize: 14, weight: .regular, help: "Copy URL (⇧⌘C)", colors: colors) {}
+                // Arc confirms a click here in place as well as with the toast; ⇧⌘C only toasts (#361).
+                copy.action = { [weak copy] in
+                    actions.performAction("copyURL")
+                    copy?.playCopyCheck(glyphSize: 14)
+                }
                 copy.active = m.active
                 accessories.append(copy)
             case .extensions:

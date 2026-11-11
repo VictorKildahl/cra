@@ -955,12 +955,19 @@ final class ToolbarURLButton: NSView, NSTextFieldDelegate {
     override func mouseUp(with event: NSEvent) {
         guard !contextClick, press.finish() else { return }
         switch region(at: event) {
-        case .copy: onCopy()
+        case .copy: copyFromGlyph()
         case .address: action()
         case .none: break
         }
     }
     override func menu(for event: NSEvent) -> NSMenu? { field == nil ? menuProvider?() : nil }
+
+    /// A click on the link glyph: Copy Current URL, and Arc's link → checkmark → link in its place.
+    /// ⇧⌘C and the address menu's Copy URL only show the toast, as in Arc (#361).
+    func copyFromGlyph() {
+        onCopy()
+        icon.playCopyCheck(glyphSize: 12)
+    }
 }
 
 /// Arc's developer-bar stripes (GitHub #42), measured on Arc 1.170 at 2x: white 2% bands at 45°

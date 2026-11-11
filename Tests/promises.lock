@@ -642,6 +642,10 @@
 #359   Packages/CraCore/Tests/CraCoreTests/PeekLayoutTests.swift::noClickNoLinkStillGrowsFromTheArea  b6cc083cb5dc
 #359   Packages/CraCore/Tests/CraCoreTests/PeekLayoutTests.swift::theScriptLooksInsideShadowRoots  04cd51ba759d
 #359   Tests/Scenarios/peek-origin.scenario  b4ac690a0977
+#361   Packages/CraCore/Tests/CraCoreTests/CopyCheckTests.swift::inkFillsTheMeasuredSquare  e442b6d5379c
+#361   Packages/CraCore/Tests/CraCoreTests/CopyCheckTests.swift::phasesInOrder  62ce482ede57
+#361   Packages/CraCore/Tests/CraCoreTests/CopyCheckTests.swift::shapeIsACheckmark  e89f94442e28
+#361   Packages/CraCore/Tests/CraCoreTests/CopyCheckTests.swift::springMatchesTheCapture  8cd896255e14
 #362   Packages/CraCore/Tests/CraCoreTests/WebsiteAppearanceTests.swift::lightAndDarkTurnTheBrowserToo  387cfc6e5ff6
 #362   Tests/Scenarios/switch-appearance.scenario  1835332daadb
 #363   Tests/Scenarios/page-top-click.scenario  ee4243bd50dc

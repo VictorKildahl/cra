@@ -262,6 +262,9 @@ final class SidebarGlyphButton: NSView {
         turnsOnPress = animated && symbol == "arrow.clockwise"
     }
 
+    /// Arc's link → checkmark → link after a click on Copy Link (GitHub #361).
+    func playCopyCheck(glyphSize: CGFloat) { glyph.playCopyCheck(glyphSize: glyphSize) }
+
     func setGlyph(_ image: NSImage?, help: String) {
         shownSymbol = nil
         glyph.image = image

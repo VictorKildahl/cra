@@ -4200,3 +4200,26 @@ points from the window's left edge (negative = outside) and from its top. Names 
   backing over any window beneath it. Cra: both floating panels are cut to the window's frame
   (`panelFrame`, `shadowPanelFrame`); what reached past it was masked by the window's outline already
   (#341).
+
+## Copy URL confirmed in place (Arc 1.172.2, 11 Nov 2026, GitHub #361, Victor's Arc, ~115 fps window recordings)
+
+Window recordings (ScreenCaptureKit, one window, no cursor) of AX presses and one real click, on the normal
+toolbar's 24 pt "Copy Current URL" glyph (12 pt link), the sidebar URL field's `copyLinkButton` (30 pt box, 14 pt
+link, toolbar hidden with ⇧⌘D), a Little Arc's link icon and the developer bar's Copy Link.
+
+- [O static] `CommandBarPlaceholderButtonsView` (the sidebar URL field's buttons) holds a `CopyLinkViewModel`
+  { isCopied, foregroundColor, activeColor, copyToken, isSidebarAnchored, isSidebarHovered, isShowingMenu };
+  ARCUI's `TranslucentButtonIconAnimation` has a `CopyLinkIcon` beside ReloadIcon and PlusMenuIcon.
+- [O] A click on the toolbar glyph or the sidebar's Copy Link: the link shrinks about its centre and fades
+  (gone by ~0.10 s); from ~0.17 s a checkmark in the glyph's ink draws itself from the short leg's end to the
+  long leg's tip (whole by ~0.31 s) while fading in (opaque by ~0.38 s); it holds until ~1.10 s, un-draws back
+  to its short leg over ~0.16 s, and the link springs back from ~0.55 at ~1.26 s, overshooting to ~1.14
+  (sidebar) / ~1.17 (toolbar) at ~+0.13 s and settling by ~+0.45 s. The checkmark's ink is a square 0.83 of
+  the link's point size (20 px at 2x for the 12 pt link, 24 px for the 14 pt one) on the glyph's centre,
+  stroke ~1.6 pt. The hover fill stays as it was; nothing lifts or casts a shadow.
+- [O] The "Copied Current URL" toast shows with it (top right of the page). ⇧⌘C and Edit ▸ Copy URL show only
+  the toast and leave the glyph alone, with the pointer over the sidebar field or not; so do a Little Arc's
+  link icon and the developer bar's Copy Link (which never animate).
+- Cra: CraCore `CopyCheck` (the numbers), `NSImageView.playCopyCheck` (CopyCheckAnimation.swift), played by
+  the sidebar URL field's Copy Link and `ToolbarURLButton.copyFromGlyph`; not by ⇧⌘C, the Little Window or
+  the developer bar.
