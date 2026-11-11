@@ -1382,34 +1382,15 @@ so test pages must not use it). Live HID clicks and hovers at 1x, plus a static 
 - [O live, 100 fps] The minus makes the row jump to scale 0.9 at once and spring back to 1 in ~0.24 s without
   overshoot (left edge 10 px in at 1x, back by 1.11 s): a critically damped spring, ω ≈ 14 (stiffness 196, damping 28).
 
-### Pressing a sidebar row (Arc 1.172.1, 11 Nov 2026, static: the main binary's method lists and disassembly)
+### Pressing a sidebar row (Arc 1.172.1, 11 Nov 2026, static: method lists and disassembly)
 
-- [O] The press lives in a Swift protocol, `SidebarBouncyClickCell` (`Arc/SidebarBouncyClickCell.swift`), with one
-  function, `performBounceAnimation(isPressedIn:)`. Only `SelectableCellView` conforms, so its subclasses push in:
-  `TabCellView` (pinned and Today tabs), `SplitViewCellView`, `NewTabCellView`, `EaselCellView`,
-  `ArcDocumentCellView`, `SharedObjectCellView`, `WelcomeToArcCellView`. Folder headers (`ListHeaderCellView`,
-  `TabGroupHeaderCellView`), `InstantLinksCellView` and section headers derive from `HoverableView` and don't.
-  Favorites have code of their own (next item).
-- [O] A Favorites tile: `AppTrayItemViewCollectionViewItem.mouseDown:` sets `itemView.isPressed = true` and
-  `mouseUp:` sets it back; no click-count check (clickCount only travels in the store action).
-  `AppTrayItemViewAppKit.isPressed`'s didSet centres the layer's anchor and springs `transform` (key
-  `press_animation`) to `CATransform3DMakeScale(0.99, 0.99, 1)`, the same 0.5 / 0.2 spring, held while pressed:
-  the whole tile, a little deeper than a row. (`isIconPressed` is Space creation's icon picker; the SwiftUI
-  `BouncyButtonStyle`, 0.99 pressed / 1.01 / spring 0.25, 0.7, is onboarding's, not the sidebar's.)
-- [O] Pressing in: the layer's anchor goes to its centre (frame kept), then a `CASpringAnimation` on `transform`
-  under the key `press_bounce`, from the presentation transform to `CATransform3DMakeScale(0.992, 0.992, 1)`,
-  fill mode forwards, not removed while pressed, so the row holds there. The spring is built from damping ratio
-  0.5 and response 0.2 (stiffness (2π/0.2)² ≈ 986.96, damping 0.5 × 4π / 0.2 ≈ 31.42, mass 1), its duration the
-  settling duration: underdamped, a slight overshoot. Releasing runs the same spring back to identity.
-- [O] `SelectableCellView.mouseDown:` presses in only when `clickCount == 1` (and a gate not decoded), so a
-  double-click's second press doesn't dip again; its `performClick:` springs back. `NewTabCellView` overrides
-  `mouseDown:` and presses in with no click-count check, then springs back in its own `performClick:`.
-- [I] What springs a row back after a press that becomes a drag isn't in the binary's callers; Cra springs it back
-  when the drag starts.
-- Not measured live: the depth and settling on screen (0.992 is about 1 pt at a 250 pt row's edge).
-- Cra: CraCore SidebarRowPress; `NSView.springPress` from SidebarRowView on Tab, Split and New Tab rows (easels
-  are tab rows) and from FavoriteTileView. It springs the layer's `transform` with the centre folded into the
-  transform, since AppKit owns a layer-backed view's anchor.
+- [O] Rows: `SidebarBouncyClickCell.performBounceAnimation(isPressedIn:)` on `SelectableCellView` (tabs, splits,
+  New Tab, easels). A `CASpringAnimation` on `transform` to scale 0.992 about the centre, damping ratio 0.5,
+  response 0.2, held while pressed. Tabs and splits press only on `clickCount == 1`; New Tab on every press.
+  Folder and section headers don't press.
+- [O] Favorites: `AppTrayItemViewAppKit.isPressed`, the same spring to 0.99 on every press, the whole tile.
+- [I] Nothing found springs a row back when a press becomes a drag; Cra does it when the drag starts.
+- Cra: CraCore SidebarRowPress, `NSView.springPress`.
 
 ### Backdrop-layer blur for light vibrant themes (25 Oct 2026, final)
 
