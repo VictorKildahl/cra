@@ -2225,6 +2225,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         shell.sidebarResizable = false
         let width = libraryWidth(page)
         CraLog.note("library opens \(Int(width)) pt wide beside a \(Int(store.prefs.sidebarWidth)) pt tab sidebar")
+        // The page keeps the width it has now; the Library only pushes it right (#340).
+        shell.pageLeading = shell.contentContainer.frame.minX
         if sidebarVisible {
             shell.sidebarWidth = width
             shell.animateSidebar(visible: true, floating: false, fullscreen: shell.contentFullscreen, width: width)
@@ -2250,6 +2252,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func closeLibrary() {
         guard sidebarUI.libraryPage != nil else { return }
         withAnimation(.easeOut(duration: 0.1)) { sidebarUI.libraryPage = nil }
+        shell.pageLeading = nil
         shell.sidebarResizable = true
         let width = CGFloat(store.prefs.sidebarWidth)
         shell.sidebarWidth = width
@@ -2529,6 +2532,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private func setLibraryReveal(_ r: CGFloat) {
         // Embedded pages keep their size under their cards until the swipe lands.
         if sidebarUI.libraryReveal == nil, EmbeddedPages.isEnabled { shell.freezePages() }
+        // The page keeps its width as the sidebar widens, and the Library pushes it right (#340).
+        if shell.pageLeading == nil { shell.pageLeading = shell.contentContainer.frame.minX }
         sidebarUI.libraryReveal = r
         shell.sidebarWidth = LibrarySwipe.sidebarWidth(reveal: r, base: sidebarUI.libraryRevealBase, library: sidebarUI.libraryRevealWidth)
     }
@@ -2632,6 +2637,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 shell.sidebarResizable = true
                 currentBrowser?.setFocused(true)
             }
+            shell.pageLeading = nil
             width = CGFloat(store.prefs.sidebarWidth)
         }
         sidebarUI.libraryReveal = nil

@@ -119,6 +119,10 @@ final class ShellView: NSView {
     /// Off while the Library has the sidebar: its width is not the user's to drag.
     var sidebarResizable = true { didSet { needsLayout = true } }
     var sidebarVisible = true { didSet { needsLayout = true } }
+    /// Set while the Library is open: where the page's left edge was without it (the tab sidebar's
+    /// width, or the inset when the sidebar was hidden). The page keeps the width it has from there;
+    /// the Library only pushes it right, past the window's edge (Arc 1.172.2, #340).
+    var pageLeading: CGFloat? { didSet { needsLayout = true } }
     var floatingSidebar = false { didSet { needsLayout = true } }
     var contentFullscreen = false { didSet { needsLayout = true } }
     /// Settings ▸ "Pages fill the window edge to edge" (GitHub #24): no margin, square cards.
@@ -130,11 +134,12 @@ final class ShellView: NSView {
         CardFill.fillsWindow(edgeToEdge: edgeToEdge, fullScreen: windowFullscreen, sidebarShown: sidebarVisible)
     }
     /// For `cra://debug?windowState`: how far the card sits from the window's left, bottom, right and
-    /// top edges, its corner radius and whether it fills the window, e.g. `0,0,0,0 r0 fills=1`.
+    /// top edges (negative past the right edge, as beside the Library, #340), its corner radius, whether
+    /// it fills the window and its width, e.g. `0,0,0,0 r0 fills=1 width=1728`.
     var cardReadout: String {
         let f = contentContainer.frame
-        return String(format: "%.0f,%.0f,%.0f,%.0f r%.0f fills=%d", f.minX, f.minY, bounds.maxX - f.maxX, bounds.maxY - f.maxY,
-                      cardCornerRadius, fillsWindow ? 1 : 0)
+        return String(format: "%.0f,%.0f,%.0f,%.0f r%.0f fills=%d width=%.0f", f.minX, f.minY, bounds.maxX - f.maxX, bounds.maxY - f.maxY,
+                      cardCornerRadius, fillsWindow ? 1 : 0, f.width)
     }
     /// Whether a lone page has a bar: the toolbar, or the developer bar on a Developer Mode site
     /// (AppSettings.showsBar(above:), #185).
@@ -646,7 +651,7 @@ final class ShellView: NSView {
         let inset = fill ? 0 : CraMetrics.contentInset
         let radius = fill ? 0 : CraMetrics.contentCornerRadius
         if sidebarVisible {
-            let content = NSRect(x: width, y: inset, width: max(0, b.width - width - inset), height: max(0, b.height - 2 * inset))
+            let content = NSRect(x: width, y: inset, width: max(0, b.width - (pageLeading ?? width) - inset), height: max(0, b.height - 2 * inset))
             return Frames(sidebar: NSRect(x: 0, y: 0, width: width, height: b.height),
                           handle: NSRect(x: width - 4, y: 0, width: 8, height: b.height),
                           content: content, cornerRadius: radius, sidebarCorner: 0)

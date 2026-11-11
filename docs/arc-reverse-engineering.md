@@ -2794,6 +2794,11 @@ curves fitted per frame. "p" = Library reveal progress, 0 = space, 1 = Library o
   live while resizing, no maximum seen); the web page keeps a 56 pt column (8 spaces need 112 + 2208 pt, more than
   this 1728 pt display, so the "fits" case was not reached). Rail 112 pt, strip scroll area = the rest (932 pt at
   1100); content 2208 = 24 + 8 × (240 + 24) + 48 pt add-space button + 24. Cards are clipped at the sidebar edge.
+- [O AX, Arc 1.172.2, 11 Nov 2026, build 90755, #340] The web page is not resized by the Library, in 1.172 at
+  least: its card (`AXSplitGroup`) is 1454 pt wide in a 1728 pt window with the tab sidebar at 264 pt, and stays
+  1454 pt wide, moving with the Library's edge, on Spaces (sidebar 1536 pt for five spaces: x 1536) and on Archived
+  Tabs (417 pt: x 417); the window cuts off what passes its right edge. This replaces the 1.171 reading above (a
+  56 pt column) and the "column shrinking" of the swipe, for the page; the sidebar's own widths are unchanged.
 - [O] Horizontal two-finger swipes scroll the strip 1:1 over a card's tab list, a card's empty body, the gaps
   between cards alike; elastic at both ends (~17 pt stretch for 340 px), ~0.25 s spring back. A swipe that starts
   inside the strip never leaves the Library; a new swipe that starts with the strip already at its end (pushing

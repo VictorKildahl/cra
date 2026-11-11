@@ -1,0 +1,21 @@
+# promise: #340
+# Opening the Library moves the page and never resizes it, as in Arc 1.172.2 (11 Nov 2026, #340):
+# the page card keeps its width and the window cuts off what passes its right edge. Cra gave the page
+# what the Library left, so beside the Spaces page (744 pt for two spaces) it laid itself out as a narrow
+# phone column. A 1280 pt window with a 218 pt tab sidebar leaves the page 1052 pt.
+budget rss=700 stalls50=10
+seed windows.json {"sidebarWidth": 218}
+seed sidebar.json {"version":1,"spaceOrder":["B3400000-0000-0000-0001-000000000001","B3400000-0000-0000-0001-000000000002"],"spaces":[{"id":"B3400000-0000-0000-0001-000000000001","title":"Space 1","emoji":"🧪","theme":{"colors":["#CDB68F","#CDB68F"],"intensity":1,"noise":0,"appearance":"light","accent":"#CDB68F","solid":true},"favoritesContainerID":"D3400000-0000-0001-1000-000000000001","pinnedContainerID":"D3400000-0000-0001-2000-000000000001","todayContainerID":"D3400000-0000-0001-3000-000000000001","createdAt":"2026-11-10T08:00:00Z"},{"id":"B3400000-0000-0000-0001-000000000002","title":"Space 2","emoji":"🍕","theme":{"colors":["#2A2536","#2A2536"],"intensity":1,"noise":0,"appearance":"dark","accent":"#2A2536","solid":true},"favoritesContainerID":"D3400000-0000-0001-1000-000000000002","pinnedContainerID":"D3400000-0000-0001-2000-000000000002","todayContainerID":"D3400000-0000-0001-3000-000000000002","createdAt":"2026-11-10T08:00:00Z"}],"items":[{"id":"D3400000-0000-0001-1000-000000000001","children":[],"isUnread":false,"createdAt":"2026-11-10T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"B3400000-0000-0000-0001-000000000001"}}}}},{"id":"D3400000-0000-0001-2000-000000000001","children":[],"isUnread":false,"createdAt":"2026-11-10T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"B3400000-0000-0000-0001-000000000001"}}}}},{"id":"D3400000-0000-0001-3000-000000000001","children":[],"isUnread":false,"createdAt":"2026-11-10T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"B3400000-0000-0000-0001-000000000001"}}}}},{"id":"D3400000-0000-0001-1000-000000000002","children":[],"isUnread":false,"createdAt":"2026-11-10T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"B3400000-0000-0000-0001-000000000002"}}}}},{"id":"D3400000-0000-0001-2000-000000000002","children":[],"isUnread":false,"createdAt":"2026-11-10T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"B3400000-0000-0000-0001-000000000002"}}}}},{"id":"D3400000-0000-0001-3000-000000000002","children":[],"isUnread":false,"createdAt":"2026-11-10T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"B3400000-0000-0000-0001-000000000002"}}}}}]}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=one
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?windowState=closed
+expect-log window state closed: main0 .* card=218,10,10,10 .* width=1052
+cra://action/manageSpaces
+wait 1
+cra://debug?windowState=spaces
+expect-log window state spaces: main0 .* card=74[0-9],10,-[0-9]+,10 .* width=1052
+cra://action/viewDownloads
+wait 1
+cra://debug?windowState=downloads
+expect-log window state downloads: main0 .* card=417,10,-[0-9]+,10 .* width=1052
