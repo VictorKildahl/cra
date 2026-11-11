@@ -10,6 +10,8 @@ final class SidebarUIState {
     /// The browser window this sidebar belongs to (its space and open tab, see WindowSession).
     @ObservationIgnored var windowID = UUID()
     var renamingID: UUID?
+    /// Rename Space… chosen in the dock (#339): that space's header turns its name into a field.
+    var renamingSpaceID: UUID?
     /// The ⌘T bar is open for a new tab: the focused space's New Tab row is the active row,
     /// filled like the selected tab, which loses its fill (Arc: isCommandBarNewTabPlaceholderActive).
     var newTabPlaceholderActive = false

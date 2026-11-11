@@ -1,0 +1,93 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Fingerprint fixture</title>
+<style>html, body { background: #fff; color: #222; font: 15px -apple-system, sans-serif; margin: 40px; }</style>
+<h1>Fingerprint fixture</h1>
+<p>Draws what fingerprinting scripts draw, with values known in advance, and reads them back the
+way those scripts do. <code>fingerprint()</code> resolves to how far each readback strayed from
+what was drawn, for the fingerprinting-protection scenarios.</p>
+<script>
+  // 64 one-pixel columns, each its own opaque colour, so the noise can't hide in a run of equal
+  // pixels: how many channels moved, and by how much at most.
+  function columns() { var c = []; for (var i = 0; i < 64; i++) c.push([i * 4, 100, 255 - i * 3, 255]); return c; }
+  function compare(data, width, height, expected) {
+    var moved = 0, most = 0;
+    for (var y = 0; y < height; y++) for (var x = 0; x < width; x++) for (var k = 0; k < 4; k++) {
+      var d = Math.abs(data[(y * width + x) * 4 + k] - expected(x, y)[k]);
+      if (d) moved++;
+      most = Math.max(most, d);
+    }
+    return moved + '/' + most;
+  }
+  function draw2d(canvas) {
+    var ctx = canvas.getContext('2d'), cols = columns();
+    cols.forEach(function (c, x) { ctx.fillStyle = 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')'; ctx.fillRect(x, 0, 1, 4); });
+    return ctx;
+  }
+  function canvas2d() {
+    var canvas = document.createElement('canvas'); canvas.width = 64; canvas.height = 4;
+    var ctx = draw2d(canvas), cols = columns();
+    var read = compare(ctx.getImageData(0, 0, 64, 4).data, 64, 4, function (x) { return cols[x]; });
+    // The same drawing reads back the same each time, so a script can't average the noise away.
+    var same = canvas.toDataURL() === canvas.toDataURL() ? 'same' : 'differs';
+    return read + ',' + same;
+  }
+  // toDataURL goes through PNG, so decode it again and compare with the drawing.
+  function dataURL() {
+    return new Promise(function (resolve) {
+      var canvas = document.createElement('canvas'); canvas.width = 64; canvas.height = 4;
+      draw2d(canvas);
+      var img = new Image(), cols = columns();
+      img.onload = function () {
+        var check = document.createElement('canvas'); check.width = 64; check.height = 4;
+        var ctx = check.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0);
+        resolve(ctx);
+      };
+      img.src = canvas.toDataURL();
+    });
+  }
+  function webgl() {
+    var canvas = document.createElement('canvas'); canvas.width = 64; canvas.height = 4;
+    var gl = canvas.getContext('webgl', { preserveDrawingBuffer: true });
+    if (!gl) return 'none';
+    var cols = columns();
+    gl.enable(gl.SCISSOR_TEST);
+    cols.forEach(function (c, x) { gl.scissor(x, 0, 1, 4); gl.clearColor(c[0] / 255, c[1] / 255, c[2] / 255, 1); gl.clear(gl.COLOR_BUFFER_BIT); });
+    var px = new Uint8Array(64 * 4 * 4);
+    gl.readPixels(0, 0, 64, 4, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    return compare(px, 64, 4, function (x) { return cols[x]; });
+  }
+  // A constant 0.5 signal: every sample is exactly 0.5 unless something moved it.
+  function audio() {
+    var ctx = new OfflineAudioContext(1, 4410, 44100);
+    var source = ctx.createConstantSource(); source.offset.value = 0.5;
+    source.connect(ctx.destination); source.start();
+    return ctx.startRendering().then(function (buffer) {
+      var data = buffer.getChannelData(0), moved = 0, most = 0;
+      for (var i = 0; i < data.length; i++) { var d = Math.abs(data[i] - 0.5); if (d) moved++; most = Math.max(most, d); }
+      return moved + '/' + (most <= 0.5e-5 ? 'faint' : 'loud:' + most);
+    });
+  }
+  // A dedicated worker: its cores, and an OffscreenCanvas read back there.
+  function worker() {
+    var src = 'var cols=[];for(var i=0;i<64;i++)cols.push([i*4,100,255-i*3,255]);' +
+      'var c=new OffscreenCanvas(64,4),x=c.getContext("2d");' +
+      'cols.forEach(function(k,i){x.fillStyle="rgb("+k[0]+","+k[1]+","+k[2]+")";x.fillRect(i,0,1,4)});' +
+      'var d=x.getImageData(0,0,64,4).data,m=0;for(var p=0;p<d.length;p++)if(d[p]!==cols[(p>>2)%64][p&3])m++;' +
+      'postMessage(navigator.hardwareConcurrency+"/"+m)';
+    return new Promise(function (resolve) {
+      var w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+      w.onmessage = function (e) { resolve(e.data); w.terminate(); };
+      w.onerror = function (e) { resolve('error:' + e.message); };
+    });
+  }
+  function fingerprint() {
+    return Promise.all([dataURL(), audio(), worker()]).then(function (r) {
+      var cols = columns();
+      var png = compare(r[0].getImageData(0, 0, 64, 4).data, 64, 4, function (x) { return cols[x]; });
+      return 'fp:2d=' + canvas2d() + ' png=' + png + ' gl=' + webgl() + ' audio=' + r[1] +
+        ' cores=' + navigator.hardwareConcurrency + ' worker=' + r[2];
+    });
+  }
+</script>

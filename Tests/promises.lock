@@ -574,3 +574,6 @@
 #333   Tests/Scenarios/little-window-menu-actions.scenario  159077f207b0
 #336   Tests/Scenarios/little-window-empty-dismiss.scenario  2b3d62cb0b67
 #337   Tests/Scenarios/little-window-card.scenario  1e436b306d47
+#339   Packages/CraCore/Tests/CraCoreTests/SpaceMenuLayoutTests.swift::dockOpensTheSpaceForItsListAndHeader  cd0d0aed9120
+#339   Packages/CraCore/Tests/CraCoreTests/SpaceMenuLayoutTests.swift::dockShowsArcsWholeSpaceMenu  074df60c8297
+#341   Tests/FloatingSidebarTests.swift::staysInsideTheWindowsCorners  47752aeeee63
