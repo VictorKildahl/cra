@@ -47,6 +47,11 @@ Embedded Framework, so sites and Chrome extensions work as they do in Chrome.
   On an Intel Mac, download <a href="https://github.com/VictorKildahl/cra/releases/latest/download/Cra-Intel.dmg">Cra-Intel.dmg</a> instead.
 </p>
 
+<p align="center">
+  Or with Homebrew, on either kind of Mac:<br>
+  <code>brew install --cask victorkildahl/tap/cra</code>
+</p>
+
 ## Coming from Arc
 
 | Arc feature | Cra |
