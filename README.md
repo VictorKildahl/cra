@@ -68,11 +68,11 @@ Embedded Framework, so sites and Chrome extensions work as they do in Chrome.
 | Private windows | ✅ |
 | Arc's keyboard shortcuts | ✅ |
 | Import from Arc | ✅ |
-| Easels | Not yet |
-| Boosts | Not yet |
+| Easels | ✅ |
+| Boosts | ✅ |
 | Peek | ✅ |
-| Notes | Not yet |
-| Arc Max | Tidy Tabs only, on the Mac's Apple Intelligence; nothing goes to a server |
+| Notes | Left out: Arc itself no longer makes new Notes |
+| Arc Max | Tidy Tabs, Tidy Tab Titles, Tidy Downloads and 5-Second Previews, on the Mac's Apple Intelligence; nothing goes to a server |
 
 The [roadmap](https://crabrowser.app/roadmap) lists what's next.
 

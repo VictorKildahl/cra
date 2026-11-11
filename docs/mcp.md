@@ -5,12 +5,33 @@ your tabs, spaces and signed-in sessions, through the
 [Model Context Protocol](https://modelcontextprotocol.io). Cra runs no model and calls no AI
 service itself. The agent you connect reads what it opens, under that agent's own data rules.
 
-It is off until you turn it on: **Settings ▸ Advanced ▸ Allow local agents to control Cra**,
-then **Copy MCP Configuration** and add that entry to the agent's MCP settings. For Claude Code:
+It is off until you turn it on: **Settings ▸ Advanced ▸ Allow local agents to control Cra**.
+Then click your agent under **Add Cra to an agent**, and Cra writes itself into that agent's
+own MCP settings, the way the agent's `mcp add` command would:
+
+| Tile | File (in your home folder) |
+| --- | --- |
+| Claude Code (desktop app or terminal) | `.claude.json`, `mcpServers` with `"type": "stdio"` |
+| Claude Cowork (the Claude app's chats and Cowork) | `Library/Application Support/Claude/claude_desktop_config.json`; quit and reopen Claude |
+| Codex (desktop app or CLI) | `.codex/config.toml`, a `[mcp_servers.cra]` table |
+| Cursor | `.cursor/mcp.json` |
+| T3 Code, Conductor | they run Claude Code and Codex, so Cra goes in those files (Codex's only when `~/.codex` exists) |
+| Other: VS Code, Windsurf, Gemini CLI, LM Studio | `Code/User/mcp.json` (`servers`), `.codeium/windsurf/mcp_config.json`, `.gemini/settings.json`, `.lmstudio/mcp.json` |
+
+Only Cra's own entry changes: the rest of the file, other servers and the entry's other keys
+(an `env`, a timeout) stay, and the file keeps its permissions (a link stays a link). A file Cra
+can't edit safely (JSON with comments, a Codex server written inline) is left alone, and the
+tile says so. A tile says **Added** when the entry runs this Cra, **Update** when it points at
+another copy or an older location (click to fix), and is dimmed when the agent isn't on this Mac.
+Right-click a tile to remove Cra again or show the file. CraDev adds itself as `cra-dev`.
+`MCPAgentSetup` in CraCore decides every edit; `CRA_AGENT_CONFIG_HOME` points a test copy at a
+made-up home folder.
+
+For any other agent, **Copy MCP Configuration** and add the entry by hand. For Claude Code by hand:
 
     claude mcp add cra -- "/Applications/Cra.app/Contents/MacOS/Cra" --mcp "$HOME/Library/Application Support/Cra/mcp.sock"
 
-Keep Cra running. Copy the configuration again after moving the app or changing profiles.
+Keep Cra running. After moving the app or changing profiles, the tiles say **Update**.
 CraDev has its own profile and socket.
 
 The first time an agent connects, Cra asks: **Let "Claude Code" use Cra?** with the app it runs

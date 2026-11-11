@@ -9,7 +9,13 @@ import UniformTypeIdentifiers
 final class SidebarUIState {
     /// The browser window this sidebar belongs to (its space and open tab, see WindowSession).
     @ObservationIgnored var windowID = UUID()
+    /// The tab whose last click in the sidebar went back to its pinned page from its favicon: the
+    /// second press of that double-click does nothing (#345). Kept per window: held on the row
+    /// view, it was gone by the second press of a real double-click.
+    @ObservationIgnored var iconWentBack: UUID?
     var renamingID: UUID?
+    /// Rename Space… chosen in the dock (#339): that space's header turns its name into a field.
+    var renamingSpaceID: UUID?
     /// The ⌘T bar is open for a new tab: the focused space's New Tab row is the active row,
     /// filled like the selected tab, which loses its fill (Arc: isCommandBarNewTabPlaceholderActive).
     var newTabPlaceholderActive = false
@@ -245,6 +251,9 @@ final class SidebarActions {
     var paneExtensionsMenu: (UUID) -> Void = { _ in }
     /// The developer bar's address field: a typed URL or search, in the selected tab.
     var loadTyped: (String) -> Void = { _ in }
+    /// The sidebar URL field edited in place (#344): Return with what was typed, in the selected
+    /// tab or, for another host from a pinned tab, a new one (SidebarAddressEdit.commit).
+    var commitAddress: (String) -> Void = { _ in }
     /// A typed URL or search in a new tab (⌘ + New Tab pastes the clipboard's text).
     var openTyped: (String) -> Void = { _ in }
 }

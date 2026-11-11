@@ -23,6 +23,8 @@ if [ "${1:-}" != core ]; then
   suite "Extension popup window" scripts/test-extension-popup-window.sh
   suite "Peek dismiss panel" scripts/test-peek-dim-panel.sh
   suite "Window content grabber" scripts/test-window-content-grabber.sh
+  suite "5-Second Previews copy" scripts/test-link-summary-share.sh
+  suite "5-Second Previews card" scripts/test-link-summary-panel.sh
   suite "Capture overlay" scripts/test-capture-overlay.sh
   suite "Dialogs" scripts/test-dialogs.sh
   suite "Sidebar creation menu" scripts/test-sidebar-creation-menu.sh

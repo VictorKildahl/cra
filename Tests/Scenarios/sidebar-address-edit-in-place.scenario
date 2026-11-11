@@ -1,0 +1,81 @@
+# promise: #344
+# Settings ▸ Tabs "Edit the address in the sidebar" (#344, not in Arc): a click on the sidebar's
+# URL field turns it into a text field holding the full address, and no command bar opens.
+# Escape puts the address back and loads nothing; Return loads what was typed in the same tab
+# (history grows to 2, so it isn't a new tab). ⌘L, another tab or showing the toolbar ends the
+# edit. With no tab, or an empty split pane, the click still opens the command bar to fill it. A
+# pinned tab loads its own host and sends another to a new Today tab, as ⌘L does. Off is
+# sidebar-address-opens-command-bar; the rules are SidebarAddressEditTests.
+budget rss=600 stalls50=8
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "editAddressInPlace": true}
+wait 2
+cra://debug?urlFieldEdit=click
+expect-log url field click: not editing, command bar open
+cra://dismiss
+cra://open?url=${PAGE}?n=before
+wait 3
+cra://debug?urlFieldEdit=click
+expect-log url field click: editing http://127\.0\.0\.1:[0-9]+/page\.html\?n=before, command bar closed
+cra://debug?urlFieldEdit=escape:${PAGE}?n=ignored
+expect-log url field escape: done
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'page:'+location.search+' h'+history.length"}
+expect-log Cra cdp Runtime.evaluate .*"value":"page:\?n=before h1"
+cra://debug?urlFieldEdit=click
+expect-log url field click: editing .*n=before, command bar closed
+cra://debug?urlFieldEdit=type:${PAGE}?n=after
+expect-log url field return: done
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'page:'+location.search+' h'+history.length"}
+expect-log Cra cdp Runtime.evaluate .*"value":"page:\?n=after h2"
+# ⌘L while editing: the command bar opens and the field gives the address back. The bar's own
+# state isn't checked here: a background copy can close it again on its own.
+cra://debug?urlFieldEdit=click
+cra://action/editURL
+wait 1
+cra://debug?urlFieldEdit=state
+expect-log url field state: not editing, command bar (open|closed)
+reject-log url field state: editing .*command bar open
+cra://dismiss
+wait 1
+# Another tab while editing ends the edit.
+cra://open?url=${PAGE}?n=second
+wait 2
+cra://debug?urlFieldEdit=click
+expect-log url field click: editing .*n=second, command bar closed
+cra://action/previousTab
+wait 1
+cra://debug?urlFieldEdit=state
+expect-log url field state: not editing, command bar closed
+# Showing the toolbar hides the field and ends the edit; hiding it again shows the address.
+cra://debug?urlFieldEdit=click
+cra://action/toggleToolbar
+wait 1
+cra://debug?urlFieldEdit=state
+expect-log url field state: hidden
+cra://action/toggleToolbar
+wait 1
+cra://debug?urlFieldEdit=state
+expect-log url field state: not editing
+# A pinned tab: its own host loads in it, another host opens in a new Today tab.
+cra://debug?browserWindows=before-pin
+cra://action/pinTab
+wait 1
+cra://debug?urlFieldEdit=click
+cra://debug?urlFieldEdit=type:${PAGE}?n=pinned
+wait 2
+cra://debug?browserWindows=pinned-same
+expect-log Cra browser windows pinned-same: .*tabs=\[[^ ]*n=pinned [^ ]*n=second\] open=[^ ]*n=pinned 
+cra://debug?urlFieldEdit=click
+cra://debug?urlFieldEdit=type:other.invalid
+wait 2
+cra://debug?browserWindows=pinned-other
+expect-log Cra browser windows pinned-other: .*tabs=\[[^ ]*n=pinned .*https://other\.invalid.*\] open=https://other\.invalid
+# An empty split pane has no address: the click opens the bar that fills it.
+cra://action/addSplitView
+wait 1
+cra://dismiss
+wait 1
+cra://debug?urlFieldEdit=click
+expect-log url field click: not editing, command bar open
+cra://dismiss

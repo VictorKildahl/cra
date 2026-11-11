@@ -1,0 +1,30 @@
+# promise: #337
+# ⌥⌘N opens Arc's card (#337): 490 × 329 pt, 20 pt in from the screen's right edge and 20 pt below
+# the menu bar, with no strip, traffic lights or page, only the command bar. Return on what was
+# typed turns the same window into the full Little Window, its top-right corner where the card's
+# was. Esc closes the card. Before, ⌥⌘N opened a 1400 × 900 pt window in the middle of the screen
+# with the strip, a blank page and the bar a third of the way down.
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+pace 0.5
+
+cra://action/newLittleWindow
+wait 1
+cra://debug?littleShown=card
+expect-log little shown card: windows=1 .* card=1 size=490x329 corner=20,20 strip=0 lights=0
+
+# Return: the full window (1400 × 900 pt unless the screen is smaller), same top-right corner.
+cra://debug?littleCard=go:${PAGE}
+wait 1.5
+cra://debug?littleShown=page
+expect-log little shown page: windows=1 .* card=0 size=1[0-9]{3}x[0-9]{3} corner=20,20 strip=1 lights=1
+
+# A second card, closed with Esc: only the page's window is left.
+cra://action/newLittleWindow
+wait 1
+cra://debug?littleShown=second
+expect-log little shown second: windows=2 .* card=1 size=490x329
+cra://debug?littleCard=close
+wait 1
+cra://debug?littleShown=closed
+expect-log little shown closed: windows=1 .* card=0

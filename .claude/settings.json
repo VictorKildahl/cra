@@ -12,6 +12,12 @@
           },
           {
             "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/check-cef-release-hook.sh",
+            "timeout": 30,
+            "statusMessage": "Checking the release ships the newest CEF"
+          },
+          {
+            "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/check-promises-hook.sh",
             "timeout": 30,
             "statusMessage": "Checking shipped-issue tests against Tests/promises.lock"

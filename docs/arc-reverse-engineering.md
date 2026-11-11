@@ -645,6 +645,20 @@ from the focused space; Cra uses the measured values as a fixed palette):
   28pt chevron-up button (#5C5C71), then 54pt rows (40pt radius-9 tile in the space colour
   with the emoji, 15pt semibold name), highlighted row #161734; typing filters, ↩ moves the
   tab there;
+- [O] Arc 1.172.1 changed the menu (10 Nov, GitHub #331; offline copy with 10 spaces and with 1, AX
+  frames and 2x window captures). It is drawn in a transparent window the size of the Little Arc, so
+  no window animation. 244 pt wide with a hairline #1D1E37 border, 4 pt below the window's top and
+  4 pt in from its right edge. Header 46 pt: 14 pt magnifier 16 pt in, "Search Spaces..." (three periods, added in code) 13 pt
+  #8E8F9D from 46 pt in, an 18 pt #1D1E37 rule 38 pt from the right edge, then a plain ∧ (16 pt
+  button, glyph centred 22 pt from the right); glyphs #505166. No filled button any more. Rows
+  46 pt: 26 pt tile 10 pt in, centred; name 13 pt semibold at 46 pt, white ≈ 82 %; highlight
+  #161734 across the full width. The list (an AXScrollArea) is at most 350 pt and scrolls. The
+  space "Open in" names is the first row and highlighted, the rest follow in sidebar order (Work,
+  Victor, Alpha… with sidebar order Victor, Work, Alpha…). ↓ moves the highlight but doesn't
+  scroll the list to it (Cra does). Typing shrinks the menu to the matches ("al" → 46 + 46 pt);
+  with none, "No results" 13 pt centred in 64 pt. ⇧⌘O opens the same menu. With one space the
+  real ⌄ (the second `openInSpaceExpander`) isn't there: the button is "Open in Work ⌘O" alone.
+  Cra: `LittleMoveMenu` (CraCore) and `LittleSpacesPopup`.
 - ⌘O ("Open in <space>") moves the page into that space; ⌥⌘N makes an empty Little Arc;
   Window ▸ Close Little Arc Windows exists;
 - opening: the window grows from a small rectangle under the pointer to its full frame in
@@ -659,6 +673,18 @@ window edge). The "Open in" halves have no tooltip. Cra reproduces all of it in
 LittleWindowController (LittleTooltip); hover is tracked by AppKit with an activeAlways
 tracking area because SwiftUI's onHover sleeps while the Chrome page window is the key
 window.
+
+Arc 1.172.1 (build 90370), re-measured on 10 Nov 2026 from 2x window captures
+(`screencapture -l`, colours read from the PNGs' pixels) by kKr1Xx (GitHub #329, #330, PR #334):
+- the strip is a gradient, not #0C091C: #242438 at the left end of a 1185 pt window, #26243A,
+  #292839 and #2C2439 between, #312339 at the right end, identical after switching spaces. The
+  pill is a lighter wash over it (about #38394A on the left, #43394B on the right, white at
+  9–10 %). The traffic lights are grey discs (about #6A6A74) until the pointer is over the
+  group, with the window in front;
+- the pill reads the host only (`cra-measure.lvh.me` for `http://cra-measure.lvh.me:47110/page?e=link1`),
+  and for a page that isn't served over https an open padlock (orange, strokes about #E93700) on a
+  22 pt tile, 4 pt in from the pill's left and top, orange at about 10 %, replaces the magnifier;
+  while a first response is awaited the magnifier is back. Cra: `LittleAddress` (CraCore).
 
 ### Live re-fit against Victor's full-screen screenshots (24 Oct, 20:21)
 
@@ -2740,6 +2766,13 @@ curves fitted per frame. "p" = Library reveal progress, 0 = space, 1 = Library o
   1044 pt Spaces page; measured 1/834, 1/870, 1/808). A space-to-space swipe measured 0.49 pt per px (one take).
 - [O] The sidebar widens during the drag, not at commit: width = 347 + (Lib − 347) × p (347→417 at p 1; 1044 pt
   for a Spaces page), the web page column shrinking with it. Library open → swipe out mirrors it exactly.
+- [O AX, Arc 1.172.2, kKr1Xx on #340] The page card keeps its width with the Library open: 1728 pt window, 264 pt
+  tab sidebar, card x 264 w 1454; Library ▸ Spaces (5 spaces, 1536 pt) x 1536 w 1454; Archived Tabs (417 pt)
+  x 417 w 1454. It moves with the Library's right edge and past the window's, which cuts it off, so the page is
+  never laid out again for a narrow column. Cra follows it (`LibraryWidth.page`); the "column shrinking" above
+  and the 56 pt column below are the slice of the page that shows. [U] the in-between frames of a swipe, the
+  Library opened with the sidebar hidden (Cra keeps the whole card's width) and a tab sidebar wider than 417
+  (Cra lets the page fill what the Library leaves).
 - [O] The space's own content fades, alpha ≈ max(0, 1 − 2p) (row contrast 1.00/0.60/0.29/0.08/0 at p 0/0.2/0.36/
   0.46/0.5), and shrinks a little: scale ≈ 1 − 0.1 p about a point near (417 pt, window mid-height) [I, fitted from
   the selected row, favourites card and traffic-light positions]. The traffic lights travel with that content and
@@ -3558,6 +3591,52 @@ Arc Max's renameDownloads: a finished download is renamed on disk and a card abo
   (the old name's baseline as far from the bottom as the label's cap top from the top), and the card stays while the
   pointer is on it, then for what was left of its 8 s but at least 3 s. On a dark space the label and the old name are #929BFF, not
   Arc's #343BD1, which reads at 2.6:1 on the card (PR #197, Quinn Battersby; Victor, 5 Nov 2026).
+
+## 5-Second Previews (Arc 1.171, 10 Nov 2026, Arc's binary + Victor's Arc: Hacker News, Google, example.com; 2x, 60 fps)
+
+Arc Max's 5-Second Previews are hover cards inside Arc: the HoverCards module (HoverCardsController,
+HoverCardWindow, HoverCardViewModel), pref `hoverCardsEnabled` (1 in Victor's Arc), remote flags
+`hoverCardsLLMDelayInterval` and `hoverCardsShareEnabled`. Arc's server still answered.
+- [B] Settings text: "Instant summaries appear when you hover over links on [certain websites.](…) Or hold Shift
+  while hovering to preview any link."
+- [B] Sites (`HoverCardsSupportedDomain`): google.com, x.com / twitter.com, news.ycombinator.com, each with its links:
+  `.title .titleline > a` (HN story titles); `[data-testid=tweetText] a[role=link][target=_blank]`,
+  `[data-testid='card.wrapper'] a[role=link]`, `a[role=link][rel='nofollow noreferrer'][target=_blank]` (X);
+  `g-section-with-header a [role=heading]`, and `#search a`, `#tvcap a`, `#topstuff a`, `#botstuff a` (Google).
+- [O] Which hovers: an HN story title and a Google organic result open a card; HN's "comments" link and a Google
+  side-panel link don't; a link on example.com doesn't. Shift must be held as the pointer reaches the link
+  (pressing it while on a link does nothing). With Shift, example.com's iana.org link got the answer card, and HN's
+  "comments" link (same site) got the small card: the page's title in bold and its address without the scheme.
+- [B] Prompt (HoverCardViewModel.loadSummary): "As a concise and helpful summarizer, create a glanceable "answer card"
+  containing the most important information from the webpage. Capture the tone, perspective and POV of the writer."
+  JSON `Response {blocked, quickSummary? (3-8 words), details: Detail[] (2-4)}`, `Detail {label ("Price:", "Story:", …),
+  icon (an SF Symbol name), info (5-10 words)}`, the page between `<webpage>` tags, the user's Google search as
+  `userQuestion`, "Write responses … in <language>". `blocked` shows "No preview available".
+- [O] Timing: a loading card 0.97–1.2 s after the pointer comes to rest (300 × 52 pt, two grey bars 7 pt thick and
+  15 pt apart); it grows down from its top edge from about a tenth of its height in 0.25 s, opaque from its second or
+  third frame. The answer streams in (rows fade in as they come, the card grows down) over the next 1–3 s. Leaving the
+  link closes it at once unless the pointer is on the card: it squashes toward its top edge to about a third, still
+  nearly opaque, and fades at the end, in 0.14 s. With no room under the link it hangs above it.
+- [O] Card: 300 pt wide, 12 pt corners. The page's picture (og:image) fills a 100 pt banner; a page without one gets no
+  banner. The quick summary in bold 13 pt white, 15 pt margins; a row per detail: the model's SF Symbol in white at
+  about 40 %, the text at 39 pt, bold label + regular info, 13 pt on 18.5 pt lines, 6 pt between rows. A 32 pt grey
+  share button with a faint rim, its centre 24 pt from the right and 25 pt from the bottom. The fill is the space's dark
+  tooltip tone at about 90 % (#322c15 over Hacker News's page in a beige space; TooltipTones gives #302913). It hangs
+  6 pt under the link, 7 pt left of the link's start. The small card: 300 × 86 pt, title on 16 pt lines, 10 pt above
+  the address.
+- [O] Share button: a dark menu at the click, Copy as Text (doc.on.doc), Copy as Image (photo.on.rectangle),
+  Share ▸ (the share services). Copy as Text puts plain text and flat RTFD on the pasteboard: the quick summary, a line
+  per detail led by an emoji for its symbol (trophy 🏆, video 📹, pencil ✏️, paperplane ✈️), "AI Summary by Arc Browser",
+  the link. Copy as Image is a 3x TIFF of the card in light: 304 pt wide, the picture at its own aspect inset 2 pt with
+  8 pt corners, #191B1F text, #BBBBBC symbols, a dashed #CFD0FB line (4 pt on, 6 off, a 3 pt gap first) and a 50 pt
+  #F6F6FF footer with the favicon and host left and "Arc Browser" bold right, both #9A9AB3.
+- Cra (LinkSummaryPolicy, LinkSummaryPrompt, LinkSummaryCardLayout, LinkSummaryShare in CraCore; LinkSummaryService,
+  LinkSummaryPreview, LinkSummaryShareImage): all of the above, on the Mac's Apple Intelligence model with Arc's
+  prompt and schema (streamed). The page script checks Arc's selectors on the hovered link. Chromium fetches the page in
+  the tab's profile only once a card opens, never for hosts on the Mac or the local network, upgraded to https with
+  Always use secure connections, never in incognito spaces. Differences that stay: "Cra" in place of Arc's name in
+  the copies; the emoji table is Cra's (Arc's isn't readable; it matches the four Arc produced); the model writes
+  its own answers. Settings ▸ Max ▸ 5-Second Previews, off by default like Arc Max.
 
 ## Little Arc over a full-screen app (Arc 1.171, 5 Nov 2026, issue #186, Victor's Arc + a test full-screen app)
 

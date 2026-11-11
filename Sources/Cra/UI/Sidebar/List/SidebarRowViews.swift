@@ -1338,19 +1338,26 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         // A click on the row (not the field) ends a rename, so it can never get stuck.
         if m.editing { commitRename() }
         // Arc: the favicon of a pinned tab away from its page takes it back there and opens it;
-        // with ⌘ the page moves out to a new Today tab first (GitHub #139).
-        if canReset, iconRegion.contains(point) {
+        // with ⌘ the page moves out to a new Today tab first (GitHub #139). A double-click there
+        // goes back once and doesn't rename the tab now at home (#345).
+        let action = PinnedIconClick.action(clickCount: event.clickCount, onIcon: iconRegion.contains(point), navigatedAway: canReset,
+                                            command: event.modifierFlags.contains(.command), previousWentBack: list.ui.iconWentBack == m.id)
+        list.ui.iconWentBack = action.wentBack ? m.id : nil
+        switch action {
+        case .separateFromPinnedTab:
             setOverIcon(false)
-            if event.modifierFlags.contains(.command) {
-                list.actions.separatePinnedTab(m.id)
-            } else {
-                list.actions.resetPinnedTab(m.id)
-                list.ui.clearPicks(anchor: m.id)
-                list.store.selectTab(m.id, window: list.ui.windowID)
-            }
-            return
+            list.actions.separatePinnedTab(m.id)
+        case .backToPinnedPage:
+            setOverIcon(false)
+            CraLog.note("pinned icon: back to pinned URL")
+            list.actions.resetPinnedTab(m.id)
+            list.ui.clearPicks(anchor: m.id)
+            list.store.selectTab(m.id, window: list.ui.windowID)
+        case .nothing:
+            CraLog.note("pinned icon: a double-click's second press stays home")
+        case .row:
+            list.clickTab(m.id, event: event)
         }
-        list.clickTab(m.id, event: event)
     }
 
     override func contextMenu(at point: NSPoint) -> NSMenu? {

@@ -32,3 +32,30 @@ struct LibraryWidthTests {
         #expect(640 - LibraryWidth.sidebar(window: 640) == 320)
     }
 }
+
+/// Arc 1.172.2 keeps the page's width beside the Library and moves it with the Library's right
+/// edge, past the window's: Cra gave it what was left, 181 pt beside five spaces, where the site
+/// laid itself out as a phone column (issue #340).
+struct LibraryPageTests {
+    /// kKr1Xx's numbers: a 1728 pt window and a 264 pt tab sidebar leave a 1454 pt card, and it
+    /// stays 1454 pt beside the 1536 pt Spaces page and the 417 pt Archived Tabs page.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/340"))
+    func pageKeepsItsWidth() {
+        #expect(LibraryWidth.page(window: 1728, library: 1536, tabSidebar: 264, inset: 10) == 1454)
+        #expect(LibraryWidth.page(window: 1728, library: 417, tabSidebar: 264, inset: 10) == 1454)
+        // Edge to edge the card has no right inset to keep.
+        #expect(LibraryWidth.page(window: 1728, library: 1536, tabSidebar: 264, inset: 0) == 1464)
+    }
+
+    /// The Library brought a hidden sidebar out: the page keeps the whole card's width.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/340"))
+    func hiddenSidebarKeepsTheWholeCard() {
+        #expect(LibraryWidth.page(window: 1728, library: 417, tabSidebar: nil, inset: 10) == 1708)
+    }
+
+    /// A tab sidebar wider than the Library: the page fills what the Library leaves, no gap.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/340"))
+    func narrowerLibraryLeavesNoGap() {
+        #expect(LibraryWidth.page(window: 1728, library: 417, tabSidebar: 450, inset: 10) == 1301)
+    }
+}

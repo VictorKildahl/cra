@@ -863,6 +863,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         if !flags.isEmpty {
             ui.pick(id, range: flags.contains(.shift), in: store)
         } else if event.clickCount == 2 {
+            CraLog.note("sidebar double-click: rename")
             ui.renamingID = id
         } else {
             ui.clearPicks(anchor: id)

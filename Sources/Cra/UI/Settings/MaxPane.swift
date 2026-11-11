@@ -31,6 +31,12 @@ struct MaxPane: View {
                                   isOn: $store.settings.tidyDownloads, enabled: available) {
                     TidyDownloadsPicture()
                 }
+                SettingsCardDivider()
+                SettingsSwitchRow("5-Second Previews",
+                                  detail: "Instant summaries appear when you hover over links on certain websites (Google results, X and Hacker News). Or hold Shift while hovering to preview any link.",
+                                  isOn: $store.settings.fiveSecondPreviews, enabled: available) {
+                    FiveSecondPreviewsPicture()
+                }
             }
             MaxFooter(status: service.status) { service.openSystemSettings() }
                 .padding(.top, 14)
@@ -134,6 +140,42 @@ private struct TidyTabsPicture: View {
                 Image(systemName: "xmark").font(.system(size: 9, weight: .semibold)).foregroundStyle(ink)
             }
             .offset(x: -2)
+        }
+    }
+}
+
+/// Arc's 5-Second Previews picture: a summary card with bullet points on teal.
+private struct FiveSecondPreviewsPicture: View {
+    private let grey = Color(white: 0.55)
+    var body: some View {
+        ZStack {
+            Color(red: 0.10, green: 0.52, blue: 0.50)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 2) {
+                    Image(systemName: "link").font(.system(size: 4)).foregroundStyle(grey)
+                    Text("news.ycombinator.com").font(.system(size: 4.5, weight: .medium)).foregroundStyle(.black).lineLimit(1).fixedSize()
+                    Spacer(minLength: 0)
+                    Image(systemName: "sparkles").font(.system(size: 4)).foregroundStyle(Color(red: 0.55, green: 0.45, blue: 0.90))
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 2) {
+                        Circle().fill(grey).frame(width: 1.5, height: 1.5)
+                        RoundedRectangle(cornerRadius: 1).fill(grey.opacity(0.7)).frame(width: 44, height: 2)
+                    }
+                    HStack(spacing: 2) {
+                        Circle().fill(grey).frame(width: 1.5, height: 1.5)
+                        RoundedRectangle(cornerRadius: 1).fill(grey.opacity(0.7)).frame(width: 50, height: 2)
+                    }
+                    HStack(spacing: 2) {
+                        Circle().fill(grey).frame(width: 1.5, height: 1.5)
+                        RoundedRectangle(cornerRadius: 1).fill(grey.opacity(0.7)).frame(width: 34, height: 2)
+                    }
+                }
+                .padding(.top, 1)
+            }
+            .padding(.horizontal, 5).padding(.vertical, 4)
+            .frame(width: 70)
+            .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Color.white))
         }
     }
 }

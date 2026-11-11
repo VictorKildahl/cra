@@ -1,0 +1,35 @@
+# promise: #345
+# A double-click on the favicon of a pinned tab away from its pinned page takes it back there
+# once (#345), as a single click there does (Arc's icon region, #139). Before the fix its second
+# press counted as a new click: back to back (as here) it loaded the pinned page a second time,
+# and a hand's ~150 ms later, on a tab already home, it opened the rename field
+# (PinnedIconClickTests covers that timing). The clicks go through the event queue to the row,
+# as the pointer's would; the page reads where it is.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=home
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://action/pinTab
+wait 1
+cra://debug?cdp=Page.navigate&params={"url":"${PAGE}?n=away"}
+wait 1.5
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'at=' + location.search"}
+expect-log "value":"at=\?n=away"
+# The only tab row is the pinned tab's; its favicon is 18 pt in from the row's leading edge.
+cra://debug?snapshot=TabRowView&out=/dev/null
+expect-log snapshot: TabRowView at 8,234 size 312x40
+
+# A double-click on the favicon goes back once and leaves the name alone.
+cra://debug?clickAt=26,254&clicks=2
+expect-log pinned icon: back to pinned URL
+expect-log pinned icon: a double-click's second press stays home
+wait 1.5
+reject-log sidebar double-click: rename
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'double=' + location.search"}
+expect-log "value":"double=\?n=home"
+
+# On its pinned page the favicon is the row's again: a double-click renames the tab.
+cra://debug?clickAt=26,254&clicks=2
+expect-log sidebar double-click: rename
+cra://debug?checkStore=1

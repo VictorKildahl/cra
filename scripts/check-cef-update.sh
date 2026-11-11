@@ -3,6 +3,8 @@
 # macOS arm64 and, when Cra is behind, opens (or updates) one "Chromium engine
 # update" issue saying how to build it. Run daily by .github/workflows/cef-updates.yml.
 #   scripts/check-cef-update.sh --dry-run   print instead of touching issues
+#   scripts/check-cef-update.sh --check     exit 1 when Cra is behind (release.sh and the
+#                                            release-tag hook: a release ships the newest CEF)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -18,6 +20,10 @@ echo "Latest: $LATEST"
 if [ "$LATEST" = "$CEF_VERSION" ] || [ "$(printf '%s\n%s\n' "$LATEST" "$CEF_VERSION" | sort -V | tail -1)" = "$CEF_VERSION" ]; then
   echo "Cra is up to date."
   exit 0
+fi
+if [ "${1:-}" = --check ]; then
+  echo "Cra is behind the newest stable CEF: build it with scripts/update-cef.sh $LATEST" >&2
+  exit 1
 fi
 
 if [ "$(major "$LATEST")" = "$(major "$CEF_VERSION")" ]; then

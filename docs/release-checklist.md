@@ -44,6 +44,15 @@ built release app with a test profile. Note anything that fails in the release's
   space's darkest tone. Recent open tabs show "Switch to Tab" before typing. Arrow through results
   and check every row's inks follow the selection; long titles truncate before the trailing action.
 
+- **PR #324, 5-Second Previews:** with Apple Intelligence on and Settings ▸ Max ▸ 5-Second Previews
+  on, rest 1 s on a story title on Hacker News, a Google result and a link in a post on X: a loading
+  card hangs under the link, then the answer streams in (picture, bold line, 2–4 rows), next to Arc's
+  on the same link (arc-reverse-engineering.md has its measurements). A story's "comments" link, a
+  Google side-panel link and a plain hover on any other site show nothing; Shift held as the pointer
+  reaches a link shows the answer, or the small card for a link within the site. Leaving the link
+  closes it at once unless the pointer is on the card. Share ▸ Copy as Text and Copy as Image paste as
+  Arc's do. Check a beige and a dark space, 1x and 2x.
+
 - **Music notes:** on a release build, play a favorite on YouTube Music, SoundCloud or Spotify.
   Compare Arc and Cra in light and dark spaces at 1x and 2x: origin, density, speed, growth, fading
   and clipping. Notes rise from the icon's top edge and stop 8 pt above the top row; in lower rows
@@ -125,6 +134,13 @@ built release app with a test profile. Note anything that fails in the release's
 - **#172:** with a space on its own profile, a Little Window from that space and a Peek from its
   tab see that profile's cookies. The chip names the profile; switching it reloads the page in
   the other profile.
+- **#329:** a Little Window's strip is a gradient, deep blue-grey at the left to purple-grey at the
+  right, in every space (compare Arc 1.172.1 beside it). Its traffic lights are grey with the window
+  in front and the pointer elsewhere, and red, yellow and green with glyphs while the pointer is over
+  them. The address pill is a lighter wash over the strip, also under the pointer.
+- **#330:** the address pill reads the host only (no port, path or query). An http page shows an
+  orange open padlock on a pale orange tile where the magnifier is; an https page and a blank one
+  show the magnifier, and so does a window still waiting for its first response.
 - **#206:** a video's PiP and Meet's PiP stay on top over a full-screen app, and clicking or
   dragging them doesn't bring Cra forward.
 - **#198:** in a Meet call with automatic picture-in-picture on, leaving the tab opens Meet's

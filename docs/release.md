@@ -334,6 +334,14 @@ itself, and ninja recompiles nearly everything (about 2½ hours on the M2 Max). 
 major needs a fresh checkout as well. Then test `build/Cra.app`, commit `scripts/fetch-cef.sh`, close the
 issue and tag a release.
 
+**A release ships the newest CEF.** Pushing a `vX.Y.Z` tag from Claude Code runs
+`scripts/check-cef-release-hook.sh` (in `.claude/settings.json`), and `scripts/release.sh` (so the
+Release workflow too) runs `scripts/check-cef-update.sh --check` before it builds. Both stop the
+release when Spotify's index lists a newer stable CEF than `fetch-cef.sh` pins; the hook also
+stops it when the pinned `CEF_RELEASE` lacks the arm64 or the Intel archive. A pin on a newer
+Chromium patch of the same CEF (Extended Stable, as in 156.0.27 on .96) counts as current.
+`CRA_ALLOW_OLD_CEF=1` ships the pinned CEF anyway, for an urgent fix while the new one builds.
+
 ## Later
 
 - **Homebrew.** A cask (`brew install --cask cra`) pointing at the DMG and

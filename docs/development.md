@@ -120,6 +120,11 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-window-content-grabber.sh`: the page-top grabber on AppKit windows:
   clicks reach the page immediately, non-arrow cursors keep the gesture, native resize edges and rounded corners stay free,
   a child page's drag starts in its browser window's coordinates, and the page stays outside WindowServer's native drag region.
+- `scripts/test-link-summary-share.sh`: 5-Second Previews' Copy as Image (`LinkSummaryShareImage`)
+  against Arc's own copy of a card: size at 3x, the picture's inset, the dashed line's pattern and place,
+  the footer colour.
+- `scripts/test-link-summary-panel.sh`: 5-Second Previews' card window (`LinkSummaryPanel`) off screen with
+  a stub service: the loading card, the answer growing in under the link, the small card above its link, closing.
 - `scripts/test-music-notes.sh`: the production note sprites over fixed white and black backgrounds
   at 1x and 2x, checking light-theme contrast and the dark-theme tint without CEF or a visible window.
 - `scripts/test-live-folder-plugins.sh`: the real `CraPluginHost` (sandboxed JavaScriptCore) and
