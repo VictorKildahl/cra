@@ -1161,21 +1161,14 @@ final class SpaceDockView: NSView {
         }
     }
 
+    /// Arc 1.172.2: the header's whole space menu, for the space whose icon was clicked (#339).
+    /// Change Space Icon… points its popover down at that icon.
     override func menu(for event: NSEvent) -> NSMenu? {
-        guard let i = index(at: point(event)), let space = store.space(order[i]) else { return nil }
-        let store = self.store, ui = self.ui, actions = self.actions
-        let m = NSMenu()
-        m.autoenablesItems = false
-        MenuItems.add(m, action: "editSpace") { actions.editSpace(space) }
-        m.addItem(.separator())
-        MenuItems.add(m, "Move Left") { if let i = store.spaceOrder.firstIndex(of: space.id) { store.moveSpace(space.id, to: max(0, i - 1)) } }
-        MenuItems.add(m, "Move Right") { if let i = store.spaceOrder.firstIndex(of: space.id) { store.moveSpace(space.id, to: i + 1) } }
-        m.addItem(.separator())
-        MenuItems.add(m, action: "deleteSpace") {
-            store.focusSpace(space.id, window: ui.windowID)
-            actions.performAction("deleteSpace")
+        guard let i = index(at: point(event)), let cell = cells[order[i]] else { return nil }
+        let id = order[i], ui = self.ui
+        return SpaceMenu.make(spaceID: id, store: store, ui: ui, actions: actions, anchor: cell, from: .dock) {
+            ui.renamingSpaceID = id
         }
-        return m
     }
 }
 

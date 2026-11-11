@@ -205,6 +205,7 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
             colors = SidebarColors(space.theme.palette)
             collapsed = store.isPinnedCollapsed(spaceID)
             hide = store.hidesSpaceHeader(spaceID)
+            _ = ui.renamingSpaceID
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self, !self.syncQueued else { return }
@@ -218,6 +219,20 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
             isHidden = hide
             onHiddenChange?()
         }
+        takeRenameRequest()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        takeRenameRequest()
+    }
+
+    /// Rename Space… from the dock's menu (#339) renames here, once this header is in the window:
+    /// a space that wasn't open gets its column only after the switch.
+    private func takeRenameRequest() {
+        guard ui.renamingSpaceID == spaceID, window != nil else { return }
+        ui.renamingSpaceID = nil
+        if !isHidden { beginRename() }
     }
 
     private func refresh() {
@@ -423,47 +438,67 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
     func controlTextDidEndEditing(_ obj: Notification) { commitRename() }
 }
 
-/// Arc 1.171's space menu (SpaceMenu.swift), item for item, for the space header's ••• and
-/// right-click and the Library's Spaces page. "Share Space…" is left out: it publishes the space
-/// through Arc's servers.
+/// Arc 1.171's space menu (SpaceMenu.swift), item for item (SpaceMenuLayout), for the space
+/// header's ••• and right-click, the Library's Spaces page and the dock's icons (#339).
 @MainActor
 enum SpaceMenu {
     static func make(spaceID id: UUID, store: SidebarStore, ui: SidebarUIState, actions: SidebarActions, anchor: NSView,
-                     rename: @escaping () -> Void) -> NSMenu? {
+                     from origin: SpaceMenuLayout.Origin = .header, rename: @escaping () -> Void) -> NSMenu? {
         guard let space = store.space(id) else { return nil }
+        let isOpen = store.focusedSpaceID(window: ui.windowID) == id
         let m = NSMenu()
         m.autoenablesItems = false
-        MenuItems.add(m, "Change Space Icon…") { [weak anchor] in if let anchor { actions.changeSpaceIcon(space, anchor) } }
-        MenuItems.add(m, "Rename Space…", rename)
-        MenuItems.add(m, "Edit Theme Color…") { actions.editSpaceTheme(space) }
-        let profiles = MenuItems.submenu(m, "Set Profile")
-        MenuItems.add(profiles, "Default", on: space.profileID == nil) { store.setProfile(nil, forSpace: id) }
-        for p in store.profiles {
-            MenuItems.add(profiles, p.name, on: space.profileID == p.id) { store.setProfile(p.id, forSpace: id) }
+        for (i, section) in SpaceMenuLayout.sections(spaceCount: store.orderedSpaces.count).enumerated() {
+            if i > 0 { m.addItem(.separator()) }
+            for item in section {
+                // From the dock, a space that isn't open opens first for what shows in its sidebar.
+                let open: () -> Void = SpaceMenuLayout.opensSpaceFirst(item, from: origin, spaceIsOpen: isOpen)
+                    ? { store.focusSpace(id, window: ui.windowID) } : {}
+                add(item, to: m, space: space, store: store, ui: ui, actions: actions, anchor: anchor, open: open, rename: rename)
+            }
         }
-        profiles.addItem(.separator())
-        MenuItems.add(profiles, "New Profile…") { actions.newProfile(id) }
-        addSearchEngines(to: MenuItems.submenu(m, "Search Engine"), space: space, store: store)
-        m.addItem(.separator())
-        MenuItems.add(m, action: "newFolder") {
-            ui.renamingID = store.createFolder(named: "New Folder", in: space.pinnedContainerID, index: 0).id
-        }
-        let live = MenuItems.submenu(m, "Live Folders")
-        SidebarMenus.addLiveFolderPlugins(to: live, space: id, store: store, window: anchor.window)
-        m.addItem(.separator())
-        let export = MenuItems.submenu(m, "Export “\(space.title)” into Folder")
-        for s in store.orderedSpaces {
-            MenuItems.add(export, s.title, enabled: s.id != id) { store.exportSpace(id, intoFolderIn: s.id) }
-        }
-        m.addItem(.separator())
-        MenuItems.add(m, action: "manageSpaces") { actions.manageSpaces() }
-        // Arc offers this only while there is one space; Show Space Header brings it back.
-        if store.orderedSpaces.count == 1 {
-            MenuItems.add(m, "Hide Space Header") { store.settings.showSpaceHeaderOnSingleSpace = false }
-        }
-        m.addItem(.separator())
-        MenuItems.add(m, action: "deleteSpace", title: "Delete Space") { actions.deleteSpace(space) }
         return m
+    }
+
+    private static func add(_ item: SpaceMenuLayout.Item, to m: NSMenu, space: Space, store: SidebarStore, ui: SidebarUIState,
+                            actions: SidebarActions, anchor: NSView, open: @escaping () -> Void, rename: @escaping () -> Void) {
+        let id = space.id
+        switch item {
+        case .changeIcon:
+            MenuItems.add(m, "Change Space Icon…") { [weak anchor] in if let anchor { actions.changeSpaceIcon(space, anchor) } }
+        case .rename:
+            MenuItems.add(m, "Rename Space…") { open(); rename() }
+        case .editTheme:
+            MenuItems.add(m, "Edit Theme Color…") { open(); actions.editSpaceTheme(space) }
+        case .setProfile:
+            let profiles = MenuItems.submenu(m, "Set Profile")
+            MenuItems.add(profiles, "Default", on: space.profileID == nil) { store.setProfile(nil, forSpace: id) }
+            for p in store.profiles {
+                MenuItems.add(profiles, p.name, on: space.profileID == p.id) { store.setProfile(p.id, forSpace: id) }
+            }
+            profiles.addItem(.separator())
+            MenuItems.add(profiles, "New Profile…") { actions.newProfile(id) }
+        case .searchEngine:
+            addSearchEngines(to: MenuItems.submenu(m, "Search Engine"), space: space, store: store)
+        case .newFolder:
+            MenuItems.add(m, action: "newFolder") {
+                open()
+                ui.renamingID = store.createFolder(named: "New Folder", in: space.pinnedContainerID, index: 0).id
+            }
+        case .liveFolders:
+            SidebarMenus.addLiveFolderPlugins(to: MenuItems.submenu(m, "Live Folders"), space: id, store: store, window: anchor.window)
+        case .export:
+            let export = MenuItems.submenu(m, "Export “\(space.title)” into Folder")
+            for s in store.orderedSpaces {
+                MenuItems.add(export, s.title, enabled: s.id != id) { store.exportSpace(id, intoFolderIn: s.id) }
+            }
+        case .manageSpaces:
+            MenuItems.add(m, action: "manageSpaces") { actions.manageSpaces() }
+        case .hideSpaceHeader:
+            MenuItems.add(m, "Hide Space Header") { store.settings.showSpaceHeaderOnSingleSpace = false }
+        case .delete:
+            MenuItems.add(m, action: "deleteSpace", title: "Delete Space") { actions.deleteSpace(space) }
+        }
     }
 }
 

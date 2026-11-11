@@ -19,6 +19,8 @@ final class FloatingSidebarController {
     var palette: () -> SpacePalette
     /// Whether the browser window is in macOS full screen; the tests stand one in.
     lazy var windowFullScreen: () -> Bool = { [unowned self] in self.window.styleMask.contains(.fullScreen) }
+    /// The browser window's corner radius (macOS's, larger than Arc's); the tests stand one in.
+    lazy var windowCornerRadius: () -> CGFloat = { [unowned self] in LittleWindow.cornerRadius(of: self.window) }
     /// Called after the panel is attached so the overlay panel can be re-ordered above it.
     var didAttachPanel: (() -> Void)?
 
@@ -31,6 +33,9 @@ final class FloatingSidebarController {
     private var shadowPanel: NSPanel?
     private let shadowView = NSView()
     private let shadowCutout = CAShapeLayer()
+    /// The window's rounded outline, one per panel: a child window isn't clipped by its parent (#341).
+    private let panelClip = CALayer()
+    private let shadowClip = CALayer()
     /// The pointer's wait in the reveal strip (#293).
     private var dwell = FloatingSidebarRevealDwell()
     /// The clock the wait runs on; the tests stand one in.
@@ -177,7 +182,8 @@ final class FloatingSidebarController {
 
     /// The panel reaches from the window's left edge to the sidebar's right edge, so the
     /// sidebar slides in from the window edge and is clipped there (Arc draws it inside
-    /// its window), instead of sliding across whatever lies left of the window.
+    /// its window), instead of sliding across whatever lies left of the window. Its
+    /// corners are cut to the window's rounded ones too (`clipToWindow`).
     private var panelFrame: NSRect {
         let t = targetFrame
         return NSRect(x: window.frame.minX, y: t.minY, width: t.maxX - window.frame.minX, height: t.height)
@@ -194,6 +200,25 @@ final class FloatingSidebarController {
     private var shadowPanelFrame: NSRect {
         let f = panelFrame, pad = Metrics.shadowPad
         return NSRect(x: f.minX, y: f.minY - pad, width: f.width + pad, height: f.height + 2 * pad)
+    }
+
+    /// Each panel is clipped to the window's rounded outline. A child window is not clipped by its
+    /// parent, so the panels' straight cut at the window's edge left the sidebar sliding in (and its
+    /// shadow) square past the window's rounded corners; Arc draws it inside its window, which
+    /// clips it there (#341).
+    private func clipToWindow() {
+        let radius = windowFullScreen() ? 0 : windowCornerRadius()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for (p, clip) in [(panel as NSPanel?, panelClip), (shadowPanel, shadowClip)] {
+            guard let p, let layer = p.contentView?.layer else { continue }
+            clip.backgroundColor = NSColor.black.cgColor
+            clip.cornerRadius = radius
+            clip.cornerCurve = .continuous
+            clip.frame = window.frame.offsetBy(dx: -p.frame.minX, dy: -p.frame.minY)
+            if layer.mask !== clip { layer.mask = clip }
+        }
+        CATransaction.commit()
     }
 
     private func makeShadowPanel() -> NSPanel {
@@ -400,6 +425,7 @@ final class FloatingSidebarController {
         shadowPanel = s
         p.setFrame(panelFrame, display: false)
         s.setFrame(shadowPanelFrame, display: false)
+        clipToWindow()
         p.ignoresMouseEvents = true
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -495,6 +521,7 @@ final class FloatingSidebarController {
         guard isShown, let p = panel else { return }
         p.setFrame(panelFrame, display: true)
         shadowPanel?.setFrame(shadowPanelFrame, display: true)
+        clipToWindow()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         slider.frame = slideFrame(shown: true)

@@ -208,12 +208,12 @@ private final class SpaceManagerCard: NSView {
               let down = NSEvent.mouseEvent(with: .rightMouseDown, location: event.locationInWindow, modifierFlags: [],
                                             timestamp: event.timestamp, windowNumber: event.windowNumber, context: nil,
                                             eventNumber: 0, clickCount: 1, pressure: 1),
-              let m = SpaceMenu.make(spaceID: spaceID, store: store, ui: ui, actions: actions, anchor: self, rename: {}) else { return }
+              let m = SpaceMenu.make(spaceID: spaceID, store: store, ui: ui, actions: actions, anchor: self, from: .library, rename: {}) else { return }
         NSMenu.popUpContextMenu(m, with: down, for: self)
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
-        SpaceMenu.make(spaceID: spaceID, store: store, ui: ui, actions: actions, anchor: self, rename: {})
+        SpaceMenu.make(spaceID: spaceID, store: store, ui: ui, actions: actions, anchor: self, from: .library, rename: {})
     }
 
     override func layout() {
