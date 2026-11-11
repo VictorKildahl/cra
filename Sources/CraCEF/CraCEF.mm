@@ -81,6 +81,10 @@ static void (^g_strayPageHandler)(NSString*, NSString*) = nil;
 static NSRect (^g_pageWindowStartHandler)(NSSize) = nil;
 static CraBrowser* (^g_extensionTabHandler)(NSString*, NSString*, BOOL, CraBrowser*) = nil;
 static BOOL (^g_appLinkHandler)(CraBrowser*, NSString*, BOOL) = nil;
+// Test hook (cra://debug?nextPageMenuCommand=): the next page context menu runs this Chromium command
+// instead of showing, as if it had been picked; -1 when none is pending.
+static int g_nextPageMenuCommand = -1;
+static void (^g_viewSourceHandler)(CraBrowser*, NSString*) = nil;
 // The last click (left mouse-up) or Return in any window, for the download Chromium makes of an
 // Option-clicked link (#298): where it landed and the keys held. Set in -[CraApplication sendEvent:].
 static __weak NSWindow* g_lastPressWindow = nil;
@@ -1883,6 +1887,13 @@ public:
                         CefRefPtr<CefContextMenuParams>, CefRefPtr<CefMenuModel>,
                         CefRefPtr<CefRunContextMenuCallback> callback) override {
         CraBrowser* o = owner_;
+        if (g_nextPageMenuCommand >= 0 && !windowless_) {
+            int command = g_nextPageMenuCommand;
+            g_nextPageMenuCommand = -1;
+            NSLog(@"Cra page menu runs command %d", command);
+            callback->Continue(command, EVENTFLAG_NONE);
+            return true;
+        }
         if (!windowless_ && !o.suppressesContextMenu) return false;
         callback->Cancel();
         return true;
@@ -2018,6 +2029,14 @@ public:
             case kMenuCaptureImage:
                 if ([o.delegate respondsToSelector:@selector(browser:requestsCaptureOfImageAt:)])
                     [o.delegate browser:o requestsCaptureOfImageAt:NSMakePoint(params->GetXCoord(), params->GetYCoord())];
+                return true;
+            // View Page Source and View Frame Source: Chrome's own command made a tab of the page itself
+            // (or none) in Cra, so both go where ⌥⌘U goes, a view-source: tab in front (#348).
+            case IDC_VIEW_SOURCE:
+            case IDC_CONTENT_CONTEXT_VIEWFRAMESOURCE:
+                if (!g_viewSourceHandler) return false;
+                g_viewSourceHandler(o, NSStringFromCef(command_id == IDC_VIEW_SOURCE ? params->GetPageUrl()
+                                                                                     : params->GetFrameUrl()));
                 return true;
             // Chrome's Inspect: Cra's DevTools (docked in the card, DevToolsToggle) on that element.
             case IDC_CONTENT_CONTEXT_INSPECTELEMENT:
@@ -3384,6 +3403,12 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
     g_extensionTabHandler = [handler copy];
 }
 + (void)setAppLinkHandler:(BOOL (^)(CraBrowser*, NSString*, BOOL))handler { g_appLinkHandler = [handler copy]; }
++ (void)setViewSourceHandler:(void (^)(CraBrowser*, NSString*))handler { g_viewSourceHandler = [handler copy]; }
++ (BOOL)runNextPageMenuCommand:(NSString*)name {
+    int command = cef_id_for_command_id_name(name.UTF8String);
+    g_nextPageMenuCommand = command > 0 ? command : -1;
+    return command > 0;
+}
 + (void)setDownloadDestinationHandler:(void (^)(NSString*, NSString*, void (^)(NSString*)))handler { g_downloadDestinationHandler = [handler copy]; }
 
 + (BOOL)controlDownload:(uint32_t)identifier action:(CraDownloadControl)action {

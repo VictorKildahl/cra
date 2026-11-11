@@ -150,6 +150,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         try? JSONEncoder().encode(installed.sorted()).write(to: welcomedFile, options: .atomic)
         DownloadDestinations.install(store: store)
         AppLinkPrompt.install()
+        CraBrowser.installViewSourceHandler()
         let dropsStartUpPage = { [weak self] (url: String) -> Bool in
             guard let self, Date().timeIntervalSince(launchedAt) < 10,
                   !hasNewExtension || self.store.allTabs().contains(where: { $0.tab?.url == url }) else { return false }
@@ -1553,6 +1554,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraCEFRuntime.sendBrowserDevToolsMethod(method, params: dict["params"] ?? "{}") { result, error in
                     CraLog.note("bcdp \(method) → \(result ?? "error: \(error ?? "?")")")
                 }
+                return
+            }
+            // nextPageMenuCommand=<IDC name>: the next page right-click runs that item of Chromium's menu
+            // instead of showing it (#348: View Page Source); pair it with a right-click through cdp.
+            if let name = dict["nextPageMenuCommand"] {
+                NSLog("Cra next page menu command %@: %@", name, CraCEFRuntime.runNextPageMenuCommand(name) ? "set" : "unknown")
                 return
             }
             if let method = dict["cdp"] {

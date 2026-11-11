@@ -434,6 +434,12 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 /// returns YES when it took it (Cra's "Open <app>?"); then no tab opens (GitHub #207). On the
 /// main thread, before Peek and the delegate's popupHostForURL.
 + (void)setAppLinkHandler:(BOOL (^)(CraBrowser *browser, NSString *url, BOOL userGesture))handler;
+/// The page's right-click View Page Source and View Frame Source: the handler gets the page's browser
+/// and the address whose source to show, and opens it as Cra's View Source does (GitHub #348).
++ (void)setViewSourceHandler:(void (^)(CraBrowser *browser, NSString *url))handler;
+/// Test hook: the next page context menu runs Chromium's command `name` (an IDC name, such as
+/// "IDC_VIEW_SOURCE") as if it had been picked, instead of showing. NO for an unknown name.
++ (BOOL)runNextPageMenuCommand:(NSString *)name;
 /// Where a page's download is saved (GitHub #190): the handler gets the browser's profile folder
 /// (nil for Default and off the record) and the file name Chromium suggests, and calls `completion`
 /// on the main thread with the full path to save to, or nil to cancel the download (a save panel

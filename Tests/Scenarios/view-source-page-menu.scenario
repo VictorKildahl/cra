@@ -1,0 +1,20 @@
+# promise: #348
+# View Page Source in the page's right-click menu opens the page's view-source: in a new tab in
+# front, as View ▸ Developer ▸ View Source does (0.1.40 opened a tab with the page itself, found
+# while filming #348's release clip). The right-click goes through Chromium's real menu; the hook
+# picks the item instead of showing the menu.
+budget rss=700 stalls50=10
+cra://open?url=${PAGE}?n=page
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?nextPageMenuCommand=IDC_VIEW_SOURCE
+expect-log Cra next page menu command IDC_VIEW_SOURCE: set
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mousePressed","x":300,"y":300,"button":"right","clickCount":1}
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseReleased","x":300,"y":300,"button":"right","clickCount":1}
+expect-log Cra page menu runs command 35002
+wait 2
+cra://debug?browserWindows=menu
+expect-log Cra browser windows menu: kind=normal .*tabs=\[\S*n=page view-source:\S*n=page\] open=view-source:\S*n=page
+# The new tab shows the page's HTML as text, Chromium's source view, not the page again.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'lines:'+document.querySelectorAll('td.line-content').length+':'+document.body.innerText.includes('<title>Fixture page</title>')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"lines:[1-9][0-9]*:true"
