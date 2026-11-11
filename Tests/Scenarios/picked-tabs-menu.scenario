@@ -1,12 +1,16 @@
 # promise: #356
 # Tabs picked with ⌘/⇧-click get Arc's menu for all of them at once: Copy Links puts every link on
 # the clipboard, one per line and without trackers (as ⇧⌘C does), and Share N Items… copies one
-# link to all of them (crabrowser.app/folder#…, as Share Folder… does). The menu is the one a
+# link to all of them (crabrowser.app/folder#…, as Share Folder… does) after Arc's warning ("Send
+# this Folder to anyone"; Cancel copies nothing). The menu is the one a
 # right-click on a picked row builds; Today lists the newest tab first. Rows as Arc 1.17x draws
 # them (read over AX, 11 Nov 2026): a right-clicked pinned row has no Archive Tabs Below, Archive
 # Tabs takes the pinned picks along, and with an Easel among the picks the tab-only rows go and
 # Archive Tabs becomes Archive Items.
 budget rss=700 stalls50=10
+# Pinned for the test copy: a ticked "Never show me this again." on this Mac would skip the warning.
+arg -skipsShareLinkWarning
+arg NO
 cra://open?url=${PAGE}?n=one
 expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
 cra://open?url=${PAGE}?n=two%26utm_source=x
@@ -17,7 +21,12 @@ expect-log picked menu two: Copy Links\|Share 2 Items…\|──\|Change Icon…
 cra://debug?pickedMenu=3&label=copy&run=Copy Links
 expect-log picked menu copy ran Copy Links: \S*n=three⏎\S*n=two⏎\S*n=one picks=3$
 cra://debug?pickedMenu=2&label=share&run=Share 2 Items
-expect-log picked menu share ran Share 2 Items: https://crabrowser\.app/folder#[A-Za-z0-9_-]+ picks=2$
+expect-log picked menu share ran Share 2 Items: - picks=2$
+cra://debug?answerDialog=Cancel
+expect-log dialog Send this Folder to anyone, on any browser\. answered Cancel: -$
+cra://debug?pickedMenu=2&label=share-again&run=Share 2 Items
+cra://debug?answerDialog=Copy Link to Folder
+expect-log dialog Send this Folder to anyone, on any browser\. answered Copy Link to Folder: https://crabrowser\.app/folder#[A-Za-z0-9_-]+$
 # The newest tab pinned and right-clicked: the same menu without Archive Tabs Below.
 cra://action/pinTab
 wait 1

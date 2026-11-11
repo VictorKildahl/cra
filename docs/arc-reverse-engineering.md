@@ -1072,6 +1072,19 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
     cannot be deleted.", a "Never show me this again." checkbox, Cancel (ESC) and Copy Link to Folder (↩). Cancel
     pressed; the link was not made (it would be a permanent arc.net page showing the user's display name).
   - A plain click on a picked row that is also the open tab starts renaming it.
+- [O strings] The warning is Arc's Dialogs.SheetWindow (`showDialogSheetDeprecated(message:buttonTitle:icon:
+  cancelButtonText:suppressionButtonText:informativeText:)`), "Alert title on privacy confirmation window for sharing
+  tab collections": "Send this <type> to anyone, on any browser." with the type "Folder" for a folder and for picked
+  tabs alike; the checkbox is "Toggle for showing the shared collections privacy dialogue". Arc also has
+  "<type> currently private." and "Viewers need their own access to any site in this <type> that is unshared or
+  requires authentication." (not seen).
+- [O] The sheet at 2x (card 560 × 308 pt, #161C2F): envelope badge 62 × 49.5 pt at 48.5, 44.5 (fill #302F5C, 4 pt
+  #6362A3 border with ~5 pt corners, 4 pt round-capped V flap, a 15 pt #6D6C96 postmark with two thin motion
+  lines); title ink 120.5–138 from x 49; message 14 pt #888B98, ink 149.5 and 167.5, 18 pt pitch, wraps at 463 pt;
+  checkbox 16 pt #2D3243 rounded square at 49.5, 195.5, label 13 pt #DBDCDF from x 79.5; buttons 243–281.5 tall
+  38.5, Cancel 237–346.5 and Copy Link to Folder 354.5–532 (blue #3339F1). Cra: AppDialog.shareLink (`older`
+  layout, ShareEnvelopeIcon, DialogCheckbox) lands within 0.5 pt everywhere (SwiftUI snaps the text rows to whole
+  points); Arc's title runs ~3 pt wider. Arc's ticked checkbox wasn't seen.
 - [?] Not measured: the drag-over fill on a dark theme, coloured dark themes (the star's colour there), 1x.
 - Cra: FavoritesEmptyCard, dismissed per favorites container (WindowPrefs.favoritesEmptyStateDismissed, since
   Cra's favorites are per space). Badge, title, subtitle and × land within 1 px of Arc's at 2x. The dashed line

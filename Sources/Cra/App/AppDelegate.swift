@@ -1686,6 +1686,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 moveBlankWindow(main, toSpace: store.spaceOrder[n - 1])
                 return
             }
+            // answerDialog=<button>: presses that button of the open dialog sheet and logs its title and
+            // what the button copied (#356: the share warning before a link is copied).
+            if let button = dict["answerDialog"] {
+                guard let dialog = AppDialog.presented, let index = dialog.actions.buttons.firstIndex(where: { $0.title == button }) else {
+                    CraLog.note("dialog answer \(button): no dialog"); return
+                }
+                let copied = MainWindowController.probeClipboard { dialog.select(index) }
+                CraLog.note("dialog \(dialog.title) answered \(button): \(copied)")
+                return
+            }
             // pickedMenu=<n>[&label=][&run=<row>]: the menu on n picked tabs, see testPickedMenu (#356).
             if let n = dict["pickedMenu"].flatMap(Int.init) {
                 main.testPickedMenu(count: n, label: dict["label"] ?? "\(n)", run: dict["run"])

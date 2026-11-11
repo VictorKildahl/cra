@@ -619,21 +619,28 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         CraLog.note("picked menu \(label): \(drawn.joined(separator: "|"))")
         let rows = menu.items + menu.items.flatMap { $0.submenu?.items ?? [] }
         guard let run, let item = rows.first(where: { $0.title == run || $0.title == run + "…" }), let owner = item.menu else { return }
+        let copied = Self.probeClipboard { owner.performActionForItem(at: owner.index(of: item)) }
+        CraLog.note("picked menu \(label) ran \(run): \(copied) picks=\(sidebarUI.multiSelection.count)")
+    }
+
+    /// For test hooks: runs `action` and returns what it put on the clipboard ("-" for nothing, line
+    /// breaks as ⏎), then puts the clipboard's old contents back.
+    static func probeClipboard(_ action: () -> Void) -> String {
         let pb = NSPasteboard.general
         let saved = pb.pasteboardItems?.map { item in
             item.types.reduce(into: [NSPasteboard.PasteboardType: Data]()) { $0[$1] = item.data(forType: $1) }
         } ?? []
         let before = pb.changeCount
-        owner.performActionForItem(at: owner.index(of: item))
-        let copied = pb.changeCount != before ? pb.string(forType: .string) ?? "" : "-"
-        CraLog.note("picked menu \(label) ran \(run): \(copied.replacingOccurrences(of: "\n", with: "⏎")) picks=\(sidebarUI.multiSelection.count)")
-        guard pb.changeCount != before else { return }
+        action()
+        guard pb.changeCount != before else { return "-" }
+        let copied = (pb.string(forType: .string) ?? "").replacingOccurrences(of: "\n", with: "⏎")
         pb.clearContents()
         pb.writeObjects(saved.map { types in
             let item = NSPasteboardItem()
             for (type, data) in types { item.setData(data, forType: type) }
             return item
         })
+        return copied
     }
 
     /// The tab's page belongs to another window that has it open: the window in use takes it,

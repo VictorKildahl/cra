@@ -45,6 +45,21 @@ enum SidebarMenus {
         NSPasteboard.general.setString(string, forType: .string)
     }
 
+    /// UserDefaults key: "Never show me this again." was ticked on the share warning.
+    static let skipsShareWarningKey = "skipsShareLinkWarning"
+
+    /// Arc asks before it makes a share link (AppDialog.shareLink): Copy Link to Folder goes on,
+    /// Cancel or Escape stops; ticking "Never show me this again." and going on skips it from then on.
+    private static func confirmShare(over window: NSWindow?, _ share: @escaping () -> Void) {
+        guard !UserDefaults.standard.bool(forKey: skipsShareWarningKey), let window = window ?? AppDialog.parentWindow else { share(); return }
+        let dialog = AppDialog.shareLink()
+        dialog.present(over: window) { response in
+            guard response == .alertFirstButtonReturn else { return }
+            if dialog.isSuppressed { UserDefaults.standard.set(true, forKey: skipsShareWarningKey) }
+            share()
+        }
+    }
+
     // MARK: Tab groups
 
     /// Arc's Tab Group Context Menu: one item, "Remove header" (the tabs stay, loose).
@@ -165,8 +180,10 @@ enum SidebarMenus {
                     let link = FolderShareLink.url(for: FolderShareLink.picked(ids.compactMap(store.item)))
                     add(menu, title, enabled: link != nil) {
                         guard let link else { return }
-                        copy(link)
-                        actions.showToast("Copied Shared URL")
+                        confirmShare(over: list.window) {
+                            copy(link)
+                            actions.showToast("Copied Shared URL")
+                        }
                     }
                 case "mute":
                     add(menu, title, enabled: enabled) {
@@ -270,8 +287,10 @@ enum SidebarMenus {
         let toast = list.actions.showToast
         add(menu, "Share Folder…", enabled: link != nil) {
             guard let link else { return }
-            copy(link)
-            toast("Copied Folder URL")
+            confirmShare(over: list.window) {
+                copy(link)
+                toast("Copied Folder URL")
+            }
         }
         menu.addItem(.separator())
         add(menu, "Delete Folder (archives tabs)") { store.deleteFolder(id) }
