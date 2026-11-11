@@ -99,7 +99,6 @@ final class EaselBrowser: CraBrowser, NativePage {
     }
     override func sslStatus() -> CraSSLStatus? { nil }
     override func print() {}
-    override func viewSource() {}
     override func notifyMoveOrResizeStarted() {}
 
     override func close() {

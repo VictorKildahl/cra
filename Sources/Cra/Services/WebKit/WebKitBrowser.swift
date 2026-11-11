@@ -963,15 +963,6 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
         }
     }
 
-    /// Chromium's view-source: page, in a new tab.
-    override func viewSource() {
-        MainActor.assumeIsolated {
-            let url = currentURL
-            guard url.hasPrefix("http") else { return }
-            delegate?.browser(self, requestsNewTabWithURL: "view-source:" + url, inBackground: false)
-        }
-    }
-
     override func sslStatus() -> CraSSLStatus? {
         MainActor.assumeIsolated {
             guard let web = webView, web.url != nil else { return nil }
