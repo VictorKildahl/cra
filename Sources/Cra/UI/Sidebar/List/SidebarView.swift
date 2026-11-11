@@ -22,6 +22,8 @@ final class SidebarView: NSView {
     /// one of its buttons. nil while the toolbar has the address.
     func debugURLFieldHover(_ on: Bool) -> [ToolbarComposition.Item]? { topBar.debugURLFieldHover(on) }
     func debugURLFieldPress(_ item: ToolbarComposition.Item) -> Bool { topBar.debugURLFieldPress(item) }
+    func debugURLFieldClick() -> String { topBar.debugURLFieldClick() }
+    func debugURLFieldType(_ text: String, commit: Bool) -> Bool { topBar.debugURLFieldType(text, commit: commit) }
     private let pager: SpacePagerView
     private let trayHost: DownloadsTrayView
     private let player: NowPlayingTrayView
@@ -351,6 +353,16 @@ final class SidebarTopBarView: NSView {
     }
 
     func debugURLFieldPress(_ item: ToolbarComposition.Item) -> Bool { !pill.isHidden && pill.debugPress(item) }
+
+    /// Scenario hooks (#344): a click on the URL field, then what it shows ("editing <text>" or
+    /// "not editing"); typing into the field being edited, then Return or Escape.
+    func debugURLFieldClick() -> String {
+        guard !pill.isHidden else { return "hidden" }
+        pill.click()
+        return pill.editingText.map { "editing \($0)" } ?? "not editing"
+    }
+    func debugURLFieldType(_ text: String, commit: Bool) -> Bool { !pill.isHidden && pill.debugType(text, commit: commit) }
+    var debugURLFieldEditing: Bool { pill.isEditing }
     private var syncQueued = false
 
     var preferredHeight: CGFloat { CraMetrics.titleAreaHeight + (compact ? 2 + pill.height + 8 : 0) }
@@ -367,6 +379,7 @@ final class SidebarTopBarView: NSView {
         self.actions = actions
         super.init(frame: .zero)
         pill.actions = actions
+        pill.onCommit = { [weak actions] in actions?.commitAddress($0) }
         addSubview(pill)
         sync()
     }
@@ -466,6 +479,7 @@ final class SidebarTopBarView: NSView {
         }
         (chevron as? DevMenuChevron)?.tint = colors.textTertiary
         pill.isHidden = !compact
+        if !compact { pill.endEditing(commit: false) }
         if compact {
             let url = tab?.tab?.url ?? ""
             let host = URL(string: url)?.host ?? ""
@@ -483,7 +497,10 @@ final class SidebarTopBarView: NSView {
             let translation = tab.flatMap { ui.navState(for: $0.id).translation }
             pill.show(text: text, url: url, hasTab: tab != nil, colors: colors, active: active,
                       pinned: pinned, protectedMedia: tab.flatMap { ui.navState(for: $0.id).protectedMedia },
-                      translate: translation?.offersTranslation == true ? (narrowWidth ? "Translate" : "Translation Available") : nil)
+                      translate: translation?.offersTranslation == true ? (narrowWidth ? "Translate" : "Translation Available") : nil,
+                      tabID: tab?.id,
+                      // An empty split pane has no address: the bar's "Search or Enter URL…" fills it.
+                      editInPlace: store.settings.editAddressInPlace && tab?.isEmptyTab != true)
             let tabID = tab?.id
             pill.onTranslate = { [weak self] in
                 guard let self, let tabID else { return }
@@ -625,7 +642,7 @@ private final class DevMenuChevron: NSView {
 }
 
 /// The URL pill on the sidebar's second row while the toolbar is hidden.
-final class SidebarURLPill: NSView {
+final class SidebarURLPill: NSView, NSTextFieldDelegate {
     var actions: SidebarActions?
     var showAccessories = false { didSet { if showAccessories != oldValue { refreshAccessories(animated: true) } } }
     private let label = NSTextField.sidebarLabel(size: 13)
@@ -636,6 +653,17 @@ final class SidebarURLPill: NSView {
     private var hovering = false { didSet { if hovering != oldValue { refreshFill() } } }
     private var colors = SidebarColors()
     private var hasTab = false
+    private var url = ""
+    private var tabID: UUID?
+    /// Settings ▸ Tabs "Edit the address in the sidebar" (#344): a click edits in place.
+    private var editInPlace = false
+    /// The address field while it is edited in place (#344), and the tab it edits.
+    private var field: NSTextField?
+    private(set) var editingTab: UUID?
+    private var savedSelectionAttributes: [NSAttributedString.Key: Any]?
+    private var resignObserver: NSObjectProtocol?
+    /// Return in the field, with what was typed.
+    var onCommit: (String) -> Void = { _ in }
     /// Scenarios (cra://debug?hover=SidebarURLPill): the pill as the pointer leaves it hovered (#293).
     func debugHover() { hovering = true }
     private var model: (pinned: [(String, String, NSImage?)], active: Bool)?
@@ -671,7 +699,14 @@ final class SidebarURLPill: NSView {
     var height: CGFloat { translateLine.isHidden ? 36 : 42 }
 
     func show(text: String, url: String, hasTab: Bool, colors: SidebarColors, active: Bool,
-              pinned: [(String, String, NSImage?)], protectedMedia: String? = nil, translate: String? = nil) {
+              pinned: [(String, String, NSImage?)], protectedMedia: String? = nil, translate: String? = nil,
+              tabID: UUID? = nil, editInPlace: Bool = false) {
+        // Another tab, or the option turned off, ends the edit; the same tab loading keeps it.
+        if field != nil, tabID != editingTab || !editInPlace { endEditing(commit: false) }
+        self.editInPlace = editInPlace
+        self.url = url
+        self.tabID = tabID
+        field?.textColor = colors.textPrimary
         self.protectedMedia = protectedMedia
         translateLine.isHidden = translate == nil
         translateLine.title = translate ?? ""
@@ -690,7 +725,7 @@ final class SidebarURLPill: NSView {
     }
 
     private func refreshFill() {
-        layer?.backgroundColor = (hovering ? colors.pillHoverFill : colors.pillFill).cgColor
+        layer?.backgroundColor = (hovering || field != nil ? colors.pillHoverFill : colors.pillFill).cgColor
     }
 
     /// Whether the pins go in this field (else in the grid over the favorites), for its width.
@@ -705,7 +740,7 @@ final class SidebarURLPill: NSView {
         accessories.forEach { $0.removeFromSuperview() }
         accessories = []
         shownItems = []
-        guard showAccessories, hasTab, let m = model, let actions else { needsLayout = true; return }
+        guard showAccessories, hasTab, field == nil, let m = model, let actions else { needsLayout = true; return }
         pinsInField = PinnedExtensionGrid.fitsInURLField(count: m.pinned.count, fieldWidth: bounds.width)
         let icons = Dictionary(m.pinned.map { ($0.0, $0.2) }, uniquingKeysWith: { a, _ in a })
         for item in ToolbarComposition.urlFieldAccessories(pinnedExtensions: m.pinned.map(\.0), fieldWidth: bounds.width) {
@@ -762,6 +797,7 @@ final class SidebarURLPill: NSView {
         let labelY = translateLine.isHidden ? (h - lh) / 2 : 6 + (18 - lh) / 2
         label.frame = NSRect(x: x - SidebarText.inset, y: labelY, width: max(0, right - x) + 2 * SidebarText.inset, height: lh)
         tip.frame = NSRect(x: 0, y: 0, width: right, height: h)
+        field?.frame = label.frame
         if !translateLine.isHidden {
             let tw = min(translateLine.fittingWidth, max(0, right - x))
             translateLine.frame = NSRect(x: x, y: 23, width: tw, height: 17)
@@ -778,7 +814,95 @@ final class SidebarURLPill: NSView {
     override func mouseDown(with event: NSEvent) {}
     override func mouseUp(with event: NSEvent) {
         guard bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
-        actions?.openCommandBar(hasTab ? .editURL : .newTab)
+        click()
+    }
+
+    /// Arc opens the command bar; with #344's option the address is edited where it is.
+    func click() {
+        switch SidebarAddressEdit.click(editInPlace: editInPlace, hasTab: hasTab) {
+        case .editInPlace: beginEditing()
+        case .commandBarEditURL: actions?.openCommandBar(.editURL)
+        case .commandBarNewTab: actions?.openCommandBar(.newTab)
+        }
+    }
+
+    var isEditing: Bool { field != nil }
+    var editingText: String? { field?.stringValue }
+
+    /// The full URL becomes editable where the host is drawn, all of it selected, as the
+    /// developer bar's address does (ToolbarURLButton.beginEditing). The buttons step aside.
+    func beginEditing() {
+        guard field == nil, let window else { return }
+        let f = NSTextField(string: url)
+        f.isBordered = false
+        f.drawsBackground = false
+        f.focusRingType = .none
+        f.font = label.font
+        f.textColor = colors.textPrimary
+        f.cell?.isScrollable = true
+        f.cell?.wraps = false
+        f.delegate = self
+        f.setAccessibilityLabel("Address")
+        field = f
+        editingTab = tabID
+        label.isHidden = true
+        tip.isHidden = true
+        refreshAccessories(animated: false)
+        refreshFill()
+        layoutSubtreeIfNeeded()
+        f.frame = label.frame
+        addSubview(f)
+        window.makeKey()
+        window.makeFirstResponder(f)
+        if let editor = f.currentEditor() as? NSTextView {
+            // The window's field editor is shared: put its selection colours back afterwards.
+            savedSelectionAttributes = editor.selectedTextAttributes
+            editor.selectedTextAttributes = [.backgroundColor: colors.textPrimary.withAlphaComponent(0.2), .foregroundColor: colors.textPrimary]
+            editor.insertionPointColor = colors.textPrimary
+            editor.selectAll(nil)
+        }
+        // A click into the page (its own window) ends the edit, like a click elsewhere in the sidebar.
+        resignObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: window, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.endEditing(commit: false) }
+        }
+    }
+
+    /// Return loads what was typed; Escape, or anything else that ends the edit, puts the address back.
+    func endEditing(commit: Bool) {
+        guard let f = field else { return }
+        field = nil
+        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
+        resignObserver = nil
+        let text = f.stringValue
+        if let editor = f.currentEditor() as? NSTextView, let saved = savedSelectionAttributes { editor.selectedTextAttributes = saved }
+        savedSelectionAttributes = nil
+        if f.currentEditor() != nil { f.window?.makeFirstResponder(nil) }
+        f.removeFromSuperview()
+        label.isHidden = false
+        tip.isHidden = false
+        refreshAccessories(animated: false)
+        refreshFill()
+        if commit { onCommit(text) }
+    }
+
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+        switch selector {
+        case #selector(NSResponder.insertNewline(_:)): endEditing(commit: true)
+        // A field editor reads Esc as complete: (word completion), ⌘. as cancelOperation:.
+        case #selector(NSResponder.cancelOperation(_:)), #selector(NSResponder.complete(_:)): endEditing(commit: false)
+        default: return false
+        }
+        return true
+    }
+
+    func controlTextDidEndEditing(_ obj: Notification) { endEditing(commit: false) }
+
+    /// Scenario hook (#344): type into the field being edited, then Return (or Escape).
+    func debugType(_ text: String, commit: Bool) -> Bool {
+        guard let f = field else { return false }
+        f.stringValue = text
+        endEditing(commit: commit)
+        return true
     }
 
     /// Runs the shown button's own action, as a click on it would (scenario hook, #226).
@@ -1161,21 +1285,14 @@ final class SpaceDockView: NSView {
         }
     }
 
+    /// Arc 1.172.2: the header's whole space menu, for the space whose icon was clicked (#339).
+    /// Change Space Icon… points its popover down at that icon.
     override func menu(for event: NSEvent) -> NSMenu? {
-        guard let i = index(at: point(event)), let space = store.space(order[i]) else { return nil }
-        let store = self.store, ui = self.ui, actions = self.actions
-        let m = NSMenu()
-        m.autoenablesItems = false
-        MenuItems.add(m, action: "editSpace") { actions.editSpace(space) }
-        m.addItem(.separator())
-        MenuItems.add(m, "Move Left") { if let i = store.spaceOrder.firstIndex(of: space.id) { store.moveSpace(space.id, to: max(0, i - 1)) } }
-        MenuItems.add(m, "Move Right") { if let i = store.spaceOrder.firstIndex(of: space.id) { store.moveSpace(space.id, to: i + 1) } }
-        m.addItem(.separator())
-        MenuItems.add(m, action: "deleteSpace") {
-            store.focusSpace(space.id, window: ui.windowID)
-            actions.performAction("deleteSpace")
+        guard let i = index(at: point(event)), let cell = cells[order[i]] else { return nil }
+        let id = order[i], ui = self.ui
+        return SpaceMenu.make(spaceID: id, store: store, ui: ui, actions: actions, anchor: cell, from: .dock) {
+            ui.renamingSpaceID = id
         }
-        return m
     }
 }
 

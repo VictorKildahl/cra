@@ -114,7 +114,8 @@ address. A WebKit page signing in on accounts.spotify.com still counts as Spotif
 - **Chrome extensions**, including password managers' autofill: those services are signed into
   once, by hand or from the password manager's own app.
 - **Chromium's logins and cookies**: the first visit to a service signs in again.
-- **Chromium's site settings, content blocking and HTTPS-Only**: camera and microphone ask
+- **Chromium's site settings, content blocking, HTTPS-Only and fingerprinting protection**
+  (fingerprinting-protection.patch is in Cra's Chromium): camera and microphone ask
   through Cra's prompt on every visit.
 - **Chrome's DevTools**: Develop ▸ Developer Tools opens WebKit's Web Inspector in its own window.
 - **Arc's Picture in Picture window**: the video goes to the system's own Picture in Picture

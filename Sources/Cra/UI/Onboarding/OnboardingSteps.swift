@@ -441,8 +441,8 @@ private struct LayoutTile: View {
 /// Drawn after Dia's TabLayout/SidebarSelected and friends (230×180 pt): a 3 pt ring, a 2 pt gap,
 /// the window inset 5 pt (radius 10), 5 pt traffic lights, 54×14 pt sidebar rows on a 19 pt pitch
 /// and the page pane from x 70. Cra's version marks where the address bar sits: the first sidebar
-/// row, or a strip across the top of the page.
-private struct LayoutArt: View {
+/// row, or a strip across the top of the page. Settings ▸ Tabs draws the same two pictures.
+struct LayoutArt: View {
     let toolbar: Bool
     let selected: Bool
     let dark: Bool

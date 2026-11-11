@@ -1,0 +1,13 @@
+# promise: #331
+# With one space the Little Window's "Open in" button has no ⌄ and the menu doesn't open (⇧⌘O
+# included): there is nowhere else to send the page (Arc 1.172.1). Before, Cra drew the ⌄ and opened
+# a menu listing the space the button already names.
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Personal","emoji":"🏠","favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-10T08:00:00Z","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-10T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-10T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-10T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}}]}
+pace 0.5
+
+cra://debug?externalURL=${PAGE}?n=one
+wait 2
+cra://debug?littleMenu=open
+expect-log little menu open: chevron=0 menu=closed

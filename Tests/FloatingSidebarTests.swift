@@ -98,6 +98,7 @@ enum FloatingSidebarTests {
 
         onlyTheKeyWindowReveals(window: window, sidebar: sidebar, panel: panel)
         noStandInLightsInFullScreen(sidebar: sidebar, panel: panel)
+        staysInsideTheWindowsCorners(window: window, sidebar: sidebar, panel: panel)
 
         // #136: the pointer is sampled only while Cra is the active app.
         sidebar.install()
@@ -281,6 +282,42 @@ enum FloatingSidebarTests {
         sidebar.windowFullScreen = { false }
     }
 
+    // promise: #341
+    /// GitHub #341: a child panel isn't clipped by the window it floats over, so the sidebar sliding
+    /// in from the window's edge (and its shadow) drew square corners past the window's rounded ones.
+    /// Arc draws its sidebar inside its window, so the window's corners clip it the whole way in.
+    @MainActor
+    private static func staysInsideTheWindowsCorners(window: NSWindow, sidebar: FloatingSidebarController, panel: NSWindow) {
+        sidebar.windowCornerRadius = { 26 }
+        sidebar.show()
+        let shadow = window.childWindows!.first { $0 !== panel && $0.ignoresMouseEvents }!
+        for (name, p) in [("sidebar", panel), ("shadow", shadow)] {
+            let mask = p.contentView?.layer?.mask
+            let inPanel = window.frame.offsetBy(dx: -p.frame.minX, dy: -p.frame.minY)
+            expect(mask.map { $0.frame == inPanel && $0.cornerRadius == 26 && $0.cornerCurve == .continuous } == true,
+                   "the \(name) panel is clipped to the window's rounded outline")
+            // The panel's top-left pixel sits on the window's left edge, just below its top: inside the
+            // window's frame, but outside its rounded corner.
+            let corner = NSPoint(x: 0.5, y: p.frame.height - 0.5)
+            expect(mask.map { !shows(corner, through: $0) && shows(NSPoint(x: 0.5, y: p.frame.height / 2), through: $0) } == true,
+                   "the \(name) panel draws nothing past the window's corner, and still draws along its edge")
+        }
+        sidebar.hide(animated: false)
+        sidebar.windowFullScreen = { true }
+        sidebar.show()
+        expect(panel.contentView?.layer?.mask?.cornerRadius == 0, "full screen has square corners, so nothing is cut off there")
+        sidebar.hide(animated: false)
+        sidebar.windowFullScreen = { false }
+    }
+
+    /// Whether a mask layer with a rounded rect (circular corners, as near as matters) lets a point through.
+    private static func shows(_ p: NSPoint, through mask: CALayer) -> Bool {
+        let f = mask.frame, r = mask.cornerRadius
+        guard f.contains(p) else { return false }
+        let cx = min(max(p.x, f.minX + r), f.maxX - r), cy = min(max(p.y, f.minY + r), f.maxY - r)
+        return hypot(p.x - cx, p.y - cy) <= r
+    }
+
     /// The view that slides inside the sidebar panel.
     @MainActor
     private static func shell_slider(_ panel: NSWindow) -> NSView? {
@@ -308,6 +345,10 @@ final class PaletteBackgroundView: NSView {
     var palette: SpacePalette
     init(palette: SpacePalette) { self.palette = palette; super.init(frame: .zero) }
     required init?(coder: NSCoder) { fatalError() }
+}
+
+enum LittleWindow {
+    static func cornerRadius(of window: NSWindow) -> CGFloat { 16 }
 }
 
 enum CraMetrics {

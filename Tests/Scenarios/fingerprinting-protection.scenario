@@ -1,0 +1,12 @@
+# Settings ▸ Privacy ▸ Fingerprinting protection (not in Arc; fingerprinting-protection.patch in
+# Cra's Chromium). On, what a page reads back from a 2D canvas, toDataURL, WebGL, offline audio and
+# an OffscreenCanvas in a worker carries faint noise (at most 3 levels a channel, a hundred-
+# thousandth of an audio sample), the same drawing reads back the same, and pages and their
+# workers see 8 cores. fingerprinting-switch checks the page reads back exactly with it off, and the switch live.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "fingerprintingProtection": true}
+cra://open?url=${PAGE}/../fingerprint.html
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fingerprint()","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"fp:2d=[1-9][0-9]*/[1-3],same png=[1-9][0-9]*/[0-9]+ gl=[1-9][0-9]*/[1-3] audio=[1-9][0-9]*/faint cores=8 worker=8/[1-9][0-9]*"

@@ -352,6 +352,10 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 /// http:// navigations are upgraded, and a site without HTTPS shows Chrome's warning
 /// page before it loads. Profiles that load later get it too. Off until enabled.
 + (void)setHttpsOnlyModeEnabled:(BOOL)enabled;
+/// Settings ▸ Privacy ▸ Fingerprinting protection in every profile, live in open pages: Cra's
+/// Chromium noises canvas, WebGL and offline-audio readback and reports 8 cores, with a seed per
+/// site, profile and launch. Profiles that load later get it too. Off until enabled.
++ (void)setFingerprintingProtectionEnabled:(BOOL)enabled;
 /// Arc's View ▸ Appearance ("Websites, Easels, and Notes will use:"): 0 Automatic (the Mac's),
 /// 1 Light, 2 Dark. Chrome's colour mode in every profile, which pages' prefers-color-scheme and
 /// Chrome's own pages follow; profiles that load later get it too.

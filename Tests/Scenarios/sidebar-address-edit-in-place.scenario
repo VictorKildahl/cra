@@ -1,0 +1,24 @@
+# promise: #344
+# Settings ▸ Tabs "Edit the address in the sidebar" (#344, not in Arc): a click on the sidebar's
+# URL field turns it into a text field holding the full address, and no command bar opens.
+# Escape puts the address back and loads nothing; Return loads what was typed in the same tab
+# (history grows to 2, so it isn't a new tab). Off is Arc's field, which opens the command bar,
+# and where Return goes from a pinned tab is SidebarAddressEditTests.
+budget rss=600 stalls50=6
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "editAddressInPlace": true}
+cra://open?url=${PAGE}?n=before
+wait 3
+cra://debug?urlFieldEdit=click
+expect-log url field click: editing http://127\.0\.0\.1:[0-9]+/page\.html\?n=before, command bar closed
+cra://debug?urlFieldEdit=escape:${PAGE}?n=ignored
+expect-log url field escape: done
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'page:'+location.search+' h'+history.length"}
+expect-log Cra cdp Runtime.evaluate .*"value":"page:\?n=before h1"
+cra://debug?urlFieldEdit=click
+expect-log url field click: editing .*n=before, command bar closed
+cra://debug?urlFieldEdit=type:${PAGE}?n=after
+expect-log url field return: done
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'page:'+location.search+' h'+history.length"}
+expect-log Cra cdp Runtime.evaluate .*"value":"page:\?n=after h2"

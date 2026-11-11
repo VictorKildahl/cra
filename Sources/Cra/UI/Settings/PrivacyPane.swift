@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// Dia's Privacy pane: a "Content blocking" card of switch rows with coloured glyphs
-/// (Block ads / Block cookie banners / Block trackers) and a "Data" card. Cra ships one
-/// ad-and-tracker domain list, so it has one switch. The Data card's usage-data row ("Share
+/// Dia's Privacy pane: a "Content blocking" card of switches (Block ads / Block cookie banners /
+/// Block trackers) and a "Data" card, each setting a row with what it does under its name. Cra ships one
+/// ad-and-tracker domain list, so it has one switch. Fingerprinting protection, under them, is Cra's
+/// own (neither Arc nor Dia has it). The Data card's usage-data row ("Share
 /// content data to help improve Dia") is Cra's usage stats, with crash reports under it; "Connections"
 /// is Chrome's "Always use secure connections". "Data" holds Arc's Clear Browsing Data (Arc keeps
 /// it in Settings ▸ Profiles and opens Chrome's Privacy and security page; Cra opens Chrome's
@@ -16,75 +17,50 @@ struct PrivacyPane: View {
         @Bindable var store = store
         SettingsCardPane {
             SettingsHeader("Content blocking")
-            SettingsCard {
-                SettingsCardRow {
-                    HStack(spacing: 5.5) {
-                        SettingsGlyph(symbol: "hand.raised.fill", color: Color(nsColor: .systemRed))
-                        Text("Block ads and trackers").font(.system(size: 13))
-                    }
-                } trailing: {
-                    Toggle("Block ads and trackers", isOn: $store.settings.blockAdsAndTrackers)
-                        .toggleStyle(.switch).labelsHidden()
-                }
+            SettingsFeatureCard {
+                SettingsToggleRow("Block ads and trackers",
+                                  detail: "Requests to known ad and tracker domains are cancelled, unless the domain belongs to the site you’re on.",
+                                  isOn: $store.settings.blockAdsAndTrackers)
                 SettingsCardDivider()
                 // Arc: Settings ▸ General "Block Cookie Banners", off by default.
-                SettingsCardRow {
-                    HStack(spacing: 5.5) {
-                        SettingsGlyph(symbol: "eye.slash.fill", color: Color(nsColor: .systemOrange))
-                        Text("Block cookie banners").font(.system(size: 13))
-                    }
-                } trailing: {
-                    Toggle("Block cookie banners", isOn: $store.settings.blockCookieBanners)
-                        .toggleStyle(.switch).labelsHidden()
-                }
+                SettingsToggleRow("Block cookie banners",
+                                  detail: "Cookie banners from the common consent tools are hidden. Pages load again with the change.",
+                                  isOn: $store.settings.blockCookieBanners)
+                SettingsCardDivider()
+                // Not in Arc: Cra's Chromium (fingerprinting-protection.patch).
+                SettingsToggleRow("Fingerprinting protection",
+                                  detail: "Sites that tell browsers apart by reading back drawings, 3D graphics or sound get faint noise in what they read, different for each site and each time Cra opens. Sites also see 8 processor cores.",
+                                  isOn: $store.settings.fingerprintingProtection)
             }
-            SettingsFootnote("Requests to known ad and tracker domains are cancelled unless they are first-party to the page. Cookie banners from the common consent tools are hidden; pages load again with the change.")
 
             SettingsHeader("Connections").padding(.top, 20)
-            SettingsCard {
-                SettingsCardRow {
-                    HStack(spacing: 5.5) {
-                        SettingsGlyph(symbol: "lock.fill", color: Color(nsColor: .systemGreen))
-                        Text("Always use secure connections").font(.system(size: 13))
-                    }
-                } trailing: {
-                    Toggle("Always use secure connections", isOn: $store.settings.httpsOnly)
-                        .toggleStyle(.switch).labelsHidden()
-                }
+            SettingsFeatureCard {
+                SettingsToggleRow("Always use secure connections",
+                                  detail: "Pages load over HTTPS. Before opening a site that doesn’t support it, Cra warns you first.",
+                                  isOn: $store.settings.httpsOnly)
                 SettingsCardDivider()
-                SecureDNSRows(error: $dnsError)
+                SecureDNSRows(error: $dnsError, footnote: dnsFootnote)
             }
-            SettingsFootnote("Pages load over HTTPS. Before opening a site that doesn’t support it, Cra warns you first.")
-            if let line = dnsFootnote { SettingsFootnote(line) }
             if let dnsError { SettingsFootnote(dnsError).foregroundStyle(.red) }
 
             SettingsHeader("Data").padding(.top, 20)
-            SettingsCard {
-                SettingsCardRow {
-                    HStack(spacing: 5.5) {
-                        SettingsGlyph(symbol: "trash.fill", color: Color(nsColor: .systemGray))
-                        Text("Browsing data").font(.system(size: 13))
+            SettingsFeatureCard {
+                SettingsPlainRow("Clear browsing data",
+                                   detail: "Delete history, cookies and cached files for the current space’s profile. History you delete also leaves the command bar.",
+                                   trailing: { Button("Clear…") { actions.openURL(BrowsingDataClear.pageURL) } })
+                SettingsCardDivider()
+                SettingsToggleRow("Share anonymous usage stats",
+                                  detail: "Once a day: your Cra and macOS versions, the kind of Mac, rough counts of spaces, tabs and extensions, and which settings you changed. Never the sites you visit, what you search or anything on a page. Each report has a new random ID, so reports can’t be tied together or to you.",
+                                  isOn: $store.settings.shareUsageStats) {
+                    HStack(spacing: 12) {
+                        Button("Show What’s Sent") { SharingService.shared.showStats() }
+                        Link("How Cra handles your data", destination: URL(string: SiteLinks.tagged("https://crabrowser.app/privacy", from: .privacy))!)
                     }
-                } trailing: {
-                    Button("Clear Browsing Data…") { actions.openURL(BrowsingDataClear.pageURL) }
                 }
                 SettingsCardDivider()
-                SettingsCardRow {
-                    HStack(spacing: 5.5) {
-                        SettingsGlyph(symbol: "chart.bar.fill", color: Color(nsColor: .systemBlue))
-                        Text("Share anonymous usage stats").font(.system(size: 13))
-                    }
-                } trailing: {
-                    Toggle("Share anonymous usage stats", isOn: $store.settings.shareUsageStats)
-                        .toggleStyle(.switch).labelsHidden()
-                }
-                SettingsCardDivider()
-                SettingsCardRow {
-                    HStack(spacing: 5.5) {
-                        SettingsGlyph(symbol: "exclamationmark.triangle.fill", color: Color(nsColor: .systemOrange))
-                        Text("Crash reports").font(.system(size: 13))
-                    }
-                } trailing: {
+                SettingsPlainRow("Crash reports",
+                                   detail: "A report shows what Cra was doing when it crashed, without your name, file paths or anything that identifies this Mac.",
+                                   trailing: { EmptyView() }) {
                     Picker("Crash reports", selection: $store.settings.crashReports) {
                         Text("Ask each time").tag(CrashReportChoice.ask)
                         Text("Send automatically").tag(CrashReportChoice.send)
@@ -94,15 +70,6 @@ struct PrivacyPane: View {
                     .fixedSize()
                 }
             }
-            SettingsFootnote("Delete history, cookies and cached files for the current space’s profile. History you delete also leaves the command bar.")
-            SettingsFootnote("Usage stats go out once a day: your Cra and macOS versions, the kind of Mac, rough counts of spaces, tabs and extensions, and which settings you changed. Never the sites you visit, what you search or anything on a page. Each report has a new random ID, so reports can’t be tied together or to you. Crash reports show what Cra was doing when it crashed, without your name, file paths or anything that identifies this Mac.")
-            HStack(spacing: 12) {
-                Button("Show What’s Sent") { SharingService.shared.showStats() }
-                Link("How Cra handles your data", destination: URL(string: SiteLinks.tagged("https://crabrowser.app/privacy", from: .privacy))!)
-                    .font(.system(size: 12))
-            }
-            .controlSize(.small)
-            .padding(.top, 6)
         }
     }
 
@@ -119,17 +86,16 @@ struct PrivacyPane: View {
 /// secure connections": the lookup before the page (#133). Custom adds a row for the template.
 private struct SecureDNSRows: View {
     @Binding var error: String?
+    /// What the current setting does, or that the organization sets it.
+    let footnote: String?
     private let dns = SecureDNSSetting.shared
     @State private var editingCustom = false
     @State private var customText = ""
 
     var body: some View {
-        SettingsCardRow {
-            HStack(spacing: 5.5) {
-                SettingsGlyph(symbol: "network.badge.shield.half.filled", color: Color(nsColor: .systemBlue))
-                Text("Secure DNS").font(.system(size: 13))
-            }
-        } trailing: {
+        SettingsPlainRow("Secure DNS",
+                           detail: "Before a page loads, the site’s address is looked up over an encrypted connection, so the network you’re on can’t see or change it." + (footnote.map { " " + $0 } ?? ""),
+                           trailing: { EmptyView() }) {
             Picker("Secure DNS", selection: choice) {
                 Text("Automatic").tag(SecureDNSChoice.automatic)
                 Text("Off").tag(SecureDNSChoice.off)

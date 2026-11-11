@@ -42,17 +42,12 @@ struct PerformancePane: View {
     // MARK: Overview
 
     @ViewBuilder private func overview(_ recording: Binding<Bool>) -> some View {
-        SettingsCard {
-            SettingsCardRow {
-                HStack(spacing: 5.5) {
-                    SettingsGlyph(symbol: "gauge.with.dots.needle.67percent", color: Color(nsColor: .systemBlue))
-                    Text("Record performance").font(.system(size: 13))
-                }
-            } trailing: {
-                Toggle("Record performance", isOn: recording).toggleStyle(.switch).labelsHidden()
-            }
+        SettingsFeatureCard {
+            SettingsToggleRow("Record performance",
+                              detail: "Cra measures itself on this Mac: freezes, CPU and memory per process, tab timings.",
+                              isOn: recording)
         }
-        SettingsFootnote("Cra measures itself on this Mac: freezes, CPU and memory per process, tab timings. Nothing leaves the Mac unless you export it with Help ▸ Export Diagnostics.")
+        SettingsFootnote("Nothing leaves the Mac unless you export it with Help ▸ Export Diagnostics.")
 
         if let r = report {
             if !r.insights.isEmpty {

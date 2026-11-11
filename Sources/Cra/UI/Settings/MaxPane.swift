@@ -13,23 +13,23 @@ struct MaxPane: View {
         @Bindable var store = store
         let available = service.status == .available
         SettingsCardPane {
-            MaxCard {
-                MaxFeatureRow(title: "Tidy Tabs", isOn: $store.settings.tidyTabs, enabled: available) {
+            SettingsFeatureCard {
+                SettingsSwitchRow("Tidy Tabs",
+                                  detail: Text("Press the \(Image(nsImage: BroomGlyph.image).renderingMode(.template)) icon to let your Sidebar organize itself whenever you have six or more Today Tabs."),
+                                  isOn: $store.settings.tidyTabs, enabled: available) {
                     TidyTabsPicture()
-                } description: {
-                    Text("Press the \(Image(nsImage: BroomGlyph.image).renderingMode(.template)) icon to let your Sidebar organize itself whenever you have six or more Today Tabs.")
                 }
                 SettingsCardDivider()
-                MaxFeatureRow(title: "Tidy Tab Titles", isOn: $store.settings.tidyTabTitles, enabled: available) {
+                SettingsSwitchRow("Tidy Tab Titles",
+                                  detail: "Have your tabs automatically renamed with tidier, shorter titles when you Pin them.",
+                                  isOn: $store.settings.tidyTabTitles, enabled: available) {
                     TidyTabTitlesPicture()
-                } description: {
-                    Text("Have your tabs automatically renamed with tidier, shorter titles when you Pin them.")
                 }
                 SettingsCardDivider()
-                MaxFeatureRow(title: "Tidy Downloads", isOn: $store.settings.tidyDownloads, enabled: available) {
+                SettingsSwitchRow("Tidy Downloads",
+                                  detail: "Keep your many files more organized with smartly renamed downloads — and make them a little easier to find later.",
+                                  isOn: $store.settings.tidyDownloads, enabled: available) {
                     TidyDownloadsPicture()
-                } description: {
-                    Text("Keep your many files more organized with smartly renamed downloads — and make them a little easier to find later.")
                 }
                 SettingsCardDivider()
                 MaxFeatureRow(title: "5-Second Previews", isOn: $store.settings.fiveSecondPreviews, enabled: available) {
@@ -49,60 +49,6 @@ struct MaxPane: View {
                 try? await Task.sleep(for: .seconds(3))
             }
         }
-    }
-}
-
-/// The card around Max's rows: a hairline border on a lighter fill, rows split by hairlines.
-struct MaxCard<Content: View>: View {
-    @ViewBuilder let content: Content
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        VStack(spacing: 0) { content }
-            .frame(maxWidth: .infinity)
-            .background(RoundedRectangle(cornerRadius: SettingsMetrics.cardCorner, style: .continuous)
-                .fill(scheme == .dark ? Color.white.opacity(0.04) : Color.white.opacity(0.6)))
-            .overlay(RoundedRectangle(cornerRadius: SettingsMetrics.cardCorner, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1))
-    }
-}
-
-/// One Max feature: picture, name over description, switch. Off while Apple Intelligence can't run.
-struct MaxFeatureRow<Picture: View, Description: View>: View {
-    let title: String
-    @Binding var isOn: Bool
-    var enabled = true
-    @ViewBuilder let picture: Picture
-    @ViewBuilder let description: Description
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 14) {
-            MaxPictureFrame { picture }
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.system(size: 14))
-                description
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 8)
-            Toggle(title, isOn: Binding(get: { isOn && enabled }, set: { isOn = $0 }))
-                .toggleStyle(.switch).labelsHidden()
-                .disabled(!enabled)
-        }
-        .padding(10)
-    }
-}
-
-/// Arc frames each picture in white: 3 pt round a tile with 6 pt corners.
-private struct MaxPictureFrame<Content: View>: View {
-    @ViewBuilder let content: Content
-    var body: some View {
-        content
-            .frame(width: 88, height: 56)
-            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-            .padding(3)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white))
-            .accessibilityHidden(true)
     }
 }
 

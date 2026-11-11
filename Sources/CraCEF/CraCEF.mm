@@ -513,11 +513,28 @@ static void ApplyWebsiteAppearance(CefRefPtr<CefRequestContext> context) {
     if (context->GetChromeColorSchemeMode() != mode) context->SetChromeColorScheme(mode, 0);
 }
 
+static bool g_fingerprintingProtection = false;
+/// Cra's own pref, registered on every profile below and read by Cra's Chromium
+/// (fingerprinting-protection.patch): pages get a seed for the profile and launch, and Blink
+/// noises canvas, WebGL and offline audio readback with it. Chrome pushes a change to open pages.
+static const char kFingerprintingProtection[] = "cra.fingerprinting_protection";
+
+static void ApplyFingerprintingProtection(CefRefPtr<CefRequestContext> context) {
+    if (!context) return;
+    CefRefPtr<CefValue> value = CefValue::Create();
+    value->SetBool(g_fingerprintingProtection);
+    CefString error;
+    if (!context->SetPreference(kFingerprintingProtection, value, error)) {
+        NSLog(@"CraCEF: %s: %s", kFingerprintingProtection, error.ToString().c_str());
+    }
+}
+
 static void ApplyProfilePreferences(CefRefPtr<CefRequestContext> context) {
     ApplyWebsiteAppearance(context);
     ApplyWebRTCPolicy(context);
     HideDownloadBubble(context);
     ApplyHttpsOnly(context);
+    ApplyFingerprintingProtection(context);
 }
 
 static const char kNotificationBlocksCleared[] = "cra.notification_blocks_cleared";
@@ -684,6 +701,7 @@ public:
         CefRefPtr<CefValue> no = CefValue::Create();
         no->SetBool(false);
         registrar->AddPreference(kNotificationBlocksCleared, no);
+        registrar->AddPreference(kFingerprintingProtection, no);
     }
 
     CefRefPtr<CefClient> GetDefaultClient() override {
@@ -3176,6 +3194,16 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
         if ([g_readyProfiles containsObject:@(path.c_str())]) ApplyHttpsOnly(context);
     }
     if (g_incognitoContext && g_incognitoReady) ApplyHttpsOnly(g_incognitoContext);
+}
++ (void)setFingerprintingProtectionEnabled:(BOOL)enabled {
+    if (enabled == g_fingerprintingProtection) return;
+    g_fingerprintingProtection = enabled;
+    if (!g_contextInitialized || g_quitting) return;
+    ApplyFingerprintingProtection(CefRequestContext::GetGlobalContext());
+    for (auto& [path, context] : g_profileContexts) {
+        if ([g_readyProfiles containsObject:@(path.c_str())]) ApplyFingerprintingProtection(context);
+    }
+    if (g_incognitoContext && g_incognitoReady) ApplyFingerprintingProtection(g_incognitoContext);
 }
 + (void)setBlockedDomains:(NSArray<NSString*>*)domains {
     auto* set = new cra_blocker::DomainSet();

@@ -134,6 +134,13 @@ built release app with a test profile. Note anything that fails in the release's
 - **#172:** with a space on its own profile, a Little Window from that space and a Peek from its
   tab see that profile's cookies. The chip names the profile; switching it reloads the page in
   the other profile.
+- **#329:** a Little Window's strip is a gradient, deep blue-grey at the left to purple-grey at the
+  right, in every space (compare Arc 1.172.1 beside it). Its traffic lights are grey with the window
+  in front and the pointer elsewhere, and red, yellow and green with glyphs while the pointer is over
+  them. The address pill is a lighter wash over the strip, also under the pointer.
+- **#330:** the address pill reads the host only (no port, path or query). An http page shows an
+  orange open padlock on a pale orange tile where the magnifier is; an https page and a blank one
+  show the magnifier, and so does a window still waiting for its first response.
 - **#206:** a video's PiP and Meet's PiP stay on top over a full-screen app, and clicking or
   dragging them doesn't bring Cra forward.
 - **#198:** in a Meet call with automatic picture-in-picture on, leaving the tab opens Meet's

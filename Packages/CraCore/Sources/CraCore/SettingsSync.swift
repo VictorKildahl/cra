@@ -112,6 +112,7 @@ public extension AppSettings {
         var s = self
         s.shareUsageStats = false
         s.crashReports = .ask
+        s.askedToShare = false
         s.downloadLocations = [:]
         s.hasSeenImportPrompt = false
         s.chromeEngine = AppSettings().chromeEngine
@@ -127,6 +128,7 @@ public extension AppSettings {
         var s = remote
         s.shareUsageStats = shareUsageStats
         s.crashReports = crashReports
+        s.askedToShare = askedToShare
         s.downloadLocations = downloadLocations
         s.hasSeenImportPrompt = hasSeenImportPrompt
         s.chromeEngine = chromeEngine

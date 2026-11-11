@@ -1,0 +1,11 @@
+# The sidebar's "Help improve Cra" card (SharingPrompt): a Mac that updated, so never saw
+# onboarding's row, is asked. Share turns usage stats on and the day's report goes out at once;
+# the card's answer is kept (CraCore SharingTests has when it shows).
+home
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+env CRA_SHARING_ENDPOINT=${ORIGIN}
+expect-log sharing: stats off, crash reports ask
+expect-log sharing: the sidebar card asks
+cra://debug?sharing=card-share
+expect-log sharing: the sidebar card was answered, share
+expect-log sharing: usage stats sent

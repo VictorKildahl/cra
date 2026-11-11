@@ -6,7 +6,7 @@ import AppKit
 @MainActor
 enum ViewSnapshot {
     /// "PaneToolbarView" or "PaneToolbarView,1": the first (or nth) view of that class on screen
-    /// in the window, left to right and top to bottom (the pager keeps other spaces' columns
+    /// in the window (else in the first other window that has one), left to right and top to bottom (the pager keeps other spaces' columns
     /// laid out beside the visible one).
     static func find(_ spec: String, in window: NSWindow?) -> NSView? {
         let parts = spec.split(separator: ",").map(String.init)
@@ -30,7 +30,9 @@ enum ViewSnapshot {
     /// text and images are drawn at 1x and only scaled up, so that drawing goes to `<name>.1x.png`
     /// instead, and scripts/scenario.sh says so rather than comparing it.
     static func write(_ spec: String, in window: NSWindow?, to path: String) {
-        guard let view = find(spec, in: window), let png = render(view) else {
+        // A view in a panel of its own (the Little Window's "Open in" menu) is found in any window.
+        guard let view = find(spec, in: window) ?? NSApp.windows.lazy.compactMap({ find(spec, in: $0) }).first,
+              let png = render(view) else {
             CraLog.note("snapshot: no visible \(spec)")
             return
         }

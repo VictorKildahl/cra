@@ -145,8 +145,25 @@ final class PictureInPictureChrome {
         let shown = overlays.values.compactMap { o in o.parent.map { (o, $0) } }
         guard !shown.isEmpty else { return "windows=0" }
         return "windows=\(shown.count) " + shown.map { o, w in
-            "key=\(w.isKeyWindow ? 1 : 0) appKey=\(NSApp.keyWindow === w ? 1 : 0) mouse=\(w.ignoresMouseEvents ? 0 : 1) preventKey=\(Self.preventsKey(w) ? 1 : 0) width=\(Int(w.frame.width)) \(o.controls.readout) frame=\(Int(w.frame.minX)),\(Int(w.frame.minY)),\(Int(w.frame.width)),\(Int(w.frame.height))"
+            "key=\(w.isKeyWindow ? 1 : 0) appKey=\(NSApp.keyWindow === w ? 1 : 0) mouse=\(w.ignoresMouseEvents ? 0 : 1) preventKey=\(Self.preventsKey(w) ? 1 : 0) width=\(Int(w.frame.width)) \(o.controls.readout) frame=\(Int(w.frame.minX)),\(Int(w.frame.minY)),\(Int(w.frame.width)),\(Int(w.frame.height)) onScreen=\(PictureInPictureLayout.landing(afterDropping: w.frame, displays: NSScreen.screens.map(Self.display)) == nil ? 1 : 0)"
         }.joined(separator: " | ")
+    }
+
+    /// `cra://debug?pipDrop=left|right|top|bottom`: the window moved half past that edge of its
+    /// display and let go there, as a mouse drag does (#332).
+    func debugDrop(_ edge: String) {
+        for o in overlays.values {
+            guard let w = o.parent, let screen = w.screen?.frame, let view = o.contentView as? PictureInPictureOverlayView else { continue }
+            var origin = w.frame.origin
+            switch edge {
+            case "left": origin.x = screen.minX - w.frame.width / 2
+            case "top": origin.y = screen.maxY - w.frame.height / 2
+            case "bottom": origin.y = screen.minY - w.frame.height / 2
+            default: origin.x = screen.maxX - w.frame.width / 2
+            }
+            w.setFrameOrigin(origin)
+            view.dropped()
+        }
     }
 
     /// `cra://debug?pipKey=space|force`: Chromium's window asked to become key the ways Chromium's
@@ -412,8 +429,23 @@ final class PictureInPictureOverlayView: NSView {
             let asked = requested.map { $0.size == target.frame.size ? "" : " (asked \(Self.size($0)))" } ?? ""
             CraLog.note("pip: resized \(g.edge) \(Self.size(g.startFrame)) → \(Self.size(target.frame))\(asked)")
             requested = nil
+            PictureInPictureChrome.shared.remember(target.frame)
+        } else {
+            dropped()
         }
-        PictureInPictureChrome.shared.remember(target.frame)
+    }
+
+    /// The mouse let the moved window go. Partly past the screen's edge, it flies into the
+    /// nearest corner on the swipe's spring, as Arc's does, and that corner is kept for the next
+    /// video when it lands (#332); otherwise the spot it was let go at is.
+    func dropped() {
+        guard let target else { return }
+        guard let landing = PictureInPictureLayout.landing(afterDropping: target.frame, displays: NSScreen.screens.map(PictureInPictureChrome.display)) else {
+            return PictureInPictureChrome.shared.remember(target.frame)
+        }
+        CraLog.note("pip: dropped past the edge, to \(landing.corner.rawValue)")
+        flight = PictureInPictureFlight(from: target.frame.origin, velocity: .zero, to: landing.frame.origin)
+        startLink()
     }
 
     /// Where on the screen the event happened. The window moves and resizes under the pointer, so
