@@ -1648,6 +1648,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 moveBlankWindow(main, toSpace: store.spaceOrder[n - 1])
                 return
             }
+            // pickedMenu=<n>[&label=][&run=<row>]: the menu on n picked tabs, see testPickedMenu (#356).
+            if let n = dict["pickedMenu"].flatMap(Int.init) {
+                main.testPickedMenu(count: n, label: dict["label"] ?? "\(n)", run: dict["run"])
+                return
+            }
             // dragEnd=<text>&at=x,y: the window's tab whose URL holds the text dragged and let go there
             // (from the screen's top left) with nothing taking it, as a drag out of the sidebar ends
             // (#219). Without at: a point of the screen no Cra window covers, a corner if one is free,

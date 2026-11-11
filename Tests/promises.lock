@@ -633,3 +633,5 @@
 #350   Tests/FloatingSidebarTests.swift::theRevealSwingsPastItsEdge  9009fb6ed80f
 #354   Packages/CraCore/Tests/CraCoreTests/PageWindowStartTests.swift::aNewPageWindowStartsOnTheWindowInUseNotOnThePrimaryDisplay  54a52c06fe08
 #354   Tests/Scenarios/page-windows-open-on-cra.scenario  57616ba445a7
+#356   Packages/CraCore/Tests/CraCoreTests/PickedTabsMenuTests.swift::twoPicksGetArcsRowsWithCopyAndShare  7b321e44a08d
+#356   Tests/Scenarios/picked-tabs-menu.scenario  4a41e1119a25

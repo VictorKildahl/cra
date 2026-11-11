@@ -60,14 +60,7 @@ enum SidebarMenus {
         let store = list.store, ui = list.ui, actions = list.actions
         let id = m.id
         let menu = menu()
-        let group = list.closeGroup(for: id)
-        if group.count > 1 {
-            folderItems(menu, ui.group(for: id, in: store), list: list)
-            menu.addItem(.separator())
-            add(menu, "Close \(group.count) Tabs") { list.closeTabs(group) }
-            add(menu, "Deselect All") { ui.clearPicks() }
-            return menu
-        }
+        if list.closeGroup(for: id).count > 1 { return picked(ui.group(for: id, in: store), list: list) }
         guard let item = store.item(id), let tab = item.tab else { return menu }
         if m.pinned {
             add(menu, action: "pinTab", "Unpin Tab") { store.unpinTab(id) }
@@ -139,6 +132,75 @@ enum SidebarMenus {
             if let parent = item.parentID, let rows = store.item(parent)?.children, rows.last != id,
                store.spaceID(ofItem: id).flatMap(store.space)?.todayContainerID == parent {
                 add(menu, "Archive Tabs Below") { store.archiveTabsBelow(id) }
+            }
+        }
+        return menu
+    }
+
+    /// The menu on a tab that is one of several picked with ⌘/⇧-click (#356): Arc's sections for
+    /// every pick at once, from PickedTabsMenu. `ids` are the picks in sidebar order.
+    static func picked(_ ids: [UUID], list: SpaceListView) -> NSMenu {
+        let store = list.store, ui = list.ui, actions = list.actions
+        let menu = menu()
+        let tabs = ids.compactMap { id in store.item(id)?.tab.map { (id, $0) } }
+        let folders = store.children(of: store.focusedSpace(window: ui.windowID).pinnedContainerID).filter { $0.isFolder && !$0.isLiveFolder }
+        let picks = PickedTabsMenu.Picks(count: ids.count, allMuted: !tabs.isEmpty && tabs.allSatisfy { $0.1.muted },
+                                         hasFolders: !folders.isEmpty, anyInSplit: ids.contains { store.splitContaining($0) != nil })
+        for (i, section) in PickedTabsMenu.shown(for: picks).enumerated() {
+            if i > 0 { menu.addItem(.separator()) }
+            for row in section {
+                let title = PickedTabsMenu.title(row, for: picks), enabled = PickedTabsMenu.isEnabled(row)
+                switch row {
+                case "openInSplitView":
+                    add(menu, title) {
+                        guard let split = store.createSplit(with: ids) else { return }
+                        ui.clearPicks()
+                        store.selectTab(store.paneID(for: ids[0], in: split) ?? ids[0], window: ui.windowID)
+                    }
+                case "duplicate":
+                    add(menu, action: "duplicateTab", title) { for id in ids { _ = store.duplicateTab(id) } }
+                case "copyURLs":
+                    // What ⇧⌘C copies with tabs picked (#322): each link without trackers, one per line.
+                    add(menu, action: "copyURL", title) {
+                        copy(CleanURL.links(tabs.map { $0.1.url }))
+                        actions.showToast("Copied item links")
+                    }
+                case "share":
+                    let urls = tabs.compactMap { URL(string: CleanURL.withoutTrackers($0.1.url)) }.filter { $0.scheme?.hasPrefix("http") == true }
+                    SharePicker.addMenu(to: menu, urls: urls, title: title)
+                case "moveToSpace":
+                    let sub = submenu(menu, title)
+                    for s in store.orderedSpaces {
+                        add(sub, s.labeled, enabled: !ids.allSatisfy { store.isInSpace($0, s.id) }) {
+                            for id in ids { store.moveTab(id, toSpace: s.id, window: ui.windowID) }
+                            ui.clearPicks()
+                        }
+                    }
+                case "moveToFolder":
+                    let sub = submenu(menu, title)
+                    for f in folders {
+                        add(sub, f.title ?? "Folder", enabled: !ids.allSatisfy { store.item($0)?.parentID == f.id }) {
+                            store.moveItems(ids, to: f.id, index: nil)
+                        }
+                    }
+                case "newFolder":
+                    add(menu, title) { ui.renamingID = store.createFolder(with: ids).id }
+                case "changeIcon":
+                    add(menu, title, enabled: enabled) {}
+                case "mute":
+                    add(menu, action: "muteTab", title) {
+                        for (id, _) in tabs {
+                            store.setMuted(id, !picks.allMuted)
+                            actions.performAction("muteTab:\(id)")
+                        }
+                    }
+                case "closeTabs":
+                    add(menu, title) { list.closeTabs(ids) }
+                case "deselectAll":
+                    add(menu, title) { ui.clearPicks() }
+                default:
+                    break
+                }
             }
         }
         return menu

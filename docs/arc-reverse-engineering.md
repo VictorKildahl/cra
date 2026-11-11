@@ -1048,7 +1048,9 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
   (white ~0.32 on the light theme), everything inside drops to 50%. A drop puts the tab in as the first tile; the
   × hides the card. Both change the layout in one frame (60 fps recording), no slide.
 - [O] A multi-tab selection's menu has no Add to Favorites (Copy Links, Share 2 Items…, Change Icon…, Mute, Open
-  in Split View, Duplicate, Move to, New Folder with 2 Items, Archive Tabs…).
+  in Split View, Duplicate, Move to, New Folder with 2 Items, Archive Tabs…). Issue #356's screenshot of two
+  Today tabs, in sections: Open in Split View, Duplicate | Copy URLs ⇧⌘C, Share 2 Items… | Move to ›, New Folder
+  with 2 Items | Change Icon › (dimmed), Mute | Archive Tabs. Cra: PickedTabsMenu.
 - [?] Not measured: the drag-over fill on a dark theme, coloured dark themes (the star's colour there), 1x.
 - Cra: FavoritesEmptyCard, dismissed per favorites container (WindowPrefs.favoritesEmptyStateDismissed, since
   Cra's favorites are per space). Badge, title, subtitle and × land within 1 px of Arc's at 2x. The dashed line

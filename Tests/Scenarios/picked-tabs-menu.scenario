@@ -1,0 +1,15 @@
+# promise: #356
+# Tabs picked with ⌘/⇧-click get Arc's menu for all of them at once: Copy URLs puts every link on
+# the clipboard, one per line and without trackers (as ⇧⌘C does), and Share N Items hands them all
+# to the Mac's share services. The menu is the one a right-click on a picked row builds; Today
+# lists the newest tab first.
+budget rss=700 stalls50=10
+cra://open?url=${PAGE}?n=one
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://open?url=${PAGE}?n=two%26utm_source=x
+cra://open?url=${PAGE}?n=three
+wait 2
+cra://debug?pickedMenu=2&label=two
+expect-log picked menu two: Open in Split View\|Duplicate\|──\|Copy URLs\|Share 2 Items ▸\|──\|Move to Space ▸\|New Folder with 2 Items\|──\|Change Icon \(off\)\|Mute\|──\|Close 2 Tabs\|Deselect All$
+cra://debug?pickedMenu=3&label=copy&run=Copy URLs
+expect-log picked menu copy ran Copy URLs: \S*n=three⏎\S*n=two⏎\S*n=one picks=3$

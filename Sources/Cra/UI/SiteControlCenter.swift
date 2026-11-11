@@ -816,15 +816,20 @@ final class SharePicker: NSObject, @preconcurrency NSSharingServicePickerDelegat
     }
 
     /// Arc's Share ▸ submenu on a sidebar tab: the same services, as menu items.
-    static func addMenu(to menu: NSMenu, url: URL) {
+    static func addMenu(to menu: NSMenu, url: URL) { addMenu(to: menu, urls: [url], title: "Share") }
+
+    /// The same submenu for several links at once ("Share 2 Items" on picked tabs, #356); each
+    /// service gets them all, as a Finder share of several files does.
+    static func addMenu(to menu: NSMenu, urls: [URL], title: String) {
+        guard !urls.isEmpty else { return }
         let sub = NSMenu()
         for name in kept {
-            guard let service = NSSharingService(named: name), service.canPerform(withItems: [url]) else { continue }
-            let item = MenuItems.add(sub, service.title, image: service.image) { service.perform(withItems: [url]) }
+            guard let service = NSSharingService(named: name), service.canPerform(withItems: urls) else { continue }
+            let item = MenuItems.add(sub, service.title, image: service.image) { service.perform(withItems: urls) }
             item.image?.size = NSSize(width: 16, height: 16)
         }
         guard !sub.items.isEmpty else { return }
-        let share = NSMenuItem(title: "Share", action: nil, keyEquivalent: "")
+        let share = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         share.submenu = sub
         menu.addItem(share)
     }

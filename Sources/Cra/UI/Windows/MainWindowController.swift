@@ -589,6 +589,43 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         l.dragEnded(id, at: screenPoint, operation: [])
     }
 
+    /// `cra://debug?pickedMenu=<n>`: picks the focused space's first n listed tabs, as ⌘-click does,
+    /// and logs the menu a right-click on the first one opens (#356): "|" between rows, "──" for a
+    /// separator, "▸" after a submenu, " (off)" after a dimmed row. `run` picks the row with that
+    /// title and logs what it copied; the clipboard gets its old contents back.
+    func testPickedMenu(count: Int, label: String, run: String?) {
+        func rows(in v: NSView) -> [TabRowView] {
+            (v as? TabRowView).map { [$0] } ?? v.subviews.flatMap { rows(in: $0) }
+        }
+        let listed = store.listedTabIDs(in: focusedSpaceID)
+        guard listed.count >= count, let first = listed.first,
+              let row = window?.contentView.flatMap(rows(in:))?.first(where: { $0.model?.id == first })
+        else { CraLog.note("picked menu \(label): no row"); return }
+        sidebarUI.multiSelection = Set(listed.prefix(count))
+        guard let menu = row.contextMenu(at: .zero) else { CraLog.note("picked menu \(label): no menu"); return }
+        let drawn = menu.items.map { item -> String in
+            if item.isSeparatorItem { return "──" }
+            return item.title + (item.submenu != nil ? " ▸" : "") + (item.isEnabled ? "" : " (off)")
+        }
+        CraLog.note("picked menu \(label): \(drawn.joined(separator: "|"))")
+        guard let run, let item = menu.items.first(where: { $0.title == run }) else { return }
+        let pb = NSPasteboard.general
+        let saved = pb.pasteboardItems?.map { item in
+            item.types.reduce(into: [NSPasteboard.PasteboardType: Data]()) { $0[$1] = item.data(forType: $1) }
+        } ?? []
+        let before = pb.changeCount
+        menu.performActionForItem(at: menu.index(of: item))
+        let copied = pb.changeCount != before ? pb.string(forType: .string) ?? "" : "-"
+        CraLog.note("picked menu \(label) ran \(run): \(copied.replacingOccurrences(of: "\n", with: "⏎")) picks=\(sidebarUI.multiSelection.count)")
+        guard pb.changeCount != before else { return }
+        pb.clearContents()
+        pb.writeObjects(saved.map { types in
+            let item = NSPasteboardItem()
+            for (type, data) in types { item.setData(data, forType: type) }
+            return item
+        })
+    }
+
     /// The tab's page belongs to another window that has it open: the window in use takes it,
     /// others keep it where it is. Windows restored at launch (none has the page yet, and
     /// `app.mainWindows` is still empty) leave it to the window in use, else the first one.
