@@ -1,0 +1,21 @@
+# An extension's separate window opened over a windowed Cra can still fill the screen
+# (chrome.windows.update with state 'fullscreen', the path a popped-out video's full screen
+# takes) and closes completely afterwards. Made a full-screen auxiliary there too, the request
+# did nothing, Chromium waited for the transition for good, and the closed window stayed behind
+# hidden.
+requires screen
+budget rss=700 stalls50=10
+cra://debug?installExtension=${FIXTURES}/TabsCreateExtension
+relaunch
+cra://open?url=${PAGE}?n=popup-window
+wait 3
+cra://open?url=${PAGE}?n=popup-fullscreen
+wait 4
+cra://debug?windowState=popup-full
+expect-log window state popup-full: main0 fullscreen=0
+expect-log window state popup-full: extension0 visible=1 .* primary=1 fullscreen=1 title=Popup fixture: id-type-resize-preserved
+cra://open?url=${PAGE}?n=close-popup
+wait 5
+cra://debug?windowState=popup-closed
+expect-log window state popup-closed: main0 fullscreen=0 visible=1 onSpace=1
+reject-log window state popup-closed: extension

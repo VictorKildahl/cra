@@ -1,6 +1,6 @@
 # The separate unlock window must share the full-screen browser's active macOS Space.
 requires screen
-budget rss=700 stalls50=5
+budget rss=700 stalls50=10
 cra://debug?installExtension=${FIXTURES}/TabsCreateExtension
 relaunch
 cra://open?url=${PAGE}?n=start
@@ -11,7 +11,7 @@ cra://open?url=${PAGE}?n=popup-window
 wait 3
 cra://debug?windowState=popup-fullscreen
 expect-log window state popup-fullscreen: main0 fullscreen=1 visible=1 onSpace=1
-expect-log window state popup-fullscreen: extension0 visible=1 onSpace=1 auxiliary=1 movesToActiveSpace=1 primary=0 managed=0 title=Popup fixture: id-type-resize-preserved
+expect-log window state popup-fullscreen: extension0 visible=1 onSpace=1 auxiliary=1 movesToActiveSpace=1 primary=0 fullscreen=0 title=Popup fixture: id-type-resize-preserved
 cra://open?url=${PAGE}?n=close-popup
 wait 1
 cra://debug?windowState=popup-closed

@@ -1258,7 +1258,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                         + "auxiliary=\(flag(w.collectionBehavior.contains(.fullScreenAuxiliary))) "
                         + "movesToActiveSpace=\(flag(w.collectionBehavior.contains(.moveToActiveSpace))) "
                         + "primary=\(flag(w.collectionBehavior.contains(.fullScreenPrimary))) "
-                        + "managed=\(flag(w.collectionBehavior.contains(.managed))) title=\(w.title)")
+                        + "fullscreen=\(flag(w.styleMask.contains(.fullScreen))) title=\(w.title)")
                 }
                 return
             }

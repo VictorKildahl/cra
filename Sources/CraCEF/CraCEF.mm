@@ -317,6 +317,32 @@ static void HideStrayWindow(NSWindow* window) {
     [window orderOut:nil];
 }
 
+// Whether one of Cra's windows fills the screen on the Space the user is looking at.
+static BOOL FullScreenWindowOnActiveSpace(NSWindow* except) {
+    for (NSWindow* window in NSApp.windows) {
+        if (window != except && window.visible && (window.styleMask & NSWindowStyleMaskFullScreen) && window.onActiveSpace) return YES;
+    }
+    return NO;
+}
+
+// An extension's own window (Bitwarden's vault unlock prompt) that opens over a full-screen Cra
+// joins that Space as a full-screen auxiliary. As an ordinary window it opened on a desktop and
+// macOS switched there. Arc's windows take the same three steps (set .fullScreenAuxiliary, clear
+// .fullScreenPrimary, add .moveToActiveSpace: docs/arc-reverse-engineering.md), and so does
+// Chromium's SetCanAppearInExistingFullscreenSpaces. Only over a full-screen Cra, because an
+// auxiliary window can't go full screen itself: Chromium leaves .fullScreenPrimary off it
+// (gfx::SetNSWindowCanFullscreen), -toggleFullScreen: then does nothing, and Chromium waits for
+// that transition for good, so chrome.windows.update({state: 'fullscreen'}) reports a full screen
+// that never came and the window's close is never finished. Over a windowed Cra the window stays
+// as Chrome made it and can still fill the screen.
+static void JoinFullScreenSpace(NSWindow* window) {
+    NSWindowCollectionBehavior behavior = window.collectionBehavior;
+    behavior &= ~(NSWindowCollectionBehaviorPrimary | NSWindowCollectionBehaviorFullScreenPrimary
+                  | NSWindowCollectionBehaviorFullScreenAllowsTiling | NSWindowCollectionBehaviorCanJoinAllSpaces);
+    behavior |= NSWindowCollectionBehaviorFullScreenAuxiliary | NSWindowCollectionBehaviorMoveToActiveSpace;
+    window.collectionBehavior = behavior;
+}
+
 // The Chromium profile folder a browser's pages use: "Default", "Profile <id>", nil off the record.
 static NSString* ProfileFolderName(CefRefPtr<CefBrowser> browser) {
     CefRefPtr<CefRequestContext> context = browser->GetHost()->GetRequestContext();
@@ -342,12 +368,7 @@ public:
         // Chrome's window exists by the first navigation (not yet in OnAfterCreated).
         NSWindow* window = ((__bridge NSView*)browser->GetHost()->GetWindowHandle()).window;
         if (window && !(window.styleMask & NSWindowStyleMaskFullSizeContentView)) {
-            NSWindowCollectionBehavior behavior = window.collectionBehavior;
-            behavior &= ~(NSWindowCollectionBehaviorPrimary | NSWindowCollectionBehaviorFullScreenPrimary
-                          | NSWindowCollectionBehaviorFullScreenAllowsTiling | NSWindowCollectionBehaviorManaged
-                          | NSWindowCollectionBehaviorCanJoinAllSpaces);
-            behavior |= NSWindowCollectionBehaviorFullScreenAuxiliary | NSWindowCollectionBehaviorMoveToActiveSpace;
-            window.collectionBehavior = behavior;
+            if (FullScreenWindowOnActiveSpace(window)) JoinFullScreenSpace(window);
             windows_[browser->GetIdentifier()] = browser;
             if (!g_extensionWindows) g_extensionWindows = [NSHashTable weakObjectsHashTable];
             [g_extensionWindows addObject:window];

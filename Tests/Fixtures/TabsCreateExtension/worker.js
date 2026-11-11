@@ -29,6 +29,9 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   let action;
   if (message === 'popup-window') {
     action = chrome.windows.create({ url: chrome.runtime.getURL('popup.html'), type: 'popup', width: 400, height: 300 });
+  } else if (message === 'popup-fullscreen') {
+    action = chrome.windows.getAll({ windowTypes: ['popup'] }).then((windows) =>
+      Promise.all(windows.map((window) => chrome.windows.update(window.id, { state: 'fullscreen' }))));
   } else if (message === 'close-popup') {
     action = chrome.windows.getAll({ windowTypes: ['popup'] }).then((windows) =>
       Promise.all(windows.map((window) => chrome.windows.remove(window.id))));
