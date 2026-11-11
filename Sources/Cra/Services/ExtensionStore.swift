@@ -17,8 +17,8 @@ final class ExtensionStore {
         let url: URL
         /// Chromium's extension ID (from the manifest key, else the folder path).
         var extensionID: String = ""
-        /// The action's manifest icon (16 px preferred): its default_icon, else the extension's
-        /// icons, as Chrome's toolbar picks it.
+        /// The action's manifest icon at 16 pt, with the files for 1x and 2x screens: its
+        /// default_icon, else the extension's icons, as Chrome's toolbar picks it.
         var icon: NSImage?
         /// action / browser_action / page_action default_popup, relative to the folder.
         var popupPath: String?
@@ -462,8 +462,8 @@ final class ExtensionStore {
         let description = ExtensionImporter.localizedDescription(manifest: m, folder: dir)
         return Entry(id: id, name: title.isEmpty ? id : title, version: str("version"), description: description, url: dir,
                      extensionID: extensionID ?? chromiumID(key: m["key"] as? String, folder: dir),
-                     icon: actionIcons.flatMap { ExtensionImporter.icon(manifest: ["icons": $0], folder: dir, minPixels: 16) }
-                        ?? ExtensionImporter.icon(manifest: m, folder: dir, minPixels: 16),
+                     icon: actionIcons.flatMap { ExtensionImporter.icon(manifest: ["icons": $0], folder: dir, points: 16) }
+                        ?? ExtensionImporter.icon(manifest: m, folder: dir, points: 16),
                      popupPath: (action?["default_popup"] as? String).flatMap { $0.isEmpty ? nil : $0 }, optionsPath: options)
     }
 

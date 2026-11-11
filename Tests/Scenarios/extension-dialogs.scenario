@@ -1,0 +1,17 @@
+# Chromium's extension install prompt wants a Chromium browser window to hang from as a sheet: the
+# page's top-level window. Cra embeds pages in its own window, so the prompt got none and Chromium
+# showed it free-standing: placed against the screen, unmovable, with macOS's title bar over the
+# prompt's title (GitHub #349). It must hang over Cra's window, on the screen, clear of the title bar.
+# A made-up store page (web-store.html, on the address --apps-gallery-url names) asks for the
+# install the way the Web Store's own page does.
+# promise: #349
+budget rss=600
+arg --apps-gallery-url=${ORIGIN}/
+cra://open?url=${ORIGIN}/web-store.html
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"ask()","userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*asked
+expect-log Chromium dialog [0-9]+ shown over window
+cra://debug?chromiumDialogs=1
+expect-log Chromium dialogs: frame=\{\{.*\}\} over=\{\{.*\}\} onScreen=true titleBarHidden=true
+reject-log over=none
