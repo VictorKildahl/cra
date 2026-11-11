@@ -22,9 +22,19 @@ cra://debug?popups=blocked
 expect-log popups blocked: waiting=2 urls=\S+n=p2 \S+n=p3 button=2 .*allowed=0 today=1 menu=2 Pop-ups Blocked on This Page \| \S+n=p2 \| \S+n=p3 \| - \| Open All 2 Pop-ups \| - \| Always Allow Pop-ups from 127\.0\.0\.1$
 expect-log page 127\.0\.0\.1 blocked 1 pop-up$
 
-# Open All: both open as tabs, and the button goes. The first is shown, which leaves the page.
+# The page opens one of them itself on its next click (a shared folder's "Open Tab 2 of 4"): the
+# button no longer offers it.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=p2'))","userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"true"
+wait 1.5
+cra://action/goBack
+wait 1
+cra://debug?popups=pageOpened
+expect-log popups pageOpened: waiting=1 urls=\S+n=p3 button=1 .*today=1
+
+# Open All: the last one opens as a tab, and the button goes. It is shown, which leaves the page.
 cra://debug?popups=opened&run=openAll
-expect-log popups opened: waiting=0 urls= button=0 .*today=3
+expect-log popups opened: waiting=0 urls= button=0 .*today=2
 cra://action/goBack
 wait 1
 

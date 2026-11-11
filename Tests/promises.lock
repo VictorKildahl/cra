@@ -639,11 +639,12 @@
 #356   Tests/Scenarios/picked-tabs-menu.scenario  59e80126bfd2
 #357   Packages/CraCore/Tests/CraCoreTests/BlockedPopupsTests.swift::blockedPopupsWaitToBeOpened  ed1d6b577d86
 #357   Packages/CraCore/Tests/CraCoreTests/BlockedPopupsTests.swift::navigationClearsTheList  fb5691b9fa28
+#357   Packages/CraCore/Tests/CraCoreTests/BlockedPopupsTests.swift::pageOpeningATabTakesItOffTheList  ad0b26bbb733
 #357   Packages/CraCore/Tests/CraCoreTests/FolderShareLinkTests.swift::sharesTheFolderAsTheSidebarShowsIt  c6c447a9a8f8
 #357   Packages/CraCore/Tests/CraCoreTests/FolderShareLinkTests.swift::versionOneStillOpens  6a2b1a89faba
 #357   Packages/CraCore/Tests/CraCoreTests/ToolbarCompositionTests.swift::blockedPopupsHaveTheButton  4663f2d12820
 #357   Tests/BrowserManagerLifecycleTests.swift::leaveVideoTabPictureInPictureCase  a12153424813
-#357   Tests/Scenarios/blocked-popups.scenario  14bed5aa2b3a
+#357   Tests/Scenarios/blocked-popups.scenario  9004e8b5813e
 #357   Tests/Scenarios/pip-leave-tab.scenario  c4d89f9ecfb9
 #359   Packages/CraCore/Tests/CraCoreTests/PeekLayoutTests.swift::aClickThePageCantPlaceGrowsFromThePointer  c1c7baa978b8
 #359   Packages/CraCore/Tests/CraCoreTests/PeekLayoutTests.swift::aLinkThePageFoundWins  f2c298126543

@@ -37,6 +37,30 @@ struct BlockedPopupsTests {
         #expect(popups.waiting.map(\.id) == [2])
     }
 
+    /// The folder page asks for every tab on the first click, then opens the next one per click: a
+    /// tab it opened itself goes off the button, and an address asked for twice is listed once.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/357"))
+    func pageOpeningATabTakesItOffTheList() {
+        var popups = BlockedPopups()
+        popups.update(ids: [0, 1, 2], urls: ["https://b.example/", "https://c.example/", "https://d.example/"])
+        let first = popups.markOpened(url: "https://b.example/")
+        let again = popups.markOpened(url: "https://b.example/")
+        let other = popups.markOpened(url: "https://elsewhere.example/")
+        #expect(first && !again && !other)
+        #expect(popups.waiting.map(\.url) == ["https://c.example/", "https://d.example/"])
+        // The page asked for c and d again; Chromium lists them twice.
+        popups.update(ids: [0, 1, 2, 3, 4], urls: ["https://b.example/", "https://c.example/", "https://d.example/",
+                                                   "https://c.example/", "https://d.example/"])
+        #expect(popups.waiting.map(\.id) == [1, 2])
+        // Opening c opens it once and takes both of its entries off.
+        let c = popups.open(1)
+        #expect(c.map(\.url) == ["https://c.example/"])
+        #expect(popups.waiting.map(\.url) == ["https://d.example/"])
+        let rest = popups.open(nil)
+        #expect(rest.map(\.url) == ["https://d.example/"])
+        #expect(popups.waiting.isEmpty)
+    }
+
     @Test func mismatchedListsPairByIndex() {
         var popups = BlockedPopups()
         popups.update(ids: [4, 5, 6], urls: ["https://a.example/"])
