@@ -1199,6 +1199,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let typed = dict["littleCommit"] { littleWindows.last?.debugCommit(typed); return }
             // littleMenu=<step>: the newest Little Window's "Open in" menu, see debugMenu (#331).
             if let step = dict["littleMenu"] { littleWindows.last?.debugMenu(step); return }
+            // littleCard=<step>: the newest Little Window's card, see debugCardStep (#337).
+            if let step = dict["littleCard"] { littleWindows.last?.debugCardStep(step); return }
             if let label = dict["littleShown"] {
                 var space = "-", profile = "-", shown = ""
                 if let w = littleWindows.last {
@@ -1207,7 +1209,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     space = store.space(state.targetSpaceID)?.title ?? "-"
                     let named: BrowserProfile? = store.profile(state.profileID)
                     profile = named?.name ?? "Default"
-                    shown = " \(w.debugReadout)"
+                    shown = " \(w.debugCard) \(w.debugReadout)"
                 }
                 CraLog.note("little shown \(label): windows=\(littleWindows.count) space=\(space) profile=\(profile)\(shown)")
                 return

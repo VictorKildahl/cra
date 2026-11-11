@@ -572,6 +572,12 @@
 #332   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::reopensInACornerWhenLeftHalfOffScreen  85f63a3542a2
 #332   Tests/Scenarios/pip-drop-corner.scenario  e5b8bd44d942
 #333   Tests/Scenarios/little-window-menu-actions.scenario  159077f207b0
+#337   Packages/CraCore/Tests/CraCoreTests/LittleCardTests.swift::barFillsTheCardUntilItShrinks  39e88968f8d7
+#337   Packages/CraCore/Tests/CraCoreTests/LittleCardTests.swift::bigWindowsStayOnScreen  d291f4bd1a25
+#337   Packages/CraCore/Tests/CraCoreTests/LittleCardTests.swift::cardFollowsTheScreen  c6db08a493fe
+#337   Packages/CraCore/Tests/CraCoreTests/LittleCardTests.swift::cardSitsTopRight  6a863146fc83
+#337   Packages/CraCore/Tests/CraCoreTests/LittleCardTests.swift::enterKeepsTheTopRightCorner  3056652942c8
+#337   Tests/Scenarios/little-window-card.scenario  6c5a8341e907
 #339   Packages/CraCore/Tests/CraCoreTests/SpaceMenuLayoutTests.swift::dockOpensTheSpaceForItsListAndHeader  cd0d0aed9120
 #339   Packages/CraCore/Tests/CraCoreTests/SpaceMenuLayoutTests.swift::dockShowsArcsWholeSpaceMenu  074df60c8297
 #341   Tests/FloatingSidebarTests.swift::staysInsideTheWindowsCorners  47752aeeee63
