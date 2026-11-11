@@ -1895,6 +1895,19 @@ Method: `strings`, `otool -oV` with relative-method-list selectors resolved by h
 (`__swift5_types` → field descriptors) of the arm64 slices of `Arc` and `ArcCore.framework`. No runtime capture of
 Arc's popup this time, so geometry is not measured.
 
+- [O, Arc 1.172.2, 11 Nov 2026, arm64 disassembly + Objective-C metadata] `BrowserExtensionWindow`'s Swift
+  initializer at `0x100108374` calls `setCollectionBehavior:` with `0x100` at `0x100108534`:
+  `.fullScreenAuxiliary`. The selector stub at `0x103664220` reads the selector reference at `0x1045483c8`.
+  The window is an ordinary `NSWindow`, not a nonactivating panel. Shared window configuration at
+  `0x1002c71f0` also has paths that set `.fullScreenAuxiliary`, clear `.fullScreenPrimary` and add
+  `.moveToActiveSpace` (`0x2`). [U] The particular shared-configuration path used by Bitwarden's separate
+  unlock window, and its live Space membership, were not measured. `ADKApplication.didCreateNewBrowser:`
+  (`0x1004bc9b4`) wraps the browser and passes it to a Swift delegate through an indirect call.
+  Read again in the review of #351: the stub's selector reference resolves to `setCollectionBehavior:`, and the
+  shared path at `0x1002c7290`–`0x1002c72c8` ORs `0x100`, ANDs out `0x80` and ORs `0x2`, in that order. Cra does
+  the three only for a window that opens over a full-screen Cra: Chromium never takes a `.fullScreenAuxiliary`
+  window full screen (`gfx::SetNSWindowCanFullscreen` returns early), so over a windowed Cra the window stays
+  as Chrome made it (scenario `extension-popup-own-fullscreen`).
 - [O] ArcCore's browser delegate hands the toolbar popup to the Swift shell as web contents:
   `browser:didOpenExtensionPopup:webContents:`, `browser:didResizeExtensionPopup:size:`,
   `browser:didCloseExtensionPopup:` (`ADKClientLive.BrowserExtensionsPopUpManager`). The window state keeps

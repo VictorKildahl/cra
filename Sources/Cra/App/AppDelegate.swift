@@ -1253,6 +1253,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                         + "visible=\(flag(w.isVisible)) onSpace=\(flag(w.isOnActiveSpace)) lights=\(lights(w)) "
                         + "onTop=\(flag(w.level == .floating)) sheet=\(flag(w.attachedSheet != nil))")
                 }
+                for (i, w) in NSApp.windows.filter({ CraCEFRuntime.isExtensionWindow($0) }).enumerated() {
+                    CraLog.note("window state \(label): extension\(i) visible=\(flag(w.isVisible)) onSpace=\(flag(w.isOnActiveSpace)) "
+                        + "auxiliary=\(flag(w.collectionBehavior.contains(.fullScreenAuxiliary))) "
+                        + "movesToActiveSpace=\(flag(w.collectionBehavior.contains(.moveToActiveSpace))) "
+                        + "primary=\(flag(w.collectionBehavior.contains(.fullScreenPrimary))) "
+                        + "fullscreen=\(flag(w.styleMask.contains(.fullScreen))) title=\(w.title)")
+                }
                 return
             }
             // themeShown=<label>: which half each window draws now (the space's theme, the window content

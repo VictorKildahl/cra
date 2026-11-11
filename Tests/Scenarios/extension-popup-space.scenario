@@ -1,0 +1,15 @@
+# An extension's separate window keeps its identity and resize API. Over a windowed Cra it stays
+# the ordinary window Chrome made: only over a full-screen Cra does it become a full-screen
+# auxiliary (extension-popup-fullscreen), which can't fill the screen itself
+# (extension-popup-own-fullscreen).
+budget rss=700 stalls50=5
+cra://debug?installExtension=${FIXTURES}/TabsCreateExtension
+relaunch
+cra://open?url=${PAGE}?n=popup-window
+wait 3
+cra://debug?windowState=popup
+expect-log window state popup: extension0 visible=1 onSpace=1 auxiliary=0 movesToActiveSpace=0 primary=1 fullscreen=0 title=Popup fixture: id-type-resize-preserved
+cra://open?url=${PAGE}?n=close-popup
+wait 1
+cra://debug?windowState=closed
+reject-log window state closed: extension[0-9]+ visible=1

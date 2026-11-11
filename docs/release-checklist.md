@@ -176,6 +176,9 @@ built release app with a test profile. Note anything that fails in the release's
   enabled extension…" instead of crashing.
 - **#8:** a Bitwarden popup opens in under 0.5 s and hangs from the button's right edge. A
   dragged popup reopens at the same offset after the window moves.
+- With Cra in native full screen and Bitwarden locked, open its separate vault-unlock window:
+  it appears over Cra on the same macOS Space, accepts the password and closes normally without
+  switching to a desktop. Compare with Arc; also check windowed Cra and a second display.
 - **#38:** in full screen, SwitchyOmega's Options doesn't slide the Space away, and a second
   click selects the open options tab.
 - **#42:** clicking the URL in the developer bar edits it in place with the whole URL selected
