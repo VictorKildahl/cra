@@ -4223,3 +4223,14 @@ link, toolbar hidden with ⇧⌘D), a Little Arc's link icon and the developer b
 - Cra: CraCore `CopyCheck` (the numbers), `NSImageView.playCopyCheck` (CopyCheckAnimation.swift), played by
   the sidebar URL field's Copy Link and `ToolbarURLButton.copyFromGlyph`; not by ⇧⌘C, the Little Window or
   the developer bar.
+
+## ⌘W in the Settings window (Arc 1.172.2, build 90755, 11 Nov 2026, PR #364, arm64 static analysis)
+
+- [O] `Settings.SettingsWindowController` (an `NSWindowController`) implements `closeCurrentItem:`, the
+  action behind Arc's ⌘W (File ▸ Close Tab), next to `doCommandBySelector:`, `copyAction:` and
+  `supplementalTargetForAction:sender:` (`otool -oV` on the arm64 slice, selector refs resolved through
+  `__objc_methname`). Its window class is `Settings.UserInteractionPausableWindow`.
+  [I] With Settings key, ⌘W reaches Settings first and closes it; the browser window behind keeps its tab.
+  Same pattern as `BrowserExtensionWindowController.closeCurrentItem:` (extension windows).
+- Cra: `AppDelegate.perform(_:)` sends Close Tab and Close Window to Settings while it's in front
+  (`settingsInFront`); with a sheet up on Settings nothing closes. Scenario `settings-close-shortcut`.
