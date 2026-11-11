@@ -4089,4 +4089,11 @@ screen on a click.
   window and the page saw the press; a click reached a button there; a drag over text selected it; the right
   14 pt and a press 130 pt down stayed with the page; the window's top-right corner resized. On the build
   before it, the text drag, the right strip and the corner all moved the window.
+- [O Cra, real pointer events, 11 Nov 2026] On an inactive Cra the press finds a stale cursor (`NSApp.isActive` false and
+  `NSCursor.current` whatever Cra set when it was last in front), so an arrow drag in the band moved the window only
+  2 times in 4. Such a drag also ends with two `leftMouseUp` events 3 ms apart, and the page took the second for a
+  click on what the drag started on. Cra now leaves the cursor out for a press on an inactive Cra or the press that
+  brings it to the front (`PageTopDrag.cursorIsCurrent`), and keeps every release after a window drag from the page:
+  7 drags in 7 moved the window, and a drag starting on a button no longer pressed it. [U] Arc's own behaviour on an
+  inactive window: its grabber makes the same cursor test, not measured.
 

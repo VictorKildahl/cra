@@ -293,7 +293,6 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 /// Seek the video in the Picture in Picture window by `seconds` (negative = back).
 - (void)skipPictureInPictureBy:(double)seconds NS_SWIFT_NAME(skipPictureInPicture(by:));
 - (void)print;
-- (void)viewSource;
 /// One of Chrome's own commands by its IDC name ("IDC_ROUTE_MEDIA" for Cast…, "IDC_TASK_MANAGER"),
 /// where Chromium can run it for this page. NO when it can't.
 - (BOOL)runChromeCommand:(NSString *)name NS_SWIFT_NAME(runChromeCommand(_:));

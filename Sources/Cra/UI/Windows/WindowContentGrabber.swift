@@ -7,9 +7,30 @@ enum WindowDragRegion {
     private static let resizeDirectionSelector = NSSelectorFromString("_resizeDirectionForMouseLocation:")
     private typealias ResizeDirection = @convention(c) (NSWindow, Selector, NSPoint) -> Int64
 
-    static func allows(_ event: NSEvent, in owner: NSWindow) -> Bool {
+    /// Whether Cra is the active app, and when it last became so (the system's uptime). Tests set both.
+    static var appIsActive: () -> Bool = { NSApp.isActive }
+    static var becameActiveAt: TimeInterval = 0
+    private static var activationObserver: NSObjectProtocol?
+
+    /// Notes each time Cra comes to the front, for `cursorIsCurrent(at:)`.
+    static func watchActivation() {
+        guard activationObserver == nil else { return }
+        activationObserver = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification,
+                                                                    object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { becameActiveAt = ProcessInfo.processInfo.systemUptime }
+        }
+    }
+
+    /// Whether the cursor at this press says what is under the pointer (PageTopDrag.cursorIsCurrent):
+    /// not on an inactive Cra, nor for the press that brought it to the front.
+    static func cursorIsCurrent(at event: NSEvent) -> Bool {
+        PageTopDrag.cursorIsCurrent(appActive: appIsActive(), becameActiveAt: becameActiveAt, pressedAt: event.timestamp)
+    }
+
+    /// `cursorIsCurrent`: what the gesture's press found; nil asks for this event.
+    static func allows(_ event: NSEvent, in owner: NSWindow, cursorIsCurrent: Bool? = nil) -> Bool {
         guard let target = event.window, owner.isMovable, !owner.styleMask.contains(.fullScreen),
-              NSCursor.current == .arrow else { return false }
+              !(cursorIsCurrent ?? Self.cursorIsCurrent(at: event)) || NSCursor.current == .arrow else { return false }
         let point = target.convertPoint(toScreen: event.locationInWindow)
         guard owner.styleMask.contains(.resizable) else { return true }
         // AppKit's corner targets reach farther inward than its straight edges. Chromium uses
@@ -31,9 +52,12 @@ final class WindowContentGrabber: NSView {
     private var monitor: Any?
     private var press: NSEvent?
     private var dragging = false
+    /// Whether the press went by the cursor; its drag does the same.
+    private var pressCursorIsCurrent = true
 
     func attach(to page: NSView, owner: NSWindow) {
         guard let host = page.superview else { removeFromSuperview(); return }
+        WindowDragRegion.watchActivation()
         if pageView !== page { press = nil; dragging = false }
         pageView = page
         self.owner = owner
@@ -70,8 +94,9 @@ final class WindowContentGrabber: NSView {
         if event.type == .leftMouseDown {
             press = nil
             dragging = false
+            pressCursorIsCurrent = WindowDragRegion.cursorIsCurrent(at: event)
             guard let owner, let page = pageView, event.window === page.window, isEnabled(),
-                  WindowDragRegion.allows(event, in: owner), let content = window?.contentView,
+                  WindowDragRegion.allows(event, in: owner, cursorIsCurrent: pressCursorIsCurrent), let content = window?.contentView,
                   let hit = content.hitTest(content.superview?.convert(event.locationInWindow, from: nil) ?? event.locationInWindow),
                   hit.isDescendant(of: page) else { return event }
             let depth = page.convert(page.bounds, to: nil).maxY - event.locationInWindow.y
@@ -84,13 +109,14 @@ final class WindowContentGrabber: NSView {
         }
         guard event.window === window else { return event }
         if event.type == .leftMouseUp {
-            let consumed = dragging
+            // `dragging` lasts until the next press: a drag that began on an inactive Cra ends with
+            // two releases, and the page took the second for a click on what the drag started on.
             press = nil
-            dragging = false
-            return consumed ? nil : event
+            return dragging ? nil : event
         }
         guard event.type == .leftMouseDragged, let down = press else { return event }
-        guard let owner, let target = event.window, isEnabled(), WindowDragRegion.allows(event, in: owner) else {
+        guard let owner, let target = event.window, isEnabled(),
+              WindowDragRegion.allows(event, in: owner, cursorIsCurrent: pressCursorIsCurrent) else {
             press = nil
             return event
         }

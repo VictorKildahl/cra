@@ -1625,7 +1625,15 @@ public:
         if (!frame->IsMain()) return;
         CraBrowser* o = owner_;
         if (!o) return;
-        o.currentURL = NSStringFromCef(url);
+        // A source page (View Source, a typed view-source: address) reports the address it shows the
+        // source of. Chrome and Arc show view-source: in front of it, and the tab keeps it, so a
+        // relaunch opens the source again rather than the page (#348).
+        std::string address = url.ToString();
+        if (CefRefPtr<CefNavigationEntry> entry = browser->GetHost()->GetVisibleNavigationEntry()) {
+            std::string shown = entry->GetDisplayURL().ToString();
+            if (shown.rfind("view-source:", 0) == 0) address = shown;
+        }
+        o.currentURL = [NSString stringWithUTF8String:address.c_str()] ?: @"";
         [o.delegate browser:o didChangeURL:o.currentURL];
     }
 
@@ -2946,7 +2954,6 @@ static NSView* FindRenderWidgetHostView(NSView* root) {
     }
 }
 - (void)print { if (_browser) _browser->GetHost()->Print(); }
-- (void)viewSource { if (_browser) _browser->GetMainFrame()->ViewSource(); }
 - (BOOL)runChromeCommand:(NSString*)name {
     if (!_browser) return NO;
     int command = cef_id_for_command_id_name(name.UTF8String);

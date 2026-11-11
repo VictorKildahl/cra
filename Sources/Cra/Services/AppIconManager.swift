@@ -50,16 +50,20 @@ final class AppIconManager {
         customImage = custom
     }
 
+    /// The picked icon as the Dock tile gets it, nil for the bundle's own (Segments). Chromium's
+    /// download view draws it too (ChromiumDockTile).
+    @ObservationIgnored private(set) var dockImage: NSImage?
+
     /// At start-up, before the Dock first draws the running app's tile.
     func applyAtLaunch() {
-        if selectedID != Self.defaultID { NSApp.applicationIconImage = image(for: selectedID) }
+        if selectedID != Self.defaultID { setDockImage() }
     }
 
     /// Cra just came back to the Dock (Keep Cra in the menu bar, #231). macOS registers the app
     /// anew with the bundle's icon, so the ⌘-Tab switcher shows Segments until the icon is set
     /// again (GitHub #319).
     func applyAfterReturningToDock() {
-        NSApp.applicationIconImage = selectedID == Self.defaultID ? nil : image(for: selectedID)
+        setDockImage()
         CraLog.note("app icon: \(selectedID) set again, back in the Dock")
     }
 
@@ -97,9 +101,21 @@ final class AppIconManager {
     }
 
     private func apply() {
-        // nil puts the bundle's icon back.
-        NSApp.applicationIconImage = selectedID == Self.defaultID ? nil : image(for: selectedID)
+        setDockImage()
         notifyDockTile()
+    }
+
+    private func setDockImage() {
+        dockImage = selectedID == Self.defaultID ? nil : image(for: selectedID)
+        // Setting applicationIconImage puts AppKit's image view on the tile in place of
+        // Chromium's download view, whose badge would then be gone until Cra quits; it goes
+        // back, drawing the new icon. nil puts the bundle's icon back.
+        let chromiumView = NSApp.dockTile.contentView.flatMap { ChromiumDockTile.isChromiumView($0) ? $0 : nil }
+        NSApp.applicationIconImage = dockImage
+        if let chromiumView {
+            NSApp.dockTile.contentView = chromiumView
+            NSApp.dockTile.display()
+        }
     }
 
     private func notifyDockTile() {
@@ -163,6 +179,37 @@ final class AppIconManager {
         let n = CGFloat(px)
         return (cutOut, NSRect(x: CGFloat(minX) / n, y: CGFloat(px - 1 - maxY) / n,
                                width: CGFloat(maxX - minX + 1) / n, height: CGFloat(maxY - minY + 1) / n))
+    }
+
+    /// What the Dock tile (and the ⌘-Tab switcher) gets while Cra runs, for
+    /// cra://debug?dockTile (#319): "view=none" while the Dock draws the bundle's icon itself,
+    /// else the tile's content view and whether its drawing is nearer the picked icon or the
+    /// bundle's.
+    func dockTileReadout() -> String {
+        guard let view = NSApp.dockTile.contentView else { return "view=none" }
+        let px = 32
+        let drawn = Self.pixels(px) { rect in
+            guard view.bounds.width > 0, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+            view.cacheDisplay(in: view.bounds, to: rep)
+            rep.draw(in: rect)
+        }
+        let bundleIcon = NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath)
+        let picked = Self.pixels(px) { (self.image(for: self.selectedID) ?? bundleIcon).draw(in: $0) }
+        let bundle = Self.pixels(px) { bundleIcon.draw(in: $0) }
+        func distance(_ a: [UInt8], _ b: [UInt8]) -> Int {
+            a.isEmpty || a.count != b.count ? Int.max : zip(a, b).reduce(0) { $0 + abs(Int($1.0) - Int($1.1)) } / a.count
+        }
+        let toPicked = distance(drawn, picked), toBundle = distance(drawn, bundle)
+        return "view=\(type(of: view)) draws=\(toPicked < toBundle ? "picked" : "bundle") (\(toPicked) vs \(toBundle))"
+    }
+
+    private static func pixels(_ px: Int, _ draw: (NSRect) -> Void) -> [UInt8] {
+        guard let rep = bitmap(px), let ctx = NSGraphicsContext(bitmapImageRep: rep), let data = rep.bitmapData else { return [] }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = ctx
+        draw(NSRect(x: 0, y: 0, width: px, height: px))
+        NSGraphicsContext.restoreGraphicsState()
+        return Array(UnsafeBufferPointer(start: data, count: rep.bytesPerRow * px))
     }
 
     private static func bitmap(_ px: Int) -> NSBitmapImageRep? {

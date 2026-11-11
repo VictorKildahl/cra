@@ -1,0 +1,25 @@
+# promise: #348
+# View ▸ Developer ▸ View Source (⌥⌘U) opens the page's view-source: in a new tab in front, as in
+# Arc and Chrome; the page's own tab stays (#348: 0.1.38 did nothing).
+budget rss=700 stalls50=10
+cra://open?url=${PAGE}?n=page
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://action/viewSource
+wait 2
+cra://debug?browserWindows=source
+expect-log Cra browser windows source: kind=normal .*tabs=\[\S*n=page view-source:\S*n=page\] open=view-source:\S*n=page
+# The new tab shows the page's HTML as text, Chromium's source view, not the page again.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'lines:'+document.querySelectorAll('td.line-content').length+':'+document.body.innerText.includes('<title>Fixture page</title>')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"lines:[1-9][0-9]*:true"
+# A source has no source of its own (Chrome greys the item out): no third tab.
+cra://action/viewSource
+wait 1
+cra://debug?browserWindows=again
+expect-log Cra browser windows again: kind=normal .*tabs=\[\S*n=page view-source:\S*n=page\] open=view-source:\S*n=page
+# The tab keeps the view-source: address, so a relaunch shows the source again, not the page.
+relaunch
+wait 2
+cra://debug?browserWindows=relaunched
+expect-log browser windows relaunched: kind=normal listed=1 tabs=2 open=1
+cra://debug?back=relaunched
+expect-log back relaunched: selected=view-source:\S*n=page back=

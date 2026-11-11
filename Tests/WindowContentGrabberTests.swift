@@ -9,11 +9,14 @@ enum WindowContentGrabberTests {
     static func main() {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
+        // The harness is never the active app; the checks below are an active Cra's unless they say otherwise.
+        WindowDragRegion.appIsActive = { true }
         let cursor = NSCursor.current
         defer { cursor.set() }
         checkClicksAndDrag()
         checkCursors()
         checkCursorChange()
+        checkActivatingPress()
         checkEligibility()
         checkResizeEdges()
         checkRoundedResizeCorners()
@@ -50,6 +53,11 @@ enum WindowContentGrabberTests {
                "the local monitor consumes the window drag and its release")
         expect(f.owner.drags.count == 1 && f.owner.drags[0].type == .leftMouseDown,
                "the system drag starts from a mouse-down event")
+        // A drag that began on an inactive Cra ends with two releases, 3 ms apart (seen with real drags):
+        // the second one reached the page, which took it for a click on what the drag started on.
+        NSApp.sendEvent(f.mouse(.leftMouseUp, dx: 12))
+        expect(f.source.delivered.map(\.type) == [.leftMouseDown],
+               "a second release after a window drag stays away from the page too")
         NSApp.sendEvent(f.mouse(.leftMouseDown))
         let nextUp = f.mouse(.leftMouseUp)
         NSApp.sendEvent(nextUp)
@@ -85,6 +93,39 @@ enum WindowContentGrabberTests {
         NSApp.sendEvent(f.mouse(.leftMouseUp, dx: 24))
         expect(f.source.delivered.count == 4 && f.owner.drags.isEmpty,
                "a cursor change cancels the candidate for the rest of that press")
+    }
+
+    /// The fixture's events are stamped 1 s.
+    @MainActor
+    private static func checkActivatingPress() {
+        let f = Fixture()
+        defer {
+            f.close()
+            WindowDragRegion.appIsActive = { true }
+            WindowDragRegion.becameActiveAt = 0
+        }
+        NSCursor.iBeam.set()
+        for (active, becameActiveAt) in [(false, 0.0), (true, 1.02), (true, 0.95)] {
+            WindowDragRegion.appIsActive = { active }
+            WindowDragRegion.becameActiveAt = becameActiveAt
+            f.source.delivered.removeAll()
+            let drags = f.owner.drags.count
+            NSApp.sendEvent(f.mouse(.leftMouseDown))
+            NSApp.sendEvent(f.mouse(.leftMouseDragged, dx: 12))
+            NSApp.sendEvent(f.mouse(.leftMouseUp, dx: 12))
+            expect(f.owner.drags.count == drags + 1 && f.source.delivered.map(\.type) == [.leftMouseDown],
+                   "a press on an inactive Cra, or the one that brought it to the front, moves the window whatever cursor Cra left behind (active=\(active), became active at \(becameActiveAt))")
+        }
+        WindowDragRegion.appIsActive = { true }
+        WindowDragRegion.becameActiveAt = 0.5
+        f.source.delivered.removeAll()
+        let drags = f.owner.drags.count
+        NSApp.sendEvent(f.mouse(.leftMouseDown))
+        WindowDragRegion.becameActiveAt = 1
+        NSApp.sendEvent(f.mouse(.leftMouseDragged, dx: 12))
+        NSApp.sendEvent(f.mouse(.leftMouseUp, dx: 12))
+        expect(f.owner.drags.count == drags && f.source.delivered.count == 3,
+               "a press on a Cra that was already active goes by its cursor, to the end of the gesture")
     }
 
     @MainActor
