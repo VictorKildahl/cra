@@ -32,10 +32,10 @@ struct MaxPane: View {
                     TidyDownloadsPicture()
                 }
                 SettingsCardDivider()
-                MaxFeatureRow(title: "5-Second Previews", isOn: $store.settings.fiveSecondPreviews, enabled: available) {
+                SettingsSwitchRow("5-Second Previews",
+                                  detail: "Instant summaries appear when you hover over links on certain websites (Google results, X and Hacker News). Or hold Shift while hovering to preview any link.",
+                                  isOn: $store.settings.fiveSecondPreviews, enabled: available) {
                     FiveSecondPreviewsPicture()
-                } description: {
-                    Text("Instant summaries appear when you hover over links on certain websites (Google results, X and Hacker News). Or hold Shift while hovering to preview any link.")
                 }
             }
             MaxFooter(status: service.status) { service.openSystemSettings() }
