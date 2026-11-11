@@ -10,7 +10,6 @@ import JavaScriptCore
 @_silgen_name("sandbox_init")
 private func sandbox_init(_ profile: UnsafePointer<CChar>, _ flags: UInt64,
                           _ errorbuf: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32
-private let SANDBOX_NAMED: UInt64 = 1
 
 var errorState: [String: String] = [:]
 
@@ -20,7 +19,7 @@ func send(_ value: [String: Any]) throws {
 }
 
 /// JavaScriptCore loads ICU's data and its regular expression engine on first use: use them once
-/// while files can still be read, then lock the process into the system's pure-computation profile.
+/// while files can still be read, then deny access to new OS resources before reading plugin code.
 func enterSandbox(_ context: JSContext) throws {
     context.evaluateScript(#"""
         /\p{L}+/u.test("é"); "Ä".normalize("NFD").toLowerCase(); "a".localeCompare("b");
@@ -28,7 +27,8 @@ func enterSandbox(_ context: JSContext) throws {
         encodeURIComponent("é ?"); parseInt("ff", 16); String.fromCodePoint(0x1F600);
         """#)
     var error: UnsafeMutablePointer<CChar>?
-    guard sandbox_init("pure-computation", SANDBOX_NAMED, &error) == 0 else {
+    // macOS kills processes built with SDK 27 or newer that enter a built-in named profile.
+    guard sandbox_init("(version 1)(deny default)", 0, &error) == 0 else {
         let message = error.map { String(cString: $0) } ?? "unknown"
         throw NSError(domain: "CraPluginHost", code: 5, userInfo: [NSLocalizedDescriptionKey: "Sandbox failed: \(message)"])
     }
