@@ -4,7 +4,7 @@ import UIKit
 /// The browser's swipes. `MobileSwipe` decides what each one does when the finger lifts.
 extension BrowserViewController: UIGestureRecognizerDelegate {
     private enum Name {
-        static let bar = "bar-swipe", page = "page-swipe", sheet = "sheet-drag"
+        static let bar = "bar-swipe", page = "page-swipe", sheet = "sheet-drag", pinch = "page-pinch"
     }
 
     func installGestures() {
@@ -23,11 +23,21 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         sheetPan.delegate = self
         sheet.addGestureRecognizer(sheetPan)
 
+        let pinch = UIPinchGestureRecognizer(target: self, action: #selector(pagePinched(_:)))
+        pinch.name = Name.pinch
+        pinch.delegate = self
+        pageContainer.addGestureRecognizer(pinch)
+
         // Holding the up arrow goes straight to the share sheet.
         bar.menuButton.addGestureRecognizer(UILongPressGestureRecognizer(target: self, action: #selector(menuHeld(_:))))
     }
 
     public func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+        if let pinch = gesture as? UIPinchGestureRecognizer, pinch.name == Name.pinch {
+            // Pinching in on a page that is not zoomed: there is nothing to zoom out of, so it summarizes.
+            guard pinchSummarizes, readerView == nil, let scroll = shownPage?.webView.scrollView else { return false }
+            return pinch.scale < 1 && scroll.zoomScale <= scroll.minimumZoomScale + 0.01
+        }
         guard let pan = gesture as? UIPanGestureRecognizer else { return true }
         let velocity = pan.velocity(in: view)
         switch pan.name {
@@ -42,6 +52,10 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         default:
             return true
         }
+    }
+
+    public func gestureRecognizer(_ gesture: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        gesture.name == Name.pinch
     }
 
     /// The page's own scrolling waits until a sideways swipe has been ruled out.

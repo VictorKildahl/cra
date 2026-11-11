@@ -390,3 +390,30 @@ struct MobileSwipeTests {
         #expect(!MobileSwipe.refreshes(pullAtRelease: 60))
     }
 }
+
+struct MobileSummaryTests {
+    @Test func thePageIsCutAtASentenceToFitTheModel() {
+        let sentence = "This is a sentence about pizza. "
+        let long = String(repeating: sentence, count: 400)
+        let clipped = MobileSummary.clipped(long)
+        #expect(clipped.count <= MobileSummary.maxTextLength)
+        #expect(clipped.hasSuffix("pizza."))
+        #expect(MobileSummary.clipped("a   b\n\n\n  c ") == "a b\nc")
+        #expect(MobileSummary.prompt(title: "Pizza", text: "Dough.", language: "Danish")
+            == "Answer in Danish.\n\nWEB PAGE:\n<webpage>\nTitle: Pizza\nDough.\n</webpage>")
+    }
+
+    @Test func aPageNeedsSomeTextToBeSummarized() {
+        #expect(!MobileSummary.canSummarize(text: "Sign in"))
+        #expect(MobileSummary.canSummarize(text: String(repeating: "Words about a thing. ", count: 20)))
+    }
+
+    @Test func anAnswerIsTidiedAndAnEmptyOneIsNoAnswer() {
+        let answer = MobileSummary.Answer(overview: "  About pizza.\n", sections: [
+            .init(title: " Dough ", body: "Flour and water."), .init(title: "", body: "No title"), .init(title: "Empty", body: "  "),
+        ])
+        #expect(answer.cleaned == MobileSummary.Answer(overview: "About pizza.", sections: [.init(title: "Dough", body: "Flour and water.")]))
+        #expect(MobileSummary.Answer(overview: " ", sections: []).cleaned == nil)
+        #expect(MobileSummary.fakeAnswer(title: "T", text: "One. Two. Three.").sections.map(\.body) == ["Two.", "Three."])
+    }
+}

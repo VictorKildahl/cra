@@ -26,6 +26,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     var swipeNeighbour: UIImageView?
     var swipeNeighbourStep = 0
     var tabArchivedBySwipe: UUID?
+    // Reader and Summarize (BrowserReading.swift).
+    var readerView: ReaderView?
+    var summaryHost: UIViewController?
     var isSearching = false
     var incognitoSearch = false
     var keyboardHeight: CGFloat = 0
@@ -94,6 +97,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     var didOfferSearchOnLaunch = false
+    var didSummarizeFirstPage = false
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
@@ -267,6 +271,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         let page = store.page(for: tab)
         page.siteOptions = { [weak self] host in self?.settings.value.options(for: host) ?? MobileSiteOptions() }
         guard page !== shownPage else { return }
+        closeReader()
         shownPage?.webView.removeFromSuperview()
         shownPage?.delegate = nil
         shownPage = page
@@ -504,8 +509,12 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
                 share.popoverPresentationController?.sourceView = self.bar.menuButton
                 self.present(share, animated: true)
             }
-        case .reader, .summarize:
-            break
+        case .reader:
+            menuHost?.dismiss()
+            toggleReader()
+        case .summarize:
+            menuHost?.dismiss()
+            summarize()
         }
     }
 
@@ -548,7 +557,11 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     // MARK: WebPageDelegate
 
     func webPageDidChange(_ page: WebPage) {
-        if page === shownPage { refreshMenu() }
+        if page === shownPage {
+            refreshMenu()
+            // Reader belongs to the page it was opened on.
+            if page.isLoading { closeReader() }
+        }
         store.update(page.tabID, url: page.webView.url?.absoluteString, title: page.webView.title)
     }
 
@@ -557,6 +570,10 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             page.iconCandidates { [weak self] candidates in self?.favicons.fetch(for: address, candidates: candidates) }
         }
         guard page === shownPage else { return }
+        if success, LaunchOptions.summarizesFirstPage, !didSummarizeFirstPage {
+            didSummarizeFirstPage = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.summarize() }
+        }
         // A moment for the page to paint before its picture is taken.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
             guard page === self?.shownPage else { return }

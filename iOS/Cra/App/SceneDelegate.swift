@@ -32,7 +32,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
 /// What a test run passes on the command line: `-CraDataDir <path>` for a data folder of its own
 /// (`fresh` for an empty one), `-CraOpenURL <address>` to start on a page, `-CraType <text>` to
-/// start with that typed in the search field, `-CraSearch NO` to launch without the search sheet.
+/// start with that typed in the search field, `-CraSearch NO` to launch without the search sheet,
+/// `-CraFakeModel YES` for canned answers in place of the on-device model, `-CraSummarize YES`
+/// to summarize the first page once it has loaded.
 enum LaunchOptions {
     static var dataDirectory: URL {
         guard let value = UserDefaults.standard.string(forKey: "CraDataDir") else { return TabStore.defaultDirectory }
@@ -46,4 +48,6 @@ enum LaunchOptions {
     static var openURL: String? { UserDefaults.standard.string(forKey: "CraOpenURL") }
     static var typedText: String? { UserDefaults.standard.string(forKey: "CraType") }
     static var skipsSearch: Bool { UserDefaults.standard.string(forKey: "CraSearch") == "NO" }
+    static var fakeModel: Bool { UserDefaults.standard.string(forKey: "CraFakeModel") == "YES" }
+    static var summarizesFirstPage: Bool { UserDefaults.standard.string(forKey: "CraSummarize") == "YES" }
 }

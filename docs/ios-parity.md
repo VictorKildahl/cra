@@ -42,12 +42,12 @@ ended). "Measured" means the numbers come from Arc Search footage, not from a de
 | Swipe back on a tab's first page archives it; opposite reopens | done | `MobileSwipe.navigation`; UI test in `GestureTests`. |
 | Pull to refresh | done | Acts on release past 96 pt, so dragging back up cancels. The reload arrow is Cra's own: Arc Search's indicator was not seen. |
 | Page menu ("Tab Controls"): address capsule, tiles, rows, footer | done | Measured from Arc Search screenshots (`MobilePageMenu`): 48 pt capsule, 68 × 77 tiles, 48 pt rows. Back, forward, reload and the link glyph work. "Gift Arc" has no counterpart. UI tests in `PageMenuTests`. |
-| Reader | missing | The tile is there and does nothing yet. |
+| Reader | partial | The article alone, scripts off, in the device's serif (`Article`, `ReaderView`); a link leaves Reader. Arc Search's Reader was not seen in any source, so the look is Cra's own. |
 | Find on Page | done | The system find bar; Arc Search's own bar was not seen in any source. |
 | Copy Link without trackers, Share | done | `CleanURL`, from the tile and from the capsule's link glyph. |
 | Page Zoom, Request Desktop Site | done | Tenths from 50% to 300%, the percentage shown and reset by a tap. |
 | Translate | missing | The row is there and does nothing yet. |
-| Pinch to Summarize / Summarize | missing | On-device model only. The tile is there (where the model is) and does nothing yet. |
+| Pinch to Summarize / Summarize | partial | The tile and the pinch summarize with the device's own model (`MobileSummary`, `Summarizer`): the page shrinks into its folded card, then the overview and titled sections, "Summarized for you by Cra" and the close button. Follows the site's Pinch to Summarize switch. The origami fold itself, the wiggle while loading, and copy/share of the summary are not built. |
 | Block ads, trackers, cookie banners, per site | done | The Mac app's domain list compiled into WebKit content rules (`MobileBlocklist`), cookie banners hidden by their containers; each page gets the lists its site's switches ask for. The list does not say which domain is an ad and which a tracker, so the split is by name. Cookie prompts are hidden, not answered (Arc Search 1.38 denies them). |
 | "Reload without ad blockers", blocked count | done | The tab shows the site unblocked until it leaves it. The footer counts requests to listed domains that failed while their blocker was on. UI test in `BlockingTests`. |
 | Link long-press preview and menu | partial | WebKit's default preview. |

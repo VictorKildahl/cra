@@ -8,6 +8,7 @@ import FoundationModels
 enum BrowseForMe {
     /// Whether this device can answer: Apple Intelligence present and switched on.
     static var isAvailable: Bool {
+        if LaunchOptions.fakeModel { return true }
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
             if case .available = SystemLanguageModel.default.availability { return true }

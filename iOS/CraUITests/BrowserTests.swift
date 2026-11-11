@@ -324,3 +324,58 @@ final class GestureTests: BrowserTestCase {
         XCTAssertFalse(app.keyboards.firstMatch.waitForExistence(timeout: 1))
     }
 }
+
+final class ReadingTests: BrowserTestCase {
+    static let article: String = {
+        let paragraphs = [
+            "Pizza is a dish of Italian origin made of a flattened base of leavened dough topped with tomato and cheese.",
+            "The dough rests for a day so that it stretches without tearing and bakes with large bubbles at its edge.",
+            "A wood fired oven reaches four hundred degrees and bakes a pizza in about ninety seconds.",
+            "Naples protects the recipe of its pizza with rules about flour, tomatoes and the size of the base.",
+        ]
+        let body = paragraphs.map { "<p>\($0)</p>" }.joined()
+        return "data:text/html,<meta name=viewport content='width=device-width'><title>About Pizza</title>"
+            + "<nav>Menu Home Shop</nav><article><h1>About Pizza</h1>\(body)</article><footer>Copyright</footer>"
+    }()
+
+    /// The Summarize tile shrinks the page into its card and shows the summary with its credit;
+    /// the close button brings the page back.
+    func testSummarizeShowsTheSummaryAndClosesBackToThePage() {
+        launch(["-CraOpenURL", Self.article, "-CraSearch", "NO", "-CraFakeModel", "YES"])
+        waitForPage("About Pizza")
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(app.buttons["menu-tile-summarize"].waitForExistence(timeout: 5))
+        app.buttons["menu-tile-summarize"].tap()
+        let overview = app.staticTexts["summary-overview"]
+        XCTAssertTrue(overview.waitForExistence(timeout: 10))
+        // The canned model answers with the article's own opening lines: its heading, then its sentences.
+        XCTAssertEqual(overview.label, "About Pizza.")
+        XCTAssertTrue(app.staticTexts["Summarized for you by Cra"].exists)
+        XCTAssertTrue(app.staticTexts["Point 1"].exists)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Pizza is a dish of Italian origin'")).firstMatch.exists)
+        sleep(1)
+        keep("summary")
+        app.buttons["summary-close"].tap()
+        XCTAssertTrue(app.buttons["bar-menu"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["summary-overview"].waitForExistence(timeout: 1))
+    }
+
+    /// Reader shows the article without the page's navigation and footer, and the tile closes it again.
+    func testReaderShowsTheArticleAlone() {
+        launch(["-CraOpenURL", Self.article, "-CraSearch", "NO"])
+        waitForPage("About Pizza")
+        XCTAssertTrue(app.webViews.staticTexts["Copyright"].exists)
+        app.buttons["bar-menu"].tap()
+        app.buttons["menu-tile-reader"].tap()
+        let reader = app.webViews["reader"]
+        XCTAssertTrue(reader.waitForExistence(timeout: 10))
+        XCTAssertTrue(reader.staticTexts["About Pizza"].waitForExistence(timeout: 5))
+        XCTAssertFalse(reader.staticTexts["Copyright"].exists)
+        XCTAssertFalse(reader.staticTexts["Menu Home Shop"].exists)
+        sleep(1)
+        keep("reader")
+        app.buttons["bar-menu"].tap()
+        app.buttons["menu-tile-reader"].tap()
+        XCTAssertFalse(app.webViews["reader"].waitForExistence(timeout: 2))
+    }
+}
