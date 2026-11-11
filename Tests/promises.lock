@@ -644,3 +644,5 @@
 #359   Tests/Scenarios/peek-origin.scenario  b4ac690a0977
 #362   Packages/CraCore/Tests/CraCoreTests/WebsiteAppearanceTests.swift::lightAndDarkTurnTheBrowserToo  387cfc6e5ff6
 #362   Tests/Scenarios/switch-appearance.scenario  1835332daadb
+#363   Tests/Scenarios/page-top-click.scenario  ee4243bd50dc
+#363   Tests/WindowContentGrabberTests.swift::checkClicksAndDrag  d4446653e531

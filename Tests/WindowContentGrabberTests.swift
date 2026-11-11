@@ -29,6 +29,9 @@ enum WindowContentGrabberTests {
         print("Window content grabber: \(checks) checks passed")
     }
 
+    // promise: #363
+    /// The page gets a press in its top band at once, so a click on a button there lands; 0.1.39 held
+    /// it until the release and moved the window once the pointer slipped 3 pt (#363).
     @MainActor
     private static func checkClicksAndDrag() {
         let f = Fixture()

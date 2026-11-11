@@ -1,0 +1,28 @@
+# With the toolbar hidden, a press at the very top of the page reaches the page (GitHub #363). The
+# window's title strip (CraWindow.sendEvent) is the margin above the card plus 4 pt into it, so a
+# press just past a toolbar's edge still moves the window. With no toolbar those 4 pt are the
+# page's top row; the strip leaves a press there to the page because the page's view is under it
+# (isTitleStrip), and only the margin moves the window. Google Slides' title and Share sit right
+# there. The clicks go through the app's event queue, as the pointer's do; the page lists the
+# presses it gets by their distance from its top. What 0.1.39 did wrong there (it held every press
+# in the page's top 56 pt until the release, and moved the window once the pointer slipped 3 pt) is
+# pinned in Tests/WindowContentGrabberTests.swift (checkClicksAndDrag).
+# promise: #363
+budget rss=700 stalls50=20
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=top
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(window.downs=[],addEventListener('mousedown',e=>downs.push(Math.round(e.clientY)),true),'listening')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"listening"
+
+# The card starts 10 pt below the window's top: 11 and 13 are the page's rows 1 and 3, both
+# inside the strip's 14 pt.
+cra://debug?clickAt=760,11
+cra://debug?clickAt=760,13
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'top downs='+downs.join(',')"}
+expect-log "value":"top downs=1,3"
