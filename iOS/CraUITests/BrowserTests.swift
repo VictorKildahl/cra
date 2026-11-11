@@ -206,3 +206,42 @@ final class SettingsTests: BrowserTestCase {
         waitForPage("Second")
     }
 }
+
+final class BlockingTests: BrowserTestCase {
+    /// A page that loads Google Analytics' script and puts what became of it in its title. With
+    /// the blockers on the script is stopped at once and the menu counts it; with Block Trackers
+    /// off for the page the request is let through and nothing is counted. The tab's card is
+    /// asked for the title: web content changed by script does not reach the test's view of the
+    /// page.
+    func testAListedScriptIsStoppedAndCountedUntilItsBlockerIsSwitchedOff() {
+        let page = "data:text/html,<meta name=viewport content='width=device-width'><title>waiting</title><h1>Blocking</h1>"
+            + "<script src='https://www.google-analytics.com/analytics.js' onload=\"document.title='script-loaded'\" onerror=\"document.title='script-stopped'\"></script>"
+        launch(["-CraOpenURL", page, "-CraSearch", "NO"])
+        waitForPage("Blocking")
+        app.buttons["bar-menu"].tap()
+        let count = app.staticTexts["menu-blocked-count"]
+        XCTAssertTrue(count.waitForExistence(timeout: 10))
+        XCTAssertEqual(count.label, "Scrubbed 1 ad or tracker")
+        keep("blocked-count")
+        // The page has no site of its own, so its Site Settings are the global ones.
+        app.buttons["menu-row-siteSettings"].tap()
+        let trackers = app.switches["setting-block-trackers"]
+        XCTAssertTrue(trackers.waitForExistence(timeout: 5))
+        trackers.switches.firstMatch.tap()
+        XCTAssertEqual(trackers.value as? String, "0")
+        app.buttons["Done"].tap()
+        app.buttons["menu-reload"].tap()
+        XCTAssertTrue(app.buttons["bar-tabs"].waitForExistence(timeout: 5))
+        sleep(6)
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(app.staticTexts["menu-host"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["menu-blocked-count"].exists)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
+        app.buttons["bar-tabs"].tap()
+        let card = app.buttons["tab-card-0"]
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        // Let through, the request is the network's business: it loads, or is still on its way on
+        // a slow or filtered network. Stopped by a rule it would have failed at once.
+        XCTAssertNotEqual(card.label, "script-stopped")
+    }
+}

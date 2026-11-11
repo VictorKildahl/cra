@@ -67,6 +67,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         center.addObserver(self, selector: #selector(keyboardWillChange(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
         center.addObserver(self, selector: #selector(appWillResignActive), name: UIApplication.willResignActiveNotification, object: nil)
 
+        ContentBlocker.shared.prepare()
         store.archiveStale(after: settings.value.archiveAfter)
         if let tab = store.selected { show(tab) }
         refreshTabStack()
@@ -258,6 +259,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     private func show(_ tab: MobileTab) {
         let page = store.page(for: tab)
+        page.siteOptions = { [weak self] host in self?.settings.value.options(for: host) ?? MobileSiteOptions() }
         guard page !== shownPage else { return }
         shownPage?.webView.removeFromSuperview()
         shownPage?.delegate = nil
@@ -383,10 +385,11 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     /// App Settings from the tab switcher's gear; Site Settings (which leads on to them) from a page.
     @objc private func showSettings() {
-        presentSettings(forSite: nil)
+        presentSettings(site: nil, startingAtSite: false)
     }
 
-    private func presentSettings(forSite host: String?) {
+    /// `host` is the page's site; a page without one (a `data:` page, say) edits the global options.
+    private func presentSettings(site host: String?, startingAtSite: Bool) {
         let model = SettingsModel(store: settings, host: host, canSummarize: BrowseForMe.isAvailable)
         model.done = { [weak self] in self?.dismiss(animated: true) }
         model.showArchive = { [weak self] in self?.showArchive() }
@@ -404,7 +407,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         }
         let sheet: UIViewController
-        if host != nil {
+        if startingAtSite {
             sheet = UIHostingController(rootView: SiteSettingsView(model: model))
             // Arc Search's Site Settings stops 465 pt up, leaving the page menu's capsule in view above it.
             sheet.sheetPresentationController?.detents = [.custom { _ in 465 }, .large()]
@@ -454,7 +457,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         let host = page.webView.url?.host.map(MobileSettings.siteKey) ?? ""
         return PageMenuState(host: host, canGoBack: page.webView.canGoBack, canGoForward: page.webView.canGoForward,
                              zoom: Double(page.webView.pageZoom), isDesktopSite: page.wantsDesktopSite,
-                             canSummarize: BrowseForMe.isAvailable, blockedCount: 0)
+                             canSummarize: BrowseForMe.isAvailable, blockedCount: page.blockedCount)
     }
 
     private func refreshMenu() {
@@ -512,7 +515,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             page.webView.reload()
             menuHost?.dismiss()
         case .siteSettings:
-            presentSettings(forSite: page.webView.url?.host ?? "")
+            presentSettings(site: page.webView.url?.host.flatMap { $0.isEmpty ? nil : $0 }, startingAtSite: true)
         case .pageZoom, .translate:
             break
         }
@@ -531,7 +534,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     func pageMenuReloadWithoutBlockers() {
-        shownPage?.webView.reload()
+        shownPage?.reloadWithoutBlockers()
         menuHost?.dismiss()
     }
 

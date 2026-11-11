@@ -131,6 +131,7 @@ final class PageMenuView: UIView {
             }
         }
         blocked.text = MobilePageMenu.blockedLabel(state.blockedCount)
+        blocked.isHidden = blocked.text == nil
         setNeedsLayout()
     }
 

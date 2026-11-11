@@ -286,3 +286,63 @@ struct MobilePageMenuTests {
         #expect(MobilePageMenu.blockedLabel(6) == "Scrubbed 6 ads and trackers")
     }
 }
+
+struct MobileBlocklistTests {
+    static let list = MobileBlocklist(text: "# comment\n\nads.example.com\nDoubleClick.net\nanalytics.example.org\n")
+
+    @Test func listedDomainsCoverTheirSubdomains() {
+        #expect(Self.list.domains == ["ads.example.com", "doubleclick.net", "analytics.example.org"])
+        #expect(Self.list.blocks(host: "ads.example.com"))
+        #expect(Self.list.blocks(host: "static.G.doubleclick.net"))
+        #expect(!Self.list.blocks(host: "example.com"))
+        #expect(!Self.list.blocks(host: "notdoubleclick.net"))
+        #expect(!Self.list.blocks(host: "net"))
+    }
+
+    @Test func aRequestIsStoppedOnlyWhileItsKindIsSwitchedOn() {
+        var options = MobileSiteOptions()
+        #expect(Self.list.stops(host: "x.doubleclick.net", with: options))
+        #expect(Self.list.stops(host: "eu.analytics.example.org", with: options))
+        options.blockAds = false
+        #expect(!Self.list.stops(host: "x.doubleclick.net", with: options))
+        #expect(Self.list.stops(host: "eu.analytics.example.org", with: options))
+        #expect(!Self.list.stops(host: "example.com", with: MobileSiteOptions()))
+    }
+
+    @Test func aDomainIsATrackerWhenItsNameSaysSo() {
+        #expect(Self.list.domains(of: .trackers) == ["analytics.example.org"])
+        #expect(Self.list.domains(of: .ads) == ["ads.example.com", "doubleclick.net"])
+    }
+
+    /// The JSON WebKit compiles: one third-party block rule per domain, valid JSON whose filter
+    /// matches the domain and its subdomains only.
+    @Test func rulesAreValidContentBlockerJSON() throws {
+        let json = MobileBlocklist.rulesJSON(blocking: ["doubleclick.net"])
+        let rules = try #require(try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [[String: Any]])
+        let trigger = try #require(rules.first?["trigger"] as? [String: Any])
+        let filter = try #require(trigger["url-filter"] as? String)
+        #expect(trigger["load-type"] as? [String] == ["third-party"])
+        #expect((rules.first?["action"] as? [String: String])?["type"] == "block")
+        let regex = try NSRegularExpression(pattern: filter)
+        func matches(_ url: String) -> Bool { regex.firstMatch(in: url, range: NSRange(url.startIndex..., in: url)) != nil }
+        #expect(matches("https://doubleclick.net/ad.js") && matches("https://g.doubleclick.net:443/x"))
+        #expect(!matches("https://notdoubleclick.net/") && !matches("https://doubleclickxnet/") && !matches("https://example.com/doubleclick.net/"))
+    }
+
+    @Test func cookieBannerRuleHidesTheKnownContainers() throws {
+        let json = MobileBlocklist.cookieBannerRulesJSON()
+        let rules = try #require(try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [[String: Any]])
+        let action = try #require(rules.first?["action"] as? [String: String])
+        #expect(action["type"] == "css-display-none")
+        #expect(action["selector"]?.contains("#onetrust-banner-sdk") == true)
+        #expect(action["selector"]?.contains("[id^=\"sp_message_container\"]") == true)
+    }
+
+    @Test func aSitesSwitchesPickItsRuleLists() {
+        var options = MobileSiteOptions()
+        #expect(MobileBlocklist.ruleLists(for: options) == ["ads", "trackers", "cookie-banners"])
+        options.blockAds = false
+        options.blockCookieBanners = false
+        #expect(MobileBlocklist.ruleLists(for: options) == ["trackers"])
+    }
+}

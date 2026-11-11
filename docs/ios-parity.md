@@ -48,8 +48,8 @@ ended). "Measured" means the numbers come from Arc Search footage, not from a de
 | Page Zoom, Request Desktop Site | done | Tenths from 50% to 300%, the percentage shown and reset by a tap. |
 | Translate | missing | The row is there and does nothing yet. |
 | Pinch to Summarize / Summarize | missing | On-device model only. The tile is there (where the model is) and does nothing yet. |
-| Block ads, trackers, cookie banners, per site | partial | The switches are in Site Settings and Global Site Settings and are saved per site; nothing is blocked yet. |
-| "Reload without ad blockers", blocked count | missing | |
+| Block ads, trackers, cookie banners, per site | done | The Mac app's domain list compiled into WebKit content rules (`MobileBlocklist`), cookie banners hidden by their containers; each page gets the lists its site's switches ask for. The list does not say which domain is an ad and which a tracker, so the split is by name. Cookie prompts are hidden, not answered (Arc Search 1.38 denies them). |
+| "Reload without ad blockers", blocked count | done | The tab shows the site unblocked until it leaves it. The footer counts requests to listed domains that failed while their blocker was on. UI test in `BlockingTests`. |
 | Link long-press preview and menu | partial | WebKit's default preview. |
 | New-window links open a tab | done | |
 | Downloads, Wallet passes, .ics | missing | |

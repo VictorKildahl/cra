@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		C0A000000000000000000030 /* CraCore in Frameworks */ = {isa = PBXBuildFile; productRef = C0A000000000000000000031 /* CraCore */; };
+		C0A000000000000000000052 /* domains.txt in Resources */ = {isa = PBXBuildFile; fileRef = C0A000000000000000000050 /* domains.txt */; };
+		C0A000000000000000000053 /* NOTICE.txt in Resources */ = {isa = PBXBuildFile; fileRef = C0A000000000000000000051 /* NOTICE.txt */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -24,6 +26,8 @@
 		C0A000000000000000000011 /* Cra.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cra.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0A000000000000000000021 /* CraUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CraUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0A000000000000000000005 /* Support */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Support; sourceTree = "<group>"; };
+		C0A000000000000000000050 /* domains.txt */ = {isa = PBXFileReference; lastKnownFileType = text; name = domains.txt; path = ../resources/blocklist/domains.txt; sourceTree = "<group>"; };
+		C0A000000000000000000051 /* NOTICE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; name = NOTICE.txt; path = ../resources/blocklist/NOTICE.txt; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -64,8 +68,18 @@
 				C0A000000000000000000003 /* Cra */,
 				C0A000000000000000000004 /* CraUITests */,
 				C0A000000000000000000005 /* Support */,
+				C0A000000000000000000054 /* Blocklist */,
 				C0A000000000000000000006 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		C0A000000000000000000054 /* Blocklist */ = {
+			isa = PBXGroup;
+			children = (
+				C0A000000000000000000050 /* domains.txt */,
+				C0A000000000000000000051 /* NOTICE.txt */,
+			);
+			name = Blocklist;
 			sourceTree = "<group>";
 		};
 		C0A000000000000000000006 /* Products */ = {
@@ -171,6 +185,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C0A000000000000000000052 /* domains.txt in Resources */,
+				C0A000000000000000000053 /* NOTICE.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -89,8 +89,9 @@ if os.path.exists(manifest):
         for item in test.get("attachments", []):
             name = item.get("suggestedHumanReadableName", "")
             source = os.path.join(folder, item.get("exportedFileName", ""))
-            if name and os.path.exists(source):
-                # "name_0_<uuid>.png" as attached by XCTest: keep the name the test gave it.
+            # "name_0_<uuid>.png" as attached by XCTest: the screenshots keep the name the test
+            # gave them; XCTest's own attachments (recordings, hierarchy dumps) keep theirs.
+            if name.endswith(".png") and "_0_" in name and os.path.exists(source):
                 os.replace(source, os.path.join(folder, name.split("_0_")[0] + ".png"))
 PY
     fi
