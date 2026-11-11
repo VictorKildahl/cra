@@ -2280,6 +2280,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             self.map { FloatingSidebarGeometry.mayReveal(sidebarShown: $0.sidebarVisible, pageFullscreen: $0.shell.contentFullscreen) } ?? false
         }
         f.staysShown = { FolderPreviewController.shared.isOpen }
+        f.windowCornerRadius = { [weak window] in window.map { LittleWindow.cornerRadius(of: $0) } ?? 0 }
         f.didAttachPanel = { [weak self] in
             // Keep the find bar above the floating sidebar.
             self?.raiseOverlayPanels()

@@ -98,6 +98,7 @@ enum FloatingSidebarTests {
 
         onlyTheKeyWindowReveals(window: window, sidebar: sidebar, panel: panel)
         noStandInLightsInFullScreen(sidebar: sidebar, panel: panel)
+        staysInsideTheWindowsCorners(window: window, sidebar: sidebar, panel: panel)
 
         // #136: the pointer is sampled only while Cra is the active app.
         sidebar.install()
@@ -277,6 +278,41 @@ enum FloatingSidebarTests {
         sidebar.windowFullScreen = { true }
         sidebar.show()
         expect(!lightsShown(), "a full-screen floating sidebar has no lights")
+        sidebar.hide(animated: false)
+        sidebar.windowFullScreen = { false }
+    }
+
+    // promise: #341
+    /// GitHub #341: the hidden sidebar stays inside the window's rounded corners on its way in and out,
+    /// as Arc's does. Its panels are square and start at the window's left edge, so each one's content
+    /// is masked with the window's frame and corner radius, and the sidebar and its shadow slide under it.
+    @MainActor
+    private static func staysInsideTheWindowsCorners(window: NSWindow, sidebar: FloatingSidebarController, panel: NSWindow) {
+        expect(FloatingSidebarGeometry.windowClip(window: CGRect(x: 100, y: 50, width: 1400, height: 880),
+                                                  panel: CGRect(x: 100, y: 58, width: 336, height: 864))
+               == CGRect(x: 0, y: -8, width: 1400, height: 880), "the window's frame, seen from a panel 8 pt inside it")
+        sidebar.windowCornerRadius = { 16 }
+        sidebar.show()
+        let shadow = window.childWindows!.first { !($0 is FloatingSidebarPanel) }!
+        /// Whether a panel's content is masked to the browser window exactly, with `radius` corners.
+        func clips(_ w: NSWindow, radius: CGFloat) -> Bool {
+            guard let content = w.contentView, let mask = content.layer?.mask else { return false }
+            return w.convertToScreen(content.convert(mask.frame, to: nil)) == window.frame
+                && mask.cornerRadius == radius && mask.backgroundColor?.alpha == 1
+        }
+        expect(clips(panel, radius: 16), "the sidebar's panel is cut to the window's frame and corners")
+        expect(clips(shadow, radius: 16), "and so is its shadow's")
+        expect(shell_slider(panel)?.layer?.mask == nil && shell_slider(panel)?.layer?.animation(forKey: "slide") != nil,
+               "the mask belongs to the panel, not to the sidebar that slides under it")
+        let frame = window.frame
+        window.setFrame(frame.insetBy(dx: 0, dy: 40), display: false)
+        sidebar.reposition()
+        expect(clips(panel, radius: 16) && clips(shadow, radius: 16), "both follow the window when it is resized")
+        window.setFrame(frame, display: false)
+        sidebar.hide(animated: false)
+        sidebar.windowFullScreen = { true }
+        sidebar.show()
+        expect(clips(panel, radius: 0), "a full-screen window has square corners")
         sidebar.hide(animated: false)
         sidebar.windowFullScreen = { false }
     }

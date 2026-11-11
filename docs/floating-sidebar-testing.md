@@ -15,6 +15,8 @@ In an isolated CraDev profile, verify:
 
 - Hide the sidebar with Command-S and move into the 10 pt margin left of the page, or
   just outside the window. It should reveal there, and not over the page.
+- Watch the window's top-left and bottom-left corners while the sidebar slides in and out.
+  It should stay inside the window's rounded corners the whole way, as in Arc (GitHub #341).
 - Move beyond the floating sidebar's right edge and quickly return to the gutter,
   repeatedly. The latest reveal should stay visible and interactive.
 - Press Command-S while the floating sidebar is entering or leaving. It should

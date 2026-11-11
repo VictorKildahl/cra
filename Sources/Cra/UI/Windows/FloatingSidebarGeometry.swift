@@ -40,6 +40,13 @@ enum FloatingSidebarGeometry {
         guard pressedMouseButtons == 0, !shouldReveal(at: point, in: bounds, edgeToEdge: edgeToEdge) else { return false }
         return !bounds.contains(point) || point.x > bounds.minX + sidebarWidth + margin + leaveSlack
     }
+
+    /// The browser window's frame as a child panel's content sees it (both frames on screen). The
+    /// floating sidebar's panels clip to it: a panel is a rectangle of its own, not cut by the
+    /// window's rounded corners the way Arc's in-window sidebar is (GitHub #341).
+    static func windowClip(window: CGRect, panel: CGRect) -> CGRect {
+        CGRect(x: window.minX - panel.minX, y: window.minY - panel.minY, width: window.width, height: window.height)
+    }
 }
 
 /// The wait before a hidden sidebar comes out: the pointer has to stay in the reveal strip for

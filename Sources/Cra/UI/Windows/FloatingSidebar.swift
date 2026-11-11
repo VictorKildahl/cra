@@ -19,6 +19,8 @@ final class FloatingSidebarController {
     var palette: () -> SpacePalette
     /// Whether the browser window is in macOS full screen; the tests stand one in.
     lazy var windowFullScreen: () -> Bool = { [unowned self] in self.window.styleMask.contains(.fullScreen) }
+    /// The browser window's corner radius, for clipping the sidebar to it on its way in and out.
+    var windowCornerRadius: () -> CGFloat = { 0 }
     /// Called after the panel is attached so the overlay panel can be re-ordered above it.
     var didAttachPanel: (() -> Void)?
 
@@ -35,6 +37,12 @@ final class FloatingSidebarController {
     private var dwell = FloatingSidebarRevealDwell()
     /// The clock the wait runs on; the tests stand one in.
     var now: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+    /// The window's shape, as a mask on each panel's content. The panels start at the window's left
+    /// edge and are square, so the sidebar's top and bottom edges showed past the window's rounded
+    /// corners while it slid along that edge; Arc draws its sidebar inside the window, which cuts it
+    /// there (#341).
+    private let clip = CALayer()
+    private let shadowClip = CALayer()
     /// The sidebar's rounded body; it slides inside the panel (see `panelFrame`).
     private let slider = NSView()
     private let blur = NSVisualEffectView()
@@ -212,6 +220,23 @@ final class FloatingSidebarController {
         content.addSubview(shadowView)
         shadowCutout.fillRule = .evenOdd
         return p
+    }
+
+    /// Each mask takes the window's frame and corners, as seen from its panel, so it stays put while
+    /// the sidebar and its shadow slide under it. A full-screen window has square corners.
+    private func placeClips() {
+        let radius = windowFullScreen() ? 0 : windowCornerRadius()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for (mask, host) in [(clip, panel as NSWindow?), (shadowClip, shadowPanel)] {
+            guard let host, let content = host.contentView?.layer else { continue }
+            mask.backgroundColor = NSColor.black.cgColor
+            mask.cornerCurve = .continuous
+            mask.cornerRadius = radius
+            mask.frame = FloatingSidebarGeometry.windowClip(window: window.frame, panel: host.frame)
+            if content.mask !== mask { content.mask = mask }
+        }
+        CATransaction.commit()
     }
 
     /// The shadow follows the sidebar's frame, inside the shadow panel.
@@ -400,6 +425,7 @@ final class FloatingSidebarController {
         shadowPanel = s
         p.setFrame(panelFrame, display: false)
         s.setFrame(shadowPanelFrame, display: false)
+        placeClips()
         p.ignoresMouseEvents = true
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -495,6 +521,7 @@ final class FloatingSidebarController {
         guard isShown, let p = panel else { return }
         p.setFrame(panelFrame, display: true)
         shadowPanel?.setFrame(shadowPanelFrame, display: true)
+        placeClips()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         slider.frame = slideFrame(shown: true)
