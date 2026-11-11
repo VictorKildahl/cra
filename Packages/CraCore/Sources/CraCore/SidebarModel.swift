@@ -1023,9 +1023,20 @@ extension TabData {
     }
 }
 
-/// Arc's View ▸ Appearance ("Websites, Easels, and Notes will use:"): Automatic follows the Mac.
+/// Arc's View ▸ Appearance ("Websites, Easels, and Notes will use:", in the command bar "Switch to
+/// Light Mode" and the like): Automatic follows the Mac. Light and Dark turn the browser as well as
+/// its pages, as Arc's do: its windows, menus, command bar and Auto space themes (#362).
 public enum WebsiteAppearance: String, Codable, CaseIterable, Sendable {
     case automatic, light, dark
+
+    /// The appearance the browser itself takes: true dark, false light, nil the Mac's.
+    public var forcesDark: Bool? {
+        switch self {
+        case .automatic: nil
+        case .light: false
+        case .dark: true
+        }
+    }
 
     public var title: String {
         switch self {

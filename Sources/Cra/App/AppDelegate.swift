@@ -253,7 +253,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         observeHttpsOnly()
         // Arc's "Archive Little Arcs after:": a Little Window left alone that long closes, its page archived.
         littleWindowArchiveCheck = composition.clock.every(60) { [weak self] in self?.archiveIdleLittleWindows() }
-        observeChanges(of: { [store] in store.settings.websiteAppearance }) { CraCEFRuntime.setWebsiteAppearance($0.chromiumMode) }
+        // View ▸ Appearance: pages, and the browser itself as in Arc (its windows, menus, command bar
+        // and Auto space themes follow NSApp's appearance), before the first window is made (#362).
+        observeChanges(of: { [store] in store.settings.websiteAppearance }) { appearance in
+            CraCEFRuntime.setWebsiteAppearance(appearance.chromiumMode)
+            NSApp.appearance = appearance.forcesDark.flatMap { NSAppearance(named: $0 ? .darkAqua : .aqua) }
+        }
         observeChanges(of: { [store] in store.settings.soundEffects }) { CaptureSound.enabled = $0 }
         observeLinkMenu()
         logSecureDNS()

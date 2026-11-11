@@ -30,4 +30,11 @@ struct WebsiteAppearanceTests {
     @Test func chromiumModes() {
         #expect(WebsiteAppearance.allCases.map(\.chromiumMode) == [0, 1, 2])
     }
+
+    /// Arc's Switch to Light Mode / Dark Mode turn Arc itself, not only its pages; Automatic hands
+    /// the browser back to the Mac (#362).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/362"))
+    func lightAndDarkTurnTheBrowserToo() {
+        #expect(WebsiteAppearance.allCases.map(\.forcesDark) == [nil, false, true])
+    }
 }

@@ -193,10 +193,14 @@ final class KeyBindingRegistry {
             // View
             KeyAction(id: "toggleSidebar", name: "Hide Sidebar", section: .view, shortcuts: [Shortcut("s", cmd)], triggers: ["sidebar", "hide sidebar", "show sidebar"]),
             KeyAction(id: "toggleToolbar", name: "Hide Toolbar", section: .view, shortcuts: [Shortcut("d", cmdShift)], triggers: ["toolbar"]),
-            // Arc: View ▸ Appearance, what websites see (Websites, Easels, and Notes will use:).
-            KeyAction(id: "appearanceAutomatic", name: "Website Appearance: Automatic", section: .none, shortcuts: [], triggers: ["website appearance", "system appearance"], symbol: "circle.lefthalf.filled"),
-            KeyAction(id: "appearanceLight", name: "Website Appearance: Light", section: .none, shortcuts: [], triggers: ["light mode", "light websites"], symbol: "sun.max"),
-            KeyAction(id: "appearanceDark", name: "Website Appearance: Dark", section: .none, shortcuts: [], triggers: ["dark mode", "dark websites"], symbol: "moon"),
+            // Arc: View ▸ Appearance ("Websites, Easels, and Notes will use:"), which turns Arc itself too.
+            // Names, aliases and symbols are Arc's command bar entries for those items (#362).
+            KeyAction(id: "appearanceAutomatic", name: "Switch to Automatic Appearance", section: .none, shortcuts: [],
+                      triggers: ["switch automatic mode", "automatic mode", "system appearance", "website appearance"], symbol: "sparkles"),
+            KeyAction(id: "appearanceLight", name: "Switch to Light Mode", section: .none, shortcuts: [],
+                      triggers: ["switch light mode", "light mode", "light websites"], symbol: "sun.max"),
+            KeyAction(id: "appearanceDark", name: "Switch to Dark Mode", section: .none, shortcuts: [],
+                      triggers: ["switch dark mode", "dark mode", "night mode", "dark websites"], symbol: "moon.stars.fill"),
             // Arc: View ▸ Collapse Pinned Tabs / Expand Pinned Tabs.
             KeyAction(id: "collapsePinned", name: "Collapse Pinned Tabs", section: .view, shortcuts: [], triggers: ["collapse pinned", "expand pinned"]),
             KeyAction(id: "stop", name: "Stop Loading", section: .view, shortcuts: [Shortcut(".", cmd)], inCommandBar: false),

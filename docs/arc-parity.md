@@ -19,7 +19,7 @@ or Arc-only service), per CONTRIBUTING.md.
 | Notes | File ▸ New Note ⌃⇧N, ⌃⌥N in split, Help ▸ Export Arc Notes | *skip* | Arc 1.172.1 no longer creates Notes: New Note is gone from the File menu and ⌃⇧N does nothing; only Help ▸ Export Arc Notes is left. |
 | Library ▸ Media | Window ▸ View Media…, Library rail | done | Off until Show Media; right-click the rail's Media button for the folders (Cra has no captures folder). A pick opens Arc's preview over the dimmed window (see "Library, measured"); the Library stays open. |
 | Essential Keyboard Shortcuts window | Help ▸ Essential Keyboard Shortcuts, Settings ▸ Shortcuts | done | 475×462 floating dark panel, five rows of key caps, "View All ↗". |
-| Website appearance | View ▸ Appearance ▸ Automatic / Light / Dark ("Websites, Easels, and Notes will use:") | done | Forces prefers-color-scheme for pages. |
+| Appearance | View ▸ Appearance ▸ Automatic / Light / Dark ("Websites, Easels, and Notes will use:"); command bar "Switch to Light Mode" / "Switch to Dark Mode" / "Switch to Automatic Appearance" | done | Forces prefers-color-scheme for pages and, as in Arc, the browser's own appearance: windows, menus, command bar, Auto space themes (#362). |
 | Stay On Top | Window ▸ Stay On Top | done | Floats the window above other apps. |
 | Save Page As | File ▸ Save Page As ⇧⌘S | done | |
 | File menu: Share…, New Profile, Arc's sections | File ▸ Share…, File ▸ New Profile | done | GitHub #279: the File menu has Arc 1.172.1's five sections and rows (FileMenu); Share… opens the system share list under the toolbar, New Profile the New Profile dialog; Close Tab shows only with a tab selected; New Space… moved to Spaces, New Folder… to Tabs. |
@@ -137,7 +137,7 @@ in this sweep (Essential Shortcuts window, Library pages).
   Edit ▸ Copy URL as Quote (⌃⇧⌘C, a text-fragment link instead of Arc's arc.net card).
 - Copy URL, Copy URL as Markdown and the sidebar's Copy Link leave out utm_* and click ids
   (CleanURL).
-- View ▸ Collapse/Expand Pinned Tabs; View ▸ Appearance (Automatic / Light / Dark for websites).
+- View ▸ Collapse/Expand Pinned Tabs; View ▸ Appearance (Automatic / Light / Dark for websites and the browser).
 - Tabs ▸ Reveal Tab in Sidebar (⌃Space) and Reset all tabs in this Space; Archive ▸ View Archive… and
   Clear Archive; Collapse All Folders / Expand All Folders; Open Extensions (⌘E); Switch to Split
   View 1–4 (⌃⇧1…4); Next/Previous Tab on ⌘} / ⌘{ too; Developer Tools on F12 too; ⌘9 = last tab.

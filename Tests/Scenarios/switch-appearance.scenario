@@ -1,0 +1,23 @@
+# promise: #362
+# Typing "dark mode", "light mode" or "night mode" in the command bar offers Arc's Switch to Dark Mode /
+# Switch to Light Mode (View ▸ Appearance), and it turns the browser, not only its pages: an Auto
+# space shows its dark half under Dark and its light half under Light, whatever the Mac shows (#362).
+# Before, the command was "Website Appearance" and only pages followed it.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Auto","emoji":"🌗","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"auto","accent":"#8389FF","solid":true,"key":["#8389FF"],"dark":{"colors":["#2B2734","#2B2734"],"intensity":1,"noise":0,"vibrant":false,"accent":"#01021F","solid":false}},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Light","emoji":"☀️","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+cra://debug?suggest=dark%20mode
+expect-log Cra suggest dark mode .*command\("appearanceDark"\) Switch to Dark Mode
+cra://debug?suggest=night%20mode
+expect-log Cra suggest night mode .*command\("appearanceDark"\) Switch to Dark Mode
+cra://debug?suggest=light%20mode
+expect-log Cra suggest light mode .*command\("appearanceLight"\) Switch to Light Mode
+cra://action/appearanceDark
+wait 1
+cra://debug?themeShown=switched-dark
+expect-log Cra theme shown switched-dark: space=Auto follows=1 theme=dark shell=dark sidebar=dark
+cra://action/appearanceLight
+wait 1
+cra://debug?themeShown=switched-light
+expect-log Cra theme shown switched-light: space=Auto follows=1 theme=light shell=light sidebar=light
+cra://action/appearanceAutomatic

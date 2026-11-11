@@ -158,8 +158,8 @@ extension SpaceTheme {
     }
 }
 
-/// macOS' light or dark appearance, which an Auto space theme follows (Arc: appearanceBased).
-/// Cra never sets NSApp.appearance, so the app's effective appearance is the system's.
+/// The app's light or dark appearance, which an Auto space theme follows (Arc: appearanceBased):
+/// macOS', unless View ▸ Appearance sets NSApp.appearance to Light or Dark, as Arc's does (#362).
 @Observable
 final class SystemAppearance: @unchecked Sendable {
     static let shared = SystemAppearance()
