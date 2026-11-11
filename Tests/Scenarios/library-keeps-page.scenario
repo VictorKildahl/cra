@@ -1,0 +1,44 @@
+# Arc 1.172.2 keeps the page's width beside the Library and moves it with the Library's right
+# edge, past the window's, which cuts off what doesn't fit. Cra gave the page what was left
+# (181 pt beside five spaces), and the site laid itself out as a phone column (#340).
+# Card readout: insets from the window's left, bottom, right and top; the right one goes
+# negative as the page passes the window's edge.
+# promise: #340
+budget rss=700 stalls50=10
+seed windows.json {"sidebarWidth": 218}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=one
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?windowState=tabs
+expect-log window state tabs: main0 .* card=218,10,10,10 
+
+# A 1052 pt page beside the 218 pt tab sidebar stays 1052 pt beside the 417 pt Library.
+cra://action/viewDownloads
+expect-log library opens 417 pt wide beside a 218 pt tab sidebar
+wait 1
+cra://debug?windowState=library
+expect-log window state library: main0 .* card=417,10,-189,10 
+
+# Resizing the window with the Library open: the page follows the window, as it would beside
+# the tab sidebar (1500 − 218 − 10 = 1272).
+cra://debug?windowSize=1500x800
+wait 1
+cra://debug?windowState=wider
+expect-log window state wider: main0 .* card=417,10,-189,10 
+
+# Closed with the Library button, which slides it out like the swipe: back beside the tab
+# sidebar, the same width.
+cra://action/openLibrary
+wait 1
+cra://debug?windowState=closed
+expect-log window state closed: main0 .* card=218,10,10,10 
+
+# With the sidebar hidden the page keeps the whole card's width (1500 − 20 = 1480).
+cra://action/toggleSidebar
+wait 1
+cra://action/viewDownloads
+expect-log library opens 417 pt wide
+wait 1
+cra://debug?windowState=hidden
+expect-log window state hidden: main0 .* card=417,10,-397,10 

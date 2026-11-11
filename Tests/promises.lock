@@ -580,6 +580,10 @@
 #337   Tests/Scenarios/little-window-card.scenario  6c5a8341e907
 #339   Packages/CraCore/Tests/CraCoreTests/SpaceMenuLayoutTests.swift::dockOpensTheSpaceForItsListAndHeader  cd0d0aed9120
 #339   Packages/CraCore/Tests/CraCoreTests/SpaceMenuLayoutTests.swift::dockShowsArcsWholeSpaceMenu  074df60c8297
+#340   Packages/CraCore/Tests/CraCoreTests/LibraryWidthTests.swift::hiddenSidebarKeepsTheWholeCard  df2c85e32e74
+#340   Packages/CraCore/Tests/CraCoreTests/LibraryWidthTests.swift::narrowerLibraryLeavesNoGap  1c2dda02d1ed
+#340   Packages/CraCore/Tests/CraCoreTests/LibraryWidthTests.swift::pageKeepsItsWidth  6683626032be
+#340   Tests/Scenarios/library-keeps-page.scenario  93e13ec1ba0b
 #341   Tests/FloatingSidebarTests.swift::staysInsideTheWindowsCorners  47752aeeee63
 #344   Packages/CraCore/Tests/CraCoreTests/SidebarAddressEditTests.swift::aPinnedTabSendsAnotherHostToANewTab  52bb16a0739c
 #344   Packages/CraCore/Tests/CraCoreTests/SidebarAddressEditTests.swift::clickEditsInPlaceOnlyWhenTurnedOnAndATabIsSelected  dbb45b4d979e

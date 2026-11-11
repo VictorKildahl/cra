@@ -261,6 +261,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             self.positionDevToolsWindow(rect, tab: id)
         }
         shell.onPaneFrames = { [weak self] frames in self?.positionPageWindows(frames) }
+        // Only an embedded page is cut off by the window; one in its own window would show past it.
+        shell.pageBesideLibrary = { [weak self] in
+            guard let self, EmbeddedPages.isEnabled, sidebarUI.libraryPage != nil || sidebarUI.libraryReveal != nil else { return nil }
+            return .init(tabSidebar: libraryShowedSidebar ? nil : CGFloat(store.prefs.sidebarWidth))
+        }
         shell.onAnimatePaneFrames = { [weak self] frames, d, timing in self?.animatePageWindows(to: frames, duration: d, timing: timing) }
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.refreshMaterialActive(); self?.sidebarUI.appActive = true }
@@ -1080,9 +1085,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         StatusBubbleStrip.frame(inPage: page)
     }
 
-    /// The find bar's screen frame: the top trailing corner of the focused page.
+    /// The find bar's screen frame: the top trailing corner of the focused page, of the part the
+    /// window shows when the page goes past its edge beside the Library (#340).
     private func findPanelFrame(page: NSRect) -> NSRect {
         let size = CraMetrics.findBarSize, inset = CraMetrics.findBarInset
+        var page = page
+        if let window, page.maxX > window.frame.maxX { page.size.width = max(0, window.frame.maxX - page.minX) }
         return NSRect(x: page.maxX - size.width - inset, y: page.maxY - size.height - inset, width: size.width, height: size.height)
     }
 

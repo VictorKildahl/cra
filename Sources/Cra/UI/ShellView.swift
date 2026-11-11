@@ -116,6 +116,11 @@ final class ShellView: NSView {
     }
 
     var sidebarWidth: CGFloat = CraMetrics.sidebarDefaultWidth { didSet { needsLayout = true } }
+    /// While the Library is in the sidebar, or a swipe is bringing it in: the tab sidebar the page
+    /// keeps its width from (nil inside when the Library brought out a hidden sidebar). The page
+    /// moves with the Library's edge and past the window's instead of narrowing (LibraryWidth.page, #340).
+    var pageBesideLibrary: () -> PageBesideLibrary? = { nil }
+    struct PageBesideLibrary { var tabSidebar: CGFloat? }
     /// Off while the Library has the sidebar: its width is not the user's to drag.
     var sidebarResizable = true { didSet { needsLayout = true } }
     var sidebarVisible = true { didSet { needsLayout = true } }
@@ -646,7 +651,12 @@ final class ShellView: NSView {
         let inset = fill ? 0 : CraMetrics.contentInset
         let radius = fill ? 0 : CraMetrics.contentCornerRadius
         if sidebarVisible {
-            let content = NSRect(x: width, y: inset, width: max(0, b.width - width - inset), height: max(0, b.height - 2 * inset))
+            var pageWidth = b.width - width - inset
+            if let kept = pageBesideLibrary() {
+                pageWidth = CGFloat(LibraryWidth.page(window: Double(b.width), library: Double(width),
+                                                      tabSidebar: kept.tabSidebar.map(Double.init), inset: Double(inset)))
+            }
+            let content = NSRect(x: width, y: inset, width: max(0, pageWidth), height: max(0, b.height - 2 * inset))
             return Frames(sidebar: NSRect(x: 0, y: 0, width: width, height: b.height),
                           handle: NSRect(x: width - 4, y: 0, width: 8, height: b.height),
                           content: content, cornerRadius: radius, sidebarCorner: 0)

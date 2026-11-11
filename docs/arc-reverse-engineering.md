@@ -2766,6 +2766,13 @@ curves fitted per frame. "p" = Library reveal progress, 0 = space, 1 = Library o
   1044 pt Spaces page; measured 1/834, 1/870, 1/808). A space-to-space swipe measured 0.49 pt per px (one take).
 - [O] The sidebar widens during the drag, not at commit: width = 347 + (Lib − 347) × p (347→417 at p 1; 1044 pt
   for a Spaces page), the web page column shrinking with it. Library open → swipe out mirrors it exactly.
+- [O AX, Arc 1.172.2, kKr1Xx on #340] The page card keeps its width with the Library open: 1728 pt window, 264 pt
+  tab sidebar, card x 264 w 1454; Library ▸ Spaces (5 spaces, 1536 pt) x 1536 w 1454; Archived Tabs (417 pt)
+  x 417 w 1454. It moves with the Library's right edge and past the window's, which cuts it off, so the page is
+  never laid out again for a narrow column. Cra follows it (`LibraryWidth.page`); the "column shrinking" above
+  and the 56 pt column below are the slice of the page that shows. [U] the in-between frames of a swipe, the
+  Library opened with the sidebar hidden (Cra keeps the whole card's width) and a tab sidebar wider than 417
+  (Cra lets the page fill what the Library leaves).
 - [O] The space's own content fades, alpha ≈ max(0, 1 − 2p) (row contrast 1.00/0.60/0.29/0.08/0 at p 0/0.2/0.36/
   0.46/0.5), and shrinks a little: scale ≈ 1 − 0.1 p about a point near (417 pt, window mid-height) [I, fitted from
   the selected row, favourites card and traffic-light positions]. The traffic lights travel with that content and
