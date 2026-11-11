@@ -115,17 +115,13 @@ struct AdvancedPane: View {
                                   isOn: Binding(get: { MCPServer.shared.enabled }, set: { MCPServer.shared.setEnabled($0) })) {
                     Text(MCPServer.shared.status)
                     if MCPServer.shared.enabled {
-                        HStack(spacing: 8) {
-                            Button("Copy MCP Configuration") {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(MCPServer.shared.configuration, forType: .string)
-                            }
-                            Text("Last tool: \(MCPServer.shared.lastTool.isEmpty ? "None" : MCPServer.shared.lastTool)")
-                                .foregroundStyle(.secondary)
-                        }
+                        Text("Last tool: \(MCPServer.shared.lastTool.isEmpty ? "None" : MCPServer.shared.lastTool)")
+                            .foregroundStyle(.secondary)
                     }
                 }
                 if MCPServer.shared.enabled {
+                    SettingsCardDivider()
+                    MCPAgentTiles()
                     SettingsCardDivider()
                     SettingsCardRow {
                         VStack(alignment: .leading, spacing: 2) {
