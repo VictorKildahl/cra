@@ -1830,6 +1830,9 @@ enum StoreTests {
         b.replace(document: doc)
         expect(b.orderedSpaces[0].profileID == nil && b.integrityProblems().isEmpty, "a space on a missing profile falls back to Default")
     
+        // Stopped before the tests below: every service here saves the one sync.json, and this
+        // one's debounced save must not land in the middle of theirs.
+        syncA.disable()
         iCloudSync(first: a, firstClock: clockA)
         syncGoesOnWithoutAsking()
     }
@@ -1933,6 +1936,10 @@ enum StoreTests {
         syncA.poll()
         expect(syncA.pendingChoice == nil && a.settings.httpsOnly, "a setting changed on the second Mac reaches the first without a question")
 
+        // The first two Macs stop here, so that neither's debounced save of sync.json lands between
+        // the third Mac's save and its relaunch.
+        syncA.disable(); syncB.disable()
+
         // Cra quit while the first download was still coming in: the question is still asked.
         let clockC = ManualScheduler(now: clockB.now)
         let c = SidebarStore(clock: clockC)
@@ -1943,7 +1950,7 @@ enum StoreTests {
         relaunched.poll()
         expect(relaunched.pendingChoice?.device == "MacBook" && !c.document.items.contains { $0.id == tab.id },
                "after a relaunch the first bundle still waits for the answer")
-        relaunched.disable(); syncA.disable(); syncB.disable()
+        relaunched.disable()
         unsetenv("CRA_SYNC_ICLOUD_DIR")
 
         // The same in a folder a provider syncs (Dropbox, OneDrive): the manifest lands before a
