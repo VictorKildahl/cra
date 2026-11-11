@@ -18,6 +18,14 @@ export CRA_RELEASE=1
 IDENTITY="${CRA_SIGN_IDENTITY:--}"
 ARCHS="${CRA_ARCHS:-arm64 x86_64}"
 
+# A release ships the newest stable CEF: Chromium fixes security bugs only in its newest
+# version. CRA_ALLOW_OLD_CEF=1 ships the pinned one anyway (an urgent fix while the new CEF
+# is still building); say so in the release notes.
+if [ "${CRA_ALLOW_OLD_CEF:-}" != 1 ]; then
+  scripts/check-cef-update.sh --check ||
+    { echo "Release stopped: CEF is behind (CRA_ALLOW_OLD_CEF=1 to ship it anyway)" >&2; exit 1; }
+fi
+
 rm -rf build/dist
 for ARCH in $ARCHS; do
   CRA_ARCH="$ARCH" scripts/build.sh release
