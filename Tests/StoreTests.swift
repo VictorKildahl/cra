@@ -1831,6 +1831,7 @@ enum StoreTests {
         expect(b.orderedSpaces[0].profileID == nil && b.integrityProblems().isEmpty, "a space on a missing profile falls back to Default")
     
         iCloudSync(first: a, firstClock: clockA)
+        syncGoesOnWithoutAsking()
     }
 
     /// iCloud is the same bundle in the app's container, with two differences a test folder can
@@ -1886,6 +1887,89 @@ enum StoreTests {
         let fresh = SettingsSyncService(store: b, clock: clockB, device: "MacBook", deviceID: "macbook")
         expect(fresh.location == nil, "Stop Syncing is remembered across a relaunch")
         syncA.disable()
+    }
+
+    /// The question comes once, when sync is turned on. After the answer a bundle from the other
+    /// Mac is applied by itself, also when iCloud delivers it in parts. Cra 0.1.38 took every
+    /// later download for the first one: it asked again (only seen in Settings) and synced
+    /// nothing until the answer.
+    @MainActor
+    private static func syncGoesOnWithoutAsking() {
+        let container = FileManager.default.temporaryDirectory.appendingPathComponent("cra-icloud-later-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: container, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: container) }
+        setenv("CRA_SYNC_ICLOUD_DIR", container.path, 1)
+        defer { unsetenv("CRA_SYNC_ICLOUD_DIR") }
+        let clockA = ManualScheduler(), clockB = ManualScheduler(now: clockA.now)
+        let a = SidebarStore(clock: clockA), b = SidebarStore(clock: clockB)
+        let syncA = SettingsSyncService(store: a, clock: clockA, device: "Studio", deviceID: "studio")
+        expect(syncA.enableICloud() == .synced, "the first Mac turns iCloud on")
+        let syncB = SettingsSyncService(store: b, clock: clockB, device: "MacBook", deviceID: "macbook")
+        guard case .bundleFound = syncB.enableICloud() else { return expect(false, "the second Mac is asked once") }
+        syncB.useRemote()
+
+        // The first Mac opens a tab. iCloud brings the manifest to the second Mac before the sidebar.
+        clockA.advance(by: 10)
+        let tab = a.createTab(url: "https://example.com/opened-on-studio")
+        syncA.poll()
+        var downloaded = false
+        syncB.downloadStatus = { url in url.lastPathComponent == SettingsSync.sidebarName && !downloaded ? .notDownloaded : nil }
+        syncB.poll()
+        expect(syncB.pendingChoice == nil && b.document.items.first { $0.id == tab.id } == nil, "a bundle still downloading is not applied yet")
+        downloaded = true
+        syncB.poll()
+        expect(syncB.pendingChoice == nil, "a later bundle from the other Mac brings no second question")
+        expect(b.document.items.contains { $0.id == tab.id }, "the tab opened on the first Mac shows on the second")
+        expect(syncB.isEnabled, "and sync stays on")
+
+        // And back, with no question on the first Mac either.
+        clockB.advance(by: 20)
+        b.settings.httpsOnly = true
+        syncB.poll()
+        downloaded = false
+        syncA.downloadStatus = { url in url.lastPathComponent == SettingsSync.settingsName && !downloaded ? .notDownloaded : nil }
+        syncA.poll()
+        downloaded = true
+        syncA.poll()
+        expect(syncA.pendingChoice == nil && a.settings.httpsOnly, "a setting changed on the second Mac reaches the first without a question")
+
+        // Cra quit while the first download was still coming in: the question is still asked.
+        let clockC = ManualScheduler(now: clockB.now)
+        let c = SidebarStore(clock: clockC)
+        let syncC = SettingsSyncService(store: c, clock: clockC, device: "Mini", deviceID: "mini")
+        syncC.downloadStatus = { url in url.lastPathComponent == SettingsSync.sidebarName ? .notDownloaded : nil }
+        expect(syncC.enableICloud() == .downloading, "a third Mac turns iCloud on while the bundle downloads")
+        let relaunched = SettingsSyncService(store: c, clock: clockC, device: "Mini", deviceID: "mini")
+        relaunched.poll()
+        expect(relaunched.pendingChoice?.device == "MacBook" && !c.document.items.contains { $0.id == tab.id },
+               "after a relaunch the first bundle still waits for the answer")
+        relaunched.disable(); syncA.disable(); syncB.disable()
+        unsetenv("CRA_SYNC_ICLOUD_DIR")
+
+        // The same in a folder a provider syncs (Dropbox, OneDrive): the manifest lands before a
+        // file it names, then the file. No question, and the bundle is applied.
+        let folder = container.appendingPathComponent("provider", isDirectory: true)
+        let clockD = ManualScheduler(now: clockC.now), clockE = ManualScheduler(now: clockC.now)
+        let d = SidebarStore(clock: clockD), e = SidebarStore(clock: clockE)
+        let syncD = SettingsSyncService(store: d, clock: clockD, device: "Studio", deviceID: "studio")
+        expect(syncD.enable(folder: folder) == .synced, "the first Mac syncs through a folder")
+        let syncE = SettingsSyncService(store: e, clock: clockE, device: "MacBook", deviceID: "macbook")
+        guard case .bundleFound = syncE.enable(folder: folder) else { return expect(false, "the second Mac is asked once about the folder's bundle") }
+        syncE.useRemote()
+        clockD.advance(by: 10)
+        let later = d.createTab(url: "https://example.com/opened-on-studio-folder")
+        let sidebarURL = folder.appendingPathComponent(SettingsSync.folderName).appendingPathComponent(SettingsSync.sidebarName)
+        let old = try? Data(contentsOf: sidebarURL)
+        syncD.poll()
+        let arrived = try? Data(contentsOf: sidebarURL)
+        try? old?.write(to: sidebarURL)
+        syncE.poll()
+        expect(syncE.pendingChoice == nil && !e.document.items.contains { $0.id == later.id }, "a bundle the provider has not finished is not applied yet")
+        try? arrived?.write(to: sidebarURL)
+        syncE.poll()
+        expect(syncE.pendingChoice == nil && e.document.items.contains { $0.id == later.id } && syncE.isEnabled,
+               "once the provider has delivered it, it is applied with no second question")
+        syncD.disable(); syncE.disable()
     }
 
     /// A Blank Window is one Mac's window: its sidebar never goes to the other Mac, and a bundle
