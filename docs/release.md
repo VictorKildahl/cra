@@ -341,6 +341,11 @@ release when Spotify's index lists a newer stable CEF than `fetch-cef.sh` pins; 
 stops it when the pinned `CEF_RELEASE` lacks the arm64 or the Intel archive. A pin on a newer
 Chromium patch of the same CEF (Extended Stable, as in 156.0.27 on .96) counts as current.
 `CRA_ALLOW_OLD_CEF=1` ships the pinned CEF anyway, for an urgent fix while the new one builds.
+In CI that's the repository variable `CRA_ALLOW_OLD_CEF` = `1` (Settings → Secrets and variables →
+Actions → Variables, or `gh variable set CRA_ALLOW_OLD_CEF --body 1`), which the Release workflow
+passes to `release.sh`. Delete it once the release is out, so the next one is checked again. It also
+fits a newer CEF that changes nothing on macOS: 156.0.28 only added a Linux offscreen-rendering patch,
+so 0.1.39 shipped on 156.0.27.
 
 ## Later
 
