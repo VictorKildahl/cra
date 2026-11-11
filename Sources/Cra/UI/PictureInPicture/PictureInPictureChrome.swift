@@ -166,6 +166,20 @@ final class PictureInPictureChrome {
         }
     }
 
+    /// `cra://debug?pipClick=<n>`: the overlay pressed and let go in its lower left quarter (clear
+    /// of the buttons) as the last click of `n` quick ones, the way AppKit sends a double click.
+    func debugClick(_ count: Int) {
+        for o in overlays.values {
+            guard let view = o.contentView as? PictureInPictureOverlayView else { continue }
+            let at = NSPoint(x: o.frame.width / 4, y: o.frame.height / 4)
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                guard let e = NSEvent.mouseEvent(with: type, location: at, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                 windowNumber: o.windowNumber, context: nil, eventNumber: 0, clickCount: count, pressure: 1) else { continue }
+                if type == .leftMouseDown { view.mouseDown(with: e) } else { view.mouseUp(with: e) }
+            }
+        }
+    }
+
     /// `cra://debug?pipKey=space|force`: Chromium's window asked to become key the ways Chromium's
     /// own code can leave it open to that. `space`: `preventKeyWindow` back to NO by a Space change,
     /// as NativeWidgetMacNSWindow does after `orderFrontKeepWindowKeyState`; `force`: cleared and
@@ -423,7 +437,14 @@ final class PictureInPictureOverlayView: NSView {
         } else {
             updateCursor(event)
         }
-        guard g.isDragging else { return }
+        guard g.isDragging else {
+            // A double click on the video goes back to its tab, as in Arc.
+            if event.type == .leftMouseUp, g.returnsToTab(clickCount: event.clickCount) {
+                CraLog.note("pip: double click, back to tab")
+                PictureInPictureChrome.shared.actions?.backToTab()
+            }
+            return
+        }
         if g.edge != .none {
             // Chromium owns the window's bounds; say so if it kept another size than the one asked.
             let asked = requested.map { $0.size == target.frame.size ? "" : " (asked \(Self.size($0)))" } ?? ""

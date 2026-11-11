@@ -824,6 +824,11 @@ Arc 1.172 binary (otool/llvm-objdump on the arm64 slice, 8 Nov, #246):
   white 30 %; dragging upwards slows seeking by 2^round(dy / 60 pt), down to 1/16. Cra has none yet.
 Cra follows the limits, the scrim, the fade, the insets and the Back to Tab words
 (`PictureInPictureLayout` in CraCore) and keeps its 782×440-on-1728×1117 opening size.
+Double click (11 Nov, reported by a user): a double click on Arc's window returns to the video's tab.
+[U] Not observed here: Arc's gestures are SwiftUI and leave no strings (Arc 1.171), and it was not tried
+on Arc. Cra (`PictureInPictureGesture.returnsToTab`): the second click of a double click that stayed
+a click, anywhere outside the buttons, does what Back to Tab does; `cra.log` gets `pip: double click,
+back to tab`.
 Centre controls (8 Nov, GitHub #262, from the #246 reporter's Arc crops): play/pause only, glyph
 about 23.5 pt, at 224 and 277 pt wide; the ±15 pair in ~31 pt circles and a 37–40 pt play/pause at
 396 and 801 pt, so the skips arrive with the small size class (280 pt). Cra: play 28 pt symbol
