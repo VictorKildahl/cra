@@ -254,6 +254,16 @@ enum SidebarMenus {
         }
         iconColor(menu, item, list: list)
         menu.addItem(.separator())
+        // Arc's Share Folder… copied an arc.net link ("Copied Folder URL"); Cra's link carries the
+        // folder after its #, so nothing is stored anywhere (FolderShareLink, #357).
+        let link = FolderShareLink.url(for: FolderShareLink.folder(item) { store.children(of: $0) })
+        let toast = list.actions.showToast
+        add(menu, "Share Folder…", enabled: link != nil) {
+            guard let link else { return }
+            copy(link)
+            toast("Copied Folder URL")
+        }
+        menu.addItem(.separator())
         add(menu, "Delete Folder (archives tabs)") { store.deleteFolder(id) }
         return menu
     }

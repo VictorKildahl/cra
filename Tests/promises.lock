@@ -635,3 +635,5 @@
 #354   Tests/Scenarios/page-windows-open-on-cra.scenario  57616ba445a7
 #356   Packages/CraCore/Tests/CraCoreTests/PickedTabsMenuTests.swift::twoPicksGetArcsRowsWithCopyAndShare  7b321e44a08d
 #356   Tests/Scenarios/picked-tabs-menu.scenario  4a41e1119a25
+#357   Packages/CraCore/Tests/CraCoreTests/FolderShareLinkTests.swift::sharesTheFolderAsTheSidebarShowsIt  c6c447a9a8f8
+#357   Packages/CraCore/Tests/CraCoreTests/FolderShareLinkTests.swift::versionOneStillOpens  6a2b1a89faba
