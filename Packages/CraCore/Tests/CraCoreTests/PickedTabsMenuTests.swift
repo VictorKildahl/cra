@@ -22,19 +22,28 @@ struct PickedTabsMenuTests {
         #expect(dimmed == ["changeIcon", "mute", "archiveBelow"])
     }
 
-    /// The same Arc with a pinned tab added to the picks: no tab-only rows, and Archive Items.
+    /// The same Arc with an Easel among the picks: no tab-only rows, and Archive Items.
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/356"))
-    func aPinnedPickLeavesOutTheTabOnlyRows() {
-        #expect(rows(.init(count: 3, anyPinned: true)) == [
+    func anEaselLeavesOutTheTabOnlyRows() {
+        #expect(rows(.init(count: 3, anyEasel: true)) == [
             "Copy Links|Share 3 Items…",
             "Open in Split View|Move to|New Folder with 3 Items",
             "Archive Items",
         ])
     }
 
-    @Test func splitViewTakesTwoToFourTabsNotInASplit() {
-        #expect(PickedTabsMenu.shows("openInSplitView", for: .init(count: 4)))
-        #expect(!PickedTabsMenu.shows("openInSplitView", for: .init(count: 5)))
+    /// A pinned tab picked with a Today one, right-clicked: the tab menu without Archive Tabs Below.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/356"))
+    func aPinnedRowHasNoArchiveTabsBelow() {
+        #expect(rows(.init(count: 2, clickedInToday: false)).last == "Archive Tabs")
+    }
+
+    /// Five picks: Open in Split View stays, dimmed (a split takes four).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/356"))
+    func splitViewIsDimmedPastFourPicks() {
+        #expect(PickedTabsMenu.shows("openInSplitView", for: .init(count: 5)))
+        #expect(!PickedTabsMenu.isEnabled("openInSplitView", for: .init(count: 5)))
+        #expect(PickedTabsMenu.isEnabled("openInSplitView", for: .init(count: 4)))
         #expect(!PickedTabsMenu.shows("openInSplitView", for: .init(count: 3, anyInSplit: true)))
     }
 

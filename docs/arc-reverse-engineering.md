@@ -1060,8 +1060,18 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
   Duplicate, Move to ›, New Folder with 2 Items | Archive Tabs, Archive Tabs Below (dimmed). No ⇧⌘C on Copy
   Links any more. Move to ›: every space, ✓ on the picks' own, ──, New Space…. With a pinned tab added (3 picks):
   Copy Links, Share 3 Items… | Open in Split View, Move to ›, New Folder with 3 Items | Archive Items. AX also
-  lists Archive Other Tabs and Archive Tabs Above in the Today menu, which are not drawn (hidden rows). Not tried:
-  what Archive Items and Share do (destructive / online), five or more picks.
+  lists Archive Other Tabs and Archive Tabs Above in the Today menu, which are not drawn (hidden rows).
+- [O] Same Arc, with five throwaway example.com tabs (opened through Little Arc ▸ Open in Victor, archived after):
+  - The "pinned tab" of the short menu above was an Easel ("Test", `easelID` in StorableSidebar.json). An Easel among
+    the picks gives the short menu and Archive Items; a real pinned tab doesn't.
+  - Pinned tab + Today tab, right-clicked on the pinned row: the full tab menu, ending in Archive Tabs (no Archive
+    Tabs Below). Archive Tabs then archived both at once, the pinned one too, no confirmation and no toast.
+  - Five Today picks: the full menu, Open in Split View shown but dimmed, Share 5 Items…, New Folder with 5 Items.
+  - Share 2 Items… opens a sheet over the window, not a toast: envelope badge, "Send this Folder to anyone, on any
+    browser.", "Anyone with this link can view your Folder. Viewers won't receive future updates and this permalink
+    cannot be deleted.", a "Never show me this again." checkbox, Cancel (ESC) and Copy Link to Folder (↩). Cancel
+    pressed; the link was not made (it would be a permanent arc.net page showing the user's display name).
+  - A plain click on a picked row that is also the open tab starts renaming it.
 - [?] Not measured: the drag-over fill on a dark theme, coloured dark themes (the star's colour there), 1x.
 - Cra: FavoritesEmptyCard, dismissed per favorites container (WindowPrefs.favoritesEmptyStateDismissed, since
   Cra's favorites are per space). Badge, title, subtitle and × land within 1 px of Arc's at 2x. The dashed line

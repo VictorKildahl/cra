@@ -60,7 +60,7 @@ enum SidebarMenus {
         let store = list.store, ui = list.ui, actions = list.actions
         let id = m.id
         let menu = menu()
-        if list.closeGroup(for: id).count > 1 { return picked(ui.group(for: id, in: store), list: list) }
+        if list.closeGroup(for: id).count > 1 { return picked(ui.group(for: id, in: store), clicked: id, list: list) }
         guard let item = store.item(id), let tab = item.tab else { return menu }
         if m.pinned {
             add(menu, action: "pinTab", "Unpin Tab") { store.unpinTab(id) }
@@ -138,12 +138,13 @@ enum SidebarMenus {
     }
 
     /// The menu on a tab that is one of several picked with ⌘/⇧-click (#356): Arc's rows for every
-    /// pick at once, from PickedTabsMenu. `ids` are the picks in sidebar order.
-    static func picked(_ ids: [UUID], list: SpaceListView) -> NSMenu {
+    /// pick at once, from PickedTabsMenu. `ids` are the picks in sidebar order, `clicked` the row.
+    static func picked(_ ids: [UUID], clicked: UUID, list: SpaceListView) -> NSMenu {
         let store = list.store, ui = list.ui, actions = list.actions
         let menu = menu()
         let tabs = ids.compactMap { id in store.item(id)?.tab.map { (id, $0) } }
-        let picks = PickedTabsMenu.Picks(count: ids.count, anyPinned: ids.contains(where: store.isPinned),
+        let picks = PickedTabsMenu.Picks(count: ids.count, anyEasel: tabs.contains { Easel.id(fromURL: $0.1.url) != nil },
+                                         clickedInToday: !store.isPinned(clicked),
                                          allMuted: !tabs.isEmpty && tabs.allSatisfy { $0.1.muted },
                                          anySound: tabs.contains { $0.1.muted || ui.audibleTabIDs.contains($0.0) },
                                          anyInSplit: ids.contains { store.splitContaining($0) != nil })
@@ -175,7 +176,7 @@ enum SidebarMenus {
                         }
                     }
                 case "openInSplitView":
-                    add(menu, title) {
+                    add(menu, title, enabled: enabled) {
                         guard let split = store.createSplit(with: ids) else { return }
                         ui.clearPicks()
                         store.selectTab(store.paneID(for: ids[0], in: split) ?? ids[0], window: ui.windowID)
@@ -198,7 +199,7 @@ enum SidebarMenus {
                 case "newFolder":
                     add(menu, title) { ui.renamingID = store.createFolder(with: ids).id }
                 case "archive":
-                    // A Today tab archives as ⌘W does; Arc's Archive Items also archives the pinned ones.
+                    // Arc archives every pick, pinned ones too, without asking; a Today tab goes as ⌘W does.
                     add(menu, title) {
                         let open = store.selectedTabID(window: ui.windowID)
                         for id in ids.filter({ $0 != open }) + ids.filter({ $0 == open }) {
