@@ -338,14 +338,17 @@ issue and tag a release.
 `scripts/check-cef-release-hook.sh` (in `.claude/settings.json`), and `scripts/release.sh` (so the
 Release workflow too) runs `scripts/check-cef-update.sh --check` before it builds. Both stop the
 release when Spotify's index lists a newer stable CEF than `fetch-cef.sh` pins; the hook also
-stops it when the pinned `CEF_RELEASE` lacks the arm64 or the Intel archive. A pin on a newer
-Chromium patch of the same CEF (Extended Stable, as in 156.0.27 on .96) counts as current.
+stops it when the pinned `CEF_RELEASE` lacks the arm64 or the Intel archive. The Chromium version
+decides first: a CEF on a newer Chromium is an update whatever its own number, and a later CEF on
+the same Chromium is one too. A later CEF on an *older* Chromium is not, since building it would take
+Chromium back. That happens when Cra pins CEF's branch head on a newer Chromium patch than Spotify
+built (156.0.27 on .96, while Spotify's 156.0.28 is on .88, #355). For such a CEF, look at its
+CEF-only commits with `gh api repos/chromiumembedded/cef/compare/<ours>...<theirs>`.
 `CRA_ALLOW_OLD_CEF=1` ships the pinned CEF anyway, for an urgent fix while the new one builds.
 In CI that's the repository variable `CRA_ALLOW_OLD_CEF` = `1` (Settings → Secrets and variables →
 Actions → Variables, or `gh variable set CRA_ALLOW_OLD_CEF --body 1`), which the Release workflow
 passes to `release.sh`. Delete it once the release is out, so the next one is checked again. It also
-fits a newer CEF that changes nothing on macOS: 156.0.28 only added a Linux offscreen-rendering patch,
-so 0.1.39 shipped on 156.0.27.
+fits a newer CEF on the same Chromium that changes nothing on macOS (check the compare above).
 
 ## Later
 
