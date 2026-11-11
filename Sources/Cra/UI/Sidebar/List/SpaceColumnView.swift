@@ -1478,7 +1478,6 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
                                       timing: grid?.store.settings.calendarMeetingLink ?? .twoMinutes) { [weak grid] in grid?.actions.openURL($0) }
     }
 
-    /// Arc's press (AppTrayItemViewAppKit.isPressed): the whole tile springs to 99 % and back.
     private func push(in down: Bool) {
         guard down != pushedIn else { return }
         pushedIn = down
@@ -1494,7 +1493,6 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         guard let p = press, let grid else { return }
         guard hypot(event.locationInWindow.x - p.locationInWindow.x, event.locationInWindow.y - p.locationInWindow.y) > 3 else { return }
         press = nil
-        // A tile that starts a drag doesn't stay pushed in under it.
         push(in: false)
         grid.ui.draggingID = itemID
         let pb = NSPasteboardItem()

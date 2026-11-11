@@ -538,10 +538,8 @@ struct DropDecor: Equatable {
 
 @MainActor
 extension NSView {
-    /// Arc's sidebar press (SidebarBouncyClickCell, AppTrayItemViewAppKit.isPressed): the view's
-    /// layer springs to `scale` about its centre and holds there while pressed, then springs back
-    /// from wherever it is. Arc moves the layer's anchor to its centre; AppKit owns a layer-backed
-    /// view's anchor, so the transform carries the centre instead.
+    /// Arc moves the layer's anchor to its centre; AppKit owns a layer-backed view's anchor, so the
+    /// transform carries the centre instead.
     func springPress(_ down: Bool, scale s: Double) {
         guard let layer else { return }
         var to = CATransform3DIdentity
@@ -709,7 +707,6 @@ class SidebarRowView: NSView {
     /// The item a combine preview draws as the drop's target.
     var itemIDForCombine: UUID { if case .item(let id) = key { return id }; return UUID() }
 
-    /// Which of Arc's pushing-in rows this is (SidebarRowPress); folders and the rest stay put.
     var pressRow: SidebarRowPress.Row { .other }
     private var pushedIn = false
 
@@ -730,7 +727,6 @@ class SidebarRowView: NSView {
         let q = convert(event.locationInWindow, from: nil)
         guard hypot(q.x - p.point.x, q.y - p.point.y) > 3 else { return }
         press = nil
-        // A row that starts a drag doesn't stay pushed in under it.
         push(in: false)
         if let id = dragItemID(at: p.point) { list?.beginDrag(id, from: self, event: p.event) }
     }
