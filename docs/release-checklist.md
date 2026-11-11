@@ -66,6 +66,9 @@ built release app with a test profile. Note anything that fails in the release's
 - **#196:** hover a Today tab and move onto its ✕ several times. The ✕ never vanishes before
   the click.
 - **#7:** click a tab while moving the pointer a few points on a trackpad. It opens.
+- **Row press:** next to Arc, hold the button on a pinned tab, a Today tab, a split, New Tab and a
+  Favorites tile. Each pushes in slightly about its centre (a tile a little more) and springs back
+  on release; a drag doesn't leave it pushed in, a double-click on a tab dips once, folders don't move.
 - **#3, #208:** a middle click on a sidebar tab row closes it; one in a page never does. ⇧⌘J
   opens Downloads in the sidebar; Esc or the back arrow closes the Library.
 - **#233:** with a real mouse, its back button over the sidebar goes to the previous space and

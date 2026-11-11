@@ -536,6 +536,33 @@ struct DropDecor: Equatable {
     }
 }
 
+@MainActor
+extension NSView {
+    /// Arc's sidebar press (SidebarBouncyClickCell, AppTrayItemViewAppKit.isPressed): the view's
+    /// layer springs to `scale` about its centre and holds there while pressed, then springs back
+    /// from wherever it is. Arc moves the layer's anchor to its centre; AppKit owns a layer-backed
+    /// view's anchor, so the transform carries the centre instead.
+    func springPress(_ down: Bool, scale s: Double) {
+        guard let layer else { return }
+        var to = CATransform3DIdentity
+        if down {
+            let a = layer.anchorPoint
+            let c = CGPoint(x: bounds.width * (0.5 - a.x), y: bounds.height * (0.5 - a.y))
+            to = CATransform3DTranslate(CATransform3DScale(CATransform3DMakeTranslation(c.x, c.y, 0), s, s, 1), -c.x, -c.y, 0)
+        }
+        let spring = CASpringAnimation(keyPath: "transform")
+        spring.fromValue = NSValue(caTransform3D: layer.presentation()?.transform ?? CATransform3DIdentity)
+        spring.toValue = NSValue(caTransform3D: to)
+        spring.mass = 1
+        spring.stiffness = SidebarRowPress.stiffness
+        spring.damping = SidebarRowPress.damping
+        spring.duration = spring.settlingDuration
+        spring.fillMode = .forwards
+        spring.isRemovedOnCompletion = !down
+        layer.add(spring, forKey: "press_bounce")
+    }
+}
+
 // MARK: - Row base
 
 @MainActor
@@ -682,9 +709,20 @@ class SidebarRowView: NSView {
     /// The item a combine preview draws as the drop's target.
     var itemIDForCombine: UUID { if case .item(let id) = key { return id }; return UUID() }
 
+    /// Which of Arc's pushing-in rows this is (SidebarRowPress); folders and the rest stay put.
+    var pressRow: SidebarRowPress.Row { .other }
+    private var pushedIn = false
+
+    private func push(in down: Bool) {
+        guard down != pushedIn else { return }
+        pushedIn = down
+        springPress(down, scale: SidebarRowPress.scale(pressRow))
+    }
+
     // Clicks act on release (SwiftUI's tap); a press that moves 3 pt starts the row's drag.
     override func mouseDown(with event: NSEvent) {
         press = (event, convert(event.locationInWindow, from: nil))
+        if SidebarRowPress.pushesIn(pressRow, clickCount: event.clickCount) { push(in: true) }
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -692,10 +730,13 @@ class SidebarRowView: NSView {
         let q = convert(event.locationInWindow, from: nil)
         guard hypot(q.x - p.point.x, q.y - p.point.y) > 3 else { return }
         press = nil
+        // A row that starts a drag doesn't stay pushed in under it.
+        push(in: false)
         if let id = dragItemID(at: p.point) { list?.beginDrag(id, from: self, event: p.event) }
     }
 
     override func mouseUp(with event: NSEvent) {
+        push(in: false)
         guard let p = press else { return }
         press = nil
         click(event, at: p.point)
@@ -812,6 +853,8 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
     private var renameOld: NSTextField?
     private var renameSparkles: CALayer?
     private var renameBright = false
+
+    override var pressRow: SidebarRowPress.Row { .tab }
 
     override init(key: SpaceListView.RowKey, list: SpaceListView, colors: SidebarColors) {
         super.init(key: key, list: list, colors: colors)
@@ -1635,6 +1678,8 @@ final class SplitRowView: SidebarRowView, NSTextFieldDelegate, ArcTooltipTarget 
     }()
     private var shownButtons: SidebarClose.SplitButtons?
 
+    override var pressRow: SidebarRowPress.Row { .split }
+
     override init(key: SpaceListView.RowKey, list: SpaceListView, colors: SidebarColors) {
         super.init(key: key, list: list, colors: colors)
         addSubview(countBadge)
@@ -2100,6 +2145,8 @@ final class NewTabRowView: SidebarRowView {
     /// What a click opens while ⌘ is held over the row with text on the clipboard; nil reads New Tab.
     private var paste: ClipboardPaste?
     private var pasteCheck: Task<Void, Never>?
+
+    override var pressRow: SidebarRowPress.Row { .newTab }
 
     override init(key: SpaceListView.RowKey, list: SpaceListView, colors: SidebarColors) {
         super.init(key: key, list: list, colors: colors)
