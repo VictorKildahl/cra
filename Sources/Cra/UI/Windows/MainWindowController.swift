@@ -3138,12 +3138,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// A press on the URL field's button by name ("siteControls", "copyURL"), then whether the
     /// Site Control Center is open once it had time to (it waits up to 0.3 s on the page).
     /// Scenario hooks (#344): "click" logs what a click on the sidebar URL field did ("url field
-    /// click: editing <text>", "not editing" when it opened the command bar); "type:<text>" or
+    /// click: editing <text>", "not editing" when it opened the command bar), "state" what it shows
+    /// now; "type:<text>" or
     /// "escape:<text>" types into the field being edited, then presses Return or Escape.
     func debugURLFieldEdit(_ step: String) {
         let sidebar = shell.sidebarHost as? SidebarView
         if step == "click" {
             CraLog.note("url field click: " + (sidebar?.debugURLFieldClick() ?? "none") + ", command bar " + (commandBar.isOpen ? "open" : "closed"))
+            return
+        }
+        if step == "state" {
+            CraLog.note("url field state: " + (sidebar?.debugURLFieldState ?? "none") + ", command bar " + (commandBar.isOpen ? "open" : "closed"))
             return
         }
         let commit = step.hasPrefix("type:")
@@ -3449,6 +3454,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     func openCommandBar(_ mode: CommandBarMode) {
         guard let window else { return }
+        // The bar takes over from the sidebar's address field edited in place (#344).
+        (shell.sidebarHost as? SidebarView)?.endAddressEditing()
         // A click on the address that closed the bar leaves it closed (Arc, GitHub #88).
         if mode == .editURL, NSApp.currentEvent?.type == .leftMouseUp,
            commandBarClosingClick.isClosingClick(lastMouseDown: ProcessInfo.processInfo.systemUptime

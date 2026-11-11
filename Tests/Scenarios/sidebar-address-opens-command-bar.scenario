@@ -1,0 +1,11 @@
+# promise: #344
+# Arc's sidebar URL field, which stays Cra's default with #344's option off: a click opens the
+# command bar editing the tab's address, and no text field appears in the sidebar.
+budget rss=600 stalls50=6
+cra://open?url=${PAGE}?n=arc
+wait 3
+cra://debug?urlFieldEdit=click
+expect-log url field click: not editing, command bar open
+cra://debug?urlFieldEdit=state
+expect-log url field state: not editing, command bar open
+cra://dismiss

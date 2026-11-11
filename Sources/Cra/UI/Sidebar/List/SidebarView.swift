@@ -23,6 +23,9 @@ final class SidebarView: NSView {
     func debugURLFieldHover(_ on: Bool) -> [ToolbarComposition.Item]? { topBar.debugURLFieldHover(on) }
     func debugURLFieldPress(_ item: ToolbarComposition.Item) -> Bool { topBar.debugURLFieldPress(item) }
     func debugURLFieldClick() -> String { topBar.debugURLFieldClick() }
+    var debugURLFieldState: String { topBar.debugURLFieldState }
+    /// The URL field edited in place puts the address back (#344).
+    func endAddressEditing() { topBar.endAddressEditing() }
     func debugURLFieldType(_ text: String, commit: Bool) -> Bool { topBar.debugURLFieldType(text, commit: commit) }
     private let pager: SpacePagerView
     private let trayHost: DownloadsTrayView
@@ -362,7 +365,8 @@ final class SidebarTopBarView: NSView {
         return pill.editingText.map { "editing \($0)" } ?? "not editing"
     }
     func debugURLFieldType(_ text: String, commit: Bool) -> Bool { !pill.isHidden && pill.debugType(text, commit: commit) }
-    var debugURLFieldEditing: Bool { pill.isEditing }
+    func endAddressEditing() { pill.endEditing(commit: false) }
+    var debugURLFieldState: String { pill.isHidden ? "hidden" : pill.editingText.map { "editing \($0)" } ?? "not editing" }
     private var syncQueued = false
 
     var preferredHeight: CGFloat { CraMetrics.titleAreaHeight + (compact ? 2 + pill.height + 8 : 0) }

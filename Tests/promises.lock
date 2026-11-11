@@ -585,7 +585,8 @@
 #344   Packages/CraCore/Tests/CraCoreTests/SidebarAddressEditTests.swift::clickEditsInPlaceOnlyWhenTurnedOnAndATabIsSelected  dbb45b4d979e
 #344   Packages/CraCore/Tests/CraCoreTests/SidebarAddressEditTests.swift::returnLoadsAnAddressOrASearchInTheTab  5fcf3ee80d37
 #344   Packages/CraCore/Tests/CraCoreTests/SidebarAddressEditTests.swift::settingDefaultsOffAndRoundTrips  9ec60d7e8be1
-#344   Tests/Scenarios/sidebar-address-edit-in-place.scenario  da9bfe866e18
+#344   Tests/Scenarios/sidebar-address-edit-in-place.scenario  9da0ecad54c8
+#344   Tests/Scenarios/sidebar-address-opens-command-bar.scenario  15db6f99119d
 #345   Packages/CraCore/Tests/CraCoreTests/PinnedIconClickTests.swift::doubleClickGoesBackWithoutRenaming  0245d5fc1ed4
 #345   Packages/CraCore/Tests/CraCoreTests/PinnedIconClickTests.swift::otherClicksAreTheRows  75f7631008a4
 #345   Tests/Scenarios/pinned-icon-double-click.scenario  e0383d787f7c
