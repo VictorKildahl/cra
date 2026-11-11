@@ -102,7 +102,13 @@ final class SettingsSyncService {
         }
     }
 
-    var isEnabled: Bool { location != nil && pendingChoice == nil && !awaitingDownload }
+    /// Sync is on and past the first question. A later bundle that iCloud is still downloading
+    /// does not turn it off.
+    var isEnabled: Bool { location != nil && pendingChoice == nil && (hasSynced || !awaitingDownload) }
+
+    /// This Mac wrote or applied a bundle since sync was turned on: the question about the first
+    /// bundle has its answer. Saved, so a relaunch before the answer still asks.
+    private var hasSynced: Bool { state.lastApplied != nil || state.lastWritten != nil }
 
     /// Picks up where the last run left off, and finds out whether iCloud is there.
     func start() {
@@ -242,14 +248,15 @@ final class SettingsSyncService {
             awaitingDownload = true
             return
         case .bundle(let manifest, let bundle):
-            if awaitingDownload {
+            awaitingDownload = false
+            if !hasSynced {
                 // The bundle sync was turned on against has arrived: now the user picks.
-                awaitingDownload = false
                 if manifest.deviceID != deviceID {
                     pendingChoice = SyncBundleSummary(manifest: manifest, document: bundle.document)
                     return
                 }
             } else if SettingsSync.shouldApply(remote: manifest, lastApplied: state.lastApplied, deviceID: deviceID) {
+                // A later bundle, also one iCloud delivered in parts: applied with no question.
                 apply(manifest, bundle)
             }
         case .none:
