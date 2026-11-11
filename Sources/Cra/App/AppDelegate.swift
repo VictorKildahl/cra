@@ -1141,6 +1141,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
+            // dockMenu=SpaceCellView,n: what a right-click on that dock cell offers; pick=<title> then
+            // chooses that entry (#339).
+            if let spec = dict["dockMenu"] {
+                if let cell = ViewSnapshot.find(spec, in: main.window) as? SpaceCellView {
+                    (cell.superview as? SpaceDockView)?.debugMenu(cell, pick: dict["pick"])
+                } else { CraLog.note("dockMenu: no visible \(spec)") }
+                return
+            }
             // musicNotes=<label>: report visible note overlays and their offsets from tile centers.
             if let label = dict["musicNotes"] {
                 var tiles: [FavoriteTileView] = [], notes: [MusicNotesView] = []

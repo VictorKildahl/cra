@@ -475,6 +475,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func refresh() {
         guard !isTornDown, !isPutAway else { return }
         let space = focusedSpace
+        followSpaceInStyleEditor()
         let palette = space.theme.palette
         // Its extensions belong to the space's profile.
         if siteControlCenter.isShown, siteControlCenterSpaceID != space.id { siteControlCenter.close() }

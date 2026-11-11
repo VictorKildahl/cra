@@ -961,6 +961,12 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
   (profiles, ✓ on the space's, then New Profile…) | New Folder, Live Folders ▸ (GitHub ✓ when present) |
   Share Space…, Export “<name>” into Folder ▸ (every space, its own disabled) | Manage Spaces… | Delete Space.
   The header keeps its hover look while the menu is open. Cra leaves out Share Space… (Arc's servers).
+- [O] A right-click on a space's icon in the bottom bar opens the same menu, for the space clicked, not the open
+  one (Arc 1.172.2, 11 Nov 2026, build 90755; "Export “Personal” into Folder" with PersonalBusiness open), and no
+  Move Left / Move Right (#339). On a space that isn't open: Change Space Icon… opens the picker as a popover
+  (298 × 298 window) above the bar with its arrow down at the clicked icon, and leaves the open space alone; Edit
+  Theme Color… switches to that space and puts the 382 × 534 editor at x 264 with its bottom on the window's;
+  Rename Space… did nothing visible (tried twice; on the open space it turns the header into the text field).
 - [O] Rename Space…: the name turns into a selected text field and the ••• into a grey "Done" (10 pt semibold,
   `Sidebar space header done button`, 32×26). Export … into Folder deletes the space afterwards
   (`completeDeleteSpace`, "Space turned into folder"). Delete alert: "Delete your <name> Space?" / "This will

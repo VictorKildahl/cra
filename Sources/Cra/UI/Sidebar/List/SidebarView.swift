@@ -1162,20 +1162,30 @@ final class SpaceDockView: NSView {
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
-        guard let i = index(at: point(event)), let space = store.space(order[i]) else { return nil }
-        let store = self.store, ui = self.ui, actions = self.actions
-        let m = NSMenu()
-        m.autoenablesItems = false
-        MenuItems.add(m, action: "editSpace") { actions.editSpace(space) }
-        m.addItem(.separator())
-        MenuItems.add(m, "Move Left") { if let i = store.spaceOrder.firstIndex(of: space.id) { store.moveSpace(space.id, to: max(0, i - 1)) } }
-        MenuItems.add(m, "Move Right") { if let i = store.spaceOrder.firstIndex(of: space.id) { store.moveSpace(space.id, to: i + 1) } }
-        m.addItem(.separator())
-        MenuItems.add(m, action: "deleteSpace") {
-            store.focusSpace(space.id, window: ui.windowID)
-            actions.performAction("deleteSpace")
+        guard let i = index(at: point(event)) else { return nil }
+        return spaceMenu(for: order[i])
+    }
+
+    /// Scenarios (cra://debug?dockMenu=SpaceCellView,n): the entries of the menu a right-click on
+    /// that cell opens, in order, a separator as "—" and a submenu with a "▸" after its title (#339).
+    /// With `pick` (an entry's title) that entry is chosen, as a click would.
+    func debugMenu(_ cell: SpaceCellView, pick: String? = nil) {
+        guard let id = cells.first(where: { $0.value === cell })?.key, let m = spaceMenu(for: id) else { return }
+        let entries = m.items.map { $0.isSeparatorItem ? "—" : $0.title + ($0.hasSubmenu ? " ▸" : "") }
+        CraLog.note("space dock menu: " + entries.joined(separator: "; "))
+        if let item = m.items.first(where: { $0.title == pick }), let action = item.action {
+            NSApp.sendAction(action, to: item.target, from: item)
         }
-        return m
+    }
+
+    /// Arc's whole space menu, for the space clicked, which needn't be the open one (#339). Its
+    /// cell is the anchor: the icon picker points up at it from here. Rename Space… opens the space
+    /// and renames it in its header (Arc did nothing on a space that wasn't open): the header takes
+    /// `ui.renamingID` when it is its space's id, as a row takes its own.
+    private func spaceMenu(for id: UUID) -> NSMenu? {
+        guard let cell = cells[id] else { return nil }
+        let ui = self.ui
+        return SpaceMenu.make(spaceID: id, store: store, ui: ui, actions: actions, anchor: cell) { ui.renamingID = id }
     }
 }
 

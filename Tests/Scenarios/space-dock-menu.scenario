@@ -1,0 +1,31 @@
+# promise: #339
+# Right-clicking a space's icon in the dock opens Arc's whole space menu, the one the header's ••• and
+# right-click open, not a short Edit Space… / Move Left / Move Right / Delete Space… one (#339). Arc
+# 1.172.2, 11 Nov 2026: the menu is for the space clicked, Share Space… is the one entry Cra leaves out
+# (it publishes through Arc's servers), and Export names the space clicked. Two made-up spaces.
+budget rss=600 stalls50=10
+seed sidebar.json {"version":1,"spaceOrder":["B3390000-0000-0000-0001-000000000001","B3390000-0000-0000-0001-000000000002"],"spaces":[{"id":"B3390000-0000-0000-0001-000000000001","title":"Space 1","emoji":"🧪","theme":{"colors":["#CDB68F","#CDB68F"],"intensity":1,"noise":0,"appearance":"light","accent":"#CDB68F","solid":true},"favoritesContainerID":"D3390000-0000-0001-1000-000000000001","pinnedContainerID":"D3390000-0000-0001-2000-000000000001","todayContainerID":"D3390000-0000-0001-3000-000000000001","createdAt":"2026-11-10T08:00:00Z"},{"id":"B3390000-0000-0000-0001-000000000002","title":"Space 2","emoji":"🍕","theme":{"colors":["#2A2536","#2A2536"],"intensity":1,"noise":0,"appearance":"dark","accent":"#2A2536","solid":true},"favoritesContainerID":"D3390000-0000-0001-1000-000000000002","pinnedContainerID":"D3390000-0000-0001-2000-000000000002","todayContainerID":"D3390000-0000-0001-3000-000000000002","createdAt":"2026-11-10T08:00:00Z"}],"items":[{"id":"D3390000-0000-0001-1000-000000000001","children":[],"isUnread":false,"createdAt":"2026-11-10T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"B3390000-0000-0000-0001-000000000001"}}}}},{"id":"D3390000-0000-0001-2000-000000000001","children":[],"isUnread":false,"createdAt":"2026-11-10T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"B3390000-0000-0000-0001-000000000001"}}}}},{"id":"D3390000-0000-0001-3000-000000000001","children":[],"isUnread":false,"createdAt":"2026-11-10T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"B3390000-0000-0000-0001-000000000001"}}}}},{"id":"D3390000-0000-0001-1000-000000000002","children":[],"isUnread":false,"createdAt":"2026-11-10T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"B3390000-0000-0000-0001-000000000002"}}}}},{"id":"D3390000-0000-0001-2000-000000000002","children":[],"isUnread":false,"createdAt":"2026-11-10T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"B3390000-0000-0000-0001-000000000002"}}}}},{"id":"D3390000-0000-0001-3000-000000000002","children":[],"isUnread":false,"createdAt":"2026-11-10T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"B3390000-0000-0000-0001-000000000002"}}}}}]}
+cra://debug?windowSize=1280x800
+wait 2
+cra://debug?dockMenu=SpaceCellView,0
+expect-log space dock menu: Change Space Icon…; Rename Space…; Edit Theme Color…; Set Profile ▸; Search Engine ▸; —; New Folder; Live Folders ▸; —; Export “Space 1” into Folder ▸; —; Manage Spaces…; —; Delete Space$
+cra://debug?dockMenu=SpaceCellView,1
+expect-log space dock menu: .*Export “Space 2” into Folder ▸
+reject-log space dock menu: .*Move (Left|Right)
+# Rename Space… on a space that isn't open opens it and renames it in its header (Arc did nothing,
+# #339); Edit Theme Color… opens the space too and sits at the window's bottom, as Arc's does from the dock.
+cra://debug?dockMenu=SpaceCellView,1&pick=Rename%20Space%E2%80%A6
+wait 1
+expect-log space header: renaming Space 2
+cra://debug?dockMenu=SpaceCellView,0&pick=Edit%20Theme%20Color%E2%80%A6
+wait 1
+expect-log theme editor: [0-9]+ pt right of the window's edge, 0 pt above its bottom
+# The theme editor follows the space the window is on, e.g. after a swipe: Arc closes it, Cra keeps
+# the panel and has it edit the space now open, after writing the colours of the one it left (#339).
+# It slides the way the sidebar does: in from the right for a later space, from the left for an earlier one.
+cra://action/space2
+wait 1.5
+expect-log theme editor: now editing Space 2, in from the right
+cra://action/space1
+wait 1.5
+expect-log theme editor: now editing Space 1, in from the left

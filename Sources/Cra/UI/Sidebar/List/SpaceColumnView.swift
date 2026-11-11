@@ -195,8 +195,10 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
     private func sync() {
         syncQueued = false
         var hide = false
+        var renameRequested = false
         let wasCollapsed = collapsed
         withObservationTracking {
+            renameRequested = ui.renamingID == spaceID
             guard let space = store.space(spaceID) else { return }
             emoji.stringValue = space.emoji
             symbol.image = space.symbol.flatMap { SidebarSymbols.image($0, size: 13, weight: .medium) }
@@ -217,6 +219,10 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         if hide != isHidden {
             isHidden = hide
             onHiddenChange?()
+        }
+        if renameRequested {
+            ui.renamingID = nil
+            beginRename()
         }
     }
 
@@ -375,6 +381,7 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
 
     func beginRename() {
         guard renameField == nil, let space = store.space(spaceID) else { return }
+        CraLog.note("space header: renaming \(space.title)")
         let f = NSTextField(string: space.title)
         f.isBordered = false
         f.drawsBackground = false
@@ -424,18 +431,25 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
 }
 
 /// Arc 1.171's space menu (SpaceMenu.swift), item for item, for the space header's ••• and
-/// right-click and the Library's Spaces page. "Share Space…" is left out: it publishes the space
-/// through Arc's servers.
+/// right-click, the Library's Spaces page and the dock's right-click on a space's icon (#339).
+/// "Share Space…" is left out: it publishes the space through Arc's servers.
 @MainActor
 enum SpaceMenu {
     static func make(spaceID id: UUID, store: SidebarStore, ui: SidebarUIState, actions: SidebarActions, anchor: NSView,
                      rename: @escaping () -> Void) -> NSMenu? {
         guard let space = store.space(id) else { return nil }
+        // From the dock the space needn't be the open one: Rename, Edit Theme Color… and New Folder
+        // work on its own column or look, so they open it first, as Arc does for the theme editor.
+        let fromDock = anchor is SpaceCellView
+        let open: () -> Void = fromDock ? { store.focusSpace(id, window: ui.windowID) } : {}
         let m = NSMenu()
         m.autoenablesItems = false
         MenuItems.add(m, "Change Space Icon…") { [weak anchor] in if let anchor { actions.changeSpaceIcon(space, anchor) } }
-        MenuItems.add(m, "Rename Space…", rename)
-        MenuItems.add(m, "Edit Theme Color…") { actions.editSpaceTheme(space) }
+        MenuItems.add(m, "Rename Space…") { open(); rename() }
+        MenuItems.add(m, "Edit Theme Color…") { [weak anchor] in
+            open()
+            if fromDock, let anchor { actions.editSpaceThemeBeside(space, anchor) } else { actions.editSpaceTheme(space) }
+        }
         let profiles = MenuItems.submenu(m, "Set Profile")
         MenuItems.add(profiles, "Default", on: space.profileID == nil) { store.setProfile(nil, forSpace: id) }
         for p in store.profiles {
@@ -446,6 +460,7 @@ enum SpaceMenu {
         addSearchEngines(to: MenuItems.submenu(m, "Search Engine"), space: space, store: store)
         m.addItem(.separator())
         MenuItems.add(m, action: "newFolder") {
+            open()
             ui.renamingID = store.createFolder(named: "New Folder", in: space.pinnedContainerID, index: 0).id
         }
         let live = MenuItems.submenu(m, "Live Folders")

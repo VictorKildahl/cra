@@ -26,6 +26,12 @@ extension MainWindowController {
         popover.contentSize = NSSize(width: 272, height: 272)
         guard let content = anchor.window?.contentView else { return }
         var rect = anchor.convert((anchor as? SpaceHeaderView)?.iconRect ?? anchor.bounds, to: content)
+        // From the dock the popover sits above the clicked cell with its arrow pointing down at it
+        // (Arc 1.172.2, #339); from the header it is under the icon.
+        if anchor is SpaceCellView {
+            popover.show(relativeTo: rect, of: content, preferredEdge: content.isFlipped ? .minY : .maxY)
+            return
+        }
         // Arc's arrow tip sits a point higher, at the icon box's last row.
         rect.origin.y += content.isFlipped ? -1 : 1
         popover.show(relativeTo: rect, of: content, preferredEdge: content.isFlipped ? .maxY : .minY)
@@ -34,25 +40,59 @@ extension MainWindowController {
     /// Edit Theme Color…: Arc's editor in a panel against the sidebar's edge at the window's top.
     /// Every change shows in the space at once but is written only when the editor closes, as in
     /// Arc (offline Arc 1.171: StorableSidebar.json changed on Escape, not on the swatch press).
+    /// From the dock it sits at the window's bottom instead (Arc 1.172.2: 382 × 534 pt at x 264,
+    /// its bottom on the window's, #339).
     func showSpaceStyleEditor(space: Space, beside anchor: NSView? = nil) {
         guard let window else { return }
         if let open = window.childWindows?.first(where: { $0 is StyleEditorPanel }) { open.close() }
         let store = self.store, id = space.id
-        let editor = SpaceStyleEditor(theme: space.theme) { theme in store.previewTheme(theme, forSpace: id) }
         // The card sits 12 pt into its 382 × 534 pt window (19 pt above the bottom), room for the shadow.
         let size = NSSize(width: 382, height: 534)
         // From a Spaces page card Arc puts it flush with the card's right edge.
-        let x = (anchor.flatMap { v in v.window.map { $0.convertToScreen(v.convert(v.bounds, to: nil)).maxX } }
+        let fromDock = anchor is SpaceCellView
+        let x = (anchor.flatMap { v in fromDock ? nil : v.window.map { $0.convertToScreen(v.convert(v.bounds, to: nil)).maxX } }
             ?? window.frame.minX + (shell.sidebarVisible ? shell.sidebarWidth : 0)).rounded()
-        let panel = StyleEditorPanel(contentRect: NSRect(x: x, y: window.frame.maxY - size.height, width: size.width, height: size.height)) {
+        let y = fromDock ? window.frame.minY : window.frame.maxY - size.height
+        let panel = StyleEditorPanel(contentRect: NSRect(x: x, y: y, width: size.width, height: size.height)) {
             store.endThemePreview(forSpace: id, keep: true)
         }
-        let host = NSHostingView(rootView: editor.shadow(color: .black.opacity(0.3), radius: 10, y: 4)
-            .padding(.top, 12).padding(.horizontal, 13.5).padding(.bottom, 19))
-        host.sizingOptions = []
-        panel.contentView = host
+        panel.spaceID = id
+        // Opened for the open space (the header, the dock) the panel follows the window to another
+        // space; from a Spaces page card it stays on that card's space.
+        panel.followsFocus = anchor == nil || fromDock
+        panel.show(styleEditorHost(for: space), direction: 0)
         window.addChildWindow(panel, ordered: .above)
         panel.makeKeyAndOrderFront(nil)
+        CraLog.note("theme editor: \(Int(x - window.frame.minX)) pt right of the window's edge, \(Int(y - window.frame.minY)) pt above its bottom")
+    }
+
+    /// The editor for `space`, with the room its shadow needs, in a view of its own: pointing the
+    /// panel at another space slides a new one in (StyleEditorPanel.show).
+    private func styleEditorHost(for space: Space) -> NSView {
+        let store = self.store, id = space.id
+        let host = NSHostingView(rootView: SpaceStyleEditor(theme: space.theme) { theme in store.previewTheme(theme, forSpace: id) }
+            .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
+            .padding(.top, 12).padding(.horizontal, 13.5).padding(.bottom, 19))
+        host.sizingOptions = []
+        return host
+    }
+
+    /// The theme editor follows the space the window is on, after a swipe or a shortcut: Arc closes
+    /// it, Cra keeps the panel and has it edit the space now open, writing the colours of the one it
+    /// left first. The editor slides the way the sidebar does: the new one comes in from the right
+    /// when the space is later in the sidebar, from the left when it is earlier (#339).
+    func followSpaceInStyleEditor() {
+        guard let panel = window?.childWindows?.first(where: { $0 is StyleEditorPanel }) as? StyleEditorPanel,
+              panel.followsFocus, let left = panel.spaceID, left != focusedSpaceID, let space = store.space(focusedSpaceID) else { return }
+        let store = self.store, id = space.id
+        store.endThemePreview(forSpace: left, keep: true)
+        panel.spaceID = id
+        panel.onClose = { store.endThemePreview(forSpace: id, keep: true) }
+        let order = store.spaceOrder
+        let later = (order.firstIndex(of: id) ?? 0) > (order.firstIndex(of: left) ?? 0)
+        let reduced = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        CraLog.note("theme editor: now editing \(space.title), in from the \(later ? "right" : "left")")
+        panel.show(styleEditorHost(for: space), direction: reduced ? 0 : (later ? 1 : -1))
     }
 
     /// Set Profile ▸ New Profile…: Arc's dialog over the dimmed window; Next asks which spaces use
@@ -106,7 +146,30 @@ final class StyleEditorPanel: NSPanel {
     private var monitor: Any?
     private var resignObserver: Any?
     private var parentObserver: Any?
-    private var onClose: (() -> Void)?
+    var onClose: (() -> Void)?
+    /// The space being edited, and whether the panel follows the window to another space.
+    var spaceID: UUID?
+    var followsFocus = false
+
+    /// Shows `new` in place of the editor showing. With a `direction` (1: the new editor comes in from
+    /// the right, −1: from the left) it pushes the old one out the other way, as the sidebar does
+    /// for a space change, on a curve fitted to its 0.4 s zero-bounce spring; with 0 it just appears.
+    func show(_ new: NSView, direction: CGFloat) {
+        guard let container = contentView else { return }
+        container.wantsLayer = true
+        if direction != 0 {
+            let push = CATransition()
+            push.type = .push
+            push.subtype = direction > 0 ? .fromRight : .fromLeft
+            push.duration = 0.4
+            push.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.2, 0.3, 1)
+            container.layer?.add(push, forKey: "push")
+        }
+        container.subviews.forEach { $0.removeFromSuperview() }
+        new.frame = container.bounds
+        new.autoresizingMask = [.width, .height]
+        container.addSubview(new)
+    }
 
     init(contentRect: NSRect, onClose: @escaping () -> Void) {
         self.onClose = onClose
