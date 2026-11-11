@@ -98,6 +98,7 @@ enum FloatingSidebarTests {
 
         onlyTheKeyWindowReveals(window: window, sidebar: sidebar, panel: panel)
         pointerPastTheLeftEdge(window: window, sidebar: sidebar)
+        theRevealSwingsPastItsEdge(window: window, sidebar: sidebar, panel: panel)
         noStandInLightsInFullScreen(sidebar: sidebar, panel: panel)
         staysInsideTheWindowsCorners(window: window, sidebar: sidebar, panel: panel)
 
@@ -282,6 +283,34 @@ enum FloatingSidebarTests {
         sidebar.now = { ProcessInfo.processInfo.systemUptime }
     }
 
+    // promise: #350
+    /// GitHub #350, seen by Victor in the fixed build: the reveal's spring swings past the sidebar's
+    /// resting place (Arc 1.172.2: 274 for 270). Cra's panel ended at the resting edge, so the
+    /// sidebar's right side was cut off there while its shadow swung on, and its left side, resting 8 pt
+    /// in, uncovered 2-3 pt of the page. The panel has room for the swing while the spring runs, and
+    /// the sidebar rests 5 pt in, as Arc's does.
+    @MainActor
+    private static func theRevealSwingsPastItsEdge(window: NSWindow, sidebar: FloatingSidebarController, panel: NSWindow) {
+        let shell = sidebar.shell
+        sidebar.hide(animated: false)
+        sidebar.show()
+        let resting = shell.sidebarHost.superview!.frame.maxX
+        expect(shell.sidebarHost.superview!.frame.minX == 5, "the floating sidebar rests 5 pt inside the window, as in Arc")
+        expect(panel.frame.width >= resting + FloatingSidebarGeometry.revealOvershoot(sidebarWidth: shell.sidebarWidth),
+               "while the spring runs the panel reaches past the sidebar's resting edge, so the swing isn't cut off")
+        drainAnimations()
+        expect(sidebar.isShown && panel.frame.width == resting, "once it has settled the panel ends at the sidebar's edge again")
+        // A hide that interrupts the spring leaves nothing behind for the next reveal.
+        sidebar.hide(animated: false)
+        sidebar.show()
+        sidebar.hide(animated: true)
+        drainAnimations()
+        sidebar.show()
+        drainAnimations()
+        expect(sidebar.isShown && panel.frame.width == resting, "a reveal after an interrupted one settles the same way")
+        sidebar.hide(animated: false)
+    }
+
     // promise: #315
     /// GitHub #315: the hidden sidebar comes out at the left edge over a page in full screen (a video),
     /// as in Arc 1.172.1 (offline copy, 10 Nov 2026: the floating sidebar over a full-screen element).
@@ -334,8 +363,13 @@ enum FloatingSidebarTests {
                "the shadow is a soft layer shadow with the sidebar cut out of it")
         let slider = shell_slider(panel)
         let spring = slider?.layer?.animation(forKey: "slide") as? CASpringAnimation
-        expect(spring.map { $0.stiffness == 759 && $0.damping == 46.3 && $0.initialVelocity == 23.3 && $0.isAdditive } == true,
+        // Arc's spring, refitted on 11 Nov (#350): the 9 Nov one (759, 46.3, 23.3) swung 2 % past, Arc's 1.5 %.
+        let arc = FloatingSidebarSpring.reveal(travel: Double(sidebar.shell.sidebarWidth + FloatingSidebarGeometry.margin))
+        expect(spring.map { $0.stiffness == CGFloat(arc.stiffness) && $0.damping == CGFloat(arc.damping)
+                   && $0.initialVelocity == CGFloat(arc.initialVelocity) && $0.isAdditive } == true,
                "the reveal is Arc's spring")
+        expect(arc.stiffness == 1134 && arc.initialVelocity == 9.1 && arc.damping > 54 && arc.damping < 58,
+               "Arc's stiffness and start, damped a little more for a sidebar wider than Arc's 264 pt")
         sidebar.hide(animated: true)
         let ease = slider?.layer?.animation(forKey: "slide")
         expect(ease.map { !($0 is CASpringAnimation) && abs($0.duration - 0.102) < 0.001 } == true, "the hide is Arc's 0.1 s ease")

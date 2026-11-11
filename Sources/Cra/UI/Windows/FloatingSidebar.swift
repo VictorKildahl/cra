@@ -53,12 +53,6 @@ final class FloatingSidebarController {
 
     enum Metrics {
         static let cornerRadius: CGFloat = 12
-        /// Arc 1.172.1's reveal, fitted to its 120 fps frames (9 Nov 2026, GitHub #293): a spring that
-        /// lands in ~0.1 s, overshoots ~1.5 % and settles by ~0.23 s. Cra slid in on the ⌘S hide's
-        /// 0.085 s ease-out, half way out in the first frame.
-        static let revealStiffness: CGFloat = 759
-        static let revealDamping: CGFloat = 46.3
-        static let revealVelocity: CGFloat = 23.3
         /// Arc's hide, fitted the same way: 0.1 s on (0.14, 0, 0.53, 1), a soft start.
         static let hideDuration: TimeInterval = 0.102
         static let hideCurve: (Float, Float, Float, Float) = (0.14, 0, 0.53, 1)
@@ -224,8 +218,13 @@ final class FloatingSidebarController {
     /// corners are cut to the window's rounded ones too (`clipToWindow`).
     private var panelFrame: NSRect {
         let t = targetFrame
-        return NSRect(x: window.frame.minX, y: t.minY, width: t.maxX - window.frame.minX, height: t.height)
+        return NSRect(x: window.frame.minX, y: t.minY, width: t.maxX - window.frame.minX + revealRoom, height: t.height)
     }
+
+    /// Room right of the sidebar's resting edge while the reveal's spring runs: it swings ~4 pt past
+    /// (Arc: 274 for 270). A panel that ended at the resting edge cut the sidebar off there while its
+    /// shadow swung on (#350). Only for the spring: the panel takes clicks, and this strip is the page's.
+    private var revealRoom: CGFloat = 0
 
     /// The sidebar inside the panel: in place, or tucked out past the window edge.
     private func slideFrame(shown: Bool) -> NSRect {
@@ -320,11 +319,13 @@ final class FloatingSidebarController {
         placeShadow()
         let animation: CABasicAnimation
         if shown {
+            // Arc's reveal (CraCore's FloatingSidebarSpring): lands in ~0.115 s, swings ~4 pt past, settles by ~0.25 s.
+            let arc = FloatingSidebarSpring.reveal(travel: Double(shell.sidebarWidth + FloatingSidebarGeometry.margin))
             let spring = CASpringAnimation()
             spring.mass = 1
-            spring.stiffness = Metrics.revealStiffness
-            spring.damping = Metrics.revealDamping
-            spring.initialVelocity = Metrics.revealVelocity
+            spring.stiffness = CGFloat(arc.stiffness)
+            spring.damping = CGFloat(arc.damping)
+            spring.initialVelocity = CGFloat(arc.initialVelocity)
             spring.duration = spring.settlingDuration
             if entering {
                 spring.beginTime = CACurrentMediaTime() + Metrics.firstFrameDelay
@@ -449,7 +450,22 @@ final class FloatingSidebarController {
         offEdge.reset()
         transitionGeneration &+= 1
         panel?.ignoresMouseEvents = false
-        slide(shown: true, entering: tucked) {}
+        // Staged with it already; back from a hide in flight it is set here.
+        setRevealRoom(ceil(FloatingSidebarGeometry.revealOvershoot(sidebarWidth: shell.sidebarWidth)) + 2)
+        let generation = transitionGeneration
+        slide(shown: true, entering: tucked) { [weak self] in
+            guard let self, self.transitionGeneration == generation, self.isShown else { return }
+            self.setRevealRoom(0)
+        }
+    }
+
+    private func setRevealRoom(_ room: CGFloat) {
+        guard room != revealRoom else { return }
+        revealRoom = room
+        guard let p = panel, p.parent === window else { return }
+        p.setFrame(panelFrame, display: false)
+        shadowPanel?.setFrame(shadowPanelFrame, display: false)
+        clipToWindow()
     }
 
     /// The sidebar into its panels, tucked out past the window's edge and drawn, the panels on the
@@ -462,6 +478,8 @@ final class FloatingSidebarController {
         panel = p
         let s = shadowPanel ?? makeShadowPanel()
         shadowPanel = s
+        // Room for the reveal's swing from the start, so nothing is resized as the spring begins.
+        revealRoom = ceil(FloatingSidebarGeometry.revealOvershoot(sidebarWidth: shell.sidebarWidth)) + 2
         p.setFrame(panelFrame, display: false)
         s.setFrame(shadowPanelFrame, display: false)
         clipToWindow()
@@ -514,6 +532,7 @@ final class FloatingSidebarController {
         // A synchronous hide also finishes a hide already in flight (for example,
         // before a traffic-light action). Repeated animated exits do not restart it.
         guard isShown || (!animated && shell.sidebarDetached), panel != nil else { return }
+        revealRoom = 0
         isShown = false
         staged = false
         dwell.reset()
@@ -537,6 +556,7 @@ final class FloatingSidebarController {
         // During the hide animation isShown is already false, but the view still
         // belongs to the panel and must come home before the anchoring animation.
         guard shell.sidebarDetached, panel != nil else { return }
+        revealRoom = 0
         isShown = false
         staged = false
         dwell.reset()

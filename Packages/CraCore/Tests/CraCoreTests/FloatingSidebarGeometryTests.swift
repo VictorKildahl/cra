@@ -48,6 +48,38 @@ struct FloatingSidebarGeometryTests {
         #expect(!hides(365, 100) && hides(365.1, 100), "over the window: 81 pt past the sidebar (#293)")
     }
 
+    /// Arc 1.172.2 (11 Nov 2026, frames of a 264 pt sidebar): the floating sidebar rests 5–6 pt inside the
+    /// window (x 5.5 to 269.5, its top at 5.5) and its reveal swings 4 pt past that (peak 274 for 270), so
+    /// its left edge stops short of the page, which starts 10 pt in. Cra's rested 8 pt in and swung 2 % of
+    /// a wider sidebar's way (6.4 pt): at the peak 2–3 pt of the page showed left of it for a few frames.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/350"), arguments: [200.0, 264.0, 328.0, 480.0, 700.0])
+    func theRevealsPeakNeverUncoversThePage(sidebarWidth: Double) {
+        let pageEdge = 10.0
+        #expect(FloatingSidebarGeometry.margin + FloatingSidebarGeometry.revealOvershoot(sidebarWidth: sidebarWidth) <= pageEdge - 0.5)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/350"))
+    func theRevealSwingsArcsFourPoints() {
+        #expect(FloatingSidebarGeometry.margin == 5)
+        #expect(abs(FloatingSidebarSpring.arc.overshoot - 0.0154) < 0.0003, "Arc: 274 for 270")
+        #expect(abs(FloatingSidebarGeometry.revealOvershoot(sidebarWidth: 264) - 4.15) < 0.1)
+        #expect(abs(FloatingSidebarGeometry.revealOvershoot(sidebarWidth: 328) - 4.15) < 0.05, "no further for Cra's wider sidebar")
+        #expect(abs(FloatingSidebarGeometry.revealOvershoot(sidebarWidth: 600) - 4.15) < 0.05)
+        #expect(FloatingSidebarGeometry.revealOvershoot(sidebarWidth: 150) < 2.5, "a narrow one swings its own 1.54 %")
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/350"))
+    func theSpringIsArcsUpToArcsTravelAndDampedMorePastIt() {
+        #expect(FloatingSidebarSpring.reveal(travel: 269) == .arc)
+        #expect(FloatingSidebarSpring.reveal(travel: 120) == .arc)
+        let wide = FloatingSidebarSpring.reveal(travel: 333), wider = FloatingSidebarSpring.reveal(travel: 605)
+        #expect(wide.stiffness == 1134 && wide.initialVelocity == 9.1)
+        #expect(wide.damping > 54 && wider.damping > wide.damping && wider.damping < 2 * 1134.0.squareRoot())
+        #expect(FloatingSidebarSpring(stiffness: 100, damping: 40, initialVelocity: 0).overshoot == 0, "an overdamped spring doesn't swing")
+        #expect(abs(FloatingSidebarSpring(stiffness: 759, damping: 46.3, initialVelocity: 23.3).overshoot - 0.0199) < 0.0005,
+                "the 9 Nov spring swung 2 %")
+    }
+
     @Test func theStripWaitsATenthOfASecond() {
         var dwell = FloatingSidebarRevealDwell()
         // In the strip, out of it at 10.095 (the wait starts over), back in.

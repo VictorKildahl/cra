@@ -4016,7 +4016,7 @@ screen on a click.
   `FloatingSidebarGeometry.mayReveal` lets the edge reveal over a full-screen page; the floating panel draws
   its stand-in lights only outside full screen. `cra://debug?windowState` reports the card's insets
   (`card=l,b,r,t rRadius fills=0|1`); `fullscreen-hidden-sidebar.scenario` checks all three states. Cra's
-  panel still sits 8 pt in (Arc 5), as before.
+  panel sat 8 pt in (Arc 5) until #350 (11 Nov), now 5.
 
 ## Page translation (Arc 1.17x, 10 Nov 2026, GitHub #310, strings + offline Arc, dark mode, 1x, AX)
 - [O static] Arc draws its own translate UI (Translation/TranslateFeature, TranslateBubblePopoverView) on Chromium's
@@ -4159,5 +4159,29 @@ points from the window's left edge (negative = outside) and from its top. Names 
   or further left, nothing for out-and-back; gone 28 ms after another app comes to the front. Kept
   apart from Arc: the zone is the window's height (Arc's sits ~24 pt lower), and a 100 pt/s exit comes out
   from the 10 pt strip 60 ms after the edge (Arc's 5 pt strip lets it pass: 220 ms). The reveal's frames
-  are Arc's one frame ahead, as on 9 Nov, but never past the resting edge: the panel ends there, so the
-  spring's 1.5 % overshoot (Arc: 274 for 270) is cut off. Not changed here.
+  are Arc's one frame ahead, as on 9 Nov, but never past the resting edge: the panel ended there, so the
+  spring's 1.5 % overshoot (Arc: 274 for 270) was cut off.
+- [O 1x frames, the same run] Arc's floating sidebar rests ~5.5 pt inside the window (a 264 pt one from
+  x 5.5 to 269.5, its top at y 5.5; "5 pt in" in full screen on 10 Nov) and the page starts 10 pt in. At
+  the reveal's peak the whole sidebar is 4 pt further right (x 9.5 to 273.5), so its left edge stops at
+  the page's edge and only the window's own margin shows beside it. Its stand-in traffic lights are
+  centred at x 24.8, 47.3, 70, y ~29 of the window.
+- Victor, trying the fix: "the sidebar shoots out too far, I can see some pixels of the background when
+  it is most to the right". [O Cra, 2x frames of the scripted reveal, `cra://debug?floatingSidebar=1`] The
+  sidebar rested 8 pt in and the 9 Nov spring swung it 6.4 pt (2 % of 325), so at the peak the page showed
+  from x 10 to ~13 left of it for three frames, and its right side was cut off at the panel's end while
+  the shadow swung on.
+- [O] Arc's reveal refitted on 27 of today's reveals (right edge per frame, the end of the motion weighted
+  4×, each run's start free within 12 ms; the same result from four starting points, rms 4.8 pt): stiffness
+  1134, damping 54, initial velocity 9.1. It lands at 115 ms, peaks at 274.15 at 146 ms (1.54 %) and reads
+  271 again at 214 ms; Arc's frames read 274 from 136 to 154 ms and 271 again at 198 ms. The 9 Nov spring
+  (759, 46.3, 23.3) peaks at 275.4 and is back at 271 only at 238 ms.
+- Cra now: `FloatingSidebarGeometry.margin` 5 (the stand-in lights land on 25, 29), the leave boundary kept
+  81 pt past the sidebar's width (`leaveSlack` 76) and the zone beside the window 8 pt narrower than the
+  sidebar (`offEdgeShortfall`). `FloatingSidebarSpring` (CraCore) is Arc's spring up to Arc's 270 pt of
+  travel; for a wider sidebar the damping goes up just enough to keep the swing at Arc's 4.2 pt (54.9 for
+  333 pt), so the sidebar's left edge peaks at 9.2 pt, short of the page at 10, whatever its width. [U]
+  whether Arc's own swing grows with a wider sidebar. The panel is the swing + 2 pt wider while the
+  spring runs and ends at the resting edge again once it settles.
+- [O Cra after, the same 2x capture] Right edge at rest 325.0, peak 329.0, back at 325 within ~0.1 s of the
+  peak; in no frame does the page show left of the sidebar.

@@ -11,11 +11,16 @@ public enum FloatingSidebarGeometry {
     /// Edge to edge there is no margin: the strip over the page is Arc's 5 pt.
     public static let revealInsideEdgeToEdge: CGFloat = 5
     public static let revealOutside: CGFloat = 4
-    public static let margin: CGFloat = 8
+    /// How far inside the window the floating sidebar rests, on every side. Arc 1.172.2 (11 Nov 2026,
+    /// GitHub #350, 1x frames): a 264 pt sidebar from x 5.5 to 269.5, its top at 5.5; 5 pt in full screen
+    /// (10 Nov, #315). Cra's rested 8 pt in, so the reveal's swing uncovered the page left of it.
+    public static let margin: CGFloat = 5
     /// How far past the sidebar the pointer may go before it leaves. Arc 1.172.1 (120 fps, 9 Nov 2026,
     /// GitHub #293) keeps a 264 pt sidebar out until x ≈ 345, 81 pt past its width; Cra let go 32 pt past
     /// it, so a hand drifting off the sidebar's edge sent it away and back.
-    public static let leaveSlack: CGFloat = 73
+    public static let leaveSlack: CGFloat = 76
+    /// How much narrower than the sidebar the zone beside the window is (#350: ~256 pt for 264).
+    public static let offEdgeShortfall: CGFloat = 8
     /// How long the pointer stays in the strip before the sidebar comes out. Arc moves ~150 ms after the
     /// pointer arrives (its own reaction takes ~35 ms of that), and an edge brushed for 86 ms doesn't
     /// reveal at all (GitHub #293). Cra revealed on the first sample, so passing the edge made it flicker.
@@ -28,6 +33,14 @@ public enum FloatingSidebarGeometry {
     /// early cost one more, and Cra ran 20–30 ms behind Arc (144–195 ms and 252–258 ms).
     public static let offEdgeRest: TimeInterval = 0.085
     public static let offEdgeLongestWait: TimeInterval = 0.15
+
+    /// How far past its resting place the reveal swings the sidebar, in points: Arc's ~4 pt
+    /// (`FloatingSidebarSpring`). With the sidebar resting `margin` in, its left edge stays short of
+    /// the page, which starts 10 pt in.
+    public static func revealOvershoot(sidebarWidth: CGFloat) -> CGFloat {
+        let travel = Double(sidebarWidth + margin)
+        return CGFloat(FloatingSidebarSpring.reveal(travel: travel).overshoot * travel)
+    }
 
     /// Whether the pointer may bring the sidebar out at all: the sidebar is hidden, or a page is in full
     /// screen over it. Arc 1.172.1 brings it out over a full-screen element (a video) as well (offline
@@ -45,12 +58,12 @@ public enum FloatingSidebarGeometry {
 
     /// Beside the window, left of its edge: where a pointer thrown past the edge lands (GitHub #350).
     /// Arc 1.172.2 (11 Nov 2026, a 264 pt sidebar): out with the pointer 250 pt left of the window, not
-    /// at 270, and a sidebar that is out leaves at 252–257, so the zone is as wide as the sidebar less
-    /// its 8 pt margin. Arc's zone sits ~24 pt lower than its window (from ~32 pt under the top to
+    /// at 270, and a sidebar that is out leaves at 252–257, so the zone is ~8 pt narrower than the
+    /// sidebar. Arc's zone sits ~24 pt lower than its window (from ~32 pt under the top to
     /// ~17 pt under the bottom); Cra's is the window's own height.
     public static func isOffLeftEdge(_ point: CGPoint, in bounds: CGRect, sidebarWidth: CGFloat) -> Bool {
         point.y >= bounds.minY && point.y <= bounds.maxY
-            && point.x < bounds.minX - revealOutside && point.x >= bounds.minX - (sidebarWidth - margin)
+            && point.x < bounds.minX - revealOutside && point.x >= bounds.minX - (sidebarWidth - offEdgeShortfall)
     }
 
     public static func shouldHide(at point: CGPoint, in bounds: CGRect, sidebarWidth: CGFloat,
@@ -126,5 +139,59 @@ public struct FloatingSidebarOffEdge {
     public mutating func reset() {
         fromWindow = false
         since = nil
+    }
+}
+
+
+/// The spring the hidden sidebar comes out on (mass 1), and how far past its resting place it swings.
+///
+/// Arc 1.172.2, 27 reveals of a 264 pt sidebar at 120 fps (11 Nov 2026, GitHub #350): the right edge
+/// reaches its resting 270 after ~115 ms, reads 274 from ~136 to ~154 ms and 271 again by ~200 ms.
+/// Fitted with the end of the motion weighted (rms 4.8 pt, the same from four starting points):
+/// stiffness 1134, damping 54, initial velocity 9.1, a 1.54 % swing. The spring fitted on 9 Nov (#293:
+/// 759, 46.3, 23.3, within 9 pt) swung 2 % and held it 40 ms longer, which on Cra's wider sidebar
+/// uncovered the page left of it.
+public struct FloatingSidebarSpring: Equatable, Sendable {
+    public var stiffness: Double
+    public var damping: Double
+    public var initialVelocity: Double
+
+    public init(stiffness: Double, damping: Double, initialVelocity: Double) {
+        self.stiffness = stiffness
+        self.damping = damping
+        self.initialVelocity = initialVelocity
+    }
+
+    public static let arc = FloatingSidebarSpring(stiffness: 1134, damping: 54, initialVelocity: 9.1)
+    /// How far Arc's 264 pt sidebar travels: to a resting right edge at 270.
+    public static let arcTravel: Double = 270
+
+    /// How far past rest the spring swings, as a share of the way it travels (0 when it doesn't).
+    public var overshoot: Double {
+        let a = damping / 2
+        let under = stiffness - a * a
+        guard under > 0 else { return 0 }
+        let w = under.squareRoot()
+        // What is left of the way: e^(-at) (cos wt + b sin wt). Its first turning point is the swing.
+        let b = (a - initialVelocity) / w
+        var angle = atan(-initialVelocity / (a * b + w))
+        if angle <= 0 { angle += .pi }
+        let left = exp(-a * angle / w) * (cos(angle) + b * sin(angle))
+        return max(0, -left)
+    }
+
+    /// The reveal's spring for a sidebar that travels `travel` points. Arc's own up to Arc's travel;
+    /// further than that the same spring damped a little more, so the swing stays Arc's ~4 pt and
+    /// doesn't grow with the sidebar's width (measured for 264 pt only).
+    public static func reveal(travel: Double) -> FloatingSidebarSpring {
+        let swing = arc.overshoot * arcTravel
+        guard travel > arcTravel else { return arc }
+        var low = arc.damping, high = 2 * arc.stiffness.squareRoot()
+        for _ in 0..<40 {
+            let mid = (low + high) / 2
+            let spring = FloatingSidebarSpring(stiffness: arc.stiffness, damping: mid, initialVelocity: arc.initialVelocity)
+            if spring.overshoot * travel > swing { low = mid } else { high = mid }
+        }
+        return FloatingSidebarSpring(stiffness: arc.stiffness, damping: (low + high) / 2, initialVelocity: arc.initialVelocity)
     }
 }

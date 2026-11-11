@@ -486,7 +486,7 @@
 #292   Tests/Scenarios/extension-tabs-create.scenario  af280e7bb957
 #293   Packages/CraCore/Tests/CraCoreTests/SidebarTonesTests.swift::pillAndTilesShareArcsHover  0e1a115d2754
 #293   Packages/CraCore/Tests/CraCoreTests/SidebarTonesTests.swift::sectionTitlesAreDimmerThanSecondaryText  cdb1390855f9
-#293   Tests/FloatingSidebarTests.swift::arcsReveal  00a3386672de
+#293   Tests/FloatingSidebarTests.swift::arcsReveal  6d2dd8cf74a8
 #293   Tests/Scenarios/sidebar-parity.scenario  5f6091d9d874
 #295   Tests/Scenarios/peek-hidden-sidebar.scenario  9c7db82491f3
 #298   Packages/CraCore/Tests/CraCoreTests/LinkSplitClickTests.swift::optionAloneOrWithCommandSplitsALinkClick  aca5d92cdaeb
@@ -623,7 +623,11 @@
 #350   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarGeometryTests.swift::besideTheWindowIsOffTheEdge  d50f3547363f
 #350   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarGeometryTests.swift::leavingTheZoneOutsideTheWindowEndsIt  dbc576fe32d0
 #350   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarGeometryTests.swift::onlyAPointerThatLeftTheWindowCounts  449fefe51fb5
+#350   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarGeometryTests.swift::theRevealSwingsArcsFourPoints  e6293d9a24cb
+#350   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarGeometryTests.swift::theRevealsPeakNeverUncoversThePage  3ca0e511910d
+#350   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarGeometryTests.swift::theSpringIsArcsUpToArcsTravelAndDampedMorePastIt  8b4ebac59f30
 #350   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarGeometryTests.swift::theStripLeadsOutToo  964e38f91bde
 #350   Tests/FloatingSidebarTests.swift::pointerPastTheLeftEdge  4be954b9cf6b
+#350   Tests/FloatingSidebarTests.swift::theRevealSwingsPastItsEdge  9009fb6ed80f
 #354   Packages/CraCore/Tests/CraCoreTests/PageWindowStartTests.swift::aNewPageWindowStartsOnTheWindowInUseNotOnThePrimaryDisplay  54a52c06fe08
 #354   Tests/Scenarios/page-windows-open-on-cra.scenario  57616ba445a7
