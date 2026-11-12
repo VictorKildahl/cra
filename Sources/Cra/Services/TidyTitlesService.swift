@@ -40,16 +40,26 @@ final class TidyTitlesService {
         guard store.settings.tidyTabTitles, TidyTabsService.shared.modelAvailable, !pending.contains(id),
               let item = store.item(id), item.title == nil, let tab = item.tab, !item.isEmptyTab else { return }
         let shown = TidyTitleRules.arc.tidy(item.displayTitle, url: tab.url)
-        let prompt = TidyTitles.prompt(title: item.displayTitle, url: tab.url)
+        let title = item.displayTitle
+        let language = Locale.preferredLanguages.first.flatMap {
+            Locale(identifier: "en_US").localizedString(forLanguageCode: $0)
+        } ?? "English"
+        let prompt = TidyTitles.prompt(title: title, url: tab.url, language: language)
         pending.insert(id)
         let started = Date()
         Task { @MainActor in
             defer { pending.remove(id) }
-            let answer = await Self.ask(prompt)
+            let answer = await Self.ask(prompt, title: title)
             let rest = Self.delayAfterPin - Date().timeIntervalSince(started)
             if rest > 0 { try? await Task.sleep(for: .seconds(rest)) }
+            // Without row metrics, select the smallest measured candidate.
+            let candidates = answer.map(TidyTitles.candidates) ?? []
+            let font = NSFont.systemFont(ofSize: 14)
+            let measured = candidates.map {
+                (title: $0, width: Double(($0 as NSString).size(withAttributes: [.font: font]).width))
+            }
             // Only if nothing changed meanwhile: still pinned, still unnamed, same page title.
-            guard let answer, let name = TidyTitles.clean(answer, shown: shown),
+            guard let name = TidyTitles.select(measured, availableWidth: 0, shown: shown),
                   let now = store.item(id), now.title == nil, store.isPinned(id),
                   now.tab.map({ TidyTitleRules.arc.tidy(now.displayTitle, url: $0.url) }) == shown else { return }
             store.rename(id, to: name)
@@ -61,14 +71,14 @@ final class TidyTitlesService {
         }
     }
 
-    private static func ask(_ prompt: String) async -> String? {
-        if let fake = fakeAnswer(prompt) { return fake }
+    private static func ask(_ prompt: String, title: String) async -> TidyTitles.Answer? {
+        if let fake = fakeAnswer(title) { return fake }
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *) {
             do {
                 let session = LanguageModelSession(instructions: TidyTitles.instructions)
                 let r = try await session.respond(to: prompt, generating: TidyTitleAnswer.self, options: GenerationOptions(sampling: .greedy))
-                return r.content.title
+                return TidyTitles.Answer(filtered: r.content.filtered, rewritten: r.content.rewritten)
             } catch {
                 CraLog.note("Tidy Tab Titles: the model failed: \(error)")
                 return nil
@@ -80,12 +90,11 @@ final class TidyTitlesService {
 
     /// CRA_TIDY_FAKE_MODEL=1: the title up to its first separator, so a test copy renames without
     /// Apple Intelligence ("Climate - BBC News" → "Climate").
-    private static func fakeAnswer(_ prompt: String) -> String? {
-        guard TidyTabsService.fakeModel, let line = prompt.split(separator: "\n").last,
-              let open = line.firstIndex(of: "\""), let close = line.lastIndex(of: "\""), open < close else { return nil }
-        let title = String(line[line.index(after: open)..<close])
+    private static func fakeAnswer(_ title: String) -> TidyTitles.Answer? {
+        guard TidyTabsService.fakeModel else { return nil }
         let cut = title.components(separatedBy: CharacterSet(charactersIn: "|–—-·:‹")).first ?? title
-        return cut.trimmingCharacters(in: .whitespaces)
+        let name = cut.trimmingCharacters(in: .whitespaces)
+        return TidyTitles.Answer(filtered: name, rewritten: name)
     }
 }
 
@@ -93,7 +102,9 @@ final class TidyTitlesService {
 @available(macOS 26.0, *)
 @Generable
 struct TidyTitleAnswer {
-    @Guide(description: "The tab's new name, one to four words")
-    var title: String
+    @Guide(description: "The title translated and filtered to remove cruft, with no word limit")
+    var filtered: String
+    @Guide(description: "The title rewritten in 1–3 words, keeping specifics and proper nouns")
+    var rewritten: String
 }
 #endif
