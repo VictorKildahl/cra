@@ -81,6 +81,7 @@ open class CraBrowser {
     public func closePictureInPicture() { pictureInPictureCloses += 1; isInPictureInPicture = false }
     public func togglePictureInPicturePlayback() {}
     public func skipPictureInPicture(by seconds: Double) {}
+    public func seekPictureInPicture(to seconds: Double) {}
     public private(set) var lastParams = ""
     public func sendDevToolsMethod(_ method: String, params: String, completion: @escaping (String?, String?) -> Void) {
         lastParams = params
