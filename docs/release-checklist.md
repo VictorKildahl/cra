@@ -10,6 +10,21 @@ built release app with a test profile. Note anything that fails in the release's
 
 ## Manual checks
 
+### Tidy Tab Titles
+
+- On a disposable profile with Apple Intelligence available, pin proper-noun, branded, SEO-heavy,
+  Spanish and CJK titles. Check actual filtered/rewritten quality and the chosen native fit at narrow
+  and wide sidebar widths. Language delivery does not prove translation or cleanup quality: the
+  12 Nov Japanese sample retained “guide” in filtered. Verify real context-overflow recovery when
+  reproducible; injected overflow tests alone do not prove the model's recovery behavior.
+- Capture Arc and Cra at the same 1x and 2x scale. Check the old/new title sweep, sparkles and hint
+  against the measured 0.55 s sweep and 3.65 s hint interval. During inference/reveal, resize, switch
+  windows, open Library Spaces, then edit, unpin, delete or turn off the feature. The originating
+  sidebar supplies width; a missing originating row takes the smallest candidate. Row reuse and
+  interrupted editing must leave no stale masks, sparkles or hint. Relaunch and inspect saved custom
+  names. The `tidy-titles` fake-model scenario covers native pin/editor, window/Library flow and
+  session relaunch; it cannot prove visual parity, saved title values, model quality or real latency.
+
 ### Themes and window chrome
 
 - **#372:** Settings opens at 684 × 650 pt on the first tab (your first name, "Cra" without one) every time, whatever tab it was closed on, and ⌘W closes it. Go through the

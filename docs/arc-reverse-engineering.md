@@ -3837,6 +3837,31 @@ Titles (`renamePinnedTabsEnabled`, AI endpoint `renamePinnedTabs`) gives a tab a
 - [?] Not seen: whether a drag into Pinned renames (Cra does, every pin counts), a rename whose new name isn't a
   prefix of the old (Cra crossfades in the soft edge), undo.
 
+### Recovered title contract (12 Nov 2026, Arc arm64 disassembly and bundled strings)
+
+- [O static] The prompt builder at `0x1000c00ac` uses editor/summarizer/translator instructions:
+  remove site/SEO/page-kind cruft, retain proper nouns and useful context, and prefer the subject,
+  main verb and object. It requests `filtered` without a word limit and `rewritten` in 1–3 words.
+  The response language is the preferred language localized through `en_US`, with English fallback.
+- [O static] Candidate construction at `0x1000bf6a4` retains filtered alone when it has fewer
+  characters than rewritten; otherwise it retains both. Selection at `0x1000bff80` takes the
+  largest measured candidate that fits, or the smallest if none fits. The measurement helper is
+  `0x1007726e8`; interpreting its result as native rendered text width remains an inference.
+  An additional candidate predicate is unresolved; exact validation parity is not claimed.
+- Cra now requests those two fields locally and measures candidates with the current originating
+  sidebar row's 14 pt native font and drawable width. Library Spaces cards and other windows cannot
+  supply that width. A missing originating row uses the measured smallest candidate. Requests are
+  rejected after opt-out, manual naming, unpin/deletion, changed shown title or changed pinned home;
+  ordinary navigation with the same home is preserved. Opt-out cancels pending work and hints.
+- Cra bounds source data, reserves 384 output tokens, counts instructions/prompt/schema on macOS
+  26.4+, and retries a typed context overflow once with a fresh session and smaller title bounds.
+  Earlier macOS 26 versions use bounded input without an exact token preflight. These are local
+  adapter safeguards, not recovered Arc internals. Reveal/sweep/subtitle constants above are unchanged.
+- Four real local-model samples on 12 Nov returned English Arc/Anna names, Spanish `Clima`, and
+  Japanese-script alternatives. The Japanese filtered result retained the page-kind word “guide”;
+  the prompt does not guarantee cleanup quality. `tidy-titles` uses the deterministic fake only for
+  native pin/editor, window/Library and persistence integration, not model semantics or latency.
+
 ## Tidy Downloads (Arc 1.171, 4 Nov 2026, strings + Victor's Arc, 60 fps recordings)
 
 Arc Max's renameDownloads: a finished download is renamed on disk and a card above the download bin says so.
