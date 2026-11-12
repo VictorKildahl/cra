@@ -1463,6 +1463,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("back \(label): selected=\(main.selectedTab?.tab?.url ?? "-") back=\(main.sidebarUI.canGoBack ? 1 : 0) today=\(today)")
                 return
             }
+            // swipeBack=<label>[&go=1]: what Chromium's two-finger swipe asks the front page's view
+            // before a swipe back starts, and with go=1 what it does at the end (#370).
+            if let label = dict["swipeBack"] {
+                let rt = main.browsers.visibleRuntime
+                let root = rt?.hostWindow.flatMap { EmbeddedPages.pageViews(of: $0)?.last ?? $0.contentView } ?? rt?.browser.containerView
+                CraLog.note("swipe back \(label): \(root.map { ChromiumHistorySwipe.debugSwipeBack(in: $0, perform: dict["go"] == "1") } ?? "no tab")")
+                return
+            }
             // scroll=<label>: how far the front page is scrolled, in cra.log, which a relaunched Cra
             // still writes (its stdout isn't the scenario's): a restored history keeps it (#273).
             if let label = dict["scroll"] {

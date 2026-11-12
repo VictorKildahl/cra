@@ -83,6 +83,12 @@ built release app with a test profile. Note anything that fails in the release's
   ticks once: a short flick, a slow drag past half (the tick comes at half), and a swipe into
   the Library and back out. A short drag that settles back is silent; a sideways wheel never
   ticks (Arc). `PageDetentHaptics` holds the rule; only a finger feels the tick.
+- **#370:** on a built-in trackpad, click a link that opens a new tab, then swipe back with two
+  fingers over its page: Chromium's back arrow shows, and letting go closes the tab and shows the
+  one the link was clicked in, as the Back button does. On a pinned tab or a split pane with no
+  history the arrow never shows; a tab with pages behind it swipes through those first. The
+  `swipe-back` scenario asks the swipe's two questions (`cra://debug?swipeBack=`); only a finger
+  makes the gesture.
 - **#12:** a two-finger swipe in the hidden sidebar (⌘S) switches spaces, and the next space
   draws mid-swipe. There is one link bubble only, and the dashed ring shows only on a
   cross-space keyboard switch.

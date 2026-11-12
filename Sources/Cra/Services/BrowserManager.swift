@@ -791,6 +791,17 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         return id
     }
 
+    /// The tab on screen whose page `view` (Chromium's page view or one inside it) belongs to:
+    /// in its pane's card (EmbeddedPages), in its own Chrome window, or in its Alloy container.
+    func visibleTabID(ofPageView view: NSView) -> UUID? {
+        visibleTabIDs.first { id in
+            guard let rt = runtimes[id] else { return false }
+            if view.isDescendant(of: rt.browser.containerView) { return true }
+            guard let host = rt.hostWindow else { return false }
+            return view.window === host || (EmbeddedPages.pageViews(of: host)?.contains { view.isDescendant(of: $0) } ?? false)
+        }
+    }
+
     // MARK: Delete browsing data
 
     /// Chrome's Settings page (its Delete browsing data dialog) runs in Chromium; the command

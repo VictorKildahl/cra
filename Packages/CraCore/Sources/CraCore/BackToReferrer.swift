@@ -33,4 +33,15 @@ public enum BackToReferrer {
     public static func canNavigateBack(canGoBack: Bool, tab: UUID, referrer: UUID?, inSplit: Bool, pinned: Bool) -> Bool {
         step(canGoBack: canGoBack, tab: tab, referrer: referrer, inSplit: inSplit, pinned: pinned) != .none
     }
+
+    /// A two-finger swipe back over the page, or a Magic Mouse's (GitHub #370). Chromium's history
+    /// swipe starts only when the page itself can go back (`canNavigateInDirection:onWindow:`,
+    /// `pageCanGoBack`) and then moves the page, so on a tab a link opened it never started. Arc's
+    /// Chromium asks the app when the page can't (`WebContentsUIDelegate::CanExternallyNavigate`,
+    /// then `WillExternallyNavigate`), and the swipe does what Back does: `.none` means no swipe,
+    /// `.history` leaves it to Chromium, `.close` closes the tab to its referrer. The mouse's back
+    /// button doesn't ask: it stays the page's own history, in Arc and in Cra.
+    public static func swipeBack(pageCanGoBack: Bool, tab: UUID, referrer: UUID?, inSplit: Bool, pinned: Bool) -> Step {
+        step(canGoBack: pageCanGoBack, tab: tab, referrer: referrer, inSplit: inSplit, pinned: pinned)
+    }
 }

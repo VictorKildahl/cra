@@ -2217,6 +2217,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
     }
 
+    /// A two-finger swipe back over tab `id`'s page, which has nothing behind it, so Chromium's
+    /// swipe asks Cra (ChromiumHistorySwipe, GitHub #370): what Back does there, a link's tab
+    /// closing to the tab it came from. nil when the swipe shouldn't start.
+    func swipeBackClose(_ id: UUID) -> (() -> Void)? {
+        guard case .close(let referrer) = store.backStep(id, canGoBack: false, swipe: true) else { return nil }
+        return { [weak self] in
+            guard let self else { return }
+            store.closeToReferrer(id, referrer: referrer, window: windowID)
+        }
+    }
+
     /// Whether Back does anything on tab `id` showing `browser` (Arc: canNavigateBack).
     private func canNavigateBack(_ id: UUID?, _ browser: CraBrowser?) -> Bool {
         guard let id, let browser else { return false }

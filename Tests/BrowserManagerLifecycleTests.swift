@@ -26,6 +26,28 @@ enum BrowserManagerLifecycleTests {
                "the Option-clicked link opens beside the live page's tab, once Chromium's call has returned")
     }
 
+    /// A two-finger swipe back over a page asks for the tab its view belongs to (#370): the page's
+    /// own Alloy container, its Chrome window, or the views moved out of that window into a card.
+    // promise: #370
+    @MainActor
+    private static func pageViewTabCase(_ manager: BrowserManager, _ runtime: TabRuntime, tab: UUID) {
+        let inContainer = NSView()
+        runtime.browser.containerView.addSubview(inContainer)
+        let host = NSWindow(contentRect: .zero, styleMask: [], backing: .buffered, defer: true)
+        let page = NSView(), inPage = NSView()
+        page.addSubview(inPage)
+        runtime.browser.hostWindow = host
+        EmbeddedPages.viewsByHost[ObjectIdentifier(host)] = [page]
+        defer {
+            inContainer.removeFromSuperview()
+            runtime.browser.hostWindow = nil
+            EmbeddedPages.viewsByHost[ObjectIdentifier(host)] = nil
+        }
+        expect(manager.visibleTabID(ofPageView: inContainer) == tab && manager.visibleTabID(ofPageView: inPage) == tab,
+               "a page view in the tab's container, or in its page moved into a card, is the tab's")
+        expect(manager.visibleTabID(ofPageView: NSView()) == nil, "a view of no page on screen is no tab's")
+    }
+
     @MainActor
     static func main() async {
         await tabFaviconsCase()
@@ -77,6 +99,7 @@ enum BrowserManagerLifecycleTests {
         expect(observer.splitLinks.map(\.url) == ["https://example.test/entry"] && observer.splitLinks.first?.tab == id,
                "Open Link in Split View reaches the window with the live page's tab, a closed page's doesn't")
         await optionClickSplitCase(manager, observer, live: replacement.browser, closed: old.browser, tab: id)
+        pageViewTabCase(manager, replacement, tab: id)
 
         let retainedID = store.createTab(url: "https://example.test/retained").id
         weak var retainedBrowser = manager.ensureRuntime(for: retainedID)?.browser

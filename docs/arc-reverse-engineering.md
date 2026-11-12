@@ -3967,6 +3967,20 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
   address; WebKit pages save WKWebView's interactionState. Saved a second after a load, when the tab is hidden
   and at quit. `MainWindowController.goBack` takes ⌘[, the toolbars and the menu; the mouse button is
   Chromium's. Readouts `cra://debug?back=<label>`, `cra://debug?scroll=<label>`.
+- [O disasm] The two-finger swipe (Arc 1.172, 12 Nov 2026, GitHub #370, static only: a real swipe can't be
+  synthesised). Arc uses Chromium's HistorySwiper (ArcCore has it and `ChromeRenderWidgetHostViewMacDelegate`),
+  but its `canNavigateInDirection:onWindow:` (arm64 0x43326a8) and `navigateInDirection:onWindow:` (0x4332784)
+  first ask the page's NavigationController and, when it can't move, call `arc::WebContentsUIDelegate::
+  CanExternallyNavigate` / `WillExternallyNavigate` (0x44b38a8 / 0x44b3d08, through `delegate_wrapper.h`
+  InvokeSync / InvokeAsync). In Arc.app those reach `ADK.WebContentChromium webContents:canExternallyNavigate:` /
+  `willExternallyNavigate:`, and `WebContentFrameAction` has `canExternallyNavigate(direction:response:)` and
+  `onNavigateExternally(ArcNavigationDirection)`: the app decides a swipe the page can't take. Stock Chromium
+  only asks the page (`chrome::CanGoBack`). So a swipe back on a link's tab with no history goes where Back
+  goes (closing it, `navigateBackToReferrer`); the mouse button never goes through the swiper.
+- Cra (#370): `ChromiumHistorySwipe` replaces the same two methods; when Chromium's answer is no for Back it
+  asks `BackToReferrer.swipeBack` for the tab whose page view it is, and at the end closes the tab to its
+  referrer. Forward stays Chromium's. Readout `cra://debug?swipeBack=<label>[&go=1]` calls the page's real
+  delegate (scenario `swipe-back`).
 
 ## Sidebar width and the narrow header (Arc 1.17x, 9 Nov 2026, GitHub #287)
 - [O disasm] `WindowLayoutController.handleSidebarResizePanGestureRecognizer:` (arm64, 0x100221030): the new
