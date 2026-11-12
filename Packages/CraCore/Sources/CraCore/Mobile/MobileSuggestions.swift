@@ -117,16 +117,20 @@ public enum MobileSuggestions {
     }
 
     /// Where a row goes: the address itself, or the engine's results for the text.
-    public static func destination(for row: Row, engine: MobileSearchEngine) -> String {
+    public static func destination(for row: Row, engine: MobileSearchEngine, browsesForMe: Bool = false) -> String {
         if case .site(let url) = row.kind { return url }
-        return destination(forTyped: row.text, engine: engine, kind: row.kind)
+        return destination(forTyped: row.text, engine: engine, kind: row.kind, browsesForMe: browsesForMe)
     }
 
     /// Where the keyboard's Go key sends what was typed.
-    public static func destination(forTyped typed: String, engine: MobileSearchEngine, kind: Row.Kind? = nil) -> String {
+    /// `browsesForMe`: Browse for Me is the search engine (and the device can run it), so a
+    /// search becomes a Browse for Me tab; an address still opens.
+    public static func destination(forTyped typed: String, engine: MobileSearchEngine, kind: Row.Kind? = nil,
+                                   browsesForMe: Bool = false) -> String {
         let query = typed.trimmingCharacters(in: .whitespaces)
         let isAddress = kind.map { $0 == .address } ?? TypedURL.looksLikeURL(query)
-        return isAddress ? TypedURL.fromInput(query) : engine.searchURL(query)
+        if isAddress { return TypedURL.fromInput(query) }
+        return browsesForMe ? MobileBrowseForMe.tabAddress(query: query) : engine.searchURL(query)
     }
 
     /// The completions in an OpenSearch suggest answer, `["query", ["one", "two", …], …]`, which

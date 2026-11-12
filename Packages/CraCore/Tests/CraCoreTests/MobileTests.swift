@@ -207,6 +207,23 @@ struct MobileSettingsTests {
         #expect(try JSONDecoder().decode(MobileSettings.self, from: saved) == loaded)
     }
 
+    /// "Browse for Me" as the search engine: older files load without it, the engine stays for
+    /// suggestions, and a search (not an address) becomes a Browse for Me tab.
+    @Test func browseForMeCanBeTheSearchEngine() throws {
+        var settings = try JSONDecoder().decode(MobileSettings.self, from: Data(#"{"searchEngine":"bing"}"#.utf8))
+        #expect(settings.searchChoice == .engine(.bing) && !settings.searchesWithBrowseForMe)
+        settings.searchChoice = .browseForMe
+        #expect(settings.searchEngine == .bing && settings.searchesWithBrowseForMe)
+        let saved = try JSONDecoder().decode(MobileSettings.self, from: JSONEncoder().encode(settings))
+        #expect(saved.searchChoice == .browseForMe)
+        settings.searchChoice = .engine(.kagi)
+        #expect(settings.searchEngine == .kagi && !settings.searchesWithBrowseForMe)
+        #expect(MobileSearchChoice.all(browseForMeAvailable: true).map(\.label) == ["Browse for Me", "Google", "Bing", "DuckDuckGo", "Ecosia", "Perplexity", "Kagi"])
+        #expect(MobileSearchChoice.all(browseForMeAvailable: false).first == .engine(.google))
+        #expect(MobileSuggestions.destination(forTyped: "pizza ovens", engine: .bing, browsesForMe: true) == MobileBrowseForMe.tabAddress(query: "pizza ovens"))
+        #expect(MobileSuggestions.destination(forTyped: "crabrowser.app", engine: .bing, browsesForMe: true) == "https://crabrowser.app")
+    }
+
     @Test func aSiteKeepsItsOwnChoicesUntilTheyMatchTheGlobalOnesAgain() {
         var settings = MobileSettings()
         var site = settings.options(for: "www.Example.com")

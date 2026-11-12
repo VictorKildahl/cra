@@ -667,4 +667,33 @@ final class BrowseToggleTests: BrowserTestCase {
         XCTAssertFalse(app.staticTexts["browse-reading"].exists, "nothing is read again")
         XCTAssertTrue(browse.isSelected)
     }
+
+    /// "Browse for Me" picked as the search engine: Go makes a Browse for Me page instead of
+    /// opening the engine's results.
+    func testBrowseForMeCanBeTheSearchEngine() {
+        launch(["-CraFakeModel", "YES", "-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["bar-settings"].waitForExistence(timeout: 5))
+        app.buttons["bar-settings"].tap()
+        // The row's identifier lands on its menu's button (and its label and icon).
+        let menu = app.buttons["setting-search-engine"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 5))
+        XCTAssertEqual(menu.label, "Google")
+        menu.tap()
+        let choice = app.buttons["Browse for Me"].firstMatch
+        XCTAssertTrue(choice.waitForExistence(timeout: 5), "the menu offers Browse for Me")
+        choice.tap()
+        expectation(for: NSPredicate(format: "label == 'Browse for Me'"), evaluatedWith: menu)
+        waitForExpectations(timeout: 5)
+        keep("search-engine-browse")
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["tab-card-0"].waitForExistence(timeout: 5))
+        app.buttons["tab-card-0"].tap()
+        waitForPage("First")
+        app.buttons["bar-search"].tap()
+        app.textFields["search-field"].typeText("pizza ovens\n")
+        XCTAssertTrue(app.staticTexts["browse-reading"].waitForExistence(timeout: 8), "Go made a Browse for Me page")
+        XCTAssertTrue(app.webViews.staticTexts["About pizza ovens"].waitForExistence(timeout: 15))
+    }
 }

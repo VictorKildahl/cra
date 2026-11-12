@@ -310,12 +310,21 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         return favoriteSites + tabs.map { MobileSuggestions.Site(title: $0.displayTitle, url: $0.url) }
     }
 
+    /// Browse for Me is the search engine and this device can run it.
+    var searchesWithBrowseForMe: Bool { settings.value.searchesWithBrowseForMe && BrowseForMe.isAvailable }
+
+    /// Where a typed or spoken search goes: an address opens, a search goes to the engine or makes
+    /// a Browse for Me page.
+    func searchDestination(_ typed: String) -> String {
+        MobileSuggestions.destination(forTyped: typed, engine: settings.value.searchEngine, browsesForMe: searchesWithBrowseForMe)
+    }
+
     func searchSheet(_ sheet: SearchSheet, didSubmit text: String) {
-        open(MobileSuggestions.destination(forTyped: text, engine: settings.value.searchEngine))
+        open(searchDestination(text))
     }
 
     func searchSheet(_ sheet: SearchSheet, didPick row: MobileSuggestions.Row) {
-        open(MobileSuggestions.destination(for: row, engine: settings.value.searchEngine))
+        open(MobileSuggestions.destination(for: row, engine: settings.value.searchEngine, browsesForMe: searchesWithBrowseForMe))
     }
 
     func searchSheet(_ sheet: SearchSheet, didPickFavorite site: MobileFavorites.Site) {
@@ -524,7 +533,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         case .search(let query):
             if let query, !query.trimmingCharacters(in: .whitespaces).isEmpty {
                 incognitoSearch = false
-                open(MobileSuggestions.destination(forTyped: query, engine: settings.value.searchEngine))
+                open(searchDestination(query))
             } else {
                 setSearching(true, incognito: false)
             }

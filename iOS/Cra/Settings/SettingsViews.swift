@@ -234,7 +234,8 @@ struct AppSettingsList: View {
             .settingsRow()
             Section {
                 ValueRow(label: SettingLabel(title: "Search Engine", symbol: "magnifyingglass", color: .blue),
-                         selection: model.binding(\.searchEngine), options: MobileSearchEngine.allCases, title: \.label)
+                         selection: model.binding(\.searchChoice),
+                         options: MobileSearchChoice.all(browseForMeAvailable: BrowseForMe.isAvailable), title: \.label)
                     .accessibilityIdentifier("setting-search-engine")
             }
             .settingsRow()

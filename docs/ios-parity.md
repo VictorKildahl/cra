@@ -61,7 +61,7 @@ the real app on an iPhone has to be recorded before then.
 | Incognito toggle in the field | done | The sheet turns dark with "Incognito" beside the mask, "You're browsing Incognito" and the dark keyboard; colours from the store screenshot. Suggestions are not fetched while it is on. |
 | Voice search (hold the pill, mic in the field) | partial | Hold the pill and speak; letting go searches for what was heard (`VoiceSearch`, `VoiceOverlayView`): dimmed page, glow, smiley, "Hi! How can I help?", the words in a capsule, dots that move with the voice. Speech is recognized on the device only. Built from a description and one small picture, not measured. No separate mic button in the field (the keyboard's dictation key is there), no widget or shortcut yet. |
 | Call Arc | *skip* | Removed from Arc Search itself. |
-| Default search engine: Google, Bing, DuckDuckGo, Ecosia, Perplexity, Kagi, custom | partial | The six engines in App Settings ▸ Search Engine (`MobileSearchEngine`); no custom engines, no "Browse for Me" as an engine. |
+| Default search engine: Browse for Me, Google, Bing, DuckDuckGo, Ecosia, Perplexity, Kagi, custom | partial | App Settings ▸ Search Engine lists Browse for Me first (only with the device's own model), then the six engines (`MobileSearchChoice`). With Browse for Me picked, Go, voice and widget searches make a Browse for Me page; the engine under it still gives suggestions and takes a search with no answer. UI test `testBrowseForMeCanBeTheSearchEngine`. No custom engines yet. |
 | Fidget-spinner logo | partial | The mark on the empty home screen spins when flicked, slows and settles upright (`MobileFidget`, `FidgetLogoView`). Built, not yet verified in the app. |
 
 ## Browse for Me
@@ -73,7 +73,7 @@ the real app on an iPhone has to be recorded before then.
 | Result page: query capsule, pictures, "Read N web pages", source cards, blue title, emoji key points, sections | partial | In that order. No video carousel, "Learn more", follow-up chips, list format, instant answers or feedback block. |
 | Toggle between Browse for Me and the search engine | done | The floating switch above the bar at the right, measured on TapSmart's March 2025 screenshot (`MobileBrowseToggle`): 108 × 43 pt capsule, the side on screen filled (Browse for Me with the #583dae to #c3699d gradient). On Browse for Me pages and on the chosen engine's results; the engine side loads its results in the tab, Browse for Me brings the page back from the cache. The filled engine side and the glyphs are Cra's own (Arc Search's mark and the engine's logo are theirs). UI test `testTheSwitchMovesBetweenBrowseForMeAndTheSearchEngine` (needs the network). |
 | Its own tab, restored after a relaunch | done | The page is kept in the caches folder; incognito pages are not. |
-| Browse for Me as the search engine, from selected text, from the share sheet, Shortcuts | missing | |
+| Browse for Me as the search engine, from selected text, from the share sheet, Shortcuts | partial | As the search engine: done (above). Selected text, the share sheet and Shortcuts: missing. |
 
 ## Page
 

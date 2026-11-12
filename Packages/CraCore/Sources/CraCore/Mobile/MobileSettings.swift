@@ -103,11 +103,25 @@ public struct MobileSettings: Codable, Equatable {
     /// Sites that differ, keyed by `siteKey`.
     public var siteOverrides: [String: MobileSiteOverride] = [:]
     public var hasSeenOnboarding = false
+    /// "Browse for Me" picked as the search engine: a search makes a Browse for Me page, while
+    /// `searchEngine` still gives the suggestions and takes the search when no answer comes.
+    public var searchesWithBrowseForMe = false
 
     public init() {}
 
+    /// The Search Engine row's value.
+    public var searchChoice: MobileSearchChoice {
+        get { searchesWithBrowseForMe ? .browseForMe : .engine(searchEngine) }
+        set {
+            switch newValue {
+            case .browseForMe: searchesWithBrowseForMe = true
+            case .engine(let engine): searchesWithBrowseForMe = false; searchEngine = engine
+            }
+        }
+    }
+
     private enum CodingKeys: String, CodingKey {
-        case searchEngine, archiveAfter, opensKeyboardOnLaunch, openAppLinksIn, siteDefaults, siteOverrides, hasSeenOnboarding
+        case searchEngine, archiveAfter, opensKeyboardOnLaunch, openAppLinksIn, siteDefaults, siteOverrides, hasSeenOnboarding, searchesWithBrowseForMe
     }
 
     public init(from decoder: Decoder) throws {
@@ -119,6 +133,7 @@ public struct MobileSettings: Codable, Equatable {
         siteDefaults = try c.decodeIfPresent(MobileSiteOptions.self, forKey: .siteDefaults) ?? MobileSiteOptions()
         siteOverrides = try c.decodeIfPresent([String: MobileSiteOverride].self, forKey: .siteOverrides) ?? [:]
         hasSeenOnboarding = try c.decodeIfPresent(Bool.self, forKey: .hasSeenOnboarding) ?? false
+        searchesWithBrowseForMe = try c.decodeIfPresent(Bool.self, forKey: .searchesWithBrowseForMe) ?? false
     }
 
     /// What applies on `host`: the site's own choices over the global ones.

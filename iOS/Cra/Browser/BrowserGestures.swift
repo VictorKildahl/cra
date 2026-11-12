@@ -310,7 +310,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         guard searching, !heard.isEmpty else { return }
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         incognitoSearch = store.selected?.isIncognito ?? false
-        open(MobileSuggestions.destination(forTyped: heard, engine: settings.value.searchEngine))
+        open(searchDestination(heard))
     }
 
     // MARK: Holding the up arrow

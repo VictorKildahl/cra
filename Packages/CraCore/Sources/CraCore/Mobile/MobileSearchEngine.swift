@@ -47,3 +47,29 @@ public enum MobileSearchEngine: String, Codable, CaseIterable, Identifiable {
         return URL(string: "https://ac.ecosia.org/autocomplete?q=\(q)&type=list")
     }
 }
+
+/// A choice in App Settings ▸ Search Engine: Arc Search's v1.2 menu lists "Browse for Me" first,
+/// then the engines.
+public enum MobileSearchChoice: Hashable, Identifiable {
+    case browseForMe
+    case engine(MobileSearchEngine)
+
+    public var id: String {
+        switch self {
+        case .browseForMe: return "browse-for-me"
+        case .engine(let engine): return engine.rawValue
+        }
+    }
+
+    public var label: String {
+        switch self {
+        case .browseForMe: return "Browse for Me"
+        case .engine(let engine): return engine.label
+        }
+    }
+
+    /// The menu: Browse for Me only where the device's own model can answer.
+    public static func all(browseForMeAvailable: Bool) -> [MobileSearchChoice] {
+        (browseForMeAvailable ? [.browseForMe] : []) + MobileSearchEngine.allCases.map { .engine($0) }
+    }
+}
