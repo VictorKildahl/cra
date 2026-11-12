@@ -268,7 +268,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             Task { @MainActor in self?.refreshMaterialActive(); self?.sidebarUI.appActive = true }
         }
         NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.refreshMaterialActive(); self?.sidebarUI.appActive = false }
+            Task { @MainActor in
+                self?.refreshMaterialActive()
+                self?.sidebarUI.appActive = false
+                if let self { LinkSummaryPreviewController.shared.stop(windowID: self.windowID) }
+            }
         }
         shell.activeAppearance.onChange = { [weak self] in self?.refreshMaterialActive() }
         // Any window: key and main move between this window, its page windows and other windows.
@@ -484,6 +488,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             _ = store.revision
             _ = store.prefs
             _ = store.settings
+            _ = TidyTabsService.shared.modelAvailable
             _ = store.spaces
             _ = SystemAppearance.shared.isDark
         } onChange: { [weak self] in
@@ -495,6 +500,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     func refresh() {
+        LinkSummaryPreviewController.shared.validate(windowID: windowID)
         guard !isTornDown, !isPutAway else { return }
         let space = focusedSpace
         let palette = space.theme.palette
@@ -844,6 +850,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     // MARK: BrowserManagerDelegate
 
     func browserManagerDidUpdate(_ tabID: UUID) {
+        LinkSummaryPreviewController.shared.validate(windowID: windowID)
         syncSidebarUI()
         let colors = browsers.runtimes.compactMapValues { $0.backgroundColor.isEmpty ? nil : $0.backgroundColor }
         if colors != shell.pageColors { shell.pageColors = colors }
@@ -866,44 +873,67 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         overlay.status = statusMessage
         shell.statusVisible = !statusMessage.isEmpty
         shell.layoutContentChildren()
-        linkHovered(statusMessage, tabID: tabID ?? browsers.visibleRuntime?.tabID)
+        linkHovered(statusMessage, tabID: tabID)
     }
 
     /// 5-Second Previews: the hovered link, with the page it is on and the profile that would load
     /// it. Incognito spaces get no previews: their pages load in no profile a fetch could use.
     private func linkHovered(_ link: String, tabID: UUID?) {
-        let space = tabID.flatMap { store.spaceID(ofItem: $0) } ?? focusedSpaceID
-        let rt = tabID.flatMap { browsers.runtime(for: $0) }
-        let page = (rt?.browser.currentURL ?? currentBrowser?.currentURL).flatMap(URL.init(string:))
-        guard store.settings.fiveSecondPreviews, LinkSummaryService.shared.isAvailable, !store.isIncognito(space: space),
-              let url = URL(string: link), LinkSummaryPolicy.canPreview(link: url, page: page) else {
-            LinkSummaryPreviewController.shared.linkHoverChanged(nil)
+        let previews = LinkSummaryPreviewController.shared
+        previews.validate(windowID: windowID)
+        guard store.settings.fiveSecondPreviews, LinkSummaryService.shared.isAvailable else {
+            previews.stop(windowID: windowID)
             return
+        }
+        guard let tabID, let rt = browsers.runtime(for: tabID), browsers.visibleTabIDs.contains(tabID) else { return }
+        let space = store.spaceID(ofItem: tabID) ?? focusedSpaceID
+        guard !store.isIncognito(space: space) else { previews.stop(windowID: windowID); return }
+        let page = URL(string: rt.browser.currentURL)
+        guard let url = URL(string: link), LinkSummaryPolicy.canPreview(link: url, page: page) else {
+            previews.pointerLeftLink(windowID: windowID, tabID: tabID)
+            return
+        }
+        let request = LinkSummaryService.request(link: url, profilePath: store.profilePath(item: tabID),
+                                                 httpsOnly: store.settings.httpsOnly, searchQuery: LinkSummaryPolicy.searchQuery(page: page))
+        let revision = rt.navigationRevision
+        let focused = selectedTabID
+        let focusedSpace = focusedSpaceID
+        let isCurrent = { [weak self, weak rt] in
+            guard let self, let rt, !self.isTornDown, !self.isPutAway, self.window?.isVisible == true,
+                  self.store.settings.fiveSecondPreviews, LinkSummaryService.shared.isAvailable,
+                  self.selectedTabID == focused, self.focusedSpaceID == focusedSpace,
+                  self.browsers.runtime(for: tabID) === rt, self.browsers.visibleTabIDs.contains(tabID),
+                  rt.navigationRevision == revision, rt.browser.currentURL == page?.absoluteString,
+                  !self.store.isIncognito(space: self.store.spaceID(ofItem: tabID) ?? self.focusedSpaceID) else { return false }
+            return LinkSummaryService.request(link: url, profilePath: self.store.profilePath(item: tabID),
+                                              httpsOnly: self.store.settings.httpsOnly,
+                                              searchQuery: LinkSummaryPolicy.searchQuery(page: page)) == request
         }
         let pointerInPage = { (host: NSWindow) -> CGPoint? in
             let f = host.frame, m = NSEvent.mouseLocation
             return f.contains(m) ? CGPoint(x: (m.x - f.minX) / f.width, y: (f.maxY - m.y) / f.height) : nil
         }
         let site = LinkSummaryPolicy.autoSite(page: page)
-        LinkSummaryPreviewController.shared.linkHoverChanged(.init(
-            link: url, page: page, window: window,
-            profilePath: tabID.flatMap { store.profilePath(item: $0) } ?? store.profilePath(space: space),
-            httpsOnly: store.settings.httpsOnly, theme: store.spaces[space]?.theme ?? focusedSpace.theme,
+        previews.linkHoverChanged(.init(
+            context: .init(request: request, page: page, windowID: windowID, tabID: tabID,
+                           runtimeID: ObjectIdentifier(rt), navigationRevision: revision), window: window,
+            theme: store.spaces[space]?.theme ?? self.focusedSpace.theme,
             shiftHeld: NSEvent.modifierFlags.contains(.shift),
             favicon: app.favicons.image(for: url.absoluteString)
                 ?? FaviconKey.key(for: url.absoluteString).flatMap { app.favicons.image(forKey: FaviconKey.siteKey(of: $0)) },
+            isCurrent: isCurrent,
             inspect: { [weak rt] done in
-                // The link under the pointer, its frame, and whether it is one of Arc's (LinkSummaryPolicy.hoverScript).
-                guard let rt, let host = rt.hostWindow, host.isVisible, let pointer = pointerInPage(host) else { done(nil); return }
+                guard isCurrent(), let rt, let host = rt.hostWindow, host.isVisible, let pointer = pointerInPage(host) else { done(nil); return }
                 let params = (try? JSONSerialization.data(withJSONObject: [
                     "expression": LinkSummaryPolicy.hoverScript(pointer: pointer, site: site), "returnByValue": true]))
                     .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
                 rt.browser.evaluate(inIsolatedWorld: PageScript.world, params: params) { [weak host] result, _ in
                     let value = PeekSource.value(result)
                     DispatchQueue.main.async {
-                        guard let host, let value else { done(nil); return }
+                        guard isCurrent(), let host, let value, let href = value["href"] as? String,
+                              let foundURL = URL(string: href) else { done(nil); return }
                         let rect = PeekLayout.fraction(fromScript: value).flatMap { PeekLayout.source(fraction: $0, in: host.frame) }
-                        done(.init(rect: rect, arcLink: value["arc"] as? Bool ?? false))
+                        done(.init(rect: rect, arcLink: value["arc"] as? Bool ?? false, link: foundURL))
                     }
                 }
             }))
@@ -1193,6 +1223,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// Attaches the visible tabs' Chrome windows over their pane areas, hides the others.
     func browserManagerPageWindowsChanged(focus: Bool) {
+        LinkSummaryPreviewController.shared.validate(windowID: windowID)
         guard let window else { return }
         // A focus still waiting for its page to embed is stale once pages change without one.
         if !focus { embedFocusTab = nil }
@@ -4025,6 +4056,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// Close whatever transient UI is up (used by cra://dismiss for scripting).
     func dismissTransientUI() {
+        LinkSummaryPreviewController.shared.stop(windowID: windowID)
         if let sheet = window?.attachedSheet { window?.endSheet(sheet) }
         importWindow?.close()
         commandBar.close()
@@ -4194,7 +4226,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     func windowWillClose(_ notification: Notification) {
         guard (notification.object as? NSWindow) === window else { return }
-        LinkSummaryPreviewController.shared.stop()
+        LinkSummaryPreviewController.shared.stop(windowID: windowID)
         tabSwitcher.cancel()
         app.mainWindowWillClose(self)
     }

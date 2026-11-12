@@ -395,6 +395,27 @@ public struct LinkSummaryRequest: Hashable, Sendable {
     public var fetchURL: URL { LinkSummaryPolicy.fetchURL(for: link, httpsOnly: httpsOnly) }
 }
 
+/// The document that originated a hover. A matching URL alone cannot identify a browser,
+/// navigation back to the same page, another tab or another window.
+public struct LinkSummaryContext: Equatable, Sendable {
+    public let request: LinkSummaryRequest
+    public let page: URL?
+    public let windowID: UUID
+    public let tabID: UUID
+    public let runtimeID: ObjectIdentifier
+    public let navigationRevision: UInt
+
+    public init(request: LinkSummaryRequest, page: URL?, windowID: UUID, tabID: UUID,
+                runtimeID: ObjectIdentifier, navigationRevision: UInt) {
+        self.request = request
+        self.page = page
+        self.windowID = windowID
+        self.tabID = tabID
+        self.runtimeID = runtimeID
+        self.navigationRevision = navigationRevision
+    }
+}
+
 /// Completed usable summaries, newest last. Failed or blocked pages are retried on the next
 /// hover, rather than retaining a temporary model failure or login challenge for the app's life.
 public struct LinkSummaryCache: Sendable {

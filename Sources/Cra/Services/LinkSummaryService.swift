@@ -29,9 +29,20 @@ final class LinkSummaryService {
     private var titles: [LinkSummaryRequest: String] = [:]
 
     /// Banner pictures come over a session that keeps nothing on disk and sends no cookies.
-    private let imageSession = URLSession(configuration: .ephemeral)
+    private static let imageSession = URLSession(configuration: .ephemeral)
 
-    private init() {}
+    private let fetchPage: (URL, String?) async -> String?
+    private let fetchImage: (URL) async -> NSImage?
+    private let summarize: (URL, LinkSummaryContent.Extracted, String?, String, @escaping (LinkSummaryPrompt.Answer) -> Void) async -> LinkSummaryPrompt.Answer?
+
+    /// Concrete fetch/model boundaries also let the production lifecycle run on controlled input.
+    init(fetch: ((URL, String?) async -> String?)? = nil,
+         image: ((URL) async -> NSImage?)? = nil,
+         answer: ((URL, LinkSummaryContent.Extracted, String?, String, @escaping (LinkSummaryPrompt.Answer) -> Void) async -> LinkSummaryPrompt.Answer?)? = nil) {
+        self.fetchPage = fetch ?? Self.fetch
+        self.fetchImage = image ?? Self.image
+        self.summarize = answer ?? Self.ask
+    }
 
     var isAvailable: Bool { TidyTabsService.fakeModel || TidyTabsService.shared.modelAvailable }
 
@@ -47,53 +58,63 @@ final class LinkSummaryService {
         return Card(title: known.title, host: known.host, image: images[request], result: known, finished: true)
     }
 
-    /// Fetches the page, then streams the model's answer into `update`. `update` first fires once
-    /// the page has arrived (title and banner, no rows yet): that is when the card opens. Nothing
-    /// fires when the page doesn't load. Cancelling the task stops the model.
+    /// Streams a current card, including a terminal empty card on failure. The image task is
+    /// owned until it finishes and is cancelled with its parent; completion need not wait for it.
     func load(_ request: LinkSummaryRequest, update: @escaping (Card) -> Void) async {
-        guard isAvailable else { return }
+        guard !Task.isCancelled else { return }
         let started = Date()
         let link = request.link
-        let fetchURL = request.fetchURL
-        guard let html = await Self.fetch(fetchURL, profilePath: request.profilePath), !Task.isCancelled else {
-            CraLog.note("5-Second Previews: no page (\(Task.isCancelled ? "cancelled" : "didn't load"))")
+        let host = LinkSummaryPrompt.displayHost(link)
+        guard isAvailable, let html = await fetchPage(request.fetchURL, request.profilePath) else {
+            if !Task.isCancelled { update(Card(title: host, host: host, finished: true)) }
             return
         }
+        guard !Task.isCancelled else { return }
         let content = await Task.detached(priority: .userInitiated) { LinkSummaryContent.extractText(from: html) }.value
-        let host = LinkSummaryPrompt.displayHost(link)
-        // One card that the picture and the streamed answer both fill in.
+        guard !Task.isCancelled else { return }
         final class Box { var card: Card; init(_ c: Card) { card = c } }
         let box = Box(Card(title: content.title ?? host, host: host))
         update(box.card)
 
-        if let imageURL = content.imageURL(page: fetchURL).map({ LinkSummaryPolicy.fetchURL(for: $0, httpsOnly: request.httpsOnly) }) {
+        let imageURL = content.imageURL(page: request.fetchURL).map { LinkSummaryPolicy.fetchURL(for: $0, httpsOnly: request.httpsOnly) }
+        let imageTask: Task<Void, Never>? = imageURL.map { url in
             Task { @MainActor in
-                guard let image = await self.image(imageURL), !Task.isCancelled else { return }
-                self.remember(image, for: request)
+                guard !Task.isCancelled, let image = await self.fetchImage(url), !Task.isCancelled,
+                      !box.card.finished || box.card.result != nil else { return }
                 box.card.image = image
+                if box.card.finished { self.remember(image, for: request) }
                 update(box.card)
             }
         }
-
-        let final = await Self.ask(url: fetchURL, content: content, searchQuery: request.searchQuery, language: request.language) { answer in
-            guard let partial = LinkSummaryPrompt.result(url: link, title: content.title, answer: answer) else { return }
-            box.card.result = partial
+        await withTaskCancellationHandler {
+            defer { imageTask?.cancel() }
+            let final = await summarize(request.fetchURL, content, request.searchQuery, request.language) { answer in
+                guard !Task.isCancelled, !box.card.finished, let partial = LinkSummaryPrompt.result(url: link, title: content.title, answer: answer) else { return }
+                box.card.result = partial
+                update(box.card)
+            }
+            guard !Task.isCancelled else { return }
+            box.card.result = final.flatMap { LinkSummaryPrompt.result(url: link, title: content.title, answer: $0) }
+            box.card.finished = true
+            if box.card.result == nil { box.card.image = nil }
+            cards.store(box.card.result, for: request)
+            if box.card.result != nil, let image = box.card.image { remember(image, for: request) }
             update(box.card)
+            // Counts and time only; hovered links remain outside diagnostics.
+            CraLog.note(String(format: "5-Second Previews: %@ in %.1f s", box.card.result.map { "\($0.details.count) details" } ?? "no preview",
+                               Date().timeIntervalSince(started)))
+            // Publish the completed summary now; keep the optional image owned until it arrives.
+            if box.card.result != nil { await imageTask?.value }
+        } onCancel: {
+            imageTask?.cancel()
         }
-        guard !Task.isCancelled else { return }
-        box.card.result = final.flatMap { LinkSummaryPrompt.result(url: link, title: content.title, answer: $0) }
-        box.card.finished = true
-        cards.store(box.card.result, for: request)
-        update(box.card)
-        // Counts and time only: the links people hover stay out of the log (it goes into diagnostics).
-        CraLog.note(String(format: "5-Second Previews: %@ in %.1f s", box.card.result.map { "\($0.details.count) details" } ?? "no preview",
-                           Date().timeIntervalSince(started)))
     }
 
     /// The small card's title: the page's <title>, nil when the page didn't load.
     func title(_ request: LinkSummaryRequest) async -> String? {
+        guard !Task.isCancelled, isAvailable else { return nil }
         if let known = titles[request] { return known }
-        guard let html = await Self.fetch(request.fetchURL, profilePath: request.profilePath), !Task.isCancelled else { return nil }
+        guard let html = await fetchPage(request.fetchURL, request.profilePath), !Task.isCancelled else { return nil }
         let title = await Task.detached(priority: .userInitiated) { LinkSummaryContent.extractText(from: html).title }.value
         guard !Task.isCancelled else { return nil }
         if let title {
@@ -115,7 +136,7 @@ final class LinkSummaryService {
     }
 
     /// The banner: a picture of at most 4 MB.
-    private func image(_ url: URL) async -> NSImage? {
+    private static func image(_ url: URL) async -> NSImage? {
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 8)
         request.httpShouldHandleCookies = false
         guard let (data, response) = try? await imageSession.data(for: request),
@@ -138,12 +159,14 @@ final class LinkSummaryService {
 
     /// The model's answer; `partial` gets it as it streams. Nil when the model failed.
     private static func ask(url: URL, content: LinkSummaryContent.Extracted, searchQuery: String?, language: String,
-                            partial: (LinkSummaryPrompt.Answer) -> Void) async -> LinkSummaryPrompt.Answer? {
+                            partial: @escaping (LinkSummaryPrompt.Answer) -> Void) async -> LinkSummaryPrompt.Answer? {
         if TidyTabsService.fakeModel {
             let answer = LinkSummaryPrompt.fakeAnswer(content: content)
             try? await Task.sleep(for: .seconds(0.6))
+            guard !Task.isCancelled else { return nil }
             partial(LinkSummaryPrompt.Answer(blocked: answer.blocked, quickSummary: answer.quickSummary, details: Array(answer.details.prefix(1))))
             try? await Task.sleep(for: .seconds(0.6))
+            guard !Task.isCancelled else { return nil }
             return answer
         }
         #if canImport(FoundationModels)

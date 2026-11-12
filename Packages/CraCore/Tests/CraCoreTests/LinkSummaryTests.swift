@@ -311,6 +311,24 @@ struct LinkSummaryTests {
         #expect(named.profilePath == "/profiles/a")
     }
 
+    @Test func sameLinkDoesNotIdentifyTheOriginatingDocument() {
+        let runtime = NSObject(), replacement = NSObject()
+        let window = UUID(), tab = UUID()
+        let page = u("https://www.google.com/search?q=price")
+        func context(_ window: UUID, _ tab: UUID, _ runtime: NSObject, _ revision: UInt, _ page: URL?) -> LinkSummaryContext {
+            .init(request: request(), page: page, windowID: window, tabID: tab,
+                  runtimeID: ObjectIdentifier(runtime), navigationRevision: revision)
+        }
+        let original = context(window, tab, runtime, 1, page)
+        #expect(original == context(window, tab, runtime, 1, page))
+        let changes = [context(UUID(), tab, runtime, 1, page), context(window, UUID(), runtime, 1, page),
+                       context(window, tab, replacement, 1, page), context(window, tab, runtime, 2, page),
+                       context(window, tab, runtime, 1, u("https://www.google.com/search?q=reviews"))]
+        for changed in changes {
+            #expect(original != changed, "same-URL preview work must be scoped to its window, tab, runtime, revision and source page")
+        }
+    }
+
     @Test func cacheKeepsTheNewest() {
         var c = LinkSummaryCache(limit: 2)
         let a = request("https://a.example"), b = request("https://b.example"), third = request("https://c.example")
