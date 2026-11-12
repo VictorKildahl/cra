@@ -2965,6 +2965,7 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 }
 - (void)stopFinding:(BOOL)clearSelection { if (_browser) _browser->GetHost()->StopFinding(clearSelection); }
 - (void)setAudioMuted:(BOOL)muted { if (_browser) _browser->GetHost()->SetAudioMuted(muted); }
+- (BOOL)isAudioMuted { return _browser && _browser->GetHost()->IsAudioMuted(); }
 
 // Chrome's RecentlyAudibleHelper: quiet only once the page stayed quiet for 2 s, so the
 // gap between two tracks doesn't blink the speaker.

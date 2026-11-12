@@ -1815,6 +1815,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 main.testPickedMenu(count: n, label: dict["label"] ?? "\(n)", run: dict["run"])
                 return
             }
+            // favoriteMenu=<n>[&label=][&run=<row>]: the n-th favorite tile's menu, see testFavoriteMenu (#387).
+            if let n = dict["favoriteMenu"].flatMap(Int.init) {
+                main.testFavoriteMenu(tile: n, label: dict["label"] ?? "\(n)", run: dict["run"])
+                return
+            }
             // pickedCopy=<c2,s3…>[&label=]: rows ⌘/⇧-clicked, then ⇧⌘C typed; see testPickedCopy (#322).
             if let clicks = dict["pickedCopy"] {
                 main.testPickedCopy(clicks: clicks, label: dict["label"] ?? clicks)

@@ -290,6 +290,8 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 - (void)findText:(NSString *)text forward:(BOOL)forward matchCase:(BOOL)matchCase findNext:(BOOL)findNext;
 - (void)stopFinding:(BOOL)clearSelection;
 - (void)setAudioMuted:(BOOL)muted;
+/// Whether Chromium has the page muted (CefBrowserHost::IsAudioMuted).
+- (BOOL)isAudioMuted;
 /// Pops the page's video out into Chromium's floating Picture in Picture
 /// window. Manual requests toggle (a second call brings the video back).
 /// `automatic` is the "leaving a video tab" case: only a playing video of some
