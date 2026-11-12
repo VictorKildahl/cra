@@ -66,7 +66,7 @@ struct AdvancedPane: View {
                 SettingsCardDivider()
                 // Arc: Settings ▸ Advanced "Show full URL when Toolbar is enabled" (also in the toolbar address's menu).
                 SettingsToggleRow("Show full URL when Toolbar is enabled",
-                                  detail: "With the toolbar on, its address shows the whole address, not only the site’s name.",
+                                  detail: "With the toolbar on, it shows a page’s whole address instead of only the site’s name.",
                                   isOn: $store.settings.toolbarShowsFullURL)
                 SettingsCardDivider()
                 // Arc: "Enable Boosts on websites you visit".
@@ -122,7 +122,7 @@ struct AdvancedPane: View {
                 SettingsCardDivider()
                 // Arc: "Reset Translated-site Prompts" (resetTranslateSettings).
                 SettingsPlainRow("Translated sites",
-                                 detail: "Forget the sites you chose never to translate and the other translate choices, so Chromium offers to translate again.",
+                                 detail: "Forget the sites and languages you chose always or never to translate, in every profile, so Cra offers to translate them again.",
                                  trailing: { ResetTranslatedSitesButton(reset: actions.resetTranslatedSitePrompts) })
             }
 

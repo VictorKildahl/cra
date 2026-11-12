@@ -1870,10 +1870,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         return true
     }
 
-    /// Arc's ⌥⌘-click (LittleWindowTrigger): the link opens in a Little Window and the tab stays put.
+    /// Arc's ⌥⌘-click (LittleWindowTrigger, decided by BrowserManager): the link opens in a Little Window and the
+    /// tab stays put. After Chromium's call returns, as a split pane opens: the window makes a page of its own.
     func browserManagerOpensLittleWindow(url: String, fromTab tabID: UUID) -> Bool {
-        guard !isIncognito, LittleWindowTrigger.opens(url, optionCommand: true, settings: store.settings) else { return false }
-        _ = app.openLittleWindow(url: url, space: focusedSpaceID)
+        guard !isIncognito else { return false }
+        let space = focusedSpaceID
+        DispatchQueue.main.async { [weak self] in _ = self?.app.openLittleWindow(url: url, space: space) }
         return true
     }
 

@@ -24,9 +24,10 @@ struct LinksPane: View {
                                   isOn: $store.settings.littleWindowShortcutEverywhere)
                     .settingsTextColumn()
                 SettingsCardDivider()
-                // Arc's "Open Little Arc when clicking on links with ⌥⌘ held" (LittleWindowTrigger).
+                // Arc's "Open Little Arc when clicking on links with ⌥⌘ held" (LittleWindowTrigger). Off in Cra:
+                // a ⌘⌥-click opens Split View otherwise (#298).
                 SettingsToggleRow("⌥⌘-click opens a Little Window",
-                                  detail: "Hold ⌥ and ⌘ while you click a link to open it in a Little Window instead of a background tab.",
+                                  detail: "Hold ⌥ and ⌘ while you click a link to open it in a Little Window instead of Split View.",
                                   isOn: $store.settings.littleWindowOnOptionCommandClick)
                     .settingsTextColumn()
                 SettingsCardDivider()

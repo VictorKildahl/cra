@@ -169,10 +169,12 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 /// opens as a target=_blank tab) or Shift-clicked (YES, instead of a new window). Return
 /// YES to show it in a Peek; the page then stays where it is.
 - (BOOL)browser:(CraBrowser *)browser opensPeekForURL:(NSString *)url shiftClick:(BOOL)shiftClick newTab:(BOOL)newTab;
-/// Arc's "Open Little Arc when clicking on links with ⌥⌘ held": a link the user clicked with both keys down
-/// (Chromium reports that click as a ⌘-click, a background tab). Return YES to show it in a Little Window;
-/// the page then stays where it is.
-- (BOOL)browser:(CraBrowser *)browser opensLittleWindowForURL:(NSString *)url;
+/// Arc's "Open Little Arc when clicking on links with ⌥⌘ held": a link the user clicked asks for Chromium's
+/// split view or a background tab. `clickModifiers` (AppKit's flags) and `clickAge` (seconds, -1 when none)
+/// are the page's last click or Return, as for a download. Return YES to show it in a Little Window; the page
+/// then stays where it is.
+- (BOOL)browser:(CraBrowser *)browser opensLittleWindowForURL:(NSString *)url
+  clickModifiers:(NSUInteger)clickModifiers clickAge:(NSTimeInterval)clickAge;
 /// A main-frame navigation (a link, a redirect, history, an address Cra loaded) before its request
 /// goes out; `method` is its HTTP method. Return YES to cancel it here because Cra shows `url` in
 /// another engine (ProtectedMediaSites: WebKit for DRM services). Called on the main thread from
@@ -510,6 +512,14 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 /// Sets a profile's pref to a JSON value, as chrome://settings would. NO when the profile hasn't
 /// loaded, a policy holds the pref, or the value isn't one it takes.
 + (BOOL)setPreference:(NSString *)name json:(NSString *)json forProfile:(nullable NSString *)profilePath;
+/// Puts a profile's pref back to Chromium's default (PrefService::ClearPref). NO when the profile hasn't
+/// loaded, a policy holds the pref, or Chromium has no pref of that name.
++ (BOOL)resetPreference:(NSString *)name forProfile:(nullable NSString *)profilePath;
+/// Whether a profile (nil is Default) has loaded in this session: 2 ready, 1 loading (its prefs are being
+/// read), 0 not asked for, so nothing in this process has its Preferences file open.
++ (NSInteger)loadStateOfProfile:(nullable NSString *)profilePath;
+/// Called on the main queue with a profile's path once it has loaded (not Default, which loads first).
++ (void)setProfileLoadedHandler:(nullable void (^)(NSString *profilePath))handler;
 /// Called on the main queue after a loaded profile's `extensions.settings` changed: an
 /// extension installed, enabled, disabled or removed.
 + (void)setExtensionSettingsChangeHandler:(nullable void (^)(void))handler;

@@ -48,6 +48,32 @@ enum BrowserManagerLifecycleTests {
         expect(manager.visibleTabID(ofPageView: NSView()) == nil, "a view of no page on screen is no tab's")
     }
 
+    /// Arc's ⌥⌘-click opens a link in a Little Window (#373): only when the switch is on and the page's own
+    /// last click had ⌥⌘, not a click made with other keys while ⌥⌘ are down by the time Chromium asks.
+    // promise: #373
+    @MainActor
+    private static func optionCommandLittleWindowCase(_ manager: BrowserManager, _ store: SidebarStore, _ observer: Observer,
+                                                      live: CraBrowser, closed: CraBrowser, tab: UUID) {
+        let optionCommand = UInt(NSEvent.ModifierFlags([.option, .command]).rawValue)
+        let command = UInt(NSEvent.ModifierFlags.command.rawValue)
+        let link = "https://example.test/little"
+        let before = observer.littleWindowLinks.count
+        store.settings.littleWindowOnOptionCommandClick = false
+        expect(!manager.browser(live, opensLittleWindowForURL: link, clickModifiers: optionCommand, clickAge: 0.05),
+               "with the switch off a ⌥⌘-click stays Chromium's split view click (#298)")
+        store.settings.littleWindowOnOptionCommandClick = true
+        expect(!manager.browser(live, opensLittleWindowForURL: link, clickModifiers: command, clickAge: 0.05)
+               && !manager.browser(live, opensLittleWindowForURL: link, clickModifiers: 0, clickAge: 0.05)
+               && !manager.browser(live, opensLittleWindowForURL: link, clickModifiers: optionCommand, clickAge: -1)
+               && !manager.browser(closed, opensLittleWindowForURL: link, clickModifiers: optionCommand, clickAge: 0.05),
+               "a ⌘-click, a plain click, no click in this page and a closed page's open no Little Window")
+        expect(manager.browser(live, opensLittleWindowForURL: link, clickModifiers: optionCommand, clickAge: 0.05),
+               "a ⌥⌘-click with the switch on opens one")
+        expect(observer.littleWindowLinks.dropFirst(before).map(\.url) == [link] && observer.littleWindowLinks.last?.tab == tab,
+               "from the live page's tab, once")
+        store.settings.littleWindowOnOptionCommandClick = false
+    }
+
     @MainActor
     static func main() async {
         await tabFaviconsCase()
@@ -100,6 +126,7 @@ enum BrowserManagerLifecycleTests {
                "Open Link in Split View reaches the window with the live page's tab, a closed page's doesn't")
         await optionClickSplitCase(manager, observer, live: replacement.browser, closed: old.browser, tab: id)
         pageViewTabCase(manager, replacement, tab: id)
+        optionCommandLittleWindowCase(manager, store, observer, live: replacement.browser, closed: old.browser, tab: id)
 
         let retainedID = store.createTab(url: "https://example.test/retained").id
         weak var retainedBrowser = manager.ensureRuntime(for: retainedID)?.browser
@@ -1744,7 +1771,11 @@ private final class Observer: BrowserManagerDelegate {
         activatedByPage.append(byPage)
     }
     func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool, newTab: Bool) -> Bool { false }
-    func browserManagerOpensLittleWindow(url: String, fromTab tabID: UUID) -> Bool { false }
+    var littleWindowLinks: [(url: String, tab: UUID)] = []
+    func browserManagerOpensLittleWindow(url: String, fromTab tabID: UUID) -> Bool {
+        littleWindowLinks.append((url, tabID))
+        return true
+    }
     var openedLinks: [(url: String, kind: CraLinkWindow, space: UUID?, incognito: Bool)] = []
     var capturedImages: [(point: NSPoint, tab: UUID)] = []
     func browserManagerOpenLink(_ url: String, in kind: CraLinkWindow, space: UUID?, fromIncognito: Bool) {

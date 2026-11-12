@@ -109,11 +109,11 @@ built release app with a test profile. Note anything that fails in the release's
 
 ### Peek, Little Window, Picture in Picture, split view, Capture
 
-- **#373:** with Settings ▸ Links ▸ "⌥⌘-click opens a Little Window" on (the default), hold ⌥ and ⌘ and click
-  a link on a page: the link opens in a Little Window and the page stays where it is, from a normal tab, a
-  pinned tab and a target=_blank link. With the switch off, ⌥⌘-click opens the link in a background tab, as
-  ⌘-click does; with ⇧ or ⌃ down as well, it is another click. (A real click with two modifiers can't be sent to
-  Cra from a scenario; `LittleWindowTrigger` carries the decision.)
+- **#373:** with Settings ▸ Links ▸ "⌥⌘-click opens a Little Window" on (it is off by default), hold ⌥ and ⌘ and
+  click a link on a page with the pointer: the link opens in a Little Window and the page stays where it is, from
+  a normal tab, a pinned tab, a target=_blank link and a WebKit tab (a DRM site, whose page gets no posted click). With the switch off, ⌥⌘-click opens Split View (#298);
+  with ⇧ or ⌃ down as well, it is another click. (`option-command-click-little-window` posts the click through
+  the app's event queue; a click from the hardware, with the keys held on the keyboard, is this line.)
 - **PR #221:** opening a Peek fades the page behind and draws it back a little, its margins widening
   while the sidebar stays still, and closing brings it back in one smooth motion with no jump at the
   end. With "Pages fill the window edge to edge" on, the page only fades. (The values are checked

@@ -566,8 +566,9 @@ public struct AppSettings: Codable, Equatable {
     public var littleWindowShortcutEverywhere: Bool = true
     /// Arc's "Open Little Arc when clicking on links with ⌥⌘ held" (optionCommandClickLittleArcEntryPointEnabled,
     /// on in the Arc 1.172.2 measured on 11 Nov 2026): a link clicked with both keys down opens in a Little Window
-    /// (LittleWindowTrigger).
-    public var littleWindowOnOptionCommandClick: Bool = true
+    /// (LittleWindowTrigger). Off in Cra, unlike Arc: since 0.1.38 a ⌘⌥-click opens Split View (#298,
+    /// Chromium 156's own split view click), and this switch takes that click over.
+    public var littleWindowOnOptionCommandClick: Bool = false
     /// A page's "Open Link in New Tab" switches to the tab it opens (LinkMenu). Off as in Arc, whose
     /// item leaves the page in front and the tab loading behind it (GitHub #276). A new key: #183's
     /// openLinksInBackground was off (switch) in every settings.json that never turned it on.
@@ -899,7 +900,7 @@ extension AppSettings {
         peekInEveryTab = try c.decodeIfPresent(Bool.self, forKey: .peekInEveryTab) ?? false
         peekOnShiftClick = try c.decodeIfPresent(Bool.self, forKey: .peekOnShiftClick) ?? true
         littleWindowShortcutEverywhere = try c.decodeIfPresent(Bool.self, forKey: .littleWindowShortcutEverywhere) ?? true
-        littleWindowOnOptionCommandClick = try c.decodeIfPresent(Bool.self, forKey: .littleWindowOnOptionCommandClick) ?? true
+        littleWindowOnOptionCommandClick = try c.decodeIfPresent(Bool.self, forKey: .littleWindowOnOptionCommandClick) ?? false
         openLinksInForeground = try c.decodeIfPresent(Bool.self, forKey: .openLinksInForeground) ?? false
         folderPreviews = try c.decodeIfPresent(Bool.self, forKey: .folderPreviews) ?? true
         hapticFeedbackOnReorder = try c.decodeIfPresent(Bool.self, forKey: .hapticFeedbackOnReorder) ?? true

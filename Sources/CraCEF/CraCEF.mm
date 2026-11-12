@@ -112,6 +112,19 @@ static void CraNoteLastPress(NSEvent* event) {
     g_lastPressTime = event.timestamp;
 }
 
+// The page's last click (or Return), for a callback Chromium makes a moment after it: the keys it was
+// made with (AppKit's flags) and its age in seconds, or -1 when the last one wasn't in this page.
+// Chromium's page view, in this page's window: in its card (EmbeddedPages moves it out of Chrome's
+// window) or in that window. Split panes share a window; the first pane to ask takes the click.
+static NSTimeInterval CraLastPressInPage(CraBrowser* o, NSEventModifierFlags* modifiers) {
+    NSWindow* window = g_lastPressWindow;
+    NSView* view = g_lastPressView;
+    BOOL inWindow = window && (window == o.containerView.window || window == o.hostWindow);
+    BOOL inPage = view && ([view isDescendantOf:o.containerView] || (inWindow && CraIsInPageView(view)));
+    *modifiers = inPage ? g_lastPressModifiers : 0;
+    return inPage && g_lastPressTime >= 0 ? NSProcessInfo.processInfo.systemUptime - g_lastPressTime : -1;
+}
+
 // Downloads whose save panel was cancelled (#190): cancelled on their next update, never shown.
 static std::set<uint32_t> g_cancelledDownloads;
 // Each download in progress, to pause, resume or cancel from its row (#272). Chromium's callback
@@ -671,6 +684,8 @@ static NSString* SecureDNSPreference(const char* name) {
     return NSStringFromCef(value->GetString());
 }
 
+static void (^g_profileLoadedHandler)(NSString*) = nil;
+
 /// Profiles other than the global Default one get the same preferences once they load,
 /// then create the browsers that waited for them.
 class ProfileContextHandler : public CefRequestContextHandler {
@@ -683,6 +698,10 @@ public:
         ObserveExtensionSettings(context);
         if (!g_readyProfiles) g_readyProfiles = [NSMutableSet set];
         [g_readyProfiles addObject:path_];
+        if (auto loaded = g_profileLoadedHandler) {
+            NSString* path = path_;
+            dispatch_async(dispatch_get_main_queue(), ^{ if (!g_quitting) loaded(path); });
+        }
         NSArray<CraBrowser*>* waiting = [g_waitingForProfile[path_] copy];
         [g_waitingForProfile removeObjectForKey:path_];
         for (CraBrowser* b in waiting) [b createNow];
@@ -1483,6 +1502,7 @@ public:
         }
         // Another app's address (spotify:) opens no tab: Cra asks "Open <app>?" over this page.
         if (g_appLinkHandler && g_appLinkHandler(o, NSStringFromCef(target_url), user_gesture)) return true;
+        if (OpensLittleWindow(o, target_url, target_disposition, user_gesture)) return true;
         if (OpensSplitPane(o, target_url, target_disposition, user_gesture)) return true;
         // A target=_blank link the user clicked (Shift-clicked: a new window) may open in a
         // Peek; window.open with features (a sign-in popup) is CEF_WOD_NEW_POPUP and stays one.
@@ -1491,7 +1511,6 @@ public:
             && [o.delegate browser:o opensPeekForURL:NSStringFromCef(target_url)
                         shiftClick:target_disposition == CEF_WOD_NEW_WINDOW
                            newTab:target_disposition == CEF_WOD_NEW_FOREGROUND_TAB]) return true;
-        if (OpensLittleWindow(o, target_url, target_disposition, user_gesture)) return true;
         BOOL background = (target_disposition == CEF_WOD_NEW_BACKGROUND_TAB);
         CraBrowser* host = [o.delegate browser:o popupHostForURL:NSStringFromCef(target_url) inBackground:background];
         if (!host) return true;  // blocked
@@ -1824,16 +1843,20 @@ public:
         return false;
     }
 
-    // Arc's ⌥⌘-click opens the link in a Little Window. Chromium reports ⌥⌘-click as a ⌘-click (a
-    // background tab: on macOS the Command key decides before Option is looked at), so the keys
-    // are read from the keyboard as the click is handled; Shift or Control make it another click.
-    bool OpensLittleWindow(CraBrowser* o, const CefString& target_url, WindowOpenDisposition disposition, bool user_gesture) {
-        if (!user_gesture || disposition != CEF_WOD_NEW_BACKGROUND_TAB) return false;
-        NSEventModifierFlags keys = [NSEvent modifierFlags] & NSEventModifierFlagDeviceIndependentFlagsMask;
-        const NSEventModifierFlags want = NSEventModifierFlagOption | NSEventModifierFlagCommand;
-        if ((keys & want) != want || (keys & (NSEventModifierFlagShift | NSEventModifierFlagControl))) return false;
-        if (![o.delegate respondsToSelector:@selector(browser:opensLittleWindowForURL:)]) return false;
-        return [o.delegate browser:o opensLittleWindowForURL:NSStringFromCef(target_url)];
+    // Arc's ⌥⌘-click opens the link in a Little Window (Settings ▸ Links). Chromium 156 reports a ⌘⌥-click
+    // as its split view click (and an older one as a ⌘-click, a background tab) after the click, so the
+    // keys are the click's own, as an Option-click's download reads them (#298); the keys held when this
+    // callback arrives may already be up, or held for the next click. LittleWindowTrigger decides.
+    static bool OpensLittleWindow(CraBrowser* o, const CefString& target_url, WindowOpenDisposition disposition,
+                                  bool user_gesture) {
+        if (!user_gesture || (disposition != CEF_WOD_NEW_SPLIT_VIEW && disposition != CEF_WOD_NEW_BACKGROUND_TAB)
+            || ![o.delegate respondsToSelector:@selector(browser:opensLittleWindowForURL:clickModifiers:clickAge:)]) return false;
+        NSEventModifierFlags modifiers = 0;
+        NSTimeInterval age = CraLastPressInPage(o, &modifiers);
+        if (![o.delegate browser:o opensLittleWindowForURL:NSStringFromCef(target_url)
+                  clickModifiers:modifiers clickAge:age]) return false;
+        g_lastPressTime = -1;  // one click, one window
+        return true;
     }
 
     bool OpensPeek(CraBrowser* o, CefRefPtr<CefRequest> request, bool user_gesture, bool is_redirect) {
@@ -1848,12 +1871,12 @@ public:
                           WindowOpenDisposition target_disposition, bool user_gesture) override {
         CraBrowser* o = owner_;
         if (!o) return false;
+        if (OpensLittleWindow(o, target_url, target_disposition, user_gesture)) return true;
         if (OpensSplitPane(o, target_url, target_disposition, user_gesture)) return true;
         // Shift-click (Chrome: a new window).
         if (user_gesture && target_disposition == CEF_WOD_NEW_WINDOW
             && [o.delegate respondsToSelector:@selector(browser:opensPeekForURL:shiftClick:newTab:)]
             && [o.delegate browser:o opensPeekForURL:NSStringFromCef(target_url) shiftClick:YES newTab:NO]) return true;
-        if (OpensLittleWindow(o, target_url, target_disposition, user_gesture)) return true;
         BOOL background = (target_disposition == CEF_WOD_NEW_BACKGROUND_TAB);
         [o.delegate browser:o requestsNewTabWithURL:NSStringFromCef(target_url) inBackground:background];
         return true;
@@ -2123,16 +2146,10 @@ public:
         CraBrowser* o = owner_;
         if (!o || ![o.delegate respondsToSelector:@selector(browser:opensSplitForDownloadURL:clickModifiers:clickAge:)])
             return true;
-        // Chromium's page view, in this page's window: in its card (EmbeddedPages moves it out of
-        // Chrome's window) or in that window. Split panes share a window; the first pane to
-        // download takes the click.
-        NSWindow* window = g_lastPressWindow;
-        NSView* view = g_lastPressView;
-        BOOL inWindow = window && (window == o.containerView.window || window == o.hostWindow);
-        BOOL inPage = view && ([view isDescendantOf:o.containerView] || (inWindow && CraIsInPageView(view)));
-        NSTimeInterval age = inPage && g_lastPressTime >= 0 ? NSProcessInfo.processInfo.systemUptime - g_lastPressTime : -1;
+        NSEventModifierFlags modifiers = 0;
+        NSTimeInterval age = CraLastPressInPage(o, &modifiers);
         if (![o.delegate browser:o opensSplitForDownloadURL:NSStringFromCef(url)
-                  clickModifiers:inPage ? g_lastPressModifiers : 0 clickAge:age]) return true;
+                  clickModifiers:modifiers clickAge:age]) return true;
         g_lastPressTime = -1;  // one click, one pane
         return false;
     }
@@ -3568,6 +3585,28 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
         return NO;
     }
     return YES;
+}
++ (BOOL)resetPreference:(NSString*)name forProfile:(NSString*)profilePath {
+    if (!g_contextInitialized || g_quitting) return NO;
+    if (profilePath.length && ![g_readyProfiles containsObject:profilePath]) return NO;
+    CefRefPtr<CefRequestContext> context = profilePath.length ? ProfileContext(profilePath) : CefRequestContext::GetGlobalContext();
+    CefString cefName = CefStringFromNS(name);
+    if (!context || !context->CanSetPreference(cefName)) return NO;
+    CefString error;
+    // No value: CEF clears the pref, so it reads as its registered default.
+    if (!context->SetPreference(cefName, nullptr, error)) {
+        NSLog(@"CraCEF: %@: %s", name, error.ToString().c_str());
+        return NO;
+    }
+    return YES;
+}
++ (NSInteger)loadStateOfProfile:(NSString*)profilePath {
+    if (!profilePath.length) return g_contextInitialized ? 2 : 1;
+    if ([g_readyProfiles containsObject:profilePath]) return 2;
+    return g_profileContexts.count(profilePath.UTF8String) ? 1 : 0;
+}
++ (void)setProfileLoadedHandler:(void (^)(NSString*))handler {
+    g_profileLoadedHandler = [handler copy];
 }
 + (void)setExtensionSettingsChangeHandler:(void (^)(void))handler {
     g_extensionSettingsHandler = [handler copy];
