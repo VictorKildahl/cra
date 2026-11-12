@@ -105,9 +105,9 @@ final class TidyTabsService {
         let tabs = loose.map { item in
             TidyTabs.Tab(title: item.displayTitle, host: item.tab.flatMap { URL(string: $0.url)?.host() } ?? "")
         }
-        let groups = store.tabGroups(in: sid).map { $0.title ?? "" }
+        let groups = store.tabGroups(in: sid).map { TidyTabs.ExistingGroup(id: $0.id, name: $0.title ?? "") }
         let ids = loose.map(\.id)
-        let prompt = TidyTabs.prompt(tabs: tabs, existingGroups: groups)
+        let prompt = TidyTabs.prompt(tabs: tabs, existingGroups: groups.map(\.name))
         store.setTidying(sid, true)
         let started = Date()
         Task { @MainActor in

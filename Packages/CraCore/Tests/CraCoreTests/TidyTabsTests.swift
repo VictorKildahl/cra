@@ -51,14 +51,24 @@ struct TidyTabsTests {
     }
 
     @Test func planMergesSameNamesAndJoinsExistingGroups() {
+        let planets = TidyTabs.ExistingGroup(id: UUID(), name: "Planets")
+        let bread = TidyTabs.ExistingGroup(id: UUID(), name: "Bread")
         let plan = TidyTabs.plan([.init(name: "Python", tabs: [4]),
                                   .init(name: "bread.", tabs: [0]),
                                   .init(name: "python", tabs: [2]),
                                   .init(name: "Travel", tabs: [3, 1])],
-                                 tabCount: 5, existingGroups: ["Planets", "Bread"])
-        #expect(plan.joins == [1: [0]])
+                                 tabCount: 5, existingGroups: [planets, bread])
+        #expect(plan.joins == [bread.id: [0]])
         // New groups follow their first tab's place.
         #expect(plan.newGroups == [.init(name: "Travel", tabs: [1, 3]), .init(name: "Python", tabs: [2, 4])])
+    }
+
+    @Test func duplicateExistingNamesKeepTheFirstOriginalIdentity() {
+        let first = TidyTabs.ExistingGroup(id: UUID(), name: "Bréad")
+        let duplicate = TidyTabs.ExistingGroup(id: UUID(), name: "BREAD")
+        let plan = TidyTabs.plan([.init(name: "bread", tabs: [0])], tabCount: 1, existingGroups: [first, duplicate])
+        #expect(plan.joins == [first.id: [0]])
+        #expect(plan.newGroups.isEmpty)
     }
 
     @Test func planCapsNames() {

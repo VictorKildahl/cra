@@ -2097,15 +2097,16 @@ final class SidebarStore {
         guard let space = spaces[sid] else { return }
         let today = space.todayContainerID
         let before = items[today]?.children ?? []
-        let groups = tabGroups(in: sid)
         let loose = Set(looseTodayTabs(sid).map(\.id))
         func ids(_ indices: [Int]) -> [UUID] {
             indices.compactMap { tabIDs.indices.contains($0) ? tabIDs[$0] : nil }.filter(loose.contains)
         }
         var moved: [UUID] = []
-        for (g, indices) in plan.joins.sorted(by: { $0.key < $1.key }) where groups.indices.contains(g) {
+        // Match captured identities against live Today headers, never against their current indexes.
+        for group in tabGroups(in: sid) {
+            guard let indices = plan.joins[group.id] else { continue }
             let tabs = ids(indices)
-            moveItems(tabs, to: groups[g].id, index: nil)
+            moveItems(tabs, to: group.id, index: nil)
             moved += tabs
         }
         var newGroups: [UUID] = []

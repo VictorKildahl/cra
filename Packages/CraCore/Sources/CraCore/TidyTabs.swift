@@ -33,12 +33,22 @@ public enum TidyTabs {
         }
     }
 
+    /// A destination captured before the model runs; its name may change while its identity stays.
+    public struct ExistingGroup: Equatable, Sendable {
+        public var id: UUID
+        public var name: String
+        public init(id: UUID, name: String) {
+            self.id = id
+            self.name = name
+        }
+    }
+
     /// What the sidebar does: new groups, in order, and tabs added to groups Today already has.
     public struct Plan: Equatable, Sendable {
         public var newGroups: [Proposal]
-        /// Existing group index (as passed in) → tab ids joining it.
-        public var joins: [Int: [Int]]
-        public init(newGroups: [Proposal], joins: [Int: [Int]]) {
+        /// Original group UUID → tab ids joining it.
+        public var joins: [UUID: [Int]]
+        public init(newGroups: [Proposal], joins: [UUID: [Int]]) {
             self.newGroups = newGroups
             self.joins = joins
         }
@@ -62,7 +72,7 @@ public enum TidyTabs {
     """
 
     /// The request: Arc's "Here are my tabs, in the format 'id: title':", plus the site, and the
-    /// groups Today already has so new tabs can join them (Arc does that on a second Tidy).
+    /// groups Today already has so new tabs can join them (CRA behavior; Arc joining is unverified).
     public static func prompt(tabs: [Tab], existingGroups: [String]) -> String {
         var lines = ["Here are my tabs, as 'id: title (site)':"]
         for (i, t) in tabs.prefix(maximumTabs).enumerated() {
@@ -80,11 +90,11 @@ public enum TidyTabs {
     /// The model's answer made safe: ids in range and used once (first group wins), names trimmed
     /// and capped, a name that matches an existing group (any case) adds to it, two new groups with
     /// one name merge, and a new group needs two tabs. New groups keep the order of their first tab.
-    public static func plan(_ proposals: [Proposal], tabCount: Int, existingGroups: [String]) -> Plan {
+    public static func plan(_ proposals: [Proposal], tabCount: Int, existingGroups: [ExistingGroup]) -> Plan {
         var used = Set<Int>()
-        var joins: [Int: [Int]] = [:]
+        var joins: [UUID: [Int]] = [:]
         var newGroups: [Proposal] = []
-        let existing = existingGroups.map(key)
+        let existing = existingGroups.map { key($0.name) }
         for p in proposals {
             let name = clip(p.name.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters)), maximumNameLength)
             guard !name.isEmpty else { continue }
@@ -95,7 +105,7 @@ public enum TidyTabs {
             }
             guard !ids.isEmpty else { continue }
             if let e = existing.firstIndex(of: key(name)) {
-                joins[e, default: []].append(contentsOf: ids)
+                joins[existingGroups[e].id, default: []].append(contentsOf: ids)
             } else if let n = newGroups.firstIndex(where: { key($0.name) == key(name) }) {
                 newGroups[n].tabs.append(contentsOf: ids)
             } else {

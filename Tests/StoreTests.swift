@@ -60,6 +60,7 @@ enum StoreTests {
         try arcSpaceWithoutAnIconImportsAsADot()
         littleWindowProfile()
         tidyTabs()
+        tidyExistingGroupIdentity()
         pinHook()
         dropOnPinnedTabSplits()
         reopenClosedTabs()
@@ -1576,7 +1577,7 @@ enum StoreTests {
         let fresh = store.createTab(url: "https://example.org/Jupiter", in: sid, select: false)
         expect(store.canTidy(sid), "a new loose tab brings Tidy back")
         let loose2 = store.looseTodayTabs(sid).map(\.id)
-        let existing = store.tabGroups(in: sid).map { $0.title ?? "" }
+        let existing = store.tabGroups(in: sid).map { TidyTabs.ExistingGroup(id: $0.id, name: $0.title ?? "") }
         let join = TidyTabs.plan([.init(name: "planets", tabs: [loose2.firstIndex(of: fresh.id)!])], tabCount: loose2.count, existingGroups: existing)
         store.applyTidy(join, tabIDs: loose2, in: sid)
         groups = store.tabGroups(in: sid)
@@ -1616,6 +1617,75 @@ enum StoreTests {
         store.archiveTab(byName["Croissant"]!, reason: .manual)
         expect(store.item(bread.id) == nil && !store.item(today)!.children.contains(bread.id), "its last tab takes the header with it")
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    /// A model result retains the original destination while headers and tab membership change.
+    @MainActor
+    private static func tidyExistingGroupIdentity() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        for change in ["remove earlier header", "reorder headers", "rename destination", "remove destination",
+                       "replace destination", "close destination", "pin destination"] {
+            let space = store.createSpace(title: "Pending tidy", emoji: "🧹")
+            let tabs = (0..<6).map { store.createTab(url: "https://example.org/identity/\($0)", in: space.id, select: false).id }
+            let initial = TidyTabs.plan([.init(name: "A", tabs: [0, 1]), .init(name: "B", tabs: [2, 3]),
+                                         .init(name: "C", tabs: [4, 5])], tabCount: tabs.count, existingGroups: [])
+            store.applyTidy(initial, tabIDs: tabs, in: space.id)
+            let groups = store.tabGroups(in: space.id)
+            let destination = groups[1].id
+            let fresh = store.createTab(url: "https://example.org/identity/fresh", in: space.id, select: false).id
+            let pending = TidyTabs.plan([.init(name: "B", tabs: [0])], tabCount: 1,
+                                        existingGroups: groups.map { TidyTabs.ExistingGroup(id: $0.id, name: $0.title ?? "") })
+            switch change {
+            case "remove earlier header": store.removeGroupHeader(groups[0].id)
+            case "reorder headers": store.moveItem(destination, to: space.todayContainerID, index: 0)
+            case "rename destination": store.rename(destination, to: "Renamed B")
+            case "remove destination": store.removeGroupHeader(destination)
+            case "replace destination":
+                store.removeGroupHeader(destination)
+                let replacement = TidyTabs.plan([.init(name: "B", tabs: [0, 1])], tabCount: 2, existingGroups: [])
+                store.applyTidy(replacement, tabIDs: groups[1].children, in: space.id)
+            case "close destination": store.deleteFolder(destination)
+            case "pin destination": store.folderFromGroup(destination)
+            default: fatalError("unknown destination change")
+            }
+            let destinationSurvives = ["remove earlier header", "reorder headers", "rename destination"].contains(change)
+            let before = store.item(space.todayContainerID)!.children
+            store.applyTidy(pending, tabIDs: [fresh], in: space.id)
+            expect(store.item(fresh)?.parentID == (destinationSurvives ? destination : space.todayContainerID),
+                   "pending tidy uses original group identity after \(change)")
+            expect(!store.item(groups[2].id)!.children.contains(fresh), "pending tidy never retargets neighboring C after \(change)")
+            if destinationSurvives {
+                expect(store.undoTidy() && store.item(fresh)?.parentID == space.todayContainerID
+                       && store.item(space.todayContainerID)?.children == before && store.item(destination) != nil,
+                       "undo restores loose order and retains original destination after \(change)")
+            } else {
+                expect(!store.undoTidy(), "skipping a removed destination creates no tidy undo after \(change)")
+            }
+            expect(store.integrityProblems().isEmpty, "pending tidy preserves sidebar integrity after \(change)")
+        }
+
+        let space = store.createSpace(title: "Changed members", emoji: "🧹")
+        let grouped = (0..<4).map { store.createTab(url: "https://example.org/members/grouped/\($0)", in: space.id, select: false).id }
+        store.applyTidy(TidyTabs.plan([.init(name: "Destination", tabs: [0, 1]), .init(name: "Other", tabs: [2, 3])],
+                                     tabCount: grouped.count, existingGroups: []), tabIDs: grouped, in: space.id)
+        let groups = store.tabGroups(in: space.id)
+        let members = (0..<5).map { store.createTab(url: "https://example.org/members/pending/\($0)", in: space.id, select: false).id }
+        let pending = TidyTabs.plan([.init(name: "Destination", tabs: Array(members.indices))], tabCount: members.count,
+                                    existingGroups: groups.map { TidyTabs.ExistingGroup(id: $0.id, name: $0.title ?? "") })
+        store.archiveTab(members[0], reason: .manual)
+        store.moveItem(members[1], to: space.pinnedContainerID, index: nil)
+        store.moveItem(members[2], to: groups[1].id, index: nil)
+        let elsewhere = store.createSpace(title: "Elsewhere", emoji: "🌍")
+        store.moveItem(members[3], to: elsewhere.todayContainerID, index: nil)
+        store.applyTidy(pending, tabIDs: members, in: space.id)
+        expect(store.item(groups[0].id)?.children == grouped.prefix(2) + [members[4]],
+               "pending tidy joins only original members still loose in the source Today")
+        expect(store.item(members[0]) == nil && store.item(members[1])?.parentID == space.pinnedContainerID
+               && store.item(members[2])?.parentID == groups[1].id && store.item(members[3])?.parentID == elsewhere.todayContainerID,
+               "pending tidy does not revive closed tabs or steal pinned, grouped or moved tabs")
+        expect(store.undoTidy() && store.item(members[4])?.parentID == space.todayContainerID
+               && store.item(groups[0].id)?.children == Array(grouped.prefix(2)), "undo moves back only the surviving joined member")
+        expect(store.integrityProblems().isEmpty, "changed-member completion and undo preserve integrity")
     }
 
     /// Tidy Tab Titles hears of a tab pinned from elsewhere, once, and only while it has no name.
