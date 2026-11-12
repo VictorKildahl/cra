@@ -53,6 +53,7 @@ enum StoreTests {
         closeSuccessor()
         favoritesEmptyState()
         sharedFavorites()
+        newDocumentApps()
         themePreview()
         try arcSpacesWithoutAThemeShareOneDefault()
         try arcItemListedTwice()
@@ -956,6 +957,30 @@ enum StoreTests {
         store.deleteSpace(space)
         store.deleteSpace(home)
         store.deleteProfile(work.id)
+    }
+
+    // promise: #375
+    /// Arc's per-profile "New documents" (#375): the command bar offers the app of the focused space's
+    /// profile, and deleting a profile drops its choice.
+    @MainActor
+    private static func newDocumentApps() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let home = store.createSpace(title: "Docs Home", emoji: "🏠", focus: false).id
+        store.setProfile(nil, forSpace: home)
+        let work = store.createProfile(name: "Docs Work")
+        let space = store.createSpace(title: "Docs Work", emoji: "💼", focus: false).id
+        store.setProfile(work.id, forSpace: space)
+        store.settings.setNewDocumentApp(.notionPage, profileID: work.id)
+        store.settings.setNewDocumentApp(.googleDoc, profileID: nil)
+        expect(store.profileID(space: space) == work.id && store.settings.newDocumentApp(profileID: store.profileID(space: space)) == .notionPage,
+               "a space on a profile makes that profile's New documents app (#375)")
+        expect(store.profileID(space: home) == nil && store.settings.newDocumentApp(profileID: store.profileID(space: home)) == .googleDoc,
+               "a space on Default makes Default's (#375)")
+        store.deleteSpace(space)
+        store.deleteProfile(work.id)
+        expect(store.settings.newDocumentApps == ["Default": .googleDoc], "deleting a profile drops its New documents app (#375)")
+        store.settings.setNewDocumentApp(nil, profileID: nil)
+        store.deleteSpace(home)
     }
 
     // promise: #170

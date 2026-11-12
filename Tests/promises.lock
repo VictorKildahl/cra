@@ -682,6 +682,12 @@
 #373   Tests/BrowserManagerLifecycleTests.swift::optionCommandLittleWindowCase  9c1e7cd05fcc
 #373   Tests/Scenarios/option-command-click-little-window.scenario  9ac2618b3196
 #373   Tests/Scenarios/settings-translate-reset.scenario  f0a23ee9fa70
+#375   Packages/CraCore/Tests/CraCoreTests/NewDocumentAppTests.swift::arcsOptionsInArcsOrder  adbbae53e235
+#375   Packages/CraCore/Tests/CraCoreTests/NewDocumentAppTests.swift::eachProfileOffersOnlyItsOwnApp  f06a3d630641
+#375   Packages/CraCore/Tests/CraCoreTests/NewDocumentAppTests.swift::noChoiceIsArcsDashAndNoCommand  cc437f475846
+#375   Packages/CraCore/Tests/CraCoreTests/NewDocumentAppTests.swift::pickingTheDashDropsTheEntry  09bac8f4dadb
+#375   Tests/Scenarios/new-document-command.scenario  408aeb22db4e
+#375   Tests/StoreTests.swift::newDocumentApps  908960d5fe0a
 #378   Packages/CraCore/Tests/CraCoreTests/SettingsSyncTests.swift::aFileOnItsWayIsWaitedFor  6795013a625a
 #378   Packages/CraCore/Tests/CraCoreTests/SettingsSyncTests.swift::aFileWithNothingOnItsWayIsLacking  1fdd7d01a0a9
 #378   Packages/CraCore/Tests/CraCoreTests/SettingsSyncTests.swift::aLackingFileWaitsLongerAndANewMacLeavesItToTheWriter  280a2a812b4d

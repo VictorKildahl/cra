@@ -693,6 +693,9 @@ public struct AppSettings: Codable, Equatable {
     /// Arc's per-profile Download location (#190), by DownloadLocation.key(profileID:). A profile
     /// that isn't here saves to the Downloads folder without asking.
     public var downloadLocations: [String: DownloadLocation] = [:]
+    /// Arc's per-profile "New documents" (#375), by NewDocumentApp.key(profileID:): the app the
+    /// command bar's "New …" command opens. A profile that isn't here has none (Arc's "——").
+    public var newDocumentApps: [String: NewDocumentApp] = [:]
     /// Settings ▸ Privacy ▸ "Share anonymous usage stats" and onboarding's Privacy step (Dia's
     /// "Help improve Dia" row): a daily UsageStats report. Off unless the user turns it on.
     public var shareUsageStats: Bool = false
@@ -948,6 +951,7 @@ extension AppSettings {
         tidyDownloads = try c.decodeIfPresent(Bool.self, forKey: .tidyDownloads) ?? false
         fiveSecondPreviews = try c.decodeIfPresent(Bool.self, forKey: .fiveSecondPreviews) ?? false
         downloadLocations = (try? c.decodeIfPresent([String: DownloadLocation].self, forKey: .downloadLocations)) ?? [:]
+        newDocumentApps = NewDocumentApp.decodeMap(try? c.decodeIfPresent([String: String].self, forKey: .newDocumentApps))
         shareUsageStats = try c.decodeIfPresent(Bool.self, forKey: .shareUsageStats) ?? false
         crashReports = (try? c.decodeIfPresent(CrashReportChoice.self, forKey: .crashReports)) ?? .ask
         askedToShare = try c.decodeIfPresent(Bool.self, forKey: .askedToShare) ?? false

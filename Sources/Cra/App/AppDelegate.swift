@@ -2208,6 +2208,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             guard !main.isIncognito else { break }
             let easel = Easel()
             _ = store.createTab(url: easel.url, title: easel.title, select: true, window: main.windowID)
+        case NewDocumentApp.commandID:
+            // The profile's "New documents" app, in a new tab of the current space (#375).
+            guard !main.isIncognito,
+                  let doc = store.settings.newDocumentApp(profileID: store.profileID(space: main.focusedSpaceID)) else { break }
+            _ = store.createTab(url: doc.url, select: true, window: main.windowID)
         case "editSpace": if !main.isStandalone { main.showSpaceEditor(space: store.focusedSpace) }
         case "changeProfile": if !main.isStandalone { main.showChangeProfileDialog(forSpace: store.focusedSpace.id) }
         case "deleteSpace": if !main.isStandalone { confirmDeleteSpace(store.focusedSpace) }

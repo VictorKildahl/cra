@@ -143,7 +143,7 @@ public struct UsageStats: Codable, Equatable, Sendable {
     /// when a report goes out.
     public static let unreportedSettings: Set<String> = [
         "developerHosts", "disabledDefaultDeveloperHosts", "autoPictureInPictureSites", "linkRoutes", "mediaFolders", "mediaHidden",
-        "downloadLocations", "hasSeenImportPrompt", "toolbarDefaultMigrated", "newTabButtonDefaultMigrated",
+        "downloadLocations", "newDocumentApps", "hasSeenImportPrompt", "toolbarDefaultMigrated", "newTabButtonDefaultMigrated",
         "autoArchiveDays", "shareUsageStats", "askedToShare",
     ]
 

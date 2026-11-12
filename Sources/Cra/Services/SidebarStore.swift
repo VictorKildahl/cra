@@ -2351,7 +2351,12 @@ final class SidebarStore {
     /// The profile a tab's pages load in: its shared-favorites list's, else its space's.
     func profileID(item id: UUID) -> UUID? {
         if let l = profileList(ofItem: id) { return profile(l.profileID)?.id }
-        return spaceID(ofItem: id).flatMap { isIncognito(space: $0) ? nil : profile(spaces[$0]?.profileID)?.id }
+        return spaceID(ofItem: id).flatMap(profileID(space:))
+    }
+
+    /// The profile a space's pages load in (nil = Default, and for an incognito space).
+    func profileID(space id: UUID) -> UUID? {
+        isIncognito(space: id) ? nil : profile(spaces[id]?.profileID)?.id
     }
 
     /// The Chromium profile folder ("Default" or "Profile <id>") a space's pages load in;
@@ -2420,6 +2425,7 @@ final class SidebarStore {
         }
         profileFavorites.removeAll { $0.profileID == id }
         settings.downloadLocations[DownloadLocation.key(profileID: id)] = nil
+        settings.setNewDocumentApp(nil, profileID: id)
         ProfileCleanup.schedule(p.directoryName)
         touch()
     }
