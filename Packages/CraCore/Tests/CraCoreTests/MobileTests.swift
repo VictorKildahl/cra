@@ -720,3 +720,36 @@ struct MobileFidgetTests {
         #expect(Int(((1 - MobilePageBehindSearch.dim) * 255).rounded()) == 0xcc)
     }
 }
+
+/// The switch between Browse for Me and the search engine on their pages.
+struct MobileBrowseToggleTests {
+    /// TapSmart's screenshot of Arc Search (402 × 874 pt, bar top at 798.3 pt): the capsule spans
+    /// 278–386 pt across and 738–781 pt down.
+    @Test func theSwitchSitsWhereArcSearchPutsIt() {
+        let frame = MobileBrowseToggle.frame(screenWidth: 402, barTop: 798)
+        #expect(frame == CGRect(x: 278, y: 738, width: 108, height: 43))
+        #expect(MobileBrowseToggle.segmentFrame(for: .browseForMe) == CGRect(x: 6, y: 6, width: 42, height: 31))
+        #expect(MobileBrowseToggle.segmentFrame(for: .engine) == CGRect(x: 60, y: 6, width: 42, height: 31))
+    }
+
+    /// A Browse for Me tab shows its side; the engine's results show the other; other pages none.
+    @Test func eachPageKnowsItsSideAndQuery() {
+        let browse = MobileBrowseToggle.state(tabAddress: MobileBrowseForMe.tabAddress(query: "best places paris"), pageURL: "about:blank", engine: .google)
+        #expect(browse?.side == .browseForMe && browse?.query == "best places paris")
+        let results = MobileBrowseToggle.state(tabAddress: "https://www.google.com/search?q=best+places%20paris&hl=en",
+                                               pageURL: "https://www.google.com/search?q=best+places%20paris&hl=en", engine: .google)
+        #expect(results?.side == .engine && results?.query == "best places paris")
+        #expect(MobileBrowseToggle.state(tabAddress: "https://example.com/search?q=x", pageURL: "https://example.com/search?q=x", engine: .google) == nil)
+        // Another engine's results are not the chosen engine's.
+        #expect(MobileBrowseToggle.state(tabAddress: "", pageURL: "https://www.bing.com/search?q=x", engine: .google) == nil)
+    }
+
+    /// Every engine's own results address reads back the query it was made from.
+    @Test func everyEnginesResultsReadBack() {
+        for engine in MobileSearchEngine.allCases {
+            #expect(engine.query(fromResultsURL: engine.searchURL("risotto vs paella & more")) == "risotto vs paella & more", "\(engine)")
+        }
+        #expect(MobileSearchEngine.duckduckgo.query(fromResultsURL: "https://duckduckgo.com/?t=h_&q=cats&ia=web") == "cats")
+        #expect(MobileSearchEngine.google.query(fromResultsURL: "https://www.google.com/search?q=") == nil)
+    }
+}

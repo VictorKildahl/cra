@@ -38,6 +38,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     var readerView: ReaderView?
     var summaryHost: UIViewController?
     var browseLoading: BrowseLoadingView?
+    /// The switch between Browse for Me and the search engine (BrowserReading.swift).
+    let browseToggle = BrowseToggleView()
+    var browseToggleState: (side: MobileBrowseToggle.Side, query: String)?
     var isSearching = false
     var incognitoSearch = false
     var keyboardHeight: CGFloat = 0
@@ -78,6 +81,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         bar.menuButton.addTarget(self, action: #selector(showMenu), for: .touchUpInside)
         bar.spacesButton.addTarget(self, action: #selector(showSpaces), for: .touchUpInside)
         bar.settingsButton.addTarget(self, action: #selector(showSettings), for: .touchUpInside)
+        browseToggle.alpha = 0
+        browseToggle.onPick = { [weak self] side in self?.browseTogglePicked(side) }
+        view.addSubview(browseToggle)
         view.addSubview(bar)
 
         sheet.delegate = self
@@ -188,6 +194,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         sheet.openness = isSearching ? 1 : 0
         dismissArea.frame = CGRect(x: 0, y: 0, width: bounds.width, height: max(0, top))
         logo.alpha = isSearching || store.selected != nil || switcher != nil ? 0 : 1
+        layoutBrowseToggle(barTop: barFrame.minY)
         updatePageInsets()
     }
 
@@ -368,7 +375,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         }
         barHiddenByScroll = false
         scrollTravel = 0
-        view.setNeedsLayout()
+        updateBrowseToggle()
     }
 
     func refreshTabStack() {
@@ -814,6 +821,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         // A Browse for Me page has no address of its own: the tab keeps the one that names its query.
         let address = page.webView.url?.absoluteString
         store.update(page.tabID, url: address == "about:blank" ? nil : address, title: page.webView.title)
+        if page === shownPage { updateBrowseToggle() }
     }
 
     func webPage(_ page: WebPage, didFinishLoading success: Bool) {

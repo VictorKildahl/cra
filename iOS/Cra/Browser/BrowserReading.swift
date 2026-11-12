@@ -108,10 +108,56 @@ extension BrowserViewController {
 
     /// Fills a Browse for Me tab: its saved page when there is one, otherwise the loading screen
     /// while the page is made. When no answer comes, the tab becomes the search for the query.
+    private static func browseCacheMarker(_ query: String) -> String {
+        "<!-- cra-browse: \((query.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? query)) -->\n"
+    }
+
+    // MARK: The Browse for Me / search engine switch
+
+    /// Works out which side the page on screen is (a Browse for Me tab, or the engine's results
+    /// for a search) and lays the switch out again.
+    func updateBrowseToggle() {
+        let engine = settings.value.searchEngine
+        if let page = shownPage, let tab = store.tabs.first(where: { $0.id == page.tabID }) {
+            browseToggleState = MobileBrowseToggle.state(tabAddress: tab.url, pageURL: page.webView.url?.absoluteString, engine: engine)
+        } else {
+            browseToggleState = nil
+        }
+        if let state = browseToggleState { browseToggle.configure(side: state.side, engine: engine) }
+        view.setNeedsLayout()
+    }
+
+    /// Above the bar at the right; only with the device's own model, and only while the page is
+    /// on screen with its bar.
+    func layoutBrowseToggle(barTop: CGFloat) {
+        browseToggle.frame = MobileBrowseToggle.frame(screenWidth: view.bounds.width, barTop: barTop)
+        let visible = browseToggleState != nil && BrowseForMe.isAvailable && !isSearching && switcher == nil
+            && !barHiddenByScroll && !(shownPage?.isBrowsing ?? false) && readerView == nil
+        browseToggle.alpha = visible ? 1 : 0
+        browseToggle.isUserInteractionEnabled = visible
+        browseToggle.accessibilityElementsHidden = !visible
+    }
+
+    func browseTogglePicked(_ side: MobileBrowseToggle.Side) {
+        guard let page = shownPage, let state = browseToggleState else { return }
+        UISelectionFeedbackGenerator().selectionChanged()
+        switch side {
+        case .engine:
+            page.load(settings.value.searchEngine.searchURL(state.query))
+        case .browseForMe:
+            store.update(page.tabID, url: MobileBrowseForMe.tabAddress(query: state.query), title: state.query)
+            browse(for: state.query, in: page)
+            updateBrowseToggle()
+        }
+    }
+
     func browse(for query: String, in page: WebPage) {
         let id = page.tabID
         let incognito = store.tabs.first { $0.id == id }?.isIncognito ?? false
-        if !incognito, let saved = try? String(contentsOf: Self.browseCache(id), encoding: .utf8) {
+        // The saved page names its query on its first line: a tab switched to the engine and
+        // back to Browse for Me for another query makes a new page.
+        let marker = Self.browseCacheMarker(query)
+        if !incognito, let saved = try? String(contentsOf: Self.browseCache(id), encoding: .utf8), saved.hasPrefix(marker) {
             page.webView.loadHTMLString(saved, baseURL: nil)
             return
         }
@@ -133,7 +179,7 @@ extension BrowserViewController {
                 case .done(let html, _):
                     page.isBrowsing = false
                     page.webView.loadHTMLString(html, baseURL: nil)
-                    if !incognito { try? html.write(to: Self.browseCache(id), atomically: true, encoding: .utf8) }
+                    if !incognito { try? (marker + html).write(to: Self.browseCache(id), atomically: true, encoding: .utf8) }
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                     UIView.animate(withDuration: 0.4, delay: 0.25, options: []) { loading.alpha = 0 } completion: { _ in
                         loading.removeFromSuperview()

@@ -636,3 +636,35 @@ final class SiteMatchTests: BrowserTestCase {
         keep("site-match")
     }
 }
+
+final class BrowseToggleTests: BrowserTestCase {
+    /// A Browse for Me page has the switch with its own side on; the engine's side opens the
+    /// search engine's results for the same query in the tab, and Browse for Me brings the page
+    /// back without reading the sites again. Needs the network for the engine's results.
+    func testTheSwitchMovesBetweenBrowseForMeAndTheSearchEngine() {
+        launch(["-CraFakeModel", "YES"])
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.typeText("pizza ovens")
+        let chip = app.buttons["browse-for-me"].firstMatch
+        XCTAssertTrue(chip.waitForExistence(timeout: 5))
+        chip.tap()
+        XCTAssertTrue(app.webViews.staticTexts["About pizza ovens"].waitForExistence(timeout: 15))
+        let browse = app.buttons["toggle-browse"]
+        let engine = app.buttons["toggle-engine"]
+        XCTAssertTrue(browse.waitForExistence(timeout: 5), "the switch shows on a Browse for Me page")
+        XCTAssertTrue(browse.isSelected)
+        XCTAssertEqual(engine.label, "Google")
+        sleep(1)
+        keep("browse-toggle")
+        engine.tap()
+        let engineOn = NSPredicate(format: "isSelected == true")
+        expectation(for: engineOn, evaluatedWith: engine)
+        waitForExpectations(timeout: 25)
+        keep("browse-toggle-engine")
+        browse.tap()
+        XCTAssertTrue(app.webViews.staticTexts["About pizza ovens"].waitForExistence(timeout: 5), "the page comes back from the cache")
+        XCTAssertFalse(app.staticTexts["browse-reading"].exists, "nothing is read again")
+        XCTAssertTrue(browse.isSelected)
+    }
+}
