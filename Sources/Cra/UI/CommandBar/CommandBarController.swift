@@ -39,6 +39,8 @@ final class CommandBarController {
     private var scopeTyped = ""
     /// The URL ⌘L opened with (the page's), nil for ⌘T.
     private(set) var openedPrefill: String?
+    /// Rows that open or change under a still pointer don't take the selection from the top row (#382).
+    @ObservationIgnored private var hoverGate = HoverGate()
 
     unowned let engine: SuggestionEngine
     unowned let store: SidebarStore
@@ -282,8 +284,16 @@ final class CommandBarController {
         onNoticeLearnMore()
     }
 
+    /// The pointer is over row `index`: it selects the row once the pointer has moved since the
+    /// rows last changed (CraCore HoverGate, #382).
+    func hover(row index: Int) {
+        guard hoverGate.isHover(pointerAt: NSEvent.mouseLocation), selectedIndex != index else { return }
+        selectedIndex = index
+    }
+
     /// What the engine listed, less the last row while the banner has its place.
     private func listed(_ r: SuggestionResult) -> SuggestionResult {
+        hoverGate.listChanged(pointerAt: NSEvent.mouseLocation)
         var r = r
         let n = SearchSuggestionsNotice.rowsListed(r.items.count, maxRows: SuggestionEngine.maxRows, banner: showsNoticeBanner)
         if n < r.items.count { r.items.removeLast(r.items.count - n) }

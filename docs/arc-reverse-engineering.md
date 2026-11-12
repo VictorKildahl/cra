@@ -171,14 +171,18 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   lands between pixels at 1x). Cra strokes it with a CAShapeLayer (SidebarSymbols.closeMark); an NSImage drawn
   the same way rendered thinner and off-centre at 1x. New Tab's plus fits SF plus 14.5 medium at both scales,
   in the label's colour. The New Space plus is a custom square-ended glyph (14 pt, 2 pt stroke).
-- [S] ⌘T in a Peek (12 Nov 2026, Arc 1.172.2's Swift field metadata, `__swift5_fieldmd` of the
-  arm64 slice; GitHub #379). A Peek is a `LittleBrowserWindow` with `presentModally` / `modalState`, shown by
+- [S] ⌘T in a Peek and hover in the bar (12 Nov 2026, Arc 1.172.2's Swift field metadata, `__swift5_fieldmd` of the
+  arm64 slice; GitHub #379, #382). A Peek is a `LittleBrowserWindow` with `presentModally` / `modalState`, shown by
   the same `LittleWindowViewController` as Little Arc (`presentedModally`, its own `commandBarInstanceID` and
   `commandBarViewStateInstance`). The bar's `CommandBarDestinationType` is `overrideCurrentTab(showCurrentURL:)`,
   `createNewTab` or `noop`. Which one ⌘T gives in a Peek isn't in the metadata, and no Peek was opened live (it
   needs a click in a pinned tab). Little Arc's ⌘T is ⌘L (Arc 1.168, live, above). Cra (#379, its own until Arc is
   checked): ⌘T in a Peek opens the browser window's New Tab bar, with its tabs; ⌘L edits the Peek; a Little Window
   keeps ⌘T as ⌘L (CraCore `CommandBarOpening`; scenario peek-command-t).
+  The row view `CommandBar.CommandBarSuggestionRowView` keeps `isHovered` and a `trackingArea`, and its `Theme` has
+  a `hoveredColor` (asset `CommandBarRowHoverBackgroundColor`) beside the selection colour, so hover in Arc's bar
+  is its own fill and not the selection. Cra's hover selects the row, and since #382 only after the pointer moves
+  from where it was when the rows last changed (CraCore `HoverGate`). Not done: Arc's separate hover fill.
 
 ## Key bindings (StorableKeyBindings.json + strings)
 - [O] Action = {identifier, name}; binding = {keyEquivalent, deviceIndependentModifierFlags}, priority, typeTravelTriggers;
