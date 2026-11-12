@@ -20,7 +20,10 @@ extension SettingsTab {
     /// The glyph over the tab's name. Arc draws its own; these are the SF Symbols closest to them.
     var symbol: String {
         switch self {
-        case .sync: return "icloud"
+        // Arc's Account glyph, the person on a card beside an @ (macOS 13+); a plain person card before it.
+        case .sync:
+            return NSImage(systemSymbolName: "person.crop.square.filled.and.at.rectangle", accessibilityDescription: nil) != nil
+                ? "person.crop.square.filled.and.at.rectangle" : "person.crop.square"
         case .general: return "gearshape"
         case .profiles: return "person"
         // macOS 15.1 added Apple's mark; before it, sparkles.
@@ -68,13 +71,13 @@ final class SettingsWindowController: NSWindowController {
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: SettingsMetrics.windowSize),
                               styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
         super.init(window: window)
-        window.title = SettingsTab.first.title
+        window.title = SettingsTab.first.title(fullName: NSFullUserName())
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.titlebarSeparatorStyle = .none
         window.isReleasedWhenClosed = false
         window.backgroundColor = SettingsPalette.window
-        let root = SettingsRoot(nav: nav, actions: actions) { [weak window] tab in window?.title = tab.title }
+        let root = SettingsRoot(nav: nav, actions: actions) { [weak window] tab in window?.title = tab.title(fullName: NSFullUserName()) }
             .environment(store).environment(bindings).environment(sync)
         let host = NSHostingController(rootView: root)
         host.sizingOptions = []
@@ -117,7 +120,7 @@ struct SettingsRoot: View {
         .background(Color.settingsWindow)
         // Arc's title, the tab's name, centred and dimmed in the title bar (the system's would sit beside the buttons).
         .overlay(alignment: .top) {
-            Text(nav.tab.title).font(.system(size: 13, weight: .bold)).foregroundStyle(.secondary)
+            Text(nav.tab.title(fullName: NSFullUserName())).font(.system(size: 13, weight: .bold)).foregroundStyle(.secondary)
                 .frame(height: 28)
                 .allowsHitTesting(false)
         }
@@ -174,7 +177,7 @@ private struct SettingsTabButton: View {
                 Image(systemName: tab.symbol)
                     .font(.system(size: 19))
                     .frame(height: 24)
-                Text(tab.title).font(.system(size: 12))
+                Text(tab.title(fullName: NSFullUserName())).font(.system(size: 12))
             }
             .foregroundStyle(selected ? Color.settingsBlue : Color.secondary)
             .padding(.horizontal, 5.5)
@@ -191,7 +194,7 @@ private struct SettingsTabButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(tab.title)
+        .accessibilityLabel(tab.title(fullName: NSFullUserName()))
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

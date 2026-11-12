@@ -43,7 +43,7 @@ or Arc-only service), per CONTRIBUTING.md.
 | Troubleshooting menu | Help ▸ Troubleshooting: Record Trace, Open Task Manager, Reveal Arc Data, Copy Arc Info | done | Export Diagnostics…, Open Task Manager (Chrome's), Reveal Cra Data, Copy Cra Info; Record Trace is Arc-internal. |
 | Help menu | Getting Started, Release Notes, Contact the Team, Visit Help Center, Restore Data | done | Cra Help (Arc's Help Center and Getting Started guide), Release Notes, Report an Issue… (Contact the Team), Essential Keyboard Shortcuts, Troubleshooting ▸ Task Manager / Reveal Data / Copy Info. *skip*: Restore Data and Export Arc Notes (Arc's account and Notes), Record Trace (chrome://tracing is a developer tool). |
 | Ad blocker upsell card, Account, Sign Out, Send to Dia, Share Space | | *skip* | Account/cloud. |
-| Membership card, Gift Arc to a Friend | Settings ▸ Account | done (Cra's own) | Settings ▸ Sync (GitHub #372): a member card made on the Mac (macOS name, a nickname, EARLY '26, a months stamp in the first year, then anniversaries, the day Cra first ran), its share, save and copy buttons, the default-browser banner, and "Share Cra with a Friend", whose sheet copies or shares crabrowser.app tagged `utm_campaign=share`. No account, server or gift unlocks. |
+| Membership card, Gift Arc to a Friend | Settings ▸ Account | done (Cra's own) | Settings' first tab, named after the user like Arc's (GitHub #372): a member card made on the Mac (macOS name, a nickname, EARLY '26, a months stamp in the first year, then anniversaries, the day Cra first ran), its share, save and copy buttons, the default-browser banner, and "Share Cra with a Friend", whose sheet copies or shares crabrowser.app tagged `utm_campaign=share`. No account, server or gift unlocks. |
 | Max: 5-Second Previews | Settings ▸ Max | done | Arc's hover cards on the Mac's Apple Intelligence: Arc's links on Google, X and Hacker News, or Shift on any link (the small card within the site); Arc's prompt, card, timing and share menu (arc-reverse-engineering.md). |
 | Max: Instant Links, ChatGPT in the Command Bar, New ChatGPT Message ⌥⌘G | Settings ▸ Max | *skip* | Cloud AI partners. Tidy Tabs/Titles/Downloads/5-Second Previews on-device. |
 
@@ -89,7 +89,7 @@ gains "New Profile".
 ## 4. Settings
 
 The window is Arc's since GitHub #372 (684 × 650 pt, eight tabs in a toolbar, measured on Arc 1.172.2: see "Arc Settings window" in
-arc-reverse-engineering.md). Arc's seven tabs after Account are Cra's in Arc's order; Cra's first tab is Sync (no account), and
+arc-reverse-engineering.md). Arc's seven tabs after Account are Cra's in Arc's order; Cra's first tab has the member card, sync and Share Cra in Account's place (no account) and carries the user's first name, and
 Privacy and Extensions follow Advanced. Tabs, Plugins and Performance have no tab: their rows sit in General, Extensions and Advanced.
 
 | Arc tab | Rows Cra lacks |

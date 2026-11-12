@@ -1,6 +1,6 @@
 import Foundation
 
-/// The card on Settings ▸ Sync, in the place of Arc's membership card (Arc 1.172.2's Account tab: the member's
+/// The card on Settings' first tab (named after the user, as Arc's), in the place of Arc's membership card (Arc 1.172.2's Account tab: the member's
 /// name, a nickname, anniversary stamps and the date they joined). Cra has no account and no server, so all of it
 /// comes from this Mac: the name macOS has for the user, the day Cra's data folder was made, and a nickname picked
 /// from that, the same every time the card is drawn.

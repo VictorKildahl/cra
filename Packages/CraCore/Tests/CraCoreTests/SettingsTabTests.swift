@@ -5,7 +5,7 @@ import Testing
 /// Profiles, Max, Links, Shortcuts, Icon, Advanced), and where Cra's own panes sit around them.
 struct SettingsTabTests {
     @Test func arcsTabsKeepArcsOrderAndTheFirstIsTheAccountsPlace() {
-        #expect(SettingsTab.first == .sync, "Cra has no account: its sync takes the first place")
+        #expect(SettingsTab.first == .sync, "Cra has no account: the member card and sync take the first place")
         let arc: [SettingsTab] = [.sync, .general, .profiles, .max, .links, .shortcuts, .icon, .advanced]
         let all = SettingsTab.allCases
         #expect(all.filter(arc.contains) == arc, "Arc's eight, in Arc's order")
@@ -35,5 +35,14 @@ struct SettingsTabTests {
         for name in ["general", "tabs", "links", "max", "privacy", "profiles", "extensions", "plugins", "shortcuts", "performance", "advanced"] {
             #expect(SettingsTab(pane: name) != nil, "\(name)")
         }
+    }
+
+    @Test func theFirstTabCarriesTheUsersFirstNameAsArcsDoes() {
+        #expect(SettingsTab.sync.title(fullName: "Victor Kildahl Petersen") == "Victor")
+        #expect(SettingsTab.sync.title(fullName: "  Ada  ") == "Ada")
+        #expect(SettingsTab.sync.title(fullName: "") == "Cra", "macOS has no name: the app's")
+        #expect(SettingsTab.sync.title == "Cra")
+        #expect(SettingsTab.general.title(fullName: "Victor") == "General", "the other tabs keep their names")
+        #expect(SettingsTab(pane: "sync") == .sync, "links and scenarios still name it sync")
     }
 }

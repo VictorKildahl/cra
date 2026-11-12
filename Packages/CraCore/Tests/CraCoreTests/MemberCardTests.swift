@@ -2,7 +2,7 @@ import CraCore
 import Foundation
 import Testing
 
-/// Settings ▸ Sync's member card and "Share Cra with a Friend", Cra's take on Arc 1.172.2's Account tab (its
+/// The member card on Settings' first tab and "Share Cra with a Friend", Cra's take on Arc 1.172.2's Account tab (its
 /// membership card and "Gift Arc to a Friend"), made from this Mac alone.
 struct MemberCardTests {
     static let utc: Calendar = {

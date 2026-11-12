@@ -12,11 +12,11 @@ built release app with a test profile. Note anything that fails in the release's
 
 ### Themes and window chrome
 
-- **#372:** Settings opens at 684 × 650 pt on the Sync tab every time, whatever tab it was closed on, and ⌘W closes it. Go through the
+- **#372:** Settings opens at 684 × 650 pt on the first tab (your first name, "Cra" without one) every time, whatever tab it was closed on, and ⌘W closes it. Go through the
   ten tabs in dark and in light: the window is the system's window colour (not Arc's navy, Victor 12 Nov 2026), the chosen tab's pill
   (white 10 % with a hairline in dark, white with a shadow in light), 36 × 16 pt switches, the cards, Max's banner (Cra's mark and "Max"),
   Links' picture, Shortcuts' key caps and search ("command e"), Icon's radio list, Profiles' list beside its cards. Switching tabs is
-  instant: nothing fades or resizes. Sync: the default-browser banner (only while Cra isn't the default), the member card (your macOS
+  instant: nothing fades or resizes. The first tab: the default-browser banner (only while Cra isn't the default), the member card (your macOS
   name, its colour and nickname, EARLY '26, a months stamp after a month), Share / Save / Copy under it (the saved PNG is the card at 2x),
   and Share Cra: the sheet's COPY LINK puts the tagged crabrowser.app link on the clipboard and Share… offers Messages and Mail. (The scenario checks the
   size, the tab order and the first tab; this is how it looks.)
