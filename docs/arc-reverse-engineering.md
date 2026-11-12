@@ -3570,6 +3570,32 @@ event with `shiftClickModalEntryPointEnabled` set for the run, AX frames and 60 
     a card inside the window under its floating sidebar. Cra now stacks the floating sidebar above the Peek's
     windows; cra://debug?peekCatcher reads `floating=above|below|none` from the window server's order.
 
+### A Peek's favicon on its favorite tile (Arc 1.172.2, 12 Nov 2026, GitHub #381, static)
+- [S] The favorite tile's model, `AppItem` (and its unnamed sibling with `childItems`), has
+  `badgeIcon: NSImage?` next to the pinned row's `modalIcon: NSImage?` (`__swift5_fieldmd`, arm64 slice).
+  `AppTrayItemViewAppKit` keeps a `badgeView: AppTrayItemBadgeView?` (file
+  AppTray/AppTrayItemBadgeView_AppKit.swift), an NSView with one lazy `iconView` (NSImageView). The
+  tiles' unread mark is a different thing (`AppTrayItemOverlay.badge: NSColor`, a dot). The reporter
+  saw Arc put the peeked page's favicon there while a Peek from the favorite is open.
+- [S] Geometry, from AppTrayItemViewAppKit's `layout` (0x101d19b3c): the badge's frame is
+  (width − 10 − 6, −4, 20, 20) in the flipped tile, so it sticks out 4 pt past the top and the right edge;
+  its layer gets anchor (0.5, 0.5) and the same frame again.
+- [S] AppTrayItemBadgeView: `layout` puts the icon at (midX − 8, midY − 8, 16, 16), backing-aligned
+  (NSAlignAllEdgesNearest). `updateLayer`: masksToBounds NO, corner radius 6, continuous corners,
+  background the asset colour `FullOpacityBackgroundPrimary` (ARCClients_BaseAssets: sRGB white, black in
+  Dark Aqua), shadow black, opacity 0.25, radius 4, offset (0, 1.5). The tile adds it with
+  `setImage:` on the icon view and animates `transform` (from scale 0.1 about the centre) and `opacity`
+  with a CASpringAnimation built from response 0.4 and damping ratio 0.6 (stiffness (2π/0.4)², damping
+  4π·0.6/0.4), both ways.
+- Not seen live: Arc 1.172.2 runs one instance, and opening a Peek from a favorite needs a real click in
+  Victor's own Arc. Cra: FavoritePeekBadge (SpaceColumnView.swift), fed from SidebarUIState.peekBadges, the
+  same entries the pinned row's badge reads, so it stays while the Peek waits and goes with it.
+  cra://debug?favoriteBadges reads it; scenario favorite-peek-badge.
+- Cra trap: on macOS 26 setting an NSView's `layer.cornerRadius` turns `clipsToBounds` on, which cut the
+  badge to the tile's rounded corner. The badge turns it off after its radius; the tile turns it off only
+  while it wears a badge, since `layer.render(in:)` (component snapshots) draws an unclipped corner radius
+  without anti-aliasing.
+
 ### Peek grows out of the link (Arc 1.171, 6 Nov 2026, GitHub #204, offline Arc)
 The reporter recorded Arc 1.172.1 growing the card out of the clicked link. 1.172.0/1.172.1 only moved Chromium
 (appcast notes: "no other changes"), so this was measured on 1.171 with a lab page on 127.0.0.1: two 68 × 31 pt

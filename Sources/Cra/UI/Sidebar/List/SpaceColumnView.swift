@@ -683,11 +683,15 @@ final class FavoritesGridView: NSView {
                                                   selectionColors: logoOutline ? favicons.selectionColors(forKey: key) : nil)
                 }
                 let open = panes.first { store.isSelected($0.id, inSpace: spaceID, window: ui.windowID) }?.id
+                let peek = panes.lazy.compactMap { self.ui.peekBadges[$0.id] }.first.map { badge -> FavoriteTileModel.Peek in
+                    let icon = favicons.image(forKey: badge.iconKey)
+                    return .init(icon: icon, flip: icon != nil && favicons.glyphIsDark(forKey: badge.iconKey) == space.theme.palette.isDark)
+                }
                 let title = item.isSplit && item.title == nil ? panes.map(\.displayTitle).joined(separator: " | ") : item.displayTitle
                 models.append((item.id, FavoriteTileModel(title: title, cells: cells, vertical: item.split?.orientation == .vertical,
                                                           tileColor: item.tab?.tileColor, selected: open != nil, openCell: open,
                                                           unread: panes.contains(where: \.isUnread), focus: ui.keyboardFocusID == item.id,
-                                                          logoOutline: logoOutline)))
+                                                          logoOutline: logoOutline, peek: peek)))
             }
         } onChange: { [weak self] in
             Task { @MainActor in
@@ -1184,6 +1188,99 @@ struct FavoriteTileModel: Equatable {
     var focus: Bool
     /// Settings ▸ Tabs "Outline the open favorite in its logo’s colors" (off: Arc's neutral rim).
     var logoOutline = false
+    /// A Peek open or waiting on one of the favorite's panes: the peeked page's favicon, worn as
+    /// a badge on the tile's top right corner (Arc's AppItem.badgeIcon, GitHub #381).
+    var peek: Peek?
+    struct Peek: Equatable {
+        var icon: NSImage?
+        /// A one-colour glyph that would vanish into the badge's fill is drawn in the other tone.
+        var flip: Bool
+    }
+}
+
+/// The Peek's favicon on a favorite's tile (GitHub #381), Arc 1.172.2's AppTrayItemBadgeView as its
+/// code sets it up (12 Nov 2026): a 20 pt square 16 pt in from the tile's right edge and 4 pt above
+/// its top, so it sticks out 4 pt past the corner; 6 pt continuous corners filled with
+/// FullOpacityBackgroundPrimary (white, black in dark), a black shadow at 0.25, 4 pt blur, 1.5 pt
+/// offset, and the 16 pt favicon centred. It springs in from scale 0.1 and opacity 0 (response
+/// 0.4 s, damping ratio 0.6) and back out the same way.
+final class FavoritePeekBadge: NSView {
+    static let side: CGFloat = 20
+    static func frame(inTile tile: CGRect) -> CGRect {
+        CGRect(x: tile.width - 16, y: -4, width: side, height: side)
+    }
+
+    private let icon = SidebarFaviconView(size: FavoriteTileMetrics.favicon)
+    private(set) var hasIcon = false
+
+    init() {
+        super.init(frame: CGRect(x: 0, y: 0, width: Self.side, height: Self.side))
+        wantsLayer = true
+        layer?.cornerRadius = 6
+        layer?.cornerCurve = .continuous
+        // Not clipped, so the shadow shows (a layer corner radius turns clipping on, macOS 26).
+        clipsToBounds = false
+        layer?.shadowColor = NSColor.black.cgColor
+        layer?.shadowOpacity = 0.25
+        layer?.shadowRadius = 4
+        layer?.shadowOffset = CGSize(width: 0, height: 1.5)
+        layer?.zPosition = 20
+        addSubview(icon)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    func show(_ image: NSImage?, flip: Bool, dark: Bool, colors: SidebarColors) {
+        hasIcon = image != nil
+        layer?.backgroundColor = (dark ? NSColor.black : NSColor.white).cgColor
+        icon.show(image, flip: flip, colors: colors)
+    }
+
+    override func layout() {
+        super.layout()
+        let side = FavoriteTileMetrics.favicon
+        icon.frame = backingAlignedRect(CGRect(x: bounds.midX - side / 2, y: bounds.midY - side / 2, width: side, height: side),
+                                        options: .alignAllEdgesNearest)
+        layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: 6, cornerHeight: 6, transform: nil)
+    }
+
+    func enter() { spring(in: true) }
+
+    /// Springs out, then goes.
+    func leave(then done: @escaping () -> Void) {
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { [weak self] in
+            self?.removeFromSuperview()
+            done()
+        }
+        spring(in: false)
+        CATransaction.commit()
+    }
+
+    private func spring(in entering: Bool) {
+        guard let layer else { return }
+        let c = CGPoint(x: bounds.width * (0.5 - layer.anchorPoint.x), y: bounds.height * (0.5 - layer.anchorPoint.y))
+        let small = CATransform3DTranslate(CATransform3DScale(CATransform3DMakeTranslation(c.x, c.y, 0), 0.1, 0.1, 1), -c.x, -c.y, 0)
+        let (from, to) = entering ? (small, CATransform3DIdentity) : (layer.presentation()?.transform ?? CATransform3DIdentity, small)
+        let fromOpacity = entering ? 0 : layer.presentation()?.opacity ?? 1
+        let toOpacity: Float = entering ? 1 : 0
+        layer.transform = to
+        layer.opacity = toOpacity
+        for (key, a, b) in [("transform", NSValue(caTransform3D: from), NSValue(caTransform3D: to)),
+                            ("opacity", NSNumber(value: fromOpacity), NSNumber(value: toOpacity))] as [(String, Any, Any)] {
+            let spring = CASpringAnimation(keyPath: key)
+            spring.fromValue = a
+            spring.toValue = b
+            spring.mass = 1
+            spring.stiffness = pow(2 * .pi / 0.4, 2)
+            spring.damping = 4 * .pi * 0.6 / 0.4
+            spring.duration = spring.settlingDuration
+            layer.add(spring, forKey: "peek_badge_" + key)
+        }
+    }
 }
 
 enum FavoriteTileMetrics {
@@ -1224,6 +1321,14 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
     private var favicons: [SidebarFaviconView] = []
     /// Cuts a split's tile into its cells.
     private let cutMask = CAShapeLayer()
+    /// The tile's mask while it is cut: the cut shape, and room for the Peek badge and its
+    /// shadow past the tile's corner.
+    private let tileMask = CALayer()
+    private let badgeRoom = CALayer()
+    private var peekBadge: FavoritePeekBadge?
+    /// The tile's own clipping while a badge sticks out past it (a layer corner radius turns
+    /// clipping on, macOS 26), put back once the badge has gone.
+    private var clipsWithoutBadge: Bool?
     private let unreadDot = CALayer()
     /// Live Calendar's Show Time to Next Meeting ("12m", "Now") at the tile's top right.
     private let countdown = CATextLayer()
@@ -1237,6 +1342,16 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
     private var pushedIn = false
     /// Scenarios (cra://debug?hover=FavoriteTileView,n): the tile as the pointer leaves it hovered (#293).
     func debugHover() { hovering = true }
+    /// Scenarios (cra://debug?favoriteBadges=): the Peek badge's frame in the tile, nil without one (#381).
+    var peekBadgeReadout: String? {
+        guard let b = peekBadge else { return nil }
+        let f = b.frame
+        // Anything clipping the tile or the badge cuts the badge (or its shadow) at the tile's edge.
+        let clipped = clipsToBounds || layer?.masksToBounds == true || (layer?.mask != nil && badgeRoom.isHidden)
+            || b.clipsToBounds || b.layer?.masksToBounds == true
+        return String(format: "frame=%.0f,%.0f,%.0fx%.0f inset=%.0f icon=%d clipped=%d", f.minX, f.minY, f.width, f.height,
+                      f.maxX - bounds.maxX, b.hasIcon ? 1 : 0, clipped ? 1 : 0)
+    }
 
     init(itemID: UUID, spaceID: UUID, grid: FavoritesGridView) {
         self.itemID = itemID
@@ -1257,6 +1372,10 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         rim.zPosition = 5
         layer?.addSublayer(rim)
         cutMask.fillRule = .evenOdd
+        tileMask.addSublayer(cutMask)
+        badgeRoom.backgroundColor = NSColor.black.cgColor
+        badgeRoom.isHidden = true
+        tileMask.addSublayer(badgeRoom)
         unreadDot.cornerRadius = 3
         layer?.addSublayer(unreadDot)
         countdown.fontSize = 9
@@ -1292,7 +1411,7 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         }
         while favicons.count > m.cells.count { favicons.removeLast().removeFromSuperview() }
         // Arc 1.171: the open split's tile is one selected tile; the cut shows while it is closed.
-        layer?.mask = m.cells.count > 1 && !m.selected ? cutMask : nil
+        layer?.mask = m.cells.count > 1 && !m.selected ? tileMask : nil
         if let url = liveCalendarURL, let store = grid?.store {
             LiveCalendarClient.shared.watch(favorite: url, profilePath: store.profilePath(item: itemID))
         }
@@ -1340,6 +1459,7 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         countdown.string = countdownText.map { NSAttributedString(string: $0, attributes: [.font: NSFont.systemFont(ofSize: 9, weight: .semibold), .foregroundColor: ink]) }
         countdown.isHidden = countdownText == nil
         if countdownText != nil { unreadDot.isHidden = true }
+        showPeekBadge(m.peek, dark: palette.isDark, colors: colors)
         if m.focus != (focusRing != nil) {
             if m.focus {
                 let r = FocusRingLayer(radius: FavoriteTileMetrics.corner)
@@ -1380,13 +1500,50 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
                 path.addRect(vertical ? CGRect(x: 0, y: a.maxY, width: bounds.width, height: b.minY - a.maxY)
                                       : CGRect(x: a.maxX, y: 0, width: b.minX - a.maxX, height: bounds.height))
             }
+            tileMask.frame = bounds
             cutMask.frame = bounds
             cutMask.path = path
         }
+        if let b = peekBadge {
+            b.frame = FavoritePeekBadge.frame(inTile: bounds)
+            badgeRoom.frame = b.frame.insetBy(dx: -8, dy: -8)
+        }
+        badgeRoom.isHidden = peekBadge == nil
         unreadDot.frame = CGRect(x: bounds.width - 5 - 6, y: 5, width: 6, height: 6)
         countdown.frame = CGRect(x: 4, y: 3, width: bounds.width - 9, height: 12)
         focusRing?.frame = bounds
         CATransaction.commit()
+    }
+
+    /// Arc puts the badge on when a Peek starts from the favorite and takes it off when the
+    /// Peek ends, springing it in from and out to a tenth of its size.
+    private func showPeekBadge(_ peek: FavoriteTileModel.Peek?, dark: Bool, colors: SidebarColors) {
+        guard let peek else {
+            guard let b = peekBadge else { return }
+            peekBadge = nil
+            badgeRoom.isHidden = true
+            b.leave { [weak self] in
+                guard let self, self.peekBadge == nil, let clips = self.clipsWithoutBadge else { return }
+                self.clipsToBounds = clips
+                self.clipsWithoutBadge = nil
+            }
+            return
+        }
+        let b = peekBadge ?? {
+            let b = FavoritePeekBadge()
+            peekBadge = b
+            if clipsWithoutBadge == nil { clipsWithoutBadge = clipsToBounds }
+            clipsToBounds = false
+            addSubview(b)
+            b.frame = FavoritePeekBadge.frame(inTile: bounds)
+            badgeRoom.frame = b.frame.insetBy(dx: -8, dy: -8)
+            badgeRoom.isHidden = false
+            b.enter()
+            return b
+        }()
+        var iconColors = colors
+        iconColors.isDark = dark
+        b.show(peek.icon, flip: peek.flip, dark: dark, colors: iconColors)
     }
 
     // MARK: Pointer

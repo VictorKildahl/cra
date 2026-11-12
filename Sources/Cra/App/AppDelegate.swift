@@ -1207,6 +1207,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 NSLog("Cra music notes %@: %d%@", label, notes.count, places.isEmpty ? "" : " (" + places.joined(separator: "; ") + ")")
                 return
             }
+            // favoriteBadges=<label>: the favorite tiles wearing a Peek's favicon badge, in grid order,
+            // with the badge's frame in the tile and how far it sticks out past the tile's right edge (#381).
+            if let label = dict["favoriteBadges"] {
+                var tiles: [FavoriteTileView] = []
+                func collect(_ v: NSView) {
+                    if let t = v as? FavoriteTileView, !t.isHiddenOrHasHiddenAncestor { tiles.append(t) }
+                    v.subviews.forEach(collect)
+                }
+                main.window?.contentView.map(collect)
+                tiles.sort { ($0.frame.minY, $0.frame.minX) < ($1.frame.minY, $1.frame.minX) }
+                let badges = tiles.enumerated().compactMap { i, t in t.peekBadgeReadout.map { "tile\(i + 1) \($0)" } }
+                NSLog("Cra favorite badges %@: %@", label, badges.isEmpty ? "none" : badges.joined(separator: ", "))
+                return
+            }
             if let size = dict["windowSize"]?.split(separator: "x").compactMap({ Double($0) }), size.count == 2, let w = main.window {
                 w.setFrame(NSRect(x: w.frame.minX, y: w.frame.maxY - size[1], width: size[0], height: size[1]), display: true)
                 return
