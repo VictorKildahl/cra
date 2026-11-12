@@ -1338,20 +1338,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             // commandBarRows=<label>: the open command bar's rows, top to bottom, each as kind:address
-            // (the title when it has none), so a scenario reads which tabs ⌘T found (#307).
+            // (the title when it has none), so a scenario reads which tabs ⌘T found (#307), with its
+            // mode and the selected row (#379, #382). An open Little Window's or Peek's bar gets a line
+            // of its own ("<label> peek:").
             if let label = dict["commandBarRows"] {
-                let bar = main.commandBar
-                let rows = bar.result.items.map { row -> String in
-                    let kind: String
-                    switch row.kind {
-                    case .switchToTab: kind = "tab"
-                    case .archived: kind = "archived"
-                    case .history: kind = "history"
-                    default: kind = "other"
+                func line(_ name: String, _ bar: CommandBarController) {
+                    let rows = bar.result.items.map { row -> String in
+                        let kind: String
+                        switch row.kind {
+                        case .switchToTab: kind = "tab"
+                        case .archived: kind = "archived"
+                        case .history: kind = "history"
+                        default: kind = "other"
+                        }
+                        return "\(kind):\(row.url ?? row.title)"
                     }
-                    return "\(kind):\(row.url ?? row.title)"
+                    NSLog("Cra command bar rows %@: open=%d mode=%@ selected=%d %@", name, bar.isOpen ? 1 : 0,
+                          bar.mode == .newTab ? "newTab" : "editURL", bar.selectedIndex, rows.joined(separator: " | "))
                 }
-                NSLog("Cra command bar rows %@: open=%d %@", label, bar.isOpen ? 1 : 0, rows.joined(separator: " | "))
+                line(label, main.commandBar)
+                for l in littleWindows where l.commandBar.isOpen { line("\(label) \(l.isPeek ? "peek" : "little")", l.commandBar) }
                 return
             }
             // sidebarShown=<label>: whether the main window shows its sidebar, and the View menu's

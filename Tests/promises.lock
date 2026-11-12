@@ -686,3 +686,5 @@
 #378   Packages/CraCore/Tests/CraCoreTests/SettingsSyncTests.swift::aWholeBundleIsAppliedAndAnEmptyFolderWritten  94152fb39426
 #378   Packages/CraCore/Tests/CraCoreTests/SettingsSyncTests.swift::everyFileThereButNotTheManifestsIsAMix  9741a2fb0bbb
 #378   Tests/StoreTests.swift::syncPutsAMixedBundleRight  bf14ae1bdb36
+#379   Packages/CraCore/Tests/CraCoreTests/CommandBarOpeningTests.swift::commandTInAPeekIsTheBrowserWindowsNewTab  4550cf2a85ca
+#379   Tests/Scenarios/peek-command-t.scenario  e1634d743ed3

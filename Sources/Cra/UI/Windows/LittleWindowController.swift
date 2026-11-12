@@ -1283,7 +1283,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         switch id {
         // ⌘W on the card fades it out, as Esc does (#337).
         case "closeTab", "closeWindow": if isCard, !cardFading, window?.isVisible == true { dismissCard() } else { closeWindow() }
-        case "newTab", "editURL": openCommandBar()
+        case "newTab", "editURL":
+            // ⌘T in a Peek is the browser window's New Tab bar, with its tabs; ⌘L edits the Peek (#379).
+            let opening = CommandBarOpening.of(id == "newTab" ? .newTab : .editURL, in: isPeek ? .peek : .littleWindow, hasPage: hasPage)
+            if opening.owner == .browserWindow, let parent = peekParent { parent.openCommandBar(opening.mode) } else { openCommandBar() }
         case "goBack": browser?.goBack()
         case "goForward": browser?.goForward()
         case "reload": browser?.reload()

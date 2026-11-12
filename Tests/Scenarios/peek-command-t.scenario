@@ -1,0 +1,36 @@
+# ⌘T in a Peek opens the browser window's New Tab bar: empty, with the window's tabs to switch to.
+# The Peek's own bar on its address, the only rows its own page, was what ⌘T gave (GitHub #379).
+# ⌘L still edits the Peek's address in the Peek. A Little Window keeps ⌘T as ⌘L, as Little Arc
+# does (CommandBarOpening in CraCore).
+# promise: #379
+budget rss=900 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "peekInEveryTab": true}
+
+cra://open?url=${PAGE}?n=other
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://open?url=${PAGE}?n=hub
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=peek'))","userGesture":true}
+expect-log peek: from
+wait 1.5
+cra://debug?peeks=open
+expect-log Cra peeks open: shown \S+n=peek$
+
+# ⌘T: the browser window's bar, empty, the other tab among its rows; the Peek's own bar stays shut.
+cra://debug?key=t,17,1048576
+wait 1
+cra://debug?commandBarRows=peek-t
+expect-log Cra command bar rows peek-t: open=1 mode=newTab selected=0 .*tab:\S*n=other
+reject-log Cra command bar rows peek-t peek:
+cra://dismiss
+wait 0.5
+cra://debug?peeks=after-t
+expect-log Cra peeks after-t: shown \S+n=peek$
+
+# ⌘L: the Peek's own bar, on its address.
+cra://debug?key=l,37,1048576
+wait 1
+cra://debug?commandBarRows=peek-l
+expect-log Cra command bar rows peek-l: open=0
+expect-log Cra command bar rows peek-l peek: open=1 mode=editURL
