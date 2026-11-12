@@ -230,6 +230,9 @@ final class KeyBindingRegistry {
             KeyAction(id: "addSplitView", name: "Add Split View", section: .view, shortcuts: [Shortcut("=", [.control, .shift])], triggers: ["split", "split view", "add split"]),
             KeyAction(id: "closeSplitPane", name: "Close this Split Pane", section: .view, shortcuts: [Shortcut("-", [.control, .shift])], triggers: ["close split", "close pane"]),
             KeyAction(id: "separateFromSplit", name: "Separate Page from Split View", section: .view, shortcuts: [], triggers: ["separate", "unsplit"]),
+            // Arc 1.172: View ▸ Expand Current Split (expandSplitViewPane), no shortcut; the command bar
+            // finds it by "Expand; Expand Split View; Maximize" (MainMenu.nib).
+            KeyAction(id: "expandSplitPane", name: "Expand Current Split", section: .view, shortcuts: [], triggers: ["expand", "expand split view", "maximize"]),
             KeyAction(id: "flipSplitOrientation", name: "Flip Split View Orientation", section: .view, shortcuts: [], triggers: ["vertical split", "horizontal split", "flip split"]),
             KeyAction(id: "nextSplitPane", name: "Switch to Next Split View", section: .view, shortcuts: [], inCommandBar: false),
             KeyAction(id: "previousSplitPane", name: "Switch to Previous Split View", section: .view, shortcuts: [], inCommandBar: false),

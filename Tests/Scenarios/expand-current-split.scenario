@@ -1,0 +1,38 @@
+# View ▸ Expand Current Split, as in Arc 1.172 (measured 11 Nov 2026): the focused pane takes the
+# window and every other pane keeps Arc's 220 pt minimum. It's stored as the split's width factors
+# (1 for the pane, 0 for the others), so a second Expand changes nothing and expanding another pane
+# swaps them. Stacked, the pane above a divider counts the divider in its 220 pt.
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=left
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/addSplitView
+cra://navigate?url=${PAGE}?n=right
+wait 2
+cra://debug?paneLengths=equal
+expect-log pane lengths equal: (\d+)(\.\d)? \| \1(\.\d)? factors=\S+ focused=1 horizontal$
+
+cra://action/expandSplitPane
+cra://debug?paneLengths=expanded
+expect-log pane lengths expanded: 220\.0 \| \d{3}\.\d factors=0\.00,1\.00 focused=1 horizontal$
+cra://action/expandSplitPane
+cra://debug?paneLengths=again
+expect-log pane lengths again: 220\.0 \| \d{3}\.\d factors=0\.00,1\.00 focused=1 horizontal$
+
+# The other pane: they swap.
+cra://action/previousSplitPane
+cra://action/expandSplitPane
+cra://debug?paneLengths=swapped
+expect-log pane lengths swapped: \d{3}\.\d \| 220\.0 factors=1\.00,0\.00 focused=0 horizontal$
+
+# Stacked: the top pane keeps 210 + the 10 pt divider, the bottom one 220.
+cra://action/flipSplitOrientation
+cra://debug?paneLengths=stackedTop
+expect-log pane lengths stackedTop: \d{3}\.\d \| 220\.0 factors=1\.00,0\.00 focused=0 vertical$
+cra://action/nextSplitPane
+cra://action/expandSplitPane
+cra://debug?paneLengths=stackedBottom
+expect-log pane lengths stackedBottom: 210\.0 \| \d{3}\.\d factors=0\.00,1\.00 focused=1 vertical$

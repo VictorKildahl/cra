@@ -62,7 +62,7 @@ Arc's actions (Settings ▸ Shortcuts, 106 rows) that Cra has no action for:
 | Developer Tools, second binding | F12 | done |
 | Go to last Sidebar Item | ⌘9 | done |
 | Switch to Split View 1–4 | ⌃⇧1…4 | done |
-| Expand Current Split | — | missing (Cra has Flip orientation) |
+| Expand Current Split | — | done | View ▸ Expand Current Split and the command bar ("expand", "maximize"), no default shortcut, as in Arc 1.172.2 (measured live 11 Nov 2026, docs/arc-reverse-engineering.md "Expand Current Split"). The focused pane takes the window and the others keep the 220 pt minimum, stored as width factors 1 and 0; laid out in one frame. Cra's pane minimum went from 200 to Arc's 220 pt with it. |
 | Open Extensions | ⌘E | done |
 | Show Little Arc "Open In" Menu | ⇧⌘O | done |
 | Open Little Arc or Peek in… | ⌘O | partial (Window menu) |
@@ -158,6 +158,8 @@ in this sweep (Essential Shortcuts window, Library pages).
   measured live in Arc (names, #RRGGBBAA format, no trace in the page's markup) and fitted to the
   semantic palette Arc stores per space.
 - Edit ▸ Find ▸ Use Selection to Find and Jump to Selection (⌘J).
+- View ▸ Expand Current Split (11 Nov 2026): the focused split pane takes the window, the others keep
+  Arc's 220 pt minimum (SplitPaneLayout.expanding).
 - Previews for a Gmail favorite: unread mail in Arc's card on hover (Settings ▸ Tabs); 8 Nov: Arc's full card
   (sender, age, subject, two lines, scrolling past 270 pt, ＋ for a new mail, rows open the mail) and its motion.
 - Live Calendar on a Google Calendar favorite (8 Nov, Victor's choice: a working version, as Arc's no longer reads):

@@ -283,6 +283,7 @@ enum ShortcutDescriptions {
         "addSplitView": "Open another page beside this one.",
         "closeSplitPane": "Close the focused split pane.",
         "separateFromSplit": "Move the page out of the split view into its own tab.",
+        "expandSplitPane": "Give the focused split pane the window, leaving the other panes narrow.",
         "flipSplitOrientation": "Switch the split view between side by side and stacked.",
         "nextSplitPane": "Focus the next split pane.",
         "previousSplitPane": "Focus the previous split pane.",

@@ -1392,6 +1392,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("split \(label): panes=\(urls) selected=\(selected?.tab?.url ?? "-") downloads=\(DownloadHistory.shared.live.count + DownloadHistory.shared.entries.count)")
                 return
             }
+            // paneLengths=<label>: each pane card's length along the split's axis in pane order, the
+            // split's stored width factors and which pane is focused (View ▸ Expand Current Split).
+            if let label = dict["paneLengths"] {
+                let shell = main.shell!
+                let horizontal = shell.splitOrientation == .horizontal
+                let lengths = shell.paneCards.map { String(format: "%.1f", horizontal ? $0.frame.width : $0.frame.height) }
+                let split = main.selectedTab.flatMap { store.splitContaining($0.id) }
+                let stored: [UUID: Double] = split?.split?.widthFactors ?? [:]
+                let factors: [String] = (split?.children ?? []).map { String(format: "%.2f", stored[$0] ?? -1) }
+                let focused = shell.paneCards.firstIndex { $0.tabID == main.selectedTab?.id }.map(String.init) ?? "-"
+                CraLog.note("pane lengths \(label): \(lengths.joined(separator: " | ")) factors=\(factors.joined(separator: ",")) focused=\(focused) \(horizontal ? "horizontal" : "vertical")")
+                return
+            }
             // popups=<label>[&run=open|openAll|allow|block]: the front tab's blocked pop-ups, its
             // toolbar button and URL-field line, the menu's rows, Chrome's site setting and the
             // Today tab count; run= picks a menu row first (#357).
@@ -1851,7 +1864,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             item.title = browser?.isInPictureInPicture == true ? "Exit Picture in Picture" : "Picture in Picture"
         case "promoteLittleWindow", "littleWindowOpenInMenu": return keyLittleWindow?.hasPage ?? false
         case "checkForUpdates": return SoftwareUpdater.shared.validateMenuItem(item)
-        case "closeSplitPane", "separateFromSplit", "flipSplitOrientation":
+        case "closeSplitPane", "separateFromSplit", "flipSplitOrientation", "expandSplitPane":
             return store.selectedTabID.flatMap { store.splitContaining($0) } != nil
         case "addSplitView": return store.selectedTabID != nil
         case "editSpace", "deleteSpace", "nextSpace", "previousSpace", "manageSpaces", "changeProfile": return !main.isStandalone
@@ -2187,6 +2200,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "addSplitView": main.addSplitPane()
         case "closeSplitPane": if let c = current { main.closeSplitPane(c) }
         case "separateFromSplit": if let c = current { main.separatePane(c) }
+        case "expandSplitPane": if let c = current { main.expandSplitPane(c) }
         case "flipSplitOrientation": if let c = current, let s = store.splitContaining(c) { store.flipSplitOrientation(s.id) }
         case "nextSplitPane": main.cycleSplitPane(1)
         case "previousSplitPane": main.cycleSplitPane(-1)
@@ -2404,7 +2418,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         view.addItem(.separator())
         view.addItem(item("pictureInPicture")); view.addItem(item("cast"))
         view.addItem(.separator())
-        for id in ["addSplitView", "closeSplitPane", "separateFromSplit", "flipSplitOrientation"] { view.addItem(item(id)) }
+        // Arc's order: Add, Close, Separate, Expand Current Split (Cra's Flip after them).
+        for id in ["addSplitView", "closeSplitPane", "separateFromSplit", "expandSplitPane", "flipSplitOrientation"] { view.addItem(item(id)) }
         view.addItem(.separator())
         let dev = NSMenu(title: "Developer")
         for id in ["viewSource", "devTools", "inspectElement", "jsConsole"] { dev.addItem(item(id)) }

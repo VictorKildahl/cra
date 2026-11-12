@@ -824,6 +824,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         store.selectTab(id, window: windowID)
     }
 
+    /// Arc's View ▸ Expand Current Split: the pane takes the window and the other panes keep the
+    /// minimum width, stored as the split's width factors like a divider drag (SplitPaneLayout.expanding).
+    /// Arc lays it out in one frame; a double-click on a divider or a drag brings the panes back.
+    func expandSplitPane(_ id: UUID) {
+        guard let split = store.splitContaining(id) else { return }
+        let factors = SplitPaneLayout.expanding(id, in: store.paneTabIDs(for: id))
+        store.setSplitWidthFactors(split.id, factors.mapValues { Double($0) })
+    }
+
     func cycleSplitPane(_ delta: Int) {
         guard let current = selectedTabID else { return }
         let panes = store.paneTabIDs(for: current)

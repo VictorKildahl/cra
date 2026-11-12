@@ -926,6 +926,38 @@ descriptions and frames) at window widths 1400 → 926 (Arc's minimum), plus win
   profile per side). Pins before ↻ is from the non-split bar (ten pins, ↻ kept); the offline copy loads no
   extensions (`--load-extension` is ignored).
 
+### Expand Current Split (Arc 1.172.2, live, 11 Nov 2026)
+Victor's running Arc (1.172.2 refuses a second instance, and an ad-hoc re-signed copy aborts in CloudKit
+at launch, so no offline copy): a File ▸ Blank Window (it gets a space of its own, nothing synced), a split
+of three local colour pages, driven through AX menu presses with the command bar's field set over AX,
+pane frames read from the AXWebAreas, window recorded with ScreenCaptureKit at ~80 fps. Window 1728×1084,
+sidebar hidden, content 1708 pt wide.
+- [O] Where: View ▸ Expand Current Split, after Separate Page from Split View (MainMenu.nib: action
+  `expandSplitViewPane`, command-bar keywords "Expand; Expand Split View; Maximize"). No shortcut. The pane
+  toolbar's Split View Menu doesn't have it (Move Left/Right, Add Right/Left Split, Separate Tab from
+  Split, Convert to Vertical Split View, Share Split View…). The binary posts
+  `maximizeFocusedSplitViewNotificationToken` / `maximizeCurrentSplitViewPane:`.
+- [O] What it does: the focused pane takes the content area and every other pane drops to 220 pt. Two
+  panes: 849 | 849 → 220 | 1478. Three: 220 | 1248 | 220 whichever pane is focused. The split stays a
+  split: every pane keeps its bar (the small ones with the essentials), the focused one its ring.
+- [O] How it's kept: as the split's width factors. StorableSidebar.json had `itemWidthFactors`
+  [a, 0, b, 0, c, 1] after expanding c, so 220 is Arc's minimumPaneWidth applied to a factor of 0. It
+  follows that a narrower window keeps the small pane at 220 (window 1200: 950 | 220, back at 1728:
+  1478 | 220).
+- [O] Animation: none. One recording frame shows 849 | 849, the next (≈13 ms later) 220 | 1478.
+- [O] Getting back: there is no un-expand. The menu title never changes and a second Expand changes
+  nothing. Expanding another pane (⌃⇧1 to focus it first) swaps them: 1478 | 220. Otherwise the divider
+  (drag, or the double-click reset recovered from `handleDraggerDoubleClickGesture:`, not pressed here).
+- [O] Stacked (Convert to Vertical Split View, middle pane expanded, 1064 pt tall): 210 | 614 | 220. The
+  pane above a divider counts the 10 pt divider in its 220 (each stacked pane carries its own
+  SplitViewBottomDraggerHandleView); the bottom pane has 220 of its own.
+- [O] Add Split View on an expanded split (focus on the 1478 pane): the new pane takes a third of the
+  focused pane's room (979 | 220 | 489, the new one at the end). Not built: Cra adds panes its own way.
+- Cra: SplitPaneLayout moved into CraCore; `expanding(_:in:)` gives 1 and 0, the minimum is Arc's 220 (was
+  200), stacked panes above a divider keep 210, and a divider drag starts from the lengths on screen.
+  MainWindowController.expandSplitPane stores the factors (`setSplitWidthFactors`, like a drag), no
+  animation. `cra://debug?paneLengths=<label>` logs the pane lengths; scenario expand-current-split.
+
 ### Pinned splits and the split menu (Arc 1.171, 30 Oct)
 Observed live on a throwaway Today split (example.com | example.org), archived afterwards.
 - [O] Tabs ▸ Pin Tab (⌘D) with a pane focused pins the WHOLE split (appended to Pinned); the item then reads
