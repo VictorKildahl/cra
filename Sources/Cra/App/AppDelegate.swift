@@ -1026,6 +1026,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if dict["embedDump"] != nil { NSLog("%@", main.embeddedPagesDump()); return }
             if dict["pageInsets"] != nil { CraLog.note(main.pageInsetsReadout()); return }
             if dict["chromiumDialogs"] != nil { CraLog.note(ChromiumDialogs.readout()); return }
+            if let label = dict["switcherWindows"] {
+                CraLog.note(SwitcherWindows.readout(label, main: main.window, little: littleWindows.compactMap(\.window))); return
+            }
             if let g = dict["screenshotPick"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2 {
                 CraLog.note(main.screenshotPickReadout(at: CGPoint(x: g[0], y: g[1]))); return
             }
