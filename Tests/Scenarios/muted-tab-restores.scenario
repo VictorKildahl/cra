@@ -1,0 +1,36 @@
+# promise: #387
+# A muted tab stays quiet when its page comes back. The tab keeps "muted" in sidebar.json, and Cra
+# mutes the page as it makes it, before Chromium has made its browser (CEF creates it later, in
+# OnAfterCreated) and before WebKit has a web view (a popup host gets its web view from the opener).
+# The mute used to be dropped there: after a relaunch the speaker showed muted while the page
+# played sound. Chromium also unmuted a muted tab on its next page (its sound content setting
+# decides the mute again on every navigation), so a muted tab followed to another page lost it.
+# Checked in both engines, each page as its engine reports it.
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+
+cra://open?url=${PAGE}?n=first
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://action/muteTab
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"location.href='${PAGE}?n=quiet'"}
+wait 2
+cra://debug?tabMute=navigated
+expect-log tab mute navigated: .*\?n=quiet saved=muted page=muted
+cra://open?url=${WEBKIT}?n=webkit
+wait 2
+cra://action/muteTab
+wait 1
+cra://debug?tabMute=before
+expect-log tab mute before: .*\?n=quiet saved=muted page=muted
+expect-log tab mute before: .*\?n=webkit saved=muted page=muted
+
+relaunch
+wait 3
+cra://debug?tabMute=relaunched
+expect-log tab mute relaunched: .*\?n=webkit saved=muted page=muted
+# The Chromium tab, opened again from the sidebar.
+cra://action/previousTab
+wait 3
+cra://debug?tabMute=chromium
+expect-log tab mute chromium: .*\?n=quiet saved=muted page=muted

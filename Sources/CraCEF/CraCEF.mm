@@ -239,6 +239,9 @@ static CraClient* AsCraClient(CefClient* c) {
 /// The key press that lends the page user activation, for a frame that has a video to show.
 - (void)nudgeUserActivation;
 - (void)adoptBrowser:(CefRefPtr<CefBrowser>)browser;
+/// A muted page's next page: Chromium's sound content setting decides the mute again on every
+/// main-frame navigation and unmutes what CEF muted, so a muted tab mutes it back (#387).
+- (void)keepAudioMuted;
 - (void)devToolsBrowserCreated:(CefRefPtr<CefBrowser>)browser;
 - (void)devToolsBrowserClosed;
 - (void)runDevToolsAction;
@@ -1548,6 +1551,7 @@ public:
             [o.delegate browser:o didReportBackgroundColor:@""];
         RunPageScript(frame, "", kLoadingBackgroundProbe);
         SetCommittedLoad(o, YES);
+        [o keepAudioMuted];
     }
 
     void SetCommittedLoad(CraBrowser* o, BOOL committed) {
@@ -2547,6 +2551,8 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     // An address was asked for while the list was going in: a failed restore doesn't load over it.
     BOOL _historySuperseded;
     BOOL _pendingFocus;
+    // Muted before Chromium made the browser (a muted tab's page coming back): applied in -adoptBrowser: (#387).
+    BOOL _audioMuted;
     BOOL _isPopupHost;
     NSMutableSet<NSNumber*>* _activeDownloads;
     BOOL _parked;
@@ -2760,6 +2766,18 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
         _pendingFocus = NO;
         browser->GetHost()->SetFocus(true);
     }
+    if (_audioMuted) browser->GetHost()->SetAudioMuted(true);
+}
+
+- (void)keepAudioMuted {
+    if (!_audioMuted) return;
+    // After the navigation's other observers, SoundContentSettingObserver among them.
+    __weak CraBrowser* weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        CraBrowser* me = weakSelf;
+        if (me && me->_audioMuted && me->_browser && !me->_browser->GetHost()->IsAudioMuted())
+            me->_browser->GetHost()->SetAudioMuted(true);
+    });
 }
 
 - (void)browserClosed {
@@ -2964,7 +2982,10 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     if (_browser) _browser->GetHost()->Find(CefStringFromNS(text), forward, matchCase, findNext);
 }
 - (void)stopFinding:(BOOL)clearSelection { if (_browser) _browser->GetHost()->StopFinding(clearSelection); }
-- (void)setAudioMuted:(BOOL)muted { if (_browser) _browser->GetHost()->SetAudioMuted(muted); }
+- (void)setAudioMuted:(BOOL)muted {
+    _audioMuted = muted;
+    if (_browser) _browser->GetHost()->SetAudioMuted(muted);
+}
 - (BOOL)isAudioMuted { return _browser && _browser->GetHost()->IsAudioMuted(); }
 
 // Chrome's RecentlyAudibleHelper: quiet only once the page stayed quiet for 2 s, so the

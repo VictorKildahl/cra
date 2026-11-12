@@ -289,8 +289,9 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 - (void)setZoomLevel:(double)level;
 - (void)findText:(NSString *)text forward:(BOOL)forward matchCase:(BOOL)matchCase findNext:(BOOL)findNext;
 - (void)stopFinding:(BOOL)clearSelection;
+/// Mutes the page, also one Chromium hasn't made yet: it starts muted (#387).
 - (void)setAudioMuted:(BOOL)muted;
-/// Whether Chromium has the page muted (CefBrowserHost::IsAudioMuted).
+/// Whether Chromium has the page muted (CefBrowserHost::IsAudioMuted), NO before it made it.
 - (BOOL)isAudioMuted;
 /// Pops the page's video out into Chromium's floating Picture in Picture
 /// window. Manual requests toggle (a second call brings the video back).

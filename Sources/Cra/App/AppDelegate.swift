@@ -1822,6 +1822,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 main.testFavoriteMenu(tile: n, label: dict["label"] ?? "\(n)", run: dict["run"])
                 return
             }
+            // tabMute=<label>: every loaded page's mute, as the tab saved it and as its engine has the
+            // page, so a muted tab that comes back (relaunch, sleep, a popup) is seen to stay quiet (#387).
+            if let label = dict["tabMute"] {
+                let rows = mainWindows.flatMap { $0.browsers.runtimes.values }.compactMap { rt -> String? in
+                    guard let tab = store.item(rt.tabID)?.tab else { return nil }
+                    return "\(tab.url) saved=\(tab.muted ? "muted" : "unmuted") page=\(rt.browser.isAudioMuted() ? "muted" : "unmuted")"
+                }.sorted()
+                CraLog.note("tab mute \(label): \(rows.isEmpty ? "none" : rows.joined(separator: ", "))")
+                return
+            }
             // pickedCopy=<c2,s3…>[&label=]: rows ⌘/⇧-clicked, then ⇧⌘C typed; see testPickedCopy (#322).
             if let clicks = dict["pickedCopy"] {
                 main.testPickedCopy(clicks: clicks, label: dict["label"] ?? clicks)

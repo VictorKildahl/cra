@@ -38,6 +38,8 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
     private var audibleHold = AudibleHold()
     private var audibleOff: DispatchWorkItem?
     private var capturing = false
+    /// Muted before the web view existed (a popup host's): applied in makeWebView (#387).
+    private var audioMuted = false
     /// The service this page opened for ("Spotify"), kept while it signs in elsewhere: what the
     /// toast, the Site Control Center and the dimmed extension buttons name (PageEngines).
     var serviceName = ""
@@ -145,6 +147,7 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
         webView = web
         created = true
         observe(web)
+        if audioMuted { setAudioMuted(true) }
     }
 
     /// The popup WebKit opens for window.open in an opener page: it must be a web view made with
@@ -614,8 +617,10 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
         }
     }
 
-    /// WebKit's page mute (Safari's tab mute), else every media element.
+    /// WebKit's page mute (Safari's tab mute), else every media element. Before the web view
+    /// exists it waits for makeWebView.
     override func setAudioMuted(_ muted: Bool) {
+        audioMuted = muted
         MainActor.assumeIsolated {
             guard let web = webView else { return }
             let sel = NSSelectorFromString("_setPageMuted:")
@@ -625,6 +630,16 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
             } else {
                 web.evaluateJavaScript("document.querySelectorAll('video,audio').forEach(m => m.muted = \(muted))", in: nil, in: Self.world) { _ in }
             }
+        }
+    }
+
+    /// WebKit's own page mute state (_mediaMutedState's audio bit), else what Cra asked for.
+    override func isAudioMuted() -> Bool {
+        MainActor.assumeIsolated {
+            let sel = NSSelectorFromString("_mediaMutedState")
+            guard let web = webView, let m = class_getInstanceMethod(type(of: web), sel) else { return audioMuted }
+            typealias Fn = @convention(c) (AnyObject, Selector) -> UInt
+            return unsafeBitCast(method_getImplementation(m), to: Fn.self)(web, sel) & 1 != 0
         }
     }
 
