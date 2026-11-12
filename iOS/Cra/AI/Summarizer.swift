@@ -7,10 +7,7 @@ import FoundationModels
 /// Writes a page's summary with the device's own model (`MobileSummary` has the prompt and the
 /// answer's shape). Nothing leaves the phone.
 enum Summarizer {
-    private static var language: String {
-        let code = Locale.preferredLanguages.first.flatMap { Locale(identifier: $0).language.languageCode?.identifier } ?? "en"
-        return Locale(identifier: "en").localizedString(forLanguageCode: code) ?? "English"
-    }
+    private static var language: String { AnswerLanguage.englishName }
 
     /// The summary, or nil when the model could not write one (too little text, a refusal).
     static func summarize(title: String, text: String) async -> MobileSummary.Answer? {

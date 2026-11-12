@@ -260,6 +260,11 @@ struct AppSettingsList: View {
                          selection: model.binding(\.searchChoice),
                          options: MobileSearchChoice.all(browseForMeAvailable: BrowseForMe.isAvailable), title: \.label)
                     .accessibilityIdentifier("setting-search-engine")
+                ValueRow(label: SettingLabel(title: "Languages", symbol: "character.bubble.fill", color: .green),
+                         selection: model.binding(\.answerLanguage),
+                         options: [nil] + MobileLanguages.codes.map(Optional.some),
+                         title: { code in code.map { Locale.current.localizedString(forLanguageCode: $0)?.capitalized ?? $0 } ?? "Same as iPhone" })
+                    .accessibilityIdentifier("setting-languages")
             }
             .settingsRow()
             Section {

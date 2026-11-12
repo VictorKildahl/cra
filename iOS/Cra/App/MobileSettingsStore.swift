@@ -15,6 +15,7 @@ final class MobileSettingsStore {
         } else {
             value = MobileSettings()
         }
+        AnswerLanguage.setting = value.answerLanguage
     }
 
     func update(_ change: (inout MobileSettings) -> Void) {
@@ -22,6 +23,7 @@ final class MobileSettingsStore {
         change(&next)
         guard next != value else { return }
         value = next
+        AnswerLanguage.setting = next.answerLanguage
         if let data = try? JSONEncoder().encode(next) { try? data.write(to: fileURL, options: .atomic) }
         onChange?()
     }

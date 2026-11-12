@@ -876,3 +876,32 @@ final class AppIconDockTests: BrowserTestCase {
         keep("icon-dock")
     }
 }
+
+final class LanguagesTests: BrowserTestCase {
+    /// App Settings ▸ Languages follows the iPhone until a language is picked, and keeps it.
+    func testLanguagesKeepsTheChosenLanguage() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["bar-settings"].waitForExistence(timeout: 5))
+        app.buttons["bar-settings"].tap()
+        let menu = app.buttons["setting-languages"]
+        XCTAssertTrue(app.buttons["setting-default-browser"].waitForExistence(timeout: 5))
+        for _ in 0..<3 where !menu.isHittable { app.swipeUp() }
+        XCTAssertTrue(menu.waitForExistence(timeout: 5))
+        XCTAssertEqual(menu.label, "Same as iPhone")
+        menu.tap()
+        let french = app.buttons["French"].firstMatch
+        XCTAssertTrue(french.waitForExistence(timeout: 5))
+        french.tap()
+        expectation(for: NSPredicate(format: "label == 'French'"), evaluatedWith: menu)
+        waitForExpectations(timeout: 5)
+        app.buttons["Done"].tap()
+        XCTAssertFalse(menu.waitForExistence(timeout: 1))
+        sleep(1)
+        app.buttons["bar-settings"].tap()
+        XCTAssertTrue(app.buttons["setting-default-browser"].waitForExistence(timeout: 5))
+        for _ in 0..<3 where !app.buttons["setting-languages"].isHittable { app.swipeUp() }
+        XCTAssertEqual(app.buttons["setting-languages"].label, "French")
+    }
+}

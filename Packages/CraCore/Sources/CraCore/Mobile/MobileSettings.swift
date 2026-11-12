@@ -121,6 +121,9 @@ public struct MobileSettings: Codable, Equatable {
     /// "Browse for Me" picked as the search engine: a search makes a Browse for Me page, while
     /// `searchEngine` still gives the suggestions and takes the search when no answer comes.
     public var searchesWithBrowseForMe = false
+    /// App Settings ▸ Languages: what Browse for Me, summaries and Translate answer in, as a
+    /// language code; nil follows the iPhone's language.
+    public var answerLanguage: String?
 
     public init() {}
 
@@ -136,7 +139,7 @@ public struct MobileSettings: Codable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case searchEngine, archiveAfter, opensKeyboardOnLaunch, openAppLinksIn, siteDefaults, siteOverrides, hasSeenOnboarding, searchesWithBrowseForMe
+        case searchEngine, archiveAfter, opensKeyboardOnLaunch, openAppLinksIn, siteDefaults, siteOverrides, hasSeenOnboarding, searchesWithBrowseForMe, answerLanguage
     }
 
     public init(from decoder: Decoder) throws {
@@ -149,6 +152,7 @@ public struct MobileSettings: Codable, Equatable {
         siteOverrides = try c.decodeIfPresent([String: MobileSiteOverride].self, forKey: .siteOverrides) ?? [:]
         hasSeenOnboarding = try c.decodeIfPresent(Bool.self, forKey: .hasSeenOnboarding) ?? false
         searchesWithBrowseForMe = try c.decodeIfPresent(Bool.self, forKey: .searchesWithBrowseForMe) ?? false
+        answerLanguage = (try? c.decodeIfPresent(String.self, forKey: .answerLanguage)).flatMap { MobileLanguages.codes.contains($0) ? $0 : nil }
     }
 
     /// What applies on `host`: the site's own choices over the global ones.
@@ -167,5 +171,28 @@ public struct MobileSettings: Codable, Equatable {
     public static func siteKey(_ host: String) -> String {
         let lower = host.lowercased()
         return lower.hasPrefix("www.") ? String(lower.dropFirst(4)) : lower
+    }
+}
+
+/// The languages answers can be written in: those Apple Intelligence's on-device model writes
+/// (Arc Search's own list was not seen).
+public enum MobileLanguages {
+    public static let codes = ["en", "da", "de", "es", "fr", "it", "ja", "ko", "nb", "nl", "pt", "sv", "tr", "vi", "zh"]
+
+    /// The language answers are written in: the setting, else the first of the iPhone's
+    /// languages that the model writes, else English.
+    public static func answerCode(setting: String?, preferred: [String]) -> String {
+        if let setting, codes.contains(setting) { return setting }
+        for identifier in preferred {
+            let code = String(identifier.prefix { $0 != "-" && $0 != "_" }).lowercased()
+            let normalized = code == "no" || code == "nn" ? "nb" : code
+            if codes.contains(normalized) { return normalized }
+        }
+        return "en"
+    }
+
+    /// The language's name in English, for the model's instructions ("Danish").
+    public static func englishName(_ code: String) -> String {
+        Locale(identifier: "en").localizedString(forLanguageCode: code) ?? "English"
     }
 }

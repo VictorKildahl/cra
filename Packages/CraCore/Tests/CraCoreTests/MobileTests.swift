@@ -884,3 +884,18 @@ struct MobileAppLinksTests {
         #expect(!MobileAppLinks.browser.offersApp(isLinkTap: true, isMainFrame: true, from: "https://a.example/", to: "https://www.youtube.com/"))
     }
 }
+
+/// App Settings ▸ Languages: what the answers are written in.
+struct MobileLanguagesTests {
+    @Test func answersFollowTheSettingThenThePhone() throws {
+        #expect(MobileLanguages.answerCode(setting: nil, preferred: ["da-DK", "en-US"]) == "da")
+        #expect(MobileLanguages.answerCode(setting: nil, preferred: ["fo-FO", "nn-NO"]) == "nb", "the first language the model writes")
+        #expect(MobileLanguages.answerCode(setting: nil, preferred: ["fo-FO"]) == "en")
+        #expect(MobileLanguages.answerCode(setting: "ja", preferred: ["da-DK"]) == "ja")
+        #expect(MobileLanguages.englishName("da") == "Danish")
+        let old = try JSONDecoder().decode(MobileSettings.self, from: Data(#"{"answerLanguage":"xx"}"#.utf8))
+        #expect(old.answerLanguage == nil, "an unknown language follows the phone")
+        let kept = try JSONDecoder().decode(MobileSettings.self, from: Data(#"{"answerLanguage":"fr"}"#.utf8))
+        #expect(kept.answerLanguage == "fr")
+    }
+}

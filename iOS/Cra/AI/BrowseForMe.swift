@@ -29,10 +29,7 @@ enum BrowseForMe {
         case failed
     }
 
-    private static var language: String {
-        let code = Locale.preferredLanguages.first.flatMap { Locale(identifier: $0).language.languageCode?.identifier } ?? "en"
-        return Locale(identifier: "en").localizedString(forLanguageCode: code) ?? "English"
-    }
+    private static var language: String { AnswerLanguage.englishName }
 
     private static let session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral

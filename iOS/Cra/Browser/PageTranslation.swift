@@ -25,7 +25,7 @@ extension BrowserViewController {
                 // Tests: capitals stand in for another language, no model needed.
                 return self.finishTranslation(page, texts.map { $0.uppercased() })
             }
-            let target = Locale.current.language
+            let target = Locale.Language(identifier: AnswerLanguage.code)
             let recognizer = NLLanguageRecognizer()
             recognizer.processString(MobileTranslate.languageSample(texts))
             guard let detected = recognizer.dominantLanguage else {
