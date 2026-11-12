@@ -23,7 +23,7 @@ struct ExtensionIconsTests {
         // Keys that aren't sizes are ignored; nothing left is no icon.
         (["16": "a", "large": "x", "0": "z"], ["a"]),
         ([:], []),
-    ])
+    ] as [([String: String], [String])])
     func choice(icons: [String: String], files: [String]) {
         #expect(ExtensionIcons.files(icons, points: 16) == files)
     }
