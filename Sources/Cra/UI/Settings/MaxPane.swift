@@ -231,8 +231,8 @@ private struct Squiggle: Shape {
     }
 }
 
-/// Arc's Max picture band (684 × ≈125, blue, the word and some flowers, ending in a wavy edge), drawn with Cra's own
-/// lettering: the system's rounded face.
+/// Arc's Max picture band (684 × ≈125, blue, some flowers, ending in a wavy edge) with Cra's mark and "Max" in the
+/// middle (Victor, 12 Nov 2026), in the system's rounded face.
 private struct MaxBanner: View {
     private static let blue = Color(.sRGB, red: 0.2, green: 0.235, blue: 1)
     private static let pink = Color(.sRGB, red: 1, green: 0.62, blue: 0.62)
@@ -240,12 +240,16 @@ private struct MaxBanner: View {
     var body: some View {
         ZStack {
             Self.blue
-            // Flowers at the places Arc's sit, some cut by the band's edges.
-            ForEach(Array([(-300, -8, 30.0), (-195, -38, 14.0), (-130, 28, 44.0), (-95, -16, 26.0), (95, 4, 20.0), (190, -24, 30.0), (275, 22, 24.0), (340, -26, 36.0)].enumerated()), id: \.offset) { _, f in
+            // Flowers round the edges, some cut by them, clear of the mark and the word.
+            ForEach(Array([(-300, -8, 30.0), (-240, -38, 14.0), (-200, 28, 44.0), (-160, -30, 22.0), (165, 8, 20.0), (210, -30, 30.0), (275, 22, 24.0), (340, -26, 36.0)].enumerated()), id: \.offset) { _, f in
                 Flower().fill(Self.pink).frame(width: f.2, height: f.2).offset(x: CGFloat(f.0), y: CGFloat(f.1))
             }
-            Text("MAX").font(.system(size: 52, weight: .black, design: .rounded)).foregroundStyle(.white)
-                .shadow(color: Self.blue, radius: 0, x: 2, y: 2)
+            HStack(spacing: 10) {
+                BrandMark(size: 64)
+                Text("Max").font(.system(size: 52, weight: .black, design: .rounded)).foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.18), radius: 0, x: 2, y: 2)
+            }
+            .offset(y: -3)
         }
         .frame(height: 125)
         .clipShape(SettingsScallopedBand())

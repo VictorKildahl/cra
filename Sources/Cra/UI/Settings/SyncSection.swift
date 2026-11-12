@@ -146,10 +146,3 @@ struct SyncSection: View {
         if let summary = sync.summary(ofBundleIn: url) { importing = (url, summary) } else { notice = "The folder holds no Cra settings." }
     }
 }
-
-/// The first tab, in the place Arc gives its Account: Cra has no account, its sync is iCloud or a folder.
-struct SyncPane: View {
-    var body: some View {
-        SettingsCardPane { SyncSection() }
-    }
-}

@@ -2353,7 +2353,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     // MARK: Windows
 
-    /// Settings opened on `pane` (the command bar's Search Settings… opens Advanced, #314).
+    /// Settings opened on `tab` (the command bar's Search Settings… opens Profiles, where the engine and the
+    /// suggestions switch are since #372; it opened Advanced before, #314).
     func showSettingsWindow(on tab: SettingsTab) {
         showSettingsWindow()
         settingsController?.show(tab)

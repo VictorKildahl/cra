@@ -24,7 +24,8 @@ enum SettingsMetrics {
 }
 
 /// Arc's Settings colours as they read in its window captures (raw Display P3 bytes, dark and light). The
-/// window follows the system appearance: the navy is the dark one.
+/// window follows the system appearance. Victor (12 Nov 2026): not Arc's navy; the window keeps the
+/// system's window colour Cra's Settings had before, with the cards and hairlines laid over it as before.
 enum SettingsPalette {
     private static func p3(_ r: Int, _ g: Int, _ b: Int) -> NSColor {
         NSColor(displayP3Red: CGFloat(r) / 255, green: CGFloat(g) / 255, blue: CGFloat(b) / 255, alpha: 1)
@@ -32,18 +33,20 @@ enum SettingsPalette {
     private static func dynamic(dark: NSColor, light: NSColor) -> NSColor {
         NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light }
     }
+    private static func white(_ a: CGFloat) -> NSColor { NSColor.white.withAlphaComponent(a) }
+    private static func black(_ a: CGFloat) -> NSColor { NSColor.black.withAlphaComponent(a) }
 
-    static let window = dynamic(dark: p3(31, 30, 53), light: p3(255, 255, 255))
+    static let window = NSColor.windowBackgroundColor
     /// The hairline under the tabs.
-    static let tabLine = dynamic(dark: p3(35, 35, 35), light: p3(230, 230, 230))
-    static let card = dynamic(dark: p3(34, 33, 56), light: p3(251, 251, 251))
+    static let tabLine = dynamic(dark: white(0.08), light: black(0.08))
+    static let card = dynamic(dark: white(0.05), light: white(0.6))
     /// Card border and the hairlines between rows.
-    static let hairline = dynamic(dark: p3(56, 55, 76), light: p3(226, 226, 226))
-    static let selectedTab = dynamic(dark: p3(38, 37, 65), light: p3(255, 255, 255))
-    static let selectedTabBorder = dynamic(dark: p3(62, 60, 118), light: p3(255, 255, 255))
+    static let hairline = dynamic(dark: white(0.1), light: black(0.1))
+    static let selectedTab = dynamic(dark: white(0.1), light: p3(255, 255, 255))
+    static let selectedTabBorder = dynamic(dark: white(0.12), light: p3(255, 255, 255))
     /// A chosen row of a list (the profiles).
-    static let selectedRow = dynamic(dark: p3(32, 38, 67), light: p3(237, 244, 255))
-    static let switchOff = dynamic(dark: p3(66, 65, 84), light: p3(224, 224, 224))
+    static let selectedRow = dynamic(dark: white(0.1), light: black(0.06))
+    static let switchOff = dynamic(dark: white(0.22), light: p3(224, 224, 224))
     static let knobOn = dynamic(dark: p3(223, 235, 255), light: p3(255, 255, 255))
     static let knobOff = dynamic(dark: p3(200, 200, 205), light: p3(255, 255, 255))
 }
