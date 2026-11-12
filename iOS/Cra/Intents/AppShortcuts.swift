@@ -5,6 +5,8 @@ import Foundation
 /// browser to do once the app is in front.
 enum LaunchAction: Equatable {
     case search(String?)
+    /// A Browse for Me page about the question (a search where the device can't make one).
+    case browseForMe(String)
     case voiceSearch
     case changeIcon
     case spaces
@@ -56,6 +58,21 @@ struct SearchIntent: AppIntent {
     }
 }
 
+struct BrowseForMeIntent: AppIntent {
+    static let title: LocalizedStringResource = "Browse for Me"
+    static let description = IntentDescription("Reads pages about your question and makes one page of the answer, on this iPhone. Without Apple Intelligence it searches instead.")
+    static let openAppWhenRun = true
+
+    @Parameter(title: "Question")
+    var query: String
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        LaunchAction.perform(.browseForMe(query))
+        return .result()
+    }
+}
+
 struct VoiceSearchIntent: AppIntent {
     static let title: LocalizedStringResource = "Voice Search"
     static let description = IntentDescription("Opens Cra listening for what to search for.")
@@ -71,6 +88,7 @@ struct VoiceSearchIntent: AppIntent {
 struct CraShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(intent: SearchIntent(), phrases: ["Search with \(.applicationName)"], shortTitle: "Search", systemImageName: "magnifyingglass")
+        AppShortcut(intent: BrowseForMeIntent(), phrases: ["Browse for Me with \(.applicationName)"], shortTitle: "Browse for Me", systemImageName: "sparkles")
         AppShortcut(intent: VoiceSearchIntent(), phrases: ["Voice Search with \(.applicationName)"], shortTitle: "Voice Search", systemImageName: "mic.fill")
     }
 }

@@ -559,6 +559,11 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             } else {
                 setSearching(true, incognito: false)
             }
+        case .browseForMe(let question):
+            let query = MobileBrowseForMe.query(fromSelection: question)
+            guard !query.isEmpty else { return setSearching(true, incognito: false) }
+            incognitoSearch = false
+            open(BrowseForMe.isAvailable ? MobileBrowseForMe.tabAddress(query: query) : settings.value.searchEngine.searchURL(query))
         case .voiceSearch:
             setSearching(false)
             beginVoiceSearch(handsFree: true)
