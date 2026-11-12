@@ -97,6 +97,18 @@ final class SpaceListView: NSView, NSDraggingSource {
         for l in all.allObjects where l.ui === ui { l.refreshHover() }
     }
 
+    /// Measure only in the window that initiated the pin, using its layout at completion time.
+    static func tidyTitleLayout(for id: UUID, window windowID: UUID) -> TidyTitleLayout? {
+        for list in all.allObjects where TidyTitles.usesSidebarLayout(windowID: list.ui.windowID,
+            originWindowID: windowID, hasWindow: list.window != nil, showsNewTab: list.showsNewTab) {
+            list.layoutSubtreeIfNeeded()
+            if let row = list.views[.item(id)] as? TabRowView, row.model?.id == id {
+                return row.tidyTitleLayout
+            }
+        }
+        return nil
+    }
+
     /// Arc's Spaces page lists a space's tabs without the New Tab row.
     var showsNewTab = true { didSet { if showsNewTab != oldValue { scheduleSync() } } }
 

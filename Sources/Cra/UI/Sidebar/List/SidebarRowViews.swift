@@ -868,6 +868,11 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    var tidyTitleLayout: TidyTitleLayout {
+        layoutSubtreeIfNeeded()
+        return TidyTitleLayout(label: titleLabel, inset: SidebarText.inset)
+    }
+
     func apply(_ m: TabRowModel) {
         guard m != model else { return }
         // A subtitle coming or going moves the title (developer mode on a live tab, GitHub #88).

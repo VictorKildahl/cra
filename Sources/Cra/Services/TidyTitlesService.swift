@@ -32,8 +32,13 @@ final class TidyTitlesService {
     static let subtitle = "Double-click to rename"
 
     @ObservationIgnored private var pending: Set<UUID> = []
+    @ObservationIgnored private let titleLayout: @MainActor (UUID, UUID) -> TidyTitleLayout?
 
-    private init() {}
+    init(titleLayout: @escaping @MainActor (UUID, UUID) -> TidyTitleLayout? = { id, window in
+        SpaceListView.tidyTitleLayout(for: id, window: window)
+    }) {
+        self.titleLayout = titleLayout
+    }
 
     /// The store saw a tab pinned. Ask for a name if the setting is on and the model can run.
     func tabPinned(_ id: UUID, store: SidebarStore) {
@@ -45,6 +50,8 @@ final class TidyTitlesService {
             Locale(identifier: "en_US").localizedString(forLanguageCode: $0)
         } ?? "English"
         let prompt = TidyTitles.prompt(title: title, url: tab.url, language: language)
+        // Programmatic pins fall back to the store's active window at pin time.
+        let originWindowID = store.activeWindowID
         pending.insert(id)
         let started = Date()
         Task { @MainActor in
@@ -52,14 +59,10 @@ final class TidyTitlesService {
             let answer = await Self.ask(prompt, title: title)
             let rest = Self.delayAfterPin - Date().timeIntervalSince(started)
             if rest > 0 { try? await Task.sleep(for: .seconds(rest)) }
-            // Without row metrics, select the smallest measured candidate.
             let candidates = answer.map(TidyTitles.candidates) ?? []
-            let font = NSFont.systemFont(ofSize: 14)
-            let measured = candidates.map {
-                (title: $0, width: Double(($0 as NSString).size(withAttributes: [.font: font]).width))
-            }
+            let layout = titleLayout(id, originWindowID) ?? .fallback
             // Only if nothing changed meanwhile: still pinned, still unnamed, same page title.
-            guard let name = TidyTitles.select(measured, availableWidth: 0, shown: shown),
+            guard let name = layout.select(candidates, shown: shown),
                   let now = store.item(id), now.title == nil, store.isPinned(id),
                   now.tab.map({ TidyTitleRules.arc.tidy(now.displayTitle, url: $0.url) }) == shown else { return }
             store.rename(id, to: name)

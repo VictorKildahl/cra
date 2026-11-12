@@ -72,6 +72,11 @@ public enum TidyTitles {
         return title
     }
 
+    /// Library's Spaces cards reuse tab IDs and window IDs but do not represent the sidebar.
+    public static func usesSidebarLayout(windowID: UUID, originWindowID: UUID, hasWindow: Bool, showsNewTab: Bool) -> Bool {
+        windowID == originWindowID && hasWindow && showsNewTab
+    }
+
     static func host(_ url: String) -> String {
         guard let h = URL(string: url)?.host?.lowercased() else { return "" }
         return h.hasPrefix("www.") ? String(h.dropFirst(4)) : h

@@ -89,6 +89,7 @@ the save panel.
     scripts/test.sh                  # everything below except the smoke test, in seconds
     scripts/test.sh core             # only Packages/CraCore
     scripts/test-folder-glyph.sh      # folder emblems: layer projection, colors and Retina resolution
+    scripts/test-tidy-title-layout.sh # pinned title candidates: native font, padding and current width
     Tests/smoke-launch.sh            # launches build/Cra.app three times, about 30 s
     scripts/scenario.sh all          # user journeys in build/Cra.app, about 6 minutes
     scripts/scenario.sh sleep-tabs   # one of them (Tests/Scenarios/<name>.scenario)
@@ -122,6 +123,9 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-folder-glyph.sh`: the standalone folder component's real AppKit layers and image
   pixels: emblems follow the front panel's perspective, keep their colors and proportions, and
   update at 1x/Retina. No CEF or visible window; coverage uses the same harness as `scripts/test.sh`.
+- `scripts/test-tidy-title-layout.sh`: native pinned-title measurement against the current text
+  field's font and drawable width, including resize, competing Library/other-window sources and
+  unmaterialized-row fallback. No CEF or visible window.
 - `scripts/test-window-content-grabber.sh`: the page-top grabber on AppKit windows:
   clicks reach the page immediately, non-arrow cursors keep the gesture, native resize edges and rounded corners stay free,
   a child page's drag starts in its browser window's coordinates, and the page stays outside WindowServer's native drag region.
