@@ -2201,6 +2201,22 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
     }
 
+    /// The tab whose page `event` landed on: a Chromium page in its own host window, or the pane
+    /// under the point for a page in this window (an embedded Chromium page, whose view lives in
+    /// the pane card and not its host window, or an Easel or WebKit page). A swipe goes to the
+    /// page under the pointer, which in Split View needn't be the focused pane. nil anywhere else
+    /// (the sidebar, a panel).
+    func pageTab(under event: NSEvent) -> UUID? {
+        guard let target = event.window else { return nil }
+        return browsers.visibleTabIDs.first { id in
+            guard let browser = browsers.runtime(for: id)?.browser else { return false }
+            if let host = browser.hostWindow, host === target { return true }
+            let embedded = browser.hostWindow.flatMap { EmbeddedPages.isHost($0) ? EmbeddedPages.pageViews(of: $0)?.last : nil }
+            let view = embedded ?? browser.containerView
+            return view.window === target && view.bounds.contains(view.convert(event.locationInWindow, from: nil))
+        }
+    }
+
     /// Whether Back does anything on tab `id` showing `browser` (Arc: canNavigateBack).
     private func canNavigateBack(_ id: UUID?, _ browser: CraBrowser?) -> Bool {
         guard let id, let browser else { return false }

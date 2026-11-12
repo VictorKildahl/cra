@@ -7,7 +7,8 @@
 /// An MX Master with Logi Options+ never emits those buttons. Options+ takes the HID report and,
 /// when Back is assigned the keystroke ⌥←, types it (and ⌥→ for Forward). That is not a mouse
 /// event, and a key's window is the focused page, so the sidebar
-/// check has to be the pointer's, not the event's.
+/// check has to be the pointer's, not the event's. With Options+'s own Back and Forward
+/// assignments it posts a swipe event instead (`offset(swipeDeltaX:deltaY:)`).
 public enum MouseButtonSpaceSwitch {
     /// AppKit's `buttonNumber` for a mouse's back button (the fourth button).
     public static let back = 3
@@ -46,6 +47,16 @@ public enum MouseButtonSpaceSwitch {
         if key == KeyChord.left || keyCode == backKeyCode { return -1 }
         if key == KeyChord.right || keyCode == forwardKeyCode { return 1 }
         return nil
+    }
+
+    /// The step a swipe event makes, −1 for back and +1 for forward, or nil for an up, down or
+    /// too small swipe. Logi Options+'s default Back and Forward (its OSX_GESTURE_BACK/FORWARD
+    /// actions) post this event instead of button 3 or 4, as a three-finger swipe between pages
+    /// on a trackpad does. AppKit's sign: left is positive, so deltaX 1 is back. Chromium's page
+    /// view hands `swipeWithEvent:` to Chrome's browser window, which an embedded page lacks.
+    public static func offset(swipeDeltaX dx: Double, deltaY dy: Double) -> Int? {
+        guard abs(dx) > 0.5, abs(dx) > abs(dy) else { return nil }
+        return dx > 0 ? -1 : 1
     }
 
     /// What ⌥← or ⌥→ does, or nil to leave the key to whoever has it. A text field always keeps

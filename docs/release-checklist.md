@@ -75,6 +75,10 @@ built release app with a test profile. Note anything that fails in the release's
   with Logi Options+ does not: set Back/Forward to the keystrokes ⌥← and ⌥→ (a plain shortcut, not
   the smart Back gesture) on the Cra profile. Console should log `Cra: mouse key back:`. The
   scenario never sees a real button or that key, so only this check proves the monitor does.
+  With Options+'s own Back and Forward assignments (the gesture, an MX Ergo's default) the same
+  holds: Console logs `Cra: mouse swipe back:`. In Split View the pane under the pointer goes back,
+  not the focused one, and a tab a link opened closes back to its opener. A test can't make a swipe
+  event, so only this check proves the swipe monitor.
 - **#260:** on a built-in trackpad, every space change by a two-finger swipe over the sidebar
   ticks once: a short flick, a slow drag past half (the tick comes at half), and a swipe into
   the Library and back out. A short drag that settles back is silent; a sideways wheel never
