@@ -804,10 +804,15 @@ public:
         // chrome://omnibox-popup document, about 45 MB a tab (GPU surfaces and one shared WebUI
         // renderer). Cra never shows Chrome's omnibox; the views popup it falls back to is built
         // only when the omnibox opens.
+        // AutofillAiWalletPrivatePasses (Google Wallet passes in autofill, which needs a Google
+        // account Cra doesn't sign in to) makes every new page's autofill client ask
+        // LocalAuthentication, synchronously, whether Touch ID re-auth is available
+        // (ChromeAutofillClient::SetReauthAvailability): an XPC round trip on the main thread
+        // before the page's first navigation starts.
         std::string disabled = command_line->GetSwitchValue("disable-features");
         command_line->AppendSwitchWithValue("disable-features",
             (disabled.empty() ? "" : disabled + ",") + "WebRtcHideLocalIpsWithMdns,"
-            + "WebUIOmniboxPopup,WebUIOmniboxAimPopup");
+            + "WebUIOmniboxPopup,WebUIOmniboxAimPopup,AutofillAiWalletPrivatePasses");
         // --load-extension loads after the restored tabs start loading. The first extension
         // with webRequest or declarativeNetRequest makes Chromium reset the profile's URL
         // loader factories (WebRequestAPI::UpdateMayHaveProxies), which strands a navigation
@@ -819,6 +824,14 @@ public:
             // Tab sleeping discards a page in place (Cra.discard), as Arc's Chromium does: the tab
             // keeps its back/forward list and scroll position, and loads again when shown (#153).
             + "WebContentsDiscard,"
+            // Background pages past the five used most recently are frozen (their timers and
+            // scripts stop) and thawed for 5 s each minute, Chromium's own policy behind this
+            // feature. Pages that play sound, capture, hold a Web Lock, use WebRTC or a device,
+            // may notify, or hold a WebSocket or WebTransport connection (Cra's CEF patch
+            // page-live-connections.patch) keep running. Cra's own 30-minute vote (Arc's
+            // timeToFreezeTab) still applies on top. At 20 idle tabs this is most of the
+            // renderers' wakeups.
+            + "InfiniteTabsFreezing,"
             // Chrome keeps its video PiP's origin strip (favicon, host, a dark top scrim) on screen
             // until the person clicks or types in that window, unless the page is file:// or has
             // high media engagement (VideoOverlayWindowViews::UpdateControlsVisibility). Cra's

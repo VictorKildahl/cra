@@ -1,0 +1,97 @@
+diff --git a/components/performance_manager/freezing/freezer.cc b/components/performance_manager/freezing/freezer.cc
+--- a/components/performance_manager/freezing/freezer.cc
++++ b/components/performance_manager/freezing/freezer.cc
+@@ -8,6 +8,7 @@
+ #include "base/memory/weak_ptr.h"
+ #include "base/task/task_traits.h"
+ #include "components/performance_manager/public/graph/page_node.h"
++#include "content/public/browser/cra_live_connection.h"
+ #include "content/public/browser/visibility.h"
+ #include "content/public/browser/web_contents.h"
+ 
+@@ -24,6 +25,12 @@
+     return;
+   }
+ 
++  // Cra: nor one holding a WebSocket or WebTransport connection, which the
++  // freeze would close (content::CraPageHasOpenedLiveConnection).
++  if (content::CraPageHasOpenedLiveConnection(contents.get())) {
++    return;
++  }
++
+   contents->SetPageFrozen(true);
+ }
+ 
+diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser/web_contents/web_contents_impl.cc
+--- a/content/browser/web_contents/web_contents_impl.cc
++++ b/content/browser/web_contents/web_contents_impl.cc
+@@ -113,6 +113,7 @@
+ #include "content/browser/renderer_host/navigation_request.h"
+ #include "content/browser/renderer_host/page_impl.h"
+ #include "content/browser/renderer_host/render_frame_host_impl.h"
++#include "content/public/browser/cra_live_connection.h"
+ #include "content/browser/renderer_host/render_frame_host_manager.h"
+ #include "content/browser/renderer_host/render_frame_proxy_host.h"
+ #include "content/browser/renderer_host/render_process_host_impl.h"
+@@ -4446,6 +4447,23 @@
+   ForEachFrameTree([](FrameTree& frame_tree) { frame_tree.StopLoading(); });
+   GetPrerenderHostRegistry()->CancelAllHosts(PrerenderFinalStatus::kStop);
+   observers_.NotifyObservers(&WebContentsObserver::NavigationStopped);
++}
++
++bool CraPageHasOpenedLiveConnection(WebContents* contents) {
++  using Feature = blink::scheduler::WebSchedulerTrackedFeature;
++  bool found = false;
++  static_cast<WebContentsImpl*>(contents)
++      ->GetPrimaryMainFrame()
++      ->ForEachRenderFrameHostImpl([&found](RenderFrameHostImpl* rfh) {
++        const auto features = rfh->GetBackForwardCacheDisablingFeatures();
++        if (features.Has(Feature::kWebSocket) ||
++            features.Has(Feature::kWebSocketSticky) ||
++            features.Has(Feature::kWebTransport) ||
++            features.Has(Feature::kWebTransportSticky)) {
++          found = true;
++        }
++      });
++  return found;
+ }
+ 
+ void WebContentsImpl::SetPageFrozen(bool frozen) {
+diff --git a/content/public/browser/BUILD.gn b/content/public/browser/BUILD.gn
+--- a/content/public/browser/BUILD.gn
++++ b/content/public/browser/BUILD.gn
+@@ -124,6 +124,7 @@
+     "context_menu_params.h",
+     "cookie_access_details.cc",
+     "cookie_access_details.h",
++    "cra_live_connection.h",
+     "cookie_store_factory.h",
+     "cors_origin_pattern_setter.cc",
+     "cors_origin_pattern_setter.h",
+diff --git a/content/public/browser/cra_live_connection.h b/content/public/browser/cra_live_connection.h
+new file mode 100644
+--- /dev/null
++++ b/content/public/browser/cra_live_connection.h
+@@ -0,0 +1,22 @@
++// Cra: a page's live connections, for Cra's tab freezing.
++
++#ifndef CONTENT_PUBLIC_BROWSER_CRA_LIVE_CONNECTION_H_
++#define CONTENT_PUBLIC_BROWSER_CRA_LIVE_CONNECTION_H_
++
++#include "content/common/content_export.h"
++
++namespace content {
++
++class WebContents;
++
++// Whether a frame of the page, or a dedicated worker of one, has opened a
++// WebSocket or WebTransport connection (Blink's sticky back/forward cache
++// features, reported whether or not the cache is on). Freezing a page fails its
++// open WebSockets (DOMWebSocket::ContextLifecycleStateChanged), so a chat or
++// mail page frozen in the background would lose its connection; Cra's freezing
++// leaves such a page running.
++CONTENT_EXPORT bool CraPageHasOpenedLiveConnection(WebContents* contents);
++
++}  // namespace content
++
++#endif  // CONTENT_PUBLIC_BROWSER_CRA_LIVE_CONNECTION_H_

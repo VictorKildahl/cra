@@ -1578,6 +1578,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let t = dict["selectTab"].flatMap(UUID.init(uuidString:)) { store.selectTab(t, window: main.windowID); return }
             // Tab freezing with a short threshold (seconds) from now on, so it can be tried without
             // waiting: the minute's pass would otherwise take the votes back.
+            if dict["freezingState"] != nil { for w in mainWindows { w.browsers.logFreezingStates() }; return }
             if let s = dict["freezeTabs"].flatMap(Double.init) {
                 freezeAfter = s
                 for w in mainWindows { w.browsers.freezeIdleTabs(hiddenLongerThan: s) }

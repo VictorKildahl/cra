@@ -19,10 +19,9 @@ index 2018b0dc0..1045118b4 100644
      "//components/url_formatter",
      "//components/user_prefs",
 diff --git a/cef/libcef/browser/devtools/devtools_controller.cc b/cef/libcef/browser/devtools/devtools_controller.cc
-index c60f22d1a..254c8ee7d 100644
 --- a/cef/libcef/browser/devtools/devtools_controller.cc
 +++ b/cef/libcef/browser/devtools/devtools_controller.cc
-@@ -4,11 +4,645 @@
+@@ -4,12 +4,663 @@
  
  #include "cef/libcef/browser/devtools/devtools_controller.h"
  
@@ -40,6 +39,8 @@ index c60f22d1a..254c8ee7d 100644
 +#include "base/strings/string_number_conversions.h"
 +#include "base/supports_user_data.h"
 +#include "base/task/sequenced_task_runner.h"
++#include "base/task/thread_pool.h"
++#include "partition_alloc/memory_reclaimer.h"
  #include "cef/libcef/browser/devtools/devtools_util.h"
  #include "cef/libcef/browser/thread_util.h"
 +#include "chrome/browser/picture_in_picture/auto_picture_in_picture_tab_helper.h"
@@ -58,6 +59,7 @@ index c60f22d1a..254c8ee7d 100644
 +#include "components/translate/core/browser/translate_manager.h"
 +#include "components/translate/core/browser/translate_prefs.h"
 +#include "content/browser/media/session/media_session_impl.h"
++#include "content/public/browser/cra_live_connection.h"
  #include "content/public/browser/devtools_agent_host.h"
 +#include "content/public/browser/navigation_controller.h"
 +#include "content/public/browser/navigation_entry.h"
@@ -72,7 +74,7 @@ index c60f22d1a..254c8ee7d 100644
 +#include "extensions/browser/webstore_installer.h"
 +#include "extensions/common/extension.h"
 +#include "extensions/common/mojom/manifest.mojom-shared.h"
-+
+ 
 +namespace {
 +
 +// Cra: a page's freezing vote, held while the client asks for it, like Arc's
@@ -555,10 +557,22 @@ index c60f22d1a..254c8ee7d 100644
 +       *method != "Cra.extensionSidePanel" && *method != "Cra.getHistory" &&
 +       *method != "Cra.restoreHistory" && *method != "Cra.getTranslateState" &&
 +       *method != "Cra.translatePage" && *method != "Cra.revertTranslation" &&
-+       *method != "Cra.neverTranslateSite")) {
++       *method != "Cra.neverTranslateSite" &&
++       *method != "Cra.reclaimMemory")) {
 +    return false;
 +  }
 +  *message_id = *id;
++  if (*method == "Cra.reclaimMemory") {
++    // Cra: closing tabs leaves the browser process's allocator holding the
++    // pages they freed (renderers reclaim theirs when they go to the
++    // background; the browser process never does). Off the UI thread: it
++    // walks every partition.
++    base::ThreadPool::PostTask(
++        FROM_HERE, {base::TaskPriority::BEST_EFFORT},
++        base::BindOnce(
++            [] { ::partition_alloc::MemoryReclaimer::Instance()->ReclaimAll(); }));
++    return true;
++  }
 +  if (*method == "Cra.getTranslateState" || *method == "Cra.translatePage" ||
 +      *method == "Cra.revertTranslation" ||
 +      *method == "Cra.neverTranslateSite") {
@@ -622,6 +636,8 @@ index c60f22d1a..254c8ee7d 100644
 +  }
 +  if (*method == "Cra.getFreezingState") {
 +    result->Set("vote", !!contents->GetUserData(kCraFreezingVoteKey));
++    result->Set("liveConnection",
++                content::CraPageHasOpenedLiveConnection(contents));
 +    const performance_manager::PageNode* page =
 +        performance_manager::PerformanceManager::
 +            GetPrimaryPageNodeForWebContents(contents)
@@ -665,10 +681,11 @@ index c60f22d1a..254c8ee7d 100644
 +}
 +
 +}  // namespace
- 
++
  CefDevToolsController::CefDevToolsController(
      content::WebContents* inspected_contents)
-@@ -30,6 +664,38 @@ CefDevToolsController::~CefDevToolsController() {
+     : inspected_contents_(inspected_contents), weak_ptr_factory_(this) {
+@@ -30,6 +681,38 @@
  bool CefDevToolsController::SendDevToolsMessage(
      const std::string_view& message) {
    CEF_REQUIRE_UIT();
