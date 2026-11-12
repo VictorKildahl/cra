@@ -142,9 +142,15 @@ to Markdown or `docs/` alone runs nothing.
   turning into an × on its spring.
 - `scripts/test-easel-canvas.sh`: the real `EaselSheetView` in an off-screen window, driven with
   synthetic mouse and key events: one click picks a text block, a double click edits it, Return and
-  Escape end editing, Delete removes it, its size pill follows a drag. Then `EaselBrowser` against
-  a stub `CraBrowser`: Peek's opaque canvas, and the clear page and dark bar it reports to the tab
-  that takes it over with ⤢.
+  Escape end editing, Delete removes it, its size pill follows a drag. Undo and Redo, copy and
+  paste, the object and canvas menus, the colour picker, a pasted address as a link card, the
+  alignment guides and a live capture (through a fake `EaselLive`); every kind of item drawn into
+  an sRGB bitmap and its pixels compared with Arc's colours. Then `EaselBrowser` against a stub
+  `CraBrowser`: Peek's opaque canvas, the clear page and dark bar it reports to the tab that takes
+  it over with ⤢, and the capture menu's New Easel and Send To… writing their easel files.
+  `Tests/Scenarios/easel.scenario` checks the rest in the app: `cra://debug?easelLive=<s>` (a
+  capture's live page draws onto its card), `easelLink=<url>` (a link card reads its page),
+  `easelDraw=1` and `easelPick=<n>` (the picker and the object menu).
 - `scripts/test-perf.sh`: the performance recorder on a real main run loop: injected stalls,
   hang files with a `sample` stack, the session marker, ownership, the recording switch
   ([performance.md](performance.md)).

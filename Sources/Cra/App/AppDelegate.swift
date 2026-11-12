@@ -94,6 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if startOnNewTab { store.selectTab(nil, window: store.activeWindowID) }
         // Before any page is made: an easel's tab opens its canvas.
         EaselBrowser.register()
+        EaselBrowser.registerServices(self)
         // Arc's Boosts: each page on a boosted site gets its boosts; an edit shows at once.
         BrowserManager.boostFor = { [store] url in
             guard store.settings.boostsEnabled else { return nil }
@@ -1112,6 +1113,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let p = dict["boostPick"] { main.debugPick(p); return }
             // captureToEasel=1: the page's screenshot, then the capture menu's New Easel.
             if let how = dict["captureToEasel"] { main.debugCaptureToEasel(send: how == "send"); return }
+            // easelLive=<s>: the open easel's first capture shows the live website; <s> seconds later
+            // cra.log says what it holds and how many pictures of the page reached the card.
+            if let wait = dict["easelLive"].flatMap(Double.init), let canvas = (main.currentBrowser as? EaselBrowser)?.canvasView {
+                canvas.debugLive(after: wait); return
+            }
+            // easelDraw=1: one of each shape on the open easel, as its tools draw them (clips, snapshots).
+            if dict["easelDraw"] != nil, let canvas = (main.currentBrowser as? EaselBrowser)?.canvasView {
+                canvas.sheetView.debugDraw(); return
+            }
+            // easelPick=<n>: the open easel's n-th item (from 0) picked; cra.log says what shows over it and its menu.
+            if let n = dict["easelPick"].flatMap(Int.init), let canvas = (main.currentBrowser as? EaselBrowser)?.canvasView {
+                canvas.debugPick(n); return
+            }
+            // easelLink=<url>: the open easel gets a link card for <url>, as a paste does; cra.log says what it read.
+            if let url = dict["easelLink"], let canvas = (main.currentBrowser as? EaselBrowser)?.canvasView {
+                canvas.debugLink(url); return
+            }
             // mcpAnswer=allow|deny: answers MCP's open "Let … use Cra?" prompt (test copies).
             if let answer = dict["mcpAnswer"] { MCPServer.shared.answerPrompt(allow: answer == "allow"); return }
             // mcpScripts=on|off: Settings ▸ Advanced ▸ Let agents run JavaScript in pages.

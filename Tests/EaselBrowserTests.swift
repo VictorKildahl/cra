@@ -28,6 +28,24 @@ enum EaselBrowserTests {
         browser.usePeekLook()
         precondition(canvas.layer!.backgroundColor!.alpha == 1, "returning to Peek restores its opaque background")
         browser.close()
+
+        // The capture menu's New Easel and Send To…: a capture that knows its page becomes a card
+        // that can go live, as big as it was on the page (at most 640 pt); without it, a picture.
+        let shot = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 800, pixelsHigh: 400, bitsPerSample: 8, samplesPerPixel: 4,
+                                    hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        let png = shot.representation(using: .png, properties: [:])!
+        let source = Easel.Capture(url: "https://example.com/", title: "Example", image: "", viewport: .init(1200, 800),
+                                   scroll: .init(0, 100), area: .init(x: 10, y: 20, width: 400, height: 200))
+        let made = EaselFiles.create(withPicture: png, source: source)!
+        guard case .capture(let c) = made.items.first?.kind else { fatalError("a capture with its page is a capture card") }
+        precondition(c.url == "https://example.com/" && c.canGoLive && !c.image.isEmpty && made.items[0].frame.width == 400,
+                     "it keeps its page and is as big as the captured area")
+        precondition(FileManager.default.fileExists(atPath: EaselFiles.pictures(made.id).appendingPathComponent(c.image).path), "its picture is saved")
+        precondition(EaselFiles.add(picture: png, to: made.id), "Send To… adds to an easel")
+        let sent = EaselFiles.load(made.id)
+        guard sent.items.count == 2, case .image = sent.items[1].kind else { fatalError("without its page a capture is a plain picture") }
+        precondition(sent.items[1].frame.y == made.items[0].frame.y + made.items[0].frame.height + 40 && sent.items[1].frame.width == 640,
+                     "it lands under what the easel holds, at most 640 pt across")
         print("Easel browser: saved drawing, Peek and expanded page colours passed")
     }
 }

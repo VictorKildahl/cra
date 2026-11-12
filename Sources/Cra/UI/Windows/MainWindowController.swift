@@ -2299,8 +2299,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// Send To… an easel: the capture goes on it, under what is there, and its tab comes forward
     /// (a new one when it has none open).
-    private func sendCapture(_ png: Data, toEasel id: UUID) {
-        guard EaselFiles.add(picture: png, to: id) else { return }
+    private func sendCapture(_ png: Data, toEasel id: UUID, source: Easel.Capture? = nil) {
+        guard EaselFiles.add(picture: png, to: id, source: source) else { return }
         CraLog.note("capture sent to an easel, which now holds \(EaselFiles.load(id).items.count) items")
         let url = Easel(id: id).url
         if let tab = store.allTabs().first(where: { $0.tab?.url == url }) {
@@ -2320,14 +2320,51 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 let o = shot.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
                 let png = (o?["data"] as? String).flatMap { Data(base64Encoded: $0) }
                 // send: Send To… the easel edited last, as if picked from its menu.
-                if send, let png, let last = EaselFiles.all().first { self?.sendCapture(png, toEasel: last.id); return }
-                self?.captureFinished(.newEasel, png)
+                // A capture of the whole visible page, so it can go live like a dragged one.
+                guard let self, let b = self.currentBrowser, let png,
+                      let rt = self.browsers.visibleRuntime, let rect = self.pageScreenRect(rt) else { self?.captureFinished(.newEasel, png); return }
+                let area = CGRect(origin: .zero, size: rect.size)
+                self.captureSource(b, rect: area, page: rect.size) { [weak self] source in
+                    if send, let last = EaselFiles.all().first { self?.sendCapture(png, toEasel: last.id, source: source); return }
+                    self?.captureFinished(.newEasel, png, in: nil, source: source)
+                }
+            }
+        }
+    }
+
+    /// Where a capture came from, for an easel (Arc's WebCard): the page's address and title, its
+    /// CSS viewport and scroll, and the captured area in CSS pixels, read from the page.
+    func captureSource(_ b: CraBrowser, rect: CGRect, page: CGSize, done: @escaping (Easel.Capture?) -> Void) {
+        let url = b.currentURL, title = b.currentTitle
+        guard Easel.webAddress(url) != nil else { done(nil); return }
+        let script = "[scrollX, scrollY, innerWidth, innerHeight]"
+        let params = (try? JSONSerialization.data(withJSONObject: ["expression": script, "returnByValue": true])).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        b.sendDevToolsMethod("Runtime.evaluate", params: params) { result, _ in
+            let v = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+                .flatMap { ($0["result"] as? [String: Any])?["value"] as? [Double] }
+            DispatchQueue.main.async {
+                guard let v, v.count == 4, page.width > 0 else { done(Easel.Capture(url: url, title: title.isEmpty ? nil : title, image: "", captured: Date())); return }
+                let k = v[2] / page.width  // CSS pixels per point (the page's zoom)
+                done(Easel.Capture(url: url, title: title.isEmpty ? nil : title, image: "", captured: Date(),
+                                   viewport: .init(v[2], v[3]), scroll: .init(v[0], v[1]),
+                                   area: .init(x: rect.minX * k, y: rect.minY * k, width: rect.width * k, height: rect.height * k)))
             }
         }
     }
 
     /// The capture menu's choice, once the overlay is down.
-    func captureFinished(_ action: CaptureOverlay.Action?, _ png: Data?, in peek: LittleWindowController? = nil) {
+    func captureFinished(_ action: CaptureOverlay.Action?, _ png: Data?, in peek: LittleWindowController? = nil,
+                         from: (browser: CraBrowser, rect: CGRect, page: CGSize)? = nil) {
+        if action == .newEasel || action == .sendToEasel, let from, let png {
+            captureSource(from.browser, rect: from.rect, page: from.page) { [weak self] source in
+                self?.captureFinished(action, png, in: peek, source: source)
+            }
+            return
+        }
+        captureFinished(action, png, in: peek, source: nil)
+    }
+
+    private func captureFinished(_ action: CaptureOverlay.Action?, _ png: Data?, in peek: LittleWindowController?, source: Easel.Capture?) {
         captureOverlay = nil
         if let peek {
             if peek.canCapturePage, action != nil || NSApp.isActive { peek.focusPage() }
@@ -2345,18 +2382,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         case .message?:
             if let png { sendCaptureViaMessages(png) }
         case .newEasel?:
-            guard let png, let easel = EaselFiles.create(withPicture: png) else { return }
+            guard let png, let easel = EaselFiles.create(withPicture: png, source: source) else { return }
             _ = store.createTab(url: easel.url, title: easel.title, select: true, window: windowID)
         case .sendToEasel?:
             guard let png else { return }
             let easels = EaselFiles.all()
             guard !easels.isEmpty else {
-                if let easel = EaselFiles.create(withPicture: png) { _ = store.createTab(url: easel.url, title: easel.title, select: true, window: windowID) }
+                if let easel = EaselFiles.create(withPicture: png, source: source) { _ = store.createTab(url: easel.url, title: easel.title, select: true, window: windowID) }
                 return
             }
             let menu = NSMenu()
             for e in easels {
-                MenuItems.add(menu, e.title) { [weak self] in self?.sendCapture(png, toEasel: e.id) }
+                MenuItems.add(menu, e.title) { [weak self] in self?.sendCapture(png, toEasel: e.id, source: source) }
             }
             menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
         case .retake?:

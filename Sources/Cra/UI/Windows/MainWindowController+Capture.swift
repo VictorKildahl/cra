@@ -51,7 +51,10 @@ extension MainWindowController {
                     return
                 }
                 let overlay = CaptureOverlay(over: source.window, pageRect: source.rect, shot: image, browser: b)
-                overlay.onFinish = { [weak self] action, png in self?.captureFinished(action, png, in: peek) }
+                overlay.onFinish = { [weak self, weak overlay, weak b] action, png in
+                    let from = b.flatMap { b in overlay?.takenRect.map { (browser: b, rect: $0, page: overlay?.pageSize ?? .zero) } }
+                    self?.captureFinished(action, png, in: peek, from: from)
+                }
                 self.captureOverlay = overlay
                 if let lift { overlay.lift(lift) }
             }

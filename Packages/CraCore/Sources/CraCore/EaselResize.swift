@@ -21,8 +21,17 @@ extension Easel {
 
     public static func resizes(_ kind: Item.Kind) -> Bool {
         switch kind {
-        case .image, .rectangle, .ellipse: return true
-        case .text, .arrow, .freehand: return false
+        case .image, .rectangle, .ellipse, .capture: return true
+        case .text, .arrow, .freehand, .link: return false
+        }
+    }
+
+    /// Pictures and captures keep their proportions as they resize; shapes don't (⇧ makes them).
+    /// Link cards keep Arc's size (no handles in Arc 1.172.2).
+    public static func keepsRatio(_ kind: Item.Kind) -> Bool {
+        switch kind {
+        case .image, .capture: return true
+        default: return false
         }
     }
 

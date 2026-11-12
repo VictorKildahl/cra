@@ -15,7 +15,7 @@ or Arc-only service), per CONTRIBUTING.md.
 | Arc feature | Where in Arc | Cra | Notes |
 |---|---|---|---|
 | Boosts (per-site CSS/JS, colours, fonts, Zap) | URL bar ✎, Library ▸ Boosts, Settings ▸ Advanced "Enable Boosts" | done | New Boost (command bar), the editor (wheel, invert, contrast/brightness/saturation, 20 fonts, size, case, Zap with its confirm popover and the shelf of zapped elements under the page (click one to unzap; "Zap, measured" below), CSS/JS code), Library ▸ Boosts, Settings ▸ Advanced switch. The Code panel's eyedropper (selector picker: outlines the element and the ones like it, then Copy selector for this / for related, Zap all related elements), hammer (Show / Hide Developer Tools) and, for JS, Refresh this Page. Sharing and the gallery are Cra's own, look only (no JS): Library ▸ Boosts and the editor's menu have Share Boost… (a crabrowser.app/boost link carrying the boost), and crabrowser.app/boosts lists `boosts/` with Open in Cra (`cra-boost:`, asked about first; `SharedBoost`, boosts/README.md). The colour wheel's recolouring is CSS filters, not Arc's own engine. The colour wheel's recolouring is CSS filters, not Arc's own engine. |
-| Easels | File ▸ New Easel ⌃⇧E, Library ▸ Easels | partial | File ▸ New Easel (⌃⇧E): canvas, title, Pointer/Image/Text/Ellipse/Rectangle/Arrow/Freehand, pictures by file, paste or drop, saved per easel. Library ▸ Easels and Window ▸ View Easels… done. The canvas shows the window's backdrop under a 50 % veil as in Arc. The toolbar strip above it takes the same veil. The capture menu's New Easel done. The capture menu's Send To… done too. The pill's + and − and Aa (Arc's four looks: bold, serif, wide, mono, in macOS's designs) work, on the title too; Duplicate (the toolbar's eighth button) done; sharing is *skip* (cloud). |
+| Easels | File ▸ New Easel ⌃⇧E, Library ▸ Easels | done | File ▸ New Easel (⌃⇧E): canvas, title, Pointer/Image/Text/Ellipse/Rectangle/Arrow/Freehand, pictures by file, paste or drop, saved per easel. Library ▸ Easels and Window ▸ View Easels… done. The canvas shows the window's backdrop under a 50 % veil as in Arc. The toolbar strip above it takes the same veil. The capture menu's New Easel and Send To… done. The pill's + and − and Aa (Arc's four looks: bold, serif, wide, mono, in macOS's designs) work, on the title too; Duplicate (the toolbar's eighth button) done. Gaps closed 11 Nov (Arc 1.172.2, item by item below, "Easels, item by item"): Arc's filled shapes in its Vibrant/Chill palettes, the colour picker over a picked shape, a click placing a 200 pt shape, the object menu (Bring to Front, Send to Back, Delete, Cut, Copy, Paste, Duplicate), the canvas menu (Paste, Color Palette, Use Alignment Guides) and the guides, Undo/Redo, link cards from a pasted or dropped address or a dropped sidebar tab, captures that keep their page and can show it live, alt text and the easel's thumbnail. Sharing is *skip* (cloud); so are Arc's embedded browsers and rich text, which nothing in 1.172.2 creates, and Export as web pages (Arc winding down; Cra's easels are already files on the Mac). |
 | Notes | File ▸ New Note ⌃⇧N, ⌃⌥N in split, Help ▸ Export Arc Notes | *skip* | Arc 1.172.1 no longer creates Notes: New Note is gone from the File menu and ⌃⇧N does nothing; only Help ▸ Export Arc Notes is left. |
 | Library ▸ Media | Window ▸ View Media…, Library rail | done | Off until Show Media; right-click the rail's Media button for the folders (Cra has no captures folder). A pick opens Arc's preview over the dimmed window (see "Library, measured"); the Library stays open. |
 | Essential Keyboard Shortcuts window | Help ▸ Essential Keyboard Shortcuts, Settings ▸ Shortcuts | done | 475×462 floating dark panel, five rows of key caps, "View All ↗". |
@@ -193,6 +193,41 @@ in this sweep (Essential Shortcuts window, Library pages).
 - Edit ▸ Find in an Easel (Arc 1.172.2, Victor's Arc, 11 Nov 2026, over AX): with the caret in a text box (an
   `AXTextArea`, Arc's rich-text editor), every Find item is off, Find and Replace included. Pressing it from the menu,
   ⌥⌘F or ⌘F opens no find bar and leaves the text as it was. On a web page, Find… is on and Find and Replace is off.
+
+## Easels, item by item (Arc 1.172.2, Victor's Arc, 11 Nov 2026)
+
+How it was read: Arc's own model from its binary (Swift field metadata of `EaselObject`, `EaselShape`, `WebCard`,
+`LinkData`, `EaselDocument`; the strings of `EaselObjectMenuProvider` and `EaselCanvasMenuProvider`), the
+`ARC_EaselUI.bundle` export viewer (EaselExportViewer.js/.css draw every kind of object), the colour sets in
+`ARCClients_BaseAssets.bundle`, and a throwaway easel in Victor's Arc read over AX with 2x window captures
+(menus by right-click, the colour picker and link card measured from pixels). Cra's side: CraCore
+`EaselObjects`, `EaselHistory`, `EaselSnap`, `EaselLinkMetadata`; the app's `EaselCanvasView`, `EaselCards`,
+`EaselLivePage`, `EaselServices`.
+
+| Arc | Cra |
+|---|---|
+| Shapes are filled at 75 % and stroked 2.5 pt in one colour; new ones are light green (rectangle), red (ellipse), light blue (arrow), black/white (stroke); arrows have two flares at 45°, min(32, 0.3 × length) | done (`Easel.defaultShade`, the canvas's `draw`) |
+| Eleven colours in two palettes, Vibrant (Arc's default) and Chill; black and white swap in the dark | done (`Easel.hex`; files keep the colour's name, so a palette change recolours) |
+| Canvas menu: Paste, —, Color Palette ▸ Vibrant / Chill, —, Use Alignment Guides | done |
+| Alignment guides: a moving item's edges and centre snap to the others' and a line shows | done (`Easel.snapped`, 6 pt; ⌘ while dragging turns them off for that drag) |
+| A picked shape shows a colour picker above it: a black 180 × 69 pt panel, 20 pt dots 26 pt apart in two rows (black, yellow, pink, red, light green, dark green / white, gray, purple, light blue, dark blue), a check on the current one | done (`EaselColorPicker`) |
+| A click with the rectangle or ellipse tool places a 200 × 200 pt shape centred on it; a drag draws one | done (`Easel.shape`) |
+| Object menu: Bring to Front, Send to Back, Delete, —, Cut, Copy, Paste, —, Duplicate (same for shapes and link cards) | done; the strings' other rows follow for their kinds: Add/Edit Alt Text… (pictures), Set as Easel Thumbnail / Reset to Default Thumbnail (pictures, captures; the Easels page then shows that picture), and for a capture Show Live Website / Show Screenshot and Copy Capture URL |
+| Undo and Redo (EaselEditManager's undo labels) | done (`EaselHistory`: a move, a resize, a typing session, a colour… is one step each; Edit ▸ Undo ⌘Z, Redo ⇧⌘Z) |
+| Cut, Copy and Paste of objects (Arc's `company.thebrowser.Browser.easelObject` pasteboard type) | done (`dk.kildahl.cra.easel-items`, with a picture, address or text for other apps; pictures come along to another easel) |
+| A pasted web address becomes a link card: the page's og:image across the top, then a 59 pt black bar with the site's icon (26 pt), the title (#D8D8D8) and a 36 pt ↗; 459 × 324 pt; no resize handles; the selection follows its rounded edge; a tooltip with the whole title and address | done (`EaselLinkMetadata` reads og:title/og:description/og:image and the icon as Arc's MetaTagParser does, once, without cookies); ↗ or a double click opens the page in a tab |
+| A dropped address or sidebar tab | done (a link card; Arc's pasteboard reader takes addresses; a sidebar tab dropped on Arc's canvas wasn't tried live) |
+| A YouTube link becomes an embedded player (in 1.172.2 it shows YouTube's "Video player configuration error, Error 153") | Cra on purpose: the link card with the video's picture and a ▶; ↗ or a double click plays it in a tab |
+| A capture sent to an easel is a web card that keeps its page, title, icon and where on the page it was (CaptureLayoutInfo), and can be flipped to the live site ("Replace this screenshot with the live website?", asked once) and back | done: the capture menu's New Easel and Send To… keep the page's address, viewport, scroll and the captured area; Show Live Website runs the page windowless at its captured size and draws the captured part on the card every second (only when it changed); a click on a picked live card reaches the page there, a link in it opens in a tab |
+| The web card's look | from Arc's export viewer (10 pt corners, a hover bar with the icon, the title and ↗), not measured live: a scripted capture in Arc never reaches its menu (also seen 4 Nov) |
+| Sharing, collaborators' avatars and presence | *skip* (cloud) |
+| Embedded browsers (`WebBrowser`) and rich text objects | *skip*: in Arc's model, but no tool, menu or paste in 1.172.2 makes one |
+| Save as web page / Export All Easels | *skip*: Arc's wind-down; Cra's easels are already files in its data folder |
+| Arc's text fill style (`EaselFillStyle.contentHugging`, its PaintBucketIcon) | not in 1.172.2's text pill (+, Aa, − only), so not built |
+
+The easel file: items Cra 0.1.40 can read stay in `items`; link cards and captures go in `cards`, which it skips (it
+fails on a kind it doesn't know, and would show the easel empty); each item carries `z`, its place in the stack
+(fixtures `easel-0140.json` and `easel.json` in CraCore's Fixtures/Model).
 
 ## Boosts, measured (Arc 1.172.1, Victor's Arc, 7 Nov 2026)
 

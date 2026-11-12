@@ -52,6 +52,11 @@ final class CaptureOverlay {
     /// Capture Image…: takes the image at `rect` (page points) straight away (CaptureView.lift).
     func lift(_ rect: CGRect) { view.lift(rect) }
 
+    /// What was captured, in page points from the page's top left, and the page's size: an easel
+    /// keeps them so the capture can show the live page (Easel.Capture).
+    var takenRect: CGRect? { view.takenRect }
+    var pageSize: CGSize { view.bounds.size }
+
     private func finish(_ action: Action?, _ png: Data?) {
         guard !closed else { return }
         closed = true
@@ -122,6 +127,8 @@ final class CaptureView: NSView {
     private weak var browser: CraBrowser?
     private let scale: CGFloat
     private var mode: Mode = .selecting
+    /// The area the capture holds (page points), once taken.
+    private(set) var takenRect: CGRect?
 
     private let colourLayer = CALayer()
     private let greyFull = CALayer()
@@ -470,6 +477,7 @@ final class CaptureView: NSView {
     /// `rect` is what goes in the image; `lens` what stays lit (an element's 2 pt more).
     private func capture(_ rect: CGRect, lens clear: CGRect) {
         mode = .captured(rect)
+        takenRect = rect
         element = nil
         pressedOnElement = nil
         snapLens(to: clear)
@@ -490,6 +498,7 @@ final class CaptureView: NSView {
         let menu = makeMenu(png: png)
         let layout = ContentCapture.liftedLayout(image: rect.size, menu: menu.intrinsicContentSize, in: bounds)
         mode = .captured(layout.image)
+        takenRect = rect
         element = nil
         pressedOnElement = nil
         lifted = true
