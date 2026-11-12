@@ -367,6 +367,7 @@
 #233   Packages/CraCore/Tests/CraCoreTests/MouseButtonSpaceSwitchTests.swift::optionLeftIsBackAndOptionRightIsForward  33a7f5c03930
 #233   Packages/CraCore/Tests/CraCoreTests/MouseButtonSpaceSwitchTests.swift::otherButtonsDoNotSwitch  07b725a8e6f5
 #233   Packages/CraCore/Tests/CraCoreTests/MouseButtonSpaceSwitchTests.swift::otherChordsAreNotTheMouseKey  378a3da1934b
+#233   Tests/Scenarios/mouse-buttons-library.scenario  af55f1cc8516
 #233   Tests/Scenarios/mouse-buttons-switch-spaces.scenario  79148e8b3ebb
 #237   Packages/CraCore/Tests/CraCoreTests/TabSleepPolicyTests.swift::criticalClosesMore  4c4b7c2f8168
 #237   Packages/CraCore/Tests/CraCoreTests/TabSleepPolicyTests.swift::emptySweepSaysWhy  39babb07a0ec
