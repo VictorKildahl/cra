@@ -115,3 +115,7 @@ A UI test can open the simulator's widget gallery: `XCUIDevice.shared.press(.hom
 Add Widget, type "Cra" into the gallery's search field, tap the result and take screenshots
 (swipe left for the medium one). Keep such a test out of the suite: it leaves the home screen in
 edit mode.
+
+A UI test that leaves SpringBoard in home-screen edit mode makes the next run fail with "Busy
+(Application failed preflight checks)" for the test runner: `xcrun simctl shutdown` and `boot`
+the simulator, then run again.

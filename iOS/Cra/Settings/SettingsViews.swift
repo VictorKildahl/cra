@@ -15,6 +15,7 @@ final class SettingsModel: ObservableObject {
     var exportData: () -> Void = {}
     var showOnboarding: () -> Void = {}
     var showWidgetGuide: () -> Void = {}
+    var showIconDock: () -> Void = {}
     var done: () -> Void = {}
 
     init(store: MobileSettingsStore, host: String?, canSummarize: Bool) {
@@ -234,36 +235,18 @@ struct AppSettingsList: View {
             }
             .settingsRow()
             Section {
-                ValueRow(label: SettingLabel(title: "Search Engine", symbol: "magnifyingglass", color: .blue),
-                         selection: model.binding(\.searchChoice),
-                         options: MobileSearchChoice.all(browseForMeAvailable: BrowseForMe.isAvailable), title: \.label)
-                    .accessibilityIdentifier("setting-search-engine")
-            }
-            .settingsRow()
-            Section {
-                ValueRow(label: SettingLabel(title: "Archive Inactive Tabs", symbol: "archivebox.fill", color: .purple),
-                         selection: model.binding(\.archiveAfter), options: MobileArchiveAfter.allCases, title: \.settingValue)
-                    .accessibilityIdentifier("setting-archive-after")
-            }
-            .settingsRow()
-            Section {
-                Toggle(isOn: model.binding(\.opensKeyboardOnLaunch)) {
-                    SettingLabel(title: "Open Keyboard on Launch", symbol: "keyboard.fill", color: .teal)
+                Button { model.showIconDock() } label: {
+                    HStack {
+                        SettingLabel(title: "Change App Icon", symbol: "app.fill", color: .indigo)
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(.tertiary)
+                    }
                 }
-                .accessibilityIdentifier("setting-keyboard-on-launch")
-                ValueRow(label: SettingLabel(title: "Open App Links in...", symbol: "arrow.up.forward.app.fill", color: .orange),
-                         selection: model.binding(\.openAppLinksIn), options: MobileAppLinks.allCases, title: \.label)
-                    .accessibilityIdentifier("setting-app-links")
-            }
-            .settingsRow()
-            Section {
-                NavigationLink { AppIconPicker() } label: {
-                    SettingLabel(title: "App Icon", symbol: "app.fill", color: .pink)
-                }
+                .foregroundStyle(.primary)
                 .accessibilityIdentifier("setting-app-icon")
                 Button { model.showWidgetGuide() } label: {
                     HStack {
-                        SettingLabel(title: "Add Widget", symbol: "square.grid.2x2.fill", color: .indigo)
+                        SettingLabel(title: "Add to Home Screen", symbol: "square.grid.2x2.fill", color: .purple)
                         Spacer()
                         Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(.tertiary)
                     }
@@ -273,6 +256,23 @@ struct AppSettingsList: View {
             }
             .settingsRow()
             Section {
+                ValueRow(label: SettingLabel(title: "Search Engine", symbol: "magnifyingglass", color: .blue),
+                         selection: model.binding(\.searchChoice),
+                         options: MobileSearchChoice.all(browseForMeAvailable: BrowseForMe.isAvailable), title: \.label)
+                    .accessibilityIdentifier("setting-search-engine")
+            }
+            .settingsRow()
+            Section {
+                Toggle(isOn: model.binding(\.opensKeyboardOnLaunch)) {
+                    SettingLabel(title: "Auto-Open Keyboard", symbol: "keyboard.fill", color: .teal)
+                }
+                .accessibilityIdentifier("setting-keyboard-on-launch")
+                ValueRow(label: SettingLabel(title: "Archive Inactive Tabs", symbol: "archivebox.fill", color: .purple),
+                         selection: model.binding(\.archiveAfter), options: MobileArchiveAfter.allCases, title: \.settingValue)
+                    .accessibilityIdentifier("setting-archive-after")
+                ValueRow(label: SettingLabel(title: "Open App Links in...", symbol: "arrow.up.forward.app.fill", color: .orange),
+                         selection: model.binding(\.openAppLinksIn), options: MobileAppLinks.allCases, title: \.label)
+                    .accessibilityIdentifier("setting-app-links")
                 Button("Clear Browsing Data...") { clearing = true }
                     .foregroundStyle(.primary)
                     .accessibilityIdentifier("setting-clear-data")

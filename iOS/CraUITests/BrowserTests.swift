@@ -853,3 +853,26 @@ final class WidgetGuideTests: BrowserTestCase {
         XCTAssertFalse(title.waitForExistence(timeout: 2), "Done! closes the guide")
     }
 }
+
+final class AppIconDockTests: BrowserTestCase {
+    /// App Settings ▸ Change App Icon opens Arc Search's dock sheet with every icon on its shelf,
+    /// the current one marked.
+    func testChangeAppIconShowsTheDock() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["bar-settings"].waitForExistence(timeout: 5))
+        app.buttons["bar-settings"].tap()
+        let row = app.buttons["setting-app-icon"]
+        XCTAssertTrue(app.buttons["setting-default-browser"].waitForExistence(timeout: 5))
+        for _ in 0..<3 where !row.isHittable { app.swipeUp() }
+        row.tap()
+        XCTAssertTrue(app.staticTexts["App Icon"].waitForExistence(timeout: 5))
+        for icon in ["segments", "midnight", "mono", "violet"] {
+            XCTAssertTrue(app.buttons["icon-\(icon)"].exists, icon)
+        }
+        XCTAssertTrue(app.buttons["icon-segments"].isSelected, "the current icon is marked")
+        sleep(1)
+        keep("icon-dock")
+    }
+}

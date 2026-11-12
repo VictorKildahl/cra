@@ -132,10 +132,10 @@ the real app on an iPhone has to be recorded before then.
 | Arc Search | Cra | Notes |
 |---|---|---|
 | Site Settings sheet | done | Same rows and order; 465 pt tall over the page menu. Compared with a late-2024 screenshot. |
-| App Settings | partial | Downloads, Archive, Global Site Settings, default browser, Search Engine, Archive Inactive Tabs, keyboard on launch, Open App Links in..., App Icon, Clear Browsing Data, Export Data, Show Onboarding. No Languages yet. The order below Archive Inactive Tabs is a guess: no source shows it. |
+| App Settings | partial | Order from 60fps.design's late-2024 clip below Set as Default Browser: Change App Icon and Add to Home Screen; Search Engine; Auto-Open Keyboard, Archive Inactive Tabs, Open App Links in..., Clear Browsing Data..., Export Data. Above that (not in the clip): Downloads and Archive, Global Site Settings, Set Cra as Default Browser. No Languages yet; Raise to Call Arc and Sync with Arc Desktop have no counterpart. |
 | Clear Data sheet | done | |
 | Onboarding | partial | Arc Search's steps and words (`MobileOnboarding`): welcome on the vivid gradient, "Meet your new favorite browser" with its four cards, the Browse for Me step where the device can, the icon grid, "Block Ads and Trackers", the default browser with Skip. The try-it demos (tapping Browse for Me, the pinch tip with its check mark) and the gradient's own transition are simplified. Settings ▸ Show Onboarding brings it back. |
-| Alternate app icons | done | Cra's four (`MobileAppIcon`), rendered for iOS by `scripts/make-app-icons.swift --ios`; picked in onboarding and in Settings ▸ App Icon. Arc Search's glass dock picker was not seen. |
+| Alternate app icons | done | Cra's four (`MobileAppIcon`), rendered for iOS by `scripts/make-app-icons.swift --ios`; picked in onboarding, and from App Settings ▸ Change App Icon in Arc Search's dock sheet (`AppIconDock`, from 60fps.design's clip): the icons on a glass shelf with their reflections, the current one raised with a blue dot; iOS confirms the change in its own alert. UI test `testChangeAppIconShowsTheDock`. |
 
 ## System
 

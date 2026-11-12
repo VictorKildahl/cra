@@ -635,6 +635,14 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         model.done = { [weak self] in self?.dismiss(animated: true) }
         model.showArchive = { [weak self] in self?.showArchive() }
         model.showOnboarding = { [weak self] in self?.showOnboarding() }
+        model.showIconDock = { [weak self] in
+            guard let self else { return }
+            var dock: UIViewController?
+            let sheet = UIHostingController(rootView: AppIconDock(done: { dock?.dismiss(animated: true) }))
+            dock = sheet
+            sheet.sheetPresentationController?.detents = [.custom { _ in 300 }]
+            self.topPresenter.present(sheet, animated: true)
+        }
         model.showWidgetGuide = { [weak self] in
             guard let self else { return }
             var guide: UIViewController?
