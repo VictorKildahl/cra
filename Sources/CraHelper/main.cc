@@ -1,6 +1,7 @@
 // Entry point for every Chromium subprocess (renderer, GPU, utility, plugin,
 // alerts). Enters the macOS sandbox, then loads the framework from the
 // enclosing Cra.app bundle and hands control to CEF.
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -92,6 +93,11 @@ class HelperApp : public CefApp {
 }  // namespace
 
 int main(int argc, char* argv[]) {
+  // A staged update run once before it is installed (Cra's UpdatePrewarm): macOS has checked this
+  // helper by the time Chromium first starts it. Nothing else runs.
+  if (const char* prewarm = getenv("CRA_PREWARM"); prewarm && std::string(prewarm) == "1") {
+    return 0;
+  }
   // The seatbelt profile has to be in place before the framework loads.
   // libcef_sandbox.dylib ships inside the framework (Libraries/).
   CefScopedSandboxContext sandbox_context;

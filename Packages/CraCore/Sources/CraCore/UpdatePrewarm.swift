@@ -4,6 +4,10 @@ import Foundation
 /// it hasn't run before (Gatekeeper's evaluation in syspolicyd), and every update is such a bundle.
 /// Running the staged update once, hidden, with `CRA_PREWARM=1` (main.swift exits on its first
 /// line) pays that check while nobody waits, and the next real launch of those files skips it.
+/// Each Chromium helper app inside the bundle (GPU, Renderer, Plugin, Alerts, the plain one) is a
+/// program of its own that macOS checks on its first start, so they run too: the main program alone
+/// took a fresh copy's first launch from 3.5 to 2.1 s, with the helpers to 0.6 s, the same as a copy
+/// that had run before (12 Nov 2026, Cra 0.1.41 from /Applications, M2 Max).
 /// The check's result can be dropped again on a busy Mac, so the copy runs again while the update
 /// waits to be installed.
 public enum UpdatePrewarm {
@@ -35,6 +39,15 @@ public enum UpdatePrewarm {
         candidates
             .filter { $0.bundleID == bundleID && $0.version == version }
             .max { $0.modified < $1.modified }
+    }
+
+    /// The helper programs to run after the main one, as paths inside the app bundle, from the names
+    /// in its Contents/Frameworks folder: every "<name> Helper….app", as Contents/MacOS/<its name>.
+    public static func helperExecutables(frameworkEntries: [String]) -> [String] {
+        frameworkEntries
+            .filter { $0.hasSuffix(".app") && $0.contains("Helper") }
+            .sorted()
+            .map { "Contents/Frameworks/\($0)/Contents/MacOS/\(String($0.dropLast(4)))" }
     }
 
     /// Whether a waiting update should run again now.

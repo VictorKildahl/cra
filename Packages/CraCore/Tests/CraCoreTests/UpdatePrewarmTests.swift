@@ -29,6 +29,17 @@ struct UpdatePrewarmTests {
         #expect(UpdatePrewarm.pick([], version: "0.1.42", bundleID: id) == nil)
     }
 
+    @Test func helpersRunToo() {
+        // Each helper app is its own program, checked on its first start; frameworks are not run.
+        let entries = ["Chromium Embedded Framework.framework", "Cra Helper (GPU).app", "Cra Helper.app",
+                       "Sparkle.framework", "Cra Helper (Renderer).app"]
+        #expect(UpdatePrewarm.helperExecutables(frameworkEntries: entries) == [
+            "Contents/Frameworks/Cra Helper (GPU).app/Contents/MacOS/Cra Helper (GPU)",
+            "Contents/Frameworks/Cra Helper (Renderer).app/Contents/MacOS/Cra Helper (Renderer)",
+            "Contents/Frameworks/Cra Helper.app/Contents/MacOS/Cra Helper",
+        ])
+    }
+
     @Test func runsAtOnceThenEveryTwentyMinutes() {
         #expect(UpdatePrewarm.isDue(lastRun: nil, now: t0))
         #expect(!UpdatePrewarm.isDue(lastRun: t0, now: t0.addingTimeInterval(19 * 60)))

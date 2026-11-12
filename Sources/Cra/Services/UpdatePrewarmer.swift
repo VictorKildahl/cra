@@ -43,31 +43,39 @@ final class UpdatePrewarmer {
             CraLog.note("update prewarm: no staged copy of \(build ?? "?") found")
             return
         }
+        let app = URL(fileURLWithPath: copy.path)
+        let entries = (try? FileManager.default.contentsOfDirectory(atPath: app.appendingPathComponent("Contents/Frameworks").path)) ?? []
+        let programs = [exe] + UpdatePrewarm.helperExecutables(frameworkEntries: entries).map { app.appendingPathComponent($0) }
+        runNext(programs[...], copy: copy, started: Date())
+    }
+
+    /// The main program, then each helper, one at a time.
+    private func runNext(_ programs: ArraySlice<URL>, copy: UpdatePrewarm.Candidate, started: Date) {
+        guard let exe = programs.first else {
+            CraLog.note("update prewarm: \(copy.path) ran in \(Int(Date().timeIntervalSince(started) * 1000)) ms")
+            running = nil
+            return
+        }
         let p = Process()
         p.executableURL = exe
         p.environment = [UpdatePrewarm.environmentKey: "1"]
         p.qualityOfService = .utility
         p.standardOutput = FileHandle.nullDevice
         p.standardError = FileHandle.nullDevice
-        let started = Date()
-        p.terminationHandler = { [weak self] proc in
-            let ms = Int(Date().timeIntervalSince(started) * 1000)
-            let status = proc.terminationStatus
-            Task { @MainActor in
-                CraLog.note("update prewarm: \(copy.path) exited \(status) after \(ms) ms")
-                self?.running = nil
-            }
+        p.terminationHandler = { [weak self] _ in
+            Task { @MainActor in self?.runNext(programs.dropFirst(), copy: copy, started: started) }
         }
         do {
             try p.run()
             running = p
             clock.after(UpdatePrewarm.timeout) { [weak self] in
                 guard let self, let r = self.running, r === p, r.isRunning else { return }
-                CraLog.note("update prewarm: still running after \(Int(UpdatePrewarm.timeout)) s; stopped")
+                CraLog.note("update prewarm: \(exe.lastPathComponent) still running after \(Int(UpdatePrewarm.timeout)) s; stopped")
                 r.terminate()
             }
         } catch {
-            CraLog.note("update prewarm: \(error.localizedDescription)")
+            CraLog.note("update prewarm: \(exe.lastPathComponent): \(error.localizedDescription)")
+            runNext(programs.dropFirst(), copy: copy, started: started)
         }
     }
 
