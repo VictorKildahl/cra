@@ -78,6 +78,7 @@ enum StoreTests {
         oneWindowAtLaunch()
         openLinkInSplit()
         backToReferrer()
+        recentTabsTakeBackgroundTabs()
         print("Store: \(checks) checks passed")
     }
 
@@ -2584,6 +2585,25 @@ enum StoreTests {
         store.togglePinnedCollapsed(sid)
         store.revealInSidebar(today.id)
         expect(store.isPinnedCollapsed(sid), "a Today tab leaves the pinned section as it is")
+    }
+
+    /// Arc's ⌃Tab after a ⌘-click: the tab the link opened in the background is next after the
+    /// current one, so a tap goes to it and the next tap comes back.
+    @MainActor
+    private static func recentTabsTakeBackgroundTabs() {
+        let clock = ManualScheduler()
+        let store = AppComposition(clock: clock).store
+        let sid = store.createSpace(title: "Recent", emoji: "⏱️").id
+        let older = store.createTab(url: "https://example.com/older", in: sid)
+        clock.advance(by: 1)
+        let source = store.createTab(url: "https://example.com/source", in: sid)
+        clock.advance(by: 1)
+        let link = store.createTab(url: "https://example.com/link", in: sid, select: false, referrer: source.id)
+        expect(store.recentTabs(in: sid, limit: .max) == [source.id, link.id, older.id],
+               "the background tab comes right after the current tab, before the one visited earlier")
+        clock.advance(by: 1)
+        store.selectTab(link.id)
+        expect(store.recentTabs(in: sid, limit: .max) == [link.id, source.id, older.id], "on it, the next tab is the one it came from")
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
