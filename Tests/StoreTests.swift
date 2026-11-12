@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Observation
 import SQLite3
@@ -1835,6 +1836,7 @@ enum StoreTests {
         syncA.disable()
         iCloudSync(first: a, firstClock: clockA)
         syncGoesOnWithoutAsking()
+        syncPutsAMixedBundleRight()
     }
 
     /// iCloud is the same bundle in the app's container, with two differences a test folder can
@@ -1977,6 +1979,94 @@ enum StoreTests {
         expect(syncE.pendingChoice == nil && e.document.items.contains { $0.id == later.id } && syncE.isEnabled,
                "once the provider has delivered it, it is applied with no second question")
         syncD.disable(); syncE.disable()
+    }
+
+    // promise: #378
+    /// Two writes that crossed leave the folder with one write's settings and the other's manifest
+    /// (two Macs at once, or a provider that keeps one Mac's file and the other Mac's manifest).
+    /// No download is coming, so after a short wait the Mac whose manifest it is writes its whole
+    /// bundle again, with the tab opened meanwhile, and the other Mac applies it. Cra 0.1.40 took
+    /// the mix for a download and both Macs stopped syncing for good.
+    @MainActor
+    private static func syncPutsAMixedBundleRight() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("cra-sync-mixed-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bundle = root.appendingPathComponent(SettingsSync.folderName, isDirectory: true)
+        let manifestURL = bundle.appendingPathComponent(SettingsSync.manifestName)
+        let settingsURL = bundle.appendingPathComponent(SettingsSync.settingsName)
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]; encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        func manifest() -> SyncManifest? { (try? Data(contentsOf: manifestURL)).flatMap { try? decoder.decode(SyncManifest.self, from: $0) } }
+        /// The files are the ones the manifest names: a whole bundle.
+        func whole() -> Bool {
+            guard let m = manifest() else { return false }
+            let hashes = Dictionary(uniqueKeysWithValues: SettingsSync.fileNames.compactMap { name in
+                (try? Data(contentsOf: bundle.appendingPathComponent(name))).map { (name, SHA256.hash(data: $0).map { String(format: "%02x", $0) }.joined()) }
+            })
+            return SettingsSync.isComplete(m, hashes: hashes)
+        }
+        /// Another write's settings: valid, but not the file the manifest names.
+        func mixIn(httpsOnly: Bool) {
+            var other = AppSettings()
+            other.httpsOnly = httpsOnly
+            other.searchEngine = .duckduckgo
+            try? encoder.encode(other).write(to: settingsURL)
+        }
+
+        let clockA = ManualScheduler(), clockB = ManualScheduler(now: clockA.now)
+        let a = SidebarStore(clock: clockA), b = SidebarStore(clock: clockB)
+        let syncA = SettingsSyncService(store: a, clock: clockA, device: "Studio", deviceID: "studio")
+        expect(syncA.enable(folder: root) == .synced, "the first Mac syncs through a folder")
+        let syncB = SettingsSyncService(store: b, clock: clockB, device: "MacBook", deviceID: "macbook")
+        guard case .bundleFound = syncB.enable(folder: root) else { return expect(false, "the second Mac is asked once") }
+        syncB.useRemote()
+
+        // The issue's steps: settings.json from another write, the manifest left as it was, a tab opened.
+        // The stores read the shared test data folder: the mix is whichever httpsOnly this Mac doesn't have.
+        let httpsOnly = a.settings.httpsOnly
+        mixIn(httpsOnly: !httpsOnly)
+        let mixed = try? Data(contentsOf: settingsURL)
+        let tab = a.createTab(url: "https://example.com/opened-during-the-mix")
+        syncA.poll()
+        expect(!whole() && (try? Data(contentsOf: settingsURL)) == mixed, "the first look leaves the mix alone: it may still be arriving")
+        clockA.advance(by: 30)
+        expect((try? Data(contentsOf: settingsURL)) == mixed, "so does the next")
+        clockA.advance(by: 30)
+        clockA.advance(by: 30)
+        expect(whole(), "a mix that stays put is written over with a whole bundle")
+        expect(manifest()?.deviceID == "studio" && !syncA.awaitingDownload && syncA.error == nil, "by the Mac whose manifest it was, which syncs again")
+        expect(a.settings.httpsOnly == httpsOnly, "the mixed-in file was never applied")
+        clockB.advance(by: 90)
+        expect(b.document.items.contains { $0.id == tab.id }, "the tab opened during the mix reaches the other Mac")
+
+        // The writer is gone (asleep, Cra quit): the other Mac puts the mix right itself, later.
+        syncA.disable()
+        mixIn(httpsOnly: !b.settings.httpsOnly)
+        let before = clockB.now
+        let tabB = b.createTab(url: "https://example.com/opened-on-the-other-mac")
+        while !whole() && clockB.now.timeIntervalSince(before) < 600 { clockB.advance(by: 30) }
+        let waited = clockB.now.timeIntervalSince(before)
+        expect(whole() && manifest()?.deviceID == "macbook" && waited > 90,
+               "the other Mac writes its bundle too, after giving the writer time (\(waited) s)")
+        expect(manifest()?.files[SettingsSync.sidebarName] != nil
+               && (try? decoder.decode(SidebarDocument.self, from: Data(contentsOf: bundle.appendingPathComponent(SettingsSync.sidebarName))))?
+                .items.contains { $0.id == tabB.id } == true, "with its own changes in it")
+
+        // A newer Cra's bundle, which this Cra can't read, is never written over.
+        let unreadable = Data(#"{"newTabsAtTop": {"a later Cra's": "shape"}}"#.utf8)
+        try? unreadable.write(to: settingsURL)
+        if var m = manifest() {
+            m.files[SettingsSync.settingsName] = SHA256.hash(data: unreadable).map { String(format: "%02x", $0) }.joined()
+            m.device = "Mini"; m.deviceID = "mini"
+            try? encoder.encode(m).write(to: manifestURL)
+        }
+        _ = b.createTab(url: "https://example.com/opened-after-the-update")
+        for _ in 0..<10 { clockB.advance(by: 30) }
+        expect((try? Data(contentsOf: settingsURL)) == unreadable && manifest()?.deviceID == "mini",
+               "a whole bundle this Cra can't read is left for the newer Cra")
+        expect(syncB.error != nil, "and Settings says why this Mac stopped syncing")
+        syncB.disable()
     }
 
     /// A Blank Window is one Mac's window: its sidebar never goes to the other Mac, and a bundle

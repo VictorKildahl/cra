@@ -664,3 +664,10 @@
 #363   Packages/CraCore/Tests/CraCoreTests/PageTopDragTests.swift::underABarTheBandIsWhatIsLeftOf60Points  5f3b649778c7
 #363   Tests/Scenarios/page-top-click.scenario  ee4243bd50dc
 #363   Tests/WindowContentGrabberTests.swift::checkClicksAndDrag  4ed1aa99b31d
+#378   Packages/CraCore/Tests/CraCoreTests/SettingsSyncTests.swift::aFileOnItsWayIsWaitedFor  6795013a625a
+#378   Packages/CraCore/Tests/CraCoreTests/SettingsSyncTests.swift::aManifestsVersionReadsWithoutTheRest  59b19de0f9a8
+#378   Packages/CraCore/Tests/CraCoreTests/SettingsSyncTests.swift::aMixThatStaysPutIsWrittenOverAfterAWhile  308117072c7b
+#378   Packages/CraCore/Tests/CraCoreTests/SettingsSyncTests.swift::aNewerCrasBundleIsNeverWrittenOver  ba7a0de393f2
+#378   Packages/CraCore/Tests/CraCoreTests/SettingsSyncTests.swift::aWholeBundleIsAppliedAndAnEmptyFolderWritten  94152fb39426
+#378   Packages/CraCore/Tests/CraCoreTests/SettingsSyncTests.swift::everyFileThereButNotTheManifestsIsAMix  9741a2fb0bbb
+#378   Tests/StoreTests.swift::syncPutsAMixedBundleRight  bf14ae1bdb36

@@ -1500,6 +1500,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             // What the Dock tile and the ⌘-Tab switcher show for Cra (#319).
+            // What the last look at the sync folder found, and whether a mix is being waited out (#378).
+            if let label = dict["sync"] { CraLog.note("sync \(label): \(composition.sync.readout())"); return }
             if let label = dict["dockTile"] { CraLog.note("dock tile \(label): \(AppIconManager.shared.dockTileReadout())"); return }
             if let label = dict["downloadState"] {
                 let rows = DownloadHistory.shared.live.map { DownloadRow.subtitle($0.row, now: Date()) }
