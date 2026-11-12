@@ -716,12 +716,21 @@ class SidebarRowView: NSView {
         springPress(down, scale: SidebarRowPress.scale(pressRow))
     }
 
-    // Clicks act on release (SwiftUI's tap); a press that moves 3 pt starts the row's drag.
+    /// Whether the press already did what the click would (a tab switches on the press, as in Arc).
+    private var actedOnPress = false
+
+    /// A row that acts on the press does so here and returns true; the release then does nothing.
+    func pressDown(_ event: NSEvent, at point: NSPoint) -> Bool { false }
+
+    // Clicks act on release (SwiftUI's tap), a tab's switch on the press (pressDown); a press that
+    // moves 3 pt starts the row's drag.
     override func mouseDown(with event: NSEvent) {
         // A pinned tab's Previews card goes at once, as a favorite's does.
         FavoritePreviewCard.shared.cancel(self)
-        press = (event, convert(event.locationInWindow, from: nil))
+        let point = convert(event.locationInWindow, from: nil)
+        press = (event, point)
         if SidebarRowPress.pushesIn(pressRow, clickCount: event.clickCount) { push(in: true) }
+        actedOnPress = pressDown(event, at: point)
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -737,6 +746,7 @@ class SidebarRowView: NSView {
         push(in: false)
         guard let p = press else { return }
         press = nil
+        if actedOnPress { actedOnPress = false; return }
         click(event, at: p.point)
     }
 
@@ -1376,6 +1386,18 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
     // MARK: Events
 
     override func dragItemID(at point: NSPoint) -> UUID? { model?.editing == true ? nil : model?.id }
+
+    /// Arc switches tabs on the press (SidebarRowPress.selectsOnPress): a plain single press on the
+    /// row, not on a pinned tab's icon away from home (that one goes back or separates on release).
+    override func pressDown(_ event: NSEvent, at point: NSPoint) -> Bool {
+        guard let m = model, let list, !m.editing,
+              SidebarRowPress.selectsOnPress(pressRow, clickCount: event.clickCount,
+                                             modified: !event.modifierFlags.intersection([.command, .shift, .control, .option]).isEmpty),
+              !(canReset && iconRegion.contains(point)) else { return false }
+        list.ui.iconWentBack = nil
+        list.clickTab(m.id, event: event)
+        return true
+    }
 
     override func click(_ event: NSEvent, at point: NSPoint) {
         guard let m = model, let list else { return }

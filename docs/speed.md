@@ -105,8 +105,10 @@ round trip). Two ways to take it off the click:
   (`chrome.tabs`) unless it is hidden from them until it is taken.
 - **Leaving CEF** (3 below): a Chrome tab is a WebContents in an existing window, no new window.
 
-Still open: whether Arc switches tabs on the press rather than the release (Cra acts on the release,
-which costs the length of the click every time); needs a free screen to check against live Arc.
+Both done since: **spare pages** (SparePages; extensions don't see the spare, spare-pages.scenario) took
+page making from 34 to 21 ms on average, the switch to a restored tab's page shown from 30 to 12 ms
+and opening a site from 36 to 16 ms; and **tabs switch on the press**, as Arc does (checked on live Arc
+1.173.1), which takes the click's own length (typically ~90 ms) off every sidebar switch.
 
 ### 2. A newer Chromium (page processes, ~7 MB a page)
 

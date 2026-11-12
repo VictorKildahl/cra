@@ -1479,7 +1479,11 @@ so test pages must not use it). Live HID clicks and hovers at 1x, plus a static 
   Folder and section headers don't press.
 - [O] Favorites: `AppTrayItemViewAppKit.isPressed`, the same spring to 0.99 on every press, the whole tile.
 - [I] Nothing found springs a row back when a press becomes a drag; Cra does it when the drag starts.
-- Cra: CraCore SidebarRowPress, `NSView.springPress`.
+- [O] Live (Arc 1.173.1, offline copy, 12 Nov 2026, real presses held over AX reads): a plain press switches the
+  tab on the press. 250 ms into a held press the window's title is already the pressed tab's, and a press that
+  becomes a drag has switched as well. A ⌘-press changes nothing until the release.
+- Cra: CraCore SidebarRowPress (`selectsOnPress`: a plain single press on a tab row), `NSView.springPress`.
+  Picks, renames and a pinned tab's icon away from home act on the release.
 
 ### Backdrop-layer blur for light vibrant themes (25 Oct 2026, final)
 
