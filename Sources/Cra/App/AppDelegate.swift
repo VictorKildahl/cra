@@ -1067,12 +1067,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // key=<characters>,<key code>,<modifier bits>: a key press as a layout reports it
             // (Turkish Q's ⌘- is "-",24,1048576), through the app's event queue (#212); the
             // characters are percent-encoded. zoomLevel logs the page's zoom. page=1: straight to the
-            // current page, as the keyboard reaches a page that has it (a background copy has no key window).
+            // current page, as the keyboard reaches a page that has it (a background copy has no key window);
+            // with target=little, the newest Little Window's or Peek's page (#402).
             if let k = dict["key"]?.split(separator: ",", omittingEmptySubsequences: false), k.count == 3,
                let code = UInt16(k[1]), let mods = UInt(k[2]), let w = main.window {
                 let flags = NSEvent.ModifierFlags(rawValue: mods)
                 if dict["page"] == "1" {
-                    guard let page = main.currentBrowser else { NSLog("Cra TestGesture: no page"); return }
+                    let little = dict["target"] == "little" ? littleWindows.last : nil
+                    guard let page = little != nil ? little?.browser : main.currentBrowser else { NSLog("Cra TestGesture: no page"); return }
+                    let w = little?.window ?? w
                     TestGesture.pageKey(String(k[0]), keyCode: code, modifiers: flags,
                                         in: [page.hostWindow?.contentView, page.containerView].compactMap { $0 }, window: w)
                 } else {

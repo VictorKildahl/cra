@@ -907,6 +907,10 @@ final class ShellView: NSView {
 
     private var sidebarSlide: SidebarSlide?
     private var sidebarSlideLink: CADisplayLink?
+    /// The sidebar is sliding in or out (⌘S): the page area's edge is where the slide has it.
+    var slidingSidebar: Bool { sidebarSlide != nil }
+    /// Each frame of the slide and its end, once the page area has moved (a Peek follows it, #402).
+    var onSidebarSlideFrame: (() -> Void)?
 
     @objc private func stepSidebarSlide(_ link: CADisplayLink) {
         guard let s = sidebarSlide else { return finishSidebarSlide() }
@@ -918,6 +922,7 @@ final class ShellView: NSView {
         contentContainer.frame = content
         loadingIndicator.frame = loadingIndicatorFrame(over: content)
         layoutContentChildren()
+        onSidebarSlideFrame?()
     }
 
     private func finishSidebarSlide() {
@@ -933,6 +938,7 @@ final class ShellView: NSView {
         needsLayout = true
         layoutSubtreeIfNeeded()
         endSlideReadout()
+        onSidebarSlideFrame?()
     }
 
     /// Logged as "sidebar slide: page moved N pt" for the sidebar-slide scenario.

@@ -1352,8 +1352,11 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         // Move Tab to Space N (⌃⌘N, #86) sends the page there, as the spaces popup does (#92).
         case let id where id.hasPrefix("moveTabToSpace"):
             if let n = Int(id.dropFirst(14)), n >= 1, n <= store.spaceOrder.count { promote(to: store.spaceOrder[n - 1]) }
+        // Arc's Peek is a card in the browser window, so ⌘S and View ▸ Hide Sidebar reach that
+        // window's sidebar; a Little Window has none (#402).
+        case "toggleSidebar": peekParent?.toggleSidebar()
         // No find bar, sidebar or split in little windows; keep them off the main window.
-        case "find", "findNext", "findPrevious", "useSelectionForFind", "toggleSidebar", "pinTab", "favoriteTab", "renameTab",
+        case "find", "findNext", "findPrevious", "useSelectionForFind", "pinTab", "favoriteTab", "renameTab",
              "duplicateTab", "resetTab", "muteTab", "clearToday", "nextTab", "previousTab", "recentTab", "recentTabBackward",
              "revealTab", "collapsePinned", "collapseAllFolders", "expandAllFolders", "resetSpaceTabs",
              "addSplitView", "closeSplitPane", "separateFromSplit", "expandSplitPane", "flipSplitOrientation", "nextSplitPane", "previousSplitPane":

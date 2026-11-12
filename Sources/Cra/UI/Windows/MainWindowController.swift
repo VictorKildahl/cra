@@ -268,6 +268,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             return .init(tabSidebar: libraryShowedSidebar ? nil : CGFloat(store.prefs.sidebarWidth))
         }
         shell.onAnimatePaneFrames = { [weak self] frames, d, timing in self?.animatePageWindows(to: frames, duration: d, timing: timing) }
+        // A Peek keeps to the page area while the sidebar slides in or out under it (#402).
+        shell.onSidebarSlideFrame = { [weak self] in self?.peeks.filter { !$0.isParked }.forEach { $0.repositionPeek() } }
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.refreshMaterialActive(); self?.sidebarUI.appActive = true }
         }
@@ -1967,7 +1969,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // Asked from windowDidResize, before the shell has laid out at the new size.
         shell.layoutSubtreeIfNeeded()
         let content = shell.convert(shell.contentContainer.frame, to: nil)
-        let sidebarShown = store.window(windowID).sidebarVisible && content.minX > CraMetrics.contentInset
+        // While the sidebar slides, the edge is where the slide has it, on the way out too.
+        let sidebarShown = (store.window(windowID).sidebarVisible || shell.slidingSidebar) && content.minX > CraMetrics.contentInset
         return sidebarShown ? content.minX : 0
     }
 
