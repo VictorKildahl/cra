@@ -1,6 +1,6 @@
 # Ask on Page implementation plan
 
-Status: independently reviewed with required Find-result, bounded extraction and stream-ownership clarifications below. Coordinator may authorize implementation; this plan alone authorizes no implementation or commit.
+Status: Core and bounded current-page context independently reviewed and committed. The guided-output amendment below is independently reviewed with the explicit empty-citation/history clarifications recorded below. Only this plan-document diff is ready for its reviewed commit; the uncommitted string-streaming service prototype remains frozen until coordinator authorization, and this document alone authorizes no guided schema implementation or source commit.
 Branch: `askonpage`, base `fccc893`.
 Worktree: `/Users/varunaditya/.codex/worktrees/cra-askonpage/cra`.
 
@@ -139,9 +139,9 @@ back-deployed and returns 4096. Do not unconditionally call the 26.4 token API f
 3. Budget against 4096 total tokens. Initial safety target: at most 3072 input tokens, reserving
    768 output tokens plus 256 for framing/uncertainty. These are conservative Cra choices, not
    recovered Arc constants. Count instructions, examples, current question, all retained
-   history, page metadata/body and framework framing. String streaming uses no Generable
-   response schema; therefore schema/tool token cost is zero. Adding one later requires its
-   budget and a fresh plan review.
+   history, page metadata/body and framework framing. The existing string prototype has zero
+   schema cost; the pending guided-output amendment below supersedes that transport and
+   explicitly budgets nonzero schema cost. It requires a fresh independent plan review.
 4. On 26.4+, use actual token counts for the fully assembled instructions/prompt/transcript
    entries and a final fit check; avoid assuming additive counts exactly equal serialized
    framework cost. On 26.0–26.3, use conservative UTF-8-byte accounting plus framing reserve,
@@ -274,3 +274,179 @@ verification status. Root owns permission/coordination for publishing.
    as stated adaptations, with no persistence or background generation.
 
 Independent GPT-6.1 Sol review (2026-11-12): merge with plan fixups applied. Existing user authorization and coordinator review resolve the proposed local token fallback, ephemeral ownership and labelled visual inferences; no additional user approval is requested by these review questions. Historical visual calibration and real CEF callback proof remain implementation acceptance gates, not assumed facts. Full record: `/Users/varunaditya/Desktop/arc-decomp/cra-validation/reviews/plan-askonpage.md`. The reviewed plan-document diff may be committed under coordinator authorization. Each source diff still requires exact-diff independent review. This document marks no feature, test or runtime check complete.
+
+## Reviewed amendment: guided local answers, 12 November 2026
+
+This amendment supersedes the string-response/excerpt-tag transport, snapshot-parser and
+schema-zero assumptions above **only after fresh independent approval**. Historical Arc UI,
+normal Find, the mandatory CEF final-query correlation gate, page extraction/ownership,
+privacy, local-only inference and all unrelated scope constraints remain unchanged.
+
+### Why the transport needs to change
+
+The committed Core and browser-context batches are `c00d0a8` and `30c01a7`. A small per-window
+service and actual FoundationModels adapter now exist as an **uncommitted prototype**.
+Its controlled provider/manual-clock harness passes 25 checks; 22 focused Core tests pass.
+Those checks establish ownership, cumulative replacement, fitted source, bounded text/history,
+error/retry/deadline handling and cancellation. They do not establish real model output quality.
+
+Actual on-device generation was run against a synthetic observatory article through the
+production string adapter and actual 26.4+ transcript token counter. No browsing data, external
+fetch or cloud model was used. The final unchanged string prototype evidence is
+`/tmp/cra-askonpage-real-model-final.log`:
+
+| Question | Actual result | Grounding result |
+| --- | --- | --- |
+| What time does the observatory open? | Correct full source sentence inside standalone excerpt tags; short answer lacked bold emphasis. 676 input tokens. | Exact quote verified. Formatting contract still incomplete. |
+| When does it close? | Correct sentence copied with literal `\\n` and escaped slash strings from JSON-quoted history. 731 input tokens. | Citation correctly rejected; no quote action could be enabled. |
+| Who founded the observatory? | Correct absence statement, but excerpt tags appeared inline. 790 input tokens. | Citation correctly rejected for invalid structure. |
+
+The initial probe `/tmp/cra-askonpage-real-model-01.log` also produced a shortened quotation
+with newly added punctuation; deterministic validation rejected it. Explicit complete-verbatim
+sentence guidance and suppression of dialogue headers improved the first turn and are retained
+in the prototype. They did not fix follow-up formatting. Probes `-03.log` and `-04.log` preserve
+those failures. Readable previous-answer blocks (`-05.log`) still omitted citations; a final
+recency reminder (`-06.log`) produced invented dialogue instead of a single answer. Those
+ineffective history-format, repeated-format-reminder and slash-encoding changes were removed.
+One failed build (`-02.log`) resulted from a test file changing during compilation; it is not
+model-quality evidence. None of these runs is reported as a successful real-model feature test.
+
+Do not relax punctuation, accept inline/escaped pseudo-tags, fabricate a source quote, label a
+failed output as grounded, or rewrite it with another inference call to conceal these failures.
+
+### Proposed narrow generated shape
+
+Use one feature-specific FoundationModels `@Generable` type in the app, behind the existing
+macOS 26 / `canImport` guards:
+
+| Field | Generation guide and native meaning |
+| --- | --- |
+| `excerpts: [String]` | Zero to four complete, unchanged source quotations. Plain page text only, without XML, Markdown wrappers or JSON escape spelling. Native code bounds each string/array and validates every quote against this turn's exact fitted source. Four is an explicitly chosen local budget bound, not a recovered Arc limit. |
+| `answer: String` | Concise plain text, normally one sentence/roughly ten words. Preserve the selected language; summaries/translations/other requested transformations remain allowed. When relying on background knowledge, explicitly say it is a guess or is not on the page. No dialogue or markup. |
+| `keyAnswer: String` | The decisive term/value copied exactly from `answer`, for native bold emphasis. This is a presentation field, not evidence of truth. |
+
+There is **no model-declared supported/verified flag**. Plain native quote values carry a
+validation state computed from exact transmitted-source containment after only canonical
+Unicode/whitespace normalization. No fuzzy matching, punctuation deletion or background
+knowledge may validate a quote. Invalid quotations remain visibly unverified with the existing
+not-found warning; they never gain a Find action. One valid quote does not certify the semantic
+truth of every sentence in the answer or of another invalid quote.
+
+The native answer value holds plain answer text, an exact substring range for `keyAnswer` and
+separate quoted-source values. Render it directly with AppKit attributed text/quote views.
+Do not generate excerpt tags/Markdown solely to parse them again. Final `keyAnswer` must be
+nonempty and occur verbatim in `answer`; otherwise expose a typed incomplete/invalid-answer
+state and retain the editable question, rather than claim the required bold result succeeded.
+While streaming, answer text may appear before the emphasis field is complete. Quote controls
+remain disabled until final complete-field validation.
+
+A complete `excerpts: []` is valid for a background guess or other answer without a direct
+quotation; it is distinct from an absent/incomplete array in a partial snapshot. Empty or
+invalid `keyAnswer` remains a final field error, but do not enforce a literal ten-word or
+single-line limit on transformations. A multi-line summary/translation can bold a copied
+decisive phrase (or the complete answer when no shorter term fits) without narrowing that
+existing behavior.
+
+Page-context escaping is a transport representation only. Preserve the actual unescaped
+`Fitted.source` prefix for native validation, rendering and later DOM lookup. A source sentence
+such as `Budget < €40 & the editor says "use <excerpt> literally".` must remain quotable as
+that exact visible text. Literal excerpt-like markers inside typed quote fields are page data,
+not parser delimiters. Do not validate against the XML-encoded prompt, render entity spelling
+instead of source text, decode arbitrary model escape sequences as a repair, or search the DOM
+for the encoded transport string. Verify the same synthetic source end to end, including quotes,
+ampersands, angle brackets and marker-like text, without fuzzy quote repair.
+
+When no excerpt validates, the UI must visibly indicate that the answer is not quoted from this
+page; this cannot depend on a model support flag. Background guesses remain permitted and must
+be identified. This is not a blanket page-only refusal. A requested transformation still runs;
+its original-language/source excerpts may accompany the transformed answer. Native evidence
+status remains separate from model phrasing. Multiple citations are rendered and validated
+individually, and follow-ups retain bounded completed pairs and the same page ownership.
+
+### Native types and removal of superseded code
+
+- Refactor `AskOnPage.Answer` / quote values in CraCore into the small platform-independent
+  native result consumed by the service and AppKit. No FoundationModels type enters CraCore.
+  Keep exact-source normalization, bounded text, completed-pair history and omission policy.
+- Replace the prototype `Generate(Fitted, (String) -> Void)` with a feature-specific typed
+  partial update plus one complete result. Keep one current turn/task/deadline per window;
+  do not add a transport hierarchy, registry, second parser or parallel raw-answer cache.
+- Remove the now-unused `<excerpt>` snapshot scanner, tag-malformed/incomplete parsing branches,
+  Markdown-to-plain conversion for citations, markup-derived `Part` cases and parser-only tests.
+  Replace them with native quote/value validation and genuinely incomplete typed-field tests.
+  Keep adversarial source/punctuation/Unicode, byte bounds and history tests in the new path.
+- Remove the prototype's raw assistant-string storage and real-model markup-parser assertions.
+  Store bounded native answer/quote values; derive a readable completed-turn history string only
+  for the existing fitter. That representation is internal context, never generated transport
+  markup that is parsed back into UI. Remove redundant formatting-recovery prompt rules once
+  guides carry the output-shape contract. Preserve the original research-assistant behavior and
+  historical examples as behavioral evidence, adapting examples into the new fields as needed.
+  A turn may enter completed-pair history once its native answer/field/size validation completes,
+  including a valid zero-citation background answer or an answer displaying a rejected citation.
+  Citation verification controls evidence labels and quote actions individually; it does not
+  erase valid unsupported follow-ups or turn the conversation into a page-only refusal. Missing
+  complete fields, invalid emphasis or interrupted output still cannot enter completed history.
+- Core prompt fitting may continue to use a feature-local count closure, whose app adapter knows
+  the fixed generated schema. No generic AI/context framework or persistent chat format is added.
+
+### Actual schema cost and complete snapshots
+
+The installed SDK was inspected: `ResponseStream.Snapshot` contains cumulative
+`Content.PartiallyGenerated` and `rawContent`; `GeneratedContent.isComplete` and
+`Generable.init(_ content:) throws` are available. `GenerationSchema` is Codable. The 26.4+
+model provides `tokenCount(for: GenerationSchema)` and `tokenCount(for: transcript entries)`;
+transcript prompts accept `responseFormat: .init(type:)`.
+
+1. Count the actual generated schema, including all guides/property descriptions and array
+   bounds. On 26.4+, construct the same instruction/prompt transcript with its typed response
+   format used for generation. Measure the complete typed request, and independently measure
+   the schema; confirm whether schema cost is included by comparing base/typed counts. Use a
+   conservative maximum of complete-typed count and base-plus-schema count if serialization
+   inclusion is ambiguous. Retain the framing reserve; never count schema as zero or silently
+   omit it. No tools are enabled.
+2. On 26.0–26.3, include the UTF-8 byte length of the actual encoded Codable generation schema
+   in the conservative existing instruction/prompt fallback, plus the framing reserve. Encoding
+   failure fails closed. Refit history/page so input plus 768 output plus reserve stays inside
+   4096; reject an oversized mandatory request without truncating the user's question.
+3. Stream typed cumulative snapshots by replacing current values. Optional fields and array
+   elements are provisional, not deltas. Missing `answer`, `keyAnswer`, quotes or partial quote
+   strings must not be promoted to a complete result or actionable citation.
+4. Iterate one stream once; retain only its latest bounded partial/native value and the final
+   bounded raw content needed to construct the full generated type. On stream termination,
+   require `rawContent.isComplete`, successful full-type construction and native field/size/
+   emphasis validation. A token cap may terminate without a thrown error, so incomplete raw
+   content is a typed incomplete-answer error. Do not start a second stream/collect pass to
+   obtain a final answer. Remove the final raw content after conversion.
+5. Preserve current cancellation/identity checks on every partial/final/error. One context
+   overflow retry uses a new session and smaller fitted context, discarding prior partial
+   values and updating disclosure. Refusal/guardrails, incomplete fields and invalid quotes
+   do not start an unbounded or concealed formatting-repair loop.
+
+### Verification and adjusted small commit sequence
+
+| Check | Required evidence |
+| --- | --- |
+| Native Core values | Exact vs fabricated/punctuation/case/Unicode quotes; multiple valid/invalid quotes; empty/missing/oversized fields; actual emphasis substring range; no model support flag; completed-pair bounds and source disclosure. Include `<`, `&`, quotes and literal excerpt-like source markers through context escaping, native validation and plain rendering; unsent suffix text remains unverified. |
+| SDK-linked controlled service harness | Cumulative field replacement; incomplete arrays/text; final raw incompleteness; late old partial/error after a newer request; opt-out/off-on/model-loss/page change/timeout/owner teardown; history only after a complete validated turn; one overflow retry and no refusal retry. Assert actual native results/state, not only fake call counts. |
+| Schema/token budget | Actual schema token count, typed whole-request accounting, escaped maximum metadata/history, older-OS schema-byte fallback, CJK/large page fitting and output-cap incompleteness. Record measured schema count from the same production type. |
+| Actual on-device samples | The same synthetic opening-time and follow-up questions must produce exact validated source quotes plus native bold emphasis. Add genuinely unsupported background question, multiple-source question, summary, translation and the escaped-representation sentence above. Record complete native field values, measured input/schema counts, validation outcomes and failures. No fake-model output certifies this row. |
+| Actual DOM representation | Extend the existing real-DOM fixture with visible angle brackets, ampersands, quotation marks and literal excerpt-like markers. Extraction must retain actual visible text, and the later production quote-search/Range seam must find that same unescaped validated source text in the real browser. Do not pass model/transport entity spellings to native Find. |
+| Existing gates | Focused Core tests, production browser-context harness and real DOM checks; lint/promises/diff; coordinated native build later. Existing Find correlation/ordinary Find and UI/1x/2x acceptance gates stay mandatory and separate. |
+
+The pending raw-string service prototype is not committed before this amendment review.
+After approval, replace its obsolete transport in place and submit one scoped guided-service
+commit (`feat(ask): stream grounded native answers`) containing necessary Core native-value/
+validation and schema-accounting changes, production adapter/service and focused tests. If
+that diff is too large to review safely, split native answer/schema values from their service
+consumer, each compiling with meaningful tests; do not commit an unused parallel string
+service. Each resulting exact diff still gets independent Sol correctness/redundancy review
+before commit and push. Settings, CEF Find-correlation/AppKit UI and runtime journeys follow
+as their existing separate batches. No schema implementation starts before this fresh plan
+review returns and blocking findings are resolved.
+
+Independent GPT-6.1 Sol amendment review (12 November 2026): ready with the empty-citation,
+transformation and history clarifications above. Only the reviewed plan-document diff is
+committable at this gate; the frozen raw service prototype is not approved for commit and no
+guided source implementation begins until coordinator authorization. Every subsequent exact
+source diff still requires independent correctness/redundancy review. Review record:
+`/Users/varunaditya/Desktop/arc-decomp/cra-validation/reviews/plan-askonpage-guided-output.md`.
