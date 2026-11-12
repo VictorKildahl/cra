@@ -12,12 +12,21 @@ final class SummaryModel: ObservableObject {
     let title: String
     let favicon: UIImage?
     let snapshot: UIImage?
+    /// The page's address, named under a copied or shared summary.
+    var address: String?
     var close: () -> Void = {}
+    var share: (String) -> Void = { _ in }
 
     init(title: String, favicon: UIImage?, snapshot: UIImage?) {
         self.title = title
         self.favicon = favicon
         self.snapshot = snapshot
+    }
+
+    /// The finished summary as text, or nil while it is being written.
+    var text: String? {
+        guard case .done(let answer) = state else { return nil }
+        return answer.plainText(title: title, address: address)
     }
 }
 
@@ -97,6 +106,13 @@ struct SummaryView: View {
             Image("LaunchMark").resizable().frame(width: 22, height: 22)
             Text(MobileSummary.credit).font(.system(size: 12)).foregroundStyle(.secondary)
             Spacer()
+            if let text = model.text {
+                footerButton("doc.on.doc", label: "Copy", id: "summary-copy") {
+                    UIPasteboard.general.string = text
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                }
+                footerButton("square.and.arrow.up", label: "Share", id: "summary-share") { model.share(text) }
+            }
             Button(action: model.close) {
                 Image(systemName: "xmark")
                     .font(.system(size: 12, weight: .bold))
@@ -111,6 +127,19 @@ struct SummaryView: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
         .background(.regularMaterial)
+    }
+
+    private func footerButton(_ symbol: String, label: String, id: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 30, height: 30)
+                .background(Color.primary.opacity(0.1), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityIdentifier(id)
     }
 }
 

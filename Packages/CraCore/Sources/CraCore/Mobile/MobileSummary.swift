@@ -27,6 +27,20 @@ public enum MobileSummary {
             self.sections = sections
         }
 
+        /// The summary as text for Copy and Share: the page's title, the overview, each section
+        /// under its title, then the credit and the page's address (trackers removed).
+        public func plainText(title: String, address: String?) -> String {
+            var parts: [String] = []
+            let heading = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !heading.isEmpty { parts.append(heading) }
+            if !overview.isEmpty { parts.append(overview) }
+            parts += sections.map { "\($0.title)\n\($0.body)" }
+            var credit = MobileSummary.credit
+            if let address, !address.isEmpty { credit += "\n" + CleanURL.withoutTrackers(address) }
+            parts.append(credit)
+            return parts.joined(separator: "\n\n")
+        }
+
         /// Trimmed, without empty sections; nil when the model said nothing usable.
         public var cleaned: Answer? {
             let overview = overview.trimmingCharacters(in: .whitespacesAndNewlines)

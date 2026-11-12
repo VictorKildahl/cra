@@ -932,3 +932,13 @@ struct MobileCustomSearchTests {
         #expect(settings.search == .kagi && settings.customSearchURL != nil, "the address is kept for later")
     }
 }
+
+/// The summary as text, for Copy and Share.
+struct MobileSummaryTextTests {
+    @Test func theSummaryReadsAsTextWithItsSource() {
+        let answer = MobileSummary.Answer(overview: "A guide to the stars.", sections: [.init(title: "Seeing", body: "Go somewhere dark.")])
+        #expect(answer.plainText(title: " Night sky ", address: "https://example.com/stars?utm_source=x") ==
+            "Night sky\n\nA guide to the stars.\n\nSeeing\nGo somewhere dark.\n\nSummarized for you by Cra\nhttps://example.com/stars")
+        #expect(answer.plainText(title: "", address: nil).hasPrefix("A guide to the stars."))
+    }
+}

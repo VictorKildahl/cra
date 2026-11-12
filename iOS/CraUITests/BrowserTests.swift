@@ -363,6 +363,12 @@ final class ReadingTests: BrowserTestCase {
         XCTAssertTrue(app.staticTexts["Summarized for you by Cra"].exists)
         XCTAssertTrue(app.staticTexts["Point 1"].exists)
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Pizza is a dish of Italian origin'")).firstMatch.exists)
+        // Copy and Share once it is written.
+        XCTAssertTrue(app.buttons["summary-copy"].exists)
+        app.buttons["summary-share"].tap()
+        XCTAssertTrue(app.otherElements["ActivityListView"].waitForExistence(timeout: 5) || app.navigationBars["UIActivityContentView"].waitForExistence(timeout: 2),
+                      "the share sheet opens")
+        app.swipeDown(velocity: .fast)
         sleep(1)
         keep("summary")
         app.buttons["summary-close"].tap()

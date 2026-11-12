@@ -49,6 +49,13 @@ extension BrowserViewController {
             let model = SummaryModel(title: tab?.displayTitle ?? "", favicon: tab.flatMap { self.favicons.icon(for: $0.url) },
                                      snapshot: image ?? self.store.snapshot(id))
             model.close = { [weak self] in self?.closeSummary() }
+            model.address = page.webView.url?.absoluteString
+            model.share = { [weak self] text in
+                guard let self else { return }
+                let share = UIActivityViewController(activityItems: [text], applicationActivities: nil)
+                share.popoverPresentationController?.sourceView = self.view
+                self.topPresenter.present(share, animated: true)
+            }
             let host = UIHostingController(rootView: SummaryView(model: model))
             host.view.frame = self.view.bounds
             host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
