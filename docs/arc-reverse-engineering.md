@@ -833,7 +833,10 @@ Arc 1.172 binary (otool/llvm-objdump on the arm64 slice, 8 Nov, #246):
 - [O static] Minimize is per site (`minimizeEnabled` in its PiP config) and asks Chromium to leave PiP;
   `offscreen` is a separate "stash" past the screen edge. Cra has neither.
 - [O static] Scrubber: 5 pt capsule (15 pt drag area) 8 pt above the bottom (4 when tiny), white over
-  white 30 %; dragging upwards slows seeking by 2^round(dy / 60 pt), down to 1/16. Cra has none yet.
+  white 30 %; dragging upwards slows seeking by 2^round(dy / 60 pt), down to 1/16. Cra draws it
+  (`PictureInPictureScrubber` in CraCore, 12 Nov) for a video with an end, and a press goes to that
+  spot. [I] The side insets (12 pt tiny, 16 otherwise, as the other controls) and the press-to-seek
+  are not from the binary. Cra's band leaves the bottom 8 pt to the window's resize edge.
 Cra follows the limits, the scrim, the fade, the insets and the Back to Tab words
 (`PictureInPictureLayout` in CraCore) and keeps its 782×440-on-1728×1117 opening size.
 Double click (11 Nov, reported by a user): a double click on Arc's window returns to the video's tab.

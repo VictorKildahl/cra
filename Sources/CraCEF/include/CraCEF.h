@@ -127,6 +127,9 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 - (void)browser:(CraBrowser *)browser didChangePictureInPicture:(BOOL)active;
 /// The video in the Picture in Picture window started or stopped playing.
 - (void)browser:(CraBrowser *)browser didChangePictureInPicturePlayback:(BOOL)playing;
+/// Where the video in the Picture in Picture window is, in seconds, and how long it is
+/// (0 for a stream with no end). Sent as the video plays and after a seek.
+- (void)browser:(CraBrowser *)browser didChangePictureInPictureTime:(double)position duration:(double)duration;
 /// The colour the page paints behind its content (root/body background, else the
 /// canvas colour of its color scheme), as "#RRGGBB"; "" when a new page starts loading
 /// and has not reported one yet (show +[CraBrowser pageCanvasColor] then). The shell fills
@@ -309,6 +312,8 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 - (void)togglePictureInPicturePlayback;
 /// Seek the video in the Picture in Picture window by `seconds` (negative = back).
 - (void)skipPictureInPictureBy:(double)seconds NS_SWIFT_NAME(skipPictureInPicture(by:));
+/// Seek the video in the Picture in Picture window to `seconds` from its start.
+- (void)seekPictureInPictureTo:(double)seconds NS_SWIFT_NAME(seekPictureInPicture(to:));
 - (void)print;
 /// One of Chrome's own commands by its IDC name ("IDC_ROUTE_MEDIA" for Cast…, "IDC_TASK_MANAGER"),
 /// where Chromium can run it for this page. NO when it can't.

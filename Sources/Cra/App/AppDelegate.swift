@@ -1427,9 +1427,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // pip=<label>: Chromium's Picture in Picture window as Cra keeps it; pipKey=space|force asks
             // it to become key the ways Chromium can leave it open to that (#262); pipDrop=left|right|top|bottom
             // lets it go half past that edge of its display, as a mouse drag does (#332); pipClick=<n> clicks
-            // the video, as the last of n quick clicks (2: a double click, back to the tab).
+            // the video, as the last of n quick clicks (2: a double click, back to the tab); pipSeek=<0…1>
+            // presses the scrubber that far along.
             if let label = dict["pip"] { NSLog("Cra pip %@: %@", label, PictureInPictureChrome.shared.readout()); return }
             if let count = dict["pipClick"].flatMap(Int.init) { PictureInPictureChrome.shared.debugClick(count); return }
+            if let at = dict["pipSeek"].flatMap(Double.init) { PictureInPictureChrome.shared.debugSeek(at); return }
             if let how = dict["pipKey"] { PictureInPictureChrome.shared.debugTakeKey(how); return }
             if let edge = dict["pipDrop"] { PictureInPictureChrome.shared.debugDrop(edge); return }
             // peekShown=<label>: the page behind a Peek in each window, faded and drawn back or whole (PR #221).
