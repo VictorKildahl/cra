@@ -127,6 +127,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     private(set) var runtimes: [UUID: TabRuntime] = [:]
     /// The focused pane's tab (the one toolbar actions and DevTools apply to).
     private(set) var visibleTabID: UUID?
+    /// Stops an Ask snapshot from surviving a focus switch away and back to the same document.
+    private(set) var askOnPageFocusRevision: UInt = 0
     /// Every tab on screen, in pane order (one entry outside split view).
     private(set) var visibleTabIDs: [UUID] = []
     /// Tabs whose page tab sleeping closed and that haven't been shown since.
@@ -256,7 +258,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         devToolsViews[tabID] = nil
         devToolsPlaceholders[tabID] = nil
         devToolsDockedState[tabID] = nil
-        if visibleTabID == tabID { visibleTabID = nil }
+        if visibleTabID == tabID { visibleTabID = nil; askOnPageFocusRevision &+= 1 }
         visibleTabIDs.removeAll { $0 == tabID }
         handOffPermissions(of: tabID, browser: rt.browser)
         if let host = rt.hostWindow {
@@ -280,6 +282,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// Show several tabs at once (split view); `focused` gets keyboard focus.
     func show(_ tabIDs: [UUID], focused: UUID?, focus: Bool) {
         let started = Perf.now()
+        let previousFocus = visibleTabID
         let newSet = Set(tabIDs)
         for previous in visibleTabIDs where !newSet.contains(previous) {
             runtimes[previous]?.hiddenAt = clock.now
@@ -331,6 +334,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         visibleTabIDs = shown
         if let np = nowPlaying, np.onScreen != Set(shown) { np.onScreen = Set(shown) }
         visibleTabID = focused.flatMap { newSet.contains($0) ? $0 : nil } ?? shown.first
+        if visibleTabID != previousFocus { askOnPageFocusRevision &+= 1 }
         if wasVisible != Set(shown) {
             HitchMonitor.mark("page-shown")
             if let rt = visibleRuntime {

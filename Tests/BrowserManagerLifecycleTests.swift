@@ -210,7 +210,56 @@ enum BrowserManagerLifecycleTests {
         pageHistoryCase()
         await permissionWaitsForItsTabCase()
         permissionPopoverStepsAsideCase()
+        await askOnPageSnapshotCase()
         print("Browser manager lifecycle: \(checks) checks passed")
+    }
+
+    @MainActor
+    private static func askOnPageSnapshotCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let tab = store.createTab(url: "https://example.test/article").id
+        let other = store.createTab(url: "https://example.test/other").id
+        manager.show(tab, focus: false)
+        let text = "A complete synthetic article sentence that can be used as page context and quoted."
+        let reply = String(data: try! JSONSerialization.data(withJSONObject: ["result": ["value": [
+            "url": "https://example.test/article", "title": "Article", "text": text,
+            "contentType": "text/html", "truncated": false]]]), encoding: .utf8)!
+        let browser = manager.visibleRuntime!.browser
+        let context = manager.askOnPageContext()!
+        var received: [AskOnPagePrompt.Page?] = []
+        manager.askOnPageSnapshot(context) { received.append($0) }
+        browser.replies.removeLast().completion(reply, nil)
+        await withCheckedContinuation { done in DispatchQueue.main.async { done.resume() } }
+        expect(received.count == 1 && received[0]?.text == text, "Ask context is returned from the captured current browser")
+
+        for change in 0..<5 {
+            let current = manager.askOnPageContext()!
+            let active = manager.visibleRuntime!.browser
+            received.removeAll()
+            manager.askOnPageSnapshot(current) { received.append($0) }
+            let complete = active.replies.removeLast().completion
+            switch change {
+            case 0: active.setLoading(true); active.setLoading(false)
+            case 1: manager.show(other, focus: false); manager.show(tab, focus: false)
+            case 2: store.profilePaths[tab] = "/different-profile"
+            case 3: manager.unload(tab); manager.show(tab, focus: false)
+            default: manager.show([tab, other], focused: other, focus: false)
+            }
+            complete(reply, nil)
+            await withCheckedContinuation { done in DispatchQueue.main.async { done.resume() } }
+            expect(received.count == 1 && received[0] == nil,
+                   "Ask rejects an obsolete snapshot after reload, focus away/back, profile change, replacement or split focus (case \(change))")
+            store.profilePaths[tab] = nil
+            manager.show(tab, focus: false)
+        }
+        received.removeAll()
+        manager.askOnPageSnapshot(context) { received.append($0) }
+        expect(received.count == 1 && received[0] == nil, "an obsolete request is rejected before page evaluation")
+        let internalPage = store.createTab(url: "cra://settings").id
+        manager.show(internalPage, focus: false)
+        expect(manager.askOnPageContext() == nil, "internal browser pages are ineligible before extraction")
+        manager.closeAll()
     }
 
     @MainActor

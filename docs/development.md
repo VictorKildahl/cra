@@ -117,6 +117,8 @@ to Markdown or `docs/` alone runs nothing.
   a stub to `AppServices.swift`.
 - `scripts/test-store.sh`: the real `SidebarStore`, `AppComposition` and importers on a
   `ManualScheduler`, against the made-up Arc and Chromium profiles in `Tests/Fixtures`.
+- `scripts/test-ask-on-page-content.sh`: the production bounded Ask on Page script in a real
+  WebKit isolated world, using synthetic local HTML, including hidden/large DOM and Unicode bounds.
 - `scripts/test-policies.sh`: the decisions pulled out of the window controllers
   (`ExtensionLaunch`, `DevToolsToggle`, `FeatureFlags`).
 - `scripts/test-folder-glyph.sh`: the standalone folder component's real AppKit layers and image
