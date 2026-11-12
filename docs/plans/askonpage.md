@@ -464,3 +464,74 @@ emphasis with a plain-text fallback is approved as the narrow correction above; 
 grounding, required answer/schema completeness, resource limits and all other gates remain.
 Only this plan-document correction is ready for commit, before corresponding source changes.
 Review: `/Users/varunaditya/Desktop/arc-decomp/cra-validation/reviews/plan-askonpage-emphasis.md`.
+
+
+## Reviewed refinement: Find query correlation, 12 November 2026
+
+Independent review accepts the stop/restart design in
+`/Users/varunaditya/Desktop/arc-decomp/cra-validation/ask-find-design.md` as a
+**conditional source-level design**, with the following implementation and acceptance gates.
+This does not establish runtime parity or complete automatic zero-match Ask.
+
+- Use one feature-specific query generation per browser, bound to exact field text, case,
+  ordinary/quote purpose, panel lifetime and the existing captured page/runtime identity.
+  A→B→A, reopen, owner/page change and quote restoration receive fresh generations.
+  Invalidate final-zero eligibility synchronously in the field-edit/programmatic-query path,
+  before Observation schedules Find. Capture/check the original page/browser for asynchronous
+  Use Selection; its late response must not rewrite another page's query or pasteboard.
+- On CEF UI, perform one uninterrupted transaction for every new generation: clear the old
+  native tag, `StopFinding(false)`, install the new immutable tag, then call `Find` with the
+  existing arguments. Never install the new tag before Stop; a callback during Stop must be
+  old/untagged and rejected. No task hop or nested event pump may split this transaction.
+  Assert/reject off-UI use or marshal the entire transaction together. Plain Stop invalidates
+  first; close retains the existing clear-selection behavior. Same-generation Next/Previous
+  calls Find directly, without restarting its session or losing active-match movement.
+- Capture generation/purpose at native `OnFindResult` entry, before any dispatch/Task to
+  Swift/main. Deliver those immutable captured values with CEF's actual identifier, count,
+  ordinal and `finalUpdate`; never read a mutable current tag inside a later delivery closure.
+  Reject absent/stale tags and wrong browser/runtime/focused-page identity before mutation.
+  The identifier is engine evidence, not a caller ID or proof of ownership by itself.
+- This fence relies on the installed CEF `a10dae3408911466b2d90409cc3355cbf6043ffb`
+  and Chromium `156.0.8078.96`: UI-thread Find synchronously enters FindTabHelper; Stop marks
+  the old session aborted; the next Find records its new session ID before synchronous reply
+  reentry; helper filtering rejects older IDs before CEF forwards accepted results. Do not
+  guess from the first callback, mirror native counters, await abandoned final replies, add
+  delays/queues, or change the CEF pin/patches.
+- **Exclusive Find ownership is a release gate.** Inventory and exercise native key/menu,
+  Chrome command, extension, page and DevTools routes for the actual runtime styles. Native
+  FindBarController can use the same helper independently. Route reachable competing Find
+  commands through the app Find path, or synchronously invalidate ownership before they run.
+  A foreign higher identifier must never be credited to the current tag. An unobservable
+  competing caller blocks auto-Ask completion; report it without silently deleting the
+  intended feature. Existing ordinary Find and explicit Ask remain usable.
+- WebKit captures generation, query, purpose and WKWebView identity before `web.find`, and
+  guards both its native completion and later count-script completion before shared mutation.
+  Only the current native `matchFound == false` authorizes zero. The innerText count is a
+  display approximation; a positive native result remains positive even when that script
+  reports zero/fails. Stop/close invalidates before clearing fields.
+- Auto-Ask requires available + opted-in, ordinary purpose, plain Return, nonempty unchanged
+  input and a proven final zero for that generation/page. Partial/unknown/negative, quote,
+  pending and stale results cannot qualify. Pending Return performs ordinary Find and never
+  arms a deferred submission. Shift-Return retains backward Find; explicit Ask/Ctrl-Return
+  follows its existing separate contract. Recheck current identity and availability on submit.
+
+| Mandatory verification before batch 6 is complete | Required evidence |
+| --- | --- |
+| Reordering | Old zero→new matching, old positive→new zero, A→B→C, A→B→A, delayed short queries, partial zero→positive final and close/reopen. Only the exact current generation can update accepted final state. |
+| Native delivery boundary | Queue delivery of an already-captured old result, install a new generation, then release delivery. It retains its old tag. Exercise callback reentry during Stop/Find so no old result receives the new tag. |
+| Ownership and lifecycle | Production manager rejects wrong runtime/browser and other split/tab/window/profile/private/page generations, including same-URL reload/history and runtime replacement; quote results cannot complete ordinary Find. Enumerate/reroute/invalidate every reachable competing native Find route. |
+| Real engines | Controlled real CEF and WKWebView fixtures record synthetic query generation/purpose, actual ID/final/count/ordinal and accepted state. No question/real-page logging. Verify short-query delay, empty/CR-only query, no renderer/cancel, repeated forward/backward wrap, first active match, selection preservation, quote restoration, Use Selection, Jump to Selection, Cmd-F/Cmd-G and Escape. |
+| Regression strength | A late-zero test must fail against the old untagged bridge/state. Test actual accepted eligibility/state through production Core/delegate seams, with event/completion synchronization; fake bookkeeping alone cannot certify the native fence. Preserve existing find-selection scenario and ordinary Find when Ask is disabled. |
+
+Keep this in the planned granular Find/UI batch after Settings; each exact implementation
+and cleanup diff receives independent review before commit. Before UI completion, settings
+opt-out and model-availability loss must synchronously call the window owner's `clear()`
+at the mutation/notification source, rather than relying on a later Observation turn.
+A production real-store test must turn Ask off then on in the same main-actor turn while
+work is pending and prove the old conversation/task cannot survive; test availability loss
+and stale extraction/stream delivery equivalently. Service injected-closure tests alone do
+not satisfy that integration gate.
+
+Independent plan-only review: approved with these explicit constraints. No source/test changes,
+engine runtime check, build, commit or push was performed by this refinement review. Record:
+`/Users/varunaditya/Desktop/arc-decomp/cra-validation/reviews/plan-askonpage-find-correlation.md`.
