@@ -1419,6 +1419,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 for m in mainWindows { NSLog("Cra peek shown %@: %@", label, m.peekBackdropShown()) }
                 return
             }
+            // peekExpand=plain|command: the front window's Peek's Expand button, clicked with or without ⌘
+            // held, then the selected tab's page, its pinned address and the Today tab count (#380).
+            if let how = dict["peekExpand"] {
+                guard let peek = littleWindows.first(where: { $0.isPeek && !$0.isParked && $0.peekParent === main }) else {
+                    CraLog.note("peek expand \(how): no Peek"); return
+                }
+                peek.expandPeek(commandClick: how == "command")
+                let today = store.tabs(under: store.focusedSpace(window: main.windowID).todayContainerID).count
+                let tab = main.selectedTab?.tab
+                CraLog.note("peek expand \(how): selected=\(tab?.url ?? "-") home=\(tab?.savedURL ?? "-") today=\(today)")
+                return
+            }
             // peeks=<label>: each window's Peeks, on screen or waiting on their tab, and their pages (#242).
             if let label = dict["peeks"] {
                 for m in mainWindows { NSLog("Cra peeks %@: %@", label, m.peeksShown()) }

@@ -1,0 +1,36 @@
+# ⌘-click on a Peek's Expand button with Settings ▸ Links ▸ "⌘-click Expand opens in the tab" on: the page
+# loads in the pinned tab the Peek came from, which keeps its pinned address, no Today tab is made and
+# Back returns the tab to its page. A plain click still makes a Today tab, as Arc's Expand (GitHub #380).
+# promise: #380
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "peekExpandInSourceTab": true}
+
+cra://open?url=${PAGE}?n=hub
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/pinTab
+wait 0.5
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=peek'))","userGesture":true}
+expect-log peek: from
+wait 1.5
+cra://debug?peeks=open
+expect-log Cra peeks open: shown \S+n=peek$
+
+cra://debug?peekExpand=command
+expect-log peek expand command: selected=\S+n=peek home=\S+n=hub today=0$
+wait 1.5
+cra://debug?peeks=gone
+expect-log Cra peeks gone: (none|hidden \S+n=peek)$
+cra://debug?back=loaded
+expect-log back loaded: selected=\S+n=peek back=1 today=0$
+cra://action/goBack
+wait 1.5
+cra://debug?back=returned
+expect-log back returned: selected=\S+n=hub back=0 today=0$
+
+# A plain click on Expand: a Today tab, the pinned tab left on its page.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=again'))","userGesture":true}
+wait 1.5
+cra://debug?peekExpand=plain
+expect-log peek expand plain: selected=\S+n=again home=\S+n=again today=1$

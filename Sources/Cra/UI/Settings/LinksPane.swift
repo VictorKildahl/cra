@@ -59,6 +59,12 @@ struct LinksPane: View {
                                   detail: "Hold ⇧ while you click any link to open it in a Peek.",
                                   isOn: $store.settings.peekOnShiftClick)
                     .settingsTextColumn()
+                SettingsCardDivider()
+                // Not in Arc (GitHub #380): off by default, Expand makes a new tab as in Arc.
+                SettingsToggleRow("⌘-click Expand opens in the tab",
+                                  detail: "Hold ⌘ while you click a Peek’s Expand button to open the page in the tab you were peeking from, instead of a new tab. Back takes that tab to where it was, and a pinned tab keeps its pinned page.",
+                                  isOn: $store.settings.peekExpandInSourceTab)
+                    .settingsTextColumn()
             }
 
             SettingsHeader("New tabs").padding(.top, 20)

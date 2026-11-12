@@ -653,7 +653,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         }
         var buttons: [PeekControlsPanel.Button] = [
             .init(symbol: "xmark", help: "Close (⌘W)") { [weak self] in self?.closeWindow() },
-            .init(symbol: "arrow.up.left.and.arrow.down.right", help: "Expand (⌘O)") { [weak self] in self?.promote(to: nil) },
+            .init(symbol: "arrow.up.left.and.arrow.down.right", help: "Expand (⌘O)") { [weak self] in
+                self?.expandPeek(commandClick: NSApp.currentEvent?.modifierFlags.contains(.command) == true)
+            },
         ]
         if easel == nil {
             buttons.append(.init(symbol: "square.split.2x1", help: "Add To Split") { [weak self] in self?.promoteToSplit() })
@@ -881,6 +883,27 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         if let window, let p = window.parent { p.removeChildWindow(window) }
         peekParent?.endPeekVeil(for: peekID)
         if !promoted, let pw = peekParent?.window, NSApp.isActive { pw.makeKeyAndOrderFront(nil) }
+    }
+
+    /// The Expand button: the page becomes a new tab, or with ⌘ held and Settings ▸ Links ▸ "⌘-click
+    /// Expand opens in the tab" on, loads in the tab the Peek came from (PeekExpand, GitHub #380).
+    func expandPeek(commandClick: Bool) {
+        let source = peekSourceTab.flatMap { store.item($0) != nil ? $0 : nil }
+        switch PeekExpand.target(commandClick: commandClick, hasSourceTab: source != nil, settings: store.settings) {
+        case .newTab: promote(to: nil)
+        case .sourceTab: if let source { loadInSourceTab(source) }
+        }
+    }
+
+    /// The tab under the Peek navigates to the peeked page and the Peek goes, without its closing
+    /// motion (Expand's own way out). The tab's history stays, so Back returns to where it was.
+    private func loadInSourceTab(_ tabID: UUID) {
+        guard hasPage, let parent = peekParent, let window else { return }
+        let url = currentURL
+        promoted = true  // the page lives on in the tab: not a closed Peek to reopen
+        guard windowShouldClose(window) else { return }
+        window.close()
+        parent.loadPeekPage(url, inTab: tabID)
     }
 
     /// Add To Split: the peeked page becomes a tab and joins the tab under the Peek as a split
