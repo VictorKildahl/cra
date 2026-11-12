@@ -1107,6 +1107,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let history = dict["mcpHistory"] { MCPServer.shared.allowsHistory = history == "on"; return }
             // mcpStop=1: the pill's Stop (every agent disconnects, MCP turns off).
             if dict["mcpStop"] != nil { MCPServer.shared.stopFromPill(); return }
+            // translatePrompts=never:<host>|reset|state: Settings ▸ Advanced ▸ Reset Translated-site Prompts and the
+            // never-translate list it empties.
+            if let t = dict["translatePrompts"] { TranslatedSitePrompts.debug(t, store: store); return }
             // settingsPane=max: Settings opened on that pane.
             if let p = dict["settingsPane"].flatMap(SettingsPane.init(rawValue:)) {
                 showSettingsWindow(on: p)
@@ -2297,6 +2300,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 newProfile: { [weak self] in
                     guard let self, let w = self.settingsWindow else { return }
                     self.main.showNewProfileDialog(over: w)
+                },
+                resetTranslatedSitePrompts: { [weak self] in
+                    guard let self else { return }
+                    TranslatedSitePrompts.reset(store: self.store)
                 })
             let c = SettingsWindowController(store: store, bindings: bindings, sync: composition.sync, actions: actions)
             settingsController = c

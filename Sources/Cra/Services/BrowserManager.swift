@@ -95,6 +95,8 @@ protocol BrowserManagerDelegate: AnyObject {
     /// Arc's Peek: a link the user clicked (or Shift-clicked) in `tabID`, whose page is at
     /// `pageURL`. Return true when it opens in a Peek instead.
     func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool, newTab: Bool) -> Bool
+    /// Arc's ⌥⌘-click: a link clicked in `tabID` with both keys down. Return true when it opens in a Little Window.
+    func browserManagerOpensLittleWindow(url: String, fromTab tabID: UUID) -> Bool
     /// The page's context menu: Open Link in New Window, Little Window or Incognito Window.
     func browserManagerOpenLink(_ url: String, in kind: CraLinkWindow, space: UUID?, fromIncognito: Bool)
     /// The page's context menu: Open Link in Split View, a pane beside `tabID`'s (#257).
@@ -1483,6 +1485,11 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     func browser(_ browser: CraBrowser, opensPeekForURL url: String, shiftClick: Bool, newTab: Bool) -> Bool {
         guard let id = tabID(of: browser), !browser.isIncognito else { return false }
         return delegate?.browserManagerOpensPeek(url: url, fromTab: id, pageURL: browser.currentURL, shiftClick: shiftClick, newTab: newTab) ?? false
+    }
+
+    func browser(_ browser: CraBrowser, opensLittleWindowForURL url: String) -> Bool {
+        guard let id = tabID(of: browser), !browser.isIncognito else { return false }
+        return delegate?.browserManagerOpensLittleWindow(url: url, fromTab: id) ?? false
     }
 
     func devToolsHostView(for browser: CraBrowser) -> NSView? {

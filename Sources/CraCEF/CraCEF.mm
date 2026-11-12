@@ -1491,6 +1491,7 @@ public:
             && [o.delegate browser:o opensPeekForURL:NSStringFromCef(target_url)
                         shiftClick:target_disposition == CEF_WOD_NEW_WINDOW
                            newTab:target_disposition == CEF_WOD_NEW_FOREGROUND_TAB]) return true;
+        if (OpensLittleWindow(o, target_url, target_disposition, user_gesture)) return true;
         BOOL background = (target_disposition == CEF_WOD_NEW_BACKGROUND_TAB);
         CraBrowser* host = [o.delegate browser:o popupHostForURL:NSStringFromCef(target_url) inBackground:background];
         if (!host) return true;  // blocked
@@ -1816,6 +1817,18 @@ public:
         return false;
     }
 
+    // Arc's ⌥⌘-click opens the link in a Little Window. Chromium reports ⌥⌘-click as a ⌘-click (a
+    // background tab: on macOS the Command key decides before Option is looked at), so the keys
+    // are read from the keyboard as the click is handled; Shift or Control make it another click.
+    bool OpensLittleWindow(CraBrowser* o, const CefString& target_url, WindowOpenDisposition disposition, bool user_gesture) {
+        if (!user_gesture || disposition != CEF_WOD_NEW_BACKGROUND_TAB) return false;
+        NSEventModifierFlags keys = [NSEvent modifierFlags] & NSEventModifierFlagDeviceIndependentFlagsMask;
+        const NSEventModifierFlags want = NSEventModifierFlagOption | NSEventModifierFlagCommand;
+        if ((keys & want) != want || (keys & (NSEventModifierFlagShift | NSEventModifierFlagControl))) return false;
+        if (![o.delegate respondsToSelector:@selector(browser:opensLittleWindowForURL:)]) return false;
+        return [o.delegate browser:o opensLittleWindowForURL:NSStringFromCef(target_url)];
+    }
+
     bool OpensPeek(CraBrowser* o, CefRefPtr<CefRequest> request, bool user_gesture, bool is_redirect) {
         if (!user_gesture || is_redirect) return false;
         cef_transition_type_t tt = request->GetTransitionType();
@@ -1833,6 +1846,7 @@ public:
         if (user_gesture && target_disposition == CEF_WOD_NEW_WINDOW
             && [o.delegate respondsToSelector:@selector(browser:opensPeekForURL:shiftClick:newTab:)]
             && [o.delegate browser:o opensPeekForURL:NSStringFromCef(target_url) shiftClick:YES newTab:NO]) return true;
+        if (OpensLittleWindow(o, target_url, target_disposition, user_gesture)) return true;
         BOOL background = (target_disposition == CEF_WOD_NEW_BACKGROUND_TAB);
         [o.delegate browser:o requestsNewTabWithURL:NSStringFromCef(target_url) inBackground:background];
         return true;

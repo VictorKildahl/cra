@@ -64,6 +64,11 @@ struct AdvancedPane: View {
                                   detail: "Drag the top edge of a page to move the window.",
                                   isOn: $store.settings.pageTopWindowDrag)
                 SettingsCardDivider()
+                // Arc: Settings ▸ Advanced "Show full URL when Toolbar is enabled" (also in the toolbar address's menu).
+                SettingsToggleRow("Show full URL when Toolbar is enabled",
+                                  detail: "With the toolbar on, its address shows the whole address, not only the site’s name.",
+                                  isOn: $store.settings.toolbarShowsFullURL)
+                SettingsCardDivider()
                 // Arc: "Enable Boosts on websites you visit".
                 SettingsToggleRow("Boosts",
                                   detail: "Your Boosts restyle and change the sites they’re made for.",
@@ -106,6 +111,19 @@ struct AdvancedPane: View {
                 SettingsPlainRow("Export spaces and pinned tabs",
                                    detail: "Save every space’s favorites, pinned tabs and folders as a bookmarks file that Chrome, Safari, Firefox and other browsers can import.",
                                    trailing: { Button("Export…") { SidebarExport.run(store, in: NSApp.keyWindow) } })
+            }
+
+            SettingsHeader("Chromium").padding(.top, 20)
+            SettingsFeatureCard {
+                // Arc: "More Settings…" opens arc://settings.
+                SettingsPlainRow("More Settings",
+                                 detail: "Chromium’s own settings page, in a tab.",
+                                 trailing: { Button("More Settings…") { actions.openURL("chrome://settings") } })
+                SettingsCardDivider()
+                // Arc: "Reset Translated-site Prompts" (resetTranslateSettings).
+                SettingsPlainRow("Translated sites",
+                                 detail: "Forget the sites you chose never to translate and the other translate choices, so Chromium offers to translate again.",
+                                 trailing: { ResetTranslatedSitesButton(reset: actions.resetTranslatedSitePrompts) })
             }
 
             SettingsHeader("Agents").padding(.top, 20)
@@ -212,5 +230,21 @@ private struct SearchEnginePicker: View {
         guard let engine = engines.first(where: { $0.keyword == keyword }) else { return }
         SearchEngines.shared.setDefault(engine, store: store)
         selected = keyword
+    }
+}
+
+/// Arc's "Reset Translated-site Prompts", which says nothing when it is done: the label turns to "Done"
+/// for two seconds instead.
+private struct ResetTranslatedSitesButton: View {
+    let reset: () -> Void
+    @State private var done = false
+
+    var body: some View {
+        Button(done ? "Done" : "Reset Translated-site Prompts") {
+            reset()
+            done = true
+            Task { try? await Task.sleep(for: .seconds(2)); done = false }
+        }
+        .disabled(done)
     }
 }

@@ -564,6 +564,10 @@ public struct AppSettings: Codable, Equatable {
     /// Arc's "Open Little Arc when I press ⌥⌘N" (globalLittleBrowserHotkeyEnabled, on by default):
     /// New Little Window's shortcut works from every app, full-screen ones too (GitHub #195).
     public var littleWindowShortcutEverywhere: Bool = true
+    /// Arc's "Open Little Arc when clicking on links with ⌥⌘ held" (optionCommandClickLittleArcEntryPointEnabled,
+    /// on in the Arc 1.172.2 measured on 11 Nov 2026): a link clicked with both keys down opens in a Little Window
+    /// (LittleWindowTrigger).
+    public var littleWindowOnOptionCommandClick: Bool = true
     /// A page's "Open Link in New Tab" switches to the tab it opens (LinkMenu). Off as in Arc, whose
     /// item leaves the page in front and the tab loading behind it (GitHub #276). A new key: #183's
     /// openLinksInBackground was off (switch) in every settings.json that never turned it on.
@@ -895,6 +899,7 @@ extension AppSettings {
         peekInEveryTab = try c.decodeIfPresent(Bool.self, forKey: .peekInEveryTab) ?? false
         peekOnShiftClick = try c.decodeIfPresent(Bool.self, forKey: .peekOnShiftClick) ?? true
         littleWindowShortcutEverywhere = try c.decodeIfPresent(Bool.self, forKey: .littleWindowShortcutEverywhere) ?? true
+        littleWindowOnOptionCommandClick = try c.decodeIfPresent(Bool.self, forKey: .littleWindowOnOptionCommandClick) ?? true
         openLinksInForeground = try c.decodeIfPresent(Bool.self, forKey: .openLinksInForeground) ?? false
         folderPreviews = try c.decodeIfPresent(Bool.self, forKey: .folderPreviews) ?? true
         hapticFeedbackOnReorder = try c.decodeIfPresent(Bool.self, forKey: .hapticFeedbackOnReorder) ?? true

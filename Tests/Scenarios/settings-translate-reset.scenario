@@ -1,0 +1,15 @@
+# Settings ▸ Advanced ▸ Reset Translated-site Prompts, as Arc's button of that name: the sites you chose
+# never to translate (Chromium's translate_site_blocklist_with_time, what "Never Translate This Site" fills)
+# are forgotten, so Chromium offers to translate them again. Until now nothing took a site off that list.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://open?url=${PAGE}?n=kept
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?translatePrompts=never:example.com
+wait 1
+expect-log translate prompts: never sites=1
+cra://debug?translatePrompts=reset
+wait 1
+expect-log translate prompts reset: [1-9][0-9]* preferences emptied
+expect-log translate prompts: never sites=0

@@ -1721,6 +1721,7 @@ private final class Observer: BrowserManagerDelegate {
         activatedByPage.append(byPage)
     }
     func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool, newTab: Bool) -> Bool { false }
+    func browserManagerOpensLittleWindow(url: String, fromTab tabID: UUID) -> Bool { false }
     var openedLinks: [(url: String, kind: CraLinkWindow, space: UUID?, incognito: Bool)] = []
     var capturedImages: [(point: NSPoint, tab: UUID)] = []
     func browserManagerOpenLink(_ url: String, in kind: CraLinkWindow, space: UUID?, fromIncognito: Bool) {

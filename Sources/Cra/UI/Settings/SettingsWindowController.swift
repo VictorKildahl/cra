@@ -10,6 +10,8 @@ struct SettingsActions {
     var openProfilePage: (String, UUID?) -> Void = { _, _ in }
     var exportDiagnostics: () -> Void = {}
     var newProfile: () -> Void = {}
+    /// Advanced ▸ Reset Translated-site Prompts (Arc): the translate choices of every profile are forgotten.
+    var resetTranslatedSitePrompts: () -> Void = {}
 }
 
 /// The panes in Dia's Settings sidebar (Dia 1.54.2: Account, Tabs, Privacy, Profiles, Skills,
