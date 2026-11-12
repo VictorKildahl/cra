@@ -126,7 +126,7 @@ public struct UsageStats: Codable, Equatable, Sendable {
 
     /// On/off, choice and number settings: the ones a report may name when they differ from the default.
     public static let reportedSettings: Set<String> = [
-        "askOnPage", "autoArchive", "autoArchiveEnabled", "autoHideToolbar", "autoPictureInPicture", "blockAdsAndTrackers", "blockCookieBanners",
+        "askOnPage", "autoArchive", "autoArchiveEnabled", "autoPictureInPicture", "blockAdsAndTrackers", "blockCookieBanners",
         "boostsEnabled", "calendarHoverPreview", "commandBarCurrentSpaceOnly", "calendarMeetingLink", "calendarTimeToNextMeeting", "chromeEngine",
         "crashReports", "defaultLinkDestination", "edgeToEdgeContent", "editAddressInPlace", "favoriteLogoOutline", "favoritePreviews", "fingerprintingProtection", "fiveSecondPreviews",
         "folderPreviews", "hapticFeedbackOnReorder", "httpsOnly", "keepInMenuBar", "littleWindowArchiveAfter",
@@ -140,11 +140,12 @@ public struct UsageStats: Codable, Equatable, Sendable {
     ]
 
     /// Lists, folders, sites and one-time marks: never in a report. Sharing itself is always on
-    /// when a report goes out.
+    /// when a report goes out. `autoHideToolbar` is here because a feature Arc never had adds
+    /// nothing to what a report says (CONTRIBUTING.md).
     public static let unreportedSettings: Set<String> = [
         "developerHosts", "disabledDefaultDeveloperHosts", "autoPictureInPictureSites", "linkRoutes", "mediaFolders", "mediaHidden",
         "downloadLocations", "newDocumentApps", "hasSeenImportPrompt", "toolbarDefaultMigrated", "newTabButtonDefaultMigrated",
-        "autoArchiveDays", "shareUsageStats", "askedToShare",
+        "autoArchiveDays", "shareUsageStats", "askedToShare", "autoHideToolbar",
     ]
 
     public static func changedSettings(_ settings: AppSettings) -> [String: String] {
