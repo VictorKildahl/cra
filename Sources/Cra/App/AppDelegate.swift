@@ -1094,6 +1094,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if dict["previewDismiss"] != nil { FavoritePreviewCard.shared.dismiss(animated: false); return }
             // boostZap=1|0: Boost editor's Zap on or off for the open page.
             if let z = dict["boostZap"] { main.debugZap(z == "1"); return }
+            // zapHover=<cell>|-1, zapUnzap=<cell>, zapPress=this|related|cancel: the Zap shelf and
+            // its popover without the pointer; each logs "zap shelf: cells=… hint=…".
+            if dict["zapHover"] != nil || dict["zapUnzap"] != nil || dict["zapPress"] != nil {
+                main.debugZapShelf(hover: dict["zapHover"].flatMap(Int.init), unzap: dict["zapUnzap"].flatMap(Int.init), press: dict["zapPress"])
+                return
+            }
             // boostPick=1|0|copyThis|copyRelated|zapRelated: the code panel's eyedropper on (the
             // menu answered with that action) or off.
             if let p = dict["boostPick"] { main.debugPick(p); return }

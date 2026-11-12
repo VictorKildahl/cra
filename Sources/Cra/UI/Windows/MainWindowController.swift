@@ -3347,6 +3347,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
               let boost = BoostStore.shared.boostForSite(of: url) else { showToast("Boosts Work on Websites"); return }
         BoostEditorController.shared.open(boost, over: window, page: .init(
             zap: { [weak self] on in self?.setZapping(on) },
+            dim: { [weak self] on in self?.zapBrowser?.executeJavaScript(BoostZap.dimExpression(on)) },
             pick: { [weak self] on in self?.setPicking(on) },
             toggleDevTools: { [weak self] in self?.browsers.runDevTools(.toggle) },
             devToolsOpen: { [weak self] in self?.browsers.visibleTabHasDevTools ?? false },
@@ -3423,40 +3424,69 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
     }
 
-    /// Zap: the page outlines what's under the pointer, and a click hides it and keeps a selector
-    /// for it; when Zap ends the selectors go into the boost.
+    /// Arc's Zap (BoostZap): the page highlights what's under the pointer and asks before it zaps;
+    /// the shelf under the page lists what's zapped. Cra polls the page for its answers, which go
+    /// straight into the boost (the page hides them through the boost's stylesheet).
     /// Testing without the pointer (cra://debug?boostZap=1|0): Zap on or off, as its button does.
-    func debugZap(_ on: Bool) { setZapping(on) }
+    func debugZap(_ on: Bool) {
+        guard let model = BoostEditorController.shared.editing else { return CraLog.note("zap: no editor") }
+        if model.zapping != on { model.toggleZap() }
+    }
+
+    private var zapTimer: Timer?
+    private weak var zapBrowser: CraBrowser?
+    private weak var zapCard: PaneCardView?
 
     private func setZapping(_ on: Bool) {
-        guard let b = currentBrowser else { return }
-        if on { b.executeJavaScript(Self.zapScript); return }
-        b.sendDevToolsMethod("Runtime.evaluate", params: #"{"expression":"(()=>{const z=window.__craZap;if(!z)return '[]';z.stop();return JSON.stringify(z.hidden)})()","returnByValue":true}"#) { result, _ in
+        zapTimer?.invalidate()
+        zapTimer = nil
+        zapBrowser?.executeJavaScript(BoostZap.stopExpression)
+        zapBrowser = nil
+        zapCard?.bottomBar = nil
+        zapCard = nil
+        guard on, let b = currentBrowser, let card = shell.focusedCard, let model = BoostEditorController.shared.editing else { return }
+        zapBrowser = b
+        zapCard = card
+        b.executeJavaScript(BoostZap.script)
+        let colors = ZapShelfColors.current(theme: focusedSpace.theme, toolbarHex: card.toolbarColor)
+        card.bottomBar = ZapShelfHostingView(rootView: ZapShelfView(model: model, colors: colors))
+        CraLog.note("zap on: shelf under the page")
+        let t = Timer(timeInterval: 0.15, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.pollZap() } }
+        RunLoop.main.add(t, forMode: .common)
+        zapTimer = t
+    }
+
+    private func pollZap() {
+        guard let b = zapBrowser else { return }
+        // Arc's Zap belongs to the page it started on.
+        guard b === currentBrowser else { BoostEditorController.shared.stopZapping(); return }
+        // The script goes in again after a navigation; then it answers what it zapped.
+        let expression = BoostZap.script + ";" + BoostZap.takeExpression
+        guard let data = try? JSONSerialization.data(withJSONObject: ["expression": expression, "returnByValue": true]),
+              let params = String(data: data, encoding: .utf8) else { return }
+        b.sendDevToolsMethod("Runtime.evaluate", params: params) { result, _ in
             MainActor.assumeIsolated {
                 let o = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
-                let text = (o?["result"] as? [String: Any])?["value"] as? String ?? "[]"
-                let selectors = (try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String]) ?? []
-                BoostEditorController.shared.addZapped(selectors)
+                let selectors = BoostZap.parseTaken((o?["result"] as? [String: Any])?["value"] as? String ?? "")
+                if !selectors.isEmpty { BoostEditorController.shared.addZapped(selectors) }
             }
         }
+    }
+
+    /// Testing the shelf without the pointer (cra://debug?zapHover=<cell>|-1, zapUnzap=<cell>,
+    /// zapPress=this|related|cancel): the pointer on a cell, a cell's click, a popover button.
+    func debugZapShelf(hover: Int?, unzap: Int?, press: String?) {
+        guard let model = BoostEditorController.shared.editing else { return CraLog.note("zap shelf: no editor") }
+        if let hover { model.hoveredZap = hover < 0 ? nil : hover }
+        if let unzap, model.boost.zapped.indices.contains(unzap) { model.unzap(model.boost.zapped[unzap]) }
+        if let press { zapBrowser?.executeJavaScript("window.__craZap&&window.__craZap.press('\(press)')") }
+        let hint = BoostZap.hint(zapped: model.boost.zapped, hovered: model.hoveredZap)
+        CraLog.note("zap shelf: cells=\(model.boost.zapped.count) hint=\(hint) bar=\(zapCard?.bottomBarHeight ?? 0) page=\(Int(zapCard?.webArea.frame.height ?? 0))")
     }
 
     private var pickTimer: Timer?
     private weak var pickBrowser: CraBrowser?
     private var pickAnswer: BoostPicker.Action?
-
-    static let zapScript = """
-    (()=>{if(window.__craZap)return;const hidden=[];let over=null;
-    const sel=e=>{if(e.id)return '#'+CSS.escape(e.id);const p=[];for(let n=e;n&&n.nodeType===1&&n!==document.body&&p.length<5;n=n.parentElement){
-    if(n.id){p.unshift('#'+CSS.escape(n.id));break}let i=1;for(let s=n.previousElementSibling;s;s=s.previousElementSibling)if(s.tagName===n.tagName)i++;
-    p.unshift(n.tagName.toLowerCase()+':nth-of-type('+i+')')}return (p[0]&&p[0][0]==='#'?'':'body > ')+p.join(' > ')};
-    const mark=e=>{if(over)over.style.outline=over.__craOutline||'';over=e;if(e){e.__craOutline=e.style.outline;e.style.outline='2px solid #ff3b30'}};
-    const page=t=>t===document.body||t===document.documentElement;
-    const move=ev=>mark(page(ev.target)?null:ev.target);
-    const click=ev=>{ev.preventDefault();ev.stopPropagation();const t=ev.target;if(page(t))return;mark(null);hidden.push(sel(t));t.style.display='none'};
-    document.addEventListener('mouseover',move,true);document.addEventListener('click',click,true);
-    window.__craZap={hidden,stop(){document.removeEventListener('mouseover',move,true);document.removeEventListener('click',click,true);mark(null);delete window.__craZap}}})()
-    """
 
     // MARK: Arc parity (docs/arc-parity.md)
 

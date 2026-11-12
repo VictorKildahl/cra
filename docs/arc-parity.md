@@ -14,7 +14,7 @@ or Arc-only service), per CONTRIBUTING.md.
 
 | Arc feature | Where in Arc | Cra | Notes |
 |---|---|---|---|
-| Boosts (per-site CSS/JS, colours, fonts, Zap) | URL bar ✎, Library ▸ Boosts, Settings ▸ Advanced "Enable Boosts" | done | New Boost (command bar), the editor (wheel, invert, contrast/brightness/saturation, 20 fonts, size, case, Zap, CSS/JS code), Library ▸ Boosts, Settings ▸ Advanced switch. The Code panel's eyedropper (selector picker: outlines the element and the ones like it, then Copy selector for this / for related, Zap all related elements), hammer (Show / Hide Developer Tools) and, for JS, Refresh this Page. The Boost Gallery and sharing are *skip* (arc.net). The colour wheel's recolouring is CSS filters, not Arc's own engine. |
+| Boosts (per-site CSS/JS, colours, fonts, Zap) | URL bar ✎, Library ▸ Boosts, Settings ▸ Advanced "Enable Boosts" | done | New Boost (command bar), the editor (wheel, invert, contrast/brightness/saturation, 20 fonts, size, case, Zap with its confirm popover and the shelf of zapped elements under the page (click one to unzap; "Zap, measured" below), CSS/JS code), Library ▸ Boosts, Settings ▸ Advanced switch. The Code panel's eyedropper (selector picker: outlines the element and the ones like it, then Copy selector for this / for related, Zap all related elements), hammer (Show / Hide Developer Tools) and, for JS, Refresh this Page. The Boost Gallery and sharing are *skip* (arc.net). The colour wheel's recolouring is CSS filters, not Arc's own engine. |
 | Easels | File ▸ New Easel ⌃⇧E, Library ▸ Easels | partial | File ▸ New Easel (⌃⇧E): canvas, title, Pointer/Image/Text/Ellipse/Rectangle/Arrow/Freehand, pictures by file, paste or drop, saved per easel. Library ▸ Easels and Window ▸ View Easels… done. The canvas shows the window's backdrop under a 50 % veil as in Arc. The toolbar strip above it takes the same veil. The capture menu's New Easel done. The capture menu's Send To… done too. The pill's + and − and Aa (Arc's four looks: bold, serif, wide, mono, in macOS's designs) work, on the title too; Duplicate (the toolbar's eighth button) done; sharing is *skip* (cloud). |
 | Notes | File ▸ New Note ⌃⇧N, ⌃⌥N in split, Help ▸ Export Arc Notes | *skip* | Arc 1.172.1 no longer creates Notes: New Note is gone from the File menu and ⌃⇧N does nothing; only Help ▸ Export Arc Notes is left. |
 | Library ▸ Media | Window ▸ View Media…, Library rail | done | Off until Show Media; right-click the rail's Media button for the folders (Cra has no captures folder). A pick opens Arc's preview over the dimmed window (see "Library, measured"); the Library stays open. |
@@ -208,6 +208,35 @@ in this sweep (Essential Shortcuts window, Library pages).
   after a click, "Copy selector for this", "Copy selector for related", "Zap all related elements"), the hammer "Show /
   Hide Developer Tools", and an arrow.clockwise "Refresh this Page" (Cra shows it for JS, which runs on load). Delete asks "Delete this Boost?" in Arc's
   dialog. Reference captures: docs/screenshots/arc-boost-*.png.
+
+## Zap, measured (Arc 1.172.2, Victor's Arc on example.com, 12 Nov 2026)
+
+- Zap on (the editor's Zap button, dark while on): the page card gets a 58 pt shelf under the page, which
+  ends above it (AX: the web area shrinks; the shelf is not over the page). The shelf takes the pane's
+  toolbar colour (34/34/34 on a dark page) with a 1 pt separator on top (56/56/56). It appears in one frame.
+- With nothing zapped the shelf says "Click elements on the page to **Zap** them" (13 pt, Zap bold in the
+  theme's tintedLight), centred between x 20 and Done. Done: 58.5 × 38 pt, 10 pt from the right, filled with
+  the theme's tintedLight (250/239/198 on Victor's #F8D558), its title in the theme's ink. Done ends Zap.
+- The element under the pointer: a 1 pt border in yellow 247/206/70 at 80 % and a fill that multiplies the
+  page by that yellow (white text turns 247/206/70, the 36 grey background 35/29/10), 4 pt outside the
+  element, 3 pt corners. Arc's overlay is native (BoostsEditorOverlayView); Cra draws it in the page.
+- A click asks first, in a popover 8 pt under the highlight, 2 pt left of it and as wide (426 pt for a
+  415 pt paragraph): a white-to-grey gradient (248/249/253 → 241/242/246), 14 pt corners, a row of 39 pt
+  buttons 9 pt in and 9 pt apart: "Zap this" (red gradient 236/94/82 → 229/60/47), "Zap all related
+  elements" (orange 240/129/87 → 233/97/46, takes the rest of the width), "Cancel" (grey 124 → 90), white
+  15 pt titles. Under them a 32.5 pt footer (233/233/237): the match count and the selector in 134/134/136,
+  e.g. `1  [lang="en"] [lang="zh"]` (Arc's candidates come sorted by matches, fewest first). It appears in one
+  frame. All colours here were read off the display, so Cra gives them as `color(display-p3 …)`.
+- "Zap this" hides the element and puts a 38 pt cell on the shelf (10 pt from the card's left edge and from
+  the shelf's top; 9 pt continuous corners; tintedLight; `square.slash` 13.5 pt in the ink), followed by
+  "← Click to unzap" 21.5 pt past the last cell. The editor's Zap button then shows the count instead of the bolt.
+- The pointer on a cell: the cell darkens (224/213/171), the page dims (black at 36 %: 36 → 23) and the hint
+  becomes a capsule 3 pt past the cells, 28.5 pt tall, in the theme's ink, reading "**Restore** <selector>".
+- A click on a cell unzaps at once, no question (the count drops). Arc 1.172.2 left the element hidden until a
+  reload; Cra shows it again at once.
+- Not measured: the gap between two cells (Arc stopped answering the pointer in Zap after AX presses; Cra uses
+  8 pt), what Arc does when the shelf runs out of room (its IndividualZapCell has overflow controls), and the
+  shelf in a light page's colours (Cra follows the toolbar colour and flips its text and separator).
 
 ## Previews, measured (Arc 1.172.1, Victor's signed-in Arc, 8 Nov 2026)
 
