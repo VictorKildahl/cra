@@ -14,7 +14,7 @@ protocol SearchSheetDelegate: AnyObject {
 /// The sheet that rises with the keyboard: the search field and four suggestions under it.
 /// Laid out to `MobileSearchSheet`. While it opens and closes, the field grows out of the bottom
 /// bar's pill: `collapsedFieldFrame` is where that pill is, and `openness` runs 0…1.
-final class SearchSheet: UIView, UITextFieldDelegate {
+final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     weak var delegate: SearchSheetDelegate?
 
     let field = SearchField()
@@ -24,6 +24,12 @@ final class SearchSheet: UIView, UITextFieldDelegate {
     private let incognitoButton = UIButton(type: .custom)
     private let incognitoNote = UILabel()
     private var rowViews: [SuggestionRowView] = []
+    /// The rows, scrolling up under the field (`MobileSuggestions.Scroll`).
+    private let list = SuggestionListView()
+    /// What was typed: the query the rows are for, shown again when the list is back at the top.
+    private var typedText = ""
+    /// How many rows have gone under the field; the field shows the last of them.
+    private var passedRows = 0
 
     /// The pill's frame in this view's coordinates, for the closed end of the morph.
     var collapsedFieldFrame: CGRect = .zero
@@ -74,14 +80,22 @@ final class SearchSheet: UIView, UITextFieldDelegate {
         incognitoNote.isHidden = true
         addSubview(incognitoNote)
 
-        for index in 0..<MobileSearchSheet.visibleRows {
+        list.delegate = self
+        list.showsVerticalScrollIndicator = false
+        list.alwaysBounceVertical = false
+        list.decelerationRate = .fast
+        list.clipsToBounds = true
+        list.delaysContentTouches = false
+        list.accessibilityIdentifier = "suggestion-list"
+        addSubview(list)
+        for index in 0..<MobileSearchSheet.listedRows {
             let row = SuggestionRowView()
             row.isHidden = true
             row.accessibilityIdentifier = "suggestion-\(index)"
             row.onPick = { [weak self] in self?.pick(index) }
             row.onBrowseForMe = { [weak self] in self?.browse(index) }
             rowViews.append(row)
-            addSubview(row)
+            list.addSubview(row)
         }
         applyIncognito()
         updateAccessories()
@@ -93,12 +107,27 @@ final class SearchSheet: UIView, UITextFieldDelegate {
 
     var text: String {
         get { field.text ?? "" }
-        set { field.text = newValue; updateAccessories() }
+        set {
+            field.text = newValue
+            typedText = newValue
+            resetScroll()
+            updateAccessories()
+        }
     }
 
     func setRows(_ rows: [MobileSuggestions.Row]) {
         self.rows = rows
+        resetScroll()
         showRows()
+    }
+
+    /// Back to the top, with what was typed in the field.
+    private func resetScroll() {
+        list.setContentOffset(.zero, animated: false)
+        if passedRows > 0 {
+            passedRows = 0
+            field.text = typedText
+        }
     }
 
     /// The sites kept with "Favorite in App": they fill the rows while nothing is typed.
@@ -110,8 +139,12 @@ final class SearchSheet: UIView, UITextFieldDelegate {
     private var showsFavorites: Bool { text.isEmpty && !isIncognito }
 
     private func showRows() {
+        let count = showsFavorites ? min(favorites.count, MobileSearchSheet.visibleRows) : rows.count
+        list.isScrollEnabled = !showsFavorites && count > 1
+        list.contentSize = CGSize(width: list.bounds.width, height: showsFavorites ? CGFloat(count) * MobileSearchSheet.rowHeight
+            : MobileSuggestions.Scroll.contentHeight(count: count, rowHeight: MobileSearchSheet.rowHeight, visibleHeight: list.bounds.height))
         for (index, view) in rowViews.enumerated() {
-            if showsFavorites, index < favorites.count {
+            if showsFavorites, index < min(favorites.count, MobileSearchSheet.visibleRows) {
                 view.configure(favorite: favorites[index].0, icon: favorites[index].1)
                 view.isHidden = false
             } else if !showsFavorites, index < rows.count {
@@ -142,8 +175,33 @@ final class SearchSheet: UIView, UITextFieldDelegate {
     }
 
     @objc private func textChanged() {
+        typedText = text
+        passedRows = 0
+        list.setContentOffset(.zero, animated: false)
         updateAccessories()
         delegate?.searchSheet(self, didChangeText: text)
+    }
+
+    // MARK: Scrolling through the suggestions
+
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        guard scrollView === list, !showsFavorites || passedRows > 0 else { return }
+        let passed = MobileSuggestions.Scroll.passedRows(offset: scrollView.contentOffset.y, rowHeight: MobileSearchSheet.rowHeight, count: rows.count)
+        guard passed != passedRows else { return }
+        passedRows = passed
+        // The field takes the row's text with a quick crossfade (Arc Search morphs the changing part).
+        let fade = CATransition()
+        fade.type = .fade
+        fade.duration = 0.15
+        field.layer.add(fade, forKey: "scroll-text")
+        field.text = MobileSuggestions.Scroll.fieldText(typed: typedText, rows: rows, offset: scrollView.contentOffset.y, rowHeight: MobileSearchSheet.rowHeight)
+        UISelectionFeedbackGenerator().selectionChanged()
+        updateAccessories()
+    }
+
+    func scrollViewWillEndDragging(_ scrollView: UIScrollView, withVelocity velocity: CGPoint, targetContentOffset: UnsafeMutablePointer<CGPoint>) {
+        guard scrollView === list else { return }
+        targetContentOffset.pointee.y = MobileSuggestions.Scroll.restingOffset(targetContentOffset.pointee.y, rowHeight: MobileSearchSheet.rowHeight, count: rows.count)
     }
 
     @objc private func clearText() {
@@ -219,10 +277,15 @@ final class SearchSheet: UIView, UITextFieldDelegate {
         incognitoNote.alpha = t
 
         let top = open.maxY + MobileSearchSheet.rowsTopGap
+        let listFrame = CGRect(x: 0, y: top, width: bounds.width, height: CGFloat(MobileSearchSheet.visibleRows) * MobileSearchSheet.rowHeight)
+        if list.frame != listFrame {
+            list.frame = listFrame
+            showRows()
+        }
+        list.alpha = t
         for (index, row) in rowViews.enumerated() {
-            row.frame = CGRect(x: 0, y: top + CGFloat(index) * MobileSearchSheet.rowHeight,
+            row.frame = CGRect(x: 0, y: CGFloat(index) * MobileSearchSheet.rowHeight,
                                width: bounds.width, height: MobileSearchSheet.rowHeight)
-            row.alpha = t
         }
     }
 
@@ -339,6 +402,12 @@ final class FieldBackgroundView: UIView {
         layer.borderColor = Palette.fieldBorder.resolvedColor(with: traitCollection).cgColor
         CATransaction.commit()
     }
+}
+
+/// The suggestions' scroll view: a drag that starts on a row scrolls instead of picking it
+/// (a scroll view leaves controls' touches alone unless told otherwise).
+final class SuggestionListView: UIScrollView {
+    override func touchesShouldCancel(in view: UIView) -> Bool { true }
 }
 
 /// One suggestion: a magnifier, the text with its typed part in grey, and "Browse for Me".

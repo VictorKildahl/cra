@@ -95,6 +95,24 @@ struct MobileSuggestionsTests {
         #expect(untitled.map(\.text) == ["news.example", "news"])
     }
 
+    /// The clip: "Bangalore" typed, ten suggestions; each row scrolled under the field puts its
+    /// text there, the last can reach it, and a flick rests on a whole row.
+    @Test func scrollingBringsEachSuggestionIntoTheField() {
+        let texts = ["Bangalore", "bangalore weather", "bangalore metro map", "bangalore news", "bangalore temperature",
+                     "bangalore palace", "bangalore auto driver news", "bangalore university", "bangalore weather today", "bangalore to delhi flight"]
+        let rows = MobileSuggestions.rows(typed: "Bangalore", completions: Array(texts.dropFirst()), limit: MobileSearchSheet.listedRows)
+        #expect(rows.count == 10)
+        typealias S = MobileSuggestions.Scroll
+        #expect(S.fieldText(typed: "Bangalore", rows: rows, offset: 0, rowHeight: 56) == "Bangalore")
+        #expect(S.fieldText(typed: "Bangalore", rows: rows, offset: 20, rowHeight: 56) == "Bangalore")
+        #expect(S.fieldText(typed: "Bangalore", rows: rows, offset: 56 * 3, rowHeight: 56) == "bangalore metro map")
+        #expect(S.fieldText(typed: "Bangalore", rows: rows, offset: 56 * 30, rowHeight: 56) == "bangalore to delhi flight")
+        #expect(S.restingOffset(145.6, rowHeight: 56, count: 10) == CGFloat(168))
+        #expect(S.restingOffset(-40, rowHeight: 56, count: 10) == CGFloat(0))
+        #expect(S.contentHeight(count: 10, rowHeight: 56, visibleHeight: 224) == CGFloat(784))
+        #expect(S.contentHeight(count: 1, rowHeight: 56, visibleHeight: 224) == CGFloat(56))
+    }
+
     /// Arc Search's engines, in its menu's order; the two the Mac app lacks have their own addresses.
     @Test func searchEnginesAreArcSearchs() {
         #expect(MobileSearchEngine.allCases.map(\.label) == ["Google", "Bing", "DuckDuckGo", "Ecosia", "Perplexity", "Kagi"])

@@ -18,6 +18,10 @@ final class SuggestionService {
     func completions(for typed: String, engine: MobileSearchEngine, done: @escaping ([String]) -> Void) {
         task?.cancel()
         let query = typed.trimmingCharacters(in: .whitespaces)
+        if LaunchOptions.value("CraFakeSuggestions") == "YES" {
+            // Tests: nine made-up completions, no network.
+            return DispatchQueue.main.async { done(query.isEmpty ? [] : (1...9).map { "\(query) \($0)" }) }
+        }
         guard !query.isEmpty, let url = engine.suggestURL(query) else { return done([]) }
         let task = session.dataTask(with: url) { data, _, error in
             if (error as NSError?)?.code == NSURLErrorCancelled { return }

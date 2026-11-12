@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// The rows under the iPhone app's search field: what was typed, pages the phone knows that
@@ -114,6 +115,34 @@ public enum MobileSuggestions {
         var path = url.path
         while path.hasSuffix("/") { path.removeLast() }
         return bare(host) + path + (url.query.map { "?" + $0 } ?? "")
+    }
+
+    /// Scrolling the list: rows pass up under the field one by one and the field takes each
+    /// one's text; scrolled back to the top it shows what was typed (60fps.design's clip).
+    public enum Scroll {
+        /// How many rows have gone under the field at `offset`, the nearer whole row.
+        public static func passedRows(offset: CGFloat, rowHeight: CGFloat, count: Int) -> Int {
+            guard rowHeight > 0, count > 0 else { return 0 }
+            return min(count, max(0, Int((offset / rowHeight).rounded())))
+        }
+
+        /// What the field shows at `offset`.
+        public static func fieldText(typed: String, rows: [Row], offset: CGFloat, rowHeight: CGFloat) -> String {
+            let passed = passedRows(offset: offset, rowHeight: rowHeight, count: rows.count)
+            return passed == 0 ? typed : rows[passed - 1].text
+        }
+
+        /// Where a flick comes to rest: on a whole row, between the top and the last row in the field.
+        public static func restingOffset(_ proposed: CGFloat, rowHeight: CGFloat, count: Int) -> CGFloat {
+            guard rowHeight > 0 else { return 0 }
+            return CGFloat(passedRows(offset: proposed, rowHeight: rowHeight, count: count)) * rowHeight
+        }
+
+        /// The list's scrolling height: every row, plus room for the last one to go under the field.
+        public static func contentHeight(count: Int, rowHeight: CGFloat, visibleHeight: CGFloat) -> CGFloat {
+            // A single row (what was typed) has nowhere to go.
+            count > 1 ? CGFloat(count) * rowHeight + visibleHeight : CGFloat(count) * rowHeight
+        }
     }
 
     /// Where a row goes: the address itself, or the engine's results for the text.

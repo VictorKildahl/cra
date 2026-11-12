@@ -782,3 +782,25 @@ final class TranslateTests: BrowserTestCase {
         XCTAssertEqual(row.label, "Translate")
     }
 }
+
+final class SuggestionScrollTests: BrowserTestCase {
+    /// Scrolling the suggestions up brings each one into the field; back at the top the field
+    /// shows what was typed, and Go searches for what the field shows.
+    func testScrollingTheSuggestionsPutsEachInTheField() {
+        launch(["-CraFakeSuggestions", "YES"])
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.typeText("ovens")
+        XCTAssertTrue(app.descendants(matching: .any)["suggestion-9"].waitForExistence(timeout: 5), "ten rows are listed")
+        let list = app.scrollViews["suggestion-list"]
+        let start = list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9))
+        start.press(forDuration: 0.05, thenDragTo: list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)), withVelocity: .slow, thenHoldForDuration: 0.3)
+        sleep(1)
+        let value = field.value as? String ?? ""
+        XCTAssertTrue(value.hasPrefix("ovens "), "a suggestion is in the field: \(value)")
+        keep("suggestion-scroll")
+        list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).press(forDuration: 0.05, thenDragTo: list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 1.0)), withVelocity: .fast, thenHoldForDuration: 0.3)
+        sleep(1)
+        XCTAssertEqual(field.value as? String, "ovens", "back at the top, what was typed")
+    }
+}

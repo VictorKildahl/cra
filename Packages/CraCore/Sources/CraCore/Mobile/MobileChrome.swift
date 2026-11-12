@@ -14,6 +14,9 @@ public enum MobileSearchSheet {
     public static let rowHeight: CGFloat = 56
     /// Arc Search shows four suggestions, and keeps room for them while the field is empty.
     public static let visibleRows = 4
+    /// More suggestions wait below the four: scrolling brings them up into the field one by one
+    /// (60fps.design's "Arc Search Scroll Morph" clip lists ten).
+    public static let listedRows = 10
     /// Last row to the keyboard.
     public static let bottomInset: CGFloat = 8
     /// The sheet's top corners.

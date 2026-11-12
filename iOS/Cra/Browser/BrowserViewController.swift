@@ -322,11 +322,11 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         let engine = settings.value.searchEngine
         // Incognito keeps what is typed on the phone until Go, and leaves the phone's own pages out.
         let sites = incognitoSearch ? [] : knownSites()
-        sheet.setRows(MobileSuggestions.rows(typed: text, completions: [], sites: sites))
+        sheet.setRows(MobileSuggestions.rows(typed: text, completions: [], sites: sites, limit: MobileSearchSheet.listedRows))
         guard !incognitoSearch else { return }
         suggestions.completions(for: text, engine: engine) { [weak self, weak sheet] found in
             guard let self, let sheet, self.isSearching, sheet.text == text else { return }
-            sheet.setRows(MobileSuggestions.rows(typed: text, completions: found, sites: sites))
+            sheet.setRows(MobileSuggestions.rows(typed: text, completions: found, sites: sites, limit: MobileSearchSheet.listedRows))
         }
     }
 
