@@ -1162,8 +1162,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if overlay.findVisible { panels.append(findPanel) }
         // A Peek (and its dimming) stays above everything else in the window but the hidden sidebar
         // slid out at the edge: that one is the sidebar, whose rows stay in reach of a Peek (#242, #295).
+        // The command bar ⌘T opened from a Peek stays above the Peek (#379).
+        let bar: [NSWindow] = commandBar.isOpen && commandPanel.parent === window ? [commandPanel] : []
         let wanted = panels.compactMap { $0 } + peeks.flatMap(\.peekWindows) + (floatingSidebar?.attachedPanels ?? [])
-            + ChromiumDialogs.dialogs(over: window)
+            + ChromiumDialogs.dialogs(over: window) + PermissionPopover.panels(over: window) + bar
         // Already the last children, in order, and showing: re-adding each one rebuilt the
         // window's ordering group, a window server round trip, on every tab switch.
         let children = window.childWindows ?? []
@@ -3715,6 +3717,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let panel = commandPanel!
         // Let CommandBarView's fade-out (0.08 s) play before the panel goes away.
         panel.orderOut(nil)
+        // ⌘T from a Peek and Escape: the keys go back to the Peek still over its tab (#379).
+        if let peek = peeks.first(where: { !$0.isParked && $0.window?.isVisible == true }) {
+            peek.window?.makeKeyAndOrderFront(nil)
+            peek.focusPage()
+            return
+        }
         window?.makeKeyAndOrderFront(nil)
         currentBrowser?.setFocused(true)
     }
@@ -3867,6 +3875,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let page = shell.webContainer.convert(shell.webContainer.bounds, to: nil)
         toast.show(notice.title, action: ShinyToast.Action(title: notice.button) { SoftwareUpdater.shared.act(on: notice) },
                    page: page, in: window, theme: focusedSpace.theme, onClose: {})
+    }
+
+    /// A Peek's page loads in the tab the Peek came from (⌘-click on Expand, GitHub #380): the tab
+    /// comes to the front with the page, and a pinned one keeps its pinned address (updateTab).
+    func loadPeekPage(_ url: String, inTab id: UUID) {
+        guard store.item(id) != nil else { return }
+        if selectedTabID != id { store.selectTab(id, window: windowID) }
+        loadInSelectedTab(url)
+        window?.makeKeyAndOrderFront(nil)
     }
 
     /// Navigate the focused tab (an empty split pane gets its first page here).

@@ -115,6 +115,10 @@ built release app with a test profile. Note anything that fails in the release's
   is enabled.
 - **#33:** hover the player stack: check the volume slider, the Picture in Picture button, and
   the light card in a light space.
+- **#382:** rest the pointer where ⌘T's third row will appear and press ⌘T without touching the
+  mouse: the top row stays selected (Return opens it); type, and the rows that change under the
+  still pointer leave the top row selected too; move the pointer a little and the row under it
+  takes the selection. HoverGateTests pins the rule; this checks AppKit's events on a real screen.
 
 ### Peek, Little Window, Picture in Picture, split view, Capture
 

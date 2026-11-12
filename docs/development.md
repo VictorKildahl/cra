@@ -62,8 +62,10 @@ build gets the entitlement) or through a folder a file provider syncs: `Settings
 writes them with a `manifest.json` into a `Cra` folder there and applies a newer bundle another
 Mac wrote (`SettingsSync` in CraCore decides). A file still downloading is waited for; files
 from different writes (hashes that don't match the manifest, #378) are waited for one to two
-minutes (`SyncMixWait`), then the Mac writes a whole bundle again; a newer Cra's bundle is never
-written over. `cra://debug?sync=<label>` logs what the last look found. `sync.json` in the data
+minutes (`SyncMixWait`), then the Mac writes a whole bundle again; a file the manifest names that
+is gone with no placeholder is put right the same way, after one minute on the Mac that wrote the
+manifest and ten on another. A Mac that hasn't synced in the folder yet never writes over another
+Mac's bundle: it waits for that Mac, then asks. A newer Cra's bundle is never written over. `cra://debug?sync=<label>` logs what the last look found. `sync.json` in the data
 folder holds the location and the last bundle written or applied. To try it on one Mac, run a second instance on another
 `CRA_DATA_DIR` with `CRA_SYNC_DEVICE=<name>` (a Mac is known in the folder by a hash of its
 hardware UUID, which two instances share);

@@ -1340,20 +1340,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             // commandBarRows=<label>: the open command bar's rows, top to bottom, each as kind:address
-            // (the title when it has none), so a scenario reads which tabs ⌘T found (#307).
+            // (the title when it has none), so a scenario reads which tabs ⌘T found (#307), with its
+            // mode and the selected row (#379, #382). An open Little Window's or Peek's bar gets a line
+            // of its own ("<label> peek:").
             if let label = dict["commandBarRows"] {
-                let bar = main.commandBar
-                let rows = bar.result.items.map { row -> String in
-                    let kind: String
-                    switch row.kind {
-                    case .switchToTab: kind = "tab"
-                    case .archived: kind = "archived"
-                    case .history: kind = "history"
-                    default: kind = "other"
+                func line(_ name: String, _ bar: CommandBarController) {
+                    let rows = bar.result.items.map { row -> String in
+                        let kind: String
+                        switch row.kind {
+                        case .switchToTab: kind = "tab"
+                        case .archived: kind = "archived"
+                        case .history: kind = "history"
+                        default: kind = "other"
+                        }
+                        return "\(kind):\(row.url ?? row.title)"
                     }
-                    return "\(kind):\(row.url ?? row.title)"
+                    NSLog("Cra command bar rows %@: open=%d mode=%@ selected=%d %@", name, bar.isOpen ? 1 : 0,
+                          bar.mode == .newTab ? "newTab" : "editURL", bar.selectedIndex, rows.joined(separator: " | "))
                 }
-                NSLog("Cra command bar rows %@: open=%d %@", label, bar.isOpen ? 1 : 0, rows.joined(separator: " | "))
+                line(label, main.commandBar)
+                for l in littleWindows where l.commandBar.isOpen { line("\(label) \(l.isPeek ? "peek" : "little")", l.commandBar) }
                 return
             }
             // sidebarShown=<label>: whether the main window shows its sidebar, and the View menu's
@@ -1413,6 +1419,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // peekShown=<label>: the page behind a Peek in each window, faded and drawn back or whole (PR #221).
             if let label = dict["peekShown"] {
                 for m in mainWindows { NSLog("Cra peek shown %@: %@", label, m.peekBackdropShown()) }
+                return
+            }
+            // peekExpand=plain|command: the front window's Peek's Expand button, clicked with or without ⌘
+            // held, then the selected tab's page, its pinned address and the Today tab count (#380).
+            if let how = dict["peekExpand"] {
+                guard let peek = littleWindows.first(where: { $0.isPeek && !$0.isParked && $0.peekParent === main }) else {
+                    CraLog.note("peek expand \(how): no Peek"); return
+                }
+                peek.expandPeek(commandClick: how == "command")
+                let today = store.tabs(under: store.focusedSpace(window: main.windowID).todayContainerID).count
+                let tab = main.selectedTab?.tab
+                CraLog.note("peek expand \(how): selected=\(tab?.url ?? "-") home=\(tab?.savedURL ?? "-") today=\(today)")
                 return
             }
             // peeks=<label>: each window's Peeks, on screen or waiting on their tab, and their pages (#242).
@@ -1756,6 +1774,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 let copied = MainWindowController.probeClipboard { dialog.select(index) }
                 CraLog.note("dialog \(dialog.title) answered \(button): \(copied)")
+                return
+            }
+            // permissionCard[=<button>]: the permission card up, where it sits on its page and
+            // whether it took the window's key, then presses that button (#371).
+            if let button = dict["permissionCard"] {
+                CraLog.note(PermissionPopover.debug(press: button.isEmpty || button == "1" ? nil : button))
                 return
             }
             // pickedMenu=<n>[&label=][&run=<row>]: the menu on n picked tabs, see testPickedMenu (#356).

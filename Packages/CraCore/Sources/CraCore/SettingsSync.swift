@@ -87,6 +87,16 @@ public enum SettingsSync {
         // The very files the manifest names, which this Cra can't decode: a format from a newer Cra.
         return readable ? .whole : .newer
     }
+
+    /// Whether a folder that `folderState` finds `.arriving` lacks a file the manifest names with
+    /// nothing on its way: no iCloud placeholder, no download (#378). The file was deleted, or a
+    /// provider left it out, or one that only lists a file once it has downloaded is still
+    /// delivering it. Waited for like a mix, but longer (SyncMixWait), and then written over.
+    public static func isLacking(manifest: SyncManifestState, files: [String: SyncFileState]) -> Bool {
+        guard case .read(let m) = manifest, m.version <= SyncManifest.currentVersion,
+              !files.values.contains(.downloading) else { return false }
+        return m.files.keys.contains { files[$0] == nil || files[$0] == .missing }
+    }
 }
 
 /// A bundle file as a look finds it.
@@ -127,9 +137,16 @@ public enum SyncFolderState: Equatable {
 /// Mac writes its own sidebar, settings and shortcuts as a whole bundle, which the other Mac
 /// applies. The Mac whose manifest is in the folder wrote last, so it writes first; another Mac
 /// waits twice as long, so that the writer's bundle lands first and is applied there instead.
+///
+/// A file the manifest names that isn't there at all (`SettingsSync.isLacking`) is waited for the
+/// same way, but another Mac gives it ten minutes: a provider may only list a file once it has
+/// downloaded. A Mac that has not synced in this folder yet never writes over another Mac's
+/// bundle: it hasn't been asked which sidebar to keep, and its bundle would replace the other
+/// Mac's. It waits for the writer, then asks.
 public struct SyncMixWait: Equatable {
     public static let writerDelay: TimeInterval = 60
     public static let otherDelay: TimeInterval = 120
+    public static let otherLackingDelay: TimeInterval = 600
 
     /// The files' hashes when the mix was first seen, and when that was.
     public private(set) var seen: [String: String]?
@@ -137,14 +154,18 @@ public struct SyncMixWait: Equatable {
 
     public init() {}
 
-    /// A look found a mix of these files (name → hash, the manifest's own included): whether this
-    /// Mac writes its bundle now.
-    public mutating func shouldRewrite(_ files: [String: String], at now: Date, wroteManifest: Bool) -> Bool {
+    /// A look found a mix of these files (name → hash, the manifest's own included), or a file
+    /// lacking (`lacking`): whether this Mac writes its bundle now. `synced` is whether this Mac has
+    /// written or applied a bundle since sync was turned on.
+    public mutating func shouldRewrite(_ files: [String: String], at now: Date, wroteManifest: Bool,
+                                       lacking: Bool = false, synced: Bool = true) -> Bool {
         if files != seen || since.map({ now < $0 }) ?? true {
             seen = files
             since = now
         }
-        return now.timeIntervalSince(since!) >= (wroteManifest ? Self.writerDelay : Self.otherDelay)
+        guard wroteManifest || synced else { return false }
+        let delay = wroteManifest ? Self.writerDelay : lacking ? Self.otherLackingDelay : Self.otherDelay
+        return now.timeIntervalSince(since!) >= delay
     }
 
     /// The folder holds something else now: a later mix waits from the start.

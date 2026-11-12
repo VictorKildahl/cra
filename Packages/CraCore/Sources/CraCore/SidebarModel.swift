@@ -558,6 +558,9 @@ public struct AppSettings: Codable, Equatable {
     /// Cra's addition (issue #12): links to other sites peek from every tab, not only
     /// favorites and pinned tabs.
     public var peekInEveryTab: Bool = false
+    /// Cra's addition (GitHub #380), off by default: ⌘-clicking a Peek's Expand button loads the page
+    /// in the tab the Peek came from instead of a new tab (PeekExpand). Arc's Expand always made a tab.
+    public var peekExpandInSourceTab: Bool = false
     /// Arc's "Open a Peek window when clicking on links with Shift held"
     /// (shiftClickModalEntryPointEnabled).
     public var peekOnShiftClick: Bool = true
@@ -898,6 +901,7 @@ extension AppSettings {
         linkRoutes = c.contains(.linkRoutes) ? (try? c.decode([LinkRoute].self, forKey: .linkRoutes)) ?? [] : [.googleMeet]
         peekLinksToOtherSites = try c.decodeIfPresent(Bool.self, forKey: .peekLinksToOtherSites) ?? true
         peekInEveryTab = try c.decodeIfPresent(Bool.self, forKey: .peekInEveryTab) ?? false
+        peekExpandInSourceTab = try c.decodeIfPresent(Bool.self, forKey: .peekExpandInSourceTab) ?? false
         peekOnShiftClick = try c.decodeIfPresent(Bool.self, forKey: .peekOnShiftClick) ?? true
         littleWindowShortcutEverywhere = try c.decodeIfPresent(Bool.self, forKey: .littleWindowShortcutEverywhere) ?? true
         littleWindowOnOptionCommandClick = try c.decodeIfPresent(Bool.self, forKey: .littleWindowOnOptionCommandClick) ?? false

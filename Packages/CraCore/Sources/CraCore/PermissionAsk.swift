@@ -12,6 +12,12 @@ public enum PermissionAsk {
     /// request's sheet is still up.
     public static func waits(tabShown: Bool, sheetUp: Bool) -> Bool { !tabShown || sheetUp }
 
+    /// Whether the request asking now steps aside: its tab went behind. Cra asks in Arc's popover
+    /// under the URL field since #371 (the sheet blocked the whole window), so the user can
+    /// switch tabs while it is up; the popover goes unanswered and its request waits first in
+    /// line until its tab is shown again, as Chrome's bubble does.
+    public static func stepsAside(tabShown: Bool) -> Bool { !tabShown }
+
     /// What macOS says about Cra using the camera or microphone (AVCaptureDevice's
     /// authorization status). A page can only reach the device past `.notAsked` after macOS's
     /// own question, which Chrome's media code puts up when the page opens the device.
@@ -60,6 +66,11 @@ public enum PermissionAsk {
     /// A waiting request whose tab came to the front: `permission: meet.google.com wants microphone → asks now`.
     public static func shownLine(origin: String, kinds: UInt) -> String {
         "permission: \(host(origin)) wants \(kindNames(kinds)) → asks now"
+    }
+
+    /// The asking request's tab went behind: `permission: meet.google.com wants microphone → waits for its tab again`.
+    public static func asideLine(origin: String, kinds: UInt) -> String {
+        "permission: \(host(origin)) wants \(kindNames(kinds)) → waits for its tab again"
     }
 
     /// `permission: meet.google.com microphone: blocked`.

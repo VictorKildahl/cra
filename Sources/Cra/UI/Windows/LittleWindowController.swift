@@ -158,6 +158,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// The page (a video) is in element fullscreen.
     private var pageFullscreen = false
     private let shell: LittleShellView
+    /// The page's permission cards up (#371); each asks until it is answered or the window closes.
+    private var permissionCards: [PermissionPopover] = []
     private var favicon: NSImage?
     private var promoted = false
     /// Hosts a page's window.open (a sign-in popup); its URL arrives after it shows.
@@ -651,7 +653,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         }
         var buttons: [PeekControlsPanel.Button] = [
             .init(symbol: "xmark", help: "Close (⌘W)") { [weak self] in self?.closeWindow() },
-            .init(symbol: "arrow.up.left.and.arrow.down.right", help: "Expand (⌘O)") { [weak self] in self?.promote(to: nil) },
+            .init(symbol: "arrow.up.left.and.arrow.down.right", help: "Expand (⌘O)") { [weak self] in
+                self?.expandPeek(commandClick: NSApp.currentEvent?.modifierFlags.contains(.command) == true)
+            },
         ]
         if easel == nil {
             buttons.append(.init(symbol: "square.split.2x1", help: "Add To Split") { [weak self] in self?.promoteToSplit() })
@@ -879,6 +883,27 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         if let window, let p = window.parent { p.removeChildWindow(window) }
         peekParent?.endPeekVeil(for: peekID)
         if !promoted, let pw = peekParent?.window, NSApp.isActive { pw.makeKeyAndOrderFront(nil) }
+    }
+
+    /// The Expand button: the page becomes a new tab, or with ⌘ held and Settings ▸ Links ▸ "⌘-click
+    /// Expand opens in the tab" on, loads in the tab the Peek came from (PeekExpand, GitHub #380).
+    func expandPeek(commandClick: Bool) {
+        let source = peekSourceTab.flatMap { store.item($0) != nil ? $0 : nil }
+        switch PeekExpand.target(commandClick: commandClick, hasSourceTab: source != nil, settings: store.settings) {
+        case .newTab: promote(to: nil)
+        case .sourceTab: if let source { loadInSourceTab(source) }
+        }
+    }
+
+    /// The tab under the Peek navigates to the peeked page and the Peek goes, without its closing
+    /// motion (Expand's own way out). The tab's history stays, so Back returns to where it was.
+    private func loadInSourceTab(_ tabID: UUID) {
+        guard hasPage, let parent = peekParent, let window else { return }
+        let url = currentURL
+        promoted = true  // the page lives on in the tab: not a closed Peek to reopen
+        guard windowShouldClose(window) else { return }
+        window.close()
+        parent.loadPeekPage(url, inTab: tabID)
     }
 
     /// Add To Split: the peeked page becomes a tab and joins the tab under the Peek as a split
@@ -1283,7 +1308,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         switch id {
         // ⌘W on the card fades it out, as Esc does (#337).
         case "closeTab", "closeWindow": if isCard, !cardFading, window?.isVisible == true { dismissCard() } else { closeWindow() }
-        case "newTab", "editURL": openCommandBar()
+        case "newTab", "editURL":
+            // ⌘T in a Peek is the browser window's New Tab bar, with its tabs; ⌘L edits the Peek (#379).
+            let opening = CommandBarOpening.of(id == "newTab" ? .newTab : .editURL, in: isPeek ? .peek : .littleWindow, hasPage: hasPage)
+            if opening.owner == .browserWindow, let parent = peekParent { parent.openCommandBar(opening.mode) } else { openCommandBar() }
         case "goBack": browser?.goBack()
         case "goForward": browser?.goForward()
         case "reload": browser?.reload()
@@ -1786,12 +1814,17 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     func browser(_ browser: CraBrowser, didUpdateDownload download: CraDownloadInfo) { app.main.browserManager(download: download) }
 
     func browser(_ browser: CraBrowser, requestsPermissionForOrigin origin: String, kinds: UInt, completion: @escaping (Bool) -> Void) {
-        // The main window's sheet. A quiet notification deny here would save a block for the
-        // site that its tabs then hit too (#137).
-        let alert = AppDialog(title: PermissionPrompt.message(origin: origin, kinds: kinds),
-                              actions: [DialogAction("Allow"), DialogAction("Block", role: .cancel)])
-        guard let window else { completion(false); return }
-        alert.present(over: window) { resp in completion(resp == .alertFirstButtonReturn) }
+        // The main window's card, in the page's top left corner as in a Little Arc (#371). A quiet
+        // notification deny here would save a block for the site that its tabs then hit too (#137).
+        let card = PermissionPopover(title: PermissionPrompt.message(origin: origin, kinds: kinds),
+                                     actions: [DialogAction("Allow"), DialogAction("Not Now", role: .cancel)])
+        guard window != nil else { completion(false); return }
+        let page = shell.page
+        permissionCards.append(card)
+        card.present(relativeTo: page.bounds, of: page) { [weak self, weak card] resp in
+            self?.permissionCards.removeAll { $0 === card }
+            completion(resp == .alertFirstButtonReturn)
+        }
     }
 
     func browserDidReceiveFocus(_ browser: CraBrowser) {}

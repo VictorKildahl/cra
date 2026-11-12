@@ -1,12 +1,5 @@
 import Foundation
 
-enum CommandBarMode: Equatable {
-    /// ⌘T: commit creates a new tab in the current space.
-    case newTab
-    /// ⌘L: commit navigates the current tab.
-    case editURL
-}
-
 enum SuggestionKind: Equatable {
     case switchToTab(UUID)
     case archived(UUID)

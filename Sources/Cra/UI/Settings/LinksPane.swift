@@ -51,6 +51,12 @@ struct LinksPane: View {
                         // Cra's addition (#12).
                         SettingsSwitchLine("Peek at links to other sites in every tab", isOn: $store.settings.peekInEveryTab,
                                            enabled: store.settings.peekLinksToOtherSites)
+                        SettingsCardDivider()
+                        // Not in Arc (GitHub #380): off by default, Expand makes a new tab as in Arc.
+                        SettingsSwitchLine("⌘-click Expand opens in the tab", isOn: $store.settings.peekExpandInSourceTab) {
+                            Text("Hold ⌘ while you click a Peek’s Expand to open the page in the tab you were peeking from. Back takes that tab to where it was.")
+                                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                     .padding(.top, 20)
 

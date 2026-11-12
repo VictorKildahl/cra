@@ -12,6 +12,12 @@ import CraCEF
         self.completion = completion
         Self.presented.append(self)
     }
+    /// The permission card (#371) records itself the same way, with the page it sits on.
+    private(set) var anchor: NSView?
+    func present(relativeTo rect: NSRect, of view: NSView, completion: @escaping (NSApplication.ModalResponse) -> Void) {
+        anchor = view
+        present(over: view.window ?? NSWindow(), completion: completion)
+    }
     /// The production sheet's close(): ends it as Escape would (.abort) when nothing was chosen.
     func close() { answer(.abort) }
     func answer(_ response: NSApplication.ModalResponse) {
@@ -20,6 +26,9 @@ import CraCEF
         done?(response)
     }
 }
+
+/// The manager's permission popover (#371) is recorded with the sheets, so #286's test reads both.
+typealias PermissionPopover = AppDialog
 
 // Unrelated shell services required to typecheck the complete production manager.
 // The tab store deliberately remains observable so stale callbacks can be asserted.
