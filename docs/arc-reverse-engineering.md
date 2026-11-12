@@ -2289,6 +2289,11 @@ strings "Opens the tab switcher, where you can cycle through recent tabs like Co
 
 - **List:** the focused space's tabs by `timeLastActiveAt`, newest first (checked against StorableSidebar.json: the
   JYSK space's top four plus one more JYSK tab, skipping a newer one in another space). The current tab is card 0.
+- **A tab opened in the background** (⌘-click) is card 1 at once: ⌃Tab goes to it and a second tap comes back
+  ([O live] contributor, PR #394, 12 Nov 2026). Arc's StorableSidebar.json agrees that `timeLastActiveAt` is set when
+  a tab is created: tabs there carry it equal to `createdAt` to the microsecond. Cra stamps a tab opened with
+  `select: false` when it opens and keeps the window's current tab first (`SidebarStore.recentTabs`), scenario
+  `tab-switcher-background-tab`.
 - **Keys:** ⌃Tab opens on card 1 and moves on; ⇧Tab, ← and → move too. All of them wrap at both ends. Releasing ⌃
   switches, Esc cancels (the tab stays). A tap (⌃ up 0.13 s after Tab) switches with no panel; the panel appeared
   0.18–0.26 s after the key, so there is a short show delay.
