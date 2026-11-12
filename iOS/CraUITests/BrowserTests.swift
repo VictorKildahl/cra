@@ -758,3 +758,27 @@ final class ShareExtensionTests: BrowserTestCase {
         XCTAssertTrue(app.buttons["tab-card-1"].waitForExistence(timeout: 5), "the shared link came back as a tab")
     }
 }
+
+final class TranslateTests: BrowserTestCase {
+    /// Translate turns the page into the phone's language (capitals stand in, no model) and the
+    /// row becomes "Show Original", which puts the page's words back.
+    func testTranslateAndShowOriginal() {
+        launch(["-CraOpenURL", Self.page("Bonjour"), "-CraSearch", "NO", "-CraFakeTranslate", "YES"])
+        waitForPage("Bonjour")
+        app.buttons["bar-menu"].tap()
+        let row = app.buttons["menu-row-translate"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertEqual(row.label, "Translate")
+        row.tap()
+        sleep(1)
+        keep("translated")
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertEqual(row.label, "Show Original")
+        row.tap()
+        sleep(1)
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertEqual(row.label, "Translate")
+    }
+}

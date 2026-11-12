@@ -836,3 +836,19 @@ struct MobileShareInboxTests {
         #expect(broken == MobileShareInbox())
     }
 }
+
+/// Translate's batching and the scripts it runs on the page.
+struct MobileTranslateTests {
+    @Test func textsGoInBatchesUnderTheLimit() {
+        #expect(MobileTranslate.batches(["aaaa", "bbbb", "cc", "dddddddddd", "e"], maxCharacters: 8) == [[0, 1], [2], [3], [4]])
+        #expect(MobileTranslate.batches([], maxCharacters: 8).isEmpty)
+        #expect(MobileTranslate.languageSample(["short", "the longest text", "middle one"], limit: 22) == "the longest text middl")
+    }
+
+    /// The written-back texts go in as JSON, so quotes and script-looking text stay text.
+    @Test func translationsAreEmbeddedAsData() {
+        let script = MobileTranslate.applyScript(["Hej \"verden\"", "</script><b>x</b>"])
+        #expect(script.contains(#"["Hej \"verden\"","<\/script><b>x<\/b>"]"#))
+        #expect(MobileTranslate.collectScript.contains("\\p{L}") && MobileTranslate.collectScript.contains("3000"))
+    }
+}

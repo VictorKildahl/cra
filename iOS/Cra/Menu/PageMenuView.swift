@@ -23,6 +23,7 @@ struct PageMenuState {
     var canSummarize: Bool
     var blockedCount: Int
     var isFavorite = false
+    var isTranslated = false
 }
 
 /// The page menu's content, laid out to `MobilePageMenu`.
@@ -136,6 +137,7 @@ final class PageMenuView: UIView {
             switch row {
             case .pageZoom: view.setZoomLabel(MobilePageMenu.zoomLabel(state.zoom))
             case .requestDesktopSite: view.setTitle(state.isDesktopSite ? "Request Mobile Site" : row.label)
+            case .translate: view.setTitle(state.isTranslated ? "Show Original" : row.label)
             default: break
             }
         }

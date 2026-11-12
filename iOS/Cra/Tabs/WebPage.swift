@@ -27,6 +27,8 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     private(set) var progress: Double = 0
     /// "Request Desktop Site": applied to every navigation of this tab while it is on.
     var wantsDesktopSite = false
+    /// The page shows Translate's words (MobileTranslate); a new page starts untranslated.
+    var isTranslated = false
     /// What applies on a site: the app's settings, asked at every navigation.
     var siteOptions: (String?) -> MobileSiteOptions = { _ in MobileSiteOptions() }
     /// "Reload without ad blockers": the site this tab shows unblocked until it leaves it.
@@ -163,6 +165,7 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         blockedCount = 0
         countedHosts = []
+        isTranslated = false
         changed()
     }
 

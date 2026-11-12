@@ -695,21 +695,28 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     /// A finished download says so in a capsule above the bar; a tap opens the file.
     func downloadFinished(_ item: MobileDownloads.Item) {
         UINotificationFeedbackGenerator().notificationOccurred(.success)
+        announce("Downloaded \(item.name)", symbol: "arrow.down.circle.fill", id: "download-toast") { [weak self] in
+            guard let self else { return }
+            DownloadManager.shared.open(item, from: self.topPresenter)
+        }
+    }
+
+    /// A capsule above the bar that says what just happened, gone after four seconds; a tap runs `tap`.
+    func announce(_ title: String, symbol: String, id: String, tap: (() -> Void)? = nil) {
         let toast = UIButton(type: .system)
         var configuration = UIButton.Configuration.filled()
-        configuration.title = "Downloaded \(item.name)"
-        configuration.image = UIImage(systemName: "arrow.down.circle.fill")
+        configuration.title = title
+        configuration.image = UIImage(systemName: symbol)
         configuration.imagePadding = 8
         configuration.cornerStyle = .capsule
         configuration.baseBackgroundColor = Palette.dynamic(light: Palette.rgb(0x2d2c31), dark: Palette.rgb(0xececee))
         configuration.baseForegroundColor = Palette.dynamic(light: .white, dark: .black)
         configuration.titleLineBreakMode = .byTruncatingMiddle
         toast.configuration = configuration
-        toast.accessibilityIdentifier = "download-toast"
-        toast.addAction(UIAction { [weak self, weak toast] _ in
+        toast.accessibilityIdentifier = id
+        toast.addAction(UIAction { [weak toast] _ in
             toast?.removeFromSuperview()
-            guard let self else { return }
-            DownloadManager.shared.open(item, from: self.topPresenter)
+            tap?()
         }, for: .touchUpInside)
         let width = min(view.bounds.width - 40, 320)
         toast.frame = CGRect(x: (view.bounds.width - width) / 2, y: bar.frame.minY - 54, width: width, height: 42)
@@ -761,7 +768,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         return PageMenuState(host: host, canGoBack: page.webView.canGoBack, canGoForward: page.webView.canGoForward,
                              zoom: Double(page.webView.pageZoom), isDesktopSite: page.wantsDesktopSite,
                              canSummarize: BrowseForMe.isAvailable, blockedCount: page.blockedCount,
-                             isFavorite: page.webView.url.map { favorites.value.contains($0.absoluteString) } ?? false)
+                             isFavorite: page.webView.url.map { favorites.value.contains($0.absoluteString) } ?? false,
+                             isTranslated: page.isTranslated)
     }
 
     func refreshMenu() {
@@ -829,7 +837,10 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             menuHost?.dismiss()
         case .siteSettings:
             presentSettings(site: page.webView.url?.host.flatMap { $0.isEmpty ? nil : $0 }, startingAtSite: true)
-        case .pageZoom, .translate:
+        case .translate:
+            menuHost?.dismiss()
+            translate(page)
+        case .pageZoom:
             break
         }
     }
