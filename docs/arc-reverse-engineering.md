@@ -1827,6 +1827,12 @@ from the binary (static strings, metadata and its key table; nothing run), marke
   `gmailPreviewEnabled`, `outlookCalendarPreviewEnabled`, `outlookEmailPreviewEnabled`, `recentPagesPreviewEnabled`, `cronPreviewEnabled`
   (Notion Calendar). Recent pages read the local history of notion.so, linear.app, figma.com and atlassian.net/wiki (no API);
   Notion Calendar shows Google Calendar's preview on calendar.notion.so; Outlook is OAuth with Microsoft Graph (GitHub #376).
+  Arc 1.172.2's main binary, recent pages: `Previews/RecentPagesFetcher.swift` `search(domain:tidyTitleConfiguration:browserContextID:)`
+  (per profile, titles through Tidy Tab Titles), left out: `notion.so/samlauthcallback`, `…/externalintegrationauthcallback`,
+  `…/googlepopupcallback`, `…/oauth2callback`, `figma.com/files/recent`. Empty lines "Recent Linear projects and issues appear
+  here.", "Recent Notion docs appear here.", "Recent Figma files appear here.", "Recent Confluence pages appear here."; the ＋ opens
+  linear.app/new, notion.so/new, figma.com/new, confluence.new. The card itself wasn't seen (no accounts); Cra's (CraCore
+  RecentPagesPreview) lists favicon, title and age in the Gmail card's style, on favorites and pinned tabs.
 - [O] **Profiles**: a line on profiles, a list on the left ("Your Profiles", "Default — 5 Spaces", + − and rename under it, 205 pt wide)
   and the chosen profile's cards on the right: Search engine, Manage search (Search Settings…), Include search engine suggestions ·
   Archive tabs after (12 hours (default), 24 hours, 7 days, 30 days), New documents (——, Confluence Page, Google Doc, Notion Page, Word

@@ -839,12 +839,40 @@ final class SpaceListView: NSView, NSDraggingSource {
             hovered = target
             target?.isHovered = true
             FolderPreviewController.shared.hover(target, in: self)
+            tabPreviewHover(target)
         }
         target?.hoverMoved(to: local)
-        let tip = scrolling ? nil : target?.tooltipTarget(at: local)
+        // A pinned tab with a Previews card shows the card instead of its name, as a favorite does.
+        let tip = scrolling || (target != nil && target === previewRow) ? nil : target?.tooltipTarget(at: local)
         if let old = tipTarget, old !== tip { ArcTooltipController.shared.mouseExited(old) }
         tipTarget = tip
         if let tip { ArcTooltipController.shared.mouseMoved(in: tip) }
+    }
+
+    /// The pinned tab whose Previews card is up or on its way.
+    private weak var previewRow: TabRowView?
+
+    /// Arc's Previews on a pinned tab ("Hover your mouse over an Arc Folder, Pinned, or Favorited
+    /// tab"): Gmail, Calendar or a site's recent pages (CraCore SidebarTabPreview), right of the
+    /// sidebar, not on the open tab.
+    private func tabPreviewHover(_ row: SidebarRowView?) {
+        if let old = previewRow, old !== row {
+            FavoritePreviewCard.shared.leave(old)
+            previewRow = nil
+        }
+        guard let tab = row as? TabRowView, tab !== previewRow, let m = tab.model, m.pinned, !m.selected, !m.editing,
+              ui.draggingID == nil, NSEvent.pressedMouseButtons == 0, let url = store.item(m.id)?.tab?.url,
+              SidebarTabPreview.kind(for: url, settings: store.settings) != nil else { return }
+        previewRow = tab
+        let id = m.id
+        FavoritePreviewCard.shared.hover(tab, target: .sidebarTab(
+            id, url: url, store: store, favicons: favicons, beside: self,
+            open: { [weak self] u in
+                guard let self else { return }
+                self.store.selectTab(id, window: self.ui.windowID)
+                (self.window?.windowController as? MainWindowController)?.loadInSelectedTab(u)
+            },
+            openNewTab: { [weak self] u in self?.actions.openURL(u) }))
     }
 
     // MARK: Clicks

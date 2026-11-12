@@ -1,0 +1,31 @@
+# Arc's "Recent pages on Linear, Notion, and Figma" preview on pinned tabs and favorites (#376): resting on a pinned
+# Linear tab that isn't open shows the card right of the sidebar with the pages from the history,
+# newest first, without the tab's own page; a pinned Figma tab with no Figma history shows Arc's
+# "Recent Figma files appear here." line. Nothing is fetched: the run is offline.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed history.json [{"url":"https://linear.app/cra/inbox","title":"Inbox","lastVisit":"2026-11-12T09:59:00Z","visitCount":9},{"url":"https://linear.app/cra/issue/CRA-12/sidebar-jumps","title":"CRA-12 Sidebar jumps","lastVisit":"2026-11-12T09:30:00Z","visitCount":2},{"url":"https://linear.app/cra/project/previews-1a2b","title":"Previews","lastVisit":"2026-11-12T09:50:00Z","visitCount":1},{"url":"https://linear.app/cra/issue/CRA-7/menus","title":"CRA-7 Menus","lastVisit":"2026-11-11T16:00:00Z","visitCount":1},{"url":"https://www.notion.so/cra/Roadmap-0123","title":"Roadmap","lastVisit":"2026-11-12T08:00:00Z","visitCount":3},{"url":"https://www.notion.so/oauth2callback?code=1","title":"Notion","lastVisit":"2026-11-12T08:01:00Z","visitCount":1},{"url":"https://example.com/","title":"Example","lastVisit":"2026-11-12T10:00:00Z","visitCount":1}]
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":["E0000000-0000-0000-0000-000000000003"],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":["E0000000-0000-0000-0000-000000000001","E0000000-0000-0000-0000-000000000002"],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"E0000000-0000-0000-0000-000000000001","parentID":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T09:00:00Z","data":{"tab":{"_0":{"url":"https://linear.app/cra/inbox","savedTitle":"Linear"}}}},{"id":"E0000000-0000-0000-0000-000000000002","parentID":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T09:00:00Z","data":{"tab":{"_0":{"url":"https://www.figma.com/files/recent","savedTitle":"Figma"}}}},{"id":"E0000000-0000-0000-0000-000000000003","parentID":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T09:00:00Z","data":{"tab":{"_0":{"url":"https://www.notion.so/cra","savedTitle":"Notion"}}}}]}
+
+# A page of our own is the open tab, so neither pinned tab is.
+cra://open?url=${PAGE}
+# Its load settles first: a sidebar update puts the hover back where the pointer is.
+wait 3
+
+# Linear: Previews, CRA-12 and CRA-7 (not Inbox, the tab's own page): three 36 pt rows and room for the ＋.
+cra://debug?hover=TabRowView,0
+wait 1
+expect-log preview card shown: 238x152 pinned$
+cra://debug?previewDismiss=1
+
+# Figma with no Figma history: Arc's empty line.
+cra://debug?hover=TabRowView,1
+wait 1
+expect-log preview card shown: 240x[0-9]+ pinned$
+cra://debug?previewDismiss=1
+
+# A Notion favorite: Roadmap only (Notion's sign-in callback never shows), under the tile.
+cra://debug?hover=FavoriteTileView,0
+wait 1
+expect-log preview card shown: 238x78$
+cra://debug?previewDismiss=1

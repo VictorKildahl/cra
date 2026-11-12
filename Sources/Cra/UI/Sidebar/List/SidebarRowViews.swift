@@ -718,6 +718,8 @@ class SidebarRowView: NSView {
 
     // Clicks act on release (SwiftUI's tap); a press that moves 3 pt starts the row's drag.
     override func mouseDown(with event: NSEvent) {
+        // A pinned tab's Previews card goes at once, as a favorite's does.
+        FavoritePreviewCard.shared.cancel(self)
         press = (event, convert(event.locationInWindow, from: nil))
         if SidebarRowPress.pushesIn(pressRow, clickCount: event.clickCount) { push(in: true) }
     }

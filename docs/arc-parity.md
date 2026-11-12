@@ -94,7 +94,7 @@ Privacy and Extensions follow Advanced. Tabs, Plugins and Performance have no ta
 
 | Arc tab | Rows Cra lacks |
 |---|---|
-| General | Previews Settings… lists the three previews Cra has (Folders, Google Calendar, Google Mail); Outlook, Notion Calendar and the recent pages of Linear, Notion and Figma are GitHub #376. Live Calendar in the Calendar favorite's menu, as in Arc; Block Cookie Banners done, under Privacy |
+| General | Previews Settings… lists the four previews Cra has, in Arc's order (Folders, Google Calendar, Google Mail, Recent pages on Linear, Notion, and Figma: #376); Notion Calendar is still to come and Outlook is left out (it would need a Microsoft sign-in kept in Cra). Live Calendar in the Calendar favorite's menu, as in Arc; Block Cookie Banners done, under Privacy |
 | Profiles | "New documents" app (GitHub #375); Search engine, Archive tabs after and Download location are on each profile's card (the engine and the archive time are one setting for all profiles); Privacy, Passwords, Credit Cards, Notifications and Clear Browsing Data done |
 | Max | The three cloud rows (Instant Links, ChatGPT in the Command Bar) are out of scope; "Automatically enable future Arc Max features" has nothing to enable yet |
 | Shortcuts | The choice of Arc or the website per shortcut (GitHub #374) |

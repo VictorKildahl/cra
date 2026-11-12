@@ -1341,7 +1341,11 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
     private var press: NSEvent?
     private var pushedIn = false
     /// Scenarios (cra://debug?hover=FavoriteTileView,n): the tile as the pointer leaves it hovered (#293).
-    func debugHover() { hovering = true }
+    func debugHover() {
+        hovering = true
+        // Its Previews card comes as for the pointer (#376).
+        if let url = previewURL, let store = grid?.store { FavoritePreviewCard.shared.hover(self, target: previewTarget(url, store: store)) }
+    }
     /// Scenarios (cra://debug?favoriteBadges=): the Peek badge's frame in the tile, nil without one (#381).
     var peekBadgeReadout: String? {
         guard let b = peekBadge else { return nil }
@@ -1584,15 +1588,14 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         FavoritePreviewCard.shared.leave(self)
     }
 
-    /// A Gmail favorite with Previews on, or a Calendar favorite with Live Calendar's hover
-    /// preview: Arc shows the card instead of the name tooltip, and none on the open tab.
+    /// A favorite with one of Arc's Previews on (CraCore SidebarTabPreview: Gmail, Live Calendar's
+    /// hover preview, recent pages): Arc shows the card instead of the name tooltip, and none on the open tab.
     private var previewURL: String? {
         // Not while the Library covers the sidebar (the tile is still under the pointer's path there).
         guard let store = grid?.store, grid?.ui.libraryPage == nil, grid?.ui.libraryReveal == nil, !isHiddenOrHasHiddenAncestor,
-              model?.selected != true, model?.cells.count == 1, let url = store.item(itemID)?.tab?.url else { return nil }
-        if GmailPreview.feedURL(for: url) != nil { return store.settings.favoritePreviews ? url : nil }
-        if CalendarPreview.isCalendar(url) { return store.settings.liveCalendar && store.settings.calendarHoverPreview ? url : nil }
-        return nil
+              model?.selected != true, model?.cells.count == 1, let url = store.item(itemID)?.tab?.url,
+              SidebarTabPreview.kind(for: url, settings: store.settings) != nil else { return nil }
+        return url
     }
 
     /// The favorite's Google Calendar address while Live Calendar is on for it.
@@ -1613,12 +1616,9 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
     }
 
     private func previewTarget(_ url: String, store: SidebarStore) -> FavoritePreviewCard.Target {
-        let id = itemID
-        return FavoritePreviewCard.Target(
-            favorite: url, profilePath: store.profilePath(item: id),
-            open: { [weak self] u in self?.openInFavorite(u) },
-            openNewTab: { [weak grid] u in grid?.actions.openURL(u) },
-            disableLiveCalendar: { store.settings.liveCalendar = false })
+        .sidebarTab(itemID, url: url, store: store, favicons: grid?.favicons,
+                    open: { [weak self] u in self?.openInFavorite(u) },
+                    openNewTab: { [weak grid] u in grid?.actions.openURL(u) })
     }
 
     /// A mail, event or new draft from the card: the favorite opens on it.

@@ -2,12 +2,14 @@ import AppKit
 import CraCEF
 import SwiftUI
 
-/// Arc's Previews card beside a Gmail or Google Calendar favorite (Arc 1.172.1, measured on
-/// Victor's signed-in Arc, 8 Nov 2026; CraCore FavoritePreviewMetrics and FavoritePreviewMotion).
-/// It shows a moment after the pointer lands on a tile that isn't the open tab, takes the pointer
-/// (rows light up, a click opens the mail or event in the favorite), and goes once the pointer has
-/// left both the tile and the card. Gmail's card lists the unread mail with a ＋ for a new one;
-/// Calendar's is today's timeline with a gear (Last fetch, Refresh, Disable Live Calendar) and a ＋.
+/// Arc's Previews card beside a Gmail, Google Calendar, Linear, Notion, Figma or Confluence
+/// favorite or pinned tab (Arc 1.172.1, measured on Victor's signed-in Arc, 8 Nov 2026; CraCore
+/// FavoritePreviewMetrics and FavoritePreviewMotion). It shows a moment after the pointer lands on a
+/// tab that isn't the open one, takes the pointer (rows light up, a click opens the mail, event or
+/// page in the tab), and goes once the pointer has left both the tab and the card. Gmail's card
+/// lists the unread mail with a ＋ for a new one; Calendar's is today's timeline with a gear (Last
+/// fetch, Refresh, Disable Live Calendar) and a ＋; the others list the site's recent pages from
+/// the history with a ＋ for a new one (CraCore RecentPagesPreview, GitHub #376).
 @MainActor
 final class FavoritePreviewCard {
     static let shared = FavoritePreviewCard()
@@ -21,6 +23,12 @@ final class FavoritePreviewCard {
         /// Opens a URL in a new tab (Join).
         var openNewTab: (String) -> Void
         var disableLiveCalendar: () -> Void = {}
+        /// The site's recent pages, read when the card shows (the history is in hand).
+        var recentPages: () -> [RecentPagesPreview.Page] = { [] }
+        var favicon: (String) -> NSImage? = { _ in nil }
+        /// A pinned tab's row: the card goes right of this view (the sidebar's list), level with
+        /// the row's top, instead of under a favorite's tile.
+        weak var beside: NSView?
     }
 
     private var panel: PreviewPanel?
@@ -125,6 +133,11 @@ final class FavoritePreviewCard {
 
     private func content() -> AnyView? {
         guard let target else { return nil }
+        if let site = RecentPagesPreview.site(for: target.favorite) {
+            return AnyView(RecentPagesPreviewView(site: site, pages: target.recentPages(), now: Date(), favicon: target.favicon,
+                                                  open: { [weak self] in self?.open($0) },
+                                                  new: { [weak self] in self?.open(site.newURL) }))
+        }
         if let feed = GmailPreview.feedURL(for: target.favorite) {
             guard let inbox = inbox[feed + "|" + (target.profilePath ?? "")] else { return nil }
             return AnyView(GmailPreviewView(inbox: inbox, now: Date(), open: { [weak self] in self?.open($0) },
@@ -178,11 +191,22 @@ final class FavoritePreviewCard {
         guard wantsShow, panel == nil, let tile, let window = tile.window, let view = content() else { return }
         let p = PreviewPanel(content: view)
         let t = window.convertToScreen(tile.convert(tile.bounds, to: nil))
-        // Arc: the card's left edge 4 pt in from the tile's right edge, its top 3.5 pt above the tile's bottom.
-        p.place(cardTopLeft: NSPoint(x: t.maxX - 4, y: t.minY + 3.5))
+        if let list = target?.beside, list.window === window {
+            // A pinned tab: right of the sidebar as Arc's folder preview is, level with the row,
+            // kept inside the window.
+            let side = window.convertToScreen(list.convert(list.bounds, to: nil))
+            let height = p.cardFrame.height
+            let top = max(t.maxY, window.frame.minY + FolderPreviewMetrics.windowInset + height)
+            p.place(cardTopLeft: NSPoint(x: side.maxX + FolderPreviewMetrics.gapFromSidebar, y: top))
+        } else {
+            // Arc: the card's left edge 4 pt in from the tile's right edge, its top 3.5 pt above the tile's bottom.
+            p.place(cardTopLeft: NSPoint(x: t.maxX - 4, y: t.minY + 3.5))
+        }
         window.addChildWindow(p, ordered: .above)
         p.open()
         panel = p
+        let size = p.cardFrame.size
+        CraLog.note("preview card shown: \(Int(size.width))x\(Int(size.height))\(target?.beside == nil ? "" : " pinned")")
     }
 
     private func refreshPanel() {
@@ -221,18 +245,53 @@ final class FavoritePreviewCard {
         demo(favorite, in: window)
     }
 
-    private func demo(_ favorite: String, in window: NSWindow) {
+    /// cra://debug?recentPages=<site>[&pages=<n>]: the site's card for n sample pages (0: Arc's
+    /// empty line), as if from the history.
+    func demoRecentPages(_ site: RecentPagesPreview.Site, count: Int, in window: NSWindow) {
+        let now = Date()
+        let favorite = switch site {
+        case .linear: "https://linear.app/cra/"
+        case .notion: "https://www.notion.so/cra/"
+        case .figma: "https://www.figma.com/"
+        case .confluence: "https://acme.atlassian.net/wiki/"
+        }
+        let pages = (0..<min(count, RecentPagesPreview.limit)).map {
+            RecentPagesPreview.Page(title: "Recent page \($0 + 1) with a title long enough to be cut", url: favorite + "demo-\($0 + 1)",
+                                    lastVisit: now.addingTimeInterval(-Double($0 + 1) * 1500))
+        }
+        demo(favorite, in: window, pages: pages)
+    }
+
+    private func demo(_ favorite: String, in window: NSWindow, pages: [RecentPagesPreview.Page] = []) {
         guard let content = window.contentView else { return }
         dismiss(animated: false)
         let anchor = NSView(frame: NSRect(x: 200, y: content.bounds.height - 44 - 47, width: 56, height: 47))
         content.addSubview(anchor)
         tile = anchor
         target = Target(favorite: favorite, profilePath: nil, open: { CraLog.note("preview opens \($0)") },
-                        openNewTab: { CraLog.note("preview joins \($0)") })
+                        openNewTab: { CraLog.note("preview joins \($0)") }, recentPages: { pages })
         wantsShow = true
         showIfReady()
         anchor.removeFromSuperview()
-        CraLog.note("preview card shown: \(panel.map { "\(Int($0.cardFrame.width))x\(Int($0.cardFrame.height))" } ?? "none")")
+        if panel == nil { CraLog.note("preview card shown: none") }
+    }
+}
+
+@MainActor
+extension FavoritePreviewCard.Target {
+    /// The card for a favorite or pinned tab: its profile, Live Calendar's off switch, and its
+    /// site's recent pages from the history (the one history_search reads) with their favicons.
+    static func sidebarTab(_ id: UUID, url: String, store: SidebarStore, favicons: FaviconCache?, beside: NSView? = nil,
+                           open: @escaping (String) -> Void, openNewTab: @escaping (String) -> Void) -> Self {
+        var t = Self(favorite: url, profilePath: store.profilePath(item: id), open: open, openNewTab: openNewTab,
+                     disableLiveCalendar: { store.settings.liveCalendar = false })
+        t.recentPages = { [weak store] in store.map { RecentPagesPreview.pages(for: url, history: Array($0.history.values)) } ?? [] }
+        t.favicon = { [weak favicons] page in
+            guard let favicons else { return nil }
+            return favicons.image(for: page) ?? FaviconKey.key(for: page).flatMap { favicons.image(forKey: FaviconKey.siteKey(of: $0)) }
+        }
+        t.beside = beside
+        return t
     }
 }
 
@@ -534,6 +593,91 @@ private struct GmailPreviewView: View {
                     .padding(FavoritePreviewMetrics.buttonInset)
             }
             .frame(width: FavoritePreviewMetrics.width, height: height))
+    }
+}
+
+/// Recent pages on Linear, Notion, Figma or Confluence (GitHub #376). Arc's card for these isn't
+/// visible without accounts on those sites, so the list is Cra's in the Gmail card's style: a row
+/// per page with its favicon, tidy title and how long ago you were there, a ＋ for a new page, and
+/// Arc's own line when the history has none.
+private struct RecentPagesPreviewView: View {
+    let site: RecentPagesPreview.Site
+    let pages: [RecentPagesPreview.Page]
+    let now: Date
+    let favicon: (String) -> NSImage?
+    let open: (String) -> Void
+    let new: () -> Void
+
+    var body: some View {
+        if pages.isEmpty { empty } else { list }
+    }
+
+    /// Arc's empty line, in the Gmail card's empty card.
+    private var empty: some View {
+        CardStyle.card(
+            Text(site.emptyText).font(.system(size: 13)).multilineTextAlignment(.center)
+                .foregroundStyle(.white.opacity(0.78))
+                .padding(.vertical, 15.5).padding(.horizontal, 16)
+                .frame(width: 240))
+    }
+
+    private var list: some View {
+        let rowStep = FavoritePreviewMetrics.pageRowHeight + 1
+        // Room under the last row for the ＋, so it never sits on a row's time.
+        let room = FavoritePreviewMetrics.buttonSize + FavoritePreviewMetrics.buttonInset
+        let height = min(CGFloat(pages.count) * rowStep - 1 + room, FavoritePreviewMetrics.maxHeight)
+        return CardStyle.card(
+            ZStack(alignment: .bottomTrailing) {
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        ForEach(Array(pages.enumerated()), id: \.offset) { i, page in
+                            if i > 0 { Rectangle().fill(CardStyle.line).frame(height: 1) }
+                            PageRow(page: page, now: now, icon: favicon(page.url)) { open(page.url) }
+                        }
+                        Color.clear.frame(height: room)
+                    }
+                }
+                RoundButton(symbol: "plus", label: site.newLabel) { _ in new() }
+                    .help(site.newLabel)
+                    .padding(FavoritePreviewMetrics.buttonInset)
+            }
+            .frame(width: FavoritePreviewMetrics.width, height: height))
+    }
+}
+
+/// A recent page: favicon, title and age on one line, 11 pt in, lit like a mail row under the pointer.
+private struct PageRow: View {
+    let page: RecentPagesPreview.Page
+    let now: Date
+    let icon: NSImage?
+    let open: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Group {
+                if let icon { Image(nsImage: icon).resizable().interpolation(.high) } else {
+                    Image(systemName: "doc.text").resizable().scaledToFit().foregroundStyle(CardStyle.secondary)
+                }
+            }
+            .frame(width: 16, height: 16)
+            Text(page.title).font(.system(size: 13)).foregroundStyle(CardStyle.text).lineLimit(1).truncationMode(.tail)
+            Spacer(minLength: 0)
+            Text(GmailPreview.age(of: page.lastVisit, now: now)).font(.system(size: 12)).foregroundStyle(CardStyle.secondary)
+        }
+        .padding(.horizontal, FavoritePreviewMetrics.inset)
+        .frame(maxWidth: .infinity, minHeight: FavoritePreviewMetrics.pageRowHeight, maxHeight: FavoritePreviewMetrics.pageRowHeight)
+        .background {
+            if hovered {
+                RoundedRectangle(cornerRadius: 7, style: .continuous).fill(CardStyle.hover).padding(FavoritePreviewMetrics.hoverInset)
+            }
+        }
+        .contentShape(Rectangle())
+        .onHover { hovered = $0 }
+        .onTapGesture(perform: open)
+        .help(page.url)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
     }
 }
 
