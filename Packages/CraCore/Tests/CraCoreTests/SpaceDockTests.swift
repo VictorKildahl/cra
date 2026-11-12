@@ -1,5 +1,6 @@
 import CoreGraphics
 import CraCore
+import Foundation
 import Testing
 
 /// The sidebar dock's space icons, as Arc 1.171 draws them (#252: dots for spaces with no icon).
@@ -31,6 +32,8 @@ struct SpaceDockTests {
         #expect(SpaceDock.mark(for: .none, isOpen: true, squeezed: false) == .dot(diameter: 8))
         #expect(SpaceDock.mark(for: .emoji("🍕"), isOpen: false, squeezed: false) == .emoji("🍕"))
         #expect(SpaceDock.mark(for: .symbol("star.fill"), isOpen: false, squeezed: false) == .symbol("star.fill"))
+        #expect(SpaceDock.mark(for: .image(Data([1])), isOpen: false, squeezed: false) == .image(Data([1])))
+        #expect(SpaceDock.mark(for: .image(Data([1])), isOpen: false, squeezed: true) == .dot(diameter: SpaceDock.squeezedDotDiameter))
     }
 
     /// In a squeezed dock every space but the open one is a 4 pt dot, whatever its icon; the open

@@ -47,4 +47,29 @@ struct SpaceIconTests {
         #expect(SpaceIcon(emoji: "", symbol: nil) == .none)
         #expect(SpaceIcon.newSpace.emoji == "🌱" && SpaceIcon.newSpace.symbol == nil)
     }
+
+    /// A picture icon survives a save and a JSON round trip, and never stacks with an emoji or symbol.
+    @Test
+    func aPictureIconRoundTrips() throws {
+        let png = Data([0x89, 0x50, 0x4E, 0x47, 1, 2, 3])
+        var s = Self.space(emoji: "🏠", symbol: "star.fill")
+        s.icon = .image(png)
+        #expect(s.emoji == "" && s.symbol == nil && s.iconImage == png)
+        #expect(s.icon == .image(png))
+        let back = try JSONDecoder().decode(Space.self, from: JSONEncoder().encode(s))
+        #expect(back.iconImage == png && back.icon == .image(png) && back.emoji == "" && back.symbol == nil)
+        s.icon = .emoji("🌱")
+        #expect(s.iconImage == nil)
+        #expect(SpaceIcon(emoji: "🌱", symbol: "star.fill", image: png) == .image(png))
+        #expect(SpaceIcon(emoji: "🌱", symbol: nil, image: Data()) == .emoji("🌱"))
+    }
+
+    /// A sidebar.json written before picture icons has no `iconImage` key and loads as before.
+    @Test
+    func olderSpacesHaveNoPicture() throws {
+        let s = Self.space(emoji: "🏠", symbol: nil)
+        let json = try JSONEncoder().encode(s)
+        #expect(!String(decoding: json, as: UTF8.self).contains("iconImage"))
+        #expect(try JSONDecoder().decode(Space.self, from: json).iconImage == nil)
+    }
 }
