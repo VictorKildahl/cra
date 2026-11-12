@@ -36,13 +36,14 @@ or Arc-only service), per CONTRIBUTING.md.
 | Window dragging from the top of webpages | Settings ▸ Advanced | done | An ordinary-arrow drag that starts within 60 pt of the card's top, its bar included, moves the window: the top 60 pt of the page with the toolbar hidden, 28 pt under the toolbar (Arc measured side by side, #363). Text, link and resize cursors keep their gesture; the rightmost 14 pt stay with the page and its scrollbar. The press reaches the page immediately, the first drag event moves the window, and the page gets the release, so a slipped click still clicks (WindowContentGrabber, PageTopDrag). Settings ▸ Advanced, on by default as in Arc. |
 | Restore windows from previous session | Settings ▸ Advanced | done | Settings ▸ Advanced; off keeps the window in use last. |
 | Block Cookie Banners | Settings ▸ General | done | Settings ▸ Privacy; hides the common consent managers' banners (CookieBanners), off by default as in Arc. |
-| Archive Little Arcs after | Settings ▸ Links (6 hours default) | done | Settings ▸ Tabs ▸ Links; a Little Window left alone that long closes into the archive. |
+| Archive Little Arcs after | Settings ▸ Links (6 hours default) | done | Settings ▸ Links; a Little Window left alone that long closes into the archive. |
 | Previews (Gmail, Calendar on Favorites) | Settings ▸ General ▸ Previews Settings…, a Calendar favorite's menu ▸ Live Calendar | done | Gmail: the unread mail from Gmail's Atom feed (the space's own sign-in) in Arc's card, rows, ＋ and motion, measured on Victor's signed-in Arc 8 Nov. Calendar: Arc's timeline card, gear menu, Live Calendar ▸ submenu, tile countdown and meeting link; events read through Google's Calendar embed (Arc's own fetch says "Failed to update" in 1.172.1). See "Previews, measured". |
 | Join Meeting ⌃⌘J | Shortcuts | done | The call on now, else the next one today, from a Live Calendar favorite. |
 | Music notes on a playing favorite | A favorite on a music site, while it plays | done | Core Animation notes rise from the playing icon's top edge and stop when the sound pauses. As in Arc 1.172.2 (live, 11–12 Nov 2026) they keep floating on a muted tab and with Reduce Motion on. Compared side by side with Arc in full windows at 1x and 2x, light and dark spaces, top row and lower rows; light notes use 30% black, dark notes 80% white. |
 | Troubleshooting menu | Help ▸ Troubleshooting: Record Trace, Open Task Manager, Reveal Arc Data, Copy Arc Info | done | Export Diagnostics…, Open Task Manager (Chrome's), Reveal Cra Data, Copy Cra Info; Record Trace is Arc-internal. |
 | Help menu | Getting Started, Release Notes, Contact the Team, Visit Help Center, Restore Data | done | Cra Help (Arc's Help Center and Getting Started guide), Release Notes, Report an Issue… (Contact the Team), Essential Keyboard Shortcuts, Troubleshooting ▸ Task Manager / Reveal Data / Copy Info. *skip*: Restore Data and Export Arc Notes (Arc's account and Notes), Record Trace (chrome://tracing is a developer tool). |
-| Ad blocker upsell card, Sync, Account, Membership card, Share Arc, Sign Out, Send to Dia, Share Space | | *skip* | Account/cloud. |
+| Ad blocker upsell card, Account, Sign Out, Send to Dia, Share Space | | *skip* | Account/cloud. |
+| Membership card, Gift Arc to a Friend | Settings ▸ Account | done (Cra's own) | Settings ▸ Sync (GitHub #372): a member card made on the Mac (macOS name, a nickname, EARLY '26, a months stamp in the first year, then anniversaries, the day Cra first ran), its share, save and copy buttons, the default-browser banner, and "Share Cra with a Friend", whose sheet copies or shares crabrowser.app tagged `utm_campaign=share`. No account, server or gift unlocks. |
 | Max: 5-Second Previews | Settings ▸ Max | done | Arc's hover cards on the Mac's Apple Intelligence: Arc's links on Google, X and Hacker News, or Shift on any link (the small card within the site); Arc's prompt, card, timing and share menu (arc-reverse-engineering.md). |
 | Max: Instant Links, ChatGPT in the Command Bar, New ChatGPT Message ⌥⌘G | Settings ▸ Max | *skip* | Cloud AI partners. Tidy Tabs/Titles/Downloads/5-Second Previews on-device. |
 
@@ -87,10 +88,16 @@ gains "New Profile".
 
 ## 4. Settings
 
+The window is Arc's since GitHub #372 (684 × 650 pt, eight tabs in a toolbar, measured on Arc 1.172.2: see "Arc Settings window" in
+arc-reverse-engineering.md). Arc's seven tabs after Account are Cra's in Arc's order; Cra's first tab is Sync (no account), and
+Privacy and Extensions follow Advanced. Tabs, Plugins and Performance have no tab: their rows sit in General, Extensions and Advanced.
+
 | Arc tab | Rows Cra lacks |
 |---|---|
-| General | (Previews: Gmail done, Tabs pane; Live Calendar in the Calendar favorite's menu, as in Arc; Block Cookie Banners done, under Privacy) |
-| Profiles | "New documents" app (Arc's Notes/Easels); Privacy, Passwords, Credit Cards and Notifications done |
+| General | Previews Settings… lists the three previews Cra has (Folders, Google Calendar, Google Mail); Outlook, Notion Calendar and the recent pages of Linear, Notion and Figma are GitHub #376. Live Calendar in the Calendar favorite's menu, as in Arc; Block Cookie Banners done, under Privacy |
+| Profiles | "New documents" app (GitHub #375); Search engine, Archive tabs after and Download location are on each profile's card (the engine and the archive time are one setting for all profiles); Privacy, Passwords, Credit Cards, Notifications and Clear Browsing Data done |
+| Max | The three cloud rows (Instant Links, ChatGPT in the Command Bar) are out of scope; "Automatically enable future Arc Max features" has nothing to enable yet |
+| Shortcuts | The choice of Arc or the website per shortcut (GitHub #374) |
 | Links | ("Open Little Arc when clicking on links with ⌥⌘ held" done, GitHub #373, as "⌥⌘-click opens a Little Window". *Deviation, pending Victor:* off by default where Arc's is on, because since 0.1.38 a ⌘⌥-click opens Split View (#298, Chromium 156's split view click) and the switch takes that click over. The click itself isn't measured in Arc; see `LittleWindowTrigger`); Archive Little Windows after done. Cra's own, not in Arc: "⌘-click Expand opens in the tab" (GitHub #380, off by default as Victor asked, 12 Nov 2026), a ⌘-click on a Peek's Expand loads the page in the tab the Peek came from (`PeekExpand`) |
 | Advanced | Shared Quotes (arc.net); "Show full URL when Toolbar is enabled", "More Settings…" and "Reset Translated-site Prompts" done (GitHub #373); Export Data (Arc's Markdown of every space and tab) isn't in Cra |
 | Icon | Cra has its own icon picker |

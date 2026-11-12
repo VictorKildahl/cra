@@ -25,6 +25,8 @@ public enum SiteLinks {
         case commandBarNotice = "command-bar-notice"
         /// "What’s sent" on the sidebar's "Help improve Cra" card.
         case sharingCard = "sharing-card"
+        /// The link a user sends from Settings ▸ Sync ▸ Share Cra with a Friend.
+        case share
     }
 
     /// `url` with Cra's tag when it points at crabrowser.app; any other URL (GitHub, a typo)

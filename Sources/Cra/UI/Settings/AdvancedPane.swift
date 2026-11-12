@@ -14,11 +14,42 @@ struct AdvancedPane: View {
         @Bindable var updater = SoftwareUpdater.shared
         let newLittleWindow = KeyBindingRegistry.shared.action("newLittleWindow")?.primary?.display ?? "⌥⌘N"
         SettingsCardPane {
-            SettingsHeader("Cra")
+            // Arc's Advanced (Arc 1.172.2, GitHub #372): three cards of switches on coloured tiles, then buttons.
+            // Its Shared Quotes switch isn't in Cra (the links it makes are arc.net's).
+            SettingsCard {
+                SettingsTileRow("Play Cra sound effects", symbol: "speaker.wave.2.fill", tile: .blue, isOn: $store.settings.soundEffects)
+                SettingsCardDivider()
+                SettingsTileRow("Haptic feedback when reordering tabs", symbol: "hand.tap.fill", tile: .blue, isOn: $store.settings.hapticFeedbackOnReorder)
+            }
+            SettingsCard {
+                SettingsTileRow("When opening Cra, restore windows from previous session", symbol: "macwindow", tile: .green, isOn: $store.settings.restoreWindows)
+                SettingsCardDivider()
+                SettingsTileRow("Allow window dragging from the top of webpages", symbol: "rectangle.topthird.inset.filled", tile: .green, isOn: $store.settings.pageTopWindowDrag)
+                SettingsCardDivider()
+                SettingsTileRow("Show full URL when Toolbar is enabled", symbol: "ellipsis.rectangle", tile: .red, isOn: $store.settings.toolbarShowsFullURL)
+            }
+            .padding(.top, 9)
+            SettingsCard {
+                SettingsTileRow("Enable Picture in Picture when you leave a video tab", symbol: "play.square", tile: .purple, isOn: $store.settings.autoPictureInPicture)
+                SettingsCardDivider()
+                SettingsTileRow("Allow websites to get your theme data", symbol: "paintpalette.fill", tile: .purple, isOn: $store.settings.shareThemeWithWebsites)
+                SettingsCardDivider()
+                SettingsTileRow("Enable Boosts on websites you visit", symbol: "paintbrush.fill", tile: .purple, isOn: $store.settings.boostsEnabled)
+            }
+            .padding(.top, 9)
+            HStack(spacing: 16) {
+                Button("More Settings…") { actions.openURL("chrome://settings") }
+                ResetTranslatedSitesButton(reset: actions.resetTranslatedSitePrompts)
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 14)
+
+            SettingsHeader("Cra").padding(.top, 20)
             SettingsFeatureCard {
-                SettingsToggleRow("Automatic updates",
-                                  detail: "Cra downloads new versions in the background and installs them the next time it opens.",
-                                  isOn: $updater.automaticallyUpdates, enabled: updater.isAvailable) {
+                // The switch is Arc's General ▸ "Automatically update my Arc".
+                SettingsPlainRow("Updates",
+                                 detail: "Cra downloads new versions in the background and installs them the next time it opens (General).",
+                                 trailing: { EmptyView() }) {
                     HStack(spacing: 8) {
                         Button("Check for Updates…") { updater.checkForUpdates(nil) }
                             .disabled(!updater.isAvailable)
@@ -31,70 +62,21 @@ struct AdvancedPane: View {
                                   isOn: $store.settings.chromeEngine)
             }
 
-            SettingsHeader("Search").padding(.top, 20)
+            // The search engine and its suggestions are in Profiles, where Arc has them.
+            SettingsHeader("Command bar").padding(.top, 20)
             SettingsFeatureCard {
-                SettingsPlainRow("Search engine",
-                                   detail: "What you type in the command bar that isn’t an address is searched for here.",
-                                   trailing: { EmptyView() }) {
-                    HStack(spacing: 8) {
-                        SearchEnginePicker(store: store)
-                        Button("Manage Search Engines…") { actions.openURL(SearchEngines.settingsPage) }
-                    }
-                }
-                SettingsCardDivider()
-                SettingsToggleRow("Search suggestions",
-                                  detail: "As you type, the command bar lists what your search engine suggests. What you type is sent to it.",
-                                  isOn: $store.settings.searchSuggestions)
-                SettingsCardDivider()
                 // GitHub #307, not in Arc: ⌘T finds tabs in the window's space only.
                 SettingsToggleRow("Only this space’s tabs",
                                   detail: "The command bar finds open tabs in the space you’re in, not in all your spaces.",
                                   isOn: $store.settings.commandBarCurrentSpaceOnly)
             }
 
-            SettingsHeader("Websites").padding(.top, 20)
-            SettingsFeatureCard {
-                // Arc: Settings ▸ Advanced "Allow websites to get your theme data" (--arc-palette-* variables).
-                SettingsToggleRow("Share your theme with websites",
-                                  detail: "Sites that ask can read your space’s colors and match their pages to them.",
-                                  isOn: $store.settings.shareThemeWithWebsites)
-                SettingsCardDivider()
-                // Arc: "Allow window dragging from the top of webpages" (under the toolbar too, #363).
-                SettingsToggleRow("Drag the window by the page’s top",
-                                  detail: "Drag the top edge of a page to move the window.",
-                                  isOn: $store.settings.pageTopWindowDrag)
-                SettingsCardDivider()
-                // Arc: Settings ▸ Advanced "Show full URL when Toolbar is enabled" (also in the toolbar address's menu).
-                SettingsToggleRow("Show full URL when Toolbar is enabled",
-                                  detail: "With the toolbar on, it shows a page’s whole address instead of only the site’s name.",
-                                  isOn: $store.settings.toolbarShowsFullURL)
-                SettingsCardDivider()
-                // Arc: "Enable Boosts on websites you visit".
-                SettingsToggleRow("Boosts",
-                                  detail: "Your Boosts restyle and change the sites they’re made for.",
-                                  isOn: $store.settings.boostsEnabled)
-                SettingsCardDivider()
-                // Arc: Settings ▸ Advanced "Play Arc sound effects".
-                SettingsToggleRow("Sound effects",
-                                  detail: "A camera shutter sounds when you capture a screenshot of a page.",
-                                  isOn: $store.settings.soundEffects)
-            }
-
             SettingsHeader("Opening and quitting").padding(.top, 20)
             SettingsFeatureCard {
-                // Arc: Settings ▸ Advanced "When opening Arc, restore windows from previous session".
-                SettingsToggleRow("Restore windows",
-                                  detail: "When Cra opens, the windows you had open last time come back.",
-                                  isOn: $store.settings.restoreWindows)
-                SettingsCardDivider()
                 // Not in Arc (X DM 7 Nov 2026): Arc opens on the tab in use last.
                 SettingsToggleRow("Start on a new tab",
                                   detail: "When Cra opens, it starts on a new tab instead of the tab you used last.",
                                   isOn: $store.settings.startOnNewTab)
-                SettingsCardDivider()
-                SettingsToggleRow("Warn before quitting",
-                                  detail: "⌘Q asks “Quit Cra?” first, so pressing it by mistake doesn’t close everything.",
-                                  isOn: $store.settings.warnBeforeQuitting, enabled: !store.settings.keepInMenuBar)
                 SettingsCardDivider()
                 // GitHub #231, not in Arc: ⌘Q puts Cra in the menu bar instead of quitting.
                 SettingsToggleRow("Keep Cra in the menu bar",
@@ -111,19 +93,6 @@ struct AdvancedPane: View {
                 SettingsPlainRow("Export spaces and pinned tabs",
                                    detail: "Save every space’s favorites, pinned tabs and folders as a bookmarks file that Chrome, Safari, Firefox and other browsers can import.",
                                    trailing: { Button("Export…") { SidebarExport.run(store, in: NSApp.keyWindow) } })
-            }
-
-            SettingsHeader("Chromium").padding(.top, 20)
-            SettingsFeatureCard {
-                // Arc: "More Settings…" opens arc://settings.
-                SettingsPlainRow("More Settings",
-                                 detail: "Chromium’s own settings page, in a tab.",
-                                 trailing: { Button("More Settings…") { actions.openURL("chrome://settings") } })
-                SettingsCardDivider()
-                // Arc: "Reset Translated-site Prompts" (resetTranslateSettings).
-                SettingsPlainRow("Translated sites",
-                                 detail: "Forget the sites and languages you chose always or never to translate, in every profile, so Cra offers to translate them again.",
-                                 trailing: { ResetTranslatedSitesButton(reset: actions.resetTranslatedSitePrompts) })
             }
 
             SettingsHeader("Agents").padding(.top, 20)
@@ -150,7 +119,7 @@ struct AdvancedPane: View {
                     } trailing: {
                         Toggle("Let agents run JavaScript in pages", isOn: Binding(
                             get: { MCPServer.shared.allowsScripts }, set: { MCPServer.shared.allowsScripts = $0 }))
-                            .toggleStyle(.switch).labelsHidden()
+                            .toggleStyle(.arcSwitch).labelsHidden()
                     }
                     SettingsCardDivider()
                     SettingsCardRow {
@@ -158,7 +127,7 @@ struct AdvancedPane: View {
                     } trailing: {
                         Toggle("Let agents read your history", isOn: Binding(
                             get: { MCPServer.shared.allowsHistory }, set: { MCPServer.shared.allowsHistory = $0 }))
-                            .toggleStyle(.switch).labelsHidden()
+                            .toggleStyle(.arcSwitch).labelsHidden()
                     }
                     ForEach(MCPServer.shared.agents) { agent in
                         SettingsCardDivider()
@@ -204,7 +173,7 @@ struct AdvancedPane: View {
 /// Chromium's default search engine, the one chrome://settings/searchEngines sets (Arc: Settings ▸
 /// Profiles ▸ Default Search Engine, beside "Search Settings"): its built-in engines and whichever is
 /// the default. The page adds, edits and removes the rest.
-private struct SearchEnginePicker: View {
+struct SearchEnginePicker: View {
     let store: SidebarStore
     @State private var engines: [ChromiumSearchEngine] = []
     @State private var selected = ""

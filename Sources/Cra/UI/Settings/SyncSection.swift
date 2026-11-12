@@ -38,7 +38,7 @@ struct SyncSection: View {
                                    : iCloudUnavailableReason,
                                trailing: {
                 Toggle("Sync with iCloud", isOn: Binding(get: { sync.location == .iCloud }, set: { on in on ? enableICloud() : sync.disable() }))
-                    .toggleStyle(.switch).labelsHidden()
+                    .toggleStyle(.arcSwitch).labelsHidden()
                     .disabled(!sync.iCloudAvailable)
             }) {
                 // macOS doesn't tell apps which Apple Account is signed in; System Settings shows it.

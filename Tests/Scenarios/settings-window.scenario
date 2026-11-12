@@ -1,0 +1,44 @@
+# Settings is Arc's window (Arc 1.172.2, measured 11 and 12 Nov 2026, GitHub #372): fixed at 684 × 650 pt, a toolbar
+# of tabs in Arc's order, and it opens on the first tab every time it is opened, not on the one used last. Cra's
+# sidebar list of eleven panes (Dia's window) is gone; the old pane names, which scenarios and the command bar's
+# "Search Settings…" use, open the tab that holds them now.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://open?url=${PAGE}?n=kept
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/settings
+wait 1
+cra://debug?windowState=first
+expect-log window state first: settings visible=1 front=1 tab=sync size=684x650 resizable=0
+cra://debug?settingsPane=profiles
+wait 1
+cra://debug?windowState=profiles
+expect-log window state profiles: settings visible=1 front=1 tab=profiles size=684x650 resizable=0
+# Tabs, Plugins and Performance are no tabs of their own now.
+cra://debug?settingsPane=tabs
+wait 1
+cra://debug?windowState=tabs
+expect-log window state tabs: settings visible=1 front=1 tab=general size=684x650
+cra://debug?settingsPane=plugins
+wait 1
+cra://debug?windowState=plugins
+expect-log window state plugins: settings visible=1 front=1 tab=extensions size=684x650
+cra://debug?settingsPane=performance
+wait 1
+cra://debug?windowState=performance
+expect-log window state performance: settings visible=1 front=1 tab=advanced size=684x650
+# A name that is no tab leaves the tab where it is.
+cra://debug?settingsPane=nonsense
+wait 1
+cra://debug?windowState=nonsense
+expect-log window state nonsense: settings visible=1 front=1 tab=advanced size=684x650
+# Closed and opened again: the first tab, as Arc's.
+cra://action/closeTab
+wait 1
+cra://debug?windowState=closed
+expect-log window state closed: settings visible=0
+cra://action/settings
+wait 1
+cra://debug?windowState=reopened
+expect-log window state reopened: settings visible=1 front=1 tab=sync size=684x650

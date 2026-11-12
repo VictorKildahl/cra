@@ -12,58 +12,34 @@ struct SettingsActions {
     var newProfile: () -> Void = {}
     /// Advanced ▸ Reset Translated-site Prompts (Arc): the translate choices of every profile are forgotten.
     var resetTranslatedSitePrompts: () -> Void = {}
+    /// Shortcuts ▸ Learn the Essential Shortcuts: the floating card of the basics (Help ▸ Essential Keyboard Shortcuts).
+    var essentialShortcuts: () -> Void = {}
 }
 
-/// The panes in Dia's Settings sidebar (Dia 1.54.2: Account, Tabs, Privacy, Profiles, Skills,
-/// Apps, Shortcuts, Advanced). Cra has no account or AI skills/apps; General
-/// (system integration) and Extensions take rows instead. Max is Arc's Max pane, for the
-/// features Cra runs on the Mac's own Apple Intelligence model; Links is Arc's Links pane.
-enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, tabs, links, max, privacy, profiles, extensions, plugins, shortcuts, performance, advanced
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .general: return "General"
-        case .tabs: return "Tabs"
-        case .links: return "Links"
-        case .max: return "Max"
-        case .privacy: return "Privacy"
-        case .profiles: return "Profiles"
-        case .extensions: return "Extensions"
-        case .plugins: return "Plugins"
-        case .shortcuts: return "Shortcuts"
-        case .performance: return "Performance"
-        case .advanced: return "Advanced"
-        }
-    }
-
-    /// Dia's sidebar glyphs are SF Symbols (compared against the running Dia's icons).
+extension SettingsTab {
+    /// The glyph over the tab's name. Arc draws its own; these are the SF Symbols closest to them.
     var symbol: String {
         switch self {
+        case .sync: return "icloud"
         case .general: return "gearshape"
-        case .tabs: return "square.on.square"
-        case .links: return "link"
+        case .profiles: return "person"
         // macOS 15.1 added Apple's mark; before it, sparkles.
         case .max: return NSImage(systemSymbolName: "apple.intelligence", accessibilityDescription: nil) != nil ? "apple.intelligence" : "sparkles"
-        case .privacy: return "hand.raised"
-        case .profiles: return "person"
-        case .extensions: return "puzzlepiece.extension"
-        case .plugins: return "folder.badge.gearshape"
+        case .links: return "macwindow.on.rectangle"
         case .shortcuts: return "keyboard"
-        case .performance: return "gauge.with.dots.needle.67percent"
-        case .advanced: return "gearshape.2"
+        case .icon: return "app.dashed"
+        case .advanced: return "slider.horizontal.3"
+        case .privacy: return "hand.raised"
+        case .extensions: return "puzzlepiece.extension"
         }
     }
 }
 
-/// Selected pane plus the back/forward history behind the toolbar pill.
+/// The tab Settings is on. Arc's window shows its tabs in a toolbar and switches between them at once.
 @MainActor
 @Observable
 final class SettingsNavigation {
-    private(set) var pane: SettingsPane = .general
-    private(set) var back: [SettingsPane] = []
-    private(set) var forward: [SettingsPane] = []
+    private(set) var tab: SettingsTab = .first
     /// The window is on screen: panes that refresh (Performance) stop while it is closed or covered.
     var isOpen = false
     /// Counts each time Settings is brought up: panes showing what changed elsewhere (a profile's
@@ -71,73 +47,39 @@ final class SettingsNavigation {
     private(set) var shown = 0
     func didShow() { shown += 1 }
 
-    func show(_ p: SettingsPane) {
-        guard p != pane else { return }
-        back.append(pane)
-        forward = []
-        pane = p
-    }
-    func goBack() {
-        guard let p = back.popLast() else { return }
-        forward.append(pane)
-        pane = p
-    }
-    func goForward() {
-        guard let p = forward.popLast() else { return }
-        back.append(pane)
-        pane = p
-    }
+    func show(_ t: SettingsTab) { if t != tab { tab = t } }
 }
 
-/// Dia's Settings window: 778×509, close button only, a 204 pt full-height source-list
-/// sidebar in an NSSplitViewController and a unified 52 pt toolbar with the back/forward
-/// pill and the pane title after the sidebar (measured on Dia 1.54.2, see
-/// docs/arc-reverse-engineering.md "Dia Settings window"). The pill and title are drawn by
-/// the content view under the (empty) toolbar: macOS 26 would wrap toolbar items in a
-/// shared glass capsule that Dia does not have.
+/// Arc's Settings window: 684 × 650, fixed, close button only, the tab's name as its title and a toolbar of tabs
+/// 32 pt down (measured on Arc 1.172.2, 11 and 12 Nov 2026, GitHub #372). It opens on the first tab every time, in
+/// the same place, and a tab switch is instant. The tabs are drawn by the content view under a transparent title
+/// bar: macOS 26 would wrap toolbar items in a glass capsule that Arc's don't have.
 @MainActor
-final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
+final class SettingsWindowController: NSWindowController {
     private let nav = SettingsNavigation()
 
-    func show(_ pane: SettingsPane) { nav.show(pane) }
-    var debugPane: String { nav.pane.rawValue }
+    func show(_ tab: SettingsTab) { nav.show(tab) }
+    var debugPane: String { nav.tab.rawValue }
     func didShow() { nav.didShow() }
+    /// Arc opens Settings on its first tab each time it is opened, not on the one used last.
+    func showFirstTabIfClosed() { if window?.isVisible != true { nav.show(.first) } }
 
     init(store: SidebarStore, bindings: KeyBindingRegistry, sync: SettingsSyncService, actions: SettingsActions) {
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: SettingsMetrics.windowSize),
                               styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
         super.init(window: window)
-        window.title = "Settings"
+        window.title = SettingsTab.first.title
         window.titleVisibility = .hidden
-        window.toolbarStyle = .unified
-        // The content view draws the pill and title under the toolbar; the titlebar must not
-        // blur them, and Dia has no separator line under its toolbar.
         window.titlebarAppearsTransparent = true
         window.titlebarSeparatorStyle = .none
         window.isReleasedWhenClosed = false
-
-        let split = NSSplitViewController()
-        let sidebar = NSSplitViewItem(sidebarWithViewController: NSHostingController(rootView: SettingsSidebar(nav: nav)))
-        // macOS 26 insets the sidebar panel 8 pt; Dia's split sits at 204 with its list 8 in.
-        sidebar.minimumThickness = SettingsMetrics.sidebarWidth - 8
-        sidebar.maximumThickness = SettingsMetrics.sidebarWidth - 8
-        sidebar.canCollapse = false
-        let content = NSHostingController(rootView: SettingsContent(nav: nav, actions: actions)
-            .environment(store).environment(bindings).environment(sync))
-        let contentItem = NSSplitViewItem(viewController: content)
-        split.addSplitViewItem(sidebar)
-        split.addSplitViewItem(contentItem)
-        split.splitView.dividerStyle = .thin
-        window.contentViewController = split
-
-        let toolbar = NSToolbar(identifier: "cra.settings")
-        toolbar.delegate = self
-        toolbar.displayMode = .iconOnly
-        toolbar.allowsUserCustomization = false
-        toolbar.showsBaselineSeparator = false
-        window.toolbar = toolbar
-        // Size last: the toolbar and full-size content change how the frame is derived.
-        window.setFrame(NSRect(origin: .zero, size: SettingsMetrics.windowSize), display: false)
+        window.backgroundColor = SettingsPalette.window
+        let root = SettingsRoot(nav: nav, actions: actions) { [weak window] tab in window?.title = tab.title }
+            .environment(store).environment(bindings).environment(sync)
+        let host = NSHostingController(rootView: root)
+        host.sizingOptions = []
+        window.contentViewController = host
+        window.setContentSize(SettingsMetrics.windowSize)
         window.centerOnTestScreen()
         // On screen: shown and not entirely covered (the window needn't be key).
         for name in [NSWindow.didChangeOcclusionStateNotification, NSWindow.willCloseNotification] {
@@ -152,130 +94,104 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+}
 
-    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.sidebarTrackingSeparator]
+/// The tabs over the pane of the chosen one.
+struct SettingsRoot: View {
+    let nav: SettingsNavigation
+    let actions: SettingsActions
+    let titleChanged: (SettingsTab) -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            SettingsTabBar(nav: nav)
+                .padding(.top, SettingsMetrics.tabBarTop)
+                .frame(height: SettingsMetrics.tabBarTop + SettingsMetrics.tabBarHeight, alignment: .top)
+            Rectangle().fill(Color(nsColor: SettingsPalette.tabLine)).frame(height: 1)
+            pane
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                // Scroll views can draw into the ignored titlebar safe area. Keep every
+                // pane inside its viewport below the tabs.
+                .clipped()
+        }
+        .background(Color.settingsWindow)
+        // Arc's title, the tab's name, centred and dimmed in the title bar (the system's would sit beside the buttons).
+        .overlay(alignment: .top) {
+            Text(nav.tab.title).font(.system(size: 13, weight: .bold)).foregroundStyle(.secondary)
+                .frame(height: 28)
+                .allowsHitTesting(false)
+        }
+        .ignoresSafeArea(.container, edges: .top)
+        .onChange(of: nav.tab) { _, tab in titleChanged(tab) }
     }
 
-    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        toolbarDefaultItemIdentifiers(toolbar)
-    }
-
-    func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier id: NSToolbarItem.Identifier, willBeInsertedIntoToolbar: Bool) -> NSToolbarItem? {
-        nil
+    @ViewBuilder private var pane: some View {
+        switch nav.tab {
+        case .sync: SyncPane()
+        case .general: GeneralPane(nav: nav)
+        case .profiles: ProfilesPane(nav: nav, actions: actions)
+        case .max: MaxPane()
+        case .links: LinksPane()
+        case .shortcuts: ShortcutsPane(actions: actions)
+        case .icon: IconPane()
+        case .advanced:
+            // Performance is Cra's own, in no Arc tab: what the recorder saw, at the foot of Advanced.
+            SettingsCardPane {
+                AdvancedPane(actions: actions).settingsNested()
+                SettingsHeader("Performance").padding(.top, 20)
+                PerformancePane(nav: nav, actions: actions).settingsNested()
+            }
+        case .privacy: PrivacyPane(actions: actions)
+        case .extensions: ExtensionsPane(actions: actions)
+        }
     }
 }
 
-/// Dia's back/forward pill: 69×38 capsule, black 25% in dark mode, two chevrons.
-struct SettingsNavPill: View {
+/// Arc's tab buttons: the glyph over the name, 55 pt wide at least, the chosen one on a rounded pill with its
+/// glyph and name in blue (dark: a navy pill with a hairline; light: a white one with a soft shadow).
+struct SettingsTabBar: View {
     let nav: SettingsNavigation
+
+    var body: some View {
+        HStack(spacing: 1) {
+            ForEach(SettingsTab.allCases) { tab in
+                SettingsTabButton(tab: tab, selected: nav.tab == tab) { nav.show(tab) }
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+private struct SettingsTabButton: View {
+    let tab: SettingsTab
+    let selected: Bool
+    let action: () -> Void
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        HStack(spacing: 0) {
-            arrow("chevron.left", enabled: !nav.back.isEmpty) { nav.goBack() }
-            arrow("chevron.right", enabled: !nav.forward.isEmpty) { nav.goForward() }
-        }
-        .frame(width: SettingsMetrics.navPillSize.width, height: SettingsMetrics.navPillSize.height)
-        .background(Capsule().fill(Color.black.opacity(scheme == .dark ? 0.25 : 0.06)))
-    }
-
-    private func arrow(_ symbol: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Color.primary.opacity(enabled ? 0.75 : 0.3))
-                .frame(width: SettingsMetrics.navPillSize.width / 2, height: SettingsMetrics.navPillSize.height)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-    }
-}
-
-/// The toolbar row over the content: pill 10 in from the split, title text 10 after it.
-struct SettingsToolbarRow: View {
-    let nav: SettingsNavigation
-    var body: some View {
-        HStack(spacing: 10) {
-            SettingsNavPill(nav: nav)
-            Text(nav.pane.title).font(.system(size: 15, weight: .bold))
-            Spacer(minLength: 0)
-        }
-        .padding(.leading, 10)
-        .frame(height: SettingsMetrics.toolbarHeight)
-    }
-}
-
-/// Dia's source list: 28 pt rows, the selection 10 pt inside the sidebar's edges with a 7 pt
-/// corner, the 20 pt glyph 10 pt into it (20 in) and the label 49 in (Dia 1.55.1, AX + 2x capture,
-/// 9 Nov 2026). The selected row is accent-filled with white text while the window is key,
-/// otherwise a grey fill with accent-coloured text.
-struct SettingsSidebar: View {
-    let nav: SettingsNavigation
-    @Environment(\.controlActiveState) private var activeState
-
-    var body: some View {
-        VStack(spacing: 0) {
-            ForEach(SettingsPane.allCases) { row($0) }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 10)
-        .padding(.top, 12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    }
-
-    private func row(_ p: SettingsPane) -> some View {
-        let selected = nav.pane == p
-        let key = activeState == .key
-        return Button { nav.show(p) } label: {
-            HStack(spacing: 9) {
-                Image(systemName: p.symbol)
-                    .font(.system(size: 15))
-                    .frame(width: 20, height: 20)
-                    .foregroundStyle(selected && key ? Color.white : Color.primary)
-                Text(p.title)
-                    .font(.system(size: 13))
-                    .foregroundStyle(selected ? (key ? Color.white : Color.accentColor) : Color.primary)
-                Spacer(minLength: 0)
+            VStack(spacing: 3) {
+                Image(systemName: tab.symbol)
+                    .font(.system(size: 19))
+                    .frame(height: 24)
+                Text(tab.title).font(.system(size: 12))
             }
-            .padding(.leading, 10)
-            .frame(height: 28)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(selected ? (key ? Color.accentColor : Color.primary.opacity(0.1)) : Color.clear))
+            .foregroundStyle(selected ? Color.settingsBlue : Color.secondary)
+            .padding(.horizontal, 5.5)
+            .frame(minWidth: SettingsMetrics.tabMinWidth, minHeight: SettingsMetrics.tabPillHeight)
+            .background {
+                if selected {
+                    RoundedRectangle(cornerRadius: SettingsMetrics.tabCorner, style: .continuous)
+                        .fill(Color(nsColor: SettingsPalette.selectedTab))
+                        .overlay(RoundedRectangle(cornerRadius: SettingsMetrics.tabCorner, style: .continuous)
+                            .strokeBorder(Color(nsColor: SettingsPalette.selectedTabBorder), lineWidth: 1))
+                        .shadow(color: .black.opacity(scheme == .light ? 0.12 : 0), radius: 6, y: 2)
+                }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-    }
-}
-
-struct SettingsContent: View {
-    let nav: SettingsNavigation
-    let actions: SettingsActions
-
-    var body: some View {
-        VStack(spacing: 0) {
-            SettingsToolbarRow(nav: nav)
-            Group {
-                switch nav.pane {
-                case .general: GeneralPane()
-                case .tabs: TabsPane()
-                case .links: LinksPane()
-                case .max: MaxPane()
-                case .privacy: PrivacyPane(actions: actions)
-                case .profiles: ProfilesPane(nav: nav, actions: actions)
-                case .extensions: ExtensionsPane(actions: actions)
-                case .plugins: PluginsPane()
-                case .shortcuts: ShortcutsPane()
-                case .performance: PerformancePane(nav: nav, actions: actions)
-                case .advanced: AdvancedPane(actions: actions)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            // Scroll views can draw into the ignored titlebar safe area. Keep every
-            // pane inside its viewport below the fixed navigation row.
-            .clipped()
-        }
-        .ignoresSafeArea(.container, edges: .top)
+        .accessibilityLabel(tab.title)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

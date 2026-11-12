@@ -538,7 +538,7 @@
 #314   Packages/CraCore/Tests/CraCoreTests/SearchSuggestionsNoticeTests.swift::theBannerTakesTheLastRowsPlace  4659c381b144
 #314   Packages/CraCore/Tests/CraCoreTests/SearchSuggestionsNoticeTests.swift::theButtonsTakeTheSpacesFocusColour  65308939eabe
 #314   Packages/CraCore/Tests/CraCoreTests/SearchSuggestionsNoticeTests.swift::theDismissalIsKeptInWindowsJSON  605e3ce2449f
-#314   Tests/Scenarios/command-bar-notice.scenario  3eeac687280e
+#314   Tests/Scenarios/command-bar-notice.scenario  9d9deb38700c
 #315   Packages/CraCore/Tests/CraCoreTests/CardFillTests.swift::fullScreenWithTheSidebarHiddenFillsTheScreen  58fb1af2d4ae
 #315   Packages/CraCore/Tests/CraCoreTests/CardFillTests.swift::theInsetStaysElsewhere  57091b70db87
 #315   Tests/FloatingSidebarTests.swift::noStandInLightsInFullScreen  5cc2f110a378

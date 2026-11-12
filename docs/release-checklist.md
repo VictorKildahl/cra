@@ -12,6 +12,15 @@ built release app with a test profile. Note anything that fails in the release's
 
 ### Themes and window chrome
 
+- **#372:** Settings opens at 684 × 650 pt on the Sync tab every time, whatever tab it was closed on, and ⌘W closes it. Go through the
+  ten tabs in dark and in light: the window is the system's window colour (not Arc's navy, Victor 12 Nov 2026), the chosen tab's pill
+  (white 10 % with a hairline in dark, white with a shadow in light), 36 × 16 pt switches, the cards, Max's banner (Cra's mark and "Max"),
+  Links' picture, Shortcuts' key caps and search ("command e"), Icon's radio list, Profiles' list beside its cards. Switching tabs is
+  instant: nothing fades or resizes. Sync: the default-browser banner (only while Cra isn't the default), the member card (your macOS
+  name, its colour and nickname, EARLY '26, a months stamp after a month), Share / Save / Copy under it (the saved PNG is the card at 2x),
+  and Share Cra: the sheet's COPY LINK puts the tagged crabrowser.app link on the clipboard and Share… offers Messages and Mail. (The scenario checks the
+  size, the tab order and the first tab; this is how it looks.)
+
 - **#155:** a space on Auto, with one colour or two, changes look when macOS switches between
   light and dark. A space on Light or Dark doesn't.
 - **#37:** over scrolling text, the sidebar stays blurred in every frame, with no hover.
@@ -130,7 +139,7 @@ built release app with a test profile. Note anything that fails in the release's
 - **#195:** in a Peek and a Little Window, click in the page, then Back, Forward, Refresh, the
   address and "Open in": each works on the first click. Capture and scroll: the page moves and
   the grey picture and the lens follow. With another app full screen, ⌥⌘N opens a Little
-  Window over it, and doesn't when Settings ▸ Tabs ▸ Links is off.
+  Window over it, and doesn't when Settings ▸ Links ▸ "Open Little Window when I press ⌥⌘N in any app" is off.
 - **#357:** play an embedded YouTube video aloud on a blog (the player in an iframe), switch tabs:
   it goes into Picture in Picture. A background test copy can't hand the iframe its key press,
   before or after #357; the pip-leave-tab scenario covers a player in the page itself.
