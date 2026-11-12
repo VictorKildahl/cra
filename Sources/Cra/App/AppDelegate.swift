@@ -1025,6 +1025,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let js = dict["devtoolsjs"] { main.debugRunInDevTools(js) }
             if dict["embedDump"] != nil { NSLog("%@", main.embeddedPagesDump()); return }
             if dict["pageInsets"] != nil { CraLog.note(main.pageInsetsReadout()); return }
+            // toolbar=out|in|sample|state: the floating toolbar (Settings ▸ Tabs), and where it is.
+            if let command = dict["toolbar"] { CraLog.note(main.shell.debugToolbar(command)); return }
             if dict["chromiumDialogs"] != nil { CraLog.note(ChromiumDialogs.readout()); return }
             if let label = dict["switcherWindows"] {
                 CraLog.note(SwitcherWindows.readout(label, main: main.window, little: littleWindows.compactMap(\.window))); return

@@ -29,6 +29,12 @@ struct TabsPane: View {
                                   detail: "Clicking the address at the top of the sidebar lets you edit it right there instead of opening the command bar. \(KeyBindingRegistry.shared.action("editURL")?.primary?.display ?? "⌘L") still opens the command bar.",
                                   isOn: $store.settings.editAddressInPlace,
                                   enabled: store.settings.addressBarPlacement == .sidebar)
+                SettingsCardDivider()
+                // Not in Arc: Zen's compact toolbar. The bar floats over the page (ToolbarAutoHide).
+                SettingsToggleRow("Hide the toolbar until you need it",
+                                  detail: "The toolbar stays out of the way and slides in over the page when you move the pointer to the top of it.",
+                                  isOn: $store.settings.autoHideToolbar,
+                                  enabled: store.settings.addressBarPlacement == .toolbar)
             }
             .padding(.top, 12)
 

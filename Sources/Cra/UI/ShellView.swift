@@ -148,6 +148,36 @@ final class ShellView: NSView {
     /// toolbar hidden (View ▸ Show Toolbar is disabled while a split is open, GitHub #178).
     var panesShowBars: Bool { barsShown(panes: paneCards.count, fullscreen: contentFullscreen) }
     private func barsShown(panes: Int, fullscreen: Bool) -> Bool { !fullscreen && (showToolbar || panes > 1) }
+    /// Settings ▸ Tabs ▸ "Hide the toolbar until the pointer reaches the top of the page", for the
+    /// page on screen (AppSettings.hidesToolbar(above:)): a lone card's bar floats over its page and
+    /// the pointer at the card's top brings it out (ToolbarAutoHide).
+    var autoHideToolbar = false { didSet { if autoHideToolbar != oldValue { needsLayout = true } } }
+    /// Whether the card's bar floats over its page instead of sitting above it.
+    var toolbarFloats: Bool { floats(panes: paneCards.count, fullscreen: contentFullscreen) }
+    private func floats(panes: Int, fullscreen: Bool) -> Bool {
+        ToolbarAutoHide.floats(enabled: autoHideToolbar, toolbarShown: barsShown(panes: panes, fullscreen: fullscreen), panes: panes,
+                               developerBar: paneCards.first?.developerBar != nil, devToolsOpen: devToolsVisible, pageFullscreen: fullscreen)
+    }
+    /// Whether the bars take room above their pages: shown, and not floating over them.
+    var barsTakeRoom: Bool { panesShowBars && !toolbarFloats }
+    /// What a card's bar takes from the top of its page with that many panes on screen.
+    private func barInset(_ c: PaneCardView, panes: Int, fullscreen: Bool) -> CGFloat {
+        guard barsShown(panes: panes, fullscreen: fullscreen) else { return 0 }
+        return floats(panes: panes, fullscreen: fullscreen) && c.hasPage && !c.transparent ? 0 : c.toolbarHeight
+    }
+    /// Whether the floating toolbar is out, from where the pointer is and how long it has been there.
+    private var toolbarTracker = ToolbarAutoHideTracker()
+    /// The pointer is looked at on a timer while the bar floats and Cra is the active app: as for
+    /// the floating sidebar, no window of ours reliably gets mouse-moved events over a page.
+    private var toolbarPoll: Timer?
+    private var toolbarActivation: [NSObjectProtocol] = []
+    /// The clock the toolbar's waits run on, and where the pointer is in the shell's coordinates
+    /// (nil: nowhere that counts); the tests stand both in.
+    var toolbarNow: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+    lazy var toolbarPointer: () -> NSPoint? = { [unowned self] in
+        guard let window, NSApp.isActive, window.isVisible, window.isKeyWindow || window.isMainWindow else { return nil }
+        return self.convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
+    }
     var hasTab = false { didSet { needsLayout = true } }
     var onEdgeHover: ((Bool) -> Void)?
     /// Set again each time the window becomes key; only a change rebuilds the backdrop.
@@ -468,12 +498,12 @@ final class ShellView: NSView {
             guard let f = target.frames[c.tabID] else { continue }
             c.frame = horizontal ? NSRect(x: f.minX, y: f.minY, width: 0, height: f.height) : NSRect(x: f.minX, y: f.maxY, width: f.width, height: 0)
             c.alphaValue = 0
-            c.frozenWebBounds = NSRect(x: 0, y: 0, width: f.width, height: max(0, f.height - (c.showToolbar ? c.toolbarHeight : 0)))
+            c.frozenWebBounds = NSRect(x: 0, y: 0, width: f.width, height: max(0, f.height - barInset(c, panes: shownIDs.count, fullscreen: contentFullscreen)))
             c.layoutSubtreeIfNeeded()
         }
         for c in paneCards where oldFrames[c.tabID] != nil {
             guard let f = target.frames[c.tabID] else { continue }
-            c.frozenWebBounds = NSRect(x: 0, y: 0, width: f.width, height: max(0, f.height - (c.showToolbar ? c.toolbarHeight : 0)))
+            c.frozenWebBounds = NSRect(x: 0, y: 0, width: f.width, height: max(0, f.height - barInset(c, panes: shownIDs.count, fullscreen: contentFullscreen)))
         }
         animatingPanes = true
         let webTargets = paneWebFrames(target)
@@ -550,7 +580,7 @@ final class ShellView: NSView {
         var out: [UUID: NSRect] = [:]
         for c in paneCards where c.tabID != ShellView.noTabID {
             guard let f = layout.frames[c.tabID] else { continue }
-            let th: CGFloat = panesShowBars ? c.toolbarHeight : 0
+            let th = barInset(c, panes: paneCards.count, fullscreen: contentFullscreen)
             let bh = c.bottomBarHeight
             var web = NSRect(x: f.minX, y: f.minY + bh, width: f.width, height: max(0, f.height - th - bh))
             if c.tabID == focusedPaneID, devToolsVisible, !devToolsFrontendDocked, f.width > 640 {
@@ -629,6 +659,119 @@ final class ShellView: NSView {
     /// While the sidebar floats in its own panel (Chrome-style hosting puts page
     /// windows above the shell), the shell leaves `sidebarHost`'s frame alone.
     var sidebarDetached = false
+
+    // MARK: Floating toolbar
+
+    /// The card whose bar floats, if one does.
+    private var floatingCard: PaneCardView? {
+        guard toolbarFloats, let card = paneCards.first, card.toolbarIsFloating else { return nil }
+        return card
+    }
+
+    /// After a layout: the card shows what the tracker says, a bar that stopped floating forgets
+    /// its state, and the pointer is watched only while a bar floats.
+    private func syncFloatingToolbar() {
+        if let card = floatingCard {
+            if card.toolbarRevealed != toolbarTracker.shown { card.setToolbarRevealed(toolbarTracker.shown, animated: false) }
+        } else if toolbarTracker != ToolbarAutoHideTracker() {
+            toolbarTracker.reset()
+        }
+        if toolbarActivation.isEmpty, floatingCard != nil {
+            toolbarActivation = [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification].map { name in
+                NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.toolbarActivationChanged() }
+                }
+            }
+        }
+        syncToolbarPolling()
+    }
+
+    private func toolbarActivationChanged() {
+        // Another app in front: the bar goes with the pointer's attention, as the floating sidebar does.
+        if !NSApp.isActive, toolbarTracker.shown {
+            toolbarTracker.reset()
+            floatingCard?.setToolbarRevealed(false, animated: true)
+        }
+        syncToolbarPolling()
+    }
+
+    private func syncToolbarPolling() {
+        let on = floatingCard != nil && window != nil && NSApp.isActive
+        guard on != (toolbarPoll != nil) else { return }
+        toolbarPoll?.invalidate()
+        toolbarPoll = nil
+        guard on else { return }
+        // Fired on the main run loop, so no hop to the main actor. It stops with the app's
+        // activation and with the setting, so a Cra in the background or with the toolbar above
+        // the page wakes for none of this.
+        toolbarPoll = Timer.scheduledTimer(withTimeInterval: 1.0 / 20, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.sampleToolbarPointer() }
+        }
+        toolbarPoll?.tolerance = 0.015
+    }
+
+    /// One look at the pointer.
+    func sampleToolbarPointer() {
+        guard let card = floatingCard else { return }
+        let where_: ToolbarAutoHide.Pointer
+        if let p = toolbarPointer() {
+            where_ = ToolbarAutoHide.classify(p, card: convert(card.frame, from: card.superview), container: bounds,
+                                              barHeight: card.toolbarHeight, shown: toolbarTracker.shown)
+        } else {
+            where_ = .away
+        }
+        // A button held down (a drag begun on the bar) or something hanging under the bar keeps it.
+        let held = toolbarTracker.shown && (NSEvent.pressedMouseButtons != 0 || somethingHangsFromToolbar(card))
+        toolbarTracker.sample(where_, held: held, at: toolbarNow())
+        if card.toolbarRevealed != toolbarTracker.shown { card.setToolbarRevealed(toolbarTracker.shown, animated: true) }
+    }
+
+    /// A popover or popup of Cra's hangs from the bar (the Site Control Center, an extension's
+    /// popup, Translate): the bar stays out under it wherever the pointer goes.
+    private func somethingHangsFromToolbar(_ card: PaneCardView) -> Bool {
+        guard let window else { return false }
+        let cardOnScreen = window.convertToScreen(card.convert(card.bounds, to: nil))
+        return (window.childWindows ?? []).contains { child in
+            child.isVisible && child.alphaValue > 0
+                && ToolbarAutoHide.hangsFromBar(child.frame, card: cardOnScreen, barHeight: card.toolbarHeight)
+        }
+    }
+
+    /// Something is about to hang under the bar, or asked for it: out now, without the slide, so
+    /// what hangs there finds the bar's buttons where they are.
+    func bringFloatingToolbarOut() {
+        guard let card = floatingCard, !toolbarTracker.shown else { return }
+        toolbarTracker.bringOut()
+        card.setToolbarRevealed(true, animated: false)
+    }
+
+    /// For `cra://debug?toolbar=…`: `out` and `in` put the floating bar there, `sample` looks at
+    /// the pointer once, `at:x,y` says what a pointer there would be to the bar; anything else is
+    /// a label. Every one answers with the command and where the bar is.
+    func debugToolbar(_ command: String) -> String {
+        switch command {
+        case "out": bringFloatingToolbarOut()
+        case "in":
+            toolbarTracker.reset()
+            floatingCard?.setToolbarRevealed(false, animated: false)
+        case "sample": sampleToolbarPointer()
+        default: break
+        }
+        layoutSubtreeIfNeeded()
+        let card = paneCards.first
+        // at:x,y (from the window's top left, as clickAt takes them): what a pointer there is to the bar.
+        if command.hasPrefix("at:"), let card, let window {
+            let g = command.dropFirst(3).split(separator: ",").compactMap { Double($0) }
+            guard g.count == 2 else { return "toolbar at: x,y" }
+            let p = convert(NSPoint(x: g[0], y: window.frame.height - g[1]), from: nil)
+            let where_ = ToolbarAutoHide.classify(p, card: convert(card.frame, from: card.superview), container: bounds,
+                                                  barHeight: card.toolbarHeight, shown: toolbarTracker.shown)
+            return "toolbar \(command): \(where_) out=\(toolbarTracker.shown ? 1 : 0)"
+        }
+        return "toolbar \(command): floats=\(floatingCard != nil ? 1 : 0) out=\(toolbarTracker.shown ? 1 : 0) "
+            + "inset=\(Int(card?.barInset ?? 0)) page=\(Int(card?.webArea.frame.height ?? 0))/\(Int(card?.bounds.height ?? 0)) "
+            + "barHidden=\(card?.toolbarHost.isHidden == true ? 1 : 0) polling=\(toolbarPoll != nil ? 1 : 0)"
+    }
 
     // MARK: Layout
 
@@ -738,9 +881,11 @@ final class ShellView: NSView {
         let cb = contentContainer.bounds
         updateFocusRings()
         let toolbarVisible = panesShowBars
+        let floating = toolbarFloats
         let layout = paneLayout(in: cb)
         for c in paneCards {
             c.showToolbar = toolbarVisible
+            c.floatsToolbar = floating
             // Arc's cards cast a soft shadow on the window; edge to edge there is no margin for it.
             c.castsShadow = !fillsWindow && !contentFullscreen
             // Several panes: every card is rounded; a single card follows the window state (square in fullscreen).
@@ -757,6 +902,7 @@ final class ShellView: NSView {
                 if animated { h.animator().frame = layout.gaps[i] } else { h.frame = layout.gaps[i] }
             }
         }
+        syncFloatingToolbar()
         placeholderHost.frame = cb
         placeholderHost.isHidden = hasTab
         layoutSidePanel(in: cb)
@@ -768,7 +914,7 @@ final class ShellView: NSView {
         // DevTools docks inside the focused card, right of its page.
         let focus = focusedCard
         let fb = focus?.bounds ?? .zero
-        let th: CGFloat = toolbarVisible ? focus?.toolbarHeight ?? CraMetrics.toolbarHeight : 0
+        let th: CGFloat = toolbarVisible ? focus?.barInset ?? CraMetrics.toolbarHeight : 0
         let bh = focus?.bottomBarHeight ?? 0
         let bodyH = max(0, fb.height - th - bh)
         let selfDock = devToolsFrontendDocked
@@ -866,7 +1012,7 @@ final class ShellView: NSView {
             guard let f = targetLayout.frames[c.tabID] else { continue }
             var w = f.width
             if c.tabID == focusedPaneID, devToolsVisible, !devToolsFrontendDocked, f.width > 640 { w -= min(max(320, devToolsWidth), f.width * 0.7) }
-            let toolbarH: CGFloat = barsShown(panes: paneCards.count, fullscreen: fullscreen) ? c.toolbarHeight : 0
+            let toolbarH = barInset(c, panes: paneCards.count, fullscreen: fullscreen)
             let page = convert(NSRect(x: target.content.minX + f.minX, y: target.content.minY + f.minY, width: w, height: max(0, f.height - toolbarH)), to: nil)
             webTargets[c.tabID] = page
             c.frozenWebBounds = NSRect(x: 0, y: 0, width: w, height: page.height)
