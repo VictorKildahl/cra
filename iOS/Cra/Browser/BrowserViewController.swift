@@ -27,6 +27,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     var swipeNeighbour: UIImageView?
     var swipeNeighbourStep = 0
     var tabArchivedBySwipe: UUID?
+    var barSwipeOpensRow = false
     // Reader and Summarize (BrowserReading.swift).
     var readerView: ReaderView?
     var summaryHost: UIViewController?
@@ -330,35 +331,53 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     @objc func showTabs() {
         guard switcher == nil, !isSearching else { return }
-        let present = { [self] in
-            let switcher = TabSwitcherView(frame: view.bounds)
-            switcher.delegate = self
-            let onRow = store.selected.map { !$0.isIncognito } ?? false
-            switcher.setTabs(store.rowTabs, focus: store.selected?.id, snapshot: store.snapshot, favicon: { self.favicons.icon(for: $0.url) })
-            // Starts as the page itself: the focused card fills the screen, then shrinks into the row.
-            // An incognito page has no card to shrink into; the row just appears.
-            switcher.expandedID = onRow ? store.selected?.id : nil
-            switcher.expansion = onRow ? 1 : 0
-            view.insertSubview(switcher, aboveSubview: pageContainer)
-            switcher.layoutIfNeeded()
-            self.switcher = switcher
-            pageContainer.isHidden = true
-            barHiddenByScroll = false
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            UIView.animate(withDuration: 0.5, delay: 0, usingSpringWithDamping: 0.86, initialSpringVelocity: 0,
-                           options: [.allowUserInteraction]) {
-                switcher.expansion = 0
-                switcher.layoutIfNeeded()
-                self.bar.mode = .tabs
-                self.layoutChrome()
-                self.bar.layoutIfNeeded()
-            }
-        }
-        guard let page = shownPage else { return present() }
+        guard let page = shownPage else { return settleSwitcher(prepareSwitcher()) }
         let id = page.tabID
         page.takeSnapshot { [weak self] image in
-            if let image { self?.store.setSnapshot(image, for: id) }
-            present()
+            guard let self, self.switcher == nil else { return }
+            if let image { self.store.setSnapshot(image, for: id) }
+            self.settleSwitcher(self.prepareSwitcher())
+        }
+    }
+
+    /// Puts the tab row up looking exactly like the page: the focused card fills the screen.
+    /// From there it settles into the row (`settleSwitcher`) or follows a finger first.
+    func prepareSwitcher() -> TabSwitcherView {
+        let switcher = TabSwitcherView(frame: view.bounds)
+        switcher.delegate = self
+        let onRow = store.selected.map { !$0.isIncognito } ?? false
+        switcher.setTabs(store.rowTabs, focus: store.selected?.id, snapshot: store.snapshot, favicon: { self.favicons.icon(for: $0.url) })
+        // An incognito page has no card to shrink into; the row just appears.
+        switcher.expandedID = onRow ? store.selected?.id : nil
+        switcher.expansion = onRow ? 1 : 0
+        view.insertSubview(switcher, aboveSubview: pageContainer)
+        switcher.layoutIfNeeded()
+        self.switcher = switcher
+        pageContainer.isHidden = true
+        barHiddenByScroll = false
+        return switcher
+    }
+
+    func settleSwitcher(_ switcher: TabSwitcherView) {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        UIView.animate(spring: MobileMotion.tabRowSettle) {
+            switcher.expansion = 0
+            switcher.layoutIfNeeded()
+            self.bar.mode = .tabs
+            self.layoutChrome()
+            self.bar.layoutIfNeeded()
+        }
+    }
+
+    /// Back from a row that was only peeked at: the card grows into its page again.
+    func cancelSwitcher(_ switcher: TabSwitcherView) {
+        UIView.animate(spring: MobileMotion.tabOpen) {
+            switcher.expansion = 1
+            switcher.layoutIfNeeded()
+        } completion: {
+            self.pageContainer.isHidden = false
+            switcher.removeFromSuperview()
+            if self.switcher === switcher { self.switcher = nil }
         }
     }
 
@@ -368,13 +387,13 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         show(tab)
         switcher.expandedID = id
         switcher.isUserInteractionEnabled = false
-        UIView.animate(withDuration: 0.45, delay: 0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0, options: []) {
+        UIView.animate(spring: MobileMotion.tabOpen) {
             switcher.expansion = 1
             switcher.layoutIfNeeded()
             self.bar.mode = .page
             self.layoutChrome()
             self.bar.layoutIfNeeded()
-        } completion: { _ in
+        } completion: {
             self.pageContainer.isHidden = false
             switcher.removeFromSuperview()
             if self.switcher === switcher { self.switcher = nil }

@@ -13,7 +13,7 @@ ended). "Measured" means the numbers come from Arc Search footage, not from a de
 | Arc Search | Cra | Notes |
 |---|---|---|
 | Opens ready to type: sheet and keyboard up | done | Measured. `MobileSearchSheet`; UI test `testLaunchesReadyToType`. |
-| Launch moment: logo behind the rising sheet | partial | Cra's mark shows behind the sheet; the rise follows the keyboard. Not compared frame by frame yet. |
+| Launch moment: logo behind the rising sheet | partial | Cra's mark shows behind the sheet. Measured frame by frame, Arc Search's sheet rises on the keyboard's own curve while growing from the bar's height to 302 pt, which is how this one moves (it animates inside the keyboard's animation). The logo's own motion is not matched. |
 | Search field: "Search...", caret, clear button | done | Measured: 48 pt field, 16 pt insets, 20 pt medium text, 18 pt clear disc. |
 | Suggestions: typed text first, completions with the typed part grey | done | Measured rows (56 pt), magnifier, text. Engine's suggest endpoint, four rows. |
 | Suggestion text wraps to two lines | missing | Rows are one line. |
@@ -74,7 +74,7 @@ ended). "Measured" means the numbers come from Arc Search footage, not from a de
 | Arc Search | Cra | Notes |
 |---|---|---|
 | Tab switcher: overlapping cards, newest right | done | Measured: 273 × 555 pt cards, 17 pt corners, focus card 83 pt in. `MobileTabCarousel`; UI tests in `TabSwitcherTests`. |
-| Page shrinks into its card and back | partial | Spring morph exists; not compared frame by frame. |
+| Page shrinks into its card and back | done | Springs fitted to the footage (`MobileMotion`): the row settles with a critically damped 0.34 s spring (the card's distance shrinks to about 0.54 of itself each frame), a card is its page within five frames. A drag up from the bar shrinks the page under the finger and lets go into the row. |
 | Swipe a card up to close | done | |
 | Favicon and title above each card | done | Icons come from the site itself. |
 | Switcher bar: Spaces, "+", Settings | done | |

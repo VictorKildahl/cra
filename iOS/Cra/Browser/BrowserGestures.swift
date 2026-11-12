@@ -42,7 +42,8 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         let velocity = pan.velocity(in: view)
         switch pan.name {
         case Name.bar:
-            return !isSearching && switcher == nil && shownPage != nil && abs(velocity.x) > abs(velocity.y)
+            // Sideways for the neighbouring tab, upwards for the tab row.
+            return !isSearching && switcher == nil && shownPage != nil && (abs(velocity.x) > abs(velocity.y) || velocity.y < 0)
         case Name.page:
             guard !isSearching, switcher == nil, menuHost == nil, let page = shownPage, abs(velocity.x) > 1.5 * abs(velocity.y) else { return false }
             let mode = settings.value.options(for: page.webView.url?.host).swipeToNavigate
@@ -72,7 +73,41 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         return tabs[index + step]
     }
 
+    /// A drag up from the bar: the page shrinks towards its card under the finger, and letting
+    /// go settles into the tab row or back into the page.
+    private func barDraggedUp(_ pan: UIPanGestureRecognizer) {
+        let up = -pan.translation(in: view).y
+        switch pan.state {
+        case .began:
+            guard let page = shownPage else { return }
+            let id = page.tabID
+            page.takeSnapshot { [weak self] image in
+                guard let self, self.barSwipeOpensRow, self.switcher == nil else { return }
+                if let image { self.store.setSnapshot(image, for: id) }
+                _ = self.prepareSwitcher()
+            }
+        case .changed:
+            guard let switcher, switcher.expandedID != nil else { return }
+            switcher.expansion = 1 - MobileMotion.switcherProgress(dragUp: up)
+            switcher.layoutIfNeeded()
+        case .ended, .cancelled:
+            barSwipeOpensRow = false
+            let opens = pan.state == .ended && MobileMotion.opensSwitcher(dragUp: up, velocityUp: -pan.velocity(in: view).y)
+            if let switcher {
+                if opens { settleSwitcher(switcher) } else { cancelSwitcher(switcher) }
+            } else if opens {
+                showTabs()
+            }
+        default: break
+        }
+    }
+
     @objc func barSwiped(_ pan: UIPanGestureRecognizer) {
+        if pan.state == .began {
+            let velocity = pan.velocity(in: view)
+            barSwipeOpensRow = abs(velocity.y) > abs(velocity.x)
+        }
+        if barSwipeOpensRow { return barDraggedUp(pan) }
         let width = view.bounds.width, gap: CGFloat = 20
         var x = pan.translation(in: view).x
         // Dragging right brings the older tab in from the left.

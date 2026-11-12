@@ -65,6 +65,10 @@ devices, and there is no Mac version. The reference is recorded footage, measure
    of both is stacked at one scale to compare.
 3. The number goes into `Packages/CraCore/Sources/CraCore/Mobile` with a test that states it.
 
+Motion is measured the same way: an edge is followed frame by frame (30 a second) and a spring
+is fitted to how fast its distance to rest shrinks (`MobileMotion` has the fitted springs and
+the test that states the rate).
+
 That footage is from early 2024. Later builds changed some screens (the tab switcher's left
 button became Spaces, the page menu grew rows); for those the reference is the screenshots and
 videos listed in arc-search-reference.md, section F. iOS 26 draws a taller keyboard than the

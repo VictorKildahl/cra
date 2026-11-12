@@ -570,3 +570,28 @@ struct MobileFavoritesTests {
         #expect(try JSONDecoder().decode(MobileFavorites.self, from: Data("{}".utf8)).sites.isEmpty)
     }
 }
+
+struct MobileMotionTests {
+    /// Arc Search's tab row: each frame leaves about 0.54 of the distance of the frame before,
+    /// once the motion is under way.
+    @Test func theTabRowSettlesAtArcSearchsRate() {
+        let spring = MobileMotion.tabRowSettle
+        let frame = 1.0 / 30
+        let ratio = spring.remaining(after: 6 * frame) / spring.remaining(after: 5 * frame)
+        #expect(abs(ratio - 0.6) < 0.08)
+        #expect(spring.remaining(after: 0.3) < 0.03)
+        #expect(abs(spring.stiffness - 341.5) < 1 && abs(spring.damping - 36.96) < 0.1)
+    }
+
+    @Test func aCardIsItsPageWithinFiveFrames() {
+        #expect(MobileMotion.tabOpen.remaining(after: 5.0 / 30) < 0.1)
+    }
+
+    @Test func draggingTheBarUpOpensTheRowByDistanceOrFlick() {
+        #expect(MobileMotion.switcherProgress(dragUp: 150) == 0.5)
+        #expect(MobileMotion.switcherProgress(dragUp: 900) == 1)
+        #expect(MobileMotion.opensSwitcher(dragUp: 120, velocityUp: 0))
+        #expect(MobileMotion.opensSwitcher(dragUp: 40, velocityUp: 800))
+        #expect(!MobileMotion.opensSwitcher(dragUp: 40, velocityUp: 100))
+    }
+}

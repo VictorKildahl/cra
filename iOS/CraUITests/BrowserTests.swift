@@ -311,6 +311,16 @@ final class GestureTests: BrowserTestCase {
         XCTAssertEqual(shownTabTitle(), "Second")
     }
 
+    /// A drag up from the bottom bar opens the tab row, as the tab stack button does.
+    func testDraggingUpFromTheBarOpensTheTabRow() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.95))
+        start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.55)), withVelocity: .default, thenHoldForDuration: 0)
+        XCTAssertTrue(app.buttons["tab-card-0"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["bar-spaces"].exists)
+    }
+
     /// Dragging the search sheet down puts it away when there is a page behind it.
     func testDraggingTheSearchSheetDownClosesIt() {
         launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])

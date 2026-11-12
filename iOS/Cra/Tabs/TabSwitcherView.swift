@@ -152,10 +152,7 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
             layoutCards()
         case .ended, .cancelled:
             let target = MobileTabCarousel.restingIndex(position: position, velocity: velocity.x, count: cards.count, in: bounds.size)
-            let distance = abs(CGFloat(target) - position) * MobileTabCarousel.pitch(in: bounds.size)
-            let spring = distance > 1 ? min(12, abs(velocity.x) / distance) : 0
-            UIView.animate(withDuration: 0.5, delay: 0, usingSpringWithDamping: 0.86, initialSpringVelocity: spring,
-                           options: [.allowUserInteraction, .beginFromCurrentState]) {
+            UIView.animate(spring: MobileMotion.tabRowSettle) {
                 self.position = CGFloat(target)
                 self.layoutCards()
             }
