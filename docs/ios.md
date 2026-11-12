@@ -89,3 +89,12 @@ footage's, so bands are compared from the sheet's top edge, not from the screen'
 AI features follow the Mac app's rule: only the device's own Apple Intelligence model, and
 hidden where it isn't available. Arc Search's own AI features (Browse for Me, Pinch to
 Summarize) used a cloud service that ends on 23 November 2026.
+
+## TestFlight
+
+`scripts/ios-testflight.sh` archives a Release build signed for team 673A7J2J54 and uploads it
+to App Store Connect; the build number is the commit count. It signs with the Apple ID in
+Xcode ▸ Settings ▸ Accounts, or with an App Store Connect API key given as `ASC_KEY_PATH`,
+`ASC_KEY_ID` and `ASC_ISSUER_ID` (the .p8 stays in `~/.appstoreconnect/private_keys`, never in
+the repo). The app record for `dk.kildahl.cra` has to exist in App Store Connect before the
+first upload. Builds are iPhone only (`TARGETED_DEVICE_FAMILY = 1`) until iPad has been checked.
