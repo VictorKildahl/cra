@@ -770,3 +770,15 @@ struct MobileBrowseToggleTests {
         #expect(MobileSearchEngine.google.query(fromResultsURL: "https://www.google.com/search?q=") == nil)
     }
 }
+
+struct MobileSelectionQueryTests {
+    /// Selected text becomes one line, cut at a word within 200 characters.
+    @Test func selectedTextBecomesAQuestion() {
+        #expect(MobileBrowseForMe.query(fromSelection: "  wood-fired\n\tpizza   ovens ") == "wood-fired pizza ovens")
+        let long = Array(repeating: "word", count: 60).joined(separator: " ")
+        let query = MobileBrowseForMe.query(fromSelection: long)
+        #expect(query.count <= 200 && query.hasSuffix("word") && !query.hasSuffix(" "))
+        #expect(MobileBrowseForMe.query(fromSelection: String(repeating: "x", count: 300)).count == 200)
+        #expect(MobileBrowseForMe.query(fromSelection: " \n ").isEmpty)
+    }
+}

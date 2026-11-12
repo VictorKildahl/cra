@@ -696,4 +696,21 @@ final class BrowseToggleTests: BrowserTestCase {
         XCTAssertTrue(app.staticTexts["browse-reading"].waitForExistence(timeout: 8), "Go made a Browse for Me page")
         XCTAssertTrue(app.webViews.staticTexts["About pizza ovens"].waitForExistence(timeout: 15))
     }
+
+    /// Selected text on a page has "Browse for Me" in its edit menu, which makes a page about it.
+    func testSelectedTextCanBeBrowsedFor() {
+        launch(["-CraFakeModel", "YES", "-CraOpenURL", Self.page("Ovens"), "-CraSearch", "NO"])
+        waitForPage("Ovens")
+        app.webViews.staticTexts["Ovens"].press(forDuration: 1.2)
+        sleep(1)
+        // A tap on the selection brings up its edit menu.
+        if !app.menuItems["Copy"].exists { app.webViews.staticTexts["Ovens"].tap() }
+        XCTAssertTrue(app.menuItems["Copy"].waitForExistence(timeout: 3), "the edit menu is up")
+        keep("selection-menu")
+        let item = app.menuItems["Browse for Me"]
+        XCTAssertTrue(item.waitForExistence(timeout: 3), "the edit menu offers Browse for Me")
+        item.tap()
+        XCTAssertTrue(app.staticTexts["browse-query"].waitForExistence(timeout: 8))
+        XCTAssertEqual(app.staticTexts["browse-query"].label, "Ovens")
+    }
 }

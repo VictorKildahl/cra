@@ -140,6 +140,28 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     var didSummarizeFirstPage = false
     var didShowOnboarding = false
 
+    /// Selected text on a page gets "Browse for Me" in its edit menu (Arc Search 1.23), where the
+    /// device's own model can answer. WebKit's edit menu asks the responder chain.
+    override func buildMenu(with builder: UIMenuBuilder) {
+        super.buildMenu(with: builder)
+        guard builder.system != .main, BrowseForMe.isAvailable, shownPage != nil, !isSearching else { return }
+        let browse = UIAction(title: "Browse for Me", image: UIImage(systemName: "sparkles")) { [weak self] _ in
+            self?.browseForSelection()
+        }
+        builder.insertSibling(UIMenu(options: .displayInline, children: [browse]), afterMenu: .standardEdit)
+    }
+
+    private func browseForSelection() {
+        guard let page = shownPage else { return }
+        page.webView.evaluateJavaScript("String(window.getSelection())") { [weak self] result, _ in
+            guard let self, let text = result as? String else { return }
+            let query = MobileBrowseForMe.query(fromSelection: text)
+            guard !query.isEmpty else { return }
+            self.incognitoSearch = self.store.tabs.first { $0.id == page.tabID }?.isIncognito ?? false
+            self.open(MobileBrowseForMe.tabAddress(query: query))
+        }
+    }
+
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         layoutChrome()

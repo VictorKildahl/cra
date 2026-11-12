@@ -182,6 +182,22 @@ public enum MobileBrowseForMe {
         "cra-browse:" + (query.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? query)
     }
 
+    /// The longest question taken from selected text.
+    public static let selectionQueryLimit = 200
+
+    /// Selected text as a question: whitespace and line breaks run together, cut at a word
+    /// boundary within `selectionQueryLimit` characters.
+    public static func query(fromSelection text: String) -> String {
+        let words = text.split(whereSeparator: { $0.isWhitespace || $0.isNewline })
+        var query = ""
+        for word in words {
+            let next = query.isEmpty ? String(word) : query + " " + word
+            if next.count > selectionQueryLimit { return query.isEmpty ? String(next.prefix(selectionQueryLimit)) : query }
+            query = next
+        }
+        return query
+    }
+
     /// The query of a Browse for Me tab, or nil for any other address.
     public static func query(fromTabAddress address: String) -> String? {
         guard address.hasPrefix("cra-browse:") else { return nil }
