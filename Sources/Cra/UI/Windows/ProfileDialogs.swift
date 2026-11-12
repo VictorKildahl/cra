@@ -222,7 +222,9 @@ private struct SpaceProfileIcon: View {
         ZStack(alignment: .bottomTrailing) {
             ZStack {
                 RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color(hex: "#4049DC"))
-                if let symbol = space.symbol {
+                if let data = space.iconImage, let image = SpaceIconImage.image(data, points: 34) {
+                    Image(nsImage: image)
+                } else if let symbol = space.symbol {
                     Image(systemName: symbol).font(.system(size: 26, weight: .medium)).foregroundStyle(.white)
                 } else {
                     Text(space.emoji.isEmpty ? "🌱" : space.emoji).font(.system(size: 30))

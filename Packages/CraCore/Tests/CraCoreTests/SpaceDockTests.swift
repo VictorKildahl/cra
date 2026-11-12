@@ -32,8 +32,6 @@ struct SpaceDockTests {
         #expect(SpaceDock.mark(for: .none, isOpen: true, squeezed: false) == .dot(diameter: 8))
         #expect(SpaceDock.mark(for: .emoji("🍕"), isOpen: false, squeezed: false) == .emoji("🍕"))
         #expect(SpaceDock.mark(for: .symbol("star.fill"), isOpen: false, squeezed: false) == .symbol("star.fill"))
-        #expect(SpaceDock.mark(for: .image(Data([1])), isOpen: false, squeezed: false) == .image(Data([1])))
-        #expect(SpaceDock.mark(for: .image(Data([1])), isOpen: false, squeezed: true) == .dot(diameter: SpaceDock.squeezedDotDiameter))
     }
 
     /// In a squeezed dock every space but the open one is a 4 pt dot, whatever its icon; the open
@@ -77,5 +75,14 @@ struct SpaceDockTests {
         #expect(SpaceDock.dotAlpha(dark: false, lit: true) == 0.5 && SpaceDock.dotAlpha(dark: true, lit: true) == 0.5)
         #expect(SpaceDock.dotAlpha(dark: false, lit: false) == 0.25)
         #expect(SpaceDock.dotAlpha(dark: true, lit: false) == 0.18)
+    }
+
+    /// A picture icon is the cell's mark while it has room, and a dot like any other when squeezed.
+    @Test
+    func aPictureIsTheMarkUnlessSqueezed() {
+        let png = Data([1])
+        #expect(SpaceDock.mark(for: .image(png), isOpen: false, squeezed: false) == .image(png))
+        #expect(SpaceDock.mark(for: .image(png), isOpen: true, squeezed: true) == .image(png))
+        #expect(SpaceDock.mark(for: .image(png), isOpen: false, squeezed: true) == .dot(diameter: SpaceDock.squeezedDotDiameter))
     }
 }
