@@ -5,12 +5,15 @@ import Foundation
 /// Every Cra tab is its own Chromium window. A tab's window that is ordered out has its compositor
 /// suspended with its last frame, and that frame keeps the page's surface, and the page's ~15 MB of
 /// tiles, alive after Chromium evicts it. Chromium (HideDelegatedFrameHostMac) evicts a hidden page's
-/// frame past its saved-frame cap (10, the most recently hidden first kept) and once it has been
+/// frame past its saved-frame cap (5, the most recently hidden first kept) and once it has been
 /// hidden 5 minutes, on a 5-minute timer, so by 10 minutes. Chrome detaches a background tab from its
 /// window instead, so nothing keeps it. A window that draws once after the eviction releases it.
 public enum HiddenFrameRelease {
-    /// Chromium's saved-frame cap with plenty of memory (FrameEvictionManager: 2 × 5).
-    public static let savedFrames = 10
+    /// Chromium's baseline saved-frame cap (FrameEvictionManager: 5). Cra turns off its doubling with
+    /// plenty of memory (ScalableFrameEviction, CraCEF.mm): the five tabs used last are the ones tab
+    /// freezing keeps running, and each saved frame held ~15 MB of GPU memory. A tab further back
+    /// draws its page again when shown.
+    public static let savedFrames = 5
     /// Chromium's culling delay (5 min) plus one timer period: evicted by then whenever it was hidden.
     public static let evictedAfter: TimeInterval = 10 * 60 + 30
 

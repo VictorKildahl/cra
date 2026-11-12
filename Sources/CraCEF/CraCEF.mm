@@ -812,7 +812,11 @@ public:
         std::string disabled = command_line->GetSwitchValue("disable-features");
         command_line->AppendSwitchWithValue("disable-features",
             (disabled.empty() ? "" : disabled + ",") + "WebRtcHideLocalIpsWithMdns,"
-            + "WebUIOmniboxPopup,WebUIOmniboxAimPopup,AutofillAiWalletPrivatePasses");
+            + "WebUIOmniboxPopup,WebUIOmniboxAimPopup,AutofillAiWalletPrivatePasses,"
+            // Hidden tabs keep their last frame (~15 MB of GPU memory each) for an instant switch
+            // back. Chromium keeps 5 and doubles that when memory is plentiful; Cra keeps 5, the
+            // tabs freezing leaves running (HiddenFrameRelease.savedFrames).
+            + "ScalableFrameEviction");
         // --load-extension loads after the restored tabs start loading. The first extension
         // with webRequest or declarativeNetRequest makes Chromium reset the profile's URL
         // loader factories (WebRequestAPI::UpdateMayHaveProxies), which strands a navigation

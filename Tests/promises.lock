@@ -299,9 +299,9 @@
 #195   Packages/CraCore/Tests/CraCoreTests/GlobalShortcutTests.swift::modifiersInCarbonBits  14ae00b2c0cb
 #195   Packages/CraCore/Tests/CraCoreTests/GlobalShortcutTests.swift::theFirstChordIsTakenWhileTheSettingIsOn  6e48513a4d03
 #195   Packages/CraCore/Tests/CraCoreTests/HiddenFrameReleaseTests.swift::eachHidingReleasesOnce  1eb6272ffd89
-#195   Packages/CraCore/Tests/CraCoreTests/HiddenFrameReleaseTests.swift::recentTabsWithinTheCapKeepTheirFrames  8b9ab7aa81af
+#195   Packages/CraCore/Tests/CraCoreTests/HiddenFrameReleaseTests.swift::recentTabsWithinTheCapKeepTheirFrames  28ac27ed2181
 #195   Packages/CraCore/Tests/CraCoreTests/HiddenFrameReleaseTests.swift::tabsHiddenLongerThanTheCullAreDue  eda41aed2bc6
-#195   Packages/CraCore/Tests/CraCoreTests/HiddenFrameReleaseTests.swift::tabsPastTheCapAreDueOldestFirst  faab2afe4a8c
+#195   Packages/CraCore/Tests/CraCoreTests/HiddenFrameReleaseTests.swift::tabsPastTheCapAreDueOldestFirst  9f22e8eec03c
 #195   Packages/CraCore/Tests/CraCoreTests/ShippedWindowsTests.swift::littleWindowShortcutWorksFromAnyAppUnlessTurnedOff  d7c46d24f219
 #198   Tests/BrowserManagerLifecycleTests.swift::callPictureInPictureCase  86106e6d910d
 #202   Packages/CraCore/Tests/CraCoreTests/PeekTriggerTests.swift::aNewTabLinkInsideThePeekLeavesIt  97e7217fdf7d

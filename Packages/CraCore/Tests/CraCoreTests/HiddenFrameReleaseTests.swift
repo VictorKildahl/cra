@@ -11,15 +11,15 @@ struct HiddenFrameReleaseTests {
     }
 
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/195")) func recentTabsWithinTheCapKeepTheirFrames() {
-        let hidden = (1...9).map { tab($0, minutesAgo: Double($0)) }
+        let hidden = (1...4).map { tab($0, minutesAgo: Double($0)) }
         #expect(HiddenFrameRelease.due(hidden, visible: 1, now: now).isEmpty)
     }
 
-    /// Chromium keeps the 10 most recent frames (the visible tab's among them); older ones are evicted.
+    /// Chromium keeps the 5 most recent frames (the visible tab's among them); older ones are evicted.
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/195")) func tabsPastTheCapAreDueOldestFirst() {
         let hidden = (1...12).map { tab($0, minutesAgo: Double($0) / 10) }
         let due = HiddenFrameRelease.due(hidden, visible: 1, now: now)
-        #expect(due == hidden.suffix(3).map(\.id))
+        #expect(due == hidden.suffix(8).map(\.id))
     }
 
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/195")) func tabsHiddenLongerThanTheCullAreDue() {
