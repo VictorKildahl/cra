@@ -69,7 +69,7 @@ struct OnboardingView: View {
 
     /// The welcome is on the saturated blue-to-red gradient; the first Next fades it to the pale one.
     @ViewBuilder private var background: some View {
-        if model.step == .welcome {
+        if model.step == .welcome || model.step == .pinch {
             LinearGradient(colors: [Color(red: 0.13, green: 0.07, blue: 0.82), Color(red: 0.55, green: 0.13, blue: 0.78), Color(red: 0.95, green: 0.2, blue: 0.42)],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
         } else {
@@ -136,6 +136,16 @@ struct OnboardingView: View {
                 .padding(.vertical, 8)
                 .background(.background.opacity(0.8), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
                 .padding(.horizontal, 24)
+            }
+        case .pinch:
+            VStack(spacing: 22) {
+                Text("\(Text("Pinch").italic()) to summarize any web page")
+                    .font(.system(size: 30, weight: .bold))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 28)
+                    .accessibilityIdentifier("onboarding-title")
+                PinchDemo()
             }
         case .icon:
             VStack(spacing: 24) {
@@ -227,5 +237,82 @@ struct AppIconPicker: View {
     static func apply(_ icon: MobileAppIcon) {
         guard UIApplication.shared.supportsAlternateIcons, UIApplication.shared.alternateIconName != icon.alternateName else { return }
         UIApplication.shared.setAlternateIconName(icon.alternateName)
+    }
+}
+
+/// Onboarding's Pinch to Summarize step acted out on a loop, after 60fps.design's clip: two
+/// fingers pinch a page, it folds flat and comes back as a small card, "Summarizing for you…",
+/// then the summary and a check mark.
+struct PinchDemo: View {
+    var body: some View {
+        TimelineView(.animation) { context in
+            let t = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 5.2)
+            frame(t: t)
+        }
+        .frame(width: 250, height: 380)
+        .accessibilityHidden(true)
+    }
+
+    private func frame(t: Double) -> some View {
+        let pinch = min(1, max(0, (t - 0.3) / 1.0))
+        let folding = t > 1.3 && t < 1.7
+        let card = t >= 1.7
+        let summary = min(1, max(0, (t - 2.6) / 0.6))
+        return ZStack(alignment: .top) {
+            RoundedRectangle(cornerRadius: 34, style: .continuous).fill(Color(red: 0.8, green: 0.75, blue: 0.95))
+            RoundedRectangle(cornerRadius: 34, style: .continuous).strokeBorder(.white, lineWidth: 6)
+            if !card {
+                page.scaleEffect(x: 1, y: folding ? 0.04 : 1, anchor: .center)
+                    .padding(10)
+                    .animation(.easeIn(duration: 0.3), value: folding)
+            } else {
+                VStack(spacing: 10) {
+                    page.frame(width: 230, height: 360).scaleEffect(0.45).frame(width: 104, height: 162)
+                        .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
+                        .padding(.top, 30)
+                    if summary < 1 {
+                        Text("Summarizing for you…").font(.system(size: 11)).foregroundStyle(.black.opacity(0.55))
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(0..<5, id: \.self) { line in
+                            RoundedRectangle(cornerRadius: 2).fill(Color.black.opacity(0.5)).frame(width: line == 4 ? 120 : 190, height: 5)
+                        }
+                    }
+                    .opacity(summary)
+                }
+            }
+            if !card {
+                Circle().fill(Color(red: 0.35, green: 0.35, blue: 0.95).opacity(0.8)).frame(width: 28, height: 28)
+                    .position(x: 190 - 60 * pinch, y: 120 + 60 * pinch)
+                Circle().fill(Color(red: 1, green: 0.4, blue: 0.55).opacity(0.8)).frame(width: 28, height: 28)
+                    .position(x: 70 + 60 * pinch, y: 280 - 60 * pinch)
+            }
+            if card {
+                Image(systemName: "checkmark.circle.fill").font(.system(size: 30)).foregroundStyle(.white, Color.accentColor)
+                    .offset(y: -50)
+                    .opacity(summary)
+            }
+        }
+    }
+
+    /// A page: a dark picture with its headline, then a title and lines of text.
+    private var page: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack {
+                LinearGradient(colors: [Color(white: 0.1), Color(white: 0.22)], startPoint: .top, endPoint: .bottom)
+                Text("The night sky,\nexplained").font(.system(size: 13, weight: .bold)).foregroundStyle(.white).multilineTextAlignment(.center)
+            }
+            .frame(height: 120)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("A field guide to the stars").font(.system(size: 12, weight: .bold)).foregroundStyle(.black)
+                ForEach(0..<9, id: \.self) { line in
+                    RoundedRectangle(cornerRadius: 2).fill(Color.black.opacity(0.25)).frame(width: line % 3 == 2 ? 140 : 200, height: 4)
+                }
+            }
+            .padding(12)
+            Spacer(minLength: 0)
+        }
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
     }
 }

@@ -36,7 +36,7 @@ public enum MobileAppIcon: String, CaseIterable, Identifiable {
 /// First launch, in Arc Search's order and (where they fit Cra) its words.
 public enum MobileOnboarding {
     public enum Step: String, Equatable {
-        case welcome, meet, browseForMe, icon, blocking, defaultBrowser
+        case welcome, meet, browseForMe, pinch, icon, blocking, defaultBrowser
     }
 
     public struct Card: Equatable {
@@ -45,9 +45,9 @@ public enum MobileOnboarding {
         public var symbol: String
     }
 
-    /// The steps shown. The Browse for Me step is only for phones whose own model can do it.
+    /// The steps shown. Browse for Me and Pinch to Summarize only for phones whose own model can do them.
     public static func steps(canUseAI: Bool) -> [Step] {
-        [.welcome, .meet] + (canUseAI ? [.browseForMe] : []) + [.icon, .blocking, .defaultBrowser]
+        [.welcome, .meet] + (canUseAI ? [.browseForMe, .pinch] : []) + [.icon, .blocking, .defaultBrowser]
     }
 
     public static let welcomeTitle = "Get what you want twice as fast."
@@ -62,6 +62,8 @@ public enum MobileOnboarding {
     /// Arc Search's sample queries.
     public static let sampleQueries = ["things to do in paris", "who are the beatles", "romantic shakespearean reply", "risotto vs paella",
                                        "vegetarian dinner ideas"]
+    /// Arc Search's step 5 ("Pinch" in italics), from 60fps.design's clip of it.
+    public static let pinchTitle = "Pinch to summarize any web page"
     public static let iconTitle = "Pick an icon for your home screen"
     public static let blockingTitle = "Get what you need, without the noise"
     public static let blockingSwitch = "Block Ads and Trackers"
