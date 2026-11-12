@@ -58,6 +58,11 @@ public struct PictureInPictureGesture: Sendable {
         }
     }
 
+    /// Whether letting this press go returns to the video's tab: the second click of a double
+    /// click that stayed a click, as on Arc's window. The buttons take their own clicks and never
+    /// get here.
+    public func returnsToTab(clickCount: Int) -> Bool { !isDragging && clickCount == 2 }
+
     /// The window's frame with the pointer at `mouse`, or nil while the press is still a click.
     /// A resize keeps the edge or corner opposite the grabbed one where it was (both sides keep
     /// the top, the top and bottom keep the left) and stays between `minSize` and `maxSize`.

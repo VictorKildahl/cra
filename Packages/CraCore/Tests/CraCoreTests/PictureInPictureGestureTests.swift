@@ -48,6 +48,25 @@ struct PictureInPictureGestureTests {
         #expect(gesture.frame(mouse: CGPoint(x: start.x + 1, y: start.y), minSize: minSize, maxSize: maxSize) == window.offsetBy(dx: 1, dy: 0))
     }
 
+    /// A double click on the video returns to its tab, as Arc's window does (reported by a user,
+    /// 11 Nov). A single click, the third click of a triple, and a press that became a drag do not.
+    @Test func aDoubleClickReturnsToTheTab() {
+        let start = CGPoint(x: window.midX, y: window.midY)
+        var gesture = PictureInPictureGesture(mouse: start, frame: window)
+        #expect(!gesture.returnsToTab(clickCount: 1))
+        #expect(gesture.returnsToTab(clickCount: 2))
+        #expect(!gesture.returnsToTab(clickCount: 3))
+        // The second click drifts 2 pt: still a click.
+        _ = gesture.frame(mouse: CGPoint(x: start.x + 2, y: start.y), minSize: minSize, maxSize: maxSize)
+        #expect(gesture.returnsToTab(clickCount: 2))
+        // The second press moves the window: a drag, not a double click.
+        _ = gesture.frame(mouse: CGPoint(x: start.x + 30, y: start.y), minSize: minSize, maxSize: maxSize)
+        #expect(!gesture.returnsToTab(clickCount: 2))
+        // On an edge too: a double click there resizes nothing, so it means the same.
+        let edge = PictureInPictureGesture(mouse: CGPoint(x: window.maxX - 2, y: window.midY), frame: window)
+        #expect(edge.returnsToTab(clickCount: 2))
+    }
+
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/134")) func theMiddleMovesTheWindow() {
         #expect(drag(at: 391, 220, by: -40, 25).1 == window.offsetBy(dx: -40, dy: 25))
     }
