@@ -65,7 +65,7 @@ Arc's actions (Settings ▸ Shortcuts, 106 rows) that Cra has no action for:
 | Expand Current Split | — | done | View ▸ Expand Current Split and the command bar ("expand", "maximize"), no default shortcut, as in Arc 1.172.2 (measured live 11 Nov 2026, docs/arc-reverse-engineering.md "Expand Current Split"). The focused pane takes the window and the others keep the 220 pt minimum, stored as width factors 1 and 0; laid out in one frame. Cra's pane minimum went from 200 to Arc's 220 pt with it. |
 | Open Extensions | ⌘E | done |
 | Show Little Arc "Open In" Menu | ⇧⌘O | done |
-| Open Little Arc or Peek in… | ⌘O | partial (Window menu) |
+| Open Little Arc or Peek in… | ⌘O | done | 11 Nov, Arc 1.172.2: Tabs ▸ "Open in <space>" after Pin Tab, with the space's icon, shown only while a Little Window or Peek is in front, out of the Window menu; ⌘O moves the page there at once (the picker is ⇧⌘O). Settings ▸ Shortcuts lists it under Tabs as "Open Little Window or Peek in…". |
 | Network Inspector | — | *skip* (DevTools has it) |
 | Exit | ⎋ | n/a |
 

@@ -1862,7 +1862,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "pictureInPicture":
             let browser = keyLittleWindow.map { $0.browser } ?? main.currentBrowser
             item.title = browser?.isInPictureInPicture == true ? "Exit Picture in Picture" : "Picture in Picture"
-        case "promoteLittleWindow", "littleWindowOpenInMenu": return keyLittleWindow?.hasPage ?? false
+        // Arc: Tabs ▸ "Open in <space>", there only while a Little Window or Peek is in front.
+        case TabsMenu.openIn:
+            let little = keyLittleWindow.flatMap { $0.hasPage ? $0 : nil }
+            item.isHidden = !TabsMenu.showsOpenIn(littleWindowWithPage: little != nil)
+            if let space = little?.openInSpace {
+                let title = TabsMenu.openInTitle(space: space.title)
+                if item.title != title { item.title = title }
+                item.image = SpaceMenuIcon.image(for: space)
+            }
+            return little != nil
+        case "littleWindowOpenInMenu": return keyLittleWindow?.hasPage ?? false
         case "checkForUpdates": return SoftwareUpdater.shared.validateMenuItem(item)
         case "closeSplitPane", "separateFromSplit", "flipSplitOrientation", "expandSplitPane":
             return store.selectedTabID.flatMap { store.splitContaining($0) } != nil
@@ -2444,11 +2454,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         menubar.addItem(submenu: spaces, title: "Spaces")
 
         let tabs = NSMenu(title: "Tabs")
-        for id in ["newTab", "pinTab"] { tabs.addItem(item(id)) }
-        // Arc: Tabs ▸ New Folder… after Pin/Unpin Tab (#279).
-        let newFolder = item("newFolder")
-        newFolder.title = "New Folder…"
-        tabs.addItem(newFolder)
+        // Arc: New Tab…, Pin Tab, Open in <space> (only while a Little Window or Peek is in front), New Folder… (#279).
+        for id in TabsMenu.head {
+            let row = item(id)
+            if id == "newFolder" { row.title = "New Folder…" }
+            tabs.addItem(row)
+        }
         for id in ["nextTab", "previousTab", "revealTab", "recentTab", "clearToday", "resetSpaceTabs"] { tabs.addItem(item(id)) }
         tabs.addItem(.separator())
         for id in ["favoriteTab", "renameTab", "duplicateTab", "resetTab", "muteTab"] { tabs.addItem(item(id)) }
@@ -2472,7 +2483,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         window.addItem(.separator())
         window.addItem(item("openLibrary")); window.addItem(item("viewDownloads")); window.addItem(item("viewEasels")); window.addItem(item("viewMedia")); window.addItem(item("viewBoosts"))
         window.addItem(.separator())
-        window.addItem(item("promoteLittleWindow")); window.addItem(item("littleWindowOpenInMenu")); window.addItem(item("closeLittleWindows"))
+        window.addItem(item("littleWindowOpenInMenu")); window.addItem(item("closeLittleWindows"))
         window.addItem(.separator())
         window.addItem(std("Bring All to Front", #selector(NSApplication.arrangeInFront(_:))))
         menubar.addItem(submenu: window, title: "Window")

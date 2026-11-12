@@ -1167,6 +1167,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         if state.targetSpaceID != id { state.targetSpaceID = id }
     }
 
+    /// The space the "Open in" button names, and Tabs ▸ "Open in <space>" with it (TabsMenu).
+    var openInSpace: Space { store.space(state.targetSpaceID) ?? store.focusedSpace }
+
     /// Move the page into a space (nil = the window's target space) as a Today
     /// tab, in the window already showing that space if there is one (Arc). The
     /// live browser goes with it, so history, scroll position and logins stay.

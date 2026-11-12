@@ -309,7 +309,7 @@ enum ShortcutDescriptions {
         "viewArchive": "Open the archive of closed tabs.",
         "openLibrary": "Open the Library.",
         "viewDownloads": "Show your downloads.",
-        "promoteLittleWindow": "Move the Little Window’s page into a space.",
+        "promoteLittleWindow": "Move the Little Window’s or Peek’s page into the space its Open in button names.",
         "closeLittleWindows": "Close all Little Windows.",
         "settings": "Open Settings.",
         "setDefaultBrowser": "Make Cra the default browser.",

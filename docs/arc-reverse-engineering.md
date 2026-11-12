@@ -2975,6 +2975,26 @@ popover driven by AX (the chevron is `openInSpaceExpander`, the rows are AXButto
   sign-ins) picked earlier; Air Traffic Control's Default (Little Window + space) sets that for good (CraCore
   `LittleWindowTarget`; scenario little-window-space-pick).
 
+### The ⌘O menu row (Arc 1.172.2, Victor's Arc, 11 Nov 2026)
+
+Little Arcs opened with `open -a Arc https://example.com/?cra-open-in…`, the menu bar read over AX with and without
+one in front, the Tabs menu opened over AX and captured, ⌘O posted to Arc's pid.
+- [O static] MainMenu.nib has one row for it, `openTabIn`, titled "Open Little Arc or Peek in" (the name Settings ▸
+  Shortcuts lists as "Open Little Arc or Peek in…", ⌘O), with no command bar keywords. The nib has no row for
+  ⇧⌘O (`showLittleArcOpenInMenu` is a key binding only) or for closing every Little Arc.
+- [O AX] With a Little Arc in front the row is in **Tabs**, after Pin Tab and before New Folder…, titled
+  "Open in Victor" (the space the Little Arc's own "Open in , Victor, ⌘O" button names), with that space's emoji
+  as its image, ⌘O, no ellipsis. With the browser window in front the row isn't in the menu at all, enabled or not.
+  The Window menu has none of the Little Arc rows either way (only the "Little Arc — <title>" window entry).
+- [O AX] ⌘O moved the page at once: the Little Arc closed and the browser window on Victor showed
+  example.com as its selected tab. No space picker; that is the ⌄ / ⇧⌘O.
+- [O AX] The browser window's command bar has no row for it: "Open in" and "Peek in" gave only the search row,
+  history and search suggestions.
+- Peek: the nib's name says the row serves a Peek too. Not opened live (a Peek needs a click in a pinned tab).
+- Cra: `TabsMenu` (CraCore) has the row's place, title and when it shows. Window ▸ Open Little Window in Space is
+  gone, and the action is "Open Little Window or Peek in…" under Tabs in Settings ▸ Shortcuts. ⌘O from a Peek
+  expands it into the parent window's space (scenario little-window-open-in-row).
+
 ## ⌘Return in the command bar and closed folders that keep their tab (Arc 1.171, 2 Nov 2026, issue #85)
 
 Victor's Arc, a window of my own (File ▸ New Window over AX, closed afterwards), keys posted to Arc's pid while it

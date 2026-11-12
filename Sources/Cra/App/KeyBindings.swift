@@ -286,8 +286,9 @@ final class KeyBindingRegistry {
             KeyAction(id: "viewMedia", name: "View Media…", section: .window, shortcuts: [], triggers: ["media", "screenshots", "photos"]),
             // Arc: Window ▸ Stay On Top.
             KeyAction(id: "stayOnTop", name: "Stay On Top", section: .window, shortcuts: [], triggers: ["stay on top", "float", "always on top", "pin window"]),
-            // Arc's Little Arc "Open in Space" button (LittleBrowserMoveButton) and "Close Little Arc Windows".
-            KeyAction(id: "promoteLittleWindow", name: "Open Little Window in Space", section: .window, shortcuts: [Shortcut("o", cmd)], inCommandBar: false),
+            // Arc's Tabs ▸ "Open Little Arc or Peek in" (openTabIn), the Little Arc's "Open in <space>" button;
+            // the menu row reads "Open in <space>" (TabsMenu).
+            KeyAction(id: "promoteLittleWindow", name: TabsMenu.openInName, section: .tabs, shortcuts: [Shortcut("o", cmd)], inCommandBar: false),
             // Arc: Show Little Arc "Open In" Menu ⇧⌘O.
             KeyAction(id: "littleWindowOpenInMenu", name: "Show Little Window “Open In” Menu", section: .window,
                       shortcuts: [Shortcut("o", cmdShift)], inCommandBar: false),
