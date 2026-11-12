@@ -1246,7 +1246,19 @@ final class SpaceListDocument: NSView {
     private var pointerIsOver: Bool {
         guard let w = window, w.isVisible, !NSApp.isHidden,
               visibleRect.contains(convert(w.mouseLocationOutsideOfEventStream, from: nil)) else { return false }
-        return NSWindow.windowNumber(at: NSEvent.mouseLocation, belowWindowWithWindowNumber: 0) == w.windowNumber
+        return Self.topWindowNumber(at: NSEvent.mouseLocation) == w.windowNumber
+    }
+
+    /// The window under the pointer is a synchronous window-server call (~1 ms), and AppKit asks for
+    /// tracking areas every frame of a space switch, once per space in the strip: 207 ms of the main
+    /// thread over six switches. The answer is kept while the pointer stays put, for 0.1 s at most.
+    private static var topWindow: (point: NSPoint, at: CFTimeInterval, number: Int)?
+    private static func topWindowNumber(at point: NSPoint) -> Int {
+        let now = CACurrentMediaTime()
+        if let t = topWindow, t.point == point, now - t.at < 0.1 { return t.number }
+        let number = NSWindow.windowNumber(at: point, belowWindowWithWindowNumber: 0)
+        topWindow = (point, now, number)
+        return number
     }
 
     override func mouseEntered(with event: NSEvent) { isMouseInside = true; list?.pointerMoved(event) }

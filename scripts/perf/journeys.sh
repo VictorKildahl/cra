@@ -32,8 +32,11 @@ sample $PID 20 1 -file "$OUT/sample-switch.txt" >/dev/null 2>&1 &
 SAMPLER=$!
 for i in $(seq 20); do send "cra://action/nextTab"; done
 wait $SAMPLER 2>/dev/null   # never a bare wait: Cra is a background job too
+sample $PID 18 1 -file "$OUT/sample-space-sidebar.txt" >/dev/null 2>&1 &
+SAMPLER=$!
 for i in $(seq 6); do send "cra://action/nextSpace" 1.5; done
 for i in $(seq 6); do send "cra://action/toggleSidebar" 1.2; done
+wait $SAMPLER 2>/dev/null
 sample $PID 15 1 -file "$OUT/sample-commandbar.txt" >/dev/null 2>&1 &
 SAMPLER=$!
 for r in 1 2 3; do
