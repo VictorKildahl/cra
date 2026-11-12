@@ -19,7 +19,8 @@ you can send. Code is welcome too, within the few rules below.
   a good one is under [Features Arc never had](#features-arc-never-had).
 - **No cloud AI.** Arc Max-style cloud features (anything that needs an
   API key or sends pages away) are out of scope. The exception is features powered by the Mac's
-  own on-device Apple Intelligence model (Tidy Tabs, Tidy Tab Titles, Tidy Downloads, 5-Second Previews),
+  own on-device Apple Intelligence model (Ask on Page, Tidy Tabs, Tidy Tab Titles, Tidy Downloads,
+  5-Second Previews),
   which only show when Apple Intelligence is turned on and never send anything off the Mac.
 - **English only, for now.** Like Arc, the interface isn't translated: keeping every
   language in step with a UI that changes most days is more than one maintainer can carry.

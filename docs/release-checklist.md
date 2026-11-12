@@ -53,6 +53,14 @@ built release app with a test profile. Note anything that fails in the release's
   space's darkest tone. Recent open tabs show "Switch to Tab" before typing. Arrow through results
   and check every row's inks follow the selection; long titles truncate before the trailing action.
 
+- **#393, Ask on Page:** with Apple Intelligence on and Settings ▸ Max ▸ Ask on Page on, press ⌘F on a
+  long article: the card reads "Find or ask…"; typing a word finds it (count, ↑ ↓, highlights in the
+  page). Type a question and press Ask (or Return): the question in the space's colour, "This page was
+  long, so I read the first N%.", an answer with a quote on a rule. Find on Page highlights and scrolls to
+  the quote in the page, or says "Quote not found". Ask a follow-up; past 450 pt the conversation scrolls
+  with fades. Esc or ✕ closes it and the next ⌘F starts over. Compare with Arc's card on the same page
+  (Arc's own numbers are in arc-reverse-engineering.md; its placement, corner and colours weren't read).
+
 - **PR #324, 5-Second Previews:** with Apple Intelligence on and Settings ▸ Max ▸ 5-Second Previews
   on, rest 1 s on a story title on Hacker News, a Google result and a link in a post on X: a loading
   card hangs under the link, then the answer streams in (picture, bold line, 2–4 rows), next to Arc's

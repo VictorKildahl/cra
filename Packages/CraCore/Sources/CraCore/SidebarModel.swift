@@ -698,6 +698,9 @@ public struct AppSettings: Codable, Equatable {
     /// on a link generates a summary of the webpage using the Mac's Apple Intelligence model.
     /// Off by default, like Arc Max.
     public var fiveSecondPreviews: Bool = false
+    /// Arc Max's Ask on Page (askOnPageEnabled): ⌘F's bar finds or asks the Mac's Apple Intelligence
+    /// model a question about the page. Off by default, like Arc Max.
+    public var askOnPage: Bool = false
     /// Arc's per-profile Download location (#190), by DownloadLocation.key(profileID:). A profile
     /// that isn't here saves to the Downloads folder without asking.
     public var downloadLocations: [String: DownloadLocation] = [:]
@@ -962,6 +965,7 @@ extension AppSettings {
         tidyTabTitles = try c.decodeIfPresent(Bool.self, forKey: .tidyTabTitles) ?? false
         tidyDownloads = try c.decodeIfPresent(Bool.self, forKey: .tidyDownloads) ?? false
         fiveSecondPreviews = try c.decodeIfPresent(Bool.self, forKey: .fiveSecondPreviews) ?? false
+        askOnPage = try c.decodeIfPresent(Bool.self, forKey: .askOnPage) ?? false
         downloadLocations = (try? c.decodeIfPresent([String: DownloadLocation].self, forKey: .downloadLocations)) ?? [:]
         newDocumentApps = NewDocumentApp.decodeMap(try? c.decodeIfPresent([String: String].self, forKey: .newDocumentApps))
         shareUsageStats = try c.decodeIfPresent(Bool.self, forKey: .shareUsageStats) ?? false

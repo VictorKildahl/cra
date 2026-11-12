@@ -14,7 +14,7 @@ struct MaxPane: View {
     var body: some View {
         @Bindable var store = store
         let available = service.status == .available
-        let features = [store.settings.tidyTabs, store.settings.tidyTabTitles, store.settings.tidyDownloads, store.settings.fiveSecondPreviews]
+        let features = [store.settings.tidyTabs, store.settings.tidyTabTitles, store.settings.tidyDownloads, store.settings.fiveSecondPreviews, store.settings.askOnPage]
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 0) {
                 MaxBanner()
@@ -37,6 +37,7 @@ struct MaxPane: View {
                                 store.settings.tidyTabTitles = on
                                 store.settings.tidyDownloads = on
                                 store.settings.fiveSecondPreviews = on
+                                store.settings.askOnPage = on
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(MaxMasterSwitch.isEmphasised(features) ? Color(.sRGB, red: 0.2, green: 0.22, blue: 0.98) : .gray)
@@ -45,6 +46,13 @@ struct MaxPane: View {
                     }
                     .padding(.top, 20)
                     SettingsFeatureCard {
+                        // Arc's first Max row (MaxSettingsUnit.askOnPage), with its text.
+                        SettingsSwitchRow("Ask on Page",
+                                  detail: "Press Command + F on any page to ask a question and let Max answer it for you in seconds.",
+                                  isOn: $store.settings.askOnPage, enabled: available) {
+                    AskOnPagePicture()
+                }
+                SettingsCardDivider()
                         SettingsSwitchRow("Tidy Tabs",
                                   detail: Text("Press the \(Image(nsImage: BroomGlyph.image).renderingMode(.template)) icon to let your Sidebar organize itself whenever you have six or more Today Tabs."),
                                   isOn: $store.settings.tidyTabs, enabled: available) {
@@ -109,6 +117,32 @@ private struct MaxFooter: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+/// Arc's Ask on Page picture (AskOnPagePreview): a find card with its Ask button on pink.
+private struct AskOnPagePicture: View {
+    var body: some View {
+        ZStack {
+            Color(red: 0.96, green: 0.62, blue: 0.62)
+            VStack(alignment: .trailing, spacing: 0) {
+                RoundedRectangle(cornerRadius: 3, style: .continuous).fill(Color.white.opacity(0.9))
+                    .frame(width: 48, height: 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 3) {
+                    RoundedRectangle(cornerRadius: 1).fill(Color(white: 0.85)).frame(width: 30, height: 2)
+                    Spacer(minLength: 0)
+                    Text("Ask").font(.system(size: 4.5, weight: .semibold)).foregroundStyle(.white)
+                        .padding(.horizontal, 4).padding(.vertical, 1.5)
+                        .background(RoundedRectangle(cornerRadius: 2, style: .continuous).fill(Color(red: 0.22, green: 0.24, blue: 1)))
+                }
+                .padding(.horizontal, 4).padding(.vertical, 3)
+                .frame(width: 70)
+                .background(RoundedRectangle(cornerRadius: 3, style: .continuous).fill(Color.white))
+                .padding(.top, 5)
+            }
+            .frame(width: 70)
+        }
     }
 }
 

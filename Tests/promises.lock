@@ -732,6 +732,14 @@
 #392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::darkGradientFollowsTheSlider  de760b3df3ea
 #392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::darkKeepsThePickedColourAsArcDoes  244ac57bf41d
 #392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::greysStayNeutralInTheDark  1afc110bfec4
+#393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::aQuoteSplitByThePagesFootnoteIsFoundByItsFirstSentence  be1ed7cb0aed
+#393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::answersSplitIntoTextAndQuotes  1c355ddc4248
+#393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::longPagesAreCutAndSaySo  87740165fd46
+#393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::placeholdersAreArcs  bd66b23c595c
+#393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::promptIsArcsWithThePageBetweenItsTags  e71bcdedf363
+#393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::returnFindsTextOnThePageAndAsksTheRest  60bb9ecd33c9
+#393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::theModelsEchoOfTheDialogueIsLeftOut  a13aef99159a
+#393   Tests/Scenarios/ask-on-page.scenario  78b0f7b9181a
 #399   Tests/EmojiLabelTests.swift::wholeEmojiWhenClipped  bec18dc87181
 #401   Packages/CraCore/Tests/CraCoreTests/SwitcherWindowsTests.swift::switchersListWindowsWithButtonsOrAStandardSubrole  9f9f67f53678
 #401   Tests/Scenarios/switcher-windows.scenario  a600d5a96203

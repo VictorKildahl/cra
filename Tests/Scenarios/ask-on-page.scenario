@@ -1,0 +1,59 @@
+# promise: #393
+# Arc Max's Ask on Page (Arc 1.173.1, read from its binary): with the setting on, ⌘F's bar is a
+# "Find or ask…" card. Typing still finds; Return on text that isn't on the page asks the model
+# (Cra's test model here) about the page's text, which leaves out navigation, headers, footers and
+# hidden parts as Arc's WebPageSnapshot does. The answer's quote gets Find on Page, which runs the
+# page's find on it. A long page is read in part and the card says how much.
+pace 0.5
+env CRA_TIDY_FAKE_MODEL=1
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "askOnPage": true}
+
+cra://open?url=${ORIGIN}/ask.html
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/find
+cra://debug?askOnPage=open
+expect-log ask open: enabled=true canAsk=true messages=0$
+
+# Text on the page finds, as the plain bar does.
+cra://debug?askQuery=StandBy
+wait 1
+cra://debug?askOnPage=found
+expect-log ask found: enabled=true canAsk=true messages=0$
+
+# A question isn't on the page: Return asks. The test model quotes the first sentence sharing a word
+# with the question; the nav's and the hidden paragraph's "reactions" come first on the page but are
+# never read, so it quotes the article's ("fireworks" has "work").
+cra://debug?askQuery=How do reactions work?
+wait 2
+cra://debug?askOnPage=asked
+expect-log ask asked: enabled=true canAsk=true messages=1 finished=true quotes=1 read=- search=\[\] quote="Add a reaction that fills the camera fra" height=\d+$
+reject-log ask asked: .*height=52$
+
+cra://debug?askFindQuote=1
+wait 1
+cra://debug?askOnPage=quote
+expect-log ask quote: .*search=\[found\]
+expect-log Ask on Page: quote found
+
+# A long page: only the first part fits, and the card says how much it read.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const a=document.querySelector('article');for(let i=0;i<40;i++){const p=document.createElement('p');p.textContent='Padding paragraph number '+i+' that makes the page much longer than the model can read in one go.';a.append(p)}return 'long'})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"long"
+cra://debug?ask=What is StandBy?
+wait 2
+cra://debug?askOnPage=long
+expect-log ask long: enabled=true canAsk=true messages=2 finished=true quotes=1 read=This page was long, so I read the first \d\d%\.
+
+# Another page ends the conversation.
+cra://navigate?url=${ORIGIN}/ask.html?n=2
+expect-log Ask on Page: another page, the conversation ends
+cra://debug?askOnPage=navigated
+expect-log ask navigated: enabled=true canAsk=true messages=0$
+
+# Closing ends the conversation; the next ⌘F starts from the find bar.
+cra://debug?ask=What is StandBy?
+wait 2
+cra://dismiss
+cra://action/find
+cra://debug?askOnPage=again
+expect-log ask again: enabled=true canAsk=true messages=0$

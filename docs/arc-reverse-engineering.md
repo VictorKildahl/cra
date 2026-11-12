@@ -3953,6 +3953,51 @@ HoverCardWindow, HoverCardViewModel), pref `hoverCardsEnabled` (1 in Victor's Ar
   the copies; the emoji table is Cra's (Arc's isn't readable; it matches the four Arc produced); the model writes
   its own answers. Settings ▸ Max ▸ 5-Second Previews, off by default like Arc Max.
 
+## Ask on Page (Arc 1.173.1, 12 Nov 2026, GitHub #393, static only: strings, Swift field metadata, disassembly; Arc not launched)
+
+Arc Max's Ask on Page is Arc's find bar as a SwiftUI card: the FindInPage reducer holds the find state and the chat,
+the AskInPage module the model call; with the pref on, WindowContentViewController shows `AskInPageHostingView`
+instead of the AppKit `FindInPageView`. Tags as above; [B?] read off disassembly without a decompiler.
+- [B] Settings ▸ Max: `MaxSettingsUnit.askOnPage`, "Press Command + F on any page to ask a question and let Max answer
+  it for you in seconds." (1.173.1 says *Press*; no hold timer or threshold exists, though older Arc's text and the
+  reporter's picture say "Hold down"). Defaults key `askOnPageEnabled`; remote flag `ask-in-page-enabled`; LLM feature
+  `ask_in_page`. The `askOnPage…` hint/upsell keys belong to Dia's assistant code in the same binary.
+- [B] State: `FindInPage.State { text, numMatches?, activeMatchOrdinal?, quotesSearched: [String: loading|found|notFound],
+  isInConversation, messages, fractionOfContextUsed?, … }`; actions onQueryUpdated, onDidClickFindQuote,
+  onDidUpdateChat(messages:fractionRead:), onDidRequestNext/PreviousResult, onShouldResetToFindInPage, onDidAskLLM.
+- [B] The field: placeholder "Find in page…" on a page it can't ask about (`isValidAskPage` false), "Ask a question…" in a
+  conversation, else "Find or ask…". Typing finds (count "%lld/%lld", ↑ `arrow.up`, ↓ `arrow.down`, "No matches"); an
+  "Ask" button sends the text. ⌘F inside the field goes back to Arc (`CommandFTextField`, tag 1).
+- [B] Page text: the page's HTML through WebPageSnapshot (SwiftSoup) without `script, style, link, svg`, `[aria-hidden=true]`,
+  `nav, [aria-role=navigation], footer, header, [aria-role=banner], form, option` and alert/dialog roles, preferring
+  `[itemprop=mainEntity], article, #content, .reviews-content`. Budget: min(context tokens, 16000) × 3 characters less the
+  rules, the examples and 200; cut with "…"; `fractionRead` = cut / whole drives "This page was long, so I read the first
+  N%." (subheadline bold, primary 0.5). 49 characters or fewer: "Sorry, I can’t read this type of page."; an error: "Sorry,
+  I encountered an error".
+- [B] Prompt: the rules ("You will be acting as a research assistant… citations … using <excerpt> tags … RULES 1–8 …
+  Respond in {lang}."), the examples (solar, NYC Brooklyn, privacy policy, summary), "WEBPAGE CONTEXT FOR OUR DIALOGUE:"
+  with `<url>…</title>` (sic), `<current-date>`, `<title>`, `<content>`, then "</content>\nBEGIN DIALOGUE\n" and the
+  question. [B?] Older turns read "[Older messages hidden]". Full text in AskOnPagePrompt.
+- [B] Answer: split at `<excerpt>` into parts; a quote (trimmed of `"'“”`) in body text at primary 0.8 on a 2 pt rule at
+  primary 0.1, selectable, with "Find on Page" + `arrow.forward` (system 11 bold, hover in timingCurve(0.25, 0.1, 0.25, 1)
+  0.2 s) under it, which runs Chromium's find on the quote; not found: `exclamationmark.triangle.fill` "Quote not found.
+  Make sure it’s accurate!". The question in body bold in the space's theme colour; while waiting a redacted "Loading
+  Content" row pulses easeInOut 0.8 s. "According to the page:" and the bold term are the model's.
+- [B] Numbers: card max width 400; conversation scrolls past 450 with fades at its edges; close button 18 pt on
+  ultraThinMaterial, corner 6, 9 from top and trailing; appears with spring(0.4, 0.75, 0.1) [B?]; input row spacing 8,
+  padding 12, field padding 6; Ask in callout semibold, padding 6 × 12.
+- [?] Not read: whether Return finds or asks, the card's placement, corner, shadow and background, the theme colours,
+  fade heights. The purple border in the reporter's picture is the Arc window in a purple space, not part of the card.
+- Cra (AskOnPagePolicy, AskOnPagePrompt, AskOnPageReply in CraCore; AskOnPageService, AskOnPageCard): Arc's card in
+  ⌘F's panel, Arc's prompt on the Mac's Apple Intelligence model (rules and examples as the session's instructions),
+  Arc's budget less 600 tokens kept for the answer, checked with the model's own token count where macOS has it
+  (26.4) and cut again if a page still doesn't fit. The page text comes from a script in Cra's isolated world that
+  skips Arc's parts and hidden ones. Cra's choices where Arc's weren't readable: Return goes to the next match while the
+  text is on the page and asks otherwise (always asks in a conversation); Find on Page tries the quote's first sentence
+  and first eight words when the whole quote isn't on the page (a footnote mark between sentences, the model's slips);
+  the model's echo of the dialogue ("BEGIN DIALOGUE", "Human: …") is dropped; the card sits where the find bar does,
+  10 pt in, on the find bar's material with a 10 pt corner. Settings ▸ Max ▸ Ask on Page, off by default.
+
 ## Little Arc over a full-screen app (Arc 1.171, 5 Nov 2026, issue #186, Victor's Arc + a test full-screen app)
 
 - [O] With another app full screen on its own Space, `open -a Arc https://example.com/…` (a link from another app)

@@ -1085,6 +1085,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("zoom level \(main.currentBrowser?.zoomLevel() ?? .nan), keys go to \(keys)")
                 return
             }
+            // Ask on Page (#393): askOnPage=<label> logs the card's state; ask=<question> opens ⌘F's
+            // card and asks; askQuery=<text> types it and presses Return; askFindQuote=<n> presses the
+            // last answer's nth Find on Page.
+            if let label = dict["askOnPage"] { CraLog.note(main.askOnPage.readout(label)); return }
+            if let q = dict["ask"] { main.showFindBar(); main.askOnPage.ask(q); return }
+            if let q = dict["askQuery"] {
+                main.showFindBar()
+                main.overlay.findQuery = q
+                main.askOnPage.submit(shift: false)
+                return
+            }
+            if let n = dict["askFindQuote"].flatMap(Int.init) { main.askOnPage.debugFindQuote(n); return }
             // tidy: the divider's Tidy on the window's space, without hovering it; undoTidy: ⌘Z's.
             if dict["tidy"] != nil { TidyTabsService.shared.tidy(store.focusedSpace(window: main.windowID).id, store: store); return }
             if dict["undoTidy"] != nil { _ = store.undoTidy(); return }
