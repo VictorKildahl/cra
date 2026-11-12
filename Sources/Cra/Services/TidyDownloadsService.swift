@@ -31,13 +31,13 @@ final class TidyDownloadsService {
     static let cardShown: TimeInterval = 8
 
     /// The tab a download started from: its title and address, for the prompt.
-    @ObservationIgnored private var sources: [UInt32: (title: String, url: String)] = [:]
+    @ObservationIgnored private var sources: [UInt32: TidyDownloads.Source] = [:]
     @ObservationIgnored private var asked: Set<UInt32> = []
 
     private init() {}
 
-    func noteSource(_ id: UInt32, title: String, url: String) {
-        if sources[id] == nil { sources[id] = (title, url) }
+    func noteSource(_ id: UInt32, tab: TabData, referrer: TabData?) {
+        if sources[id] == nil { sources[id] = TidyDownloads.Source(tab: tab, referrer: referrer) }
     }
 
     /// A download finished at `path`. Rename it if the setting is on and the model can run; `moved`
@@ -48,9 +48,12 @@ final class TidyDownloadsService {
         asked.insert(id)
         let source = sources.removeValue(forKey: id)
         let original = (path as NSString).lastPathComponent
-        let prompt = TidyDownloads.prompt(file: original, tabTitle: source?.title ?? "", url: source?.url ?? downloadURL)
+        let language = Locale.preferredLanguages.first.flatMap {
+            Locale(identifier: "en").localizedString(forLanguageCode: Locale(identifier: $0).language.languageCode?.identifier ?? "en")
+        } ?? "English"
+        let request = TidyDownloads.Request(file: original, source: source, downloadURL: downloadURL, language: language)
         Task { @MainActor in
-            guard let answer = await Self.ask(prompt), let name = TidyDownloads.clean(answer, original: original) else { return }
+            guard let answer = await Self.ask(request), let name = TidyDownloads.clean(answer, original: original) else { return }
             let folder = (path as NSString).deletingLastPathComponent
             let fm = FileManager.default
             guard let free = TidyDownloads.unique(name, existing: {
@@ -126,13 +129,11 @@ final class TidyDownloadsService {
         return true
     }
 
-    private static func ask(_ prompt: String) async -> String? {
+    private static func ask(_ request: TidyDownloads.Request) async -> String? {
         if TidyTabsService.fakeModel {
             // Test copies without Apple Intelligence: the file's name tidied by hand.
-            guard let line = prompt.split(separator: "\n").last, let q = line.range(of: "Rename: '") else { return nil }
-            let file = line[q.upperBound...].prefix { $0 != "'" }
-            let ext = (String(file) as NSString).pathExtension
-            let stem = (String(file) as NSString).deletingPathExtension
+            let ext = (request.file as NSString).pathExtension
+            let stem = (request.file as NSString).deletingPathExtension
                 .replacingOccurrences(of: "_", with: " ").replacingOccurrences(of: "-", with: " ")
                 .filter { !$0.isNumber }.split(separator: " ").joined(separator: " ").capitalized
             return ext.isEmpty ? stem : "\(stem).\(ext)"
@@ -140,9 +141,9 @@ final class TidyDownloadsService {
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *) {
             do {
-                let session = LanguageModelSession(instructions: TidyDownloads.instructions)
-                let r = try await session.respond(to: prompt, generating: TidyDownloadAnswer.self, options: GenerationOptions(sampling: .greedy))
-                return r.content.name
+                let session = LanguageModelSession(instructions: TidyDownloads.instructions(for: request))
+                let r = try await session.respond(to: TidyDownloads.prompt(request), generating: TidyDownloadAnswer.self, options: GenerationOptions(sampling: .greedy))
+                return r.content.newName
             } catch {
                 CraLog.note("Tidy Downloads: the model failed: \(error)")
                 return nil
@@ -157,7 +158,7 @@ final class TidyDownloadsService {
 @available(macOS 26.0, *)
 @Generable
 struct TidyDownloadAnswer {
-    @Guide(description: "The file's new name, with its extension")
-    var name: String
+    @Guide(description: "The new filename written in the requested responseLanguage. Translate generic words into that language; preserve informative proper nouns and the original file extension.")
+    var newName: String
 }
 #endif

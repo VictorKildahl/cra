@@ -918,7 +918,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func browserManager(download: CraDownloadInfo) {
         let name = (download.fullPath as NSString).lastPathComponent.isEmpty ? download.suggestedName : (download.fullPath as NSString).lastPathComponent
         if let tab = browsers.downloadSourceTab, let item = store.item(tab), let t = item.tab {
-            TidyDownloadsService.shared.noteSource(download.identifier, title: item.displayTitle, url: t.url)
+            TidyDownloadsService.shared.noteSource(download.identifier, tab: t,
+                referrer: t.referrerID.flatMap { store.item($0)?.tab })
         }
         if windowDownloads.insert(download.identifier).inserted {
             ChromeDownloadAnimation.suppress()
