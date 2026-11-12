@@ -323,7 +323,7 @@ macOS 26 / `canImport` guards:
 | --- | --- |
 | `excerpts: [String]` | Zero to four complete, unchanged source quotations. Plain page text only, without XML, Markdown wrappers or JSON escape spelling. Native code bounds each string/array and validates every quote against this turn's exact fitted source. Four is an explicitly chosen local budget bound, not a recovered Arc limit. |
 | `answer: String` | Concise plain text, normally one sentence/roughly ten words. Preserve the selected language; summaries/translations/other requested transformations remain allowed. When relying on background knowledge, explicitly say it is a guess or is not on the page. No dialogue or markup. |
-| `keyAnswer: String` | The decisive term/value copied exactly from `answer`, for native bold emphasis. This is a presentation field, not evidence of truth. |
+| `keyAnswer: String?` | Optional decisive term/value copied exactly from `answer`, for native bold emphasis. Nil/empty is allowed. This is a presentation hint, not evidence of truth or a condition for accepting the answer. |
 
 There is **no model-declared supported/verified flag**. Plain native quote values carry a
 validation state computed from exact transmitted-source containment after only canonical
@@ -332,20 +332,25 @@ knowledge may validate a quote. Invalid quotations remain visibly unverified wit
 not-found warning; they never gain a Find action. One valid quote does not certify the semantic
 truth of every sentence in the answer or of another invalid quote.
 
-The native answer value holds plain answer text, an exact substring range for `keyAnswer` and
+The native answer value holds plain answer text, an optional exact substring range for `keyAnswer` and
 separate quoted-source values. Render it directly with AppKit attributed text/quote views.
-Do not generate excerpt tags/Markdown solely to parse them again. Final `keyAnswer` must be
-nonempty and occur verbatim in `answer`; otherwise expose a typed incomplete/invalid-answer
-state and retain the editable question, rather than claim the required bold result succeeded.
-While streaming, answer text may appear before the emphasis field is complete. Quote controls
-remain disabled until final complete-field validation.
+Do not generate excerpt tags/Markdown solely to parse them again. Apply bold only when the
+bounded `keyAnswer` is nonempty and occurs verbatim as one contiguous substring in `answer`.
+An absent, empty, accent-mismatched or noncontiguous hint leaves the valid answer plain; it
+does not reject that answer, its separately validated citations or completed-pair history.
+Never accent-fold, fuzzy-match, concatenate answer terms, alter the answer or make another
+inference call to repair emphasis. This follows Arc's prompt/Markdown formatting intent;
+no recovered native rejection rule for missing bold has been established. While streaming,
+answer text may appear before an emphasis hint. Quote controls remain disabled until final
+complete-answer/schema validation, independently of whether emphasis is available.
 
 A complete `excerpts: []` is valid for a background guess or other answer without a direct
-quotation; it is distinct from an absent/incomplete array in a partial snapshot. Empty or
-invalid `keyAnswer` remains a final field error, but do not enforce a literal ten-word or
+quotation; it is distinct from an absent/incomplete array in a partial snapshot. An unusable
+optional `keyAnswer` is a plain-text presentation fallback, not a final field error. Do not enforce a literal ten-word or
 single-line limit on transformations. A multi-line summary/translation can bold a copied
 decisive phrase (or the complete answer when no shorter term fits) without narrowing that
-existing behavior.
+existing behavior. Missing/empty actual answer text, incomplete raw/schema output and existing
+required-field/resource-bound failures remain errors; optional emphasis does not relax them.
 
 Page-context escaping is a transport representation only. Preserve the actual unescaped
 `Fitted.source` prefix for native validation, rendering and later DOM lookup. A source sentence
@@ -385,7 +390,8 @@ individually, and follow-ups retain bounded completed pairs and the same page ow
   including a valid zero-citation background answer or an answer displaying a rejected citation.
   Citation verification controls evidence labels and quote actions individually; it does not
   erase valid unsupported follow-ups or turn the conversation into a page-only refusal. Missing
-  complete fields, invalid emphasis or interrupted output still cannot enter completed history.
+  complete required fields or interrupted output still cannot enter completed history. Missing
+  or unusable optional emphasis alone cannot prevent a complete answer from entering history.
 - Core prompt fitting may continue to use a feature-local count closure, whose app adapter knows
   the fixed generated schema. No generic AI/context framework or persistent chat format is added.
 
@@ -409,12 +415,13 @@ transcript prompts accept `responseFormat: .init(type:)`.
    failure fails closed. Refit history/page so input plus 768 output plus reserve stays inside
    4096; reject an oversized mandatory request without truncating the user's question.
 3. Stream typed cumulative snapshots by replacing current values. Optional fields and array
-   elements are provisional, not deltas. Missing `answer`, `keyAnswer`, quotes or partial quote
-   strings must not be promoted to a complete result or actionable citation.
+   elements are provisional, not deltas. Missing actual `answer`, incomplete required arrays or
+   partial quote strings must not be promoted to a complete result or actionable citation.
+   An optional nil/empty emphasis hint is distinct from an incomplete schema or answer.
 4. Iterate one stream once; retain only its latest bounded partial/native value and the final
    bounded raw content needed to construct the full generated type. On stream termination,
-   require `rawContent.isComplete`, successful full-type construction and native field/size/
-   emphasis validation. A token cap may terminate without a thrown error, so incomplete raw
+   require `rawContent.isComplete`, successful full-type construction and native required-field/
+   size validation; compute optional emphasis separately. A token cap may terminate without a thrown error, so incomplete raw
    content is a typed incomplete-answer error. Do not start a second stream/collect pass to
    obtain a final answer. Remove the final raw content after conversion.
 5. Preserve current cancellation/identity checks on every partial/final/error. One context
@@ -426,10 +433,10 @@ transcript prompts accept `responseFormat: .init(type:)`.
 
 | Check | Required evidence |
 | --- | --- |
-| Native Core values | Exact vs fabricated/punctuation/case/Unicode quotes; multiple valid/invalid quotes; empty/missing/oversized fields; actual emphasis substring range; no model support flag; completed-pair bounds and source disclosure. Include `<`, `&`, quotes and literal excerpt-like source markers through context escaping, native validation and plain rendering; unsent suffix text remains unverified. |
+| Native Core values | Exact vs fabricated/punctuation/case/Unicode quotes; multiple valid/invalid quotes; empty/missing/oversized required fields; exact optional emphasis substring range, with nil/empty/accent-mismatched/noncontiguous hints rendering plainly and preserving completed history; no model support flag; completed-pair bounds and source disclosure. Include `<`, `&`, quotes and literal excerpt-like source markers through context escaping, native validation and plain rendering; unsent suffix text remains unverified. |
 | SDK-linked controlled service harness | Cumulative field replacement; incomplete arrays/text; final raw incompleteness; late old partial/error after a newer request; opt-out/off-on/model-loss/page change/timeout/owner teardown; history only after a complete validated turn; one overflow retry and no refusal retry. Assert actual native results/state, not only fake call counts. |
 | Schema/token budget | Actual schema token count, typed whole-request accounting, escaped maximum metadata/history, older-OS schema-byte fallback, CJK/large page fitting and output-cap incompleteness. Record measured schema count from the same production type. |
-| Actual on-device samples | The same synthetic opening-time and follow-up questions must produce exact validated source quotes plus native bold emphasis. Add genuinely unsupported background question, multiple-source question, summary, translation and the escaped-representation sentence above. Record complete native field values, measured input/schema counts, validation outcomes and failures. No fake-model output certifies this row. |
+| Actual on-device samples | The same synthetic opening-time and follow-up questions must produce exact validated source quotes; record native bold when a usable verbatim hint is present and plain-text fallback otherwise. Add genuinely unsupported background question, multiple-source question, summary, translation and the escaped-representation sentence above. Reproduce French accent-mismatched and noncontiguous multi-fact hints: retain the complete answer/history without repairing either emphasis or citations. Record complete native field values, measured input/schema counts, validation outcomes and failures. No fake-model output certifies this row. |
 | Actual DOM representation | Extend the existing real-DOM fixture with visible angle brackets, ampersands, quotation marks and literal excerpt-like markers. Extraction must retain actual visible text, and the later production quote-search/Range seam must find that same unescaped validated source text in the real browser. Do not pass model/transport entity spellings to native Find. |
 | Existing gates | Focused Core tests, production browser-context harness and real DOM checks; lint/promises/diff; coordinated native build later. Existing Find correlation/ordinary Find and UI/1x/2x acceptance gates stay mandatory and separate. |
 
@@ -450,3 +457,10 @@ committable at this gate; the frozen raw service prototype is not approved for c
 guided source implementation begins until coordinator authorization. Every subsequent exact
 source diff still requires independent correctness/redundancy review. Review record:
 `/Users/varunaditya/Desktop/arc-decomp/cra-validation/reviews/plan-askonpage-guided-output.md`.
+
+Independent emphasis correction review (12 November 2026): the real French and multi-fact
+guided samples exposed a stricter-than-evidence acceptance rule for styling. Optional exact
+emphasis with a plain-text fallback is approved as the narrow correction above; citation
+grounding, required answer/schema completeness, resource limits and all other gates remain.
+Only this plan-document correction is ready for commit, before corresponding source changes.
+Review: `/Users/varunaditya/Desktop/arc-decomp/cra-validation/reviews/plan-askonpage-emphasis.md`.
