@@ -236,7 +236,7 @@ struct MobileSettingsTests {
         #expect(saved.searchChoice == .browseForMe)
         settings.searchChoice = .engine(.kagi)
         #expect(settings.searchEngine == .kagi && !settings.searchesWithBrowseForMe)
-        #expect(MobileSearchChoice.all(browseForMeAvailable: true).map(\.label) == ["Browse for Me", "Google", "Bing", "DuckDuckGo", "Ecosia", "Perplexity", "Kagi"])
+        #expect(MobileSearchChoice.all(browseForMeAvailable: true).map(\.label) == ["Browse for Me", "Google", "Bing", "DuckDuckGo", "Ecosia", "Perplexity", "Kagi", "Custom"])
         #expect(MobileSearchChoice.all(browseForMeAvailable: false).first == .engine(.google))
         #expect(MobileSuggestions.destination(forTyped: "pizza ovens", engine: .bing, browsesForMe: true) == MobileBrowseForMe.tabAddress(query: "pizza ovens"))
         #expect(MobileSuggestions.destination(forTyped: "crabrowser.app", engine: .bing, browsesForMe: true) == "https://crabrowser.app")
@@ -897,5 +897,36 @@ struct MobileLanguagesTests {
         #expect(old.answerLanguage == nil, "an unknown language follows the phone")
         let kept = try JSONDecoder().decode(MobileSettings.self, from: Data(#"{"answerLanguage":"fr"}"#.utf8))
         #expect(kept.answerLanguage == "fr")
+    }
+}
+
+/// Custom search engines: an https address with `%s` for the query.
+struct MobileCustomSearchTests {
+    @Test func aCustomEngineSearchesItsAddressAndReadsItsQueryBack() {
+        #expect(MobileSearch.isValidTemplate("https://search.brave.com/search?q=%s"))
+        #expect(!MobileSearch.isValidTemplate("http://example.com/?q=%s"), "https only")
+        #expect(!MobileSearch.isValidTemplate("https://example.com/?q="), "needs %s")
+        #expect(!MobileSearch.isValidTemplate("https://example.com/%s?q=%s"), "one %s")
+        let brave = MobileSearch(.google, customTemplate: "https://search.brave.com/search?q=%s&source=web")
+        #expect(brave.label == "search.brave.com")
+        #expect(brave.searchURL("risotto & paella") == "https://search.brave.com/search?q=risotto%20%26%20paella&source=web")
+        #expect(brave.query(fromResultsURL: brave.searchURL("risotto & paella")) == "risotto & paella")
+        #expect(brave.query(fromResultsURL: "https://www.google.com/search?q=x") == nil)
+        #expect(brave.suggestURL("x") == nil)
+        let endless = MobileSearch(.google, customTemplate: "https://www.startpage.com/do/search?q=%s")
+        #expect(endless.label == "startpage.com")
+        #expect(endless.query(fromResultsURL: "https://www.startpage.com/do/search?q=cats&page=2") == "cats")
+        #expect(MobileSearch(.bing, customTemplate: "not an address %s") == .bing, "a bad address falls back")
+    }
+
+    @Test func settingsChooseTheCustomEngine() throws {
+        var settings = MobileSettings()
+        settings.customSearchURL = "https://search.brave.com/search?q=%s"
+        settings.searchChoice = .custom
+        #expect(settings.searchChoice == .custom && settings.search.label == "search.brave.com")
+        let saved = try JSONDecoder().decode(MobileSettings.self, from: JSONEncoder().encode(settings))
+        #expect(saved.searchChoice == .custom)
+        settings.searchChoice = .engine(.kagi)
+        #expect(settings.search == .kagi && settings.customSearchURL != nil, "the address is kept for later")
     }
 }

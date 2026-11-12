@@ -35,7 +35,7 @@ public enum MobileBrowseToggle {
 
     /// Which side a tab is showing and for what query: a Browse for Me tab (`tabAddress`), or the
     /// engine's results page for a search (`pageURL`). Nil anywhere else, where the switch is hidden.
-    public static func state(tabAddress: String, pageURL: String?, engine: MobileSearchEngine) -> (side: Side, query: String)? {
+    public static func state(tabAddress: String, pageURL: String?, engine: MobileSearch) -> (side: Side, query: String)? {
         if let query = MobileBrowseForMe.query(fromTabAddress: tabAddress), !query.isEmpty {
             return (.browseForMe, query)
         }

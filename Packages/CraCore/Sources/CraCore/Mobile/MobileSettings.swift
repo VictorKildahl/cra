@@ -124,22 +124,31 @@ public struct MobileSettings: Codable, Equatable {
     /// App Settings ▸ Languages: what Browse for Me, summaries and Translate answer in, as a
     /// language code; nil follows the iPhone's language.
     public var answerLanguage: String?
+    /// A custom search engine's address (`%s` for the query), and whether searches go there.
+    public var customSearchURL: String?
+    public var searchesWithCustom = false
 
     public init() {}
 
+    /// Where searches go now.
+    public var search: MobileSearch {
+        MobileSearch(searchEngine, customTemplate: searchesWithCustom ? customSearchURL : nil)
+    }
+
     /// The Search Engine row's value.
     public var searchChoice: MobileSearchChoice {
-        get { searchesWithBrowseForMe ? .browseForMe : .engine(searchEngine) }
+        get { searchesWithBrowseForMe ? .browseForMe : search.customTemplate != nil ? .custom : .engine(searchEngine) }
         set {
             switch newValue {
             case .browseForMe: searchesWithBrowseForMe = true
-            case .engine(let engine): searchesWithBrowseForMe = false; searchEngine = engine
+            case .engine(let engine): searchesWithBrowseForMe = false; searchesWithCustom = false; searchEngine = engine
+            case .custom: searchesWithBrowseForMe = false; searchesWithCustom = customSearchURL != nil
             }
         }
     }
 
     private enum CodingKeys: String, CodingKey {
-        case searchEngine, archiveAfter, opensKeyboardOnLaunch, openAppLinksIn, siteDefaults, siteOverrides, hasSeenOnboarding, searchesWithBrowseForMe, answerLanguage
+        case searchEngine, archiveAfter, opensKeyboardOnLaunch, openAppLinksIn, siteDefaults, siteOverrides, hasSeenOnboarding, searchesWithBrowseForMe, answerLanguage, customSearchURL, searchesWithCustom
     }
 
     public init(from decoder: Decoder) throws {
@@ -152,6 +161,8 @@ public struct MobileSettings: Codable, Equatable {
         siteOverrides = try c.decodeIfPresent([String: MobileSiteOverride].self, forKey: .siteOverrides) ?? [:]
         hasSeenOnboarding = try c.decodeIfPresent(Bool.self, forKey: .hasSeenOnboarding) ?? false
         searchesWithBrowseForMe = try c.decodeIfPresent(Bool.self, forKey: .searchesWithBrowseForMe) ?? false
+        customSearchURL = (try? c.decodeIfPresent(String.self, forKey: .customSearchURL)).flatMap { MobileSearch.isValidTemplate($0) ? $0 : nil }
+        searchesWithCustom = (try? c.decodeIfPresent(Bool.self, forKey: .searchesWithCustom)) ?? false
         answerLanguage = (try? c.decodeIfPresent(String.self, forKey: .answerLanguage)).flatMap { MobileLanguages.codes.contains($0) ? $0 : nil }
     }
 

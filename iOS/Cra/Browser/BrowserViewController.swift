@@ -319,7 +319,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     func searchSheet(_ sheet: SearchSheet, didChangeText text: String) {
-        let engine = settings.value.searchEngine
+        let engine = settings.value.search
         // Incognito keeps what is typed on the phone until Go, and leaves the phone's own pages out.
         let sites = incognitoSearch ? [] : knownSites()
         sheet.setRows(MobileSuggestions.rows(typed: text, completions: [], sites: sites, limit: MobileSearchSheet.listedRows))
@@ -344,7 +344,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     /// Where a typed or spoken search goes: an address opens, a search goes to the engine or makes
     /// a Browse for Me page.
     func searchDestination(_ typed: String) -> String {
-        MobileSuggestions.destination(forTyped: typed, engine: settings.value.searchEngine, browsesForMe: searchesWithBrowseForMe)
+        MobileSuggestions.destination(forTyped: typed, engine: settings.value.search, browsesForMe: searchesWithBrowseForMe)
     }
 
     func searchSheet(_ sheet: SearchSheet, didSubmit text: String) {
@@ -352,7 +352,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     func searchSheet(_ sheet: SearchSheet, didPick row: MobileSuggestions.Row) {
-        open(MobileSuggestions.destination(for: row, engine: settings.value.searchEngine, browsesForMe: searchesWithBrowseForMe))
+        open(MobileSuggestions.destination(for: row, engine: settings.value.search, browsesForMe: searchesWithBrowseForMe))
     }
 
     func searchSheet(_ sheet: SearchSheet, didPickFavorite site: MobileFavorites.Site) {
@@ -570,7 +570,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             let query = MobileBrowseForMe.query(fromSelection: question)
             guard !query.isEmpty else { return setSearching(true, incognito: false) }
             incognitoSearch = false
-            open(BrowseForMe.isAvailable ? MobileBrowseForMe.tabAddress(query: query) : settings.value.searchEngine.searchURL(query))
+            open(BrowseForMe.isAvailable ? MobileBrowseForMe.tabAddress(query: query) : settings.value.search.searchURL(query))
         case .voiceSearch:
             setSearching(false)
             beginVoiceSearch(handsFree: true)

@@ -905,3 +905,39 @@ final class LanguagesTests: BrowserTestCase {
         XCTAssertEqual(app.buttons["setting-languages"].label, "French")
     }
 }
+
+final class CustomSearchEngineTests: BrowserTestCase {
+    /// Search Engine ▸ Custom asks for an address with %s; Go then searches there.
+    func testACustomEngineTakesTheSearch() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["bar-settings"].waitForExistence(timeout: 5))
+        app.buttons["bar-settings"].tap()
+        let menu = app.buttons["setting-search-engine"]
+        XCTAssertTrue(app.buttons["setting-default-browser"].waitForExistence(timeout: 5))
+        for _ in 0..<3 where !menu.isHittable { app.swipeUp() }
+        menu.tap()
+        app.buttons["Custom"].firstMatch.tap()
+        let field = app.alerts.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "the address is asked for")
+        // The field starts with "https://".
+        field.tap()
+        field.typeText("custom.invalid/find?q=%s")
+        keep("custom-engine")
+        app.alerts.buttons["Save"].tap()
+        expectation(for: NSPredicate(format: "label == 'custom.invalid'"), evaluatedWith: menu)
+        waitForExpectations(timeout: 5)
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["tab-card-0"].waitForExistence(timeout: 5))
+        app.buttons["tab-card-0"].tap()
+        waitForPage("First")
+        app.buttons["bar-search"].tap()
+        app.textFields["search-field"].typeText("pizza ovens\n")
+        sleep(2)
+        // The address never loads (.invalid); the new tab is named by its site.
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["tab-card-1"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["tab-card-1"].label, "custom.invalid", "the search went to the custom engine")
+    }
+}

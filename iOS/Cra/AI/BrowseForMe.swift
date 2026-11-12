@@ -53,7 +53,7 @@ enum BrowseForMe {
 
     /// Runs the whole thing for `query`, reporting each step on the main actor.
     @MainActor
-    static func run(query: String, engine: MobileSearchEngine, progress: @escaping (Step) -> Void) async {
+    static func run(query: String, engine: MobileSearch, progress: @escaping (Step) -> Void) async {
         let hits: [MobileBrowseForMe.Hit]
         if LaunchOptions.fakeModel {
             // Tests get three made-up results and no network.

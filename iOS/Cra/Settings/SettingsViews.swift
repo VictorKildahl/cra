@@ -196,6 +196,8 @@ struct AppSettingsView: View {
 struct AppSettingsList: View {
     @ObservedObject var model: SettingsModel
     @State private var clearing = false
+    @State private var editingCustom = false
+    @State private var customAddress = ""
 
     private var version: String {
         let info = Bundle.main.infoDictionary
@@ -257,8 +259,17 @@ struct AppSettingsList: View {
             .settingsRow()
             Section {
                 ValueRow(label: SettingLabel(title: "Search Engine", symbol: "magnifyingglass", color: .blue),
-                         selection: model.binding(\.searchChoice),
-                         options: MobileSearchChoice.all(browseForMeAvailable: BrowseForMe.isAvailable), title: \.label)
+                         selection: Binding(get: { model.settings.searchChoice }, set: { choice in
+                             // Custom asks for its address first (and again to change it).
+                             if choice == .custom {
+                                 customAddress = model.settings.customSearchURL ?? "https://"
+                                 editingCustom = true
+                             } else {
+                                 model.update { $0.searchChoice = choice }
+                             }
+                         }),
+                         options: MobileSearchChoice.all(browseForMeAvailable: BrowseForMe.isAvailable),
+                         title: { $0 == .custom && model.settings.customSearchURL != nil ? model.settings.search.label : $0.label })
                     .accessibilityIdentifier("setting-search-engine")
                 ValueRow(label: SettingLabel(title: "Languages", symbol: "character.bubble.fill", color: .green),
                          selection: model.binding(\.answerLanguage),
@@ -301,6 +312,19 @@ struct AppSettingsList: View {
         }
         .settingsListStyle()
         .font(.system(size: 15))
+        .alert("Custom Search Engine", isPresented: $editingCustom) {
+            TextField("https://example.com/search?q=%s", text: $customAddress)
+                .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                .accessibilityIdentifier("custom-engine-address")
+            Button("Cancel", role: .cancel) {}
+            Button("Save") {
+                let address = customAddress.trimmingCharacters(in: .whitespaces)
+                guard MobileSearch.isValidTemplate(address) else { return }
+                model.update { $0.customSearchURL = address; $0.searchChoice = .custom }
+            }
+        } message: {
+            Text("The search page's address with %s where the search goes, such as https://search.brave.com/search?q=%s")
+        }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { model.done() }.fontWeight(.semibold) } }

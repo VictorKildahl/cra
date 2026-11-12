@@ -117,7 +117,7 @@ extension BrowserViewController {
     /// Works out which side the page on screen is (a Browse for Me tab, or the engine's results
     /// for a search) and lays the switch out again.
     func updateBrowseToggle() {
-        let engine = settings.value.searchEngine
+        let engine = settings.value.search
         if let page = shownPage, let tab = store.tabs.first(where: { $0.id == page.tabID }) {
             browseToggleState = MobileBrowseToggle.state(tabAddress: tab.url, pageURL: page.webView.url?.absoluteString, engine: engine)
         } else {
@@ -143,7 +143,7 @@ extension BrowserViewController {
         UISelectionFeedbackGenerator().selectionChanged()
         switch side {
         case .engine:
-            page.load(settings.value.searchEngine.searchURL(state.query))
+            page.load(settings.value.search.searchURL(state.query))
         case .browseForMe:
             store.update(page.tabID, url: MobileBrowseForMe.tabAddress(query: state.query), title: state.query)
             browse(for: state.query, in: page)
@@ -170,7 +170,7 @@ extension BrowserViewController {
         pageContainer.insertSubview(loading, belowSubview: pageDim)
         browseLoading?.removeFromSuperview()
         browseLoading = loading
-        let engine = settings.value.searchEngine
+        let engine = settings.value.search
         Task { @MainActor [weak self] in
             await BrowseForMe.run(query: query, engine: engine) { step in
                 switch step {

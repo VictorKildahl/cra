@@ -15,7 +15,7 @@ final class SuggestionService {
         session = URLSession(configuration: configuration)
     }
 
-    func completions(for typed: String, engine: MobileSearchEngine, done: @escaping ([String]) -> Void) {
+    func completions(for typed: String, engine: MobileSearch, done: @escaping ([String]) -> Void) {
         task?.cancel()
         let query = typed.trimmingCharacters(in: .whitespaces)
         if LaunchOptions.value("CraFakeSuggestions") == "YES" {

@@ -65,7 +65,7 @@ final class BrowseToggleView: UIView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
-    func configure(side: MobileBrowseToggle.Side, engine: MobileSearchEngine) {
+    func configure(side: MobileBrowseToggle.Side, engine: MobileSearch) {
         self.side = side
         engineLetter.text = String(engine.label.prefix(1))
         engineButton.accessibilityLabel = engine.label
