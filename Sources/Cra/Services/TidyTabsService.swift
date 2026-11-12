@@ -103,47 +103,43 @@ final class TidyTabsService {
         let loose = Array(store.tidyCandidates(sid).prefix(TidyTabs.maximumTabs))
         guard !loose.isEmpty else { return }
         let tabs = loose.map { item in
-            TidyTabs.Tab(title: item.displayTitle, host: item.tab.flatMap { URL(string: $0.url)?.host() } ?? "")
+            TidyTabs.Tab(id: item.id, title: item.displayTitle, host: item.tab.flatMap { URL(string: $0.url)?.host() } ?? "")
         }
         let groups = store.tabGroups(in: sid).map { TidyTabs.ExistingGroup(id: $0.id, name: $0.title ?? "") }
-        let ids = loose.map(\.id)
-        let prompt = TidyTabs.prompt(tabs: tabs, existingGroups: groups.map(\.name))
+        guard let request = TidyTabs.request(tabs: tabs, existingGroups: groups,
+                                             maximumBytes: TidyTabsModel.promptByteLimit) else { return }
         store.setTidying(sid, true)
         let started = Date()
         Task { @MainActor in
-            let proposals = await Self.ask(prompt)
+            let answer = await Self.ask(request)
             // Counts and time only: tab titles stay out of the log (it goes into diagnostics).
-            CraLog.note(String(format: "Tidy Tabs: %d tabs, %d groups proposed in %.1f s", tabs.count, proposals?.count ?? -1,
+            CraLog.note(String(format: "Tidy Tabs: %d tabs, %d groups proposed in %.1f s", answer?.request.tabs.count ?? request.tabs.count, answer?.proposals.count ?? -1,
                                Date().timeIntervalSince(started)))
             // The squiggle runs at least one full swing of the broom, so a quick answer doesn't flash.
             let rest = SidebarTidyMetrics.minimumRun - Date().timeIntervalSince(started)
             if rest > 0 { try? await Task.sleep(for: .seconds(rest)) }
             store.setTidying(sid, false)
-            guard let proposals else {
+            guard let answer else {
                 store.markTidied(sid)
                 return
             }
             // The list slides the tabs under their new headers (SpaceListView.placeViews).
-            store.applyTidy(TidyTabs.plan(proposals, tabCount: tabs.count, existingGroups: groups), tabIDs: ids, in: sid)
+            store.applyTidy(answer.request.plan(answer.proposals), tabIDs: answer.request.tabIDs, in: sid)
         }
     }
 
-    /// The model's groups, nil when it couldn't answer.
-    private static func ask(_ prompt: String) async -> [TidyTabs.Proposal]? {
-        if fakeModel { return await fakeAnswer(prompt) }
-        #if canImport(FoundationModels)
-        if #available(macOS 26.0, *) {
-            do {
-                let session = LanguageModelSession(instructions: TidyTabs.instructions)
-                let answer = try await session.respond(to: prompt, generating: TidyAnswer.self,
-                                                       options: GenerationOptions(sampling: .greedy))
-                return answer.content.groups.map { TidyTabs.Proposal(name: $0.name, tabs: $0.tabs) }
-            } catch {
-                CraLog.note("Tidy Tabs: the model failed: \(error)")
-                return nil
-            }
+    /// Failures stay distinct from a successful empty answer; the caller owns the UI outcome.
+    private static func ask(_ request: TidyTabs.Request) async -> TidyTabsModel.Answer? {
+        if fakeModel { return await fakeAnswer(request) }
+        do {
+            return try await TidyTabsModel.group(request)
+        } catch is CancellationError {
+            CraLog.note("Tidy Tabs: generation cancelled")
+        } catch TidyTabsModel.Failure.contextLimit {
+            CraLog.note("Tidy Tabs: context limit after bounded recovery")
+        } catch {
+            CraLog.note("Tidy Tabs: generation unavailable or failed")
         }
-        #endif
         return nil
     }
 
@@ -153,35 +149,17 @@ final class TidyTabsService {
 
     /// Groups tabs by site, named after it, after a model-like pause: enough to drive the UI in a
     /// test copy on a Mac without Apple Intelligence.
-    private static func fakeAnswer(_ prompt: String) async -> [TidyTabs.Proposal] {
+    private static func fakeAnswer(_ request: TidyTabs.Request) async -> TidyTabsModel.Answer {
         try? await Task.sleep(for: .seconds(1.6))
         var bySite: [String: [Int]] = [:]
         var order: [String] = []
-        for line in prompt.split(separator: "\n") {
-            guard let colon = line.firstIndex(of: ":"), let id = Int(line[..<colon]),
-                  let open = line.lastIndex(of: "("), line.hasSuffix(")") else { continue }
-            let site = String(line[line.index(after: open)..<line.index(before: line.endIndex)])
+        for (id, tab) in request.tabs.enumerated() {
+            let site = tab.host.isEmpty ? "Tabs" : tab.host
             if bySite[site] == nil { order.append(site) }
             bySite[site, default: []].append(id)
         }
-        return order.map { TidyTabs.Proposal(name: $0.replacingOccurrences(of: "www.", with: ""), tabs: bySite[$0] ?? []) }
+        return TidyTabsModel.Answer(request: request, proposals: order.map {
+            TidyTabs.Proposal(name: $0.replacingOccurrences(of: "www.", with: ""), tabs: bySite[$0] ?? [])
+        })
     }
 }
-
-#if canImport(FoundationModels)
-@available(macOS 26.0, *)
-@Generable
-struct TidyAnswer {
-    @Guide(description: "The groups, each with a name and the ids of its tabs")
-    var groups: [TidyGroup]
-}
-
-@available(macOS 26.0, *)
-@Generable
-struct TidyGroup {
-    @Guide(description: "What the tabs have in common, in one or two words, like a folder name: 'Planets', 'Trip to Lisbon', 'Cra Pull Requests'")
-    var name: String
-    @Guide(description: "Ids of every tab that belongs in this group")
-    var tabs: [Int]
-}
-#endif

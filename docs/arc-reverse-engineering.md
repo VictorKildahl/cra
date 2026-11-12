@@ -3771,6 +3771,22 @@ Apple Intelligence is on, so it's free and nothing leaves the Mac).
   The answer becomes `SidebarItemData.tabGroup(SidebarTabGroup { title })` items in the unpinned container,
   the tabs their children: in StorableSidebar, `"data": {"tabGroup": {"title": "Planets"}}` (an empty `{}`
   fails to decode and Arc drops the item with its tabs). Undo string "Undo prompt for tidying explore tabs".
+- [O decoded, 12 Nov 2026] The full grouping system instruction was recovered from `0x104663278`
+  (1089 bytes), decoded by the request builder's `0x1007fb3a8` repeating XOR with key
+  `ObfuscatorString` (`0x1039b0260`). Decoded SHA-256:
+  `065d06b349870dc5e94c6731b3ac8719cc457fa8020ab0f3de4f3f6d652a032f`.
+  It groups by shared keywords, domain, website purpose and referring tab, permits a tab in a group
+  of its own, and imposes no 2–6 group count. The six static output pairs at `0x1046636d0`,
+  `0x104663718`, `0x104663760`, `0x1046637a8`, `0x1046637f0`, `0x104663838` assign two cinema tabs
+  to Movies, three shopping tabs to Toaster Shopping, and only `calendar.google.com/0` to Calendar.
+  This establishes a singleton instruction/example, not the unrecovered final native validator.
+  Reproduction, byte hashes and exact text: `/Users/varunaditya/Desktop/arc-decomp/scripts/decode_tidy_tabs_prompt.py`,
+  `inventory/ai/tidy-tabs-system-prompt.txt`, `inventory/ai/tidy-tabs-prompt-decoding.json` and
+  `reports/tidy-tabs-prompt-evidence.md` under that evidence directory. Independent review verified
+  Mach-O mapping and bytes rather than trusting the report. CRA adapts the examples to integer IDs
+  and guided groups, quotes titles as data, omits referring-tab arrows (no captured referral field),
+  and retains its existing-name reuse as a separately bounded extension. Normal titles have no added
+  host suffix; an empty title can use its bounded host as fallback.
 - [O static] UnpinnedSectionHeaderCellView: stackView, tidyButton (SidebarTidyButton: imageView "broom-stick",
   a 14 pt template SVG in ARCClients_BaseAssets, label, divider), clearButton, downArrowImage, borderView,
   squiggleView. SquiggleDivider (viewModel, height, amplitudeAnimationDuration) over SquiggleViewModel (period,

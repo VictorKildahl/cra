@@ -62,6 +62,7 @@ enum StoreTests {
         tidyTabs()
         tidyExistingGroupIdentity()
         tidyConsideredSnapshots()
+        tidySingletonGroups()
         pinHook()
         dropOnPinnedTabSplits()
         reopenClosedTabs()
@@ -1772,6 +1773,38 @@ enum StoreTests {
                    "request prioritization never reorders the visible loose tabs")
             expect(store.integrityProblems().isEmpty, "fitted request convergence preserves sidebar integrity")
         }
+    }
+
+    /// Arc's decoded singleton example must survive live filtering, undo and empty-header pruning.
+    @MainActor
+    private static func tidySingletonGroups() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let space = store.createSpace(title: "Singleton tidy", emoji: "🧹")
+        for i in 0..<6 { store.createTab(url: "https://example.org/singleton/\(i)", in: space.id, select: false) }
+        let original = store.looseTodayTabs(space.id).map(\.id)
+        let calendar = TidyTabs.Plan(newGroups: [.init(name: "Calendar", tabs: [0])], joins: [:])
+        store.applyTidy(calendar, tabIDs: original, in: space.id)
+        var groups = store.tabGroups(in: space.id)
+        expect(groups.count == 1 && groups[0].children == [original[0]], "a live singleton assignment creates its named header")
+        expect(store.undoTidy() && store.tabGroups(in: space.id).isEmpty
+               && store.item(space.todayContainerID)?.children == original,
+               "undo restores exact loose order and prunes the new singleton header")
+        let pair = TidyTabs.Plan(newGroups: [.init(name: "Survivor", tabs: [0, 1])], joins: [:])
+        store.archiveTab(original[0], reason: .manual)
+        store.applyTidy(pair, tabIDs: original, in: space.id)
+        groups = store.tabGroups(in: space.id)
+        expect(groups.count == 1 && groups[0].children == [original[1]], "one eligible survivor of a pair still forms a valid group")
+        let groupID = groups[0].id
+        store.archiveTab(original[1], reason: .manual)
+        expect(store.item(groupID) == nil && store.tabGroups(in: space.id).isEmpty, "closing the sole member prunes its empty header")
+        store.applyTidy(pair, tabIDs: original, in: space.id)
+        expect(store.tabGroups(in: space.id).isEmpty, "zero surviving eligible members never create an empty header")
+        store.applyTidy(calendar, tabIDs: [original[2]], in: space.id)
+        let removedHeader = store.tabGroups(in: space.id)[0].id
+        store.removeGroupHeader(removedHeader)
+        expect(store.item(removedHeader) == nil && store.item(original[2])?.parentID == space.todayContainerID,
+               "Remove header leaves a singleton loose and prunes its former header")
+        expect(store.integrityProblems().isEmpty, "singleton application, undo and pruning preserve sidebar integrity")
     }
 
     /// Tidy Tab Titles hears of a tab pinned from elsewhere, once, and only while it has no name.

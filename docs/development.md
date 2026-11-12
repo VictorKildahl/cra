@@ -125,6 +125,9 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-window-content-grabber.sh`: the page-top grabber on AppKit windows:
   clicks reach the page immediately, non-arrow cursors keep the gesture, native resize edges and rounded corners stay free,
   a child page's drag starts in its browser window's coordinates, and the page stays outside WindowServer's native drag region.
+- `scripts/test-tidy-tabs-model.sh`: Tidy Tabs' production Foundation Models adapter and guided schema,
+  including reduced-request mapping, exactly one context-overflow retry and propagated failure/cancellation.
+  `--real` additionally runs synthetic samples on an available local model; fake checks do not establish quality.
 - `scripts/test-link-summary-share.sh`: 5-Second Previews' Copy as Image (`LinkSummaryShareImage`)
   against Arc's own copy of a card: size at 3x, the picture's inset, the dashed line's pattern and place,
   the footer colour.

@@ -2118,7 +2118,7 @@ final class SidebarStore {
         }
         // Prompt priority can differ from Today order; it must not reorder the resulting rows.
         let proposals = plan.newGroups.map { (name: $0.name, tabs: ids($0.tabs)) }
-            .filter { $0.tabs.count >= 2 }
+            .filter { !$0.tabs.isEmpty }
             .sorted { looseOrder[$0.tabs[0]]! < looseOrder[$1.tabs[0]]! }
         var newGroups: [UUID] = []
         for p in proposals {
