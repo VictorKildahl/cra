@@ -142,7 +142,7 @@ the real app on an iPhone has to be recorded before then.
 | Arc Search | Cra | Notes |
 |---|---|---|
 | Default browser | partial | Declares http/https; the `com.apple.developer.web-browser` entitlement needs Apple's approval. |
-| Widgets (small, medium, Lock Screen) | partial | `iOS/CraWidgets`: small (mark and a search field), medium (search field, Voice, Spaces), Lock Screen circular and rectangular. Built and embedded; not looked at in the widget gallery yet. Arc Search's own widget was seen only as a small picture. |
+| Widgets (small, medium, Lock Screen) | partial | `iOS/CraWidgets`, looked at in the simulator's widget gallery. Small is Arc Search's, from 60fps.design's "Add Widget" clip: the indigo-to-pink gradient, the mark at the top left, the white Search capsule running off the right edge, voice and Spaces buttons along the bottom (their own links through `OpenURLIntent` on iOS 18; the whole widget searches before that). Medium (Arc Search's not seen) has the same parts with Voice and Spaces labelled; Lock Screen circular and rectangular. Arc Search's "Bring Arc to your home screen" walkthrough sheet is not built. |
 | App Shortcuts, quick actions | done | "Search with Cra" and "Voice Search with Cra" for Siri, Spotlight and the Action button (`AppShortcuts.swift`); home-screen quick actions Change App Icon, Voice Search, Search. Not exercised by a test: they are started from outside the app. |
 | iPad layout | partial | Runs; nothing iPad-specific. |
 | Landscape | partial | Rotates; not checked. |

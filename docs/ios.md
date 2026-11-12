@@ -107,3 +107,11 @@ read-change-write); the app takes it each time it becomes active (`SharedLinks.s
 can put a link in the inbox as the extension would with `-CraFakeShare <url>` (and
 `-CraFakeShareTo favorites`). Signing registers the App Group through the API key, like the
 iCloud container.
+
+## Looking at the widgets
+
+A UI test can open the simulator's widget gallery: `XCUIDevice.shared.press(.home)`, then on
+`XCUIApplication(bundleIdentifier: "com.apple.springboard")` long-press an empty spot, tap Edit,
+Add Widget, type "Cra" into the gallery's search field, tap the result and take screenshots
+(swipe left for the medium one). Keep such a test out of the suite: it leaves the home screen in
+edit mode.
