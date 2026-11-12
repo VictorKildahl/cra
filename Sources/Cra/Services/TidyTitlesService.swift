@@ -31,19 +31,57 @@ final class TidyTitlesService {
     static let subtitleShown: TimeInterval = 3.65
     static let subtitle = "Double-click to rename"
 
-    @ObservationIgnored private var pending: Set<UUID> = []
+    private struct Request {
+        let token = UUID()
+        let shown: String
+        let homeURL: String
+        let windowID: UUID
+        let started: Date
+        var task: Task<Void, Never>?
+        var reveal: ScheduledWork?
+        var expiry: ScheduledWork?
+
+        @MainActor func cancel() {
+            task?.cancel()
+            reveal?.cancel()
+            expiry?.cancel()
+        }
+    }
+
+    @ObservationIgnored private var requests: [UUID: Request] = [:]
     @ObservationIgnored private let titleLayout: @MainActor (UUID, UUID) -> TidyTitleLayout?
+    @ObservationIgnored private let generate: @MainActor (String, String) async -> TidyTitles.Answer?
+    @ObservationIgnored private let modelAvailable: @MainActor () -> Bool
 
     init(titleLayout: @escaping @MainActor (UUID, UUID) -> TidyTitleLayout? = { id, window in
         SpaceListView.tidyTitleLayout(for: id, window: window)
-    }) {
+    }, generate: @escaping @MainActor (String, String) async -> TidyTitles.Answer? = { prompt, title in
+        await TidyTitlesService.ask(prompt, title: title)
+    }, modelAvailable: @escaping @MainActor () -> Bool = { TidyTabsService.shared.modelAvailable }) {
         self.titleLayout = titleLayout
+        self.generate = generate
+        self.modelAvailable = modelAvailable
+    }
+
+    deinit {
+        let pending = Array(requests.values)
+        pending.forEach { $0.task?.cancel() }
+        Task { @MainActor in pending.forEach { $0.cancel() } }
+    }
+
+    /// Disabling the feature invalidates work before asking its tasks/timers to stop.
+    func cancelAll() {
+        let pending = Array(requests.values)
+        requests.removeAll()
+        effects.removeAll()
+        pending.forEach { $0.cancel() }
     }
 
     /// The store saw a tab pinned. Ask for a name if the setting is on and the model can run.
     func tabPinned(_ id: UUID, store: SidebarStore) {
-        guard store.settings.tidyTabTitles, TidyTabsService.shared.modelAvailable, !pending.contains(id),
-              let item = store.item(id), item.title == nil, let tab = item.tab, !item.isEmptyTab else { return }
+        guard store.settings.tidyTabTitles, modelAvailable(), requests[id] == nil,
+              let item = store.item(id), item.title == nil, let tab = item.tab,
+              !item.isEmptyTab, store.isPinned(id) else { return }
         let shown = TidyTitleRules.arc.tidy(item.displayTitle, url: tab.url)
         let title = item.displayTitle
         let language = Locale.preferredLanguages.first.flatMap {
@@ -51,27 +89,64 @@ final class TidyTitlesService {
         } ?? "English"
         let prompt = TidyTitles.prompt(title: title, url: tab.url, language: language)
         // Programmatic pins fall back to the store's active window at pin time.
-        let originWindowID = store.activeWindowID
-        pending.insert(id)
-        let started = Date()
-        Task { @MainActor in
-            defer { pending.remove(id) }
-            let answer = await Self.ask(prompt, title: title)
-            let rest = Self.delayAfterPin - Date().timeIntervalSince(started)
-            if rest > 0 { try? await Task.sleep(for: .seconds(rest)) }
-            let candidates = answer.map(TidyTitles.candidates) ?? []
-            let layout = titleLayout(id, originWindowID) ?? .fallback
-            // Only if nothing changed meanwhile: still pinned, still unnamed, same page title.
-            guard let name = layout.select(candidates, shown: shown),
-                  let now = store.item(id), now.title == nil, store.isPinned(id),
-                  now.tab.map({ TidyTitleRules.arc.tidy(now.displayTitle, url: $0.url) }) == shown else { return }
-            store.rename(id, to: name)
-            let effect = Effect(oldTitle: shown, start: Date())
-            effects[id] = effect
-            CraLog.note("Tidy Tab Titles: renamed a pinned tab (\(shown.count) → \(name.count) characters)")
-            try? await Task.sleep(for: .seconds(Self.subtitleShown))
-            if effects[id]?.token == effect.token { effects[id] = nil }
+        let request = Request(shown: shown, homeURL: tab.savedURL,
+                              windowID: store.activeWindowID, started: store.clock.now)
+        requests[id] = request
+        let generate = self.generate
+        requests[id]?.task = Task { @MainActor [weak self, weak store] in
+            guard !Task.isCancelled, self?.requests[id]?.token == request.token, store != nil else { return }
+            let answer = await generate(prompt, title)
+            guard !Task.isCancelled else { self?.finish(id, token: request.token); return }
+            self?.generated(answer, for: id, token: request.token, store: store)
         }
+    }
+
+    private func generated(_ answer: TidyTitles.Answer?, for id: UUID, token: UUID, store: SidebarStore?) {
+        guard let request = requests[id], request.token == token else { return }
+        requests[id]?.task = nil
+        guard let answer, let store else { finish(id, token: token); return }
+        let remaining = Self.delayAfterPin - store.clock.now.timeIntervalSince(request.started)
+        if remaining > 0 {
+            requests[id]?.reveal = store.clock.after(remaining) { [weak self, weak store] in
+                self?.apply(answer, to: id, token: token, store: store)
+            }
+        } else {
+            apply(answer, to: id, token: token, store: store)
+        }
+    }
+
+    private func apply(_ answer: TidyTitles.Answer, to id: UUID, token: UUID, store: SidebarStore?) {
+        guard let request = requests[id], request.token == token else { return }
+        requests[id]?.reveal = nil
+        let now = store?.item(id)
+        let shown = now.flatMap { item in
+            item.tab.map { TidyTitleRules.arc.tidy(item.displayTitle, url: $0.url) }
+        }
+        guard let store,
+              TidyTitles.canApply(enabled: store.settings.tidyTabTitles,
+                                  pinned: store.isPinned(id), customTitle: now?.title,
+                                  shown: shown, originalShown: request.shown,
+                                  homeURL: now?.tab?.savedURL, originalHomeURL: request.homeURL) else {
+            finish(id, token: token)
+            return
+        }
+        let layout = titleLayout(id, request.windowID) ?? .fallback
+        guard let name = layout.select(TidyTitles.candidates(answer), shown: request.shown) else {
+            finish(id, token: token)
+            return
+        }
+        store.rename(id, to: name)
+        effects[id] = Effect(token: token, oldTitle: request.shown, start: store.clock.now)
+        CraLog.note("Tidy Tab Titles: renamed a pinned tab (\(request.shown.count) → \(name.count) characters)")
+        requests[id]?.expiry = store.clock.after(Self.subtitleShown) { [weak self] in
+            self?.finish(id, token: token)
+        }
+    }
+
+    private func finish(_ id: UUID, token: UUID) {
+        guard requests[id]?.token == token, let request = requests.removeValue(forKey: id) else { return }
+        request.cancel()
+        if effects[id]?.token == token { effects[id] = nil }
     }
 
     private static func ask(_ prompt: String, title: String) async -> TidyTitles.Answer? {
@@ -82,6 +157,8 @@ final class TidyTitlesService {
                 let session = LanguageModelSession(instructions: TidyTitles.instructions)
                 let r = try await session.respond(to: prompt, generating: TidyTitleAnswer.self, options: GenerationOptions(sampling: .greedy))
                 return TidyTitles.Answer(filtered: r.content.filtered, rewritten: r.content.rewritten)
+            } catch is CancellationError {
+                return nil
             } catch {
                 CraLog.note("Tidy Tab Titles: the model failed: \(error)")
                 return nil

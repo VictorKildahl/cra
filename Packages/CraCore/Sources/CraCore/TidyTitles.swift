@@ -77,6 +77,12 @@ public enum TidyTitles {
         windowID == originWindowID && hasWindow && showsNewTab
     }
 
+    /// A pinned name describes its home, so ordinary navigation alone does not invalidate it.
+    public static func canApply(enabled: Bool, pinned: Bool, customTitle: String?,
+                                shown: String?, originalShown: String, homeURL: String?, originalHomeURL: String) -> Bool {
+        enabled && pinned && customTitle == nil && shown == originalShown && homeURL == originalHomeURL
+    }
+
     static func host(_ url: String) -> String {
         guard let h = URL(string: url)?.host?.lowercased() else { return "" }
         return h.hasPrefix("www.") ? String(h.dropFirst(4)) : h

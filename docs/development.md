@@ -90,6 +90,7 @@ the save panel.
     scripts/test.sh core             # only Packages/CraCore
     scripts/test-folder-glyph.sh      # folder emblems: layer projection, colors and Retina resolution
     scripts/test-tidy-title-layout.sh # pinned title candidates: native font, padding and current width
+    scripts/test-tidy-titles.sh       # pinned title requests: cancellation, ownership and reveal timing
     Tests/smoke-launch.sh            # launches build/Cra.app three times, about 30 s
     scripts/scenario.sh all          # user journeys in build/Cra.app, about 6 minutes
     scripts/scenario.sh sleep-tabs   # one of them (Tests/Scenarios/<name>.scenario)
@@ -126,6 +127,9 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-tidy-title-layout.sh`: native pinned-title measurement against the current text
   field's font and drawable width, including resize, competing Library/other-window sources and
   unmaterialized-row fallback. No CEF or visible window.
+- `scripts/test-tidy-titles.sh`: the production pinned-title service and sidebar store on a manual
+  clock with deferred model responses: opt-out, request ownership, home/manual-name guards and
+  reveal/expiry timing. `owner` runs just the stale-request ownership regression. No CEF or visible window.
 - `scripts/test-window-content-grabber.sh`: the page-top grabber on AppKit windows:
   clicks reach the page immediately, non-arrow cursors keep the gesture, native resize edges and rounded corners stay free,
   a child page's drag starts in its browser window's coordinates, and the page stays outside WindowServer's native drag region.

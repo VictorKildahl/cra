@@ -140,4 +140,21 @@ struct TidyTitlesTests {
         #expect(TidyTitles.select([("First", 30), ("Other", 20)], availableWidth: 30, shown: " first ") == nil,
                 "An unchanged best candidate does not force a different rename")
     }
+
+    @Test func completionProtectsCurrentUserAndHomeState() {
+        let rows: [(enabled: Bool, pinned: Bool, title: String?, shown: String?, home: String?, expected: Bool)] = [
+            (true, true, nil, "Original", "home", true),
+            (false, true, nil, "Original", "home", false),
+            (true, false, nil, "Original", "home", false),
+            (true, true, "Mine", "Original", "home", false),
+            (true, true, nil, "Changed", "home", false),
+            (true, true, nil, nil, nil, false),
+            (true, true, nil, "Original", "replacement", false),
+        ]
+        for row in rows {
+            #expect(TidyTitles.canApply(enabled: row.enabled, pinned: row.pinned, customTitle: row.title,
+                                        shown: row.shown, originalShown: "Original",
+                                        homeURL: row.home, originalHomeURL: "home") == row.expected)
+        }
+    }
 }

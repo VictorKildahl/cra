@@ -36,6 +36,7 @@ if [ "${1:-}" != core ]; then
   suite "Command bar glyph" scripts/test-command-bar-glyph.sh
   suite "Folder glyph" scripts/test-folder-glyph.sh
   suite "Tidy title layout" scripts/test-tidy-title-layout.sh
+  suite "Tidy title requests" scripts/test-tidy-titles.sh
   suite "Music notes pixels" scripts/test-music-notes.sh
   suite "Live folder plugins" scripts/test-live-folder-plugins.sh
   suite "Key bindings" scripts/test-key-bindings.sh
