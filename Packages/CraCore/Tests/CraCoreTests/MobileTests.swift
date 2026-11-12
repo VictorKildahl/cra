@@ -595,3 +595,21 @@ struct MobileMotionTests {
         #expect(!MobileMotion.opensSwitcher(dragUp: 40, velocityUp: 100))
     }
 }
+
+struct MobileOnboardingTests {
+    @Test func theStepsFollowArcSearchsOrderAndSkipAIWhereThereIsNone() {
+        #expect(MobileOnboarding.steps(canUseAI: true) == [.welcome, .meet, .browseForMe, .icon, .blocking, .defaultBrowser])
+        #expect(MobileOnboarding.steps(canUseAI: false) == [.welcome, .meet, .icon, .blocking, .defaultBrowser])
+        #expect(MobileOnboarding.buttonTitle(for: .welcome) == "Next")
+        #expect(MobileOnboarding.buttonTitle(for: .blocking) == "Let’s go")
+        #expect(MobileOnboarding.cards.map(\.title) == ["Protect your privacy", "Auto-archives old tabs", "Keep your logins", "Navigate faster"])
+    }
+
+    @Test func iconsMapToTheirAlternateNames() {
+        #expect(MobileAppIcon.allCases.map(\.alternateName) == [nil, "AppIcon-Midnight", "AppIcon-Mono", "AppIcon-Violet"])
+        #expect(MobileAppIcon(alternateName: "AppIcon-Violet") == .violet)
+        #expect(MobileAppIcon(alternateName: nil) == .segments)
+        #expect(MobileAppIcon(alternateName: "Gone") == .segments)
+        #expect(MobileAppIcon.mono.previewName == "AppIcon-Mono-Preview")
+    }
+}

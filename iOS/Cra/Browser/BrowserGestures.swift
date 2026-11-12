@@ -266,34 +266,52 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
     @objc func pillHeld(_ hold: UILongPressGestureRecognizer) {
         switch hold.state {
         case .began:
-            guard voiceOverlay == nil, !isSearching else { return }
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-            let overlay = VoiceOverlayView(frame: view.bounds)
-            overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            view.addSubview(overlay)
-            overlay.appear()
-            voiceOverlay = overlay
-            let voice = VoiceSearch()
-            voice.onTranscript = { [weak overlay] in overlay?.setTranscript($0) }
-            voice.onLevel = { [weak overlay] in overlay?.setLevel($0) }
-            voice.onFailure = { [weak overlay] failure in
-                overlay?.setMessage(failure == .denied ? "Allow the microphone and speech recognition in Settings to search by voice."
-                                                       : "Voice search needs on-device speech recognition, which this iPhone doesn't have for your language.")
-            }
-            self.voice = voice
-            voice.start()
-        case .ended, .cancelled, .failed:
-            guard let overlay = voiceOverlay else { return }
-            let heard = voice?.stop() ?? ""
-            voice = nil
-            voiceOverlay = nil
-            overlay.disappear()
-            guard hold.state == .ended, !heard.isEmpty else { return }
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-            incognitoSearch = store.selected?.isIncognito ?? false
-            open(MobileSuggestions.destination(forTyped: heard, engine: settings.value.searchEngine))
+            guard !isSearching else { return }
+            beginVoiceSearch(handsFree: false)
+        case .ended:
+            endVoiceSearch(searching: true)
+        case .cancelled, .failed:
+            endVoiceSearch(searching: false)
         default: break
         }
+    }
+
+    /// Starts listening under the voice overlay. Held, it ends when the pill is let go; hands
+    /// free (a shortcut, a quick action), a tap on the overlay ends it.
+    func beginVoiceSearch(handsFree: Bool) {
+        guard voiceOverlay == nil else { return }
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        let overlay = VoiceOverlayView(frame: view.bounds)
+        overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        if handsFree { overlay.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(voiceOverlayTapped))) }
+        view.addSubview(overlay)
+        overlay.appear()
+        voiceOverlay = overlay
+        let voice = VoiceSearch()
+        voice.onTranscript = { [weak overlay] in overlay?.setTranscript($0) }
+        voice.onLevel = { [weak overlay] in overlay?.setLevel($0) }
+        voice.onFailure = { [weak overlay] failure in
+            overlay?.setMessage(failure == .denied ? "Allow the microphone and speech recognition in Settings to search by voice."
+                                                   : "Voice search needs on-device speech recognition, which this iPhone doesn't have for your language.")
+        }
+        self.voice = voice
+        voice.start()
+    }
+
+    @objc func voiceOverlayTapped() {
+        endVoiceSearch(searching: true)
+    }
+
+    func endVoiceSearch(searching: Bool) {
+        guard let overlay = voiceOverlay else { return }
+        let heard = voice?.stop() ?? ""
+        voice = nil
+        voiceOverlay = nil
+        overlay.disappear()
+        guard searching, !heard.isEmpty else { return }
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        incognitoSearch = store.selected?.isIncognito ?? false
+        open(MobileSuggestions.destination(forTyped: heard, engine: settings.value.searchEngine))
     }
 
     // MARK: Holding the up arrow

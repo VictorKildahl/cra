@@ -12,6 +12,7 @@ final class SettingsModel: ObservableObject {
     var showArchive: () -> Void = {}
     var clearData: (_ history: Bool, _ siteData: Bool) -> Void = { _, _ in }
     var exportData: () -> Void = {}
+    var showOnboarding: () -> Void = {}
     var done: () -> Void = {}
 
     init(store: MobileSettingsStore, host: String?, canSummarize: Bool) {
@@ -252,6 +253,13 @@ struct AppSettingsList: View {
             }
             .settingsRow()
             Section {
+                NavigationLink { AppIconPicker() } label: {
+                    SettingLabel(title: "App Icon", symbol: "app.fill", color: .pink)
+                }
+                .accessibilityIdentifier("setting-app-icon")
+            }
+            .settingsRow()
+            Section {
                 Button("Clear Browsing Data...") { clearing = true }
                     .foregroundStyle(.primary)
                     .accessibilityIdentifier("setting-clear-data")
@@ -265,6 +273,9 @@ struct AppSettingsList: View {
                     .foregroundStyle(.primary)
                 Link("Privacy Policy", destination: URL(string: "https://crabrowser.app/privacy")!)
                     .foregroundStyle(.primary)
+                Button("Show Onboarding") { model.showOnboarding() }
+                    .foregroundStyle(.primary)
+                    .accessibilityIdentifier("setting-show-onboarding")
             } footer: {
                 Text(version).frame(maxWidth: .infinity).padding(.top, 12)
             }

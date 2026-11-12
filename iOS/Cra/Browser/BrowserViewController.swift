@@ -81,6 +81,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         let center = NotificationCenter.default
         center.addObserver(self, selector: #selector(keyboardWillChange(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
         center.addObserver(self, selector: #selector(appWillResignActive), name: UIApplication.willResignActiveNotification, object: nil)
+        center.addObserver(self, selector: #selector(performLaunchAction), name: LaunchAction.notification, object: nil)
 
         ContentBlocker.shared.prepare()
         store.archiveStale(after: settings.value.archiveAfter)
@@ -91,8 +92,15 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         // Arc Search opens ready to type: the sheet comes up with the keyboard on launch.
+        if !didOfferSearchOnLaunch, !didShowOnboarding, LaunchOptions.showsOnboarding(seen: settings.value.hasSeenOnboarding),
+           presentedViewController == nil {
+            // First launch: onboarding first; the search sheet comes up when it is done.
+            didShowOnboarding = true
+            return showOnboarding()
+        }
         if !didOfferSearchOnLaunch {
             didOfferSearchOnLaunch = true
+            if LaunchAction.pending != nil { return performLaunchAction() }
             let wantsSearch = (settings.value.opensKeyboardOnLaunch && !LaunchOptions.skipsSearch) || store.selected == nil
             if wantsSearch { setSearching(true, incognito: false) }
             if LaunchOptions.showsVoiceOverlay {
@@ -113,6 +121,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     var didOfferSearchOnLaunch = false
     var didSummarizeFirstPage = false
+    var didShowOnboarding = false
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
@@ -430,6 +439,58 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         setSearching(true, incognito: false)
     }
 
+    // MARK: Onboarding and launch actions
+
+    func showOnboarding() {
+        let model = OnboardingModel(canUseAI: BrowseForMe.isAvailable, icon: MobileAppIcon(alternateName: UIApplication.shared.alternateIconName))
+        model.setIcon = { AppIconPicker.apply($0) }
+        model.openDefaultBrowserSettings = {
+            if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+        }
+        model.finish = { [weak self] blocks in
+            guard let self else { return }
+            self.settings.update {
+                $0.hasSeenOnboarding = true
+                $0.siteDefaults.blockAds = blocks
+                $0.siteDefaults.blockTrackers = blocks
+            }
+            self.topPresenter.dismiss(animated: true) {
+                // Now the app opens as it always will: ready to type.
+                if !self.didOfferSearchOnLaunch {
+                    self.didOfferSearchOnLaunch = true
+                    self.setSearching(true, incognito: false)
+                }
+            }
+        }
+        let host = UIHostingController(rootView: OnboardingView(model: model))
+        host.modalPresentationStyle = .fullScreen
+        host.isModalInPresentation = true
+        topPresenter.present(host, animated: presentedViewController != nil)
+    }
+
+    /// A quick action, shortcut or Siri request, once the browser is on screen.
+    @objc func performLaunchAction() {
+        guard isViewLoaded, view.window != nil, let action = LaunchAction.pending else { return }
+        LaunchAction.pending = nil
+        didOfferSearchOnLaunch = true
+        switch action {
+        case .search(let query):
+            if let query, !query.trimmingCharacters(in: .whitespaces).isEmpty {
+                incognitoSearch = false
+                open(MobileSuggestions.destination(forTyped: query, engine: settings.value.searchEngine))
+            } else {
+                setSearching(true, incognito: false)
+            }
+        case .voiceSearch:
+            setSearching(false)
+            beginVoiceSearch(handsFree: true)
+        case .changeIcon:
+            let picker = UINavigationController(rootViewController: UIHostingController(rootView: AppIconPicker()))
+            picker.sheetPresentationController?.detents = [.medium(), .large()]
+            topPresenter.present(picker, animated: true)
+        }
+    }
+
     // MARK: Spaces
 
     /// The Mac's Spaces, from the tab row's left button. A tap on a tab there opens it here.
@@ -480,6 +541,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         let model = SettingsModel(store: settings, host: host, canSummarize: BrowseForMe.isAvailable)
         model.done = { [weak self] in self?.dismiss(animated: true) }
         model.showArchive = { [weak self] in self?.showArchive() }
+        model.showOnboarding = { [weak self] in self?.showOnboarding() }
         model.exportData = { [weak self] in
             guard let self else { return }
             let share = UIActivityViewController(activityItems: [self.store.document.exportText], applicationActivities: nil)

@@ -515,3 +515,40 @@ final class VoiceSearchTests: BrowserTestCase {
         XCTAssertFalse(app.otherElements["voice-overlay"].exists)
     }
 }
+
+final class OnboardingTests: BrowserTestCase {
+    /// First launch walks through Arc Search's steps; the blocking switch decides the global
+    /// blockers, and afterwards the app is ready to type.
+    func testOnboardingWalksThroughAndLeavesTheAppReadyToType() {
+        launch(["-CraOnboarding", "YES", "-CraFakeModel", "YES"])
+        let next = app.buttons["onboarding-next"]
+        XCTAssertTrue(next.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Get what you want twice as fast."].exists)
+        keep("onboarding-welcome")
+        next.tap()
+        XCTAssertTrue(app.staticTexts["Meet your new favorite browser"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["No more virtual dust bunnies"].exists)
+        sleep(1)
+        keep("onboarding-meet")
+        next.tap()
+        // The device can answer (the canned model), so Browse for Me gets its step.
+        XCTAssertTrue(app.staticTexts["Let Cra search and summarize for you"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["things to do in paris"].exists)
+        sleep(1)
+        keep("onboarding-browse")
+        next.tap()
+        XCTAssertTrue(app.staticTexts["Pick an icon for your home screen"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["icon-violet"].exists)
+        sleep(1)
+        keep("onboarding-icon")
+        next.tap()
+        XCTAssertTrue(app.staticTexts["Get what you need, without the noise"].waitForExistence(timeout: 3))
+        XCTAssertEqual(next.label, "Let’s go")
+        app.switches["onboarding-blocking"].switches.firstMatch.tap()
+        next.tap()
+        XCTAssertTrue(app.buttons["onboarding-skip"].waitForExistence(timeout: 3))
+        app.buttons["onboarding-skip"].tap()
+        XCTAssertTrue(app.textFields["search-field"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+    }
+}

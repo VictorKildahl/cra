@@ -18,6 +18,17 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             browser.loadViewIfNeeded()
             browser.open(url)
         }
+        if let item = connectionOptions.shortcutItem, let action = LaunchAction(shortcutType: item.type) {
+            LaunchAction.pending = action
+        }
+    }
+
+    /// A home-screen quick action while the app is running.
+    func windowScene(_ windowScene: UIWindowScene, performActionFor shortcutItem: UIApplicationShortcutItem,
+                     completionHandler: @escaping (Bool) -> Void) {
+        guard let action = LaunchAction(shortcutType: shortcutItem.type) else { return completionHandler(false) }
+        LaunchAction.perform(action)
+        completionHandler(true)
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
@@ -37,7 +48,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 /// to summarize the first page once it has loaded, `-CraSyncDir <folder>` for the folder the Mac's
 /// sidebar syncs into (`demo` for a made-up sidebar with two Spaces), `-CraFakeVoice <text>` for
 /// what voice search hears instead of the microphone (`-CraShowVoice YES` holds the voice overlay
-/// up with it, for a screenshot).
+/// up with it, for a screenshot), `-CraOnboarding YES` to show onboarding on a test's data folder.
 enum LaunchOptions {
     /// Worked out once: every store of a launch shares the folder.
     static let dataDirectory: URL = {
@@ -52,6 +63,12 @@ enum LaunchOptions {
     static var typedText: String? { UserDefaults.standard.string(forKey: "CraType") }
     static var skipsSearch: Bool { UserDefaults.standard.string(forKey: "CraSearch") == "NO" }
     static var fakeModel: Bool { UserDefaults.standard.string(forKey: "CraFakeModel") == "YES" }
+    /// First launch shows onboarding; a test's own data folder skips it unless `-CraOnboarding YES`.
+    static func showsOnboarding(seen: Bool) -> Bool {
+        if let asked = UserDefaults.standard.string(forKey: "CraOnboarding") { return asked == "YES" }
+        return !seen && UserDefaults.standard.string(forKey: "CraDataDir") == nil
+    }
+
     static var fakeVoice: String? { UserDefaults.standard.string(forKey: "CraFakeVoice") }
     static var showsVoiceOverlay: Bool { UserDefaults.standard.string(forKey: "CraShowVoice") == "YES" }
     static var summarizesFirstPage: Bool { UserDefaults.standard.string(forKey: "CraSummarize") == "YES" }

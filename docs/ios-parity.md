@@ -98,10 +98,10 @@ ended). "Measured" means the numbers come from Arc Search footage, not from a de
 | Arc Search | Cra | Notes |
 |---|---|---|
 | Site Settings sheet | done | Same rows and order; 465 pt tall over the page menu. Compared with a late-2024 screenshot. |
-| App Settings | partial | Archive, Global Site Settings, default browser, Search Engine, Archive Inactive Tabs, keyboard on launch, Open App Links in..., Clear Browsing Data, Export Data. No Downloads, Languages or app icons yet. The order below Archive Inactive Tabs is a guess: no source shows it. |
+| App Settings | partial | Archive, Global Site Settings, default browser, Search Engine, Archive Inactive Tabs, keyboard on launch, Open App Links in..., App Icon, Clear Browsing Data, Export Data, Show Onboarding. No Downloads or Languages yet. The order below Archive Inactive Tabs is a guess: no source shows it. |
 | Clear Data sheet | done | |
-| Onboarding | missing | |
-| Alternate app icons | missing | |
+| Onboarding | partial | Arc Search's steps and words (`MobileOnboarding`): welcome on the vivid gradient, "Meet your new favorite browser" with its four cards, the Browse for Me step where the device can, the icon grid, "Block Ads and Trackers", the default browser with Skip. The try-it demos (tapping Browse for Me, the pinch tip with its check mark) and the gradient's own transition are simplified. Settings ▸ Show Onboarding brings it back. |
+| Alternate app icons | done | Cra's four (`MobileAppIcon`), rendered for iOS by `scripts/make-app-icons.swift --ios`; picked in onboarding and in Settings ▸ App Icon. Arc Search's glass dock picker was not seen. |
 
 ## System
 
@@ -109,7 +109,7 @@ ended). "Measured" means the numbers come from Arc Search footage, not from a de
 |---|---|---|
 | Default browser | partial | Declares http/https; the `com.apple.developer.web-browser` entitlement needs Apple's approval. |
 | Widgets (small, medium, Lock Screen) | missing | |
-| App Shortcuts, quick actions | missing | |
+| App Shortcuts, quick actions | done | "Search with Cra" and "Voice Search with Cra" for Siri, Spotlight and the Action button (`AppShortcuts.swift`); home-screen quick actions Change App Icon, Voice Search, Search. Not exercised by a test: they are started from outside the app. |
 | iPad layout | partial | Runs; nothing iPad-specific. |
 | Landscape | partial | Rotates; not checked. |
 | Dynamic Type | missing | |
