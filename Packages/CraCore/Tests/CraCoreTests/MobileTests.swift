@@ -670,6 +670,8 @@ struct MobileOnboardingTests {
     @Test func theStepsFollowArcSearchsOrderAndSkipAIWhereThereIsNone() {
         #expect(MobileOnboarding.steps(canUseAI: true) == [.welcome, .meet, .browseForMe, .pinch, .icon, .blocking, .defaultBrowser])
         #expect(MobileOnboarding.steps(canUseAI: false) == [.welcome, .meet, .icon, .blocking, .defaultBrowser])
+        #expect(MobileOnboarding.buttonTitle(for: .defaultBrowser) == "Open Settings")
+        #expect(MobileOnboarding.defaultBrowserSteps == ["Go to Settings", "Tap Default Browser App", "Select Cra"])
         #expect(MobileOnboarding.buttonTitle(for: .welcome) == "Next")
         #expect(MobileOnboarding.buttonTitle(for: .blocking) == "Let’s go")
         #expect(MobileOnboarding.cards.map(\.title) == ["Protect your privacy", "Auto-archives old tabs", "Keep your logins", "Navigate faster"])

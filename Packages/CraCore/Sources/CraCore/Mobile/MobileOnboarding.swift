@@ -67,14 +67,17 @@ public enum MobileOnboarding {
     public static let iconTitle = "Pick an icon for your home screen"
     public static let blockingTitle = "Get what you need, without the noise"
     public static let blockingSwitch = "Block Ads and Trackers"
-    public static let defaultBrowserTitle = "Make Cra your default browser"
-    public static let defaultBrowserDetail = "Links from other apps open in Cra."
+    /// The default-browser step in Arc Search's words (its launch build, 60fps.design's clip; the
+    /// late-2024 build's wording was not seen): the three steps in Settings, "Open Settings", "Not now".
+    public static let defaultBrowserTitle = "Switch Your Default Browser"
+    public static let defaultBrowserSteps = ["Go to Settings", "Tap Default Browser App", "Select Cra"]
+    public static let defaultBrowserSkip = "Not now"
 
     /// The button under a step: "Next" until the blocking step's "Let’s go".
     public static func buttonTitle(for step: Step) -> String {
         switch step {
         case .blocking: return "Let’s go"
-        case .defaultBrowser: return "Set as Default Browser"
+        case .defaultBrowser: return "Open Settings"
         default: return "Next"
         }
     }

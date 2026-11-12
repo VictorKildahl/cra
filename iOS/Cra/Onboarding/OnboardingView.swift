@@ -56,7 +56,7 @@ struct OnboardingView: View {
                 .padding(.horizontal, 24)
                 .accessibilityIdentifier("onboarding-next")
                 if model.step == .defaultBrowser {
-                    Button("Skip") { model.finish(model.blocksAdsAndTrackers) }
+                    Button(MobileOnboarding.defaultBrowserSkip) { model.finish(model.blocksAdsAndTrackers) }
                         .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(.secondary)
                         .padding(.top, 14)
@@ -174,7 +174,16 @@ struct OnboardingView: View {
             VStack(spacing: 16) {
                 Image(systemName: "safari.fill").font(.system(size: 52)).foregroundStyle(Color.accentColor)
                 title(MobileOnboarding.defaultBrowserTitle)
-                Text(MobileOnboarding.defaultBrowserDetail).font(.system(size: 17)).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(Array(MobileOnboarding.defaultBrowserSteps.enumerated()), id: \.offset) { index, step in
+                        HStack(spacing: 12) {
+                            Text("\(index + 1)").font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
+                                .frame(width: 22, height: 22).background(Color.accentColor, in: Circle())
+                            Text(step).font(.system(size: 17, weight: .medium))
+                        }
+                    }
+                }
+                .padding(.top, 6)
             }
         }
     }
