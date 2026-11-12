@@ -1422,6 +1422,16 @@ so test pages must not use it). Live HID clicks and hovers at 1x, plus a static 
 - [O live, 100 fps] The minus makes the row jump to scale 0.9 at once and spring back to 1 in ~0.24 s without
   overshoot (left edge 10 px in at 1x, back by 1.11 s): a critically damped spring, ω ≈ 14 (stiffness 196, damping 28).
 
+### Pressing a sidebar row (Arc 1.172.1, 11 Nov 2026, static: method lists and disassembly)
+
+- [O] Rows: `SidebarBouncyClickCell.performBounceAnimation(isPressedIn:)` on `SelectableCellView` (tabs, splits,
+  New Tab, easels). A `CASpringAnimation` on `transform` to scale 0.992 about the centre, damping ratio 0.5,
+  response 0.2, held while pressed. Tabs and splits press only on `clickCount == 1`; New Tab on every press.
+  Folder and section headers don't press.
+- [O] Favorites: `AppTrayItemViewAppKit.isPressed`, the same spring to 0.99 on every press, the whole tile.
+- [I] Nothing found springs a row back when a press becomes a drag; Cra does it when the drag starts.
+- Cra: CraCore SidebarRowPress, `NSView.springPress`.
+
 ### Backdrop-layer blur for light vibrant themes (25 Oct 2026, final)
 
 The system materials could not reproduce Arc's intercept and slope together, so
