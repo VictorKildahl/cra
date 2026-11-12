@@ -158,6 +158,9 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-perf.sh`: the performance recorder on a real main run loop: injected stalls,
   hang files with a `sample` stack, the session marker, ownership, the recording switch
   ([performance.md](performance.md)).
+- `scripts/perf/rounds.sh` + `scripts/perf/report.py`: memory, idle CPU and wakeups, new tab and
+  tab switch timings of builds side by side, interleaved, in background copies; not part of
+  `scripts/test.sh` (about 7 minutes a build a round). How to read them: [speed.md](speed.md).
 - `python3 Tests/test_cef_download.py`: offline checks for direct downloads, API fallback,
   checksum and metadata failures, and custom URLs; included in `scripts/test.sh`.
 - `scripts/lint.py`: Cra's own rules (testing.md), checked by `scripts/test.sh`.
