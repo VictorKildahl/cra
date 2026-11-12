@@ -239,8 +239,8 @@ struct SpaceThemeAppearanceTests {
         let theme = SpaceThemeVariants.theme(key: swatch, intensity: 0.5, noise: 0.2, appearance: appearance)
         #expect(!theme.followsSystem && theme.dark == nil && theme.appearance == appearance)
         #expect(theme.resolved(systemDark: false) == theme.resolved(systemDark: true))
-        // Dark keeps a light colour light with dark text, as Arc does (#392).
-        #expect(theme.isDark == (appearance == "dark" && (HexColor.luminance(swatch[0]) ?? 0) < 0.45))
+        // Light and Dark keep the colour as Arc does, so its own lightness picks the look (#392).
+        #expect(theme.isDark == ((HexColor.luminance(swatch[0]) ?? 0) < 0.45))
     }
 
     /// A dark half written without its optional fields loads with them off, and one that can't be
@@ -337,15 +337,16 @@ struct SpaceThemeAppearanceTests {
         }
     }
 
-    /// Dark keeps every swatch as it is, as Arc does on a Mac or Arc set to dark (offline Arc 1.172,
-    /// 12 Nov 2026: white, red #F25E6B and pastel #F1D1EC were saved as themselves and drawn as light
-    /// sidebars with dark text; black stayed black). Cra darkened them to a deep shade (#392).
-    @Test(.bug("https://github.com/VictorKildahl/cra/issues/392"), arguments: SpaceColorPresets.pages.flatMap(\.swatches))
-    func darkKeepsThePickedColourAsArcDoes(swatch: [String]) {
-        let theme = SpaceThemeVariants.theme(key: swatch, intensity: 0.4, noise: 0, appearance: "dark")
+    /// Light and Dark keep every swatch as it is, as Arc does with its appearance set either way
+    /// (offline Arc 1.172, 12 Nov 2026: on Dark, white, red #F25E6B and pastel #F1D1EC were saved as
+    /// themselves and drawn as light sidebars with dark text; on Light, black stayed black with white
+    /// text). Cra darkened every colour on Dark and lifted dark ones to a pale shade on Light (#392).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/392"), arguments: SpaceColorPresets.pages.flatMap(\.swatches), ["light", "dark"])
+    func lightAndDarkKeepThePickedColourAsArcDoes(swatch: [String], appearance: String) {
+        let theme = SpaceThemeVariants.theme(key: swatch, intensity: 0.4, noise: 0, appearance: appearance)
         let colours = swatch.map { $0.uppercased() }
         #expect(theme.colors == (colours.count == 1 ? colours + colours : colours) && theme.solid == (colours.count == 1))
-        #expect(theme.intensity == 0.4 && theme.appearance == "dark" && !theme.followsSystem)
+        #expect(theme.intensity == 0.4 && theme.appearance == appearance && !theme.followsSystem)
         #expect(theme.isDark == ((HexColor.luminance(colours[0]) ?? 0) < 0.45))
         #expect(theme.resolved(systemDark: false) == theme.resolved(systemDark: true))
     }

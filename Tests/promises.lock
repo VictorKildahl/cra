@@ -244,7 +244,7 @@
 #154   Tests/StoreTests.swift::sharedFavorites  db5eca7d0a92
 #155   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::autoShowsTheHalfMacOSAsksFor  73a172a01086
 #155   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::everySwatchOnAutoFollowsMacOS  2abd1f76b828
-#155   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::everySwatchOnLightOrDarkKeepsOneLook  48da89bfe74e
+#155   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::everySwatchOnLightOrDarkKeepsOneLook  6628c520301a
 #155   Packages/CraCore/Tests/CraCoreTests/ModelFixtureTests.swift::autoSpacesKeepBothHalves  89e5047a5e96
 #155   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::newSpaceIsOneColourOnAuto  32095d76196a
 #155   Tests/Scenarios/auto-theme.scenario  ecf687c1ce39
@@ -730,8 +730,8 @@
 #391   Tests/DockedWindowAccessibilityTests.swift::movingADockedWindowMovesTheBrowser  2138e64da85d
 #392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::darkColoursKeepTheirOwnTone  180984317a3e
 #392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::darkGradientFollowsTheSlider  de760b3df3ea
-#392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::darkKeepsThePickedColourAsArcDoes  244ac57bf41d
 #392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::greysStayNeutralInTheDark  1afc110bfec4
+#392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::lightAndDarkKeepThePickedColourAsArcDoes  aff895b8b551
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::aQuoteSplitByThePagesFootnoteIsFoundByItsFirstSentence  be1ed7cb0aed
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::answersSplitIntoTextAndQuotes  1c355ddc4248
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::longPagesAreCutAndSaySo  87740165fd46

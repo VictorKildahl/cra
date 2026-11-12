@@ -15,8 +15,8 @@ public enum SpaceThemeVariants {
             return t
         }
         switch appearance {
-        case "light": t = light(key: key, intensity: intensity, noise: noise)
-        case "dark": t = picked(key: key, intensity: intensity, noise: noise)
+        case "light": t = picked(key: key, intensity: intensity, noise: noise, appearance: "light")
+        case "dark": t = picked(key: key, intensity: intensity, noise: noise, appearance: "dark")
         default: t = SpaceTheme(light: light(key: key, intensity: intensity, noise: noise), dark: dark(key: key, intensity: intensity, noise: noise))
         }
         t.key = key
@@ -38,7 +38,7 @@ public enum SpaceThemeVariants {
         }
     }
 
-    /// The half shown while macOS is light, from the pad's colours: the colours themselves (Arc
+    /// Auto's half shown while macOS is light, from the pad's colours: the colours themselves (Arc
     /// saves a colour picked in Light as that colour), lifted to Arc's default light half (HSL
     /// lightness 0.9, #8389FF → #C8CAFF) when they would read as a dark theme. One colour is Arc's
     /// one-dot theme (`blendedSingleColor`), a flat fill like an imported one (ArcThemeImport).
@@ -80,12 +80,13 @@ public enum SpaceThemeVariants {
         (HexColor.luminance(hex) ?? 1) < 0.45 ? hex.uppercased() : shade(hex, lightness: 0.064)
     }
 
-    /// Dark, as Arc draws a colour picked while it shows dark (offline Arc 1.172, 12 Nov 2026): the
-    /// pad's colours as they are, one colour Arc's one-dot fill, at the slider's intensity. Arc
-    /// darkens nothing; a light colour keeps a light sidebar with dark text (SpaceTheme.isDark), a
-    /// dark one a dark sidebar. Only Auto's half for a dark Mac is darkened (`dark`, #155).
-    public static func picked(key: [String], intensity: Double, noise: Double) -> SpaceTheme {
-        var t = SpaceTheme(colors: key.map { $0.uppercased() }, intensity: intensity, noise: noise, appearance: "dark", accent: key.first?.uppercased())
+    /// Light or Dark, as Arc draws a picked colour on either appearance (offline Arc 1.172, 12 Nov
+    /// 2026): the pad's colours as they are, one colour Arc's one-dot fill, at the slider's intensity.
+    /// Arc lightens and darkens nothing: a light colour is a light sidebar with dark text and a dark
+    /// one a dark sidebar with white text, on Light and Dark alike (SpaceTheme.isDark, #392). Only
+    /// Auto's halves are lifted or darkened (`light`, `dark`), so an Auto space follows macOS (#155).
+    public static func picked(key: [String], intensity: Double, noise: Double, appearance: String) -> SpaceTheme {
+        var t = SpaceTheme(colors: key.map { $0.uppercased() }, intensity: intensity, noise: noise, appearance: appearance, accent: key.first?.uppercased())
         if t.colors.count == 1 { t.colors.append(t.colors[0]); t.solid = true }
         return t
     }
