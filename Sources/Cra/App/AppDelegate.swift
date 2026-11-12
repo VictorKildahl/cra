@@ -1957,8 +1957,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // Logi Options+'s own Back and Forward (an MX Ergo's or MX Master's default) and a
         // trackpad's three-finger swipe between pages post a swipe event, not a button or a key.
         // Chromium's page view leaves `swipeWithEvent:` to Chrome's browser window, which Cra's
-        // pages don't have, so nothing went back. A swipe goes to the page under the pointer, and
-        // Back there is the toolbar's (a tab a link opened closes back to its opener, #273).
+        // pages don't have, so nothing went back. A swipe goes to the page under the pointer and
+        // stays in that page's own history, like Arc's mouse back button: a tab a link opened
+        // doesn't close back to its opener here (only the toolbar's Back and ⌘[ do that, #273).
         sideButtonSwipeMonitor = NSEvent.addLocalMonitorForEvents(matching: .swipe) { [weak self] event in
             guard let self, let offset = MouseButtonSpaceSwitch.offset(swipeDeltaX: event.deltaX, deltaY: event.deltaY),
                   let target = event.window else { return event }
@@ -1972,7 +1973,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                let browser = little.browser {
                 if offset < 0 { browser.goBack() } else { browser.goForward() }
             } else if let hit = self.mainWindows.lazy.compactMap({ m in m.pageTab(under: event).map { (main: m, id: $0) } }).first {
-                if offset < 0 { hit.main.goBack(hit.id) } else { hit.main.browsers.runtime(for: hit.id)?.browser.goForward() }
+                let browser = hit.main.browsers.runtime(for: hit.id)?.browser
+                if offset < 0 { browser?.goBack() } else { browser?.goForward() }
             } else {
                 return event
             }
