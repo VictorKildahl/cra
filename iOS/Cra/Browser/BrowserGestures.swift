@@ -294,6 +294,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
                                                    : "Voice search needs on-device speech recognition, which this iPhone doesn't have for your language.")
         }
         self.voice = voice
+        voiceIsIncognito = store.selected?.isIncognito ?? false
         voice.start()
     }
 
@@ -309,7 +310,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         overlay.disappear()
         guard searching, !heard.isEmpty else { return }
         UINotificationFeedbackGenerator().notificationOccurred(.success)
-        incognitoSearch = store.selected?.isIncognito ?? false
+        incognitoSearch = voiceIsIncognito
         open(searchDestination(heard))
     }
 

@@ -516,6 +516,21 @@ final class VoiceSearchTests: BrowserTestCase {
     }
 }
 
+final class VoiceFromFieldTests: BrowserTestCase {
+    /// The mic in the empty search field starts voice search; a tap ends it and searches.
+    func testTheMicInTheFieldSearchesForWhatWasSaid() {
+        launch(["-CraFakeVoice", Self.page("Spoken")])
+        let mic = app.buttons["search-voice"]
+        XCTAssertTrue(mic.waitForExistence(timeout: 10))
+        mic.tap()
+        let overlay = app.otherElements["voice-overlay"]
+        XCTAssertTrue(overlay.waitForExistence(timeout: 5))
+        sleep(2)
+        overlay.tap()
+        waitForPage("Spoken")
+    }
+}
+
 final class OnboardingTests: BrowserTestCase {
     /// First launch walks through Arc Search's steps; the blocking switch decides the global
     /// blockers, and afterwards the app is ready to type.

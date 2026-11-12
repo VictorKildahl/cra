@@ -9,6 +9,8 @@ protocol SearchSheetDelegate: AnyObject {
     func searchSheet(_ sheet: SearchSheet, didPickFavorite site: MobileFavorites.Site)
     func searchSheet(_ sheet: SearchSheet, didAskToBrowseFor row: MobileSuggestions.Row)
     func searchSheetDidToggleIncognito(_ sheet: SearchSheet)
+    /// The mic in the empty field: voice search.
+    func searchSheetDidAskForVoice(_ sheet: SearchSheet)
 }
 
 /// The sheet that rises with the keyboard: the search field and four suggestions under it.
@@ -25,6 +27,8 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     private let fieldBackground = FieldBackgroundView()
     private let clearButton = UIButton(type: .custom)
     private let incognitoButton = UIButton(type: .custom)
+    /// Voice search from the field (Arc Search 1.19), left of the incognito eyes while it is empty.
+    private let micButton = UIButton(type: .system)
     private let incognitoNote = UILabel()
     private var rowViews: [SuggestionRowView] = []
     /// The rows, scrolling up under the field (`MobileSuggestions.Scroll`).
@@ -80,6 +84,13 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         incognitoButton.semanticContentAttribute = .forceRightToLeft
         incognitoButton.contentHorizontalAlignment = .right
         addSubview(incognitoButton)
+
+        micButton.setImage(UIImage(systemName: "mic", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .regular)), for: .normal)
+        micButton.tintColor = Palette.placeholder
+        micButton.accessibilityLabel = "Voice Search"
+        micButton.accessibilityIdentifier = "search-voice"
+        micButton.addTarget(self, action: #selector(micTapped), for: .touchUpInside)
+        addSubview(micButton)
 
         incognitoNote.text = "You're browsing Incognito"
         incognitoNote.font = .systemFont(ofSize: 17, weight: .medium)
@@ -219,6 +230,10 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         delegate?.searchSheet(self, didChangeText: "")
     }
 
+    @objc private func micTapped() {
+        delegate?.searchSheetDidAskForVoice(self)
+    }
+
     @objc private func toggleIncognito() {
         delegate?.searchSheetDidToggleIncognito(self)
     }
@@ -227,6 +242,7 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         let empty = text.isEmpty
         clearButton.isHidden = empty
         incognitoButton.isHidden = !empty
+        micButton.isHidden = !empty || isIncognito
         incognitoNote.isHidden = !(empty && isIncognito)
         showRows()
     }
@@ -291,6 +307,8 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         incognitoButton.frame = isIncognito ? CGRect(x: accessory.maxX - 11 - 130, y: accessory.minY, width: 130, height: 44) : accessory
         clearButton.alpha = t
         incognitoButton.alpha = t
+        micButton.frame = accessory.offsetBy(dx: -38, dy: 0)
+        micButton.alpha = t
         // Arc Search's note sits 187 pt below the sheet's top edge.
         incognitoNote.frame = CGRect(x: 0, y: 187 - 12, width: bounds.width, height: 24)
         incognitoNote.alpha = t

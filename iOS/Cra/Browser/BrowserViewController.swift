@@ -34,6 +34,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     // Voice search (BrowserGestures.swift).
     var voice: VoiceSearch?
     var voiceOverlay: VoiceOverlayView?
+    /// Whether what is heard opens incognito: the tab's state, or the search sheet's when the mic there started it.
+    var voiceIsIncognito = false
     // Reader and Summarize (BrowserReading.swift).
     var readerView: ReaderView?
     var summaryHost: UIViewController?
@@ -361,6 +363,13 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     func searchSheet(_ sheet: SearchSheet, didAskToBrowseFor row: MobileSuggestions.Row) {
         open(MobileBrowseForMe.tabAddress(query: row.text))
+    }
+
+    func searchSheetDidAskForVoice(_ sheet: SearchSheet) {
+        let incognito = incognitoSearch
+        setSearching(false)
+        beginVoiceSearch(handsFree: true)
+        voiceIsIncognito = incognito
     }
 
     func searchSheetDidToggleIncognito(_ sheet: SearchSheet) {
