@@ -50,13 +50,13 @@ final class TidyTitlesService {
 
     @ObservationIgnored private var requests: [UUID: Request] = [:]
     @ObservationIgnored private let titleLayout: @MainActor (UUID, UUID) -> TidyTitleLayout?
-    @ObservationIgnored private let generate: @MainActor (String, String) async -> TidyTitles.Answer?
+    @ObservationIgnored private let generate: @MainActor (String, String, String) async -> TidyTitles.Answer?
     @ObservationIgnored private let modelAvailable: @MainActor () -> Bool
 
     init(titleLayout: @escaping @MainActor (UUID, UUID) -> TidyTitleLayout? = { id, window in
         SpaceListView.tidyTitleLayout(for: id, window: window)
-    }, generate: @escaping @MainActor (String, String) async -> TidyTitles.Answer? = { prompt, title in
-        await TidyTitlesService.ask(prompt, title: title)
+    }, generate: @escaping @MainActor (String, String, String) async -> TidyTitles.Answer? = { title, url, language in
+        await TidyTitlesService.ask(title: title, url: url, language: language)
     }, modelAvailable: @escaping @MainActor () -> Bool = { TidyTabsService.shared.modelAvailable }) {
         self.titleLayout = titleLayout
         self.generate = generate
@@ -84,10 +84,10 @@ final class TidyTitlesService {
               !item.isEmptyTab, store.isPinned(id) else { return }
         let shown = TidyTitleRules.arc.tidy(item.displayTitle, url: tab.url)
         let title = item.displayTitle
+        let url = tab.url
         let language = Locale.preferredLanguages.first.flatMap {
             Locale(identifier: "en_US").localizedString(forLanguageCode: $0)
         } ?? "English"
-        let prompt = TidyTitles.prompt(title: title, url: tab.url, language: language)
         // Programmatic pins fall back to the store's active window at pin time.
         let request = Request(shown: shown, homeURL: tab.savedURL,
                               windowID: store.activeWindowID, started: store.clock.now)
@@ -95,7 +95,7 @@ final class TidyTitlesService {
         let generate = self.generate
         requests[id]?.task = Task { @MainActor [weak self, weak store] in
             guard !Task.isCancelled, self?.requests[id]?.token == request.token, store != nil else { return }
-            let answer = await generate(prompt, title)
+            let answer = await generate(title, url, language)
             guard !Task.isCancelled else { self?.finish(id, token: request.token); return }
             self?.generated(answer, for: id, token: request.token, store: store)
         }
@@ -149,23 +149,66 @@ final class TidyTitlesService {
         if effects[id]?.token == token { effects[id] = nil }
     }
 
-    private static func ask(_ prompt: String, title: String) async -> TidyTitles.Answer? {
+    /// A title has just two bounded attempts. Only an exact context overflow earns the second.
+    static func ask(title: String, url: String, language: String,
+                    respond: @escaping @MainActor (String, String, Int) async throws -> TidyTitles.Answer = { instructions, prompt, limit in
+                        try await TidyTitlesService.respond(instructions: instructions, prompt: prompt, responseLimit: limit)
+                    }) async -> TidyTitles.Answer? {
+        guard !Task.isCancelled else { return nil }
         if let fake = fakeAnswer(title) { return fake }
-        #if canImport(FoundationModels)
-        if #available(macOS 26.0, *) {
+        let instructions = TidyTitles.instructions(language: language)
+        for attempt in 0..<2 {
             do {
-                let session = LanguageModelSession(instructions: TidyTitles.instructions)
-                let r = try await session.respond(to: prompt, generating: TidyTitleAnswer.self, options: GenerationOptions(sampling: .greedy))
-                return TidyTitles.Answer(filtered: r.content.filtered, rewritten: r.content.rewritten)
+                try Task.checkCancellation()
+                let prompt = TidyTitles.prompt(title: title, url: url, language: language, compact: attempt == 1)
+                let answer = try await respond(instructions, prompt, TidyTitles.responseTokenLimit)
+                try Task.checkCancellation()
+                return answer
             } catch is CancellationError {
                 return nil
             } catch {
-                CraLog.note("Tidy Tab Titles: the model failed: \(error)")
+                let overflow = isContextOverflow(error)
+                if TidyTitles.shouldRetry(attempt: attempt, contextOverflow: overflow, cancelled: Task.isCancelled) { continue }
+                if !Task.isCancelled {
+                    CraLog.note(overflow ? "Tidy Tab Titles: the request exceeded its context budget" : "Tidy Tab Titles: model generation failed")
+                }
                 return nil
             }
         }
-        #endif
         return nil
+    }
+
+    static func respond(instructions: String, prompt: String, responseLimit: Int) async throws -> TidyTitles.Answer {
+        #if canImport(FoundationModels)
+        if #available(macOS 26.0, *) {
+            try Task.checkCancellation()
+            if #available(macOS 26.4, *) {
+                let model = SystemLanguageModel.default
+                let instructionTokens = try await model.tokenCount(for: Instructions(instructions))
+                try Task.checkCancellation()
+                let promptTokens = try await model.tokenCount(for: prompt)
+                try Task.checkCancellation()
+                let schemaTokens = try await model.tokenCount(for: TidyTitleAnswer.generationSchema)
+                try Task.checkCancellation()
+                guard TidyTitles.fitsContext(inputTokens: instructionTokens + promptTokens + schemaTokens, contextSize: model.contextSize) else {
+                    throw LanguageModelSession.GenerationError.exceededContextWindowSize(.init(debugDescription: "Pinned title input exceeds local context budget"))
+                }
+            }
+            let session = LanguageModelSession(instructions: instructions)
+            let result = try await session.respond(to: prompt, generating: TidyTitleAnswer.self,
+                options: GenerationOptions(sampling: .greedy, maximumResponseTokens: responseLimit))
+            return TidyTitles.Answer(filtered: result.content.filtered, rewritten: result.content.rewritten)
+        }
+        #endif
+        throw CocoaError(.featureUnsupported)
+    }
+
+    private static func isContextOverflow(_ error: Error) -> Bool {
+        #if canImport(FoundationModels)
+        if #available(macOS 26.0, *), let generationError = error as? LanguageModelSession.GenerationError,
+           case .exceededContextWindowSize = generationError { return true }
+        #endif
+        return false
     }
 
     /// CRA_TIDY_FAKE_MODEL=1: the title up to its first separator, so a test copy renames without

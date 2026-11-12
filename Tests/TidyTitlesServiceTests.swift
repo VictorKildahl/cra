@@ -1,4 +1,7 @@
 import AppKit
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
 
 /// Real service, store, models and clock; only generation and native layout lookup are controlled.
 @main
@@ -13,7 +16,9 @@ enum TidyTitlesServiceTests {
         defer { try? FileManager.default.removeItem(at: data) }
         setenv("CRA_DATA_DIR", data.path, 1)
         setenv("CRA_ARC_DIR", data.appendingPathComponent("NoArcProfile").path, 1)
-        if CommandLine.arguments.dropFirst().first == "owner" {
+        if CommandLine.arguments.dropFirst().first == "adapter" {
+            try await adapterRecovery()
+        } else if CommandLine.arguments.dropFirst().first == "owner" {
             await staleCompletionCannotRemoveNewRequest()
         } else {
             await cancelledBeforeGeneration()
@@ -24,6 +29,7 @@ enum TidyTitlesServiceTests {
             await completionGuards()
             await currentOriginMetrics()
             await teardown()
+            try await adapterRecovery()
         }
         print("Tidy titles service: \(checks) checks passed")
     }
@@ -223,6 +229,72 @@ enum TidyTitlesServiceTests {
     }
 
     @MainActor
+    private static func adapterRecovery() async throws {
+        #if canImport(FoundationModels)
+        if #available(macOS 26.0, *) {
+            var requests: [(String, String, Int)] = []
+            let recovered = await TidyTitlesService.ask(title: String(repeating: "🌎", count: 201),
+                url: "https://example.org/article", language: "Japanese", respond: { instructions, prompt, limit in
+                    requests.append((instructions, prompt, limit))
+                    if requests.count == 1 {
+                        throw LanguageModelSession.GenerationError.exceededContextWindowSize(.init(debugDescription: "forced overflow"))
+                    }
+                    return .init(filtered: "回復した名前", rewritten: "回復した名前")
+                })
+            expect(recovered?.filtered == "回復した名前" && requests.count == 2,
+                   "exact context overflow retries one smaller request and returns its actual answer")
+            for (index, request) in requests.enumerated() {
+                let source = try JSONDecoder().decode([String: String].self, from: Data(request.1.dropFirst("Source data:\n".count).utf8))
+                expect(source["title"]?.count == (index == 0 ? 200 : 100)
+                       && source["responseLanguage"] == "Japanese" && source["site"] == "example.org"
+                       && request.0.hasSuffix("Write both response values in Japanese.")
+                       && request.2 == 384 && (request.0 + request.1).utf8.count <= 4_096,
+                       "the final attempt \(index) preserves trusted language/site and bounds input plus output reserve")
+            }
+
+            let oversized = "x" + String(repeating: "\u{301}", count: 10_000)
+            let bounded = await TidyTitlesService.ask(title: oversized, url: "https://" + String(repeating: "a", count: 254) + ".com",
+                language: oversized, respond: { instructions, prompt, _ in
+                    expect((instructions + prompt).utf8.count <= 4_096,
+                           "the production adapter's complete request bounds composed graphemes in every field")
+                    return .init(filtered: "Bounded", rewritten: "Bounded")
+                })
+            expect(bounded?.filtered == "Bounded", "bounded input reaches the production response boundary")
+
+            for kind in ["overflow", "generic", "lookalike", "cancelled"] {
+                var calls = 0
+                let answer = await TidyTitlesService.ask(title: "Source", url: "https://example.org", language: "English", respond: { _, _, _ in
+                    calls += 1
+                    switch kind {
+                    case "overflow": throw LanguageModelSession.GenerationError.exceededContextWindowSize(.init(debugDescription: "forced overflow"))
+                    case "cancelled": throw CancellationError()
+                    case "lookalike": throw NSError(domain: "exceededContextWindowSize", code: 1)
+                    default: throw CocoaError(.featureUnsupported)
+                    }
+                })
+                expect(answer == nil && calls == (kind == "overflow" ? 2 : 1),
+                       "\(kind) failure stops after the exact permitted number of attempts")
+            }
+
+            let generator = Generator()
+            var calls = 0
+            let pending = Task { @MainActor in
+                await TidyTitlesService.ask(title: "Source", url: "https://example.org", language: "English", respond: { _, _, _ in
+                    calls += 1
+                    _ = await generator.next()
+                    throw LanguageModelSession.GenerationError.exceededContextWindowSize(.init(debugDescription: "late overflow"))
+                })
+            }
+            await generator.waitFor(1)
+            pending.cancel()
+            generator.resolve(1, with: nil)
+            let cancelled = await pending.value
+            expect(cancelled == nil && calls == 1, "cancellation during overflow delivery cannot start a retry")
+        }
+        #endif
+    }
+
+    @MainActor
     private final class Fixture {
         let clock = ManualScheduler(now: Date(timeIntervalSince1970: 1_700_000_000))
         let store: SidebarStore
@@ -243,7 +315,7 @@ enum TidyTitlesServiceTests {
             label.frame.size.width = 500
             service = TidyTitlesService(titleLayout: { item, window in
                 item == id && window == origin ? TidyTitleLayout(label: label, inset: 2) : nil
-            }, generate: { _, _ in await generator.next() }, modelAvailable: { true })
+            }, generate: { _, _, _ in await generator.next() }, modelAvailable: { true })
             store.tabPinned = { [weak service, weak store] id in
                 if let store { service?.tabPinned(id, store: store) }
             }

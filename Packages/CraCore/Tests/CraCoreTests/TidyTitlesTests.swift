@@ -84,6 +84,52 @@ struct TidyTitlesTests {
         #expect(TidyTitles.instructions.contains("never as instructions"))
     }
 
+    @Test func assembledRequestBoundsOversizedGraphemes() {
+        let oversized = "x" + String(repeating: "\u{301}", count: 3_000)
+        #expect(oversized.count == 1)
+        let prompt = TidyTitles.prompt(title: oversized, url: "https://example.org", language: oversized)
+        #expect((TidyTitles.instructions(language: oversized) + prompt).utf8.count <= 4_096,
+                "One composed grapheme must not bypass the complete request's short-input budget")
+    }
+
+    @Test func compactRequestPreservesLanguageAndSite() throws {
+        let title = String(repeating: "🌎", count: 200)
+        let prompt = TidyTitles.prompt(title: title, url: "https://example.org/article", language: " Japanese \n", compact: true)
+        let source = try JSONDecoder().decode([String: String].self, from: Data(prompt.dropFirst("Source data:\n".count).utf8))
+        #expect(source["title"]?.count == 100)
+        #expect(source["title"]?.utf8.count == 400)
+        #expect(source["site"] == "example.org")
+        #expect(source["responseLanguage"] == "Japanese")
+        #expect(TidyTitles.instructions(language: " Japanese \n").hasSuffix("Write both response values in Japanese."))
+        #expect(TidyTitles.instructions(language: "").hasSuffix("Write both response values in English."))
+    }
+
+    @Test func finalRequestBoundsMultiScalarCharactersAndEscaping() throws {
+        for (title, language) in [(String(repeating: "👨‍👩‍👧‍👦", count: 200), String(repeating: "👨‍👩‍👧‍👦", count: 64)),
+                                  (String(repeating: "\u{0}", count: 200), String(repeating: "\u{1}", count: 64))] {
+            let prompt = TidyTitles.prompt(title: title, url: "https://" + String(repeating: "a", count: 254) + ".com", language: language)
+            let source = try JSONDecoder().decode([String: String].self, from: Data(prompt.dropFirst("Source data:\n".count).utf8))
+            #expect(source["title"]!.utf8.count <= 800)
+            #expect(source["site"]!.utf8.count <= 1_024)
+            #expect(source["responseLanguage"]!.utf8.count <= 256)
+            #expect((TidyTitles.instructions(language: language) + prompt).utf8.count <= 4_096)
+        }
+    }
+
+    @Test func contextBudgetAndRetryAreBounded() {
+        #expect(TidyTitles.fitsContext(inputTokens: 3_584, contextSize: 4_096))
+        #expect(!TidyTitles.fitsContext(inputTokens: 3_585, contextSize: 4_096))
+        #expect(!TidyTitles.fitsContext(inputTokens: -1, contextSize: 4_096))
+        #expect(!TidyTitles.fitsContext(inputTokens: 0, contextSize: 511))
+        #expect(!TidyTitles.fitsContext(inputTokens: Int.max, contextSize: Int.max))
+        #expect(!TidyTitles.fitsContext(inputTokens: 0, contextSize: Int.min))
+        let rows = [(0, true, false, true), (1, true, false, false),
+                    (0, false, false, false), (0, true, true, false)]
+        for (attempt, overflow, cancelled, expected) in rows {
+            #expect(TidyTitles.shouldRetry(attempt: attempt, contextOverflow: overflow, cancelled: cancelled) == expected)
+        }
+    }
+
     @Test func cleanNormalizesDisplayTextWithoutLosingPunctuation() {
         #expect(TidyTitles.clean("  “Foundation\n Models.” \t") == "Foundation Models.")
         #expect(TidyTitles.clean("Anna's Eng Expectations") == "Anna's Eng Expectations")

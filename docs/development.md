@@ -129,7 +129,8 @@ to Markdown or `docs/` alone runs nothing.
   unmaterialized-row fallback. No CEF or visible window.
 - `scripts/test-tidy-titles.sh`: the production pinned-title service and sidebar store on a manual
   clock with deferred model responses: opt-out, request ownership, home/manual-name guards and
-  reveal/expiry timing. `owner` runs just the stale-request ownership regression. No CEF or visible window.
+  reveal/expiry timing, plus bounded request construction and exact context-overflow recovery.
+  `owner` runs the stale-request regression; `adapter` runs the request/retry checks. No CEF or visible window.
 - `scripts/test-window-content-grabber.sh`: the page-top grabber on AppKit windows:
   clicks reach the page immediately, non-arrow cursors keep the gesture, native resize edges and rounded corners stay free,
   a child page's drag starts in its browser window's coordinates, and the page stays outside WindowServer's native drag region.
