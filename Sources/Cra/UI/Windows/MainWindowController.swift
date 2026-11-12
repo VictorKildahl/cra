@@ -643,6 +643,37 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         return copied
     }
 
+    /// `cra://debug?pickedCopy=<clicks>`: clicks rows of the focused space's list as the pointer
+    /// would, "c2" ⌘-clicking the second listed tab and "s3" ⇧-clicking the third (an empty list
+    /// picks nothing), then presses ⇧⌘C as a key event, so the menu's key equivalent runs as
+    /// typed, and logs what reached the clipboard (#322). The clipboard gets its old contents back.
+    func testPickedCopy(clicks: String, label: String) {
+        let listed = store.listedTabIDs(in: focusedSpaceID)
+        sidebarUI.clearPicks()
+        for click in clicks.split(separator: ",") {
+            guard let n = Int(click.dropFirst()), listed.indices.contains(n - 1) else { CraLog.note("picked copy \(label): no row \(click)"); return }
+            sidebarUI.pick(listed[n - 1], range: click.first == "s", in: store)
+        }
+        guard let window else { return }
+        let pb = NSPasteboard.general
+        let saved = pb.pasteboardItems?.map { item in
+            item.types.reduce(into: [NSPasteboard.PasteboardType: Data]()) { $0[$1] = item.data(forType: $1) }
+        } ?? []
+        let before = pb.changeCount
+        TestGesture.key("C", keyCode: 8, modifiers: [.command, .shift], in: window)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            let copied = pb.changeCount != before ? pb.string(forType: .string) ?? "" : "-"
+            CraLog.note("picked copy \(label): \(copied.replacingOccurrences(of: "\n", with: "⏎")) picks=\(self?.sidebarUI.multiSelection.count ?? 0)")
+            guard pb.changeCount != before else { return }
+            pb.clearContents()
+            pb.writeObjects(saved.map { types in
+                let item = NSPasteboardItem()
+                for (type, data) in types { item.setData(data, forType: type) }
+                return item
+            })
+        }
+    }
+
     /// The tab's page belongs to another window that has it open: the window in use takes it,
     /// others keep it where it is. Windows restored at launch (none has the page yet, and
     /// `app.mainWindows` is still empty) leave it to the window in use, else the first one.

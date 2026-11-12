@@ -30,7 +30,7 @@ or Arc-only service), per CONTRIBUTING.md.
 | AppleScript dictionary | Arc.sdef, View ▸ Developer ▸ Allow JavaScript from Apple Events | done | Arc's terms and codes (resources/Cra.sdef); `execute javascript` only after View ▸ Developer ▸ Allow JavaScript from Apple Events (off by default, as in Arc). |
 | Cast | View ▸ Cast | done | Chrome's Cast bubble (IDC_ROUTE_MEDIA). |
 | Page translation | Toolbar `character.bubble`, URL field "Translation Available", popover | done | GitHub #310: Arc's button (left of the sliders), the URL field's line with the toolbar hidden, the popover (Options: Choose Another Language ▸, Never Translate This Site, Language Settings; Translate / Show Original) and its toasts, on Chromium's translate state instead of Chrome's bubble (scripts/cef-patches/translate-ui.patch). Never Translate This Site uses Chromium's per-profile list, not Arc's `translateNeverHosts`; Settings ▸ Advanced ▸ "Reset Translated-site Prompts" (GitHub #373) empties that list and Chromium's other translate choices (`TranslateReset`) for every profile. |
-| Find and Replace, Use Selection to Find, Jump to Selection | Edit ▸ Find | partial | Use Selection to Find and Jump to Selection (⌘J) done; Find and Replace is for Arc's Notes/Easels text, which Cra doesn't have. |
+| Find and Replace, Use Selection to Find, Jump to Selection | Edit ▸ Find | done | Use Selection to Find and Jump to Selection (⌘J) done. *skip*: Find and Replace (⌥⌘F). Checked live in Arc 1.172.2 on 11 Nov: it does nothing anywhere Cra has a counterpart. In an Easel text box with the caret in it, the whole Find submenu is off and ⌥⌘F does nothing; on a web page Find… is on but Find and Replace stays off. It was for Notes, which Arc 1.172 no longer has. |
 | Sound effects | Settings ▸ Advanced "Play Arc sound effects" | done | Settings ▸ Advanced ▸ Play Cra sound effects gates the capture shutter. |
 | Theme data for websites | Settings ▸ Advanced "Allow websites to get your theme data" | done | `--arc-palette-*` and `--arc-background-*` as #RRGGBBAA, from the space's theme (ArcThemeData; fitted to Arc's stored palette, checked live). |
 | Window dragging from the top of webpages | Settings ▸ Advanced | done | An ordinary-arrow drag that starts within 60 pt of the card's top, its bar included, moves the window: the top 60 pt of the page with the toolbar hidden, 28 pt under the toolbar (Arc measured side by side, #363). Text, link and resize cursors keep their gesture; the rightmost 14 pt stay with the page and its scrollbar. The press reaches the page immediately, the first drag event moves the window, and the page gets the release, so a slipped click still clicks (WindowContentGrabber, PageTopDrag). Settings ▸ Advanced, on by default as in Arc. |
@@ -190,6 +190,9 @@ in this sweep (Essential Shortcuts window, Library pages).
   backgroundExtra): Pointer, Image, Text, Ellipse, Rectangle, Arrow, Freehand, then captures. The picked
   tool sits on #716328 with 8 pt corners; glyphs in #FAEEC2 (foregroundPrimary). Bottom right: a 36 pt
   share button (person.badge.plus), cloud sharing in Arc.
+- Edit ▸ Find in an Easel (Arc 1.172.2, Victor's Arc, 11 Nov 2026, over AX): with the caret in a text box (an
+  `AXTextArea`, Arc's rich-text editor), every Find item is off, Find and Replace included. Pressing it from the menu,
+  ⌥⌘F or ⌘F opens no find bar and leaves the text as it was. On a web page, Find… is on and Find and Replace is off.
 
 ## Boosts, measured (Arc 1.172.1, Victor's Arc, 7 Nov 2026)
 
