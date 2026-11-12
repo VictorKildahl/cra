@@ -35,7 +35,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 /// start with that typed in the search field, `-CraSearch NO` to launch without the search sheet,
 /// `-CraFakeModel YES` for canned answers in place of the on-device model, `-CraSummarize YES`
 /// to summarize the first page once it has loaded, `-CraSyncDir <folder>` for the folder the Mac's
-/// sidebar syncs into (`demo` for a made-up sidebar with two Spaces).
+/// sidebar syncs into (`demo` for a made-up sidebar with two Spaces), `-CraFakeVoice <text>` for
+/// what voice search hears instead of the microphone (`-CraShowVoice YES` holds the voice overlay
+/// up with it, for a screenshot).
 enum LaunchOptions {
     /// Worked out once: every store of a launch shares the folder.
     static let dataDirectory: URL = {
@@ -50,5 +52,7 @@ enum LaunchOptions {
     static var typedText: String? { UserDefaults.standard.string(forKey: "CraType") }
     static var skipsSearch: Bool { UserDefaults.standard.string(forKey: "CraSearch") == "NO" }
     static var fakeModel: Bool { UserDefaults.standard.string(forKey: "CraFakeModel") == "YES" }
+    static var fakeVoice: String? { UserDefaults.standard.string(forKey: "CraFakeVoice") }
+    static var showsVoiceOverlay: Bool { UserDefaults.standard.string(forKey: "CraShowVoice") == "YES" }
     static var summarizesFirstPage: Bool { UserDefaults.standard.string(forKey: "CraSummarize") == "YES" }
 }

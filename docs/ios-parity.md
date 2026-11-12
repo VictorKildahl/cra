@@ -25,7 +25,7 @@ ended). "Measured" means the numbers come from Arc Search footage, not from a de
 | Tap above the sheet closes it | done | UI test `testThePillOpensSearchAndATapAboveClosesIt`. |
 | Swipe the sheet down to close | done | The sheet follows the finger; the keyboard leaves on release. |
 | Incognito toggle in the field | done | The sheet turns dark with "Incognito" beside the mask, "You're browsing Incognito" and the dark keyboard; colours from the store screenshot. Suggestions are not fetched while it is on. |
-| Voice search (hold the pill, mic in the field) | missing | |
+| Voice search (hold the pill, mic in the field) | partial | Hold the pill and speak; letting go searches for what was heard (`VoiceSearch`, `VoiceOverlayView`): dimmed page, glow, smiley, "Hi! How can I help?", the words in a capsule, dots that move with the voice. Speech is recognized on the device only. Built from a description and one small picture, not measured. No separate mic button in the field (the keyboard's dictation key is there), no widget or shortcut yet. |
 | Call Arc | *skip* | Removed from Arc Search itself. |
 | Default search engine: Google, Bing, DuckDuckGo, Ecosia, Perplexity, Kagi, custom | partial | The six engines in App Settings ▸ Search Engine (`MobileSearchEngine`); no custom engines, no "Browse for Me" as an engine. |
 | Fidget-spinner logo | missing | |

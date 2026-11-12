@@ -28,6 +28,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     var swipeNeighbourStep = 0
     var tabArchivedBySwipe: UUID?
     var barSwipeOpensRow = false
+    // Voice search (BrowserGestures.swift).
+    var voice: VoiceSearch?
+    var voiceOverlay: VoiceOverlayView?
     // Reader and Summarize (BrowserReading.swift).
     var readerView: ReaderView?
     var summaryHost: UIViewController?
@@ -92,6 +95,15 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             didOfferSearchOnLaunch = true
             let wantsSearch = (settings.value.opensKeyboardOnLaunch && !LaunchOptions.skipsSearch) || store.selected == nil
             if wantsSearch { setSearching(true, incognito: false) }
+            if LaunchOptions.showsVoiceOverlay {
+                let overlay = VoiceOverlayView(frame: view.bounds)
+                view.addSubview(overlay)
+                overlay.appear()
+                overlay.setLevel(0.6)
+                if let heard = LaunchOptions.fakeVoice {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { overlay.setTranscript(heard) }
+                }
+            }
             if isSearching, let typed = LaunchOptions.typedText {
                 sheet.text = typed
                 searchSheet(sheet, didChangeText: typed)

@@ -503,3 +503,15 @@ final class FavoritesTests: BrowserTestCase {
         XCTAssertFalse(app.staticTexts["Starred"].waitForExistence(timeout: 1), "typing replaces the favorites with suggestions")
     }
 }
+
+final class VoiceSearchTests: BrowserTestCase {
+    /// Holding the pill listens (here to a canned phrase), shows the words, and searches for
+    /// them when the pill is let go.
+    func testHoldingThePillSearchesForWhatWasSaid() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraFakeVoice", Self.page("Spoken")])
+        waitForPage("First")
+        app.buttons["bar-search"].press(forDuration: 3)
+        waitForPage("Spoken")
+        XCTAssertFalse(app.otherElements["voice-overlay"].exists)
+    }
+}

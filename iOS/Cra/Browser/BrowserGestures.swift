@@ -28,6 +28,11 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         pinch.delegate = self
         pageContainer.addGestureRecognizer(pinch)
 
+        // Holding the pill is voice search: speak while it is held, let go to search.
+        let talk = UILongPressGestureRecognizer(target: self, action: #selector(pillHeld(_:)))
+        talk.minimumPressDuration = 0.35
+        bar.pill.addGestureRecognizer(talk)
+
         // Holding the up arrow goes straight to the share sheet.
         bar.menuButton.addGestureRecognizer(UILongPressGestureRecognizer(target: self, action: #selector(menuHeld(_:))))
     }
@@ -252,6 +257,41 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
                     self.sheet.transform = .identity
                 }
             }
+        default: break
+        }
+    }
+
+    // MARK: Holding the pill: voice search
+
+    @objc func pillHeld(_ hold: UILongPressGestureRecognizer) {
+        switch hold.state {
+        case .began:
+            guard voiceOverlay == nil, !isSearching else { return }
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            let overlay = VoiceOverlayView(frame: view.bounds)
+            overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            view.addSubview(overlay)
+            overlay.appear()
+            voiceOverlay = overlay
+            let voice = VoiceSearch()
+            voice.onTranscript = { [weak overlay] in overlay?.setTranscript($0) }
+            voice.onLevel = { [weak overlay] in overlay?.setLevel($0) }
+            voice.onFailure = { [weak overlay] failure in
+                overlay?.setMessage(failure == .denied ? "Allow the microphone and speech recognition in Settings to search by voice."
+                                                       : "Voice search needs on-device speech recognition, which this iPhone doesn't have for your language.")
+            }
+            self.voice = voice
+            voice.start()
+        case .ended, .cancelled, .failed:
+            guard let overlay = voiceOverlay else { return }
+            let heard = voice?.stop() ?? ""
+            voice = nil
+            voiceOverlay = nil
+            overlay.disappear()
+            guard hold.state == .ended, !heard.isEmpty else { return }
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            incognitoSearch = store.selected?.isIncognito ?? false
+            open(MobileSuggestions.destination(forTyped: heard, engine: settings.value.searchEngine))
         default: break
         }
     }
