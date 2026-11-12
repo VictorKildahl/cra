@@ -77,14 +77,36 @@ went up with tabs refreezing every minute).
 
 In order of what they're worth.
 
-### 1. Measure what users feel first
+### 1. What users feel: making a page costs ~34 ms of the main thread
 
-The bench covers memory, idle, new tab and switch timing on a quiet page. Users who say Cra feels
-slower are more likely describing the sidebar, the command bar, Little Window, and switches on real
-sites. Before more engine work: time those on a real profile (HitchMonitor marks from the action to
-`page-shown`, the performance recorder's tab-switch and stall numbers), on a screen that is free.
-Also check whether Arc switches tabs on the press rather than the release: Cra acts on the release,
-which costs the length of the click every time.
+`scripts/perf/journeys.sh` times what a user waits for on a copy of a real sidebar (12 Nov 2026: 2
+spaces, 96 items) and real sites; `journeys.py` prints it. Main-thread stall per action, median:
+
+| Action | To page shown | Stalls |
+|---|---|---|
+| Tab switch | 30 ms | 75 ms |
+| Open a site | 36 ms | 83 ms |
+| Space switch | 15 ms | 57 ms |
+| Close tab | 6 ms | 39 ms |
+| Sidebar toggle | – | 30 ms |
+| Command bar keystroke | – | ~0 ms |
+
+The performance recorder (a copy with its own bundle id, so it owns its profile) splits a switch:
+the switch itself ~9 ms, making the page for a tab that has none (a new tab, a link opened in a tab,
+the first visit to a restored tab) **34 ms on average, up to 104 ms** (`pageCreate`), the rest the
+page's load handled on the main thread, as in Chrome. The page's cost is CEF making a whole macOS
+window per tab: NSWindow creation, Chromium asking the window server twice whether it is on the
+active Space, and `ChromiumDialogs.patch`'s hook on `makeKeyAndOrderFront` (one more window-server
+round trip). Two ways to take it off the click:
+
+- **A spare page**, made in idle time and taken by the next tab that needs one (`BrowserManager.adopt`
+  already hands a live page to a tab; a page made with a saved history starts with no address, as a
+  spare would). The catch: in CEF every page is a Chrome tab, so extensions would see the spare
+  (`chrome.tabs`) unless it is hidden from them until it is taken.
+- **Leaving CEF** (3 below): a Chrome tab is a WebContents in an existing window, no new window.
+
+Still open: whether Arc switches tabs on the press rather than the release (Cra acts on the release,
+which costs the length of the click every time); needs a free screen to check against live Arc.
 
 ### 2. A newer Chromium (page processes, ~7 MB a page)
 
