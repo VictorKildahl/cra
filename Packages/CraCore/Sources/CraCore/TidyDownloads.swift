@@ -41,16 +41,12 @@ public enum TidyDownloads {
         s = s.trimmingCharacters(in: .whitespaces.union(CharacterSet(charactersIn: "\"'“”‘’`")))
         s = s.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
         s = s.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        // Arc 1.171's 0x1002d488c/0x1002d6b38: replace the model's final-dot suffix
+        // with the original's, including an empty suffix or a trailing dot.
+        if let dot = s.lastIndex(of: ".") { s = String(s[..<dot]) }
         guard !s.isEmpty, !s.hasPrefix(".") else { return nil }
-        let ext = (original as NSString).pathExtension
-        if !ext.isEmpty {
-            // A name that lost or changed the extension gets the original's back.
-            if (s as NSString).pathExtension.lowercased() != ext.lowercased() { s += "." + ext }
-            let stem = (s as NSString).deletingPathExtension.trimmingCharacters(in: .whitespaces.union(.punctuationCharacters))
-            guard !stem.isEmpty else { return nil }
-            s = stem + "." + ext
-        }
-        guard !s.isEmpty, !s.hasPrefix("."), s.count <= maximumLength, s != original else { return nil }
+        s += original.lastIndex(of: ".").map { String(original[$0...]) } ?? ""
+        guard s.count <= maximumLength, s != original else { return nil }
         return s
     }
 

@@ -12,8 +12,41 @@ struct TidyDownloadsTests {
     @Test func cleanKeepsTheExtension() {
         #expect(TidyDownloads.clean("Hello World Master", original: "Hello-World-master.zip") == "Hello World Master.zip")
         #expect(TidyDownloads.clean("\"Guest Stay Folio Aug 14.pdf\"", original: "folio_6691488.PDF") == "Guest Stay Folio Aug 14.PDF")
-        #expect(TidyDownloads.clean("Ladybug.png", original: "AdobeStock_1.jpeg") == "Ladybug.png.jpeg")
+        #expect(TidyDownloads.clean("Ladybug.png", original: "AdobeStock_1.jpeg") == "Ladybug.jpeg")
         #expect(TidyDownloads.clean("Notes", original: "notes_v2") == "Notes")
+    }
+
+    @Test(arguments: [
+        ("Notes.txt", "notes_v2", "Notes"),
+        ("Notes.TXT", "notes_v2.pdf", "Notes.pdf"),
+        ("Notes.pdf", "notes_v2.PDF", "Notes.PDF"),
+        ("Archive.tar.zip", "archive_old.tar.gz", "Archive.tar.gz"),
+        ("Release.2026.pdf", "report_old.txt", "Release.2026.txt"),
+        ("Notes.", "notes_v2.pdf", "Notes.pdf"),
+        ("Notes.txt", "notes_v2.", "Notes."),
+        ("Notes", "notes_v2.", "Notes."),
+        ("Notes.txt", ".old", "Notes.old"),
+        ("\"Résumé  📄.txt\"", "notes_v2.PDF", "Résumé 📄.PDF"),
+    ])
+    func cleanRestoresOnlyTheOriginalFinalDotSuffix(answer: String, original: String, expected: String) {
+        #expect(TidyDownloads.clean(answer, original: original) == expected)
+    }
+
+    @Test(arguments: [
+        ("Notes.txt", "Notes"),
+        ("Notes.txt", "Notes.pdf"),
+        ("Notes.txt", "Notes."),
+        (".hidden.pdf", "a.pdf"),
+        ("..", "a.pdf"),
+    ])
+    func cleanRejectsUnchangedOrHiddenNamesAfterSuffixRestoration(answer: String, original: String) {
+        #expect(TidyDownloads.clean(answer, original: original) == nil)
+    }
+
+    @Test func cleanChecksTheLengthOfTheRestoredFilename() {
+        let stem = String(repeating: "x", count: 76)
+        #expect(TidyDownloads.clean(stem + ".jpeg", original: "a.pdf") == stem + ".pdf")
+        #expect(TidyDownloads.clean(stem + "x.jpeg", original: "a.pdf") == nil)
     }
 
     @Test func cleanRefusesUnusableNames() {
