@@ -13,29 +13,27 @@ ended). "Measured" means the numbers come from Arc Search footage, not from a de
 Work was paused mid-way. The branch is `ios-app`, in the worktree `../cra-ios`; nothing is
 pushed. Pick up here.
 
-**State of the tests.** The whole UI suite last ran green at 21 tests (commit `65f6e168`).
-Added after that and passed when run on their own: voice search, onboarding, and the page
-alert. Not confirmed: the download test (the download and its toast work, seen in a
-screenshot; the test was not run again after the toast's fade was fixed) and the empty home
-test (written, never run). The CraCore tests (`--filter Mobile`, 64) pass. Run the suite in
-two halves (it takes more than ten minutes whole), and do not edit sources while it runs: twice
-a run hung with the simulator shut down when files changed under it.
+**State of the tests.** 12 November, evening: the whole UI suite passed, run in two halves
+(16 + 10 tests, then the new site-match test; 27 in all), and the CraCore tests
+(`--filter Mobile`, 66). Run the suite in two halves (it takes more than ten minutes whole),
+and do not edit sources while it runs: twice a run hung with the simulator shut down when files
+changed under it.
 
-**In the last commit, built but not verified in the running app:**
-- the empty home screen (the sheet can be put away with no tabs) and the logo that spins
-- the page pushed back as a dimmed card behind the search sheet
-- the widget extension (`iOS/CraWidgets`) and its links `cra://search`, `cra://voice`, `cra://spaces`
-- the certificate warning, HTTP sign-in, link long-press menu and Handoff
+**Checked in the running app since the pause:** the empty home screen with its logo, the page
+pushed back behind the search sheet. **Still built but not verified:** the widget extension
+(`iOS/CraWidgets`) and its links `cra://search`, `cra://voice`, `cra://spaces`; the
+certificate warning, HTTP sign-in, link long-press menu and Handoff.
 
 **Next, in this order:**
-1. Run both halves of the UI suite; fix what the new work broke; look at the two new screens.
-2. Look at the widgets in the simulator's widget gallery.
+1. Look at the widgets in the simulator's widget gallery.
+2. Scrolling the suggestions updates the field (needs the reference clip, YouTube KRX1EXj6LaI at
+   0:31, fetched through the Cra MCP; `curl` is not allowed here).
 3. Translate (on-device Translation framework; it does not run in the simulator).
-4. Search sheet details: two-line suggestions, site matches, scrolling through suggestions.
-5. Browse for Me: the floating toggle to the search engine, Browse for Me as a search engine.
-6. iCloud entitlement for Spaces, then writing pins back to the Mac ("Pin to Space:").
-7. Share extension; Languages; custom search engines; iPad and landscape; dark mode against a reference.
-8. Motion still unmeasured: the pill growing into the search field, the summarize fold.
+4. Browse for Me: the floating toggle to the search engine, Browse for Me as a search engine.
+5. iCloud entitlement for Spaces, then writing pins back to the Mac ("Pin to Space:"). Needs
+   Victor's Apple ID; so does running on his iPhone, which has never been done.
+6. Share extension; Languages; custom search engines; iPad and landscape; dark mode against a reference.
+7. Motion still unmeasured: the pill growing into the search field, the summarize fold.
 
 **The reference.** Arc Search cannot be installed in the simulator (no App Store there, no Mac
 build). The footage and screenshots used are in `build/ios-reference/` of the worktree (not in
@@ -51,14 +49,14 @@ the real app on an iPhone has to be recorded before then.
 | Launch moment: logo behind the rising sheet | partial | Cra's mark shows behind the sheet. Measured frame by frame, Arc Search's sheet rises on the keyboard's own curve while growing from the bar's height to 302 pt, which is how this one moves (it animates inside the keyboard's animation). The logo's own motion is not matched. |
 | Search field: "Search...", caret, clear button | done | Measured: 48 pt field, 16 pt insets, 20 pt medium text, 18 pt clear disc. |
 | Suggestions: typed text first, completions with the typed part grey | done | Measured rows (56 pt), magnifier, text. Engine's suggest endpoint, four rows. |
-| Suggestion text wraps to two lines | missing | Rows are one line. |
-| Site matches as rows (favicon and title) | missing | |
+| Suggestion text wraps to two lines | done | A long suggestion takes a second line in the same 56 pt row and is cut after it. |
+| Site matches as rows (favicon and title) | done | Favorites, open and archived tabs (`MobileSuggestions.siteMatches`): a site whose address starts with what was typed leads the list, a title match follows the typed text, two at most. Arc Search's order was read from one Feb 2024 picture (site rows above and below the query row), not measured. Not offered while incognito. UI test `testAnOpenPageIsOfferedWhenItsAddressIsTyped`. |
 | Favorites / pinned sites under an empty field | partial | The first four of "Favorite in App" (`MobileFavorites`), each with its site icon and a pin. No drag to reorder. |
 | Scrolling the suggestions updates the field | missing | |
 | "Browse for Me" button on each search row | done | Shown only where Apple Intelligence is on. |
 | Pill grows into the search field | partial | The morph exists; timing and the side icons' fade are not compared yet. |
 | Tap above the sheet closes it | done | UI test `testThePillOpensSearchAndATapAboveClosesIt`. |
-| Page pushed back as a dimmed card behind the sheet | partial | Placed from the TidBITS screenshot (`MobilePageBehindSearch`): 10 pt in from each side, top under the status bar. Built, not yet verified in the app. |
+| Page pushed back as a dimmed card behind the sheet | done | Placed from the TidBITS screenshot (`MobilePageBehindSearch`): 10 pt in from each side, top under the status bar, black at 0.2 over it (a white page reads #cccccc, as there). Checked in the app. |
 | Swipe the sheet down to close | done | The sheet follows the finger; the keyboard leaves on release. |
 | Incognito toggle in the field | done | The sheet turns dark with "Incognito" beside the mask, "You're browsing Incognito" and the dark keyboard; colours from the store screenshot. Suggestions are not fetched while it is on. |
 | Voice search (hold the pill, mic in the field) | partial | Hold the pill and speak; letting go searches for what was heard (`VoiceSearch`, `VoiceOverlayView`): dimmed page, glow, smiley, "Hi! How can I help?", the words in a capsule, dots that move with the voice. Speech is recognized on the device only. Built from a description and one small picture, not measured. No separate mic button in the field (the keyboard's dictation key is there), no widget or shortcut yet. |

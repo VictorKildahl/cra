@@ -81,6 +81,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         view.addSubview(bar)
 
         sheet.delegate = self
+        sheet.siteIcon = { [weak self] address in self?.favicons.icon(for: address) }
         sheet.isHidden = true
         view.addSubview(sheet)
 
@@ -284,13 +285,22 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     func searchSheet(_ sheet: SearchSheet, didChangeText text: String) {
         let engine = settings.value.searchEngine
-        sheet.setRows(MobileSuggestions.rows(typed: text, completions: []))
-        // Incognito keeps what is typed on the phone until Go.
+        // Incognito keeps what is typed on the phone until Go, and leaves the phone's own pages out.
+        let sites = incognitoSearch ? [] : knownSites()
+        sheet.setRows(MobileSuggestions.rows(typed: text, completions: [], sites: sites))
         guard !incognitoSearch else { return }
         suggestions.completions(for: text, engine: engine) { [weak self, weak sheet] found in
             guard let self, let sheet, self.isSearching, sheet.text == text else { return }
-            sheet.setRows(MobileSuggestions.rows(typed: text, completions: found))
+            sheet.setRows(MobileSuggestions.rows(typed: text, completions: found, sites: sites))
         }
+    }
+
+    /// The pages a typed word can match, most wanted first: favorites, open tabs from the most
+    /// recent, then archived ones.
+    private func knownSites() -> [MobileSuggestions.Site] {
+        let favoriteSites = favorites.value.sites.map { MobileSuggestions.Site(title: $0.title, url: $0.url) }
+        let tabs = (store.rowTabs + store.archived).sorted { $0.lastActive > $1.lastActive }
+        return favoriteSites + tabs.map { MobileSuggestions.Site(title: $0.displayTitle, url: $0.url) }
     }
 
     func searchSheet(_ sheet: SearchSheet, didSubmit text: String) {

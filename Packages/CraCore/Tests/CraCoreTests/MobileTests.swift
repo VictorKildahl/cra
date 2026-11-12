@@ -60,6 +60,41 @@ struct MobileSuggestionsTests {
         #expect(MobileSuggestions.destination(forTyped: " a b ", engine: .google) == "https://www.google.com/search?q=a%20b")
     }
 
+    /// Pages the phone knows join the list: a site whose address starts with what was typed
+    /// leads, the typed text follows, a title match comes after it, and completions fill the rest.
+    @Test func knownSitesJoinTheList() {
+        let sites = [
+            MobileSuggestions.Site(title: "Weather Forecast Aarhus", url: "https://yr.no/aarhus"),
+            MobileSuggestions.Site(title: "Weather.com", url: "https://www.weather.com/"),
+            MobileSuggestions.Site(title: "Weather.com again", url: "http://weather.com#today"),
+            MobileSuggestions.Site(title: "Local weather", url: "cra://weather"),
+        ]
+        let rows = MobileSuggestions.rows(typed: "weat", completions: ["weather", "weather today", "weather aarhus"], sites: sites)
+        #expect(rows.map(\.text) == ["Weather.com", "weat", "Weather Forecast Aarhus", "weather"])
+        #expect(rows[0].kind == .site(url: "https://www.weather.com/"))
+        #expect(rows[2].kind == .site(url: "https://yr.no/aarhus"))
+        #expect(MobileSuggestions.destination(for: rows[0], engine: .google) == "https://www.weather.com/")
+        #expect(MobileSuggestions.destination(for: rows[3], engine: .google) == "https://www.google.com/search?q=weather")
+    }
+
+    /// Without an address match the typed text stays on top; every typed word has to begin a
+    /// word of the title, and no more than two sites crowd out the engine.
+    @Test func titleMatchesFollowTheTypedText() {
+        let sites = [
+            MobileSuggestions.Site(title: "Risotto vs paella", url: "https://a.example/1"),
+            MobileSuggestions.Site(title: "Paella recipe", url: "https://b.example/2"),
+            MobileSuggestions.Site(title: "Best paella in Valencia", url: "https://c.example/3"),
+            MobileSuggestions.Site(title: "Spanish rice", url: "https://d.example/4"),
+        ]
+        let rows = MobileSuggestions.rows(typed: "pae", completions: ["paella"], sites: sites)
+        #expect(rows.map(\.text) == ["pae", "Risotto vs paella", "Paella recipe", "paella"])
+        #expect(MobileSuggestions.rows(typed: "paella rec", completions: [], sites: sites).map(\.text) == ["paella rec", "Paella recipe"])
+        #expect(MobileSuggestions.rows(typed: "ella", completions: [], sites: sites).map(\.text) == ["ella"])
+        // A site with no title shows its address.
+        let untitled = MobileSuggestions.rows(typed: "news", completions: [], sites: [.init(title: " ", url: "https://www.news.example/")])
+        #expect(untitled.map(\.text) == ["news.example", "news"])
+    }
+
     /// Arc Search's engines, in its menu's order; the two the Mac app lacks have their own addresses.
     @Test func searchEnginesAreArcSearchs() {
         #expect(MobileSearchEngine.allCases.map(\.label) == ["Google", "Bing", "DuckDuckGo", "Ecosia", "Perplexity", "Kagi"])
@@ -681,5 +716,7 @@ struct MobileFidgetTests {
         // The scaled page's top edge: half the lost height, plus the shift.
         let top = 852 * (1 - placed.scale) / 2 + placed.shiftDown
         #expect(abs(top - 59) < 1e-9)
+        // White under the dim comes out #cccccc, the screenshot's colour.
+        #expect(Int(((1 - MobilePageBehindSearch.dim) * 255).rounded()) == 0xcc)
     }
 }

@@ -44,8 +44,9 @@ public enum MobilePageBehindSearch {
     /// The card's distance from each side of the screen.
     public static let sideInset: CGFloat = 10
     public static let cornerRadius: CGFloat = 12
-    /// How dark the page gets.
-    public static let dim: CGFloat = 0.22
+    /// How dark the page gets: black at 0.2 over it, which turns a white page #cccccc as in the
+    /// TidBITS screenshot.
+    public static let dim: CGFloat = 0.2
 
     /// The page's scale and its shift down, for a screen of `size` whose status bar ends at `safeTop`:
     /// the card's top edge sits right under the status bar.

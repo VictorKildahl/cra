@@ -618,3 +618,21 @@ final class EmptyHomeTests: BrowserTestCase {
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
     }
 }
+
+final class SiteMatchTests: BrowserTestCase {
+    /// A page the phone has open comes up as a row when its address is typed, above the typed
+    /// text, and a tap on it opens it. The address never loads (`.invalid`), so no network.
+    func testAnOpenPageIsOfferedWhenItsAddressIsTyped() {
+        launch(["-CraOpenURL", "http://sitematch.invalid/", "-CraSearch", "NO"])
+        XCTAssertTrue(app.buttons["bar-search"].waitForExistence(timeout: 10))
+        sleep(2)
+        app.buttons["bar-search"].tap()
+        XCTAssertTrue(app.textFields["search-field"].waitForExistence(timeout: 5))
+        app.textFields["search-field"].typeText("sitem")
+        let row = app.descendants(matching: .any)["suggestion-0"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(row.staticTexts["sitematch.invalid"].waitForExistence(timeout: 3), "the open page leads the list")
+        XCTAssertTrue(app.descendants(matching: .any)["suggestion-1"].staticTexts["sitem"].exists, "the typed text follows it")
+        keep("site-match")
+    }
+}

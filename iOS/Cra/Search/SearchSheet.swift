@@ -34,6 +34,8 @@ final class SearchSheet: UIView, UITextFieldDelegate {
     var isIncognito = false { didSet { applyIncognito() } }
 
     private(set) var rows: [MobileSuggestions.Row] = []
+    /// A site row's icon, by its address.
+    var siteIcon: (String) -> UIImage? = { _ in nil }
     /// The favorites shown under the field while it is empty, with their icons.
     private var favorites: [(MobileFavorites.Site, UIImage?)] = []
 
@@ -113,7 +115,11 @@ final class SearchSheet: UIView, UITextFieldDelegate {
                 view.configure(favorite: favorites[index].0, icon: favorites[index].1)
                 view.isHidden = false
             } else if !showsFavorites, index < rows.count {
-                view.configure(rows[index])
+                if case .site(let url) = rows[index].kind {
+                    view.configure(site: rows[index].text, icon: siteIcon(url))
+                } else {
+                    view.configure(rows[index])
+                }
                 view.isHidden = false
             } else {
                 view.isHidden = true
@@ -345,6 +351,8 @@ final class SuggestionRowView: UIControl {
     private let label = UILabel()
     private let chip = UIButton(type: .custom)
     private let pin = UIImageView(image: UIImage(systemName: "pin.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .regular)))
+    /// Shows a site's icon (20 pt) in place of a search glyph.
+    private var isSite = false
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -380,16 +388,24 @@ final class SuggestionRowView: UIControl {
 
     /// A favorite: its site icon, its title, and the pin at the right.
     func configure(favorite: MobileFavorites.Site, icon image: UIImage?) {
+        configure(site: favorite.title, icon: image)
+        pin.isHidden = false
+    }
+
+    /// A page the phone knows: its site icon and title, one line, no "Browse for Me".
+    func configure(site title: String, icon image: UIImage?) {
         icon.image = image ?? UIImage(systemName: "globe", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .regular))
         icon.contentMode = image == nil ? .center : .scaleAspectFit
         icon.layer.cornerRadius = 4
         icon.clipsToBounds = true
-        label.attributedText = NSAttributedString(string: favorite.title, attributes: [
+        isSite = true
+        label.numberOfLines = 1
+        label.attributedText = NSAttributedString(string: title, attributes: [
             .font: UIFont.systemFont(ofSize: 17, weight: .medium), .foregroundColor: Palette.primaryText,
         ])
-        label.accessibilityLabel = favorite.title
+        label.accessibilityLabel = title
         chip.isHidden = true
-        pin.isHidden = false
+        pin.isHidden = true
         setNeedsLayout()
     }
 
@@ -399,7 +415,11 @@ final class SuggestionRowView: UIControl {
         let symbol = row.kind == .address ? "globe" : "magnifyingglass"
         icon.image = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .medium))
         icon.contentMode = .center
+        icon.layer.cornerRadius = 0
+        isSite = false
         pin.isHidden = true
+        // A long suggestion wraps to a second line, as in Arc Search, and is cut after that.
+        label.numberOfLines = 2
         let font = UIFont.systemFont(ofSize: 17, weight: .medium)
         let text = NSMutableAttributedString(string: row.text, attributes: [.font: font, .foregroundColor: Palette.primaryText])
         if row.typedPrefixLength > 0 {
@@ -415,8 +435,8 @@ final class SuggestionRowView: UIControl {
     override func layoutSubviews() {
         super.layoutSubviews()
         // A favorite's site icon is 20 pt; a search row's glyph is centred in the same place.
-        icon.frame = pin.isHidden ? CGRect(x: 28.8 - 14, y: bounds.midY - 14, width: 28, height: 28)
-                                  : CGRect(x: 28.8 - 10, y: bounds.midY - 10, width: 20, height: 20)
+        icon.frame = isSite ? CGRect(x: 28.8 - 10, y: bounds.midY - 10, width: 20, height: 20)
+                            : CGRect(x: 28.8 - 14, y: bounds.midY - 14, width: 28, height: 28)
         pin.frame = CGRect(x: bounds.width - 46, y: bounds.midY - 12, width: 24, height: 24)
         let chipSize = CGSize(width: 100.5, height: 29.5)
         chip.frame = CGRect(x: bounds.width - 17.7 - chipSize.width, y: bounds.midY - chipSize.height / 2,
