@@ -635,6 +635,15 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         model.done = { [weak self] in self?.dismiss(animated: true) }
         model.showArchive = { [weak self] in self?.showArchive() }
         model.showOnboarding = { [weak self] in self?.showOnboarding() }
+        model.showWidgetGuide = { [weak self] in
+            guard let self else { return }
+            var guide: UIViewController?
+            let view = WidgetGuideView(done: { guide?.dismiss(animated: true) })
+            let sheet = UIHostingController(rootView: view)
+            guide = sheet
+            sheet.sheetPresentationController?.prefersGrabberVisible = true
+            self.topPresenter.present(sheet, animated: true)
+        }
         model.showDownloads = { [weak self] in self?.showDownloads() }
         model.exportData = { [weak self] in
             guard let self else { return }

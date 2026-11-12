@@ -821,3 +821,35 @@ final class AppLinkTests: BrowserTestCase {
         XCTAssertEqual(host.label, "example.com", "the link loaded in the browser")
     }
 }
+
+final class WidgetGuideTests: BrowserTestCase {
+    /// App Settings ▸ Add Widget walks through Arc Search's three steps and closes on Done!.
+    func testTheWidgetGuideWalksThroughItsSteps() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["bar-settings"].waitForExistence(timeout: 5))
+        app.buttons["bar-settings"].tap()
+        let row = app.buttons["setting-add-widget"]
+        XCTAssertTrue(app.buttons["setting-default-browser"].waitForExistence(timeout: 5))
+        // Further down the list.
+        for _ in 0..<3 where !row.isHittable { app.swipeUp() }
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+        let title = app.staticTexts["widget-guide-title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        XCTAssertEqual(title.label, "Bring Cra to your home screen")
+        sleep(1)
+        keep("widget-guide-1")
+        app.buttons["widget-guide-next"].tap()
+        sleep(2)
+        XCTAssertTrue(title.label.hasPrefix("Start by holding"))
+        keep("widget-guide-2")
+        app.buttons["widget-guide-next"].tap()
+        sleep(3)
+        XCTAssertTrue(title.label.contains("Add Widget"))
+        keep("widget-guide-3")
+        app.buttons["widget-guide-next"].tap()
+        XCTAssertFalse(title.waitForExistence(timeout: 2), "Done! closes the guide")
+    }
+}

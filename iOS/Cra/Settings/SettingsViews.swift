@@ -14,6 +14,7 @@ final class SettingsModel: ObservableObject {
     var clearData: (_ history: Bool, _ siteData: Bool) -> Void = { _, _ in }
     var exportData: () -> Void = {}
     var showOnboarding: () -> Void = {}
+    var showWidgetGuide: () -> Void = {}
     var done: () -> Void = {}
 
     init(store: MobileSettingsStore, host: String?, canSummarize: Bool) {
@@ -260,6 +261,15 @@ struct AppSettingsList: View {
                     SettingLabel(title: "App Icon", symbol: "app.fill", color: .pink)
                 }
                 .accessibilityIdentifier("setting-app-icon")
+                Button { model.showWidgetGuide() } label: {
+                    HStack {
+                        SettingLabel(title: "Add Widget", symbol: "square.grid.2x2.fill", color: .indigo)
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(.tertiary)
+                    }
+                }
+                .foregroundStyle(.primary)
+                .accessibilityIdentifier("setting-add-widget")
             }
             .settingsRow()
             Section {
