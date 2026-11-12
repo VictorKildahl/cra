@@ -364,19 +364,50 @@ public enum LinkSummaryPrompt {
     }
 }
 
-/// Summaries already made, newest last, so hovering a link again shows its card at once without
-/// growing for as long as Cra runs.
+/// A preview's fetch and model context. Arc keys cards by URL and browser context; the local
+/// answer also depends on search, language and secure-connection policy.
+public struct LinkSummaryRequest: Hashable, Sendable {
+    public enum Profile: Hashable, Sendable {
+        case `default`
+        case path(String)
+    }
+
+    public let link: URL
+    public let profile: Profile
+    public let httpsOnly: Bool
+    public let searchQuery: String?
+    public let language: String
+
+    public init(link: URL, profilePath: String?, httpsOnly: Bool, searchQuery: String?, language: String) {
+        self.link = link
+        // CEF treats both nil and an empty profile path as its global Default context.
+        self.profile = profilePath.flatMap { $0.isEmpty ? nil : .path($0) } ?? .default
+        self.httpsOnly = httpsOnly
+        self.searchQuery = searchQuery
+        self.language = language
+    }
+
+    public var profilePath: String? {
+        if case .path(let path) = profile { return path }
+        return nil
+    }
+
+    public var fetchURL: URL { LinkSummaryPolicy.fetchURL(for: link, httpsOnly: httpsOnly) }
+}
+
+/// Completed usable summaries, newest last. Failed or blocked pages are retried on the next
+/// hover, rather than retaining a temporary model failure or login challenge for the app's life.
 public struct LinkSummaryCache: Sendable {
     public let limit: Int
-    private var order: [String] = []
-    private var entries: [String: LinkSummaryResult?] = [:]
+    private var order: [LinkSummaryRequest] = []
+    private var entries: [LinkSummaryRequest: LinkSummaryResult] = [:]
 
     public init(limit: Int = 40) { self.limit = limit }
 
-    /// `.some(nil)` is a page known to have no preview.
-    public func lookup(_ key: String) -> LinkSummaryResult?? { entries[key] }
+    public func lookup(_ key: LinkSummaryRequest) -> LinkSummaryResult? { entries[key] }
 
-    public mutating func store(_ value: LinkSummaryResult?, for key: String) {
+    public mutating func store(_ value: LinkSummaryResult?, for key: LinkSummaryRequest) {
+        guard let value else { return }
         if entries.updateValue(value, forKey: key) != nil { order.removeAll { $0 == key } }
         order.append(key)
         while order.count > limit { entries.removeValue(forKey: order.removeFirst()) }

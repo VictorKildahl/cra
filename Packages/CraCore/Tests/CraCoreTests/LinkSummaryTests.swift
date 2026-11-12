@@ -259,17 +259,70 @@ struct LinkSummaryTests {
 
     // MARK: - Cache
 
+    private func request(_ link: String = "https://example.com/private", profile: String? = nil,
+                         httpsOnly: Bool = false, query: String? = nil, language: String = "English") -> LinkSummaryRequest {
+        LinkSummaryRequest(link: u(link), profilePath: profile, httpsOnly: httpsOnly, searchQuery: query, language: language)
+    }
+
+    @Test func failedPreviewCanBeRetried() {
+        var cache = LinkSummaryCache()
+        cache.store(nil, for: request())
+        #expect(cache.lookup(request()) == nil,
+                "A temporary preview failure must not become a cached no-preview result")
+        #expect(cache.count == 0)
+        let recovered = LinkSummaryResult(url: "https://example.com/private", title: "Recovered", host: "example.com",
+                                          quickSummary: "Available again", details: [])
+        cache.store(recovered, for: request())
+        #expect(cache.lookup(request()) == recovered)
+    }
+
+    @Test func cachedPreviewNeverCrossesFetchOrModelContexts() {
+        let original = request(profile: "/profiles/a", query: "price")
+        let variants = [
+            request(profile: "/profiles/b", query: "price"),
+            request(query: "price"),
+            request(profile: "/profiles/a", query: "reviews"),
+            request(profile: "/profiles/a"),
+            request(profile: "/profiles/a", query: "price", language: "Danish"),
+            request(profile: "/profiles/a", httpsOnly: true, query: "price"),
+            request("https://example.com/other", profile: "/profiles/a", query: "price"),
+        ]
+        var cache = LinkSummaryCache()
+        let privateCard = LinkSummaryResult(url: original.link.absoluteString, title: "Profile A's page", host: "example.com",
+                                            quickSummary: "Account-specific information", details: [])
+        cache.store(privateCard, for: original)
+        #expect(cache.lookup(request(profile: "/profiles/a", query: "price")) == privateCard)
+        for context in variants {
+            #expect(cache.lookup(context) == nil, "A cached preview must not cross profile, query, language or HTTPS context")
+        }
+    }
+
+    @Test func requestCapturesDefaultProfileAndEffectiveFetchURL() {
+        let defaultRequest = request("http://example.com/private", httpsOnly: true, query: "price", language: "Danish")
+        #expect(defaultRequest.profile == .default)
+        #expect(defaultRequest.profilePath == nil)
+        #expect(defaultRequest == request("http://example.com/private", profile: "", httpsOnly: true, query: "price", language: "Danish"))
+        #expect(defaultRequest.link == u("http://example.com/private"))
+        #expect(defaultRequest.fetchURL == u("https://example.com/private"))
+        #expect(defaultRequest.searchQuery == "price")
+        #expect(defaultRequest.language == "Danish")
+        let named = request(profile: "/profiles/a")
+        #expect(named.profile == .path("/profiles/a"))
+        #expect(named.profilePath == "/profiles/a")
+    }
+
     @Test func cacheKeepsTheNewest() {
         var c = LinkSummaryCache(limit: 2)
-        let r = LinkSummaryResult(url: "a", title: "A", host: "a", quickSummary: nil, details: [])
-        c.store(r, for: "a")
-        c.store(nil, for: "b")
-        #expect(c.lookup("b") == .some(nil))
-        c.store(r, for: "a")  // touched again: "b" is now the oldest
-        c.store(r, for: "c")
+        let a = request("https://a.example"), b = request("https://b.example"), third = request("https://c.example")
+        let r = LinkSummaryResult(url: "https://a.example", title: "A", host: "a.example", quickSummary: nil, details: [])
+        c.store(r, for: a)
+        c.store(r, for: b)
+        c.store(r, for: a)  // stored again: "b" is now the oldest
+        c.store(r, for: third)
         #expect(c.count == 2)
-        #expect(c.lookup("b") == nil)
-        #expect(c.lookup("a") == .some(r))
+        #expect(c.lookup(b) == nil)
+        #expect(c.lookup(a) == r)
+        #expect(c.lookup(third) == r)
     }
 
     // MARK: - Settings

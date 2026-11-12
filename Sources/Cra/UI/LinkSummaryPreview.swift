@@ -75,18 +75,19 @@ final class LinkSummaryPreviewController {
         p.cardView.favicon = h.favicon
         let theme = h.theme
         CraLog.note("5-Second Previews: \(kind == .summary ? "answer" : "small") card opens\(rect == nil ? " by the pointer" : "")")
+        let request = LinkSummaryService.request(link: h.link, profilePath: h.profilePath, httpsOnly: h.httpsOnly,
+                                                 searchQuery: LinkSummaryPolicy.searchQuery(page: h.page))
         switch kind {
         case .summary:
-            if let card = LinkSummaryService.shared.cached(h.link) {
+            if let card = LinkSummaryService.shared.cached(request) {
                 p.cardView.show(.summary(card), theme: theme)
                 p.open(over: parent)
                 return
             }
             p.cardView.show(.loading, theme: theme)
             p.open(over: parent)
-            let query = LinkSummaryPolicy.searchQuery(page: h.page)
             loading = Task { @MainActor [weak self, weak p] in
-                await LinkSummaryService.shared.load(link: h.link, profilePath: h.profilePath, httpsOnly: h.httpsOnly, searchQuery: query) { card in
+                await LinkSummaryService.shared.load(request) { card in
                     guard let self, let p, self.shown == h.link else { return }
                     // The loading card stays until the answer starts: the page alone shows nothing new.
                     guard card.result != nil || card.finished else { return }
@@ -98,7 +99,7 @@ final class LinkSummaryPreviewController {
             p.cardView.show(.loading, theme: theme)
             p.open(over: parent)
             loading = Task { @MainActor [weak self, weak p] in
-                let title = await LinkSummaryService.shared.title(link: h.link, profilePath: h.profilePath, httpsOnly: h.httpsOnly)
+                let title = await LinkSummaryService.shared.title(request)
                 guard !Task.isCancelled, let self, let p, self.shown == h.link else { return }
                 p.cardView.show(.link(title: title ?? LinkSummaryPrompt.displayHost(h.link), address: LinkSummaryPolicy.displayAddress(h.link)), theme: theme)
                 p.fit()

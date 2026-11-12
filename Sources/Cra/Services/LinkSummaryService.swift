@@ -24,9 +24,9 @@ final class LinkSummaryService {
     }
 
     private var cards = LinkSummaryCache()
-    private var images: [String: NSImage] = [:]
-    private var imageOrder: [String] = []
-    private var titles: [String: String] = [:]
+    private var images: [LinkSummaryRequest: NSImage] = [:]
+    private var imageOrder: [LinkSummaryRequest] = []
+    private var titles: [LinkSummaryRequest: String] = [:]
 
     /// Banner pictures come over a session that keeps nothing on disk and sends no cookies.
     private let imageSession = URLSession(configuration: .ephemeral)
@@ -35,21 +35,27 @@ final class LinkSummaryService {
 
     var isAvailable: Bool { TidyTabsService.fakeModel || TidyTabsService.shared.modelAvailable }
 
-    /// A card made before, finished.
-    func cached(_ link: URL) -> Card? {
-        guard let known = cards.lookup(link.absoluteString) else { return nil }
-        let host = LinkSummaryPrompt.displayHost(link)
-        return Card(title: known?.title ?? host, host: host, image: images[link.absoluteString], result: known, finished: true)
+    /// Capture the output language once, so cache lookup and generation cannot disagree.
+    static func request(link: URL, profilePath: String?, httpsOnly: Bool, searchQuery: String?) -> LinkSummaryRequest {
+        LinkSummaryRequest(link: link, profilePath: profilePath, httpsOnly: httpsOnly,
+                           searchQuery: searchQuery, language: language)
+    }
+
+    /// A card made before in this exact fetch/model context, finished.
+    func cached(_ request: LinkSummaryRequest) -> Card? {
+        guard let known = cards.lookup(request) else { return nil }
+        return Card(title: known.title, host: known.host, image: images[request], result: known, finished: true)
     }
 
     /// Fetches the page, then streams the model's answer into `update`. `update` first fires once
     /// the page has arrived (title and banner, no rows yet): that is when the card opens. Nothing
     /// fires when the page doesn't load. Cancelling the task stops the model.
-    func load(link: URL, profilePath: String?, httpsOnly: Bool, searchQuery: String?, update: @escaping (Card) -> Void) async {
+    func load(_ request: LinkSummaryRequest, update: @escaping (Card) -> Void) async {
         guard isAvailable else { return }
         let started = Date()
-        let fetchURL = LinkSummaryPolicy.fetchURL(for: link, httpsOnly: httpsOnly)
-        guard let html = await Self.fetch(fetchURL, profilePath: profilePath), !Task.isCancelled else {
+        let link = request.link
+        let fetchURL = request.fetchURL
+        guard let html = await Self.fetch(fetchURL, profilePath: request.profilePath), !Task.isCancelled else {
             CraLog.note("5-Second Previews: no page (\(Task.isCancelled ? "cancelled" : "didn't load"))")
             return
         }
@@ -60,16 +66,16 @@ final class LinkSummaryService {
         let box = Box(Card(title: content.title ?? host, host: host))
         update(box.card)
 
-        if let imageURL = content.imageURL(page: fetchURL).map({ LinkSummaryPolicy.fetchURL(for: $0, httpsOnly: httpsOnly) }) {
+        if let imageURL = content.imageURL(page: fetchURL).map({ LinkSummaryPolicy.fetchURL(for: $0, httpsOnly: request.httpsOnly) }) {
             Task { @MainActor in
                 guard let image = await self.image(imageURL), !Task.isCancelled else { return }
-                self.remember(image, for: link.absoluteString)
+                self.remember(image, for: request)
                 box.card.image = image
                 update(box.card)
             }
         }
 
-        let final = await Self.ask(url: fetchURL, content: content, searchQuery: searchQuery) { answer in
+        let final = await Self.ask(url: fetchURL, content: content, searchQuery: request.searchQuery, language: request.language) { answer in
             guard let partial = LinkSummaryPrompt.result(url: link, title: content.title, answer: answer) else { return }
             box.card.result = partial
             update(box.card)
@@ -77,7 +83,7 @@ final class LinkSummaryService {
         guard !Task.isCancelled else { return }
         box.card.result = final.flatMap { LinkSummaryPrompt.result(url: link, title: content.title, answer: $0) }
         box.card.finished = true
-        cards.store(box.card.result, for: link.absoluteString)
+        cards.store(box.card.result, for: request)
         update(box.card)
         // Counts and time only: the links people hover stay out of the log (it goes into diagnostics).
         CraLog.note(String(format: "5-Second Previews: %@ in %.1f s", box.card.result.map { "\($0.details.count) details" } ?? "no preview",
@@ -85,13 +91,14 @@ final class LinkSummaryService {
     }
 
     /// The small card's title: the page's <title>, nil when the page didn't load.
-    func title(link: URL, profilePath: String?, httpsOnly: Bool) async -> String? {
-        if let known = titles[link.absoluteString] { return known }
-        guard let html = await Self.fetch(LinkSummaryPolicy.fetchURL(for: link, httpsOnly: httpsOnly), profilePath: profilePath) else { return nil }
+    func title(_ request: LinkSummaryRequest) async -> String? {
+        if let known = titles[request] { return known }
+        guard let html = await Self.fetch(request.fetchURL, profilePath: request.profilePath), !Task.isCancelled else { return nil }
         let title = await Task.detached(priority: .userInitiated) { LinkSummaryContent.extractText(from: html).title }.value
+        guard !Task.isCancelled else { return nil }
         if let title {
             if titles.count >= 40 { titles.removeAll() }
-            titles[link.absoluteString] = title
+            titles[request] = title
         }
         return title
     }
@@ -117,7 +124,7 @@ final class LinkSummaryService {
         return image
     }
 
-    private func remember(_ image: NSImage, for key: String) {
+    private func remember(_ image: NSImage, for key: LinkSummaryRequest) {
         if images.updateValue(image, forKey: key) != nil { imageOrder.removeAll { $0 == key } }
         imageOrder.append(key)
         while imageOrder.count > 20 { images.removeValue(forKey: imageOrder.removeFirst()) }
@@ -130,7 +137,7 @@ final class LinkSummaryService {
     }
 
     /// The model's answer; `partial` gets it as it streams. Nil when the model failed.
-    private static func ask(url: URL, content: LinkSummaryContent.Extracted, searchQuery: String?,
+    private static func ask(url: URL, content: LinkSummaryContent.Extracted, searchQuery: String?, language: String,
                             partial: (LinkSummaryPrompt.Answer) -> Void) async -> LinkSummaryPrompt.Answer? {
         if TidyTabsService.fakeModel {
             let answer = LinkSummaryPrompt.fakeAnswer(content: content)
