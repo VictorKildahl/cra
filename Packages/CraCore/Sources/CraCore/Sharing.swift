@@ -130,7 +130,7 @@ public struct UsageStats: Codable, Equatable, Sendable {
         "boostsEnabled", "calendarHoverPreview", "commandBarCurrentSpaceOnly", "calendarMeetingLink", "calendarTimeToNextMeeting", "chromeEngine",
         "crashReports", "defaultLinkDestination", "edgeToEdgeContent", "editAddressInPlace", "favoriteLogoOutline", "favoritePreviews", "fingerprintingProtection", "fiveSecondPreviews",
         "folderPreviews", "hapticFeedbackOnReorder", "httpsOnly", "keepInMenuBar", "littleWindowArchiveAfter",
-        "littleWindowOnOptionCommandClick", "littleWindowShortcutEverywhere", "liveCalendar", "mediaLibraryEnabled", "newTabButtonAtTop", "newTabsAtTop",
+        "littleWindowOnOptionCommandClick", "notionCalendarPreviews", "outlookCalendarPreviews", "outlookMailPreviews", "littleWindowShortcutEverywhere", "liveCalendar", "mediaLibraryEnabled", "newTabButtonAtTop", "newTabsAtTop",
         "openLinksInForeground", "pageTopWindowDrag", "peekExpandInSourceTab", "peekInEveryTab", "peekLinksToOtherSites", "peekOnShiftClick",
         "perfRecording", "recentPagesPreviews", "restoreWindows", "searchEngine", "searchSuggestions", "shareThemeWithWebsites",
         "sharedFavorites", "showSpaceHeaderOnSingleSpace", "showStatusBar", "showToolbar", "soundEffects",

@@ -90,8 +90,8 @@ struct GeneralPane: View {
 }
 
 /// Arc's "Show Arc Previews:" sheet (422 wide, Arc 1.172.2): what shows when you hover a folder, a pinned tab or a
-/// favorite. Arc lists seven; Cra has these four in Arc's order (Notion Calendar is still to come; Outlook is left
-/// out, as it would need a Microsoft sign-in kept in Cra: GitHub #376).
+/// favorite. All seven of Arc's, in its order (GitHub #376); Outlook and Notion Calendar read with the page's own
+/// sign-in, as the Google ones do, not Arc's Microsoft sign-in.
 private struct PreviewsSheet: View {
     @Environment(SidebarStore.self) private var store
     @Environment(\.dismiss) private var dismiss
@@ -106,7 +106,10 @@ private struct PreviewsSheet: View {
                 Toggle("Folders", isOn: $store.settings.folderPreviews)
                 Toggle("Google Calendar", isOn: $store.settings.calendarHoverPreview)
                 Toggle("Google Mail", isOn: $store.settings.favoritePreviews)
+                Toggle("Outlook Calendar", isOn: $store.settings.outlookCalendarPreviews)
+                Toggle("Outlook Mail", isOn: $store.settings.outlookMailPreviews)
                 Toggle("Recent pages on Linear, Notion, and Figma", isOn: $store.settings.recentPagesPreviews)
+                Toggle("Notion Calendar", isOn: $store.settings.notionCalendarPreviews)
             }
             .toggleStyle(.checkbox)
             .padding(.top, 4)

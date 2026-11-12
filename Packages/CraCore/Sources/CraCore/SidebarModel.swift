@@ -643,6 +643,11 @@ public struct AppSettings: Codable, Equatable {
     /// Previews Settings… ▸ "Recent pages on Linear, Notion, and Figma" (GitHub #376): hovering a
     /// favorite or pinned tab on Linear, Notion, Figma or Confluence lists the pages you visited there.
     public var recentPagesPreviews: Bool = true
+    /// Previews Settings… ▸ "Outlook Mail", "Outlook Calendar" and "Notion Calendar" (GitHub #376),
+    /// read with the page's own sign-in.
+    public var outlookMailPreviews: Bool = true
+    public var outlookCalendarPreviews: Bool = true
+    public var notionCalendarPreviews: Bool = true
     /// Cra's addition (PR #267, Dia-like): the open favorite's rim takes its logo's colours.
     /// Off keeps Arc's neutral 2 pt rim.
     public var favoriteLogoOutline: Bool = false
@@ -937,6 +942,9 @@ extension AppSettings {
         boostsEnabled = try c.decodeIfPresent(Bool.self, forKey: .boostsEnabled) ?? true
         favoritePreviews = try c.decodeIfPresent(Bool.self, forKey: .favoritePreviews) ?? true
         recentPagesPreviews = try c.decodeIfPresent(Bool.self, forKey: .recentPagesPreviews) ?? true
+        outlookMailPreviews = try c.decodeIfPresent(Bool.self, forKey: .outlookMailPreviews) ?? true
+        outlookCalendarPreviews = try c.decodeIfPresent(Bool.self, forKey: .outlookCalendarPreviews) ?? true
+        notionCalendarPreviews = try c.decodeIfPresent(Bool.self, forKey: .notionCalendarPreviews) ?? true
         favoriteLogoOutline = try c.decodeIfPresent(Bool.self, forKey: .favoriteLogoOutline) ?? false
         liveCalendar = try c.decodeIfPresent(Bool.self, forKey: .liveCalendar) ?? true
         calendarHoverPreview = try c.decodeIfPresent(Bool.self, forKey: .calendarHoverPreview) ?? true

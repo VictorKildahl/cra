@@ -24,3 +24,21 @@ cra://debug?previewDismiss=1
 cra://debug?recentPages=notion&pages=0
 expect-log preview card shown: 240x[0-9]+$
 cra://debug?previewDismiss=1
+# Outlook (#376), read with the page's own sign-in: the mail card is Gmail's (exhale card with
+# nothing unread), the calendar card Google's, and a signed-out account asks to sign in.
+cra://debug?outlookPreview=mail&unread=3
+expect-log preview card shown: 238x254$
+cra://debug?previewDismiss=1
+cra://debug?outlookPreview=mail&unread=0
+expect-log preview card shown: 240x6[0-9]$
+cra://debug?previewDismiss=1
+cra://debug?outlookPreview=calendar
+expect-log preview card shown: 238x255$
+cra://debug?previewDismiss=1
+cra://debug?outlookPreview=signedOut
+expect-log preview card shown: 238x[0-9]+$
+cra://debug?previewDismiss=1
+# Notion Calendar shows the profile's Google calendar, as in Arc.
+cra://debug?notionCalendarPreview=1
+expect-log preview card shown: 238x255$
+cra://debug?previewDismiss=1

@@ -120,11 +120,46 @@ public enum SidebarTabPreview: Equatable, Sendable {
     case gmail
     case calendar
     case recentPages(RecentPagesPreview.Site)
+    case outlookMail
+    case outlookCalendar
+    case notionCalendar
 
     public static func kind(for url: String, settings: AppSettings) -> SidebarTabPreview? {
         if GmailPreview.feedURL(for: url) != nil { return settings.favoritePreviews ? .gmail : nil }
         if CalendarPreview.isCalendar(url) { return settings.liveCalendar && settings.calendarHoverPreview ? .calendar : nil }
         if let site = RecentPagesPreview.site(for: url) { return settings.recentPagesPreviews ? .recentPages(site) : nil }
+        switch OutlookPreview.kind(for: url) {
+        case .mail: return settings.outlookMailPreviews ? .outlookMail : nil
+        case .calendar: return settings.outlookCalendarPreviews ? .outlookCalendar : nil
+        case nil: break
+        }
+        if NotionCalendarPreview.isNotionCalendar(url) { return settings.notionCalendarPreviews ? .notionCalendar : nil }
         return nil
+    }
+
+    /// The card an address gets whatever the checkboxes say (the card already open keeps its kind).
+    public static func card(for url: String) -> SidebarTabPreview? { kind(for: url, settings: AppSettings()) }
+
+    /// The calendar card's gear: the last item turns the preview off (Arc's Google Calendar says
+    /// "Disable Live Calendar", which also stops the tile's countdown and Join link).
+    public var turnOffTitle: String? {
+        switch self {
+        case .calendar: "Disable Live Calendar"
+        case .outlookCalendar: "Turn Off Outlook Calendar Preview"
+        case .notionCalendar: "Turn Off Notion Calendar Preview"
+        default: nil
+        }
+    }
+
+    /// That item's switch: Live Calendar for Google, the preview's own checkbox for the others.
+    public func turnOff(_ settings: inout AppSettings) {
+        switch self {
+        case .gmail: settings.favoritePreviews = false
+        case .calendar: settings.liveCalendar = false
+        case .recentPages: settings.recentPagesPreviews = false
+        case .outlookMail: settings.outlookMailPreviews = false
+        case .outlookCalendar: settings.outlookCalendarPreviews = false
+        case .notionCalendar: settings.notionCalendarPreviews = false
+        }
     }
 }

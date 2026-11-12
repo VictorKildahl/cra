@@ -1833,6 +1833,10 @@ from the binary (static strings, metadata and its key table; nothing run), marke
   here.", "Recent Notion docs appear here.", "Recent Figma files appear here.", "Recent Confluence pages appear here."; the ＋ opens
   linear.app/new, notion.so/new, figma.com/new, confluence.new. The card itself wasn't seen (no accounts); Cra's (CraCore
   RecentPagesPreview) lists favicon, title and age in the Gmail card's style, on favorites and pinned tabs.
+  Notion Calendar has no fetcher of its own in the binary (only `calendar.notion.so`/`.com` and `…/event/create`): its card is
+  the Google Calendar preview. Outlook's empty mail line shares Gmail's string. Cra reads Outlook without Arc's Graph sign-in:
+  CraCore OutlookPreview borrows the sign-in headers of a hidden Outlook page's own `/owa/service.svc` requests (FindItem,
+  GetCalendarView).
 - [O] **Profiles**: a line on profiles, a list on the left ("Your Profiles", "Default — 5 Spaces", + − and rename under it, 205 pt wide)
   and the chosen profile's cards on the right: Search engine, Manage search (Search Settings…), Include search engine suggestions ·
   Archive tabs after (12 hours (default), 24 hours, 7 days, 30 days), New documents (——, Confluence Page, Google Doc, Notion Page, Word
