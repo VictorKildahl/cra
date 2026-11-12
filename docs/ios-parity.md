@@ -35,6 +35,15 @@ certificate warning, HTTP sign-in, link long-press menu and Handoff.
 6. Share extension; Languages; custom search engines; iPad and landscape; dark mode against a reference.
 7. Motion still unmeasured: the pill growing into the search field, the summarize fold.
 
+**Pin to Space: a proposal, waiting for Victor.** Arc Search's "Pin to Space:" writes into the
+desktop's sidebar. The Mac's sync folder (`SettingsSync`) is a bundle each Mac writes whole, manifest
+last; the phone writing `sidebar.json` would race the Macs and break that rule. Proposed instead: the
+phone writes `phone-pins.json` beside the bundle (entries: id, url, title, Space id, optional folder id,
+created), which a Mac that knows it reads on its next look, adds as pinned tabs, records as applied in
+its own `sync.json` state, and then writes a normal bundle. Older Macs ignore the file. The phone drops
+an entry once the Mac's `sidebar.json` holds it (or after 30 days). This is a data-folder format change
+(CLAUDE.md rule 4) with a reader on main, so it is Victor's call before it is built.
+
 **The reference.** Arc Search cannot be installed in the simulator (no App Store there, no Mac
 build). The footage and screenshots used are in `build/ios-reference/` of the worktree (not in
 git); [arc-search-reference.md](arc-search-reference.md) lists more. On 23 November 2026 Arc
