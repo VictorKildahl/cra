@@ -65,6 +65,8 @@ final class PictureInPictureControlsView: NSView {
         addSubview(scrubber)
         scrubber.onPress = { [weak self] in self?.show() }
         scrubber.onSeek = { PictureInPictureChrome.shared.actions?.seek($0) }
+        scrubber.isPlaying = { PictureInPictureChrome.shared.isPlaying }
+        scrubber.togglePlayback = { PictureInPictureChrome.shared.actions?.togglePlayback() }
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -185,6 +187,10 @@ final class PictureInPictureControlsView: NSView {
 final class PictureInPictureScrubberView: NSView {
     var onSeek: (Double) -> Void = { _ in }
     var onPress: () -> Void = {}
+    /// Whether the video plays now, and the way to pause or play it: a playing video holds while
+    /// the scrubber is held and plays on when it is let go, as Arc's (`wasPlayingAtDragBegin`).
+    var isPlaying: () -> Bool = { false }
+    var togglePlayback: () -> Void = {}
     /// The capsule in this view's coordinates.
     var track: CGRect = .zero { didSet { redraw() } }
     private var position = 0.0
@@ -231,12 +237,17 @@ final class PictureInPictureScrubberView: NSView {
 
     /// A press at `point` in a window of `size` (origin bottom left): the video goes there.
     func press(at point: CGPoint, in size: CGSize) {
-        guard let d = PictureInPictureScrubber(press: point, in: size, duration: duration) else { return }
+        guard drag == nil, let d = PictureInPictureScrubber(press: point, in: size, duration: duration, playing: isPlaying()) else { return }
         drag = d
+        if d.wasPlaying { togglePlayback() }
         seek(to: d.position)
     }
 
-    func release() { drag = nil }
+    func release() {
+        guard let d = drag else { return }
+        drag = nil
+        if d.wasPlaying { togglePlayback() }
+    }
 
     private func seek(to seconds: Double) {
         position = seconds

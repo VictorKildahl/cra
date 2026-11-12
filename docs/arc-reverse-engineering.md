@@ -837,11 +837,21 @@ Arc 1.172 binary (otool/llvm-objdump on the arm64 slice, 8 Nov, #246):
   (`PictureInPictureScrubber` in CraCore, 12 Nov) for a video with an end, and a press goes to that
   spot. [I] The side insets (12 pt tiny, 16 otherwise, as the other controls) and the press-to-seek
   are not from the binary. Cra's band leaves the bottom 8 pt to the window's resize edge.
+  [O static] (12 Nov, PR #384 review) Arc's `BasicScrubber` (module PictureInPicture) keeps
+  `dragStartTime`, `dragStartLocation`, `relativeTranslation`, `totalTranslation`,
+  `wasPlayingAtDragBegin`, `_scrubSpeed`, `barHeight`, `draggableHeight`, `_hovered`; a
+  `ScrubSpeedLabel` view sits with `PlayControls`, and the per-site config has `_scrubEnabled`. Cra
+  pauses a playing video while the scrubber is held and plays it on after (from
+  `wasPlayingAtDragBegin`). [I] The relative translations suggest a drag moves from where the video
+  was rather than jumping to the press; whether a plain press seeks, and the speed label's words
+  and look, are not settled: Arc's hover controls don't show while a script drives the pointer with
+  Arc in the background, and its PiP window hides when Arc is made active.
 Cra follows the limits, the scrim, the fade, the insets and the Back to Tab words
 (`PictureInPictureLayout` in CraCore) and keeps its 782×440-on-1728×1117 opening size.
 Double click (11 Nov, reported by a user): a double click on Arc's window returns to the video's tab.
-[U] Not observed here: Arc's gestures are SwiftUI and leave no strings (Arc 1.171), and it was not tried
-on Arc. Cra (`PictureInPictureGesture.returnsToTab`): the second click of a double click that stayed
+[O live] Arc 1.172.2, 12 Nov (PR #383 review): a real double click (cliclick) on a 242×136 PiP window
+of a playing file:// video took the window away and the page's video played on; a single click on
+the same window just before did nothing. Cra (`PictureInPictureGesture.returnsToTab`): the second click of a double click that stayed
 a click, anywhere outside the buttons, does what Back to Tab does; `cra.log` gets `pip: double click,
 back to tab`.
 Centre controls (8 Nov, GitHub #262, from the #246 reporter's Arc crops): play/pause only, glyph

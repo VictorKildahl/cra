@@ -1,8 +1,9 @@
 # Arc's Picture in Picture window has a scrubber along the bottom: it shows how far the video is,
 # and a press on it seeks. Cra's window had only the ±15 s skips (reported by a user, 11 Nov). Here
 # a 4 s clip is in Picture in Picture, paused: the scrubber shows, and a press half way along puts
-# the video at 2 s. A stream has no end, so its window has no scrubber. (No pointer: the test copy
-# runs in the background, so the press is handed to the scrubber.)
+# the video at 2 s. Played, a press pauses it until the scrubber is let go. A stream has no end, so
+# its window has no scrubber. (No pointer: the test copy runs in the background, so the press is
+# handed to the scrubber.)
 cra://open?url=file://${FIXTURES}/Pages/media.html
 expect-log loaded file:
 wait 2
@@ -17,6 +18,15 @@ cra://debug?cdp=Runtime.evaluate&params={"expression":"'at:'+document.getElement
 expect-log Cra cdp Runtime.evaluate .*"value":"at:2\.0"
 cra://debug?pip=half
 expect-log Cra pip half: windows=1 .* scrub=1 at=50
+# A playing video holds while the scrubber is held and plays on when it is let go, as Arc's
+# (`wasPlayingAtDragBegin`): one pause, then playing again.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"window.pauses=0;document.getElementById('v').addEventListener('pause',()=>pauses++);document.getElementById('v').play().then(()=>'pip:playing')","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"pip:playing"
+wait 1
+cra://debug?pipSeek=0.25
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'held:'+pauses+':'+!document.getElementById('v').paused"}
+expect-log Cra cdp Runtime.evaluate .*"value":"held:1:true"
 cra://debug?cdp=Runtime.evaluate&params={"expression":"document.exitPictureInPicture().then(()=>'pip:closed')","awaitPromise":true,"userGesture":true}
 expect-log Cra cdp Runtime.evaluate .*"value":"pip:closed"
 cra://open?url=file://${FIXTURES}/Pages/video.html

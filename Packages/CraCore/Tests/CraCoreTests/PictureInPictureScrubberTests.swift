@@ -62,4 +62,12 @@ struct PictureInPictureScrubberTests {
         #expect(drag.move(to: CGPoint(x: 5000, y: 10)) == 240)
         #expect(drag.move(to: CGPoint(x: -5000, y: 10)) == 0)
     }
+
+    /// Arc's scrubber remembers whether the video played when the drag began
+    /// (`wasPlayingAtDragBegin`, Arc 1.172 binary): a playing video holds while it is scrubbed and
+    /// plays on after; a paused one stays paused.
+    @Test func aPlayingVideoPlaysOnAfterTheScrub() throws {
+        #expect(try #require(PictureInPictureScrubber(press: CGPoint(x: 100, y: 10), in: size, duration: 240, playing: true)).wasPlaying)
+        #expect(try !#require(PictureInPictureScrubber(press: CGPoint(x: 100, y: 10), in: size, duration: 240, playing: false)).wasPlaying)
+    }
 }

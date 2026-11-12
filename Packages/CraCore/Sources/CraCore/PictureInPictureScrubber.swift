@@ -50,18 +50,23 @@ public struct PictureInPictureScrubber: Sendable, Equatable {
 
     public let duration: Double
     public let trackWidth: CGFloat
+    /// Whether the video played when the press began. Arc's scrubber keeps this
+    /// (`wasPlayingAtDragBegin`): the video holds still while the scrubber is held and plays on
+    /// when it is let go.
+    public let wasPlaying: Bool
     /// Where the video is with the drag so far, in seconds.
     public private(set) var position: Double
     private let pressY: CGFloat
     private var lastX: CGFloat
 
-    /// A press at `point` on a window of `size` showing a video `duration` seconds long. The
-    /// video goes to the pressed spot on the capsule.
-    public init?(press point: CGPoint, in size: CGSize, duration: Double) {
+    /// A press at `point` on a window of `size` showing a video `duration` seconds long, playing
+    /// or not. The video goes to the pressed spot on the capsule.
+    public init?(press point: CGPoint, in size: CGSize, duration: Double, playing: Bool = false) {
         let track = Self.track(in: size)
         guard Self.shows(duration: duration), track.width > 0 else { return nil }
         self.duration = duration
         trackWidth = track.width
+        wasPlaying = playing
         pressY = point.y
         lastX = point.x
         position = Double(min(max((point.x - track.minX) / track.width, 0), 1)) * duration
