@@ -91,19 +91,23 @@ final class PeekBarView: NSView {
 
 /// Close, Expand and Add To Split beside the Peek card (Arc's confirmCloseModal,
 /// openInSpaceExpander and openInSplit): round buttons in the space's darkest tone with its light
-/// foreground for the glyph, each with Arc's tip.
+/// foreground for the glyph, each with Arc's tip. They rise under the pointer and give under a
+/// press, and a shortcut presses its button as a click does (PeekControlLook, GitHub #385).
 @MainActor
 final class PeekControlsPanel: NSPanel {
     struct Button {
+        let control: PeekControl
         let symbol: String
         let help: String
         let run: () -> Void
     }
 
     private let views: [PeekControlButton]
+    private let controls: [PeekControl]
 
     init(buttons: [Button]) {
         views = buttons.map { PeekControlButton(symbol: $0.symbol, help: $0.help, run: $0.run) }
+        controls = buttons.map(\.control)
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .clear
@@ -129,57 +133,159 @@ final class PeekControlsPanel: NSPanel {
         let ink = NSColor(LittlePalette.spaceName(theme))
         for (v, f) in zip(views, frames) {
             v.frame = NSRect(x: f.minX - all.minX, y: f.minY - all.minY, width: f.width, height: f.height)
-            v.paint(fill: fill, ink: ink)
+            v.paint(fill: fill, ink: ink, scale: backingScaleFactor)
         }
+    }
+
+    /// A shortcut for one of the buttons ran (PeekControl.pressed(byAction:)): it gives as under a
+    /// click, at once, and springs back a moment later. The action doesn't wait for it.
+    func pressFromKey(_ control: PeekControl) {
+        guard let i = controls.firstIndex(of: control) else { return }
+        views[i].pressBriefly()
     }
 }
 
+/// One round Peek button. Its fill, shadow and glyph are layers of its own (`face` inside
+/// `scaler`), not the view's backing layer, which AppKit places: the press scales `scaler` about
+/// its centre on Arc's press spring, the pointer lifts `face` and deepens its shadow on the hover
+/// spring.
 final class PeekControlButton: NSView {
     private let run: () -> Void
-    private let glyph = NSImageView()
     private let symbol: String
+    private let scaler = CALayer()
+    private let face = CALayer()
+    private let glyph = CALayer()
+    private var hovered = false
     private var pressed = false
+    private var keyRelease: DispatchWorkItem?
 
     init(symbol: String, help: String, run: @escaping () -> Void) {
         self.run = run
         self.symbol = symbol
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.shadowColor = NSColor.black.cgColor
-        layer?.shadowOpacity = 0.25
-        layer?.shadowRadius = 4
-        layer?.shadowOffset = CGSize(width: 0, height: -1)
-        glyph.imageScaling = .scaleNone
-        addSubview(glyph)
+        layer?.masksToBounds = false
+        face.shadowColor = NSColor.black.cgColor
+        face.shadowOffset = CGSize(width: 0, height: -PeekControlLook.shadowDrop)
+        face.addSublayer(glyph)
+        scaler.addSublayer(face)
+        layer?.addSublayer(scaler)
+        glyph.contentsGravity = .center
+        show(.of(hovered: false, pressed: false), spring: nil)
         _ = ArcTooltipAnchorView.attach(to: self, help: help)
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func paint(fill: NSColor, ink: NSColor) {
-        layer?.backgroundColor = fill.cgColor
-        layer?.cornerRadius = min(bounds.width, bounds.height) / 2
-        glyph.image = SidebarSymbols.image(symbol, size: 15, weight: .semibold)
-        glyph.contentTintColor = ink
+    func paint(fill: NSColor, ink: NSColor, scale: CGFloat) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        face.backgroundColor = fill.cgColor
+        if let image = SidebarSymbols.image(symbol, size: 15, weight: .semibold) {
+            let tinted = NSImage(size: image.size, flipped: false) { r in
+                image.draw(in: r)
+                ink.set()
+                r.fill(using: .sourceAtop)
+                return true
+            }
+            let s = tinted.recommendedLayerContentsScale(scale)
+            glyph.contents = tinted.layerContents(forContentsScale: s)
+            glyph.contentsScale = s
+        }
+        CATransaction.commit()
         needsLayout = true
     }
 
     override func layout() {
         super.layout()
-        layer?.cornerRadius = min(bounds.width, bounds.height) / 2
-        glyph.frame = bounds
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for l in [scaler, face, glyph] {
+            l.bounds = bounds
+            l.position = CGPoint(x: bounds.midX, y: bounds.midY)
+        }
+        face.cornerRadius = min(bounds.width, bounds.height) / 2
+        face.shadowPath = CGPath(ellipseIn: bounds, transform: nil)
+        CATransaction.commit()
     }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for t in trackingAreas where t.owner === self { removeTrackingArea(t) }
+        // activeAlways: the key window is the Peek's page, never this panel.
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil))
+    }
+
+    override func mouseEntered(with event: NSEvent) { setState(hovered: true, pressed: pressed, spring: PeekControlLook.hoverSpring) }
+    override func mouseExited(with event: NSEvent) { setState(hovered: false, pressed: pressed, spring: PeekControlLook.hoverSpring) }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func mouseDown(with event: NSEvent) {
-        pressed = true
-        alphaValue = 0.8
+        keyRelease?.cancel()
+        setState(hovered: hovered, pressed: true, spring: PeekControlLook.pressSpring)
+    }
+    override func mouseDragged(with event: NSEvent) {
+        // Arc's button lets go as the pointer leaves it and gives again as it comes back.
+        let inside = bounds.contains(convert(event.locationInWindow, from: nil))
+        setState(hovered: inside, pressed: inside, spring: PeekControlLook.pressSpring)
     }
     override func mouseUp(with event: NSEvent) {
-        alphaValue = 1
-        guard pressed, bounds.contains(convert(event.locationInWindow, from: nil)) else { pressed = false; return }
-        pressed = false
-        run()
+        let inside = bounds.contains(convert(event.locationInWindow, from: nil))
+        let ran = pressed && inside
+        setState(hovered: inside, pressed: false, spring: PeekControlLook.pressSpring)
+        if ran { run() }
+    }
+
+    /// A shortcut's press: down now, up after PeekControlLook.keyPressHold.
+    func pressBriefly() {
+        keyRelease?.cancel()
+        setState(hovered: hovered, pressed: true, spring: PeekControlLook.pressSpring)
+        let release = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.setState(hovered: self.hovered, pressed: false, spring: PeekControlLook.pressSpring)
+        }
+        keyRelease = release
+        DispatchQueue.main.asyncAfter(deadline: .now() + PeekControlLook.keyPressHold, execute: release)
+    }
+
+    private func setState(hovered: Bool, pressed: Bool, spring: PeekControlLook.Spring) {
+        guard hovered != self.hovered || pressed != self.pressed else { return }
+        self.hovered = hovered
+        self.pressed = pressed
+        show(.of(hovered: hovered, pressed: pressed), spring: spring)
+    }
+
+    /// The layers' model values become `new` (so a picture taken now shows it), each springing
+    /// there from where it is on screen.
+    private func show(_ new: PeekControlLook, spring: PeekControlLook.Spring?) {
+        let scale = CATransform3DMakeScale(new.scale, new.scale, 1)
+        let lift = CATransform3DMakeTranslation(0, new.lift, 0)  // the layer's y is up
+        let changes: [(CALayer, String, Any)] = [
+            (scaler, "transform", NSValue(caTransform3D: scale)),
+            (face, "transform", NSValue(caTransform3D: lift)),
+            (face, "shadowOpacity", Float(new.shadowOpacity)),
+            (face, "shadowRadius", new.shadowRadius),
+        ]
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for (l, key, value) in changes {
+            let from = l.presentation()?.value(forKeyPath: key) ?? l.value(forKeyPath: key)
+            l.setValue(value, forKeyPath: key)
+            // Arc's SwiftUI springs run under Reduce Motion too.
+            guard let spring else {
+                l.removeAnimation(forKey: key)
+                continue
+            }
+            let a = CASpringAnimation(keyPath: key)
+            a.mass = 1
+            a.stiffness = spring.stiffness
+            a.damping = spring.damping
+            a.fromValue = from
+            a.toValue = value
+            a.duration = a.settlingDuration
+            l.add(a, forKey: key)
+        }
+        CATransaction.commit()
     }
 }
 

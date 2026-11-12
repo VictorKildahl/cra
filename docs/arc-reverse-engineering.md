@@ -3536,6 +3536,23 @@ event with `shiftClickModalEntryPointEnabled` set for the run, AX frames and 60 
   shows it, so the page waits hidden (contentView.isHidden), not transparent.
 - Cra: PeekLayout (CraCore) has the geometry; PeekBarView and PeekControlsPanel (PeekChrome.swift) the card's bar
   and the buttons; MainWindowController.setPeekVeil fades the page; ShinyToast.Action.share the button.
+- [S, 12 Nov, GitHub #385] The buttons' hover and press, from Arc 1.172.2's arm64 code (no symbols: the body
+  witness of `ModalButtonStyle.ButtonView: View`, found through the conformance's resilient witnesses, then lldb
+  on the file). `ModalV2ControlButton` uses `ModalButtonStyle` (fields `buttonFill`, `buttonAccent`; its
+  `ButtonView` holds `isPressed` and `@State isHovered`). The body is: the label in the accent, padding 8, clipped to
+  the capsule, on the fill with `.shadow(color: .black.opacity(isHovered ? 0.3 : 0.2), radius: isHovered &&
+  !isPressed ? 6 : 4, x: 0, y: 1)`, `.offset(y: isHovered ? -1 : 0)`, `.animation(.spring(response: 0.15,
+  dampingFraction: 0.95), value: isHovered)`, `.onHover`, `.scaleEffect(isPressed ? 0.95 : 1)` about the centre,
+  `.animation(.spring(response: 0.28, dampingFraction: 0.63), value: isPressed)`. The fill doesn't change.
+  `ModalControlState.dismissButtonScale` (a `@Published` CGFloat) scales the Close button in
+  `ModalV2ControlsViewSwiftUI` on `.spring(response: 0.25, dampingFraction: 0.8)`, but its key path pattern is
+  used only by that read and its own accessor thunks: nothing in 1.172.2 writes it, so ⌘W doesn't animate the
+  button in Arc. Not seen live (Arc runs one instance; a Peek needs a click in Victor's Arc).
+- Cra (#385): PeekControlLook (CraCore) has those values and springs as Core Animation takes them (stiffness
+  (2π / response)², damping 4π · fraction / response); PeekControlButton draws its fill, shadow and glyph on its
+  own layers so the press can scale about the centre. Past Arc, at the reporter's request: ⌘W and ⌘O press their
+  button (PeekControl.pressed(byAction:)) for 0.15 s on the press spring while the action runs at once. Close's
+  closing picture, taken within 80 ms, carries the pressed button; Expand's Peek is gone that frame.
 - [O, 4 Nov] Which links peek, with both Links settings on (`modalEnabled` and
   `shiftClickModalEntryPointEnabled` set for the run, the sidebar reset before each run), HID clicks on a
   lab page at 127.0.0.1 in a pinned tab: a link to localhost peeked, plain or target=_blank; a link to

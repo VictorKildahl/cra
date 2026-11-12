@@ -700,3 +700,7 @@
 #380   Tests/Scenarios/peek-expand-in-tab.scenario  e12b76e33b6c
 #381   Tests/Scenarios/favorite-peek-badge.scenario  ae249a1b489e
 #382   Packages/CraCore/Tests/CraCoreTests/HoverGateTests.swift::stillPointerIsNotHover  a454423d11ad
+#385   Packages/CraCore/Tests/CraCoreTests/PeekControlLookTests.swift::aPressShrinksTheButtonAndTightensItsShadow  84e9b3c0a4a9
+#385   Packages/CraCore/Tests/CraCoreTests/PeekControlLookTests.swift::hoverLiftsTheButtonAndDeepensItsShadow  be3fe61a69bf
+#385   Packages/CraCore/Tests/CraCoreTests/PeekControlLookTests.swift::shortcutsPressTheirButtons  b2c01bed9702
+#385   Packages/CraCore/Tests/CraCoreTests/PeekControlLookTests.swift::springsAreArcsInCoreAnimationTerms  5be9f378ea04

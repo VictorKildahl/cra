@@ -652,13 +652,13 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             easel.usePeekLook()
         }
         var buttons: [PeekControlsPanel.Button] = [
-            .init(symbol: "xmark", help: "Close (⌘W)") { [weak self] in self?.closeWindow() },
-            .init(symbol: "arrow.up.left.and.arrow.down.right", help: "Expand (⌘O)") { [weak self] in
+            .init(control: .close, symbol: "xmark", help: "Close (⌘W)") { [weak self] in self?.closeWindow() },
+            .init(control: .expand, symbol: "arrow.up.left.and.arrow.down.right", help: "Expand (⌘O)") { [weak self] in
                 self?.expandPeek(commandClick: NSApp.currentEvent?.modifierFlags.contains(.command) == true)
             },
         ]
         if easel == nil {
-            buttons.append(.init(symbol: "square.split.2x1", help: "Add To Split") { [weak self] in self?.promoteToSplit() })
+            buttons.append(.init(control: .addToSplit, symbol: "square.split.2x1", help: "Add To Split") { [weak self] in self?.promoteToSplit() })
         }
         let controls = PeekControlsPanel(buttons: buttons)
         self.controls = controls
@@ -1305,6 +1305,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// that are not the little window's (the app handles those).
     func handle(action id: String) -> Bool {
         if handleCapture(action: id) { return true }
+        // A shortcut for a Peek button presses it as a click would, and the action runs at once (#385).
+        if isPeek, !closingPeek, let control = PeekControl.pressed(byAction: id) { controls?.pressFromKey(control) }
         switch id {
         // ⌘W on the card fades it out, as Esc does (#337).
         case "closeTab", "closeWindow": if isCard, !cardFading, window?.isVisible == true { dismissCard() } else { closeWindow() }
