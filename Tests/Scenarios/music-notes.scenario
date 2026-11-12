@@ -1,5 +1,5 @@
 # promise: #303
-# A music favorite shows notes while audible and unmuted. ${MUSIC} is the local fixture server
+# A music favorite shows notes while audible, muted or not. ${MUSIC} is the local fixture server
 # under nts.live. A 440 Hz tone, 60 dB below full volume, triggers Chromium's audible state.
 # Playback starts through the protocol's user gesture.
 budget rss=800 stalls50=30
@@ -32,11 +32,12 @@ wait 3
 cra://debug?musicNotes=playing
 expect-log Cra music notes playing: 1 \(0\.0 across, 8\.0 up\)
 
-# A muted tab plays nothing, though Chromium still counts it audible.
+# Muting keeps the notes: Chromium still counts the tab audible, and Arc 1.172.2 keeps
+# floating them over a muted favorite (docs/arc-reverse-engineering.md, 11 Nov 2026).
 cra://action/muteTab
 wait 1
 cra://debug?musicNotes=muted
-expect-log Cra music notes muted: 0
+expect-log Cra music notes muted: 1
 cra://action/muteTab
 wait 1
 cra://debug?musicNotes=unmuted

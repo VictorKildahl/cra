@@ -39,7 +39,7 @@ or Arc-only service), per CONTRIBUTING.md.
 | Archive Little Arcs after | Settings ▸ Links (6 hours default) | done | Settings ▸ Tabs ▸ Links; a Little Window left alone that long closes into the archive. |
 | Previews (Gmail, Calendar on Favorites) | Settings ▸ General ▸ Previews Settings…, a Calendar favorite's menu ▸ Live Calendar | done | Gmail: the unread mail from Gmail's Atom feed (the space's own sign-in) in Arc's card, rows, ＋ and motion, measured on Victor's signed-in Arc 8 Nov. Calendar: Arc's timeline card, gear menu, Live Calendar ▸ submenu, tile countdown and meeting link; events read through Google's Calendar embed (Arc's own fetch says "Failed to update" in 1.172.1). See "Previews, measured". |
 | Join Meeting ⌃⌘J | Shortcuts | done | The call on now, else the next one today, from a Live Calendar favorite. |
-| Music notes on a playing favorite | A favorite on a music site, while it plays | partial | Core Animation notes rise above the playing icon, stop on pause or mute, and stay hidden with Reduce Motion on. Dark-theme footage and light-theme screenshots compared with Arc; light notes use 30% black, dark notes 80% white. Full-window 1x/2x and remaining manual checks are pending. |
+| Music notes on a playing favorite | A favorite on a music site, while it plays | done | Core Animation notes rise from the playing icon's top edge and stop when the sound pauses. As in Arc 1.172.2 (live, 11–12 Nov 2026) they keep floating on a muted tab and with Reduce Motion on. Compared side by side with Arc in full windows at 1x and 2x, light and dark spaces, top row and lower rows; light notes use 30% black, dark notes 80% white. |
 | Troubleshooting menu | Help ▸ Troubleshooting: Record Trace, Open Task Manager, Reveal Arc Data, Copy Arc Info | done | Export Diagnostics…, Open Task Manager (Chrome's), Reveal Cra Data, Copy Cra Info; Record Trace is Arc-internal. |
 | Help menu | Getting Started, Release Notes, Contact the Team, Visit Help Center, Restore Data | done | Cra Help (Arc's Help Center and Getting Started guide), Release Notes, Report an Issue… (Contact the Team), Essential Keyboard Shortcuts, Troubleshooting ▸ Task Manager / Reveal Data / Copy Info. *skip*: Restore Data and Export Arc Notes (Arc's account and Notes), Record Trace (chrome://tracing is a developer tool). |
 | Ad blocker upsell card, Sync, Account, Membership card, Share Arc, Sign Out, Send to Dia, Share Space | | *skip* | Account/cloud. |
@@ -120,10 +120,14 @@ gains "New Profile".
   [the research notes](arc-reverse-engineering.md#music-notes-on-a-playing-favorite-arc-11721-build-90370-10-nov-2026).
   Paired dark-theme footage and light-theme screenshots of YouTube Music were compared with Arc;
   live pause/resume was checked in CraDev. The independently drawn light notes use 0.3 black opacity,
-  visually fitted to those captures; dark notes use 0.8 white. `scripts/test.sh`, the release build
-  and the `music-notes` scenario passed. Tests cover host eligibility, immediate sound state,
-  mute/pause/resume, placement and sprite tint at 1x/2x. Full-window display-scale coverage and the
-  remaining manual state checks are still pending; see
+  visually fitted to those captures; dark notes use 0.8 white. Tests cover host eligibility, immediate
+  sound state, mute/pause/resume, placement and sprite tint at 1x/2x.
+  11–12 Nov 2026: Arc 1.172.2 (the user's own, on www.nts.live) and a Cra test copy in 1280 × 800 windows
+  on a virtual display at 1x and 2x, light and dark spaces, the playing favorite in row 2. Origin, rise,
+  growth, fading and the drift over the tile above match; pause stops both within 0.2 s. Two differences
+  were fixed: Arc keeps the notes on a muted tab and with Reduce Motion on, where Cra hid them (the muted
+  case changes #303's locked promise, Victor's decision). Density and fan width differ within sampling
+  noise. A real music site on a release build, splits, drags and swipes stay on
   [release-checklist.md](release-checklist.md#sidebar-tabs-and-the-command-bar).
 
 Not re-measured in this sweep: earlier sessions measured the command bar, split view,

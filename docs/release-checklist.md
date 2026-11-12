@@ -53,15 +53,13 @@ built release app with a test profile. Note anything that fails in the release's
   closes it at once unless the pointer is on the card. Share ▸ Copy as Text and Copy as Image paste as
   Arc's do. Check a beige and a dark space, 1x and 2x.
 
-- **Music notes:** on a release build, play a favorite on YouTube Music, SoundCloud or Spotify.
-  Compare Arc and Cra in light and dark spaces at 1x and 2x: origin, density, speed, growth, fading
-  and clipping. Notes rise from the icon's top edge and stop 8 pt above the top row; in lower rows
-  they drift over the tile above. Check split favorites in both orientations, dragging, space
-  swipes and a space with no favorites for clipping regressions. Mute or pause: notes disappear
-  as sound stops; a quick resume brings them back. A regular YouTube video shows none. Toggle
-  Reduce Motion during playback: notes disappear and return when it is off. Dark footage, light
-  screenshots and live pause/resume were checked on 10 Nov; full-window 1x/2x and the other states
-  remain. Arc's mute and Reduce Motion behavior are unverified; record differences when comparing.
+- **Music notes:** on a release build, play a favorite on YouTube Music, SoundCloud or Spotify
+  (the 1x/2x side-by-side with Arc used nts.live and a local tone, 11–12 Nov). Notes rise from the
+  icon's top edge, stop 8 pt above the top row and in lower rows drift over the tile above. Pause:
+  they go at once, and a quick resume brings them back. Mute and Reduce Motion: they keep floating,
+  as Arc's do. A regular YouTube video shows none. By hand: split favorites in both orientations,
+  dragging a playing favorite, space swipes and a space with no favorites, for clipping
+  regressions. If notes look denser or wider than Arc's, take a minute-long recording of each.
 
 - **#196:** hover a Today tab and move onto its ✕ several times. The ✕ never vanishes before
   the click.

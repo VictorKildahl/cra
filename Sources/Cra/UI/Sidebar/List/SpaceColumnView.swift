@@ -671,7 +671,7 @@ final class FavoritesGridView: NSView {
                 guard !panes.isEmpty else { continue }
                 // A split emits notes from its first playing music pane.
                 if let cell = panes.firstIndex(where: { p in
-                    p.tab.map { MusicNotes.plays(url: $0.url, soundPlaying: soundPlaying.contains(p.id), muted: $0.muted) } ?? false
+                    p.tab.map { MusicNotes.plays(url: $0.url, soundPlaying: soundPlaying.contains(p.id)) } ?? false
                 }) {
                     playing[item.id] = Playing(cell: cell, count: panes.count, vertical: item.split?.orientation == .vertical)
                 }

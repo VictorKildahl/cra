@@ -1051,7 +1051,8 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
   `sandbox-exec` (deny network-outbound ip/tcp/udp) `…/MacOS/Arc --no-sandbox`. Without `--no-sandbox` the
   GPU process dies (nested seatbelt) and Arc never orders its windows in. Traps: cfprefsd ignores the fake
   home, so the copy writes the REAL company.thebrowser.Browser domain (back it up, restore after); `open -a
-  Arc` while the copy runs launches the real Arc; File ▸ New Window over AX opens a window.
+  Arc` while the copy runs launches the real Arc; File ▸ New Window over AX opens a window. Arc 1.172.2
+  (10 Nov 2026) refuses to start while another Arc runs, so this needs the user's Arc quit first.
   "Unnamed" means no title AND no icon: a space with an emoji shows "Space 1" and keeps its header,
   however the defaults key is set. Drop `customInfo.iconType` too and Arc hides the header by itself.
   `topBarURLEnabled` (real domain) puts the URL field in the sidebar; the favorites card closes over AX
@@ -4039,7 +4040,7 @@ ScreenCaptureKit region recorder that also drives the pointer and logs each move
 Reference: `strings` and Swift field metadata on the arm64 binary, `assetutil` on ARCUI's Assets.car,
 and lldb's disassembler for constants, with Objective-C calls resolved through selector metadata.
 Visual references: paired YouTube Music footage in dark spaces and light-theme screenshots,
-10 Nov 2026. Full-window coverage at both 1x and 2x is still pending.
+10 Nov 2026; live Arc 1.172.2 against a Cra test copy at 1x and 2x, 11–12 Nov 2026 (below).
 
 - [O static] The top-apps item state has `shouldShowMusicalAnimation`, and `AppTrayItemViewAppKit` a lazy
   `musicIconAnimationView`: an `ARCUI.ParticleNSView` (ParticlesView.swift), a `CAEmitterLayer` filled from a
@@ -4050,7 +4051,9 @@ Visual references: paired YouTube Music footage in dark spaces and light-theme s
   matches when its host is one of them, ends in "." + one of them, or has one among its dot-separated labels.
   youtube.com is not there.
 - [I] The flag is "the tab plays audio and its URL is a music site" (`_isAudible` and `browserIsPlayingAudio`
-  exist; where they meet the list wasn't traced). [U] Whether a muted tab keeps its notes. Cra shows none.
+  exist; where they meet the list wasn't traced). [O live, 1.172.2] A muted tab keeps its notes: more than
+  10 s after muting (mini player showing the struck-through speaker) new notes still rose. So the flag
+  follows Chromium's audible state, which a mute doesn't clear.
 - [O static] `ParticleTemplate.musicNotes` is two cells that differ in image and birth rate: `MusicSprite1`
   (one eighth note) 1.4 a second, `MusicSprite2` (two notes under a beam) 1.0. Both: lifetime 2, lifetimeRange
   0, scale 0, scaleRange 0.2, scaleSpeed 1, alphaRange 0.15, alphaSpeed −0.5, emissionLongitude π/2,
@@ -4073,10 +4076,10 @@ Visual references: paired YouTube Music footage in dark spaces and light-theme s
   `FavoritesGridView` keeps the overlays above the tiles; a split emits from its first eligible playing
   pane. The pager mask allows 8 pt above the top row, following the still; empty columns keep their
   original clipping.
-- Cra policy choices: require an exact music host or its subdomain, current sound playback and an
-  unmuted tab; hide notes with Reduce Motion on. Notes follow the immediate sound callback so pausing
-  removes them before the speaker's 2 s recently-audible hold expires. Arc's full trigger is inferred
-  above; its muted-tab and Reduce Motion behavior remain unverified.
+- Cra policy choices: require an exact music host or its subdomain and current sound playback, muted
+  or not, as Arc does. Notes follow the immediate sound callback so pausing removes them before the
+  speaker's 2 s recently-audible hold expires. Reduce Motion doesn't stop them (Arc's don't stop either,
+  below).
 - [O capture, 10 Nov] Paired dark-theme footage (12.32 s, Arc left, CraDev right) shows notes above
   each music icon, growing softer and fading under the URL field. The grids have different tile
   counts, so widths differ. Live pause/resume was checked in CraDev.
@@ -4090,9 +4093,30 @@ Visual references: paired YouTube Music footage in dark spaces and light-theme s
   `cra://debug?musicNotes=`. It covers a non-music host, an idle music favorite, playing, muting,
   unmuting, pausing, quick resuming and the emitter's offset. Paused readouts poll for one second,
   before the speaker's hold expires, to allow Chromium's asynchronous sound event to arrive.
-- Pending: full-window coverage at both 1x and 2x and the remaining states in
-  [release-checklist.md](release-checklist.md#sidebar-tabs-and-the-command-bar). The captures provide
-  qualitative comparisons; exact particle timing and display-scale coverage remain unverified.
+- Live comparison, 11–12 Nov 2026. Arc 1.172.2 refuses a second instance while one runs ("Arc is
+  already open. Only one instance of Arc can be opened at a time"), so the offline copy of "One space"
+  no longer works beside the user's Arc. A clone with another bundle id dies in CloudKit once re-signed
+  ad hoc and is killed by code signing when it isn't. Arc was therefore the user's own: a new window,
+  www.nts.live's live stream (Mac output muted; the audible state doesn't depend on it), made a favorite
+  with the command bar's "Favorite Tab" and removed with "Unfavorite Tab" afterwards. As the fifth favorite
+  at 264 pt it sat in row 2 (three columns), so the notes rose over the tile above. Cra was a test copy
+  with six favorites (two on music hosts mapped to a local tone page), row 2 playing too. Both windows were
+  1280 × 800 on a CGVirtualDisplay at 1x and at 2x, recorded with ScreenCaptureKit at 30 fps, 5–6 s per
+  take, light and dark spaces. Statistics per take: a per-pixel median as background, note pixels
+  differing by more than 14/255.
+- [O live] What matches, at 1x and 2x: the emitter on the icon's top edge, rows above drawn over (notes
+  cross the tile above), the fan opening upwards, notes gone by about 44 pt above the icon's centre, the
+  same rise of glyph size with height (1x medians 3, 4, 6, 11, 11, 14, 14 pt in 4 pt bands from the
+  emitter; Cra 3, 5, 7, 13, 12, 14, 15 pt) and the same fade of peak ink with height (dark, 1x: Arc
+  116 → 28, Cra 128 → 33 over 2–34 pt). In Arc's light space notes are faint (about 32 pt² of note
+  pixels per frame against 124 pt² in its dark space), in line with Cra's 30 % black ink.
+- [O live] Pause: the notes go within 0.2 s of the stream stopping and come back on resuming, as in Cra.
+  Mute: they stay (above). Reduce Motion (System Settings ▸ Accessibility ▸ Motion, on for 5 s, then
+  off): unchanged, 32.0 pt² of notes per frame with it on against 32.4 before and 31.8 after.
+- [U] Density and spread: Cra showed about 3.7–4.2 notes per frame and a fan about 50 pt wide, Arc
+  2.6–3.1 and about 36 pt. Each take holds only some 14 births (2.4 a second for 6 s) and Arc's leaned
+  left in one take and right in another, so this is within sampling noise; the cell values are the
+  same. A longer Arc take would settle it.
 
 ## Full screen: the page edge to edge, the sidebar over it (Arc 1.172.1, 10 Nov 2026, GitHub #315, offline Arc on a fake home)
 Offline Arc, View ▸ Enter Full Screen and View ▸ Hide Sidebar over AX, the pointer moved with cliclick; screen

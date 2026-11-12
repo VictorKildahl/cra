@@ -15,8 +15,10 @@ public enum MusicNotes {
     }
 
     /// Use immediate sound state so notes stop before the speaker's 2 s audible hold ends.
-    public static func plays(url: String, soundPlaying: Bool, muted: Bool) -> Bool {
-        soundPlaying && !muted && isMusicSite(url)
+    /// Muting doesn't stop them: Chromium still counts a muted tab's sound as playing, and Arc
+    /// 1.172.2 keeps floating notes over a muted favorite (live, 11 Nov 2026).
+    public static func plays(url: String, soundPlaying: Bool) -> Bool {
+        soundPlaying && isMusicSite(url)
     }
 
     // MARK: The emitter

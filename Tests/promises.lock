@@ -512,9 +512,9 @@
 #303   Packages/CraCore/Tests/CraCoreTests/MusicNotesTests.swift::arcsMusicSites  7073b0e92e72
 #303   Packages/CraCore/Tests/CraCoreTests/MusicNotesTests.swift::fieldIsCentredOnTheIconsTopEdge  ed1fe24fdf19
 #303   Packages/CraCore/Tests/CraCoreTests/MusicNotesTests.swift::otherSites  10add4b90759
-#303   Packages/CraCore/Tests/CraCoreTests/MusicNotesTests.swift::playsOnlyWhatCanBeHeardOnAMusicSite  e257e0be4145
+#303   Packages/CraCore/Tests/CraCoreTests/MusicNotesTests.swift::playsOnlyWhatCanBeHeardOnAMusicSite  047425a5dc39
 #303   Tests/BrowserManagerLifecycleTests.swift::musicNotesPauseWithinHoldCase  a89980952d6f
-#303   Tests/Scenarios/music-notes.scenario  c3bee378ad93
+#303   Tests/Scenarios/music-notes.scenario  fb0ac37b38ea
 #305   Packages/CraCore/Tests/CraCoreTests/AddressBarPlacementTests.swift::bothChoicesAreNamed  36f4e5cee543
 #305   Packages/CraCore/Tests/CraCoreTests/AddressBarPlacementTests.swift::placementIsTheToolbarSwitch  b2e689828283
 #305   Packages/CraCore/Tests/CraCoreTests/AddressBarPlacementTests.swift::settingsFileKeepsShowToolbar  c852bda6b868
