@@ -727,4 +727,7 @@
 #387   Tests/Scenarios/favorite-mute.scenario  7b04a5025ba3
 #391   Tests/DockedWindowAccessibilityTests.swift::movesFindsTheBrowserWindow  b7cbb5a23a9d
 #391   Tests/DockedWindowAccessibilityTests.swift::movingADockedWindowMovesTheBrowser  2138e64da85d
+#392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::darkColoursKeepTheirOwnTone  180984317a3e
+#392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::darkGradientFollowsTheSlider  7bf63af75ca2
+#392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::greysStayNeutralInTheDark  49ffec8286fa
 #399   Tests/EmojiLabelTests.swift::wholeEmojiWhenClipped  bec18dc87181

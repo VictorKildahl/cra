@@ -3434,7 +3434,7 @@ properties {URL:…}`) on a local server that answers after 40 s; window capture
   picks one; `SpaceTheme.palette` resolves through `SystemAppearance` (NSApp.effectiveAppearance, observed), so a macOS
   switch redraws at once. Arc imports keep both halves. The editor builds halves from its pad (`SpaceTheme.key`) with
   `SpaceThemeVariants`: the light half is the pad's colours (lifted to HSL lightness 0.9 only when they read dark),
-  the dark half keeps their hue at HSL lightness 0.064, drawn like an imported dark half (27 % over #2B2632). An
+  the dark half darkens the light ones to HSL lightness 0.064 and draws them over neutral grey (#392, below). An
   Auto theme with one set of colours (saved before 0.1.29, or from Zen) stays on the side they suit whatever macOS
   shows, and an Arc `single` without `contentOverBackgroundAppearance` imports as that side (#171).
 - Cra deviates on purpose (Victor, 6 Nov 2026, #155): the editor's Auto always builds both halves, one colour too.
@@ -3444,8 +3444,26 @@ properties {URL:…}`) on a local server that answers after 40 s; window capture
   (`SpaceThemeVariants.colourless`: the imported halves of Arc's default, both on Auto, one on Light or Dark) with an
   empty `key`, so the editor reopens on "Tap to pick a color for this space". Before, − stopped at one colour.
   Pinned by `noColourIsArcsColourlessTheme` and `padButtons`.
-- [?] Not worked out: how Arc's editor maps a picked colour to its halves (the pad's `lightnessRange` and the bias
-  value). Cra's halves are fitted to Arc's default theme only.
+- [O live] How Arc treats a picked colour in dark mode (offline Arc 1.172, 12 Nov 2026, issue #392; editor driven
+  over AX, StorableSidebar.json read after each commit, window captured): the editor's sun / moon toggles are Arc's
+  app-wide View ▸ Appearance (the `appearance` default, NSAppearanceNameDarkAqua), not part of the theme, and AXPress
+  on them is unreliable; set View ▸ Appearance ▸ Dark over AX instead. With Arc on Dark, every swatch was saved as
+  itself in a `single` `blendedSingleColor` (black #000000, #1A1A1A, #333333, navy, white, red #F25E6B, pastel
+  #F1D1EC), the intensity kept, `contentOverBackgroundAppearance` dark for dark colours and light for light ones.
+  Arc never darkens a picked colour and adds no tint: on Dark a white or pastel space stays a light sidebar with dark
+  text. Drawn as Arc's one-colour recipe (below, "Solid colour"), all neutral: black at intensity 0.25 over a light
+  window read 122/121/123, at 1 read 43/43/44, at 0 156/155/157. Removing every colour deletes `windowTheme` (Arc's
+  default space theme); its dark half read 36/36/55 → 41/37/54 on this Mac.
+- [O fit] Arc's default dark half (non-vibrant, intensity 0.8): its top stop is 0.63 of #01021F (α for 0.8 in the
+  one-colour recipe) over a neutral grey #5E5E5E (~94), within 1/255. The ~27 % over purple #2B2632 that
+  ArcThemeImport uses was fitted on that purple theme alone and is locked for Arc imports (#155 tests).
+- Cra (#392): the editor's dark half (Auto while macOS is dark, or Dark) keeps a colour that already reads dark
+  (luminance < 0.45) as itself and darkens a lighter one to HSL lightness 0.064 in its hue (Arc's default pair,
+  #8389FF → #01021F), and draws them neutral: one colour as Arc's one-colour fill at the slider's intensity
+  (`solid`), a gradient opaque at that opacity over #5E5E5E. Before, every dark half went ~73 % over #2B2632 and
+  ignored the slider, so black came out #2F2A36. Cra still darkens light colours where Arc keeps them light: Cra's
+  Dark and Auto promise a dark look (#155). Pinned by `greysStayNeutralInTheDark`, `darkColoursKeepTheirOwnTone`
+  and `darkGradientFollowsTheSlider`.
 
 ## The theme editor's presets and commit (Arc 1.171, 4 Nov 2026, issue #170, asset catalog + strings)
 - [O static] The swatches are named colours in `ARCClients_BaseAssets.bundle`'s Assets.car (`assetutil --info`),

@@ -135,6 +135,12 @@ public struct SpaceTheme: Codable, Equatable {
     /// Incognito windows: near-black with a cool violet cast, so they never pass for a space.
     public static let incognito = SpaceTheme(colors: ["#141318", "#2B2638"], intensity: 0.9, noise: 0.14, appearance: "dark")
 
+    /// Arc 1.171 over solid white and black backdrops (31 Oct 2026, nine colours, sRGB after undoing
+    /// the display's P3): a one-colour theme shows α·colour + (1 − α)·(66 + 0.52·backdrop) while
+    /// active, α·colour + (1 − α)·212 while inactive, with α = 0.19 + 0.55·intensity (fits 0.191,
+    /// 0.459, 0.742 at 0, 0.5, 1; within 3/255). isVibrant and the text appearance don't matter.
+    public static func solidAlpha(intensity: Double) -> Double { 0.19 + 0.55 * max(0, min(1, intensity)) }
+
     public var isDark: Bool {
         if appearance == "dark" { return true }
         if appearance == "light" { return false }

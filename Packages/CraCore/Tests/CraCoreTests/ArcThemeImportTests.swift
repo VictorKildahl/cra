@@ -291,6 +291,49 @@ struct SpaceThemeAppearanceTests {
         #expect(!lifted.isDark && close(lifted.colors.first, "#CCCCFF"))
     }
 
+    /// A grey or black picked on Auto or Dark stays a neutral grey or black while macOS is dark, as
+    /// Arc keeps it (offline Arc 1.172, 12 Nov 2026: black, #1A1A1A and #333333 saved as themselves and
+    /// drawn neutral). Cra drew every dark half ~73 % over a purple grey (#2B2632), so black came out
+    /// #2F2A36 and nothing could reach a neutral dark shade (#392).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/392"), arguments: SpaceColorPresets.pages[4].swatches, ["auto", "dark"])
+    func greysStayNeutralInTheDark(swatch: [String], appearance: String) throws {
+        for colours in [swatch, swatch + ["#000000"]] {
+            let dark = SpaceThemeVariants.theme(key: colours, intensity: 0.5, noise: 0, appearance: appearance).resolved(systemDark: true)
+            #expect(dark.isDark)
+            for hex in dark.colors + [try #require(dark.accent)] {
+                let c = try #require(HexColor.components(hex))
+                #expect(max(c.r, c.g, c.b) - min(c.r, c.g, c.b) < 1.5 / 255, "\(colours) → \(hex)")
+            }
+        }
+    }
+
+    /// A colour that already reads dark is the dark half's colour itself, one dot a flat fill at the
+    /// slider's intensity like Arc's: black at full intensity is black over the dark material, and
+    /// the slider takes it lighter or darker. Before, the dark half ignored the slider (#392).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/392"), arguments: ["#000000", "#26456B", "#226149", "#4E3A5A"])
+    func darkColoursKeepTheirOwnTone(hex: String) {
+        for appearance in ["auto", "dark"] {
+            let dark = SpaceThemeVariants.theme(key: [hex], intensity: 1, noise: 0, appearance: appearance).resolved(systemDark: true)
+            #expect(dark.colors == [hex, hex] && dark.solid && dark.intensity == 1 && dark.accent == hex)
+            let faint = SpaceThemeVariants.theme(key: [hex], intensity: 0.2, noise: 0, appearance: appearance).resolved(systemDark: true)
+            #expect(faint.intensity == 0.2)
+        }
+    }
+
+    /// A dark gradient bakes the slider into its stops: more intensity, more of the colour; the
+    /// editor reads the slider back from the saved stops (#392).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/392"), arguments: [0.0, 0.3, 0.5, 0.8, 1.0])
+    func darkGradientFollowsTheSlider(intensity: Double) throws {
+        let key = ["#000000", "#26456B"]
+        let theme = SpaceThemeVariants.theme(key: key, intensity: intensity, noise: 0, appearance: "dark")
+        #expect(abs(SpaceThemeVariants.padIntensity(of: theme) - intensity) < 0.02)
+        let first = try #require(HexColor.components(theme.colors[0]))
+        let a = SpaceTheme.solidAlpha(intensity: intensity)
+        #expect(abs(first.r * 255 - (1 - a) * 94) <= 1, "black at the slider's opacity over neutral grey")
+        let more = SpaceThemeVariants.theme(key: key, intensity: min(1, intensity + 0.2), noise: 0, appearance: "dark")
+        if intensity < 1 { #expect((HexColor.luminance(more.colors[0]) ?? 1) < (HexColor.luminance(theme.colors[0]) ?? 0)) }
+    }
+
     /// No colour on the pad (the pad's − took the last one) is Arc's colourless theme: on Auto the
     /// purple light half and the dark half Arc's own default space has, following macOS, as Cra
     /// imports them; Light or Dark keeps that one half. It is saved with an empty pad, so the editor
