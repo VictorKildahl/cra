@@ -38,7 +38,7 @@ struct SyncSection: View {
                                    : iCloudUnavailableReason,
                                trailing: {
                 Toggle("Sync with iCloud", isOn: Binding(get: { sync.location == .iCloud }, set: { on in on ? enableICloud() : sync.disable() }))
-                    .toggleStyle(.switch).labelsHidden()
+                    .toggleStyle(.arcSwitch).labelsHidden()
                     .disabled(!sync.iCloudAvailable)
             }) {
                 // macOS doesn't tell apps which Apple Account is signed in; System Settings shows it.
@@ -144,5 +144,12 @@ struct SyncSection: View {
         let panel = folderPanel(prompt: "Import", message: "Choose the folder that holds the exported “Cra” folder, or that folder itself.")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         if let summary = sync.summary(ofBundleIn: url) { importing = (url, summary) } else { notice = "The folder holds no Cra settings." }
+    }
+}
+
+/// The first tab, in the place Arc gives its Account: Cra has no account, its sync is iCloud or a folder.
+struct SyncPane: View {
+    var body: some View {
+        SettingsCardPane { SyncSection() }
     }
 }

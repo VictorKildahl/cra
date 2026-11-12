@@ -8,13 +8,44 @@ import SwiftUI
 struct MaxPane: View {
     @Environment(SidebarStore.self) private var store
     private var service: TidyTabsService { TidyTabsService.shared }
+    /// Max's mark in Arc's tile: Apple's, or sparkles before macOS 15.1.
+    static var glyph: String { SettingsTab.max.symbol }
 
     var body: some View {
         @Bindable var store = store
         let available = service.status == .available
-        SettingsCardPane {
-            SettingsFeatureCard {
-                SettingsSwitchRow("Tidy Tabs",
+        let features = [store.settings.tidyTabs, store.settings.tidyTabTitles, store.settings.tidyDownloads, store.settings.fiveSecondPreviews]
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: 0) {
+                MaxBanner()
+                VStack(alignment: .leading, spacing: 0) {
+                    SettingsBlurb("Let Cra do more for you with Max, so you can do less. Power up your browsing with Apple Intelligence on this Mac and spend time on the things that matter — on or off screen.")
+                        .padding(.top, 20)
+                    // Arc's "Enable Max" with its button: Turn On All / Turn On Max / Turn Off Max, by how many are on.
+                    SettingsCard {
+                        SettingsCardRow {
+                            HStack(spacing: 10) {
+                                Image(systemName: MaxPane.glyph).font(.system(size: 11, weight: .semibold)).foregroundStyle(.white)
+                                    .frame(width: 24, height: 24)
+                                    .background(RoundedRectangle(cornerRadius: 5.5, style: .continuous).fill(Color(.sRGB, red: 0.22, green: 0.24, blue: 1)))
+                                Text("Enable Max").font(.system(size: 13))
+                            }
+                        } trailing: {
+                            let on = MaxMasterSwitch.pressTurnsOn(features)
+                            Button(MaxMasterSwitch.title(features)) {
+                                store.settings.tidyTabs = on
+                                store.settings.tidyTabTitles = on
+                                store.settings.tidyDownloads = on
+                                store.settings.fiveSecondPreviews = on
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(MaxMasterSwitch.isEmphasised(features) ? Color(.sRGB, red: 0.2, green: 0.22, blue: 0.98) : .gray)
+                            .disabled(!available)
+                        }
+                    }
+                    .padding(.top, 20)
+                    SettingsFeatureCard {
+                        SettingsSwitchRow("Tidy Tabs",
                                   detail: Text("Press the \(Image(nsImage: BroomGlyph.image).renderingMode(.template)) icon to let your Sidebar organize itself whenever you have six or more Today Tabs."),
                                   isOn: $store.settings.tidyTabs, enabled: available) {
                     TidyTabsPicture()
@@ -37,10 +68,16 @@ struct MaxPane: View {
                                   isOn: $store.settings.fiveSecondPreviews, enabled: available) {
                     FiveSecondPreviewsPicture()
                 }
-            }
+                    }
+                    .padding(.top, 9)
             MaxFooter(status: service.status) { service.openSystemSettings() }
                 .padding(.top, 14)
+                }
+                .padding(.horizontal, SettingsMetrics.paneInset)
+                .padding(.bottom, SettingsMetrics.paneBottom)
+            }
         }
+        .scrollIndicators(.automatic)
         // Coming back from System Settings brings Cra to the front, which reads the status again;
         // a model still downloading gets there without that.
         .task {
@@ -189,6 +226,40 @@ private struct Squiggle: Shape {
         while x <= r.width {
             p.addLine(to: CGPoint(x: r.minX + x, y: r.midY + r.height / 2 * sin(2 * .pi * x / period)))
             x += 0.5
+        }
+        return p
+    }
+}
+
+/// Arc's Max picture band (684 × ≈125, blue, the word and some flowers, ending in a wavy edge), drawn with Cra's own
+/// lettering: the system's rounded face.
+private struct MaxBanner: View {
+    private static let blue = Color(.sRGB, red: 0.2, green: 0.235, blue: 1)
+    private static let pink = Color(.sRGB, red: 1, green: 0.62, blue: 0.62)
+
+    var body: some View {
+        ZStack {
+            Self.blue
+            // Flowers at the places Arc's sit, some cut by the band's edges.
+            ForEach(Array([(-300, -8, 30.0), (-195, -38, 14.0), (-130, 28, 44.0), (-95, -16, 26.0), (95, 4, 20.0), (190, -24, 30.0), (275, 22, 24.0), (340, -26, 36.0)].enumerated()), id: \.offset) { _, f in
+                Flower().fill(Self.pink).frame(width: f.2, height: f.2).offset(x: CGFloat(f.0), y: CGFloat(f.1))
+            }
+            Text("MAX").font(.system(size: 52, weight: .black, design: .rounded)).foregroundStyle(.white)
+                .shadow(color: Self.blue, radius: 0, x: 2, y: 2)
+        }
+        .frame(height: 125)
+        .clipShape(SettingsScallopedBand())
+        .accessibilityHidden(true)
+    }
+}
+
+/// A flower of four lobes.
+private struct Flower: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let r = min(rect.width, rect.height) * 0.28
+        for (dx, dy) in [(0.0, -0.5), (0.5, 0.0), (0.0, 0.5), (-0.5, 0.0)] {
+            p.addEllipse(in: CGRect(x: rect.midX + dx * rect.width * 0.55 - r, y: rect.midY + dy * rect.height * 0.55 - r, width: r * 2, height: r * 2))
         }
         return p
     }

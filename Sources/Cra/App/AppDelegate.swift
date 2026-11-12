@@ -1110,8 +1110,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // translatePrompts=never:<host>|reset|state: Settings ▸ Advanced ▸ Reset Translated-site Prompts and the
             // never-translate list it empties.
             if let t = dict["translatePrompts"] { TranslatedSitePrompts.debug(t, store: store); return }
-            // settingsPane=max: Settings opened on that pane.
-            if let p = dict["settingsPane"].flatMap(SettingsPane.init(rawValue:)) {
+            // settingsPane=max: Settings opened on that tab (the old pane names open the tab that holds them).
+            if let p = dict["settingsPane"].flatMap(SettingsTab.init(pane:)) {
                 showSettingsWindow(on: p)
                 return
             }
@@ -1277,7 +1277,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                         + "onTop=\(flag(w.level == .floating)) sheet=\(flag(w.attachedSheet != nil))")
                 }
                 if let w = settingsWindow {
-                    CraLog.note("window state \(label): settings visible=\(flag(w.isVisible)) front=\(flag(settingsInFront))")
+                    CraLog.note("window state \(label): settings visible=\(flag(w.isVisible)) front=\(flag(settingsInFront)) "
+                        + "tab=\(settingsController?.debugPane ?? "-") size=\(Int(w.frame.width))x\(Int(w.frame.height)) "
+                        + "resizable=\(flag(w.styleMask.contains(.resizable)))")
                 }
                 for (i, w) in NSApp.windows.filter({ CraCEFRuntime.isExtensionWindow($0) }).enumerated() {
                     CraLog.note("window state \(label): extension\(i) visible=\(flag(w.isVisible)) onSpace=\(flag(w.isOnActiveSpace)) "
@@ -2250,9 +2252,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     // MARK: Windows
 
     /// Settings opened on `pane` (the command bar's Search Settings… opens Advanced, #314).
-    func showSettingsWindow(on pane: SettingsPane) {
+    func showSettingsWindow(on tab: SettingsTab) {
         showSettingsWindow()
-        settingsController?.show(pane)
+        settingsController?.show(tab)
     }
 
     /// Settings is the window in front: the key window, or the frontmost one while Cra isn't
@@ -2304,7 +2306,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 resetTranslatedSitePrompts: { [weak self] in
                     guard let self else { return }
                     TranslatedSitePrompts.reset(store: self.store)
-                })
+                },
+                essentialShortcuts: { [weak self] in self?.perform("essentialShortcuts") })
             let c = SettingsWindowController(store: store, bindings: bindings, sync: composition.sync, actions: actions)
             settingsController = c
             settingsWindow = c.window
@@ -2317,6 +2320,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
         }
         leaveMenuBarForWindow()
+        settingsController?.showFirstTabIfClosed()
         settingsController?.didShow()
         settingsWindow?.makeKeyAndOrderFront(nil)
     }

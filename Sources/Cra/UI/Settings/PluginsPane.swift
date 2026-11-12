@@ -30,7 +30,7 @@ struct PluginsPane: View {
                             Toggle("Enable \(package.manifest.name)", isOn: Binding(
                                 get: { registry.isEnabled(package.manifest.id) },
                                 set: { enabled in Task { await registry.setEnabled(enabled, id: package.manifest.id) } }
-                            )).labelsHidden().toggleStyle(.switch)
+                            )).labelsHidden().toggleStyle(.arcSwitch)
                         }
                     }
                 }

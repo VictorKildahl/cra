@@ -1705,6 +1705,85 @@ search results) or cosmetic ad slots; requests from service workers and extensio
   and `_usesCustomDrawing` (returns NO); no active-appearance override. Cra keeps its buttons coloured while
   inactive by overriding AppKit's private `_hasActiveAppearanceForStandardWindowButton:` (checked on a test window).
 
+## Arc Settings window (Arc 1.172.2 build 90755, 11 and 12 Nov 2026)
+
+First measurement of Arc's own Settings window (GitHub #372); until then Cra's was Dia's (next section). Arc ▸ Settings… opened
+through the menu with Accessibility, tabs switched with `AXPress`, 1728 × 1117 pt display, dark and light. Frames, strings and
+fonts from the accessibility tree (fonts through `AXAttributedStringForRange`), window captures with `screencapture -l` (size
+checked: 2736 × 2600 px for 684 × 650 pt), colours from the PNG's raw bytes (Display P3), motion from ScreenCaptureKit
+recordings of Arc's windows other than the browser window. No page content was captured. Keys and behaviour of the rows come
+from the binary (static strings, metadata and its key table; nothing run), marked [binary].
+
+- [O] The window is **684 × 650 pt, fixed**: zoom and minimise are off, no tab resizes it. It opens at x 522, y 119 (centred across, near
+  the top) and **always on the first tab**, not the one used last (closed on Shortcuts, reopened on the first). The title bar shows the
+  tab's name, centred and dimmed; traffic lights are 16 pt at x 8, 31, 54, y 8. [binary] The frame autosave name is
+  `company.browser.Settings.FrameAutosaveName`, the panes (`ArcPreferencePane`) are account, general, max, profiles, keyBindings,
+  links, advanced, staff, appIcon.
+- [O] **Tabs**, in a toolbar 56 pt tall (y 32–88): a glyph over the name, buttons 55 pt wide (Shortcuts 63, Advanced 64, labels 12 pt)
+  with 1 pt gaps, the group (464 pt) centred. In order: Account (named after the user), General, Profiles, Max, Links, Shortcuts, Icon,
+  Advanced. The chosen tab is a pill 55 × 47 with a 7 pt corner and its glyph and name in the system blue: `(38, 37, 65)` with a
+  hairline in dark, white with a soft shadow in light. A hairline under the toolbar. [binary] Glyphs: Account
+  `person.crop.square.filled.and.at.rectangle` (18 pt medium), Profiles `person`, Shortcuts `keyboard`, Advanced
+  `slider.horizontal.3`, General and Links are bundled 24 × 24 template PDFs.
+- [O] The body is 562 pt tall (y 88–650) and scrolls (Max, Links, Icon, Advanced do); the Shortcuts list and the Icon list scroll inside
+  it. Side margin 64 pt, first card 20 pt below the toolbar, cards 556 pt wide, a 1 pt border, corner ≈ 5.5 pt (buttons 5.75, the window
+  ≈ 15; fitted to the corner pixels), 10 pt inside a row, hairlines between rows, 9 pt between cards. Switches 36 × 16 pt, 10 pt from the
+  card's edge; buttons 24 pt tall. Rows with a switch are 36 pt (pitch 37), with a 24 pt control 44. Text is the system font: 13 pt for
+  rows and body, 11 pt for sub-text and counts, 12 pt for a shortcut's description, 14 pt semibold for a shortcut's name and the icons'
+  names, 11 pt semibold "CURRENT ICON".
+- [O] Colours (raw P3 bytes, dark / light): window and toolbar `(31, 30, 53)` / `(255, 255, 255)`; the hairline under the tabs
+  `(35, 35, 35)` / `(230, 230, 230)`; card `(34, 33, 56)` / `(251, 251, 251)`; card border and separators `(56, 55, 76)` /
+  `(226, 226, 226)`; buttons `(45, 44, 66)` / `(239, 239, 239)`; pop-ups `(48, 47, 67)` / `(236, 236, 236)`; switch on `(17, 125, 253)` /
+  `(0, 118, 245)`; a chosen profile row `(32, 38, 67)` / `(237, 244, 255)`; Max banner `(51, 60, 255)` in both; Links picture
+  `(222, 126, 133)` / `(255, 161, 164)`. The window follows the system appearance.
+- [O] Motion: opening is the standard AppKit scale-in (first frame already 98.8 % of the size, full after 5 frames ≈ 100 ms, opacity
+  steady), closing 3 frames (scale to ≈ 89 %, opacity 89 → 44 → 10 → 4 %); **a tab switch is instant** (one frame changes, no fade,
+  no resize); a sheet opens in ≈ 240 ms with the window behind it darkening and closes in ≈ 210 ms. Cra's window has the same
+  opening, closing and instant switch.
+- [O] **General**: "Automatically update my Arc" ⓘ, "Warn before quitting" (card), "Previews" with Previews Settings… and "Manage your
+  default search engine, Auto-Archive, and downloads in Profile Settings." with Profile Settings… (card). Previews Settings… is a 422 pt
+  sheet "Show Arc Previews:" with seven checkboxes: Arc Folders, Google Calendar, Google Mail, Outlook Calendar, Outlook Mail, Recent
+  pages on Linear, Notion, and Figma, Notion Calendar. [binary] keys `folderPreviewEnabled`, `calendarPreviewEnabled`,
+  `gmailPreviewEnabled`, `outlookCalendarPreviewEnabled`, `outlookEmailPreviewEnabled`, `recentPagesPreviewEnabled`, `cronPreviewEnabled`
+  (Notion Calendar). Recent pages read the local history of notion.so, linear.app, figma.com and atlassian.net/wiki (no API);
+  Notion Calendar shows Google Calendar's preview on calendar.notion.so; Outlook is OAuth with Microsoft Graph (GitHub #376).
+- [O] **Profiles**: a line on profiles, a list on the left ("Your Profiles", "Default — 5 Spaces", + − and rename under it, 205 pt wide)
+  and the chosen profile's cards on the right: Search engine, Manage search (Search Settings…), Include search engine suggestions ·
+  Archive tabs after (12 hours (default), 24 hours, 7 days, 30 days), New documents (——, Confluence Page, Google Doc, Notion Page, Word
+  Doc), Download location (Downloads, Other…, Ask every time) · "Your Data and Settings": Privacy and Security, Passwords, Credit Cards,
+  Notifications, Clear Browsing Data (24 pt coloured tiles, arrows). [binary] New documents is `defaultNoteDocumentApp`, a per-profile
+  map, and feeds the command bar's "New Google Doc" and the like (`doc.new`, `app.notion.com/new`, `word.new`, `make.page`; GitHub #375).
+- [O] **Max**: a banner (blue, the word and flowers, a wavy bottom edge), "Let Arc do more for you with Max…", a card "Enable Max" with
+  a button and "Automatically enable future Arc Max features", then a card of six rows with a picture each (Tidy Tabs, Instant Links,
+  5-Second Previews, Tidy Tab Titles, Tidy Downloads, ChatGPT in the Command Bar) and "Max features require that we send data to
+  our AI partners.". [binary] The button has no key of its own: it reads Turn Off Max with every feature on, Turn On All with some,
+  Turn On Max with none, and a press sets them all; the per-feature keys are `tidyTabsEnabled`, `instantLinksEnabled`,
+  `hoverCardsEnabled`, `renamePinnedTabsEnabled`, `renameDownloadsEnabled`, `gptSiteSearchEnabled`, and the auto switch is
+  `arcMaxAutoOptInEnabled`.
+- [O] **Links**: a 684 × 135 picture (a Little Arc, rose, wavy bottom edge), "Little Arc is a smaller, simpler Arc window…", a card of
+  "Open Little Arc when I press ⌥⌘N in any app", "Open Little Arc when clicking on links with ⌥⌘ held", "Links from other apps open in
+  Little Arc" and "Archive Little Arcs after:", a rule, "Peek is a way to preview a link…", a card of the two Peek switches (the second
+  with the note "This only affects Favorites and Pinned tabs"), a rule, and a card "Choose where links open inside Arc." ⓘ with Air Traffic
+  Control…. [binary] the ⌥⌘ switch is `optionCommandClickLittleArcEntryPointEnabled`; the click itself isn't measured (GitHub #373).
+- [O] **Shortcuts**: "Start with the basics" and a button "Learn the Essential Shortcuts", a card with a field ("Type a feature name or
+  shortcut (like “Command E”)", which also finds by keys: "command e" → Open Extensions) over one flat list "Default Shortcuts" by name
+  (110 rows here, rows 48 pt, the keys on white 64 × 24 caps, `---` for none), and on the right two 64 pt key caps, "Custom Shortcuts"
+  or the chosen action's name and description, "Reset Shortcut to Default" and a "…" menu (Remove Shortcut, Reset All Shortcuts,
+  Extension Shortcuts…). An action that has a shortcut also has a pop-up Prefer Websites / Use Both / Prefer Arc ("When shortcuts
+  conflict, Arc wins.") [binary] `priority` = `low` / `promptAfterConsumedByWebView` / `overrideWebView` (GitHub #374).
+- [O] **Icon**: a radio list of the alternate icons (64 pt picture, 14 pt name, "CURRENT ICON" under the chosen one, rows 81 pt): The
+  Original Arc, Candy Arc by Dmitry Novikov, Hologram, Neon, Fluted Glass, Schoolbook, Colorful. [binary] They unlock by inviting
+  friends ("Refer %d friend(s) to unlock"); a remote flag opens them all.
+- [O] **Advanced**: three cards of switches on 20 pt coloured tiles — "Play Arc sound effects", "Haptic feedback when reordering tabs" ·
+  "When opening Arc, restore windows from previous session", "Allow window dragging from the top of webpages", "Show full URL when
+  Toolbar is enabled", "Enable Shared Quotes when highlighting text." · "Enable Picture in Picture when you leave a video tab", "Allow
+  websites to get your theme data", "Enable Boosts on websites you visit" — then More Settings… (`arc://settings`), Reset Translated-site
+  Prompts (`resetTranslateSettings`) and Export Data (a Markdown file of every Space and tab, "Arc Data Export.md").
+- [O] **Account**: the user's card, "Account" with the email, "Sync Sidebar", "Gift Arc to a Friend". Cra has no account; its sync is the
+  first tab.
+- Cra's window is Arc's since GitHub #372; Tabs, Privacy, Extensions, Plugins and Performance, which Arc has no tab for, are Cra's own:
+  Privacy and Extensions after Advanced, the rest inside General, Extensions and Advanced.
+
 ## Dia Settings window (Dia 1.54.2, 25 Oct 2026)
 
 Evidence: window-id captures (`screencapture -l`) and the accessibility tree of Dia's own

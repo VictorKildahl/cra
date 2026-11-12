@@ -27,7 +27,7 @@ struct PerformancePane: View {
             case .export: export($store.settings.perfHidesSiteNames)
             }
         }
-        .task(id: RefreshKey(open: nav.isOpen, recording: store.settings.perfRecording)) {
+        .task(id: RefreshKey(open: nav.isOpen && nav.tab == .advanced, recording: store.settings.perfRecording)) {
             report = nil
             guard nav.isOpen, store.settings.perfRecording else { return }
             while !Task.isCancelled {
@@ -183,7 +183,7 @@ struct PerformancePane: View {
             SettingsCardRow {
                 Text("Hide site names").font(.system(size: 13))
             } trailing: {
-                Toggle("Hide site names", isOn: hideSites).toggleStyle(.switch).labelsHidden()
+                Toggle("Hide site names", isOn: hideSites).toggleStyle(.arcSwitch).labelsHidden()
             }
         }
         SettingsFootnote("Sites in the exported files become site-1, site-2… in every file, logs included. Without it they keep their host name (never the full address), as Cra's logs always have.")

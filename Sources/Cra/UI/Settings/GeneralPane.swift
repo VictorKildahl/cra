@@ -1,14 +1,54 @@
 import SwiftUI
 
-/// System integration (Dia asks for these in onboarding and shows the default-browser prompt at
-/// the top of its Account pane): default browser, Dock, login, each with what it does under its
-/// name; then Sync and App Icon.
+/// Arc's General tab, then what Cra adds. Arc's has four rows in two cards (Arc 1.172.2): "Automatically update my
+/// Arc", "Warn before quitting", "Previews" with Previews Settings…, and a line sending the search engine, Auto-Archive
+/// and downloads to Profile Settings…. After them come System integration (Dia asks for these in onboarding: default
+/// browser, Dock, login) and the Tabs cards, which Arc has no tab for. Sync is the first tab and App Icon the Icon tab.
 struct GeneralPane: View {
+    let nav: SettingsNavigation
+    @Environment(SidebarStore.self) private var store
+    @State private var showsPreviews = false
     private let system = SystemIntegration.shared
 
     var body: some View {
+        @Bindable var store = store
+        @Bindable var updater = SoftwareUpdater.shared
         SettingsCardPane {
-            SettingsHeader("System")
+            SettingsCard {
+                SettingsCardRow {
+                    Text("Automatically update Cra").font(.system(size: 13))
+                } trailing: {
+                    Toggle("Automatically update Cra", isOn: $updater.automaticallyUpdates)
+                        .toggleStyle(.arcSwitch).labelsHidden()
+                        .disabled(!updater.isAvailable).opacity(updater.isAvailable ? 1 : 0.5)
+                }
+                SettingsCardDivider()
+                SettingsCardRow {
+                    Text("Warn before quitting").font(.system(size: 13))
+                        .help(store.settings.keepInMenuBar ? "⌘Q doesn’t quit Cra while it stays in the menu bar (Advanced)." : "⌘Q asks “Quit Cra?” first.")
+                } trailing: {
+                    Toggle("Warn before quitting", isOn: $store.settings.warnBeforeQuitting)
+                        .toggleStyle(.arcSwitch).labelsHidden()
+                        .disabled(store.settings.keepInMenuBar).opacity(store.settings.keepInMenuBar ? 0.5 : 1)
+                }
+            }
+            SettingsCard {
+                SettingsCardRow {
+                    Text("Previews").font(.system(size: 13))
+                } trailing: {
+                    Button("Previews Settings…") { showsPreviews = true }
+                }
+                SettingsCardDivider()
+                SettingsCardRow {
+                    Text("Manage your default search engine, Auto-Archive, and downloads in Profile Settings.")
+                        .font(.system(size: 13)).fixedSize(horizontal: false, vertical: true)
+                } trailing: {
+                    Button("Profile Settings…") { nav.show(.profiles) }
+                }
+            }
+            .padding(.top, 9)
+
+            SettingsHeader("System").padding(.top, 20)
             SettingsFeatureCard {
                 SettingsPlainRow("Default browser",
                                    detail: system.isDefaultBrowser
@@ -40,11 +80,42 @@ struct GeneralPane: View {
                                   isOn: Binding(get: { system.launchesAtLogin }, set: { error = system.setLaunchAtLogin($0) }))
             }
             if let error { SettingsFootnote(error).foregroundStyle(.red) }
-            SyncSection().padding(.top, 20)
-            AppIconSection().padding(.top, 20)
+            TabsPane().settingsNested().padding(.top, 20)
         }
         .onAppear { system.refresh() }
+        .sheet(isPresented: $showsPreviews) { PreviewsSheet().environment(store) }
     }
 
     @State private var error: String?
+}
+
+/// Arc's "Show Arc Previews:" sheet (422 wide, Arc 1.172.2): what shows when you hover a folder, a pinned tab or a
+/// favorite. Arc lists seven; Cra has these three (Outlook, Notion Calendar and the recent pages of Linear, Notion
+/// and Figma are GitHub #376).
+private struct PreviewsSheet: View {
+    @Environment(SidebarStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        @Bindable var store = store
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Show Previews:").font(.system(size: 13, weight: .semibold))
+            Text("Save a click! Hover your mouse over a Folder, Pinned, or Favorited tab to quickly preview what you need from that site!")
+                .font(.system(size: 13)).fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 12) {
+                Toggle("Folders", isOn: $store.settings.folderPreviews)
+                Toggle("Google Calendar", isOn: $store.settings.calendarHoverPreview)
+                Toggle("Google Mail", isOn: $store.settings.favoritePreviews)
+            }
+            .toggleStyle(.checkbox)
+            .padding(.top, 4)
+            HStack {
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+            .padding(.top, 14)
+        }
+        .padding(24)
+        .frame(width: 422)
+    }
 }
