@@ -99,6 +99,11 @@ public struct MobileTabsDocument: Codable, Equatable {
         selected = tab.id
     }
 
+    /// Puts `tab` at the end of the row without showing it (a link saved from another app).
+    public mutating func add(_ tab: MobileTab) {
+        tabs.append(tab)
+    }
+
     /// Shows a tab and restarts its archive clock.
     public mutating func select(_ id: UUID, now: Date) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }

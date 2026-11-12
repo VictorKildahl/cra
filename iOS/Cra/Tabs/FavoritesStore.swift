@@ -15,6 +15,12 @@ final class FavoritesStore {
         }
     }
 
+    /// Makes the page a favorite unless it is one already.
+    func add(url: String, title: String) {
+        guard !value.contains(url) else { return }
+        toggle(url: url, title: title)
+    }
+
     @discardableResult
     func toggle(url: String, title: String) -> Bool {
         let isFavorite = value.toggle(url: url, title: title)

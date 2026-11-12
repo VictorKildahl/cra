@@ -16,5 +16,10 @@
 	<array>
 		<string>iCloud.dk.kildahl.cra</string>
 	</array>
+	<!-- Links saved from other apps' share sheets wait here (MobileShareInbox). -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.dk.kildahl.cra</string>
+	</array>
 </dict>
 </plist>

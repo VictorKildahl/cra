@@ -782,3 +782,57 @@ struct MobileSelectionQueryTests {
         #expect(MobileBrowseForMe.query(fromSelection: " \n ").isEmpty)
     }
 }
+
+/// Links from other apps' share sheets, waiting in the App Group for the app.
+struct MobileShareInboxTests {
+    /// A saved link joins the row behind what is on screen.
+    @Test func aSavedLinkJoinsTheRowWithoutTakingTheScreen() {
+        let now = Date(timeIntervalSince1970: 0)
+        let shown = MobileTab(url: "https://a.example", lastActive: now)
+        var document = MobileTabsDocument(tabs: [shown], selected: shown.id)
+        document.add(MobileTab(url: "https://b.example", title: "B", lastActive: now))
+        #expect(document.selected == shown.id && document.tabs.map(\.url) == ["https://a.example", "https://b.example"])
+    }
+
+    @Test func savedLinksWaitOnceEachAndRememberThePlace() {
+        var inbox = MobileShareInbox()
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let kept1 = inbox.save(url: "https://tidbits.com/a", title: " TidBITS ", to: .favorites, at: now)
+        #expect(kept1)
+        let kept2 = inbox.save(url: "https://tidbits.com/a", title: "TidBITS again", to: .favorites, at: now)
+        #expect(kept2)
+        let kept3 = inbox.save(url: "https://tidbits.com/a", title: "", to: .tabs, at: now)
+        #expect(kept3)
+        let kept4 = inbox.save(url: "file:///etc/hosts", title: "x", to: .tabs, at: now)
+        #expect(!kept4)
+        let kept5 = inbox.save(url: "javascript:alert(1)", title: "x", to: .tabs, at: now)
+        #expect(!kept5)
+        #expect(inbox.items.map(\.title) == ["TidBITS again", "tidbits.com"])
+        #expect(inbox.lastDestination == .tabs)
+        let taken = inbox.take()
+        #expect(taken.count == 2)
+        #expect(inbox.items.isEmpty && inbox.lastDestination == .tabs)
+        for index in 0..<(MobileShareInbox.limit + 5) { inbox.save(url: "https://e.example/\(index)", title: "", to: .tabs, at: now) }
+        #expect(inbox.items.count == MobileShareInbox.limit && inbox.items.first?.url == "https://e.example/5")
+    }
+
+    /// The extension writes, the app takes: one file in the shared folder, read back whole.
+    @Test func theFileCarriesLinksFromTheExtensionToTheApp() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("inbox-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let saved = MobileShareInbox.update(in: folder) { (inbox: inout MobileShareInbox) in
+            inbox.save(url: "https://crabrowser.app", title: "Cra", to: .favorites, at: Date(timeIntervalSince1970: 0))
+        }
+        #expect(saved == true)
+        let place = MobileShareInbox.update(in: folder) { (inbox: inout MobileShareInbox) in inbox.lastDestination }
+        #expect(place == .favorites)
+        let taken = MobileShareInbox.update(in: folder) { (inbox: inout MobileShareInbox) in inbox.take() } ?? []
+        #expect(taken.map(\.url) == ["https://crabrowser.app"] && taken.first?.destination == .favorites)
+        let left = MobileShareInbox.update(in: folder) { (inbox: inout MobileShareInbox) in inbox.items.count }
+        #expect(left == 0)
+        // A file from a newer or broken build is an empty inbox, not a crash.
+        try Data("{\"items\":[{\"url\":1}],\"lastDestination\":\"space\"}".utf8).write(to: folder.appendingPathComponent(MobileShareInbox.fileName))
+        let broken = MobileShareInbox.update(in: folder) { (inbox: inout MobileShareInbox) in inbox }
+        #expect(broken == MobileShareInbox())
+    }
+}

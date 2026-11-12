@@ -96,6 +96,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         let center = NotificationCenter.default
         center.addObserver(self, selector: #selector(keyboardWillChange(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
         center.addObserver(self, selector: #selector(appWillResignActive), name: UIApplication.willResignActiveNotification, object: nil)
+        center.addObserver(self, selector: #selector(appDidBecomeActive), name: UIApplication.didBecomeActiveNotification, object: nil)
+        Self.saveFakeShareForTest()
         center.addObserver(self, selector: #selector(performLaunchAction), name: LaunchAction.notification, object: nil)
 
         ContentBlocker.shared.prepare()
@@ -259,6 +261,10 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             layoutChrome()
             chromeSettled()
         }
+    }
+
+    @objc func appDidBecomeActive() {
+        takeSharedLinks()
     }
 
     @objc func appWillResignActive() {

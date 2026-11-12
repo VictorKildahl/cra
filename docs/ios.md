@@ -98,3 +98,12 @@ Xcode ▸ Settings ▸ Accounts, or with an App Store Connect API key given as `
 `ASC_KEY_ID` and `ASC_ISSUER_ID` (the .p8 stays in `~/.appstoreconnect/private_keys`, never in
 the repo). The app record for `dk.kildahl.cra` has to exist in App Store Connect before the
 first upload. Builds are iPhone only (`TARGETED_DEVICE_FAMILY = 1`) until iPad has been checked.
+
+## Share extension
+
+`iOS/CraShare` is "Cra" in other apps' share sheets. Done writes the link into
+`share-inbox.json` in the App Group `group.dk.kildahl.cra` (`MobileShareInbox`, a coordinated
+read-change-write); the app takes it each time it becomes active (`SharedLinks.swift`). A test
+can put a link in the inbox as the extension would with `-CraFakeShare <url>` (and
+`-CraFakeShareTo favorites`). Signing registers the App Group through the API key, like the
+iCloud container.

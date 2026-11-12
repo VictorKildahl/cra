@@ -714,3 +714,47 @@ final class BrowseToggleTests: BrowserTestCase {
         XCTAssertEqual(app.staticTexts["browse-query"].label, "Ovens")
     }
 }
+
+final class ShareExtensionTests: BrowserTestCase {
+    /// A link the share extension saved for Tabs joins the tab row behind the page on screen.
+    func testALinkSavedForTabsJoinsTheRow() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraFakeShare", "https://saved.invalid/page"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["tab-card-1"].waitForExistence(timeout: 5), "the saved link is a second tab")
+        XCTAssertEqual(app.buttons["tab-card-1"].label, "Shared page")
+    }
+
+    /// One saved for Favorites shows under the empty search field.
+    func testALinkSavedForFavoritesShowsUnderTheSearchField() {
+        launch(["-CraFakeShare", "https://saved.invalid/page", "-CraFakeShareTo", "favorites"])
+        XCTAssertTrue(app.textFields["search-field"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Shared page"].waitForExistence(timeout: 5))
+    }
+
+    /// The extension itself, from the page menu's share sheet: "Saved", the place picker, Done.
+    func testTheShareSheetSavesThroughTheExtension() {
+        // A page that loads (the network is needed): the share sheet shares the page's address.
+        launch(["-CraOpenURL", "https://example.com/", "-CraSearch", "NO"])
+        XCTAssertTrue(app.buttons["bar-menu"].waitForExistence(timeout: 10))
+        sleep(6)
+        app.buttons["bar-menu"].press(forDuration: 1.2)
+        let cra = app.collectionViews.cells.matching(NSPredicate(format: "label == 'Cra'")).firstMatch
+        if !cra.waitForExistence(timeout: 8) {
+            keep("share-sheet")
+            XCTFail(app.debugDescription)
+            return
+        }
+        cra.tap()
+        XCTAssertTrue(app.staticTexts["Saved"].waitForExistence(timeout: 8))
+        sleep(1)
+        keep("share-saved")
+        app.buttons["share-done"].tap()
+        sleep(1)
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(app.buttons["bar-tabs"].waitForExistence(timeout: 10))
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["tab-card-1"].waitForExistence(timeout: 5), "the shared link came back as a tab")
+    }
+}
