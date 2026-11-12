@@ -106,4 +106,23 @@ struct PictureInPictureGestureTests {
         #expect(big.width == 1382 && big.height == 778)
         #expect(big.maxY == window.maxY)
     }
+
+    /// A resize grows the window up to the display's edges, not past them: the sides it keeps stay,
+    /// the grabbed ones stop at the visible frame (since the window can be as large as the display,
+    /// 12 Nov). A pure top or bottom edge has no limit across, and a side already past an edge keeps
+    /// the window's size.
+    @Test func aResizeStopsAtTheDisplaysEdges() {
+        let visible = CGRect(x: 0, y: 0, width: 1728, height: 1084)
+        let w = CGRect(x: 800, y: 500, width: 480, height: 270)
+        func room(_ x: CGFloat, _ y: CGFloat) -> CGSize {
+            PictureInPictureGesture(mouse: CGPoint(x: x, y: y), frame: w).room(in: visible)
+        }
+        #expect(room(1278, 502) == CGSize(width: 928, height: 770))       // bottom right: right of x 800, below y 770
+        #expect(room(802, 768) == CGSize(width: 1280, height: 584))       // top left: left of x 1280, above y 500
+        #expect(room(1278, 600).width == 928)                              // right edge
+        #expect(room(1278, 600).height == .greatestFiniteMagnitude)
+        #expect(room(1000, 502).width == .greatestFiniteMagnitude)         // bottom edge
+        let under = CGRect(x: 800, y: 900, width: 480, height: 270)        // its top under the menu bar
+        #expect(PictureInPictureGesture(mouse: CGPoint(x: 802, y: 1168), frame: under).room(in: visible).height == 270)
+    }
 }
