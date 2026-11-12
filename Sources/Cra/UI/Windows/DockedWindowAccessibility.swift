@@ -20,7 +20,9 @@ enum DockedWindowAccessibility {
     private static var installed = false
     private static var patchedClasses = Set<ObjectIdentifier>()
     private typealias ObjectIMP = @convention(c) (NSObject, Selector) -> AnyObject?
-    private typealias AttachIMP = @convention(c) (NSWindow, Selector, NSWindow, Int) -> Void
+    /// The child is optional: other code in the process passes nil (Safari's AutoFill list does),
+    /// and a non-optional parameter would crash on it before AppKit could ignore it.
+    private typealias AttachIMP = @convention(c) (NSWindow, Selector, NSWindow?, Int) -> Void
 
     /// Patches NSWindow's addChildWindow so every window that gets docked (and its parent)
     /// answers as above from then on, and the application's window list.
@@ -48,8 +50,9 @@ enum DockedWindowAccessibility {
         let sel = #selector(NSWindow.addChildWindow(_:ordered:))
         guard let method = class_getInstanceMethod(NSWindow.self, sel) else { return }
         let original = unsafeBitCast(method_getImplementation(method), to: AttachIMP.self)
-        let block: @convention(block) (NSWindow, NSWindow, Int) -> Void = { parent, child, place in
+        let block: @convention(block) (NSWindow, NSWindow?, Int) -> Void = { parent, child, place in
             original(parent, sel, child, place)
+            guard let child else { return }
             MainActor.assumeIsolated {
                 patchWindow(type(of: parent))
                 patchWindow(type(of: child))

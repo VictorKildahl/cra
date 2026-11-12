@@ -32,6 +32,7 @@ enum DockedWindowAccessibilityTests {
         appListsOnlyTheBrowserWindow(browser: browser, page: page, sidebar: sidebar, bubble: bubble)
         movingADockedWindowMovesTheBrowser(browser: browser, page: page)
         detachedWindowIsAWindowAgain(browser: browser, page: page, deep: deep)
+        attachingNoWindowIsHarmless(browser: browser)
 
         print("Docked window accessibility: \(checks) checks passed")
     }
@@ -109,6 +110,20 @@ enum DockedWindowAccessibilityTests {
         expect(((value(browser, .children) as? [AnyObject]) ?? []).allSatisfy { $0 !== page },
                "the old parent no longer lists it")
         browser.addChildWindow(page, ordered: .above)
+    }
+
+    // promise: #391
+    /// Safari's AutoFill list (SafariPlatformSupport's _updateWindowVisibility:inWindow:, loaded
+    /// into every app through the PressAndHold input method) calls addChildWindow:ordered: with a
+    /// nil window. The patched method took the child as non-optional and crashed on it.
+    @MainActor
+    private static func attachingNoWindowIsHarmless(browser: NSWindow) {
+        typealias Attach = @convention(c) (NSWindow, Selector, NSWindow?, Int) -> Void
+        let sel = #selector(NSWindow.addChildWindow(_:ordered:))
+        let attach = unsafeBitCast(browser.method(for: sel), to: Attach.self)
+        let before = browser.childWindows?.count ?? 0
+        attach(browser, sel, nil, NSWindow.OrderingMode.above.rawValue)
+        expect((browser.childWindows?.count ?? 0) == before, "attaching no window leaves the children as they were")
     }
 
     // MARK: - The questions the accessibility server asks
