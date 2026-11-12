@@ -542,6 +542,10 @@ public struct AppSettings: Codable, Equatable {
     /// Arc's "Show Full URL" on the toolbar address's menu (toolbarShowFullURLsEnabledPreference):
     /// the normal bar shows the host and the dimmer path. Off like Arc, which shows the host only.
     public var toolbarShowsFullURL: Bool = false
+    /// Settings ▸ Tabs ▸ "Hide the toolbar until the pointer reaches the top of the page" (not in
+    /// Arc; Zen's compact toolbar): the toolbar floats over the page and comes out when the pointer
+    /// is at the card's top edge (ToolbarAutoHide). Only means something while `showToolbar` is on.
+    public var autoHideToolbar: Bool = false
     public var hasSeenImportPrompt: Bool = false
     /// Arc's per-site Developer Mode (⌃D): the toolbar shows the full URL in
     /// monospace with the developer icons, and the nav buttons move to the sidebar.
@@ -905,6 +909,7 @@ extension AppSettings {
             showToolbar = try c.decodeIfPresent(Bool.self, forKey: .showToolbar) ?? false
         }
         toolbarShowsFullURL = try c.decodeIfPresent(Bool.self, forKey: .toolbarShowsFullURL) ?? false
+        autoHideToolbar = try c.decodeIfPresent(Bool.self, forKey: .autoHideToolbar) ?? false
         hasSeenImportPrompt = try c.decodeIfPresent(Bool.self, forKey: .hasSeenImportPrompt) ?? false
         developerHosts = try c.decodeIfPresent(Set<String>.self, forKey: .developerHosts) ?? []
         disabledDefaultDeveloperHosts = try c.decodeIfPresent(Set<String>.self, forKey: .disabledDefaultDeveloperHosts) ?? []

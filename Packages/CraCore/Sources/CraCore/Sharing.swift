@@ -140,11 +140,12 @@ public struct UsageStats: Codable, Equatable, Sendable {
     ]
 
     /// Lists, folders, sites and one-time marks: never in a report. Sharing itself is always on
-    /// when a report goes out.
+    /// when a report goes out. `autoHideToolbar` is here because a feature Arc never had adds
+    /// nothing to what a report says (CONTRIBUTING.md).
     public static let unreportedSettings: Set<String> = [
         "developerHosts", "disabledDefaultDeveloperHosts", "autoPictureInPictureSites", "linkRoutes", "mediaFolders", "mediaHidden",
         "downloadLocations", "newDocumentApps", "hasSeenImportPrompt", "toolbarDefaultMigrated", "newTabButtonDefaultMigrated",
-        "autoArchiveDays", "shareUsageStats", "askedToShare",
+        "autoArchiveDays", "shareUsageStats", "askedToShare", "autoHideToolbar",
     ]
 
     public static func changedSettings(_ settings: AppSettings) -> [String: String] {
