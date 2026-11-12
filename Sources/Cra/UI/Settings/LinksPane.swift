@@ -24,6 +24,12 @@ struct LinksPane: View {
                                   isOn: $store.settings.littleWindowShortcutEverywhere)
                     .settingsTextColumn()
                 SettingsCardDivider()
+                // Arc's "Open Little Arc when clicking on links with ⌥⌘ held" (LittleWindowTrigger).
+                SettingsToggleRow("⌥⌘-click opens a Little Window",
+                                  detail: "Hold ⌥ and ⌘ while you click a link to open it in a Little Window instead of a background tab.",
+                                  isOn: $store.settings.littleWindowOnOptionCommandClick)
+                    .settingsTextColumn()
+                SettingsCardDivider()
                 // Arc: "Archive Little Arcs after:" 1 hour, 6 hours (default), 12 hours.
                 SettingsPlainRow("Archive Little Windows",
                                  detail: "A Little Window you leave alone closes into the archive, where you can find it again.") {

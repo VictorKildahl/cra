@@ -1870,6 +1870,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         return true
     }
 
+    /// Arc's ⌥⌘-click (LittleWindowTrigger): the link opens in a Little Window and the tab stays put.
+    func browserManagerOpensLittleWindow(url: String, fromTab tabID: UUID) -> Bool {
+        guard !isIncognito, LittleWindowTrigger.opens(url, optionCommand: true, settings: store.settings) else { return false }
+        _ = app.openLittleWindow(url: url, space: focusedSpaceID)
+        return true
+    }
+
     func browserManagerCaptureImage(at point: NSPoint, tabID: UUID) {
         guard tabID == browsers.visibleTabID else { return }
         capturePage(liftImageAt: point)

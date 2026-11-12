@@ -169,6 +169,10 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 /// opens as a target=_blank tab) or Shift-clicked (YES, instead of a new window). Return
 /// YES to show it in a Peek; the page then stays where it is.
 - (BOOL)browser:(CraBrowser *)browser opensPeekForURL:(NSString *)url shiftClick:(BOOL)shiftClick newTab:(BOOL)newTab;
+/// Arc's "Open Little Arc when clicking on links with ⌥⌘ held": a link the user clicked with both keys down
+/// (Chromium reports that click as a ⌘-click, a background tab). Return YES to show it in a Little Window;
+/// the page then stays where it is.
+- (BOOL)browser:(CraBrowser *)browser opensLittleWindowForURL:(NSString *)url;
 /// A main-frame navigation (a link, a redirect, history, an address Cra loaded) before its request
 /// goes out; `method` is its HTTP method. Return YES to cancel it here because Cra shows `url` in
 /// another engine (ProtectedMediaSites: WebKit for DRM services). Called on the main thread from
