@@ -1897,6 +1897,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var keyFallbackMonitor: Any?
     /// ⌥← / ⌥→ from a mouse whose driver types them (Logi Options+, issue #233).
     private var sideButtonKeyMonitor: Any?
+    /// The swipe Logi Options+ posts for its own Back and Forward, and a three-finger swipe.
+    private var sideButtonSwipeMonitor: Any?
     private func installKeyFallbackMonitor() {
         guard keyFallbackMonitor == nil else { return }
         keyFallbackMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -1950,6 +1952,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 if step < 0 { browser.goBack() } else { browser.goForward() }
                 CraLog.note("mouse key \(which): history")
             }
+            return nil
+        }
+        // Logi Options+'s own Back and Forward (an MX Ergo's or MX Master's default) and a
+        // trackpad's three-finger swipe between pages post a swipe event, not a button or a key.
+        // Chromium's page view leaves `swipeWithEvent:` to Chrome's browser window, which Cra's
+        // pages don't have, so nothing went back. A swipe goes to the page under the pointer, and
+        // Back there is the toolbar's (a tab a link opened closes back to its opener, #273).
+        sideButtonSwipeMonitor = NSEvent.addLocalMonitorForEvents(matching: .swipe) { [weak self] event in
+            guard let self, let offset = MouseButtonSpaceSwitch.offset(swipeDeltaX: event.deltaX, deltaY: event.deltaY),
+                  let target = event.window else { return event }
+            let which = offset < 0 ? "back" : "forward"
+            if let window = self.mainWindows.first(where: { $0.pointerOverSidebar() }) {
+                self.store.focusSpace(offset: offset, window: window.windowID)
+                CraLog.note("mouse swipe \(which): switched space")
+                return nil
+            }
+            if let little = self.littleWindows.first(where: { !$0.isParked && $0.window != nil && (target === $0.window || target.parent === $0.window) }),
+               let browser = little.browser {
+                if offset < 0 { browser.goBack() } else { browser.goForward() }
+            } else if let hit = self.mainWindows.lazy.compactMap({ m in m.pageTab(under: event).map { (main: m, id: $0) } }).first {
+                if offset < 0 { hit.main.goBack(hit.id) } else { hit.main.browsers.runtime(for: hit.id)?.browser.goForward() }
+            } else {
+                return event
+            }
+            CraLog.note("mouse swipe \(which): history")
             return nil
         }
     }
