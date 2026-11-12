@@ -1083,7 +1083,7 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
   in Split View, Duplicate, Move to, New Folder with 2 Items, Archive Tabs…). Issue #356's screenshot of two
   Today tabs, in sections: Open in Split View, Duplicate | Copy URLs ⇧⌘C, Share 2 Items… | Move to ›, New Folder
   with 2 Items | Change Icon › (dimmed), Mute | Archive Tabs. Cra: PickedTabsMenu.
-- [O strings] Arc 1.17x binary: Share N Items… shows "Generating Link..." then the toast "Copied Shared URL"
+- [O strings] Arc 1.17x binary: Share N Items… strings: "Generating Link...", the toast "Copied Shared URL" (live it said "Copied Folder URL")
   ("Letting user know that the sharable URL has been copied"; `itemsToShare`); Move to is "Menu Item that shows a
   user's root spaces in a submenu" (SidebarMenu+MoveMenu.swift, which also has "Move selected items to a new folder
   in a subspace"); the archive row is "Archive sidebar items"; Copy links/item links as Markdown exist as titles.
@@ -1116,7 +1116,14 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
   checkbox 16 pt #2D3243 rounded square at 49.5, 195.5, label 13 pt #DBDCDF from x 79.5; buttons 243–281.5 tall
   38.5, Cancel 237–346.5 and Copy Link to Folder 354.5–532 (blue #3339F1). Cra: AppDialog.shareLink (`older`
   layout, ShareEnvelopeIcon, DialogCheckbox) lands within 0.5 pt everywhere (SwiftUI snaps the text rows to whole
-  points); Arc's title runs ~3 pt wider. Arc's ticked checkbox wasn't seen.
+  points); Arc's title runs ~3 pt wider.
+- [O] Arc 1.17x live, 12 Nov 2026 (Victor's Arc, throwaway tabs, settings exported before and diffed after):
+  - Ticked, the checkbox is Display P3 #397CF7 with a 2 pt white check; ticking it and pressing Cancel saves
+    nothing (no defaults key changed, the sheet came back on the next Share).
+  - Copy Link to Folder copies `https://arc.net/folder/<UUID>` and the toast says "Copied Folder URL" (top
+    right), for picked tabs too; no "Generating Link..." was seen. The page is titled "2 Items" with "A Folder
+    from <display name>" under it and the two links. Cra: FolderShareLink.picked titles its page "N Items".
+  - With a picked tab playing sound, Mute is enabled; after Mute the row says Unmute.
 - [?] Not measured: the drag-over fill on a dark theme, coloured dark themes (the star's colour there), 1x.
 - Cra: FavoritesEmptyCard, dismissed per favorites container (WindowPrefs.favoritesEmptyStateDismissed, since
   Cra's favorites are per space). Badge, title, subtitle and × land within 1 px of Arc's at 2x. The dashed line

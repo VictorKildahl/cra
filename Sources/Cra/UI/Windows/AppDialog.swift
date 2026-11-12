@@ -256,20 +256,25 @@ private struct AppDialogView: View {
 }
 
 /// The badge on Arc's share warning: a violet envelope with a postmark, drawn here to the 2x capture
-/// of Arc 1.17x (11 Nov 2026) rather than taken from Arc's assets. 62 × 49.5 pt.
+/// of Arc 1.17x (11 Nov 2026) rather than taken from Arc's assets. 62 × 49.5 pt, colours in Display P3
+/// as captured.
 struct ShareEnvelopeIcon: View {
+    private static func p3(_ hex: UInt32) -> Color {
+        Color(.displayP3, red: Double(hex >> 16 & 0xFF) / 255, green: Double(hex >> 8 & 0xFF) / 255, blue: Double(hex & 0xFF) / 255)
+    }
+
     var body: some View {
         Canvas { context, size in
-            let ink = Color(hex: "#6362A3")
+            let ink = Self.p3(0x6362A3)
             let card = Path(roundedRect: CGRect(origin: .zero, size: size).insetBy(dx: 2, dy: 2), cornerRadius: 3.5)
-            context.fill(card, with: .color(Color(hex: "#302F5C")))
+            context.fill(card, with: .color(Self.p3(0x302F5C)))
             context.stroke(card, with: .color(ink), lineWidth: 4)
             var flap = Path()
             flap.move(to: CGPoint(x: 8.25, y: 9.5))
             flap.addLine(to: CGPoint(x: 30.75, y: 22))
             flap.addLine(to: CGPoint(x: 53.25, y: 9.5))
             context.stroke(flap, with: .color(ink), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
-            context.fill(Path(ellipseIn: CGRect(x: 40, y: 27.75, width: 15, height: 15)), with: .color(Color(hex: "#6D6C96")))
+            context.fill(Path(ellipseIn: CGRect(x: 40, y: 27.75, width: 15, height: 15)), with: .color(Self.p3(0x6D6C96)))
             for dy in [0.0, 3.75] {
                 var wave = Path()
                 wave.move(to: CGPoint(x: 24.75, y: 28.5 + dy))
@@ -282,8 +287,8 @@ struct ShareEnvelopeIcon: View {
 }
 
 /// Arc's checkbox on its older dialog sheet: a 16 pt dark rounded square, no border, and the label
-/// in near-white 13 pt, 14 pt to its right (2x capture of the share warning, 11 Nov 2026). Arc's
-/// ticked state wasn't captured; ticked shows a white check on the sheet's blue.
+/// in near-white 13 pt, 14 pt to its right; ticked, Display P3 #397CF7 with a 2 pt white check (2x captures of
+/// the share warning in Arc 1.17x, 11 and 12 Nov 2026).
 struct DialogCheckbox: View {
     let title: String
     @Binding var isOn: Bool
@@ -292,10 +297,17 @@ struct DialogCheckbox: View {
         Button { isOn.toggle() } label: {
             HStack(spacing: 13) {
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(isOn ? Color(hex: "#3339F1") : Color(hex: "#2D3243"))
+                    .fill(isOn ? Color(.displayP3, red: 0x39 / 255, green: 0x7C / 255, blue: 0xF7 / 255) : Color(hex: "#2D3243"))
                     .frame(width: 16, height: 16)
                     .overlay {
-                        if isOn { Image(systemName: "checkmark").font(.system(size: 9.5, weight: .bold)).foregroundStyle(.white) }
+                        if isOn {
+                            Path { p in
+                                p.move(to: CGPoint(x: 3.75, y: 8.25))
+                                p.addLine(to: CGPoint(x: 6.75, y: 11.5))
+                                p.addLine(to: CGPoint(x: 12, y: 4.5))
+                            }
+                            .stroke(.white, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                        }
                     }
                 Text(title).font(.system(size: 13)).foregroundStyle(Color(hex: "#DBDCDF"))
             }

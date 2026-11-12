@@ -17,11 +17,12 @@ import Foundation
 /// A pinned pick changes nothing but Archive Tabs Below, which shows only when the row clicked is
 /// in Today; Archive Tabs archives the pinned picks too, without asking. With five or more picks
 /// Open in Split View stays, dimmed. Move to ▸ lists the spaces, the picks' own one checked, then
-/// New Space…. Mute was dimmed with nothing playing; Cra lets it act once a pick plays sound or is
-/// muted. Share 2 Items… copies a link anyone can open: Arc first asks ("Send this Folder to anyone,
-/// on any browser", Copy Link to Folder) and keeps the folder on arc.net; Cra's link carries it after
-/// its # (FolderShareLink.picked). Copy Links copies what ⇧⌘C does with tabs picked, every link one
-/// per line (#322). Rows are identifiers; `title` names them.
+/// New Space…. Mute is dimmed with nothing playing and acts once a pick plays sound; after it the
+/// row says Unmute (Arc, 12 Nov 2026, a tab playing a tone). Share 2 Items… copies a link anyone
+/// can open: Arc first asks ("Send this Folder to anyone, on any browser", Copy Link to Folder),
+/// keeps the folder on arc.net and says "Copied Folder URL"; Cra's link carries it after its #
+/// (FolderShareLink.picked). Copy Links copies what ⇧⌘C does with tabs picked, every link one per
+/// line (#322). Rows are identifiers; `title` names them.
 public enum PickedTabsMenu {
     public static let sections: [[String]] = [
         ["copyLinks", "share"],

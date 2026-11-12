@@ -175,14 +175,14 @@ enum SidebarMenus {
                         actions.showToast("Copied item links")
                     }
                 case "share":
-                    // Arc's Share N Items… copied an arc.net link ("Copied Shared URL"); Cra's link
+                    // Arc's Share N Items… copied an arc.net folder link ("Copied Folder URL"); Cra's link
                     // carries the picks after its #, as Share Folder… does (FolderShareLink, #357).
                     let link = FolderShareLink.url(for: FolderShareLink.picked(ids.compactMap(store.item)))
                     add(menu, title, enabled: link != nil) {
                         guard let link else { return }
                         confirmShare(over: list.window) {
                             copy(link)
-                            actions.showToast("Copied Shared URL")
+                            actions.showToast("Copied Folder URL")
                         }
                     }
                 case "mute":

@@ -60,7 +60,7 @@ struct PickedTabsMenuTests {
         b.data = .tab({ var t = TabData(url: "https://docs.example/start", title: "Docs"); t.url = "https://docs.example/page-2"; t.savedTitle = "Page 2"; return t }())
         let settings = SidebarItem.tab("cra://settings", title: "Settings", parent: nil)
         let folder = FolderShareLink.picked([a, b, settings])
-        #expect(folder == FolderShareLink.Folder(title: "2 Tabs", items: [
+        #expect(folder == FolderShareLink.Folder(title: "2 Items", items: [
             .link(title: "Story", url: "https://news.example/story?id=4"),
             .link(title: "Page 2", url: "https://docs.example/page-2"),
         ]))
