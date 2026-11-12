@@ -4004,6 +4004,14 @@ instead of the AppKit `FindInPageView`. Tags as above; [B?] read off disassembly
   padding 12, field padding 6; Ask in callout semibold, padding 6 × 12.
 - [?] Not read: whether Return finds or asks, the card's placement, corner, shadow and background, the theme colours,
   fade heights. The purple border in the reporter's picture is the Arc window in a purple space, not part of the card.
+- [O] Live Arc 1.173.1 (12 Nov 2026, Victor's Arc, Blank Window on Wikipedia): Ask on Page is gone. Settings ▸ Max lists
+  Tidy Tabs, Instant Links, 5-Second Previews, Tidy Tab Titles, Tidy Downloads and ChatGPT in the Command Bar, no Ask on
+  Page row, though `askOnPageEnabled` is 1; ⌘F opens the plain dark find bar ("Find in page…", "NOT FOUND", no Ask). The
+  remote flag `ask-in-page-enabled` is presumably off. So the only look at the card is the reporter's capture of an older
+  Arc (#393, light, lavender space, apple.com's iOS 17 page), which Cra was matched to at the same width: a nearly opaque
+  white card (#FAFAFB-ish), 18 pt margins, about 17 pt between parts and 12 pt above Find on Page, a plain ✕ about 12 pt
+  level with the question, and at the bottom one grey band (corner ~8, 6 pt in from the card) holding the field and a
+  full-colour Ask button (~46 × 26 pt) that shows while the field is still empty.
 - Cra (AskOnPagePolicy, AskOnPagePrompt, AskOnPageReply in CraCore; AskOnPageService, AskOnPageCard): Arc's card in
   ⌘F's panel, Arc's prompt on the Mac's Apple Intelligence model (rules and examples as the session's instructions),
   Arc's budget less 600 tokens kept for the answer, checked with the model's own token count where macOS has it
@@ -4011,8 +4019,8 @@ instead of the AppKit `FindInPageView`. Tags as above; [B?] read off disassembly
   skips Arc's parts and hidden ones. Cra's choices where Arc's weren't readable: Return goes to the next match while the
   text is on the page and asks otherwise (always asks in a conversation); Find on Page tries the quote's first sentence
   and first eight words when the whole quote isn't on the page (a footnote mark between sentences, the model's slips);
-  the model's echo of the dialogue ("BEGIN DIALOGUE", "Human: …") is dropped; the card sits where the find bar does,
-  10 pt in, on the find bar's material with a 10 pt corner. Settings ▸ Max ▸ Ask on Page, off by default.
+  the model's echo of the dialogue ("BEGIN DIALOGUE", "Human: …", or the question as asked) is dropped; the card sits
+  where the find bar does, 10 pt in, with a 10 pt corner. Settings ▸ Max ▸ Ask on Page, off by default.
 
 ## Little Arc over a full-screen app (Arc 1.171, 5 Nov 2026, issue #186, Victor's Arc + a test full-screen app)
 

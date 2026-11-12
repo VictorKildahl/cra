@@ -235,9 +235,9 @@ public enum AskOnPageReply {
 
     /// The parts of `reply`, as far as it has come: a quote still streaming is a quote already, and a
     /// tag the model is halfway through writing is left out.
-    public static func parts(_ reply: String) -> [Part] {
+    public static func parts(_ reply: String, question: String? = nil) -> [Part] {
         var parts: [Part] = []
-        var rest = Substring(clean(reply))
+        var rest = Substring(clean(reply, question: question))
         func addText(_ s: Substring) {
             let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
             if !t.isEmpty { parts.append(Part(text: t, isQuote: false)) }
@@ -263,24 +263,33 @@ public enum AskOnPageReply {
     }
 
     /// The reply without the prompt's dialogue framing, which the on-device model sometimes writes
-    /// back before its answer: a "BEGIN DIALOGUE" line, the question again as "Human: …", and an
-    /// "Assistant:" before the answer.
-    public static func clean(_ reply: String) -> String {
+    /// back before its answer: a "BEGIN DIALOGUE" line, the question again (as "Human: …" or as it
+    /// was asked), and an "Assistant:" before the answer.
+    public static func clean(_ reply: String, question: String? = nil) -> String {
         var lines = reply.components(separatedBy: "\n")
+        let asked = question.map(normalized)
         while let first = lines.first {
             let t = first.trimmingCharacters(in: .whitespaces)
             if t.isEmpty || t == "BEGIN DIALOGUE" || t.hasPrefix("Human:") || t.hasPrefix("> ") { lines.removeFirst(); continue }
+            // The question itself, unless it is all the model has written so far of a longer line.
+            if let asked, !asked.isEmpty, normalized(t) == asked, lines.count > 1 { lines.removeFirst(); continue }
             if t.hasPrefix("Assistant:") {
                 lines[0] = String(t.dropFirst("Assistant:".count)).trimmingCharacters(in: .whitespaces)
                 if lines[0].isEmpty { lines.removeFirst(); continue }
             }
             break
         }
-        // A streamed line still being written may be the start of "BEGIN DIALOGUE" or "Human:".
-        if lines.count == 1, let only = lines.first, ["BEGIN DIALOGUE", "Human:", "Assistant:"].contains(where: { $0.hasPrefix(only) && !only.isEmpty }) {
-            return ""
+        // A streamed line still being written may be the start of "BEGIN DIALOGUE", "Human:" or the
+        // question again: it waits for the rest.
+        if lines.count == 1, let only = lines.first {
+            if ["BEGIN DIALOGUE", "Human:", "Assistant:"].contains(where: { $0.hasPrefix(only) && !only.isEmpty }) { return "" }
+            if !reply.hasSuffix("\n"), let asked, !normalized(only).isEmpty, asked.hasPrefix(normalized(only)) { return "" }
         }
         return lines.joined(separator: "\n")
+    }
+
+    static func normalized(_ s: String) -> String {
+        s.lowercased().filter { $0.isLetter || $0.isNumber }
     }
 
     /// What Find on Page searches for, in turn, until the page has it: the whole quote, then its first

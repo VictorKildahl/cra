@@ -136,6 +136,12 @@ struct AskOnPageTests {
         #expect(AskOnPageReply.parts("BEGIN DIA") == [])
         #expect(AskOnPageReply.parts("Hum") == [])
         #expect(AskOnPageReply.parts("Hello there") == [.init(text: "Hello there", isQuote: false)])
+        // On Apple's iOS page it wrote the question back as asked, without "Human:".
+        #expect(AskOnPageReply.parts("How do reactions work?\n<excerpt>Reactions fill the frame.</excerpt>", question: "How do reactions work?")
+                == [.init(text: "Reactions fill the frame.", isQuote: true)])
+        // While it streams, the start of the question waits for the line to end.
+        #expect(AskOnPageReply.parts("How do reac", question: "How do reactions work?") == [])
+        #expect(AskOnPageReply.parts("Reactions are", question: "How do reactions work?") == [.init(text: "Reactions are", isQuote: false)])
     }
 
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/393")) func aQuoteSplitByThePagesFootnoteIsFoundByItsFirstSentence() {

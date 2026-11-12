@@ -28,7 +28,7 @@ cra://debug?askQuery=How do reactions work?
 wait 2
 cra://debug?askOnPage=asked
 expect-log ask asked: enabled=true canAsk=true messages=1 finished=true quotes=1 read=- search=\[\] quote="Add a reaction that fills the camera fra" height=\d+$
-reject-log ask asked: .*height=52$
+reject-log ask asked: .*height=48$
 
 cra://debug?askFindQuote=1
 wait 1

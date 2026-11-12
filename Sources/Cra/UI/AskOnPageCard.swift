@@ -39,7 +39,7 @@ final class AskOnPageState {
 enum AskOnPageMetrics {
     static let width: CGFloat = 400
     static let conversationMaxHeight: CGFloat = 450
-    static let rowHeight: CGFloat = 52
+    static let rowHeight: CGFloat = 48
     static let radius: CGFloat = 10
 }
 
@@ -214,7 +214,7 @@ final class AskOnPageController {
 
     /// cra://debug?askFindQuote=<n>: Find on Page under the last answer's nth quote (from 1).
     func debugFindQuote(_ n: Int) {
-        let quotes = AskOnPageReply.parts(state.messages.last?.reply ?? "").filter(\.isQuote)
+        let quotes = AskOnPageReply.parts(state.messages.last?.reply ?? "", question: state.messages.last?.question).filter(\.isQuote)
         guard n >= 1, n <= quotes.count else { return }
         findQuote(quotes[n - 1].text)
     }
@@ -222,7 +222,7 @@ final class AskOnPageController {
     /// cra://debug readout: messages, the last reply's parts and the read line.
     func readout(_ label: String) -> String {
         guard let last = state.messages.last else { return "ask \(label): enabled=\(state.enabled) canAsk=\(state.canAsk) messages=0" }
-        let parts = AskOnPageReply.parts(last.reply)
+        let parts = AskOnPageReply.parts(last.reply, question: last.question)
         let quotes = parts.filter(\.isQuote).count
         let line = AskOnPagePrompt.fractionLine(last.fractionRead) ?? "-"
         let found = state.quotes.values.map { "\($0)" }.sorted().joined(separator: ",")
@@ -238,6 +238,8 @@ struct AskOnPageView: View {
     @Bindable var overlay: OverlayState
     let controller: AskOnPageController
     @FocusState private var fieldFocused: Bool
+    @Environment(\.colorScheme) private var scheme
+    @State private var closeHovered = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -251,8 +253,11 @@ struct AskOnPageView: View {
         .fixedSize(horizontal: false, vertical: true)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { controller.heightChanged($0) }
         .frame(maxHeight: .infinity, alignment: .top)
+        // Arc's card is nearly opaque (the reporter's capture): the material only shows at its edge.
+        .background(RoundedRectangle(cornerRadius: AskOnPageMetrics.radius, style: .continuous)
+            .fill(scheme == .dark ? Color(white: 0.16).opacity(0.96) : Color(white: 0.985).opacity(0.97)))
         .overlay(alignment: .topTrailing) {
-            if state.inConversation { closeButton.padding([.top, .trailing], 9) }
+            if state.inConversation { closeButton.padding([.top, .trailing], 12) }
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.75, blendDuration: 0.1), value: state.inConversation)
         .onAppear { fieldFocused = true }
@@ -260,16 +265,30 @@ struct AskOnPageView: View {
         .onChange(of: overlay.findVisible) { _, visible in if visible { fieldFocused = true } }
     }
 
+    /// Arc's field: one grey band with the count, the arrows and the Ask button inside it.
     private var inputRow: some View {
         HStack(alignment: .center, spacing: 8) {
-            TextField(AskOnPagePolicy.placeholder(canAsk: state.canAsk, inConversation: state.inConversation), text: $overlay.findQuery)
-                .textFieldStyle(.plain)
-                .font(.system(size: 13))
-                .focused($fieldFocused)
-                .onSubmit { controller.submit(shift: NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false) }
-                .onExitCommand { controller.onClose() }
-                .padding(6)
-                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.primary.opacity(0.06)))
+            HStack(alignment: .center, spacing: 8) {
+                TextField(AskOnPagePolicy.placeholder(canAsk: state.canAsk, inConversation: state.inConversation), text: $overlay.findQuery)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .focused($fieldFocused)
+                    .onSubmit { controller.submit(shift: NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false) }
+                    .onExitCommand { controller.onClose() }
+                findControls
+            }
+            .padding(.leading, 10).padding(.trailing, 5).padding(.vertical, 5)
+            .frame(minHeight: 36)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.primary.opacity(0.06)))
+            if !state.inConversation {
+                iconButton("xmark", label: "Close") { controller.onClose() }
+            }
+        }
+        .padding(6)
+        .frame(minHeight: AskOnPageMetrics.rowHeight)
+    }
+
+    @ViewBuilder private var findControls: some View {
             if !state.inConversation, !overlay.findQuery.isEmpty, let matches = overlay.findMatchCount {
                 Text(matches == 0 ? "No matches" : "\(overlay.findActiveMatch)/\(matches)")
                     .font(.system(size: 13, weight: .medium)).monospacedDigit()
@@ -280,21 +299,17 @@ struct AskOnPageView: View {
                     iconButton("arrow.down", label: "Next") { controller.onFind(overlay.findQuery, true) }
                 }
             }
-            if AskOnPagePolicy.showsAskButton(query: overlay.findQuery, canAsk: state.canAsk) {
-                Button { controller.ask(overlay.findQuery) } label: {
+            // Arc shows Ask with the field still empty (the reporter's capture); it asks once there is text.
+            if state.canAsk {
+                let ready = AskOnPagePolicy.showsAskButton(query: overlay.findQuery, canAsk: state.canAsk)
+                Button { if ready { controller.ask(overlay.findQuery) } } label: {
                     Text("Ask").font(.callout.weight(.semibold)).foregroundStyle(.white)
-                        .padding(.vertical, 4).padding(.horizontal, 12)
+                        .padding(.vertical, 5).padding(.horizontal, 12)
                         .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(state.accent))
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("askOnPageAsk")
             }
-            if !state.inConversation {
-                iconButton("xmark", label: "Close") { controller.onClose() }
-            }
-        }
-        .padding(12)
-        .frame(minHeight: AskOnPageMetrics.rowHeight)
     }
 
     private func iconButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
@@ -306,13 +321,15 @@ struct AskOnPageView: View {
         .accessibilityLabel(label)
     }
 
+    /// Arc's close button: a plain ✕ on the card; its material square shows under the pointer.
     private var closeButton: some View {
         Button { controller.onClose() } label: {
-            Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundStyle(.primary.opacity(0.45))
-                .frame(width: 18, height: 18)
-                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(.ultraThinMaterial))
+            Image(systemName: "xmark").font(.system(size: 12, weight: .regular)).foregroundStyle(.primary.opacity(0.5))
+                .frame(width: 22, height: 22)
+                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(.ultraThinMaterial).opacity(closeHovered ? 1 : 0))
         }
         .buttonStyle(.plain)
+        .onHover { closeHovered = $0 }
         .accessibilityLabel("Close")
     }
 }
@@ -326,12 +343,12 @@ private struct AskOnPageConversation: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(.vertical) {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 24) {
                     ForEach(state.messages) { message in
                         AskOnPageMessageView(message: message, state: state, controller: controller).id(message.id)
                     }
                 }
-                .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 4)
+                .padding(.horizontal, 18).padding(.top, 17).padding(.bottom, 12)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
             }
@@ -361,7 +378,7 @@ private struct AskOnPageMessageView: View {
     @State private var pulse = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 16) {
             Text(message.question).font(.body.bold()).foregroundStyle(state.accent)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.trailing, 24)
@@ -369,7 +386,7 @@ private struct AskOnPageMessageView: View {
             if let line = AskOnPagePrompt.fractionLine(message.fractionRead) {
                 Text(line).font(.subheadline.bold()).foregroundStyle(.primary.opacity(0.5))
             }
-            let parts = AskOnPageReply.parts(message.reply)
+            let parts = AskOnPageReply.parts(message.reply, question: message.question)
             if parts.isEmpty, !message.finished {
                 Text("Loading Content").font(.body).redacted(reason: .placeholder)
                     .opacity(pulse ? 0.4 : 1)
@@ -415,7 +432,7 @@ private struct AskOnPageQuote: View {
                             Text("Quote not found. Make sure it’s accurate!")
                         }
                         .font(.system(size: 11, weight: .bold)).foregroundStyle(.primary.opacity(0.5))
-                        .padding(.top, 4)
+                        .padding(.top, 12)
                     } else {
                         Button(action: find) {
                             HStack(spacing: 4) {
@@ -428,7 +445,7 @@ private struct AskOnPageQuote: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .padding(.top, 4)
+                        .padding(.top, 12)
                         .onHover { h in withAnimation(.timingCurve(0.25, 0.1, 0.25, 1, duration: 0.2)) { hovered = h } }
                         .accessibilityIdentifier("askOnPageFindQuote")
                     }

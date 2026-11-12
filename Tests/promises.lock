@@ -738,8 +738,8 @@
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::placeholdersAreArcs  bd66b23c595c
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::promptIsArcsWithThePageBetweenItsTags  e71bcdedf363
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::returnFindsTextOnThePageAndAsksTheRest  60bb9ecd33c9
-#393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::theModelsEchoOfTheDialogueIsLeftOut  a13aef99159a
-#393   Tests/Scenarios/ask-on-page.scenario  78b0f7b9181a
+#393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::theModelsEchoOfTheDialogueIsLeftOut  c7e6334433dd
+#393   Tests/Scenarios/ask-on-page.scenario  f8c87a909b54
 #399   Tests/EmojiLabelTests.swift::wholeEmojiWhenClipped  bec18dc87181
 #401   Packages/CraCore/Tests/CraCoreTests/SwitcherWindowsTests.swift::switchersListWindowsWithButtonsOrAStandardSubrole  9f9f67f53678
 #401   Tests/Scenarios/switcher-windows.scenario  a600d5a96203
