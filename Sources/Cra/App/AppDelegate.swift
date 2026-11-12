@@ -1358,8 +1358,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 for m in mainWindows {
                     let space = m.focusedSpace
                     let drawn = m.window?.contentView.flatMap(sidebar(in:)).map { side($0.palette.isDark) } ?? "-"
-                    NSLog("Cra theme shown %@: space=%@ follows=%d theme=%@ shell=%@ sidebar=%@", label, space.title, space.theme.followsSystem ? 1 : 0,
-                          side(space.theme.shown.isDark), side(m.shell.isDarkTheme), drawn)
+                    NSLog("Cra theme shown %@: space=%@ follows=%d theme=%@ shell=%@ sidebar=%@ library=%@", label, space.title, space.theme.followsSystem ? 1 : 0,
+                          side(space.theme.shown.isDark), side(m.shell.isDarkTheme), drawn, m.sidebarUI.libraryPage.map { "\($0)" } ?? "-")
                 }
                 return
             }
@@ -2078,7 +2078,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return nil
             case .switchSpace(let step):
                 if let window = self.mainWindows.first(where: { $0.pointerOverSidebar() }) {
-                    self.store.focusSpace(offset: step, window: window.windowID)
+                    window.stepSidebarPage(step)
                 }
                 CraLog.note("mouse key \(which): switched space")
             case .history(let step):
@@ -2099,7 +2099,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                   let target = event.window else { return event }
             let which = offset < 0 ? "back" : "forward"
             if let window = self.mainWindows.first(where: { $0.pointerOverSidebar() }) {
-                self.store.focusSpace(offset: offset, window: window.windowID)
+                window.stepSidebarPage(offset)
                 CraLog.note("mouse swipe \(which): switched space")
                 return nil
             }

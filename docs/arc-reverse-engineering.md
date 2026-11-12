@@ -3250,16 +3250,17 @@ Reported on #233: in Arc a mouse's back and forward buttons over the sidebar swi
   back/forward runs.
 - [O static] NSEvent helpers next to `PageSwipeController` (0x100a0d608…0x100a0d6b8): `otherMouseDown` with button
   2, `otherMouseUp` with button 3 and with button 4.
-- [U] Whether `focusNextSpace` wraps at the last space or opens the Library before the first; what the Bool gate is.
-  Not checked live (Victor was using the Mac).
+- [O live] (contributor, 12 Nov 2026) Back on the first space brings the Library in and forward takes it out,
+  as a swipe does, and the ends don't wrap. [U] What the Bool gate is.
 - Cra: `MouseButtonSpaceSwitch` (CraCore) maps 3 → −1 and 4 → +1. The window's `otherMouseUp` monitor, over the
-  sidebar (docked or floating, not a Little Window), calls `focusSpace(offset:)` like Spaces ▸ Previous/Next Space
-  (which wrap) and swallows the event; anywhere else the event goes on. Scenario `mouse-buttons-switch-spaces`.
+  sidebar (docked or floating, not a Little Window), turns the sidebar's page like the wheel (`stepSidebarPage`: the
+  Library before the first space, no wrap) and swallows the event; anywhere else the event goes on. Scenarios
+  `mouse-buttons-switch-spaces`, `mouse-buttons-library`.
 - Cra, follow-up (reporter, MX Master 3S, Logi Options+ running): that mouse does not emit button 3/4. Options+
   eats the HID report; a Back keystroke assignment types ⌥← (key code 123) and Forward types ⌥→. Assigning ⌥←
   in Options+ still did nothing, because Cra only listened for `otherMouseUp`. The same type maps ⌥← / ⌥→ (Option
   alone; ⌥⌘← stays Previous Space). A `keyDown` monitor hit-tests the pointer, not the key's window (the focused
-  page): over the sidebar `focusSpace(offset:)`, otherwise `goBack`/`goForward`, and the key is left alone when a
+  page): over the sidebar `stepSidebarPage`, otherwise `goBack`/`goForward`, and the key is left alone when a
   text field has it (⌥← moves by word). Console shows `Cra: mouse key back: …` when the key arrives.
 
 ### Extension action icons, badges and tooltips (Arc 1.171, 2 Nov 2026, issue #106, offline Arc + probe)
