@@ -34,16 +34,17 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 /// (`fresh` for an empty one), `-CraOpenURL <address>` to start on a page, `-CraType <text>` to
 /// start with that typed in the search field, `-CraSearch NO` to launch without the search sheet,
 /// `-CraFakeModel YES` for canned answers in place of the on-device model, `-CraSummarize YES`
-/// to summarize the first page once it has loaded.
+/// to summarize the first page once it has loaded, `-CraSyncDir <folder>` for the folder the Mac's
+/// sidebar syncs into (`demo` for a made-up sidebar with two Spaces).
 enum LaunchOptions {
-    static var dataDirectory: URL {
+    /// Worked out once: every store of a launch shares the folder.
+    static let dataDirectory: URL = {
         guard let value = UserDefaults.standard.string(forKey: "CraDataDir") else { return TabStore.defaultDirectory }
         if value == "fresh" {
-            let url = FileManager.default.temporaryDirectory.appendingPathComponent("Cra-\(UUID().uuidString)", isDirectory: true)
-            return url
+            return FileManager.default.temporaryDirectory.appendingPathComponent("Cra-\(UUID().uuidString)", isDirectory: true)
         }
         return URL(fileURLWithPath: value, isDirectory: true)
-    }
+    }()
 
     static var openURL: String? { UserDefaults.standard.string(forKey: "CraOpenURL") }
     static var typedText: String? { UserDefaults.standard.string(forKey: "CraType") }

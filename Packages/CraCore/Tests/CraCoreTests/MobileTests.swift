@@ -497,3 +497,76 @@ struct MobileBrowseForMeTests {
         #expect(MobileBrowseForMe.readingLabel(6) == "Reading 6 web pages")
     }
 }
+
+struct MobileSpacesTests {
+    /// A Mac sidebar: one space with a pinned tab, a folder holding a tab, and a Today tab; and
+    /// a second, empty space.
+    static func sidebar() -> (SidebarDocument, folder: UUID) {
+        var document = SidebarDocument.fresh()
+        let space = document.spaces[0]
+        var pinned = SidebarItem.tab("https://mail.example/inbox", title: "Mail", parent: space.pinnedContainerID)
+        pinned.title = "Inbox"
+        var folder = SidebarItem.folder("Work", parent: space.pinnedContainerID)
+        let inside = SidebarItem.tab("https://docs.example/", title: "Docs", parent: folder.id)
+        folder.children = [inside.id]
+        let today = SidebarItem.tab("https://news.example/story", title: "", parent: space.todayContainerID)
+        document.items += [pinned, folder, inside, today]
+        for (container, children) in [(space.pinnedContainerID, [pinned.id, folder.id]), (space.todayContainerID, [today.id])] {
+            let index = document.items.firstIndex { $0.id == container }!
+            document.items[index].children = children
+        }
+        let secondID = UUID()
+        let containers = [SidebarItem.container(.favorites(spaceID: secondID)), .container(.pinned(spaceID: secondID)), .container(.today(spaceID: secondID))]
+        document.items += containers
+        document.spaces.append(Space(id: secondID, title: "Play", emoji: "🎮", theme: SpaceTheme.presets[1], favoritesContainerID: containers[0].id,
+                                     pinnedContainerID: containers[1].id, todayContainerID: containers[2].id, createdAt: Date()))
+        document.spaceOrder.append(secondID)
+        return (document, folder.id)
+    }
+
+    @Test func aSpaceListsItsPinsFoldersAndTodayTabs() {
+        let (document, folder) = Self.sidebar()
+        let spaces = MobileSpaces.spaces(in: document)
+        #expect(spaces.map(\.title) == ["Personal", "Play"])
+        #expect(spaces[0].rows.map(\.title) == ["Inbox", "Work", "Docs", "Today", "news.example"])
+        #expect(spaces[0].rows.map(\.depth) == [0, 0, 1, 0, 0])
+        #expect(spaces[0].rows[0].kind == .tab(url: "https://mail.example/inbox"))
+        #expect(spaces[0].rows[3].kind == .todayHeader)
+        #expect(spaces[1].rows.isEmpty)
+        #expect(spaces[0].colors == SpaceTheme.presets[0].colors)
+        let closed = MobileSpaces.spaces(in: document, closedFolders: [folder])
+        #expect(closed[0].rows.map(\.title) == ["Inbox", "Work", "Today", "news.example"])
+    }
+
+    @Test func theSyncedFileReadsBack() throws {
+        let (document, _) = Self.sidebar()
+        let data = try JSONEncoder().encode(document)
+        #expect(MobileSpaces.document(from: data)?.spaces.count == 2)
+        #expect(MobileSpaces.document(from: Data("{}".utf8)) == nil)
+    }
+}
+
+struct MobileFavoritesTests {
+    @Test func aPageTogglesInAndOutWhateverItsTrackers() {
+        var favorites = MobileFavorites()
+        let added = favorites.toggle(url: "https://example.com/a?utm_source=x", title: "A")
+        #expect(added)
+        #expect(favorites.contains("https://example.com/a#part"))
+        #expect(!favorites.contains("https://example.com/b"))
+        let stillThere = favorites.toggle(url: "https://example.com/a", title: "A")
+        #expect(!stillThere)
+        #expect(favorites.sites.isEmpty)
+        favorites.toggle(url: "https://example.org/", title: "")
+        #expect(favorites.sites[0].title == "example.org")
+    }
+
+    @Test func fourShowUnderTheFieldInTheirOrder() throws {
+        var favorites = MobileFavorites()
+        for name in ["a", "b", "c", "d", "e"] { favorites.toggle(url: "https://\(name).example", title: name) }
+        favorites.move(from: 4, to: 0)
+        #expect(favorites.shown().map(\.title) == ["e", "a", "b", "c"])
+        let saved = try JSONEncoder().encode(favorites)
+        #expect(try JSONDecoder().decode(MobileFavorites.self, from: saved) == favorites)
+        #expect(try JSONDecoder().decode(MobileFavorites.self, from: Data("{}".utf8)).sites.isEmpty)
+    }
+}

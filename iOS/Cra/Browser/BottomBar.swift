@@ -8,8 +8,8 @@ final class BottomBar: UIView {
     let tabsButton = TabStackButton()
     let pill = BarButton(symbol: "plus", pointSize: 16, weight: .semibold)
     let menuButton = BarButton(symbol: "chevron.up", pointSize: 16, weight: .semibold)
-    /// In the tab switcher the tab stack gives way to the archive, and the menu to Settings.
-    let archiveButton = BarButton(symbol: "archivebox", pointSize: 14, weight: .semibold)
+    /// In the tab switcher the tab stack gives way to Spaces, and the menu to Settings.
+    let spacesButton = BarButton(symbol: "desktopcomputer", pointSize: 13, weight: .semibold)
     let settingsButton = BarButton(symbol: "gearshape", pointSize: 15, weight: .semibold)
 
     enum Mode { case page, tabs }
@@ -36,11 +36,11 @@ final class BottomBar: UIView {
         pill.accessibilityLabel = "New tab"
         menuButton.accessibilityIdentifier = "bar-menu"
         menuButton.accessibilityLabel = "Menu"
-        archiveButton.accessibilityIdentifier = "bar-archive"
-        archiveButton.accessibilityLabel = "Archived tabs"
+        spacesButton.accessibilityIdentifier = "bar-spaces"
+        spacesButton.accessibilityLabel = "Spaces"
         settingsButton.accessibilityIdentifier = "bar-settings"
         settingsButton.accessibilityLabel = "Settings"
-        [tabsButton, archiveButton, pill, menuButton, settingsButton].forEach(addSubview)
+        [tabsButton, spacesButton, pill, menuButton, settingsButton].forEach(addSubview)
         applyMode()
     }
 
@@ -50,18 +50,18 @@ final class BottomBar: UIView {
         let tabs = mode == .tabs
         tabsButton.alpha = tabs ? 0 : visible
         menuButton.alpha = tabs ? 0 : visible
-        archiveButton.alpha = tabs ? visible : 0
+        spacesButton.alpha = tabs ? visible : 0
         settingsButton.alpha = tabs ? visible : 0
         // Over the switcher the bar has no slab of its own: the buttons float on the backdrop,
         // tinted with its lavender (Arc Search: pill #dfddf2, circles #f0effd on #fcfafd).
         blur.alpha = tabs ? 0 : visible
         pill.backgroundColor = tabs ? Palette.switcherPillFill : Palette.barControlFill
-        archiveButton.backgroundColor = Palette.switcherButtonFill
+        spacesButton.backgroundColor = Palette.switcherButtonFill
         settingsButton.backgroundColor = Palette.switcherButtonFill
         let small = CGAffineTransform(scaleX: 0.6, y: 0.6)
         tabsButton.transform = tabs ? small : .identity
         menuButton.transform = tabs ? small : .identity
-        archiveButton.transform = tabs ? .identity : small
+        spacesButton.transform = tabs ? .identity : small
         settingsButton.transform = tabs ? .identity : small
     }
 
@@ -76,15 +76,15 @@ final class BottomBar: UIView {
         hairline.frame = CGRect(x: 0, y: 0, width: bounds.width, height: 1 / UIScreen.main.scale)
         // The bar's frames are worked out for a view that ends at the screen's bottom edge.
         let frames = MobileBottomBar.frames(in: bounds.size, safeBottom: bounds.height - MobileBottomBar.height)
-        let transforms = [tabsButton, menuButton, archiveButton, settingsButton].map(\.transform)
-        [tabsButton, menuButton, archiveButton, settingsButton].forEach { $0.transform = .identity }
+        let transforms = [tabsButton, menuButton, spacesButton, settingsButton].map(\.transform)
+        [tabsButton, menuButton, spacesButton, settingsButton].forEach { $0.transform = .identity }
         tabsButton.frame = frames.tabs.insetBy(dx: -6, dy: -6)
         pill.frame = frames.pill
         menuButton.frame = frames.menu
         // The switcher's round buttons are 32 pt, a little smaller than the page's menu button.
-        archiveButton.frame = frames.tabs.insetBy(dx: 1.5, dy: 1.5)
+        spacesButton.frame = frames.tabs.insetBy(dx: 1.5, dy: 1.5)
         settingsButton.frame = frames.menu.insetBy(dx: 1.5, dy: 1.5)
-        zip([tabsButton, menuButton, archiveButton, settingsButton], transforms).forEach { $0.transform = $1 }
+        zip([tabsButton, menuButton, spacesButton, settingsButton], transforms).forEach { $0.transform = $1 }
     }
 
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {

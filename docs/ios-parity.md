@@ -18,7 +18,7 @@ ended). "Measured" means the numbers come from Arc Search footage, not from a de
 | Suggestions: typed text first, completions with the typed part grey | done | Measured rows (56 pt), magnifier, text. Engine's suggest endpoint, four rows. |
 | Suggestion text wraps to two lines | missing | Rows are one line. |
 | Site matches as rows (favicon and title) | missing | |
-| Favorites / pinned sites under an empty field | missing | |
+| Favorites / pinned sites under an empty field | partial | The first four of "Favorite in App" (`MobileFavorites`), each with its site icon and a pin. No drag to reorder. |
 | Scrolling the suggestions updates the field | missing | |
 | "Browse for Me" button on each search row | done | Shown only where Apple Intelligence is on. |
 | Pill grows into the search field | partial | The morph exists; timing and the side icons' fade are not compared yet. |
@@ -77,7 +77,7 @@ ended). "Measured" means the numbers come from Arc Search footage, not from a de
 | Page shrinks into its card and back | partial | Spring morph exists; not compared frame by frame. |
 | Swipe a card up to close | done | |
 | Favicon and title above each card | done | Icons come from the site itself. |
-| Switcher bar: Spaces, "+", Settings | partial | The gear opens App Settings. The left button is still the archive of the 1.0 footage, not Spaces. |
+| Switcher bar: Spaces, "+", Settings | done | |
 | Auto-archive: 12 hours, 1 day, 3 days, 7 days, 30 days | done | App Settings ▸ Archive Inactive Tabs; applied at launch. |
 | Archive list: search, day groups, edit, swipe to delete | done | `MobileArchive`; a tap reopens the tab. UI test `testAnArchivedTabComesBackFromTheArchive`. |
 | Incognito tabs kept out of the switcher and off disk | done | Not in the row, the Archive or `tabs.json`, on a private data store. One that is left closes (inferred: with no card there is no way back to it). How an incognito page's own chrome differs was not seen. |
@@ -88,8 +88,8 @@ ended). "Measured" means the numbers come from Arc Search footage, not from a de
 
 | Arc Search | Cra | Notes |
 |---|---|---|
-| Spaces from the desktop: pinned tabs, folders, Today | missing | Plan: read the Mac app's synced `sidebar.json` from iCloud. |
-| Pin from the phone ("Favorite in App", "Pin to Space:") | missing | |
+| Spaces from the desktop: pinned tabs, folders, Today | partial | The tab row's left button opens them (`MobileSpaces`, `SyncedSidebar`): one Space a page in its colour, folders that fold, Today under a line, the Spaces' icons along the bottom; a tap opens the tab here. Read from the `sidebar.json` the Mac app syncs to iCloud. The iCloud entitlement is not in the project yet, so only the test folder (`-CraSyncDir`) has been exercised; the widget's Spaces button is missing. |
+| Pin from the phone ("Favorite in App", "Pin to Space:") | partial | The page menu's pin has "Favorite in App". "Pin to Space:" and "Pin to Folder…" need the phone to write the Mac's sidebar, which it does not do yet. |
 | Share extension with "Saved" screen | missing | |
 | Sign in with Arc | *skip* | No account in Cra; iCloud carries the sync. |
 

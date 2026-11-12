@@ -5,7 +5,7 @@ protocol PageMenuDelegate: AnyObject {
     func pageMenuGoBack()
     func pageMenuGoForward()
     func pageMenuReload()
-    func pageMenuCopyLinkFromCapsule()
+    func pageMenuToggleFavorite()
     func pageMenu(didPick tile: MobilePageMenu.Tile)
     func pageMenu(didPick row: MobilePageMenu.Row)
     func pageMenuZoom(up: Bool)
@@ -22,6 +22,7 @@ struct PageMenuState {
     var isDesktopSite: Bool
     var canSummarize: Bool
     var blockedCount: Int
+    var isFavorite = false
 }
 
 /// The page menu's content, laid out to `MobilePageMenu`.
@@ -53,7 +54,9 @@ final class PageMenuView: UIView {
         addSubview(capsule)
         configure(back, symbol: "chevron.left", size: 15, weight: .bold, id: "menu-back", label: "Back", action: #selector(backTapped))
         configure(forward, symbol: "chevron.right", size: 15, weight: .bold, id: "menu-forward", label: "Forward", action: #selector(forwardTapped))
-        configure(link, symbol: "link", size: 13.5, weight: .medium, id: "menu-link", label: "Copy Link", action: #selector(linkTapped))
+        configure(link, symbol: "pin", size: 14.5, weight: .regular, id: "menu-pin", label: "Pin", action: #selector(linkTapped))
+        // The pin opens Arc Search's little menu; "Pin to Space:" joins it when the phone can write to the Mac's sidebar.
+        link.showsMenuAsPrimaryAction = true
         configure(reload, symbol: "arrow.clockwise", size: 14.5, weight: .medium, id: "menu-reload", label: "Reload", action: #selector(reloadTapped))
         hostLabel.font = .systemFont(ofSize: 17, weight: .medium)
         hostLabel.textColor = Palette.primaryText
@@ -119,6 +122,12 @@ final class PageMenuView: UIView {
     func apply(_ state: PageMenuState) {
         self.state = state
         hostLabel.text = state.host
+        link.setImage(UIImage(systemName: state.isFavorite ? "pin.fill" : "pin", withConfiguration: UIImage.SymbolConfiguration(pointSize: 14.5, weight: .regular)), for: .normal)
+        link.menu = UIMenu(children: [
+            UIAction(title: "Favorite in App", image: UIImage(systemName: "iphone"), state: state.isFavorite ? .on : .off) { [weak self] _ in
+                self?.delegate?.pageMenuToggleFavorite()
+            },
+        ])
         back.isEnabled = state.canGoBack
         forward.isEnabled = state.canGoForward
         back.tintColor = state.canGoBack ? Palette.glyph : Palette.placeholder
@@ -172,7 +181,7 @@ final class PageMenuView: UIView {
     @objc private func backTapped() { delegate?.pageMenuGoBack() }
     @objc private func forwardTapped() { delegate?.pageMenuGoForward() }
     @objc private func reloadTapped() { delegate?.pageMenuReload() }
-    @objc private func linkTapped() { delegate?.pageMenuCopyLinkFromCapsule() }
+    @objc private func linkTapped() {}
     @objc private func withoutBlockersTapped() { delegate?.pageMenuReloadWithoutBlockers() }
 }
 

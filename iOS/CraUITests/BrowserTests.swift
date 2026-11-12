@@ -91,7 +91,7 @@ final class TabSwitcherTests: BrowserTestCase {
         openTwoTabs()
         app.buttons["bar-tabs"].tap()
         XCTAssertTrue(app.buttons["tab-card-1"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["bar-archive"].exists)
+        XCTAssertTrue(app.buttons["bar-spaces"].exists)
         XCTAssertTrue(app.buttons["bar-settings"].exists)
         sleep(1)
         keep("tab-row")
@@ -432,5 +432,64 @@ final class IncognitoTests: BrowserTestCase {
         app.buttons["settings-archive"].tap()
         XCTAssertTrue(app.staticTexts["No Archived Tabs"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["archive-row-Secret"].exists)
+    }
+}
+
+final class SpacesTests: BrowserTestCase {
+    /// The tab row's left button shows the Mac's Spaces: the pinned tabs and folders of each, a
+    /// folder that folds shut, and a tap on a tab that opens it here.
+    func testTheMacsSpacesOpenFromTheTabRow() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraSyncDir", "demo"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["bar-spaces"].waitForExistence(timeout: 5))
+        app.buttons["bar-spaces"].tap()
+        XCTAssertTrue(app.buttons["space-tab-Inbox"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["space-title"].firstMatch.label, "Personal")
+        XCTAssertTrue(app.buttons["space-tab-Docs"].exists)
+        XCTAssertTrue(app.buttons["space-tab-A Story"].exists)
+        sleep(1)
+        keep("spaces")
+        app.buttons["space-folder-Work"].tap()
+        XCTAssertFalse(app.buttons["space-tab-Docs"].waitForExistence(timeout: 1))
+        app.buttons["space-icon-Play"].tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label == 'Play'")).firstMatch.waitForExistence(timeout: 3))
+        app.buttons["space-icon-Personal"].tap()
+        app.buttons["space-tab-Inbox"].tap()
+        waitForPage("Inbox")
+    }
+
+    /// Without iCloud the Spaces view says where Spaces come from.
+    func testWithoutSyncTheSpacesViewExplains() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        app.buttons["bar-spaces"].tap()
+        XCTAssertTrue(app.staticTexts["Spaces come from Cra on your Mac"].waitForExistence(timeout: 10))
+        app.buttons["spaces-close"].tap()
+        XCTAssertTrue(app.buttons["bar-spaces"].waitForExistence(timeout: 5))
+    }
+}
+
+final class FavoritesTests: BrowserTestCase {
+    /// "Favorite in App" from the page menu's pin puts the page under the empty search field,
+    /// where a tap opens it.
+    func testAFavoriteShowsUnderTheEmptySearchField() {
+        // A title that is nowhere in the page, so finding it means finding the favorite's row.
+        launch(["-CraOpenURL", "data:text/html,<meta name=viewport content='width=device-width'><title>Starred</title><h1>Heading</h1>", "-CraSearch", "NO"])
+        waitForPage("Heading")
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(app.buttons["menu-pin"].waitForExistence(timeout: 5))
+        app.buttons["menu-pin"].tap()
+        XCTAssertTrue(app.buttons["Favorite in App"].waitForExistence(timeout: 5))
+        app.buttons["Favorite in App"].tap()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
+        app.buttons["bar-search"].tap()
+        XCTAssertTrue(app.textFields["search-field"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Starred"].waitForExistence(timeout: 3), "the favorite is listed under the empty field")
+        sleep(1)
+        keep("favorites")
+        app.textFields["search-field"].typeText("x")
+        XCTAssertFalse(app.staticTexts["Starred"].waitForExistence(timeout: 1), "typing replaces the favorites with suggestions")
     }
 }

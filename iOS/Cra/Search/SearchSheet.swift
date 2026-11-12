@@ -6,6 +6,7 @@ protocol SearchSheetDelegate: AnyObject {
     /// The keyboard's Go key.
     func searchSheet(_ sheet: SearchSheet, didSubmit text: String)
     func searchSheet(_ sheet: SearchSheet, didPick row: MobileSuggestions.Row)
+    func searchSheet(_ sheet: SearchSheet, didPickFavorite site: MobileFavorites.Site)
     func searchSheet(_ sheet: SearchSheet, didAskToBrowseFor row: MobileSuggestions.Row)
     func searchSheetDidToggleIncognito(_ sheet: SearchSheet)
 }
@@ -33,6 +34,8 @@ final class SearchSheet: UIView, UITextFieldDelegate {
     var isIncognito = false { didSet { applyIncognito() } }
 
     private(set) var rows: [MobileSuggestions.Row] = []
+    /// The favorites shown under the field while it is empty, with their icons.
+    private var favorites: [(MobileFavorites.Site, UIImage?)] = []
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -93,8 +96,23 @@ final class SearchSheet: UIView, UITextFieldDelegate {
 
     func setRows(_ rows: [MobileSuggestions.Row]) {
         self.rows = rows
+        showRows()
+    }
+
+    /// The sites kept with "Favorite in App": they fill the rows while nothing is typed.
+    func setFavorites(_ favorites: [(MobileFavorites.Site, UIImage?)]) {
+        self.favorites = favorites
+        showRows()
+    }
+
+    private var showsFavorites: Bool { text.isEmpty && !isIncognito }
+
+    private func showRows() {
         for (index, view) in rowViews.enumerated() {
-            if index < rows.count {
+            if showsFavorites, index < favorites.count {
+                view.configure(favorite: favorites[index].0, icon: favorites[index].1)
+                view.isHidden = false
+            } else if !showsFavorites, index < rows.count {
                 view.configure(rows[index])
                 view.isHidden = false
             } else {
@@ -104,6 +122,10 @@ final class SearchSheet: UIView, UITextFieldDelegate {
     }
 
     private func pick(_ index: Int) {
+        if showsFavorites {
+            guard index < favorites.count else { return }
+            return delegate?.searchSheet(self, didPickFavorite: favorites[index].0) ?? ()
+        }
         guard index < rows.count else { return }
         delegate?.searchSheet(self, didPick: rows[index])
     }
@@ -133,6 +155,7 @@ final class SearchSheet: UIView, UITextFieldDelegate {
         clearButton.isHidden = empty
         incognitoButton.isHidden = !empty
         incognitoNote.isHidden = !(empty && isIncognito)
+        showRows()
     }
 
     /// Incognito turns the sheet dark, names itself beside the mask, and brings the dark keyboard.
@@ -321,6 +344,7 @@ final class SuggestionRowView: UIControl {
     private let icon = UIImageView()
     private let label = UILabel()
     private let chip = UIButton(type: .custom)
+    private let pin = UIImageView(image: UIImage(systemName: "pin.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .regular)))
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -345,8 +369,28 @@ final class SuggestionRowView: UIControl {
         chip.addTarget(self, action: #selector(browseTapped), for: .touchUpInside)
         addSubview(chip)
 
+        pin.tintColor = Palette.placeholder
+        pin.contentMode = .center
+        pin.isHidden = true
+        addSubview(pin)
+
         addTarget(self, action: #selector(tapped), for: .touchUpInside)
         isAccessibilityElement = false
+    }
+
+    /// A favorite: its site icon, its title, and the pin at the right.
+    func configure(favorite: MobileFavorites.Site, icon image: UIImage?) {
+        icon.image = image ?? UIImage(systemName: "globe", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .regular))
+        icon.contentMode = image == nil ? .center : .scaleAspectFit
+        icon.layer.cornerRadius = 4
+        icon.clipsToBounds = true
+        label.attributedText = NSAttributedString(string: favorite.title, attributes: [
+            .font: UIFont.systemFont(ofSize: 17, weight: .medium), .foregroundColor: Palette.primaryText,
+        ])
+        label.accessibilityLabel = favorite.title
+        chip.isHidden = true
+        pin.isHidden = false
+        setNeedsLayout()
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -354,6 +398,8 @@ final class SuggestionRowView: UIControl {
     func configure(_ row: MobileSuggestions.Row) {
         let symbol = row.kind == .address ? "globe" : "magnifyingglass"
         icon.image = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .medium))
+        icon.contentMode = .center
+        pin.isHidden = true
         let font = UIFont.systemFont(ofSize: 17, weight: .medium)
         let text = NSMutableAttributedString(string: row.text, attributes: [.font: font, .foregroundColor: Palette.primaryText])
         if row.typedPrefixLength > 0 {
@@ -368,11 +414,14 @@ final class SuggestionRowView: UIControl {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        icon.frame = CGRect(x: 28.8 - 14, y: bounds.midY - 14, width: 28, height: 28)
+        // A favorite's site icon is 20 pt; a search row's glyph is centred in the same place.
+        icon.frame = pin.isHidden ? CGRect(x: 28.8 - 14, y: bounds.midY - 14, width: 28, height: 28)
+                                  : CGRect(x: 28.8 - 10, y: bounds.midY - 10, width: 20, height: 20)
+        pin.frame = CGRect(x: bounds.width - 46, y: bounds.midY - 12, width: 24, height: 24)
         let chipSize = CGSize(width: 100.5, height: 29.5)
         chip.frame = CGRect(x: bounds.width - 17.7 - chipSize.width, y: bounds.midY - chipSize.height / 2,
                             width: chipSize.width, height: chipSize.height)
-        let right = chip.isHidden ? bounds.width - 18 : chip.frame.minX - 10
+        let right = !pin.isHidden ? pin.frame.minX - 8 : chip.isHidden ? bounds.width - 18 : chip.frame.minX - 10
         label.frame = CGRect(x: 48.2, y: 0, width: max(0, right - 48.2), height: bounds.height)
     }
 

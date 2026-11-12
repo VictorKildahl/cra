@@ -10,6 +10,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     let settings: MobileSettingsStore
     let suggestions = SuggestionService()
     let favicons = FaviconStore()
+    lazy var favorites = FavoritesStore(directory: LaunchOptions.dataDirectory)
 
     let backdrop = BackdropView()
     let logo = UIImageView(image: UIImage(named: "LaunchMark"))
@@ -63,7 +64,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         bar.tabsButton.addTarget(self, action: #selector(showTabs), for: .touchUpInside)
         bar.pill.addTarget(self, action: #selector(startSearch), for: .touchUpInside)
         bar.menuButton.addTarget(self, action: #selector(showMenu), for: .touchUpInside)
-        bar.archiveButton.addTarget(self, action: #selector(showArchive), for: .touchUpInside)
+        bar.spacesButton.addTarget(self, action: #selector(showSpaces), for: .touchUpInside)
         bar.settingsButton.addTarget(self, action: #selector(showSettings), for: .touchUpInside)
         view.addSubview(bar)
 
@@ -204,6 +205,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             sheet.text = ""
             sheet.setRows([])
             sheet.offersBrowseForMe = BrowseForMe.isAvailable
+            sheet.setFavorites(favorites.value.shown().map { ($0, favicons.icon(for: $0.url)) })
             sheet.isHidden = false
             bar.pill.alpha = 0
             // Starts from the pill: lay the closed state out before anything animates.
@@ -245,6 +247,10 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     func searchSheet(_ sheet: SearchSheet, didPick row: MobileSuggestions.Row) {
         open(MobileSuggestions.destination(for: row, engine: settings.value.searchEngine))
+    }
+
+    func searchSheet(_ sheet: SearchSheet, didPickFavorite site: MobileFavorites.Site) {
+        open(site.url)
     }
 
     func searchSheet(_ sheet: SearchSheet, didAskToBrowseFor row: MobileSuggestions.Row) {
@@ -393,6 +399,24 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         setSearching(true, incognito: false)
     }
 
+    // MARK: Spaces
+
+    /// The Mac's Spaces, from the tab row's left button. A tap on a tab there opens it here.
+    @objc func showSpaces() {
+        let model = SpacesModel()
+        model.favicon = { [weak self] in self?.favicons.icon(for: $0) }
+        model.close = { [weak self] in self?.dismiss(animated: true) }
+        model.open = { [weak self] address in
+            guard let self else { return }
+            self.dismiss(animated: true)
+            self.incognitoSearch = false
+            self.open(address)
+        }
+        let sheet = UIHostingController(rootView: SpacesView(model: model))
+        sheet.sheetPresentationController?.detents = [.large()]
+        topPresenter.present(sheet, animated: true)
+    }
+
     // MARK: Settings and archive
 
     @objc func showArchive() {
@@ -489,7 +513,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         let host = page.webView.url?.host.map(MobileSettings.siteKey) ?? ""
         return PageMenuState(host: host, canGoBack: page.webView.canGoBack, canGoForward: page.webView.canGoForward,
                              zoom: Double(page.webView.pageZoom), isDesktopSite: page.wantsDesktopSite,
-                             canSummarize: BrowseForMe.isAvailable, blockedCount: page.blockedCount)
+                             canSummarize: BrowseForMe.isAvailable, blockedCount: page.blockedCount,
+                             isFavorite: page.webView.url.map { favorites.value.contains($0.absoluteString) } ?? false)
     }
 
     func refreshMenu() {
@@ -515,7 +540,12 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         shownPage?.webView.reload()
         menuHost?.dismiss()
     }
-    func pageMenuCopyLinkFromCapsule() { copyLink() }
+    func pageMenuToggleFavorite() {
+        guard let page = shownPage, let address = shareableAddress else { return }
+        favorites.toggle(url: address, title: page.webView.title ?? "")
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        refreshMenu()
+    }
 
     func pageMenu(didPick tile: MobilePageMenu.Tile) {
         switch tile {
