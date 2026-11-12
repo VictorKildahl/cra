@@ -683,11 +683,15 @@
 #373   Tests/Scenarios/option-command-click-little-window.scenario  9ac2618b3196
 #373   Tests/Scenarios/settings-translate-reset.scenario  f0a23ee9fa70
 #378   Packages/CraCore/Tests/CraCoreTests/SettingsSyncTests.swift::aFileOnItsWayIsWaitedFor  6795013a625a
+#378   Packages/CraCore/Tests/CraCoreTests/SettingsSyncTests.swift::aFileWithNothingOnItsWayIsLacking  1fdd7d01a0a9
+#378   Packages/CraCore/Tests/CraCoreTests/SettingsSyncTests.swift::aLackingFileWaitsLongerAndANewMacLeavesItToTheWriter  280a2a812b4d
 #378   Packages/CraCore/Tests/CraCoreTests/SettingsSyncTests.swift::aManifestsVersionReadsWithoutTheRest  59b19de0f9a8
 #378   Packages/CraCore/Tests/CraCoreTests/SettingsSyncTests.swift::aMixThatStaysPutIsWrittenOverAfterAWhile  308117072c7b
 #378   Packages/CraCore/Tests/CraCoreTests/SettingsSyncTests.swift::aNewerCrasBundleIsNeverWrittenOver  ba7a0de393f2
 #378   Packages/CraCore/Tests/CraCoreTests/SettingsSyncTests.swift::aWholeBundleIsAppliedAndAnEmptyFolderWritten  94152fb39426
 #378   Packages/CraCore/Tests/CraCoreTests/SettingsSyncTests.swift::everyFileThereButNotTheManifestsIsAMix  9741a2fb0bbb
+#378   Tests/StoreTests.swift::syncLeavesAMixToItsWriterOnANewMac  059c22ad702f
+#378   Tests/StoreTests.swift::syncPutsAFileThatNeverArrivesRight  b3ca3da9a4ca
 #378   Tests/StoreTests.swift::syncPutsAMixedBundleRight  bf14ae1bdb36
 #379   Packages/CraCore/Tests/CraCoreTests/CommandBarOpeningTests.swift::commandTInAPeekIsTheBrowserWindowsNewTab  4550cf2a85ca
 #379   Tests/Scenarios/peek-command-t.scenario  e1634d743ed3

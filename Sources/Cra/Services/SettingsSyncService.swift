@@ -211,9 +211,10 @@ final class SettingsSyncService {
             awaitingDownload = true
             startWatching()
             return .downloading
-        case .mixed(let files, let wroteManifest):
-            // Waited for like a download; a mix that stays put is written over by a later look.
-            _ = mixWait.shouldRewrite(files, at: clock.now, wroteManifest: wroteManifest)
+        case .mixed(let files, let wroteManifest, let lacking):
+            // Waited for like a download; a mix that stays put is written over by a later look,
+            // here only by the Mac that wrote it: this one hasn't been asked which sidebar to keep.
+            _ = mixWait.shouldRewrite(files, at: clock.now, wroteManifest: wroteManifest, lacking: lacking, synced: false)
             awaitingDownload = true
             startWatching()
             return .downloading
@@ -261,8 +262,9 @@ final class SettingsSyncService {
 
     /// One look: a newer bundle from another Mac is applied, then what changed here is written.
     /// While iCloud still downloads a bundle, nothing is written over it. Files from different
-    /// writes are waited for a little, then this Mac writes a whole bundle again (#378); a
-    /// newer Cra's bundle is never written over.
+    /// writes, or a file gone with nothing on its way, are waited for a little, then this Mac writes
+    /// a whole bundle again (#378), unless it hasn't synced here yet and the manifest is another
+    /// Mac's; a newer Cra's bundle is never written over.
     func poll() {
         guard let folder, pendingChoice == nil else { return }
         var gone = false
@@ -273,15 +275,15 @@ final class SettingsSyncService {
         case .downloading:
             awaitingDownload = true
             return
-        case .mixed(let files, let wroteManifest):
+        case .mixed(let files, let wroteManifest, let lacking):
             let since = mixWait.since
-            guard mixWait.shouldRewrite(files, at: clock.now, wroteManifest: wroteManifest) else {
+            guard mixWait.shouldRewrite(files, at: clock.now, wroteManifest: wroteManifest, lacking: lacking, synced: hasSynced) else {
                 awaitingDownload = true
                 return
             }
             // No download is coming: this Mac's sidebar, settings and shortcuts go up whole, and
             // the other Mac applies them like any later bundle.
-            CraLog.note("sync: the folder held files from different writes for \(Int(clock.now.timeIntervalSince(since ?? clock.now))) s; this Mac's bundle written again")
+            CraLog.note("sync: the folder held \(lacking ? "a bundle with a file gone" : "files from different writes") for \(Int(clock.now.timeIntervalSince(since ?? clock.now))) s; this Mac's bundle written again")
             mixWait.reset()
             awaitingDownload = false
             gone = true
@@ -348,9 +350,10 @@ final class SettingsSyncService {
     private enum Look {
         case none
         case downloading
-        /// Every file there, but not the manifest's: the files' hashes (the manifest's included),
-        /// and whether this Mac wrote that manifest.
-        case mixed([String: String], wroteManifest: Bool)
+        /// Every file there, but not the manifest's, or a file the manifest names gone with nothing
+        /// on its way (`lacking`): the files' hashes (the manifest's included), and whether this
+        /// Mac wrote that manifest.
+        case mixed([String: String], wroteManifest: Bool, lacking: Bool)
         case newer
         case bundle(SyncManifest, Bundle)
     }
@@ -474,12 +477,12 @@ final class SettingsSyncService {
         folderState = state
         switch state {
         case .empty: return .none
-        case .arriving: return .downloading
+        case .arriving where !SettingsSync.isLacking(manifest: manifestState, files: states): return .downloading
         case .newer: return .newer
-        case .mixed:
+        case .mixed, .arriving:
             var files = data.mapValues(Self.hash)
             if let manifestData { files[SettingsSync.manifestName] = Self.hash(manifestData) }
-            return .mixed(files, wroteManifest: manifest?.deviceID == deviceID)
+            return .mixed(files, wroteManifest: manifest?.deviceID == deviceID, lacking: state == .arriving)
         case .whole:
             guard let manifest, let bundle else { return .downloading }
             return .bundle(manifest, bundle)
@@ -489,7 +492,7 @@ final class SettingsSyncService {
     /// The `cra://debug?sync=` readout: what the last look found and what this Mac does about it.
     func readout() -> String {
         let since = mixWait.since.map { "\(Int(clock.now.timeIntervalSince($0)))s" } ?? "-"
-        return "folder=\(folderState.map { "\($0)" } ?? "-") awaiting=\(awaitingDownload) mixedFor=\(since) "
+        return "folder=\(folderState.map { "\($0)" } ?? "-") awaiting=\(awaitingDownload) mixedFor=\(since) asking=\(pendingChoice?.device ?? "-") "
             + "lastWritten=\(state.lastWritten?.writtenAt.timeIntervalSince1970 ?? 0) error=\(error ?? "-")"
     }
 

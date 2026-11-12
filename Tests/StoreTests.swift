@@ -1837,6 +1837,8 @@ enum StoreTests {
         iCloudSync(first: a, firstClock: clockA)
         syncGoesOnWithoutAsking()
         syncPutsAMixedBundleRight()
+        syncPutsAFileThatNeverArrivesRight()
+        syncLeavesAMixToItsWriterOnANewMac()
     }
 
     /// iCloud is the same bundle in the app's container, with two differences a test folder can
@@ -2067,6 +2069,107 @@ enum StoreTests {
                "a whole bundle this Cra can't read is left for the newer Cra")
         expect(syncB.error != nil, "and Settings says why this Mac stopped syncing")
         syncB.disable()
+    }
+
+    /// A sync folder in a temporary directory, and what its bundle holds, for the tests below.
+    private struct SyncFolder {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("cra-sync-\(UUID().uuidString)", isDirectory: true)
+        var bundle: URL { root.appendingPathComponent(SettingsSync.folderName, isDirectory: true) }
+        func url(_ name: String) -> URL { bundle.appendingPathComponent(name) }
+        func data(_ name: String) -> Data? { try? Data(contentsOf: url(name)) }
+        var manifest: SyncManifest? {
+            let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+            return data(SettingsSync.manifestName).flatMap { try? decoder.decode(SyncManifest.self, from: $0) }
+        }
+        /// The files are the ones the manifest names: a whole bundle.
+        var whole: Bool {
+            guard let m = manifest else { return false }
+            let hashes = Dictionary(uniqueKeysWithValues: SettingsSync.fileNames.compactMap { name in
+                data(name).map { (name, SHA256.hash(data: $0).map { String(format: "%02x", $0) }.joined()) }
+            })
+            return SettingsSync.isComplete(m, hashes: hashes)
+        }
+        func sidebarHas(_ id: UUID) -> Bool {
+            let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+            return data(SettingsSync.sidebarName).flatMap { try? decoder.decode(SidebarDocument.self, from: $0) }?
+                .items.contains { $0.id == id } == true
+        }
+    }
+
+    // promise: #378
+    /// A file the manifest names that is gone from the folder, with no iCloud placeholder for it
+    /// (deleted, or left out by a provider), never arrives. The Mac that wrote the manifest writes
+    /// its bundle again after a minute; another Mac waits ten, since a provider that only shows a
+    /// file once it has downloaded may still be delivering it. ebce13c1 waited on it for ever.
+    @MainActor
+    private static func syncPutsAFileThatNeverArrivesRight() {
+        let folder = SyncFolder()
+        try? FileManager.default.createDirectory(at: folder.root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder.root) }
+        let clockA = ManualScheduler(), clockB = ManualScheduler(now: clockA.now)
+        let a = SidebarStore(clock: clockA), b = SidebarStore(clock: clockB)
+        let syncA = SettingsSyncService(store: a, clock: clockA, device: "Studio", deviceID: "studio")
+        expect(syncA.enable(folder: folder.root) == .synced, "the first Mac syncs through a folder")
+        let syncB = SettingsSyncService(store: b, clock: clockB, device: "MacBook", deviceID: "macbook")
+        guard case .bundleFound = syncB.enable(folder: folder.root) else { return expect(false, "the second Mac is asked once") }
+        syncB.useRemote()
+
+        try? FileManager.default.removeItem(at: folder.url(SettingsSync.settingsName))
+        let tab = a.createTab(url: "https://example.com/opened-with-a-file-gone")
+        syncA.poll()
+        expect(!folder.whole && syncA.awaitingDownload, "the first look waits: the file may be on its way")
+        for _ in 0..<3 { clockA.advance(by: 30) }
+        expect(folder.whole && folder.manifest?.deviceID == "studio" && !syncA.awaitingDownload,
+               "the Mac whose manifest names it writes its whole bundle again")
+        clockB.advance(by: 90)
+        expect(b.document.items.contains { $0.id == tab.id }, "and the other Mac receives it")
+
+        // The writer is away: the other Mac puts it right itself, after waiting longer than for a mix.
+        syncA.disable()
+        try? FileManager.default.removeItem(at: folder.url(SettingsSync.sidebarName))
+        let before = clockB.now
+        let tabB = b.createTab(url: "https://example.com/opened-on-the-other-mac")
+        while !folder.whole && clockB.now.timeIntervalSince(before) < 1200 { clockB.advance(by: 30) }
+        let waited = clockB.now.timeIntervalSince(before)
+        expect(folder.whole && folder.manifest?.deviceID == "macbook" && waited >= 600,
+               "the other Mac writes its bundle after ten minutes (\(waited) s)")
+        expect(folder.sidebarHas(tabB.id), "with its own changes in it")
+        syncB.disable()
+    }
+
+    // promise: #378
+    /// A Mac that turns sync on against another Mac's mix has not been asked yet which sidebar to
+    /// keep, so it never writes over the mix: written over, its bundle would replace the other
+    /// Mac's sidebar with no question. It waits for the writer, then asks as usual.
+    @MainActor
+    private static func syncLeavesAMixToItsWriterOnANewMac() {
+        let folder = SyncFolder()
+        try? FileManager.default.createDirectory(at: folder.root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder.root) }
+        let clockA = ManualScheduler(), clockC = ManualScheduler(now: clockA.now)
+        let a = SidebarStore(clock: clockA), c = SidebarStore(clock: clockC)
+        let syncA = SettingsSyncService(store: a, clock: clockA, device: "Studio", deviceID: "studio")
+        expect(syncA.enable(folder: folder.root) == .synced, "the first Mac syncs through a folder")
+
+        // A mix the first Mac has not seen yet (asleep): a valid settings.json from another write.
+        var other = AppSettings()
+        other.httpsOnly = !a.settings.httpsOnly
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try? encoder.encode(other).write(to: folder.url(SettingsSync.settingsName))
+        let mixed = folder.data(SettingsSync.settingsName)
+
+        let syncC = SettingsSyncService(store: c, clock: clockC, device: "Mini", deviceID: "mini")
+        expect(syncC.enable(folder: folder.root) == .downloading, "the new Mac waits on the mix")
+        for _ in 0..<40 { clockC.advance(by: 30) }
+        expect(folder.manifest?.deviceID == "studio" && folder.data(SettingsSync.settingsName) == mixed && syncC.pendingChoice == nil,
+               "twenty minutes on, the new Mac has still not written over the first Mac's bundle")
+
+        for _ in 0..<3 { clockA.advance(by: 30) }
+        expect(folder.whole && folder.manifest?.deviceID == "studio", "the first Mac puts it right when it is back")
+        clockC.advance(by: 30)
+        expect(syncC.pendingChoice?.device == "Studio", "and the new Mac asks which sidebar to keep, as when sync is turned on")
+        syncC.useLocal()
+        syncA.disable(); syncC.disable()
     }
 
     /// A Blank Window is one Mac's window: its sidebar never goes to the other Mac, and a bundle
