@@ -3457,13 +3457,15 @@ properties {URL:…}`) on a local server that answers after 40 s; window capture
 - [O fit] Arc's default dark half (non-vibrant, intensity 0.8): its top stop is 0.63 of #01021F (α for 0.8 in the
   one-colour recipe) over a neutral grey #5E5E5E (~94), within 1/255. The ~27 % over purple #2B2632 that
   ArcThemeImport uses was fitted on that purple theme alone and is locked for Arc imports (#155 tests).
-- Cra (#392): the editor's dark half (Auto while macOS is dark, or Dark) keeps a colour that already reads dark
-  (luminance < 0.45) as itself and darkens a lighter one to HSL lightness 0.064 in its hue (Arc's default pair,
-  #8389FF → #01021F), and draws them neutral: one colour as Arc's one-colour fill at the slider's intensity
-  (`solid`), a gradient opaque at that opacity over #5E5E5E. Before, every dark half went ~73 % over #2B2632 and
-  ignored the slider, so black came out #2F2A36. Cra still darkens light colours where Arc keeps them light: Cra's
-  Dark and Auto promise a dark look (#155). Pinned by `greysStayNeutralInTheDark`, `darkColoursKeepTheirOwnTone`
-  and `darkGradientFollowsTheSlider`.
+- Cra (#392): Dark keeps the pad's colours as they are, as Arc does (one colour Arc's one-colour fill, a
+  gradient at the slider's intensity); a light colour keeps a light sidebar with dark text (`SpaceTheme.isDark`
+  judges an editor-built Dark theme by its first colour). Auto's half for a dark Mac (Cra only, #155) keeps a
+  colour that already reads dark (luminance < 0.45) as itself and darkens a lighter one to HSL lightness 0.064
+  in its hue (Arc's default pair, #8389FF → #01021F), drawn neutral: one colour as Arc's one-colour fill at the
+  slider's intensity, a gradient opaque at that opacity over #5E5E5E. Before, every dark half went ~73 % over
+  #2B2632 and ignored the slider, so black came out #2F2A36, and Dark darkened every colour. Pinned by
+  `greysStayNeutralInTheDark`, `darkColoursKeepTheirOwnTone`, `darkGradientFollowsTheSlider` and
+  `darkKeepsThePickedColourAsArcDoes`.
 
 ## The theme editor's presets and commit (Arc 1.171, 4 Nov 2026, issue #170, asset catalog + strings)
 - [O static] The swatches are named colours in `ARCClients_BaseAssets.bundle`'s Assets.car (`assetutil --info`),

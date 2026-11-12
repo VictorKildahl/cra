@@ -244,7 +244,7 @@
 #154   Tests/StoreTests.swift::sharedFavorites  db5eca7d0a92
 #155   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::autoShowsTheHalfMacOSAsksFor  73a172a01086
 #155   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::everySwatchOnAutoFollowsMacOS  2abd1f76b828
-#155   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::everySwatchOnLightOrDarkKeepsOneLook  95d16ff2c954
+#155   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::everySwatchOnLightOrDarkKeepsOneLook  48da89bfe74e
 #155   Packages/CraCore/Tests/CraCoreTests/ModelFixtureTests.swift::autoSpacesKeepBothHalves  89e5047a5e96
 #155   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::newSpaceIsOneColourOnAuto  32095d76196a
 #155   Tests/Scenarios/auto-theme.scenario  ecf687c1ce39
@@ -729,8 +729,9 @@
 #391   Tests/DockedWindowAccessibilityTests.swift::movesFindsTheBrowserWindow  b7cbb5a23a9d
 #391   Tests/DockedWindowAccessibilityTests.swift::movingADockedWindowMovesTheBrowser  2138e64da85d
 #392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::darkColoursKeepTheirOwnTone  180984317a3e
-#392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::darkGradientFollowsTheSlider  7bf63af75ca2
-#392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::greysStayNeutralInTheDark  49ffec8286fa
+#392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::darkGradientFollowsTheSlider  de760b3df3ea
+#392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::darkKeepsThePickedColourAsArcDoes  244ac57bf41d
+#392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::greysStayNeutralInTheDark  1afc110bfec4
 #399   Tests/EmojiLabelTests.swift::wholeEmojiWhenClipped  bec18dc87181
 #401   Packages/CraCore/Tests/CraCoreTests/SwitcherWindowsTests.swift::switchersListWindowsWithButtonsOrAStandardSubrole  9f9f67f53678
 #401   Tests/Scenarios/switcher-windows.scenario  a600d5a96203

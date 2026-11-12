@@ -142,7 +142,12 @@ public struct SpaceTheme: Codable, Equatable {
     public static func solidAlpha(intensity: Double) -> Double { 0.19 + 0.55 * max(0, min(1, intensity)) }
 
     public var isDark: Bool {
-        if appearance == "dark" { return true }
+        // Dark from the theme editor keeps a picked colour as it is, as Arc does, and a light one
+        // keeps dark text over it (#392). Presets, imports and Auto's dark half have no pad colours.
+        if appearance == "dark" {
+            if let key, !key.isEmpty, (colors.first.flatMap(HexColor.luminance) ?? 0) >= 0.45 { return false }
+            return true
+        }
         if appearance == "light" { return false }
         // auto: judge by the first color's luminance
         return (colors.first.flatMap(HexColor.luminance) ?? 1) < 0.45
