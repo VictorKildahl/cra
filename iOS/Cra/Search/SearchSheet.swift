@@ -19,6 +19,8 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
 
     let field = SearchField()
     private let surface = UIView()
+    /// The 2025 sheet warms a shade toward the keyboard (`Palette.sheetBottom`).
+    private let surfaceTint = CAGradientLayer()
     private let fieldBackground = FieldBackgroundView()
     private let clearButton = UIButton(type: .custom)
     private let incognitoButton = UIButton(type: .custom)
@@ -48,6 +50,8 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     override init(frame: CGRect) {
         super.init(frame: frame)
         surface.backgroundColor = Palette.sheet
+        surface.layer.addSublayer(surfaceTint)
+        surface.layer.masksToBounds = true
         surface.layer.cornerRadius = MobileSearchSheet.cornerRadius
         surface.layer.cornerCurve = .continuous
         surface.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
@@ -252,6 +256,12 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         let t = openness
         surface.frame = bounds
         surface.alpha = t
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        surfaceTint.frame = CGRect(x: 0, y: 0, width: bounds.width, height: MobileSearchSheet.height)
+        surfaceTint.colors = [Palette.sheet.resolvedColor(with: traitCollection).cgColor,
+                              Palette.sheetBottom.resolvedColor(with: traitCollection).cgColor]
+        CATransaction.commit()
 
         let open = CGRect(x: MobileSearchSheet.fieldSideInset, y: MobileSearchSheet.topInset,
                           width: bounds.width - 2 * MobileSearchSheet.fieldSideInset, height: MobileSearchSheet.fieldHeight)
@@ -302,7 +312,7 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
             cross.move(to: CGPoint(x: 12, y: 6)); cross.addLine(to: CGPoint(x: 6, y: 12))
             cross.lineWidth = 1.7
             cross.lineCapStyle = .round
-            UIColor.white.setStroke()
+            Palette.clearCross.resolvedColor(with: UITraitCollection(userInterfaceStyle: .light)).setStroke()
             cross.stroke()
         }.withRenderingMode(.alwaysOriginal)
     }

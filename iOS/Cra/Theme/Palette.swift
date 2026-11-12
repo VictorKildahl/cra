@@ -11,13 +11,16 @@ enum Palette {
                 blue: CGFloat(hex & 0xff) / 255, alpha: alpha)
     }
 
-    /// The search sheet's surface.
+    /// The search sheet's surface. Light from TapSmart's March 2025 screenshot: #f3f3f4 under the
+    /// field, warming to #f3e6e8 at the keyboard (`sheetBottom`). (The 2024 footage had #fcfcfc.)
     /// Dark is Arc Search's incognito sheet, which is also how the sheet looks in dark mode.
-    static let sheet = dynamic(light: rgb(0xfcfcfc), dark: rgb(0x2d2c31))
-    /// The search field's fill runs from lavender on the left to pink on the right.
-    static let fieldLeading = dynamic(light: rgb(0xede9f4), dark: rgb(0x46454a))
-    static let fieldTrailing = dynamic(light: rgb(0xf5ecf0), dark: rgb(0x46454a))
-    static let fieldBorder = dynamic(light: rgb(0xd9d2dc), dark: rgb(0x504f54))
+    static let sheet = dynamic(light: rgb(0xf3f3f4), dark: rgb(0x2d2c31))
+    static let sheetBottom = dynamic(light: rgb(0xf3e6e8), dark: rgb(0x2d2c31))
+    /// The search field: a flat grey in 2025 (#dbd9da, no edge); the 2024 footage had a
+    /// lavender-to-pink gradient with a hairline.
+    static let fieldLeading = dynamic(light: rgb(0xdbd9da), dark: rgb(0x46454a))
+    static let fieldTrailing = dynamic(light: rgb(0xdbd9da), dark: rgb(0x46454a))
+    static let fieldBorder = dynamic(light: rgb(0xdbd9da), dark: rgb(0x504f54))
     /// The caret and selection.
     static let accent = dynamic(light: rgb(0x4a5fe6), dark: rgb(0x7f8eff))
     static let primaryText = dynamic(light: .black, dark: .white)
@@ -26,12 +29,14 @@ enum Palette {
     static let placeholder = dynamic(light: rgb(0xa2a0a5), dark: rgb(0x97979e))
     static let glyph = dynamic(light: rgb(0x2e2e30), dark: rgb(0xe6e6ea))
     /// The round clear button in the field.
-    static let clearFill = dynamic(light: rgb(0xc1b7bc), dark: rgb(0x5a565c))
+    static let clearFill = dynamic(light: rgb(0xafafaf), dark: rgb(0x5a565c))
+    /// Its cross: cut out of the disc in 2025, so the field's grey shows through.
+    static let clearCross = dynamic(light: rgb(0xdbd9da), dark: .white)
     /// The incognito mask in the field while incognito is off: barely there.
     static let incognitoOff = dynamic(light: rgb(0xe4dce4), dark: rgb(0x4a464c))
     /// "Browse for Me" on a suggestion row.
-    static let chipFill = dynamic(light: rgb(0xf5ebed), dark: rgb(0x332c2f))
-    static let chipBorder = dynamic(light: rgb(0xdfd2d6), dark: rgb(0x403a3d))
+    static let chipFill = dynamic(light: rgb(0xdbd8d9), dark: rgb(0x332c2f))
+    static let chipBorder = dynamic(light: rgb(0xdbd8d9), dark: rgb(0x403a3d))
     /// The pill and the round buttons of the bottom bar, over the bar's blur.
     static let barControlFill = dynamic(light: UIColor(white: 0, alpha: 0.10), dark: UIColor(white: 1, alpha: 0.14))
     /// The same controls floating over the tab switcher's backdrop.
