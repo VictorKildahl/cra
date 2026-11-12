@@ -118,6 +118,11 @@ built release app with a test profile. Note anything that fails in the release's
   a normal tab, a pinned tab, a target=_blank link and a WebKit tab (a DRM site, whose page gets no posted click). With the switch off, ⌥⌘-click opens Split View (#298);
   with ⇧ or ⌃ down as well, it is another click. (`option-command-click-little-window` posts the click through
   the app's event queue; a click from the hardware, with the keys held on the keyboard, is this line.)
+- **#381:** click a link to another site in a favorite, next to Arc doing the same: the peeked page's
+  favicon springs onto the tile's top right corner on a white square (black in a dark space), 4 pt
+  past the corner, with a soft shadow, and springs off when the Peek closes. Check a split favorite
+  too. (`favorite-peek-badge` checks the frame and that nothing clips it; Arc's values come from its
+  code, so the side-by-side with Arc and the spring's feel are this line.)
 - **PR #221:** opening a Peek fades the page behind and draws it back a little, its margins widening
   while the sidebar stays still, and closing brings it back in one smooth motion with no jump at the
   end. With "Pages fill the window edge to edge" on, the page only fades. (The values are checked

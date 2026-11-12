@@ -698,4 +698,5 @@
 #380   Packages/CraCore/Tests/CraCoreTests/PeekExpandTests.swift::commandClickLoadsInTheSourceTabOnlyWhenTurnedOn  fc0ceb5cb908
 #380   Packages/CraCore/Tests/CraCoreTests/PeekExpandTests.swift::offByDefault  c73dab54bddc
 #380   Tests/Scenarios/peek-expand-in-tab.scenario  e12b76e33b6c
+#381   Tests/Scenarios/favorite-peek-badge.scenario  ae249a1b489e
 #382   Packages/CraCore/Tests/CraCoreTests/HoverGateTests.swift::stillPointerIsNotHover  a454423d11ad

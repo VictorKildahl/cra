@@ -1,0 +1,44 @@
+# promise: #381
+# A Peek opened from a favorite badges the favorite's tile with the peeked page's favicon, as Arc
+# 1.172.2 does (AppItem.badgeIcon drawn by AppTrayItemBadgeView): a 20 pt square sticking out 4 pt
+# past the tile's top right corner. The badge stays while the Peek waits on its tile and goes with
+# the Peek (GitHub #381).
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?windowSize=1280x800
+
+cra://open?url=${PAGE}?n=fav
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/favoriteTab
+wait 1
+cra://debug?favoriteBadges=before
+expect-log Cra favorite badges before: none$
+
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?icon=1'))","userGesture":true}
+expect-log peek: from
+wait 1.5
+cra://debug?favoriteBadges=open
+expect-log Cra favorite badges open: tile1 frame=\d+,-4,20x20 inset=4 icon=1 clipped=0$
+cra://debug?snapshot=FavoritesGridView,1&out=favorite-peek-badge.png
+
+# Another tab opens and the Peek waits on its favorite: the badge stays.
+cra://open?url=${PAGE}?n=other
+wait 1
+cra://debug?peeks=waiting
+expect-log Cra peeks waiting: hidden \S+\?icon=1$
+cra://debug?favoriteBadges=waiting
+expect-log Cra favorite badges waiting: tile1 frame=\d+,-4,20x20 inset=4 icon=1 clipped=0$
+
+# Back on the favorite, then the Peek closes: the badge goes with it.
+cra://action/previousTab
+wait 1
+cra://debug?peeks=back
+expect-log Cra peeks back: shown \S+\?icon=1$
+cra://debug?target=little&cdp=Runtime.evaluate&params={"expression":"window.close()"}
+wait 1.5
+cra://debug?peeks=closed
+expect-log Cra peeks closed: none$
+cra://debug?favoriteBadges=closed
+expect-log Cra favorite badges closed: none$
