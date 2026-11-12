@@ -1135,6 +1135,11 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
     cannot be deleted.", a "Never show me this again." checkbox, Cancel (ESC) and Copy Link to Folder (↩). Cancel
     pressed; the link was not made (it would be a permanent arc.net page showing the user's display name).
   - A plain click on a picked row that is also the open tab starts renaming it.
+- [O live] Arc 1.172.2, 12 Nov 2026 (issue #386, a Blank Window of throwaway example.com/org/net tabs, two of them
+  ⌘-picked): View ▸ Add Split View (⌃⇧=) ignores the picks. It adds an empty pane beside the open tab and opens the
+  command bar, as with nothing picked; the picks stay picked, and Esc closes the bar and the empty pane. Arc has no
+  key for the picks: Open in Split View in their menu is the only way to split them. Esc doesn't clear Arc's picks.
+  Cra: ⌃⇧= unchanged; the menu row is pinned by Tests/Scenarios/picked-tabs-split.scenario.
 - [O strings] The warning is Arc's Dialogs.SheetWindow (`showDialogSheetDeprecated(message:buttonTitle:icon:
   cancelButtonText:suppressionButtonText:informativeText:)`), "Alert title on privacy confirmation window for sharing
   tab collections": "Send this <type> to anyone, on any browser." with the type "Folder" for a folder and for picked

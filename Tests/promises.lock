@@ -722,5 +722,6 @@
 #385   Packages/CraCore/Tests/CraCoreTests/PeekControlLookTests.swift::hoverLiftsTheButtonAndDeepensItsShadow  be3fe61a69bf
 #385   Packages/CraCore/Tests/CraCoreTests/PeekControlLookTests.swift::shortcutsPressTheirButtons  b2c01bed9702
 #385   Packages/CraCore/Tests/CraCoreTests/PeekControlLookTests.swift::springsAreArcsInCoreAnimationTerms  5be9f378ea04
+#386   Tests/Scenarios/picked-tabs-split.scenario  cd33102969a4
 #387   Tests/Scenarios/favorite-mute.scenario  7b04a5025ba3
 #399   Tests/EmojiLabelTests.swift::wholeEmojiWhenClipped  bec18dc87181
