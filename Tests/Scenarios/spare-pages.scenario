@@ -1,0 +1,20 @@
+# Cra keeps a page made ahead for the next tab that needs one (SparePages): the ~34 ms CEF spends
+# making a page's window falls between clicks. The next tab takes it and loads its own address, and
+# until then extensions don't see it: chrome.tabs.query and chrome.windows.getAll leave it out
+# (spare-pages.patch). The fixture's button opens a page naming what it saw.
+budget rss=900 stalls50=8
+cra://debug?installExtension=${FIXTURES}/TabsQueryExtension
+relaunch
+cra://open?url=${PAGE}?n=one
+wait 4
+cra://open?url=${PAGE}?n=two
+expect-log takes a spare page
+wait 4
+cra://debug?extensionAction=${TABS_QUERY_EXTENSION_ID}
+wait 4
+cra://debug?back=answer
+expect-log back answer: selected=.*page\.html\?n=tabs-
+reject-log back answer: selected=.*page\.html\?n=tabs-[0-9]+-blank-[1-9]
+cra://debug?removeExtension=${TABS_QUERY_EXTENSION_ID}
+wait 1
+reject-log fault:

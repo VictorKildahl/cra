@@ -183,10 +183,21 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         // list the tab had (PageHistory, #273): after a relaunch or a close, Back goes where it went.
         let incognito = store.isIncognito(item: tabID)
         let history = incognito ? nil : PageHistoryStore.shared.load(tabID)
-        let browser = Perf.time(.pageCreate) {
-            PageEngines.makeBrowser(frame: container.bounds, url: tab.url, delegate: self, incognito: incognito,
-                                    profilePath: store.profilePath(item: tabID), history: history)
+        let profilePath = store.profilePath(item: tabID)
+        // The profile's spare page if there is one (SparePages): made ahead, so this click doesn't
+        // wait for CEF to make the page's window.
+        let fill = PageEngines.spareFill(url: tab.url, incognito: incognito, history: history)
+        let browser = Perf.time(.pageCreate) { () -> CraBrowser in
+            if fill.canTake, let spare = SparePages.shared.take(profilePath: profilePath) {
+                spare.delegate = self
+                spare.takeSpare(withURL: tab.url, history: fill.history)
+                log(tabID, "takes a spare page")
+                return spare
+            }
+            return PageEngines.makeBrowser(frame: container.bounds, url: tab.url, delegate: self, incognito: incognito,
+                                           profilePath: profilePath, history: history)
         }
+        if !incognito { SparePages.shared.refill(profilePath: profilePath, frame: container.bounds, clock: clock) }
         return register(browser: browser, tabID: tabID)
     }
 

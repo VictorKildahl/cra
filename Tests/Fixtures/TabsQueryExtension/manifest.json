@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Cra Tabs Query Fixture",
+  "version": "1.0",
+  "description": "Made up for scripts/scenario.sh: its toolbar button opens a page naming how many tabs chrome.tabs.query and chrome.windows.getAll report, and how many of them have no address (a spare page Cra keeps ready must not be one).",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAotFCAQ2DbPPL1gcMbRxLhzlefP+9dlkNeoDmJkrVDnIT7ZL8tYHzANzUQICX+s+wLh/MErmnbdFfSXbCUDjAx4gs1wPSG+EbcQjDOVgXvMxDec8TPWfmFDrszCcrx4NSHyFO3/aoEipUM49OQ5nIlTjokDhOKlPcAQGhEOkYzIbc5nS5/SMgPlVa3OWGhBSZP9LnsY9LDZDKahihoDi6Jl4FYWy8a3JeCqIKFWz6htHIiB99wspPkK6kytw4CQUrt6S2DAjelHmrqPk/u0+Bvbaw6Cisy1HzckVZnv00O2tUt2ETjyF67EtkfXrYUdKnUVDAhOK5pLXciOesmxsAZwIDAQAB",
+  "permissions": [
+    "tabs"
+  ],
+  "background": {
+    "service_worker": "worker.js"
+  },
+  "action": {
+    "default_title": "Cra Tabs Query Fixture"
+  }
+}

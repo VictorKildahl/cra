@@ -2571,6 +2571,9 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     // Muted before Chromium made the browser (a muted tab's page coming back): applied in -adoptBrowser: (#387).
     BOOL _audioMuted;
     BOOL _isPopupHost;
+    BOOL _isSpare;
+    /// Taken before Chromium had made the page: -adoptBrowser: loads its address.
+    BOOL _spareTakenEarly;
     NSMutableSet<NSNumber*>* _activeDownloads;
     BOOL _parked;
     NSUInteger _audibleChanges;
@@ -2607,6 +2610,36 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     return [self initWithFrame:frame url:url sidePanelURL:nil history:history delegate:delegate incognito:incognito profilePath:profilePath agent:NO];
 }
 
+/// Set around a spare's init: CEF makes a views-hosted page, window and all, inside it
+/// (createNow), so -adoptBrowser: and -hostWindowCreated: run before the init returns.
+static BOOL g_makingSpare = NO;
+
+- (instancetype)initSpareWithFrame:(NSRect)frame profilePath:(NSString*)profilePath {
+    // No address (CEF then doesn't navigate), as a page that gets a saved history starts.
+    g_makingSpare = YES;
+    self = [self initWithFrame:frame url:@"" sidePanelURL:nil history:nil delegate:nil incognito:NO profilePath:profilePath agent:NO];
+    g_makingSpare = NO;
+    return self;
+}
+
+- (BOOL)isSpare { return _isSpare; }
+
+- (void)takeSpareWithURL:(NSString*)url history:(NSDictionary<NSString*, id>*)history {
+    if (!_isSpare) return;
+    _isSpare = NO;
+    _currentURL = url;
+    _pendingURL = url;
+    _pendingHistory = [history[@"history"] isKindOfClass:NSString.class] ? [history copy] : nil;
+    if (!_browser) { _spareTakenEarly = YES; return; }
+    [self sendDevToolsMethod:@"Cra.setSpare" params:@"{\"spare\":false}" completion:^(NSString*, NSString*) {}];
+    [self loadTakenSpare];
+}
+
+- (void)loadTakenSpare {
+    if (_pendingHistory) [self restorePendingHistory];
+    else if (_browser && _pendingURL.length) _browser->GetMainFrame()->LoadURL(CefStringFromNS(_pendingURL));
+}
+
 - (instancetype)initWithFrame:(NSRect)frame extensionSidePanelURL:(NSString*)url
                      delegate:(id<CraBrowserDelegate>)delegate profilePath:(NSString*)profilePath {
     // Created with no page (CEF then doesn't navigate), so no script of the panel runs as a tab.
@@ -2629,6 +2662,7 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     _pendingURL = url;
     _sidePanelURL = [sidePanelURL copy];
     _isPopupHost = (url == nil);
+    _isSpare = g_makingSpare;
     _containerView = [[NSView alloc] initWithFrame:frame];
     _containerView.wantsLayer = YES;
     _containerView.autoresizesSubviews = YES;
@@ -2736,6 +2770,8 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 
 - (void)hostWindowCreated:(NSWindow*)window {
     self.hostWindow = window;
+    // A spare's window stays out of sight until a tab takes it (its delegate then places it).
+    if (_isSpare) { [window orderOut:nil]; return; }
     [self.delegate browser:self didCreateHostWindow:window];
 }
 
@@ -2777,6 +2813,13 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
             load(@"no answer");
         });
+    }
+    if (_isSpare) {
+        // Hidden from extensions until a tab takes it; messages run in order, so before any load.
+        [self sendDevToolsMethod:@"Cra.setSpare" params:@"{\"spare\":true}" completion:^(NSString*, NSString*) {}];
+    } else if (_spareTakenEarly) {
+        _spareTakenEarly = NO;
+        if (!_pendingHistory && _pendingURL.length) browser->GetMainFrame()->LoadURL(CefStringFromNS(_pendingURL));
     }
     [self restorePendingHistory];
     if (_pendingFocus) {

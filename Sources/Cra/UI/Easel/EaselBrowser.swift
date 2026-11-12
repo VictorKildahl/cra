@@ -118,6 +118,7 @@ final class EaselBrowser: CraBrowser, NativePage {
 extension EaselBrowser {
     /// PageEngines' hook: an easel's address gets its canvas.
     static func register() {
+        PageEngines.isNativePage = { Easel.id(fromURL: $0) != nil }
         PageEngines.nativePage = { frame, url, delegate, incognito, profilePath in
             Easel.id(fromURL: url) == nil ? nil : EaselBrowser(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath)
         }

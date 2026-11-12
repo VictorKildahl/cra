@@ -21,7 +21,7 @@ index 2018b0dc0..1045118b4 100644
 diff --git a/cef/libcef/browser/devtools/devtools_controller.cc b/cef/libcef/browser/devtools/devtools_controller.cc
 --- a/cef/libcef/browser/devtools/devtools_controller.cc
 +++ b/cef/libcef/browser/devtools/devtools_controller.cc
-@@ -4,12 +4,663 @@
+@@ -4,12 +4,675 @@
  
  #include "cef/libcef/browser/devtools/devtools_controller.h"
  
@@ -558,10 +558,22 @@ diff --git a/cef/libcef/browser/devtools/devtools_controller.cc b/cef/libcef/bro
 +       *method != "Cra.restoreHistory" && *method != "Cra.getTranslateState" &&
 +       *method != "Cra.translatePage" && *method != "Cra.revertTranslation" &&
 +       *method != "Cra.neverTranslateSite" &&
-+       *method != "Cra.reclaimMemory")) {
++       *method != "Cra.reclaimMemory" && *method != "Cra.setSpare")) {
 +    return false;
 +  }
 +  *message_id = *id;
++  if (*method == "Cra.setSpare") {
++    // Cra: a page made ahead for the next tab that needs one, hidden from
++    // extensions' tabs and windows until Cra gives it a tab.
++    const base::DictValue* params = dict->FindDict("params");
++    if (params && params->FindBool("spare").value_or(false)) {
++      contents->SetUserData(content::CraSparePageKey(),
++                            std::make_unique<base::SupportsUserData::Data>());
++    } else {
++      contents->RemoveUserData(content::CraSparePageKey());
++    }
++    return true;
++  }
 +  if (*method == "Cra.reclaimMemory") {
 +    // Cra: closing tabs leaves the browser process's allocator holding the
 +    // pages they freed (renderers reclaim theirs when they go to the
@@ -685,7 +697,7 @@ diff --git a/cef/libcef/browser/devtools/devtools_controller.cc b/cef/libcef/bro
  CefDevToolsController::CefDevToolsController(
      content::WebContents* inspected_contents)
      : inspected_contents_(inspected_contents), weak_ptr_factory_(this) {
-@@ -30,6 +681,38 @@
+@@ -30,6 +693,38 @@
  bool CefDevToolsController::SendDevToolsMessage(
      const std::string_view& message) {
    CEF_REQUIRE_UIT();

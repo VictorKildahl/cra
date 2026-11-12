@@ -33,10 +33,13 @@ diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser
  #include "content/browser/renderer_host/render_frame_host_manager.h"
  #include "content/browser/renderer_host/render_frame_proxy_host.h"
  #include "content/browser/renderer_host/render_process_host_impl.h"
-@@ -4446,6 +4447,23 @@
-   ForEachFrameTree([](FrameTree& frame_tree) { frame_tree.StopLoading(); });
-   GetPrerenderHostRegistry()->CancelAllHosts(PrerenderFinalStatus::kStop);
+@@ -4448,6 +4449,28 @@
    observers_.NotifyObservers(&WebContentsObserver::NavigationStopped);
+ }
+ 
++const void* CraSparePageKey() {
++  static const char kKey = 0;
++  return &kKey;
 +}
 +
 +bool CraPageHasOpenedLiveConnection(WebContents* contents) {
@@ -54,9 +57,11 @@ diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser
 +        }
 +      });
 +  return found;
- }
- 
++}
++
  void WebContentsImpl::SetPageFrozen(bool frozen) {
+   TRACE_EVENT1("content", "WebContentsImpl::SetPageFrozen", "frozen", frozen);
+ 
 diff --git a/content/public/browser/BUILD.gn b/content/public/browser/BUILD.gn
 --- a/content/public/browser/BUILD.gn
 +++ b/content/public/browser/BUILD.gn
@@ -72,7 +77,7 @@ diff --git a/content/public/browser/cra_live_connection.h b/content/public/brows
 new file mode 100644
 --- /dev/null
 +++ b/content/public/browser/cra_live_connection.h
-@@ -0,0 +1,22 @@
+@@ -0,0 +1,26 @@
 +// Cra: a page's live connections, for Cra's tab freezing.
 +
 +#ifndef CONTENT_PUBLIC_BROWSER_CRA_LIVE_CONNECTION_H_
@@ -91,6 +96,10 @@ new file mode 100644
 +// mail page frozen in the background would lose its connection; Cra's freezing
 +// leaves such a page running.
 +CONTENT_EXPORT bool CraPageHasOpenedLiveConnection(WebContents* contents);
++
++// The WebContents user-data key on a page Cra keeps ready for the next tab that
++// needs one (a spare page, Cra.setSpare). Extensions don't see its window.
++CONTENT_EXPORT const void* CraSparePageKey();
 +
 +}  // namespace content
 +

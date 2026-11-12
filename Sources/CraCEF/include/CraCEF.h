@@ -261,6 +261,15 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 - (instancetype)initWithFrame:(NSRect)frame url:(NSString *)url delegate:(nullable id<CraBrowserDelegate>)delegate
                     incognito:(BOOL)incognito profilePath:(nullable NSString *)profilePath
                       history:(nullable NSDictionary<NSString *, id> *)history;
+/// A page made ahead for the next tab that needs one (SparePages): Chromium makes the page and its
+/// window now, when nothing waits on it, with no address and no delegate; the window stays hidden and
+/// extensions don't see it as a tab (Cra.setSpare, spare-pages.patch). -takeSpareWithURL:history:
+/// gives it its address, after the caller has set the delegate.
+- (instancetype)initSpareWithFrame:(NSRect)frame profilePath:(nullable NSString *)profilePath;
+@property (nonatomic, readonly) BOOL isSpare;
+/// A spare page becomes a tab's page: it loads `url`, or the saved back and forward list `history`
+/// (as -initWithFrame:…history: takes it) with `url` as its current entry.
+- (void)takeSpareWithURL:(NSString *)url history:(nullable NSDictionary<NSString *, id> *)history;
 
 - (void)loadURL:(NSString *)url;
 - (void)goBack;
