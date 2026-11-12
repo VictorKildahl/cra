@@ -126,12 +126,14 @@ struct PictureInPictureActions {
     var backToTab: () -> Void
     var togglePlayback: () -> Void
     var skip: (Double) -> Void
+    var seek: (Double) -> Void
     var close: () -> Void
 }
 final class PictureInPictureChrome {
     static let shared = PictureInPictureChrome()
     var actions: PictureInPictureActions?
     var isPlaying = false
+    var time: (position: Double, duration: Double) = (0, 0)
     var address = ""
     func videoEntered() {}
     func videoLeft() {}

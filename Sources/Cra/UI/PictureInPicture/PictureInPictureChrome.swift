@@ -6,6 +6,8 @@ struct PictureInPictureActions {
     var backToTab: () -> Void
     var togglePlayback: () -> Void
     var skip: (Double) -> Void = { _ in }
+    /// Go to this many seconds from the video's start (the scrubber).
+    var seek: (Double) -> Void = { _ in }
     var close: () -> Void
 }
 
@@ -29,6 +31,10 @@ final class PictureInPictureChrome {
     var actions: PictureInPictureActions?
     var isPlaying = false {
         didSet { for o in overlays.values { o.controls.isPlaying = isPlaying } }
+    }
+    /// Where the video is and how long it is, in seconds, for the scrubber (0 long: no scrubber).
+    var time: (position: Double, duration: Double) = (0, 0) {
+        didSet { for o in overlays.values { o.controls.setTime(position: time.position, duration: time.duration) } }
     }
     /// The page's host, centred in the top bar (Arc's; Chrome's own strip stays hidden, #246).
     var address = "" {
@@ -66,6 +72,7 @@ final class PictureInPictureChrome {
         overlays[ObjectIdentifier(window)] = overlay
         overlay.controls.isPlaying = isPlaying
         overlay.controls.address = address
+        overlay.controls.setTime(position: time.position, duration: time.duration)
         window.addChildWindow(overlay, ordered: .above)
         overlay.orderFront(nil)
         let center = NotificationCenter.default
@@ -164,6 +171,11 @@ final class PictureInPictureChrome {
             w.setFrameOrigin(origin)
             view.dropped()
         }
+    }
+
+    /// `cra://debug?pipSeek=<0…1>`: the scrubber pressed that far along and let go.
+    func debugSeek(_ fraction: Double) {
+        for o in overlays.values { o.controls.debugScrub(CGFloat(fraction)) }
     }
 
     /// `cra://debug?pipClick=<n>`: the overlay pressed and let go in its lower left quarter (clear

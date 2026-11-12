@@ -1563,8 +1563,11 @@ public:
         RunPageScript(frame, "pip",
             "(function(send){"
             "var cur=null;function playing(v){send('pip:play'+(v.paused||v.ended?0:1));}"
-            "function watch(v){cur=v;playing(v);v.addEventListener('play',function(){if(cur===v)playing(v);});"
-            "v.addEventListener('pause',function(){if(cur===v)playing(v);});v.addEventListener('ended',function(){if(cur===v)playing(v);});}"
+            // "pip:time:<seconds>:<duration>" feeds the scrubber; duration 0 is a stream with no end.
+            "function time(v){send('pip:time:'+v.currentTime+':'+(isFinite(v.duration)?v.duration:0));}"
+            "function watch(v){cur=v;playing(v);time(v);v.addEventListener('play',function(){if(cur===v)playing(v);});"
+            "v.addEventListener('pause',function(){if(cur===v)playing(v);});v.addEventListener('ended',function(){if(cur===v)playing(v);});"
+            "['timeupdate','durationchange','seeked','loadedmetadata'].forEach(function(n){v.addEventListener(n,function(){if(cur===v)time(v);});});}"
             "document.addEventListener('enterpictureinpicture',function(e){send('pip:1');watch(e.target);},true);"
             "document.addEventListener('leavepictureinpicture',function(){cur=null;send('pip:0');},true);"
             "if(document.pictureInPictureElement){send('pip:1');watch(document.pictureInPictureElement);}})");
@@ -1609,6 +1612,11 @@ public:
                 // A frame has a video to put in Picture in Picture: only now does the page get
                 // the key press that lends it user activation (see PictureInPictureScript).
                 if (!o.isInPictureInPicture) [o nudgeUserActivation];
+            } else if (v.compare(0, 5, "time:") == 0) {
+                double position = 0, duration = 0;
+                if (sscanf(v.c_str() + 5, "%lf:%lf", &position, &duration) == 2 &&
+                    [o.delegate respondsToSelector:@selector(browser:didChangePictureInPictureTime:duration:)])
+                    [o.delegate browser:o didChangePictureInPictureTime:position duration:duration];
             } else if (v.compare(0, 3, "err") == 0) {
                 NSLog(@"CraCEF: Picture in Picture %s", v.c_str());
             }
@@ -3085,6 +3093,18 @@ static NSView* FindRenderWidgetHostView(NSView* root) {
     if (!_browser) return;
     NSString* js = [NSString stringWithFormat:@"(function(){var v=document.pictureInPictureElement;if(!v)return;"
                     "var t=v.currentTime+(%f);if(isFinite(v.duration))t=Math.min(t,v.duration);v.currentTime=Math.max(0,t);})();", seconds];
+    std::vector<CefString> ids;
+    _browser->GetFrameIdentifiers(ids);
+    for (const auto& id : ids) {
+        CefRefPtr<CefFrame> f = _browser->GetFrameByIdentifier(id);
+        if (f && f->IsValid()) f->ExecuteJavaScript(CefStringFromNS(js), f->GetURL(), 0);
+    }
+}
+
+- (void)seekPictureInPictureTo:(double)seconds {
+    if (!_browser) return;
+    NSString* js = [NSString stringWithFormat:@"(function(){var v=document.pictureInPictureElement;if(!v||!isFinite(v.duration))return;"
+                    "v.currentTime=Math.max(0,Math.min(%f,v.duration));})();", seconds];
     std::vector<CefString> ids;
     _browser->GetFrameIdentifiers(ids);
     for (const auto& id : ids) {
