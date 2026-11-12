@@ -390,6 +390,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     func show(_ tab: MobileTab) {
         let page = store.page(for: tab)
         page.siteOptions = { [weak self] host in self?.settings.value.options(for: host) ?? MobileSiteOptions() }
+        page.appLinks = { [weak self] in self?.settings.value.openAppLinksIn ?? .nativeApp }
         guard page !== shownPage else { return }
         closeReader()
         shownPage?.webView.removeFromSuperview()

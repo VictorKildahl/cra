@@ -90,6 +90,21 @@ public enum MobileAppLinks: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+extension MobileAppLinks {
+    /// Whether a navigation is first offered to an installed app (iOS opens it only when an app
+    /// claims the address as a universal link, else the page loads here). Only a link tapped in the
+    /// page itself, to an http(s) address on another site: a typed address, a reload, a redirect or a
+    /// link within the same site stays in the browser, so a site can't bounce the user into its app.
+    public func offersApp(isLinkTap: Bool, isMainFrame: Bool, from current: String?, to target: String) -> Bool {
+        guard self == .nativeApp, isLinkTap, isMainFrame, let url = URL(string: target),
+              let scheme = url.scheme?.lowercased(), scheme == "https" || scheme == "http",
+              let host = url.host.map(MobileSettings.siteKey), !host.isEmpty else { return false }
+        guard let current = current.flatMap({ URL(string: $0)?.host }).map(MobileSettings.siteKey), !current.isEmpty else { return true }
+        let sameSite = host == current || host.hasSuffix("." + current) || current.hasSuffix("." + host)
+        return !sameSite
+    }
+}
+
 /// `settings.json` in the iPhone app's data folder. Every field has a default, so a file from an
 /// older build loads and a missing file is the defaults.
 public struct MobileSettings: Codable, Equatable {

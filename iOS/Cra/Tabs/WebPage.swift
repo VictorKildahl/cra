@@ -27,6 +27,8 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     private(set) var progress: Double = 0
     /// "Request Desktop Site": applied to every navigation of this tab while it is on.
     var wantsDesktopSite = false
+    /// App Settings ▸ Open App Links in...
+    var appLinks: () -> MobileAppLinks = { .nativeApp }
     /// The page shows Translate's words (MobileTranslate); a new page starts untranslated.
     var isTranslated = false
     /// What applies on a site: the app's settings, asked at every navigation.
@@ -158,6 +160,23 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
         }
         if navigationAction.targetFrame?.isMainFrame == true {
             applyBlocking(for: navigationAction.request.url)
+        }
+        // "Open App Links in... Native App": a tapped link to another site goes to its app when
+        // one claims it (universal links only); otherwise it loads here.
+        if let url = navigationAction.request.url,
+           appLinks().offersApp(isLinkTap: navigationAction.navigationType == .linkActivated,
+                                isMainFrame: navigationAction.targetFrame?.isMainFrame == true,
+                                from: webView.url?.absoluteString, to: url.absoluteString) {
+            // Exactly one answer: the system's, or loading here if it hasn't answered in time.
+            var answered = false
+            let answer: (Bool) -> Void = { opened in
+                guard !answered else { return }
+                answered = true
+                decisionHandler(opened ? .cancel : .allow, preferences)
+            }
+            UIApplication.shared.open(url, options: [.universalLinksOnly: true]) { opened in answer(opened) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { answer(false) }
+            return
         }
         decisionHandler(.allow, preferences)
     }

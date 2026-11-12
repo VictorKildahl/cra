@@ -804,3 +804,20 @@ final class SuggestionScrollTests: BrowserTestCase {
         XCTAssertEqual(field.value as? String, "ovens", "back at the top, what was typed")
     }
 }
+
+final class AppLinkTests: BrowserTestCase {
+    /// With links going to native apps (the default), a tapped link that no app claims still
+    /// loads in Cra. Needs the network for example.com.
+    func testALinkNoAppClaimsLoadsHere() {
+        launch(["-CraOpenURL", "data:text/html,<meta/name=viewport/content=width=device-width><a/href=https://example.com/>Go/there</a>", "-CraSearch", "NO"])
+        let link = app.webViews.links.firstMatch
+        XCTAssertTrue(link.waitForExistence(timeout: 10))
+        link.tap()
+        sleep(6)
+        // The page menu names the page's site (the web view's own text isn't always readable here).
+        app.buttons["bar-menu"].tap()
+        let host = app.staticTexts["menu-host"]
+        XCTAssertTrue(host.waitForExistence(timeout: 5))
+        XCTAssertEqual(host.label, "example.com", "the link loaded in the browser")
+    }
+}

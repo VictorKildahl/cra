@@ -100,7 +100,7 @@ the real app on an iPhone has to be recorded before then.
 | New-window links open a tab | done | |
 | Downloads, Wallet passes, .ics | partial | Files go to Documents/Downloads (shown in the Files app), numbered when a name is taken (`MobileDownloads`), announced above the bar and listed under Settings ▸ Downloads; a Wallet pass opens in Wallet, anything else in a preview. No .ics-to-calendar or .mobileconfig handling. |
 | Picture in picture, HTTP auth, certificate bypass | partial | Sign-in prompts for HTTP authentication; a page whose certificate can't be verified says so and lets the user continue to that host for the rest of the run. Page alerts, confirms and prompts show. Picture in picture is WebKit's default and not checked. |
-| Open in native app banner, "Open App Links in..." | missing | |
+| Open in native app banner, "Open App Links in..." | partial | "Open App Links in..." works (App Settings, Native App by default as in 1.36): a link tapped in a page to another site goes to the app that claims it as a universal link, otherwise it loads in Cra (`MobileAppLinks.offersApp`); typed addresses, redirects and same-site links stay. The banner can't be built: iOS doesn't tell a browser which apps are installed. UI test `testALinkNoAppClaimsLoadsHere` (needs the network). |
 | Handoff | done | The page on screen is offered to the user's other devices; never an incognito page. Not checked on a device. |
 
 ## Tabs

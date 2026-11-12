@@ -870,3 +870,17 @@ struct MobileTranslateTests {
         #expect(MobileTranslate.collectScript.contains("\\p{L}") && MobileTranslate.collectScript.contains("3000"))
     }
 }
+
+/// "Open App Links in...": which navigations are offered to an installed app first.
+struct MobileAppLinksTests {
+    @Test func onlyATappedLinkToAnotherSiteGoesToTheApp() {
+        let app = MobileAppLinks.nativeApp
+        #expect(app.offersApp(isLinkTap: true, isMainFrame: true, from: "https://news.ycombinator.com/", to: "https://www.youtube.com/watch?v=x"))
+        #expect(!app.offersApp(isLinkTap: false, isMainFrame: true, from: "https://news.ycombinator.com/", to: "https://www.youtube.com/watch?v=x"), "typed or redirected")
+        #expect(!app.offersApp(isLinkTap: true, isMainFrame: false, from: "https://a.example/", to: "https://www.youtube.com/"), "inside a frame")
+        #expect(!app.offersApp(isLinkTap: true, isMainFrame: true, from: "https://www.youtube.com/", to: "https://m.youtube.com/watch"), "same site")
+        #expect(!app.offersApp(isLinkTap: true, isMainFrame: true, from: "https://a.example/", to: "mailto:x@example.com"))
+        #expect(app.offersApp(isLinkTap: true, isMainFrame: true, from: nil, to: "https://www.youtube.com/"))
+        #expect(!MobileAppLinks.browser.offersApp(isLinkTap: true, isMainFrame: true, from: "https://a.example/", to: "https://www.youtube.com/"))
+    }
+}
