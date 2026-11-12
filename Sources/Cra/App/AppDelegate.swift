@@ -41,6 +41,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         guard !bootstrapped else { return }
         bootstrapped = true
         NSApp.setActivationPolicy(.regular)
+        // Before any window docks: window managers see one Cra window, not its page and panels (#391).
+        DockedWindowAccessibility.install()
         SystemAppearance.shared.start()
         installURLEventHandler()
         PerfCEF.install(app: self)

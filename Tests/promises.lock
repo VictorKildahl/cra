@@ -724,4 +724,6 @@
 #385   Packages/CraCore/Tests/CraCoreTests/PeekControlLookTests.swift::springsAreArcsInCoreAnimationTerms  5be9f378ea04
 #386   Tests/Scenarios/picked-tabs-split.scenario  cd33102969a4
 #387   Tests/Scenarios/favorite-mute.scenario  7b04a5025ba3
+#391   Tests/DockedWindowAccessibilityTests.swift::movesFindsTheBrowserWindow  b7cbb5a23a9d
+#391   Tests/DockedWindowAccessibilityTests.swift::movingADockedWindowMovesTheBrowser  2138e64da85d
 #399   Tests/EmojiLabelTests.swift::wholeEmojiWhenClipped  bec18dc87181

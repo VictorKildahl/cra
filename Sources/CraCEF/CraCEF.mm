@@ -3837,19 +3837,8 @@ static BOOL CraIsSystemHotKey(NSEvent* event) {
     [super sendEvent:event];
 }
 
-// Pages, DevTools and panels are child windows docked over the main window, and
-// the page is usually key. Window managers (Rectangle, Magnet, Raycast) move
-// the AX focused window, which tore the page off its dock instead of moving
-// Cra; hand them the top-level window the child belongs to.
-static id CraTopLevelWindow(id element) {
-    if (![element isKindOfClass:[NSWindow class]]) return element;
-    NSWindow* w = element;
-    while (w.parentWindow) w = w.parentWindow;
-    return w;
-}
-
-- (id)accessibilityFocusedWindow { return CraTopLevelWindow([super accessibilityFocusedWindow]); }
-- (id)accessibilityMainWindow { return CraTopLevelWindow([super accessibilityMainWindow]); }
+// Window managers are handed the top-level window, not a docked page or panel, by
+// DockedWindowAccessibility in the app (#391).
 
 // Cmd-Q, the Dock, logout: give the delegate a say, then tear Chromium down
 // in order (browsers first, then the message loop, then CefShutdown in main).
