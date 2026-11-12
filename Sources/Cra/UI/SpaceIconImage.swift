@@ -1,4 +1,5 @@
 import AppKit
+import ImageIO
 import UniformTypeIdentifiers
 
 /// A picture the user chose as a space's icon (not in Arc). The file is read once, scaled down to
@@ -44,7 +45,7 @@ enum SpaceIconImage {
         let key = data as NSData
         let base: NSImage
         if let hit = cache.object(forKey: key) { base = hit } else {
-            guard let made = NSImage(data: data) else { return nil }
+            guard isStoredPicture(data), let made = NSImage(data: data) else { return nil }
             cache.setObject(made, forKey: key)
             base = made
         }
@@ -54,18 +55,24 @@ enum SpaceIconImage {
         return copy
     }
 
+    /// Whether `data` is what `normalized` stores: a PNG no bigger than a few times its square. The
+    /// bytes come from sidebar.json, which another Mac's sync or a hand edit can fill, so anything
+    /// else (a PDF, an SVG, a huge bitmap) is never handed to a decoder.
+    static func isStoredPicture(_ data: Data) -> Bool {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              CGImageSourceGetType(source) as String? == UTType.png.identifier,
+              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let w = props[kCGImagePropertyPixelWidth] as? Int, let h = props[kCGImagePropertyPixelHeight] as? Int
+        else { return false }
+        return w > 0 && h > 0 && w <= 4 * pixels && h <= 4 * pixels
+    }
+
     /// A space's icon image: its picture, else its symbol (a template the caller tints). `points` is
     /// the symbol's size; a picture fills its square, so it is drawn a quarter larger, about what an
     /// emoji of that size covers.
     static func glyph(for space: Space, points: CGFloat, weight: NSFont.Weight = .medium) -> NSImage? {
         if let data = space.iconImage, !data.isEmpty { return image(data, points: (points * 1.25).rounded()) }
         return space.symbol.flatMap { SidebarSymbols.image($0, size: points, weight: weight) }
-    }
-
-    /// The first picture on a drop or the paste board, as normalized bytes.
-    static func normalized(fromFileURLs urls: [URL]) -> Data? {
-        for url in urls { if let d = normalized(from: url) { return d } }
-        return nil
     }
 
     /// Choose Image…: a sheet-less open panel; `completion` gets the bytes, or nothing on cancel.

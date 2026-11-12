@@ -64,6 +64,18 @@ struct SpaceIconTests {
         #expect(SpaceIcon(emoji: "🌱", symbol: nil, image: Data()) == .emoji("🌱"))
     }
 
+    /// A picture far past what the app stores came from somewhere else and is dropped, leaving the
+    /// emoji or symbol saved beside it.
+    @Test
+    func anOversizedPictureIsDropped() throws {
+        var s = Self.space(emoji: "🏠", symbol: nil)
+        s.iconImage = Data(count: Space.maxIconImageBytes + 1)
+        let back = try JSONDecoder().decode(Space.self, from: JSONEncoder().encode(s))
+        #expect(back.iconImage == nil && back.icon == .emoji("🏠"))
+        s.iconImage = Data(count: Space.maxIconImageBytes)
+        #expect(try JSONDecoder().decode(Space.self, from: JSONEncoder().encode(s)).icon == .image(Data(count: Space.maxIconImageBytes)))
+    }
+
     /// A sidebar.json written before picture icons has no `iconImage` key and loads as before.
     @Test
     func olderSpacesHaveNoPicture() throws {

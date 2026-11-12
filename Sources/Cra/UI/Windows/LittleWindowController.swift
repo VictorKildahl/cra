@@ -2535,9 +2535,9 @@ final class LittleSpacesPopup: NSView, NSTextFieldDelegate {
             emoji.alignment = .center
             emoji.frame = NSRect(x: -SidebarText.inset, y: (ts - 15) / 2 + 1, width: ts + 2 * SidebarText.inset, height: 15)
             tile.addSubview(emoji)
-            if let name = s.symbol {
+            if let image = SpaceIconImage.glyph(for: s, points: 11) {
                 let glyph = NSImageView(frame: NSRect(x: 0, y: 0, width: ts, height: ts))
-                glyph.image = SidebarSymbols.image(name, size: 11, weight: .medium)
+                glyph.image = image
                 glyph.imageScaling = .scaleNone
                 glyph.contentTintColor = .white
                 tile.addSubview(glyph)

@@ -49,7 +49,7 @@ struct ModelFixtureTests {
     }
 
     @Test(arguments: ["sidebar.json", "sidebar-legacy.json", "sidebar-stacked-icon.json", "sidebar-auto-theme.json",
-                     "sidebar-plugin-folder.json"])
+                     "sidebar-plugin-folder.json", "sidebar-image-icon.json"])
     func sidebarLoadsAsRecorded(name: String) throws {
         let (loaded, recorded) = try Self.load(name, as: SidebarDocument.self)
         #expect(loaded == recorded)
