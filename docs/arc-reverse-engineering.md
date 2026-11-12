@@ -848,6 +848,20 @@ Arc 1.172 binary (otool/llvm-objdump on the arm64 slice, 8 Nov, #246):
   Arc in the background, and its PiP window hides when Arc is made active.
 Cra follows the limits, the scrim, the fade, the insets and the Back to Tab words
 (`PictureInPictureLayout` in CraCore) and keeps its 782×440-on-1728×1117 opening size.
+Size and displays (12 Nov, the maintainer's decision; not Arc's numbers): Cra's window can grow to
+the display's whole visible frame, not Arc's 61.7 % of the screen's width. It always rests on one
+display: let go across two, it slides onto the one most of it is on; dragged to another display, it
+takes the same share of that display's width; a display unplugged or changed, it goes back onto one
+(`PictureInPictureLayout.rest`). Past the screen's edge it still springs into the corner (#332).
+[U] A user reports that Arc shows the window on one display at a time during a drag and moves it
+back when it is let go out of bounds; not observed here. `cra.log`: `pip: onto one display, …`.
+Chromium's cap (Chromium 156 `VideoOverlayWindowViews::UpdateMaxSize`, read in the source, 12 Nov):
+Chromium keeps its own maximum of 80 % of the work area. It cuts the window down to it when that
+maximum changes (the window's display changes, or its work area does), each side on its own, and
+when the video's natural size changes (`CalculateAndUpdateWindowBounds`, in the video's shape). A
+size set from AppKit is otherwise left alone. Cra puts its own size back after either cut
+(`PictureInPictureLayout.undoingChromiumCap`, scenario `pip-full-display`); `cra.log`:
+`pip: Chromium cut …`. A swipe onto another display takes the same share of its width as a drag.
 Double click (11 Nov, reported by a user): a double click on Arc's window returns to the video's tab.
 [O live] Arc 1.172.2, 12 Nov (PR #383 review): a real double click (cliclick) on a 242×136 PiP window
 of a playing file:// video took the window away and the page's video played on; a single click on
