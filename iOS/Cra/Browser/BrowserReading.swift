@@ -19,7 +19,7 @@ extension BrowserViewController {
             reader.frame = self.pageContainer.bounds
             reader.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             reader.alpha = 0
-            self.pageContainer.addSubview(reader)
+            self.pageContainer.insertSubview(reader, belowSubview: self.pageDim)
             self.readerView = reader
             UIView.animate(withDuration: 0.22) { reader.alpha = 1 }
         }
@@ -121,7 +121,7 @@ extension BrowserViewController {
         loading.tabID = id
         loading.frame = pageContainer.bounds
         loading.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        pageContainer.addSubview(loading)
+        pageContainer.insertSubview(loading, belowSubview: pageDim)
         browseLoading?.removeFromSuperview()
         browseLoading = loading
         let engine = settings.value.searchEngine

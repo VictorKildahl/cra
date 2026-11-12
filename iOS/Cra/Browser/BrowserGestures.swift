@@ -242,13 +242,12 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
     // MARK: The search sheet, dragged down
 
     @objc func sheetDragged(_ pan: UIPanGestureRecognizer) {
-        let canLeave = store.selected != nil || switcher != nil
         let y = max(0, pan.translation(in: view).y)
         switch pan.state {
         case .changed:
-            sheet.transform = CGAffineTransform(translationX: 0, y: canLeave ? y : y / 4)
+            sheet.transform = CGAffineTransform(translationX: 0, y: y)
         case .ended, .cancelled:
-            let leaves = pan.state == .ended && canLeave && (y > 70 || pan.velocity(in: view).y > 700)
+            let leaves = pan.state == .ended && (y > 70 || pan.velocity(in: view).y > 700)
             if leaves {
                 setSearching(false)
                 UIView.animate(withDuration: 0.25) { self.sheet.transform = .identity }

@@ -14,7 +14,10 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window.makeKeyAndVisible()
         self.window = window
         self.browser = browser
-        if let url = LaunchOptions.openURL ?? connectionOptions.urlContexts.first?.url.absoluteString {
+        let opened = connectionOptions.urlContexts.first?.url
+        if let action = opened.flatMap(LaunchAction.init(link:)) {
+            LaunchAction.pending = action
+        } else if let url = LaunchOptions.openURL ?? opened?.absoluteString {
             browser.loadViewIfNeeded()
             browser.open(url)
         }
@@ -32,7 +35,17 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
-        guard let url = URLContexts.first?.url else { return }
+        guard let context = URLContexts.first else { return }
+        let url = context.url
+        if url.scheme == "cra" {
+            guard var action = LaunchAction(link: url) else { return }
+            // Another app may bring the search sheet up, but not start the microphone: only
+            // Cra's own widget does that.
+            let fromElsewhere = context.options.sourceApplication.map { !$0.hasPrefix("dk.kildahl.cra") } ?? false
+            if fromElsewhere, action == .voiceSearch { action = .search(nil) }
+            LaunchAction.perform(action)
+            return
+        }
         browser?.open(url.absoluteString)
     }
 
@@ -50,26 +63,34 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 /// what voice search hears instead of the microphone (`-CraShowVoice YES` holds the voice overlay
 /// up with it, for a screenshot), `-CraOnboarding YES` to show onboarding on a test's data folder.
 enum LaunchOptions {
+    /// The argument after `-<name>` on the command line, exactly as given. (UserDefaults would
+    /// read it as a property list and drop quotes from it.)
+    static func value(_ name: String) -> String? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: "-" + name), index + 1 < arguments.count else { return nil }
+        return arguments[index + 1]
+    }
+
     /// Worked out once: every store of a launch shares the folder.
     static let dataDirectory: URL = {
-        guard let value = UserDefaults.standard.string(forKey: "CraDataDir") else { return TabStore.defaultDirectory }
+        guard let value = LaunchOptions.value("CraDataDir") else { return TabStore.defaultDirectory }
         if value == "fresh" {
             return FileManager.default.temporaryDirectory.appendingPathComponent("Cra-\(UUID().uuidString)", isDirectory: true)
         }
         return URL(fileURLWithPath: value, isDirectory: true)
     }()
 
-    static var openURL: String? { UserDefaults.standard.string(forKey: "CraOpenURL") }
-    static var typedText: String? { UserDefaults.standard.string(forKey: "CraType") }
-    static var skipsSearch: Bool { UserDefaults.standard.string(forKey: "CraSearch") == "NO" }
-    static var fakeModel: Bool { UserDefaults.standard.string(forKey: "CraFakeModel") == "YES" }
+    static var openURL: String? { LaunchOptions.value("CraOpenURL") }
+    static var typedText: String? { LaunchOptions.value("CraType") }
+    static var skipsSearch: Bool { LaunchOptions.value("CraSearch") == "NO" }
+    static var fakeModel: Bool { LaunchOptions.value("CraFakeModel") == "YES" }
     /// First launch shows onboarding; a test's own data folder skips it unless `-CraOnboarding YES`.
     static func showsOnboarding(seen: Bool) -> Bool {
-        if let asked = UserDefaults.standard.string(forKey: "CraOnboarding") { return asked == "YES" }
-        return !seen && UserDefaults.standard.string(forKey: "CraDataDir") == nil
+        if let asked = LaunchOptions.value("CraOnboarding") { return asked == "YES" }
+        return !seen && LaunchOptions.value("CraDataDir") == nil
     }
 
-    static var fakeVoice: String? { UserDefaults.standard.string(forKey: "CraFakeVoice") }
-    static var showsVoiceOverlay: Bool { UserDefaults.standard.string(forKey: "CraShowVoice") == "YES" }
-    static var summarizesFirstPage: Bool { UserDefaults.standard.string(forKey: "CraSummarize") == "YES" }
+    static var fakeVoice: String? { LaunchOptions.value("CraFakeVoice") }
+    static var showsVoiceOverlay: Bool { LaunchOptions.value("CraShowVoice") == "YES" }
+    static var summarizesFirstPage: Bool { LaunchOptions.value("CraSummarize") == "YES" }
 }

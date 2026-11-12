@@ -552,3 +552,69 @@ final class OnboardingTests: BrowserTestCase {
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
     }
 }
+
+final class PageBasicsTests: BrowserTestCase {
+    // XCUITest drops quotes from launch arguments, so these pages are written without any.
+
+    /// A download link saves the file, says so above the bar, and lists it under Settings ▸ Downloads;
+    /// downloading it again keeps both, the second one numbered.
+    func testADownloadIsSavedAnnouncedAndListed() {
+        let page = "data:text/html,<meta name=viewport content=width=device-width><title>Files</title><h1>Files</h1>"
+            + "<a href=data:text/plain,hello download=hello.txt style=font-size:40px>Get file</a>"
+        launch(["-CraOpenURL", page, "-CraSearch", "NO"])
+        waitForPage("Files")
+        app.webViews.links["Get file"].tap()
+        let toast = app.buttons["download-toast"]
+        XCTAssertTrue(toast.waitForExistence(timeout: 10))
+        XCTAssertTrue(toast.label.contains("hello"))
+        keep("download-toast")
+        sleep(5)
+        app.webViews.links["Get file"].tap()
+        XCTAssertTrue(app.buttons["download-toast"].waitForExistence(timeout: 10))
+        app.buttons["bar-tabs"].tap()
+        app.buttons["bar-settings"].tap()
+        app.buttons["settings-downloads"].tap()
+        let rows = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'download-row-hello'"))
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertEqual(rows.count, 2)
+        XCTAssertTrue(app.buttons["download-row-hello 2.txt"].exists, "the second copy is numbered, not written over the first")
+        keep("downloads")
+    }
+
+    /// A page's alert shows with its message and goes away on OK; the tap that raised it went
+    /// through the browser's own swipe and pinch recognizers to the page.
+    func testAPagesAlertShows() {
+        let page = "data:text/html,<meta name=viewport content=width=device-width><title>Dialogs</title><h1>Dialogs</h1>"
+            + "<button onclick=alert(1234) style=font-size:40px>Say hi</button>"
+        launch(["-CraOpenURL", page, "-CraSearch", "NO"])
+        waitForPage("Dialogs")
+        app.webViews.buttons["Say hi"].tap()
+        XCTAssertTrue(app.alerts.staticTexts["1234"].waitForExistence(timeout: 5))
+        app.alerts.buttons["OK"].tap()
+        XCTAssertFalse(app.alerts.firstMatch.waitForExistence(timeout: 1))
+    }
+}
+
+final class EmptyHomeTests: BrowserTestCase {
+    /// With no tabs the search sheet can still be put away: what is left is the empty home
+    /// screen, whose logo spins when it is flicked, and the pill brings the sheet back.
+    func testTheEmptyHomeScreenHasALogoThatSpins() {
+        launch()
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        let start = field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 200)), withVelocity: .fast, thenHoldForDuration: 0)
+        let logo = app.images["logo"]
+        XCTAssertTrue(logo.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["bar-search"].exists)
+        XCTAssertEqual(logo.value as? String, "0.0 turns")
+        // A flick across its right-hand side, downwards: clockwise.
+        let from = logo.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.2))
+        from.press(forDuration: 0.05, thenDragTo: logo.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.9)), withVelocity: .fast, thenHoldForDuration: 0)
+        sleep(1)
+        keep("empty-home")
+        XCTAssertNotEqual(logo.value as? String, "0.0 turns")
+        app.buttons["bar-search"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+    }
+}

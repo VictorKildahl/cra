@@ -19,6 +19,8 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     private var lastOffset: CGFloat = 0
     private let pullIndicator = UIImageView(image: UIImage(systemName: "arrow.clockwise", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)))
 
+    /// Hosts whose unverifiable certificate the user chose to go on with, for this run of the app.
+    static var certificateExceptions = MobileCertificateExceptions()
     /// Browse for Me is making this tab's page.
     var isBrowsing = false
     private(set) var isLoading = false
@@ -149,6 +151,9 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, preferences: WKWebpagePreferences,
                  decisionHandler: @escaping (WKNavigationActionPolicy, WKWebpagePreferences) -> Void) {
         preferences.preferredContentMode = wantsDesktopSite ? .desktop : .mobile
+        if navigationAction.shouldPerformDownload {
+            return decisionHandler(.download, preferences)
+        }
         if navigationAction.targetFrame?.isMainFrame == true {
             applyBlocking(for: navigationAction.request.url)
         }
@@ -170,6 +175,7 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        _ = offerCertificateBypass(for: error)
         delegate?.webPage(self, didFinishLoading: false)
     }
 

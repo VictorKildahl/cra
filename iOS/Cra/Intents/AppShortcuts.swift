@@ -7,6 +7,7 @@ enum LaunchAction: Equatable {
     case search(String?)
     case voiceSearch
     case changeIcon
+    case spaces
 
     static let notification = Notification.Name("CraLaunchAction")
     /// Set before the browser exists; it picks it up when it appears.
@@ -15,6 +16,18 @@ enum LaunchAction: Equatable {
     static func perform(_ action: LaunchAction) {
         pending = action
         NotificationCenter.default.post(name: notification, object: nil)
+    }
+
+    /// A widget's link: `cra://search`, `cra://voice`, `cra://spaces`. Nothing else in the `cra`
+    /// scheme does anything, so a page or another app can't steer the browser through it.
+    init?(link: URL) {
+        guard link.scheme == "cra" else { return nil }
+        switch link.host {
+        case "search": self = .search(nil)
+        case "voice": self = .voiceSearch
+        case "spaces": self = .spaces
+        default: return nil
+        }
     }
 
     /// A home-screen quick action's type, as Info.plist names it.

@@ -14,7 +14,7 @@ enum SyncedSidebar {
     }
 
     private static var folder: URL? {
-        if let path = UserDefaults.standard.string(forKey: "CraSyncDir") {
+        if let path = LaunchOptions.value("CraSyncDir") {
             return URL(fileURLWithPath: path, isDirectory: true)
         }
         return FileManager.default.url(forUbiquityContainerIdentifier: nil)?
@@ -56,7 +56,7 @@ enum SyncedSidebar {
     }
 
     private static func read() -> State {
-        if UserDefaults.standard.string(forKey: "CraSyncDir") == "demo" { return .spaces(demo()) }
+        if LaunchOptions.value("CraSyncDir") == "demo" { return .spaces(demo()) }
         guard let folder else { return .unavailable }
         let file = folder.appendingPathComponent(SettingsSync.sidebarName)
         let manager = FileManager.default

@@ -613,3 +613,73 @@ struct MobileOnboardingTests {
         #expect(MobileAppIcon.mono.previewName == "AppIcon-Mono-Preview")
     }
 }
+
+struct MobileDownloadsTests {
+    /// Arc Search 1.16: downloads get sequential numbers so files aren't overwritten.
+    @Test func aRepeatedDownloadIsNumberedNotOverwritten() {
+        #expect(MobileDownloads.freeName(for: "report.pdf", taken: []) == "report.pdf")
+        #expect(MobileDownloads.freeName(for: "report.pdf", taken: ["report.pdf"]) == "report 2.pdf")
+        #expect(MobileDownloads.freeName(for: "report.pdf", taken: ["report.pdf", "report 2.pdf"]) == "report 3.pdf")
+        #expect(MobileDownloads.freeName(for: "README", taken: ["README"]) == "README 2")
+        #expect(MobileDownloads.freeName(for: "archive.tar.gz", taken: ["archive.tar.gz"]) == "archive.tar 2.gz")
+    }
+
+    @Test func aNameCannotLeaveTheFolderOrHide() {
+        #expect(MobileDownloads.safeName("../../etc/passwd") == "_.._etc_passwd")
+        #expect(MobileDownloads.safeName(".hidden") == "hidden")
+        #expect(MobileDownloads.safeName("  ") == "Download")
+    }
+
+    @Test func theListKeepsNewestFirstAndSaysWhereAFileCameFrom() throws {
+        var downloads = MobileDownloads()
+        let old = MobileDownloads.Item(name: "a.pdf", source: "https://www.example.com/a.pdf", date: Date(timeIntervalSince1970: 1), bytes: 2_048)
+        let new = MobileDownloads.Item(name: "b.pkpass", source: "https://tickets.example/b", date: Date(timeIntervalSince1970: 2), bytes: 10)
+        downloads.add(old)
+        downloads.add(new)
+        #expect(downloads.items.map(\.name) == ["b.pkpass", "a.pdf"])
+        #expect(MobileDownloads.detail(for: old).hasPrefix("example.com · "))
+        #expect(MobileDownloads.opening(forName: "b.pkpass") == .walletPass)
+        #expect(MobileDownloads.opening(forName: "a.PDF") == .preview)
+        downloads.remove([new.id])
+        let saved = try JSONEncoder().encode(downloads)
+        #expect(try JSONDecoder().decode(MobileDownloads.self, from: saved) == downloads)
+    }
+
+    @Test func aCertificateExceptionIsForOneHost() {
+        var exceptions = MobileCertificateExceptions()
+        exceptions.allow("Self-Signed.Example")
+        #expect(exceptions.allows("self-signed.example"))
+        #expect(!exceptions.allows("other.example"))
+    }
+}
+
+struct MobileFidgetTests {
+    @Test func theSpinSlowsDownAndStops() {
+        var angle = 0.0, speed = MobileFidget.launchSpeed(angularVelocity: 200)
+        #expect(speed == 60)
+        var seconds = 0.0
+        while MobileFidget.isSpinning(speed: speed) {
+            (angle, speed) = MobileFidget.step(angle: angle, speed: speed, elapsed: 1.0 / 60)
+            seconds += 1.0 / 60
+        }
+        #expect(seconds > 4 && seconds < 7)
+        #expect(angle > 60)
+    }
+
+    @Test func itSettlesUprightOnTheTurnItWasHeadingFor() {
+        #expect(abs(MobileFidget.restAngle(from: 7, speed: 1) - 4 * Double.pi) < 1e-9)
+        #expect(abs(MobileFidget.restAngle(from: 7, speed: -1) - 2 * Double.pi) < 1e-9)
+        #expect(MobileFidget.restAngle(from: -1, speed: -1) == -2 * Double.pi)
+        #expect(MobileFidget.quarterTurns(from: 0, to: 3.3) == 2)
+    }
+
+    /// Arc Search pushes the page back as a card under the status bar while the sheet is up:
+    /// 10 pt in from each side on a 393 pt screen.
+    @Test func thePageSitsBehindTheSearchSheetAsACard() {
+        let placed = MobilePageBehindSearch.transform(in: CGSize(width: 393, height: 852), safeTop: 59)
+        #expect(abs(placed.scale - 373.0 / 393) < 1e-9)
+        // The scaled page's top edge: half the lost height, plus the shift.
+        let top = 852 * (1 - placed.scale) / 2 + placed.shiftDown
+        #expect(abs(top - 59) < 1e-9)
+    }
+}

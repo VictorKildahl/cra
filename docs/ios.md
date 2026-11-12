@@ -49,6 +49,18 @@ Launch arguments put the app in a state for a screenshot or a test:
 | `-CraOpenURL <address>` | Starts with that page in a tab |
 | `-CraType <text>` | Starts with that typed in the search field |
 | `-CraSearch NO` | Launches without the search sheet |
+| `-CraFakeModel YES` | Canned answers in place of the on-device model |
+| `-CraSummarize YES` | Summarizes the first page once it has loaded |
+| `-CraSyncDir <folder>` or `demo` | The folder the Mac's sidebar syncs into, or a made-up sidebar |
+| `-CraFakeVoice <text>` | What voice search hears instead of the microphone |
+| `-CraShowVoice YES` | Holds the voice overlay up, for a screenshot |
+| `-CraOnboarding YES` | Shows onboarding on a test's data folder |
+
+Writing a UI test (`iOS/CraUITests`): pages are `data:` addresses passed with `-CraOpenURL`, so
+no test needs the network. XCUITest drops quotes from launch arguments, so a test page has none
+(`<button onclick=alert(1234)>`, not `alert('hi')`), and typed addresses have no spaces
+(attributes separated by slashes). Web content changed by script does not reach the test's view
+of the page: assert on native UI instead (a menu label, a tab card's title).
 
 Data lives in the app's `Application Support/Cra`: `tabs.json` (open and archived tabs),
 `settings.json`, and `Snapshots/` with each tab's last picture.

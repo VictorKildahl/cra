@@ -8,6 +8,41 @@ Status: **done** = built and compared with the reference; **partial** = some of 
 **missing** = nothing yet; *skip* = left out on purpose (account, cloud AI, a service that
 ended). "Measured" means the numbers come from Arc Search footage, not from a description.
 
+## Where this stopped (12 November 2026)
+
+Work was paused mid-way. The branch is `ios-app`, in the worktree `../cra-ios`; nothing is
+pushed. Pick up here.
+
+**State of the tests.** The whole UI suite last ran green at 21 tests (commit `65f6e168`).
+Added after that and passed when run on their own: voice search, onboarding, and the page
+alert. Not confirmed: the download test (the download and its toast work, seen in a
+screenshot; the test was not run again after the toast's fade was fixed) and the empty home
+test (written, never run). The CraCore tests (`--filter Mobile`, 64) pass. Run the suite in
+two halves (it takes more than ten minutes whole), and do not edit sources while it runs: twice
+a run hung with the simulator shut down when files changed under it.
+
+**In the last commit, built but not verified in the running app:**
+- the empty home screen (the sheet can be put away with no tabs) and the logo that spins
+- the page pushed back as a dimmed card behind the search sheet
+- the widget extension (`iOS/CraWidgets`) and its links `cra://search`, `cra://voice`, `cra://spaces`
+- the certificate warning, HTTP sign-in, link long-press menu and Handoff
+
+**Next, in this order:**
+1. Run both halves of the UI suite; fix what the new work broke; look at the two new screens.
+2. Look at the widgets in the simulator's widget gallery.
+3. Translate (on-device Translation framework; it does not run in the simulator).
+4. Search sheet details: two-line suggestions, site matches, scrolling through suggestions.
+5. Browse for Me: the floating toggle to the search engine, Browse for Me as a search engine.
+6. iCloud entitlement for Spaces, then writing pins back to the Mac ("Pin to Space:").
+7. Share extension; Languages; custom search engines; iPad and landscape; dark mode against a reference.
+8. Motion still unmeasured: the pill growing into the search field, the summarize fold.
+
+**The reference.** Arc Search cannot be installed in the simulator (no App Store there, no Mac
+build). The footage and screenshots used are in `build/ios-reference/` of the worktree (not in
+git); [arc-search-reference.md](arc-search-reference.md) lists more. On 23 November 2026 Arc
+Search's Browse for Me, summaries and sync are switched off, so anything to be recorded from
+the real app on an iPhone has to be recorded before then.
+
 ## Search and launch
 
 | Arc Search | Cra | Notes |
@@ -23,12 +58,13 @@ ended). "Measured" means the numbers come from Arc Search footage, not from a de
 | "Browse for Me" button on each search row | done | Shown only where Apple Intelligence is on. |
 | Pill grows into the search field | partial | The morph exists; timing and the side icons' fade are not compared yet. |
 | Tap above the sheet closes it | done | UI test `testThePillOpensSearchAndATapAboveClosesIt`. |
+| Page pushed back as a dimmed card behind the sheet | partial | Placed from the TidBITS screenshot (`MobilePageBehindSearch`): 10 pt in from each side, top under the status bar. Built, not yet verified in the app. |
 | Swipe the sheet down to close | done | The sheet follows the finger; the keyboard leaves on release. |
 | Incognito toggle in the field | done | The sheet turns dark with "Incognito" beside the mask, "You're browsing Incognito" and the dark keyboard; colours from the store screenshot. Suggestions are not fetched while it is on. |
 | Voice search (hold the pill, mic in the field) | partial | Hold the pill and speak; letting go searches for what was heard (`VoiceSearch`, `VoiceOverlayView`): dimmed page, glow, smiley, "Hi! How can I help?", the words in a capsule, dots that move with the voice. Speech is recognized on the device only. Built from a description and one small picture, not measured. No separate mic button in the field (the keyboard's dictation key is there), no widget or shortcut yet. |
 | Call Arc | *skip* | Removed from Arc Search itself. |
 | Default search engine: Google, Bing, DuckDuckGo, Ecosia, Perplexity, Kagi, custom | partial | The six engines in App Settings ▸ Search Engine (`MobileSearchEngine`); no custom engines, no "Browse for Me" as an engine. |
-| Fidget-spinner logo | missing | |
+| Fidget-spinner logo | partial | The mark on the empty home screen spins when flicked, slows and settles upright (`MobileFidget`, `FidgetLogoView`). Built, not yet verified in the app. |
 
 ## Browse for Me
 
@@ -61,13 +97,13 @@ ended). "Measured" means the numbers come from Arc Search footage, not from a de
 | Pinch to Summarize / Summarize | partial | The tile and the pinch summarize with the device's own model (`MobileSummary`, `Summarizer`): the page shrinks into its folded card, then the overview and titled sections, "Summarized for you by Cra" and the close button. Follows the site's Pinch to Summarize switch. The origami fold itself, the wiggle while loading, and copy/share of the summary are not built. |
 | Block ads, trackers, cookie banners, per site | done | The Mac app's domain list compiled into WebKit content rules (`MobileBlocklist`), cookie banners hidden by their containers; each page gets the lists its site's switches ask for. The list does not say which domain is an ad and which a tracker, so the split is by name. Cookie prompts are hidden, not answered (Arc Search 1.38 denies them). |
 | "Reload without ad blockers", blocked count | done | The tab shows the site unblocked until it leaves it. The footer counts requests to listed domains that failed while their blocker was on. UI test in `BlockingTests`. |
-| Link long-press preview and menu | partial | WebKit's default preview. |
+| Link long-press preview and menu | partial | Open, Open in New Tab, Copy Link (without trackers), Share. Arc Search's own items and its website preview were not seen. |
 | Hold the up arrow for the share sheet | done | |
 | New-window links open a tab | done | |
-| Downloads, Wallet passes, .ics | missing | |
-| Picture in picture, HTTP auth, certificate bypass | missing | |
+| Downloads, Wallet passes, .ics | partial | Files go to Documents/Downloads (shown in the Files app), numbered when a name is taken (`MobileDownloads`), announced above the bar and listed under Settings ▸ Downloads; a Wallet pass opens in Wallet, anything else in a preview. No .ics-to-calendar or .mobileconfig handling. |
+| Picture in picture, HTTP auth, certificate bypass | partial | Sign-in prompts for HTTP authentication; a page whose certificate can't be verified says so and lets the user continue to that host for the rest of the run. Page alerts, confirms and prompts show. Picture in picture is WebKit's default and not checked. |
 | Open in native app banner, "Open App Links in..." | missing | |
-| Handoff | missing | |
+| Handoff | done | The page on screen is offered to the user's other devices; never an incognito page. Not checked on a device. |
 
 ## Tabs
 
@@ -98,7 +134,7 @@ ended). "Measured" means the numbers come from Arc Search footage, not from a de
 | Arc Search | Cra | Notes |
 |---|---|---|
 | Site Settings sheet | done | Same rows and order; 465 pt tall over the page menu. Compared with a late-2024 screenshot. |
-| App Settings | partial | Archive, Global Site Settings, default browser, Search Engine, Archive Inactive Tabs, keyboard on launch, Open App Links in..., App Icon, Clear Browsing Data, Export Data, Show Onboarding. No Downloads or Languages yet. The order below Archive Inactive Tabs is a guess: no source shows it. |
+| App Settings | partial | Downloads, Archive, Global Site Settings, default browser, Search Engine, Archive Inactive Tabs, keyboard on launch, Open App Links in..., App Icon, Clear Browsing Data, Export Data, Show Onboarding. No Languages yet. The order below Archive Inactive Tabs is a guess: no source shows it. |
 | Clear Data sheet | done | |
 | Onboarding | partial | Arc Search's steps and words (`MobileOnboarding`): welcome on the vivid gradient, "Meet your new favorite browser" with its four cards, the Browse for Me step where the device can, the icon grid, "Block Ads and Trackers", the default browser with Skip. The try-it demos (tapping Browse for Me, the pinch tip with its check mark) and the gradient's own transition are simplified. Settings ▸ Show Onboarding brings it back. |
 | Alternate app icons | done | Cra's four (`MobileAppIcon`), rendered for iOS by `scripts/make-app-icons.swift --ios`; picked in onboarding and in Settings ▸ App Icon. Arc Search's glass dock picker was not seen. |
@@ -108,7 +144,7 @@ ended). "Measured" means the numbers come from Arc Search footage, not from a de
 | Arc Search | Cra | Notes |
 |---|---|---|
 | Default browser | partial | Declares http/https; the `com.apple.developer.web-browser` entitlement needs Apple's approval. |
-| Widgets (small, medium, Lock Screen) | missing | |
+| Widgets (small, medium, Lock Screen) | partial | `iOS/CraWidgets`: small (mark and a search field), medium (search field, Voice, Spaces), Lock Screen circular and rectangular. Built and embedded; not looked at in the widget gallery yet. Arc Search's own widget was seen only as a small picture. |
 | App Shortcuts, quick actions | done | "Search with Cra" and "Voice Search with Cra" for Siri, Spotlight and the Action button (`AppShortcuts.swift`); home-screen quick actions Change App Icon, Voice Search, Search. Not exercised by a test: they are started from outside the app. |
 | iPad layout | partial | Runs; nothing iPad-specific. |
 | Landscape | partial | Rotates; not checked. |

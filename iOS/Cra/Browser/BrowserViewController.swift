@@ -13,8 +13,11 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     lazy var favorites = FavoritesStore(directory: LaunchOptions.dataDirectory)
 
     let backdrop = BackdropView()
-    let logo = UIImageView(image: UIImage(named: "LaunchMark"))
-    let pageContainer = UIView()
+    let logo = FidgetLogoView(image: UIImage(named: "LaunchMark"))
+    let pageContainer = PassthroughView()
+    /// Darkens the page while it sits pushed back behind the search sheet.
+    let pageDim = UIView()
+    var pagePushedBack = false
     let dismissArea = UIControl()
     let bar = BottomBar()
     let sheet = SearchSheet()
@@ -56,9 +59,14 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
         view.addSubview(backdrop)
-        logo.contentMode = .scaleAspectFit
         view.addSubview(logo)
         view.addSubview(pageContainer)
+        pageDim.backgroundColor = .black
+        pageDim.alpha = 0
+        pageDim.isUserInteractionEnabled = false
+        pageContainer.addSubview(pageDim)
+        pageContainer.layer.cornerCurve = .continuous
+        pageContainer.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
 
         dismissArea.addTarget(self, action: #selector(dismissSearch), for: .touchUpInside)
         dismissArea.isHidden = true
@@ -84,6 +92,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         center.addObserver(self, selector: #selector(performLaunchAction), name: LaunchAction.notification, object: nil)
 
         ContentBlocker.shared.prepare()
+        DownloadManager.shared.load(from: LaunchOptions.dataDirectory)
+        DownloadManager.shared.onFinish = { [weak self] item in self?.downloadFinished(item) }
         store.archiveStale(after: settings.value.archiveAfter)
         if let tab = store.selected { show(tab) }
         refreshTabStack()
@@ -136,11 +146,31 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     func layoutChrome() {
         let bounds = view.bounds
         backdrop.frame = bounds
-        pageContainer.frame = bounds
+        // Bounds and centre, not frame: the container may be transformed (pushed back, swiped).
+        pageContainer.bounds = CGRect(origin: .zero, size: bounds.size)
+        pageContainer.center = CGPoint(x: bounds.midX, y: bounds.midY)
         switcher?.frame = bounds
         shownPage?.webView.frame = pageContainer.bounds
+        pageDim.frame = pageContainer.bounds
         let logoSide: CGFloat = 132
-        logo.frame = CGRect(x: bounds.midX - logoSide / 2, y: bounds.height * 0.505 - logoSide / 2, width: logoSide, height: logoSide)
+        logo.bounds = CGRect(x: 0, y: 0, width: logoSide, height: logoSide)
+        logo.center = CGPoint(x: bounds.midX, y: bounds.height * 0.505)
+
+        // While the search sheet is up over a page, the page sits back as a dimmed card under
+        // the status bar (Arc Search's look; `MobilePageBehindSearch`).
+        if isSearching, shownPage != nil, switcher == nil {
+            let placed = MobilePageBehindSearch.transform(in: bounds.size, safeTop: view.safeAreaInsets.top)
+            pageContainer.transform = CGAffineTransform(translationX: 0, y: placed.shiftDown).scaledBy(x: placed.scale, y: placed.scale)
+            pageContainer.layer.cornerRadius = MobilePageBehindSearch.cornerRadius / placed.scale
+            pageContainer.clipsToBounds = true
+            pageDim.alpha = MobilePageBehindSearch.dim
+            pagePushedBack = true
+        } else if pagePushedBack {
+            pageContainer.transform = .identity
+            pageContainer.layer.cornerRadius = 0
+            pageDim.alpha = 0
+            pagePushedBack = false
+        }
 
         let safeBottom = view.safeAreaInsets.bottom
         let frames = MobileBottomBar.frames(in: bounds.size, safeBottom: safeBottom)
@@ -212,9 +242,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         setSearching(true, incognito: store.selected?.isIncognito ?? false)
     }
 
+    /// Puts the sheet away. With no page behind it that leaves the empty home screen: the
+    /// backdrop, the logo and the bar.
     @objc func dismissSearch() {
-        // With no page or tab row to go back to, the sheet stays: there is nothing else to show.
-        guard store.selected != nil || switcher != nil else { return }
         setSearching(false)
     }
 
@@ -314,7 +344,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         page.delegate = self
         page.webView.allowsBackForwardNavigationGestures = false
         page.webView.frame = pageContainer.bounds
-        pageContainer.addSubview(page.webView)
+        pageContainer.insertSubview(page.webView, belowSubview: pageDim)
         if page.webView.url == nil, !page.isBrowsing {
             if let query = MobileBrowseForMe.query(fromTabAddress: tab.url) {
                 browse(for: query, in: page)
@@ -324,7 +354,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         }
         if let browseLoading {
             browseLoading.isHidden = browseLoading.tabID != page.tabID
-            pageContainer.bringSubviewToFront(browseLoading)
+            pageContainer.insertSubview(browseLoading, belowSubview: pageDim)
         }
         barHiddenByScroll = false
         scrollTravel = 0
@@ -484,6 +514,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         case .voiceSearch:
             setSearching(false)
             beginVoiceSearch(handsFree: true)
+        case .spaces:
+            setSearching(false)
+            showSpaces()
         case .changeIcon:
             let picker = UINavigationController(rootViewController: UIHostingController(rootView: AppIconPicker()))
             picker.sheetPresentationController?.detents = [.medium(), .large()]
@@ -542,6 +575,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         model.done = { [weak self] in self?.dismiss(animated: true) }
         model.showArchive = { [weak self] in self?.showArchive() }
         model.showOnboarding = { [weak self] in self?.showOnboarding() }
+        model.showDownloads = { [weak self] in self?.showDownloads() }
         model.exportData = { [weak self] in
             guard let self else { return }
             let share = UIActivityViewController(activityItems: [self.store.document.exportText], applicationActivities: nil)
@@ -567,6 +601,67 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         sheet.sheetPresentationController?.prefersGrabberVisible = true
         sheet.view.backgroundColor = .clear
         topPresenter.present(sheet, animated: true)
+    }
+
+    // MARK: Handoff
+
+    /// Offers the page on screen to the user's other devices. Never an incognito page.
+    func offerHandoff(for page: WebPage) {
+        let incognito = store.tabs.first { $0.id == page.tabID }?.isIncognito ?? false
+        guard !incognito, let url = page.webView.url, url.scheme == "https" || url.scheme == "http" else {
+            userActivity?.invalidate()
+            userActivity = nil
+            return
+        }
+        let activity = userActivity ?? NSUserActivity(activityType: NSUserActivityTypeBrowsingWeb)
+        activity.webpageURL = url
+        userActivity = activity
+        activity.becomeCurrent()
+    }
+
+    // MARK: Downloads
+
+    @objc func showDownloads() {
+        let model = DownloadsModel()
+        model.done = { [weak self] in self?.dismiss(animated: true) }
+        model.open = { [weak self] item in
+            guard let self else { return }
+            DownloadManager.shared.open(item, from: self.topPresenter)
+        }
+        let sheet = UIHostingController(rootView: DownloadsView(model: model))
+        sheet.sheetPresentationController?.prefersGrabberVisible = true
+        topPresenter.present(sheet, animated: true)
+    }
+
+    /// A finished download says so in a capsule above the bar; a tap opens the file.
+    func downloadFinished(_ item: MobileDownloads.Item) {
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        let toast = UIButton(type: .system)
+        var configuration = UIButton.Configuration.filled()
+        configuration.title = "Downloaded \(item.name)"
+        configuration.image = UIImage(systemName: "arrow.down.circle.fill")
+        configuration.imagePadding = 8
+        configuration.cornerStyle = .capsule
+        configuration.baseBackgroundColor = Palette.dynamic(light: Palette.rgb(0x2d2c31), dark: Palette.rgb(0xececee))
+        configuration.baseForegroundColor = Palette.dynamic(light: .white, dark: .black)
+        configuration.titleLineBreakMode = .byTruncatingMiddle
+        toast.configuration = configuration
+        toast.accessibilityIdentifier = "download-toast"
+        toast.addAction(UIAction { [weak self, weak toast] _ in
+            toast?.removeFromSuperview()
+            guard let self else { return }
+            DownloadManager.shared.open(item, from: self.topPresenter)
+        }, for: .touchUpInside)
+        let width = min(view.bounds.width - 40, 320)
+        toast.frame = CGRect(x: (view.bounds.width - width) / 2, y: bar.frame.minY - 54, width: width, height: 42)
+        toast.alpha = 0
+        view.addSubview(toast)
+        UIView.animate(withDuration: 0.25) { toast.alpha = 1 }
+        // Faded later by a timer, not a delayed animation: that would set the alpha to zero at
+        // once and hide the toast from VoiceOver for the whole time it is on screen.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak toast] in
+            UIView.animate(withDuration: 0.3) { toast?.alpha = 0 } completion: { _ in toast?.removeFromSuperview() }
+        }
     }
 
     /// The controller on top, so a sheet can be put over another sheet.
@@ -705,6 +800,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             // Reader belongs to the page it was opened on.
             if page.isLoading { closeReader() }
         }
+        if page === shownPage { offerHandoff(for: page) }
         // A Browse for Me page has no address of its own: the tab keeps the one that names its query.
         let address = page.webView.url?.absoluteString
         store.update(page.tabID, url: address == "about:blank" ? nil : address, title: page.webView.title)

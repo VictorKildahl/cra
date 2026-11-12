@@ -10,6 +10,7 @@ final class SettingsModel: ObservableObject {
     let host: String?
     let canSummarize: Bool
     var showArchive: () -> Void = {}
+    var showDownloads: () -> Void = {}
     var clearData: (_ history: Bool, _ siteData: Bool) -> Void = { _, _ in }
     var exportData: () -> Void = {}
     var showOnboarding: () -> Void = {}
@@ -203,6 +204,7 @@ struct AppSettingsList: View {
         List {
             Section {
                 HStack(spacing: 10) {
+                    capsule("Downloads", symbol: "folder", id: "settings-downloads") { model.showDownloads() }
                     capsule("Archive", symbol: "archivebox", id: "settings-archive") { model.showArchive() }
                 }
                 .listRowInsets(EdgeInsets())
