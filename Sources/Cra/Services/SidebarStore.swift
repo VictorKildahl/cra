@@ -585,6 +585,8 @@ final class SidebarStore {
             var t = TabData(url: url, title: title)
             t.activeTabBeforeCreationID = selectedTabID(in: sid, window: window)
             t.referrerID = referrer
+            // A background tab joins ⌃Tab's recent tabs when opened, as in Arc.
+            if !select { t.timeLastActiveAt = clock.now }
             return t
         }())
         tab.isUnread = !select
@@ -862,10 +864,15 @@ final class SidebarStore {
 
     /// The tab switcher's list (⌃Tab): a space's most recently used tabs, newest first
     /// (Arc shows five, the current tab first).
-    func recentTabs(in sid: UUID, limit: Int) -> [UUID] {
-        visibleTabs(in: sid)
+    func recentTabs(in sid: UUID, limit: Int, window: UUID? = nil) -> [UUID] {
+        // A tab opened in the background since is newer than the current one, which still comes first.
+        let current = selectedTabID(in: sid, window: window)
+        return visibleTabs(in: sid)
             .filter { $0.tab?.timeLastActiveAt != nil }
-            .sorted { $0.tab!.timeLastActiveAt! > $1.tab!.timeLastActiveAt! }
+            .sorted { a, b in
+                if (a.id == current) != (b.id == current) { return a.id == current }
+                return a.tab!.timeLastActiveAt! > b.tab!.timeLastActiveAt!
+            }
             .prefix(limit).map(\.id)
     }
 

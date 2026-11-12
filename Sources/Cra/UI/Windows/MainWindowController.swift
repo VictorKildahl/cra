@@ -2296,7 +2296,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// The space's open tabs, the latest first. A pinned tab that was closed (unloaded) isn't
     /// open: ⌃Tab doesn't list it.
     private func openRecentTabs(limit: Int) -> [UUID] {
-        Array(store.recentTabs(in: focusedSpaceID, limit: .max)
+        Array(store.recentTabs(in: focusedSpaceID, limit: .max, window: windowID)
             .filter { $0 == selectedTabID || !store.isPinned($0) || app.runtime(for: $0) != nil }
             .prefix(limit))
     }
