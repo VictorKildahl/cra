@@ -155,8 +155,11 @@ final class ShellView: NSView {
     /// Whether the card's bar floats over its page instead of sitting above it.
     var toolbarFloats: Bool { floats(panes: paneCards.count, fullscreen: contentFullscreen) }
     private func floats(panes: Int, fullscreen: Bool) -> Bool {
+        // With pages in their own windows (embedPages off) the page is a window over the card,
+        // as with DevTools open, and a bar in the card can't float over it.
         ToolbarAutoHide.floats(enabled: autoHideToolbar, toolbarShown: barsShown(panes: panes, fullscreen: fullscreen), panes: panes,
-                               developerBar: paneCards.first?.developerBar != nil, devToolsOpen: devToolsVisible, pageFullscreen: fullscreen)
+                               developerBar: paneCards.first?.developerBar != nil,
+                               devToolsOpen: devToolsVisible || !EmbeddedPages.isEnabled, pageFullscreen: fullscreen)
     }
     /// Whether the bars take room above their pages: shown, and not floating over them.
     var barsTakeRoom: Bool { panesShowBars && !toolbarFloats }
