@@ -30,15 +30,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var littleWindowLastUsed: [ObjectIdentifier: Date] = [:]
     private var littleWindowArchiveCheck: ScheduledWork?
 
-    /// Shortcuts the app takes before the web page sees them (Chrome calls
-    /// these reserved). Everything else goes to the page first. Copy URL is reserved like Arc:
-    /// Google Docs takes ⇧⌘C for its word count (GitHub #194).
-    static let reservedActions: Set<String> = Set([
-        "newTab", "newWindow", "newBlankWindow", "newIncognitoWindow", "closeTab", "closeWindow", "reopenClosedTab", "editURL", "toggleSidebar", "toggleToolbar",
-        "nextTab", "previousTab", "recentTab", "recentTabBackward", "nextSpace", "previousSpace", "devTools", "jsConsole", "inspectElement",
-        "viewArchive", "openLibrary", "settings", "clearToday", "newLittleWindow", "promoteLittleWindow",
-        "addSplitView", "closeSplitPane", "copyURL", "copyURLMarkdown",
-    ] + (1...9).flatMap { ["item\($0)", "space\($0)", "moveTabToSpace\($0)"] })
+    /// Use Both's presses between OnPreKeyEvent and OnKeyEvent (#374).
+    private var useBoth = UseBothPresses()
 
     // MARK: Lifecycle
 
@@ -1068,10 +1061,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let st = dict["status"] { main.browserManager(statusMessage: st, tabID: nil); return }
             // key=<characters>,<key code>,<modifier bits>: a key press as a layout reports it
             // (Turkish Q's ⌘- is "-",24,1048576), through the app's event queue (#212); the
-            // characters are percent-encoded. zoomLevel logs the page's zoom.
+            // characters are percent-encoded. zoomLevel logs the page's zoom. page=1: straight to the
+            // current page, as the keyboard reaches a page that has it (a background copy has no key window).
             if let k = dict["key"]?.split(separator: ",", omittingEmptySubsequences: false), k.count == 3,
                let code = UInt16(k[1]), let mods = UInt(k[2]), let w = main.window {
-                TestGesture.key(String(k[0]), keyCode: code, modifiers: NSEvent.ModifierFlags(rawValue: mods), in: w)
+                let flags = NSEvent.ModifierFlags(rawValue: mods)
+                if dict["page"] == "1" {
+                    guard let page = main.currentBrowser else { NSLog("Cra TestGesture: no page"); return }
+                    TestGesture.pageKey(String(k[0]), keyCode: code, modifiers: flags,
+                                        in: [page.hostWindow?.contentView, page.containerView].compactMap { $0 }, window: w)
+                } else {
+                    TestGesture.key(String(k[0]), keyCode: code, modifiers: flags, in: w)
+                }
                 return
             }
             if dict["zoomLevel"] != nil {
@@ -2127,11 +2128,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return false
     }
 
-    /// Reserved shortcuts (CEF OnPreKeyEvent).
+    /// A key before the page sees it (CEF OnPreKeyEvent): Cra takes the shortcuts that prefer Cra,
+    /// and Use Both's second press of a shortcut the page kept (Settings ▸ Shortcuts, #374). The rest
+    /// go to the page and come back through handleUnhandledKey if it leaves them alone.
     func handleReservedKey(_ event: NSEvent) -> Bool {
-        guard let action = bindings.action(for: event), Self.reservedActions.contains(action.id) else { return false }
+        guard let action = bindings.action(for: event) else { return false }
+        let priority = bindings.priority(of: action.id)
+        let takes: Bool
+        if priority == .useBoth {
+            takes = useBoth.beforePage(action.id, at: event.timestamp, isRepeat: event.isARepeat)
+            if !takes, !event.isARepeat { watchUseBoth(action, pressedAt: event.timestamp, window: event.window) }
+        } else {
+            takes = priority.takesBeforePage()
+        }
+        guard takes else { return false }
         perform(action.id)
         return true
+    }
+
+    /// Use Both: a press the page hasn't handed back by UseBothPresses.answerTime was the page's. Cra
+    /// says so in the window it was pressed in, as Arc's `webContentConsumedHotkey` toast does
+    /// ("Press ⌘W again to Close Tab", with "Edit the shortcut"), and takes the next press while it shows.
+    private func watchUseBoth(_ action: KeyAction, pressedAt: TimeInterval, window: NSWindow?) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + UseBothPresses.answerTime) { [weak self, weak window] in
+            guard let self else { return }
+            let now = ProcessInfo.processInfo.systemUptime
+            guard useBoth.pageKept(action.id, pressedAt: pressedAt, now: now, offerTime: ShinyToast.visibleFor) else { return }
+            CraLog.note("shortcut \(action.id): the page kept it, Use Both offers the next press")
+            let keys = bindings.action(action.id)?.primary?.display ?? ""
+            let edit = ShinyToast.Action(title: "Edit the shortcut") { [weak self] in self?.showShortcutSettings(action.id) }
+            let text = "Press \(keys) again to \(action.name.trimmingCharacters(in: CharacterSet(charactersIn: "…")))"
+            // The page is a child window of the browser window or Little Window it shows in.
+            var w = window
+            while let x = w {
+                if let little = littleWindows.first(where: { $0.window === x }) { little.showToast(text, action: edit); return }
+                if let m = mainWindows.first(where: { $0.window === x }) { m.showToast(text, action: edit); return }
+                w = x.parent
+            }
+            main.showToast(text, action: edit)
+        }
     }
 
     /// Keys the page let through (CEF OnKeyEvent). Anything we know runs here;
@@ -2166,6 +2201,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     func perform(_ id: String) {
+        // A Use Both press the page left alone comes back by OnKeyEvent or, redispatched by Chromium,
+        // through the menu bar: either way it ends here, so the page didn't keep it (#374).
+        useBoth.pageLeft(id)
         if let dialog = NSApp.keyWindow as? DialogPanel, ["closeTab", "closeWindow"].contains(id) {
             dialog.close()
             return
@@ -2409,6 +2447,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     func showSettingsWindow(on tab: SettingsTab) {
         showSettingsWindow()
         settingsController?.show(tab)
+    }
+
+    /// Settings ▸ Shortcuts with `action` chosen (Use Both's "Edit the shortcut", #374).
+    func showShortcutSettings(_ action: String) {
+        showSettingsWindow()
+        settingsController?.showShortcut(action)
     }
 
     /// Settings is the window in front: the key window, or the frontmost one while Cra isn't

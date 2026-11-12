@@ -51,6 +51,9 @@ final class SettingsNavigation {
     func didShow() { shown += 1 }
 
     func show(_ t: SettingsTab) { if t != tab { tab = t } }
+
+    /// The action Shortcuts opens on: Use Both's toast's "Edit the shortcut" (#374).
+    var shortcut: String?
 }
 
 /// Arc's Settings window: 684 × 650, fixed, close button only, the tab's name as its title and a toolbar of tabs
@@ -62,6 +65,11 @@ final class SettingsWindowController: NSWindowController {
     private let nav = SettingsNavigation()
 
     func show(_ tab: SettingsTab) { nav.show(tab) }
+    /// Shortcuts with `action` chosen.
+    func showShortcut(_ action: String) {
+        nav.shortcut = action
+        nav.show(.shortcuts)
+    }
     var debugPane: String { nav.tab.rawValue }
     func didShow() { nav.didShow() }
     /// Arc opens Settings on its first tab each time it is opened, not on the one used last.
@@ -135,7 +143,7 @@ struct SettingsRoot: View {
         case .profiles: ProfilesPane(nav: nav, actions: actions)
         case .max: MaxPane()
         case .links: LinksPane()
-        case .shortcuts: ShortcutsPane(actions: actions)
+        case .shortcuts: ShortcutsPane(nav: nav, actions: actions)
         case .icon: IconPane()
         case .advanced:
             // Performance is Cra's own, in no Arc tab: what the recorder saw, at the foot of Advanced.

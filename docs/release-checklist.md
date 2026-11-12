@@ -294,7 +294,6 @@ issue when a change touches that code anyway.
 | #47 | Move `SpaceListView.revealActiveRow` (scroll the least that shows the row) |
 | #139 | Move `navigatedAway` (pinned, URL differs from the saved one) out of `SpaceListView` |
 | #3 #21 #86 #195 | Default bindings (⇧⌘J, ⌃⌘1–9, ⇧⌘T, ⌥⌘N) live in `App/KeyBindings.swift`, a known exception |
-| #194 | `AppDelegate.reservedActions` must hold `copyURL` and `copyURLMarkdown`: a `reserved=<action>` hook or a move |
 | #192 | A `validate=pasteAsPlainText` hook logging whether the item is enabled while a page has focus |
 | #21 | An `undoKey` hook logging whether ⌘Z undoes typing or reopens a tab |
 | #49 | `SuggestionEngine` (at most five rows, never the current tab), a known exception |

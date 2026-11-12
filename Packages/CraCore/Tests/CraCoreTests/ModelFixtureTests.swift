@@ -162,10 +162,26 @@ struct ModelFixtureTests {
     }
 
     /// keybindings.json keeps its bytes: KeyChord encodes exactly as the AppKit Shortcut did.
+    /// A file from before the priorities (#374) loads with every action at its default.
     @Test func keybindingsSaveByteForByte() throws {
-        let loaded = try Self.decoder.decode([String: [KeyChord]].self, from: Self.data("input", "keybindings.json"))
+        let loaded = try Self.decoder.decode(KeyBindingOverrides.self, from: Self.data("input", "keybindings.json"))
         #expect(try Self.encoder.encode(loaded) == Self.data("recorded", "keybindings.json"))
-        #expect(loaded["nextTab"] == [KeyChord(key: KeyChord.tab, modifiers: 1 << 18), KeyChord(key: KeyChord.right, modifiers: 1 << 20 | 1 << 19)])
+        #expect(loaded.shortcuts["nextTab"] == [KeyChord(key: KeyChord.tab, modifiers: 1 << 18), KeyChord(key: KeyChord.right, modifiers: 1 << 20 | 1 << 19)])
+        #expect(loaded.priorities.isEmpty)
+    }
+
+    /// keybindings.json with priorities (#374): each action's on its chords, kept as written; a value
+    /// this Cra doesn't know ("askEveryTime" on reload) loads as the default and is dropped on save.
+    /// Cra from before the priorities reads the same shortcuts from it.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/374"))
+    func keybindingsPrioritiesLoadAsRecorded() throws {
+        let input = try Self.data("input", "keybindings-priority.json")
+        let loaded = try Self.decoder.decode(KeyBindingOverrides.self, from: input)
+        #expect(try Self.encoder.encode(loaded) == Self.data("recorded", "keybindings-priority.json"))
+        #expect(loaded.priorities == ["closeTab": .preferWebsites, "find": .useBoth, "nextTab": .preferCra])
+        #expect(loaded.priority(for: "reload") == .preferWebsites && loaded.priority(for: "newTab") == .preferCra)
+        #expect(try Self.decoder.decode([String: [KeyChord]].self, from: input) == loaded.shortcuts)
+        #expect(try Self.roundTrips(loaded))
     }
 
     /// pinned-extensions.json: the one list of before #107 loads as every profile's and stays an
