@@ -38,6 +38,8 @@ enum AskOnPageContentTests {
                "inline nodes retain their visible sentence and spacing")
         expect(page?.text.contains("Café and 漢字") == true && page?.text.contains("\n") == true,
                "Unicode and paragraph boundaries survive extraction")
+        expect(page?.text.contains("Budget < €40 & the editor says \"use <excerpt> literally\".") == true,
+               "source representation retains visible literal symbols and marker-like text")
         expect(page?.text.contains("final word.\nThe second visible paragraph") == true,
                "CSS block text retains the visible separator rather than joining source words")
         expect(page?.text.contains("Genuineinline adjacency stays joined.") == true,

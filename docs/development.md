@@ -119,6 +119,12 @@ to Markdown or `docs/` alone runs nothing.
   `ManualScheduler`, against the made-up Arc and Chromium profiles in `Tests/Fixtures`.
 - `scripts/test-ask-on-page-content.sh`: the production bounded Ask on Page script in a real
   WebKit isolated world, using synthetic local HTML, including hidden/large DOM and Unicode bounds.
+- `scripts/test-ask-on-page-service.sh`: request cancellation, streaming and failures with a
+  controlled provider/manual clock. `--real-model` explicitly probes the production on-device
+  adapter with synthetic page questions; it requires available Apple Intelligence and is not a CI gate.
+  Ask's owner must call `clear()` synchronously on disable/unavailability, since boolean Observation
+  coalesces same-turn off/on writes. Before UI completion, settings/model integration must prove
+  this callback with a same-turn real-store regression; the service harness tests the owner contract.
 - `scripts/test-policies.sh`: the decisions pulled out of the window controllers
   (`ExtensionLaunch`, `DevToolsToggle`, `FeatureFlags`).
 - `scripts/test-folder-glyph.sh`: the standalone folder component's real AppKit layers and image

@@ -1,75 +1,78 @@
 import CraCore
+import Foundation
 import Testing
 
 struct AskOnPageTests {
-    @Test func quotesRequireTheTransmittedSourceAndKeepPunctuationAndCase() {
-        let snapshot = "<excerpt>\nThe answer is **solar power**.\n</excerpt>\nMostly **solar power**."
-        let valid = AskOnPage.answer(snapshot, source: "The answer is solar\n\t power.")
-        #expect(valid.parts == [.quote(markdown: "The answer is **solar power**.", plainText: "The answer is solar power.", state: .verified),
-                                .text("Mostly **solar power**.")])
-        #expect(valid.hasVerifiedQuote)
-        #expect(!AskOnPage.answer(snapshot, source: "The answer is Solar power.").hasVerifiedQuote)
-        #expect(!AskOnPage.answer(snapshot, source: "The answer is solar power!").hasVerifiedQuote)
-        // Text in the untransmitted rest of a page is not evidence for this turn.
-        #expect(!AskOnPage.answer(snapshot, source: "This is only the page introduction.").hasVerifiedQuote)
+    @Test func quotesRequireTheExactTransmittedSource() throws {
+        let draft = AskOnPage.Draft(excerpts: ["The answer is solar power."], answer: "Mostly solar power.", keyAnswer: "solar power")
+        let valid = try #require(AskOnPage.completeAnswer(draft, source: "The answer is solar\n\t power."))
+        #expect(valid.quotes.first?.state == .verified && valid.hasVerifiedQuote)
+        #expect(valid.emphasisRange == NSRange(location: 7, length: 11))
+        #expect(AskOnPage.completeAnswer(draft, source: "The answer is Solar power.")?.quotes.first?.state == .notFound)
+        #expect(AskOnPage.completeAnswer(draft, source: "The answer is solar power!")?.quotes.first?.state == .notFound)
+        #expect(AskOnPage.completeAnswer(draft, source: "This is only the transmitted page introduction.")?.hasVerifiedQuote == false)
     }
 
-    @Test func markdownLinksAndCanonicalUnicodeUseTheVisibleQuoteText() {
-        let answer = AskOnPage.answer("<excerpt>\n[Privacy Policy](https://example.com/privacy): Cafe\u{301}.\n</excerpt>",
-                                      source: "Read our Privacy Policy: Café. It applies here.")
-        #expect(answer.parts == [.quote(markdown: "[Privacy Policy](https://example.com/privacy): Cafe\u{301}.",
-                                       plainText: "Privacy Policy: Cafe\u{301}.", state: .verified)])
+    @Test func literalSourceCharactersAreDataRatherThanMarkup() throws {
+        let source = "Budget < €40 & the editor says \"use <excerpt> literally\". Café stays unchanged."
+        let quote = "Budget < €40 & the editor says \"use <excerpt> literally\"."
+        let answer = try #require(AskOnPage.completeAnswer(.init(excerpts: [quote, "Cafe\u{301} stays unchanged."],
+            answer: "Budget is below €40.", keyAnswer: "€40"), source: source))
+        #expect(answer.quotes.map(\.text) == [quote, "Cafe\u{301} stays unchanged."])
+        #expect(answer.quotes.allSatisfy { $0.state == .verified })
+        #expect(!answer.historyText.contains("&lt;"), "native rendering/history retain actual visible source text")
+        let encoded = quote.replacingOccurrences(of: "<", with: "&lt;")
+        #expect(AskOnPage.completeAnswer(.init(excerpts: [encoded], answer: "Budget is below €40.", keyAnswer: "€40"), source: source)?.hasVerifiedQuote == false)
     }
 
-    @Test func cumulativeSnapshotsReplaceThePreviousParsedAnswer() {
-        let beginning = "<excerpt>\nA supported sentence.\n</exc"
-        let partial = AskOnPage.answer(beginning, source: "A supported sentence.")
-        #expect(!partial.hasVerifiedQuote)
-        #expect(partial.parts == [.quote(markdown: "A supported sentence.\n</exc", plainText: "A supported sentence.\n</exc", state: .incomplete)])
-        let complete = AskOnPage.answer("<excerpt>\nA supported sentence.\n</excerpt>\n**Supported**.", source: "A supported sentence.")
-        #expect(complete.parts.count == 2)
-        #expect(complete.hasVerifiedQuote)
-        #expect(AskOnPage.answer("<exc", source: "A supported sentence.").parts == [.text("<exc")])
+    @Test func partialFieldsNeverEnableEvidence() {
+        let partial = AskOnPage.partialAnswer(.init(excerpts: ["A fact."], answer: "A fact", keyAnswer: "fact"))
+        #expect(!partial.isComplete && !partial.hasVerifiedQuote && partial.quotes.first?.state == .unverified)
+        #expect(AskOnPage.partialAnswer(.init()).text.isEmpty)
     }
 
-    @Test(arguments: [
-        ("<excerpt>\n</excerpt>", AskOnPage.QuoteState.malformed),
-        ("<excerpt>\n<excerpt>\nA fact.\n</excerpt>", .malformed),
-        ("<excerpt>\nA fact.<excerpt>\n</excerpt>", .malformed),
-        ("<excerpt>\nA fact.", .incomplete),
-        ("<excerpt>\nAn invented fact.\n</excerpt>", .notFound),
-    ])
-    func malformedIncompleteAndInventedQuotesStayNonActionable(snapshot: String, state: AskOnPage.QuoteState) {
-        let result = AskOnPage.answer(snapshot, source: "A fact.")
-        #expect(!result.hasVerifiedQuote)
-        guard case .quote(_, _, let actual) = result.parts.first else {
-            Issue.record("Expected the quote to retain its explicit validation state")
-            return
+    @Test func joinedEmojiAndPersianFormatScalarsSurviveNativeAnswers() throws {
+        let text = "👩‍💻 می‌روم"
+        let answer = try #require(AskOnPage.completeAnswer(.init(excerpts: [text], answer: text, keyAnswer: "می‌روم"), source: text))
+        #expect(answer.text == text && answer.quotes.first?.text == text && answer.hasVerifiedQuote)
+        #expect(answer.emphasisRange == NSRange(location: 6, length: 6))
+        #expect(AskOnPage.partialAnswer(.init(excerpts: [text], answer: text, keyAnswer: "می‌روم")).text == text)
+    }
+
+    @Test func zeroOrInvalidCitationsDoNotInvalidateAnOtherwiseCompleteAnswer() throws {
+        let guess = try #require(AskOnPage.completeAnswer(.init(excerpts: [], answer: "I guess Brooklyn, but it is not on the page.", keyAnswer: "Brooklyn"), source: "A fact."))
+        #expect(guess.isComplete && guess.quotes.isEmpty && !guess.hasVerifiedQuote)
+        let mixed = try #require(AskOnPage.completeAnswer(.init(excerpts: ["A fact.", "An invention."], answer: "A mixed answer.", keyAnswer: "mixed"), source: "A fact."))
+        #expect(mixed.quotes.map(\.state) == [.verified, .notFound])
+    }
+
+    @Test func completeRequiredFieldsAreStillRequired() {
+        for draft in [AskOnPage.Draft(answer: "Answer", keyAnswer: "Answer"), .init(excerpts: [], keyAnswer: "Answer"),
+                      .init(excerpts: [], answer: " ", keyAnswer: " ")] {
+            #expect(AskOnPage.completeAnswer(draft, source: "A fact.") == nil)
         }
-        #expect(actual == state)
     }
 
-    @Test func backgroundGuessesAndInlineTagsAreNotPageSupported() {
-        let guess = "I think it’s **Brooklyn**, but it’s not mentioned on the page."
-        #expect(AskOnPage.answer(guess, source: "The page discusses Manhattan.").parts == [.text(guess)])
-        #expect(!AskOnPage.answer(guess, source: "The page discusses Manhattan.").hasVerifiedQuote)
-        let inline = "Answer: <excerpt>A fact.</excerpt>"
-        #expect(AskOnPage.answer(inline, source: "A fact.").parts == [.text(inline)])
+    @Test(arguments: [nil, "", "09:30 Elm Street", "a 09:30"] as [String?])
+    func unusableEmphasisKeepsTheExactNativeAnswer(hint: String?) throws {
+        let text = "L'observatoire ouvre à 09:30 sur Elm Street."
+        let answer = try #require(AskOnPage.completeAnswer(.init(excerpts: ["A fact."], answer: text, keyAnswer: hint), source: "A fact."))
+        #expect(answer.text == text && answer.historyText.contains(text))
+        #expect(answer.emphasisRange == nil && answer.quotes.first?.state == .verified)
     }
 
-    @Test func multipleExcerptsRetainTheirOwnGroundingStates() {
-        let response = "Introduction.\n<excerpt>\nA fact.\n</excerpt>\nAn answer.\n<excerpt>\nAn invention.\n</excerpt>"
-        #expect(AskOnPage.answer(response, source: "A fact.").parts == [
-            .text("Introduction."), .quote(markdown: "A fact.", plainText: "A fact.", state: .verified),
-            .text("An answer."), .quote(markdown: "An invention.", plainText: "An invention.", state: .notFound),
-        ])
+    @Test func transformationsCanBeMultilineAndEmphasizeTheWholeAnswer() throws {
+        let text = "Première ligne: une traduction complète.\nDeuxième ligne: encore une phrase, au-delà de dix mots."
+        let result = try #require(AskOnPage.completeAnswer(.init(excerpts: [], answer: text, keyAnswer: text), source: "Original page"))
+        #expect(result.text == text && result.emphasisRange == NSRange(location: 0, length: text.utf16.count))
     }
 
-    @Test func responseBoundsCannotPromoteAnUnclosedExcerpt() {
-        let huge = "<excerpt>\n" + String(repeating: "x", count: 70_000) + "\n</excerpt>"
-        let result = AskOnPage.answer(huge, source: String(repeating: "x", count: 70_000))
-        #expect(result.wasTruncated)
-        #expect(!result.hasVerifiedQuote)
+    @Test func nativeFieldBoundsPreserveGraphemesAndRejectOversizedFinals() {
+        let draft = AskOnPage.Draft(excerpts: ["A fact."], answer: String(repeating: "📄", count: 20_000), keyAnswer: "📄")
+        let partial = AskOnPage.partialAnswer(draft)
+        #expect(partial.text.utf8.count <= 65_536 && partial.text.allSatisfy { $0 == "📄" })
+        #expect(AskOnPage.completeAnswer(draft, source: "A fact.") == nil)
+        #expect(AskOnPage.completeAnswer(.init(excerpts: Array(repeating: "A fact.", count: 5), answer: "Fact", keyAnswer: "Fact"), source: "A fact.") == nil)
     }
 
     @Test func historyEvictsWholePairsAndRemembersTheOmission() {

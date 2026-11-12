@@ -17,9 +17,9 @@ public enum AskOnPage {
         public static let maximumTurns = 12
         public static let maximumBytes = 65_536
         public private(set) var turns: [Turn] = []
-        public private(set) var olderMessagesHidden = false
+        public private(set) var olderMessagesHidden: Bool
 
-        public init() {}
+        public init(olderMessagesHidden: Bool = false) { self.olderMessagesHidden = olderMessagesHidden }
 
         public mutating func append(_ turn: Turn) {
             turns.append(turn)
@@ -32,73 +32,62 @@ public enum AskOnPage {
         }
     }
 
-    public enum QuoteState: Equatable, Sendable {
-        case verified, notFound, incomplete, malformed
+    public struct Draft: Equatable, Sendable {
+        public var excerpts: [String]?
+        public var answer: String?
+        public var keyAnswer: String?
+
+        public init(excerpts: [String]? = nil, answer: String? = nil, keyAnswer: String? = nil) {
+            self.excerpts = excerpts; self.answer = answer; self.keyAnswer = keyAnswer
+        }
     }
 
-    public enum Part: Equatable, Sendable {
-        case text(String)
-        case quote(markdown: String, plainText: String, state: QuoteState)
+    public enum QuoteState: Equatable, Sendable { case unverified, verified, notFound }
+    public struct Quote: Equatable, Sendable {
+        public let text: String
+        public let state: QuoteState
     }
-
     public struct Answer: Equatable, Sendable {
-        public let parts: [Part]
-        public let wasTruncated: Bool
-        public var hasVerifiedQuote: Bool {
-            parts.contains { if case .quote(_, _, .verified) = $0 { return true }; return false }
+        public let text: String
+        public let keyAnswer: String?
+        public let quotes: [Quote]
+        public let isComplete: Bool
+        /// Text presence in the transmitted source, not semantic support for the answer.
+        public var hasVerifiedQuote: Bool { quotes.contains { $0.state == .verified } }
+        public var emphasisRange: NSRange? {
+            guard let keyAnswer, !keyAnswer.isEmpty, let range = text.range(of: keyAnswer, options: .literal) else { return nil }
+            return NSRange(range, in: text)
         }
+        /// Only internal history context; native UI consumes the fields directly.
+        public var historyText: String { (quotes.map(\.text) + [text]).joined(separator: "\n") }
     }
 
-    /// FoundationModels yields cumulative snapshots: parse the latest bounded text afresh, rather
-    /// than appending each snapshot as a delta or maintaining another incremental parser state.
-    public static func answer(_ snapshot: String, source: String) -> Answer {
-        let bounded = prefix(snapshot, maximumBytes: 65_536)
-        let normalizedSource = normalized(source)
-        var parts: [Part] = []
-        var text: [String] = []
-        var quote: [String]?
-        var malformed = false
+    /// Partial generated fields replace earlier fields. No provisional quotation is actionable.
+    public static func partialAnswer(_ draft: Draft) -> Answer {
+        var remaining = 65_536
+        func take(_ text: String) -> String {
+            let result = prefix(text, maximumBytes: remaining)
+            remaining -= result.utf8.count
+            return result
+        }
+        let text = take(draft.answer ?? "")
+        let key = draft.keyAnswer.map(take)
+        let quotes = (draft.excerpts ?? []).prefix(4).map { Quote(text: take($0), state: .unverified) }
+        return Answer(text: text, keyAnswer: key, quotes: quotes, isComplete: false)
+    }
 
-        func flushText() {
-            let value = text.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-            if !value.isEmpty { parts.append(.text(value)) }
-            text.removeAll(keepingCapacity: true)
+    /// Required-field completeness is separate from citation validity and optional emphasis:
+    /// complete empty citation arrays remain legitimate conversation turns.
+    public static func completeAnswer(_ draft: Draft, source: String) -> Answer? {
+        guard let excerpts = draft.excerpts, let text = draft.answer,
+              excerpts.count <= 4, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              excerpts.reduce(text.utf8.count + (draft.keyAnswer?.utf8.count ?? 0), { $0 + $1.utf8.count }) <= 65_536 else { return nil }
+        let source = normalized(source)
+        let quotes = excerpts.map { text -> Quote in
+            let candidate = normalized(text)
+            return Quote(text: text, state: !candidate.isEmpty && source.contains(candidate) ? .verified : .notFound)
         }
-        func finishQuote(incomplete: Bool) {
-            let markdown = (quote ?? []).joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-            let attributed = try? AttributedString(markdown: markdown, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))
-            let plain = attributed.map { String($0.characters) } ?? markdown
-            let search = normalized(plain)
-            let state: QuoteState = malformed || search.isEmpty ? .malformed : incomplete ? .incomplete
-                : normalizedSource.contains(search) ? .verified : .notFound
-            parts.append(.quote(markdown: markdown, plainText: plain, state: state))
-            quote = nil
-            malformed = false
-        }
-
-        for line in bounded.split(separator: "\n", omittingEmptySubsequences: false) {
-            let value = String(line)
-            let tag = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            if tag == "<excerpt>" {
-                if quote != nil {
-                    malformed = true
-                    quote?.append(value)
-                } else {
-                    flushText()
-                    quote = []
-                }
-            } else if tag == "</excerpt>", quote != nil {
-                finishQuote(incomplete: false)
-            } else if quote != nil {
-                if value.contains("<excerpt>") || value.contains("</excerpt>") { malformed = true }
-                quote?.append(value)
-            } else {
-                text.append(value)
-            }
-        }
-        if quote != nil { finishQuote(incomplete: true) }
-        flushText()
-        return Answer(parts: parts, wasTruncated: bounded != snapshot)
+        return Answer(text: text, keyAnswer: draft.keyAnswer, quotes: quotes, isComplete: true)
     }
 
     /// Only canonical Unicode and whitespace fold. Case and punctuation remain evidence.
