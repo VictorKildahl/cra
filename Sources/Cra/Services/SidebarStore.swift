@@ -2062,7 +2062,7 @@ final class SidebarStore {
 
     /// Spaces whose Today tabs the model is sorting: the divider draws its squiggle meanwhile.
     private(set) var tidyingSpaces: Set<UUID> = []
-    /// Per space, Today's tabs when Tidy last ran: Tidy waits for a new loose tab (TidyTabs.offers).
+    /// Per space, Today's tabs already considered by Tidy; an unseen loose tab keeps it offered.
     /// Not saved, like Arc's.
     private(set) var tidiedTabs: [UUID: Set<UUID>] = [:]
     /// What ⌘Z puts back: the last tidy, until a tab closes or a group's header is used.
@@ -2072,6 +2072,12 @@ final class SidebarStore {
     func looseTodayTabs(_ sid: UUID) -> [SidebarItem] {
         guard let space = spaces[sid] else { return [] }
         return children(of: space.todayContainerID).filter(\.isTab)
+    }
+
+    /// Request priority is separate from visible order: a fitted prefix must not starve unseen tabs.
+    func tidyCandidates(_ sid: UUID) -> [SidebarItem] {
+        TidyTabs.requestOrder(looseTabs: looseTodayTabs(sid).map(\.id), tidied: tidiedTabs[sid])
+            .compactMap { items[$0] }
     }
 
     func tabGroups(in sid: UUID) -> [SidebarItem] {
@@ -2097,9 +2103,10 @@ final class SidebarStore {
         guard let space = spaces[sid] else { return }
         let today = space.todayContainerID
         let before = items[today]?.children ?? []
-        let loose = Set(looseTodayTabs(sid).map(\.id))
+        let looseOrder = Dictionary(uniqueKeysWithValues: looseTodayTabs(sid).enumerated().map { ($0.element.id, $0.offset) })
         func ids(_ indices: [Int]) -> [UUID] {
-            indices.compactMap { tabIDs.indices.contains($0) ? tabIDs[$0] : nil }.filter(loose.contains)
+            indices.compactMap { tabIDs.indices.contains($0) ? tabIDs[$0] : nil }
+                .filter { looseOrder[$0] != nil }.sorted { looseOrder[$0]! < looseOrder[$1]! }
         }
         var moved: [UUID] = []
         // Match captured identities against live Today headers, never against their current indexes.
@@ -2109,10 +2116,13 @@ final class SidebarStore {
             moveItems(tabs, to: group.id, index: nil)
             moved += tabs
         }
+        // Prompt priority can differ from Today order; it must not reorder the resulting rows.
+        let proposals = plan.newGroups.map { (name: $0.name, tabs: ids($0.tabs)) }
+            .filter { $0.tabs.count >= 2 }
+            .sorted { looseOrder[$0.tabs[0]]! < looseOrder[$1.tabs[0]]! }
         var newGroups: [UUID] = []
-        for p in plan.newGroups {
-            let tabs = ids(p.tabs)
-            guard tabs.count >= 2 else { continue }
+        for p in proposals {
+            let tabs = p.tabs
             var g = SidebarItem.tabGroup(p.name, parent: today)
             g.createdAt = clock.now
             items[g.id] = g
@@ -2129,7 +2139,8 @@ final class SidebarStore {
             items[today] = t
         }
         lastTidy = moved.isEmpty ? nil : (sid, before, moved)
-        tidiedTabs[sid] = Set(tabs(under: today).map(\.id))
+        let surviving = Set(tabs(under: today).map(\.id))
+        tidiedTabs[sid] = (tidiedTabs[sid] ?? []).union(tabIDs).intersection(surviving)
         touch()
     }
 

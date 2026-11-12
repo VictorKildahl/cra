@@ -100,7 +100,7 @@ final class TidyTabsService {
     /// The Tidy button: ask the model about the space's loose Today tabs and apply its answer.
     func tidy(_ sid: UUID, store: SidebarStore) {
         guard modelAvailable, !store.tidyingSpaces.contains(sid) else { return }
-        let loose = Array(store.looseTodayTabs(sid).prefix(TidyTabs.maximumTabs))
+        let loose = Array(store.tidyCandidates(sid).prefix(TidyTabs.maximumTabs))
         guard !loose.isEmpty else { return }
         let tabs = loose.map { item in
             TidyTabs.Tab(title: item.displayTitle, host: item.tab.flatMap { URL(string: $0.url)?.host() } ?? "")

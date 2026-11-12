@@ -18,6 +18,14 @@ struct TidyTabsTests {
         #expect(TidyTabs.offers(todayTabs: 7, looseTabs: ["a", "g"], tidied: Set(six)))
     }
 
+    @Test func requestOrderPrioritizesUnseenIdsWithoutReorderingEitherPart() {
+        let loose = ["old1", "new1", "old2", "new2"]
+        #expect(TidyTabs.requestOrder(looseTabs: loose, tidied: nil) == loose)
+        #expect(TidyTabs.requestOrder(looseTabs: loose, tidied: []) == loose)
+        #expect(TidyTabs.requestOrder(looseTabs: loose, tidied: Set(loose)) == loose)
+        #expect(TidyTabs.requestOrder(looseTabs: loose, tidied: ["old1", "old2", "gone"]) == ["new1", "new2", "old1", "old2"])
+    }
+
     @Test func promptListsTabsWithIdsAndExistingGroups() {
         let p = TidyTabs.prompt(tabs: [.init(title: "Mars - Wikipedia", host: "en.wikipedia.org"),
                                        .init(title: "", host: "example.com"),

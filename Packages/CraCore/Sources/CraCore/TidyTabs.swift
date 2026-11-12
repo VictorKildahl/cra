@@ -64,6 +64,13 @@ public enum TidyTabs {
         return looseTabs.contains { !tidied.contains($0) }
     }
 
+    /// Put unseen tabs first so a capped request eventually reaches the whole sidebar. Previously
+    /// considered tabs remain optional context, with each part retaining its current Today order.
+    public static func requestOrder<ID: Hashable>(looseTabs: [ID], tidied: Set<ID>?) -> [ID] {
+        guard let tidied, !tidied.isEmpty else { return looseTabs }
+        return looseTabs.filter { !tidied.contains($0) } + looseTabs.filter { tidied.contains($0) }
+    }
+
     public static let instructions = """
     You sort a person's open browser tabs into groups, like tidying loose papers into labelled folders. \
     Put tabs about the same topic, task or project in one group, even when they come from different websites. \
