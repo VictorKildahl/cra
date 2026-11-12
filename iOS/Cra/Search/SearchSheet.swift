@@ -21,6 +21,7 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     private let surface = UIView()
     /// The 2025 sheet warms a shade toward the keyboard (`Palette.sheetBottom`).
     private let surfaceTint = CAGradientLayer()
+    private let surfaceGlow = CAGradientLayer()
     private let fieldBackground = FieldBackgroundView()
     private let clearButton = UIButton(type: .custom)
     private let incognitoButton = UIButton(type: .custom)
@@ -51,6 +52,10 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         super.init(frame: frame)
         surface.backgroundColor = Palette.sheet
         surface.layer.addSublayer(surfaceTint)
+        surfaceGlow.type = .radial
+        surfaceGlow.startPoint = CGPoint(x: 0.5, y: 0.5)
+        surfaceGlow.endPoint = CGPoint(x: 1.05, y: 1.05)
+        surface.layer.addSublayer(surfaceGlow)
         surface.layer.masksToBounds = true
         surface.layer.cornerRadius = MobileSearchSheet.cornerRadius
         surface.layer.cornerCurve = .continuous
@@ -261,6 +266,10 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         surfaceTint.frame = CGRect(x: 0, y: 0, width: bounds.width, height: MobileSearchSheet.height)
         surfaceTint.colors = [Palette.sheet.resolvedColor(with: traitCollection).cgColor,
                               Palette.sheetBottom.resolvedColor(with: traitCollection).cgColor]
+        let glow = Palette.sheetGlow.resolvedColor(with: traitCollection)
+        surfaceGlow.colors = [glow.cgColor, glow.withAlphaComponent(0).cgColor]
+        surfaceGlow.frame = CGRect(x: bounds.width * 0.1, y: MobileSearchSheet.topInset + MobileSearchSheet.fieldHeight,
+                                   width: bounds.width * 0.8, height: MobileSearchSheet.height * 0.75)
         CATransaction.commit()
 
         let open = CGRect(x: MobileSearchSheet.fieldSideInset, y: MobileSearchSheet.topInset,

@@ -14,12 +14,14 @@ enum Palette {
     /// The search sheet's surface. Light from TapSmart's March 2025 screenshot: #f3f3f4 under the
     /// field, warming to #f3e6e8 at the keyboard (`sheetBottom`). (The 2024 footage had #fcfcfc.)
     /// Dark is Arc Search's incognito sheet, which is also how the sheet looks in dark mode.
-    static let sheet = dynamic(light: rgb(0xf3f3f4), dark: rgb(0x2d2c31))
-    static let sheetBottom = dynamic(light: rgb(0xf3e6e8), dark: rgb(0x2d2c31))
+    static let sheet = dynamic(light: rgb(0xf3f3f4), dark: rgb(0x2e2930))
+    static let sheetBottom = dynamic(light: rgb(0xf3e6e8), dark: rgb(0x2e2930))
+    /// Dark mode's faint blue glow behind the rows (60fps.design's dark clip: #34394a at its middle).
+    static let sheetGlow = dynamic(light: .clear, dark: rgb(0x343a4e))
     /// The search field: a flat grey in 2025 (#dbd9da, no edge); the 2024 footage had a
     /// lavender-to-pink gradient with a hairline.
-    static let fieldLeading = dynamic(light: rgb(0xdbd9da), dark: rgb(0x46454a))
-    static let fieldTrailing = dynamic(light: rgb(0xdbd9da), dark: rgb(0x46454a))
+    static let fieldLeading = dynamic(light: rgb(0xdbd9da), dark: rgb(0x433f44))
+    static let fieldTrailing = dynamic(light: rgb(0xdbd9da), dark: rgb(0x433f44))
     static let fieldBorder = dynamic(light: rgb(0xdbd9da), dark: rgb(0x504f54))
     /// The caret and selection.
     static let accent = dynamic(light: rgb(0x4a5fe6), dark: rgb(0x7f8eff))

@@ -147,5 +147,5 @@ the real app on an iPhone has to be recorded before then.
 | iPad layout | partial | Runs; nothing iPad-specific. |
 | Landscape | partial | Rotates; not checked. |
 | Dynamic Type | missing | |
-| Dark mode | partial | Colours defined; not compared with a reference. |
+| Dark mode | partial | The search sheet compared with 60fps.design's dark-mode clip: sheet #2e2930 with its faint blue glow behind the rows, field #433f44 (the clip is compressed video: within a few levels). The rest of the chrome's dark colours are not compared yet. |
 | System look | done | `UIDesignRequiresCompatibility`: Arc Search's lists, sheets and keyboard are the pre-iOS 26 ones. |
