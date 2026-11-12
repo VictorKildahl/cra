@@ -50,16 +50,17 @@ public enum TidyDownloads {
         return s
     }
 
-    /// A free name in `existing` for `name`: "Report.pdf", then "Report 2.pdf", "Report 3.pdf"…
-    public static func unique(_ name: String, existing: (String) -> Bool) -> String {
+    /// Arc's free sibling name: the proposal, then "Report (1).pdf" through "Report (100).pdf".
+    /// No name is returned when every candidate is occupied.
+    public static func unique(_ name: String, existing: (String) -> Bool) -> String? {
         guard existing(name) else { return name }
-        let ext = (name as NSString).pathExtension
-        let stem = (name as NSString).deletingPathExtension
-        for n in 2...999 {
-            let candidate = ext.isEmpty ? "\(stem) \(n)" : "\(stem) \(n).\(ext)"
+        let dot = name.lastIndex(of: ".") ?? name.endIndex
+        let stem = name[..<dot], suffix = name[dot...]
+        for n in 1...100 {
+            let candidate = "\(stem) (\(n))\(suffix)"
             if !existing(candidate) { return candidate }
         }
-        return name
+        return nil
     }
 
     static func host(_ url: String) -> String {

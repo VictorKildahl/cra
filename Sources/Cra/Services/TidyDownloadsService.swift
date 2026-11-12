@@ -53,7 +53,9 @@ final class TidyDownloadsService {
             guard let answer = await Self.ask(prompt), let name = TidyDownloads.clean(answer, original: original) else { return }
             let folder = (path as NSString).deletingLastPathComponent
             let fm = FileManager.default
-            let free = TidyDownloads.unique(name) { fm.fileExists(atPath: (folder as NSString).appendingPathComponent($0)) }
+            guard let free = TidyDownloads.unique(name, existing: {
+                fm.fileExists(atPath: (folder as NSString).appendingPathComponent($0))
+            }) else { return }
             let newPath = (folder as NSString).appendingPathComponent(free)
             guard fm.fileExists(atPath: path), (try? fm.moveItem(atPath: path, toPath: newPath)) != nil else {
                 CraLog.note("Tidy Downloads: the file couldn't be renamed")
@@ -114,7 +116,9 @@ final class TidyDownloadsService {
         let fm = FileManager.default
         guard fm.fileExists(atPath: r.newPath) else { return false }
         let folder = (r.oldPath as NSString).deletingLastPathComponent
-        let free = TidyDownloads.unique(r.oldName) { fm.fileExists(atPath: (folder as NSString).appendingPathComponent($0)) }
+        guard let free = TidyDownloads.unique(r.oldName, existing: {
+            fm.fileExists(atPath: (folder as NSString).appendingPathComponent($0))
+        }) else { return false }
         let back = (folder as NSString).appendingPathComponent(free)
         guard (try? fm.moveItem(atPath: r.newPath, toPath: back)) != nil else { return false }
         DownloadHistory.shared.move(from: r.newPath, to: back)
