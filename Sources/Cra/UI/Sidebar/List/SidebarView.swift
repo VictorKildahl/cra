@@ -1439,7 +1439,7 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
         let size: CGFloat = 13
         if emoji.font?.pointSize != size { emoji.font = .systemFont(ofSize: size) }
         let h = emoji.intrinsicContentSize.height
-        emoji.frame = NSRect(x: 0, y: (bounds.height - h) / 2, width: bounds.width, height: h)
+        emoji.frame = emoji.frameHoldingInk(NSRect(x: 0, y: (bounds.height - h) / 2, width: bounds.width, height: h))
         symbol.frame = bounds
         symbol.symbolConfiguration = .init(pointSize: size - 2, weight: .medium)
         if case .dot(let d) = mark {

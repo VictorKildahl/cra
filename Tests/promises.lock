@@ -723,3 +723,4 @@
 #385   Packages/CraCore/Tests/CraCoreTests/PeekControlLookTests.swift::shortcutsPressTheirButtons  b2c01bed9702
 #385   Packages/CraCore/Tests/CraCoreTests/PeekControlLookTests.swift::springsAreArcsInCoreAnimationTerms  5be9f378ea04
 #387   Tests/Scenarios/favorite-mute.scenario  7b04a5025ba3
+#399   Tests/EmojiLabelTests.swift::wholeEmojiWhenClipped  bec18dc87181

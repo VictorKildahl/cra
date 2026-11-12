@@ -289,7 +289,8 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         let h = bounds.height, w = bounds.width
         let es = emoji.intrinsicContentSize
         let ew = emoji.attributedStringValue.size().width
-        emoji.frame = NSRect(x: 18.25 - ew / 2 - SidebarText.inset, y: (h - es.height) / 2 - 1.25, width: ew + 2 * SidebarText.inset, height: es.height)
+        emoji.frame = emoji.frameHoldingInk(NSRect(x: 18.25 - ew / 2 - SidebarText.inset, y: (h - es.height) / 2 - 1.25,
+                                                   width: ew + 2 * SidebarText.inset, height: es.height))
         symbol.frame = iconRect
         // Turned right, Arc's chevron sits a little higher than chevron.down turned about its centre.
         let (cx, cy): (CGFloat, CGFloat) = collapsed ? (18.5, h / 2 - 0.25) : (18.25, h / 2 + 0.5)
