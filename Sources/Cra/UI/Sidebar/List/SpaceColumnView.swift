@@ -199,7 +199,7 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         withObservationTracking {
             guard let space = store.space(spaceID) else { return }
             emoji.stringValue = space.emoji
-            symbol.image = space.symbol.flatMap { SidebarSymbols.image($0, size: 13, weight: .medium) }
+            symbol.image = SpaceIconImage.glyph(for: space, points: 13)
             title.stringValue = space.title
             blank = space.standaloneWindowID != nil
             colors = SidebarColors(space.theme.palette)
@@ -376,7 +376,7 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
                 guard store.isBlank(space: spaceID) else { return }
                 actions.moveBlankWindow(space.id)
             }
-            if let sym = space.symbol { item.image = SidebarSymbols.image(sym, size: 13, weight: .medium) }
+            item.image = SpaceIconImage.glyph(for: space, points: 13)
             m.addItem(item)
         }
         return m

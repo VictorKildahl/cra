@@ -1,12 +1,13 @@
 import AppKit
 
 /// A space's icon at menu size, as Arc shows it before Tabs ▸ "Open in <space>": the emoji, or the
-/// SF Symbol picked in its icon picker; nil for a space with neither.
+/// SF Symbol picked in its icon picker; nil for a space with neither. A picture the user chose comes first, in full colour.
 @MainActor
 enum SpaceMenuIcon {
     private static var cache: [String: NSImage] = [:]
 
     static func image(for space: Space) -> NSImage? {
+        if let data = space.iconImage, !data.isEmpty { return SpaceIconImage.image(data, points: 16) }
         if let symbol = space.symbol, !symbol.isEmpty {
             let image = SidebarSymbols.image(symbol, size: 13)
             image?.isTemplate = true

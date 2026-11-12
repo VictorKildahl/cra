@@ -616,7 +616,7 @@
 #349   Packages/CraCore/Tests/CraCoreTests/ChromiumDialogTests.swift::staysOnTheScreen  635a7aec06bf
 #349   Packages/CraCore/Tests/CraCoreTests/ChromiumDialogTests.swift::tallerThanTheScreenKeepsItsTitle  f3c07297be40
 #349   Packages/CraCore/Tests/CraCoreTests/ChromiumDialogTests.swift::theInstallPromptIsOne  075faa411fd2
-#349   Packages/CraCore/Tests/CraCoreTests/ExtensionIconsTests.swift::choice  08a4f85120f2
+#349   Packages/CraCore/Tests/CraCoreTests/ExtensionIconsTests.swift::choice  554e66819a98
 #349   Packages/CraCore/Tests/CraCoreTests/ExtensionIconsTests.swift::retinaTakesTheNextSizeUp  6e1e7d7bcd07
 #349   Packages/CraCore/Tests/CraCoreTests/ExtensionIconsTests.swift::threeTimesTakesTheLargerStill  26e4ac9aef72
 #349   Tests/Scenarios/extension-dialogs.scenario  63311e149d3c

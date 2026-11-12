@@ -312,6 +312,11 @@ public struct Space: Identifiable, Codable, Equatable {
     public var profileID: UUID?
     /// An SF Symbol from the Icon tab of Arc's icon picker, shown instead of `emoji` (then empty).
     public var symbol: String? = nil
+    /// A picture the user gave as the space's icon (PNG bytes, already scaled small), shown instead
+    /// of `emoji` and `symbol` (then empty). Not in Arc.
+    public var iconImage: Data? = nil
+    /// The largest `iconImage` a sidebar.json may carry. The app stores a 96 px PNG, at most ~37 KB.
+    public static let maxIconImageBytes = 256 * 1024
     /// The Blank Window this space belongs to (Arc: a `standalone` sidebar container keyed by its
     /// window). Such a space is in no window's space list and goes when its window closes (BlankWindow).
     public var standaloneWindowID: UUID? = nil
@@ -320,7 +325,8 @@ public struct Space: Identifiable, Codable, Equatable {
     public var searchEngine: String? = nil
 
     public init(id: UUID, title: String, emoji: String, theme: SpaceTheme, favoritesContainerID: UUID, pinnedContainerID: UUID,
-                todayContainerID: UUID, createdAt: Date, profileID: UUID? = nil, symbol: String? = nil, standaloneWindowID: UUID? = nil) {
+                todayContainerID: UUID, createdAt: Date, profileID: UUID? = nil, symbol: String? = nil, standaloneWindowID: UUID? = nil,
+                iconImage: Data? = nil) {
         self.id = id
         self.title = title
         self.emoji = emoji
@@ -332,6 +338,7 @@ public struct Space: Identifiable, Codable, Equatable {
         self.profileID = profileID
         self.symbol = symbol
         self.standaloneWindowID = standaloneWindowID
+        self.iconImage = iconImage
     }
 }
 
@@ -1024,11 +1031,15 @@ extension Space {
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         profileID = try c.decodeIfPresent(UUID.self, forKey: .profileID)
         symbol = try c.decodeIfPresent(String.self, forKey: .symbol)
+        // A picture is a small PNG the app made (SpaceIconImage). Bytes far past that size came from
+        // somewhere else (a hand-edited or synced file) and are dropped rather than decoded.
+        iconImage = try c.decodeIfPresent(Data.self, forKey: .iconImage).flatMap { $0.count <= Space.maxIconImageBytes ? $0 : nil }
         standaloneWindowID = try c.decodeIfPresent(UUID.self, forKey: .standaloneWindowID)
         searchEngine = try c.decodeIfPresent(String.self, forKey: .searchEngine)
         // Edit Space… → Save in 0.1.31 and older wrote 🌱 beside a space's symbol, and the sidebar
         // drew both stacked (#205). The symbol was the space's icon, so the emoji beside it goes.
         if symbol?.isEmpty == false { emoji = "" }
+        if iconImage?.isEmpty == false { emoji = ""; symbol = nil }
     }
 }
 
