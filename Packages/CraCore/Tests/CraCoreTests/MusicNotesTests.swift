@@ -39,10 +39,9 @@ struct MusicNotesTests {
 
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/303")) func playsOnlyWhatCanBeHeardOnAMusicSite() {
         let music = "https://open.spotify.com/", video = "https://www.youtube.com/watch?v=abc"
-        #expect(MusicNotes.plays(url: music, soundPlaying: true, muted: false))
-        #expect(!MusicNotes.plays(url: music, soundPlaying: false, muted: false), "paused, even during the speaker's audible hold")
-        #expect(!MusicNotes.plays(url: music, soundPlaying: true, muted: true), "muting hides notes even if the page keeps playing")
-        #expect(!MusicNotes.plays(url: video, soundPlaying: true, muted: false))
+        #expect(MusicNotes.plays(url: music, soundPlaying: true), "muted or not: a muted tab's sound still plays")
+        #expect(!MusicNotes.plays(url: music, soundPlaying: false), "paused, even during the speaker's audible hold")
+        #expect(!MusicNotes.plays(url: video, soundPlaying: true))
     }
 
     /// Single notes appear more often than pairs; notes grow and fade over their lifetime.

@@ -59,19 +59,20 @@ built release app with a test profile. Note anything that fails in the release's
   closes it at once unless the pointer is on the card. Share ▸ Copy as Text and Copy as Image paste as
   Arc's do. Check a beige and a dark space, 1x and 2x.
 
-- **Music notes:** on a release build, play a favorite on YouTube Music, SoundCloud or Spotify.
-  Compare Arc and Cra in light and dark spaces at 1x and 2x: origin, density, speed, growth, fading
-  and clipping. Notes rise from the icon's top edge and stop 8 pt above the top row; in lower rows
-  they drift over the tile above. Check split favorites in both orientations, dragging, space
-  swipes and a space with no favorites for clipping regressions. Mute or pause: notes disappear
-  as sound stops; a quick resume brings them back. A regular YouTube video shows none. Toggle
-  Reduce Motion during playback: notes disappear and return when it is off. Dark footage, light
-  screenshots and live pause/resume were checked on 10 Nov; full-window 1x/2x and the other states
-  remain. Arc's mute and Reduce Motion behavior are unverified; record differences when comparing.
+- **Music notes:** on a release build, play a favorite on YouTube Music, SoundCloud or Spotify
+  (the 1x/2x side-by-side with Arc used nts.live and a local tone, 11–12 Nov). Notes rise from the
+  icon's top edge, stop 8 pt above the top row and in lower rows drift over the tile above. Pause:
+  they go at once, and a quick resume brings them back. Mute and Reduce Motion: they keep floating,
+  as Arc's do. A regular YouTube video shows none. By hand: split favorites in both orientations,
+  dragging a playing favorite, space swipes and a space with no favorites, for clipping
+  regressions. If notes look denser or wider than Arc's, take a minute-long recording of each.
 
 - **#196:** hover a Today tab and move onto its ✕ several times. The ✕ never vanishes before
   the click.
 - **#7:** click a tab while moving the pointer a few points on a trackpad. It opens.
+- **Row press:** next to Arc, hold the button on a pinned tab, a Today tab, a split, New Tab and a
+  Favorites tile. Each pushes in slightly about its centre (a tile a little more) and springs back
+  on release; a drag doesn't leave it pushed in, a double-click on a tab dips once, folders don't move.
 - **#3, #208:** a middle click on a sidebar tab row closes it; one in a page never does. ⇧⌘J
   opens Downloads in the sidebar; Esc or the back arrow closes the Library.
 - **#233:** with a real mouse, its back button over the sidebar goes to the previous space and
@@ -80,10 +81,20 @@ built release app with a test profile. Note anything that fails in the release's
   with Logi Options+ does not: set Back/Forward to the keystrokes ⌥← and ⌥→ (a plain shortcut, not
   the smart Back gesture) on the Cra profile. Console should log `Cra: mouse key back:`. The
   scenario never sees a real button or that key, so only this check proves the monitor does.
+  With Options+'s own Back and Forward assignments (the gesture, an MX Ergo's default) the same
+  holds: Console logs `Cra: mouse swipe back:`. In Split View the pane under the pointer goes back,
+  not the focused one, and a tab a link opened closes back to its opener. A test can't make a swipe
+  event, so only this check proves the swipe monitor.
 - **#260:** on a built-in trackpad, every space change by a two-finger swipe over the sidebar
   ticks once: a short flick, a slow drag past half (the tick comes at half), and a swipe into
   the Library and back out. A short drag that settles back is silent; a sideways wheel never
   ticks (Arc). `PageDetentHaptics` holds the rule; only a finger feels the tick.
+- **#370:** on a built-in trackpad, click a link that opens a new tab, then swipe back with two
+  fingers over its page: Chromium's back arrow shows, and letting go closes the tab and shows the
+  one the link was clicked in, as the Back button does. On a pinned tab or a split pane with no
+  history the arrow never shows; a tab with pages behind it swipes through those first. The
+  `swipe-back` scenario asks the swipe's two questions (`cra://debug?swipeBack=`); only a finger
+  makes the gesture.
 - **#12:** a two-finger swipe in the hidden sidebar (⌘S) switches spaces, and the next space
   draws mid-swipe. There is one link bubble only, and the dashed ring shows only on a
   cross-space keyboard switch.
@@ -104,11 +115,11 @@ built release app with a test profile. Note anything that fails in the release's
 
 ### Peek, Little Window, Picture in Picture, split view, Capture
 
-- **#373:** with Settings ▸ Links ▸ "⌥⌘-click opens a Little Window" on (the default), hold ⌥ and ⌘ and click
-  a link on a page: the link opens in a Little Window and the page stays where it is, from a normal tab, a
-  pinned tab and a target=_blank link. With the switch off, ⌥⌘-click opens the link in a background tab, as
-  ⌘-click does; with ⇧ or ⌃ down as well, it is another click. (A real click with two modifiers can't be sent to
-  Cra from a scenario; `LittleWindowTrigger` carries the decision.)
+- **#373:** with Settings ▸ Links ▸ "⌥⌘-click opens a Little Window" on (it is off by default), hold ⌥ and ⌘ and
+  click a link on a page with the pointer: the link opens in a Little Window and the page stays where it is, from
+  a normal tab, a pinned tab, a target=_blank link and a WebKit tab (a DRM site, whose page gets no posted click). With the switch off, ⌥⌘-click opens Split View (#298);
+  with ⇧ or ⌃ down as well, it is another click. (`option-command-click-little-window` posts the click through
+  the app's event queue; a click from the hardware, with the keys held on the keyboard, is this line.)
 - **PR #221:** opening a Peek fades the page behind and draws it back a little, its margins widening
   while the sidebar stays still, and closing brings it back in one smooth motion with no jump at the
   end. With "Pages fill the window edge to edge" on, the page only fades. (The values are checked

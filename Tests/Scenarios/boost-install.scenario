@@ -1,0 +1,47 @@
+# Boosts from the gallery (crabrowser.app/boosts) and Share Boost… links: Open in Cra is a
+# cra-boost: address with the boost in it (SharedBoost). Cra asks before adding anything, adds only
+# the boost's look (a js key in the link is dropped), and a page can't offer one without a click.
+# Five dialogs come and go, and AppDialog's panel stalls ~280 ms on each show and each close
+# (as in external-app-links): 10 of the stalls are that.
+budget rss=700 stalls50=16
+pace 0.5
+seed settings.json {"boostsEnabled":false}
+
+# From another app (macOS hands the address over): asked, then added; Boosts turn on.
+cra://debug?externalURL=cra-boost:LY6xCsMwDER_xWhOTDt0MXQvFLoUusQZHEvFBicOthNwQ_69Cu12vDudbgMzxKWAgkcUTxdTySI7CitlCQ0MlZ2XtyWmuw9oXGBoc2YqR9RaOY9Ik9hEnI31pSpxkhexc8rFfNRWbl8GkjaODCczEsObR_p_Y7iCOjfwMfNMCKqDWrBNRKE9hrxZTkiJEidNV3wJdNXwO9bQQ79_AQ
+expect-log boost link from another app offers youtube\.com
+cra://debug?answerDialog=Add Boost
+expect-log dialog .* answered Add Boost
+expect-log boost added for youtube\.com
+
+# The same link again: it replaces the one added, it doesn't add a second.
+cra://debug?externalURL=cra-boost:LY6xCsMwDER_xWhOTDt0MXQvFLoUusQZHEvFBicOthNwQ_69Cu12vDudbgMzxKWAgkcUTxdTySI7CitlCQ0MlZ2XtyWmuw9oXGBoc2YqR9RaOY9Ik9hEnI31pSpxkhexc8rFfNRWbl8GkjaODCczEsObR_p_Y7iCOjfwMfNMCKqDWrBNRKE9hrxZTkiJEidNV3wJdNXwO9bQQ79_AQ
+expect-log boost link from another app offers youtube\.com
+cra://debug?answerDialog=Replace Boost
+expect-log dialog .* answered Replace Boost
+
+# A page's script can't offer one without a click; a click on a link can.
+cra://open?url=${PAGE}?n=boostlink
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?pageJS=location.href='cra-boost:LY6xCsMwDER_xWhOTDt0MXQvFLoUusQZHEvFBicOthNwQ_69Cu12vDudbgMzxKWAgkcUTxdTySI7CitlCQ0MlZ2XtyWmuw9oXGBoc2YqR9RaOY9Ik9hEnI31pSpxkhexc8rFfNRWbl8GkjaODCczEsObR_p_Y7iCOjfwMfNMCKqDWrBNRKE9hrxZTkiJEidNV3wJdNXwO9bQQ79_AQ'
+expect-log page 127\.0\.0\.1 can't offer a boost \(no click\)
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='cra-boost:LY6xCsMwDER_xWhOTDt0MXQvFLoUusQZHEvFBicOthNwQ_69Cu12vDudbgMzxKWAgkcUTxdTySI7CitlCQ0MlZ2XtyWmuw9oXGBoc2YqR9RaOY9Ik9hEnI31pSpxkhexc8rFfNRWbl8GkjaODCczEsObR_p_Y7iCOjfwMfNMCKqDWrBNRKE9hrxZTkiJEidNV3wJdNXwO9bQQ79_AQ',document.body.append(a),a.click(),'clicked'))(document.createElement('a'))","userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"clicked"
+expect-log boost link from 127\.0\.0\.1 offers youtube\.com
+cra://debug?answerDialog=Cancel
+expect-log dialog .* answered Cancel
+
+# A link whose CSS would load from the web is refused, with the reason.
+cra://debug?externalURL=cra-boost:LctJCoQwEAXQu_yVDcHQ2wI3XkMUqpNCxUyYAUG8e298-3ejgb4Kgb2AMLKFwhZzAUEu9slJb6KHgskZhD2kWqbGrsoy8Hz_2BzrGWuwVE_XbaWkTFpL213_fs2fB88f
+expect-log boost link from another app refused: Its CSS uses url\(\), which loads from the web\.
+cra://debug?answerDialog=OK
+
+# An added boost restyles its site at once, with Boosts turned back on; the link's js never runs.
+cra://debug?externalURL=cra-boost:FcxBDoIwEAXQq4zfjSaThuLCpMYbeANx0dIGUek0tErAcHfjO8D74gOjGdEOAQYXae0LjLvkAgNdH1WlKqXBaHOGgRM_05ecbZ_dKO_oDY2d22mmmumwp00_JBmLjeVEKxiLTSl4mCu2i01DwI3x-EdTH71MyonkEjydqcEccgOsPw
+expect-log boost link from another app offers 127\.0\.0\.1
+cra://debug?answerDialog=Add Boost
+expect-log boost added for 127\.0\.0\.1
+cra://open?url=${PAGE}?n=boosted
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const z=document.createElement('div');z.id='zapme';document.body.append(z);return 'boost-'+getComputedStyle(document.body).backgroundColor+'-'+getComputedStyle(z).display+'-'+(window.boosted||'nojs')})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"boost-rgb\(1, 2, 3\)-none-nojs"

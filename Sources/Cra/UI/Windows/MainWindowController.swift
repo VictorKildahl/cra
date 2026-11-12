@@ -824,6 +824,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         store.selectTab(id, window: windowID)
     }
 
+    /// Arc's View ▸ Expand Current Split: the pane takes the window and the other panes keep the
+    /// minimum width, stored as the split's width factors like a divider drag (SplitPaneLayout.expanding).
+    /// Arc lays it out in one frame; a double-click on a divider or a drag brings the panes back.
+    func expandSplitPane(_ id: UUID) {
+        guard let split = store.splitContaining(id) else { return }
+        let factors = SplitPaneLayout.expanding(id, in: store.paneTabIDs(for: id))
+        store.setSplitWidthFactors(split.id, factors.mapValues { Double($0) })
+    }
+
     func cycleSplitPane(_ delta: Int) {
         guard let current = selectedTabID else { return }
         let panes = store.paneTabIDs(for: current)
@@ -1861,10 +1870,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         return true
     }
 
-    /// Arc's ⌥⌘-click (LittleWindowTrigger): the link opens in a Little Window and the tab stays put.
+    /// Arc's ⌥⌘-click (LittleWindowTrigger, decided by BrowserManager): the link opens in a Little Window and the
+    /// tab stays put. After Chromium's call returns, as a split pane opens: the window makes a page of its own.
     func browserManagerOpensLittleWindow(url: String, fromTab tabID: UUID) -> Bool {
-        guard !isIncognito, LittleWindowTrigger.opens(url, optionCommand: true, settings: store.settings) else { return false }
-        _ = app.openLittleWindow(url: url, space: focusedSpaceID)
+        guard !isIncognito else { return false }
+        let space = focusedSpaceID
+        DispatchQueue.main.async { [weak self] in _ = self?.app.openLittleWindow(url: url, space: space) }
         return true
     }
 
@@ -2199,6 +2210,33 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
     }
 
+    /// The tab whose page `event` landed on: a Chromium page in its own host window, or the pane
+    /// under the point for a page in this window (an embedded Chromium page, whose view lives in
+    /// the pane card and not its host window, or an Easel or WebKit page). A swipe goes to the
+    /// page under the pointer, which in Split View needn't be the focused pane. nil anywhere else
+    /// (the sidebar, a panel).
+    func pageTab(under event: NSEvent) -> UUID? {
+        guard let target = event.window else { return nil }
+        return browsers.visibleTabIDs.first { id in
+            guard let browser = browsers.runtime(for: id)?.browser else { return false }
+            if let host = browser.hostWindow, host === target { return true }
+            let embedded = browser.hostWindow.flatMap { EmbeddedPages.isHost($0) ? EmbeddedPages.pageViews(of: $0)?.last : nil }
+            let view = embedded ?? browser.containerView
+            return view.window === target && view.bounds.contains(view.convert(event.locationInWindow, from: nil))
+        }
+    }
+
+    /// A two-finger swipe back over tab `id`'s page, which has nothing behind it, so Chromium's
+    /// swipe asks Cra (ChromiumHistorySwipe, GitHub #370): what Back does there, a link's tab
+    /// closing to the tab it came from. nil when the swipe shouldn't start.
+    func swipeBackClose(_ id: UUID) -> (() -> Void)? {
+        guard case .close(let referrer) = store.backStep(id, canGoBack: false, swipe: true) else { return nil }
+        return { [weak self] in
+            guard let self else { return }
+            store.closeToReferrer(id, referrer: referrer, window: windowID)
+        }
+    }
+
     /// Whether Back does anything on tab `id` showing `browser` (Arc: canNavigateBack).
     private func canNavigateBack(_ id: UUID?, _ browser: CraBrowser?) -> Bool {
         guard let id, let browser else { return false }
@@ -2281,8 +2319,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// Send To… an easel: the capture goes on it, under what is there, and its tab comes forward
     /// (a new one when it has none open).
-    private func sendCapture(_ png: Data, toEasel id: UUID) {
-        guard EaselFiles.add(picture: png, to: id) else { return }
+    private func sendCapture(_ png: Data, toEasel id: UUID, source: Easel.Capture? = nil) {
+        guard EaselFiles.add(picture: png, to: id, source: source) else { return }
         CraLog.note("capture sent to an easel, which now holds \(EaselFiles.load(id).items.count) items")
         let url = Easel(id: id).url
         if let tab = store.allTabs().first(where: { $0.tab?.url == url }) {
@@ -2302,14 +2340,51 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 let o = shot.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
                 let png = (o?["data"] as? String).flatMap { Data(base64Encoded: $0) }
                 // send: Send To… the easel edited last, as if picked from its menu.
-                if send, let png, let last = EaselFiles.all().first { self?.sendCapture(png, toEasel: last.id); return }
-                self?.captureFinished(.newEasel, png)
+                // A capture of the whole visible page, so it can go live like a dragged one.
+                guard let self, let b = self.currentBrowser, let png,
+                      let rt = self.browsers.visibleRuntime, let rect = self.pageScreenRect(rt) else { self?.captureFinished(.newEasel, png); return }
+                let area = CGRect(origin: .zero, size: rect.size)
+                self.captureSource(b, rect: area, page: rect.size) { [weak self] source in
+                    if send, let last = EaselFiles.all().first { self?.sendCapture(png, toEasel: last.id, source: source); return }
+                    self?.captureFinished(.newEasel, png, in: nil, source: source)
+                }
+            }
+        }
+    }
+
+    /// Where a capture came from, for an easel (Arc's WebCard): the page's address and title, its
+    /// CSS viewport and scroll, and the captured area in CSS pixels, read from the page.
+    func captureSource(_ b: CraBrowser, rect: CGRect, page: CGSize, done: @escaping (Easel.Capture?) -> Void) {
+        let url = b.currentURL, title = b.currentTitle
+        guard Easel.webAddress(url) != nil else { done(nil); return }
+        let script = "[scrollX, scrollY, innerWidth, innerHeight]"
+        let params = (try? JSONSerialization.data(withJSONObject: ["expression": script, "returnByValue": true])).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        b.sendDevToolsMethod("Runtime.evaluate", params: params) { result, _ in
+            let v = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+                .flatMap { ($0["result"] as? [String: Any])?["value"] as? [Double] }
+            DispatchQueue.main.async {
+                guard let v, v.count == 4, page.width > 0 else { done(Easel.Capture(url: url, title: title.isEmpty ? nil : title, image: "", captured: Date())); return }
+                let k = v[2] / page.width  // CSS pixels per point (the page's zoom)
+                done(Easel.Capture(url: url, title: title.isEmpty ? nil : title, image: "", captured: Date(),
+                                   viewport: .init(v[2], v[3]), scroll: .init(v[0], v[1]),
+                                   area: .init(x: rect.minX * k, y: rect.minY * k, width: rect.width * k, height: rect.height * k)))
             }
         }
     }
 
     /// The capture menu's choice, once the overlay is down.
-    func captureFinished(_ action: CaptureOverlay.Action?, _ png: Data?, in peek: LittleWindowController? = nil) {
+    func captureFinished(_ action: CaptureOverlay.Action?, _ png: Data?, in peek: LittleWindowController? = nil,
+                         from: (browser: CraBrowser, rect: CGRect, page: CGSize)? = nil) {
+        if action == .newEasel || action == .sendToEasel, let from, let png {
+            captureSource(from.browser, rect: from.rect, page: from.page) { [weak self] source in
+                self?.captureFinished(action, png, in: peek, source: source)
+            }
+            return
+        }
+        captureFinished(action, png, in: peek, source: nil)
+    }
+
+    private func captureFinished(_ action: CaptureOverlay.Action?, _ png: Data?, in peek: LittleWindowController?, source: Easel.Capture?) {
         captureOverlay = nil
         if let peek {
             if peek.canCapturePage, action != nil || NSApp.isActive { peek.focusPage() }
@@ -2327,18 +2402,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         case .message?:
             if let png { sendCaptureViaMessages(png) }
         case .newEasel?:
-            guard let png, let easel = EaselFiles.create(withPicture: png) else { return }
+            guard let png, let easel = EaselFiles.create(withPicture: png, source: source) else { return }
             _ = store.createTab(url: easel.url, title: easel.title, select: true, window: windowID)
         case .sendToEasel?:
             guard let png else { return }
             let easels = EaselFiles.all()
             guard !easels.isEmpty else {
-                if let easel = EaselFiles.create(withPicture: png) { _ = store.createTab(url: easel.url, title: easel.title, select: true, window: windowID) }
+                if let easel = EaselFiles.create(withPicture: png, source: source) { _ = store.createTab(url: easel.url, title: easel.title, select: true, window: windowID) }
                 return
             }
             let menu = NSMenu()
             for e in easels {
-                MenuItems.add(menu, e.title) { [weak self] in self?.sendCapture(png, toEasel: e.id) }
+                MenuItems.add(menu, e.title) { [weak self] in self?.sendCapture(png, toEasel: e.id, source: source) }
             }
             menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
         case .retake?:
@@ -3329,6 +3404,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
               let boost = BoostStore.shared.boostForSite(of: url) else { showToast("Boosts Work on Websites"); return }
         BoostEditorController.shared.open(boost, over: window, page: .init(
             zap: { [weak self] on in self?.setZapping(on) },
+            dim: { [weak self] on in self?.zapBrowser?.executeJavaScript(BoostZap.dimExpression(on)) },
             pick: { [weak self] on in self?.setPicking(on) },
             toggleDevTools: { [weak self] in self?.browsers.runDevTools(.toggle) },
             devToolsOpen: { [weak self] in self?.browsers.visibleTabHasDevTools ?? false },
@@ -3405,40 +3481,69 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
     }
 
-    /// Zap: the page outlines what's under the pointer, and a click hides it and keeps a selector
-    /// for it; when Zap ends the selectors go into the boost.
+    /// Arc's Zap (BoostZap): the page highlights what's under the pointer and asks before it zaps;
+    /// the shelf under the page lists what's zapped. Cra polls the page for its answers, which go
+    /// straight into the boost (the page hides them through the boost's stylesheet).
     /// Testing without the pointer (cra://debug?boostZap=1|0): Zap on or off, as its button does.
-    func debugZap(_ on: Bool) { setZapping(on) }
+    func debugZap(_ on: Bool) {
+        guard let model = BoostEditorController.shared.editing else { return CraLog.note("zap: no editor") }
+        if model.zapping != on { model.toggleZap() }
+    }
+
+    private var zapTimer: Timer?
+    private weak var zapBrowser: CraBrowser?
+    private weak var zapCard: PaneCardView?
 
     private func setZapping(_ on: Bool) {
-        guard let b = currentBrowser else { return }
-        if on { b.executeJavaScript(Self.zapScript); return }
-        b.sendDevToolsMethod("Runtime.evaluate", params: #"{"expression":"(()=>{const z=window.__craZap;if(!z)return '[]';z.stop();return JSON.stringify(z.hidden)})()","returnByValue":true}"#) { result, _ in
+        zapTimer?.invalidate()
+        zapTimer = nil
+        zapBrowser?.executeJavaScript(BoostZap.stopExpression)
+        zapBrowser = nil
+        zapCard?.bottomBar = nil
+        zapCard = nil
+        guard on, let b = currentBrowser, let card = shell.focusedCard, let model = BoostEditorController.shared.editing else { return }
+        zapBrowser = b
+        zapCard = card
+        b.executeJavaScript(BoostZap.script)
+        let colors = ZapShelfColors.current(theme: focusedSpace.theme, toolbarHex: card.toolbarColor)
+        card.bottomBar = ZapShelfHostingView(rootView: ZapShelfView(model: model, colors: colors))
+        CraLog.note("zap on: shelf under the page")
+        let t = Timer(timeInterval: 0.15, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.pollZap() } }
+        RunLoop.main.add(t, forMode: .common)
+        zapTimer = t
+    }
+
+    private func pollZap() {
+        guard let b = zapBrowser else { return }
+        // Arc's Zap belongs to the page it started on.
+        guard b === currentBrowser else { BoostEditorController.shared.stopZapping(); return }
+        // The script goes in again after a navigation; then it answers what it zapped.
+        let expression = BoostZap.script + ";" + BoostZap.takeExpression
+        guard let data = try? JSONSerialization.data(withJSONObject: ["expression": expression, "returnByValue": true]),
+              let params = String(data: data, encoding: .utf8) else { return }
+        b.sendDevToolsMethod("Runtime.evaluate", params: params) { result, _ in
             MainActor.assumeIsolated {
                 let o = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
-                let text = (o?["result"] as? [String: Any])?["value"] as? String ?? "[]"
-                let selectors = (try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String]) ?? []
-                BoostEditorController.shared.addZapped(selectors)
+                let selectors = BoostZap.parseTaken((o?["result"] as? [String: Any])?["value"] as? String ?? "")
+                if !selectors.isEmpty { BoostEditorController.shared.addZapped(selectors) }
             }
         }
+    }
+
+    /// Testing the shelf without the pointer (cra://debug?zapHover=<cell>|-1, zapUnzap=<cell>,
+    /// zapPress=this|related|cancel): the pointer on a cell, a cell's click, a popover button.
+    func debugZapShelf(hover: Int?, unzap: Int?, press: String?) {
+        guard let model = BoostEditorController.shared.editing else { return CraLog.note("zap shelf: no editor") }
+        if let hover { model.hoveredZap = hover < 0 ? nil : hover }
+        if let unzap, model.boost.zapped.indices.contains(unzap) { model.unzap(model.boost.zapped[unzap]) }
+        if let press { zapBrowser?.executeJavaScript("window.__craZap&&window.__craZap.press('\(press)')") }
+        let hint = BoostZap.hint(zapped: model.boost.zapped, hovered: model.hoveredZap)
+        CraLog.note("zap shelf: cells=\(model.boost.zapped.count) hint=\(hint) bar=\(zapCard?.bottomBarHeight ?? 0) page=\(Int(zapCard?.webArea.frame.height ?? 0))")
     }
 
     private var pickTimer: Timer?
     private weak var pickBrowser: CraBrowser?
     private var pickAnswer: BoostPicker.Action?
-
-    static let zapScript = """
-    (()=>{if(window.__craZap)return;const hidden=[];let over=null;
-    const sel=e=>{if(e.id)return '#'+CSS.escape(e.id);const p=[];for(let n=e;n&&n.nodeType===1&&n!==document.body&&p.length<5;n=n.parentElement){
-    if(n.id){p.unshift('#'+CSS.escape(n.id));break}let i=1;for(let s=n.previousElementSibling;s;s=s.previousElementSibling)if(s.tagName===n.tagName)i++;
-    p.unshift(n.tagName.toLowerCase()+':nth-of-type('+i+')')}return (p[0]&&p[0][0]==='#'?'':'body > ')+p.join(' > ')};
-    const mark=e=>{if(over)over.style.outline=over.__craOutline||'';over=e;if(e){e.__craOutline=e.style.outline;e.style.outline='2px solid #ff3b30'}};
-    const page=t=>t===document.body||t===document.documentElement;
-    const move=ev=>mark(page(ev.target)?null:ev.target);
-    const click=ev=>{ev.preventDefault();ev.stopPropagation();const t=ev.target;if(page(t))return;mark(null);hidden.push(sel(t));t.style.display='none'};
-    document.addEventListener('mouseover',move,true);document.addEventListener('click',click,true);
-    window.__craZap={hidden,stop(){document.removeEventListener('mouseover',move,true);document.removeEventListener('click',click,true);mark(null);delete window.__craZap}}})()
-    """
 
     // MARK: Arc parity (docs/arc-parity.md)
 

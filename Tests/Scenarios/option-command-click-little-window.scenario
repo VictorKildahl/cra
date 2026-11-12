@@ -1,0 +1,29 @@
+# promise: #373
+# Settings ▸ Links ▸ "⌥⌘-click opens a Little Window" (Arc's "Open Little Arc when clicking on links with ⌥⌘
+# held"), turned on: a link ⌥⌘-clicked opens in a Little Window and the page stays as it was, no split pane.
+# The keys are the click's own, as an Option-click's (#298): these clicks go through the app's event queue
+# with the keys on the event, and none is held on the keyboard. A ⌘-click stays a background tab. With the
+# switch off (the default) a ⌘⌥-click opens Split View: link-option-click-split.
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "littleWindowOnOptionCommandClick": true}
+
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=source
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+# A link over the whole page, so a click anywhere on it lands on the link.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='${PAGE}?n=littleLink',a.textContent='link',a.style.cssText='position:fixed;inset:0;z-index:9;background:pink',document.body.append(a),'placed'))(document.createElement('a'))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"placed"
+cra://debug?clickAt=760,400&mods=1572864
+wait 2
+cra://debug?littleShown=option-command
+expect-log little shown option-command: windows=1 space=Personal profile=Default
+cra://debug?split=option-command
+expect-log split option-command: panes=none selected=\S+n=source downloads=0$
+
+# ⌘-click: a background tab, no Little Window.
+cra://debug?clickAt=760,400&mods=1048576
+wait 2
+cra://debug?littleShown=command
+expect-log little shown command: windows=1 

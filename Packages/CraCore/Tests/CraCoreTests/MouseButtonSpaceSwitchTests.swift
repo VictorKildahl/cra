@@ -70,4 +70,22 @@ struct MouseButtonSpaceSwitchTests {
         #expect(MouseButtonSpaceSwitch.action(offset: -1, pointerOverSidebar: false, editingText: true, isRepeat: true) == nil)
         #expect(MouseButtonSpaceSwitch.action(offset: -1, pointerOverSidebar: true, editingText: true, isRepeat: true) == nil)
     }
+
+    /// Logi Options+'s default Back and Forward on an MX Ergo or MX Master are its "Back" and
+    /// "Forward" gestures (OSX_GESTURE_BACK/FORWARD), which post an NSEvent swipe, as a
+    /// three-finger swipe on a trackpad does. Left is positive: deltaX 1 is back, −1 forward.
+    @Test
+    func aSwipeRightIsBackAndASwipeLeftIsForward() {
+        #expect(MouseButtonSpaceSwitch.offset(swipeDeltaX: 1, deltaY: 0) == -1)
+        #expect(MouseButtonSpaceSwitch.offset(swipeDeltaX: -1, deltaY: 0) == 1)
+    }
+
+    /// An up or down swipe, or one too small to have a side, is not back or forward.
+    @Test
+    func aVerticalOrTinySwipeIsNotBackOrForward() {
+        #expect(MouseButtonSpaceSwitch.offset(swipeDeltaX: 0, deltaY: 1) == nil)
+        #expect(MouseButtonSpaceSwitch.offset(swipeDeltaX: 0, deltaY: -1) == nil)
+        #expect(MouseButtonSpaceSwitch.offset(swipeDeltaX: 0.2, deltaY: 0) == nil)
+        #expect(MouseButtonSpaceSwitch.offset(swipeDeltaX: 0, deltaY: 0) == nil)
+    }
 }

@@ -7,11 +7,15 @@ final class MainWindowController: NSWindowController {
     var captureOverlay: CaptureOverlay?
     var captureRequest: (id: UUID, window: NSWindow)?
     var onCaptureFinished: ((CaptureOverlay.Action?, Data?) -> Void)?
+    /// Where the last capture came from (page points, the page's size): an easel keeps it.
+    var capturedFrom: (rect: CGRect, page: CGSize)?
 
     func showToast(_ text: String) {}
 
-    func captureFinished(_ action: CaptureOverlay.Action?, _ png: Data?, in peek: LittleWindowController? = nil) {
+    func captureFinished(_ action: CaptureOverlay.Action?, _ png: Data?, in peek: LittleWindowController? = nil,
+                         from: (browser: CraBrowser, rect: CGRect, page: CGSize)? = nil) {
         captureOverlay = nil
+        capturedFrom = from.map { ($0.rect, $0.page) }
         onCaptureFinished?(action, png)
     }
 }

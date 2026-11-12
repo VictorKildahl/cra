@@ -551,7 +551,8 @@ final class ShellView: NSView {
         for c in paneCards where c.tabID != ShellView.noTabID {
             guard let f = layout.frames[c.tabID] else { continue }
             let th: CGFloat = panesShowBars ? c.toolbarHeight : 0
-            var web = NSRect(x: f.minX, y: f.minY, width: f.width, height: max(0, f.height - th))
+            let bh = c.bottomBarHeight
+            var web = NSRect(x: f.minX, y: f.minY + bh, width: f.width, height: max(0, f.height - th - bh))
             if c.tabID == focusedPaneID, devToolsVisible, !devToolsFrontendDocked, f.width > 640 {
                 web.size.width -= min(max(320, devToolsWidth), f.width * 0.7)
             }
@@ -768,24 +769,25 @@ final class ShellView: NSView {
         let focus = focusedCard
         let fb = focus?.bounds ?? .zero
         let th: CGFloat = toolbarVisible ? focus?.toolbarHeight ?? CraMetrics.toolbarHeight : 0
-        let bodyH = max(0, fb.height - th)
+        let bh = focus?.bottomBarHeight ?? 0
+        let bodyH = max(0, fb.height - th - bh)
         let selfDock = devToolsFrontendDocked
         let showDev = devToolsVisible && hasTab && focus != nil && (selfDock || fb.width > 640)
         let devW: CGFloat = showDev && !selfDock ? min(max(320, devToolsWidth), fb.width * 0.7) : 0
         if let focus, showDev {
             for v in [devToolsHost, devToolsDivider, devToolsHandle] where v.superview !== focus { v.removeFromSuperview(); focus.addSubview(v) }
-            focus.webArea.frame = NSRect(x: 0, y: 0, width: fb.width - devW, height: bodyH)
+            focus.webArea.frame = NSRect(x: 0, y: bh, width: fb.width - devW, height: bodyH)
             EmbeddedPages.place(focus.webArea.subviews, in: focus.pageBounds)
         }
         // A frontend-docked DevTools paints its own split; the shell's dock chrome stays hidden.
         devToolsHost.isHidden = !showDev || selfDock
         devToolsDivider.isHidden = !showDev || selfDock
         devToolsHandle.isHidden = !showDev || selfDock
-        let devFrame = selfDock ? NSRect(x: 0, y: 0, width: fb.width, height: bodyH)
-                                : NSRect(x: fb.width - devW, y: 0, width: devW, height: bodyH)
+        let devFrame = selfDock ? NSRect(x: 0, y: bh, width: fb.width, height: bodyH)
+                                : NSRect(x: fb.width - devW, y: bh, width: devW, height: bodyH)
         devToolsHost.frame = devFrame
-        devToolsDivider.frame = NSRect(x: fb.width - devW, y: 0, width: 1, height: bodyH)
-        devToolsHandle.frame = NSRect(x: fb.width - devW - 3, y: 0, width: 7, height: bodyH)
+        devToolsDivider.frame = NSRect(x: fb.width - devW, y: bh, width: 1, height: bodyH)
+        devToolsHandle.frame = NSRect(x: fb.width - devW - 3, y: bh, width: 7, height: bodyH)
         for sub in devToolsHost.subviews { sub.frame = devToolsHost.bounds }
         if showDev, let focus { onDevToolsFrame?(focus.convert(devFrame, to: nil)) }
 

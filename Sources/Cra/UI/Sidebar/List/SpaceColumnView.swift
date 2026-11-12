@@ -671,7 +671,7 @@ final class FavoritesGridView: NSView {
                 guard !panes.isEmpty else { continue }
                 // A split emits notes from its first playing music pane.
                 if let cell = panes.firstIndex(where: { p in
-                    p.tab.map { MusicNotes.plays(url: $0.url, soundPlaying: soundPlaying.contains(p.id), muted: $0.muted) } ?? false
+                    p.tab.map { MusicNotes.plays(url: $0.url, soundPlaying: soundPlaying.contains(p.id)) } ?? false
                 }) {
                     playing[item.id] = Playing(cell: cell, count: panes.count, vertical: item.split?.orientation == .vertical)
                 }
@@ -1234,6 +1234,7 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
     private var hoveredCell: Int? { didSet { if hoveredCell != oldValue { ArcTooltipController.shared.mouseExited(self) } } }
     private var hovering = false { didSet { if hovering != oldValue { refresh() } } }
     private var press: NSEvent?
+    private var pushedIn = false
     /// Scenarios (cra://debug?hover=FavoriteTileView,n): the tile as the pointer leaves it hovered (#293).
     func debugHover() { hovering = true }
 
@@ -1477,14 +1478,22 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
                                       timing: grid?.store.settings.calendarMeetingLink ?? .twoMinutes) { [weak grid] in grid?.actions.openURL($0) }
     }
 
+    private func push(in down: Bool) {
+        guard down != pushedIn else { return }
+        pushedIn = down
+        springPress(down, scale: SidebarRowPress.scale(.favorite))
+    }
+
     override func mouseDown(with event: NSEvent) {
         FavoritePreviewCard.shared.cancel(self)
         press = event
+        if SidebarRowPress.pushesIn(.favorite, clickCount: event.clickCount) { push(in: true) }
     }
     override func mouseDragged(with event: NSEvent) {
         guard let p = press, let grid else { return }
         guard hypot(event.locationInWindow.x - p.locationInWindow.x, event.locationInWindow.y - p.locationInWindow.y) > 3 else { return }
         press = nil
+        push(in: false)
         grid.ui.draggingID = itemID
         let pb = NSPasteboardItem()
         if let data = try? JSONEncoder().encode(SidebarDragItem(id: itemID)) { pb.setData(data, forType: .craSidebarItem) }
@@ -1493,6 +1502,7 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         beginDraggingSession(with: [item], event: p, source: self)
     }
     override func mouseUp(with event: NSEvent) {
+        push(in: false)
         guard let p = press, let grid else { return }
         press = nil
         grid.ui.keyboardFocusID = nil

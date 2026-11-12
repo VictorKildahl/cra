@@ -1,0 +1,39 @@
+# A two-finger swipe back over a tab a link opened (GitHub #370), as Back does (#273) and as in Arc
+# (WebContentsUIDelegate::CanExternallyNavigate): Chromium's history swipe asks the page's swipe
+# delegate whether it may start and calls it at the end. A test can't make the gesture, so
+# cra://debug?swipeBack= asks the front page's delegate those two questions (go=1: the end).
+# promise: #370
+budget rss=900 stalls50=40
+pace 0.5
+
+cra://open?url=${PAGE}?n=source
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+# Nothing behind the page and no tab to return to: no swipe.
+cra://debug?swipeBack=start
+expect-log swipe back start: can=0$
+
+# A target=_blank link: a new tab in front, with no history of its own. The swipe may start.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='${PAGE}?n=link',a.target='_blank',document.body.append(a),a.click(),'clicked'))(document.createElement('a'))","userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"clicked"
+wait 1.5
+cra://debug?back=opened
+expect-log back opened: selected=\S+n=link back=1 today=2$
+cra://debug?swipeBack=opened
+expect-log swipe back opened: can=1$
+
+# A page it went on to comes first: the swipe is Chromium's own, back to the link's page.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"location.href='${PAGE}?n=next'","userGesture":true}
+wait 1.5
+cra://debug?swipeBack=history&go=1
+expect-log swipe back history: can=1$
+wait 1.5
+cra://debug?back=history
+expect-log back history: selected=\S+n=link back=1 today=2$
+
+# Then the swipe's end closes the tab and the page the link was clicked in is in front again.
+cra://debug?swipeBack=close&go=1
+expect-log swipe back close: can=1$
+wait 1
+cra://debug?back=returned
+expect-log back returned: selected=\S+n=source back=0 today=1$

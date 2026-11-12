@@ -44,6 +44,7 @@ enum TestRoot { case today }
         }
         var shareThemeWithWebsites = true
         var blockCookieBanners = false
+        var littleWindowOnOptionCommandClick = false
     }
     func cookieBannerCSS(item: UUID) -> String? { settings.blockCookieBanners ? "#onetrust-banner-sdk { display: none !important; }" : nil }
     func themeDataCSS(item: UUID, systemDark: Bool) -> String? {

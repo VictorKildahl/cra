@@ -19,8 +19,11 @@ struct LinksPane: View {
                         // Arc: "Open Little Arc when I press ⌥⌘N in any app" (#195).
                         SettingsSwitchLine("Open Little Window when I press \(shortcut) in any app", isOn: $store.settings.littleWindowShortcutEverywhere)
                         SettingsCardDivider()
-                        // Arc: "Open Little Arc when clicking on links with ⌥⌘ held" (#373).
-                        SettingsSwitchLine("Open Little Window when clicking on links with ⌥⌘ held", isOn: $store.settings.littleWindowOnOptionCommandClick)
+                        // Arc: "Open Little Arc when clicking on links with ⌥⌘ held" (#373). Off in Cra: a ⌘⌥-click opens
+                        // Split View otherwise (#298).
+                        SettingsSwitchLine("Open Little Window when clicking on links with ⌥⌘ held", isOn: $store.settings.littleWindowOnOptionCommandClick) {
+                            Text("Off, a ⌥⌘-click opens the link in Split View.").font(.system(size: 11)).foregroundStyle(.secondary)
+                        }
                         SettingsCardDivider()
                         SettingsSwitchLine("Links from other apps open in Little Window", isOn: $store.settings.openExternalLinksInLittleWindow)
                         SettingsCardDivider()

@@ -1,0 +1,9 @@
+{
+  "v": 1,
+  "name": "Full Width",
+  "host": "github.com",
+  "about": "Repositories, issues and pull requests use the whole window.",
+  "by": "VictorKildahl",
+  "preview": "https://github.com/VictorKildahl/cra",
+  "css": ".container-xl, .container-lg, .container-md { max-width: none !important; }"
+}

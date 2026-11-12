@@ -147,7 +147,8 @@ enum EaselThumbnail {
     static func image(for id: UUID, edited: Date) -> NSImage? {
         if let (d, img) = cache[id], d == edited { return img }
         let easel = EaselFiles.load(id)
-        let items = easel.items
+        // A picture set as the easel's thumbnail stands for it on its own.
+        let items = easel.thumbnailItem.map { [$0] } ?? easel.items
         guard !items.isEmpty else { cache[id] = (edited, NSImage()); return nil }
         let minX = items.map(\.frame.x).min()!, minY = items.map(\.frame.y).min()!
         let maxX = items.map { $0.frame.x + $0.frame.width }.max()!, maxY = items.map { $0.frame.y + $0.frame.height }.max()!
@@ -163,12 +164,16 @@ enum EaselThumbnail {
             t.concat()
             for item in items {
                 let r = NSRect(x: item.frame.x, y: item.frame.y, width: item.frame.width, height: item.frame.height)
-                (item.color.map { NSColor(hex: $0) } ?? ink).setStroke()
+                // The canvas's colours, in the palette's light look (black ink on the light card).
+                let shade = item.shade ?? (item.color == nil ? Easel.defaultShade(item.kind) : nil)
+                let color = shade.map { NSColor(hex: Easel.hex($0, palette: easel.palette, dark: false)) } ?? item.color.map { NSColor(hex: $0) } ?? ink
+                color.setStroke()
+                color.withAlphaComponent(Easel.shapeFillOpacity).setFill()
                 switch item.kind {
                 case .rectangle:
-                    let p = NSBezierPath(roundedRect: r, xRadius: 4, yRadius: 4); p.lineWidth = 3 / scale; p.stroke()
+                    let p = NSBezierPath(rect: r); p.fill(); p.lineWidth = 3 / scale; p.stroke()
                 case .ellipse:
-                    let p = NSBezierPath(ovalIn: r); p.lineWidth = 3 / scale; p.stroke()
+                    let p = NSBezierPath(ovalIn: r); p.fill(); p.lineWidth = 3 / scale; p.stroke()
                 case .arrow(let a, let b):
                     let p = NSBezierPath(); p.move(to: NSPoint(x: a.x, y: a.y)); p.line(to: NSPoint(x: b.x, y: b.y))
                     p.lineWidth = 3 / scale; p.stroke()
@@ -179,6 +184,17 @@ enum EaselThumbnail {
                     p.lineWidth = 3 / scale; p.lineCapStyle = .round; p.stroke()
                 case .image(let file):
                     NSImage(contentsOf: EaselFiles.pictures(id).appendingPathComponent(file))?.draw(in: r)
+                case .link(let l):
+                    let card = NSBezierPath(roundedRect: r, xRadius: 8, yRadius: 8)
+                    NSColor.white.setFill(); card.fill()
+                    if let file = l.image, let pic = NSImage(contentsOf: EaselFiles.pictures(id).appendingPathComponent(file)) {
+                        NSGraphicsContext.saveGraphicsState(); card.addClip()
+                        EaselCards.drawCovering(pic, in: NSRect(x: r.minX, y: r.minY, width: r.width, height: max(0, r.height - Easel.linkBarHeight)))
+                        NSGraphicsContext.restoreGraphicsState()
+                    }
+                    ink.setStroke(); card.lineWidth = 1 / scale; card.stroke()
+                case .capture(let c):
+                    NSImage(contentsOf: EaselFiles.pictures(id).appendingPathComponent(c.image))?.draw(in: r)
                 case .text(let s, let size):
                     (s as NSString).draw(in: r, withAttributes: [.font: EaselSheetView.font(item.style, size: size, title: false), .foregroundColor: ink])
                 }

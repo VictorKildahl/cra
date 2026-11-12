@@ -99,6 +99,9 @@ hooks and how to run a test instance next to your daily Cra.
 
 [docs/reviewing.md](docs/reviewing.md) lists what a review checks, so you can check it first.
 
+A Boost for the gallery on crabrowser.app/boosts needs no Swift: one `boost.json` in
+[boosts/](boosts/README.md), which says what a gallery Boost may do and how to send one.
+
 ## Chromium and CEF
 
 The CEF version is pinned in `scripts/fetch-cef.sh`, which downloads Cra's own CEF build

@@ -95,7 +95,8 @@ protocol BrowserManagerDelegate: AnyObject {
     /// Arc's Peek: a link the user clicked (or Shift-clicked) in `tabID`, whose page is at
     /// `pageURL`. Return true when it opens in a Peek instead.
     func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool, newTab: Bool) -> Bool
-    /// Arc's ⌥⌘-click: a link clicked in `tabID` with both keys down. Return true when it opens in a Little Window.
+    /// Arc's ⌥⌘-click: a link clicked in `tabID` with both keys down, the switch on. Return true when it opens
+    /// in a Little Window (after Chromium's call returns).
     func browserManagerOpensLittleWindow(url: String, fromTab tabID: UUID) -> Bool
     /// The page's context menu: Open Link in New Window, Little Window or Incognito Window.
     func browserManagerOpenLink(_ url: String, in kind: CraLinkWindow, space: UUID?, fromIncognito: Bool)
@@ -793,6 +794,17 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         return id
     }
 
+    /// The tab on screen whose page `view` (Chromium's page view or one inside it) belongs to:
+    /// in its pane's card (EmbeddedPages), in its own Chrome window, or in its Alloy container.
+    func visibleTabID(ofPageView view: NSView) -> UUID? {
+        visibleTabIDs.first { id in
+            guard let rt = runtimes[id] else { return false }
+            if view.isDescendant(of: rt.browser.containerView) { return true }
+            guard let host = rt.hostWindow else { return false }
+            return view.window === host || (EmbeddedPages.pageViews(of: host)?.contains { view.isDescendant(of: $0) } ?? false)
+        }
+    }
+
     // MARK: Delete browsing data
 
     /// Chrome's Settings page (its Delete browsing data dialog) runs in Chromium; the command
@@ -1487,8 +1499,13 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         return delegate?.browserManagerOpensPeek(url: url, fromTab: id, pageURL: browser.currentURL, shiftClick: shiftClick, newTab: newTab) ?? false
     }
 
-    func browser(_ browser: CraBrowser, opensLittleWindowForURL url: String) -> Bool {
-        guard let id = tabID(of: browser), !browser.isIncognito else { return false }
+    /// Arc's ⌥⌘-click (Settings ▸ Links, #373): a link clicked with ⌥⌘ opens in a Little Window when the switch is
+    /// on. The keys are the click's (LittleWindowTrigger); otherwise the click stays Chromium's (Split View).
+    func browser(_ browser: CraBrowser, opensLittleWindowForURL url: String, clickModifiers: UInt, clickAge: TimeInterval) -> Bool {
+        guard let id = tabID(of: browser), !browser.isIncognito,
+              LittleWindowTrigger.opens(url, clickModifiers: clickModifiers, clickAge: clickAge,
+                                        enabled: store.settings.littleWindowOnOptionCommandClick)
+        else { return false }
         return delegate?.browserManagerOpensLittleWindow(url: url, fromTab: id) ?? false
     }
 

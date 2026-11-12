@@ -1,0 +1,13 @@
+{
+  "v": 1,
+  "name": "Hide Promoted",
+  "host": "reddit.com",
+  "about": "Hides promoted posts in feeds and ads between comments.",
+  "by": "VictorKildahl",
+  "preview": "https://www.reddit.com/r/MacOS/",
+  "zapped": [
+    "shreddit-ad-post",
+    "shreddit-comments-page-ad",
+    "shreddit-sidebar-ad"
+  ]
+}

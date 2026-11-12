@@ -60,8 +60,11 @@ Settings ▸ General ▸ Sync keeps `sidebar.json`, `settings.json` (minus each 
 (`Documents/Cra` in the app's iCloud Documents container; docs/release.md says how the signed
 build gets the entitlement) or through a folder a file provider syncs: `SettingsSyncService`
 writes them with a `manifest.json` into a `Cra` folder there and applies a newer bundle another
-Mac wrote (`SettingsSync` in CraCore decides). `sync.json` in the data folder holds the location
-and the last bundle written or applied. To try it on one Mac, run a second instance on another
+Mac wrote (`SettingsSync` in CraCore decides). A file still downloading is waited for; files
+from different writes (hashes that don't match the manifest, #378) are waited for one to two
+minutes (`SyncMixWait`), then the Mac writes a whole bundle again; a newer Cra's bundle is never
+written over. `cra://debug?sync=<label>` logs what the last look found. `sync.json` in the data
+folder holds the location and the last bundle written or applied. To try it on one Mac, run a second instance on another
 `CRA_DATA_DIR` with `CRA_SYNC_DEVICE=<name>` (a Mac is known in the folder by a hash of its
 hardware UUID, which two instances share);
 `CRA_SYNC_ICLOUD_DIR=<folder>` makes both treat that folder as the iCloud container.
@@ -139,9 +142,15 @@ to Markdown or `docs/` alone runs nothing.
   turning into an × on its spring.
 - `scripts/test-easel-canvas.sh`: the real `EaselSheetView` in an off-screen window, driven with
   synthetic mouse and key events: one click picks a text block, a double click edits it, Return and
-  Escape end editing, Delete removes it, its size pill follows a drag. Then `EaselBrowser` against
-  a stub `CraBrowser`: Peek's opaque canvas, and the clear page and dark bar it reports to the tab
-  that takes it over with ⤢.
+  Escape end editing, Delete removes it, its size pill follows a drag. Undo and Redo, copy and
+  paste, the object and canvas menus, the colour picker, a pasted address as a link card, the
+  alignment guides and a live capture (through a fake `EaselLive`); every kind of item drawn into
+  an sRGB bitmap and its pixels compared with Arc's colours. Then `EaselBrowser` against a stub
+  `CraBrowser`: Peek's opaque canvas, the clear page and dark bar it reports to the tab that takes
+  it over with ⤢, and the capture menu's New Easel and Send To… writing their easel files.
+  `Tests/Scenarios/easel.scenario` checks the rest in the app: `cra://debug?easelLive=<s>` (a
+  capture's live page draws onto its card), `easelLink=<url>` (a link card reads its page),
+  `easelDraw=1` and `easelPick=<n>` (the picker and the object menu).
 - `scripts/test-perf.sh`: the performance recorder on a real main run loop: injected stalls,
   hang files with a `sample` stack, the session marker, ownership, the recording switch
   ([performance.md](performance.md)).

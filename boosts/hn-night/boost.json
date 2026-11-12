@@ -1,0 +1,10 @@
+{
+  "v": 1,
+  "name": "Night",
+  "host": "news.ycombinator.com",
+  "about": "Hacker News in dark colours, pictures left as they are.",
+  "by": "VictorKildahl",
+  "preview": "https://news.ycombinator.com/",
+  "invert": true,
+  "contrast": 45
+}

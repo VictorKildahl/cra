@@ -926,6 +926,38 @@ descriptions and frames) at window widths 1400 → 926 (Arc's minimum), plus win
   profile per side). Pins before ↻ is from the non-split bar (ten pins, ↻ kept); the offline copy loads no
   extensions (`--load-extension` is ignored).
 
+### Expand Current Split (Arc 1.172.2, live, 11 Nov 2026)
+Victor's running Arc (1.172.2 refuses a second instance, and an ad-hoc re-signed copy aborts in CloudKit
+at launch, so no offline copy): a File ▸ Blank Window (it gets a space of its own, nothing synced), a split
+of three local colour pages, driven through AX menu presses with the command bar's field set over AX,
+pane frames read from the AXWebAreas, window recorded with ScreenCaptureKit at ~80 fps. Window 1728×1084,
+sidebar hidden, content 1708 pt wide.
+- [O] Where: View ▸ Expand Current Split, after Separate Page from Split View (MainMenu.nib: action
+  `expandSplitViewPane`, command-bar keywords "Expand; Expand Split View; Maximize"). No shortcut. The pane
+  toolbar's Split View Menu doesn't have it (Move Left/Right, Add Right/Left Split, Separate Tab from
+  Split, Convert to Vertical Split View, Share Split View…). The binary posts
+  `maximizeFocusedSplitViewNotificationToken` / `maximizeCurrentSplitViewPane:`.
+- [O] What it does: the focused pane takes the content area and every other pane drops to 220 pt. Two
+  panes: 849 | 849 → 220 | 1478. Three: 220 | 1248 | 220 whichever pane is focused. The split stays a
+  split: every pane keeps its bar (the small ones with the essentials), the focused one its ring.
+- [O] How it's kept: as the split's width factors. StorableSidebar.json had `itemWidthFactors`
+  [a, 0, b, 0, c, 1] after expanding c, so 220 is Arc's minimumPaneWidth applied to a factor of 0. It
+  follows that a narrower window keeps the small pane at 220 (window 1200: 950 | 220, back at 1728:
+  1478 | 220).
+- [O] Animation: none. One recording frame shows 849 | 849, the next (≈13 ms later) 220 | 1478.
+- [O] Getting back: there is no un-expand. The menu title never changes and a second Expand changes
+  nothing. Expanding another pane (⌃⇧1 to focus it first) swaps them: 1478 | 220. Otherwise the divider
+  (drag, or the double-click reset recovered from `handleDraggerDoubleClickGesture:`, not pressed here).
+- [O] Stacked (Convert to Vertical Split View, middle pane expanded, 1064 pt tall): 210 | 614 | 220. The
+  pane above a divider counts the 10 pt divider in its 220 (each stacked pane carries its own
+  SplitViewBottomDraggerHandleView); the bottom pane has 220 of its own.
+- [O] Add Split View on an expanded split (focus on the 1478 pane): the new pane takes a third of the
+  focused pane's room (979 | 220 | 489, the new one at the end). Not built: Cra adds panes its own way.
+- Cra: SplitPaneLayout moved into CraCore; `expanding(_:in:)` gives 1 and 0, the minimum is Arc's 220 (was
+  200), stacked panes above a divider keep 210, and a divider drag starts from the lengths on screen.
+  MainWindowController.expandSplitPane stores the factors (`setSplitWidthFactors`, like a drag), no
+  animation. `cra://debug?paneLengths=<label>` logs the pane lengths; scenario expand-current-split.
+
 ### Pinned splits and the split menu (Arc 1.171, 30 Oct)
 Observed live on a throwaway Today split (example.com | example.org), archived afterwards.
 - [O] Tabs ▸ Pin Tab (⌘D) with a pane focused pins the WHOLE split (appended to Pinned); the item then reads
@@ -1019,7 +1051,8 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
   `sandbox-exec` (deny network-outbound ip/tcp/udp) `…/MacOS/Arc --no-sandbox`. Without `--no-sandbox` the
   GPU process dies (nested seatbelt) and Arc never orders its windows in. Traps: cfprefsd ignores the fake
   home, so the copy writes the REAL company.thebrowser.Browser domain (back it up, restore after); `open -a
-  Arc` while the copy runs launches the real Arc; File ▸ New Window over AX opens a window.
+  Arc` while the copy runs launches the real Arc; File ▸ New Window over AX opens a window. Arc 1.172.2
+  (10 Nov 2026) refuses to start while another Arc runs, so this needs the user's Arc quit first.
   "Unnamed" means no title AND no icon: a space with an emoji shows "Space 1" and keeps its header,
   however the defaults key is set. Drop `customInfo.iconType` too and Arc hides the header by itself.
   `topBarURLEnabled` (real domain) puts the URL field in the sidebar; the favorites card closes over AX
@@ -1051,7 +1084,7 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
   in Split View, Duplicate, Move to, New Folder with 2 Items, Archive Tabs…). Issue #356's screenshot of two
   Today tabs, in sections: Open in Split View, Duplicate | Copy URLs ⇧⌘C, Share 2 Items… | Move to ›, New Folder
   with 2 Items | Change Icon › (dimmed), Mute | Archive Tabs. Cra: PickedTabsMenu.
-- [O strings] Arc 1.17x binary: Share N Items… shows "Generating Link..." then the toast "Copied Shared URL"
+- [O strings] Arc 1.17x binary: Share N Items… strings: "Generating Link...", the toast "Copied Shared URL" (live it said "Copied Folder URL")
   ("Letting user know that the sharable URL has been copied"; `itemsToShare`); Move to is "Menu Item that shows a
   user's root spaces in a submenu" (SidebarMenu+MoveMenu.swift, which also has "Move selected items to a new folder
   in a subspace"); the archive row is "Archive sidebar items"; Copy links/item links as Markdown exist as titles.
@@ -1084,7 +1117,14 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
   checkbox 16 pt #2D3243 rounded square at 49.5, 195.5, label 13 pt #DBDCDF from x 79.5; buttons 243–281.5 tall
   38.5, Cancel 237–346.5 and Copy Link to Folder 354.5–532 (blue #3339F1). Cra: AppDialog.shareLink (`older`
   layout, ShareEnvelopeIcon, DialogCheckbox) lands within 0.5 pt everywhere (SwiftUI snaps the text rows to whole
-  points); Arc's title runs ~3 pt wider. Arc's ticked checkbox wasn't seen.
+  points); Arc's title runs ~3 pt wider.
+- [O] Arc 1.17x live, 12 Nov 2026 (Victor's Arc, throwaway tabs, settings exported before and diffed after):
+  - Ticked, the checkbox is Display P3 #397CF7 with a 2 pt white check; ticking it and pressing Cancel saves
+    nothing (no defaults key changed, the sheet came back on the next Share).
+  - Copy Link to Folder copies `https://arc.net/folder/<UUID>` and the toast says "Copied Folder URL" (top
+    right), for picked tabs too; no "Generating Link..." was seen. The page is titled "2 Items" with "A Folder
+    from <display name>" under it and the two links. Cra: FolderShareLink.picked titles its page "N Items".
+  - With a picked tab playing sound, Mute is enabled; after Mute the row says Unmute.
 - [?] Not measured: the drag-over fill on a dark theme, coloured dark themes (the star's colour there), 1x.
 - Cra: FavoritesEmptyCard, dismissed per favorites container (WindowPrefs.favoritesEmptyStateDismissed, since
   Cra's favorites are per space). Badge, title, subtitle and × land within 1 px of Arc's at 2x. The dashed line
@@ -1381,6 +1421,16 @@ so test pages must not use it). Live HID clicks and hovers at 1x, plus a static 
   on the open one. Nested rows indent 16 pt (favicon 26 → 42, text 45 → 61) and their fill starts after it.
 - [O live, 100 fps] The minus makes the row jump to scale 0.9 at once and spring back to 1 in ~0.24 s without
   overshoot (left edge 10 px in at 1x, back by 1.11 s): a critically damped spring, ω ≈ 14 (stiffness 196, damping 28).
+
+### Pressing a sidebar row (Arc 1.172.1, 11 Nov 2026, static: method lists and disassembly)
+
+- [O] Rows: `SidebarBouncyClickCell.performBounceAnimation(isPressedIn:)` on `SelectableCellView` (tabs, splits,
+  New Tab, easels). A `CASpringAnimation` on `transform` to scale 0.992 about the centre, damping ratio 0.5,
+  response 0.2, held while pressed. Tabs and splits press only on `clickCount == 1`; New Tab on every press.
+  Folder and section headers don't press.
+- [O] Favorites: `AppTrayItemViewAppKit.isPressed`, the same spring to 0.99 on every press, the whole tile.
+- [I] Nothing found springs a row back when a press becomes a drag; Cra does it when the drag starts.
+- Cra: CraCore SidebarRowPress, `NSView.springPress`.
 
 ### Backdrop-layer blur for light vibrant themes (25 Oct 2026, final)
 
@@ -3022,6 +3072,26 @@ popover driven by AX (the chevron is `openInSpaceExpander`, the rows are AXButto
   sign-ins) picked earlier; Air Traffic Control's Default (Little Window + space) sets that for good (CraCore
   `LittleWindowTarget`; scenario little-window-space-pick).
 
+### The ⌘O menu row (Arc 1.172.2, Victor's Arc, 11 Nov 2026)
+
+Little Arcs opened with `open -a Arc https://example.com/?cra-open-in…`, the menu bar read over AX with and without
+one in front, the Tabs menu opened over AX and captured, ⌘O posted to Arc's pid.
+- [O static] MainMenu.nib has one row for it, `openTabIn`, titled "Open Little Arc or Peek in" (the name Settings ▸
+  Shortcuts lists as "Open Little Arc or Peek in…", ⌘O), with no command bar keywords. The nib has no row for
+  ⇧⌘O (`showLittleArcOpenInMenu` is a key binding only) or for closing every Little Arc.
+- [O AX] With a Little Arc in front the row is in **Tabs**, after Pin Tab and before New Folder…, titled
+  "Open in Victor" (the space the Little Arc's own "Open in , Victor, ⌘O" button names), with that space's emoji
+  as its image, ⌘O, no ellipsis. With the browser window in front the row isn't in the menu at all, enabled or not.
+  The Window menu has none of the Little Arc rows either way (only the "Little Arc — <title>" window entry).
+- [O AX] ⌘O moved the page at once: the Little Arc closed and the browser window on Victor showed
+  example.com as its selected tab. No space picker; that is the ⌄ / ⇧⌘O.
+- [O AX] The browser window's command bar has no row for it: "Open in" and "Peek in" gave only the search row,
+  history and search suggestions.
+- Peek: the nib's name says the row serves a Peek too. Not opened live (a Peek needs a click in a pinned tab).
+- Cra: `TabsMenu` (CraCore) has the row's place, title and when it shows. Window ▸ Open Little Window in Space is
+  gone, and the action is "Open Little Window or Peek in…" under Tabs in Settings ▸ Shortcuts. ⌘O from a Peek
+  expands it into the parent window's space (scenario little-window-open-in-row).
+
 ## ⌘Return in the command bar and closed folders that keep their tab (Arc 1.171, 2 Nov 2026, issue #85)
 
 Victor's Arc, a window of my own (File ▸ New Window over AX, closed afterwards), keys posted to Arc's pid while it
@@ -3976,6 +4046,20 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
   address; WebKit pages save WKWebView's interactionState. Saved a second after a load, when the tab is hidden
   and at quit. `MainWindowController.goBack` takes ⌘[, the toolbars and the menu; the mouse button is
   Chromium's. Readouts `cra://debug?back=<label>`, `cra://debug?scroll=<label>`.
+- [O disasm] The two-finger swipe (Arc 1.172, 12 Nov 2026, GitHub #370, static only: a real swipe can't be
+  synthesised). Arc uses Chromium's HistorySwiper (ArcCore has it and `ChromeRenderWidgetHostViewMacDelegate`),
+  but its `canNavigateInDirection:onWindow:` (arm64 0x43326a8) and `navigateInDirection:onWindow:` (0x4332784)
+  first ask the page's NavigationController and, when it can't move, call `arc::WebContentsUIDelegate::
+  CanExternallyNavigate` / `WillExternallyNavigate` (0x44b38a8 / 0x44b3d08, through `delegate_wrapper.h`
+  InvokeSync / InvokeAsync). In Arc.app those reach `ADK.WebContentChromium webContents:canExternallyNavigate:` /
+  `willExternallyNavigate:`, and `WebContentFrameAction` has `canExternallyNavigate(direction:response:)` and
+  `onNavigateExternally(ArcNavigationDirection)`: the app decides a swipe the page can't take. Stock Chromium
+  only asks the page (`chrome::CanGoBack`). So a swipe back on a link's tab with no history goes where Back
+  goes (closing it, `navigateBackToReferrer`); the mouse button never goes through the swiper.
+- Cra (#370): `ChromiumHistorySwipe` replaces the same two methods; when Chromium's answer is no for Back it
+  asks `BackToReferrer.swipeBack` for the tab whose page view it is, and at the end closes the tab to its
+  referrer. Forward stays Chromium's. Readout `cra://debug?swipeBack=<label>[&go=1]` calls the page's real
+  delegate (scenario `swipe-back`).
 
 ## Sidebar width and the narrow header (Arc 1.17x, 9 Nov 2026, GitHub #287)
 - [O disasm] `WindowLayoutController.handleSidebarResizePanGestureRecognizer:` (arm64, 0x100221030): the new
@@ -4059,7 +4143,7 @@ ScreenCaptureKit region recorder that also drives the pointer and logs each move
 Reference: `strings` and Swift field metadata on the arm64 binary, `assetutil` on ARCUI's Assets.car,
 and lldb's disassembler for constants, with Objective-C calls resolved through selector metadata.
 Visual references: paired YouTube Music footage in dark spaces and light-theme screenshots,
-10 Nov 2026. Full-window coverage at both 1x and 2x is still pending.
+10 Nov 2026; live Arc 1.172.2 against a Cra test copy at 1x and 2x, 11–12 Nov 2026 (below).
 
 - [O static] The top-apps item state has `shouldShowMusicalAnimation`, and `AppTrayItemViewAppKit` a lazy
   `musicIconAnimationView`: an `ARCUI.ParticleNSView` (ParticlesView.swift), a `CAEmitterLayer` filled from a
@@ -4070,7 +4154,9 @@ Visual references: paired YouTube Music footage in dark spaces and light-theme s
   matches when its host is one of them, ends in "." + one of them, or has one among its dot-separated labels.
   youtube.com is not there.
 - [I] The flag is "the tab plays audio and its URL is a music site" (`_isAudible` and `browserIsPlayingAudio`
-  exist; where they meet the list wasn't traced). [U] Whether a muted tab keeps its notes. Cra shows none.
+  exist; where they meet the list wasn't traced). [O live, 1.172.2] A muted tab keeps its notes: more than
+  10 s after muting (mini player showing the struck-through speaker) new notes still rose. So the flag
+  follows Chromium's audible state, which a mute doesn't clear.
 - [O static] `ParticleTemplate.musicNotes` is two cells that differ in image and birth rate: `MusicSprite1`
   (one eighth note) 1.4 a second, `MusicSprite2` (two notes under a beam) 1.0. Both: lifetime 2, lifetimeRange
   0, scale 0, scaleRange 0.2, scaleSpeed 1, alphaRange 0.15, alphaSpeed −0.5, emissionLongitude π/2,
@@ -4093,10 +4179,10 @@ Visual references: paired YouTube Music footage in dark spaces and light-theme s
   `FavoritesGridView` keeps the overlays above the tiles; a split emits from its first eligible playing
   pane. The pager mask allows 8 pt above the top row, following the still; empty columns keep their
   original clipping.
-- Cra policy choices: require an exact music host or its subdomain, current sound playback and an
-  unmuted tab; hide notes with Reduce Motion on. Notes follow the immediate sound callback so pausing
-  removes them before the speaker's 2 s recently-audible hold expires. Arc's full trigger is inferred
-  above; its muted-tab and Reduce Motion behavior remain unverified.
+- Cra policy choices: require an exact music host or its subdomain and current sound playback, muted
+  or not, as Arc does. Notes follow the immediate sound callback so pausing removes them before the
+  speaker's 2 s recently-audible hold expires. Reduce Motion doesn't stop them (Arc's don't stop either,
+  below).
 - [O capture, 10 Nov] Paired dark-theme footage (12.32 s, Arc left, CraDev right) shows notes above
   each music icon, growing softer and fading under the URL field. The grids have different tile
   counts, so widths differ. Live pause/resume was checked in CraDev.
@@ -4110,9 +4196,30 @@ Visual references: paired YouTube Music footage in dark spaces and light-theme s
   `cra://debug?musicNotes=`. It covers a non-music host, an idle music favorite, playing, muting,
   unmuting, pausing, quick resuming and the emitter's offset. Paused readouts poll for one second,
   before the speaker's hold expires, to allow Chromium's asynchronous sound event to arrive.
-- Pending: full-window coverage at both 1x and 2x and the remaining states in
-  [release-checklist.md](release-checklist.md#sidebar-tabs-and-the-command-bar). The captures provide
-  qualitative comparisons; exact particle timing and display-scale coverage remain unverified.
+- Live comparison, 11–12 Nov 2026. Arc 1.172.2 refuses a second instance while one runs ("Arc is
+  already open. Only one instance of Arc can be opened at a time"), so the offline copy of "One space"
+  no longer works beside the user's Arc. A clone with another bundle id dies in CloudKit once re-signed
+  ad hoc and is killed by code signing when it isn't. Arc was therefore the user's own: a new window,
+  www.nts.live's live stream (Mac output muted; the audible state doesn't depend on it), made a favorite
+  with the command bar's "Favorite Tab" and removed with "Unfavorite Tab" afterwards. As the fifth favorite
+  at 264 pt it sat in row 2 (three columns), so the notes rose over the tile above. Cra was a test copy
+  with six favorites (two on music hosts mapped to a local tone page), row 2 playing too. Both windows were
+  1280 × 800 on a CGVirtualDisplay at 1x and at 2x, recorded with ScreenCaptureKit at 30 fps, 5–6 s per
+  take, light and dark spaces. Statistics per take: a per-pixel median as background, note pixels
+  differing by more than 14/255.
+- [O live] What matches, at 1x and 2x: the emitter on the icon's top edge, rows above drawn over (notes
+  cross the tile above), the fan opening upwards, notes gone by about 44 pt above the icon's centre, the
+  same rise of glyph size with height (1x medians 3, 4, 6, 11, 11, 14, 14 pt in 4 pt bands from the
+  emitter; Cra 3, 5, 7, 13, 12, 14, 15 pt) and the same fade of peak ink with height (dark, 1x: Arc
+  116 → 28, Cra 128 → 33 over 2–34 pt). In Arc's light space notes are faint (about 32 pt² of note
+  pixels per frame against 124 pt² in its dark space), in line with Cra's 30 % black ink.
+- [O live] Pause: the notes go within 0.2 s of the stream stopping and come back on resuming, as in Cra.
+  Mute: they stay (above). Reduce Motion (System Settings ▸ Accessibility ▸ Motion, on for 5 s, then
+  off): unchanged, 32.0 pt² of notes per frame with it on against 32.4 before and 31.8 after.
+- [U] Density and spread: Cra showed about 3.7–4.2 notes per frame and a fan about 50 pt wide, Arc
+  2.6–3.1 and about 36 pt. Each take holds only some 14 births (2.4 a second for 6 s) and Arc's leaned
+  left in one take and right in another, so this is within sampling noise; the cell values are the
+  same. A longer Arc take would settle it.
 
 ## Full screen: the page edge to edge, the sidebar over it (Arc 1.172.1, 10 Nov 2026, GitHub #315, offline Arc on a fake home)
 Offline Arc, View ▸ Enter Full Screen and View ▸ Hide Sidebar over AX, the pointer moved with cliclick; screen

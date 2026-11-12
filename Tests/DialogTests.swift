@@ -206,7 +206,8 @@ enum DialogTests {
             ("long-message", AppDialog(title: "Move these spaces to their Arc profiles?", message: Array(repeating: "Work → Work Profile", count: 80).joined(separator: "\n"),
                                        actions: [DialogAction("Move and Restart"), .cancel])),
             ("last-space", AppDialog(title: "You need at least one space.")),
-            ("share-link", .shareLink())
+            ("share-link", .shareLink()),
+            ("share-link-ticked", { let d = AppDialog.shareLink(); d.isSuppressed = true; return d }())
         ]
         let folder = URL(fileURLWithPath: directory, isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

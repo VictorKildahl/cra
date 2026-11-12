@@ -121,6 +121,26 @@ struct ModelFixtureTests {
         #expect(try Self.roundTrips(loaded))
     }
 
+    /// Easels/<id>.json. Since the Easels parity work (Nov 2026) an item carries its place in the stack
+    /// as `z`, and link cards and captures sit in `cards`, which Cra 0.1.40 and older don't read
+    /// (they'd fail on the whole easel if those were in `items`).
+    @Test(arguments: ["easel-0140.json", "easel.json"])
+    func easelsLoadAsRecorded(name: String) throws {
+        let (loaded, recorded) = try Self.load(name, as: Easel.self)
+        #expect(loaded == recorded)
+        #expect(try Self.roundTrips(loaded))
+        let saved = try #require(JSONSerialization.jsonObject(with: Self.encoder.encode(loaded)) as? [String: Any])
+        let file = try #require(JSONSerialization.jsonObject(with: Self.data("recorded", name)) as? [String: Any])
+        #expect(NSDictionary(dictionary: saved).isEqual(to: file))
+    }
+
+    @Test func easelStackOrderSurvivesTheSplit() throws {
+        let (easel, _) = try Self.load("easel.json", as: Easel.self)
+        // z: link 0, rectangle 1, capture 2, picture 3, though they are saved in two lists.
+        #expect(easel.items.map(\.id.uuidString.first) == ["7", "9", "8", "A"])
+        #expect(easel.palette == .vibrant && easel.items[1].shade == .purple && easel.items[3].altText == "A cat")
+    }
+
     @Test func windowsLoadAsRecorded() throws {
         let (loaded, recorded) = try Self.load("windows.json", as: WindowPrefs.self)
         #expect(loaded == recorded)

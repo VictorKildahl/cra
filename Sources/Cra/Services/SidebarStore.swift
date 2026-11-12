@@ -599,10 +599,13 @@ final class SidebarStore {
 
     /// What Back does on tab `id`, whose page `canGoBack` or not: a tab a link opened, with no
     /// page behind, closes to the tab it came from while that one is still in the sidebar (#273).
-    func backStep(_ id: UUID, canGoBack: Bool) -> BackToReferrer.Step {
+    /// `swipe`: a two-finger swipe back over the page asks (#370).
+    func backStep(_ id: UUID, canGoBack: Bool, swipe: Bool = false) -> BackToReferrer.Step {
         let referrer = items[id]?.tab?.referrerID.flatMap { items[$0]?.isTab == true ? $0 : nil }
-        return BackToReferrer.step(canGoBack: canGoBack, tab: id, referrer: referrer,
-                                   inSplit: splitContaining(id) != nil, pinned: isPinned(id))
+        let inSplit = splitContaining(id) != nil, pinned = isPinned(id)
+        return swipe
+            ? BackToReferrer.swipeBack(pageCanGoBack: canGoBack, tab: id, referrer: referrer, inSplit: inSplit, pinned: pinned)
+            : BackToReferrer.step(canGoBack: canGoBack, tab: id, referrer: referrer, inSplit: inSplit, pinned: pinned)
     }
 
     /// Back's `.close`: the tab goes to the archive like ⌘W and `referrer` is shown in `window`.

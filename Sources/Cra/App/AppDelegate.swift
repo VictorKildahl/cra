@@ -94,6 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if startOnNewTab { store.selectTab(nil, window: store.activeWindowID) }
         // Before any page is made: an easel's tab opens its canvas.
         EaselBrowser.register()
+        EaselBrowser.registerServices(self)
         // Arc's Boosts: each page on a boosted site gets its boosts; an edit shows at once.
         BrowserManager.boostFor = { [store] url in
             guard store.settings.boostsEnabled else { return nil }
@@ -530,6 +531,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // A link from another app soon after starting on a new tab: its tab is what the window
         // shows, so the bar that was waiting for a new tab goes.
         if store.settings.startOnNewTab, let m = main, m.commandBar.isOpen, m.selectedTab == nil { m.commandBar.close() }
+        // The gallery's Open in Cra (crabrowser.app/boosts) from any browser: asked about first.
+        if BoostInstall.isBoostLink(url) {
+            main.showWindow(nil)
+            if !HitchMonitor.background { NSApp.activate(ignoringOtherApps: true) }
+            BoostInstall.offer(url, over: main.window, from: "another app")
+            return
+        }
         if let u = URL(string: url), u.scheme?.lowercased() == "cra" {
             if Self.isUserFacing(u) || UserDefaults.standard.bool(forKey: "scriptingURLs") {
                 handleInternalURL(u)
@@ -1094,11 +1102,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if dict["previewDismiss"] != nil { FavoritePreviewCard.shared.dismiss(animated: false); return }
             // boostZap=1|0: Boost editor's Zap on or off for the open page.
             if let z = dict["boostZap"] { main.debugZap(z == "1"); return }
+            // zapHover=<cell>|-1, zapUnzap=<cell>, zapPress=this|related|cancel: the Zap shelf and
+            // its popover without the pointer; each logs "zap shelf: cells=… hint=…".
+            if dict["zapHover"] != nil || dict["zapUnzap"] != nil || dict["zapPress"] != nil {
+                main.debugZapShelf(hover: dict["zapHover"].flatMap(Int.init), unzap: dict["zapUnzap"].flatMap(Int.init), press: dict["zapPress"])
+                return
+            }
             // boostPick=1|0|copyThis|copyRelated|zapRelated: the code panel's eyedropper on (the
             // menu answered with that action) or off.
             if let p = dict["boostPick"] { main.debugPick(p); return }
             // captureToEasel=1: the page's screenshot, then the capture menu's New Easel.
             if let how = dict["captureToEasel"] { main.debugCaptureToEasel(send: how == "send"); return }
+            // easelLive=<s>: the open easel's first capture shows the live website; <s> seconds later
+            // cra.log says what it holds and how many pictures of the page reached the card.
+            if let wait = dict["easelLive"].flatMap(Double.init), let canvas = (main.currentBrowser as? EaselBrowser)?.canvasView {
+                canvas.debugLive(after: wait); return
+            }
+            // easelDraw=1: one of each shape on the open easel, as its tools draw them (clips, snapshots).
+            if dict["easelDraw"] != nil, let canvas = (main.currentBrowser as? EaselBrowser)?.canvasView {
+                canvas.sheetView.debugDraw(); return
+            }
+            // easelPick=<n>: the open easel's n-th item (from 0) picked; cra.log says what shows over it and its menu.
+            if let n = dict["easelPick"].flatMap(Int.init), let canvas = (main.currentBrowser as? EaselBrowser)?.canvasView {
+                canvas.debugPick(n); return
+            }
+            // easelLink=<url>: the open easel gets a link card for <url>, as a paste does; cra.log says what it read.
+            if let url = dict["easelLink"], let canvas = (main.currentBrowser as? EaselBrowser)?.canvasView {
+                canvas.debugLink(url); return
+            }
             // mcpAnswer=allow|deny: answers MCP's open "Let … use Cra?" prompt (test copies).
             if let answer = dict["mcpAnswer"] { MCPServer.shared.answerPrompt(allow: answer == "allow"); return }
             // mcpScripts=on|off: Settings ▸ Advanced ▸ Let agents run JavaScript in pages.
@@ -1107,9 +1138,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let history = dict["mcpHistory"] { MCPServer.shared.allowsHistory = history == "on"; return }
             // mcpStop=1: the pill's Stop (every agent disconnects, MCP turns off).
             if dict["mcpStop"] != nil { MCPServer.shared.stopFromPill(); return }
-            // translatePrompts=never:<host>|reset|state: Settings ▸ Advanced ▸ Reset Translated-site Prompts and the
-            // never-translate list it empties.
-            if let t = dict["translatePrompts"] { TranslatedSitePrompts.debug(t, store: store); return }
+            // translatePrompts=never:<host>|block:<lang>|reset|state[&profile=<name>][&label=<label>]: Settings ▸
+            // Advanced ▸ Reset Translated-site Prompts and the translate choices it forgets, in every profile.
+            if let t = dict["translatePrompts"] {
+                TranslatedSitePrompts.debug(t, profile: dict["profile"], label: dict["label"] ?? t, store: store)
+                return
+            }
             // settingsPane=max: Settings opened on that tab (the old pane names open the tab that holds them).
             if let p = dict["settingsPane"].flatMap(SettingsTab.init(pane:)) {
                 showSettingsWindow(on: p)
@@ -1397,6 +1431,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("split \(label): panes=\(urls) selected=\(selected?.tab?.url ?? "-") downloads=\(DownloadHistory.shared.live.count + DownloadHistory.shared.entries.count)")
                 return
             }
+            // paneLengths=<label>: each pane card's length along the split's axis in pane order, the
+            // split's stored width factors and which pane is focused (View ▸ Expand Current Split).
+            if let label = dict["paneLengths"] {
+                let shell = main.shell!
+                let horizontal = shell.splitOrientation == .horizontal
+                let lengths = shell.paneCards.map { String(format: "%.1f", horizontal ? $0.frame.width : $0.frame.height) }
+                let split = main.selectedTab.flatMap { store.splitContaining($0.id) }
+                let stored: [UUID: Double] = split?.split?.widthFactors ?? [:]
+                let factors: [String] = (split?.children ?? []).map { String(format: "%.2f", stored[$0] ?? -1) }
+                let focused = shell.paneCards.firstIndex { $0.tabID == main.selectedTab?.id }.map(String.init) ?? "-"
+                CraLog.note("pane lengths \(label): \(lengths.joined(separator: " | ")) factors=\(factors.joined(separator: ",")) focused=\(focused) \(horizontal ? "horizontal" : "vertical")")
+                return
+            }
             // popups=<label>[&run=open|openAll|allow|block]: the front tab's blocked pop-ups, its
             // toolbar button and URL-field line, the menu's rows, Chrome's site setting and the
             // Today tab count; run= picks a menu row first (#357).
@@ -1422,6 +1469,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let label = dict["back"] {
                 let today = store.tabs(under: store.focusedSpace(window: main.windowID).todayContainerID).count
                 CraLog.note("back \(label): selected=\(main.selectedTab?.tab?.url ?? "-") back=\(main.sidebarUI.canGoBack ? 1 : 0) today=\(today)")
+                return
+            }
+            // swipeBack=<label>[&go=1]: what Chromium's two-finger swipe asks the front page's view
+            // before a swipe back starts, and with go=1 what it does at the end (#370).
+            if let label = dict["swipeBack"] {
+                let rt = main.browsers.visibleRuntime
+                let root = rt?.hostWindow.flatMap { EmbeddedPages.pageViews(of: $0)?.last ?? $0.contentView } ?? rt?.browser.containerView
+                CraLog.note("swipe back \(label): \(root.map { ChromiumHistorySwipe.debugSwipeBack(in: $0, perform: dict["go"] == "1") } ?? "no tab")")
                 return
             }
             // scroll=<label>: how far the front page is scrolled, in cra.log, which a relaunched Cra
@@ -1486,6 +1541,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             // What the Dock tile and the ⌘-Tab switcher show for Cra (#319).
+            // What the last look at the sync folder found, and whether a mix is being waited out (#378).
+            if let label = dict["sync"] { CraLog.note("sync \(label): \(composition.sync.readout())"); return }
             if let label = dict["dockTile"] { CraLog.note("dock tile \(label): \(AppIconManager.shared.dockTileReadout())"); return }
             if let label = dict["downloadState"] {
                 let rows = DownloadHistory.shared.live.map { DownloadRow.subtitle($0.row, now: Date()) }
@@ -1854,9 +1911,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "pictureInPicture":
             let browser = keyLittleWindow.map { $0.browser } ?? main.currentBrowser
             item.title = browser?.isInPictureInPicture == true ? "Exit Picture in Picture" : "Picture in Picture"
-        case "promoteLittleWindow", "littleWindowOpenInMenu": return keyLittleWindow?.hasPage ?? false
+        // Arc: Tabs ▸ "Open in <space>", there only while a Little Window or Peek is in front.
+        case TabsMenu.openIn:
+            let little = keyLittleWindow.flatMap { $0.hasPage ? $0 : nil }
+            item.isHidden = !TabsMenu.showsOpenIn(littleWindowWithPage: little != nil)
+            if let space = little?.openInSpace {
+                let title = TabsMenu.openInTitle(space: space.title)
+                if item.title != title { item.title = title }
+                item.image = SpaceMenuIcon.image(for: space)
+            }
+            return little != nil
+        case "littleWindowOpenInMenu": return keyLittleWindow?.hasPage ?? false
         case "checkForUpdates": return SoftwareUpdater.shared.validateMenuItem(item)
-        case "closeSplitPane", "separateFromSplit", "flipSplitOrientation":
+        case "closeSplitPane", "separateFromSplit", "flipSplitOrientation", "expandSplitPane":
             return store.selectedTabID.flatMap { store.splitContaining($0) } != nil
         case "addSplitView": return store.selectedTabID != nil
         case "editSpace", "deleteSpace", "nextSpace", "previousSpace", "manageSpaces", "changeProfile": return !main.isStandalone
@@ -1907,6 +1974,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var keyFallbackMonitor: Any?
     /// ⌥← / ⌥→ from a mouse whose driver types them (Logi Options+, issue #233).
     private var sideButtonKeyMonitor: Any?
+    /// The swipe Logi Options+ posts for its own Back and Forward, and a three-finger swipe.
+    private var sideButtonSwipeMonitor: Any?
     private func installKeyFallbackMonitor() {
         guard keyFallbackMonitor == nil else { return }
         keyFallbackMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -1960,6 +2029,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 if step < 0 { browser.goBack() } else { browser.goForward() }
                 CraLog.note("mouse key \(which): history")
             }
+            return nil
+        }
+        // Logi Options+'s own Back and Forward (an MX Ergo's or MX Master's default) and a
+        // trackpad's three-finger swipe between pages post a swipe event, not a button or a key.
+        // Chromium's page view leaves `swipeWithEvent:` to Chrome's browser window, which Cra's
+        // pages don't have, so nothing went back. A swipe goes to the page under the pointer and
+        // stays in that page's own history, like Arc's mouse back button: a tab a link opened
+        // doesn't close back to its opener here (only the toolbar's Back and ⌘[ do that, #273).
+        sideButtonSwipeMonitor = NSEvent.addLocalMonitorForEvents(matching: .swipe) { [weak self] event in
+            guard let self, let offset = MouseButtonSpaceSwitch.offset(swipeDeltaX: event.deltaX, deltaY: event.deltaY),
+                  let target = event.window else { return event }
+            let which = offset < 0 ? "back" : "forward"
+            if let window = self.mainWindows.first(where: { $0.pointerOverSidebar() }) {
+                self.store.focusSpace(offset: offset, window: window.windowID)
+                CraLog.note("mouse swipe \(which): switched space")
+                return nil
+            }
+            if let little = self.littleWindows.first(where: { !$0.isParked && $0.window != nil && (target === $0.window || target.parent === $0.window) }),
+               let browser = little.browser {
+                if offset < 0 { browser.goBack() } else { browser.goForward() }
+            } else if let hit = self.mainWindows.lazy.compactMap({ m in m.pageTab(under: event).map { (main: m, id: $0) } }).first {
+                let browser = hit.main.browsers.runtime(for: hit.id)?.browser
+                if offset < 0 { browser?.goBack() } else { browser?.goForward() }
+            } else {
+                return event
+            }
+            CraLog.note("mouse swipe \(which): history")
             return nil
         }
     }
@@ -2192,6 +2288,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "addSplitView": main.addSplitPane()
         case "closeSplitPane": if let c = current { main.closeSplitPane(c) }
         case "separateFromSplit": if let c = current { main.separatePane(c) }
+        case "expandSplitPane": if let c = current { main.expandSplitPane(c) }
         case "flipSplitOrientation": if let c = current, let s = store.splitContaining(c) { store.flipSplitOrientation(s.id) }
         case "nextSplitPane": main.cycleSplitPane(1)
         case "previousSplitPane": main.cycleSplitPane(-1)
@@ -2415,7 +2512,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         view.addItem(.separator())
         view.addItem(item("pictureInPicture")); view.addItem(item("cast"))
         view.addItem(.separator())
-        for id in ["addSplitView", "closeSplitPane", "separateFromSplit", "flipSplitOrientation"] { view.addItem(item(id)) }
+        // Arc's order: Add, Close, Separate, Expand Current Split (Cra's Flip after them).
+        for id in ["addSplitView", "closeSplitPane", "separateFromSplit", "expandSplitPane", "flipSplitOrientation"] { view.addItem(item(id)) }
         view.addItem(.separator())
         let dev = NSMenu(title: "Developer")
         for id in ["viewSource", "devTools", "inspectElement", "jsConsole"] { dev.addItem(item(id)) }
@@ -2440,11 +2538,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         menubar.addItem(submenu: spaces, title: "Spaces")
 
         let tabs = NSMenu(title: "Tabs")
-        for id in ["newTab", "pinTab"] { tabs.addItem(item(id)) }
-        // Arc: Tabs ▸ New Folder… after Pin/Unpin Tab (#279).
-        let newFolder = item("newFolder")
-        newFolder.title = "New Folder…"
-        tabs.addItem(newFolder)
+        // Arc: New Tab…, Pin Tab, Open in <space> (only while a Little Window or Peek is in front), New Folder… (#279).
+        for id in TabsMenu.head {
+            let row = item(id)
+            if id == "newFolder" { row.title = "New Folder…" }
+            tabs.addItem(row)
+        }
         for id in ["nextTab", "previousTab", "revealTab", "recentTab", "clearToday", "resetSpaceTabs"] { tabs.addItem(item(id)) }
         tabs.addItem(.separator())
         for id in ["favoriteTab", "renameTab", "duplicateTab", "resetTab", "muteTab"] { tabs.addItem(item(id)) }
@@ -2468,7 +2567,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         window.addItem(.separator())
         window.addItem(item("openLibrary")); window.addItem(item("viewDownloads")); window.addItem(item("viewEasels")); window.addItem(item("viewMedia")); window.addItem(item("viewBoosts"))
         window.addItem(.separator())
-        window.addItem(item("promoteLittleWindow")); window.addItem(item("littleWindowOpenInMenu")); window.addItem(item("closeLittleWindows"))
+        window.addItem(item("littleWindowOpenInMenu")); window.addItem(item("closeLittleWindows"))
         window.addItem(.separator())
         window.addItem(std("Bring All to Front", #selector(NSApplication.arrangeInFront(_:))))
         menubar.addItem(submenu: window, title: "Window")

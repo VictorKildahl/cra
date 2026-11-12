@@ -19,6 +19,14 @@ enum AppLinkPrompt {
     /// refused) and must not load or open a tab. Without a click (`userGesture`) nothing opens.
     @discardableResult
     static func handle(_ url: String, from browser: CraBrowser, userGesture: Bool) -> Bool {
+        // The gallery's Open in Cra, clicked in Cra itself: no "Open Cra?" first, straight to the
+        // question about the boost. Without a click nothing is asked.
+        if BoostInstall.isBoostLink(url) {
+            let page = browser.isIncognito ? "(incognito)" : CraLog.host(browser.currentURL)
+            if userGesture { BoostInstall.offer(url, over: browser.containerView.window, from: page) }
+            else { CraLog.note("page \(page) can't offer a boost (no click)") }
+            return true
+        }
         let kind = AppLinks.kind(of: url)
         if kind == .page { return false }
         let page = browser.isIncognito ? "(incognito)" : CraLog.host(browser.currentURL)
