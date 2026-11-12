@@ -1,0 +1,28 @@
+# promise: #371
+# A page's permission request asks in Arc's card over the top left corner of its page, 12 pt in,
+# not in a sheet that blocked the whole window (#371: "wants to access other devices on your
+# network"). The window keeps its key status, so the page and the tabs stay usable: a tab switch
+# takes the card down unanswered, the tab coming back puts it up again, and Allow answers the page.
+budget rss=800 stalls50=30
+pace 0.5
+port 47127
+
+cra://open?url=${PAGE}?n=asker
+expect-log loaded 127\.0\.0\.1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"navigator.requestMIDIAccess({sysex:true}).then(()=>document.title='midi allowed',()=>document.title='midi denied'),'armed'"}
+expect-log Cra cdp Runtime.evaluate .*"value":"armed"
+expect-log permission card: http://127\.0\.0\.1:[0-9]+/? wants to control and reprogram your MIDI devices
+cra://debug?permissionCard=1
+expect-log permission card: .*MIDI devices \(232x[0-9]+ at 12,12 on the page; key window unchanged\)
+snapshot PermissionCardView permission-card
+
+cra://open?url=${PAGE}?n=other
+expect-log loaded 127\.0\.0\.1.*
+expect-log permission: 127\.0\.0\.1 wants .* → waits for its tab again
+cra://debug?permissionCard=1
+expect-log permission card: none
+cra://action/previousTab
+expect-log permission: 127\.0\.0\.1 wants .* → asks now
+cra://debug?permissionCard=Allow
+expect-log permission card: .*; pressed Allow
+expect-log permission: 127\.0\.0\.1 .*: allowed

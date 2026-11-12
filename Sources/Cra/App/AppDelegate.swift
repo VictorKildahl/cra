@@ -1762,6 +1762,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("dialog \(dialog.title) answered \(button): \(copied)")
                 return
             }
+            // permissionCard[=<button>]: the permission card up, where it sits on its page and
+            // whether it took the window's key, then presses that button (#371).
+            if let button = dict["permissionCard"] {
+                CraLog.note(PermissionPopover.debug(press: button.isEmpty || button == "1" ? nil : button))
+                return
+            }
             // pickedMenu=<n>[&label=][&run=<row>]: the menu on n picked tabs, see testPickedMenu (#356).
             if let n = dict["pickedMenu"].flatMap(Int.init) {
                 main.testPickedMenu(count: n, label: dict["label"] ?? "\(n)", run: dict["run"])

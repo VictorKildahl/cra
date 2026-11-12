@@ -209,6 +209,7 @@ enum BrowserManagerLifecycleTests {
         await pageEngineCase()
         pageHistoryCase()
         await permissionWaitsForItsTabCase()
+        permissionPopoverStepsAsideCase()
         print("Browser manager lifecycle: \(checks) checks passed")
     }
 
@@ -1683,6 +1684,45 @@ enum BrowserManagerLifecycleTests {
                "a withdrawn request waiting behind never asks")
         manager.closeAll()
         otherManager.closeAll()
+    }
+
+    // promise: #371
+    /// A page's permission request asks in Arc's card over the top left corner of its tab's page,
+    /// not a sheet over the window (#371: "wants to access other devices on your network" took
+    /// the whole window). The window stays usable, so a tab switch takes the card down
+    /// unanswered, and it asks again when its tab is back.
+    @MainActor
+    private static func permissionPopoverStepsAsideCase() {
+        AppDialog.presented = []
+        let store = SidebarStore()
+        let container = NSView()
+        let window = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 20, height: 20),
+                              styleMask: .borderless, backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        window.contentView!.addSubview(container)
+        let webArea = NSView()
+        container.addSubview(webArea)
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: container)
+        manager.paneHost = { _ in webArea }
+        let asking = store.createTab(url: "https://router.example/").id
+        let other = store.createTab(url: "https://example.test/").id
+        manager.show(asking, focus: false)
+        var answers: [Bool] = []
+        manager.browser(page(manager, asking), requestsPermissionForOrigin: "https://router.example", kinds: 1 << 7) { answers.append($0) }
+        let first = AppDialog.presented.last
+        expect(first?.title == "https://router.example wants to access other devices on your local network"
+               && first?.anchor === webArea && first?.isUp == true,
+               "the request asks in a card on its tab's page")
+        manager.show(other, focus: false)
+        expect(first?.isUp == false && answers.isEmpty, "switching tabs takes the card down, unanswered")
+        manager.show(asking, focus: false)
+        let again = AppDialog.presented.last
+        expect(AppDialog.presented.count == 2 && again !== first && again?.isUp == true && again?.title == first?.title,
+               "its tab back in front asks again")
+        again?.answer(.alertFirstButtonReturn)
+        expect(answers == [true], "Allow answers it once")
+        manager.closeAll()
     }
 
     @MainActor

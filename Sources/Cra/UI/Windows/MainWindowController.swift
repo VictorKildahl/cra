@@ -1165,7 +1165,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // The command bar ⌘T opened from a Peek stays above the Peek (#379).
         let bar: [NSWindow] = commandBar.isOpen && commandPanel.parent === window ? [commandPanel] : []
         let wanted = panels.compactMap { $0 } + peeks.flatMap(\.peekWindows) + (floatingSidebar?.attachedPanels ?? [])
-            + ChromiumDialogs.dialogs(over: window) + bar
+            + ChromiumDialogs.dialogs(over: window) + PermissionPopover.panels(over: window) + bar
         // Already the last children, in order, and showing: re-adding each one rebuilt the
         // window's ordering group, a window server round trip, on every tab switch.
         let children = window.childWindows ?? []

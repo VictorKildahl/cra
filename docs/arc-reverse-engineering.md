@@ -4412,3 +4412,23 @@ link, toolbar hidden with ⇧⌘D), a Little Arc's link icon and the developer b
   Same pattern as `BrowserExtensionWindowController.closeCurrentItem:` (extension windows).
 - Cra: `AppDelegate.perform(_:)` sends Close Tab and Close Window to Settings while it's in front
   (`settingsInFront`); with a sheet up on Settings nothing closes. Scenario `settings-close-shortcut`.
+
+## Permission requests (Arc 1.172.2, 12 Nov 2026, GitHub #371, a Little Arc asking for MIDI, 2x window capture)
+- [O static] `PermissionRequests/PermissionRequestPopoverView.swift` and `PermissionRequestDialogView`. Strings:
+  "Allow %@ to access your %@?" (the site's title, else "this website"; the type's `displayName`, e.g. "local
+  network", "MIDI devices"), own sentences for notifications, multiple downloads, storage, idle detection and
+  mailto ("Make %@ your default mail app?"), "Click the lock to change this any time", "Button to deny permission".
+- [O] Not a sheet and no arrow: a card over the page's top left corner, 12 pt in from the page's left edge and
+  12 pt under the toolbar. The page and the window stay usable while it is up.
+- [O] Card 232 pt wide, 126 pt tall with a two-line question, #050627, ~10 pt corners, a soft shadow (about
+  25 % black, 8 pt blur, 3 pt down). Badge 24 pt (#090D4F, 4 pt corners, the `info` glyph in #ECEDFF) 16 pt in,
+  20 pt down. Question 13 pt semibold white from 48 pt in, 16 pt lines, centred on the badge. "Click the 🔒 to
+  change this any time" 11 pt medium white, 16 pt in, 8 pt under the question. Buttons 96 × 32 pt, 8 pt apart,
+  16 pt from the sides, 22 pt under the hint, 16 pt above the bottom, 5 pt corners, 13 pt semibold labels: Not
+  Now (no fill, a 1 pt #2A2B47 lip) on the left, Allow (#434BDF, a 1 pt #232441 lip) on the right.
+- Not measured: hover and pressed colours, light mode, where the card sits in a main window with the sidebar,
+  what Not Now saves.
+- Cra (#371): `PermissionPopover` (a child panel over the tab's `webArea`, the Little Window's page), Arc's
+  layout and colours. A tab switch takes it down unanswered and it asks again when the tab is back
+  (`PermissionAsk.stepsAside`). Cra keeps its own question ("<origin> wants to …", locked by #137 and #286).
+  `cra://debug?permissionCard[=<button>]`, scenario permission-card.

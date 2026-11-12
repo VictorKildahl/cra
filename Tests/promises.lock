@@ -667,6 +667,9 @@
 #370   Packages/CraCore/Tests/CraCoreTests/BackToReferrerTests.swift::swipingBackOnALinksTabClosesItLikeBack  5fa484b1a95a
 #370   Tests/BrowserManagerLifecycleTests.swift::pageViewTabCase  e9cbddff1ae5
 #370   Tests/Scenarios/swipe-back.scenario  f12e84f3acbe
+#371   Packages/CraCore/Tests/CraCoreTests/PermissionAskTests.swift::aPromptWhoseTabGoesBehindStepsAside  8624c170530d
+#371   Tests/BrowserManagerLifecycleTests.swift::permissionPopoverStepsAsideCase  de5396486ef4
+#371   Tests/Scenarios/permission-card.scenario  9ae102316834
 #373   Packages/CraCore/Tests/CraCoreTests/LittleWindowTriggerTests.swift::aLinkClickedWithOptionCommandOpensOneWhenTheSwitchIsOn  321009d2af63
 #373   Packages/CraCore/Tests/CraCoreTests/LittleWindowTriggerTests.swift::onlyAClickInThisPageJustNowCounts  28d9c5ecab0f
 #373   Packages/CraCore/Tests/CraCoreTests/LittleWindowTriggerTests.swift::onlyPagesATabCanShowOpenOne  4f0de1686b25
