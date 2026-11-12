@@ -27,7 +27,7 @@ if [ -n "${ASC_KEY_PATH:-}" ]; then
 fi
 
 rm -rf "$ARCHIVE" "$EXPORT"
-echo "archiving build $BUILD_NUMBER…"
+echo "archiving build ${BUILD_NUMBER}…"
 xcodebuild -project iOS/Cra.xcodeproj -scheme Cra -configuration Release \
   -destination "generic/platform=iOS" -archivePath "$ARCHIVE" \
   CURRENT_PROJECT_VERSION="$BUILD_NUMBER" "${auth[@]}" archive 2>&1 |
@@ -51,7 +51,7 @@ cat > "$options" <<PLIST
 </plist>
 PLIST
 
-echo "exporting ($destination)…"
+echo "exporting (${destination})…"
 xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath "$EXPORT" \
   -exportOptionsPlist "$options" "${auth[@]}" 2>&1 |
   grep -E "error|Upload|EXPORT (SUCCEEDED|FAILED)|Progress" || true
