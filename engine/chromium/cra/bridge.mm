@@ -33,6 +33,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
+#include "base/scoped_observation.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -336,6 +337,8 @@ bool IsHost(BrowserWindowInterface* browser) {
 // popup) stays Chrome's window, as in Arc.
 class StrayWindows : public BrowserCollectionObserver, public TabStripModelObserver {
  public:
+  void Start() { observation_.Observe(GlobalBrowserCollection::GetInstance()); }
+
   void OnBrowserCreated(BrowserWindowInterface* browser) override {
     if (g_making_host || IsHost(browser)) {
       return;
@@ -382,6 +385,8 @@ class StrayWindows : public BrowserCollectionObserver, public TabStripModelObser
     tabs->RemoveObserver(this);
     browser->GetWindow()->Close();
   }
+
+  base::ScopedObservation<GlobalBrowserCollection, BrowserCollectionObserver> observation_{this};
 };
 
 StrayWindows& Strays() {
@@ -520,7 +525,7 @@ namespace cra {
 void RunReadyBlocks() {
   g_page_activation = &PageActivation;
   g_translate_state = &TranslateState;
-  GlobalBrowserCollection::GetInstance()->AddObserver(&Strays());
+  Strays().Start();
   StartProfilePrefs();
   g_keep_alive = new ScopedKeepAlive(KeepAliveOrigin::APP_CONTROLLER, KeepAliveRestartOption::DISABLED);
   g_ready = true;
