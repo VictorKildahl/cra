@@ -3,6 +3,7 @@
 #   - copies engine/chromium/cra to <src>/cra (built into Chrome's framework as //cra:core)
 #   - Chrome's hooks: chrome/browser/cra_engine_hooks.h, ChromeBrowserMainParts::Create adds Cra's startup
 #     part, the framework exports CraEngineMain (framework.exports and .order), chrome_dll depends on //cra:core
+#   - a stand-in Widevine signer (Cra plays DRM through WebKit, not Widevine)
 # docs/chromium-engine.md says what the layer is for.
 set -euo pipefail
 SRC="$1"
@@ -11,6 +12,11 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 
 rsync -a --delete "$HERE/cra/" "$SRC/cra/"
 cp "$HERE/hooks/cra_engine_hooks.h" "$SRC/chrome/browser/cra_engine_hooks.h"
+# Google's Widevine signer isn't in public checkouts; an official build of Chrome's framework runs it.
+if [ ! -f "$SRC/third_party/widevine/scripts/signature_generator.py" ]; then
+  mkdir -p "$SRC/third_party/widevine/scripts"
+  cp "$HERE/hooks/widevine_signature_generator.py" "$SRC/third_party/widevine/scripts/signature_generator.py"
+fi
 
 python3 -I - "$SRC" <<'EOF'
 import sys

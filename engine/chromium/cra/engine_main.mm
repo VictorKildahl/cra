@@ -2,6 +2,8 @@
 // own ChromeMain. Exported by chrome/app/framework.exports (engine/chromium/apply.sh).
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
 #include "chrome/browser/cra_engine_hooks.h"
@@ -15,9 +17,31 @@ std::unique_ptr<ChromeBrowserMainExtraParts> MakeCraParts() {
   return cra::MakeSpikeParts();
 }
 
+// Features Cra always runs with, added to the browser's --enable-features (Chromium reads only one).
+// AperitifHelpers: the helper apps that link the framework at launch, so its 12 MB __DATA_CONST stays
+// clean in every page, GPU and utility process (docs/chromium-engine.md); off by default in 156.
+constexpr char kCraFeatures[] = "AperitifHelpers";
+
 }  // namespace
 
 extern "C" __attribute__((visibility("default"))) int CraEngineMain(int argc, const char** argv) {
   cra::g_extra_parts_factory = &MakeCraParts;
-  return ChromeMain(argc, argv);
+  // Live for the whole process (Chromium keeps argv); never freed.
+  auto& args = *new std::vector<std::string>(argv, argv + argc);
+  const std::string prefix = "--enable-features=";
+  bool merged = false;
+  for (std::string& arg : args) {
+    if (arg.rfind(prefix, 0) == 0) {
+      arg += std::string(arg.size() > prefix.size() ? "," : "") + kCraFeatures;
+      merged = true;
+    }
+  }
+  if (!merged) {
+    args.push_back(prefix + kCraFeatures);
+  }
+  auto& pointers = *new std::vector<const char*>();
+  for (const std::string& arg : args) {
+    pointers.push_back(arg.c_str());
+  }
+  return ChromeMain(static_cast<int>(pointers.size()), pointers.data());
 }

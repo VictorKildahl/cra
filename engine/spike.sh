@@ -20,7 +20,7 @@ echo '<!doctype html><title>Cra engine test</title><h1>Cra engine test</h1>' > "
 DATA="$WORK/profile"
 mkdir -p "$DATA"
 "$APP/Contents/MacOS/Chromium" --user-data-dir="$DATA" --no-first-run --no-startup-window --use-mock-keychain \
-  --disable-features=DisableLoadExtensionCommandLineSwitch --enable-features=AperitifHelpers --load-extension="$ROOT/Tests/Fixtures/Extension" \
+  --disable-features=DisableLoadExtensionCommandLineSwitch --load-extension="$ROOT/Tests/Fixtures/Extension" \
   --cra-spike --cra-spike-page="${SPIKE_PAGE:-file://$PAGE}" --cra-spike-extension="$(cat "$ROOT/Tests/Fixtures/Extension/ID")" \
   --cra-spike-screen="${CRA_TEST_SCREEN:-}" --cra-spike-tabs="${TABS:-20}" > "$WORK/stdout.log" 2> "$WORK/stderr.log" &
 PID=$!
