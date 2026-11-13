@@ -43,6 +43,8 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/version_info/version_info.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
+#include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/printing/print_view_manager_common.h"
 #include "chrome/browser/devtools/devtools_toggle_action.h"
@@ -118,6 +120,8 @@ extern "C" int CraEngineMain(int argc, const char** argv);
 - (void)pageFavicon:(NSImage*)image url:(NSString*)url;
 - (void)pageFindResult;
 - (void)pagePictureInPicture:(BOOL)active;
+- (void)pageProcessEvent:(NSString*)kind detail:(NSString*)detail url:(const GURL&)url;
+- (void)pageCaptureChanged;
 - (void)pageMediaPlaying:(BOOL)playing;
 @property(nonatomic) BOOL inPageFullscreen;
 - (void)devToolsOpened:(BrowserWindowInterface*)devtools;
@@ -154,6 +158,7 @@ ScopedKeepAlive* g_keep_alive = nullptr;
 // The app's handlers (CraCEF.h says what each is for).
 CraBrowser* _Nullable (^g_extension_tab_handler)(NSString*, NSString* _Nullable, BOOL, CraBrowser* _Nullable) = nil;
 void (^g_stray_page_handler)(NSString*, NSString* _Nullable) = nil;
+void (^g_process_event_handler)(NSString*, NSString*, NSString* _Nullable) = nil;
 void (^g_download_destination_handler)(NSString* _Nullable, NSString*, void (^)(NSString* _Nullable)) = nil;
 // Chrome windows an extension opened as popups (windows.create type popup), which stay Chrome's.
 NSHashTable<NSWindow*>* g_extension_windows = nil;
@@ -270,6 +275,37 @@ class PageObserver : public content::WebContentsObserver,
 
   void DidChangeThemeColor() override { [owner_ pageThemeColor]; }
   void MediaPictureInPictureChanged(bool active) override { [owner_ pagePictureInPicture:active]; }
+
+  // "Aw, Snap!" and "Page Unresponsive", for Cra's performance recorder (GitHub #91).
+  void PrimaryMainFrameRenderProcessGone(base::TerminationStatus status) override {
+    const char* what = "unknown";
+    switch (status) {
+      case base::TERMINATION_STATUS_ABNORMAL_TERMINATION:
+        what = "abnormal termination";
+        break;
+      case base::TERMINATION_STATUS_PROCESS_WAS_KILLED:
+        what = "killed";
+        break;
+      case base::TERMINATION_STATUS_PROCESS_CRASHED:
+        what = "crashed";
+        break;
+      case base::TERMINATION_STATUS_OOM:
+        what = "out of memory";
+        break;
+      case base::TERMINATION_STATUS_LAUNCH_FAILED:
+        what = "launch failed";
+        break;
+      default:
+        break;
+    }
+    [owner_ pageProcessEvent:@"terminated" detail:@(what) url:GURL()];
+  }
+  void OnRendererUnresponsive(content::RenderProcessHost* host) override {
+    [owner_ pageProcessEvent:@"unresponsive" detail:@"" url:GURL()];
+  }
+  void OnRendererResponsive(content::RenderProcessHost* host) override {
+    [owner_ pageProcessEvent:@"responsive" detail:@"" url:GURL()];
+  }
   void MediaStartedPlaying(const MediaPlayerInfo& info, const content::MediaPlayerId& id) override {
     [owner_ pageMediaPlaying:YES];
   }
@@ -594,6 +630,21 @@ void BlockedPopupsChanged(content::WebContents* contents) {
   [browser.delegate browser:browser didChangeBlockedPopups:ids urls:urls];
 }
 
+// The camera or microphone in use, as Chrome's tab recording indicator counts it.
+class CaptureWatcher : public MediaStreamCaptureIndicator::Observer {
+ public:
+  void OnIsCapturingVideoChanged(content::WebContents* contents, bool capturing) override { Changed(contents); }
+  void OnIsCapturingAudioChanged(content::WebContents* contents, bool capturing) override { Changed(contents); }
+
+ private:
+  void Changed(content::WebContents* contents) { [BrowserFor(contents) pageCaptureChanged]; }
+};
+
+CaptureWatcher& Captures() {
+  static auto* captures = new CaptureWatcher();
+  return *captures;
+}
+
 bool IsCraPage(const content::WebContents* contents) {
   return BrowserFor(const_cast<content::WebContents*>(contents)) != nil;
 }
@@ -871,6 +922,7 @@ void RunReadyBlocks() {
   g_target_url = &TargetURL;
   g_is_cra_page = &IsCraPage;
   g_block_request = &BlockRequest;
+  MediaCaptureDevicesDispatcher::GetInstance()->GetMediaStreamCaptureIndicator()->AddObserver(&Captures());
   blocked_content::PopupBlockerTabHelper::SetCraListChangedCallback(base::BindRepeating(&BlockedPopupsChanged));
   StartDownloads(&ReportDownload);
   Strays().Start();
@@ -1172,9 +1224,11 @@ void RunReadyBlocks() {
   }
   [self pageAddressChanged];
   int error = handle->GetNetErrorCode();
-  if (error != net::OK && error != net::ERR_ABORTED &&
-      [_delegate respondsToSelector:@selector(browser:didFailLoadingURL:errorCode:)]) {
-    [_delegate browser:self didFailLoadingURL:NS(handle->GetURL().spec()) errorCode:error];
+  if (error != net::OK && error != net::ERR_ABORTED) {
+    [self pageProcessEvent:@"loadError" detail:[NSString stringWithFormat:@"%d", error] url:handle->GetURL()];
+    if ([_delegate respondsToSelector:@selector(browser:didFailLoadingURL:errorCode:)]) {
+      [_delegate browser:self didFailLoadingURL:NS(handle->GetURL().spec()) errorCode:error];
+    }
   }
   [self pageLoadingChanged];
 }
@@ -1245,6 +1299,28 @@ void RunReadyBlocks() {
   _isPictureInPicturePlaying = playing;
   if ([_delegate respondsToSelector:@selector(browser:didChangePictureInPicturePlayback:)]) {
     [_delegate browser:self didChangePictureInPicturePlayback:playing];
+  }
+}
+
+// Only the host, and none for incognito or Cra's own pages: the recorder's log can be shared.
+- (void)pageProcessEvent:(NSString*)kind detail:(NSString*)detail url:(const GURL&)url {
+  if (!g_process_event_handler) {
+    return;
+  }
+  GURL page = url.is_empty() && _contents ? _contents->GetLastCommittedURL() : url;
+  NSString* site = !_isIncognito && page.SchemeIsHTTPOrHTTPS() && !page.host().empty() ? NS(std::string(page.host()))
+                                                                                       : nil;
+  g_process_event_handler(kind, detail, site);
+}
+
+- (BOOL)isCapturingMedia {
+  return _contents &&
+         MediaCaptureDevicesDispatcher::GetInstance()->GetMediaStreamCaptureIndicator()->IsCapturingUserMedia(_contents);
+}
+
+- (void)pageCaptureChanged {
+  if ([_delegate respondsToSelector:@selector(browser:didChangeMediaCapture:)]) {
+    [_delegate browser:self didChangeMediaCapture:self.isCapturingMedia];
   }
 }
 
@@ -1972,7 +2048,14 @@ void RunReadyBlocks() {
   return cra_blocker::ShouldBlock(cra_blocker::WebHost(requestURL.UTF8String ?: ""),
                                   cra_blocker::WebHost(pageURL.UTF8String ?: ""));
 }
+// The last incognito window closed: the off-the-record profile's Browser closes, so Chrome destroys the profile
+// and the next incognito page starts a fresh one.
 + (void)endIncognitoSession {
+  for (auto& [profile, host] : Hosts()) {
+    if (profile->IsOffTheRecord() && host->browser()) {
+      host->browser()->GetWindow()->Close();
+    }
+  }
 }
 + (void)setRelaunchHandler:(void (^)(NSArray<NSString*>*))handler {
 }
@@ -2002,6 +2085,7 @@ void RunReadyBlocks() {
   return cra::ControlDownload(identifier, control);
 }
 + (void)setProcessEventHandler:(void (^)(NSString*, NSString*, NSString* _Nullable))handler {
+  g_process_event_handler = [handler copy];
 }
 + (BOOL)isExtensionWindow:(NSWindow*)window {
   return [g_extension_windows containsObject:window];
