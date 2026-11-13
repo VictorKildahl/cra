@@ -96,6 +96,7 @@
 #include "components/zoom/zoom_controller.h"
 #include "components/download/public/common/download_item.h"
 #include "content/public/browser/download_item_utils.h"
+#include "extensions/browser/webstore_installer.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/download_request_utils.h"
 #include "components/download/public/common/download_url_parameters.h"
@@ -598,9 +599,29 @@ int KeyEvent(content::WebContents* contents, const input::NativeWebKeyboardEvent
   return [NSApp.mainMenu performKeyEquivalent:key] ? 1 : 0;
 }
 
+// The page used last in each profile (Chrome's active tab follows it): a download that no page of Cra's started
+// (an extension's popup, side panel or service worker, GitHub #218) is listed with it.
+std::map<content::BrowserContext*, CraBrowser* __weak>& LastPages() {
+  static auto* pages = new std::map<content::BrowserContext*, CraBrowser* __weak>();
+  return *pages;
+}
+
+// The page a download belongs to: the one that started it, else the profile's last page. None for a Web Store
+// install's own CRX download, which is Chrome's (WebstoreInstaller sets its path, #203).
+CraBrowser* DownloadPage(download::DownloadItem* item) {
+  if (CraBrowser* page = BrowserFor(content::DownloadItemUtils::GetWebContents(item))) {
+    return page;
+  }
+  if (extensions::WebstoreInstaller::GetAssociatedApproval(*item)) {
+    return nil;
+  }
+  auto it = LastPages().find(content::DownloadItemUtils::GetBrowserContext(item));
+  return it == LastPages().end() ? nil : it->second;
+}
+
 // A download's progress, for the page that started it (the CEF bridge's OnDownloadUpdated).
 void ReportDownload(download::DownloadItem* item) {
-  CraBrowser* browser = BrowserFor(content::DownloadItemUtils::GetWebContents(item));
+  CraBrowser* browser = DownloadPage(item);
   if (!browser) {
     return;
   }
@@ -642,7 +663,7 @@ void DownloadPath(download::DownloadItem* item,
     std::move(done).Run(suggested);
     return;
   }
-  CraBrowser* browser = BrowserFor(content::DownloadItemUtils::GetWebContents(item));
+  CraBrowser* browser = DownloadPage(item);
   // An agent page saves only what its agent asked for, where it asked.
   if (browser.isAgent) {
     std::move(done).Run([browser agentDownloadTakes:item] ? std::optional<base::FilePath>(suggested) : std::nullopt);
@@ -1489,6 +1510,9 @@ void RunReadyBlocks() {
     tabs->ActivateTabAt(index);
   }
   host->FollowWindow(_container.window);
+  if (!_isAgent) {
+    LastPages()[_contents->GetBrowserContext()] = self;
+  }
 }
 
 // Cra's scripts in every frame before the page's own (PageScript.swift), as the CEF bridge installed them: the
