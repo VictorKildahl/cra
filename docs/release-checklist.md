@@ -22,8 +22,12 @@ built release app with a test profile. Note anything that fails in the release's
   windows, open Library Spaces, then edit, unpin, delete or turn off the feature. The originating
   sidebar supplies width; a missing originating row takes the smallest candidate. Row reuse and
   interrupted editing must leave no stale masks, sparkles or hint. Relaunch and inspect saved custom
-  names. The `tidy-titles` fake-model scenario covers native pin/editor, window/Library flow and
-  session relaunch; it cannot prove visual parity, saved title values, model quality or real latency.
+  names. Cra-only checks on 13 Nov 2026 passed at 1x and 2x for title/hint, settled light/dark,
+  interrupted editor cleanup and same-item relaunch (`Synthetic Alpha`, original source title
+  retained). Evidence is in `cra-validation/runtime/titles-latest-b7-{native1x,foreground2x,
+  interruption1x,interruption2x}/`; fresh paired Arc captures and model-quality checks remain open.
+  The `tidy-titles` fake-model scenario targets native pin/editor, window/Library flow and session
+  relaunch; it does not prove visual parity, saved title values, model quality or real latency.
 
 ### Themes and window chrome
 

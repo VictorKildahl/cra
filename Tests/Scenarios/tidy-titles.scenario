@@ -20,9 +20,14 @@ expect-log Cra suggest Synthetic Alpha .*rows=.* Synthetic Alpha \S*n=alpha
 # Editing inside the minimum reveal interval wins over the pending generated answer.
 cra://debug?pageJS=document.title='Synthetic Manual - Test Host'
 wait 0.5
-pace 0.05
+# Row observation creates the editor, then focuses it asynchronously. Check the native
+# responder before typing; keep the three editing keys inside the one-second reveal hold.
+pace 0.2
 cra://action/pinTab
 cra://action/renameTab
+cra://debug?zoomLevel=1
+expect-log zoom level .*keys go to NSTextView
+pace 0.05
 cra://key?chars=a&cmd=1
 cra://key?chars=My%20Manual%20Name
 cra://key?chars=%0D

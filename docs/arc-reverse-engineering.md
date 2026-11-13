@@ -3926,6 +3926,17 @@ Titles (`renamePinnedTabsEnabled`, AI endpoint `renamePinnedTabs`) gives a tab a
   Japanese-script alternatives. The Japanese filtered result retained the page-kind word “guide”;
   the prompt does not guarantee cleanup quality. `tidy-titles` uses the deterministic fake only for
   native pin/editor, window/Library and persistence integration, not model semantics or latency.
+- Cra validation, 13 Nov 2026: eligibility now reads actual model availability at pin/application;
+  an unavailable refresh invalidates pending responses, held reveals and active effects even when
+  UI availability was already cached as unavailable. Interrupted editing removes the old-title
+  overlay, masks, sparkles and hint while retaining the saved custom name.
+- Cra-only native captures on 13 Nov used 1200 × 800 pixels at 1x and 2400 × 1600 at 2x: generated
+  title/hint, settled light/dark rows and interrupted native editors were checked. Both relaunches
+  restored the same item with custom title `Synthetic Alpha` and source title
+  `Synthetic Alpha - Test Host`. Evidence: `cra-validation/runtime/titles-latest-b7-{native1x,
+  foreground2x,interruption1x,interruption2x}/`. These fake-model captures verify local presentation
+  and persistence; they are not fresh paired Arc captures or new animation-frame measurements.
+  The earlier measured timings above are unchanged; real semantic-quality limitations remain.
 
 ## Tidy Downloads (Arc 1.171, 4 Nov 2026, strings + Victor's Arc, 60 fps recordings)
 
