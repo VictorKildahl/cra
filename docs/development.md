@@ -126,7 +126,9 @@ to Markdown or `docs/` alone runs nothing.
   update at 1x/Retina. No CEF or visible window; coverage uses the same harness as `scripts/test.sh`.
 - `scripts/test-tidy-title-layout.sh`: native pinned-title measurement against the current text
   field's font and drawable width, including resize, competing Library/other-window sources and
-  unmaterialized-row fallback. No CEF or visible window.
+  unmaterialized-row fallback. Actual sweep views/layers are removed on editing/effect withdrawal,
+  and stale cleanup cannot clear a replacement; `edit`, `withdraw` or `owner` isolates a regression.
+  No CEF or visible window.
 - `scripts/test-tidy-titles.sh`: the production pinned-title service and sidebar store on a manual
   clock with deferred model responses: opt-out, request ownership, home/manual-name guards and
   reveal/expiry timing, plus bounded request construction and exact context-overflow recovery.

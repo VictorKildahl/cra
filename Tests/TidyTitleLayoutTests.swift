@@ -2,6 +2,7 @@ import AppKit
 
 @main
 enum TidyTitleLayoutTests {
+    private static var checks = 0
     @MainActor
     static func main() {
         _ = NSApplication.shared
@@ -31,7 +32,8 @@ enum TidyTitleLayoutTests {
         label.frame.size.width = 1
         expect(TidyTitleLayout(label: label, inset: 2).width == 0, "padding never creates negative drawable width")
         sidebarPresentationSelection()
-        print("Tidy title layout: 10 checks passed")
+        sweepInterruption()
+        print("Tidy title layout and sweep: \(checks) checks passed")
     }
 
     @MainActor
@@ -78,7 +80,80 @@ enum TidyTitleLayoutTests {
                "without the intended sidebar, manager and other-window rows cannot replace the smallest fallback")
     }
 
+    @MainActor
+    private static func sweepInterruption() {
+        let row = NSView(frame: NSRect(x: 0, y: 0, width: 280, height: 40))
+        row.wantsLayer = true
+        let title = NSTextField(labelWithString: "Generated title")
+        let subtitle = NSTextField(labelWithString: "Double-click to rename")
+        title.wantsLayer = true
+        subtitle.wantsLayer = true
+        row.addSubview(title)
+        row.addSubview(subtitle)
+        let sweep = TidyTitleSweep()
+        var ended = 0
+
+        func begin(_ token: UUID) -> (old: NSTextField, sparks: CALayer) {
+            let old = NSTextField(labelWithString: "Original title")
+            row.addSubview(old)
+            let sparks = CALayer()
+            sweep.begin(token: token, oldTitle: old, sparkles: sparks,
+                        title: title, subtitle: subtitle, row: row.layer, duration: 0.55) { ended += 1 }
+            title.layer?.mask = CALayer()
+            subtitle.layer?.mask = CALayer()
+            row.layer?.addSublayer(sparks)
+            row.layer?.zPosition = 50
+            return (old, sparks)
+        }
+
+        func expectCleared(_ pieces: (old: NSTextField, sparks: CALayer), _ reason: String) {
+            expect(!sweep.isActive && pieces.old.superview == nil && pieces.sparks.superlayer == nil,
+                   "\(reason) removes the actual old-title view and sparkle layer immediately")
+            expect(title.layer?.mask == nil && subtitle.layer?.mask == nil && row.layer?.zPosition == 0,
+                   "\(reason) clears native text masks and the row's lifted z-position")
+        }
+
+        let mode = CommandLine.arguments.dropFirst().first
+        if mode == nil || mode == "edit" {
+            let token = UUID(), pieces = begin(token)
+            sweep.update(effectToken: token, editing: false)
+            expect(sweep.isActive && pieces.old.superview === row && pieces.sparks.superlayer === row.layer,
+                   "an unchanged effect keeps its normal native sweep")
+            sweep.update(effectToken: token, editing: true)
+            expectCleared(pieces, "entering manual editing")
+            expect(ended == 1, "interruption ends the bright subtitle exactly once")
+        }
+
+        if mode == nil || mode == "withdraw" {
+            let token = UUID(), pieces = begin(token)
+            sweep.update(effectToken: nil, editing: false)
+            expectCleared(pieces, "withdrawing the service effect")
+            let replaced = begin(UUID())
+            sweep.update(effectToken: UUID(), editing: false)
+            expectCleared(replaced, "replacing the service effect")
+        }
+
+        if mode == nil || mode == "owner" {
+            let old = UUID(), current = UUID()
+            let oldPieces = begin(old)
+            let pieces = begin(current)
+            expect(oldPieces.old.superview == nil && oldPieces.sparks.superlayer == nil,
+                   "a replacement sweep removes the previous native pieces")
+            let before = ended
+            sweep.end(token: old) // The exact entry point used by the delayed completion.
+            expect(sweep.isActive && pieces.old.superview === row && pieces.sparks.superlayer === row.layer
+                   && title.layer?.mask != nil && subtitle.layer?.mask != nil && row.layer?.zPosition == 50 && ended == before,
+                   "an old scheduled cleanup cannot clear a newer sweep or dim its subtitle")
+            sweep.end(token: current)
+            expectCleared(pieces, "the matching sweep completion")
+            expect(ended == before + 1, "the matching completion ends its bright subtitle once")
+            sweep.end(token: current)
+            expect(ended == before + 1, "repeated completion cannot finish an already removed sweep")
+        }
+    }
+
     private static func expect(_ condition: Bool, _ message: String) {
+        checks += 1
         guard condition else { print("FAIL: \(message)"); exit(1) }
     }
 }
