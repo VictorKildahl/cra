@@ -1,0 +1,13 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Extension context fixture</title>
+<input autocomplete="username" placeholder="Username">
+<input type="password" autocomplete="current-password" placeholder="Password">
+<script>
+  function checkExtensionContext(label) {
+    return new Promise((resolve) => {
+      document.addEventListener('cra-context-result', (event) => resolve(event.detail), { once: true });
+      document.dispatchEvent(new CustomEvent('cra-context-request', { detail: label }));
+    });
+  }
+</script>

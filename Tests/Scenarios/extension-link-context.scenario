@@ -1,0 +1,42 @@
+# Background extension queries must follow the focused page, including links and duplicate URLs.
+budget rss=1100 stalls50=40
+cra://debug?installExtension=${FIXTURES}/TabsQueryExtension
+relaunch
+cra://open?url=${ORIGIN}/extension-context.html?n=source
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('direct')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"direct current=true currentWindow=true last=true type=normal page=source active=source"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='${ORIGIN}/extension-context.html?n=linked',a.target='_blank',document.body.append(a),a.click()))(document.createElement('a'))","userGesture":true}
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('linked')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"linked current=true currentWindow=true last=true type=normal page=linked active=linked"
+cra://action/goBack
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('returned')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"returned current=true currentWindow=true last=true type=normal page=source active=source"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('background')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"background current=true currentWindow=true last=true type=normal page=source active=source"
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('background-settled')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"background-settled current=true currentWindow=true last=true type=normal page=source active=source"
+cra://open?url=${ORIGIN}/extension-context.html?n=source
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('same-url')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"same-url current=true currentWindow=true last=true type=normal page=source active=source"
+cra://action/previousTab
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('previous')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"previous current=true currentWindow=true last=true type=normal page=source active=source"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"window.open('${ORIGIN}/extension-context.html?n=popup','popup','width=500,height=400')","userGesture":true}
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('popup')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"popup current=true currentWindow=true last=true type=normal page=popup active=popup"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"window.opener.checkExtensionContext('inactive-opener')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"inactive-opener current=false currentWindow=false last=false type=normal page=source active=popup"
+cra://action/closeTab
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('popup-closed')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"popup-closed current=true currentWindow=true last=true type=normal page=source active=source"
+cra://debug?removeExtension=${TABS_QUERY_EXTENSION_ID}
+wait 1
+reject-log fault:

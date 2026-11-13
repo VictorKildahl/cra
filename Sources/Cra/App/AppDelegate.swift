@@ -1762,7 +1762,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 let tab = dict["tab"].flatMap(UUID.init(uuidString:)).flatMap { main.browsers.runtime(for: $0)?.browser }
                 let b = dict["target"] == "little" ? littleWindows.last?.browser : tab ?? main.currentBrowser
                 b?.sendDevToolsMethod(method, params: dict["params"] ?? "{}") { result, error in
-                    NSLog("Cra cdp %@ → %@", method, result ?? "error: \(error ?? "?")")
+                    CraLog.note("Cra cdp \(method) → \(result ?? "error: \(error ?? "?")")")
                 }
                 return
             }
