@@ -71,9 +71,14 @@ public enum ToolbarAutoHide {
         case elsewhere
     }
 
-    public static func classify(_ point: CGPoint, card: CGRect, container: CGRect, barHeight: CGFloat, shown: Bool) -> Pointer {
+    /// `followers` are what moved under the bar with it and goes back when it goes (the find bar,
+    /// `FindBarPlacement`): the pointer on one keeps a bar that is out, so nothing slides away
+    /// from under the pointer.
+    public static func classify(_ point: CGPoint, card: CGRect, container: CGRect, barHeight: CGFloat, shown: Bool,
+                                followers: [CGRect] = []) -> Pointer {
         if inRevealStrip(point, card: card, container: container) { return .strip }
         if shown, inKeepZone(point, card: card, container: container, barHeight: barHeight) { return .bar }
+        if shown, followers.contains(where: { $0.contains(point) }) { return .bar }
         return .away
     }
 }

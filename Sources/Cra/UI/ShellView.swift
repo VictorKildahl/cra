@@ -671,13 +671,35 @@ final class ShellView: NSView {
         return card
     }
 
+    /// How much of the page's top the floating bar covers: its height while it is out, else nothing.
+    /// The find bar's panel hangs under that (`FindBarPlacement`).
+    var floatingToolbarCover: CGFloat {
+        guard let card = floatingCard, card.toolbarRevealed else { return 0 }
+        return card.toolbarHeight
+    }
+
+    /// The floating bar came out or went (`animated`: with the slide), so what hangs under it moves.
+    var onFloatingToolbarChange: ((_ animated: Bool) -> Void)?
+
+    /// Windows that follow the floating bar instead of hanging from it (the find bar's panel):
+    /// the pointer on one keeps the bar, and being under the bar doesn't hold it there.
+    var toolbarFollowers: () -> [NSWindow] = { [] }
+
+    private func reveal(_ card: PaneCardView, _ shown: Bool, animated: Bool) {
+        guard card.toolbarRevealed != shown else { return }
+        card.setToolbarRevealed(shown, animated: animated)
+        onFloatingToolbarChange?(animated)
+    }
+
     /// After a layout: the card shows what the tracker says, a bar that stopped floating forgets
     /// its state, and the pointer is watched only while a bar floats.
     private func syncFloatingToolbar() {
         if let card = floatingCard {
-            if card.toolbarRevealed != toolbarTracker.shown { card.setToolbarRevealed(toolbarTracker.shown, animated: false) }
+            reveal(card, toolbarTracker.shown, animated: false)
         } else if toolbarTracker != ToolbarAutoHideTracker() {
+            let wasOut = toolbarTracker.shown
             toolbarTracker.reset()
+            if wasOut { onFloatingToolbarChange?(false) }
         }
         if toolbarActivation.isEmpty, floatingCard != nil {
             toolbarActivation = [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification].map { name in
@@ -693,7 +715,7 @@ final class ShellView: NSView {
         // Another app in front: the bar goes with the pointer's attention, as the floating sidebar does.
         if !NSApp.isActive, toolbarTracker.shown {
             toolbarTracker.reset()
-            floatingCard?.setToolbarRevealed(false, animated: true)
+            if let card = floatingCard { reveal(card, false, animated: true) }
         }
         syncToolbarPolling()
     }
@@ -719,14 +741,21 @@ final class ShellView: NSView {
         let where_: ToolbarAutoHide.Pointer
         if let p = toolbarPointer() {
             where_ = ToolbarAutoHide.classify(p, card: convert(card.frame, from: card.superview), container: bounds,
-                                              barHeight: card.toolbarHeight, shown: toolbarTracker.shown)
+                                              barHeight: card.toolbarHeight, shown: toolbarTracker.shown,
+                                              followers: toolbarFollowerFrames())
         } else {
             where_ = .away
         }
         // A button held down (a drag begun on the bar) or something hanging under the bar keeps it.
         let held = toolbarTracker.shown && (NSEvent.pressedMouseButtons != 0 || somethingHangsFromToolbar(card))
         toolbarTracker.sample(where_, held: held, at: toolbarNow())
-        if card.toolbarRevealed != toolbarTracker.shown { card.setToolbarRevealed(toolbarTracker.shown, animated: true) }
+        reveal(card, toolbarTracker.shown, animated: true)
+    }
+
+    /// Where the bar's followers are, in this view's coordinates.
+    private func toolbarFollowerFrames() -> [NSRect] {
+        guard let window else { return [] }
+        return toolbarFollowers().filter { $0.isVisible }.map { convert(window.convertFromScreen($0.frame), from: nil) }
     }
 
     /// A popover or popup of Cra's hangs from the bar (the Site Control Center, an extension's
@@ -734,8 +763,9 @@ final class ShellView: NSView {
     private func somethingHangsFromToolbar(_ card: PaneCardView) -> Bool {
         guard let window else { return false }
         let cardOnScreen = window.convertToScreen(card.convert(card.bounds, to: nil))
+        let followers = toolbarFollowers()
         return (window.childWindows ?? []).contains { child in
-            child.isVisible && child.alphaValue > 0
+            child.isVisible && child.alphaValue > 0 && !followers.contains { $0 === child }
                 && ToolbarAutoHide.hangsFromBar(child.frame, card: cardOnScreen, barHeight: card.toolbarHeight)
         }
     }
@@ -745,7 +775,7 @@ final class ShellView: NSView {
     func bringFloatingToolbarOut() {
         guard let card = floatingCard, !toolbarTracker.shown else { return }
         toolbarTracker.bringOut()
-        card.setToolbarRevealed(true, animated: false)
+        reveal(card, true, animated: false)
     }
 
     /// For `cra://debug?toolbar=…`: `out` and `in` put the floating bar there, `sample` looks at
@@ -756,7 +786,7 @@ final class ShellView: NSView {
         case "out": bringFloatingToolbarOut()
         case "in":
             toolbarTracker.reset()
-            floatingCard?.setToolbarRevealed(false, animated: false)
+            if let card = floatingCard { reveal(card, false, animated: false) }
         case "sample": sampleToolbarPointer()
         default: break
         }
@@ -768,12 +798,14 @@ final class ShellView: NSView {
             guard g.count == 2 else { return "toolbar at: x,y" }
             let p = convert(NSPoint(x: g[0], y: window.frame.height - g[1]), from: nil)
             let where_ = ToolbarAutoHide.classify(p, card: convert(card.frame, from: card.superview), container: bounds,
-                                                  barHeight: card.toolbarHeight, shown: toolbarTracker.shown)
+                                                  barHeight: card.toolbarHeight, shown: toolbarTracker.shown,
+                                                  followers: toolbarFollowerFrames())
             return "toolbar \(command): \(where_) out=\(toolbarTracker.shown ? 1 : 0)"
         }
         return "toolbar \(command): floats=\(floatingCard != nil ? 1 : 0) out=\(toolbarTracker.shown ? 1 : 0) "
             + "inset=\(Int(card?.barInset ?? 0)) page=\(Int(card?.webArea.frame.height ?? 0))/\(Int(card?.bounds.height ?? 0)) "
-            + "barHidden=\(card?.toolbarHost.isHidden == true ? 1 : 0) polling=\(toolbarPoll != nil ? 1 : 0)"
+            + "barHidden=\(card?.toolbarHost.isHidden == true ? 1 : 0) polling=\(toolbarPoll != nil ? 1 : 0) "
+            + "hangs=\(card.map(somethingHangsFromToolbar) == true ? 1 : 0)"
     }
 
     // MARK: Layout
@@ -955,7 +987,7 @@ final class ShellView: NSView {
         if findHost.superview === overlayParent {
             let size = CraMetrics.findBarSize, inset = CraMetrics.findBarInset
             findHost.isHidden = !findVisible
-            findHost.frame = NSRect(x: wb.maxX - size.width - inset, y: wb.maxY - size.height - inset, width: size.width, height: size.height)
+            findHost.frame = FindBarPlacement.frame(page: wb, size: size, inset: inset, toolbarOverPage: floatingToolbarCover)
         }
         if !animatingPanes, paneCards.allSatisfy({ $0.frozenWebBounds == nil }) { onPaneFrames?(paneWebFrames(layout)) }
     }

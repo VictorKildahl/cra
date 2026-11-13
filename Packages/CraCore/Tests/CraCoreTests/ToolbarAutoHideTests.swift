@@ -127,6 +127,24 @@ struct ToolbarAutoHideTests {
         #expect(!hangs(CGRect(x: 0, y: 382, width: 280, height: 300)))
     }
 
+    /// The find bar hangs under a toolbar that is out (`FindBarPlacement`). A pointer on it keeps the
+    /// toolbar, so the find bar doesn't slide back to the corner from under the pointer; the find
+    /// bar itself brings nothing out, and off it the pointer lets the toolbar go as before.
+    @Test func thePointerOnWhatFollowsTheBarKeepsIt() {
+        // Under the bar (y 678…710) with the find bar's 10 pt inset: y 630…668, far below the 16 pt slack.
+        let findBar = CGRect(x: 980, y: 630, width: 300, height: 38)
+        func classify(_ x: CGFloat, _ y: CGFloat, shown: Bool, followers: [CGRect]) -> ToolbarAutoHide.Pointer {
+            ToolbarAutoHide.classify(CGPoint(x: x, y: y), card: card, container: container, barHeight: bar, shown: shown,
+                                     followers: followers)
+        }
+        #expect(classify(1100, 640, shown: true, followers: []) == .away)
+        #expect(classify(1100, 640, shown: true, followers: [findBar]) == .bar)
+        #expect(classify(700, 640, shown: true, followers: [findBar]) == .away)
+        #expect(classify(1100, 600, shown: true, followers: [findBar]) == .away)
+        // While the toolbar is away the find bar is only the find bar.
+        #expect(classify(1100, 640, shown: false, followers: [findBar]) == .away)
+    }
+
     // MARK: Coming out and going
 
     @Test func comesOutOnceThePointerHasRestedInTheStrip() {
