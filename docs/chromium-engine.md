@@ -85,3 +85,8 @@ framework `ChromeMain` owns the whole run, start to quit. So:
     and keeps it out of sight; the layer will do the same.
   - The hooks are inert for CEF: the CEF build doesn't build `chrome_dll`, and `cra::g_extra_parts_factory` is
     only set by `CraEngineMain`.
+- 13 Nov 2026, step 2's first build: Chrome 157.0.8103.81 from `scripts/build-chromium.sh` (official, ThinLTO + PGO,
+  codecs; `~/chromium.noindex`, 3.5 h with other builds on the Mac). The layer built on 157 unchanged, and
+  `engine/spike.sh` passes all 12 checks again. 20 tabs of the bench page: total 702 MB, browser process 101 MB,
+  GPU 111 MB, pages 16 MB each (median), the framework's `__DATA_CONST` clean in the pages. Cra's patches and
+  ungoogled-chromium's service patches are not in yet.
