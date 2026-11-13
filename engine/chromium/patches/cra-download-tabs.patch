@@ -1,0 +1,24 @@
+diff --git a/chrome/browser/download/download_ui_controller.cc b/chrome/browser/download/download_ui_controller.cc
+--- a/chrome/browser/download/download_ui_controller.cc
++++ b/chrome/browser/download/download_ui_controller.cc
+@@ -3,6 +3,8 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/download/download_ui_controller.h"
++
++#include "chrome/browser/cra_engine_hooks.h"
+ 
+ #include <memory>
+ #include <utility>
+@@ -269,7 +271,10 @@
+     // it. Avoid calling CloseContents if the tab is not in this browser's tab
+     // strip model; this can happen if the download was initiated by something
+     // internal to Chrome, such as by the app list.
+-    if (browser && web_contents->GetController().IsInitialNavigation() &&
++    // Cra: a page of Cra's stays, as it did when each page had a window of
++    // its own; Cra's app decides about the tab.
++    if (browser && !(cra::g_is_cra_page && cra::g_is_cra_page(web_contents)) &&
++        web_contents->GetController().IsInitialNavigation() &&
+         (browser->GetTabStripModel()->count() > 1 ||
+          web_app::AppBrowserController::IsWebApp(browser)) &&
+         browser->GetTabStripModel()->GetIndexOfWebContents(web_contents) !=
