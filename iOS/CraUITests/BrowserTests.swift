@@ -444,6 +444,22 @@ final class BrowseFollowUpTests: BrowserTestCase {
     }
 }
 
+final class BrowseQueryEditTests: BrowserTestCase {
+    /// The question at the top of a Browse for Me page opens the search sheet with it, to change.
+    func testTheQuestionCapsuleOpensItForEditing() {
+        launch(["-CraFakeModel", "YES", "-CraFakeSuggestions", "YES"])
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.typeText("pizza ovens")
+        app.buttons["browse-for-me"].firstMatch.tap()
+        XCTAssertTrue(app.webViews.staticTexts["About pizza ovens"].waitForExistence(timeout: 15))
+        app.webViews.links["pizza ovens"].firstMatch.tap()
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertEqual(field.value as? String, "pizza ovens", "the question is ready to change")
+        XCTAssertTrue(app.descendants(matching: .any)["suggestion-1"].waitForExistence(timeout: 5), "with its suggestions")
+    }
+}
+
 final class IncognitoTests: BrowserTestCase {
     /// The mask in the search field turns the sheet incognito; a page opened then stays out of
     /// the tab row and out of the Archive, and is gone once it is left.

@@ -938,6 +938,12 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         animateChrome(duration: 0.25, options: .curveEaseInOut)
     }
 
+    func webPage(_ page: WebPage, editQuery query: String) {
+        setSearching(true, incognito: store.tabs.first { $0.id == page.tabID }?.isIncognito ?? false)
+        sheet.text = query
+        searchSheet(sheet, didChangeText: query)
+    }
+
     func webPage(_ page: WebPage, openInNewTab url: URL) {
         incognitoSearch = store.selected?.isIncognito ?? false
         open(url.absoluteString)

@@ -8,6 +8,8 @@ protocol WebPageDelegate: AnyObject {
     func webPage(_ page: WebPage, didScrollBy delta: CGFloat, atTop: Bool)
     /// A link that asked for a new window.
     func webPage(_ page: WebPage, openInNewTab url: URL)
+    /// The query capsule on a Browse for Me page: edit the question.
+    func webPage(_ page: WebPage, editQuery query: String)
 }
 
 /// One tab's web view and what the chrome needs to know about it.
@@ -159,6 +161,12 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
             return decisionHandler(.download, preferences)
         }
         // A Browse for Me page's follow-up chip: a new Browse for Me in a tab of its own.
+        if let url = navigationAction.request.url, url.scheme == "cra-edit" {
+            if navigationAction.navigationType == .linkActivated, let query = MobileBrowseForMe.query(fromEditAddress: url.absoluteString) {
+                delegate?.webPage(self, editQuery: query)
+            }
+            return decisionHandler(.cancel, preferences)
+        }
         if let url = navigationAction.request.url, url.scheme == "cra-browse" {
             if navigationAction.navigationType == .linkActivated { delegate?.webPage(self, openInNewTab: url) }
             return decisionHandler(.cancel, preferences)

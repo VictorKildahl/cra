@@ -978,3 +978,15 @@ struct MobileSpacesSheetTests {
         #expect(MobileSpaces.sheetStyle(colors: []) == nil)
     }
 }
+
+/// The query capsule on a Browse for Me page edits the question.
+struct MobileBrowseQueryEditTests {
+    @Test func theCapsuleOpensTheQuestionForEditing() {
+        let address = MobileBrowseForMe.editAddress(query: "risotto & paella?")
+        #expect(MobileBrowseForMe.query(fromEditAddress: address) == "risotto & paella?")
+        #expect(MobileBrowseForMe.query(fromEditAddress: "https://example.com") == nil)
+        let answer = MobileBrowseForMe.Answer(title: "T", points: [.init(emoji: "", term: "", text: "x")], sections: [])
+        let html = MobileBrowseForMe.pageHTML(query: "risotto & paella?", answer: answer, sources: [], searchURL: "https://www.google.com/search?q=x")
+        #expect(html.contains("class=\"query\" href=\"\(address)\""))
+    }
+}

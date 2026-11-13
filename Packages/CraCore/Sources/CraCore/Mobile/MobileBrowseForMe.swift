@@ -207,6 +207,17 @@ public enum MobileBrowseForMe {
         return query
     }
 
+    /// The query capsule's link: the search sheet with the question in it, to change it (Arc
+    /// Search 1.12's query editing). Only Cra's own pages carry it; it does nothing else.
+    public static func editAddress(query: String) -> String {
+        "cra-edit:" + (query.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? query)
+    }
+
+    public static func query(fromEditAddress address: String) -> String? {
+        guard address.hasPrefix("cra-edit:") else { return nil }
+        return String(address.dropFirst("cra-edit:".count)).removingPercentEncoding
+    }
+
     /// The query of a Browse for Me tab, or nil for any other address.
     public static func query(fromTabAddress address: String) -> String? {
         guard address.hasPrefix("cra-browse:") else { return nil }
@@ -220,7 +231,8 @@ public enum MobileBrowseForMe {
 
     /// The answer as a page, in Arc Search's order: the query in a capsule, the sources' pictures,
     /// "Read N web pages" with the source cards, the title, the key points, then the sections.
-    /// `searchURL` is where the capsule's search button goes: the same query in the search engine.
+    /// The capsule edits the question (`editAddress`); `searchURL` is kept for the engine's results
+    /// (the floating switch goes there).
     public static func pageHTML(query: String, answer: Answer, sources: [Source], searchURL: String) -> String {
         let pictures = sources.compactMap { source -> String? in
             guard let image = source.image, let url = URL(string: image, relativeTo: URL(string: source.hit.url))?.absoluteURL,
@@ -276,7 +288,7 @@ public enum MobileBrowseForMe {
         .sources { margin-top: 8px; } .sources li { display: block; margin: 0 0 10px; }
         .sources a { display: flex; flex-direction: column; } .src-title { font-weight: 500; }
         </style></head><body><main>
-        <a class="query" href="\(escape(searchURL))"><svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="6.3" cy="6.3" r="4.8"/><path d="M10 10l3.6 3.6"/></svg><span>\(escape(query))</span></a>
+        <a class="query" href="\(escape(editAddress(query: query)))"><svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="6.3" cy="6.3" r="4.8"/><path d="M10 10l3.6 3.6"/></svg><span>\(escape(query))</span></a>
         \(pictures.isEmpty ? "" : "<div class=\"shots\">\(pictures.joined())</div>")
         <div class="read">Read \(sources.count) web page\(sources.count == 1 ? "" : "s")</div>
         <div class="cards">\(cards.joined())</div>
