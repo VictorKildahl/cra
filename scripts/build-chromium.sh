@@ -11,7 +11,7 @@
 # ~/chromium.noindex: .noindex keeps Spotlight out). Needs ~45 GB for one CPU. Never edit this file
 # while it runs (bash reads it as it goes).
 set -euo pipefail
-CHROMIUM_TAG="${CHROMIUM_TAG:-157.0.8103.81}"
+CHROMIUM_TAG="${CHROMIUM_TAG:-158.0.8127.37}"
 ARCH="${CRA_ARCH:-arm64}"
 ROOT="${CHROMIUM_ROOT:-$HOME/chromium.noindex}"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
