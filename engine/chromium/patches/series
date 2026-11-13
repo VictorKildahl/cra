@@ -15,7 +15,6 @@ settings-no-on-startup.patch
 speech-on-device.patch
 webauthn-keychain-access-group.patch
 extension-install-ui-null-tab.patch
-# fingerprinting-protection.patch: rebased to 157; listed with the next full rebuild (it touches Blink's web preferences)
 cra-hosted-pages.patch
 page-activate.patch
 extension-tab-activate.patch
@@ -31,3 +30,24 @@ cra-download-tabs.patch
 cra-content-blocking.patch
 cra-page-menu.patch
 cra-relaunch.patch
+fingerprinting-protection.patch
+
+# Google's background services, off: ungoogled-chromium's patches (BSD 3-Clause, ungoogled/LICENSE), taken one
+# by one from its 157.0.8103.78 series (commit 8c886df). Left out on purpose: GCM (push
+# notifications), Web Store URLs (installs), Safe Browsing and other security updaters, translate, DNS, search
+# engines, disable-ai (it changes the speech service Cra's speech-on-device patch uses).
+ungoogled/disable-crash-reporter.patch
+ungoogled/disable-profile-avatar-downloading.patch
+ungoogled/disable-domain-reliability.patch
+ungoogled/disable-fonts-googleapis-references.patch
+ungoogled/disable-webrtc-log-uploader.patch
+ungoogled/disable-network-time-tracker.patch
+ungoogled/disable-mei-preload.patch
+ungoogled/disable-fetching-field-trials.patch
+ungoogled/0003-disable-autofill-download-manager.patch
+ungoogled/0021-disable-rlz.patch
+ungoogled/safe_browsing-disable-incident-reporting.patch
+ungoogled/safe_browsing-disable-reporting-of-safebrowsing-over.patch
+ungoogled/disable-untraceable-urls.patch
+ungoogled/disable-intranet-redirect-detector.patch
+ungoogled/disable-dial-repeating-discovery.patch
