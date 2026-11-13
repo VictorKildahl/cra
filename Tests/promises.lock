@@ -770,3 +770,5 @@
 #417   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::theModelIsNotToldToWriteADialogue  00c89cbe584e
 #419   Packages/CraCore/Tests/CraCoreTests/SidebarLinkDropTests.swift::whichLinkBecomesTheTab  74f055957ef6
 #419   Tests/Scenarios/drop-link.scenario  f8f3d8da77df
+#421   Packages/CraCore/Tests/CraCoreTests/LinkRoutingTests.swift::typedURLFollowsSpaceRoutes  cfbe95a599dd
+#421   Tests/Scenarios/command-bar-route.scenario  e9c6c3f45f79

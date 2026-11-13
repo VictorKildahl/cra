@@ -2122,6 +2122,12 @@ the arm64 slice. [O] = observed, [I] = inferred.
   under "Little Window"; the page loads in that space's profile and "Open in" / ⌘O names it. Saved as
   `{"littleWindow": {"space": "<id>"}}` (`{}` without one, as before), which older Cra reads as a plain Little
   Window. An imported `littleArc(space(id))` keeps its space.
+- [O, Arc 1.173.1, reporter of #421 via AppleScript] A URL typed in ⌘T goes through the routes too: a `meet.google.com`
+  or `youtube.com` route to Personal, typed from Homelab, switched the window to Personal with the tab there. A typed
+  URL that matches nothing stays in the space in use (the Little Arc default does not apply). Not checked: ⌘L on an
+  open tab, the sidebar address pill, a typed URL whose first match is a Little Arc route. Cra
+  (`AppSettings.space(forTypedURL:)`, `MainWindowController.handleCommit`) routes the ⌘T new-tab case only, and only
+  to a space; scenario `command-bar-route`.
 
 ## Extension popups and extension windows (Arc 1.170, 26 Oct 2026, static)
 
