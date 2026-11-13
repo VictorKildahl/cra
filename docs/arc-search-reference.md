@@ -722,3 +722,28 @@ Things I could not confirm
 - Accessibility (VoiceOver labels), localisation (the App Store lists English only [AS]).
 - What the UI looks like after 23 Nov 2026 once Browse for Me, summaries and sync are switched off (which buttons disappear).
 - The Verge's coverage (launch review, Call Arc, sync) and r/ArcBrowser threads: both sites were unreachable with the tools allowed here. The Wayback Machine, which would hold the deleted help-centre feature articles and older App Store version histories (1.0 to 1.33), was also unreachable. Those three are the most promising places to close the gaps above, along with the paid tier of the screensdesign recording and simply watching the videos in F.1.
+
+## Victor's recording, 13 November 2026 (Arc Search 1.49.0, iPhone 16 Pro Max)
+
+`build/ios-reference/victor-recording/arc-search-full.mp4` (local only): 4:00 at 60 fps,
+1320 × 2868 px = 440 × 956 pt at 3 px per point, the same screen as Victor's phone. `1x/tNNN.png`
+holds one frame a second at 1 px per point (frame N is second N − 1). The best reference there is.
+
+| Time | What |
+|---|---|
+| 0:00–0:02 | Home screen, launch: the big logo shrinks to the top of the welcome. |
+| 0:02–0:07 | Welcome on the vivid blue-to-red gradient: "Get what you want *twice* as fast.", Next. |
+| 0:07–0:12 | "Meet your new favorite browser": four translucent pills with coloured round icons. |
+| 0:12–0:30 | "Let Arc search and *summarize for you*": phone mock with the search sheet and five sample queries, "Try it!" and an arrow to the first Browse for Me chip; tapped, the mock runs a real Browse for Me ("things to do in paris"), a check appears above. |
+| 0:31–0:44 | "*Pinch* to summarize any web page", Skip at the top right: a moon page in the mock, pinched by the user, folds into its summary; check. |
+| 0:45–0:55 | "Pick an icon for your *home screen*": 3 × 3 grid with radio marks; iOS's "You have changed the icon" alert. |
+| 0:55–1:05 | "Get what you need, without the noise": page mock ("Out West") with ads, the "Block Ads and Trackers" switch inside the mock hides them; "Let's go"; check. |
+| 1:06–1:20 | "Never see another ad.": big app icon on a pale screen, "Set as Default Browser", "Skip"; the inset sheet "How to change your default browser" (three steps, "Open Arc Search in Settings", "Maybe later"). |
+| 1:21–1:29 | Coach mark over the search sheet: "Tap *Browse for Me* for a faster answer", pink arrow to the first chip; starter rows "how do i make my boss like me", "lebron vs lebron jr", "tips for seasonal depression", "will tiktok be banned". |
+| 1:30–1:58 | Browse for Me in dark: "Reading 8 web pages … and more", the result with follow-up chips and "Did Arc answer your question?" with thumbs; query editing from the capsule. |
+| 1:59–2:05 | Google results; "Arc just blocked **14** trackers / See more and change block settings in the ⌃ menu" toast. |
+| 2:05–2:40 | Page menu: capsule (back, forward, address, link, reload), tiles Find on Page, Summarize, Pin, Share; rows "Display Options ›" (opens inline: Translate, Reader Mode, Page Zoom, Request Desktop Site) and "Site Settings"; footer "Arc scrubbed 22 trackers / Problems? Tap to restore original page". Search sheet over a page, incognito, Find on Page bar. |
+| 2:40–2:50 | Summarize on a dark gradient; share sheet; Pin. |
+| 2:50–3:20 | Site Settings ("GOOGLE.COM SETTINGS"), App Settings (full list, 1.49.0 (68824.2)), Default Site Settings, empty Archive, Downloads (Files browser). |
+| 3:20–3:30 | "Did it fix the issue?" thumbs pill, "Blockers disabled for google.com" pill. |
+| 3:30–4:00 | Tab row in dark with the "Every tab, anywhere. Sync with Arc Desktop" card; Spaces button opens "Sync with Arc Desktop" (Sign in with Arc / I don't have an account), "Sign up on your computer first", "← Go back"; Arc's farewell page. |
