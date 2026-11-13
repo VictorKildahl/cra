@@ -14,6 +14,22 @@ public enum HiddenFrameRelease {
     /// freezing keeps running, and each saved frame held ~15 MB of GPU memory. A tab further back
     /// draws its page again when shown.
     public static let savedFrames = 5
+    /// How long after the page windows change (a switch, a new tab) the release runs, besides the
+    /// once-a-minute pass: a tab past the saved-frame cap is evicted as it is hidden, so its ~15 MB
+    /// can go at once, and opening twenty tabs no longer held ~240 MB more in the GPU process for up
+    /// to a minute. Long enough that a burst of switches draws nothing until it ends.
+    public static let afterPageChange: TimeInterval = 2
+    /// Page windows drawing at once. Each goes in as a child of the browser window, and AppKit
+    /// sorts all of that window's children on every order in and out: 45 at once (fifty tabs
+    /// opened quickly) held the main thread 2.3-3.2 s. In passes of a few it stays a few ms each.
+    public static let perPass = 4
+    /// Between passes, after a pass's draws are done (0.25 s).
+    public static let passGap: TimeInterval = 0.4
+
+    /// The windows to draw in this pass, and whether another pass is needed after it.
+    public static func pass(_ due: [UUID]) -> (now: [UUID], more: Bool) {
+        (Array(due.prefix(perPass)), due.count > perPass)
+    }
     /// Chromium's culling delay (5 min) plus one timer period: evicted by then whenever it was hidden.
     public static let evictedAfter: TimeInterval = 10 * 60 + 30
 

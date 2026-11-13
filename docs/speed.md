@@ -198,6 +198,23 @@ Measured on a 0.1.42 copy with only the helper changed, two interleaved rounds, 
 
 That puts Cra's page processes below Chrome 157's and below the other browser's (~26.5 MB).
 
+### Done 13 Nov 2026: hidden tabs' frames go 2 s after a switch, a few windows at a time
+
+The GPU process held ~370 MB for up to a minute after twenty tabs were opened: the hidden tabs past
+Chromium's five saved frames were only released (HiddenFrameRelease) on the once-a-minute tab
+cleanup pass. The release now also runs 2 s after the page windows last changed
+(`HiddenFrameRelease.afterPageChange`). 20 bench tabs, `MODES=procs`, 20 s after the last one:
+GPU 371 → 148 MB, total ~1,000 → ~790 MB.
+
+Each window that draws for a release goes in as a child of the browser window, and AppKit sorts all
+of that window's children on every order in and out: with fifty tabs opened quickly, 45 windows at
+once held the main thread 2.3–3.2 s (the minute pass did the same, at a random moment). It now draws
+`perPass` (4) at a time, a pass every 0.65 s: fifty-tabs' longest stall 2,265 → ~120 ms.
+
+Five more Google services off (SegmentationPlatform, PageInfoAboutThisSite, AutofillServerCommunication,
+VisitedURLRankingService, ModelQualityLogging) measured no change in the browser process (199–205 MB
+with and without, two interleaved rounds), so they stay on.
+
 ### 3. Leave CEF (browser process, ~50 MB at 20 tabs; any Chromium version)
 
 Build Chrome's own framework with a thin Cra layer instead of CEF: one Chrome browser per profile

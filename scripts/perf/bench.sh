@@ -6,10 +6,13 @@
 #            No HitchMonitor here: its 4 ms ping alone is ~250 wakeups/s.
 #   latency: new tab -> first contentful paint, tab switch -> shown (visibilitychange, then 2
 #            requestAnimationFrame), each timed from the command's HitchMonitor mark.
-#   procs:   20 tabs, then each process's footprint and --type (procs.txt), and the windows (windows.txt).
+#   procs:   20 tabs, then each process's footprint and --type (procs.txt), and again a minute later
+#            (procs-later.txt: the GPU process lets go of hidden tabs' frames in between).
+#   launch:  start -> "launch: opened" in cra.log, and three new windows, each -> its first page's first
+#            contentful paint (timed from the newWindow command's HitchMonitor mark).
 #
 #   scripts/perf/bench.sh build/Cra.app build/perf/<label>
-#   MODES="idle latency" (default)  IDLE=<seconds> (default 30)  BENCH_ENV="K=V ..." (passed to Cra)
+#   MODES="idle latency" (default; also procs, launch)  IDLE=<seconds> (default 30)  BENCH_ENV="K=V ..." (passed to Cra)
 #   BENCH_ARGS="--disable-features=X,Y" (Chromium switches on Cra's command line; Cra appends its own)
 #
 # Compare builds with scripts/perf/rounds.sh (interleaved), read with scripts/perf/report.py.
@@ -34,7 +37,8 @@ run() {
   for _ in $(seq 50); do PORT=$(head -1 "$OUT/port"); [ -n "$PORT" ] && break; sleep 0.1; done
   local PAGE="http://127.0.0.1:$PORT/bench.html" CMD="$OUT/commands" HITCH=""
   : > "$CMD"
-  [ "$MODE" = latency ] && HITCH="$OUT/hitch.log"
+  [ "$MODE" = latency ] || [ "$MODE" = launch ] && HITCH="$OUT/hitch.log"
+  python3 -I -c 'import time; print(time.time() * 1000)' > "$OUT/t0"
   env CRA_DATA_DIR="$DATA" CRA_COMMAND_FILE="$CMD" CRA_HITCH_LOG="$HITCH" CRA_TEST_BACKGROUND=1 ${BENCH_ENV:-} \
     "$APP/Contents/MacOS/Cra" -ApplePersistenceIgnoreState YES --disable-backgrounding-occluded-windows --mute-audio ${BENCH_ARGS:-} \
     > "$OUT/stdout.log" 2>&1 &
@@ -55,7 +59,11 @@ run() {
     for i in $(seq 1 20); do send "cra://open?url=$PAGE?n=$i"; sleep 1.5; done; sleep 20
     "$B/procs.sh" "$FP" $PID > "$OUT/procs.txt"
     R=$(awk '/--type=renderer/ {print $4; exit}' "$OUT/procs.txt"); [ -n "$R" ] && vmmap --summary "$R" > "$OUT/renderer-vmmap.txt" 2>/dev/null
-    send "cra://debug?freezingState=1"; sleep 2
+    send "cra://debug?freezingState=1"; sleep 60
+    "$B/procs.sh" "$FP" $PID > "$OUT/procs-later.txt"
+  elif [ "$MODE" = launch ]; then
+    send "cra://open?url=$PAGE?n=1"; sleep 5
+    for w in 1 2 3; do send "cra://action/newWindow"; send "cra://open?url=$PAGE?n=w$w"; sleep 4; done
   else
     send "cra://open?url=$PAGE?n=1"; sleep 5
     for i in $(seq 2 20); do send "cra://open?url=$PAGE?n=$i"; sleep 1.5; done; sleep 5
