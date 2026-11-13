@@ -1,0 +1,26 @@
+# promise: #408
+# Ask on Page's card follows macOS, not the space: a light space on a dark Mac has a dark card. Its
+# question took the space's light-card purple there and read ~2:1 (#408). The card now has a question
+# for each of its appearances, each at least 4.5:1 on it, and the Ask button's white text reads too.
+pace 0.5
+env CRA_TIDY_FAKE_MODEL=1
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "askOnPage": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000002","title":"Lavender","emoji":"🪻","theme":{"colors":["#C8CAFF","#C8CAFF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#C8CAFF","solid":true,"key":["#C8CAFF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+
+cra://debug?systemAppearance=dark
+cra://open?url=${ORIGIN}/ask.html
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/find
+wait 0.5
+cra://debug?askTone=dark
+expect-log ask tone dark: card=dark question=#[0-9A-F]{6} contrast=([4-9]|1\d)\.\d button=#[0-9A-F]{6} white=([4-9]|1\d)\.\d$
+reject-log ask tone dark: .*contrast=4\.[0-4]
+
+# Back to a light Mac: the same card is light and its question is the space's deeper purple.
+cra://debug?systemAppearance=light
+wait 0.5
+cra://debug?askTone=light
+expect-log ask tone light: card=light question=#[0-9A-F]{6} contrast=([4-9]|1\d)\.\d button=#[0-9A-F]{6} white=([4-9]|1\d)\.\d$
+reject-log ask tone light: .*contrast=4\.[0-4]
+cra://debug?systemAppearance=system

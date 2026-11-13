@@ -1,6 +1,10 @@
 import AppKit
 import CraCEF
 
+// A staged update run once before it is installed, so macOS has checked the new bundle by the
+// time the user starts it (UpdatePrewarm). Nothing else of Cra runs.
+if ProcessInfo.processInfo.environment[UpdatePrewarm.environmentKey] == "1" { exit(0) }
+
 if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--mcp" {
     MCPConnection.bridge(path: CommandLine.arguments[2])
 }
@@ -76,6 +80,7 @@ MainActor.assumeIsolated {
 
     ChromiumBluetoothCache.install()
     ChromiumDockTile.install()
+    ChromiumHistorySwipe.install()
 
     // Only now: the "another Cra is running" and failed-start exits above leave no session marker.
     Perf.phase("chromiumStarted")

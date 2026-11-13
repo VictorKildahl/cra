@@ -230,7 +230,7 @@ final class CommandBarView: NSView {
             let r = CommandBarRowView()
             r.onHover = { [weak self, weak r] in
                 guard let self, let r, let i = self.rows.firstIndex(where: { $0 === r }) else { return }
-                if self.controller.selectedIndex != i { self.controller.selectedIndex = i }
+                self.controller.hover(row: i)
             }
             r.onClick = { [weak self, weak r] in
                 guard let self, let r, let i = self.rows.firstIndex(where: { $0 === r }), self.controller.result.items.indices.contains(i) else { return }

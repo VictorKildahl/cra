@@ -39,6 +39,8 @@ final class CommandBarController {
     private var scopeTyped = ""
     /// The URL ⌘L opened with (the page's), nil for ⌘T.
     private(set) var openedPrefill: String?
+    /// Rows that open or change under a still pointer don't take the selection from the top row (#382).
+    @ObservationIgnored private var hoverGate = HoverGate()
 
     unowned let engine: SuggestionEngine
     unowned let store: SidebarStore
@@ -47,6 +49,9 @@ final class CommandBarController {
     var onOpenInBackground: (Suggestion?, String) -> Bool = { _, _ in false }
     /// Opens the row as a split pane beside the current tab; false when it can't go there.
     var onOpenInSplit: (Suggestion?, String) -> Bool = { _, _ in false }
+    /// Shift-Return on a search (Instant Links, #407): the phrase and the engine the bar searched with.
+    /// Nil where the host has no space to open results in (a Little Window).
+    var onInstantLinks: ((String, ChromiumSearchEngine) -> Void)?
     var onClose: () -> Void = {}
     /// Arc's search-suggestions notice (CraCore SearchSuggestionsNotice, #314): the (i) at the field's end
     /// opens a banner in the bottom row's place for this ⌘T.
@@ -83,6 +88,7 @@ final class CommandBarController {
         noticePressed = false
         result = listed(engine.suggestions(for: query, mode: mode, currentTabID: store.selectedTabID, spaceShown: spaceShown))
         isOpen = true
+        if onInstantLinks != nil { InstantLinksService.shared.prewarm(store) }
     }
 
     /// Replace the typed text (scripting / tests).
@@ -208,6 +214,36 @@ final class CommandBarController {
         onCommit(selected, typed, mode)
     }
 
+    /// Shift-Return (Instant Links): on a search row, with the feature on and Apple Intelligence able,
+    /// the bar closes and the model plans what was typed. Anything else is Return.
+    func commitInstantLinks() {
+        guard let (selected, typed) = committed() else { return }
+        if let onInstantLinks, InstantLinksService.shared.isAvailable(store), let phrase = instantLinksPhrase(selected) {
+            // Before close(): the row needs to know whether the New Tab row is the open one.
+            onInstantLinks(phrase, engine.searchEngine)
+            close()
+            return
+        }
+        close()
+        onCommit(selected, typed, mode)
+    }
+
+    /// What Shift-Return searches: what was typed (never the inline completion Return would take), or a
+    /// search suggestion's text; nil for any other row.
+    private func instantLinksPhrase(_ selected: Suggestion?) -> String? {
+        guard scope == nil else { return nil }
+        let text: String
+        if let selected {
+            guard selected.kind == .search else { return nil }
+            text = selected.id == "typed" ? query : selected.title
+        } else {
+            guard !SuggestionEngine.looksLikeURL(query) else { return nil }
+            text = query
+        }
+        let phrase = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return phrase.isEmpty ? nil : phrase
+    }
+
     /// ⌘Return (Arc): the row's page opens in a new background tab and the bar stays open with
     /// what was typed, so the next ⌘Return opens another. Rows that open no page, and hosts with
     /// no tabs to open (a Little Window), take it as Return.
@@ -282,8 +318,16 @@ final class CommandBarController {
         onNoticeLearnMore()
     }
 
+    /// The pointer is over row `index`: it selects the row once the pointer has moved since the
+    /// rows last changed (CraCore HoverGate, #382).
+    func hover(row index: Int) {
+        guard hoverGate.isHover(pointerAt: NSEvent.mouseLocation), selectedIndex != index else { return }
+        selectedIndex = index
+    }
+
     /// What the engine listed, less the last row while the banner has its place.
     private func listed(_ r: SuggestionResult) -> SuggestionResult {
+        hoverGate.listChanged(pointerAt: NSEvent.mouseLocation)
         var r = r
         let n = SearchSuggestionsNotice.rowsListed(r.items.count, maxRows: SuggestionEngine.maxRows, banner: showsNoticeBanner)
         if n < r.items.count { r.items.removeLast(r.items.count - n) }

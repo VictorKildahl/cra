@@ -28,8 +28,12 @@ public struct BlockedPopups: Equatable, Sendable {
 
     public init() {}
 
-    /// The pop-ups still to open: the button shows while there are any.
-    public var waiting: [Popup] { listed.filter { !opened.contains($0.id) } }
+    /// The pop-ups still to open, one per address (a page that asked twice lists it twice): the
+    /// button shows while there are any.
+    public var waiting: [Popup] {
+        var seen = Set<String>()
+        return listed.filter { !opened.contains($0.id) && seen.insert($0.url).inserted }
+    }
 
     /// Chromium's list as it is now (ids and URLs pair up by index; extra entries are dropped).
     public mutating func update(ids: [Int], urls: [String]) {
@@ -40,8 +44,17 @@ public struct BlockedPopups: Equatable, Sendable {
     /// The pop-ups to open for `id`, nil for all that are waiting, and marks them opened.
     public mutating func open(_ id: Int?) -> [Popup] {
         let picked = waiting.filter { id == nil || $0.id == id }
-        opened.formUnion(picked.map(\.id))
+        picked.forEach { markOpened(url: $0.url) }
         return picked
+    }
+
+    /// The page opened `url` itself (a later click: a shared folder's "Open Tab 2 of 4"), so the
+    /// button no longer offers it. True when that took one off the list.
+    @discardableResult
+    public mutating func markOpened(url: String) -> Bool {
+        let ids = listed.filter { $0.url == url && !opened.contains($0.id) }.map(\.id)
+        opened.formUnion(ids)
+        return !ids.isEmpty
     }
 
     // MARK: Words

@@ -68,11 +68,16 @@ git push origin v0.1.0
 Before writing the notes, run `scripts/sponsors.py`. It reads the GitHub Sponsors tiers and
 lists who the tiers promise a name in these notes (one-time $50 and up since the last tag,
 monthly $5 and up once a year), which Backers to ask first about the next big feature, and
-which companies need their logo on /support. Thank monthly sponsors with their `@login` in
-the sentence, so next year's run sees they were thanked. Private sponsors are counted, never
-named. It needs the VictorKildahl `gh` login with the `user` scope. Also list the public
-sponsors you thank in the release's `sponsors` field (`login` and `name`), which puts their
-GitHub avatars under the summary on the release's page.
+which companies need their logo on /support. Private sponsors are counted, never named. It
+needs the VictorKildahl `gh` login with the `user` scope.
+
+Sponsors are thanked first, at the top of the notes, on their own: list the public sponsors
+in the release's `sponsors` field (`login` and `name`), which opens the release's page with
+"Thank you, A and B, for sponsoring Cra." and their avatars, and is what next year's run
+reads to see a monthly sponsor was thanked. In the GitHub release the same line, with each
+`@login`, goes right after the opening paragraph. The thank-you at the bottom is for work
+only (pull requests, reports): a sponsor who also did work is thanked there again, for the
+work, without "also for sponsoring".
 
 A run of fixes or small changes goes in a highlight's `items`, one fix per item with its
 issue and who reported it, never as a paragraph of sentences. A contributor thanked for the
@@ -350,7 +355,31 @@ Actions → Variables, or `gh variable set CRA_ALLOW_OLD_CEF --body 1`), which t
 passes to `release.sh`. Delete it once the release is out, so the next one is checked again. It also
 fits a newer CEF on the same Chromium that changes nothing on macOS (check the compare above).
 
-## Later
+## Homebrew
 
-- **Homebrew.** A cask (`brew install --cask cra`) pointing at the DMG and
-  `SHA256SUMS.txt`.
+```sh
+brew install --cask victorkildahl/tap/cra
+```
+
+The cask lives in [VictorKildahl/homebrew-tap](https://github.com/VictorKildahl/homebrew-tap)
+(`Casks/cra.rb`). It installs `Cra.dmg` or `Cra-Intel.dmg` from the tagged release, so it
+depends on the asset names in [Cutting a release](#cutting-a-release) and on
+`SHA256SUMS.txt` listing both DMGs. Naming the tap in full makes Homebrew trust it, so
+there's no `brew trust` step.
+
+A release needs nothing extra. The tap's `bump-cra.yml` runs every hour, and when
+`releases/latest` has a newer tag it reads that release's `SHA256SUMS.txt`, rewrites the
+version and both checksums and commits. Run it at once with
+`gh workflow run bump-cra.yml -R VictorKildahl/homebrew-tap`. The cask says
+`auto_updates true`, so `brew upgrade` leaves installed copies to Sparkle. Check a cask edit
+with `brew style` and `brew audit --cask --strict --online victorkildahl/tap/cra`.
+
+Someone who installed from the DMG first gets "there is already an App at
+'/Applications/Cra.app'"; `--adopt` takes that copy over when it's the same version.
+
+**Homebrew's own list.** `brew install --cask cra` needs the cask in
+[Homebrew/homebrew-cask](https://github.com/Homebrew/homebrew-cask). Its audit
+(`brew audit --cask --new --online`) wants the repository to be 30 days old, which
+VictorKildahl/cra is from 23 November 2026. It meets the star bar for a cask its own author
+sends (225). Once that's merged, Homebrew's autobump follows the `livecheck` block, the
+tap's workflow can go, and the docs switch to `brew install --cask cra`.

@@ -84,6 +84,8 @@ enum DialogTests {
         profile.select(0)
         expect(suppressed, "the suppression choice is available in the completion")
 
+        checkShareWarning(over: parent)
+
         let confirmation = AppDialog(title: "Quit Cra?", actions: [DialogAction("Quit"), .cancel])
         RunLoop.current.perform(inModes: [.modalPanel]) {
             MainActor.assumeIsolated {
@@ -171,6 +173,25 @@ enum DialogTests {
         }
     }
 
+    // promise: #356
+    /// Arc's share warning (Share Folder…, Share N Items…): Return copies the link, Escape doesn't, and the
+    /// "Never show me this again." choice reaches the completion. Arc's older sheet: 560 × 308 pt.
+    @MainActor
+    private static func checkShareWarning(over parent: NSWindow) {
+        for code: UInt16 in [36, 53] {
+            let share = AppDialog.shareLink()
+            var answer: (NSApplication.ModalResponse, Bool)?
+            share.present(over: parent) { answer = ($0, share.isSuppressed) }
+            let window = sheet(over: parent)
+            expect(window.contentView?.bounds.size == NSSize(width: 560, height: 308), "the share warning has Arc's size")
+            share.isSuppressed = code == 36
+            window.sendEvent(key(code, window: window))
+            window.close()
+            expect(answer?.0 == (code == 36 ? .alertFirstButtonReturn : .alertSecondButtonReturn) && answer?.1 == (code == 36),
+                   "Return copies the share link and Escape cancels")
+        }
+    }
+
     @MainActor
     private static func snapshots(in directory: String) throws {
         let examples: [(String, AppDialog)] = [
@@ -184,7 +205,9 @@ enum DialogTests {
                                icon: .application, buttonSpacing: 49.5, buttonOutset: 10.5)),
             ("long-message", AppDialog(title: "Move these spaces to their Arc profiles?", message: Array(repeating: "Work → Work Profile", count: 80).joined(separator: "\n"),
                                        actions: [DialogAction("Move and Restart"), .cancel])),
-            ("last-space", AppDialog(title: "You need at least one space."))
+            ("last-space", AppDialog(title: "You need at least one space.")),
+            ("share-link", .shareLink()),
+            ("share-link-ticked", { let d = AppDialog.shareLink(); d.isSuppressed = true; return d }())
         ]
         let folder = URL(fileURLWithPath: directory, isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

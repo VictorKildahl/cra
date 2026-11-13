@@ -51,6 +51,12 @@ final class SettingsSyncService {
     private(set) var iCloudAvailable = false
     /// A bundle in iCloud is still downloading; the look repeats until it is whole.
     private(set) var awaitingDownload = false
+    /// What the last look at the folder found (the `cra://debug?sync=` readout).
+    private(set) var folderState: SyncFolderState?
+    /// How long the folder has held files from different writes (#378).
+    private var mixWait = SyncMixWait()
+
+    static let newerCraError = "Your other Mac syncs with a newer version of Cra. Update Cra on this Mac to keep syncing."
 
     /// Reads keybindings.json again after a bundle wrote it (KeyBindingRegistry.reloadOverrides).
     var keybindingsChanged: @MainActor () -> Void = {}
@@ -195,6 +201,7 @@ final class SettingsSyncService {
         error = nil
         pendingChoice = nil
         awaitingDownload = false
+        mixWait.reset()
         stateFile.saveNow(state)
         switch look(at: target) {
         case .bundle(let manifest, let bundle) where manifest.deviceID != deviceID:
@@ -204,6 +211,17 @@ final class SettingsSyncService {
             awaitingDownload = true
             startWatching()
             return .downloading
+        case .mixed(let files, let wroteManifest, let lacking):
+            // Waited for like a download; a mix that stays put is written over by a later look,
+            // here only by the Mac that wrote it: this one hasn't been asked which sidebar to keep.
+            _ = mixWait.shouldRewrite(files, at: clock.now, wroteManifest: wroteManifest, lacking: lacking, synced: false)
+            awaitingDownload = true
+            startWatching()
+            return .downloading
+        case .newer:
+            error = Self.newerCraError
+            startWatching()
+            return .failed(Self.newerCraError)
         case .bundle, .none:
             writeBundle()
             startWatching()
@@ -214,8 +232,12 @@ final class SettingsSyncService {
     /// The bundle in the folder replaces this Mac's sidebar, settings and shortcuts.
     func useRemote() {
         pendingChoice = nil
-        guard let folder, case .bundle(let manifest, let bundle) = look(at: folder) else { writeBundle(); startWatching(); return }
-        apply(manifest, bundle)
+        guard let folder else { return }
+        switch look(at: folder) {
+        case .bundle(let manifest, let bundle): apply(manifest, bundle)
+        case .newer: error = Self.newerCraError
+        default: writeBundle()
+        }
         startWatching()
     }
 
@@ -239,13 +261,36 @@ final class SettingsSyncService {
     }
 
     /// One look: a newer bundle from another Mac is applied, then what changed here is written.
-    /// While iCloud still downloads a bundle, nothing is written over it.
+    /// While iCloud still downloads a bundle, nothing is written over it. Files from different
+    /// writes, or a file gone with nothing on its way, are waited for a little, then this Mac writes
+    /// a whole bundle again (#378), unless it hasn't synced here yet and the manifest is another
+    /// Mac's; a newer Cra's bundle is never written over.
     func poll() {
         guard let folder, pendingChoice == nil else { return }
         var gone = false
-        switch look(at: folder) {
+        let found = look(at: folder)
+        if case .mixed = found {} else { mixWait.reset() }
+        if case .newer = found {} else if error == Self.newerCraError { error = nil }
+        switch found {
         case .downloading:
             awaitingDownload = true
+            return
+        case .mixed(let files, let wroteManifest, let lacking):
+            let since = mixWait.since
+            guard mixWait.shouldRewrite(files, at: clock.now, wroteManifest: wroteManifest, lacking: lacking, synced: hasSynced) else {
+                awaitingDownload = true
+                return
+            }
+            // No download is coming: this Mac's sidebar, settings and shortcuts go up whole, and
+            // the other Mac applies them like any later bundle.
+            CraLog.note("sync: the folder held \(lacking ? "a bundle with a file gone" : "files from different writes") for \(Int(clock.now.timeIntervalSince(since ?? clock.now))) s; this Mac's bundle written again")
+            mixWait.reset()
+            awaitingDownload = false
+            gone = true
+        case .newer:
+            // Nothing applied, nothing written: the newer Cra reads this one's format, not the reverse.
+            awaitingDownload = false
+            error = Self.newerCraError
             return
         case .bundle(let manifest, let bundle):
             awaitingDownload = false
@@ -305,6 +350,11 @@ final class SettingsSyncService {
     private enum Look {
         case none
         case downloading
+        /// Every file there, but not the manifest's, or a file the manifest names gone with nothing
+        /// on its way (`lacking`): the files' hashes (the manifest's included), and whether this
+        /// Mac wrote that manifest.
+        case mixed([String: String], wroteManifest: Bool, lacking: Bool)
+        case newer
         case bundle(SyncManifest, Bundle)
     }
 
@@ -385,10 +435,11 @@ final class SettingsSyncService {
         return data
     }
 
-    /// What a folder holds: a whole bundle, one iCloud is still downloading, or nothing.
+    /// What a folder holds: a whole bundle, one iCloud is still downloading, files from different
+    /// writes, a newer Cra's bundle, or nothing (SettingsSync.folderState decides).
     private func look(at folder: URL) -> Look {
-        var files: [String: Data] = [:]
-        var downloading = false
+        var states: [String: SyncFileState] = [:]
+        var data: [String: Data] = [:]
         for name in [SettingsSync.manifestName] + SettingsSync.fileNames {
             let url = folder.appendingPathComponent(name)
             // A file not downloaded yet, or (iCloud before macOS 14) only its placeholder: ask for
@@ -397,21 +448,52 @@ final class SettingsSyncService {
             let placeholder = FileManager.default.fileExists(atPath: folder.appendingPathComponent(SettingsSync.placeholderName(for: name)).path)
             if placeholder || (status != nil && status != .current) {
                 try? FileManager.default.startDownloadingUbiquitousItem(at: url)
-                downloading = true
+                states[name] = .downloading
                 continue
             }
-            if let d = coordinatedRead(url) { files[name] = d }
+            if let d = coordinatedRead(url) {
+                data[name] = d
+                states[name] = .present(hash: Self.hash(d))
+            } else {
+                states[name] = .missing
+            }
         }
-        guard let data = files.removeValue(forKey: SettingsSync.manifestName),
-              let manifest = try? Self.decoder.decode(SyncManifest.self, from: data) else { return downloading ? .downloading : .none }
-        guard SettingsSync.isComplete(manifest, hashes: files.mapValues(Self.hash)),
-              let sidebar = files[SettingsSync.sidebarName], let settings = files[SettingsSync.settingsName],
-              let document = try? Self.decoder.decode(SidebarDocument.self, from: sidebar),
-              let appSettings = try? Self.decoder.decode(AppSettings.self, from: settings) else {
-            // A manifest naming a file that is not whole yet: a provider is still delivering it.
-            return .downloading
+        let manifestData = data.removeValue(forKey: SettingsSync.manifestName)
+        let manifest = manifestData.flatMap { try? Self.decoder.decode(SyncManifest.self, from: $0) }
+        let manifestState: SyncManifestState
+        switch states.removeValue(forKey: SettingsSync.manifestName) {
+        case .downloading?: manifestState = .downloading
+        case .present?: manifestState = manifest.map { .read($0) } ?? .unreadable(version: manifestData.flatMap(SettingsSync.manifestVersion(in:)))
+        default: manifestState = .missing
         }
-        return .bundle(manifest, Bundle(document: document, settings: appSettings, keybindings: files[SettingsSync.keybindingsName] ?? Data("{}".utf8)))
+        var bundle: Bundle?
+        if let manifest, SettingsSync.isComplete(manifest, hashes: data.mapValues(Self.hash)),
+           let sidebar = data[SettingsSync.sidebarName], let settings = data[SettingsSync.settingsName],
+           let document = try? Self.decoder.decode(SidebarDocument.self, from: sidebar),
+           let appSettings = try? Self.decoder.decode(AppSettings.self, from: settings) {
+            bundle = Bundle(document: document, settings: appSettings, keybindings: data[SettingsSync.keybindingsName] ?? Data("{}".utf8))
+        }
+        let state = SettingsSync.folderState(manifest: manifestState, files: states, readable: bundle != nil)
+        folderState = state
+        switch state {
+        case .empty: return .none
+        case .arriving where !SettingsSync.isLacking(manifest: manifestState, files: states): return .downloading
+        case .newer: return .newer
+        case .mixed, .arriving:
+            var files = data.mapValues(Self.hash)
+            if let manifestData { files[SettingsSync.manifestName] = Self.hash(manifestData) }
+            return .mixed(files, wroteManifest: manifest?.deviceID == deviceID, lacking: state == .arriving)
+        case .whole:
+            guard let manifest, let bundle else { return .downloading }
+            return .bundle(manifest, bundle)
+        }
+    }
+
+    /// The `cra://debug?sync=` readout: what the last look found and what this Mac does about it.
+    func readout() -> String {
+        let since = mixWait.since.map { "\(Int(clock.now.timeIntervalSince($0)))s" } ?? "-"
+        return "folder=\(folderState.map { "\($0)" } ?? "-") awaiting=\(awaitingDownload) mixedFor=\(since) asking=\(pendingChoice?.device ?? "-") "
+            + "lastWritten=\(state.lastWritten?.writtenAt.timeIntervalSince1970 ?? 0) error=\(error ?? "-")"
     }
 
     private func apply(_ manifest: SyncManifest, _ bundle: Bundle, remember: Bool = true) {

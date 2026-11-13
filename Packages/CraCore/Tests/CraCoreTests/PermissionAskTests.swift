@@ -13,6 +13,16 @@ struct PermissionAskTests {
         #expect(PermissionAsk.waits(tabShown: false, sheetUp: true))
     }
 
+    // #371: the sheet took the whole window ("wants to access other devices on your network");
+    // Arc asks in a popover that leaves the page and the tabs usable. A popover whose tab goes
+    // behind steps aside and asks again when its tab is back.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/371")) func aPromptWhoseTabGoesBehindStepsAside() {
+        #expect(PermissionAsk.stepsAside(tabShown: false))
+        #expect(!PermissionAsk.stepsAside(tabShown: true))
+        #expect(PermissionAsk.asideLine(origin: "https://router.example", kinds: 1 << 7)
+                == "permission: router.example wants permission bits 0x80 → waits for its tab again")
+    }
+
     @Test func requestLineNamesTheSiteTabAndMacOS() {
         #expect(PermissionAsk.requestLine(origin: "https://meet.google.com/", kinds: 2, tab: "1a2b3c4d", shown: false, waits: true,
                                           camera: .allowed, microphone: .notAsked)

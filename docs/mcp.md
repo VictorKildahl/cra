@@ -206,7 +206,13 @@ links and popups are refused, JavaScript dialogs are suppressed and file pickers
 ### Files
 
 `page_upload` takes 1–8 absolute paths of regular files (not symlinks), copies them into private
-staging and selects them with `DOM.setFileInputFiles`; it doesn't submit the form. 16 MiB a file,
+staging and selects them with `DOM.setFileInputFiles`; it doesn't submit the form. The target is
+the file input, or what a site shows instead of it: a label for it, an element holding exactly one
+(a drop zone, a component's host), or a button in the same shadow-root component (reddit.com's
+uploaders keep a hidden input in an open shadow root, where no ref or selector reaches it). Refs in
+same-site iframes work too, and so does x/y from `page_screenshot`, which takes the element there
+(a label's text has no ref). Plain-DOM neighbours don't count, and two inputs it can't tell apart are
+refused (`MCPUploadTarget` decides). 16 MiB a file,
 64 MiB a tab. Copies stay until their tab closes, its page is replaced, or MCP stops, so the page
 can still read its File objects; after a crash they go the next time MCP starts.
 

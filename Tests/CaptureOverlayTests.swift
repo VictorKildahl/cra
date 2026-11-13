@@ -96,6 +96,8 @@ enum CaptureOverlayTests {
         let expected = ContentCapture.pixelRect(for: NSRect(x: 30, y: 30, width: 160, height: 120),
                                                pageSize: view.bounds.size, imageSize: NSSize(width: 640, height: 480))
         expect(image.width == Int(expected.width) && image.height == Int(expected.height), "the PNG is cropped to the selected page area")
+        expect(fixture.main.capturedFrom?.rect == NSRect(x: 30, y: 30, width: 160, height: 120) && fixture.main.capturedFrom?.page == view.bounds.size,
+               "the capture says where on the page it was, for an easel's live capture")
         expect(panel.parent == nil && !panel.isVisible && fixture.peekWindow.isVisible,
                "copy ends capture and leaves Peek open")
     }

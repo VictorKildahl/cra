@@ -19,7 +19,8 @@ you can send. Code is welcome too, within the few rules below.
   a good one is under [Features Arc never had](#features-arc-never-had).
 - **No cloud AI.** Arc Max-style cloud features (anything that needs an
   API key or sends pages away) are out of scope. The exception is features powered by the Mac's
-  own on-device Apple Intelligence model (Tidy Tabs, Tidy Tab Titles, Tidy Downloads, 5-Second Previews),
+  own on-device Apple Intelligence model (Ask on Page, Tidy Tabs, Tidy Tab Titles, Tidy Downloads,
+  5-Second Previews, Instant Links, whose search queries go to the search engine as a normal search would),
   which only show when Apple Intelligence is turned on and never send anything off the Mac.
 - **English only, for now.** Like Arc, the interface isn't translated: keeping every
   language in step with a UI that changes most days is more than one maintainer can carry.
@@ -98,6 +99,9 @@ hooks and how to run a test instance next to your daily Cra.
    the PR. Releases are cut by the maintainer.
 
 [docs/reviewing.md](docs/reviewing.md) lists what a review checks, so you can check it first.
+
+A Boost for the gallery on crabrowser.app/boosts needs no Swift: one `boost.json` in
+[boosts/](boosts/README.md), which says what a gallery Boost may do and how to send one.
 
 ## Chromium and CEF
 

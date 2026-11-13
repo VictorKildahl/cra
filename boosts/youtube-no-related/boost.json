@@ -1,0 +1,11 @@
+{
+  "v": 1,
+  "name": "No Up Next",
+  "host": "youtube.com",
+  "about": "Hides the column of suggested videos beside the one you're watching.",
+  "by": "VictorKildahl",
+  "preview": "https://www.youtube.com/watch?v=0_DjDdfqtUE&hl=en&gl=US",
+  "zapped": [
+    "ytd-watch-next-secondary-results-renderer"
+  ]
+}

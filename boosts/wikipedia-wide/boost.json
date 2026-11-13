@@ -1,0 +1,9 @@
+{
+  "v": 1,
+  "name": "Full Width",
+  "host": "wikipedia.org",
+  "about": "Articles use the whole window instead of a fixed column.",
+  "by": "VictorKildahl",
+  "preview": "https://en.wikipedia.org/wiki/Web_browser",
+  "css": ".mw-page-container { max-width: none !important; }\n.vector-feature-limited-width-clientpref-1 .mw-content-container, .mw-body { max-width: none !important; }"
+}

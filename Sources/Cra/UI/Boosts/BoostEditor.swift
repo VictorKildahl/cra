@@ -18,6 +18,8 @@ final class BoostEditorController {
     /// What the editor does to the page beside it.
     struct PageActions {
         var zap: (Bool) -> Void
+        /// A shelf cell under the pointer dims the page (BoostZap).
+        var dim: (Bool) -> Void
         var pick: (Bool) -> Void
         var toggleDevTools: () -> Void
         var devToolsOpen: () -> Bool
@@ -99,6 +101,12 @@ final class BoostEditorController {
 
     var isOpen: Bool { panel != nil }
 
+    /// The boost being edited, for the Zap shelf.
+    var editing: BoostEditorModel? { model }
+
+    /// Zap ends (its page went to the back).
+    func stopZapping() { model?.finishZap() }
+
     /// The picker ends (its page went to the back).
     func stopPicking() { model?.finishPicking() }
 
@@ -109,7 +117,7 @@ final class BoostEditorController {
     func addZapped(_ selectors: [String]) {
         CraLog.note("zap kept \(selectors.count) selector\(selectors.count == 1 ? "" : "s")")
         guard let model, !selectors.isEmpty else { return }
-        model.change { b in b.zapped += selectors.filter { !b.zapped.contains($0) } }
+        model.change { b in for s in selectors { b.zap(s) } }
     }
 
     private func resize(width: CGFloat) {
@@ -136,9 +144,11 @@ final class BoostEditorModel {
     var showingCode = false
     var codeIsJS = false
     var zapping = false
+    /// The shelf cell under the pointer: the page dims and the hint offers to restore it.
+    var hoveredZap: Int? { didSet { if (hoveredZap == nil) != (oldValue == nil) { page.dim(hoveredZap != nil) } } }
     var picking = false
     var devToolsOpen = false
-    @ObservationIgnored var page = BoostEditorController.PageActions(zap: { _ in }, pick: { _ in }, toggleDevTools: {}, devToolsOpen: { false }, reload: {})
+    @ObservationIgnored var page = BoostEditorController.PageActions(zap: { _ in }, dim: { _ in }, pick: { _ in }, toggleDevTools: {}, devToolsOpen: { false }, reload: {})
     @ObservationIgnored var onClose: () -> Void = {}
     @ObservationIgnored var onWidth: (CGFloat) -> Void = { _ in }
 
@@ -175,7 +185,13 @@ final class BoostEditorModel {
         page.zap(zapping)
     }
 
-    func finishZap() { if zapping { zapping = false; page.zap(false) } }
+    func finishZap() { if zapping { hoveredZap = nil; zapping = false; page.zap(false) } }
+
+    /// A shelf cell's click (Arc: at once, no question).
+    func unzap(_ selector: String) {
+        hoveredZap = nil
+        change { $0.unzap(selector) }
+    }
 
     /// The eyedropper: outline elements on the page; a click offers their selectors.
     func togglePicker() {
@@ -261,6 +277,10 @@ private struct BoostEditorView: View {
                 Button("Reset all Edits") { model.resetAll() }
                 Button("Delete this Boost") { delete() }
                 Divider()
+                Button("Share Boost…") {
+                    BoostInstall.share(model.boost) { text in (NSApp.delegate as? AppDelegate)?.main?.showToast(text) }
+                }
+                .disabled(!BoostInstall.canShare(model.boost))
                 Button("All Boosts…") { NotificationCenter.default.post(name: .craShowBoostsLibrary, object: nil) }
             } label: {
                 HStack(spacing: 4) {
@@ -308,7 +328,11 @@ private struct BoostEditorView: View {
                 .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).help("Change text case")
             }
             .frame(width: 147)
-            Button { model.toggleZap() } label: { wide("Zap", trailing: "bolt.fill", on: model.zapping) }.buttonStyle(.plain)
+            // Arc 1.172.2: with something zapped the bolt gives way to the count.
+            Button { model.toggleZap() } label: {
+                wide("Zap", trailing: "bolt.fill", count: model.boost.zapped.count, on: model.zapping)
+            }
+            .buttonStyle(.plain).accessibilityLabel(model.boost.zapped.isEmpty ? "Zap" : "Zap, \(model.boost.zapped.count)")
                 .help("Click things on the page to hide them")
             Button { model.setCode(true) } label: { wide("Code", trailing: "curlybraces") }.buttonStyle(.plain)
             Spacer(minLength: 0)
@@ -360,10 +384,11 @@ private struct BoostEditorView: View {
         .buttonStyle(.plain).help(help).accessibilityLabel(help)
     }
 
-    private func wide(_ title: String, trailing: String?, on: Bool = false) -> some View {
+    private func wide(_ title: String, trailing: String?, count: Int = 0, on: Bool = false) -> some View {
         HStack {
             Text(title).font(.system(size: 14, weight: .semibold))
-            if let trailing { Spacer(); Image(systemName: trailing).font(.system(size: 13, weight: .semibold)) }
+            if count > 0 { Spacer(); Text("\(count)").font(.system(size: 13, weight: .semibold)).monospacedDigit() }
+            else if let trailing { Spacer(); Image(systemName: trailing).font(.system(size: 13, weight: .semibold)) }
         }
         .foregroundStyle(on ? .white : BoostStyle.ink)
         .padding(.horizontal, 12)

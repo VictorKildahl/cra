@@ -24,3 +24,19 @@ cra://open?url=${PAGE}?n=sent
 wait 2
 cra://debug?captureToEasel=send
 expect-log capture sent to an easel, which now holds 2 items
+# Captures keep the page they came from (Arc's WebCard) and can show it live: a page of its own,
+# laid out at the captured size, drawn onto the card about once a second.
+cra://debug?easelLive=5
+expect-log easel capture: host=127\.0\.0\.1 viewport=[0-9]+x[0-9]+ area=[0-9]+x[0-9]+@0,0 canGoLive=true
+wait 6
+expect-log easel live: frames=[1-9][0-9]* image=[0-9]+x[0-9]+
+# A pasted web address is a link card with the page's title (Arc's LinkData).
+cra://debug?easelLink=${PAGE}?n=linked
+wait 4
+expect-log easel link: host=127\.0\.0\.1 title=
+# Arc 1.172.2's shapes, colour picker and object menu, on a new easel.
+cra://action/newEasel
+wait 2
+cra://debug?easelDraw=1
+cra://debug?easelPick=0
+expect-log easel pick: picker=shown color=lightGreen menu=Bring to Front\|Send to Back\|Delete\|—\|Cut\|Copy\|Paste\|—\|Duplicate$

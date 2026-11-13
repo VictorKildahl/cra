@@ -413,7 +413,7 @@ final class SidebarTopBarView: NSView {
 
     private func button(_ key: String, symbol: String, help: String, size: CGFloat, height: CGFloat, iconSize: CGFloat,
                         weight: NSFont.Weight = .regular, active: Bool?, enabled: Bool = true, animated: Bool = false,
-                        action: @escaping () -> Void) -> SidebarGlyphButton {
+                        history: BackForwardMenu.Direction? = nil, action: @escaping () -> Void) -> SidebarGlyphButton {
         let b = buttons[key] ?? {
             let b = SidebarGlyphButton(symbol: symbol, size: size, height: height, iconSize: iconSize, weight: weight, help: help, colors: colors, action: action)
             buttons[key] = b
@@ -425,6 +425,7 @@ final class SidebarTopBarView: NSView {
         b.active = active
         b.enabled = enabled
         b.action = action
+        b.secondaryAction = history.map { direction in { [weak self] view in self?.actions.showBackForwardMenu(nil, direction, view) } }
         return b
     }
 
@@ -456,17 +457,17 @@ final class SidebarTopBarView: NSView {
             : button("toggle", symbol: "sidebar.left", help: help, size: 32, height: 32, iconSize: 15.5, active: active) { [weak self] in self?.actions.toggleSidebar() }
         var shown = narrow ? [] : [toggle]
         if narrow {
-            shown.append(button("nback", symbol: "arrow.left", help: "Go Back (⌘[)", size: 28, height: 28, iconSize: 15, active: active, enabled: ui.canGoBack) { [weak self] in self?.actions.goBack() })
-            shown.append(button("nforward", symbol: "arrow.right", help: "Go Forward (⌘])", size: 28, height: 28, iconSize: 15, active: active, enabled: ui.canGoForward) { [weak self] in self?.actions.goForward() })
+            shown.append(button("nback", symbol: "arrow.left", help: "Go Back (⌘[)", size: 28, height: 28, iconSize: 15, active: active, enabled: ui.canGoBack, history: .back) { [weak self] in self?.actions.goBack() })
+            shown.append(button("nforward", symbol: "arrow.right", help: "Go Forward (⌘])", size: 28, height: 28, iconSize: 15, active: active, enabled: ui.canGoForward, history: .forward) { [weak self] in self?.actions.goForward() })
             shown.append(button("more", symbol: morePanel == nil ? "ellipsis" : "xmark", help: "More options", size: 28, height: 28, iconSize: 15,
                                 weight: .semibold, active: active) { [weak self] in self?.toggleMorePanel() })
         } else if compact {
-            shown.append(button("back", symbol: "arrow.left", help: "Go Back (⌘[)", size: 32, height: 32, iconSize: 15, active: active, enabled: ui.canGoBack) { [weak self] in self?.actions.goBack() })
-            shown.append(button("forward", symbol: "arrow.right", help: "Go Forward (⌘])", size: 32, height: 32, iconSize: 15, active: active, enabled: ui.canGoForward) { [weak self] in self?.actions.goForward() })
+            shown.append(button("back", symbol: "arrow.left", help: "Go Back (⌘[)", size: 32, height: 32, iconSize: 15, active: active, enabled: ui.canGoBack, history: .back) { [weak self] in self?.actions.goBack() })
+            shown.append(button("forward", symbol: "arrow.right", help: "Go Forward (⌘])", size: 32, height: 32, iconSize: 15, active: active, enabled: ui.canGoForward, history: .forward) { [weak self] in self?.actions.goForward() })
             shown.append(button("reload", symbol: reloadSymbol, help: "Refresh (⌘R)", size: 32, height: 32, iconSize: 15, active: active, animated: true) { [weak self] in self?.actions.reload() })
         } else if devNav {
-            shown.append(button("dback", symbol: "arrow.left", help: "Go Back (⌘[)", size: 34, height: 28, iconSize: 15, active: nil, enabled: ui.canGoBack) { [weak self] in self?.actions.goBack() })
-            shown.append(button("dforward", symbol: "arrow.right", help: "Go Forward (⌘])", size: 34, height: 28, iconSize: 15, active: nil, enabled: ui.canGoForward) { [weak self] in self?.actions.goForward() })
+            shown.append(button("dback", symbol: "arrow.left", help: "Go Back (⌘[)", size: 34, height: 28, iconSize: 15, active: nil, enabled: ui.canGoBack, history: .back) { [weak self] in self?.actions.goBack() })
+            shown.append(button("dforward", symbol: "arrow.right", help: "Go Forward (⌘])", size: 34, height: 28, iconSize: 15, active: nil, enabled: ui.canGoForward, history: .forward) { [weak self] in self?.actions.goForward() })
             shown.append(button("dreload", symbol: reloadSymbol, help: "Refresh (⌘R)", size: 24, height: 24, iconSize: 15, active: nil, animated: true) { [weak self] in self?.actions.reload() })
         }
         for (k, b) in buttons where !shown.contains(where: { $0 === b }) {
@@ -1322,11 +1323,16 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
     private let spaceID: UUID
     private let store: SidebarStore
     private let ui: SidebarUIState
-    private let emoji = NSTextField.sidebarLabel(size: 13)
+    private let emoji = EmojiLabel.sidebar(size: 13)
     private let emojiHolder = NSView()
     /// An Icon-tab glyph (Space.symbol) in the emoji's place.
     private let symbol = NSImageView()
     private var symbolName: String?
+    /// A picture the user chose (Space.iconImage) in the emoji's place. It sits in `emojiHolder`, so
+    /// it gets the same dimming and desaturation as an emoji while the cell isn't lit, and shows in
+    /// its own colours while it is.
+    private let picture = NSImageView()
+    private var pictureData: Data?
     /// Arc's dot, outside `emojiHolder` so its own ink sets how faint it is.
     private let dot = CALayer()
     private var icon = SpaceIcon.none
@@ -1336,6 +1342,7 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
         switch mark {
         case .emoji(let e): return e
         case .symbol(let s): return s
+        case .image: return "image"
         case .dot(let d): return "dot\(Int(d))"
         }
     }
@@ -1399,12 +1406,19 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
         case .emoji(let e):
             emoji.stringValue = e
             showSymbol(nil)
+            showPicture(nil)
         case .symbol(let name):
             emoji.stringValue = ""
             showSymbol(name)
+            showPicture(nil)
+        case .image(let data):
+            emoji.stringValue = ""
+            showSymbol(nil)
+            showPicture(data)
         case .dot:
             emoji.stringValue = ""
             showSymbol(nil)
+            showPicture(nil)
         }
         emojiHolder.isHidden = { if case .dot = mark { return true } else { return false } }()
         dot.isHidden = !emojiHolder.isHidden
@@ -1425,6 +1439,14 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
         if symbol.superview == nil { symbol.imageScaling = .scaleNone; emojiHolder.addSubview(symbol) }
     }
 
+    private func showPicture(_ data: Data?) {
+        guard pictureData != data else { return }
+        pictureData = data
+        picture.image = data.flatMap { SpaceIconImage.image($0, points: 16) }
+        picture.isHidden = data == nil
+        if picture.superview == nil { picture.imageScaling = .scaleNone; emojiHolder.addSubview(picture) }
+    }
+
     /// Arc's hovered/pressed cell on a dark space: white at ~7.8%, 6 pt corners.
     private func refreshFill(_ on: Bool? = nil) {
         let fill = colors.isDark ? NSColor.white.withAlphaComponent(0.078) : NSColor.black.withAlphaComponent(0.05)
@@ -1439,8 +1461,9 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
         let size: CGFloat = 13
         if emoji.font?.pointSize != size { emoji.font = .systemFont(ofSize: size) }
         let h = emoji.intrinsicContentSize.height
-        emoji.frame = NSRect(x: 0, y: (bounds.height - h) / 2, width: bounds.width, height: h)
+        emoji.frame = emoji.frameHoldingInk(NSRect(x: 0, y: (bounds.height - h) / 2, width: bounds.width, height: h))
         symbol.frame = bounds
+        picture.frame = bounds
         symbol.symbolConfiguration = .init(pointSize: size - 2, weight: .medium)
         if case .dot(let d) = mark {
             dot.bounds = CGRect(x: 0, y: 0, width: d, height: d)

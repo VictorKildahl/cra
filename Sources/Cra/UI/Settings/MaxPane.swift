@@ -4,20 +4,67 @@ import SwiftUI
 /// Arc's Max pane (Arc 1.171, Settings ▸ Max): one card, a row per feature with a picture in a
 /// white frame, its name, what it does and a switch, and a line under the card about where the
 /// data goes. Cra's features run on the Mac's own Apple Intelligence model, so that line says
-/// nothing leaves the Mac, or, while Apple Intelligence can't run, why and how to turn it on.
+/// the model sends nothing (and, with Instant Links on, that its searches go to the search engine),
+/// or, while Apple Intelligence can't run, why and how to turn it on.
 struct MaxPane: View {
     @Environment(SidebarStore.self) private var store
     private var service: TidyTabsService { TidyTabsService.shared }
+    /// Max's mark in Arc's tile: Apple's, or sparkles before macOS 15.1.
+    static var glyph: String { SettingsTab.max.symbol }
 
     var body: some View {
         @Bindable var store = store
         let available = service.status == .available
-        SettingsCardPane {
-            SettingsFeatureCard {
-                SettingsSwitchRow("Tidy Tabs",
+        let features = [store.settings.tidyTabs, store.settings.tidyTabTitles, store.settings.tidyDownloads, store.settings.fiveSecondPreviews, store.settings.askOnPage, store.settings.instantLinks]
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: 0) {
+                MaxBanner()
+                VStack(alignment: .leading, spacing: 0) {
+                    SettingsBlurb("Let Cra do more for you with Max, so you can do less. Power up your browsing with Apple Intelligence on this Mac and spend time on the things that matter — on or off screen.")
+                        .padding(.top, 20)
+                    // Arc's "Enable Max" with its button: Turn On All / Turn On Max / Turn Off Max, by how many are on.
+                    SettingsCard {
+                        SettingsCardRow {
+                            HStack(spacing: 10) {
+                                Image(systemName: MaxPane.glyph).font(.system(size: 11, weight: .semibold)).foregroundStyle(.white)
+                                    .frame(width: 24, height: 24)
+                                    .background(RoundedRectangle(cornerRadius: 5.5, style: .continuous).fill(Color(.sRGB, red: 0.22, green: 0.24, blue: 1)))
+                                Text("Enable Max").font(.system(size: 13))
+                            }
+                        } trailing: {
+                            let on = MaxMasterSwitch.pressTurnsOn(features)
+                            Button(MaxMasterSwitch.title(features)) {
+                                store.settings.tidyTabs = on
+                                store.settings.tidyTabTitles = on
+                                store.settings.tidyDownloads = on
+                                store.settings.fiveSecondPreviews = on
+                                store.settings.askOnPage = on
+                                store.settings.instantLinks = on
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(MaxMasterSwitch.isEmphasised(features) ? Color(.sRGB, red: 0.2, green: 0.22, blue: 0.98) : .gray)
+                            .disabled(!available)
+                        }
+                    }
+                    .padding(.top, 20)
+                    SettingsFeatureCard {
+                        // Arc's first Max row (MaxSettingsUnit.askOnPage), with its text.
+                        SettingsSwitchRow("Ask on Page",
+                                  detail: "Press Command + F on any page to ask a question and let Max answer it for you in seconds.",
+                                  isOn: $store.settings.askOnPage, enabled: available) {
+                    AskOnPagePicture()
+                }
+                SettingsCardDivider()
+                        SettingsSwitchRow("Tidy Tabs",
                                   detail: Text("Press the \(Image(nsImage: BroomGlyph.image).renderingMode(.template)) icon to let your Sidebar organize itself whenever you have six or more Today Tabs."),
                                   isOn: $store.settings.tidyTabs, enabled: available) {
                     TidyTabsPicture()
+                }
+                SettingsCardDivider()
+                // Arc 1.172's order: Instant Links comes right after Tidy Tabs.
+                SettingsSwitchRow(InstantLinks.settingsTitle, detail: InstantLinks.settingsDetail,
+                                  isOn: $store.settings.instantLinks, enabled: available) {
+                    InstantLinksPicture()
                 }
                 SettingsCardDivider()
                 SettingsSwitchRow("Tidy Tab Titles",
@@ -37,10 +84,16 @@ struct MaxPane: View {
                                   isOn: $store.settings.fiveSecondPreviews, enabled: available) {
                     FiveSecondPreviewsPicture()
                 }
-            }
-            MaxFooter(status: service.status) { service.openSystemSettings() }
+                    }
+                    .padding(.top, 9)
+            MaxFooter(status: service.status, instantLinks: store.settings.instantLinks) { service.openSystemSettings() }
                 .padding(.top, 14)
+                }
+                .padding(.horizontal, SettingsMetrics.paneInset)
+                .padding(.bottom, SettingsMetrics.paneBottom)
+            }
         }
+        .scrollIndicators(.automatic)
         // Coming back from System Settings brings Cra to the front, which reads the status again;
         // a model still downloading gets there without that.
         .task {
@@ -56,6 +109,7 @@ struct MaxPane: View {
 /// can't and the way to System Settings ▸ Apple Intelligence & Siri.
 private struct MaxFooter: View {
     let status: TidyTabsService.Status
+    let instantLinks: Bool
     let openSettings: () -> Void
 
     var body: some View {
@@ -64,6 +118,13 @@ private struct MaxFooter: View {
                 .font(.system(size: 12)).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+            // The searches Instant Links makes are the one thing that leaves the Mac.
+            if status == .available, instantLinks {
+                Text("Instant Links sends what it searches for to your search engine, as a search would.")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if status.canOpenSettings {
                 Button(action: openSettings) {
                     Text("Turn on Apple Intelligence in System Settings").font(.system(size: 12)).underline()
@@ -72,6 +133,32 @@ private struct MaxFooter: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+/// Arc's Ask on Page picture (AskOnPagePreview): a find card with its Ask button on pink.
+private struct AskOnPagePicture: View {
+    var body: some View {
+        ZStack {
+            Color(red: 0.96, green: 0.62, blue: 0.62)
+            VStack(alignment: .trailing, spacing: 0) {
+                RoundedRectangle(cornerRadius: 3, style: .continuous).fill(Color.white.opacity(0.9))
+                    .frame(width: 48, height: 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 3) {
+                    RoundedRectangle(cornerRadius: 1).fill(Color(white: 0.85)).frame(width: 30, height: 2)
+                    Spacer(minLength: 0)
+                    Text("Ask").font(.system(size: 4.5, weight: .semibold)).foregroundStyle(.white)
+                        .padding(.horizontal, 4).padding(.vertical, 1.5)
+                        .background(RoundedRectangle(cornerRadius: 2, style: .continuous).fill(Color(red: 0.22, green: 0.24, blue: 1)))
+                }
+                .padding(.horizontal, 4).padding(.vertical, 3)
+                .frame(width: 70)
+                .background(RoundedRectangle(cornerRadius: 3, style: .continuous).fill(Color.white))
+                .padding(.top, 5)
+            }
+            .frame(width: 70)
+        }
     }
 }
 
@@ -144,6 +231,28 @@ private struct TidyTabsPicture: View {
     }
 }
 
+/// Instant Links' picture: the command bar with a search and the ⇧ and ↩ keycaps, on pink.
+private struct InstantLinksPicture: View {
+    var body: some View {
+        ZStack {
+            Color(red: 0.96, green: 0.62, blue: 0.62)
+            HStack(spacing: 3) {
+                Image(systemName: "magnifyingglass").font(.system(size: 5, weight: .medium)).foregroundStyle(Color(white: 0.55))
+                RoundedRectangle(cornerRadius: 1).fill(Color(white: 0.8)).frame(width: 20, height: 2)
+                Spacer(minLength: 0)
+                ForEach(["⇧", "↩"], id: \.self) { key in
+                    Text(key).font(.system(size: 5.5, weight: .semibold)).foregroundStyle(Color(white: 0.35))
+                        .frame(width: 8, height: 8)
+                        .background(RoundedRectangle(cornerRadius: 2, style: .continuous).fill(Color(white: 0.92)))
+                }
+            }
+            .padding(.horizontal, 5)
+            .frame(width: 70, height: 16)
+            .background(Capsule().fill(Color.white))
+        }
+    }
+}
+
 /// Arc's 5-Second Previews picture: a summary card with bullet points on teal.
 private struct FiveSecondPreviewsPicture: View {
     private let grey = Color(white: 0.55)
@@ -189,6 +298,44 @@ private struct Squiggle: Shape {
         while x <= r.width {
             p.addLine(to: CGPoint(x: r.minX + x, y: r.midY + r.height / 2 * sin(2 * .pi * x / period)))
             x += 0.5
+        }
+        return p
+    }
+}
+
+/// Arc's Max picture band (684 × ≈125, blue, some flowers, ending in a wavy edge) with Cra's mark and "Max" in the
+/// middle (Victor, 12 Nov 2026), in the system's rounded face.
+private struct MaxBanner: View {
+    private static let blue = Color(.sRGB, red: 0.2, green: 0.235, blue: 1)
+    private static let pink = Color(.sRGB, red: 1, green: 0.62, blue: 0.62)
+
+    var body: some View {
+        ZStack {
+            Self.blue
+            // Flowers round the edges, some cut by them, clear of the mark and the word.
+            ForEach(Array([(-300, -8, 30.0), (-240, -38, 14.0), (-200, 28, 44.0), (-160, -30, 22.0), (165, 8, 20.0), (210, -30, 30.0), (275, 22, 24.0), (340, -26, 36.0)].enumerated()), id: \.offset) { _, f in
+                Flower().fill(Self.pink).frame(width: f.2, height: f.2).offset(x: CGFloat(f.0), y: CGFloat(f.1))
+            }
+            HStack(spacing: 10) {
+                BrandMark(size: 64)
+                Text("Max").font(.system(size: 52, weight: .black, design: .rounded)).foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.18), radius: 0, x: 2, y: 2)
+            }
+            .offset(y: -3)
+        }
+        .frame(height: 125)
+        .clipShape(SettingsScallopedBand())
+        .accessibilityHidden(true)
+    }
+}
+
+/// A flower of four lobes.
+private struct Flower: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let r = min(rect.width, rect.height) * 0.28
+        for (dx, dy) in [(0.0, -0.5), (0.5, 0.0), (0.0, 0.5), (-0.5, 0.0)] {
+            p.addEllipse(in: CGRect(x: rect.midX + dx * rect.width * 0.55 - r, y: rect.midY + dy * rect.height * 0.55 - r, width: r * 2, height: r * 2))
         }
         return p
     }

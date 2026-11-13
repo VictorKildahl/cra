@@ -95,6 +95,9 @@ protocol BrowserManagerDelegate: AnyObject {
     /// Arc's Peek: a link the user clicked (or Shift-clicked) in `tabID`, whose page is at
     /// `pageURL`. Return true when it opens in a Peek instead.
     func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool, newTab: Bool) -> Bool
+    /// Arc's ⌥⌘-click: a link clicked in `tabID` with both keys down, the switch on. Return true when it opens
+    /// in a Little Window (after Chromium's call returns).
+    func browserManagerOpensLittleWindow(url: String, fromTab tabID: UUID) -> Bool
     /// The page's context menu: Open Link in New Window, Little Window or Incognito Window.
     func browserManagerOpenLink(_ url: String, in kind: CraLinkWindow, space: UUID?, fromIncognito: Bool)
     /// The page's context menu: Open Link in Split View, a pane beside `tabID`'s (#257).
@@ -103,7 +106,7 @@ protocol BrowserManagerDelegate: AnyObject {
     func browserManagerCaptureImage(at point: NSPoint, tabID: UUID)
 }
 
-/// A page's permission request on its way to Cra's sheet; `completion` answers it in Chromium.
+/// A page's permission request on its way to Cra's card (#371); `completion` answers it in Chromium.
 private struct PermissionRequest {
     let tabID: UUID
     let browser: CraBrowser
@@ -140,10 +143,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     var pageClosed: (UUID) -> Void = { _ in }
     private var byBrowser: [ObjectIdentifier: UUID] = [:]
     /// Pages' permission requests that haven't asked yet: their tab is behind, or another
-    /// request's sheet is up (PermissionAsk, #286).
+    /// request's card is up (PermissionAsk, #286).
     private var waitingPermissions: [PermissionRequest] = []
-    /// The request whose sheet is up.
-    private var permissionSheet: (request: PermissionRequest, dialog: AppDialog)?
+    /// The request whose card is up.
+    private var permissionSheet: (request: PermissionRequest, dialog: PermissionPopover)?
     /// CEF's client holds its owner weakly; keep retired browsers alive until teardown finishes.
     private var closingBrowsers: [ObjectIdentifier: CraBrowser] = [:]
 
@@ -180,10 +183,21 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         // list the tab had (PageHistory, #273): after a relaunch or a close, Back goes where it went.
         let incognito = store.isIncognito(item: tabID)
         let history = incognito ? nil : PageHistoryStore.shared.load(tabID)
-        let browser = Perf.time(.pageCreate) {
-            PageEngines.makeBrowser(frame: container.bounds, url: tab.url, delegate: self, incognito: incognito,
-                                    profilePath: store.profilePath(item: tabID), history: history)
+        let profilePath = store.profilePath(item: tabID)
+        // The profile's spare page if there is one (SparePages): made ahead, so this click doesn't
+        // wait for CEF to make the page's window.
+        let fill = PageEngines.spareFill(url: tab.url, incognito: incognito, history: history)
+        let browser = Perf.time(.pageCreate) { () -> CraBrowser in
+            if fill.canTake, let spare = SparePages.shared.take(profilePath: profilePath) {
+                spare.delegate = self
+                spare.takeSpare(withURL: tab.url, history: fill.history)
+                log(tabID, "takes a spare page")
+                return spare
+            }
+            return PageEngines.makeBrowser(frame: container.bounds, url: tab.url, delegate: self, incognito: incognito,
+                                           profilePath: profilePath, history: history)
         }
+        if !incognito { SparePages.shared.refill(profilePath: profilePath, frame: container.bounds, clock: clock) }
         return register(browser: browser, tabID: tabID)
     }
 
@@ -349,6 +363,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         syncDevToolsVisibility()
         delegate?.browserManagerPageWindowsChanged(focus: focus)
         if wasVisible != Set(shown) { Perf.time(.tabSwitch, ms: Perf.ms(since: started) - creating) }
+        stepAsideIfHidden()
         askNextPermission()
     }
 
@@ -501,6 +516,26 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         rt.browser.close()
         delegate?.browserManagerDidUpdate(tabID)
         delegate?.browserManagerPageWindowsChanged(focus: false)
+        scheduleMemoryReclaim()
+    }
+
+    private var memoryReclaimWork: ScheduledWork?
+    /// Chromium's browser process returns what closed pages freed, once closing has settled and
+    /// nobody is typing (MemoryReclaim). Any page can carry the call: it acts on the whole process.
+    private func scheduleMemoryReclaim(after delay: TimeInterval = MemoryReclaim.settle) {
+        memoryReclaimWork?.cancel()
+        memoryReclaimWork = clock.after(delay) { [weak self] in
+            guard let self else { return }
+            let idle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
+            guard MemoryReclaim.runsNow(secondsSinceInput: idle) else {
+                self.scheduleMemoryReclaim(after: MemoryReclaim.retry)
+                return
+            }
+            guard let carrier = self.runtimes.values.first(where: { $0.browser.isCreated && !$0.browser.isClosed })?.browser else { return }
+            carrier.sendDevToolsMethod("Cra.reclaimMemory", params: "{}") { _, error in
+                if let error { CraLog.note("memory reclaim: \(error)") }
+            }
+        }
     }
 
     // MARK: Tab sleeping
@@ -700,6 +735,21 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     private static var loggedFreezingError = false
 
+    /// cra://debug?freezingState=1: each page's freezing state as Chromium has it, for scenarios.
+    /// The title comes from the browser side, which a frozen page doesn't hold up.
+    func logFreezingStates() {
+        for rt in runtimes.values where rt.browser.isCreated && !rt.browser.isClosed {
+            let title = rt.browser.currentTitle, url = rt.browser.currentURL
+            rt.browser.sendDevToolsMethod("Cra.getFreezingState", params: "{}") { result, error in
+                let r = (result?.data(using: .utf8)).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
+                let line = "freezing state \(url) title=\(title): frozen=\(r["frozen"] as? Bool ?? false)"
+                    + " liveConnection=\(r["liveConnection"] as? Bool ?? false)"
+                    + " reasons=\((r["reasons"] as? [String] ?? []).joined(separator: ","))\(error.map { " error=\($0)" } ?? "")"
+                DispatchQueue.main.async { CraLog.note(line) }
+            }
+        }
+    }
+
     /// Arc never freezes or discards the pages of the 10 tabs used last, however long ago that
     /// was (TabSleepPolicy.protectedRecentTabs, GitHub #136).
     var protectedRecentTabs = TabSleepPolicy.protectedRecentTabs
@@ -789,6 +839,17 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     func tabID(of browser: CraBrowser) -> UUID? {
         guard let id = byBrowser[ObjectIdentifier(browser)], runtimes[id]?.browser === browser else { return nil }
         return id
+    }
+
+    /// The tab on screen whose page `view` (Chromium's page view or one inside it) belongs to:
+    /// in its pane's card (EmbeddedPages), in its own Chrome window, or in its Alloy container.
+    func visibleTabID(ofPageView view: NSView) -> UUID? {
+        visibleTabIDs.first { id in
+            guard let rt = runtimes[id] else { return false }
+            if view.isDescendant(of: rt.browser.containerView) { return true }
+            guard let host = rt.hostWindow else { return false }
+            return view.window === host || (EmbeddedPages.pageViews(of: host)?.contains { view.isDescendant(of: $0) } ?? false)
+        }
     }
 
     // MARK: Delete browsing data
@@ -922,6 +983,11 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         PictureInPictureChrome.shared.isPlaying = playing
     }
 
+    func browser(_ browser: CraBrowser, didChangePictureInPictureTime position: Double, duration: Double) {
+        guard browser.isInPictureInPicture else { return }
+        PictureInPictureChrome.shared.time = (position, duration)
+    }
+
     /// Picture in Picture's "back to tab": select the tab, bring its window up
     /// and put the video back in the page (also when the tab was already selected).
     private func bringToFront(_ tabID: UUID) {
@@ -971,8 +1037,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                 backToTab: { [weak self] in self?.bringToFront(id) },
                 togglePlayback: { [weak browser] in browser?.togglePictureInPicturePlayback() },
                 skip: { [weak browser] s in browser?.skipPictureInPicture(by: s) },
+                seek: { [weak browser] s in browser?.seekPictureInPicture(to: s) },
                 close: { [weak browser] in browser?.closePictureInPicture() })
             PictureInPictureChrome.shared.isPlaying = browser.isPictureInPicturePlaying
+            PictureInPictureChrome.shared.time = (0, 0)   // the page says where its video is right after
             PictureInPictureChrome.shared.address = PictureInPictureLayout.address(of: browser.currentURL)
             PictureInPictureChrome.shared.videoEntered()
         } else {
@@ -1009,7 +1077,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         if let np = nowPlaying {
             if np.entries.contains(where: { $0.id == id }) {
                 np.update(id) { $0.playing = audible }
-            } else if audible {
+            } else if audible && !browser.hasUncontrollableSound {
                 np.entries.append(.init(id: id, playing: true))
             }
             if audible { refreshMediaControls(id) }
@@ -1025,7 +1093,14 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         rt.soundPlaying = playing
         let resumesCard = playing && nowPlaying?.entries.contains(where: { $0.id == id && !$0.playing }) == true
         if resumesCard { nowPlaying?.update(id) { $0.playing = true } }
-        guard changed || resumesCard else { return }
+        // A ding made no card (#411); media starting within its hold has no audible edge of its own.
+        let startsCard = playing && browser.isAudible && !browser.hasUncontrollableSound
+            && nowPlaying?.entries.contains(where: { $0.id == id }) == false
+        if startsCard {
+            nowPlaying?.entries.append(.init(id: id, playing: true))
+            refreshMediaControls(id)
+        }
+        guard changed || resumesCard || startsCard else { return }
         delegate?.browserManagerDidUpdate(id)
     }
 
@@ -1433,6 +1508,9 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     func browser(_ browser: CraBrowser, popupHostForURL url: String, inBackground background: Bool) -> CraBrowser? {
         if url.lowercased().hasPrefix("cra:") { return nil }
         let source = tabID(of: browser)
+        // The page opened a pop-up Chromium blocked before (a shared folder's next click): the
+        // blocked pop-ups button no longer offers it (#357).
+        if let source, runtimes[source]?.blockedPopups.markOpened(url: url) == true { delegate?.browserManagerDidUpdate(source) }
         let sourceSpace = source.flatMap { store.spaceID(ofItem: $0) }
         let tab = store.createTab(url: url, in: sourceSpace, select: !background, window: windowID, referrer: source)
         if background { store.markUnread(tab.id, true) }
@@ -1480,6 +1558,16 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     func browser(_ browser: CraBrowser, opensPeekForURL url: String, shiftClick: Bool, newTab: Bool) -> Bool {
         guard let id = tabID(of: browser), !browser.isIncognito else { return false }
         return delegate?.browserManagerOpensPeek(url: url, fromTab: id, pageURL: browser.currentURL, shiftClick: shiftClick, newTab: newTab) ?? false
+    }
+
+    /// Arc's ⌥⌘-click (Settings ▸ Links, #373): a link clicked with ⌥⌘ opens in a Little Window when the switch is
+    /// on. The keys are the click's (LittleWindowTrigger); otherwise the click stays Chromium's (Split View).
+    func browser(_ browser: CraBrowser, opensLittleWindowForURL url: String, clickModifiers: UInt, clickAge: TimeInterval) -> Bool {
+        guard let id = tabID(of: browser), !browser.isIncognito,
+              LittleWindowTrigger.opens(url, clickModifiers: clickModifiers, clickAge: clickAge,
+                                        enabled: store.settings.littleWindowOnOptionCommandClick)
+        else { return false }
+        return delegate?.browserManagerOpensLittleWindow(url: url, fromTab: id) ?? false
     }
 
     func devToolsHostView(for browser: CraBrowser) -> NSView? {
@@ -1589,8 +1677,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     }
 
     /// A page asks for the camera, microphone, notifications… Chrome asks in the tab that wants
-    /// it while that tab is in front; Cra's sheet covers the window, so a request from a tab
-    /// behind waits until its tab is shown, and sheets come one at a time (PermissionAsk, #286).
+    /// it while that tab is in front, so a request from a tab behind waits until its tab is
+    /// shown, and cards come one at a time (PermissionAsk, #286, #371).
     func browser(_ browser: CraBrowser, requestsPermissionForOrigin origin: String, kinds: UInt, completion: @escaping (Bool) -> Void) {
         guard let id = tabID(of: browser) else {
             // A page Cra already closed: Chromium drops the request with it.
@@ -1612,15 +1700,28 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         dropPermissions(.withdrawn) { $0.browser === browser }
     }
 
+    /// Arc's permission card (#371) in the top left corner of the tab's page: it leaves the page
+    /// and the window usable, where Cra's sheet blocked the whole window until it was answered.
     private func askPermission(_ request: PermissionRequest) {
-        let alert = AppDialog(title: PermissionPrompt.message(origin: request.origin, kinds: request.kinds),
-                              actions: [DialogAction("Allow"), DialogAction("Block", role: .cancel)])
-        guard let window = container.window else { request.completion(false); return }
+        let alert = PermissionPopover(title: PermissionPrompt.message(origin: request.origin, kinds: request.kinds),
+                                      actions: [DialogAction("Allow"), DialogAction("Not Now", role: .cancel)])
+        guard container.window != nil else { request.completion(false); return }
         permissionSheet = (request, alert)
-        alert.present(over: window) { [weak self] resp in
-            // A sheet Cra took down (the request was withdrawn) answers nothing.
+        let page = paneHost?(request.tabID) ?? container
+        alert.present(relativeTo: page.bounds, of: page) { [weak self] resp in
+            // A card Cra took down (the request was withdrawn, its tab went behind) answers nothing.
             guard let self, self.permissionSheet?.dialog === alert else { return }
             self.permissionSheet = nil
+            guard resp != .abort else {
+                // Taken down unanswered by AppKit (the window closed): it waits again, and asks
+                // again only while the window still shows. A closing window drops it with its tabs.
+                self.waitingPermissions.insert(request, at: 0)
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.container.window?.isVisible == true else { return }
+                    self.askNextPermission()
+                }
+                return
+            }
             let allowed = resp == .alertFirstButtonReturn
             CraLog.note(PermissionAsk.outcomeLine(origin: request.logName, kinds: request.kinds, outcome: allowed ? .allowed : .blocked))
             request.completion(allowed)
@@ -1628,7 +1729,17 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         }
     }
 
-    /// The oldest waiting request whose tab is on screen asks, once no sheet is up.
+    /// The card's tab went behind (a tab switch, which the sheet never allowed): the card
+    /// goes, unanswered, and its request waits first in line for its tab, as Chrome's does.
+    private func stepAsideIfHidden() {
+        guard let up = permissionSheet, PermissionAsk.stepsAside(tabShown: visibleTabIDs.contains(up.request.tabID)) else { return }
+        permissionSheet = nil
+        up.dialog.close()
+        waitingPermissions.insert(up.request, at: 0)
+        CraLog.note(PermissionAsk.asideLine(origin: up.request.logName, kinds: up.request.kinds))
+    }
+
+    /// The oldest waiting request whose tab is on screen asks, once no card is up.
     private func askNextPermission() {
         guard permissionSheet == nil,
               let i = waitingPermissions.firstIndex(where: { visibleTabIDs.contains($0.tabID) }) else { return }

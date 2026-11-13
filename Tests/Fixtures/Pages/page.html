@@ -11,6 +11,8 @@
   const n = query.get('n') || '0';
   document.title = 'Fixture ' + n;
   // ?beforeunload=1: asks "Leave site?" like a shop with something in its cart (once the page had a gesture).
+  // ?icon=1: a red square favicon, for checks that show a page's favicon (#381).
+  if (query.get('icon') === '1') { const l = document.createElement('link'); l.rel = 'icon'; l.href = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGUlEQVR4nGN4ZqPxnxLMMGrAqAGjBgwXAwB2LEkfOWMJxAAAAABJRU5ErkJggg=='; document.head.appendChild(l); }
   if (query.get('beforeunload') === '1') addEventListener('beforeunload', e => { e.preventDefault(); e.returnValue = ''; });
   const rows = document.getElementById('rows');
   for (let i = 0; i < 200; i++) { const d = document.createElement('div'); d.className = 'row'; d.textContent = 'Row ' + i; rows.appendChild(d); }

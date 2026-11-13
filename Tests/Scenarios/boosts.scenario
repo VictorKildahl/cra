@@ -7,17 +7,35 @@ expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
 wait 1
 cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const z=document.createElement('div');z.id='zapme';document.body.append(z);const b=getComputedStyle(document.body);return 'boost-'+b.backgroundColor+'-'+b.textTransform+'-'+getComputedStyle(z).display+'-'+window.boosted})()"}
 expect-log Cra cdp Runtime.evaluate .*"value":"boost-rgb\(1, 2, 3\)-uppercase-none-yes"
-# Zap: what a click hides is kept as a selector; a click on the page itself hides nothing.
+# Zap (Arc 1.172.2): a click asks first (Zap this / Zap all related elements / Cancel, the selector and its
+# count under them); "Zap this" goes into the boost at once and the shelf under the page gets a cell
+# (after the seeded #zapme). The pointer on a cell dims the page; a click on it unzaps.
 cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const s=document.createElement('section');s.innerHTML='<p id=zz>x</p><span>y</span>';document.body.append(s);return 'ready'})()"}
 expect-log Cra cdp Runtime.evaluate .*"value":"ready"
 cra://action/newBoost
 wait 1
 cra://debug?boostZap=1
+expect-log zap on: shelf under the page
 wait 1
-cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{document.body.click();document.getElementById('zz').click();return 'zz-'+getComputedStyle(document.getElementById('zz')).display+'-body-'+getComputedStyle(document.body).display})()"}
-expect-log Cra cdp Runtime.evaluate .*"value":"zz-none-body-block"
-cra://debug?boostZap=0
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{document.body.click();document.getElementById('zz').click();const st=JSON.parse(window.__craZap.state());return 'zz-'+getComputedStyle(document.getElementById('zz')).display+'-pop-'+(st.popover?'yes':'no')+'-foot-'+st.footer})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"zz-block-pop-yes-foot-1#zz"
+cra://debug?zapPress=this
 expect-log zap kept 1 selector$
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'zz-'+getComputedStyle(document.getElementById('zz')).display+'-'+JSON.parse(window.__craZap.state()).popover"}
+expect-log Cra cdp Runtime.evaluate .*"value":"zz-none-null"
+cra://debug?zapHover=1
+expect-log zap shelf: cells=2 hint=restore\("#zz"\) bar=58\.0
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'dim-'+JSON.parse(window.__craZap.state()).dim"}
+expect-log Cra cdp Runtime.evaluate .*"value":"dim-true"
+cra://debug?zapUnzap=1
+expect-log zap shelf: cells=1 hint=clickToUnzap bar=58\.0
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'zz-'+getComputedStyle(document.getElementById('zz')).display+'-dim-'+JSON.parse(window.__craZap.state()).dim"}
+expect-log Cra cdp Runtime.evaluate .*"value":"zz-block-dim-false"
+cra://debug?boostZap=0
+cra://debug?zapHover=-1
+expect-log zap shelf: cells=1 hint=clickToUnzap bar=0\.0
 # The code panel's eyedropper (BoostPicker): a click is held, and Arc's menu copies the selector for the
 # element or zaps it and the ones like it.
 cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const u=document.createElement('ul');u.className='list';u.innerHTML='<li class=item>a</li><li class=item id=second>b</li><li class=item>c</li>';document.body.append(u);window.pickClick=()=>{const e=document.getElementById('second'),r=e.getBoundingClientRect();return e.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,clientX:r.left+2,clientY:r.top+2}))};return 'list'})()"}

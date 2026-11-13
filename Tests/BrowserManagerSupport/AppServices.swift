@@ -12,6 +12,12 @@ import CraCEF
         self.completion = completion
         Self.presented.append(self)
     }
+    /// The permission card (#371) records itself the same way, with the page it sits on.
+    private(set) var anchor: NSView?
+    func present(relativeTo rect: NSRect, of view: NSView, completion: @escaping (NSApplication.ModalResponse) -> Void) {
+        anchor = view
+        present(over: view.window ?? NSWindow(), completion: completion)
+    }
     /// The production sheet's close(): ends it as Escape would (.abort) when nothing was chosen.
     func close() { answer(.abort) }
     func answer(_ response: NSApplication.ModalResponse) {
@@ -20,6 +26,9 @@ import CraCEF
         done?(response)
     }
 }
+
+/// The manager's permission popover (#371) is recorded with the sheets, so #286's test reads both.
+typealias PermissionPopover = AppDialog
 
 // Unrelated shell services required to typecheck the complete production manager.
 // The tab store deliberately remains observable so stale callbacks can be asserted.
@@ -44,6 +53,7 @@ enum TestRoot { case today }
         }
         var shareThemeWithWebsites = true
         var blockCookieBanners = false
+        var littleWindowOnOptionCommandClick = false
     }
     func cookieBannerCSS(item: UUID) -> String? { settings.blockCookieBanners ? "#onetrust-banner-sdk { display: none !important; }" : nil }
     func themeDataCSS(item: UUID, systemDark: Bool) -> String? {
@@ -116,12 +126,14 @@ struct PictureInPictureActions {
     var backToTab: () -> Void
     var togglePlayback: () -> Void
     var skip: (Double) -> Void
+    var seek: (Double) -> Void
     var close: () -> Void
 }
 final class PictureInPictureChrome {
     static let shared = PictureInPictureChrome()
     var actions: PictureInPictureActions?
     var isPlaying = false
+    var time: (position: Double, duration: Double) = (0, 0)
     var address = ""
     func videoEntered() {}
     func videoLeft() {}

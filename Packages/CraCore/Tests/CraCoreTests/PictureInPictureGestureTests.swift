@@ -48,6 +48,25 @@ struct PictureInPictureGestureTests {
         #expect(gesture.frame(mouse: CGPoint(x: start.x + 1, y: start.y), minSize: minSize, maxSize: maxSize) == window.offsetBy(dx: 1, dy: 0))
     }
 
+    /// A double click on the video returns to its tab, as Arc's window does (reported by a user,
+    /// 11 Nov). A single click, the third click of a triple, and a press that became a drag do not.
+    @Test func aDoubleClickReturnsToTheTab() {
+        let start = CGPoint(x: window.midX, y: window.midY)
+        var gesture = PictureInPictureGesture(mouse: start, frame: window)
+        #expect(!gesture.returnsToTab(clickCount: 1))
+        #expect(gesture.returnsToTab(clickCount: 2))
+        #expect(!gesture.returnsToTab(clickCount: 3))
+        // The second click drifts 2 pt: still a click.
+        _ = gesture.frame(mouse: CGPoint(x: start.x + 2, y: start.y), minSize: minSize, maxSize: maxSize)
+        #expect(gesture.returnsToTab(clickCount: 2))
+        // The second press moves the window: a drag, not a double click.
+        _ = gesture.frame(mouse: CGPoint(x: start.x + 30, y: start.y), minSize: minSize, maxSize: maxSize)
+        #expect(!gesture.returnsToTab(clickCount: 2))
+        // On an edge too: a double click there resizes nothing, so it means the same.
+        let edge = PictureInPictureGesture(mouse: CGPoint(x: window.maxX - 2, y: window.midY), frame: window)
+        #expect(edge.returnsToTab(clickCount: 2))
+    }
+
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/134")) func theMiddleMovesTheWindow() {
         #expect(drag(at: 391, 220, by: -40, 25).1 == window.offsetBy(dx: -40, dy: 25))
     }
@@ -86,5 +105,24 @@ struct PictureInPictureGestureTests {
         let big = try #require(drag(at: 780, 220, by: 2000, 0).1)
         #expect(big.width == 1382 && big.height == 778)
         #expect(big.maxY == window.maxY)
+    }
+
+    /// A resize grows the window up to the display's edges, not past them: the sides it keeps stay,
+    /// the grabbed ones stop at the visible frame (since the window can be as large as the display,
+    /// 12 Nov). A pure top or bottom edge has no limit across, and a side already past an edge keeps
+    /// the window's size.
+    @Test func aResizeStopsAtTheDisplaysEdges() {
+        let visible = CGRect(x: 0, y: 0, width: 1728, height: 1084)
+        let w = CGRect(x: 800, y: 500, width: 480, height: 270)
+        func room(_ x: CGFloat, _ y: CGFloat) -> CGSize {
+            PictureInPictureGesture(mouse: CGPoint(x: x, y: y), frame: w).room(in: visible)
+        }
+        #expect(room(1278, 502) == CGSize(width: 928, height: 770))       // bottom right: right of x 800, below y 770
+        #expect(room(802, 768) == CGSize(width: 1280, height: 584))       // top left: left of x 1280, above y 500
+        #expect(room(1278, 600).width == 928)                              // right edge
+        #expect(room(1278, 600).height == .greatestFiniteMagnitude)
+        #expect(room(1000, 502).width == .greatestFiniteMagnitude)         // bottom edge
+        let under = CGRect(x: 800, y: 900, width: 480, height: 270)        // its top under the menu bar
+        #expect(PictureInPictureGesture(mouse: CGPoint(x: 802, y: 1168), frame: under).room(in: visible).height == 270)
     }
 }

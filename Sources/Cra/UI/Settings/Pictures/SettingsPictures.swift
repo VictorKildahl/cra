@@ -45,62 +45,6 @@ extension SettingsArt {
         }
     }
 
-    /// Hovering a closed folder shows its tabs beside it.
-    static var folderPreviews: some View {
-        let t = ArtTint.mint
-        return ArtCanvas(tint: t) {
-            ArtSidebar(tint: t, width: 40) {
-                ArtTabRow(favicon: blue, width: 34, title: 0.7)
-                ArtTabRow(width: 34, title: 0.6, selected: true, symbol: "folder.fill", ink: t.ink)
-                ArtTabRow(favicon: yellow, width: 34, title: 0.5)
-                ArtTabRow(favicon: red, width: 34, title: 0.8)
-            }
-            .at(4, 3)
-            ArtCard(width: 38, height: 34) {
-                VStack(alignment: .leading, spacing: 1) {
-                    ArtTabRow(favicon: green, width: 34, title: 0.8)
-                    ArtTabRow(favicon: purple, width: 34, title: 0.55)
-                    ArtTabRow(favicon: blue, width: 34, title: 0.7)
-                }
-                .padding(2)
-            }
-            .at(46, 9)
-            ArtCursor().at(30, 15)
-        }
-    }
-
-    /// Hovering Gmail's favorite shows the unread mail.
-    static var gmailPreviews: some View {
-        let t = ArtTint.rose
-        return ArtCanvas(tint: t) {
-            ArtSidebar(tint: t, width: 44, height: 50) {
-                HStack(spacing: 2) {
-                    ArtFavorite(logo: red, symbol: "envelope.fill", width: 12, height: 10, selected: true)
-                    ArtFavorite(logo: blue, width: 12, height: 10)
-                    ArtFavorite(logo: green, width: 12, height: 10)
-                }
-                .padding(.bottom, 2)
-                ArtTabRow(favicon: yellow, width: 38, title: 0.7)
-                ArtTabRow(favicon: purple, width: 38, title: 0.5)
-                ArtTabRow(favicon: blue, width: 38, title: 0.6)
-            }
-            .at(4, 3)
-            ArtCard(width: 42, height: 38) {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(0..<3, id: \.self) { i in
-                        HStack(alignment: .top, spacing: 2.5) {
-                            Circle().fill(i < 2 ? blue : Color.clear).frame(width: 2.6, height: 2.6).padding(.top, 0.4)
-                            ArtLines(count: 2, width: 30, height: 1.8, spacing: 1.5, color: i < 2 ? Color(white: 0.7) : ArtTint.line)
-                        }
-                    }
-                }
-                .padding(4)
-            }
-            .at(42, 14)
-            ArtCursor().at(10, 9)
-        }
-    }
-
     /// The open favorite's rim in its logo's colours.
     static var favoriteLogoOutline: some View {
         let t = ArtTint.lemon
@@ -136,16 +80,27 @@ extension SettingsArt {
         }
     }
 
-    /// Leaving a video's tab floats the video over the next page.
-    static var autoPictureInPicture: some View {
-        let t = ArtTint.slate
+    /// The page fills the card, and the toolbar slides in over its top where the pointer is.
+    static var autoHideToolbar: some View {
+        let t = ArtTint.mint
         return ArtCanvas(tint: t) {
-            ArtWindow(tint: t, selected: 2).at(4, 5)
-            RoundedRectangle(cornerRadius: 2.5, style: .continuous).fill(Color(white: 0.16))
-                .frame(width: 32, height: 19)
-                .overlay(ArtSymbol(name: "play.fill", size: 7, color: .white))
-                .artLift(2)
-                .at(50, 31)
+            ArtWindow(tint: t) {
+                ZStack(alignment: .topLeading) {
+                    ArtLines(count: 5, width: 36).padding(.leading, 4).padding(.top, 4)
+                    VStack(spacing: 0) {
+                        HStack(spacing: 2) {
+                            Capsule().fill(t.ink.opacity(0.7)).frame(width: 22, height: 3)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 3).frame(height: 7)
+                        .background(Color.white)
+                        Rectangle().fill(Color.black.opacity(0.14)).frame(height: 0.6)
+                    }
+                    .artLift(1)
+                }
+            }
+            .at(9, 5)
+            ArtCursor(size: 8).at(48, 2)
         }
     }
 
@@ -170,66 +125,6 @@ extension SettingsArt {
                 }
             }
             .at(18, 3)
-        }
-    }
-
-}
-
-// MARK: - Links
-
-extension SettingsArt {
-    /// A small window with no sidebar, the way a Little Window looks.
-    private static func littleWindow(_ t: ArtTint, width: CGFloat = 42, height: CGFloat = 32) -> some View {
-        ArtWindow(tint: t, width: width, height: height, sidebar: false, toolbar: true) {
-            ArtLines(count: 3, width: width - 14).padding(.leading, 4).padding(.top, 4)
-        }
-    }
-
-    /// A link clicked in another app opens in a Little Window.
-    static var littleWindowFromApps: some View {
-        let t = ArtTint.mint
-        return ArtCanvas(tint: t) {
-            RoundedRectangle(cornerRadius: 5, style: .continuous).fill(Color.white)
-                .frame(width: 20, height: 20)
-                .overlay(ArtSymbol(name: "bubble.left.fill", size: 10, color: SettingsArt.green))
-                .artLift()
-                .at(6, 18)
-            ArtSymbol(name: "arrow.right", size: 8, color: t.ink, weight: .heavy).at(30, 23)
-            littleWindow(t).at(42, 12)
-        }
-    }
-
-    /// A Peek over the page it was opened from.
-    private static func peek(_ t: ArtTint, at x: CGFloat, _ y: CGFloat, width: CGFloat = 40, height: CGFloat = 32) -> some View {
-        ArtCard(width: width, height: height) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 1.5) {
-                    Circle().fill(Color(white: 0.8)).frame(width: 2.4, height: 2.4)
-                    Circle().fill(Color(white: 0.8)).frame(width: 2.4, height: 2.4)
-                }
-                t.theme.opacity(0.6).frame(height: 7).clipShape(RoundedRectangle(cornerRadius: 1))
-                ArtLines(count: 3, width: width - 10)
-            }
-            .padding(3)
-        }
-        .at(x, y)
-    }
-
-    private static func dimmedWindow(_ t: ArtTint) -> some View {
-        ArtWindow(tint: t) {
-            ZStack(alignment: .topLeading) {
-                ArtLines(count: 5, width: 36).padding(.leading, 4).padding(.top, 5)
-                Color.black.opacity(0.22)
-            }
-        }
-    }
-
-    /// A link to another site opens in a Peek over the page.
-    static var peekLinks: some View {
-        let t = ArtTint.lavender
-        return ArtCanvas(tint: t) {
-            dimmedWindow(t).at(4, 5)
-            peek(t, at: 36, 13)
         }
     }
 

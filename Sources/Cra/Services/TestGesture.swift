@@ -22,11 +22,13 @@ enum TestGesture {
     /// A click at a point of the window, through the app's event queue: AppKit routes it as it
     /// routes the pointer's (the window's sendEvent, first-click rules, hit testing), so a test
     /// sees what a real click there does, while the pointer and the front app stay put.
-    /// `modifiers`: keys held through the click (an Option-click on a link, #298).
-    static func click(at point: NSPoint, in window: NSWindow, clicks: Int = 1, modifiers: NSEvent.ModifierFlags = []) {
+    /// `modifiers`: keys held through the click (an Option-click on a link, #298). `right`: the
+    /// right button (Back's history menu, #416).
+    static func click(at point: NSPoint, in window: NSWindow, clicks: Int = 1, modifiers: NSEvent.ModifierFlags = [], right: Bool = false) {
+        let (down, up): (NSEvent.EventType, NSEvent.EventType) = right ? (.rightMouseDown, .rightMouseUp) : (.leftMouseDown, .leftMouseUp)
         // A double-click is two presses, the second with clickCount 2, as AppKit counts them.
         for count in 1...max(clicks, 1) {
-            for (type, pressure) in [(NSEvent.EventType.leftMouseDown, Float(1)), (.leftMouseUp, 0)] {
+            for (type, pressure) in [(down, Float(1)), (up, 0)] {
                 guard let e = NSEvent.mouseEvent(with: type, location: point, modifierFlags: modifiers, timestamp: ProcessInfo.processInfo.systemUptime,
                                                  windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: count,
                                                  pressure: pressure) else { return }
@@ -51,6 +53,28 @@ enum TestGesture {
                                            windowNumber: window.windowNumber, context: nil, characters: characters,
                                            charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode) else { return }
             NSApp.postEvent(e, atStart: false)
+        }
+    }
+
+    /// A key press handed to a page's view as CraApplication.sendEvent forwards one to the page that has
+    /// the keyboard, for a background test copy, whose windows are never key: CEF's OnPreKeyEvent, the
+    /// page's own handlers and OnKeyEvent see it as they see a typed one (who gets a shortcut, #374).
+    /// The page's view is found under `roots` (Chromium's own window when Chrome hosts the page), else
+    /// it is `window`'s first responder (an embedded page that has the keyboard).
+    static func pageKey(_ characters: String, keyCode: UInt16, modifiers: NSEvent.ModifierFlags, in roots: [NSView], window: NSWindow?) {
+        func isPage(_ v: NSView) -> Bool { NSStringFromClass(type(of: v)) == "RenderWidgetHostViewCocoa" }
+        func pageView(_ v: NSView) -> NSView? { isPage(v) ? v : v.subviews.lazy.compactMap(pageView).first }
+        let focused = (window?.firstResponder as? NSView).flatMap { isPage($0) ? $0 : nil }
+        guard let view = roots.lazy.compactMap(pageView).first ?? focused, let target = view.window else {
+            NSLog("Cra TestGesture: no page view")
+            return
+        }
+        target.makeFirstResponder(view)
+        for type in [NSEvent.EventType.keyDown, .keyUp] {
+            guard let e = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: modifiers, timestamp: ProcessInfo.processInfo.systemUptime,
+                                           windowNumber: target.windowNumber, context: nil, characters: characters,
+                                           charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode) else { return }
+            target.sendEvent(e)
         }
     }
 

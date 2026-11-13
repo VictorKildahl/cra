@@ -5,7 +5,7 @@ import SwiftUI
 @MainActor
 @Observable
 final class AppDialog {
-    enum Icon { case mark, application, none }
+    enum Icon { case mark, application, envelope, none }
 
     let title: String
     let message: String
@@ -14,6 +14,10 @@ final class AppDialog {
     let width: CGFloat
     let buttonSpacing: CGFloat
     let buttonOutset: CGFloat
+    /// Arc's older dialog sheet (showDialogSheetDeprecated, the share warning): 48.5 pt margins
+    /// instead of 38.5, tighter rows, and Arc's own dark checkbox instead of the system one.
+    let older: Bool
+    var inset: CGFloat { older ? 48.5 : 38.5 }
     var input: String?
     let placeholder: String
     let requiresInput: Bool
@@ -26,7 +30,8 @@ final class AppDialog {
 
     init(title: String, message: String = "", actions: [DialogAction] = [DialogAction("OK")],
          input: String? = nil, placeholder: String = "", requiresInput: Bool = false, suppressionTitle: String? = nil,
-         icon: Icon = .mark, width: CGFloat = 450, buttonSpacing: CGFloat = 38, buttonOutset: CGFloat = 10.5) {
+         icon: Icon = .mark, width: CGFloat = 450, buttonSpacing: CGFloat = 38, buttonOutset: CGFloat = 10.5,
+         older: Bool = false) {
         self.title = title
         self.message = message
         self.actions = DialogActions(actions)
@@ -34,6 +39,7 @@ final class AppDialog {
         self.width = width
         self.buttonSpacing = buttonSpacing
         self.buttonOutset = buttonOutset
+        self.older = older
         self.input = input
         self.placeholder = placeholder
         self.requiresInput = requiresInput
@@ -49,6 +55,16 @@ final class AppDialog {
         AppDialog(title: "Are you sure you want to delete this Easel?",
                   message: "Doing so will delete the Easel permanently.",
                   actions: [DialogAction("Delete", role: .destructive), .cancel])
+    }
+
+    /// Arc's privacy warning before a share link is made (Share Folder…, Share N Items…; #356,
+    /// #357), word for word: Arc 1.17x's Dialogs.SheetWindow, captured at 2x on 11 Nov 2026 (560 pt
+    /// card, the envelope 62 × 49.5 pt at 48.5, 44.5). Arc names the picked tabs a Folder too.
+    static func shareLink() -> AppDialog {
+        AppDialog(title: "Send this Folder to anyone, on any browser.",
+                  message: "Anyone with this link can view your Folder. Viewers won’t receive future updates and this permalink cannot be deleted.",
+                  actions: [DialogAction("Copy Link to Folder"), .cancel], suppressionTitle: "Never show me this again.",
+                  icon: .envelope, width: 560, buttonSpacing: 32, buttonOutset: 21, older: true)
     }
 
     static var parentWindow: NSWindow? {
@@ -84,8 +100,12 @@ final class AppDialog {
             return
         }
         self.completion = completion
+        Self.presented = self
         prepareWindow(over: parent).show()
     }
+
+    /// The dialog last presented as a sheet, for `cra://debug?answerDialog=`.
+    static weak var presented: AppDialog?
 
     /// Takes a presented sheet down as if nothing was chosen: its completion gets `.abort`.
     func close() { presentedWindow?.close() }
@@ -132,7 +152,7 @@ private struct AppDialogView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            DialogScrollContent(width: dialog.width - 77, maximumHeight: max(140, (NSScreen.main?.visibleFrame.height ?? 800) - 250)) {
+            DialogScrollContent(width: dialog.width - 2 * dialog.inset, maximumHeight: max(140, (NSScreen.main?.visibleFrame.height ?? 800) - 250)) {
                 details
             }
             // Arc's extra choice ("Quit, and don’t ask again") sits at the card's left edge, the rest at its right.
@@ -145,8 +165,8 @@ private struct AppDialogView: View {
             .padding(.horizontal, -dialog.buttonOutset)
             .padding(.top, dialog.buttonSpacing)
         }
-        .padding(.horizontal, 38.5)
-        .padding(.top, 38.5)
+        .padding(.horizontal, dialog.inset)
+        .padding(.top, dialog.older ? 44 : 38.5)
         .padding(.bottom, 28)
         .frame(width: dialog.width)
         .fixedSize(horizontal: false, vertical: true)
@@ -156,7 +176,11 @@ private struct AppDialogView: View {
 
     private var details: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if dialog.icon != .none {
+            if dialog.icon == .envelope {
+                ShareEnvelopeIcon()
+                    .frame(width: 62, height: 49.5)
+                    .accessibilityHidden(true)
+            } else if dialog.icon != .none {
                 ZStack {
                     if dialog.icon == .application {
                         Image(nsImage: NSApp.applicationIconImage).resizable()
@@ -176,14 +200,14 @@ private struct AppDialogView: View {
                 .font(.system(size: 17.5, weight: .semibold))
                 .foregroundStyle(.white)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, dialog.icon == .none ? 0 : dialog.icon == .application ? 18 : 17.5)
+                .padding(.top, dialog.icon == .none ? 0 : dialog.icon == .envelope ? 23.5 : dialog.icon == .application ? 18 : 17.5)
             if !dialog.message.isEmpty {
                 Text(dialog.message)
                     .font(.system(size: 14))
                     .lineSpacing(0.7)
                     .foregroundStyle(DialogTheme.body)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 16)
+                    .padding(.top, dialog.older ? 8 : 16)
             }
             if dialog.input != nil {
                 TextField(dialog.placeholder, text: Binding(get: { dialog.input ?? "" }, set: { dialog.input = $0 }))
@@ -197,7 +221,11 @@ private struct AppDialogView: View {
                     .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(hex: "#737884"), lineWidth: 1))
                     .padding(.top, 18)
             }
-            if let title = dialog.suppressionTitle {
+            if let title = dialog.suppressionTitle, dialog.older {
+                DialogCheckbox(title: title, isOn: $dialog.isSuppressed)
+                    .padding(.leading, 1)
+                    .padding(.top, 14)
+            } else if let title = dialog.suppressionTitle {
                 Toggle(title, isOn: $dialog.isSuppressed)
                     .toggleStyle(.checkbox)
                     .font(.system(size: 13))
@@ -224,5 +252,68 @@ private struct AppDialogView: View {
         case .destructive: return .destructive
         case .secondary, .cancel: return .secondary
         }
+    }
+}
+
+/// The badge on Arc's share warning: a violet envelope with a postmark, drawn here to the 2x capture
+/// of Arc 1.17x (11 Nov 2026) rather than taken from Arc's assets. 62 × 49.5 pt, colours in Display P3
+/// as captured.
+struct ShareEnvelopeIcon: View {
+    private static func p3(_ hex: UInt32) -> Color {
+        Color(.displayP3, red: Double(hex >> 16 & 0xFF) / 255, green: Double(hex >> 8 & 0xFF) / 255, blue: Double(hex & 0xFF) / 255)
+    }
+
+    var body: some View {
+        Canvas { context, size in
+            let ink = Self.p3(0x6362A3)
+            let card = Path(roundedRect: CGRect(origin: .zero, size: size).insetBy(dx: 2, dy: 2), cornerRadius: 3.5)
+            context.fill(card, with: .color(Self.p3(0x302F5C)))
+            context.stroke(card, with: .color(ink), lineWidth: 4)
+            var flap = Path()
+            flap.move(to: CGPoint(x: 8.25, y: 9.5))
+            flap.addLine(to: CGPoint(x: 30.75, y: 22))
+            flap.addLine(to: CGPoint(x: 53.25, y: 9.5))
+            context.stroke(flap, with: .color(ink), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+            context.fill(Path(ellipseIn: CGRect(x: 40, y: 27.75, width: 15, height: 15)), with: .color(Self.p3(0x6D6C96)))
+            for dy in [0.0, 3.75] {
+                var wave = Path()
+                wave.move(to: CGPoint(x: 24.75, y: 28.5 + dy))
+                wave.addCurve(to: CGPoint(x: 43, y: 32.25 + dy), control1: CGPoint(x: 34, y: 27.75 + dy), control2: CGPoint(x: 37, y: 32 + dy))
+                wave.addLine(to: CGPoint(x: 50.75, y: 32.25 + dy))
+                context.stroke(wave, with: .color(.white.opacity(0.3)), style: StrokeStyle(lineWidth: 1.25, lineCap: .round))
+            }
+        }
+    }
+}
+
+/// Arc's checkbox on its older dialog sheet: a 16 pt dark rounded square, no border, and the label
+/// in near-white 13 pt, 14 pt to its right; ticked, Display P3 #397CF7 with a 2 pt white check (2x captures of
+/// the share warning in Arc 1.17x, 11 and 12 Nov 2026).
+struct DialogCheckbox: View {
+    let title: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Button { isOn.toggle() } label: {
+            HStack(spacing: 13) {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(isOn ? Color(.displayP3, red: 0x39 / 255, green: 0x7C / 255, blue: 0xF7 / 255) : Color(hex: "#2D3243"))
+                    .frame(width: 16, height: 16)
+                    .overlay {
+                        if isOn {
+                            Path { p in
+                                p.move(to: CGPoint(x: 3.75, y: 8.25))
+                                p.addLine(to: CGPoint(x: 6.75, y: 11.5))
+                                p.addLine(to: CGPoint(x: 12, y: 4.5))
+                            }
+                            .stroke(.white, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                        }
+                    }
+                Text(title).font(.system(size: 13)).foregroundStyle(Color(hex: "#DBDCDF"))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isOn ? [.isSelected] : [])
     }
 }

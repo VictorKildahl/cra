@@ -1,0 +1,11 @@
+{
+  "v": 1,
+  "name": "No Sidebar",
+  "host": "reddit.com",
+  "about": "Hides the right-hand column of community info and suggestions.",
+  "by": "VictorKildahl",
+  "preview": "https://www.reddit.com/r/MacOS/",
+  "zapped": [
+    "#right-sidebar-container"
+  ]
+}

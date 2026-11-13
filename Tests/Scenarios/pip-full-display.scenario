@@ -1,0 +1,22 @@
+# The Picture in Picture window can be made as wide as its display (the maintainer's decision,
+# 12 Nov; Arc stops at 61.7 % of the screen's width). Chromium keeps the window inside 80 % of the
+# work area and cuts it down to that whenever the video's size changes, as a stream switching
+# quality does. Here the window is made 95 % as wide as its display, the fixture's stream then
+# doubles its size, and the window must still be 95 % as wide.
+cra://open?url=file://${FIXTURES}/Pages/video.html
+expect-log loaded file:
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.getElementById('v').requestPictureInPicture().then(()=>'pip:open')","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"pip:open"
+wait 1
+cra://debug?pipSize=0.95
+expect-log pip: resized to
+wait 1
+cra://debug?pip=wide
+expect-log Cra pip wide: windows=1 .* share=0.95 .* onScreen=1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"c.width=1280,c.height=720,'stream:'+c.width","returnByValue":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"stream:1280"
+expect-log pip: Chromium cut
+wait 2
+cra://debug?pip=after
+expect-log Cra pip after: windows=1 .* share=0.95 .* onScreen=1

@@ -71,6 +71,136 @@ struct SettingsSyncTests {
         #expect(!SettingsSync.isComplete(SyncManifest(device: "Studio", deviceID: "id-Studio", writtenAt: t0, files: [:]), hashes: [:]))
     }
 
+    // MARK: What a look at the folder found (#378)
+
+    func folder(_ m: SyncManifest, _ files: [String: SyncFileState]) -> SyncFolderState {
+        SettingsSync.folderState(manifest: .read(m), files: files, readable: true)
+    }
+    var written: SyncManifest {
+        SyncManifest(device: "Studio", deviceID: "id-Studio", writtenAt: t0, files: ["sidebar.json": "a", "settings.json": "b", "keybindings.json": "c"])
+    }
+    let wholeFiles: [String: SyncFileState] = ["sidebar.json": .present(hash: "a"), "settings.json": .present(hash: "b"), "keybindings.json": .present(hash: "c")]
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/378"))
+    func aFileOnItsWayIsWaitedFor() {
+        var files = wholeFiles
+        files["settings.json"] = .downloading
+        #expect(folder(written, files) == .arriving, "an iCloud placeholder or a file not downloaded yet")
+        files["settings.json"] = .missing
+        #expect(folder(written, files) == .arriving, "a file the manifest names that has not landed yet")
+        files["settings.json"] = nil
+        #expect(folder(written, files) == .arriving)
+        #expect(SettingsSync.folderState(manifest: .downloading, files: wholeFiles, readable: true) == .arriving)
+        #expect(SettingsSync.folderState(manifest: .missing, files: ["sidebar.json": .downloading], readable: false) == .arriving)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/378"))
+    func everyFileThereButNotTheManifestsIsAMix() {
+        var files = wholeFiles
+        files["settings.json"] = .present(hash: "from-the-other-write")
+        #expect(folder(written, files) == .mixed, "files from two writes stay that way: no download is coming")
+        #expect(SettingsSync.folderState(manifest: .read(written), files: files, readable: false) == .mixed,
+                "a mixed file need not decode: it is written over all the same")
+        #expect(SettingsSync.folderState(manifest: .unreadable(version: nil), files: wholeFiles, readable: false) == .mixed,
+                "a manifest that is not one is no download either")
+        #expect(SettingsSync.folderState(manifest: .unreadable(version: SyncManifest.currentVersion), files: wholeFiles, readable: false) == .mixed)
+        #expect(folder(SyncManifest(device: "Studio", deviceID: "id-Studio", writtenAt: t0, files: [:]), wholeFiles) == .mixed,
+                "a manifest that names no files")
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/378"))
+    func aWholeBundleIsAppliedAndAnEmptyFolderWritten() {
+        #expect(folder(written, wholeFiles) == .whole)
+        #expect(SettingsSync.folderState(manifest: .missing, files: [:], readable: false) == .empty)
+        #expect(SettingsSync.folderState(manifest: .missing, files: wholeFiles, readable: false) == .empty, "files with no manifest are no bundle")
+    }
+
+    /// An older Cra never writes over what a newer one wrote: the newer one reads the older
+    /// format, not the other way round, and puts a mix right itself.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/378"))
+    func aNewerCrasBundleIsNeverWrittenOver() {
+        var newer = written
+        newer.version = SyncManifest.currentVersion + 1
+        #expect(folder(newer, wholeFiles) == .newer)
+        var files = wholeFiles
+        files["sidebar.json"] = .present(hash: "mixed")
+        #expect(folder(newer, files) == .newer, "not even when its files are mixed")
+        #expect(SettingsSync.folderState(manifest: .read(written), files: wholeFiles, readable: false) == .newer,
+                "the manifest's own files that this Cra can't decode are a newer format")
+        #expect(SettingsSync.folderState(manifest: .unreadable(version: SyncManifest.currentVersion + 1), files: wholeFiles, readable: false) == .newer)
+        files["sidebar.json"] = .downloading
+        #expect(folder(newer, files) == .arriving, "still on its way: looked at again once it is there")
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/378"))
+    func aManifestsVersionReadsWithoutTheRest() {
+        #expect(SettingsSync.manifestVersion(in: Data(#"{"version": 7, "files": "a new shape"}"#.utf8)) == 7)
+        #expect(SettingsSync.manifestVersion(in: Data("not json".utf8)) == nil)
+    }
+
+    /// A mix that stays put is written over after two looks of the 30-second poll by the Mac
+    /// whose manifest it is, after four by another Mac; one that changes waits from the start.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/378"))
+    func aMixThatStaysPutIsWrittenOverAfterAWhile() {
+        let mix = ["manifest.json": "m", "settings.json": "x"], later = ["manifest.json": "m", "settings.json": "y"]
+        /// Whether each look (seconds after the first, files seen) writes, for one Mac.
+        func looks(_ steps: [(TimeInterval, [String: String])], wroteManifest: Bool, resetBefore: Int? = nil) -> [Bool] {
+            var wait = SyncMixWait()
+            return steps.enumerated().map { i, step in
+                if i == resetBefore { wait.reset() }
+                return wait.shouldRewrite(step.1, at: t0.addingTimeInterval(step.0), wroteManifest: wroteManifest)
+            }
+        }
+        #expect(looks([(0, mix), (30, mix), (60, mix)], wroteManifest: true) == [false, false, true],
+                "the Mac whose manifest it is writes its bundle again on the third look")
+        #expect(looks([(0, mix), (90, mix), (120, mix)], wroteManifest: false) == [false, false, true],
+                "another Mac leaves the writer time first, but does not wait for ever")
+        #expect(looks([(0, mix), (50, later), (100, later), (110, later)], wroteManifest: true) == [false, false, false, true],
+                "a file changed: a provider is still delivering, and the wait starts again")
+        #expect(looks([(0, mix), (60, mix), (200, mix)], wroteManifest: true, resetBefore: 2) == [false, true, false],
+                "after a whole bundle a later mix waits from the start")
+    }
+
+    /// A file the manifest names that isn't there, with nothing on its way, is no download: it is
+    /// waited for like a mix, not for ever.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/378"))
+    func aFileWithNothingOnItsWayIsLacking() {
+        var files = wholeFiles
+        #expect(!SettingsSync.isLacking(manifest: .read(written), files: files), "a whole bundle")
+        files["settings.json"] = .missing
+        #expect(SettingsSync.isLacking(manifest: .read(written), files: files), "deleted, or left out by a provider")
+        files["settings.json"] = nil
+        #expect(SettingsSync.isLacking(manifest: .read(written), files: files))
+        files["sidebar.json"] = .downloading
+        #expect(!SettingsSync.isLacking(manifest: .read(written), files: files), "another file is still downloading: looked at once it is there")
+        var newer = written
+        newer.version = SyncManifest.currentVersion + 1
+        #expect(!SettingsSync.isLacking(manifest: .read(newer), files: ["sidebar.json": .present(hash: "a")]), "a newer Cra's bundle is never written over")
+        #expect(!SettingsSync.isLacking(manifest: .downloading, files: [:]))
+        #expect(!SettingsSync.isLacking(manifest: .missing, files: [:]), "no manifest: an empty folder, written at once")
+    }
+
+    /// A lacking file waits a minute on the Mac that wrote the manifest and ten on another Mac;
+    /// a Mac that has not synced yet never writes over another Mac's bundle.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/378"))
+    func aLackingFileWaitsLongerAndANewMacLeavesItToTheWriter() {
+        let lacking = ["manifest.json": "m", "sidebar.json": "a"]
+        func looks(_ times: [TimeInterval], wroteManifest: Bool, lacking isLacking: Bool, synced: Bool) -> [Bool] {
+            var wait = SyncMixWait()
+            return times.map { wait.shouldRewrite(lacking, at: t0.addingTimeInterval($0), wroteManifest: wroteManifest, lacking: isLacking, synced: synced) }
+        }
+        #expect(looks([0, 30, 60], wroteManifest: true, lacking: true, synced: true) == [false, false, true],
+                "the Mac that wrote the manifest knows nothing more is coming")
+        #expect(looks([0, 120, 570, 600], wroteManifest: false, lacking: true, synced: true) == [false, false, false, true],
+                "another Mac gives a provider ten minutes to list the file")
+        #expect(looks([0, 120, 600, 3600], wroteManifest: false, lacking: false, synced: false) == [false, false, false, false],
+                "a Mac not asked yet which sidebar to keep never writes over a mix")
+        #expect(looks([0, 600, 3600], wroteManifest: false, lacking: true, synced: false) == [false, false, false],
+                "nor over a lacking bundle")
+        #expect(looks([0, 60], wroteManifest: true, lacking: false, synced: false) == [false, true],
+                "its own manifest it writes again: sync was turned off and on on the Mac that wrote it")
+    }
+
     @Test func anICloudPlaceholderHasTheFilesNameWithADotAndIcloud() {
         #expect(SettingsSync.placeholderName(for: "sidebar.json") == ".sidebar.json.icloud")
     }

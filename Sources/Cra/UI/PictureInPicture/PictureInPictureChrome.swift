@@ -6,6 +6,8 @@ struct PictureInPictureActions {
     var backToTab: () -> Void
     var togglePlayback: () -> Void
     var skip: (Double) -> Void = { _ in }
+    /// Go to this many seconds from the video's start (the scrubber).
+    var seek: (Double) -> Void = { _ in }
     var close: () -> Void
 }
 
@@ -29,6 +31,10 @@ final class PictureInPictureChrome {
     var actions: PictureInPictureActions?
     var isPlaying = false {
         didSet { for o in overlays.values { o.controls.isPlaying = isPlaying } }
+    }
+    /// Where the video is and how long it is, in seconds, for the scrubber (0 long: no scrubber).
+    var time: (position: Double, duration: Double) = (0, 0) {
+        didSet { for o in overlays.values { o.controls.setTime(position: time.position, duration: time.duration) } }
     }
     /// The page's host, centred in the top bar (Arc's; Chrome's own strip stays hidden, #246).
     var address = "" {
@@ -66,8 +72,11 @@ final class PictureInPictureChrome {
         overlays[ObjectIdentifier(window)] = overlay
         overlay.controls.isPlaying = isPlaying
         overlay.controls.address = address
+        overlay.controls.setTime(position: time.position, duration: time.duration)
         window.addChildWindow(overlay, ordered: .above)
         overlay.orderFront(nil)
+        // The size style() gave the window is Cra's, for when Chromium cuts it down later.
+        (overlay.contentView as? PictureInPictureOverlayView)?.undoChromiumCap()
         let center = NotificationCenter.default
         let id = ObjectIdentifier(window)
         observers[id].map { $0.forEach(center.removeObserver) }   // Chromium shows the same window again for the next video
@@ -79,6 +88,7 @@ final class PictureInPictureChrome {
                 Task { @MainActor in
                     guard let overlay, let window else { return }
                     overlay.setFrame(window.frame, display: false)
+                    if (overlay.contentView as? PictureInPictureOverlayView)?.undoChromiumCap() == true { return }
                     PictureInPictureChrome.keepFromKey(window)
                     PictureInPictureChrome.shared.remember(window.frame)
                 }
@@ -122,7 +132,16 @@ final class PictureInPictureChrome {
             center.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main, using: reassert),
             // The task is queued behind Chromium's observer, which was queued when the post came.
             NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main, using: reassert),
+            // A display was unplugged, added or resized: the window goes back onto one display.
+            center.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { _ in
+                Task { @MainActor in PictureInPictureChrome.shared.settle() }
+            },
         ]
+    }
+
+    /// Every window rests on one display again, inside its limits (`PictureInPictureLayout.rest`).
+    private func settle() {
+        for o in overlays.values { (o.contentView as? PictureInPictureOverlayView)?.dropped() }
     }
 
     private func reassert() {
@@ -145,16 +164,28 @@ final class PictureInPictureChrome {
         let shown = overlays.values.compactMap { o in o.parent.map { (o, $0) } }
         guard !shown.isEmpty else { return "windows=0" }
         return "windows=\(shown.count) " + shown.map { o, w in
-            "key=\(w.isKeyWindow ? 1 : 0) appKey=\(NSApp.keyWindow === w ? 1 : 0) mouse=\(w.ignoresMouseEvents ? 0 : 1) preventKey=\(Self.preventsKey(w) ? 1 : 0) width=\(Int(w.frame.width)) \(o.controls.readout) frame=\(Int(w.frame.minX)),\(Int(w.frame.minY)),\(Int(w.frame.width)),\(Int(w.frame.height)) onScreen=\(PictureInPictureLayout.landing(afterDropping: w.frame, displays: NSScreen.screens.map(Self.display)) == nil ? 1 : 0)"
+            "key=\(w.isKeyWindow ? 1 : 0) appKey=\(NSApp.keyWindow === w ? 1 : 0) mouse=\(w.ignoresMouseEvents ? 0 : 1) preventKey=\(Self.preventsKey(w) ? 1 : 0) width=\(Int(w.frame.width)) share=\(Self.share(of: w)) \(o.controls.readout) frame=\(Int(w.frame.minX)),\(Int(w.frame.minY)),\(Int(w.frame.width)),\(Int(w.frame.height)) onScreen=\(PictureInPictureLayout.landing(afterDropping: w.frame, displays: NSScreen.screens.map(Self.display)) == nil ? 1 : 0)"
         }.joined(separator: " | ")
     }
 
-    /// `cra://debug?pipDrop=left|right|top|bottom`: the window moved half past that edge of its
-    /// display and let go there, as a mouse drag does (#332).
+    /// `cra://debug?pipDrop=left|right|top|bottom`: the window moved half past that edge of the
+    /// outermost display on that side and let go there, as a mouse drag does (#332). The outermost,
+    /// so the window is past the edge of the screen whatever displays the Mac has; past an edge
+    /// another display sits behind, it would be across two displays instead.
     func debugDrop(_ edge: String) {
+        let screens = NSScreen.screens.map(\.frame)
         for o in overlays.values {
-            guard let w = o.parent, let screen = w.screen?.frame, let view = o.contentView as? PictureInPictureOverlayView else { continue }
-            var origin = w.frame.origin
+            guard let w = o.parent, let view = o.contentView as? PictureInPictureOverlayView else { continue }
+            let outer: NSRect? = switch edge {
+            case "left": screens.min { $0.minX < $1.minX }
+            case "top": screens.max { $0.maxY < $1.maxY }
+            case "bottom": screens.min { $0.minY < $1.minY }
+            default: screens.max { $0.maxX < $1.maxX }
+            }
+            guard let screen = outer else { continue }
+            // Inside that display along the edge, half past it across.
+            var origin = NSPoint(x: min(max(w.frame.minX, screen.minX), screen.maxX - w.frame.width),
+                                 y: min(max(w.frame.minY, screen.minY), screen.maxY - w.frame.height))
             switch edge {
             case "left": origin.x = screen.minX - w.frame.width / 2
             case "top": origin.y = screen.maxY - w.frame.height / 2
@@ -163,6 +194,42 @@ final class PictureInPictureChrome {
             }
             w.setFrameOrigin(origin)
             view.dropped()
+        }
+    }
+
+    /// `cra://debug?pipSize=<share>`: the window resized to that share of its display's visible
+    /// width (inside the limits and the visible frame), as a finished resize leaves it.
+    func debugSize(_ share: CGFloat) {
+        guard share.isFinite, share > 0 else { return }
+        for o in overlays.values {
+            guard let w = o.parent, let view = o.contentView as? PictureInPictureOverlayView else { continue }
+            let visible = (w.screen ?? NSScreen.main)?.visibleFrame ?? w.frame
+            view.resized(toWidth: (visible.width * share).rounded())
+        }
+    }
+
+    /// The window's width as a share of its display's visible width, two decimals.
+    private static func share(of w: NSWindow) -> String {
+        guard let visible = (w.screen ?? NSScreen.main)?.visibleFrame, visible.width > 0 else { return "-" }
+        return String(format: "%.2f", w.frame.width / visible.width)
+    }
+
+    /// `cra://debug?pipSeek=<0…1>`: the scrubber pressed that far along and let go.
+    func debugSeek(_ fraction: Double) {
+        for o in overlays.values { o.controls.debugScrub(CGFloat(fraction)) }
+    }
+
+    /// `cra://debug?pipClick=<n>`: the overlay pressed and let go in its lower left quarter (clear
+    /// of the buttons) as the last click of `n` quick ones, the way AppKit sends a double click.
+    func debugClick(_ count: Int) {
+        for o in overlays.values {
+            guard let view = o.contentView as? PictureInPictureOverlayView else { continue }
+            let at = NSPoint(x: o.frame.width / 4, y: o.frame.height / 4)
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                guard let e = NSEvent.mouseEvent(with: type, location: at, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                 windowNumber: o.windowNumber, context: nil, eventNumber: 0, clickCount: count, pressure: 1) else { continue }
+                if type == .leftMouseDown { view.mouseDown(with: e) } else { view.mouseUp(with: e) }
+            }
         }
     }
 
@@ -223,10 +290,10 @@ final class PictureInPictureChrome {
     func initialFrame(aspect: CGFloat, screen: NSScreen?) -> NSRect {
         let current = screen.map(Self.display) ?? .init(id: nil, frame: NSRect(x: 0, y: 0, width: 1728, height: 1117),
                                                          visible: NSRect(x: 0, y: 0, width: 1728, height: 1084))
-        let defaults = UserDefaults.standard
-        let remembered = defaults.string(forKey: Self.frameKey).map(NSRectFromString).map {
-            PictureInPictureLayout.Placement(frame: $0, display: defaults.string(forKey: Self.displayKey),
-                                             displayFrame: defaults.string(forKey: Self.displayFrameKey).map(NSRectFromString))
+        let saved = Self.saved()
+        let remembered = saved[Self.frameKey].map(NSRectFromString).map {
+            PictureInPictureLayout.Placement(frame: $0, display: saved[Self.displayKey],
+                                             displayFrame: saved[Self.displayFrameKey].map(NSRectFromString))
         }
         let displays = NSScreen.screens.map(Self.display)
         let frame = PictureInPictureLayout.initialFrame(aspect: aspect, displays: displays, current: current, remembered: remembered)
@@ -236,16 +303,31 @@ final class PictureInPictureChrome {
     }
 
     func remember(_ frame: NSRect) {
-        let defaults = UserDefaults.standard
-        defaults.set(NSStringFromRect(frame), forKey: Self.frameKey)
+        var values = [Self.frameKey: NSStringFromRect(frame)]
         // The display most of the window is on, as AppKit's `screen` picks it.
         let screen = NSScreen.screens.max { PictureInPictureChrome.overlap($0.frame, frame) < PictureInPictureChrome.overlap($1.frame, frame) }
         if let screen, let id = Self.display(screen).id {
-            defaults.set(id, forKey: Self.displayKey)
-            defaults.set(NSStringFromRect(screen.frame), forKey: Self.displayFrameKey)
-        } else {
-            defaults.removeObject(forKey: Self.displayKey)
-            defaults.removeObject(forKey: Self.displayFrameKey)
+            values[Self.displayKey] = id
+            values[Self.displayFrameKey] = NSStringFromRect(screen.frame)
+        }
+        Self.save(values)
+    }
+
+    /// A test instance (CRA_DATA_DIR) keeps the placement in a file in its own data folder, not in
+    /// the app's defaults: a test run moved the window the user had left somewhere, and where the
+    /// user left it decided how a test went.
+    private static let testFile = ProcessInfo.processInfo.environment["CRA_DATA_DIR"] == nil ? nil : AppPaths.file("pip-placement.plist")
+    private static let keys = [frameKey, displayKey, displayFrameKey]
+
+    private static func saved() -> [String: String] {
+        if let testFile { return (NSDictionary(contentsOf: testFile) as? [String: String]) ?? [:] }
+        return Dictionary(uniqueKeysWithValues: keys.compactMap { k in UserDefaults.standard.string(forKey: k).map { (k, $0) } })
+    }
+
+    private static func save(_ values: [String: String]) {
+        if let testFile { (values as NSDictionary).write(to: testFile, atomically: true); return }
+        for k in keys {
+            if let v = values[k] { UserDefaults.standard.set(v, forKey: k) } else { UserDefaults.standard.removeObject(forKey: k) }
         }
     }
 
@@ -310,6 +392,15 @@ final class PictureInPictureOverlayView: NSView {
     private typealias Edge = PictureInPictureGesture.Edge
     private var gesture: PictureInPictureGesture?
     private var requested: NSRect?
+    /// The display the window was on when the press or the swipe began, and its size then, for a
+    /// move to another display. The size is the press's: on the way Chromium may cut the window
+    /// down, and Cra fits it to the display it is crossing (`undoChromiumCap`).
+    private var pressedOn: PictureInPictureLayout.Display?
+    private var pressedSize: NSSize?
+    /// The size Cra last gave the window or let it keep, and Chromium's cap on it then
+    /// (`undoChromiumCap`).
+    private var given: NSSize?
+    private var cap: NSSize?
 
     private var target: NSWindow? { window?.parent }
 
@@ -377,6 +468,8 @@ final class PictureInPictureOverlayView: NSView {
         }
         land()
         swipe = nil
+        pressedOn = Self.display(holding: target.frame)
+        pressedSize = target.frame.size
         releasePointer()
         stopLink()
         gesture = PictureInPictureGesture(mouse: Self.screenLocation(of: event), frame: target.frame)
@@ -386,14 +479,16 @@ final class PictureInPictureOverlayView: NSView {
         guard let target, var g = gesture else { return }
         // The button was let go without a mouse-up reaching this window.
         if NSEvent.pressedMouseButtons & 1 == 0 { finish(event); return }
-        // Arc's limits (#246): 224 × 126 for a 16:9 video at least, 61.7 % of the screen's width and
-        // the visible height less 20 at most.
+        // The limits (#246): 224 × 126 for a 16:9 video at least, as in Arc, and the display's
+        // visible frame at most. Chromium's own maximum (80 % of the work area, `contentMaxSize`)
+        // only binds its native resize, which this window never gets.
         let screen = target.screen ?? NSScreen.main
         let visible = screen?.visibleFrame ?? target.frame
         let limits = PictureInPictureLayout.sizeLimits(aspect: g.startFrame.width / max(g.startFrame.height, 1),
                                                        screen: screen?.frame ?? visible, visible: visible)
-        let constraints = target.contentMaxSize
-        let maxSize = NSSize(width: min(constraints.width, limits.max.width), height: min(constraints.height, limits.max.height))
+        // Up to the display's edges, not past them.
+        let room = g.room(in: visible)
+        let maxSize = NSSize(width: min(limits.max.width, room.width), height: min(limits.max.height, room.height))
         let minSize = NSSize(width: max(target.contentMinSize.width, limits.min.width), height: max(target.contentMinSize.height, limits.min.height))
         let wasDragging = g.isDragging
         let frame = g.frame(mouse: Self.screenLocation(of: event), minSize: minSize, maxSize: maxSize)
@@ -407,7 +502,7 @@ final class PictureInPictureOverlayView: NSView {
             // for the whole drag, also when the pointer runs ahead of the edge.
             Self.cursor(g.edge).set()
             requested = frame
-            target.setFrame(frame, display: true)
+            give(frame, to: target)
         }
     }
 
@@ -416,6 +511,7 @@ final class PictureInPictureOverlayView: NSView {
     private func finish(_ event: NSEvent) {
         guard let target, let g = gesture else { return }
         gesture = nil
+        if !g.isDragging || g.edge != .none { pressedOn = nil }   // only a move can change display
         if let window, !window.frame.contains(NSEvent.mouseLocation) {
             // Let go outside the window: its exit came during the drag.
             NSCursor.arrow.set()
@@ -423,7 +519,14 @@ final class PictureInPictureOverlayView: NSView {
         } else {
             updateCursor(event)
         }
-        guard g.isDragging else { return }
+        guard g.isDragging else {
+            // A double click on the video goes back to its tab, as in Arc.
+            if event.type == .leftMouseUp, g.returnsToTab(clickCount: event.clickCount) {
+                CraLog.note("pip: double click, back to tab")
+                PictureInPictureChrome.shared.actions?.backToTab()
+            }
+            return
+        }
         if g.edge != .none {
             // Chromium owns the window's bounds; say so if it kept another size than the one asked.
             let asked = requested.map { $0.size == target.frame.size ? "" : " (asked \(Self.size($0)))" } ?? ""
@@ -435,17 +538,88 @@ final class PictureInPictureOverlayView: NSView {
         }
     }
 
-    /// The mouse let the moved window go. Partly past the screen's edge, it flies into the
-    /// nearest corner on the swipe's spring, as Arc's does, and that corner is kept for the next
-    /// video when it lands (#332); otherwise the spot it was let go at is.
+    /// The mouse let the moved window go (or the displays changed). It comes to rest on one
+    /// display (`PictureInPictureLayout.rest`): partly past the screen's edge, it flies into the
+    /// nearest corner on the swipe's spring, as Arc's does (#332); across two displays, it slides
+    /// onto the one most of it is on; on another display than it came from, it takes the same
+    /// share of that display's width. Where it lands is kept for the next video; otherwise the
+    /// spot it was let go at is.
     func dropped() {
         guard let target else { return }
-        guard let landing = PictureInPictureLayout.landing(afterDropping: target.frame, displays: NSScreen.screens.map(PictureInPictureChrome.display)) else {
+        undoChromiumCap(settling: false)
+        let from = pressedOn, f = target.frame
+        // Moved from another display: the share of the width is taken of the size at the press.
+        let letGo = from.flatMap { _ in pressedSize }.map { NSRect(x: f.midX - $0.width / 2, y: f.midY - $0.height / 2, width: $0.width, height: $0.height) } ?? f
+        pressedOn = nil
+        pressedSize = nil
+        // Back on the display it came from, it has its size from the press again.
+        guard let rest = PictureInPictureLayout.rest(afterDropping: letGo, from: from, displays: NSScreen.screens.map(PictureInPictureChrome.display))
+                ?? (letGo.size != f.size ? .init(frame: letGo, corner: nil) : nil) else {
             return PictureInPictureChrome.shared.remember(target.frame)
         }
-        CraLog.note("pip: dropped past the edge, to \(landing.corner.rawValue)")
-        flight = PictureInPictureFlight(from: target.frame.origin, velocity: .zero, to: landing.frame.origin)
+        if let corner = rest.corner {
+            CraLog.note("pip: dropped past the edge, to \(corner.rawValue)")
+        } else {
+            CraLog.note("pip: onto one display, \(Self.size(target.frame)) → \(Self.size(rest.frame))")
+        }
+        if rest.frame.size != target.frame.size {
+            // The new size first, around the window's centre; then it flies to its place.
+            let f = target.frame
+            give(NSRect(x: f.midX - rest.frame.width / 2, y: f.midY - rest.frame.height / 2, width: rest.frame.width, height: rest.frame.height), to: target)
+        }
+        flight = PictureInPictureFlight(from: target.frame.origin, velocity: .zero, to: rest.frame.origin)
         startLink()
+    }
+
+    /// Sets the window's frame and remembers its size as the one Cra gave it.
+    private func give(_ frame: NSRect, to target: NSWindow) {
+        given = frame.size
+        cap = target.contentMaxSize
+        target.setFrame(frame, display: true)
+    }
+
+    /// The window resized to `width` inside the limits of its display, its top-left kept where the
+    /// display's visible frame has room, then kept for the next video (`cra://debug?pipSize`).
+    func resized(toWidth width: CGFloat) {
+        guard let target, let screen = target.screen ?? NSScreen.main else { return }
+        let f = target.frame, v = screen.visibleFrame
+        let display = PictureInPictureChrome.display(screen)
+        let size = PictureInPictureLayout.size(NSSize(width: width, height: width * f.height / max(f.width, 1)), movedFrom: nil, onto: display)
+        let x = max(min(f.minX, v.maxX - size.width), v.minX), top = min(max(f.maxY, v.minY + size.height), v.maxY)
+        give(NSRect(x: x, y: top - size.height, width: size.width, height: size.height), to: target)
+        CraLog.note("pip: resized to \(Self.size(target.frame))")
+        PictureInPictureChrome.shared.remember(target.frame)
+    }
+
+    /// Chromium resized the window. When that was Chromium cutting it down to its own cap (80 % of
+    /// the work area, which Cra's limits go past), the size Cra gave it comes back, in the video's
+    /// shape (`PictureInPictureLayout.undoingChromiumCap`), and outside a gesture the window comes
+    /// to rest on its display again. Returns whether it put the size back.
+    @discardableResult
+    func undoChromiumCap(settling: Bool = true) -> Bool {
+        guard let target else { return false }
+        let now = target.frame.size, chromiumCap = target.contentMaxSize
+        defer { cap = chromiumCap }
+        guard let was = given, now != was else {
+            if given == nil { given = now }
+            return false
+        }
+        guard let screen = target.screen ?? NSScreen.main,
+              let size = PictureInPictureLayout.undoingChromiumCap(was: was, now: now, cap: chromiumCap, capChanged: cap != chromiumCap,
+                                                                    on: PictureInPictureChrome.display(screen)) else {
+            given = now   // Chromium's own size stands
+            return false
+        }
+        CraLog.note("pip: Chromium cut \(Self.size(NSRect(origin: .zero, size: was))) to \(Self.size(target.frame)), back to \(Int(size.width))×\(Int(size.height))")
+        // Chromium cut it from the bottom right; it grows back there.
+        let f = target.frame
+        give(NSRect(x: f.minX, y: f.maxY - size.height, width: size.width, height: size.height), to: target)
+        if settling, gesture == nil, swipe == nil, flight == nil { dropped() }
+        return true
+    }
+
+    private static func display(holding frame: NSRect) -> PictureInPictureLayout.Display? {
+        PictureInPictureLayout.display(holding: frame, in: NSScreen.screens.map(PictureInPictureChrome.display))
     }
 
     /// Where on the screen the event happened. The window moves and resizes under the pointer, so
@@ -489,11 +663,15 @@ final class PictureInPictureOverlayView: NSView {
         case .mayBegin, .began:
             land()
             swipe = PictureInPictureThrow(frame: target.frame, at: t)
+            pressedOn = Self.display(holding: target.frame)
+            pressedSize = target.frame.size
             startLink()
         case .changed:
             if swipe == nil {
                 land()
                 swipe = PictureInPictureThrow(frame: target.frame, at: t)
+                pressedOn = Self.display(holding: target.frame)
+                pressedSize = target.frame.size
                 startLink()
             }
             // The window goes where the fingers go: with natural scrolling the deltas already
@@ -504,7 +682,7 @@ final class PictureInPictureOverlayView: NSView {
             guard let s = swipe else { return }
             swipe = nil
             releasePointer()
-            guard s.hasMoved else { return stopLink() }
+            guard s.hasMoved else { pressedOn = nil; return stopLink() }
             throwWindow(target, aim: s.frame, velocity: event.phase == .ended ? s.velocity(at: t) : .zero)
         default:
             break
@@ -514,12 +692,21 @@ final class PictureInPictureOverlayView: NSView {
     /// The fingers lifted with the window shown at its own frame and aimed at `aim` (where the
     /// fingers had it): it flies on from where it is shown, at their speed, so the hand-off is seamless.
     private func throwWindow(_ target: NSWindow, aim: NSRect, velocity: CGVector) {
+        let from = pressedOn
+        pressedOn = nil
         let rest = PictureInPictureThrow.restingCentre(of: aim, velocity: velocity)
-        let screen = NSScreen.screens.first { $0.frame.contains(rest) } ?? target.screen ?? NSScreen.main
-        guard let visible = screen?.visibleFrame else { return stopLink() }
-        let corner = PictureInPictureThrow.corner(for: aim, velocity: velocity, in: visible)
-        let end = PictureInPictureThrow.frame(in: corner, size: aim.size, visible: visible, margin: PictureInPictureChrome.edgeMargin)
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(rest) }) ?? target.screen ?? NSScreen.main else { return stopLink() }
+        let display = PictureInPictureChrome.display(screen)
+        let corner = PictureInPictureThrow.corner(for: aim, velocity: velocity, in: display.visible)
+        // On another display it takes the same share of its width, as a mouse drag there does;
+        // `aim` has the size the swipe began with, whatever Chromium cut it to on the way.
+        let size = PictureInPictureLayout.size(aim.size, movedFrom: from, onto: display)
+        let end = PictureInPictureLayout.frame(in: corner, size: size, on: display)
         CraLog.note("pip: swipe to \(corner.rawValue) at \(Int(hypot(velocity.dx, velocity.dy))) pt/s")
+        if size != target.frame.size {
+            let f = target.frame
+            give(NSRect(x: f.midX - size.width / 2, y: f.midY - size.height / 2, width: size.width, height: size.height), to: target)
+        }
         flight = PictureInPictureFlight(from: target.frame.origin, velocity: velocity, to: end.origin)
         startLink()
     }

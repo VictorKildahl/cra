@@ -127,6 +127,9 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 - (void)browser:(CraBrowser *)browser didChangePictureInPicture:(BOOL)active;
 /// The video in the Picture in Picture window started or stopped playing.
 - (void)browser:(CraBrowser *)browser didChangePictureInPicturePlayback:(BOOL)playing;
+/// Where the video in the Picture in Picture window is, in seconds, and how long it is
+/// (0 for a stream with no end). Sent as the video plays and after a seek.
+- (void)browser:(CraBrowser *)browser didChangePictureInPictureTime:(double)position duration:(double)duration;
 /// The colour the page paints behind its content (root/body background, else the
 /// canvas colour of its color scheme), as "#RRGGBB"; "" when a new page starts loading
 /// and has not reported one yet (show +[CraBrowser pageCanvasColor] then). The shell fills
@@ -169,6 +172,12 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 /// opens as a target=_blank tab) or Shift-clicked (YES, instead of a new window). Return
 /// YES to show it in a Peek; the page then stays where it is.
 - (BOOL)browser:(CraBrowser *)browser opensPeekForURL:(NSString *)url shiftClick:(BOOL)shiftClick newTab:(BOOL)newTab;
+/// Arc's "Open Little Arc when clicking on links with ⌥⌘ held": a link the user clicked asks for Chromium's
+/// split view or a background tab. `clickModifiers` (AppKit's flags) and `clickAge` (seconds, -1 when none)
+/// are the page's last click or Return, as for a download. Return YES to show it in a Little Window; the page
+/// then stays where it is.
+- (BOOL)browser:(CraBrowser *)browser opensLittleWindowForURL:(NSString *)url
+  clickModifiers:(NSUInteger)clickModifiers clickAge:(NSTimeInterval)clickAge;
 /// A main-frame navigation (a link, a redirect, history, an address Cra loaded) before its request
 /// goes out; `method` is its HTTP method. Return YES to cancel it here because Cra shows `url` in
 /// another engine (ProtectedMediaSites: WebKit for DRM services). Called on the main thread from
@@ -252,6 +261,15 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 - (instancetype)initWithFrame:(NSRect)frame url:(NSString *)url delegate:(nullable id<CraBrowserDelegate>)delegate
                     incognito:(BOOL)incognito profilePath:(nullable NSString *)profilePath
                       history:(nullable NSDictionary<NSString *, id> *)history;
+/// A page made ahead for the next tab that needs one (SparePages): Chromium makes the page and its
+/// window now, when nothing waits on it, with no address and no delegate; the window stays hidden and
+/// extensions don't see it as a tab (Cra.setSpare, spare-pages.patch). -takeSpareWithURL:history:
+/// gives it its address, after the caller has set the delegate.
+- (instancetype)initSpareWithFrame:(NSRect)frame profilePath:(nullable NSString *)profilePath;
+@property (nonatomic, readonly) BOOL isSpare;
+/// A spare page becomes a tab's page: it loads `url`, or the saved back and forward list `history`
+/// (as -initWithFrame:…history: takes it) with `url` as its current entry.
+- (void)takeSpareWithURL:(NSString *)url history:(nullable NSDictionary<NSString *, id> *)history;
 
 - (void)loadURL:(NSString *)url;
 - (void)goBack;
@@ -280,7 +298,10 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 - (void)setZoomLevel:(double)level;
 - (void)findText:(NSString *)text forward:(BOOL)forward matchCase:(BOOL)matchCase findNext:(BOOL)findNext;
 - (void)stopFinding:(BOOL)clearSelection;
+/// Mutes the page, also one Chromium hasn't made yet: it starts muted (#387).
 - (void)setAudioMuted:(BOOL)muted;
+/// Whether Chromium has the page muted (CefBrowserHost::IsAudioMuted), NO before it made it.
+- (BOOL)isAudioMuted;
 /// Pops the page's video out into Chromium's floating Picture in Picture
 /// window. Manual requests toggle (a second call brings the video back).
 /// `automatic` is the "leaving a video tab" case: only a playing video of some
@@ -299,10 +320,16 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 /// The page is playing sound, in any frame (Chromium's audible state). Like Chrome's tab
 /// speaker it stays YES for 2 s after the page goes quiet. Muting the tab doesn't change it.
 @property (nonatomic, readonly) BOOL isAudible;
+/// The sound that last started or stopped is one Chrome's global media controls leave out
+/// (Chromium's media session isn't controllable): a sound under 5 s, such as a notification
+/// ding, or Web Audio alone. The sidebar player makes no card for it, as Arc (#411).
+@property (nonatomic, readonly) BOOL hasUncontrollableSound;
 /// Play/pause the video in the Picture in Picture window.
 - (void)togglePictureInPicturePlayback;
 /// Seek the video in the Picture in Picture window by `seconds` (negative = back).
 - (void)skipPictureInPictureBy:(double)seconds NS_SWIFT_NAME(skipPictureInPicture(by:));
+/// Seek the video in the Picture in Picture window to `seconds` from its start.
+- (void)seekPictureInPictureTo:(double)seconds NS_SWIFT_NAME(seekPictureInPicture(to:));
 - (void)print;
 /// One of Chrome's own commands by its IDC name ("IDC_ROUTE_MEDIA" for Cast…, "IDC_TASK_MANAGER"),
 /// where Chromium can run it for this page. NO when it can't.
@@ -506,6 +533,14 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 /// Sets a profile's pref to a JSON value, as chrome://settings would. NO when the profile hasn't
 /// loaded, a policy holds the pref, or the value isn't one it takes.
 + (BOOL)setPreference:(NSString *)name json:(NSString *)json forProfile:(nullable NSString *)profilePath;
+/// Puts a profile's pref back to Chromium's default (PrefService::ClearPref). NO when the profile hasn't
+/// loaded, a policy holds the pref, or Chromium has no pref of that name.
++ (BOOL)resetPreference:(NSString *)name forProfile:(nullable NSString *)profilePath;
+/// Whether a profile (nil is Default) has loaded in this session: 2 ready, 1 loading (its prefs are being
+/// read), 0 not asked for, so nothing in this process has its Preferences file open.
++ (NSInteger)loadStateOfProfile:(nullable NSString *)profilePath;
+/// Called on the main queue with a profile's path once it has loaded (not Default, which loads first).
++ (void)setProfileLoadedHandler:(nullable void (^)(NSString *profilePath))handler;
 /// Called on the main queue after a loaded profile's `extensions.settings` changed: an
 /// extension installed, enabled, disabled or removed.
 + (void)setExtensionSettingsChangeHandler:(nullable void (^)(void))handler;

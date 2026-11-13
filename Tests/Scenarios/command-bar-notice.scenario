@@ -2,7 +2,7 @@
 # The (i) at the end of ⌘T's field is Arc's search-suggestions notice (CommandBar.SearchSuggestionsPrivacyView,
 # Arc 1.172.1 measured live): pressed, it gives way to a banner in the bottom row's place, "We talk to your
 # search engine to help us suggest results.", with Search Settings… and Dismiss. Search Settings… closes the bar
-# and opens Settings ▸ Advanced (the engine and "Show search suggestions"). Dismiss ends it for good: no (i) on
+# and opens Settings ▸ Profiles (the engine and "Include search engine suggestions", in Advanced until #372). Dismiss ends it for good: no (i) on
 # the next ⌘T. Until 0.1.37 the (i) was a picture and a click did nothing (#314).
 budget rss=600 stalls50=10
 seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
@@ -19,7 +19,7 @@ wait 1
 expect-log command bar notice badge: pressed true, badge false, banner true, rows [0-4], bar open, dismissed false
 cra://debug?commandBarNotice=settings
 wait 1
-expect-log command bar notice settings: pressed true, badge .*, bar closed, dismissed false, settings advanced
+expect-log command bar notice settings: pressed true, badge .*, bar closed, dismissed false, settings profiles
 cra://action/newTab
 wait 1
 cra://debug?commandBarNotice=badge

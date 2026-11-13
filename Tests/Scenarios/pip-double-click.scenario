@@ -1,0 +1,28 @@
+# A double click on Arc's Picture in Picture window returns to the tab the video came from. Cra's
+# window took a press only as a move or a resize, and a double click did nothing (reported by a
+# user, 11 Nov). Here a video is in Picture in Picture and another tab is in front. One click
+# changes nothing; a double click selects the video's tab and the window goes. (No pointer: the
+# test copy runs in the background, so the clicks are events handed to the overlay.)
+cra://open?url=file://${FIXTURES}/Pages/video.html?n=video
+expect-log loaded file:
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.getElementById('v').requestPictureInPicture().then(()=>'pip:open')","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"pip:open"
+wait 1
+cra://open?url=${PAGE}?n=other
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?pipClick=1
+wait 1
+cra://debug?pip=single
+expect-log Cra pip single: windows=1
+cra://debug?back=single
+expect-log back single: selected=\S+n=other
+reject-log pip: double click
+cra://debug?pipClick=2
+expect-log pip: double click, back to tab
+wait 1.5
+cra://debug?back=double
+expect-log back double: selected=\S+n=video
+cra://debug?pip=double
+expect-log Cra pip double: windows=0

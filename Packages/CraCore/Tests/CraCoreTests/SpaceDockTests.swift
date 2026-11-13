@@ -1,5 +1,6 @@
 import CoreGraphics
 import CraCore
+import Foundation
 import Testing
 
 /// The sidebar dock's space icons, as Arc 1.171 draws them (#252: dots for spaces with no icon).
@@ -74,5 +75,14 @@ struct SpaceDockTests {
         #expect(SpaceDock.dotAlpha(dark: false, lit: true) == 0.5 && SpaceDock.dotAlpha(dark: true, lit: true) == 0.5)
         #expect(SpaceDock.dotAlpha(dark: false, lit: false) == 0.25)
         #expect(SpaceDock.dotAlpha(dark: true, lit: false) == 0.18)
+    }
+
+    /// A picture icon is the cell's mark while it has room, and a dot like any other when squeezed.
+    @Test
+    func aPictureIsTheMarkUnlessSqueezed() {
+        let png = Data([1])
+        #expect(SpaceDock.mark(for: .image(png), isOpen: false, squeezed: false) == .image(png))
+        #expect(SpaceDock.mark(for: .image(png), isOpen: true, squeezed: true) == .image(png))
+        #expect(SpaceDock.mark(for: .image(png), isOpen: false, squeezed: true) == .dot(diameter: SpaceDock.squeezedDotDiameter))
     }
 }

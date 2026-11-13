@@ -1,0 +1,40 @@
+# ⌘S and View ▸ Hide Sidebar work while a Peek is open: the browser window's sidebar hides and
+# comes back, and the Peek's click catcher follows the page area. Arc's Peek is a card inside the
+# browser window, so its keys reach the window; Cra's Peek, a window of its own, kept them (GitHub #402).
+# promise: #402
+budget rss=900 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "peekInEveryTab": true}
+
+cra://open?url=${PAGE}?n=hub
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=peek'))","userGesture":true}
+expect-log peek: from
+wait 1.5
+cra://debug?peeks=open
+expect-log Cra peeks open: shown \S+n=peek$
+cra://debug?peekCatcher=open
+expect-log Cra peek catcher open: sidebar=clear
+
+# ⌘S hides the sidebar; the Peek stays.
+cra://debug?key=s,1,1048576&page=1&target=little
+wait 1
+cra://debug?peekCatcher=hidden
+expect-log Cra peek catcher hidden: sidebar=hidden floating=none
+cra://debug?peeks=hidden
+expect-log Cra peeks hidden: shown \S+n=peek$
+
+# ⌘S again brings it back, clear of the Peek's catcher.
+cra://debug?key=s,1,1048576&page=1&target=little
+wait 1
+cra://debug?peekCatcher=shown
+expect-log Cra peek catcher shown: sidebar=clear
+
+# View ▸ Hide Sidebar, the menu's way, does the same.
+cra://action/toggleSidebar
+wait 1
+cra://debug?peekCatcher=menu
+expect-log Cra peek catcher menu: sidebar=hidden floating=none
+cra://debug?peeks=menu
+expect-log Cra peeks menu: shown \S+n=peek$

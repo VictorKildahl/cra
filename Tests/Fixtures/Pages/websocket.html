@@ -1,0 +1,11 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>ws connecting</title></head>
+<body>
+<p>Holds a WebSocket to the address in ?ws= and shows its state in the title: "ws open" while connected,
+"ws closed" once it ends. Freezing the page would close it (tab freezing, freezing-live-connection.scenario).</p>
+<script>
+const ws = new WebSocket(new URLSearchParams(location.search).get('ws'));
+ws.onopen = () => { document.title = 'ws open'; };
+ws.onclose = () => { document.title = 'ws closed'; };
+</script>
+</body></html>

@@ -6,7 +6,6 @@ final class MusicNotesView: NSView {
     private let emitter = CAEmitterLayer()
     /// The tile's tone: white notes on a dark tile, black on a light one.
     var dark: Bool { didSet { if dark != oldValue { fill() } } }
-    nonisolated(unsafe) private var motionObserver: NSObjectProtocol?
 
     init(dark: Bool) {
         self.dark = dark
@@ -16,18 +15,9 @@ final class MusicNotesView: NSView {
         emitter.emitterSize = CGSize(width: MusicNotes.emitterRadius, height: MusicNotes.emitterRadius)
         layer?.addSublayer(emitter)
         fill()
-        motionObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.fill() }
-        }
     }
 
     required init?(coder: NSCoder) { fatalError() }
-
-    deinit {
-        if let o = motionObserver { NSWorkspace.shared.notificationCenter.removeObserver(o) }
-    }
 
     /// Keep the emitter's angle pointing up regardless of the parent's coordinates.
     override var isFlipped: Bool { false }
@@ -42,10 +32,9 @@ final class MusicNotesView: NSView {
         CATransaction.commit()
     }
 
-    /// With Reduce Motion on nothing floats.
+    /// Reduce Motion doesn't stop the notes: Arc 1.172.2 keeps floating them with it on (live, 12 Nov 2026).
     private func fill() {
-        emitter.emitterCells = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-            ? [] : MusicNotes.Shape.allCases.map { Self.cell($0, dark: dark) }
+        emitter.emitterCells = MusicNotes.Shape.allCases.map { Self.cell($0, dark: dark) }
     }
 
     private static func cell(_ shape: MusicNotes.Shape, dark: Bool) -> CAEmitterCell {

@@ -1,0 +1,39 @@
+# The find bar's panel is above everything in Cra's window, so a floating toolbar (Settings ▸
+# Pages ▸ "Hide the toolbar until you need it") slid out behind it and its right end was covered
+# (noted on #405). The find bar hangs under the toolbar while that is out, the pointer on it keeps
+# the toolbar, and it is back in the page's corner once the toolbar has gone.
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true, "autoHideToolbar": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=findfloat
+wait 3
+cra://action/find
+wait 1
+# Toolbar away: the page's top trailing corner, 10 pt in.
+cra://debug?findBar=corner
+expect-log findBar corner: visible=1 top=10 trailing=10 size=300x38
+# Out: 32 pt lower, under the toolbar. It follows the toolbar and doesn't hold it there.
+cra://debug?toolbar=out
+expect-log toolbar out: floats=1 out=1 inset=0 page=780/780 barHidden=0 polling=\d hangs=0
+cra://debug?findBar=under
+expect-log findBar under: visible=1 top=42 trailing=10 size=300x38
+# The find bar is 52…90 pt from the window's top and 880…1180 pt across: the pointer on it keeps
+# the toolbar, beside it the page lets the toolbar go.
+cra://debug?toolbar=at:1000,70
+expect-log toolbar at:1000,70: bar out=1
+cra://debug?toolbar=at:700,70
+expect-log toolbar at:700,70: away out=1
+# Gone: the find bar is back in the corner.
+cra://debug?toolbar=in
+expect-log toolbar in: floats=1 out=0 inset=0 page=780/780 barHidden=1
+cra://debug?findBar=back
+expect-log findBar back: visible=1 top=10 trailing=10 size=300x38
+# Opened while the toolbar is out, the find bar starts under it.
+cra://dismiss
+wait 1
+cra://debug?findBar=closed
+expect-log findBar closed: visible=0
+cra://debug?toolbar=out
+cra://action/find
+wait 1
+cra://debug?findBar=opened-under
+expect-log findBar opened-under: visible=1 top=42 trailing=10 size=300x38

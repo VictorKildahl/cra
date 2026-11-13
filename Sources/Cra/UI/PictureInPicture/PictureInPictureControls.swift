@@ -5,8 +5,9 @@ import AppKit
 /// Invisible until the pointer enters the window, then fades in one even dark
 /// layer with the controls: back-to-tab (top-left), the page's address (centred)
 /// and close (top-right), play/pause in the middle between ±15 s skips, as in Arc
-/// (#246), sized by Arc's size classes, without the skips in a tiny window (#262). Fades out when the pointer leaves or rests for a while, and the window
-/// is the bare video again. Only the buttons take clicks; everything else passes
+/// (#246), sized by Arc's size classes, without the skips in a tiny window (#262), and Arc's
+/// scrubber along the bottom for a video with an end. Fades out when the pointer leaves or rests for a while, and the window
+/// is the bare video again. Only the buttons and the shown scrubber take clicks; everything else passes
 /// through to the overlay, which drags and resizes the window.
 @MainActor
 final class PictureInPictureControlsView: NSView {
@@ -14,6 +15,14 @@ final class PictureInPictureControlsView: NSView {
 
     var address = "" { didSet { addressLabel.stringValue = address; needsLayout = true } }
 
+    /// Where the video is and how long it is, in seconds (0 long: a stream, no scrubber).
+    func setTime(position: Double, duration: Double) {
+        let had = scrubber.isHidden
+        scrubber.setTime(position: position, duration: duration)
+        if had != scrubber.isHidden { needsLayout = true }
+    }
+
+    private let scrubber = PictureInPictureScrubberView()
     private let scrim = CALayer()
     private let addressLabel = NSTextField(labelWithString: "")
     private static let topButtonSize: CGFloat = 26
@@ -53,6 +62,11 @@ final class PictureInPictureControlsView: NSView {
         }
         skipBackButton.onClick = { PictureInPictureChrome.shared.actions?.skip(-15) }
         skipAheadButton.onClick = { PictureInPictureChrome.shared.actions?.skip(15) }
+        addSubview(scrubber)
+        scrubber.onPress = { [weak self] in self?.show() }
+        scrubber.onSeek = { PictureInPictureChrome.shared.actions?.seek($0) }
+        scrubber.isPlaying = { PictureInPictureChrome.shared.isPlaying }
+        scrubber.togglePlayback = { PictureInPictureChrome.shared.actions?.togglePlayback() }
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -62,7 +76,15 @@ final class PictureInPictureControlsView: NSView {
     /// The centre cluster as laid out, for `cra://debug?pip`.
     var readout: String {
         layoutSubtreeIfNeeded()
-        return "play=\(Int(playButton.frame.width)) skips=\(skipBackButton.isHidden ? 0 : 1)"
+        return "play=\(Int(playButton.frame.width)) skips=\(skipBackButton.isHidden ? 0 : 1) scrub=\(scrubber.isHidden ? 0 : 1) at=\(scrubber.percent)"
+    }
+
+    /// `cra://debug?pipSeek=<0…1>`: the scrubber pressed and let go that far along.
+    func debugScrub(_ fraction: CGFloat) {
+        layoutSubtreeIfNeeded()
+        let track = PictureInPictureScrubber.track(in: bounds.size)
+        scrubber.press(at: CGPoint(x: track.minX + track.width * fraction, y: track.midY), in: bounds.size)
+        scrubber.release()
     }
 
     override func layout() {
@@ -93,6 +115,10 @@ final class PictureInPictureControlsView: NSView {
         playButton.setFrameOrigin(NSPoint(x: c.x - playButton.frame.width / 2, y: c.y - playButton.frame.height / 2))
         skipBackButton.setFrameOrigin(NSPoint(x: playButton.frame.minX - centre.gap - skipBackButton.frame.width, y: c.y - skipBackButton.frame.height / 2))
         skipAheadButton.setFrameOrigin(NSPoint(x: playButton.frame.maxX + centre.gap, y: c.y - skipAheadButton.frame.height / 2))
+        // The scrubber's view is the band that takes the pointer; its capsule is drawn inside.
+        let area = PictureInPictureScrubber.dragArea(in: bounds.size)
+        scrubber.frame = NSRect(x: area.minX, y: bounds.height - area.maxY, width: area.width, height: area.height)
+        scrubber.track = PictureInPictureScrubber.track(in: bounds.size).offsetBy(dx: -area.minX, dy: -area.minY)
     }
 
     // Only the buttons are hit; drags anywhere else reach the overlay view below. A button takes
@@ -101,7 +127,9 @@ final class PictureInPictureControlsView: NSView {
     // means play, not a drag (#134).
     override func hitTest(_ point: NSPoint) -> NSView? {
         let p = convert(point, from: superview)
-        return buttons.first { !$0.isHidden && $0.frame.contains(p) }
+        if let b = buttons.first(where: { !$0.isHidden && $0.frame.contains(p) }) { return b }
+        // The scrubber only while it shows: a press on the bare video's bottom moves the window.
+        return shown && !scrubber.isHidden && scrubber.frame.contains(p) ? scrubber : nil
     }
 
     override func updateTrackingAreas() {
@@ -131,6 +159,7 @@ final class PictureInPictureControlsView: NSView {
         let action = { [weak self] in
             guard let self, self.shown else { return }
             // Keep the controls while the pointer rests on a button.
+            if self.scrubber.isDragging { self.hide(after: 2.5); return }
             if pointerInside(), self.buttons.contains(where: { $0.isHovered && !$0.isHidden }) { self.hide(after: 2.5); return }
             self.shown = false
             self.fade(to: 0, duration: PictureInPictureLayout.fadeDuration)
@@ -149,6 +178,98 @@ final class PictureInPictureControlsView: NSView {
         layer.opacity = opacity
         layer.add(anim, forKey: "fade")
     }
+}
+
+/// Arc's scrubber: a white capsule filling over white 30 %. A press goes to that spot and a drag
+/// seeks, slower the higher the pointer is (`PictureInPictureScrubber` in CraCore). Hidden for a
+/// video with no end.
+@MainActor
+final class PictureInPictureScrubberView: NSView {
+    var onSeek: (Double) -> Void = { _ in }
+    var onPress: () -> Void = {}
+    /// Whether the video plays now, and the way to pause or play it: a playing video holds while
+    /// the scrubber is held and plays on when it is let go, as Arc's (`wasPlayingAtDragBegin`).
+    var isPlaying: () -> Bool = { false }
+    var togglePlayback: () -> Void = {}
+    /// The capsule in this view's coordinates.
+    var track: CGRect = .zero { didSet { redraw() } }
+    private var position = 0.0
+    private var duration = 0.0
+    private var drag: PictureInPictureScrubber?
+    private let rail = CALayer()
+    private let fill = CALayer()
+
+    var isDragging: Bool { drag != nil }
+    /// How far the fill is, 0…100, for `cra://debug?pip`.
+    var percent: Int { Int((PictureInPictureScrubber.fraction(position: position, duration: duration) * 100).rounded()) }
+
+    init() {
+        super.init(frame: .zero)
+        wantsLayer = true
+        isHidden = true
+        rail.backgroundColor = NSColor.white.withAlphaComponent(0.3).cgColor
+        fill.backgroundColor = NSColor.white.cgColor
+        for l in [rail, fill] {
+            l.cornerRadius = PictureInPictureScrubber.thickness / 2
+            layer?.addSublayer(l)
+        }
+        setAccessibilityRole(.slider)
+        setAccessibilityLabel("Time")
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    /// The page's word on where the video is. A drag in progress knows better until it ends.
+    func setTime(position: Double, duration: Double) {
+        self.duration = duration
+        isHidden = !PictureInPictureScrubber.shows(duration: duration)
+        guard drag == nil else { return }
+        self.position = position
+        redraw()
+    }
+
+    private func redraw() {
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        rail.frame = track
+        fill.frame = CGRect(x: track.minX, y: track.minY, width: track.width * PictureInPictureScrubber.fraction(position: position, duration: duration), height: track.height)
+        CATransaction.commit()
+    }
+
+    /// A press at `point` in a window of `size` (origin bottom left): the video goes there.
+    func press(at point: CGPoint, in size: CGSize) {
+        guard drag == nil, let d = PictureInPictureScrubber(press: point, in: size, duration: duration, playing: isPlaying()) else { return }
+        drag = d
+        if d.wasPlaying { togglePlayback() }
+        seek(to: d.position)
+    }
+
+    func release() {
+        guard let d = drag else { return }
+        drag = nil
+        if d.wasPlaying { togglePlayback() }
+    }
+
+    private func seek(to seconds: Double) {
+        position = seconds
+        redraw()
+        onSeek(seconds)
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override var mouseDownCanMoveWindow: Bool { false }
+
+    // The overlay window is as large as the video, so a point in it is a point in the window.
+    override func mouseDown(with event: NSEvent) {
+        guard let size = window?.frame.size else { return }
+        onPress()
+        press(at: event.locationInWindow, in: size)
+    }
+    override func mouseDragged(with event: NSEvent) {
+        guard drag != nil else { return }
+        onPress()
+        seek(to: drag!.move(to: event.locationInWindow))
+    }
+    override func mouseUp(with event: NSEvent) { release() }
 }
 
 /// A round, borderless control: white SF Symbol, translucent disc on hover,

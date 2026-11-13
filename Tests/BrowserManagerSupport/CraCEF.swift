@@ -12,6 +12,13 @@ public protocol CraBrowserDelegate: AnyObject {
 
 public final class CraDownloadInfo {}
 
+/// The runtime switches BrowserManager's helpers read.
+@MainActor
+public enum CraCEFRuntime {
+    public static var hosting = true
+    public static func chromeHosting() -> Bool { hosting }
+}
+
 @objc public enum CraLinkWindow: Int { case new, incognito, little }
 
 /// `open`: the app subclasses it (WebKitBrowser, faked in AppServices.swift).
@@ -29,6 +36,7 @@ open class CraBrowser {
     public var isPictureInPicturePlaying = false
     public var isCapturingMedia = false
     public var isAudible = false
+    public var hasUncontrollableSound = false
     /// Chrome's pop-up site setting (#357).
     public private(set) var popupsAllowed = false
     public func setPopupsAllowed(_ allowed: Bool) { popupsAllowed = allowed }
@@ -57,6 +65,20 @@ open class CraBrowser {
         restoredHistory = history
     }
 
+    /// A page made ahead for the next tab (SparePages); `takenURL` is what the tab that took it loads.
+    public private(set) var isSpare = false
+    public private(set) var takenURL: String?
+    public convenience init(spareWithFrame frame: NSRect, profilePath: String?) {
+        self.init(frame: frame, url: "", delegate: nil, incognito: false, profilePath: profilePath)
+        isSpare = true
+    }
+    public func takeSpare(withURL url: String, history: [String: Any]?) {
+        isSpare = false
+        takenURL = url
+        currentURL = url
+        restoredHistory = history
+    }
+
     public func close() { closeRequested = true; onClose?() }
     public func finishClose() { isClosed = true; delegate?.browserDidClose(self) }
     /// "show" / "close" / "apply <action>", in the order Cra asked.
@@ -81,6 +103,7 @@ open class CraBrowser {
     public func closePictureInPicture() { pictureInPictureCloses += 1; isInPictureInPicture = false }
     public func togglePictureInPicturePlayback() {}
     public func skipPictureInPicture(by seconds: Double) {}
+    public func seekPictureInPicture(to seconds: Double) {}
     public private(set) var lastParams = ""
     public func sendDevToolsMethod(_ method: String, params: String, completion: @escaping (String?, String?) -> Void) {
         lastParams = params

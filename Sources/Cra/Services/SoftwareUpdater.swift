@@ -98,6 +98,9 @@ final class SoftwareUpdater: NSObject {
     @ObservationIgnored private var acknowledgement: (() -> Void)?
     @ObservationIgnored private var autoRestartTimer: ScheduledWork?
     @ObservationIgnored private var inactiveSince: Date?
+    /// The last release Sparkle offered, so a staged copy of it can be found (showReady has no item).
+    @ObservationIgnored private var offeredBuild: String?
+    @ObservationIgnored private lazy var prewarmer = UpdatePrewarmer(clock: app?.composition.clock ?? LiveScheduler.shared)
 
     private enum Keys {
         static let pendingBuild = "updateSummaryPendingBuild"
@@ -306,6 +309,7 @@ extension SoftwareUpdater: SPUUpdaterDelegate {
         bannerDismissed = false
         UserDefaults.standard.set(item.versionString, forKey: Keys.pendingBuild)
         scheduleAutoRestart()
+        prewarmer.staged(build: item.versionString)
         return true
     }
 
@@ -337,6 +341,7 @@ extension SoftwareUpdater: SPUUserDriver {
         cancellation = nil
         choiceReply = reply
         let release = Release(appcastItem)
+        offeredBuild = release.build
         phase = .found(release, downloaded: state.stage != .notDownloaded)
         if state.userInitiated {
             showWindow()
@@ -398,6 +403,7 @@ extension SoftwareUpdater: SPUUserDriver {
     func showReady(toInstallAndRelaunch reply: @escaping (SPUUserUpdateChoice) -> Void) {
         choiceReply = reply
         phase = .readyToInstall
+        if let build = offeredBuild ?? readyRelease?.build { prewarmer.staged(build: build) }
     }
 
     func showInstallingUpdate(withApplicationTerminated applicationTerminated: Bool,

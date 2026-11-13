@@ -22,10 +22,11 @@
 #   pace <s>                    pause after each command (default 0.2)
 #   repeat <n> <cra://…${i}…>   the command n times, ${i} = 1…n
 #   budget rss=<MB> maxstall=<ms> stalls50=<n> launchstall=<ms> perfcpu=<% of a core>
+#     stalls16=<n> (dropped frames: stalls over 16 ms; no budget unless a scenario sets one)
 #     (stalls count from the first command; start-up has its own launchstall budget)
 #   helpers baseline | helpers settle [slack]
 #   relaunch                    cra://debug?relaunch=1, then follow the new process
-#   expect-log <regex>          a line Cra logged (cra.log or stdout)
+#   expect-log <regex>          a line Cra logged (cra.log or stdout), or ${WS}'s "ws open" / "ws closed"
 #   reject-log <regex>          no such line logged so far
 #   snapshot <View[,n]> <name>  the nth visible view of that class drawn to PNG and compared with
 #                               Tests/Snapshots/<name>.png (CRA_SNAPSHOT_RECORD=1 records it)
@@ -48,9 +49,11 @@
 # run treats as a DRM service, so its pages open in WebKit), ${MUSIC} (that server as
 # http://nts.live:<port>, a recognized music host, for a scenario whose `arg` maps the name to
 # 127.0.0.1), ${EXTENSION_ID} (Tests/Fixtures/Extension) and
+# ${WS}, a WebSocket server on 127.0.0.1 that keeps every connection open (ws://127.0.0.1:<port>), and
 # ${SIDE_PANEL_EXTENSION_ID} (Tests/Fixtures/SidePanelExtension) and ${DOWNLOAD_EXTENSION_ID}
 # (Tests/Fixtures/DownloadExtension) and ${WEB_STORE_COPY_ID} (Tests/Fixtures/WebStoreCopy) and
-# ${TABS_CREATE_EXTENSION_ID} (Tests/Fixtures/TabsCreateExtension) expand,
+# ${TABS_CREATE_EXTENSION_ID} (Tests/Fixtures/TabsCreateExtension) and ${TABS_QUERY_EXTENSION_ID}
+# (Tests/Fixtures/TabsQueryExtension) expand,
 # and ${STALL}, an address on 127.0.0.1 that takes connections and never answers (a download
 # that never ends), and ${TRICKLE}, one that answers with a 10 MB file to save, sends the first
 # 64 KB and holds the rest back (a download that stays in progress).
@@ -64,6 +67,7 @@ SIDE_PANEL_EXTENSION_ID="$(cat "$FIXTURES/SidePanelExtension/ID")"
 DOWNLOAD_EXTENSION_ID="$(cat "$FIXTURES/DownloadExtension/ID")"
 WEB_STORE_COPY_ID="$(cat "$FIXTURES/WebStoreCopy/ID")"
 TABS_CREATE_EXTENSION_ID="$(cat "$FIXTURES/TabsCreateExtension/ID")"
+TABS_QUERY_EXTENSION_ID="$(cat "$FIXTURES/TabsQueryExtension/ID")"
 
 if [ "${1:-}" = "all" ]; then
   failed=()
@@ -199,7 +203,36 @@ TRICKLER=$!
 disown "$TRICKLER"
 for _ in $(seq 1 50); do TRICKLE_PORT=$(head -1 "$OUT/trickle.log"); [ -n "$TRICKLE_PORT" ] && break; sleep 0.1; done
 TRICKLE="http://127.0.0.1:${TRICKLE_PORT:?trickle port did not open}"
-expand() { local s="$1"; s="${s//\$\{FIXTURES\}/$FIXTURES}"; s="${s//\$\{ORIGIN\}/$ORIGIN}"; s="${s//\$\{PAGE\}/$PAGE}"; s="${s//\$\{WEBKIT\}/$WEBKIT}"; s="${s//\$\{MUSIC\}/$MUSIC}"; s="${s//\$\{STALL\}/$STALL}"; s="${s//\$\{TRICKLE\}/$TRICKLE}"; s="${s//\$\{EXTENSION_ID\}/$EXTENSION_ID}"; s="${s//\$\{SIDE_PANEL_EXTENSION_ID\}/$SIDE_PANEL_EXTENSION_ID}"; s="${s//\$\{DOWNLOAD_EXTENSION_ID\}/$DOWNLOAD_EXTENSION_ID}"; s="${s//\$\{WEB_STORE_COPY_ID\}/$WEB_STORE_COPY_ID}"; s="${s//\$\{TABS_CREATE_EXTENSION_ID\}/$TABS_CREATE_EXTENSION_ID}"; printf '%s' "$s"; }
+# A WebSocket server that answers the handshake and holds the connection, logging opens and closes.
+python3 -I -u -c '
+import base64, hashlib, socket, threading
+s = socket.socket()
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(("127.0.0.1", 0))
+s.listen(16)
+print(s.getsockname()[1], flush=True)
+def serve(c):
+    try:
+        req = c.recv(65536).decode("latin-1")
+        key = next(l.split(":", 1)[1].strip() for l in req.split("\r\n") if l.lower().startswith("sec-websocket-key:"))
+        accept = base64.b64encode(hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()).digest()).decode()
+        c.sendall(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                   "Sec-WebSocket-Accept: " + accept + "\r\n\r\n").encode())
+        print("ws open", flush=True)
+        while c.recv(65536):
+            pass
+    except (OSError, StopIteration):
+        pass
+    print("ws closed", flush=True)
+    c.close()
+while True:
+    c, _ = s.accept()
+    threading.Thread(target=serve, args=(c,), daemon=True).start()' >"$OUT/ws.log" 2>&1 &
+WS_SERVER=$!
+disown "$WS_SERVER"
+for _ in $(seq 1 50); do WS_PORT=$(head -1 "$OUT/ws.log"); [ -n "$WS_PORT" ] && break; sleep 0.1; done
+WS="ws://127.0.0.1:${WS_PORT:?WebSocket server did not start}"
+expand() { local s="$1"; s="${s//\$\{FIXTURES\}/$FIXTURES}"; s="${s//\$\{ORIGIN\}/$ORIGIN}"; s="${s//\$\{PAGE\}/$PAGE}"; s="${s//\$\{WEBKIT\}/$WEBKIT}"; s="${s//\$\{MUSIC\}/$MUSIC}"; s="${s//\$\{STALL\}/$STALL}"; s="${s//\$\{TRICKLE\}/$TRICKLE}"; s="${s//\$\{WS\}/$WS}"; s="${s//\$\{EXTENSION_ID\}/$EXTENSION_ID}"; s="${s//\$\{SIDE_PANEL_EXTENSION_ID\}/$SIDE_PANEL_EXTENSION_ID}"; s="${s//\$\{DOWNLOAD_EXTENSION_ID\}/$DOWNLOAD_EXTENSION_ID}"; s="${s//\$\{WEB_STORE_COPY_ID\}/$WEB_STORE_COPY_ID}"; s="${s//\$\{TABS_CREATE_EXTENSION_ID\}/$TABS_CREATE_EXTENSION_ID}"; s="${s//\$\{TABS_QUERY_EXTENSION_ID\}/$TABS_QUERY_EXTENSION_ID}"; printf '%s' "$s"; }
 # AppKit asks "reopen windows?" after a test copy was killed, and that modal blocks every command;
 # Cra restores its own windows from windows.json, so AppKit's restoration is off.
 app_args=(-ApplePersistenceIgnoreState YES)
@@ -216,7 +249,7 @@ PIDS+=("$PID")
 
 cleanup() {
   for p in "${PIDS[@]}"; do kill -KILL "$p" 2>/dev/null; done
-  kill "$SERVER" "$STALLER" "$TRICKLER" 2>/dev/null
+  kill "$SERVER" "$STALLER" "$TRICKLER" "$WS_SERVER" 2>/dev/null
   cp "$DATA"/cra*.log "$OUT/" 2>/dev/null
   rm -rf "$DATA"
 }
@@ -244,7 +277,7 @@ ready "$PID" || problem "Cra did not start reading commands in 30 s"
 sleep 2
 
 PACE=0.2
-RSS_BUDGET=1500 MAXSTALL=1500 STALLS50=10 LAUNCHSTALL=1000 PERFCPU=0.1
+RSS_BUDGET=1500 MAXSTALL=1500 STALLS50=10 STALLS16= LAUNCHSTALL=1000 PERFCPU=0.1
 BASELINE=""
 
 echo "$NAME (pid $PID, logs in ${OUT#$ROOT/})"
@@ -264,7 +297,7 @@ while IFS= read -r raw || [ -n "$raw" ]; do
     budget)
       shift
       for kv in "$@"; do
-        case "$kv" in rss=*) RSS_BUDGET="${kv#*=}" ;; perfcpu=*) PERFCPU="${kv#*=}" ;; launchstall=*) LAUNCHSTALL="${kv#*=}" ;; maxstall=*) MAXSTALL="${kv#*=}" ;; stalls50=*) STALLS50="${kv#*=}" ;; esac
+        case "$kv" in rss=*) RSS_BUDGET="${kv#*=}" ;; perfcpu=*) PERFCPU="${kv#*=}" ;; launchstall=*) LAUNCHSTALL="${kv#*=}" ;; maxstall=*) MAXSTALL="${kv#*=}" ;; stalls50=*) STALLS50="${kv#*=}" ;; stalls16=*) STALLS16="${kv#*=}" ;; esac
       done ;;
     helpers)
       if [ "$2" = "baseline" ]; then BASELINE=$(helpers); echo "  helpers: baseline $BASELINE"
@@ -290,11 +323,11 @@ while IFS= read -r raw || [ -n "$raw" ]; do
       sleep 2 ;;
     expect-log)
       shift; re="$*"; found=""
-      for _ in $(seq 1 150); do grep -Eq "$re" "$DATA"/cra*.log "$OUT/stdout.log" 2>/dev/null && { found=1; break; }; sleep 0.2; done
+      for _ in $(seq 1 150); do grep -Eq "$re" "$DATA"/cra*.log "$OUT/stdout.log" "$OUT/ws.log" 2>/dev/null && { found=1; break; }; sleep 0.2; done
       [ -n "$found" ] || problem "no log line matching: $re" ;;
     reject-log)
       shift; re="$*"
-      ! grep -Eq "$re" "$DATA"/cra*.log "$OUT/stdout.log" 2>/dev/null || problem "a log line matching: $re" ;;
+      ! grep -Eq "$re" "$DATA"/cra*.log "$OUT/stdout.log" "$OUT/ws.log" 2>/dev/null || problem "a log line matching: $re" ;;
     snapshot)
       shot="$OUT/snapshots/$3.png"; ref="$ROOT/Tests/Snapshots/$3.png"
       # A name shot twice (before and after a relaunch) must not find the first file and stop waiting.
@@ -329,16 +362,20 @@ else
   problem "Cra is not running at the end"
 fi
 # Stalls after a snapshot command are the snapshot being drawn, not the app.
-read -r launch maxstall over50 < <(cat "$OUT/hitch.earlier" "$HITCH" 2>/dev/null | awk '$2 == "relaunch" { started = 0 }
+read -r launch maxstall over50 over16 < <(cat "$OUT/hitch.earlier" "$HITCH" 2>/dev/null | awk '$2 == "relaunch" { started = 0 }
   $2 == "mark" { started = 1; shooting = ($3 ~ /snapshot=/) }
   $2 == "stall" && shooting { next }
   $2 == "stall" && !started { if ($3 > l) l = $3 }
-  $2 == "stall" && started { if ($3 > m) m = $3; if ($3 > 50) n++ }
-  END { printf "%d %d %d\n", l, m, n }' || echo "0 0 0")
+  $2 == "stall" && started { if ($3 > m) m = $3; if ($3 > 50) n++; if ($3 > 16) f++ }
+  END { printf "%d %d %d %d\n", l, m, n, f }' || echo "0 0 0 0")
 echo "  stalls: start-up ${launch} ms (budget ${LAUNCHSTALL}); then longest ${maxstall} ms, ${over50} over 50 ms (budget ${MAXSTALL} ms, ${STALLS50})"
 [ "${launch:-0}" -le "$LAUNCHSTALL" ] || budget_problem "a ${launch} ms main-thread stall at start-up, budget ${LAUNCHSTALL} ms"
 [ "${maxstall:-0}" -le "$MAXSTALL" ] || budget_problem "a ${maxstall} ms main-thread stall, budget ${MAXSTALL} ms"
 [ "${over50:-0}" -le "$STALLS50" ] || budget_problem "${over50} stalls over 50 ms, budget ${STALLS50}"
+if [ -n "$STALLS16" ]; then
+  echo "  dropped frames: ${over16} stalls over 16 ms (budget ${STALLS16})"
+  [ "${over16:-0}" -le "$STALLS16" ] || budget_problem "${over16} stalls over 16 ms, budget ${STALLS16}"
+fi
 
 # The performance recorder (#91): what it costs, and whether it saw the stalls HitchMonitor saw.
 if alive; then

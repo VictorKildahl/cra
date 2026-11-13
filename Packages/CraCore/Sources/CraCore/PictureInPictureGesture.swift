@@ -58,6 +58,21 @@ public struct PictureInPictureGesture: Sendable {
         }
     }
 
+    /// Whether letting this press go returns to the video's tab: the second click of a double
+    /// click that stayed a click, as on Arc's window. The buttons take their own clicks and never
+    /// get here.
+    public func returnsToTab(clickCount: Int) -> Bool { !isDragging && clickCount == 2 }
+
+    /// The largest size a resize can reach with the window's anchored sides where they are and the
+    /// grabbed ones still inside `visible`: the window grows up to the display's edges, not past
+    /// them. A side already past an edge (a window under the menu bar) keeps the size it has.
+    public func room(in visible: CGRect) -> CGSize {
+        let s = startFrame
+        let w = edge.isLeft ? s.maxX - visible.minX : edge.isRight ? visible.maxX - s.minX : .greatestFiniteMagnitude
+        let h = edge.isTop ? visible.maxY - s.minY : edge.isBottom ? s.maxY - visible.minY : .greatestFiniteMagnitude
+        return CGSize(width: max(w, s.width), height: max(h, s.height))
+    }
+
     /// The window's frame with the pointer at `mouse`, or nil while the press is still a click.
     /// A resize keeps the edge or corner opposite the grabbed one where it was (both sides keep
     /// the top, the top and bottom keep the left) and stays between `minSize` and `maxSize`.

@@ -26,8 +26,57 @@ enum BrowserManagerLifecycleTests {
                "the Option-clicked link opens beside the live page's tab, once Chromium's call has returned")
     }
 
+    /// A two-finger swipe back over a page asks for the tab its view belongs to (#370): the page's
+    /// own Alloy container, its Chrome window, or the views moved out of that window into a card.
+    // promise: #370
+    @MainActor
+    private static func pageViewTabCase(_ manager: BrowserManager, _ runtime: TabRuntime, tab: UUID) {
+        let inContainer = NSView()
+        runtime.browser.containerView.addSubview(inContainer)
+        let host = NSWindow(contentRect: .zero, styleMask: [], backing: .buffered, defer: true)
+        let page = NSView(), inPage = NSView()
+        page.addSubview(inPage)
+        runtime.browser.hostWindow = host
+        EmbeddedPages.viewsByHost[ObjectIdentifier(host)] = [page]
+        defer {
+            inContainer.removeFromSuperview()
+            runtime.browser.hostWindow = nil
+            EmbeddedPages.viewsByHost[ObjectIdentifier(host)] = nil
+        }
+        expect(manager.visibleTabID(ofPageView: inContainer) == tab && manager.visibleTabID(ofPageView: inPage) == tab,
+               "a page view in the tab's container, or in its page moved into a card, is the tab's")
+        expect(manager.visibleTabID(ofPageView: NSView()) == nil, "a view of no page on screen is no tab's")
+    }
+
+    /// Arc's ⌥⌘-click opens a link in a Little Window (#373): only when the switch is on and the page's own
+    /// last click had ⌥⌘, not a click made with other keys while ⌥⌘ are down by the time Chromium asks.
+    // promise: #373
+    @MainActor
+    private static func optionCommandLittleWindowCase(_ manager: BrowserManager, _ store: SidebarStore, _ observer: Observer,
+                                                      live: CraBrowser, closed: CraBrowser, tab: UUID) {
+        let optionCommand = UInt(NSEvent.ModifierFlags([.option, .command]).rawValue)
+        let command = UInt(NSEvent.ModifierFlags.command.rawValue)
+        let link = "https://example.test/little"
+        let before = observer.littleWindowLinks.count
+        store.settings.littleWindowOnOptionCommandClick = false
+        expect(!manager.browser(live, opensLittleWindowForURL: link, clickModifiers: optionCommand, clickAge: 0.05),
+               "with the switch off a ⌥⌘-click stays Chromium's split view click (#298)")
+        store.settings.littleWindowOnOptionCommandClick = true
+        expect(!manager.browser(live, opensLittleWindowForURL: link, clickModifiers: command, clickAge: 0.05)
+               && !manager.browser(live, opensLittleWindowForURL: link, clickModifiers: 0, clickAge: 0.05)
+               && !manager.browser(live, opensLittleWindowForURL: link, clickModifiers: optionCommand, clickAge: -1)
+               && !manager.browser(closed, opensLittleWindowForURL: link, clickModifiers: optionCommand, clickAge: 0.05),
+               "a ⌘-click, a plain click, no click in this page and a closed page's open no Little Window")
+        expect(manager.browser(live, opensLittleWindowForURL: link, clickModifiers: optionCommand, clickAge: 0.05),
+               "a ⌥⌘-click with the switch on opens one")
+        expect(observer.littleWindowLinks.dropFirst(before).map(\.url) == [link] && observer.littleWindowLinks.last?.tab == tab,
+               "from the live page's tab, once")
+        store.settings.littleWindowOnOptionCommandClick = false
+    }
+
     @MainActor
     static func main() async {
+        await sparePagesCase()
         await tabFaviconsCase()
         let store = SidebarStore()
         let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
@@ -77,6 +126,8 @@ enum BrowserManagerLifecycleTests {
         expect(observer.splitLinks.map(\.url) == ["https://example.test/entry"] && observer.splitLinks.first?.tab == id,
                "Open Link in Split View reaches the window with the live page's tab, a closed page's doesn't")
         await optionClickSplitCase(manager, observer, live: replacement.browser, closed: old.browser, tab: id)
+        pageViewTabCase(manager, replacement, tab: id)
+        optionCommandLittleWindowCase(manager, store, observer, live: replacement.browser, closed: old.browser, tab: id)
 
         let retainedID = store.createTab(url: "https://example.test/retained").id
         weak var retainedBrowser = manager.ensureRuntime(for: retainedID)?.browser
@@ -146,6 +197,7 @@ enum BrowserManagerLifecycleTests {
         musicNotesPauseWithinHoldCase()
         await nowPlayingPictureInPictureCase()
         nowPlayingSkipsPictureInPictureCase()
+        nowPlayingSkipsUncontrollableSoundCase()
         await leaveVideoTabPictureInPictureCase()
         await pictureInPicturePerSiteCase()
         await splitCopySleepsPinnedTabCase()
@@ -159,6 +211,7 @@ enum BrowserManagerLifecycleTests {
         await pageEngineCase()
         pageHistoryCase()
         await permissionWaitsForItsTabCase()
+        permissionPopoverStepsAsideCase()
         print("Browser manager lifecycle: \(checks) checks passed")
     }
 
@@ -571,6 +624,33 @@ enum BrowserManagerLifecycleTests {
         manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
         expect(runtime.browser.replies.contains { $0.method == isolatedProbe }, "a refused page is probed again after the back-off")
         manager.closeAll()
+    }
+
+    /// Pages made ahead (SparePages): a tab that needs a page takes its profile's spare, made
+    /// SparePage.refillDelay after the last page was made, instead of waiting for CEF's window.
+    @MainActor
+    private static func sparePagesCase() async {
+        SparePages.shared.dropAll()
+        let clock = ManualScheduler()
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView(), clock: clock)
+        let first = store.createTab(url: "https://example.test/one").id
+        let one = manager.ensureRuntime(for: first)!
+        expect(one.browser.takenURL == nil && !one.browser.isSpare, "with no spare yet, the page is made on the spot")
+        expect(SparePages.shared.take(profilePath: nil) == nil, "the next spare isn't made on the same click")
+        clock.advance(by: SparePage.refillDelay)
+        let second = store.createTab(url: "https://example.test/two").id
+        let two = manager.ensureRuntime(for: second)!
+        expect(two.browser.takenURL == "https://example.test/two", "the next tab takes the spare made after the first and loads its address")
+        expect(two.browser.delegate === manager && manager.runtime(for: second)?.browser === two.browser,
+               "the taken spare is the tab's page, reporting to its window")
+        expect(SparePages.shared.take(profilePath: nil) == nil, "a taken spare is no longer kept")
+        clock.advance(by: SparePage.refillDelay)
+        let spare = SparePages.shared.take(profilePath: nil)
+        expect(spare?.isSpare == true, "another spare is made after it was taken")
+        spare?.close()
+        manager.closeAll()
+        SparePages.shared.dropAll()
     }
 
     // promise: #32
@@ -1142,6 +1222,33 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #411
+    /// A notification ding (a sound under 5 s) or Web Audio alone makes no player card (#411):
+    /// Arc's player follows Chromium's media session, which Chrome's media controls only offer
+    /// once it is controllable. Media that starts in the same tab, even within the ding's 2 s
+    /// hold, gets its card.
+    @MainActor
+    private static func nowPlayingSkipsUncontrollableSoundCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let np = NowPlaying()
+        manager.nowPlaying = np
+        let a = store.createTab(url: "https://chat.example.test/").id, b = store.createTab(url: "https://example.test/other").id
+        let ra = manager.ensureRuntime(for: a)!
+        manager.show(b, focus: false)
+        ra.browser.hasUncontrollableSound = true
+        ra.browser.isAudible = true
+        manager.browser(ra.browser, didChangeSoundPlaying: true)
+        manager.browser(ra.browser, didChangeAudible: true)
+        expect(np.entries.isEmpty, "a notification ding makes no card")
+        manager.browser(ra.browser, didChangeSoundPlaying: false)
+        ra.browser.hasUncontrollableSound = false
+        manager.browser(ra.browser, didChangeSoundPlaying: true)
+        expect(np.entries.map(\.id) == [a] && np.entries.first?.playing == true,
+               "a video that starts within the ding's hold gets its card")
+        manager.closeAll()
+    }
+
     // promise: #33
     /// The sidebar player (#33) has no card for a tab whose video is in Picture in Picture; the
     /// card comes back when the video leaves it.
@@ -1635,6 +1742,45 @@ enum BrowserManagerLifecycleTests {
         otherManager.closeAll()
     }
 
+    // promise: #371
+    /// A page's permission request asks in Arc's card over the top left corner of its tab's page,
+    /// not a sheet over the window (#371: "wants to access other devices on your network" took
+    /// the whole window). The window stays usable, so a tab switch takes the card down
+    /// unanswered, and it asks again when its tab is back.
+    @MainActor
+    private static func permissionPopoverStepsAsideCase() {
+        AppDialog.presented = []
+        let store = SidebarStore()
+        let container = NSView()
+        let window = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 20, height: 20),
+                              styleMask: .borderless, backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        window.contentView!.addSubview(container)
+        let webArea = NSView()
+        container.addSubview(webArea)
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: container)
+        manager.paneHost = { _ in webArea }
+        let asking = store.createTab(url: "https://router.example/").id
+        let other = store.createTab(url: "https://example.test/").id
+        manager.show(asking, focus: false)
+        var answers: [Bool] = []
+        manager.browser(page(manager, asking), requestsPermissionForOrigin: "https://router.example", kinds: 1 << 7) { answers.append($0) }
+        let first = AppDialog.presented.last
+        expect(first?.title == "https://router.example wants to access other devices on your local network"
+               && first?.anchor === webArea && first?.isUp == true,
+               "the request asks in a card on its tab's page")
+        manager.show(other, focus: false)
+        expect(first?.isUp == false && answers.isEmpty, "switching tabs takes the card down, unanswered")
+        manager.show(asking, focus: false)
+        let again = AppDialog.presented.last
+        expect(AppDialog.presented.count == 2 && again !== first && again?.isUp == true && again?.title == first?.title,
+               "its tab back in front asks again")
+        again?.answer(.alertFirstButtonReturn)
+        expect(answers == [true], "Allow answers it once")
+        manager.closeAll()
+    }
+
     @MainActor
     private static func page(_ manager: BrowserManager, _ id: UUID) -> CraBrowser { manager.runtime(for: id)!.browser }
 
@@ -1721,6 +1867,11 @@ private final class Observer: BrowserManagerDelegate {
         activatedByPage.append(byPage)
     }
     func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool, newTab: Bool) -> Bool { false }
+    var littleWindowLinks: [(url: String, tab: UUID)] = []
+    func browserManagerOpensLittleWindow(url: String, fromTab tabID: UUID) -> Bool {
+        littleWindowLinks.append((url, tabID))
+        return true
+    }
     var openedLinks: [(url: String, kind: CraLinkWindow, space: UUID?, incognito: Bool)] = []
     var capturedImages: [(point: NSPoint, tab: UUID)] = []
     func browserManagerOpenLink(_ url: String, in kind: CraLinkWindow, space: UUID?, fromIncognito: Bool) {

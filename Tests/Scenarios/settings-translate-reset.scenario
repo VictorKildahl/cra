@@ -1,0 +1,39 @@
+# promise: #373
+# Settings ▸ Advanced ▸ Reset Translated-site Prompts, as Arc's button of that name: the sites and languages you
+# chose always or never to translate are forgotten in every profile, so Chromium offers to translate again.
+# The sites never to translate (translate_site_blocklist_with_time, what "Never Translate This Site" fills) end
+# up empty; the languages never to translate go back to Chromium's default (one, the UI language), not to empty.
+# A profile not loaded this session is reset in its Preferences file and reads that way when it loads.
+# Personal is on Default, Random on the profile Hobbies (as in space-profiles).
+budget rss=800 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Personal","emoji":"🏠","favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}},{"id":"A0000000-0000-0000-0000-000000000002","title":"Random","emoji":"🎲","favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z","profileID":"B0000000-0000-0000-0000-000000000001","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}}],"profiles":[{"id":"B0000000-0000-0000-0000-000000000001","name":"Hobbies"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+cra://open?url=${PAGE}?n=kept
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?translatePrompts=never:example.com
+cra://debug?translatePrompts=block:da&label=default-set
+expect-log translate prompts default-set: Default loaded never sites=1 never languages=\S*,da$
+# Hobbies loads with a tab in Random, gets its own choices, and the window goes back to Personal.
+cra://open?url=${PAGE}?n=hobbies&space=A0000000-0000-0000-0000-000000000002
+wait 3
+cra://debug?translatePrompts=never:example.org&profile=Hobbies
+cra://debug?translatePrompts=block:da&profile=Hobbies&label=hobbies-set
+expect-log translate prompts hobbies-set: Hobbies loaded never sites=1 never languages=\S*,da$
+cra://open?url=${PAGE}?n=back&space=A0000000-0000-0000-0000-000000000001
+wait 2
+
+# Next launch: Hobbies isn't loaded until a Random tab asks for it, and its file still holds its choices.
+relaunch
+wait 2
+cra://debug?translatePrompts=state&label=before
+expect-log translate prompts before: Hobbies not loaded never sites=1 never languages=\S*,da$
+cra://debug?translatePrompts=reset&label=after
+expect-log translate prompts reset: 2 profiles reset, 0 when loaded
+expect-log translate prompts after: Default loaded never sites=0 never languages=[a-z-]+$
+expect-log translate prompts after: Hobbies not loaded never sites=0 never languages=default$
+# Hobbies loads: Chromium reads the reset file.
+cra://open?url=${PAGE}?n=hobbies2&space=A0000000-0000-0000-0000-000000000002
+wait 3
+cra://debug?translatePrompts=state&label=loaded
+expect-log translate prompts loaded: Hobbies loaded never sites=0 never languages=[a-z-]+$

@@ -63,8 +63,10 @@ final class KeyBindingRegistry {
     static let shared = KeyBindingRegistry()
 
     private(set) var actions: [KeyAction]
-    @ObservationIgnored private let overridesFile = JSONStore<[String: [Shortcut]]>("keybindings.json")
-    @ObservationIgnored private var overrides: [String: [Shortcut]]
+    @ObservationIgnored private let overridesFile = JSONStore<KeyBindingOverrides>("keybindings.json")
+    /// The user's shortcuts and who gets each one's keys (#374). Observed, so the Shortcuts pane's
+    /// pop-up follows a pick.
+    private var overrides: KeyBindingOverrides
     @ObservationIgnored private var pluginActions: [KeyAction] = []
 
     private var defaultActions: [KeyAction] {
@@ -83,29 +85,41 @@ final class KeyBindingRegistry {
 
     init() {
         actions = KeyBindingRegistry.defaults
-        overrides = overridesFile.load(or: { [:] })
+        overrides = overridesFile.load(or: { KeyBindingOverrides() })
         apply()
     }
 
     private func apply() {
         for i in actions.indices {
-            if let o = overrides[actions[i].id] { actions[i].shortcuts = o }
+            if let o = overrides.shortcuts[actions[i].id] { actions[i].shortcuts = o }
         }
     }
 
     func action(_ id: String) -> KeyAction? { actions.first { $0.id == id } }
 
     func setShortcuts(_ shortcuts: [Shortcut], for id: String) {
-        overrides[id] = shortcuts
+        overrides.shortcuts[id] = shortcuts
         overridesFile.save(overrides)
         apply()
         NotificationCenter.default.post(name: .craKeyBindingsChanged, object: nil)
     }
 
-    func isOverridden(_ id: String) -> Bool { overrides[id] != nil }
+    func isOverridden(_ id: String) -> Bool { overrides.shortcuts[id] != nil || overrides.priorities[id] != nil }
 
+    /// Who gets the action's keys while a page wants them too (Settings ▸ Shortcuts, #374).
+    func priority(of id: String) -> ShortcutPriority { overrides.priority(for: id) }
+
+    func setPriority(_ priority: ShortcutPriority, for id: String) {
+        let current = action(id)?.shortcuts ?? []
+        let defaults = defaultActions.first { $0.id == id }?.shortcuts ?? []
+        overrides.setPriority(priority, for: id, current: current, defaults: defaults)
+        overridesFile.save(overrides)
+    }
+
+    /// Reset Shortcut to Default: the keys and who gets them.
     func resetShortcuts(for id: String) {
-        overrides[id] = nil
+        overrides.shortcuts[id] = nil
+        overrides.priorities[id] = nil
         overridesFile.save(overrides)
         if let d = defaultActions.first(where: { $0.id == id }), let i = actions.firstIndex(where: { $0.id == id }) {
             actions[i].shortcuts = d.shortcuts
@@ -115,7 +129,7 @@ final class KeyBindingRegistry {
 
     /// keybindings.json was written by another Mac's bundle (SettingsSyncService): read it again.
     func reloadOverrides() {
-        overrides = overridesFile.load(or: { [:] })
+        overrides = overridesFile.load(or: { KeyBindingOverrides() })
         // With the plugins' commands: the built-in list alone would drop New GitHub Live Folder and the rest.
         actions = defaultActions
         apply()
@@ -123,7 +137,7 @@ final class KeyBindingRegistry {
     }
 
     func resetOverrides() {
-        overrides = [:]
+        overrides = KeyBindingOverrides()
         overridesFile.saveNow(overrides)
         actions = defaultActions
         NotificationCenter.default.post(name: .craKeyBindingsChanged, object: nil)
@@ -230,6 +244,9 @@ final class KeyBindingRegistry {
             KeyAction(id: "addSplitView", name: "Add Split View", section: .view, shortcuts: [Shortcut("=", [.control, .shift])], triggers: ["split", "split view", "add split"]),
             KeyAction(id: "closeSplitPane", name: "Close this Split Pane", section: .view, shortcuts: [Shortcut("-", [.control, .shift])], triggers: ["close split", "close pane"]),
             KeyAction(id: "separateFromSplit", name: "Separate Page from Split View", section: .view, shortcuts: [], triggers: ["separate", "unsplit"]),
+            // Arc 1.172: View ▸ Expand Current Split (expandSplitViewPane), no shortcut; the command bar
+            // finds it by "Expand; Expand Split View; Maximize" (MainMenu.nib).
+            KeyAction(id: "expandSplitPane", name: "Expand Current Split", section: .view, shortcuts: [], triggers: ["expand", "expand split view", "maximize"]),
             KeyAction(id: "flipSplitOrientation", name: "Flip Split View Orientation", section: .view, shortcuts: [], triggers: ["vertical split", "horizontal split", "flip split"]),
             KeyAction(id: "nextSplitPane", name: "Switch to Next Split View", section: .view, shortcuts: [], inCommandBar: false),
             KeyAction(id: "previousSplitPane", name: "Switch to Previous Split View", section: .view, shortcuts: [], inCommandBar: false),
@@ -283,8 +300,9 @@ final class KeyBindingRegistry {
             KeyAction(id: "viewMedia", name: "View Media…", section: .window, shortcuts: [], triggers: ["media", "screenshots", "photos"]),
             // Arc: Window ▸ Stay On Top.
             KeyAction(id: "stayOnTop", name: "Stay On Top", section: .window, shortcuts: [], triggers: ["stay on top", "float", "always on top", "pin window"]),
-            // Arc's Little Arc "Open in Space" button (LittleBrowserMoveButton) and "Close Little Arc Windows".
-            KeyAction(id: "promoteLittleWindow", name: "Open Little Window in Space", section: .window, shortcuts: [Shortcut("o", cmd)], inCommandBar: false),
+            // Arc's Tabs ▸ "Open Little Arc or Peek in" (openTabIn), the Little Arc's "Open in <space>" button;
+            // the menu row reads "Open in <space>" (TabsMenu).
+            KeyAction(id: "promoteLittleWindow", name: TabsMenu.openInName, section: .tabs, shortcuts: [Shortcut("o", cmd)], inCommandBar: false),
             // Arc: Show Little Arc "Open In" Menu ⇧⌘O.
             KeyAction(id: "littleWindowOpenInMenu", name: "Show Little Window “Open In” Menu", section: .window,
                       shortcuts: [Shortcut("o", cmdShift)], inCommandBar: false),

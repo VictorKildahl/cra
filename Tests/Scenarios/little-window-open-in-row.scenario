@@ -1,0 +1,47 @@
+# Arc 1.172.2's ⌘O row (read 11 Nov 2026): Tabs ▸ "Open in <space>" after Pin Tab, there only while
+# a Little Window or Peek is in front, and not in the Window menu. ⌘O moves the page into that
+# space straight away, from a Little Window and from a Peek alike (TabsMenu in CraCore).
+budget rss=900 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "peekInEveryTab": true, "defaultLinkDestination": {"littleWindow": {}}}
+
+cra://open?url=${PAGE}?n=main
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+# The browser window in front: no row, in Tabs or Window.
+cra://debug?menuRows=Tabs&label=main-tabs
+expect-log menu rows main-tabs: New Tab…\|Pin Tab\|New Folder…\|
+cra://debug?menuRows=Window&label=main-window
+reject-log menu rows main-window: .*Open in 
+reject-log menu rows main-window: .*Open Little Window
+
+# A Little Window in front: "Open in Personal" after Pin Tab, still not in Window.
+cra://debug?externalURL=${PAGE}?n=little
+wait 3
+cra://debug?littleShown=front
+expect-log little shown front: windows=1
+cra://debug?menuRows=Tabs&label=little-tabs
+expect-log menu rows little-tabs: New Tab…\|Pin Tab\|Open in Personal\|New Folder…\|
+cra://debug?menuRows=Window&label=little-window
+reject-log menu rows little-window: .*Open in 
+reject-log menu rows little-window: .*Open Little Window
+# ⌘O moves the page into the space and closes the Little Window.
+cra://debug?key=o,31,1048576
+wait 2
+cra://debug?littleShown=after
+expect-log little shown after: windows=0
+cra://debug?menuRows=Tabs&label=after-tabs
+expect-log menu rows after-tabs: New Tab…\|Pin Tab\|New Folder…\|
+
+# A Peek in front: the same row, and ⌘O expands it into the space.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=peek'))","userGesture":true}
+expect-log peek: from
+wait 1.5
+cra://debug?peekShown=open
+expect-log Cra peek shown open: veiled=1
+cra://debug?menuRows=Tabs&label=peek-tabs
+expect-log menu rows peek-tabs: New Tab…\|Pin Tab\|Open in Personal\|New Folder…\|
+cra://debug?key=o,31,1048576
+wait 1.5
+cra://debug?peekShown=expanded
+expect-log Cra peek shown expanded: veiled=0

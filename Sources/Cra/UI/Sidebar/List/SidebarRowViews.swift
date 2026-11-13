@@ -202,6 +202,9 @@ final class SidebarGlyphButton: NSView {
     var tint: NSColor? { didSet { if tint != oldValue { refresh() } } }
     /// Keeps the hover fill while what it opened is open (the player's volume drawer).
     var highlighted = false { didSet { if highlighted != oldValue { refresh() } } }
+    /// Right-click, ⌃-click or a held press (ButtonHold): Back and Forward's history (#416).
+    var secondaryAction: ((NSView) -> Void)?
+    private let hold = ButtonHold()
 
     init(symbol: String, size: CGFloat, height: CGFloat? = nil, iconSize: CGFloat, weight: NSFont.Weight = .medium, help: String,
          optionHelp: String? = nil, colors: SidebarColors, action: @escaping () -> Void) {
@@ -381,6 +384,7 @@ final class SidebarGlyphButton: NSView {
     override func mouseEntered(with event: NSEvent) { hovering = true }
     override func mouseExited(with event: NSEvent) { hovering = false }
     override func mouseDown(with event: NSEvent) {
+        if hold.down(event, enabled: enabled, secondary: secondaryAction.map { f in { [weak self] in if let self { f(self) } } }) { return }
         if turnsOnPress, enabled { glyph.pressTurn(true) }
     }
     override func mouseDragged(with event: NSEvent) {
@@ -388,7 +392,12 @@ final class SidebarGlyphButton: NSView {
     }
     override func mouseUp(with event: NSEvent) {
         if turnsOnPress { glyph.pressTurn(false) }
+        if hold.up() { return }
         if enabled, bounds.contains(convert(event.locationInWindow, from: nil)) { action() }
+    }
+    override func rightMouseDown(with event: NSEvent) {
+        guard enabled, let secondaryAction else { return super.rightMouseDown(with: event) }
+        secondaryAction(self)
     }
 }
 
@@ -533,6 +542,31 @@ struct DropDecor: Equatable {
     struct Badge: Equatable {
         let symbol: String
         let label: String
+    }
+}
+
+@MainActor
+extension NSView {
+    /// Arc moves the layer's anchor to its centre; AppKit owns a layer-backed view's anchor, so the
+    /// transform carries the centre instead.
+    func springPress(_ down: Bool, scale s: Double) {
+        guard let layer else { return }
+        var to = CATransform3DIdentity
+        if down {
+            let a = layer.anchorPoint
+            let c = CGPoint(x: bounds.width * (0.5 - a.x), y: bounds.height * (0.5 - a.y))
+            to = CATransform3DTranslate(CATransform3DScale(CATransform3DMakeTranslation(c.x, c.y, 0), s, s, 1), -c.x, -c.y, 0)
+        }
+        let spring = CASpringAnimation(keyPath: "transform")
+        spring.fromValue = NSValue(caTransform3D: layer.presentation()?.transform ?? CATransform3DIdentity)
+        spring.toValue = NSValue(caTransform3D: to)
+        spring.mass = 1
+        spring.stiffness = SidebarRowPress.stiffness
+        spring.damping = SidebarRowPress.damping
+        spring.duration = spring.settlingDuration
+        spring.fillMode = .forwards
+        spring.isRemovedOnCompletion = !down
+        layer.add(spring, forKey: "press_bounce")
     }
 }
 
@@ -682,9 +716,30 @@ class SidebarRowView: NSView {
     /// The item a combine preview draws as the drop's target.
     var itemIDForCombine: UUID { if case .item(let id) = key { return id }; return UUID() }
 
-    // Clicks act on release (SwiftUI's tap); a press that moves 3 pt starts the row's drag.
+    var pressRow: SidebarRowPress.Row { .other }
+    private var pushedIn = false
+
+    private func push(in down: Bool) {
+        guard down != pushedIn else { return }
+        pushedIn = down
+        springPress(down, scale: SidebarRowPress.scale(pressRow))
+    }
+
+    /// Whether the press already did what the click would (a tab switches on the press, as in Arc).
+    private var actedOnPress = false
+
+    /// A row that acts on the press does so here and returns true; the release then does nothing.
+    func pressDown(_ event: NSEvent, at point: NSPoint) -> Bool { false }
+
+    // Clicks act on release (SwiftUI's tap), a tab's switch on the press (pressDown); a press that
+    // moves 3 pt starts the row's drag.
     override func mouseDown(with event: NSEvent) {
-        press = (event, convert(event.locationInWindow, from: nil))
+        // A pinned tab's Previews card goes at once, as a favorite's does.
+        FavoritePreviewCard.shared.cancel(self)
+        let point = convert(event.locationInWindow, from: nil)
+        press = (event, point)
+        if SidebarRowPress.pushesIn(pressRow, clickCount: event.clickCount) { push(in: true) }
+        actedOnPress = pressDown(event, at: point)
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -692,12 +747,15 @@ class SidebarRowView: NSView {
         let q = convert(event.locationInWindow, from: nil)
         guard hypot(q.x - p.point.x, q.y - p.point.y) > 3 else { return }
         press = nil
+        push(in: false)
         if let id = dragItemID(at: p.point) { list?.beginDrag(id, from: self, event: p.event) }
     }
 
     override func mouseUp(with event: NSEvent) {
+        push(in: false)
         guard let p = press else { return }
         press = nil
+        if actedOnPress { actedOnPress = false; return }
         click(event, at: p.point)
     }
 
@@ -812,6 +870,8 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
     private var renameOld: NSTextField?
     private var renameSparkles: CALayer?
     private var renameBright = false
+
+    override var pressRow: SidebarRowPress.Row { .tab }
 
     override init(key: SpaceListView.RowKey, list: SpaceListView, colors: SidebarColors) {
         super.init(key: key, list: list, colors: colors)
@@ -1336,6 +1396,19 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
 
     override func dragItemID(at point: NSPoint) -> UUID? { model?.editing == true ? nil : model?.id }
 
+    /// Arc switches tabs on the press (SidebarRowPress.selectsOnPress): a plain single press on the
+    /// row, not on a pinned tab's icon away from home (that one goes back or separates on release).
+    override func pressDown(_ event: NSEvent, at point: NSPoint) -> Bool {
+        guard let m = model, let list, !m.editing,
+              SidebarRowPress.selectsOnPress(pressRow, clickCount: event.clickCount,
+                                             modified: !event.modifierFlags.intersection([.command, .shift, .control, .option]).isEmpty),
+              !(canReset && iconRegion.contains(point)) else { return false }
+        list.ui.iconWentBack = nil
+        list.ui.tabBeforePress = list.store.selectedTabID(window: list.ui.windowID)
+        list.clickTab(m.id, event: event)
+        return true
+    }
+
     override func click(_ event: NSEvent, at point: NSPoint) {
         guard let m = model, let list else { return }
         // A click on the row (not the field) ends a rename, so it can never get stuck.
@@ -1634,6 +1707,8 @@ final class SplitRowView: SidebarRowView, NSTextFieldDelegate, ArcTooltipTarget 
         return b
     }()
     private var shownButtons: SidebarClose.SplitButtons?
+
+    override var pressRow: SidebarRowPress.Row { .split }
 
     override init(key: SpaceListView.RowKey, list: SpaceListView, colors: SidebarColors) {
         super.init(key: key, list: list, colors: colors)
@@ -2091,6 +2166,156 @@ final class LiveStatusRowView: SidebarRowView {
     }
 }
 
+struct InstantLinksRowModel: Equatable {
+    var id: UUID
+    var failed: Bool
+    /// Drawn as the open row, with the selected row's fill (the run started from ⌘T's new-tab bar).
+    var current = false
+}
+
+/// Instant Links' row (#407, Arc Max): "Searching the web for you…" at the top of Today as tall as a tab,
+/// Arc Max's flower where the favicon goes, turning once a second until the results replace the row.
+/// When the search fails it reads "Oops, something went wrong.", stops, and has a ✕ that removes it.
+final class InstantLinksRowView: SidebarRowView {
+    private(set) var model: InstantLinksRowModel?
+    private let spinner = CALayer()
+    private let flower = CAShapeLayer()
+    private let titleLabel = NSTextField.sidebarLabel(size: 14)
+    private lazy var closeButton: SidebarGlyphButton = {
+        let b = SidebarGlyphButton(symbol: "xmark", size: 24, iconSize: 13, help: "", colors: colors) { [weak self] in
+            guard let id = self?.model?.id else { return }
+            InstantLinksService.shared.dismiss(id)
+        }
+        b.setCloseMark(minus: false, help: "")
+        return b
+    }()
+    private var showsClose = false
+
+    override init(key: SpaceListView.RowKey, list: SpaceListView, colors: SidebarColors) {
+        super.init(key: key, list: list, colors: colors)
+        spinner.bounds = CGRect(x: 0, y: 0, width: CraMetrics.favicon, height: CraMetrics.favicon)
+        flower.frame = spinner.bounds
+        flower.fillColor = nil
+        flower.lineWidth = 1.5
+        flower.lineJoin = .round
+        flower.path = Self.flowerPath(in: spinner.bounds)
+        flower.actions = ["strokeColor": NSNull()]
+        spinner.addSublayer(flower)
+        layer?.addSublayer(spinner)
+        addSubview(titleLabel)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.staticText)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    /// Arc Max's flower, as drawn in its 30 fps capture: one line of four teardrop petals that start at
+    /// the centre, round out and cross the next petal's line on the way back, leaving a small diamond
+    /// in the middle.
+    static func flowerPath(in rect: CGRect) -> CGPath {
+        let path = CGMutablePath()
+        let reach = rect.width * 0.47
+        let belly = reach * 0.44
+        for k in 0..<4 {
+            let turn = CGAffineTransform(translationX: rect.midX, y: rect.midY)
+                .rotated(by: CGFloat(k) * .pi / 2 + .pi / 9)
+            let petal = CGMutablePath()
+            petal.move(to: .zero)
+            petal.addCurve(to: CGPoint(x: 0, y: reach), control1: CGPoint(x: -belly * 1.7, y: reach * 0.05), control2: CGPoint(x: -belly * 1.2, y: reach))
+            petal.addCurve(to: .zero, control1: CGPoint(x: belly * 1.2, y: reach), control2: CGPoint(x: belly * 1.7, y: reach * 0.05))
+            path.addPath(petal, transform: turn)
+        }
+        return path
+    }
+
+    func apply(_ m: InstantLinksRowModel) {
+        guard m != model else { return }
+        model = m
+        titleLabel.stringValue = m.failed ? InstantLinks.errorTitle : InstantLinks.searchingTitle
+        setAccessibilityLabel(titleLabel.stringValue)
+        refreshColors()
+        refreshBackground()
+        refreshSpin()
+        rebuildClose()
+        needsLayout = true
+    }
+
+    private func refreshColors() {
+        titleLabel.textColor = colors.textPrimary
+        flower.strokeColor = colors.textPrimary.cgColor
+    }
+
+    override func baseFill() -> NSColor { model?.current == true ? colors.selectedFill : .clear }
+
+    override func refreshBackground() {
+        super.refreshBackground()
+        setLifted(model?.current == true)
+    }
+
+    override func setColors(_ c: SidebarColors) {
+        guard c != colors else { return }
+        super.setColors(c)
+        refreshColors()
+        closeButton.colors = c
+    }
+
+    /// One turn a second, linear, for as long as it works; Reduce Motion leaves it still.
+    private func refreshSpin() {
+        let spins = model?.failed == false && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        if !spins { spinner.removeAnimation(forKey: "spin"); return }
+        guard spinner.animation(forKey: "spin") == nil else { return }
+        let turn = CABasicAnimation(keyPath: "transform.rotation.z")
+        turn.fromValue = 0
+        turn.toValue = 2 * Double.pi
+        turn.duration = 1
+        turn.timingFunction = CAMediaTimingFunction(name: .linear)
+        turn.repeatCount = .infinity
+        turn.isRemovedOnCompletion = false
+        spinner.add(turn, forKey: "spin")
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        // Core Animation drops a layer's animations when its view leaves a window.
+        spinner.removeAnimation(forKey: "spin")
+        refreshSpin()
+    }
+
+    private func rebuildClose() {
+        let shown = model?.failed == true && isHovered
+        guard shown != showsClose else { return }
+        showsClose = shown
+        if shown { addSubview(closeButton) } else { closeButton.removeFromSuperview() }
+        needsLayout = true
+    }
+
+    override func hoverChanged() {
+        super.hoverChanged()
+        rebuildClose()
+    }
+
+    override func layout() {
+        super.layout()
+        let h = bounds.height
+        let x = CraMetrics.rowLeading
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        spinner.position = CGPoint(x: x + CraMetrics.favicon / 2, y: h / 2)
+        CATransaction.commit()
+        let textX = x + CraMetrics.favicon + 11
+        var right = bounds.width - TabRowTrailing.endInset
+        if showsClose {
+            let s = closeButton.size
+            closeButton.frame = NSRect(x: right - s.width, y: (h - s.height) / 2, width: s.width, height: s.height)
+            right = closeButton.frame.minX - TabRowTrailing.controlGap
+        } else {
+            right = bounds.width - TabRowTrailing.restingTail
+        }
+        let th = titleLabel.intrinsicContentSize.height
+        titleLabel.frame = NSRect(x: textX - SidebarText.inset, y: (h - th) / 2, width: max(0, right - textX) + 2 * SidebarText.inset, height: th)
+    }
+}
+
 final class NewTabRowView: SidebarRowView {
     private let plus = NSImageView()
     private let label = NSTextField.sidebarLabel(size: 14)
@@ -2100,6 +2325,8 @@ final class NewTabRowView: SidebarRowView {
     /// What a click opens while ⌘ is held over the row with text on the clipboard; nil reads New Tab.
     private var paste: ClipboardPaste?
     private var pasteCheck: Task<Void, Never>?
+
+    override var pressRow: SidebarRowPress.Row { .newTab }
 
     override init(key: SpaceListView.RowKey, list: SpaceListView, colors: SidebarColors) {
         super.init(key: key, list: list, colors: colors)
@@ -2312,7 +2539,7 @@ final class DividerRowView: SidebarRowView {
         if show, clear == nil, let list {
             let b = ClearButton(colors: colors) { [weak list] in
                 guard let list else { return }
-                list.store.clearToday(list.spaceID)
+                list.store.clearToday(list.spaceID, playing: list.ui.audibleTabIDs)
             }
             b.alphaValue = 0
             addSubview(b)

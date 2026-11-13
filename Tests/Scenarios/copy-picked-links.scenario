@@ -1,0 +1,25 @@
+# promise: #322
+# ⇧⌘C with tabs picked by ⌘-click or ⇧-click copies every picked tab's link, one per line, in
+# sidebar order and without trackers ("Copied item links", as Arc); with nothing picked it copies
+# the open tab's alone. Rows are clicked through the sidebar's own pick logic (the open tab joins
+# when a selection starts) and ⇧⌘C is typed as a key event, so the Edit menu's key equivalent runs.
+# Today lists the newest tab first: three (open), two, one.
+budget rss=700 stalls50=10
+cra://open?url=${PAGE}?n=one
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://open?url=${PAGE}?n=two%26utm_source=x
+cra://open?url=${PAGE}?n=three
+wait 2
+cra://debug?pickedCopy=c3&label=cmd
+wait 1
+expect-log picked copy cmd: \S*n=three⏎\S*n=one picks=2$
+cra://debug?pickedCopy=s2&label=shift
+wait 1
+expect-log picked copy shift: \S*n=three⏎\S*n=two picks=2$
+cra://debug?pickedCopy=c2,c3&label=all
+wait 1
+expect-log picked copy all: \S*n=three⏎\S*n=two⏎\S*n=one picks=3$
+reject-log picked copy all: .*utm_source
+cra://debug?pickedCopy=&label=none
+wait 1
+expect-log picked copy none: \S*n=three picks=0$

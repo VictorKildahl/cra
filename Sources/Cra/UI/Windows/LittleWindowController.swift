@@ -158,6 +158,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// The page (a video) is in element fullscreen.
     private var pageFullscreen = false
     private let shell: LittleShellView
+    /// The page's permission cards up (#371); each asks until it is answered or the window closes.
+    private var permissionCards: [PermissionPopover] = []
     private var favicon: NSImage?
     private var promoted = false
     /// Hosts a page's window.open (a sign-in popup); its URL arrives after it shows.
@@ -324,7 +326,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         commandBar.onCommit = { [weak self] s, typed, mode in self?.handleCommit(s, typed: typed, mode: mode) }
         commandBar.onClose = { [weak self] in self?.hideCommandPanel() }
         commandBar.spaceName = { [weak self] id in self?.store.space(id)?.title ?? "" }
-        commandBar.onNoticeSettings = { [weak self] in self?.app.showSettingsWindow(on: .advanced) }
+        commandBar.onNoticeSettings = { [weak self] in self?.app.showSettingsWindow(on: .profiles) }
         commandBar.onNoticeLearnMore = { [weak self] in self?.app.openInNormalWindow(MainWindowController.privacyPage) }
 
         // The page's sign-ins (#172). Arc's Little Arc takes the profile of the space it opens into
@@ -444,7 +446,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     func focusPage() {
         guard let b = browser else { return }
-        if let w = b.hostWindow, w.parent === window { w.makeKey() }
+        if let w = b.hostWindow, w.parent === window {
+            w.makeKey()
+            ChromiumPageFocus.focus(w)
+        }
         b.setFocused(true)
     }
 
@@ -650,11 +655,13 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             easel.usePeekLook()
         }
         var buttons: [PeekControlsPanel.Button] = [
-            .init(symbol: "xmark", help: "Close (⌘W)") { [weak self] in self?.closeWindow() },
-            .init(symbol: "arrow.up.left.and.arrow.down.right", help: "Expand (⌘O)") { [weak self] in self?.promote(to: nil) },
+            .init(control: .close, symbol: "xmark", help: "Close (⌘W)") { [weak self] in self?.closeWindow() },
+            .init(control: .expand, symbol: "arrow.up.left.and.arrow.down.right", help: "Expand (⌘O)") { [weak self] in
+                self?.expandPeek(commandClick: NSApp.currentEvent?.modifierFlags.contains(.command) == true)
+            },
         ]
         if easel == nil {
-            buttons.append(.init(symbol: "square.split.2x1", help: "Add To Split") { [weak self] in self?.promoteToSplit() })
+            buttons.append(.init(control: .addToSplit, symbol: "square.split.2x1", help: "Add To Split") { [weak self] in self?.promoteToSplit() })
         }
         let controls = PeekControlsPanel(buttons: buttons)
         self.controls = controls
@@ -879,6 +886,27 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         if let window, let p = window.parent { p.removeChildWindow(window) }
         peekParent?.endPeekVeil(for: peekID)
         if !promoted, let pw = peekParent?.window, NSApp.isActive { pw.makeKeyAndOrderFront(nil) }
+    }
+
+    /// The Expand button: the page becomes a new tab, or with ⌘ held and Settings ▸ Links ▸ "⌘-click
+    /// Expand opens in the tab" on, loads in the tab the Peek came from (PeekExpand, GitHub #380).
+    func expandPeek(commandClick: Bool) {
+        let source = peekSourceTab.flatMap { store.item($0) != nil ? $0 : nil }
+        switch PeekExpand.target(commandClick: commandClick, hasSourceTab: source != nil, settings: store.settings) {
+        case .newTab: promote(to: nil)
+        case .sourceTab: if let source { loadInSourceTab(source) }
+        }
+    }
+
+    /// The tab under the Peek navigates to the peeked page and the Peek goes, without its closing
+    /// motion (Expand's own way out). The tab's history stays, so Back returns to where it was.
+    private func loadInSourceTab(_ tabID: UUID) {
+        guard hasPage, let parent = peekParent, let window else { return }
+        let url = currentURL
+        promoted = true  // the page lives on in the tab: not a closed Peek to reopen
+        guard windowShouldClose(window) else { return }
+        window.close()
+        parent.loadPeekPage(url, inTab: tabID)
     }
 
     /// Add To Split: the peeked page becomes a tab and joins the tab under the Peek as a split
@@ -1167,6 +1195,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         if state.targetSpaceID != id { state.targetSpaceID = id }
     }
 
+    /// The space the "Open in" button names, and Tabs ▸ "Open in <space>" with it (TabsMenu).
+    var openInSpace: Space { store.space(state.targetSpaceID) ?? store.focusedSpace }
+
     /// Move the page into a space (nil = the window's target space) as a Today
     /// tab, in the window already showing that space if there is one (Arc). The
     /// live browser goes with it, so history, scroll position and logins stay.
@@ -1277,10 +1308,15 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// that are not the little window's (the app handles those).
     func handle(action id: String) -> Bool {
         if handleCapture(action: id) { return true }
+        // A shortcut for a Peek button presses it as a click would, and the action runs at once (#385).
+        if isPeek, !closingPeek, let control = PeekControl.pressed(byAction: id) { controls?.pressFromKey(control) }
         switch id {
         // ⌘W on the card fades it out, as Esc does (#337).
         case "closeTab", "closeWindow": if isCard, !cardFading, window?.isVisible == true { dismissCard() } else { closeWindow() }
-        case "newTab", "editURL": openCommandBar()
+        case "newTab", "editURL":
+            // ⌘T in a Peek is the browser window's New Tab bar, with its tabs; ⌘L edits the Peek (#379).
+            let opening = CommandBarOpening.of(id == "newTab" ? .newTab : .editURL, in: isPeek ? .peek : .littleWindow, hasPage: hasPage)
+            if opening.owner == .browserWindow, let parent = peekParent { parent.openCommandBar(opening.mode) } else { openCommandBar() }
         case "goBack": browser?.goBack()
         case "goForward": browser?.goForward()
         case "reload": browser?.reload()
@@ -1319,11 +1355,14 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         // Move Tab to Space N (⌃⌘N, #86) sends the page there, as the spaces popup does (#92).
         case let id where id.hasPrefix("moveTabToSpace"):
             if let n = Int(id.dropFirst(14)), n >= 1, n <= store.spaceOrder.count { promote(to: store.spaceOrder[n - 1]) }
+        // Arc's Peek is a card in the browser window, so ⌘S and View ▸ Hide Sidebar reach that
+        // window's sidebar; a Little Window has none (#402).
+        case "toggleSidebar": peekParent?.toggleSidebar()
         // No find bar, sidebar or split in little windows; keep them off the main window.
-        case "find", "findNext", "findPrevious", "useSelectionForFind", "toggleSidebar", "pinTab", "favoriteTab", "renameTab",
+        case "find", "findNext", "findPrevious", "useSelectionForFind", "pinTab", "favoriteTab", "renameTab",
              "duplicateTab", "resetTab", "muteTab", "clearToday", "nextTab", "previousTab", "recentTab", "recentTabBackward",
              "revealTab", "collapsePinned", "collapseAllFolders", "expandAllFolders", "resetSpaceTabs",
-             "addSplitView", "closeSplitPane", "separateFromSplit", "flipSplitOrientation", "nextSplitPane", "previousSplitPane":
+             "addSplitView", "closeSplitPane", "separateFromSplit", "expandSplitPane", "flipSplitOrientation", "nextSplitPane", "previousSplitPane":
             break
         case let id where id.hasPrefix("splitPane"): break
         default: return false
@@ -1435,8 +1474,14 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         if popup != nil { closePopup() }
     }
 
+    func windowDidBecomeKey(_ notification: Notification) {
+        guard (notification.object as? NSWindow) === window, let host = browser?.hostWindow else { return }
+        ChromiumPageFocus.focus(host)
+    }
+
     func windowDidResignKey(_ notification: Notification) {
         let w = notification.object as? NSWindow
+        if w === window, let host = browser?.hostWindow { ChromiumPageFocus.blur(host) }
         if w === popup {
             DispatchQueue.main.async { [weak self] in
                 guard let self, let p = self.popup, !p.isKeyWindow else { return }
@@ -1783,15 +1828,24 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     func browser(_ browser: CraBrowser, didUpdateDownload download: CraDownloadInfo) { app.main.browserManager(download: download) }
 
     func browser(_ browser: CraBrowser, requestsPermissionForOrigin origin: String, kinds: UInt, completion: @escaping (Bool) -> Void) {
-        // The main window's sheet. A quiet notification deny here would save a block for the
-        // site that its tabs then hit too (#137).
-        let alert = AppDialog(title: PermissionPrompt.message(origin: origin, kinds: kinds),
-                              actions: [DialogAction("Allow"), DialogAction("Block", role: .cancel)])
-        guard let window else { completion(false); return }
-        alert.present(over: window) { resp in completion(resp == .alertFirstButtonReturn) }
+        // The main window's card, in the page's top left corner as in a Little Arc (#371). A quiet
+        // notification deny here would save a block for the site that its tabs then hit too (#137).
+        let card = PermissionPopover(title: PermissionPrompt.message(origin: origin, kinds: kinds),
+                                     actions: [DialogAction("Allow"), DialogAction("Not Now", role: .cancel)])
+        guard window != nil else { completion(false); return }
+        let page = shell.page
+        permissionCards.append(card)
+        card.present(relativeTo: page.bounds, of: page) { [weak self, weak card] resp in
+            self?.permissionCards.removeAll { $0 === card }
+            completion(resp == .alertFirstButtonReturn)
+        }
     }
 
-    func browserDidReceiveFocus(_ browser: CraBrowser) {}
+    func browserDidReceiveFocus(_ browser: CraBrowser) {
+        guard self.browser === browser, !isParked, !isCard, window?.isVisible == true,
+              let host = browser.hostWindow else { return }
+        ChromiumPageFocus.focus(host)
+    }
 
     func browserDidClose(_ browser: CraBrowser) {
         browser.containerView.removeFromSuperview()
@@ -2497,9 +2551,9 @@ final class LittleSpacesPopup: NSView, NSTextFieldDelegate {
             emoji.alignment = .center
             emoji.frame = NSRect(x: -SidebarText.inset, y: (ts - 15) / 2 + 1, width: ts + 2 * SidebarText.inset, height: 15)
             tile.addSubview(emoji)
-            if let name = s.symbol {
+            if let image = SpaceIconImage.glyph(for: s, points: 11) {
                 let glyph = NSImageView(frame: NSRect(x: 0, y: 0, width: ts, height: ts))
-                glyph.image = SidebarSymbols.image(name, size: 11, weight: .medium)
+                glyph.image = image
                 glyph.imageScaling = .scaleNone
                 glyph.contentTintColor = .white
                 tile.addSubview(glyph)

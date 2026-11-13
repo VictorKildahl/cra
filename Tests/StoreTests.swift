@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Observation
 import SQLite3
@@ -21,6 +22,7 @@ enum StoreTests {
         try arcImport()
         try diaImport()
         chromiumProfile()
+        deletedBrowserStillImports()
         chromiumManifestV2Import()
         autoArchive()
         longAutoArchive()
@@ -52,11 +54,13 @@ enum StoreTests {
         closeSuccessor()
         favoritesEmptyState()
         sharedFavorites()
+        newDocumentApps()
         themePreview()
         try arcSpacesWithoutAThemeShareOneDefault()
         try arcItemListedTwice()
         try arcLiveFolderImportsLive()
         try arcSpaceWithoutAnIconImportsAsADot()
+        try arcSpaceIconTabGlyphImports()
         littleWindowProfile()
         tidyTabs()
         pinHook()
@@ -70,12 +74,15 @@ enum StoreTests {
         tornOffTabMovesToABlankWindow()
         tornOffTabKeepsItsProfile()
         archiveTabsBelow()
+        clearTodayKeepsSelectedAndPlaying()
         allFoldersExpanded()
         dropIntoFolderGoesOnTop()
         revealInSidebar()
         oneWindowAtLaunch()
         openLinkInSplit()
         backToReferrer()
+        recentTabsTakeBackgroundTabs()
+        incognitoSpaceKeepsItsContext()
         print("Store: \(checks) checks passed")
     }
 
@@ -259,6 +266,27 @@ enum StoreTests {
         expect(ExtensionImporter.disabledIDs(inProfile: profile).contains("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
                && !ExtensionImporter.disabledIDs(inProfile: profile).contains("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
                "an extension with disable_reasons is off, one in state 1 is on")
+    }
+
+    /// A browser someone has already deleted still leaves its profile behind, and the import
+    /// reads only that: Chrome and Firefox are offered from their data alone, as Arc, Dia and Zen
+    /// are. Requiring the app too left a Chrome switcher with only Safari (X DM, 12 Nov).
+    private static func deletedBrowserStillImports() {
+        let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures")
+        let chrome = ImportSource(id: "chrome", name: "Chrome", bundleID: "app.cra.tests.not-installed", kind: .chromium,
+                                  dataDir: fixtures.appendingPathComponent("Chromium"))
+        expect(!chrome.isInstalled && chrome.isAvailable, "a Chrome profile without the app is offered")
+        let firefoxRoot = FileManager.default.temporaryDirectory.appendingPathComponent("cra-firefox-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: firefoxRoot) }
+        try? FileManager.default.createDirectory(at: firefoxRoot.appendingPathComponent("abc.default-release"), withIntermediateDirectories: true)
+        try? Data("[Profile0]\nName=default-release\nIsRelative=1\nPath=abc.default-release\nDefault=1\n".utf8)
+            .write(to: firefoxRoot.appendingPathComponent("profiles.ini"))
+        FileManager.default.createFile(atPath: firefoxRoot.appendingPathComponent("abc.default-release/places.sqlite").path, contents: Data())
+        let firefox = ImportSource(id: "firefox", name: "Firefox", bundleID: "app.cra.tests.not-installed", kind: .firefox, dataDir: firefoxRoot)
+        expect(!firefox.isInstalled && firefox.isAvailable, "a Firefox profile without the app is offered")
+        let empty = ImportSource(id: "chrome", name: "Chrome", bundleID: "app.cra.tests.not-installed", kind: .chromium,
+                                 dataDir: firefoxRoot.appendingPathComponent("none"))
+        expect(!empty.isAvailable, "no profile, nothing to offer")
     }
 
     // promise: #228
@@ -918,6 +946,35 @@ enum StoreTests {
         for id in ids { store.deleteSpace(id) }
     }
 
+    /// An Arc space with a glyph from the Icon tab of Arc's picker (`iconType.icon`, e.g. "star")
+    /// imports with the SF Symbol in the same slot of Cra's Icon tab, not 🗂️, so nobody picks it
+    /// again. A name Cra has no symbol for (Arc's "github") still gets 🗂️.
+    @MainActor
+    private static func arcSpaceIconTabGlyphImports() throws {
+        let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Arc/StorableSidebar.json")
+        var root = try JSONSerialization.jsonObject(with: Data(contentsOf: fixture)) as! [String: Any]
+        var sidebar = root["sidebar"] as! [String: Any]
+        var containers = sidebar["containers"] as! [[String: Any]]
+        let main = containers.firstIndex { $0["spaces"] != nil }!
+        var spaces = containers[main]["spaces"] as! [Any]
+        for (title, icon) in [("Home", "star"), ("Work", "github")] {
+            let i = spaces.firstIndex { ($0 as? [String: Any])?["title"] as? String == title }!
+            var space = spaces[i] as! [String: Any]
+            space["customInfo"] = ["iconType": ["icon": icon]]
+            spaces[i] = space
+        }
+        containers[main]["spaces"] = spaces
+        sidebar["containers"] = containers
+        root["sidebar"] = sidebar
+        let plan = try ArcImporter.plan(sidebar: JSONSerialization.data(withJSONObject: root))
+
+        let store = AppComposition(clock: ManualScheduler()).store
+        let ids = store.apply(plan, includeArchive: false, includeSettings: false).spaceIDs
+        let icons = ids.map { store.space($0)?.icon }
+        expect(icons == [.symbol("star.fill"), .emoji("🗂️")], "Arc's Icon-tab star imports as Cra's star, an unknown glyph as 🗂️ (\(icons))")
+        for id in ids { store.deleteSpace(id) }
+    }
+
     // promise: #30
     /// Arc spaces without a `windowTheme` (both in the made-up profile) import with one fixed
     /// default, not the next preset each, which shifted every later space's colour (#30).
@@ -955,6 +1012,30 @@ enum StoreTests {
         store.deleteSpace(space)
         store.deleteSpace(home)
         store.deleteProfile(work.id)
+    }
+
+    // promise: #375
+    /// Arc's per-profile "New documents" (#375): the command bar offers the app of the focused space's
+    /// profile, and deleting a profile drops its choice.
+    @MainActor
+    private static func newDocumentApps() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let home = store.createSpace(title: "Docs Home", emoji: "🏠", focus: false).id
+        store.setProfile(nil, forSpace: home)
+        let work = store.createProfile(name: "Docs Work")
+        let space = store.createSpace(title: "Docs Work", emoji: "💼", focus: false).id
+        store.setProfile(work.id, forSpace: space)
+        store.settings.setNewDocumentApp(.notionPage, profileID: work.id)
+        store.settings.setNewDocumentApp(.googleDoc, profileID: nil)
+        expect(store.profileID(space: space) == work.id && store.settings.newDocumentApp(profileID: store.profileID(space: space)) == .notionPage,
+               "a space on a profile makes that profile's New documents app (#375)")
+        expect(store.profileID(space: home) == nil && store.settings.newDocumentApp(profileID: store.profileID(space: home)) == .googleDoc,
+               "a space on Default makes Default's (#375)")
+        store.deleteSpace(space)
+        store.deleteProfile(work.id)
+        expect(store.settings.newDocumentApps == ["Default": .googleDoc], "deleting a profile drops its New documents app (#375)")
+        store.settings.setNewDocumentApp(nil, profileID: nil)
+        store.deleteSpace(home)
     }
 
     // promise: #170
@@ -1835,6 +1916,9 @@ enum StoreTests {
         syncA.disable()
         iCloudSync(first: a, firstClock: clockA)
         syncGoesOnWithoutAsking()
+        syncPutsAMixedBundleRight()
+        syncPutsAFileThatNeverArrivesRight()
+        syncLeavesAMixToItsWriterOnANewMac()
     }
 
     /// iCloud is the same bundle in the app's container, with two differences a test folder can
@@ -1977,6 +2061,195 @@ enum StoreTests {
         expect(syncE.pendingChoice == nil && e.document.items.contains { $0.id == later.id } && syncE.isEnabled,
                "once the provider has delivered it, it is applied with no second question")
         syncD.disable(); syncE.disable()
+    }
+
+    // promise: #378
+    /// Two writes that crossed leave the folder with one write's settings and the other's manifest
+    /// (two Macs at once, or a provider that keeps one Mac's file and the other Mac's manifest).
+    /// No download is coming, so after a short wait the Mac whose manifest it is writes its whole
+    /// bundle again, with the tab opened meanwhile, and the other Mac applies it. Cra 0.1.40 took
+    /// the mix for a download and both Macs stopped syncing for good.
+    @MainActor
+    private static func syncPutsAMixedBundleRight() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("cra-sync-mixed-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bundle = root.appendingPathComponent(SettingsSync.folderName, isDirectory: true)
+        let manifestURL = bundle.appendingPathComponent(SettingsSync.manifestName)
+        let settingsURL = bundle.appendingPathComponent(SettingsSync.settingsName)
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]; encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        func manifest() -> SyncManifest? { (try? Data(contentsOf: manifestURL)).flatMap { try? decoder.decode(SyncManifest.self, from: $0) } }
+        /// The files are the ones the manifest names: a whole bundle.
+        func whole() -> Bool {
+            guard let m = manifest() else { return false }
+            let hashes = Dictionary(uniqueKeysWithValues: SettingsSync.fileNames.compactMap { name in
+                (try? Data(contentsOf: bundle.appendingPathComponent(name))).map { (name, SHA256.hash(data: $0).map { String(format: "%02x", $0) }.joined()) }
+            })
+            return SettingsSync.isComplete(m, hashes: hashes)
+        }
+        /// Another write's settings: valid, but not the file the manifest names.
+        func mixIn(httpsOnly: Bool) {
+            var other = AppSettings()
+            other.httpsOnly = httpsOnly
+            other.searchEngine = .duckduckgo
+            try? encoder.encode(other).write(to: settingsURL)
+        }
+
+        let clockA = ManualScheduler(), clockB = ManualScheduler(now: clockA.now)
+        let a = SidebarStore(clock: clockA), b = SidebarStore(clock: clockB)
+        let syncA = SettingsSyncService(store: a, clock: clockA, device: "Studio", deviceID: "studio")
+        expect(syncA.enable(folder: root) == .synced, "the first Mac syncs through a folder")
+        let syncB = SettingsSyncService(store: b, clock: clockB, device: "MacBook", deviceID: "macbook")
+        guard case .bundleFound = syncB.enable(folder: root) else { return expect(false, "the second Mac is asked once") }
+        syncB.useRemote()
+
+        // The issue's steps: settings.json from another write, the manifest left as it was, a tab opened.
+        // The stores read the shared test data folder: the mix is whichever httpsOnly this Mac doesn't have.
+        let httpsOnly = a.settings.httpsOnly
+        mixIn(httpsOnly: !httpsOnly)
+        let mixed = try? Data(contentsOf: settingsURL)
+        let tab = a.createTab(url: "https://example.com/opened-during-the-mix")
+        syncA.poll()
+        expect(!whole() && (try? Data(contentsOf: settingsURL)) == mixed, "the first look leaves the mix alone: it may still be arriving")
+        clockA.advance(by: 30)
+        expect((try? Data(contentsOf: settingsURL)) == mixed, "so does the next")
+        clockA.advance(by: 30)
+        clockA.advance(by: 30)
+        expect(whole(), "a mix that stays put is written over with a whole bundle")
+        expect(manifest()?.deviceID == "studio" && !syncA.awaitingDownload && syncA.error == nil, "by the Mac whose manifest it was, which syncs again")
+        expect(a.settings.httpsOnly == httpsOnly, "the mixed-in file was never applied")
+        clockB.advance(by: 90)
+        expect(b.document.items.contains { $0.id == tab.id }, "the tab opened during the mix reaches the other Mac")
+
+        // The writer is gone (asleep, Cra quit): the other Mac puts the mix right itself, later.
+        syncA.disable()
+        mixIn(httpsOnly: !b.settings.httpsOnly)
+        let before = clockB.now
+        let tabB = b.createTab(url: "https://example.com/opened-on-the-other-mac")
+        while !whole() && clockB.now.timeIntervalSince(before) < 600 { clockB.advance(by: 30) }
+        let waited = clockB.now.timeIntervalSince(before)
+        expect(whole() && manifest()?.deviceID == "macbook" && waited > 90,
+               "the other Mac writes its bundle too, after giving the writer time (\(waited) s)")
+        expect(manifest()?.files[SettingsSync.sidebarName] != nil
+               && (try? decoder.decode(SidebarDocument.self, from: Data(contentsOf: bundle.appendingPathComponent(SettingsSync.sidebarName))))?
+                .items.contains { $0.id == tabB.id } == true, "with its own changes in it")
+
+        // A newer Cra's bundle, which this Cra can't read, is never written over.
+        let unreadable = Data(#"{"newTabsAtTop": {"a later Cra's": "shape"}}"#.utf8)
+        try? unreadable.write(to: settingsURL)
+        if var m = manifest() {
+            m.files[SettingsSync.settingsName] = SHA256.hash(data: unreadable).map { String(format: "%02x", $0) }.joined()
+            m.device = "Mini"; m.deviceID = "mini"
+            try? encoder.encode(m).write(to: manifestURL)
+        }
+        _ = b.createTab(url: "https://example.com/opened-after-the-update")
+        for _ in 0..<10 { clockB.advance(by: 30) }
+        expect((try? Data(contentsOf: settingsURL)) == unreadable && manifest()?.deviceID == "mini",
+               "a whole bundle this Cra can't read is left for the newer Cra")
+        expect(syncB.error != nil, "and Settings says why this Mac stopped syncing")
+        syncB.disable()
+    }
+
+    /// A sync folder in a temporary directory, and what its bundle holds, for the tests below.
+    private struct SyncFolder {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("cra-sync-\(UUID().uuidString)", isDirectory: true)
+        var bundle: URL { root.appendingPathComponent(SettingsSync.folderName, isDirectory: true) }
+        func url(_ name: String) -> URL { bundle.appendingPathComponent(name) }
+        func data(_ name: String) -> Data? { try? Data(contentsOf: url(name)) }
+        var manifest: SyncManifest? {
+            let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+            return data(SettingsSync.manifestName).flatMap { try? decoder.decode(SyncManifest.self, from: $0) }
+        }
+        /// The files are the ones the manifest names: a whole bundle.
+        var whole: Bool {
+            guard let m = manifest else { return false }
+            let hashes = Dictionary(uniqueKeysWithValues: SettingsSync.fileNames.compactMap { name in
+                data(name).map { (name, SHA256.hash(data: $0).map { String(format: "%02x", $0) }.joined()) }
+            })
+            return SettingsSync.isComplete(m, hashes: hashes)
+        }
+        func sidebarHas(_ id: UUID) -> Bool {
+            let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+            return data(SettingsSync.sidebarName).flatMap { try? decoder.decode(SidebarDocument.self, from: $0) }?
+                .items.contains { $0.id == id } == true
+        }
+    }
+
+    // promise: #378
+    /// A file the manifest names that is gone from the folder, with no iCloud placeholder for it
+    /// (deleted, or left out by a provider), never arrives. The Mac that wrote the manifest writes
+    /// its bundle again after a minute; another Mac waits ten, since a provider that only shows a
+    /// file once it has downloaded may still be delivering it. ebce13c1 waited on it for ever.
+    @MainActor
+    private static func syncPutsAFileThatNeverArrivesRight() {
+        let folder = SyncFolder()
+        try? FileManager.default.createDirectory(at: folder.root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder.root) }
+        let clockA = ManualScheduler(), clockB = ManualScheduler(now: clockA.now)
+        let a = SidebarStore(clock: clockA), b = SidebarStore(clock: clockB)
+        let syncA = SettingsSyncService(store: a, clock: clockA, device: "Studio", deviceID: "studio")
+        expect(syncA.enable(folder: folder.root) == .synced, "the first Mac syncs through a folder")
+        let syncB = SettingsSyncService(store: b, clock: clockB, device: "MacBook", deviceID: "macbook")
+        guard case .bundleFound = syncB.enable(folder: folder.root) else { return expect(false, "the second Mac is asked once") }
+        syncB.useRemote()
+
+        try? FileManager.default.removeItem(at: folder.url(SettingsSync.settingsName))
+        let tab = a.createTab(url: "https://example.com/opened-with-a-file-gone")
+        syncA.poll()
+        expect(!folder.whole && syncA.awaitingDownload, "the first look waits: the file may be on its way")
+        for _ in 0..<3 { clockA.advance(by: 30) }
+        expect(folder.whole && folder.manifest?.deviceID == "studio" && !syncA.awaitingDownload,
+               "the Mac whose manifest names it writes its whole bundle again")
+        clockB.advance(by: 90)
+        expect(b.document.items.contains { $0.id == tab.id }, "and the other Mac receives it")
+
+        // The writer is away: the other Mac puts it right itself, after waiting longer than for a mix.
+        syncA.disable()
+        try? FileManager.default.removeItem(at: folder.url(SettingsSync.sidebarName))
+        let before = clockB.now
+        let tabB = b.createTab(url: "https://example.com/opened-on-the-other-mac")
+        while !folder.whole && clockB.now.timeIntervalSince(before) < 1200 { clockB.advance(by: 30) }
+        let waited = clockB.now.timeIntervalSince(before)
+        expect(folder.whole && folder.manifest?.deviceID == "macbook" && waited >= 600,
+               "the other Mac writes its bundle after ten minutes (\(waited) s)")
+        expect(folder.sidebarHas(tabB.id), "with its own changes in it")
+        syncB.disable()
+    }
+
+    // promise: #378
+    /// A Mac that turns sync on against another Mac's mix has not been asked yet which sidebar to
+    /// keep, so it never writes over the mix: written over, its bundle would replace the other
+    /// Mac's sidebar with no question. It waits for the writer, then asks as usual.
+    @MainActor
+    private static func syncLeavesAMixToItsWriterOnANewMac() {
+        let folder = SyncFolder()
+        try? FileManager.default.createDirectory(at: folder.root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder.root) }
+        let clockA = ManualScheduler(), clockC = ManualScheduler(now: clockA.now)
+        let a = SidebarStore(clock: clockA), c = SidebarStore(clock: clockC)
+        let syncA = SettingsSyncService(store: a, clock: clockA, device: "Studio", deviceID: "studio")
+        expect(syncA.enable(folder: folder.root) == .synced, "the first Mac syncs through a folder")
+
+        // A mix the first Mac has not seen yet (asleep): a valid settings.json from another write.
+        var other = AppSettings()
+        other.httpsOnly = !a.settings.httpsOnly
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try? encoder.encode(other).write(to: folder.url(SettingsSync.settingsName))
+        let mixed = folder.data(SettingsSync.settingsName)
+
+        let syncC = SettingsSyncService(store: c, clock: clockC, device: "Mini", deviceID: "mini")
+        expect(syncC.enable(folder: folder.root) == .downloading, "the new Mac waits on the mix")
+        for _ in 0..<40 { clockC.advance(by: 30) }
+        expect(folder.manifest?.deviceID == "studio" && folder.data(SettingsSync.settingsName) == mixed && syncC.pendingChoice == nil,
+               "twenty minutes on, the new Mac has still not written over the first Mac's bundle")
+
+        for _ in 0..<3 { clockA.advance(by: 30) }
+        expect(folder.whole && folder.manifest?.deviceID == "studio", "the first Mac puts it right when it is back")
+        clockC.advance(by: 30)
+        expect(syncC.pendingChoice?.device == "Studio", "and the new Mac asks which sidebar to keep, as when sync is turned on")
+        syncC.useLocal()
+        syncA.disable(); syncC.disable()
     }
 
     /// A Blank Window is one Mac's window: its sidebar never goes to the other Mac, and a bundle
@@ -2278,6 +2551,54 @@ enum StoreTests {
         expect(store.integrityProblems().isEmpty, "the sidebar stays sound")
     }
 
+    /// An incognito window's pages all load in one off-the-record context, whatever profile its
+    /// space would name, so the space takes no profile; and Export into Folder can't carry its
+    /// tabs into a saved space (#413).
+    // promise: #413
+    @MainActor
+    private static func incognitoSpaceKeepsItsContext() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let work = store.createProfile(name: "Work")
+        let home = store.createSpace(title: "Home", emoji: "🏠").id
+        let incognito = store.addIncognitoWindow(frame: nil)
+        let sid = incognito.focusedSpaceID!
+        let secret = store.createTab(url: "https://example.com/secret", window: incognito.id)
+        store.setProfile(work.id, forSpace: sid)
+        expect(store.space(sid)?.profileID == nil, "an incognito space takes no profile")
+        expect(store.exportSpace(sid, intoFolderIn: home) == nil, "an incognito space doesn't export into a saved space")
+        expect(store.isIncognito(item: secret.id) && store.spaceID(ofItem: secret.id) == sid, "its tab stays in the incognito window")
+        expect(store.integrityProblems().isEmpty, "the sidebar stays sound")
+    }
+
+    /// Arc's Clear on Today ("Clear unselected Today tabs"): the tab on screen and a tab playing
+    /// sound stay; a split stays whole with them.
+    // promise: #406
+    @MainActor
+    private static func clearTodayKeepsSelectedAndPlaying() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let sid = store.createSpace(title: "Clear", emoji: "🧹").id
+        let today = store.space(sid)!.todayContainerID
+        let a = store.createTab(url: "https://a.example/", in: sid, select: false, parent: today, index: 0)
+        let video = store.createTab(url: "https://video.example/", in: sid, select: false, parent: today, index: 1)
+        let c = store.createTab(url: "https://c.example/", in: sid, select: false, parent: today, index: 2)
+        let d = store.createTab(url: "https://d.example/", in: sid, select: false, parent: today, index: 3)
+        let split = store.createSplit(with: [c.id, d.id])!
+        let shown = store.createTab(url: "https://shown.example/", in: sid, parent: today, index: 3)
+        expect(store.selectedTabID == shown.id, "set up: the last tab is on screen")
+        store.clearToday(sid, playing: [video.id])
+        expect(store.children(of: today).map(\.id) == [video.id, shown.id],
+               "Clear keeps the tab on screen and the one playing sound, and archives the rest")
+        expect(store.item(split.id) == nil && store.item(a.id) == nil, "the split and the idle tab are archived")
+
+        let e = store.createTab(url: "https://e.example/", in: sid, select: false, parent: today, index: 2)
+        let f = store.createTab(url: "https://f.example/", in: sid, select: false, parent: today, index: 3)
+        let paneSplit = store.createSplit(with: [e.id, f.id])!
+        store.selectTab(f.id)
+        store.clearToday(sid, playing: [])
+        expect(store.children(of: today).map(\.id) == [paneSplit.id], "a split with the selected pane stays whole")
+        expect(store.integrityProblems().isEmpty, "the sidebar stays sound")
+    }
+
     /// Arc's Shortcuts list: Collapse All Folders / Expand All Folders, nested folders included.
     @MainActor
     private static func allFoldersExpanded() {
@@ -2366,6 +2687,25 @@ enum StoreTests {
         store.togglePinnedCollapsed(sid)
         store.revealInSidebar(today.id)
         expect(store.isPinnedCollapsed(sid), "a Today tab leaves the pinned section as it is")
+    }
+
+    /// Arc's ⌃Tab after a ⌘-click: the tab the link opened in the background is next after the
+    /// current one, so a tap goes to it and the next tap comes back.
+    @MainActor
+    private static func recentTabsTakeBackgroundTabs() {
+        let clock = ManualScheduler()
+        let store = AppComposition(clock: clock).store
+        let sid = store.createSpace(title: "Recent", emoji: "⏱️").id
+        let older = store.createTab(url: "https://example.com/older", in: sid)
+        clock.advance(by: 1)
+        let source = store.createTab(url: "https://example.com/source", in: sid)
+        clock.advance(by: 1)
+        let link = store.createTab(url: "https://example.com/link", in: sid, select: false, referrer: source.id)
+        expect(store.recentTabs(in: sid, limit: .max) == [source.id, link.id, older.id],
+               "the background tab comes right after the current tab, before the one visited earlier")
+        clock.advance(by: 1)
+        store.selectTab(link.id)
+        expect(store.recentTabs(in: sid, limit: .max) == [link.id, source.id, older.id], "on it, the next tab is the one it came from")
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {

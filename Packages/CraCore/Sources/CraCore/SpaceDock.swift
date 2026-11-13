@@ -1,9 +1,11 @@
 import CoreGraphics
+import Foundation
 
 /// What one space's cell in the sidebar's dock draws (Arc: SidebarDockIconType).
 public enum SpaceDockMark: Equatable, Sendable {
     case emoji(String)
     case symbol(String)
+    case image(Data)
     /// A filled circle this many points across.
     case dot(diameter: CGFloat)
 }
@@ -75,6 +77,7 @@ public enum SpaceDock {
         switch icon {
         case .emoji(let e): return .emoji(e)
         case .symbol(let s): return .symbol(s)
+        case .image(let d): return .image(d)
         case .none: return .dot(diameter: dotDiameter)
         }
     }

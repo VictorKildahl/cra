@@ -1,0 +1,11 @@
+{
+  "v": 1,
+  "name": "No Comments",
+  "host": "youtube.com",
+  "about": "Hides the comments under every video.",
+  "by": "VictorKildahl",
+  "preview": "https://www.youtube.com/watch?v=UF8uR6Z6KLc&hl=en&gl=US",
+  "zapped": [
+    "ytd-comments#comments"
+  ]
+}

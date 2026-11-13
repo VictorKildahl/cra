@@ -60,8 +60,13 @@ Settings ▸ General ▸ Sync keeps `sidebar.json`, `settings.json` (minus each 
 (`Documents/Cra` in the app's iCloud Documents container; docs/release.md says how the signed
 build gets the entitlement) or through a folder a file provider syncs: `SettingsSyncService`
 writes them with a `manifest.json` into a `Cra` folder there and applies a newer bundle another
-Mac wrote (`SettingsSync` in CraCore decides). `sync.json` in the data folder holds the location
-and the last bundle written or applied. To try it on one Mac, run a second instance on another
+Mac wrote (`SettingsSync` in CraCore decides). A file still downloading is waited for; files
+from different writes (hashes that don't match the manifest, #378) are waited for one to two
+minutes (`SyncMixWait`), then the Mac writes a whole bundle again; a file the manifest names that
+is gone with no placeholder is put right the same way, after one minute on the Mac that wrote the
+manifest and ten on another. A Mac that hasn't synced in the folder yet never writes over another
+Mac's bundle: it waits for that Mac, then asks. A newer Cra's bundle is never written over. `cra://debug?sync=<label>` logs what the last look found. `sync.json` in the data
+folder holds the location and the last bundle written or applied. To try it on one Mac, run a second instance on another
 `CRA_DATA_DIR` with `CRA_SYNC_DEVICE=<name>` (a Mac is known in the folder by a hash of its
 hardware UUID, which two instances share);
 `CRA_SYNC_ICLOUD_DIR=<folder>` makes both treat that folder as the iCloud container.
@@ -125,6 +130,9 @@ to Markdown or `docs/` alone runs nothing.
   the footer colour.
 - `scripts/test-link-summary-panel.sh`: 5-Second Previews' card window (`LinkSummaryPanel`) off screen with
   a stub service: the loading card, the answer growing in under the link, the small card above its link, closing.
+- `scripts/test-emoji-label.sh`: a space's emoji label in the dock and the space header, drawn
+  clipped to its frame and with the cell's text cut at the baseline, as macOS 27 draws it: `EmojiLabel`
+  shows the emoji's whole picture, in the same place (#399).
 - `scripts/test-music-notes.sh`: the production note sprites over fixed white and black backgrounds
   at 1x and 2x, checking light-theme contrast and the dark-theme tint without CEF or a visible window.
 - `scripts/test-live-folder-plugins.sh`: the real `CraPluginHost` (sandboxed JavaScriptCore) and
@@ -137,14 +145,26 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-sidebar-creation-menu.sh`: the sidebar + menu's real window and view off screen:
   rows and keys, clicks on enabled and disabled rows, Arc's open and close timings, and the +
   turning into an × on its spring.
+- `scripts/test-back-forward-menu.sh`: Back and Forward's history menu (#416) off screen: rows,
+  keys, clicks, titles cut where Arc cuts them, the window growing from its tail, a click on the
+  button closing it, and the button's hold (⌃-click stays a plain click).
 - `scripts/test-easel-canvas.sh`: the real `EaselSheetView` in an off-screen window, driven with
   synthetic mouse and key events: one click picks a text block, a double click edits it, Return and
-  Escape end editing, Delete removes it, its size pill follows a drag. Then `EaselBrowser` against
-  a stub `CraBrowser`: Peek's opaque canvas, and the clear page and dark bar it reports to the tab
-  that takes it over with ⤢.
+  Escape end editing, Delete removes it, its size pill follows a drag. Undo and Redo, copy and
+  paste, the object and canvas menus, the colour picker, a pasted address as a link card, the
+  alignment guides and a live capture (through a fake `EaselLive`); every kind of item drawn into
+  an sRGB bitmap and its pixels compared with Arc's colours. Then `EaselBrowser` against a stub
+  `CraBrowser`: Peek's opaque canvas, the clear page and dark bar it reports to the tab that takes
+  it over with ⤢, and the capture menu's New Easel and Send To… writing their easel files.
+  `Tests/Scenarios/easel.scenario` checks the rest in the app: `cra://debug?easelLive=<s>` (a
+  capture's live page draws onto its card), `easelLink=<url>` (a link card reads its page),
+  `easelDraw=1` and `easelPick=<n>` (the picker and the object menu).
 - `scripts/test-perf.sh`: the performance recorder on a real main run loop: injected stalls,
   hang files with a `sample` stack, the session marker, ownership, the recording switch
   ([performance.md](performance.md)).
+- `scripts/perf/rounds.sh` + `scripts/perf/report.py`: memory, idle CPU and wakeups, new tab and
+  tab switch timings of builds side by side, interleaved, in background copies; not part of
+  `scripts/test.sh` (about 7 minutes a build a round). How to read them: [speed.md](speed.md).
 - `python3 Tests/test_cef_download.py`: offline checks for direct downloads, API fallback,
   checksum and metadata failures, and custom URLs; included in `scripts/test.sh`.
 - `scripts/lint.py`: Cra's own rules (testing.md), checked by `scripts/test.sh`.
@@ -167,7 +187,7 @@ sleep does: notes Chromium's audio service), `wake=1` (what waking the Mac does:
 re-read their tabs' sound, a tab-sleeping pass runs and cra.log says whether the audio service lived), `stall=<ms>` (blocks the main
 thread), `perfReport=<path>` (the recorder's perf.json now), `systemAppearance=light|dark|system`
 (the appearance Auto space themes follow, without changing the Mac's), `themeEditor=1` (Edit
-Theme Color… for the focused space), `sidebarShown=<label>` (whether the window shows its sidebar,
+Theme Color… for the focused space), `toolbar=out|in|sample|at:<x>,<y>|<label>` (the floating toolbar of Settings ▸ Tabs ▸ "Hide the toolbar until you need it": put it out or in, look at the pointer once, or say what a pointer at that point from the window's top left is to it, then log `toolbar <command>: floats=… out=… inset=… page=… hangs=…`), `findBar=<label>` (whether the find bar shows and how far its panel is from the focused page's top and trailing edges: `findBar <label>: visible=… top=… trailing=… size=…`), `sidebarShown=<label>` (whether the window shows its sidebar,
 and the View menu's Hide/Show Sidebar row: its title and the key it answers to, an App Shortcut's
 when one names it), `relaunch=1`, `quit=1`, and `nowPlaying=state|toggle|next|previous|pip|dismiss` (the sidebar player's
 newest card, then a `Cra nowPlaying[<label>] <host> playing=… prev=… next=… video=… pip=…` line per card
@@ -228,6 +248,18 @@ without Apple Intelligence would. `cra://debug?tidy=1` runs Tidy on the window's
 hovering the divider, `cra://debug?undoTidy=1` is ⌘Z's undo and `cra://debug?settingsPane=max`
 opens Settings on a pane.
 
+Opening ⌘T with Instant Links on prewarms a model session, kept until the next Instant Links run. Instant Links (#407) uses the same test model: its plan is `InstantLinks.plainPlan`, the phrase as
+one search, after the 1.6 s pause. `CRA_INSTANT_LINKS_SEARCH=<url with {searchTerms}>` loads that page in the hidden
+search page and reads it with Google's script, as if it were Google (`Tests/Fixtures/Pages/instant-links.html` is
+shaped like Google's results). `CRA_INSTANT_LINKS_FAIL=1` makes the model and the fallback both give no plan,
+so the row shows its error, and `CRA_INSTANT_LINKS_MODEL_FAIL=1` makes the test model throw, so the fallback runs.
+While a scenario runs, `cra://debug?instantLinksFail=none|plan|model` changes both,
+`cra://debug?instantLinksSetting=on|off` is Settings ▸ Max ▸ Instant Links and `cra://debug?instantLinksDismiss=1` is
+the error row's ✕. `cra://debug?instantLinks=<label>` logs the row and the last run: rows, status, current (the
+selected-row fill), plan (format/searches/counts), opened, fellback, and Today's and Pinned's items in order (a page's
+`result=` number, `+` between a split's panes, `"title"{…}` for a folder, `*` on the selected tab).
+`cra://debug?key=` now sends the key to the ⌘T bar's panel while it is open, so a scenario can press Shift-Return.
+
 `cra://debug?dragEnd=<text>` ends a drag of the window's tab whose URL holds the text, let go
 with nothing taking it, the way a drag out of the sidebar ends: outside every Cra window it opens
 in a new Blank Window (`&at=x,y` picks the point, from the screen's top left).
@@ -243,6 +275,8 @@ the way to check a menu without the pointer. The menu shows up on screen. While 
 it is an AXMenu child of the app: each item's `AXMenuItemCmdChar`, `AXMenuItemCmdModifiers`
 and `AXMenuItemMarkChar` give its shortcut and checkmark, and AXCancel closes it (a posted
 Esc doesn't). The first menu after a launch can close before AX sees it, so open it again.
+`cra://debug?spaceMenu=<label>` logs the rows of the open space's header menu without showing
+it (`&window=incognito` for the newest incognito window's).
 
 The sidebar's tab list and space pager are AppKit (`UI/Sidebar/List`): rows are plain
 layer-backed views rebuilt from the store when it changes, a swipe moves the pager's layers
