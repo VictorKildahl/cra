@@ -329,10 +329,16 @@ public enum LinkSummaryPrompt {
         if !content.bodyText.isEmpty { page.append(content.bodyText) }
         var lines = ["WEBPAGE INFO:", "<webpage>", page.joined(separator: "\n"), "</webpage>"]
         if let searchQuery {
-            lines.append("Focus the answer card on the user's search query: '\(searchQuery)'.")
+            lines.append("User search query: '\(searchQuery)'")
         }
-        lines.append("Write responses in \(language).")
+        lines.append("Write responses (but not JSON keys) in \(language) using markdown formatting.")
         return lines.joined(separator: "\n")
+    }
+
+    /// Capture once in the request; only generated values are localized, never schema keys.
+    public static func responseLanguage(preferredLanguages: [String]) -> String {
+        let code = preferredLanguages.first.flatMap { Locale(identifier: $0).language.languageCode?.identifier } ?? "en"
+        return Locale(identifier: "en_US").localizedString(forLanguageCode: code) ?? "English"
     }
 
     /// Arc's row limits: 2 to 4 details.
@@ -341,15 +347,17 @@ public enum LinkSummaryPrompt {
     /// The model's answer, cleaned into a card. Nil when it said the page is blocked (asks for
     /// JavaScript or a security check) or said nothing usable: the card then reads
     /// "No preview available", as Arc's does.
-    public static func result(url: URL, title: String?, answer: Answer) -> LinkSummaryResult? {
+    public static func result(url: URL, title: String?, answer: Answer, final: Bool = false) -> LinkSummaryResult? {
         guard !answer.blocked else { return nil }
         let details = answer.details.compactMap { d -> LinkSummaryResult.Detail? in
             let label = clean(d.label).trimmingCharacters(in: CharacterSet(charactersIn: ":"))
             let info = clean(d.info)
-            guard !info.isEmpty else { return nil }
-            return LinkSummaryResult.Detail(label: label, icon: d.icon.trimmingCharacters(in: .whitespaces), info: info)
+            let icon = d.icon.trimmingCharacters(in: .whitespaces)
+            guard !info.isEmpty, !final || (!label.isEmpty && !icon.isEmpty) else { return nil }
+            return LinkSummaryResult.Detail(label: label, icon: icon, info: info)
         }.prefix(maxDetails)
-        let quick = clean(answer.quickSummary)
+        let quick = answer.quickSummary.map(clean) ?? ""
+        guard !final || details.count >= 2 else { return nil }
         guard !details.isEmpty || !quick.isEmpty else { return nil }
         let host = displayHost(url)
         return LinkSummaryResult(url: url.absoluteString, title: title.map(clean).flatMap { $0.isEmpty ? nil : $0 } ?? host,
@@ -359,11 +367,14 @@ public enum LinkSummaryPrompt {
     /// The model's fields before cleaning.
     public struct Answer: Equatable, Sendable {
         public var blocked: Bool
-        public var quickSummary: String
+        /// A generated search focus, not displayed or substituted for the quick summary.
+        public var userQuestion: String?
+        public var quickSummary: String?
         public var details: [LinkSummaryResult.Detail]
 
-        public init(blocked: Bool, quickSummary: String, details: [LinkSummaryResult.Detail]) {
+        public init(blocked: Bool, userQuestion: String? = nil, quickSummary: String?, details: [LinkSummaryResult.Detail]) {
             self.blocked = blocked
+            self.userQuestion = userQuestion
             self.quickSummary = quickSummary
             self.details = details
         }

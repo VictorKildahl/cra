@@ -91,7 +91,7 @@ final class LinkSummaryService {
                 update(box.card)
             }
             guard !Task.isCancelled else { return }
-            box.card.result = final.flatMap { LinkSummaryPrompt.result(url: link, title: content.title, answer: $0) }
+            box.card.result = final.flatMap { LinkSummaryPrompt.result(url: link, title: content.title, answer: $0, final: true) }
             box.card.finished = true
             if box.card.result == nil { box.card.image = nil }
             cards.store(box.card.result, for: request)
@@ -136,8 +136,7 @@ final class LinkSummaryService {
 
     /// The user's language by name, as Arc writes it into the prompt.
     private static var language: String {
-        let code = Locale.preferredLanguages.first.flatMap { Locale(identifier: $0).language.languageCode?.identifier } ?? "en"
-        return Locale(identifier: "en").localizedString(forLanguageCode: code) ?? "English"
+        LinkSummaryPrompt.responseLanguage(preferredLanguages: Locale.preferredLanguages)
     }
 
     /// The model's answer; `partial` gets it as it streams. Nil when the model failed.
@@ -147,7 +146,7 @@ final class LinkSummaryService {
             let answer = LinkSummaryPrompt.fakeAnswer(content: content)
             try? await Task.sleep(for: .seconds(0.6))
             guard !Task.isCancelled else { return nil }
-            partial(LinkSummaryPrompt.Answer(blocked: answer.blocked, quickSummary: answer.quickSummary, details: Array(answer.details.prefix(1))))
+            partial(LinkSummaryPrompt.Answer(blocked: answer.blocked, userQuestion: answer.userQuestion, quickSummary: answer.quickSummary, details: Array(answer.details.prefix(1))))
             try? await Task.sleep(for: .seconds(0.6))
             guard !Task.isCancelled else { return nil }
             return answer
@@ -178,14 +177,17 @@ final class LinkSummaryService {
 }
 
 #if canImport(FoundationModels)
-/// Arc's `Response` schema (HoverCardViewModel), field for field.
+/// Arc's ordered fields, with one static optional focus instead of a query-specific schema.
+/// Queryless requests ask for nil focus; it guides later fields and is never displayed.
 @available(macOS 26.0, *)
 @Generable
 struct HoverCardAnswer {
     @Guide(description: "Does this page ask the user to enable Javascript or complete a security check before accessing the content?")
     var blocked: Bool
+    @Guide(description: "1-word question to focus the rest of the answer card upon; based on the User search query in the request. Leave nil when no search query is supplied.")
+    var userQuestion: String?
     @Guide(description: "3-8 words the user is most likely to want to know, beyond the page's title. Provide a fact or opinion, not just a title.")
-    var quickSummary: String
+    var quickSummary: String?
     @Guide(description: "2-4 key points, solutions or items.", .count(2...4))
     var details: [HoverCardDetail]
 }
@@ -205,7 +207,7 @@ struct HoverCardDetail {
 extension LinkSummaryPrompt.Answer {
     /// A streamed answer so far: fields not yet written are empty.
     init(_ p: HoverCardAnswer.PartiallyGenerated) {
-        self.init(blocked: p.blocked ?? false, quickSummary: p.quickSummary ?? "",
+        self.init(blocked: p.blocked ?? false, userQuestion: p.userQuestion, quickSummary: p.quickSummary,
                   details: (p.details ?? []).map { .init(label: $0.label ?? "", icon: $0.icon ?? "", info: $0.info ?? "") })
     }
 }

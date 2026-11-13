@@ -177,10 +177,51 @@ struct LinkSummaryTests {
         let p = LinkSummaryPrompt.prompt(url: "https://example.com/p", content: content, searchQuery: "pizza oslo", language: "English")
         #expect(p.contains("<webpage>\nURL: https://example.com/p\nTitle: Pizza\nDescription: Best slices\nText.\n</webpage>"))
         #expect(p.contains("'pizza oslo'"))
-        #expect(p.hasSuffix("Write responses in English."))
+        #expect(p.hasSuffix("Write responses (but not JSON keys) in English using markdown formatting."))
         let bare = LinkSummaryPrompt.prompt(url: "https://e.com", content: .init(), searchQuery: nil, language: "Danish")
         #expect(!bare.contains("search query"))
         #expect(LinkSummaryPrompt.instructions.contains("glanceable \"answer card\""))
+    }
+
+    @Test func recoveredPromptKeepsResponseKeysEnglish() {
+        let prompt = LinkSummaryPrompt.prompt(url: "https://example.com/p", content: .init(bodyText: "Useful text"),
+                                             searchQuery: "pizza oslo", language: "Spanish")
+        #expect(prompt.contains("Write responses (but not JSON keys) in Spanish"))
+        #expect(prompt.contains("User search query: 'pizza oslo'"), "the query is data for the optional generated focus, not a second model input")
+        #expect(!prompt.contains("Focus the answer card on the user's search query:"))
+    }
+
+    @Test func optionalSummaryAndFocusHaveDifferentRoles() {
+        let details: [LinkSummaryResult.Detail] = [
+            .init(label: "Price", icon: "tag", info: "Costs twenty euros"),
+            .init(label: "Choice", icon: "star", info: "A recommended local option")
+        ]
+        let answer = LinkSummaryPrompt.Answer(blocked: false, userQuestion: "Price", quickSummary: nil, details: details)
+        let result = LinkSummaryPrompt.result(url: u("https://example.com"), title: "Page", answer: answer, final: true)
+        #expect(result?.quickSummary == nil)
+        #expect(result?.details == details, "missing optional summary still permits useful details")
+        let both = LinkSummaryPrompt.Answer(blocked: false, userQuestion: "Price", quickSummary: "Costs twenty euros", details: details)
+        #expect(LinkSummaryPrompt.result(url: u("https://example.com"), title: nil, answer: both, final: true)?.quickSummary == "Costs twenty euros")
+        #expect(LinkSummaryPrompt.result(url: u("https://example.com"), title: nil,
+                                        answer: .init(blocked: false, userQuestion: "Price", quickSummary: nil, details: [])) == nil,
+                "a generated focus alone is never displayed as the quick summary")
+    }
+
+    @Test func finalDetailsAreCompleteButStreamingStaysPermissive() {
+        let incomplete = LinkSummaryResult.Detail(label: "", icon: "", info: "Progressive text")
+        let partial = LinkSummaryPrompt.Answer(blocked: false, quickSummary: nil, details: [incomplete])
+        #expect(LinkSummaryPrompt.result(url: u("https://example.com"), title: nil, answer: partial)?.details.count == 1)
+        #expect(LinkSummaryPrompt.result(url: u("https://example.com"), title: nil, answer: partial, final: true) == nil)
+        #expect(LinkSummaryPrompt.result(url: u("https://example.com"), title: nil,
+                                        answer: .init(blocked: false, quickSummary: "Only summary", details: []), final: true) == nil)
+    }
+
+    @Test func responseLanguageUsesPreferredLanguageWithEnglishFallback() {
+        #expect(LinkSummaryPrompt.responseLanguage(preferredLanguages: ["es-ES", "en-US"]) == "Spanish")
+        #expect(LinkSummaryPrompt.responseLanguage(preferredLanguages: ["ja-JP"]) == "Japanese")
+        #expect(LinkSummaryPrompt.responseLanguage(preferredLanguages: []) == "English")
+        #expect(LinkSummaryPrompt.responseLanguage(preferredLanguages: ["zz"]) == "English")
+        #expect(LinkSummaryPrompt.instructions == "As a concise and helpful summarizer, create a glanceable \"answer card\" containing the most important information from the webpage. Capture the tone, perspective and POV of the writer.")
     }
 
     @Test func answerBecomesACard() {

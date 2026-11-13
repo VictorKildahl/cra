@@ -1,4 +1,7 @@
 import AppKit
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
 
 @MainActor final class Gate<Value> {
     private var waiting: CheckedContinuation<Value, Never>?
@@ -20,7 +23,8 @@ import AppKit
     private static let theme = SpaceTheme.presets[0]
     private static let html = "<head><title>A page</title><meta property='og:image' content='/hero.png'></head><body>A supported paragraph of useful information.</body>"
     private static let answer = LinkSummaryPrompt.Answer(blocked: false, quickSummary: "A current answer", details: [
-        .init(label: "Detail", icon: "star", info: "A useful fact about this page")
+        .init(label: "Detail", icon: "star", info: "A useful fact about this page"),
+        .init(label: "Context", icon: "info.circle", info: "Another useful fact from the page")
     ])
 
     private static func expect(_ value: Bool, _ message: String) {
@@ -40,6 +44,10 @@ import AppKit
     static func main() async {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
+        #if canImport(FoundationModels)
+        if #available(macOS 26.0, *) { guidedSchemaAndOptionalPartials() }
+        #endif
+        await optionalAndEmptyModelOutput()
         await LinkSummaryFetchTests.run(expect)
         await failedAndBlockedLoadsFinish()
         await imageFailureKeepsSummary()
@@ -54,6 +62,60 @@ import AppKit
         await deadlineEndsIgnoringFetch()
         await deadlineRejectsLateModelPartials()
         print("Link summary lifecycle: \(checks) checks passed")
+    }
+
+    #if canImport(FoundationModels)
+    @available(macOS 26.0, *)
+    private static func guidedSchemaAndOptionalPartials() {
+        let schema = try! JSONSerialization.jsonObject(with: JSONEncoder().encode(HoverCardAnswer.generationSchema)) as! [String: Any]
+        expect(schema["x-order"] as? [String] == ["blocked", "userQuestion", "quickSummary", "details"], "actual guided field order generates search focus before the summary and details")
+        expect(schema["required"] as? [String] == ["blocked", "details"], "focus and quickSummary are optional in the actual static guided schema")
+        let properties = schema["properties"] as! [String: Any]
+        let details = properties["details"] as! [String: Any]
+        expect(details["minItems"] as? Int == 2 && details["maxItems"] as? Int == 4, "the actual guided schema retains 2-4 detail rows")
+        let focus = properties["userQuestion"] as! [String: Any]
+        expect((focus["description"] as? String)?.contains("Leave nil when no search query") == true, "the static schema explicitly handles queryless requests")
+        let missing = try! HoverCardAnswer.PartiallyGenerated(GeneratedContent(properties: ["blocked": false]))
+        let empty = LinkSummaryPrompt.Answer(missing)
+        expect(empty.userQuestion == nil && empty.quickSummary == nil && empty.details.isEmpty, "missing generated optional fields stay absent")
+        let focusOnly = try! HoverCardAnswer.PartiallyGenerated(GeneratedContent(properties: ["blocked": false, "userQuestion": "Price"]))
+        let partial = LinkSummaryPrompt.Answer(focusOnly)
+        expect(partial.userQuestion == "Price" && partial.quickSummary == nil, "the typed adapter does not confuse generated focus with quickSummary")
+        expect(LinkSummaryPrompt.result(url: link, title: nil, answer: partial) == nil, "focus-only streaming cannot manufacture a visible answer")
+        let complete = try! HoverCardAnswer.PartiallyGenerated(GeneratedContent(json: """
+        {"blocked":false,"details":[{"label":"Cost","icon":"tag","info":"Twenty euros per person"},{"label":"Choice","icon":"star","info":"A useful local option"}]}
+        """))
+        expect(LinkSummaryPrompt.result(url: link, title: nil, answer: .init(complete), final: true)?.details.count == 2, "typed streamed details remain usable without either optional field")
+    }
+    #endif
+
+    private static func optionalAndEmptyModelOutput() async {
+        var attempt = 0
+        let service = LinkSummaryService(fetch: { .init(html: html, url: $0.fetchURL) }, image: { _ in nil }, answer: { _, _, _, _, partial in
+            attempt += 1
+            if attempt == 1 {
+                let value = LinkSummaryPrompt.Answer(blocked: false, userQuestion: "Price", quickSummary: nil, details: [])
+                partial(value)
+                return value
+            }
+            return .init(blocked: false, quickSummary: nil, details: answer.details)
+        })
+        var last: LinkSummaryService.Card?
+        await service.load(request(query: "price")) { last = $0 }
+        expect(last?.finished == true && last?.result == nil && service.cached(request(query: "price")) == nil,
+               "focus-only final output ends empty without a transient negative cache entry")
+        await service.load(request(query: "price")) { last = $0 }
+        expect(last?.result?.quickSummary == nil && last?.result?.details == answer.details,
+               "the next hover recovers with useful details and no optional quickSummary")
+        expect(service.cached(request(query: "price"))?.result == last?.result, "only the usable recovered result is cached")
+        let incomplete = LinkSummaryService(fetch: { .init(html: html, url: $0.fetchURL) }, image: { _ in nil }, answer: { _, _, _, _, partial in
+            let value = LinkSummaryPrompt.Answer(blocked: false, quickSummary: "Only a summary", details: [])
+            partial(value)
+            return value
+        })
+        await incomplete.load(request()) { last = $0 }
+        expect(last?.finished == true && last?.result == nil && incomplete.cached(request()) == nil,
+               "incomplete final details clear earlier partial content and remain retryable")
     }
 
     private static func failedAndBlockedLoadsFinish() async {
