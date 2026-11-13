@@ -35,8 +35,8 @@ fingerprinting-protection.patch
 # Google's background services, off: ungoogled-chromium's patches (BSD 3-Clause, ungoogled/LICENSE), taken one
 # by one from its 157.0.8103.78 series (commit 8c886df). Left out on purpose: GCM (push
 # notifications), Web Store URLs (installs), Safe Browsing and other security updaters, translate, DNS, search
-# engines, disable-ai (it changes the speech service Cra's speech-on-device patch uses).
-ungoogled/disable-crash-reporter.patch
+# engines, disable-ai (it changes the speech service Cra's speech-on-device patch uses), disable-crash-reporter
+# (a Chromium-branded build has no crash upload address; the patch also fails Chrome's -Werror build).
 ungoogled/disable-profile-avatar-downloading.patch
 ungoogled/disable-domain-reliability.patch
 ungoogled/disable-fonts-googleapis-references.patch
