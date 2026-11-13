@@ -1001,3 +1001,14 @@ struct MobileStarterRowsTests {
         #expect(MobileSuggestions.starterRows(favorites: 0, hasSearched: false, incognito: true).isEmpty)
     }
 }
+
+/// Browse for Me pages follow the phone's text size.
+struct MobileBrowseDynamicTypeTests {
+    @Test func thePageIsSizedAgainstTheSystemBodyStyle() {
+        let answer = MobileBrowseForMe.Answer(title: "T", points: [.init(emoji: "", term: "", text: "x")], sections: [])
+        let html = MobileBrowseForMe.pageHTML(query: "q", answer: answer, sources: [], searchURL: "https://www.google.com/search?q=q")
+        #expect(html.contains("font: -apple-system-body"))
+        let style = html[html.range(of: "<style>")!.upperBound..<html.range(of: "</style>")!.lowerBound]
+        #expect(style.range(of: #"font-size: \d+px"#, options: .regularExpression) == nil, "no fixed text sizes")
+    }
+}

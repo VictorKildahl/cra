@@ -229,6 +229,8 @@ public enum MobileBrowseForMe {
             .replacingOccurrences(of: ">", with: "&gt;").replacingOccurrences(of: "\"", with: "&quot;")
     }
 
+    /// Text follows the phone's text size (Arc Search 1.22.2: Dynamic Type in Browse for Me): the
+    /// body is the system's body style and everything else is sized against it.
     /// The answer as a page, in Arc Search's order: the query in a capsule, the sources' pictures,
     /// "Read N web pages" with the source cards, the title, the key points, then the sections.
     /// The capsule edits the question (`editAddress`); `searchURL` is kept for the engine's results
@@ -263,7 +265,7 @@ public enum MobileBrowseForMe {
         <style>
         :root { color-scheme: light dark; --ink: #1c1c1e; --soft: #6e6e73; --blue: #2b2bd6; --card: rgba(0,0,0,0.05); --page: #fff; }
         @media (prefers-color-scheme: dark) { :root { --ink: #ececee; --soft: #9a999f; --blue: #8f93ff; --card: rgba(255,255,255,0.09); --page: #1c1c1e; } }
-        body { margin: 0; padding: 12px 20px 140px; font: 16px/1.45 -apple-system, system-ui, sans-serif; color: var(--ink); background: var(--page); -webkit-text-size-adjust: 100%; }
+        body { margin: 0; padding: 12px 20px 140px; font: -apple-system-body; line-height: 1.45; color: var(--ink); background: var(--page); -webkit-text-size-adjust: 100%; }
         main { max-width: 680px; margin: 0 auto; }
         a { color: inherit; text-decoration: none; }
         .query { display: flex; align-items: center; gap: 9px; height: 40px; padding: 0 16px; border-radius: 20px; background: var(--card); font-weight: 500; white-space: nowrap; overflow: hidden; }
@@ -272,19 +274,19 @@ public enum MobileBrowseForMe {
         .shots::-webkit-scrollbar, .cards::-webkit-scrollbar { display: none; }
         .shot { flex: none; width: 62%; aspect-ratio: 4 / 3; border-radius: 12px; overflow: hidden; background: var(--card); }
         .shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
-        .read { margin: 18px 0 8px; font-size: 14px; color: var(--soft); }
+        .read { margin: 18px 0 8px; font-size: 0.82em; color: var(--soft); }
         .cards { display: flex; gap: 8px; overflow-x: auto; margin: 0 -20px; padding: 0 20px; scrollbar-width: none; }
         .card { flex: none; width: 150px; padding: 10px 12px; border-radius: 12px; background: var(--card); display: flex; flex-direction: column; gap: 6px; }
-        .card-title { font-size: 13px; font-weight: 500; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 34px; }
-        .card-site { font-size: 12px; color: var(--soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        h1 { margin: 24px 0 14px; font-size: 26px; line-height: 1.2; font-weight: 600; color: var(--blue); }
+        .card-title { font-size: 0.76em; font-weight: 500; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.6em; }
+        .card-site { font-size: 0.7em; color: var(--soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        h1 { margin: 24px 0 14px; font-size: 1.53em; line-height: 1.2; font-weight: 600; color: var(--blue); }
         ul { list-style: none; margin: 0; padding: 0; }
         li { display: flex; gap: 10px; margin: 0 0 12px; }
         .emoji { flex: none; width: 24px; text-align: center; }
-        h2 { margin: 24px 0 6px; font-size: 19px; font-weight: 600; color: var(--blue); }
+        h2 { margin: 24px 0 6px; font-size: 1.12em; font-weight: 600; color: var(--blue); }
         p { margin: 0 0 10px; }
         .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 6px; }
-        .chip { padding: 8px 14px; border-radius: 18px; background: var(--card); font-size: 15px; font-weight: 500; }
+        .chip { padding: 8px 14px; border-radius: 18px; background: var(--card); font-size: 0.88em; font-weight: 500; }
         .sources { margin-top: 8px; } .sources li { display: block; margin: 0 0 10px; }
         .sources a { display: flex; flex-direction: column; } .src-title { font-weight: 500; }
         </style></head><body><main>

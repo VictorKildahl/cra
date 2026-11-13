@@ -74,7 +74,7 @@ private struct SettingLabel: View {
     var body: some View {
         HStack(spacing: 14) {
             SettingIcon(symbol: symbol, color: color)
-            Text(title).font(.system(size: 15))
+            Text(title).font(.subheadline)
         }
     }
 }
@@ -137,7 +137,7 @@ private struct ValueRow<Label: View, Value: Hashable>: View {
                     ForEach(options, id: \.self) { Text(title($0)).tag($0) }
                 }
             } label: {
-                Text(title(selection)).font(.system(size: 15)).lineLimit(1)
+                Text(title(selection)).font(.subheadline).lineLimit(1)
             }
             .tint(.secondary)
         }
@@ -311,7 +311,7 @@ struct AppSettingsList: View {
             .settingsRow()
         }
         .settingsListStyle()
-        .font(.system(size: 15))
+        .font(.subheadline)
         .alert("Custom Search Engine", isPresented: $editingCustom) {
             TextField("https://example.com/search?q=%s", text: $customAddress)
                 .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()

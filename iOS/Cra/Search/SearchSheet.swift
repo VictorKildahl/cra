@@ -453,7 +453,9 @@ final class SearchField: UITextField {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        font = .systemFont(ofSize: 20, weight: .medium)
+        // Follows the phone's text size up to a point the 48 pt field still holds (1.22.2).
+        font = UIFontMetrics(forTextStyle: .body).scaledFont(for: .systemFont(ofSize: 20, weight: .medium), maximumPointSize: 26)
+        adjustsFontForContentSizeCategory = true
         textColor = Palette.primaryText
         tintColor = Palette.accent
         attributedPlaceholder = NSAttributedString(string: "Search...", attributes: [
@@ -554,6 +556,10 @@ final class SuggestionRowView: UIControl {
     private let pin = UIImageView(image: UIImage(systemName: "pin.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .regular)))
     /// Shows a site's icon (20 pt) in place of a search glyph.
     private var isSite = false
+    /// 17 pt, following the phone's text size up to what two lines in a 56 pt row hold.
+    static var textFont: UIFont {
+        UIFontMetrics(forTextStyle: .body).scaledFont(for: .systemFont(ofSize: 17, weight: .medium), maximumPointSize: 21)
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -602,7 +608,7 @@ final class SuggestionRowView: UIControl {
         isSite = true
         label.numberOfLines = 1
         label.attributedText = NSAttributedString(string: title, attributes: [
-            .font: UIFont.systemFont(ofSize: 17, weight: .medium), .foregroundColor: Palette.primaryText,
+            .font: SuggestionRowView.textFont, .foregroundColor: Palette.primaryText,
         ])
         label.accessibilityLabel = title
         chip.isHidden = true
@@ -621,7 +627,7 @@ final class SuggestionRowView: UIControl {
         pin.isHidden = true
         // A long suggestion wraps to a second line, as in Arc Search, and is cut after that.
         label.numberOfLines = 2
-        let font = UIFont.systemFont(ofSize: 17, weight: .medium)
+        let font = SuggestionRowView.textFont
         let text = NSMutableAttributedString(string: row.text, attributes: [.font: font, .foregroundColor: Palette.primaryText])
         if row.typedPrefixLength > 0 {
             let typed = NSRange(row.text.startIndex..<row.text.index(row.text.startIndex, offsetBy: min(row.typedPrefixLength, row.text.count)), in: row.text)
