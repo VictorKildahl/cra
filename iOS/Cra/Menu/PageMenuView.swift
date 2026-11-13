@@ -5,12 +5,14 @@ protocol PageMenuDelegate: AnyObject {
     func pageMenuGoBack()
     func pageMenuGoForward()
     func pageMenuReload()
-    func pageMenuToggleFavorite()
+    func pageMenuCopyLink()
     func pageMenu(didPick tile: MobilePageMenu.Tile)
     func pageMenu(didPick row: MobilePageMenu.Row)
     func pageMenuZoom(up: Bool)
     func pageMenuResetZoom()
     func pageMenuReloadWithoutBlockers()
+    /// Display Options opened or closed: the sheet changes height.
+    func pageMenuDidChangeHeight()
 }
 
 /// What the page menu shows about the page it was opened on.
@@ -24,12 +26,15 @@ struct PageMenuState {
     var blockedCount: Int
     var isFavorite = false
     var isTranslated = false
+    var isReader = false
 }
 
-/// The page menu's content, laid out to `MobilePageMenu`.
+/// The page menu's content, laid out to `MobilePageMenu` (Arc Search 1.49, Victor's recording).
 final class PageMenuView: UIView {
     weak var delegate: PageMenuDelegate?
     private(set) var state: PageMenuState
+    /// Display Options is open.
+    private(set) var displayOptionsOpen = false
 
     private let capsule = UIView()
     private let back = UIButton(type: .system)
@@ -38,14 +43,19 @@ final class PageMenuView: UIView {
     private let link = UIButton(type: .system)
     private let reload = UIButton(type: .system)
     private var tiles: [(MobilePageMenu.Tile, PageMenuTile)] = []
-    private let rowsBox = UIView()
-    private var rows: [(MobilePageMenu.Row, PageMenuRow)] = []
-    private let problems = UILabel()
-    private let withoutBlockers = UIButton(type: .custom)
-    private let blocked = UILabel()
+    private let optionsBox = UIView()
+    private let optionsHeader: PageMenuRow
+    private var options: [(MobilePageMenu.Row, PageMenuRow)] = []
+    private let siteBox = UIView()
+    private let siteRow: PageMenuRow
+    private let footer = UIControl()
+    private let scrubbed = UILabel()
+    private let restore = UILabel()
 
     init(state: PageMenuState) {
         self.state = state
+        optionsHeader = PageMenuRow(row: .displayOptions, showsSeparator: false)
+        siteRow = PageMenuRow(row: .siteSettings, showsSeparator: false)
         super.init(frame: .zero)
 
         capsule.backgroundColor = Palette.barControlFill
@@ -53,16 +63,14 @@ final class PageMenuView: UIView {
         capsule.layer.borderWidth = 0.5
         capsule.layer.borderColor = Palette.barControlBorder.cgColor
         addSubview(capsule)
-        configure(back, symbol: "chevron.left", size: 15, weight: .bold, id: "menu-back", label: "Back", action: #selector(backTapped))
-        configure(forward, symbol: "chevron.right", size: 15, weight: .bold, id: "menu-forward", label: "Forward", action: #selector(forwardTapped))
-        configure(link, symbol: "pin", size: 14.5, weight: .regular, id: "menu-pin", label: "Pin", action: #selector(linkTapped))
-        // The pin opens Arc Search's little menu; "Pin to Space:" joins it when the phone can write to the Mac's sidebar.
-        link.showsMenuAsPrimaryAction = true
-        configure(reload, symbol: "arrow.clockwise", size: 14.5, weight: .medium, id: "menu-reload", label: "Reload", action: #selector(reloadTapped))
-        hostLabel.font = .systemFont(ofSize: 17, weight: .medium)
+        configure(back, symbol: "chevron.left", size: 17, weight: .semibold, id: "menu-back", label: "Back", action: #selector(backTapped))
+        configure(forward, symbol: "chevron.right", size: 17, weight: .semibold, id: "menu-forward", label: "Forward", action: #selector(forwardTapped))
+        configure(link, symbol: "link", size: 17, weight: .medium, id: "menu-copy-link", label: "Copy Link", action: #selector(linkTapped))
+        configure(reload, symbol: "arrow.clockwise", size: 17, weight: .medium, id: "menu-reload", label: "Reload", action: #selector(reloadTapped))
+        hostLabel.font = .systemFont(ofSize: 18, weight: .regular)
         hostLabel.textColor = Palette.primaryText
         hostLabel.textAlignment = .center
-        hostLabel.lineBreakMode = .byTruncatingMiddle
+        hostLabel.lineBreakMode = .byTruncatingTail
         hostLabel.accessibilityIdentifier = "menu-host"
         capsule.addSubview(hostLabel)
 
@@ -73,39 +81,45 @@ final class PageMenuView: UIView {
             addSubview(view)
         }
 
-        rowsBox.backgroundColor = Palette.barControlFill
-        rowsBox.layer.cornerRadius = MobilePageMenu.rowCornerRadius
-        rowsBox.layer.cornerCurve = .continuous
-        rowsBox.clipsToBounds = true
-        addSubview(rowsBox)
-        for (index, row) in MobilePageMenu.rows.enumerated() {
-            let view = PageMenuRow(row: row, showsSeparator: index > 0)
+        for box in [optionsBox, siteBox] {
+            box.backgroundColor = Palette.barControlFill
+            box.layer.cornerRadius = MobilePageMenu.rowCornerRadius
+            box.layer.cornerCurve = .continuous
+            box.clipsToBounds = true
+            addSubview(box)
+        }
+        optionsHeader.addAction(UIAction { [weak self] _ in self?.toggleDisplayOptions() }, for: .touchUpInside)
+        optionsBox.addSubview(optionsHeader)
+        for row in MobilePageMenu.displayOptions {
+            let view = PageMenuRow(row: row, showsSeparator: true)
             view.addAction(UIAction { [weak self] _ in self?.delegate?.pageMenu(didPick: row) }, for: .touchUpInside)
             if row == .pageZoom {
-                view.isUserInteractionEnabled = true
                 view.onZoom = { [weak self] up in self?.delegate?.pageMenuZoom(up: up) }
                 view.onResetZoom = { [weak self] in self?.delegate?.pageMenuResetZoom() }
             }
-            rows.append((row, view))
-            rowsBox.addSubview(view)
+            view.alpha = 0
+            options.append((row, view))
+            optionsBox.addSubview(view)
         }
+        siteRow.addAction(UIAction { [weak self] _ in self?.delegate?.pageMenu(didPick: .siteSettings) }, for: .touchUpInside)
+        siteBox.addSubview(siteRow)
 
-        problems.text = "Problems?"
-        problems.font = .systemFont(ofSize: 12, weight: .regular)
-        problems.textColor = Palette.secondaryText
-        addSubview(problems)
-        withoutBlockers.setAttributedTitle(NSAttributedString(string: "Reload without ad blockers", attributes: [
-            .font: UIFont.systemFont(ofSize: 12, weight: .regular), .foregroundColor: Palette.secondaryText,
-        ]), for: .normal)
-        withoutBlockers.backgroundColor = Palette.barControlFill
-        withoutBlockers.accessibilityIdentifier = "menu-reload-without-blockers"
-        withoutBlockers.addTarget(self, action: #selector(withoutBlockersTapped), for: .touchUpInside)
-        addSubview(withoutBlockers)
-        blocked.font = .systemFont(ofSize: 12, weight: .regular)
-        blocked.textColor = Palette.secondaryText
-        blocked.textAlignment = .center
-        blocked.accessibilityIdentifier = "menu-blocked-count"
-        addSubview(blocked)
+        // "Arc scrubbed 22 trackers / Problems? Tap to restore original page": the whole card reloads
+        // the page without blockers.
+        footer.backgroundColor = Palette.barControlFill
+        footer.layer.cornerRadius = MobilePageMenu.rowCornerRadius
+        footer.layer.cornerCurve = .continuous
+        footer.accessibilityIdentifier = "menu-reload-without-blockers"
+        footer.addTarget(self, action: #selector(withoutBlockersTapped), for: .touchUpInside)
+        addSubview(footer)
+        scrubbed.accessibilityIdentifier = "menu-blocked-count"
+        scrubbed.isUserInteractionEnabled = false
+        footer.addSubview(scrubbed)
+        restore.text = MobilePageMenu.restoreHint
+        restore.font = .systemFont(ofSize: 15, weight: .regular)
+        restore.textColor = Palette.secondaryText
+        restore.isUserInteractionEnabled = false
+        footer.addSubview(restore)
         apply(state)
     }
 
@@ -123,27 +137,48 @@ final class PageMenuView: UIView {
     func apply(_ state: PageMenuState) {
         self.state = state
         hostLabel.text = state.host
-        link.setImage(UIImage(systemName: state.isFavorite ? "pin.fill" : "pin", withConfiguration: UIImage.SymbolConfiguration(pointSize: 14.5, weight: .regular)), for: .normal)
-        link.menu = UIMenu(children: [
-            UIAction(title: "Favorite in App", image: UIImage(systemName: "iphone"), state: state.isFavorite ? .on : .off) { [weak self] _ in
-                self?.delegate?.pageMenuToggleFavorite()
-            },
-        ])
         back.isEnabled = state.canGoBack
         forward.isEnabled = state.canGoForward
         back.tintColor = state.canGoBack ? Palette.glyph : Palette.placeholder
         forward.tintColor = state.canGoForward ? Palette.glyph : Palette.placeholder
-        for (row, view) in rows {
+        for (tile, view) in tiles where tile == .pin {
+            view.setPinned(state.isFavorite)
+        }
+        for (row, view) in options {
             switch row {
             case .pageZoom: view.setZoomLabel(MobilePageMenu.zoomLabel(state.zoom))
             case .requestDesktopSite: view.setTitle(state.isDesktopSite ? "Request Mobile Site" : row.label)
             case .translate: view.setTitle(state.isTranslated ? "Show Original" : row.label)
+            case .readerMode: view.setTitle(state.isReader ? "Exit Reader Mode" : row.label)
             default: break
             }
         }
-        blocked.text = MobilePageMenu.blockedLabel(state.blockedCount)
-        blocked.isHidden = blocked.text == nil
+        if let label = MobilePageMenu.scrubbedLabel(state.blockedCount) {
+            let text = NSMutableAttributedString(string: label.text, attributes: [
+                .font: UIFont.systemFont(ofSize: 17, weight: .medium), .foregroundColor: Palette.primaryText,
+            ])
+            if let range = label.text.range(of: label.number) {
+                text.addAttribute(.font, value: UIFont.systemFont(ofSize: 17, weight: .bold), range: NSRange(range, in: label.text))
+            }
+            scrubbed.attributedText = text
+            scrubbed.accessibilityLabel = label.text
+            scrubbed.isHidden = false
+        } else {
+            scrubbed.isHidden = true
+        }
         setNeedsLayout()
+    }
+
+    private func toggleDisplayOptions() {
+        displayOptionsOpen.toggle()
+        optionsHeader.setOpen(displayOptionsOpen)
+        UISelectionFeedbackGenerator().selectionChanged()
+        delegate?.pageMenuDidChangeHeight()
+        UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+            for (_, view) in self.options { view.alpha = self.displayOptionsOpen ? 1 : 0 }
+            self.setNeedsLayout()
+            self.layoutIfNeeded()
+        }
     }
 
     override func layoutSubviews() {
@@ -151,39 +186,45 @@ final class PageMenuView: UIView {
         let inset = MobilePageMenu.inset
         capsule.frame = CGRect(x: inset, y: inset, width: bounds.width - 2 * inset, height: MobilePageMenu.capsuleHeight)
         capsule.layer.cornerRadius = capsule.bounds.height / 2
-        // Glyph centres measured from the capsule's left edge: 22.5, 68.5, then 65 and 30 from the right.
+        // Glyph centres from the recording: 25 and 65 pt from the capsule's left, 65 and 27 from its right.
         let mid = capsule.bounds.midY, width = capsule.bounds.width
-        back.frame = CGRect(x: 22.5 - 22, y: mid - 22, width: 44, height: 44)
-        forward.frame = CGRect(x: 68.5 - 22, y: mid - 22, width: 44, height: 44)
+        back.frame = CGRect(x: 25 - 22, y: mid - 22, width: 44, height: 44)
+        forward.frame = CGRect(x: 65 - 22, y: mid - 22, width: 44, height: 44)
         link.frame = CGRect(x: width - 65 - 22, y: mid - 22, width: 44, height: 44)
-        reload.frame = CGRect(x: width - 30 - 22, y: mid - 22, width: 44, height: 44)
-        hostLabel.frame = CGRect(x: 96, y: 0, width: max(0, width - 192), height: capsule.bounds.height)
+        reload.frame = CGRect(x: width - 27 - 22, y: mid - 22, width: 44, height: 44)
+        hostLabel.frame = CGRect(x: 92, y: 0, width: max(0, width - 184), height: capsule.bounds.height)
 
         let frames = MobilePageMenu.tileFrames(count: tiles.count, width: bounds.width)
-        for (index, (_, tile)) in tiles.enumerated() { tile.frame = frames[index].insetBy(dx: -8, dy: 0).union(CGRect(x: frames[index].minX - 8, y: frames[index].maxY, width: frames[index].width + 16, height: 28)) }
-
-        let rowsTop = inset + MobilePageMenu.capsuleHeight + MobilePageMenu.tilesGap + MobilePageMenu.tileSize.height + MobilePageMenu.rowsGap
-        rowsBox.frame = CGRect(x: inset, y: rowsTop, width: bounds.width - 2 * inset, height: CGFloat(rows.count) * MobilePageMenu.rowHeight)
-        for (index, (_, row)) in rows.enumerated() {
-            row.frame = CGRect(x: 0, y: CGFloat(index) * MobilePageMenu.rowHeight, width: rowsBox.bounds.width, height: MobilePageMenu.rowHeight)
+        for (index, (_, tile)) in tiles.enumerated() {
+            let box = frames[index]
+            tile.frame = CGRect(x: box.minX - 6, y: box.minY, width: box.width + 12, height: box.height + MobilePageMenu.tileLabelDrop + 12)
         }
 
-        // Footer: "Problems?" and its capsule centred as a pair; the blocked count under it when there is one.
-        let footerY = rowsBox.frame.maxY + MobilePageMenu.footerDrop
-        let problemsSize = problems.intrinsicContentSize
-        let buttonWidth = (withoutBlockers.titleLabel?.intrinsicContentSize.width ?? 150) + 20
-        let total = problemsSize.width + 9 + buttonWidth
-        let left = (bounds.width - total) / 2
-        problems.frame = CGRect(x: left, y: footerY - problemsSize.height / 2, width: problemsSize.width, height: problemsSize.height)
-        withoutBlockers.frame = CGRect(x: left + problemsSize.width + 9, y: footerY - 11, width: buttonWidth, height: 22)
-        withoutBlockers.layer.cornerRadius = 11
-        blocked.frame = CGRect(x: inset, y: footerY + 15, width: bounds.width - 2 * inset, height: 16)
+        let rowWidth = bounds.width - 2 * inset
+        let groupTop = inset + MobilePageMenu.capsuleHeight + MobilePageMenu.tilesGap + MobilePageMenu.tileHeight + MobilePageMenu.rowsGap
+        let open = displayOptionsOpen
+        optionsBox.frame = CGRect(x: inset, y: groupTop, width: rowWidth,
+                                  height: CGFloat(open ? 1 + options.count : 1) * MobilePageMenu.rowHeight)
+        optionsHeader.frame = CGRect(x: 0, y: 0, width: rowWidth, height: MobilePageMenu.rowHeight)
+        for (index, (_, row)) in options.enumerated() {
+            row.frame = CGRect(x: 0, y: CGFloat(index + 1) * MobilePageMenu.rowHeight, width: rowWidth, height: MobilePageMenu.rowHeight)
+        }
+        siteBox.frame = CGRect(x: inset, y: optionsBox.frame.maxY + MobilePageMenu.groupGap, width: rowWidth, height: MobilePageMenu.rowHeight)
+        siteRow.frame = siteBox.bounds
+        footer.frame = CGRect(x: inset, y: siteBox.frame.maxY + MobilePageMenu.groupGap, width: rowWidth, height: MobilePageMenu.footerHeight)
+        // The two lines start 20.7 pt in; with nothing scrubbed the hint sits alone in the middle.
+        if scrubbed.isHidden {
+            restore.frame = CGRect(x: 20.7, y: 0, width: rowWidth - 41.4, height: footer.bounds.height)
+        } else {
+            scrubbed.frame = CGRect(x: 20.7, y: 8, width: rowWidth - 41.4, height: 21)
+            restore.frame = CGRect(x: 20.7, y: 29, width: rowWidth - 41.4, height: 19)
+        }
     }
 
     @objc private func backTapped() { delegate?.pageMenuGoBack() }
     @objc private func forwardTapped() { delegate?.pageMenuGoForward() }
     @objc private func reloadTapped() { delegate?.pageMenuReload() }
-    @objc private func linkTapped() {}
+    @objc private func linkTapped() { delegate?.pageMenuCopyLink() }
     @objc private func withoutBlockersTapped() { delegate?.pageMenuReloadWithoutBlockers() }
 }
 
@@ -192,22 +233,26 @@ final class PageMenuTile: UIControl {
     private let box = UIView()
     private let icon = UIImageView()
     private let label = UILabel()
+    private let tile: MobilePageMenu.Tile
 
     init(tile: MobilePageMenu.Tile) {
+        self.tile = tile
         super.init(frame: .zero)
         box.backgroundColor = Palette.barControlFill
         box.layer.cornerRadius = MobilePageMenu.tileCornerRadius
         box.layer.cornerCurve = .continuous
         box.isUserInteractionEnabled = false
         addSubview(box)
-        icon.image = Self.image(for: tile)
+        icon.image = Self.image(for: tile, pinned: false)
         icon.tintColor = Palette.glyph
         icon.contentMode = .center
         box.addSubview(icon)
         label.text = tile.label
-        label.font = .systemFont(ofSize: 12, weight: .semibold)
-        label.textColor = Palette.secondaryText
+        label.font = .systemFont(ofSize: 13, weight: .medium)
+        label.textColor = Palette.primaryText
         label.textAlignment = .center
+        label.adjustsFontSizeToFitWidth = true
+        label.minimumScaleFactor = 0.8
         addSubview(label)
         isAccessibilityElement = true
         accessibilityTraits = .button
@@ -217,41 +262,49 @@ final class PageMenuTile: UIControl {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
+    /// Pin shows whether the page is a favorite ("Pinned").
+    func setPinned(_ pinned: Bool) {
+        icon.image = Self.image(for: tile, pinned: pinned)
+        label.text = pinned ? "Pinned" : tile.label
+        accessibilityLabel = label.text
+        accessibilityTraits = pinned ? [.button, .selected] : .button
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
-        box.frame = CGRect(x: 8, y: 0, width: bounds.width - 16, height: MobilePageMenu.tileSize.height)
+        box.frame = CGRect(x: 6, y: 0, width: bounds.width - 12, height: MobilePageMenu.tileHeight)
         icon.frame = box.bounds
-        label.frame = CGRect(x: 0, y: box.frame.maxY + MobilePageMenu.tileLabelDrop - 10, width: bounds.width, height: 18)
+        label.frame = CGRect(x: 0, y: box.frame.maxY + MobilePageMenu.tileLabelDrop - 10, width: bounds.width, height: 20)
     }
 
     override var isHighlighted: Bool {
         didSet { box.alpha = isHighlighted ? 0.55 : 1 }
     }
 
-    private static func image(for tile: MobilePageMenu.Tile) -> UIImage? {
-        let configuration = UIImage.SymbolConfiguration(pointSize: 21, weight: .regular)
+    private static func image(for tile: MobilePageMenu.Tile, pinned: Bool) -> UIImage? {
+        let configuration = UIImage.SymbolConfiguration(pointSize: 26, weight: .regular)
         switch tile {
-        case .reader: return UIImage(systemName: "doc.plaintext", withConfiguration: configuration)
-        case .copyLink: return UIImage(systemName: "link", withConfiguration: configuration)
-        case .share: return UIImage(systemName: "paperplane", withConfiguration: configuration)
+        case .findOnPage: return UIImage(systemName: "doc.text.magnifyingglass", withConfiguration: configuration)
+        case .pin: return UIImage(systemName: pinned ? "pin.fill" : "pin", withConfiguration: configuration)
+        case .share: return UIImage(systemName: "square.and.arrow.up", withConfiguration: configuration)
         case .summarize: return foldedPage()
         }
     }
 
     /// Arc Search's Summarize glyph: a page folded in three, as a zigzag of leaning panels.
     private static func foldedPage() -> UIImage {
-        let size = CGSize(width: 26, height: 26)
+        let size = CGSize(width: 30, height: 30)
         return UIGraphicsImageRenderer(size: size).image { _ in
             let path = UIBezierPath()
-            for (index, top) in [CGFloat(3.5), 10.1, 16.7].enumerated() {
-                let lean: CGFloat = index % 2 == 0 ? 3 : -3
-                path.move(to: CGPoint(x: 4.5 + max(0, lean), y: top))
-                path.addLine(to: CGPoint(x: 21.5 + min(0, lean) + max(0, lean), y: top))
-                path.addLine(to: CGPoint(x: 21.5 + min(0, -lean) + max(0, -lean), y: top + 6.6))
-                path.addLine(to: CGPoint(x: 4.5 + max(0, -lean), y: top + 6.6))
+            for (index, top) in [CGFloat(4), 11.6, 19.2].enumerated() {
+                let lean: CGFloat = index % 2 == 0 ? 3.5 : -3.5
+                path.move(to: CGPoint(x: 5 + max(0, lean), y: top))
+                path.addLine(to: CGPoint(x: 25 + min(0, lean) + max(0, lean), y: top))
+                path.addLine(to: CGPoint(x: 25 + min(0, -lean) + max(0, -lean), y: top + 7.6))
+                path.addLine(to: CGPoint(x: 5 + max(0, -lean), y: top + 7.6))
                 path.close()
             }
-            path.lineWidth = 1.9
+            path.lineWidth = 2
             path.lineJoinStyle = .round
             UIColor.black.setStroke()
             path.stroke()
@@ -259,48 +312,61 @@ final class PageMenuTile: UIControl {
     }
 }
 
-/// One row of the menu's group: glyph, title, and for Page Zoom the stepper.
+/// One row of the menu: glyph and title, a chevron for Display Options, the stepper for Page Zoom.
 final class PageMenuRow: UIControl {
     private let icon = UIImageView()
     private let title = UILabel()
     private let separator = UIView()
+    private let chevron = UIImageView()
     private let minus = UIButton(type: .system)
     private let plus = UIButton(type: .system)
     private let stepper = UIView()
+    private let stepperLine = UIView()
     private let zoomValue = UIButton(type: .system)
     private let isZoom: Bool
+    private let opens: Bool
     var onZoom: ((Bool) -> Void)?
     var onResetZoom: (() -> Void)?
 
     init(row: MobilePageMenu.Row, showsSeparator: Bool) {
         isZoom = row == .pageZoom
+        opens = row == .displayOptions
         super.init(frame: .zero)
         let symbol: String
         switch row {
-        case .findOnPage: symbol = "doc.text.magnifyingglass"
+        case .displayOptions: symbol = "doc.richtext"
+        case .translate: symbol = "globe.americas.fill"
+        case .readerMode: symbol = "doc.plaintext"
         case .pageZoom: symbol = "textformat.size"
-        case .requestDesktopSite: symbol = "macbook"
-        case .translate: symbol = "translate"
+        case .requestDesktopSite: symbol = "laptopcomputer"
         case .siteSettings: symbol = "gearshape"
         }
-        icon.image = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .regular))
+        icon.image = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 19, weight: .regular))
         icon.tintColor = Palette.glyph
         icon.contentMode = .center
         addSubview(icon)
         title.text = row.label
-        title.font = .systemFont(ofSize: 17, weight: .medium)
-        title.textColor = Palette.glyph
+        title.font = .systemFont(ofSize: 18, weight: .regular)
+        title.textColor = Palette.primaryText
         addSubview(title)
         separator.backgroundColor = Palette.dynamic(light: UIColor(white: 0, alpha: 0.10), dark: UIColor(white: 1, alpha: 0.12))
         separator.isHidden = !showsSeparator
         addSubview(separator)
+        if opens {
+            chevron.image = UIImage(systemName: "chevron.right", withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold))
+            chevron.tintColor = Palette.secondaryText
+            chevron.contentMode = .center
+            addSubview(chevron)
+        }
         if isZoom {
             stepper.backgroundColor = Palette.barControlFill
-            stepper.layer.cornerRadius = 8
+            stepper.layer.cornerRadius = 9
             stepper.layer.cornerCurve = .continuous
             addSubview(stepper)
+            stepperLine.backgroundColor = Palette.dynamic(light: UIColor(white: 0, alpha: 0.12), dark: UIColor(white: 1, alpha: 0.14))
+            stepper.addSubview(stepperLine)
             for (button, symbol, up) in [(minus, "minus", false), (plus, "plus", true)] {
-                button.setImage(UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .medium)), for: .normal)
+                button.setImage(UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .medium)), for: .normal)
                 button.tintColor = Palette.glyph
                 button.accessibilityIdentifier = up ? "menu-zoom-in" : "menu-zoom-out"
                 button.accessibilityLabel = up ? "Zoom in" : "Zoom out"
@@ -326,6 +392,14 @@ final class PageMenuRow: UIControl {
         accessibilityLabel = text
     }
 
+    /// Display Options' chevron turns down while it is open.
+    func setOpen(_ open: Bool) {
+        UIView.animate(withDuration: 0.25) {
+            self.chevron.transform = open ? CGAffineTransform(rotationAngle: .pi / 2) : .identity
+        }
+        accessibilityValue = open ? "Open" : nil
+    }
+
     func setZoomLabel(_ text: String?) {
         zoomValue.setTitle(text, for: .normal)
         zoomValue.isHidden = text == nil
@@ -334,14 +408,17 @@ final class PageMenuRow: UIControl {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        // Glyph centred 29 pt in, title from 53.5 pt (measured from the row's left edge).
-        icon.frame = CGRect(x: 29 - 14, y: bounds.midY - 14, width: 28, height: 28)
-        title.frame = CGRect(x: 53.5, y: 0, width: bounds.width - 53.5 - 16, height: bounds.height)
+        // Glyph centred 30 pt in, title from 52.7 pt, chevron 26 pt from the right (recording).
+        icon.frame = CGRect(x: 30 - 15, y: bounds.midY - 15, width: 30, height: 30)
+        title.frame = CGRect(x: 52.7, y: 0, width: bounds.width - 52.7 - 40, height: bounds.height)
         separator.frame = CGRect(x: 0, y: 0, width: bounds.width, height: 1 / UIScreen.main.scale)
+        chevron.frame = CGRect(x: bounds.width - 26 - 10, y: bounds.midY - 10, width: 20, height: 20)
         guard isZoom else { return }
-        stepper.frame = CGRect(x: bounds.width - 10 - 98, y: bounds.midY - 16, width: 98, height: 32)
-        minus.frame = CGRect(x: 0, y: 0, width: 49, height: 32)
-        plus.frame = CGRect(x: 49, y: 0, width: 49, height: 32)
+        // The stepper: 89 × 31 pt, its right edge 10 pt in, a hairline between − and +.
+        stepper.frame = CGRect(x: bounds.width - 10 - 89, y: bounds.midY - 15.5, width: 89, height: 31)
+        minus.frame = CGRect(x: 0, y: 0, width: 44.5, height: 31)
+        plus.frame = CGRect(x: 44.5, y: 0, width: 44.5, height: 31)
+        stepperLine.frame = CGRect(x: 44, y: 7, width: 1, height: 17)
         zoomValue.frame = CGRect(x: stepper.frame.minX - 62, y: 0, width: 56, height: bounds.height)
     }
 

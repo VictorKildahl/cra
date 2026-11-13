@@ -126,11 +126,21 @@ final class PageMenuTests: BrowserTestCase {
         app.buttons["bar-menu"].tap()
         XCTAssertTrue(app.staticTexts["menu-host"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["menu-host"].label, "example.com")
-        for tile in ["reader", "copyLink", "share"] { XCTAssertTrue(app.buttons["menu-tile-\(tile)"].exists, tile) }
-        for row in ["findOnPage", "requestDesktopSite", "translate", "siteSettings"] { XCTAssertTrue(app.buttons["menu-row-\(row)"].exists, row) }
+        // Arc Search 1.49's menu (Victor's recording): four tiles, Display Options, Site Settings.
+        for tile in ["findOnPage", "pin", "share"] { XCTAssertTrue(app.buttons["menu-tile-\(tile)"].exists, tile) }
+        for row in ["displayOptions", "siteSettings"] { XCTAssertTrue(app.buttons["menu-row-\(row)"].exists, row) }
+        XCTAssertTrue(app.buttons["menu-copy-link"].exists)
         XCTAssertFalse(app.buttons["menu-back"].isEnabled)
         sleep(1)
         keep("page-menu")
+        // Display Options opens in place to its four rows.
+        XCTAssertFalse(app.buttons["menu-row-translate"].isHittable)
+        app.buttons["menu-row-displayOptions"].tap()
+        for row in ["translate", "readerMode", "requestDesktopSite"] {
+            XCTAssertTrue(app.buttons["menu-row-\(row)"].waitForExistence(timeout: 3), row)
+        }
+        sleep(1)
+        keep("page-menu-options")
         // Zooming shows the percentage, and a tap on it goes back to the page's own size.
         app.buttons["menu-zoom-in"].tap()
         XCTAssertEqual(app.buttons["menu-zoom-value"].label, "110%")
@@ -146,8 +156,8 @@ final class PageMenuTests: BrowserTestCase {
         launch(["-CraOpenURL", Self.page("First") + "?utm_source=test", "-CraSearch", "NO"])
         waitForPage("First")
         app.buttons["bar-menu"].tap()
-        XCTAssertTrue(app.buttons["menu-tile-copyLink"].waitForExistence(timeout: 5))
-        app.buttons["menu-tile-copyLink"].tap()
+        XCTAssertTrue(app.buttons["menu-copy-link"].waitForExistence(timeout: 5))
+        app.buttons["menu-copy-link"].tap()
         XCTAssertFalse(app.staticTexts["menu-host"].waitForExistence(timeout: 2))
     }
 }
@@ -221,7 +231,7 @@ final class BlockingTests: BrowserTestCase {
         app.buttons["bar-menu"].tap()
         let count = app.staticTexts["menu-blocked-count"]
         XCTAssertTrue(count.waitForExistence(timeout: 10))
-        XCTAssertEqual(count.label, "Scrubbed 1 ad or tracker")
+        XCTAssertEqual(count.label, "Cra scrubbed 1 tracker")
         keep("blocked-count")
         // The page has no site of its own, so its Site Settings are the global ones.
         app.buttons["menu-row-siteSettings"].tap()
@@ -382,7 +392,9 @@ final class ReadingTests: BrowserTestCase {
         waitForPage("About Pizza")
         XCTAssertTrue(app.webViews.staticTexts["Copyright"].exists)
         app.buttons["bar-menu"].tap()
-        app.buttons["menu-tile-reader"].tap()
+        app.buttons["menu-row-displayOptions"].tap()
+        XCTAssertTrue(app.buttons["menu-row-readerMode"].waitForExistence(timeout: 3))
+        app.buttons["menu-row-readerMode"].tap()
         let reader = app.webViews["reader"]
         XCTAssertTrue(reader.waitForExistence(timeout: 10))
         XCTAssertTrue(reader.staticTexts["About Pizza"].waitForExistence(timeout: 5))
@@ -391,7 +403,9 @@ final class ReadingTests: BrowserTestCase {
         sleep(1)
         keep("reader")
         app.buttons["bar-menu"].tap()
-        app.buttons["menu-tile-reader"].tap()
+        app.buttons["menu-row-displayOptions"].tap()
+        XCTAssertTrue(app.buttons["menu-row-readerMode"].waitForExistence(timeout: 3))
+        app.buttons["menu-row-readerMode"].tap()
         XCTAssertFalse(app.webViews["reader"].waitForExistence(timeout: 2))
     }
 }
@@ -545,17 +559,16 @@ final class SpacesTests: BrowserTestCase {
 }
 
 final class FavoritesTests: BrowserTestCase {
-    /// "Favorite in App" from the page menu's pin puts the page under the empty search field,
+    /// The page menu's Pin tile ("Favorite in App" on the phone) puts the page under the empty search field,
     /// where a tap opens it.
     func testAFavoriteShowsUnderTheEmptySearchField() {
         // A title that is nowhere in the page, so finding it means finding the favorite's row.
         launch(["-CraOpenURL", "data:text/html,<meta name=viewport content='width=device-width'><title>Starred</title><h1>Heading</h1>", "-CraSearch", "NO"])
         waitForPage("Heading")
         app.buttons["bar-menu"].tap()
-        XCTAssertTrue(app.buttons["menu-pin"].waitForExistence(timeout: 5))
-        app.buttons["menu-pin"].tap()
-        XCTAssertTrue(app.buttons["Favorite in App"].waitForExistence(timeout: 5))
-        app.buttons["Favorite in App"].tap()
+        XCTAssertTrue(app.buttons["menu-tile-pin"].waitForExistence(timeout: 5))
+        app.buttons["menu-tile-pin"].tap()
+        XCTAssertEqual(app.buttons["menu-tile-pin"].label, "Pinned")
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
         app.buttons["bar-search"].tap()
         XCTAssertTrue(app.textFields["search-field"].waitForExistence(timeout: 5))
@@ -849,6 +862,7 @@ final class TranslateTests: BrowserTestCase {
         launch(["-CraOpenURL", Self.page("Bonjour"), "-CraSearch", "NO", "-CraFakeTranslate", "YES"])
         waitForPage("Bonjour")
         app.buttons["bar-menu"].tap()
+        app.buttons["menu-row-displayOptions"].tap()
         let row = app.buttons["menu-row-translate"]
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         XCTAssertEqual(row.label, "Translate")
@@ -856,11 +870,13 @@ final class TranslateTests: BrowserTestCase {
         sleep(1)
         keep("translated")
         app.buttons["bar-menu"].tap()
+        app.buttons["menu-row-displayOptions"].tap()
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         XCTAssertEqual(row.label, "Show Original")
         row.tap()
         sleep(1)
         app.buttons["bar-menu"].tap()
+        app.buttons["menu-row-displayOptions"].tap()
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         XCTAssertEqual(row.label, "Translate")
     }
@@ -1064,10 +1080,9 @@ final class FavoriteOrderTests: BrowserTestCase {
                 "-CraSearch", "NO", "-CraFakeShare", "https://saved.invalid/page", "-CraFakeShareTo", "favorites"])
         waitForPage("Heading")
         app.buttons["bar-menu"].tap()
-        XCTAssertTrue(app.buttons["menu-pin"].waitForExistence(timeout: 5))
-        app.buttons["menu-pin"].tap()
-        XCTAssertTrue(app.buttons["Favorite in App"].waitForExistence(timeout: 5))
-        app.buttons["Favorite in App"].tap()
+        XCTAssertTrue(app.buttons["menu-tile-pin"].waitForExistence(timeout: 5))
+        app.buttons["menu-tile-pin"].tap()
+        XCTAssertEqual(app.buttons["menu-tile-pin"].label, "Pinned")
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
         app.buttons["bar-search"].tap()
         let shared = app.staticTexts["Shared page"], starred = app.staticTexts["Starred"]

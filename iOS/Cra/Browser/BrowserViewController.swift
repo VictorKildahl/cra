@@ -795,7 +795,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         guard let page = shownPage, menuHost == nil, !isSearching else { return }
         let menu = PageMenuView(state: menuState(for: page))
         menu.delegate = self
-        let host = SheetHost(content: menu, cornerRadius: MobilePageMenu.cornerRadius) { MobilePageMenu.height(safeBottom: $0) }
+        let host = SheetHost(content: menu, cornerRadius: MobilePageMenu.cornerRadius) { [weak menu] in
+            MobilePageMenu.height(displayOptionsOpen: menu?.displayOptionsOpen ?? false, safeBottom: $0)
+        }
         host.onDismiss = { [weak self] in
             self?.menuHost = nil
             self?.menuView = nil
@@ -812,7 +814,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
                              zoom: Double(page.webView.pageZoom), isDesktopSite: page.wantsDesktopSite,
                              canSummarize: BrowseForMe.isAvailable, blockedCount: page.blockedCount,
                              isFavorite: page.webView.url.map { favorites.value.contains($0.absoluteString) } ?? false,
-                             isTranslated: page.isTranslated)
+                             isTranslated: page.isTranslated, isReader: readerView != nil)
     }
 
     func refreshMenu() {
@@ -838,6 +840,16 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         shownPage?.webView.reload()
         menuHost?.dismiss()
     }
+    func pageMenuCopyLink() { copyLink() }
+
+    /// Display Options opened or closed: the sheet follows the menu's new height.
+    func pageMenuDidChangeHeight() {
+        UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+            self.menuHost?.setNeedsLayout()
+            self.menuHost?.layoutIfNeeded()
+        }
+    }
+
     func pageMenuToggleFavorite() {
         guard let page = shownPage, let address = shareableAddress else { return }
         favorites.toggle(url: address, title: page.webView.title ?? "")
@@ -847,8 +859,15 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     func pageMenu(didPick tile: MobilePageMenu.Tile) {
         switch tile {
-        case .copyLink:
-            copyLink()
+        case .findOnPage:
+            guard let page = shownPage else { return }
+            menuHost?.dismiss {
+                page.webView.isFindInteractionEnabled = true
+                page.webView.findInteraction?.presentFindNavigator(showingReplace: false)
+            }
+        case .pin:
+            // Arc Search pins to a Space; on the phone Cra keeps it with "Favorite in App".
+            pageMenuToggleFavorite()
         case .share:
             guard let address = shareableAddress, let url = URL(string: address) else { return }
             menuHost?.dismiss { [weak self] in
@@ -857,9 +876,6 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
                 share.popoverPresentationController?.sourceView = self.bar.menuButton
                 self.present(share, animated: true)
             }
-        case .reader:
-            menuHost?.dismiss()
-            toggleReader()
         case .summarize:
             menuHost?.dismiss()
             summarize()
@@ -869,11 +885,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     func pageMenu(didPick row: MobilePageMenu.Row) {
         guard let page = shownPage else { return }
         switch row {
-        case .findOnPage:
-            menuHost?.dismiss {
-                page.webView.isFindInteractionEnabled = true
-                page.webView.findInteraction?.presentFindNavigator(showingReplace: false)
-            }
+        case .readerMode:
+            menuHost?.dismiss()
+            toggleReader()
         case .requestDesktopSite:
             page.wantsDesktopSite.toggle()
             page.webView.reload()
@@ -883,7 +897,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         case .translate:
             menuHost?.dismiss()
             translate(page)
-        case .pageZoom:
+        case .pageZoom, .displayOptions:
             break
         }
     }

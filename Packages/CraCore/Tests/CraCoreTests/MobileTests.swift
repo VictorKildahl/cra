@@ -346,21 +346,26 @@ struct MobileTabCarouselTests {
 }
 
 struct MobilePageMenuTests {
-    /// Arc Search's menu with "Find on Page" and two more rows starts 413 pt down an iPhone 15
-    /// Pro: three rows there (one group of one and one of two, 16 pt apart).
+    /// Victor's recording of Arc Search 1.49 on an iPhone 16 Pro Max (440 × 956 pt): the closed
+    /// menu's sheet starts at 508 pt, the address capsule at 524.7 pt; Display Options opens to
+    /// four more rows.
     @Test func heightMatchesArcSearch() {
-        #expect(abs(MobilePageMenu.height(rows: 3, safeBottom: 34) + 16 - (852 - 413)) < 0.5)
-        #expect(abs(MobilePageMenu.height(safeBottom: 34) - 519) < 0.001)
+        #expect(abs(MobilePageMenu.height(safeBottom: 34) - (956 - 508.3)) < 1)
+        #expect(MobilePageMenu.height(displayOptionsOpen: true, safeBottom: 34) - MobilePageMenu.height(safeBottom: 34) == CGFloat(192))
     }
 
-    @Test func fourTilesSitAsMeasuredAndThreeStayCentred() {
-        let four = MobilePageMenu.tileFrames(count: 4, width: 393)
-        #expect(four.map { ($0.minX * 10).rounded() / 10 } == [21.3, 115.3, 209.4, 303.4])
-        #expect(four[0].minY == 81)
-        let three = MobilePageMenu.tileFrames(count: 3, width: 393)
-        #expect(abs(three[1].midX - 196.5) < 0.01)
-        #expect(abs((three[1].minX - three[0].minX) - (four[1].minX - four[0].minX)) < 0.01)
-        #expect(MobilePageMenu.tiles(canSummarize: false) == [.reader, .copyLink, .share])
+    /// The tiles there: 85.7 pt wide from 18.3 pt in, 20 pt apart, their tops 81 pt down the sheet.
+    @Test func fourTilesFillTheWidthAndThreeStayCentred() {
+        let four = MobilePageMenu.tileFrames(count: 4, width: 440)
+        // 55, 373, 691 and 1008 px in the recording.
+        let measured: [CGFloat] = [55, 373, 691, 1008].map { $0 / 3 }
+        #expect(zip(four, measured).allSatisfy { abs($0.minX - $1) < 0.4 })
+        #expect(abs(four[0].width - 85.6) < 0.1 && four[0].height == 88.7)
+        #expect(abs(four[0].minY - 80.9) < 0.01)
+        let three = MobilePageMenu.tileFrames(count: 3, width: 440)
+        #expect(abs(three[1].midX - 220) < 0.01)
+        #expect(MobilePageMenu.tiles(canSummarize: false) == [.findOnPage, .pin, .share])
+        #expect(MobilePageMenu.displayOptions.map(\.label) == ["Translate", "Reader Mode", "Page Zoom", "Request Desktop Site"])
     }
 
     @Test func zoomStepsByTenthsWithinLimits() {
@@ -372,9 +377,12 @@ struct MobilePageMenuTests {
         #expect(MobilePageMenu.zoomLabel(1.3) == "130%")
     }
 
-    @Test func blockedCountReadsAsArcSearchs() {
-        #expect(MobilePageMenu.blockedLabel(0) == nil)
-        #expect(MobilePageMenu.blockedLabel(6) == "Scrubbed 6 ads and trackers")
+    /// "Arc scrubbed 22 trackers / Problems? Tap to restore original page" in the recording.
+    @Test func theFooterCountsWhatWasScrubbed() {
+        #expect(MobilePageMenu.scrubbedLabel(0) == nil)
+        #expect(MobilePageMenu.scrubbedLabel(22)?.text == "Cra scrubbed 22 trackers")
+        #expect(MobilePageMenu.scrubbedLabel(1)?.text == "Cra scrubbed 1 tracker")
+        #expect(MobilePageMenu.restoreHint == "Problems? Tap to restore original page")
     }
 }
 
