@@ -50,6 +50,11 @@ against ~930 MB at 20 tabs and ~370 against ~320 MB back at one tab. Where the d
 | Browser process | ~210 MB | ~155 MB | CEF makes every tab a Chrome browser with its own (hidden) window and toolbar. |
 | GPU | ~160 MB | (with network, storage, its blocker: ~250 MB) | Even now that five hidden tabs keep their frame. |
 
+For scale, Google Chrome 157 on the same steps (13 Nov 2026, `chromium-bench`-style CDP run with its own
+profile): 417 MB at 1 tab, 827 at 10, ~1,200 at 20, 396 back at one. Cra (~309 / ~805 / ~1,150 / ~370) is
+already below stock Chrome; the other browser's lower numbers come with a base that strips Chrome's
+Google services as well as its newer engine and no CEF.
+
 ## Done this round
 
 - **Tab freezing past the five tabs used last** (Chromium's InfiniteTabsFreezing, CraCEF.mm): frozen
@@ -72,6 +77,21 @@ against ~930 MB at 20 tabs and ~370 against ~320 MB back at one tab. Where the d
 Tried and taken out: waking Chromium's frame clock on a sidebar press (no gain: Cra's pages keep
 their frame while hidden), and MemoryPurgeOnFreeze (no memory saved on these pages, and idle CPU
 went up with tabs refreezing every minute).
+
+## Done the night after (12–13 Nov 2026)
+
+- **Spare pages** (`SparePages`, `spare-pages.patch`): a page per profile made ahead; a new tab, a link
+  opened in a tab and the first visit to a restored tab take it. Page making 34 → 21 ms on average
+  (15 of 26 pages from a spare at a click every 1–2 s), switch to a restored tab's page shown 30 → 12 ms,
+  opening a site 36 → 16 ms. Extensions never see a spare (`spare-pages.scenario`).
+- **Tabs switch on the press**, as Arc 1.173.1 does (checked live): the click's own length, ~90 ms,
+  comes off every sidebar switch. Picks, renames and a pinned tab's icon act on the release.
+- **Space switches** no longer ask the window server which window is under the pointer every frame of
+  the spring (207 ms of the main thread over six switches).
+- **Updates**: the warm-up runs the five helper apps too; a fresh copy's first launch 3.5 → 0.6 s.
+
+What is left on a switch is Chromium's own work on the browser side as pages load (Chrome pays it too)
+and ~8 ms of Cra's refresh per switch.
 
 ## The next gains
 
@@ -116,6 +136,28 @@ CEF skipped 157: its master went from 156 to 158 (158.0.8127.0, 4 Nov 2026) and 
 release branch (8078). The daily CEF update check opens the issue when a stable 158 branch exists;
 take it with `scripts/update-cef.sh` as soon as it does, and measure the page processes against 156.
 Every engine round also needs the Intel build ([release.md](release.md)).
+
+### Measured before deciding on 3: plain Chromium from the same tree (13 Nov 2026)
+
+Chromium 156 built from the CEF checkout itself (`out/Chrome_arm64`: CEF's GN args plus
+`enable_cef=false`; `scripts/perf/plain-chromium.patch` guards the seven places where CEF's patches use
+CEF code unguarded; a stub `third_party/widevine/scripts/signature_generator.py` that writes an empty
+signature, since that signer isn't in the checkout; ~4 h on the M2 Max at low priority) and run through
+the same steps over CDP:
+
+| 20 tabs, settled | Cra (CEF) | Plain Chromium 156 |
+|---|---|---|
+| Total | ~1,150–1,200 MB | 1,286 MB |
+| Browser process | ~210 MB | 113 MB |
+| GPU and other helpers | ~280 MB | 435 MB |
+| Page processes | ~33.6 MB each | ~37 MB each |
+
+On the same engine, Chromium without CEF uses more memory here than Cra does. CEF's cost per tab in the
+browser process (~100 MB at 20 tabs) is real, and Chrome's own GPU and helper processes spend more than
+that. So leaving CEF would not by itself bring Cra to the ~930 MB of the browser above; that one strips
+Chrome's background services (its Helium-style base) and runs a newer engine. Before 3, the cheaper
+lever is the same as theirs: turn off Chrome background features Cra doesn't use, one at a time,
+measured with `scripts/perf/rounds.sh`.
 
 ### 3. Leave CEF (browser process, ~50 MB at 20 tabs; any Chromium version)
 
