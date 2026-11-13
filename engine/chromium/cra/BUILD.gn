@@ -1,0 +1,25 @@
+# Cra's layer in Chrome's framework (docs/chromium-engine.md in the Cra repository). Linked into
+# //chrome:chrome_dll by engine/chromium/apply.sh.
+
+source_set("core") {
+  sources = [
+    "engine_main.mm",
+    "spike_checks.h",
+    "spike_checks.mm",
+  ]
+  frameworks = [ "Cocoa.framework" ]
+  deps = [
+    "//base",
+    "//chrome/browser",
+    "//chrome/browser/profiles:profile",
+    "//chrome/browser/ui",
+    "//chrome/browser/ui/browser_window",
+    "//chrome/browser/ui/tabs:tab_strip",
+    "//content/public/browser",
+    "//extensions/common",
+    "//ui/gfx",
+    "//chrome/browser/ui/browser_window:create_browser_window",
+    "//chrome/browser/ui/extensions:extensions",
+    "//url",
+  ]
+}
