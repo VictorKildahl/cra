@@ -400,6 +400,7 @@
 #252   Tests/Scenarios/space-dots-hover.scenario  22e9959ac346
 #252   Tests/Scenarios/space-dots.scenario  6d228947e52a
 #252   Tests/StoreTests.swift::arcSpaceWithoutAnIconImportsAsADot  14c68aa6e846
+#253   Tests/Scenarios/app-shortcuts-page.scenario  b35db2b8b16f
 #253   Tests/Scenarios/app-shortcuts.scenario  f21d8bb94bb5
 #256   Packages/CraCore/Tests/CraCoreTests/SlowResponseNoticeTests.swift::aCommittedPageThatKeepsLoadingNeverShowsIt  74904a1aff59
 #256   Packages/CraCore/Tests/CraCoreTests/SlowResponseNoticeTests.swift::aNewNavigationWhileWaitingStartsAgain  6dcd1be80b22

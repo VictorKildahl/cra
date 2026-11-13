@@ -2257,13 +2257,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// returning false lets CEF pass the key on to the menu bar (⌘Q, ⌘H…).
     func handleUnhandledKey(_ event: NSEvent) -> Bool {
         if undoClosedTab(event) { return true }
-        // Chromium hands a ⌘-key the page left alone back to the menu bar through its own
-        // window's command dispatcher (⌘C, ⌘V, ⌘A, ⌘Z exist only as Edit menu items). An
-        // embedded page sits in Cra's window, which has none, so it goes to the menu bar here,
-        // first: the menu runs the keys it shows, which AppKit fits to the keyboard layout
-        // (Turkish Q: Zoom In ⌘., Stop ⌘ç, Back ⌘ğ), the way the sidebar's keys go (GitHub #212).
-        if event.modifierFlags.contains(.command), let key = NSApp.keyWindow,
-           !key.responds(to: NSSelectorFromString("commandDispatcher")),
+        // Chromium's page view takes every key equivalent before the menu bar, ⌘ or not, and
+        // hands one the page left alone back to the menu bar through its own window's command
+        // dispatcher (⌘C, ⌘V, ⌘A, ⌘Z exist only as Edit menu items). An embedded page sits in
+        // Cra's window, which has none, so it goes to the menu bar here, first: the menu runs
+        // the keys it shows, which AppKit fits to the keyboard layout (Turkish Q: Zoom In ⌘.,
+        // Stop ⌘ç, Back ⌘ğ), the way the sidebar's keys go (GitHub #212). ⌃, ⌥ and F-keys too:
+        // a System Settings App Shortcut such as ⌃` for Hide/Show Sidebar is a menu key (#253).
+        if !event.modifierFlags.intersection([.command, .control, .option, .function]).isEmpty,
+           let window = event.window ?? NSApp.keyWindow,
+           !window.responds(to: NSSelectorFromString("commandDispatcher")),
            NSApp.mainMenu?.performKeyEquivalent(with: event) == true {
             return true
         }
