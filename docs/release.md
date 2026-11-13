@@ -68,11 +68,16 @@ git push origin v0.1.0
 Before writing the notes, run `scripts/sponsors.py`. It reads the GitHub Sponsors tiers and
 lists who the tiers promise a name in these notes (one-time $50 and up since the last tag,
 monthly $5 and up once a year), which Backers to ask first about the next big feature, and
-which companies need their logo on /support. Thank monthly sponsors with their `@login` in
-the sentence, so next year's run sees they were thanked. Private sponsors are counted, never
-named. It needs the VictorKildahl `gh` login with the `user` scope. Also list the public
-sponsors you thank in the release's `sponsors` field (`login` and `name`), which puts their
-GitHub avatars under the summary on the release's page.
+which companies need their logo on /support. Private sponsors are counted, never named. It
+needs the VictorKildahl `gh` login with the `user` scope.
+
+Sponsors are thanked first, at the top of the notes, on their own: list the public sponsors
+in the release's `sponsors` field (`login` and `name`), which opens the release's page with
+"Thank you, A and B, for sponsoring Cra." and their avatars, and is what next year's run
+reads to see a monthly sponsor was thanked. In the GitHub release the same line, with each
+`@login`, goes right after the opening paragraph. The thank-you at the bottom is for work
+only (pull requests, reports): a sponsor who also did work is thanked there again, for the
+work, without "also for sponsoring".
 
 A run of fixes or small changes goes in a highlight's `items`, one fix per item with its
 issue and who reported it, never as a paragraph of sentences. A contributor thanked for the

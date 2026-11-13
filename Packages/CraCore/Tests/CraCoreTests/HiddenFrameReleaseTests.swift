@@ -22,6 +22,17 @@ struct HiddenFrameReleaseTests {
         #expect(due == hidden.suffix(8).map(\.id))
     }
 
+    /// Fifty tabs opened quickly: 45 page windows drawing at once held the main thread for seconds.
+    @Test func manyDueTabsDrawAFewAtATime() {
+        let due = (1...45).map { tab($0, minutesAgo: 0).id }
+        let first = HiddenFrameRelease.pass(due)
+        #expect(first.now == Array(due.prefix(HiddenFrameRelease.perPass)) && first.more)
+        #expect(HiddenFrameRelease.perPass <= 4)
+        let last = HiddenFrameRelease.pass(Array(due.suffix(3)))
+        #expect(last.now.count == 3 && !last.more)
+        #expect(HiddenFrameRelease.pass([]) == ([], false))
+    }
+
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/195")) func tabsHiddenLongerThanTheCullAreDue() {
         let hidden = [tab(1, minutesAgo: 3), tab(2, minutesAgo: 11)]
         #expect(HiddenFrameRelease.due(hidden, visible: 1, now: now) == [hidden[1].id])

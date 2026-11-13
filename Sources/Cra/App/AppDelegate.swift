@@ -1095,6 +1095,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // card and asks; askQuery=<text> types it and presses Return; askFindQuote=<n> presses the
             // last answer's nth Find on Page.
             if let label = dict["askOnPage"] { CraLog.note(main.askOnPage.readout(label)); return }
+            // askTone=<label>: the card's appearance and the question's contrast on it (#408).
+            if let label = dict["askTone"] { CraLog.note(main.askOnPage.toneReadout(label)); return }
             if let q = dict["ask"] { main.showFindBar(); main.askOnPage.ask(q); return }
             if let q = dict["askQuery"] {
                 main.showFindBar()

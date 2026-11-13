@@ -62,6 +62,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var slowResponses: [UUID: SlowResponseNotice] = [:]
     private var slowResponseToastTab: UUID?
     private var slowResponseCheck: ScheduledWork?
+    /// releaseHiddenFrames, HiddenFrameRelease.afterPageChange after the last page change.
+    private var frameReleaseAfterChange: ScheduledWork?
     private var commandObserving = false
     /// Closed for good (another window stayed open): it no longer follows the store.
     private var isTornDown = false
@@ -1256,6 +1258,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Attaches the visible tabs' Chrome windows over their pane areas, hides the others.
     func browserManagerPageWindowsChanged(focus: Bool) {
         guard let window else { return }
+        frameReleaseAfterChange?.cancel()
+        frameReleaseAfterChange = app.composition.clock.after(HiddenFrameRelease.afterPageChange) { [weak self] in
+            guard let self else { return }
+            self.frameReleaseAfterChange = nil
+            self.releaseHiddenFrames(now: self.app.composition.clock.now)
+        }
         // A focus still waiting for its page to embed is stale once pages change without one.
         if !focus { embedFocusTab = nil }
         ensureOverlayPanel()
@@ -1377,7 +1385,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             return .init(id: rt.tabID, hiddenAt: at, releasedFor: rt.hiddenFrameReleasedFor)
         }
         guard let window else { return }
-        for id in HiddenFrameRelease.due(hidden, visible: visible.count, now: now) {
+        let pass = HiddenFrameRelease.pass(HiddenFrameRelease.due(hidden, visible: visible.count, now: now).filter { id in
+            guard let w = browsers.runtime(for: id)?.hostWindow else { return false }
+            return !w.isVisible && w.parent == nil && !releasingFrames.contains(id)
+        })
+        if pass.more {
+            frameReleaseAfterChange?.cancel()
+            frameReleaseAfterChange = app.composition.clock.after(0.25 + HiddenFrameRelease.passGap) { [weak self] in
+                guard let self else { return }
+                self.frameReleaseAfterChange = nil
+                self.releaseHiddenFrames(now: self.app.composition.clock.now)
+            }
+        }
+        for id in pass.now {
             guard let rt = browsers.runtime(for: id), let w = rt.hostWindow, !w.isVisible, w.parent == nil,
                   !releasingFrames.contains(id) else { continue }
             rt.hiddenFrameReleasedFor = rt.hiddenAt
@@ -4054,8 +4074,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         shell.findHost.isHidden = enabled
         askOnPage.view.isHidden = !enabled
         let theme = focusedSpace.theme.shown
-        let c = AskOnPageTone.accent(themeHex: theme.accent ?? theme.colors.first ?? "#DDDDDD", dark: theme.isDark)
-        askOnPage.setAccent(c)
+        // Not theme.isDark: the card follows macOS, so it makes a question for each appearance (#408).
+        askOnPage.setTone(themeHex: theme.accent ?? theme.colors.first ?? "#DDDDDD")
         let tab = browsers.visibleTabID
         askOnPage.pageChanged(tab: tab, url: tab.flatMap { store.item($0)?.tab?.url }.flatMap(URL.init(string:)))
         refitFindPanel()

@@ -1,7 +1,7 @@
 # report.py <run dir>...: scripts/perf/bench.sh runs as a table, the median (min–max) per build.
 # Runs are grouped by name before the last "-": before-1, before-2 and after-1 give "before" and "after".
 # Call a row different only when the ranges separate; overlapping ranges are noise (docs/speed.md).
-import json, os, statistics as st, sys
+import datetime, glob, json, os, statistics as st, sys
 
 
 def load(root):
@@ -35,6 +35,21 @@ def load(root):
         out["tab switches shown (of 16)"] = len(sw)
         if fcp:
             out["new tab → first paint (ms)"] = st.median(fcp)
+    launch = f"{root}/launch"
+    if os.path.exists(f"{launch}/hitch.log"):
+        t0 = float(open(f"{launch}/t0").read())
+        for line in open(glob.glob(f"{launch}/cra*.log")[0]):
+            if " launch: opened" in line:
+                at = datetime.datetime.strptime(line[:23], "%Y-%m-%d %H:%M:%S.%f").timestamp() * 1000
+                out["start → window open (ms)"] = at - t0
+                break
+        off = float(open(f"{launch}/clock-offset").read())
+        news = [(float(t) + off) * 1000 for t, _, label in
+                (l.split(" ", 2) for l in open(f"{launch}/hitch.log") if " mark " in l) if "newWindow" in label]
+        fcp = {m["n"]: m["t"] for m in map(json.loads, open(f"{launch}/marks.jsonl")) if m["kind"] == "fcp"}
+        win = [fcp[f"w{i + 1}"] - t for i, t in enumerate(news) if f"w{i + 1}" in fcp]
+        if win:
+            out["new window → first paint (ms)"] = st.median(win)
     return out
 
 
