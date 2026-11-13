@@ -1916,10 +1916,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 main.testDragEnded(tab.id, at: point)
                 return
             }
-            // dropLink=<url>[&name=<link text>][&before=<text>]: a link let go on the focused space's
-            // list, below the last row or on the row whose tab's URL holds the text (#419).
+            // dropLink=<url>[&name=<link text>][&before=<text>|&onto=<text>]: a link let go on the focused
+            // space's list, below the last row, or on the top or the middle of the row whose tab's URL
+            // holds the text (#419).
             if let url = dict["dropLink"] {
-                main.testDropLink(url, name: dict["name"], before: dict["before"])
+                main.testDropLink(url, name: dict["name"], row: dict["before"] ?? dict["onto"], onto: dict["onto"] != nil)
                 return
             }
             if dict["windows"] != nil {

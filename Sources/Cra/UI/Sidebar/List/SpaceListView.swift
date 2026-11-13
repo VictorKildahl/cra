@@ -1007,11 +1007,11 @@ final class SpaceListView: NSView, NSDraggingSource {
     }
 
     /// `cra://debug?dropLink`: where a link is let go, in the list's coordinates: on the upper
-    /// part of the row whose tab's address holds `text`, or below the last row.
-    func testDropPoint(before text: String?) -> CGPoint? {
+    /// part of the row whose tab's address holds `text`, on its middle (`onto`), or below the last row.
+    func testDropPoint(row text: String?, onto: Bool) -> CGPoint? {
         if let text {
             guard let r = rows.first(where: { $0.itemID.flatMap { store.item($0)?.tab?.url.contains(text) } == true }) else { return nil }
-            return CGPoint(x: r.frame.midX, y: r.frame.minY + r.frame.height * 0.1)
+            return CGPoint(x: r.frame.midX, y: onto ? r.frame.midY : r.frame.minY + r.frame.height * 0.1)
         }
         return CGPoint(x: todayFrame.midX, y: (rows.map(\.frame.maxY).max() ?? todayFrame.maxY) + 40)
     }
@@ -1128,8 +1128,9 @@ final class SpaceListView: NSView, NSDraggingSource {
     /// Top and bottom quarters of a row insert before/after it; the middle combines: a folder
     /// takes the item, a tab, pinned or not, makes a split in its place (the dragged tab goes on
     /// the side of the row it hovers), a split row takes a pane. A link (`SidebarListDrop.link`)
-    /// only goes between rows: its upper half before a row, its lower half after, into an open
-    /// folder at the top.
+    /// only goes between rows: a tab's top quarter before it, its bottom quarter after, nothing on
+    /// its middle (Arc 1.173.1); a folder's upper half before it, its lower half after or into an
+    /// open folder at the top.
     func resolve(dragged id: UUID, at p: CGPoint) -> SidebarListDrop {
         guard let space = store.space(spaceID) else { return SidebarListDrop(draggedID: id) }
         let items = rows.filter { $0.itemID != nil }
@@ -1157,6 +1158,9 @@ final class SpaceListView: NSView, NSDraggingSource {
                 target = .split(with: rid, leading: p.x < r.frame.midX)
             } else if middle && isTab && item.isSplit {
                 target = .into(rid)
+            } else if middle && !combines {
+                // Arc 1.173.1 takes nothing on a tab's middle (measured: no line, no tab, the tab kept its page).
+                target = nil
             } else {
                 target = f < 0.5 ? before : after
             }

@@ -1,7 +1,8 @@
 # promise: #419
 # A link dragged onto the tab list from a page or another app opens as a new tab where it is let
-# go, behind the page you're on, as in Arc 1.172.1: below the last row it is the end of Today,
-# on a row's upper part it goes before that row. Only web pages are taken.
+# go, behind the page you're on, as in Arc (1.173.1, measured): below the last row it is the end of
+# Today, on a row's top quarter it goes before that row. Arc takes nothing on a tab's middle, and
+# only web pages are taken.
 budget rss=800 stalls50=30
 pace 0.5
 seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
@@ -14,6 +15,8 @@ cra://debug?dropLink=${PAGE}?n=bottom&name=Dropped
 expect-log dropLink: opened \S*n=bottom
 cra://debug?dropLink=${PAGE}?n=between&before=n=first
 expect-log dropLink: opened \S*n=between
+cra://debug?dropLink=${PAGE}?n=onto&onto=n=first
+expect-log dropLink: refused \S*n=onto
 cra://debug?dropLink=file:///etc/hosts
 expect-log dropLink: refused file:///etc/hosts
 wait 1
