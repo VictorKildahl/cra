@@ -14,8 +14,13 @@ class ChromeBrowserMainExtraParts;
 
 namespace content {
 class WebContents;
+struct ContextMenuParams;
 struct GlobalRenderFrameHostId;
 }
+namespace ui {
+class SimpleMenuModel;
+}
+class RenderViewContextMenuBase;
 namespace input {
 struct NativeWebKeyboardEvent;
 }
@@ -85,6 +90,25 @@ inline IsCraPageHook g_is_cra_page = nullptr;
 // (patches/cra-content-blocking.patch).
 using BlockRequestHook = bool (*)(const GURL& url, const content::GlobalRenderFrameHostId& frame);
 inline BlockRequestHook g_block_request = nullptr;
+
+// A page's context menu, Arc's in Cra's pages (patches/cra-page-menu.patch): Cra changes the model Chrome built,
+// runs its own items (ids kCraMenuFirst to kCraMenuLast) and the Chrome ones it takes over (true: done), and
+// may run a command instead of showing the menu, or show none (false: not shown).
+inline constexpr int kCraMenuFirst = 56700;
+inline constexpr int kCraMenuLast = 56799;
+inline bool IsCraMenuCommand(int id) {
+  return id >= kCraMenuFirst && id <= kCraMenuLast;
+}
+using PageMenuBuiltHook = void (*)(content::WebContents* contents,
+                                   const content::ContextMenuParams& params,
+                                   ui::SimpleMenuModel* model);
+inline PageMenuBuiltHook g_page_menu_built = nullptr;
+using PageMenuCommandHook = bool (*)(content::WebContents* contents,
+                                     const content::ContextMenuParams& params,
+                                     int command_id);
+inline PageMenuCommandHook g_page_menu_command = nullptr;
+using PageMenuShowHook = bool (*)(content::WebContents* contents, RenderViewContextMenuBase* menu);
+inline PageMenuShowHook g_page_menu_show = nullptr;
 
 }  // namespace cra
 

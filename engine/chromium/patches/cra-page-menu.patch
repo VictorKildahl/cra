@@ -1,0 +1,71 @@
+diff --git a/chrome/browser/renderer_context_menu/render_view_context_menu.cc b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
+--- a/chrome/browser/renderer_context_menu/render_view_context_menu.cc
++++ b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
+@@ -3,6 +3,8 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
++
++#include "chrome/browser/cra_engine_hooks.h"
+ 
+ #include <stddef.h>
+ 
+@@ -1608,6 +1610,11 @@
+       AppendReadAnythingItem();
+     }
+   }
++
++  // Cra: Arc's page menu in Cra's pages.
++  if (cra::g_page_menu_built) {
++    cra::g_page_menu_built(source_web_contents_, params_, &menu_model_);
++  }
+ }
+ 
+ Profile* RenderViewContextMenu::GetProfile() const {
+@@ -3419,6 +3426,9 @@
+ // Menu delegate functions -----------------------------------------------------
+ 
+ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
++  if (cra::IsCraMenuCommand(id)) {
++    return true;
++  }
+ #if BUILDFLAG(IS_CHROMEOS)
+   // Disable context menu in locked fullscreen mode to prevent users from
+   // exiting this mode (the menu is not really disabled as the user can still
+@@ -3854,6 +3864,12 @@
+ }
+ 
+ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
++  // Cra: its own items and the Chrome ones it takes over in Cra's pages.
++  if (cra::g_page_menu_command &&
++      cra::g_page_menu_command(source_web_contents_, params_, id)) {
++    command_executed_ = true;
++    return;
++  }
+   RenderViewContextMenuBase::ExecuteCommand(id, event_flags);
+   if (command_executed_) {
+     return;
+diff --git a/chrome/browser/ui/views/tab_contents/chrome_web_contents_view_delegate_views_mac.mm b/chrome/browser/ui/views/tab_contents/chrome_web_contents_view_delegate_views_mac.mm
+--- a/chrome/browser/ui/views/tab_contents/chrome_web_contents_view_delegate_views_mac.mm
++++ b/chrome/browser/ui/views/tab_contents/chrome_web_contents_view_delegate_views_mac.mm
+@@ -8,6 +8,7 @@
+ #include <optional>
+ 
+ #import "chrome/browser/renderer_host/chrome_render_widget_host_view_mac_delegate.h"
++#include "chrome/browser/cra_engine_hooks.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+ #include "chrome/browser/ui/cocoa/renderer_context_menu/render_view_context_menu_mac_cocoa.h"
+@@ -210,6 +211,12 @@
+     return;
+   }
+ 
++  // Cra: a command run instead of the menu (a test), or no menu at all (an MCP client's right-click).
++  if (cra::g_page_menu_show &&
++      !cra::g_page_menu_show(web_contents_, context_menu_.get())) {
++    return;
++  }
++
+   context_menu_->Show();
+ }
+ 

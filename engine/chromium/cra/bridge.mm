@@ -43,7 +43,14 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/version_info/version_info.h"
+#include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/grit/generated_resources.h"
+#include "components/renderer_context_menu/render_view_context_menu_base.h"
+#include "content/public/browser/context_menu_params.h"
+#include "third_party/blink/public/mojom/context_menu/context_menu.mojom.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/menus/simple_menu_model.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -160,6 +167,19 @@ ScopedKeepAlive* g_keep_alive = nullptr;
 CraBrowser* _Nullable (^g_extension_tab_handler)(NSString*, NSString* _Nullable, BOOL, CraBrowser* _Nullable) = nil;
 void (^g_stray_page_handler)(NSString*, NSString* _Nullable) = nil;
 void (^g_process_event_handler)(NSString*, NSString*, NSString* _Nullable) = nil;
+void (^g_view_source_handler)(CraBrowser*, NSString*) = nil;
+NSString* _Nullable (^g_image_search_title)(NSString*) = nil;
+// The "Open Link in New Tab" item: its title and whether its tab opens behind (LinkMenu, GitHub #276).
+NSString* g_link_menu_title = @"Open Link in New Tab";
+BOOL g_link_menu_background = YES;
+// A test's command for the next page menu, run instead of showing it (-1: none).
+int g_next_page_menu_command = -1;
+
+// Cra's own page menu items (cra_engine_hooks.h's range).
+constexpr int kMenuOpenLinkNewTab = cra::kCraMenuFirst;
+constexpr int kMenuOpenLinkSplitView = cra::kCraMenuFirst + 1;
+constexpr int kMenuOpenLinkLittleWindow = cra::kCraMenuFirst + 2;
+constexpr int kMenuCaptureImage = cra::kCraMenuFirst + 3;
 void (^g_download_destination_handler)(NSString* _Nullable, NSString*, void (^)(NSString* _Nullable)) = nil;
 // Chrome windows an extension opened as popups (windows.create type popup), which stay Chrome's.
 NSHashTable<NSWindow*>* g_extension_windows = nil;
@@ -649,6 +669,161 @@ CaptureWatcher& Captures() {
   return *captures;
 }
 
+// No separator first, last or twice in a row (among the visible items).
+void TidySeparators(ui::SimpleMenuModel* model) {
+  bool separator_after = true;  // walking back from the end, which counts as one
+  for (size_t i = model->GetItemCount(); i-- > 0;) {
+    if (model->GetTypeAt(i) != ui::MenuModel::TYPE_SEPARATOR) {
+      if (model->IsVisibleAt(i)) {
+        separator_after = false;
+      }
+    } else if (separator_after) {
+      model->RemoveItemAt(i);
+    } else {
+      separator_after = true;
+    }
+  }
+  for (size_t i = 0; i < model->GetItemCount();) {
+    if (model->GetTypeAt(i) == ui::MenuModel::TYPE_SEPARATOR) {
+      model->RemoveItemAt(i);
+    } else if (model->IsVisibleAt(i)) {
+      break;
+    } else {
+      i++;
+    }
+  }
+}
+
+// Arc's page menus are Chrome's with a few changes (Arc 1.172; the CEF bridge's MakeArcMenu says which).
+void BuildArcMenu(content::WebContents* contents, const content::ContextMenuParams& params, ui::SimpleMenuModel* model) {
+  CraBrowser* page = BrowserFor(contents);
+  if (!page) {
+    return;
+  }
+  if (std::optional<size_t> new_tab = model->GetIndexOfCommandId(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB)) {
+    model->RemoveItemAt(*new_tab);
+    model->InsertItemAt(*new_tab, kMenuOpenLinkNewTab, base::SysNSStringToUTF16(g_link_menu_title));
+  }
+  // Under New Window: Split View, then Little Window (Arc's order, #276); no Little Window from incognito.
+  if (std::optional<size_t> new_window = model->GetIndexOfCommandId(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW)) {
+    size_t at = *new_window;
+    if ([page.delegate respondsToSelector:@selector(browser:requestsSplitPaneWithURL:)]) {
+      model->InsertItemAt(++at, kMenuOpenLinkSplitView, u"Open Link in Split View");
+    }
+    if (!page.isIncognito) {
+      model->InsertItemAt(at + 1, kMenuOpenLinkLittleWindow, u"Open Link in Little Window");
+    }
+  }
+  for (int id : {IDC_CONTENT_CONTEXT_GENERATE_QR_CODE, IDC_CONTENT_CONTEXT_OPENLINKINPROFILE,
+                 IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW, IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP,
+                 IDC_CONTENT_CONTEXT_SEARCHLENSFORVIDEOFRAME, IDC_CONTENT_CONTEXT_SEARCHWEBFORVIDEOFRAME}) {
+    while (std::optional<size_t> at = model->GetIndexOfCommandId(id)) {
+      model->RemoveItemAt(*at);
+    }
+  }
+  TidySeparators(model);
+  // Translate sits with Save As…, Print… and Cast…: no separator before it.
+  if (std::optional<size_t> translate = model->GetIndexOfCommandId(IDC_CONTENT_CONTEXT_TRANSLATE); translate && *translate > 0) {
+    size_t before = *translate - 1;
+    while (before > 0 && model->GetTypeAt(before) != ui::MenuModel::TYPE_SEPARATOR && !model->IsVisibleAt(before)) {
+      before--;
+    }
+    if (model->GetTypeAt(before) == ui::MenuModel::TYPE_SEPARATOR) {
+      model->RemoveItemAt(before);
+    }
+  }
+  // Selected text: Search <engine> for "…" before Copy (not with a link).
+  std::optional<size_t> search = model->GetIndexOfCommandId(IDC_CONTENT_CONTEXT_SEARCHWEBFOR);
+  std::optional<size_t> copy = model->GetIndexOfCommandId(IDC_CONTENT_CONTEXT_COPY);
+  if (params.link_url.is_empty() && !params.is_editable && search && copy && *search > *copy) {
+    std::u16string label = model->GetLabelAt(*search);
+    model->RemoveItemAt(*search);
+    model->InsertItemAt(*copy, IDC_CONTENT_CONTEXT_SEARCHWEBFOR, label);
+  }
+  // "Search Image with Google" becomes Chrome's own "Search <engine> for Image" (CraCore's PageMenuLabels).
+  if (std::optional<size_t> lens = model->GetIndexOfCommandId(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE);
+      lens && g_image_search_title) {
+    if (NSString* title = g_image_search_title(base::SysUTF16ToNSString(model->GetLabelAt(*lens)))) {
+      model->RemoveItemAt(*lens);
+      model->InsertItemAt(*lens, IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE, base::SysNSStringToUTF16(title));
+    }
+  }
+  if (std::optional<size_t> save_image = model->GetIndexOfCommandId(IDC_CONTENT_CONTEXT_SAVEIMAGEAS);
+      save_image && params.media_type == blink::mojom::ContextMenuDataMediaType::kImage &&
+      [page.delegate respondsToSelector:@selector(browser:requestsCaptureOfImageAt:)]) {
+    model->InsertItemAt(*save_image + 1, kMenuCaptureImage, u"Capture Image…");
+  }
+  TidySeparators(model);
+}
+
+// The page menu's commands Cra runs: its own items, and Chrome's that would open Chrome windows or tabs.
+bool PageMenuCommand(content::WebContents* contents, const content::ContextMenuParams& params, int command) {
+  CraBrowser* page = BrowserFor(contents);
+  if (!page) {
+    return false;
+  }
+  id<CraBrowserDelegate> delegate = page.delegate;
+  NSString* link = NS(params.link_url.spec());
+  switch (command) {
+    case kMenuOpenLinkNewTab:
+      [delegate browser:page requestsNewTabWithURL:link inBackground:g_link_menu_background];
+      return true;
+    case kMenuOpenLinkSplitView:
+      if ([delegate respondsToSelector:@selector(browser:requestsSplitPaneWithURL:)]) {
+        [delegate browser:page requestsSplitPaneWithURL:link];
+      }
+      return true;
+    case IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW:
+    case IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD:
+    case kMenuOpenLinkLittleWindow: {
+      if (![delegate respondsToSelector:@selector(browser:requestsWindowWithURL:kind:)]) {
+        [delegate browser:page requestsNewTabWithURL:link inBackground:NO];
+        return true;
+      }
+      CraLinkWindow kind = command == kMenuOpenLinkLittleWindow                 ? CraLinkWindowLittle
+                           : command == IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD ? CraLinkWindowIncognito
+                                                                                 : CraLinkWindowNew;
+      [delegate browser:page requestsWindowWithURL:link kind:kind];
+      return true;
+    }
+    case kMenuCaptureImage:
+      if ([delegate respondsToSelector:@selector(browser:requestsCaptureOfImageAt:)]) {
+        [delegate browser:page requestsCaptureOfImageAt:NSMakePoint(params.x, params.y)];
+      }
+      return true;
+    // View Page Source and View Frame Source go where ⌥⌘U goes, a view-source: tab in front (#348).
+    case IDC_VIEW_SOURCE:
+    case IDC_CONTENT_CONTEXT_VIEWFRAMESOURCE:
+      if (!g_view_source_handler) {
+        return false;
+      }
+      g_view_source_handler(page, NS(command == IDC_VIEW_SOURCE ? params.page_url.spec() : params.frame_url.spec()));
+      return true;
+    // Inspect: Cra's DevTools, docked in the card, on that element.
+    case IDC_CONTENT_CONTEXT_INSPECTELEMENT:
+      [page showDevToolsInspectingPoint:NSMakePoint(params.x, params.y)];
+      return true;
+    default:
+      return false;
+  }
+}
+
+// A test's command runs instead of the menu; an MCP client's right-click shows none.
+bool PageMenuShow(content::WebContents* contents, RenderViewContextMenuBase* menu) {
+  CraBrowser* page = BrowserFor(contents);
+  if (!page) {
+    return true;
+  }
+  if (g_next_page_menu_command >= 0) {
+    int command = g_next_page_menu_command;
+    g_next_page_menu_command = -1;
+    NSLog(@"Cra page menu runs command %d", command);
+    menu->ExecuteCommand(command, 0);
+    return false;
+  }
+  return !page.suppressesContextMenu;
+}
+
 bool IsCraPage(const content::WebContents* contents) {
   return BrowserFor(const_cast<content::WebContents*>(contents)) != nil;
 }
@@ -926,6 +1101,9 @@ void RunReadyBlocks() {
   g_target_url = &TargetURL;
   g_is_cra_page = &IsCraPage;
   g_block_request = &BlockRequest;
+  g_page_menu_built = &BuildArcMenu;
+  g_page_menu_command = &PageMenuCommand;
+  g_page_menu_show = &PageMenuShow;
   MediaCaptureDevicesDispatcher::GetInstance()->GetMediaStreamCaptureIndicator()->AddObserver(&Captures());
   blocked_content::PopupBlockerTabHelper::SetCraListChangedCallback(base::BindRepeating(&BlockedPopupsChanged));
   StartDownloads(&ReportDownload);
@@ -1991,11 +2169,21 @@ void RunReadyBlocks() {
 + (void)spikeChromeWindowWithURL:(NSString*)url handler:(void (^)(NSWindow*))handler {
 }
 + (void)setLinkMenuTitle:(NSString*)title opensInBackground:(BOOL)background {
+  g_link_menu_title = [title copy];
+  g_link_menu_background = background;
 }
+// One of Chromium's strings in the language it runs in ($1 where a name goes, & before a mnemonic).
 + (NSString*)chromiumString:(CraChromiumString)string {
-  return nil;
+  if (!g_ready) {
+    return nil;
+  }
+  int ids = string == CraChromiumStringOpenLinkInNewTab      ? IDS_CONTENT_CONTEXT_OPENLINKNEWTAB
+            : string == CraChromiumStringSearchLensForImage ? IDS_CONTENT_CONTEXT_SEARCHLENSFORIMAGE
+                                                            : IDS_CONTENT_CONTEXT_SEARCHWEBFORIMAGE;
+  return base::SysUTF16ToNSString(l10n_util::GetStringUTF16(ids));
 }
 + (void)setImageSearchTitle:(NSString* _Nullable (^)(NSString*))block {
+  g_image_search_title = [block copy];
 }
 + (void)setDocumentStartScript:(NSString*)script isolatedScript:(NSString*)isolatedScript world:(NSString*)world {
   NSMutableArray<NSString*>* all = [NSMutableArray array];
@@ -2075,9 +2263,21 @@ void RunReadyBlocks() {
 + (void)setAppLinkHandler:(BOOL (^)(CraBrowser*, NSString*, BOOL))handler {
 }
 + (void)setViewSourceHandler:(void (^)(CraBrowser*, NSString*))handler {
+  g_view_source_handler = [handler copy];
 }
+// Test hook: the commands scenarios run by name.
 + (BOOL)runNextPageMenuCommand:(NSString*)name {
-  return NO;
+  static NSDictionary<NSString*, NSNumber*>* const commands = @{
+    @"IDC_VIEW_SOURCE" : @(IDC_VIEW_SOURCE),
+    @"IDC_CONTENT_CONTEXT_VIEWFRAMESOURCE" : @(IDC_CONTENT_CONTEXT_VIEWFRAMESOURCE),
+    @"IDC_CONTENT_CONTEXT_INSPECTELEMENT" : @(IDC_CONTENT_CONTEXT_INSPECTELEMENT),
+    @"IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW" : @(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW),
+    @"IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD" : @(IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD),
+    @"IDC_CONTENT_CONTEXT_COPYLINKLOCATION" : @(IDC_CONTENT_CONTEXT_COPYLINKLOCATION),
+  };
+  NSNumber* command = commands[name];
+  g_next_page_menu_command = command ? command.intValue : -1;
+  return command != nil;
 }
 + (void)setDownloadDestinationHandler:(void (^)(NSString* _Nullable, NSString*, void (^)(NSString* _Nullable)))handler {
   g_download_destination_handler = [handler copy];
