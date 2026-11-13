@@ -135,6 +135,8 @@ NSString* g_log_path = nil;
 NSString* g_locale = nil;
 BOOL g_mock_keychain = NO;
 NSArray<NSString*>* g_extension_paths = nil;
+// Page.addScriptToEvaluateOnNewDocument params every page gets once it exists (setDocumentStartScript:…).
+NSArray<NSString*>* g_document_start_params = nil;
 NSString* g_extension_profiles = nil;
 int g_exit_code = 0;
 bool g_ready = false;
@@ -978,21 +980,11 @@ void RunReadyBlocks() {
     _spareContents = content::WebContents::Create(content::WebContents::CreateParams(profile));
     return;
   }
-  if (_pendingHistory || _sidePanel) {
-    std::unique_ptr<content::WebContents> made = content::WebContents::Create(content::WebContents::CreateParams(profile));
-    if (_sidePanel) {
-      extensions::SetViewType(made.get(), extensions::mojom::ViewType::kExtensionSidePanel);
-    }
-    [self insertContents:std::move(made) profile:profile];
-    return;
+  std::unique_ptr<content::WebContents> made = content::WebContents::Create(content::WebContents::CreateParams(profile));
+  if (_sidePanel) {
+    extensions::SetViewType(made.get(), extensions::mojom::ViewType::kExtensionSidePanel);
   }
-  PageHost* host = HostFor(profile);
-  GURL url(_pendingURL.length ? UTF8(_pendingURL) : std::string(url::kAboutBlankURL));
-  g_adding_own_page = true;
-  content::WebContents* contents = chrome::AddAndReturnTabAt(host->browser(), url, -1, /*foreground=*/false);
-  g_adding_own_page = false;
-  _pendingURL = nil;
-  [self contentsCreated:contents];
+  [self insertContents:std::move(made) profile:profile];
 }
 
 // A page the bridge made itself goes in its profile's tab strip (Chrome's tab helpers attach there), then
@@ -1047,6 +1039,25 @@ void RunReadyBlocks() {
   }
 }
 
+// Cra's scripts in every frame before the page's own (PageScript.swift), as the CEF bridge installed them: the
+// page agent runs new-document scripts only while its domain is enabled. Protocol messages run in order, so
+// they are in before the page's first load.
+- (void)installDocumentStartScripts {
+  if (!g_document_start_params.count) {
+    return;
+  }
+  [self sendDevToolsMethod:@"Page.enable" params:@"{}" completion:^(NSString*, NSString*) {}];
+  for (NSString* params in g_document_start_params) {
+    [self sendDevToolsMethod:@"Page.addScriptToEvaluateOnNewDocument"
+                      params:params
+                  completion:^(NSString*, NSString* error) {
+                    if (error) {
+                      NSLog(@"Cra: document start script not installed: %@", error);
+                    }
+                  }];
+  }
+}
+
 - (void)contentsCreated:(content::WebContents*)contents {
   _contents = contents;
   contents->SetUserData(views::CraHostedPageKey(), std::make_unique<base::SupportsUserData::Data>());
@@ -1064,6 +1075,7 @@ void RunReadyBlocks() {
   page.frame = _container.bounds;
   page.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   [_container addSubview:page];
+  [self installDocumentStartScripts];
   if (_pendingFocus) {
     _pendingFocus = NO;
     [self setFocused:YES];
@@ -1849,6 +1861,20 @@ void RunReadyBlocks() {
 + (void)setImageSearchTitle:(NSString* _Nullable (^)(NSString*))block {
 }
 + (void)setDocumentStartScript:(NSString*)script isolatedScript:(NSString*)isolatedScript world:(NSString*)world {
+  NSMutableArray<NSString*>* all = [NSMutableArray array];
+  for (NSDictionary* params in @[
+         @{@"source" : script ?: @"", @"runImmediately" : @YES},
+         @{@"source" : isolatedScript ?: @"", @"worldName" : world ?: @"", @"runImmediately" : @YES}
+       ]) {
+    if (![params[@"source"] length]) {
+      continue;
+    }
+    NSData* json = [NSJSONSerialization dataWithJSONObject:params options:0 error:nil];
+    if (json) {
+      [all addObject:[[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding]];
+    }
+  }
+  g_document_start_params = all;
 }
 + (void)setContentBlockingEnabled:(BOOL)enabled {
 }
