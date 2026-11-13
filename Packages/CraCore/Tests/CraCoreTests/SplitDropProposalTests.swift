@@ -52,6 +52,18 @@ import Testing
               region: CGRect(x: 0, y: 0, width: 495, height: 600), current: h(0), expected: h(0)),
         .init(name: "leaves the region", point: CGPoint(x: 980, y: 300), ids: [a], frames: lone,
               region: CGRect(x: 0, y: 0, width: 495, height: 600), current: h(0), expected: h(1)),
+        // A drag from the sidebar crosses the middle, where the bottom is nearest, on its way to the
+        // right edge: the bottom region it opened reaches the middle line, so the far right edge at
+        // mid-height was still "on the region" and the drop stacked (0.1.43 release clip). Reaching
+        // another edge's band, a fifth of the page, wins over the region; elsewhere it still holds.
+        .init(name: "right edge over the bottom region", point: CGPoint(x: 975, y: 290), ids: [a], frames: lone,
+              region: CGRect(x: 0, y: 0, width: 1000, height: 295), current: v(1), expected: h(1)),
+        .init(name: "bottom region's own edge", point: CGPoint(x: 150, y: 50), ids: [a], frames: lone,
+              region: CGRect(x: 0, y: 0, width: 1000, height: 295), current: v(1), expected: v(1)),
+        .init(name: "middle of the bottom region", point: CGPoint(x: 500, y: 250), ids: [a], frames: lone,
+              region: CGRect(x: 0, y: 0, width: 1000, height: 295), current: v(1), expected: v(1)),
+        .init(name: "top edge over the left region", point: CGPoint(x: 300, y: 590), ids: [a], frames: lone,
+              region: CGRect(x: 0, y: 0, width: 495, height: 600), current: h(0), expected: v(0)),
         // In a split a pane's sides, a fifth of it each, open the region before or after it, and so
         // does the gap; the rest of it, top and bottom too, is replaced.
         .init(name: "first pane's left side", point: CGPoint(x: 60, y: 300), ids: [a, b], frames: pair, expected: h(0)),
