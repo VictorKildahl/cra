@@ -31,7 +31,17 @@ solutions = [{
 }]
 target_os = ["mac"]
 EOF
-  (cd "$ROOT" && gclient sync --no-history --nohooks --with_tags -r "src@refs/tags/$CHROMIUM_TAG")
+  # A checkout from an earlier version fetches only the new tag, one commit deep: gclient's
+  # --with_tags fetches every Chromium tag into a shallow checkout, which never finished (13 Nov 2026).
+  if [ -d "$ROOT/src/.git" ]; then
+    (cd "$ROOT/src" && git fetch --depth=1 --no-tags origin "+refs/tags/$CHROMIUM_TAG:refs/tags/$CHROMIUM_TAG" \
+      && git -c advice.detachedHead=false checkout -q "$CHROMIUM_TAG")
+    local rev
+    rev="$(cd "$ROOT/src" && git rev-parse HEAD)"
+    (cd "$ROOT" && gclient sync --no-history --nohooks -D -r "src@$rev")
+  else
+    (cd "$ROOT" && gclient sync --no-history --nohooks --with_tags -r "src@refs/tags/$CHROMIUM_TAG")
+  fi
   (cd "$ROOT" && gclient runhooks)
   echo "$CHROMIUM_TAG" > "$ROOT/.cra-tag"
 }
