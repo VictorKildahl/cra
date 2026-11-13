@@ -745,6 +745,10 @@
 #401   Packages/CraCore/Tests/CraCoreTests/SwitcherWindowsTests.swift::switchersListWindowsWithButtonsOrAStandardSubrole  9f9f67f53678
 #401   Tests/Scenarios/switcher-windows.scenario  a600d5a96203
 #402   Tests/Scenarios/peek-toggle-sidebar.scenario  28b99af4794f
+#406   Packages/CraCore/Tests/CraCoreTests/TodayClearTests.swift::selectedAndPlayingTabsStay  d57f9def4205
+#406   Packages/CraCore/Tests/CraCoreTests/TodayClearTests.swift::splitStaysWhole  e45654607849
+#406   Tests/Scenarios/clear-today-keeps.scenario  669596089ac8
+#406   Tests/StoreTests.swift::clearTodayKeepsSelectedAndPlaying  632d1e0b24a9
 #407   Tests/Scenarios/instant-links.scenario  6cf20ad42d70
 #408   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::everyQuestionReadsOnItsCard  4700f64b8bc7
 #408   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::lightSpaceOnDarkMacGetsALightQuestion  462fb908f263
