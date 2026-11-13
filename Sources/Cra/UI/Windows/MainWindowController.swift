@@ -612,6 +612,27 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         l.dragEnded(id, at: screenPoint, operation: [])
     }
 
+    /// `cra://debug?dropLink`: a link from a page or another app let go on the focused space's list
+    /// (#419), from a pasteboard holding what Mail or a page's link drag holds: its address and,
+    /// with `name`, its text. It goes through the drop's own pasteboard read, placement and tab.
+    func testDropLink(_ url: String, name: String?, before text: String?) {
+        func list(in v: NSView) -> SpaceListView? {
+            if let l = v as? SpaceListView, l.spaceID == focusedSpaceID { return l }
+            return v.subviews.lazy.compactMap { list(in: $0) }.first
+        }
+        guard let l = window?.contentView.flatMap(list(in:)) else { CraLog.note("dropLink: no list"); return }
+        let pb = NSPasteboard(name: .init("dk.kildahl.cra.test-drop-link"))
+        defer { pb.releaseGlobally() }
+        pb.clearContents()
+        let item = NSPasteboardItem()
+        item.setString(url, forType: .URL)
+        if let name { item.setString(name, forType: .urlName) }
+        pb.writeObjects([item])
+        guard let link = SpaceListView.link(on: pb) else { CraLog.note("dropLink: refused \(url)"); return }
+        guard let point = l.testDropPoint(before: text) else { CraLog.note("dropLink: no row with \(text ?? "")"); return }
+        CraLog.note("dropLink: \(l.dropLink(link, drop: l.resolve(dragged: SidebarListDrop.link, at: point)) ? "opened" : "refused") \(link.url)")
+    }
+
     /// `cra://debug?pickedMenu=<n>`: picks the focused space's first n listed tabs, as ⌘-click does,
     /// and logs the menu a right-click on the first one opens (#356): "|" between rows, "──" for a
     /// separator, "▸" after a submenu, " (off)" after a dimmed row. `run` picks the row (or a submenu's

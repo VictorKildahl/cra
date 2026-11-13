@@ -1908,6 +1908,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 main.testDragEnded(tab.id, at: point)
                 return
             }
+            // dropLink=<url>[&name=<link text>][&before=<text>]: a link let go on the focused space's
+            // list, below the last row or on the row whose tab's URL holds the text (#419).
+            if let url = dict["dropLink"] {
+                main.testDropLink(url, name: dict["name"], before: dict["before"])
+                return
+            }
             if dict["windows"] != nil {
                 for w in NSApp.windows {
                     let line = "Cra windows: \(w.windowController.map { String(describing: type(of: $0)) } ?? "-") '\(w.title)' frame=\(NSStringFromRect(w.frame)) parent=\(w.parent.map { NSStringFromRect($0.frame) } ?? "-") visible=\(w.isVisible) key=\(w.isKeyWindow) mask=\(w.styleMask.rawValue) class=\(NSStringFromClass(type(of: w))) children=\(w.childWindows?.count ?? 0) contentView=\(w.contentView.map { NSStringFromClass(type(of: $0)) } ?? "-")"

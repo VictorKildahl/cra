@@ -1,0 +1,25 @@
+# promise: #419
+# A link dragged onto the tab list from a page or another app opens as a new tab where it is let
+# go, behind the page you're on, as in Arc 1.172.1: below the last row it is the end of Today,
+# on a row's upper part it goes before that row. Only web pages are taken.
+budget rss=800 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+
+cra://open?url=${PAGE}?n=first
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://open?url=${PAGE}?n=shown
+wait 1
+cra://debug?dropLink=${PAGE}?n=bottom&name=Dropped
+expect-log dropLink: opened \S*n=bottom
+cra://debug?dropLink=${PAGE}?n=between&before=n=first
+expect-log dropLink: opened \S*n=between
+cra://debug?dropLink=file:///etc/hosts
+expect-log dropLink: refused file:///etc/hosts
+wait 1
+# Newest first above them, as Today lists new tabs; the dropped ones where they were let go.
+cra://debug?applescript=tell%20current%20application%20to%20get%20%C2%ABclass%20URL%20%C2%BB%20of%20%C2%ABclass%20tAbB%C2%BB%20of%20%C2%ABclass%20WiND%C2%BB%201
+expect-log Cra applescript → .*\[ 'utxt'\("[^"]*n=shown"\), 'utxt'\("[^"]*n=between"\), 'utxt'\("[^"]*n=first"\), 'utxt'\("[^"]*n=bottom"\) \]>$
+# The page you were on stays in front.
+cra://debug?applescript=tell%20current%20application%20to%20get%20%C2%ABclass%20URL%20%C2%BB%20of%20%C2%ABclass%20acTa%C2%BB%20of%20%C2%ABclass%20WiND%C2%BB%201
+expect-log Cra applescript → .*n=shown
