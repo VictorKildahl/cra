@@ -120,7 +120,7 @@ final class PageMenuView: UIView {
         footer.addSubview(scrubbed)
         restore.text = MobilePageMenu.restoreHint
         restore.font = .systemFont(ofSize: 15, weight: .regular)
-        restore.textColor = UIColor(white: 1, alpha: 0.5)
+        restore.textColor = Palette.dynamic(light: UIColor(white: 0, alpha: 0.45), dark: UIColor(white: 1, alpha: 0.5))
         restore.isUserInteractionEnabled = false
         footer.addSubview(restore)
         apply(state)

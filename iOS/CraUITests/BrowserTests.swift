@@ -718,12 +718,18 @@ final class OnboardingTests: BrowserTestCase {
         next.tap()
         XCTAssertTrue(app.staticTexts["Get what you need, without the noise"].waitForExistence(timeout: 3))
         XCTAssertEqual(next.label, "Let’s go")
+        sleep(1)
+        keep("onboarding-blocking")
         app.switches["onboarding-blocking"].switches.firstMatch.tap()
         next.tap()
         XCTAssertTrue(app.buttons["onboarding-skip"].waitForExistence(timeout: 3))
+        sleep(1)
+        keep("onboarding-default")
         app.buttons["onboarding-skip"].tap()
         XCTAssertTrue(app.textFields["search-field"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        sleep(1)
+        keep("onboarding-after")
     }
 }
 

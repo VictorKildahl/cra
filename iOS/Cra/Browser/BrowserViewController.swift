@@ -660,8 +660,6 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         }
         let sheet = UIHostingController(rootView: ArchiveView(model: model))
         sheet.sheetPresentationController?.prefersGrabberVisible = true
-        // Arc Search 1.49's settings and Archive sheets are dark in light mode too.
-        sheet.overrideUserInterfaceStyle = .dark
         topPresenter.present(sheet, animated: true)
     }
 
@@ -724,7 +722,6 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             sheet.sheetPresentationController?.detents = [.medium(), .large()]
         }
         sheet.sheetPresentationController?.prefersGrabberVisible = true
-        sheet.overrideUserInterfaceStyle = .dark
         sheet.view.backgroundColor = .clear
         topPresenter.present(sheet, animated: true)
     }

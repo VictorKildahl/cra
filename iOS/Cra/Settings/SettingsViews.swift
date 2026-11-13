@@ -172,19 +172,18 @@ private struct ValueRow<Label: View, Value: Hashable>: View {
 }
 
 extension View {
-    /// Arc Search 1.49's settings lists (Victor's recording): dark in light mode too, the sheet's
-    /// material showing through (grey ~49) with the groups lighter (~75), rows 52 pt.
+    /// Arc Search 1.49's settings lists (Victor's recording, in dark mode): the sheet's material
+    /// showing through (grey ~49) with the groups lighter (~75), rows 52 pt.
     func settingsListStyle() -> some View {
         scrollContentBackground(.hidden)
             .background(.regularMaterial)
             .environment(\.defaultMinListRowHeight, 52)
-            .environment(\.colorScheme, .dark)
-            // Switches stay green while the bar's Done and back are white, as in Arc Search.
+            // Switches stay green while the bar's Done and back take the text colour, as in Arc Search.
             .tint(Color(.systemGreen))
     }
 
     func settingsRow() -> some View {
-        listRowBackground(Color.white.opacity(0.12))
+        listRowBackground(Color.primary.opacity(0.1))
     }
 }
 
@@ -211,7 +210,7 @@ struct SiteSettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { model.done() }.fontWeight(.semibold) } }
         }
-        .tint(.white)
+        .tint(.primary)
     }
 }
 
@@ -220,7 +219,7 @@ struct AppSettingsView: View {
     @ObservedObject var model: SettingsModel
 
     var body: some View {
-        NavigationStack { AppSettingsList(model: model) }.tint(.white)
+        NavigationStack { AppSettingsList(model: model) }.tint(.primary)
     }
 }
 
@@ -430,7 +429,6 @@ struct LicensesView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(.regularMaterial)
-        .environment(\.colorScheme, .dark)
         .navigationTitle("Open Source Licenses")
         .navigationBarTitleDisplayMode(.inline)
     }

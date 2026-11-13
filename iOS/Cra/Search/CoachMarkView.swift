@@ -41,7 +41,8 @@ final class CoachMarkView: UIView {
         style.alignment = .center
         style.minimumLineHeight = MobileCoachMark.lineSpacing + 3
         style.maximumLineHeight = MobileCoachMark.lineSpacing + 3
-        let attributes: [NSAttributedString.Key: Any] = [.font: plain, .foregroundColor: UIColor.white, .paragraphStyle: style]
+        // White in dark mode as recorded; the light backdrop is pale, so the text colour there.
+        let attributes: [NSAttributedString.Key: Any] = [.font: plain, .foregroundColor: Palette.primaryText, .paragraphStyle: style]
         let text = NSMutableAttributedString(string: MobileCoachMark.title.before, attributes: attributes)
         var emphasis = attributes
         if let descriptor = UIFont.systemFont(ofSize: size, weight: .bold).fontDescriptor.withSymbolicTraits([.traitItalic, .traitBold]) {
