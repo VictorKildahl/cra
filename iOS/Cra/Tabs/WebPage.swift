@@ -51,7 +51,10 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
         webView = WKWebView(frame: .zero, configuration: configuration)
         webView.allowsBackForwardNavigationGestures = true
         webView.allowsLinkPreview = true
-        webView.isOpaque = false
+        // Opaque, so WebKit paints the page's canvas as Safari does: white for a page that sets no
+        // colours and doesn't opt into dark, dark for one that does. See-through, a plain page's
+        // black text sat on the app's black background in dark mode.
+        webView.isOpaque = true
         webView.backgroundColor = .systemBackground
         webView.scrollView.contentInsetAdjustmentBehavior = .automatic
         super.init()

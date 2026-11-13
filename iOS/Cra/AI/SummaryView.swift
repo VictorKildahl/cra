@@ -40,10 +40,7 @@ struct SummaryView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            LinearGradient(colors: scheme == .dark ? [Color(red: 0.13, green: 0.12, blue: 0.2), Color(red: 0.2, green: 0.12, blue: 0.18)]
-                                                   : [Color(red: 0.89, green: 0.87, blue: 0.98), Color(red: 0.98, green: 0.89, blue: 0.93)],
-                           startPoint: .topLeading, endPoint: .bottomTrailing)
-                .ignoresSafeArea()
+            backdrop.ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     VStack(spacing: 10) {
@@ -61,6 +58,28 @@ struct SummaryView: View {
                 .padding(.bottom, 90)
             }
             footer
+        }
+    }
+
+    /// Dark: Arc Search 1.49's (Victor's recording, 2:34): dark plum above and below, a raspberry
+    /// glow on the left, magenta in the middle, blue-violet on the right. Light: pale lavender.
+    @ViewBuilder private var backdrop: some View {
+        if scheme == .dark {
+            GeometryReader { proxy in
+                let w = proxy.size.width, h = proxy.size.height
+                ZStack {
+                    Color(red: 0.18, green: 0.14, blue: 0.21)
+                    RadialGradient(colors: [Color(red: 0.64, green: 0.32, blue: 0.4), .clear], center: .center, startRadius: 0, endRadius: w * 0.75)
+                        .frame(width: w * 1.5, height: w * 1.5).position(x: w * 0.05, y: h * 0.42)
+                    RadialGradient(colors: [Color(red: 0.59, green: 0.29, blue: 0.53).opacity(0.85), .clear], center: .center, startRadius: 0, endRadius: w * 0.55)
+                        .frame(width: w * 1.1, height: w * 1.1).position(x: w * 0.5, y: h * 0.47)
+                    RadialGradient(colors: [Color(red: 0.23, green: 0.19, blue: 0.54), .clear], center: .center, startRadius: 0, endRadius: w * 0.6)
+                        .frame(width: w * 1.2, height: w * 1.2).position(x: w * 1.0, y: h * 0.4)
+                }
+            }
+        } else {
+            LinearGradient(colors: [Color(red: 0.89, green: 0.87, blue: 0.98), Color(red: 0.98, green: 0.89, blue: 0.93)],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
         }
     }
 

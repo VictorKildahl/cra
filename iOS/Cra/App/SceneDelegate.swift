@@ -11,6 +11,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         let browser = BrowserViewController(store: TabStore(directory: directory), settings: MobileSettingsStore(directory: directory))
         let window = UIWindow(windowScene: scene)
         window.rootViewController = browser
+        // Tests and screenshots can ask for one appearance whatever the device's is.
+        if let style = LaunchOptions.appearance { window.overrideUserInterfaceStyle = style }
         window.makeKeyAndVisible()
         self.window = window
         self.browser = browser
@@ -93,4 +95,12 @@ enum LaunchOptions {
     static var fakeVoice: String? { LaunchOptions.value("CraFakeVoice") }
     static var showsVoiceOverlay: Bool { LaunchOptions.value("CraShowVoice") == "YES" }
     static var summarizesFirstPage: Bool { LaunchOptions.value("CraSummarize") == "YES" }
+    /// `-CraAppearance dark` or `light`.
+    static var appearance: UIUserInterfaceStyle? {
+        switch LaunchOptions.value("CraAppearance") {
+        case "dark": return .dark
+        case "light": return .light
+        default: return nil
+        }
+    }
 }

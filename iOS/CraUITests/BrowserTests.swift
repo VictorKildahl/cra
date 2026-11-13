@@ -752,6 +752,26 @@ final class OnboardingTests: BrowserTestCase {
 final class PageBasicsTests: BrowserTestCase {
     // XCUITest drops quotes from launch arguments, so these pages are written without any.
 
+    /// In dark mode a page that sets no colours of its own is white with black text, as in Safari
+    /// and Arc Search. The web view used to be see-through over the black app background, which
+    /// left such a page's black text on black.
+    func testAPageWithoutColoursStaysWhiteInDarkMode() {
+        launch(["-CraOpenURL", "data:text/html,<meta/name=viewport/content=width=device-width><title>Plain</title><h1>Plain</h1>",
+                "-CraSearch", "NO", "-CraAppearance", "dark"])
+        waitForPage("Plain")
+        sleep(1)
+        keep("plain-page-dark")
+        let shot = XCUIScreen.main.screenshot().image
+        guard let image = shot.cgImage, let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else {
+            return XCTFail("no screenshot")
+        }
+        // The middle of the screen, well clear of the heading and the bar.
+        let x = image.width / 2, y = image.height / 2
+        let offset = y * image.bytesPerRow + x * (image.bitsPerPixel / 8)
+        let brightness = (Int(bytes[offset]) + Int(bytes[offset + 1]) + Int(bytes[offset + 2])) / 3
+        XCTAssertGreaterThan(brightness, 200, "the page is white, not the app's black")
+    }
+
     /// A download link saves the file, says so above the bar, and lists it under Settings ▸ Downloads;
     /// downloading it again keeps both, the second one numbered.
     func testADownloadIsSavedAnnouncedAndListed() {
