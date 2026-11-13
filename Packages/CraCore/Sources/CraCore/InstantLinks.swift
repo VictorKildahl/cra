@@ -91,16 +91,22 @@ public enum InstantLinks {
             let plain = own.filter { !$0.hasPrefix("site:") }
             // 1. A name copied from the examples, not typed ("youtube mkbhd" came back with mr beast too).
             guard plain.contains(where: { w in words.contains { $0 == w || stem($0) == stem(w) } }) else { continue }
-            // 2. "oatmeal cookie recipes reddit" means site:reddit.com.
+            // 2. "oatmeal cookie recipes reddit" means site:reddit.com; "amazon rainforest facts" doesn't.
             if !own.contains(where: { $0.hasPrefix("site:") }), own.count > 1,
-               let named = plain.first(where: { siteNames[$0] != nil }), let domain = siteNames[named] {
-                query = plain.filter { $0 != named }.joined(separator: " ") + " site:" + domain
+               let named = plain.first(where: { name in
+                   namesSite(at: plain.firstIndex(of: name)!, in: plain)
+                       || words.indices.contains { words[$0] == name && namesSite(at: $0, in: words) }
+               }), let domain = siteNames[named] {
+                // The name goes, and the word pointing at it: "playlists on spotify" → "playlists site:spotify.com".
+                let at = plain.firstIndex(of: named)!
+                let gone = at > 0 && sitePointers.contains(plain[at - 1]) ? (at - 1)...at : at...at
+                query = plain.indices.filter { !gone.contains($0) }.map { plain[$0] }.joined(separator: " ") + " site:" + domain
             }
             kept.append(Search(query: query, count: search.count))
         }
         // 3. The phrase names one website and the model left it out ("search reddit for oatmeal cookie
         // recipes" came back as "oatmeal cookie recipes"): search on it.
-        let named = Set(words.compactMap { siteNames[$0] })
+        let named = Set(words.indices.compactMap { namesSite(at: $0, in: words) ? siteNames[words[$0]] : nil })
         if named.count == 1, let domain = named.first,
            !kept.contains(where: { $0.query.lowercased().split(separator: " ").contains { $0.hasPrefix("site:") } }) {
             // A search that is the site's own name ("youtube") is the site, not a search on it.
@@ -139,10 +145,9 @@ public enum InstantLinks {
     public static func statedCount(in phrase: String) -> Int? {
         let t = tokens(phrase)
         func number(_ i: Int) -> Int? { t.indices.contains(i) ? numbers[t[i]] : nil }
-        let things: Set<String> = ["player", "players", "giocatore", "giocatori"]
 
         if let first = t.firstIndex(where: { !leadWords.contains($0) }), let n = number(first),
-           !(t.indices.contains(first + 1) && things.contains(t[first + 1])) { return n }
+           !(t.indices.contains(first + 1) && things.contains(t[first + 1])), countsThings(after: first, in: t) { return n }
         for i in t.indices {
             if ["top", "first", "primi", "prime"].contains(t[i]), let n = number(i + 1) { return n }
             if let n = number(i), t.indices.contains(i + 1), ["migliori", "best", "results", "risultati"].contains(t[i + 1]),
@@ -155,6 +160,25 @@ public enum InstantLinks {
         }
         return nil
     }
+
+    /// A number at the start counts things when plural things follow it: "3 easy bread recipes", "dammi
+    /// 3 ristoranti a trieste", but not "7 wonders board game" or "3 body problem". The words up to the
+    /// first preposition name the things; the last of them has to be plural (English -s, Italian -i).
+    private static func countsThings(after i: Int, in t: [String]) -> Bool {
+        let named = t[(i + 1)...].prefix { !thingsEnd.contains($0) }
+        guard let last = named.last else { return false }
+        return (last.count > 2 && last.hasSuffix("s") && !last.hasSuffix("ss")) || (last.count > 3 && last.hasSuffix("i"))
+    }
+
+    /// Words after a number that make it part of the thing ("2 player games", "5 star hotels", "5 minute abs").
+    private static let things: Set<String> = [
+        "player", "players", "giocatore", "giocatori", "star", "stars", "stelle", "minute", "minutes", "min", "minuti",
+        "hour", "hours", "ore", "day", "days", "giorni", "week", "weeks", "month", "months", "year", "years", "anni",
+        "second", "seconds", "ingredient", "ingredients", "ingredienti", "step", "steps", "piece", "pieces", "door", "doors", "pack",
+    ]
+    private static let thingsEnd: Set<String> = [
+        "for", "in", "on", "of", "from", "by", "with", "near", "at", "to", "about", "and", "a", "di", "da", "per", "su", "con", "nel", "e",
+    ]
 
     /// What to open: each search with its number of results. A folder of one search that asks for one
     /// result opens 5 (Arc's rule); a split opens `PickedTabsMenu.maxPanes` panes in all; ten tabs at most.
@@ -299,15 +323,18 @@ public enum InstantLinks {
 
     private static func checkedFormat(model: Format, phrase: String) -> Format {
         let p = phrase.lowercased()
-        func has(_ cues: [String]) -> Bool { cues.contains { p.contains($0) } }
-        let split = has(["split", "side by side", "affianc"]) || (p.contains("left") && p.contains("right"))
-            || (p.contains("sinistra") && p.contains("destra"))
+        // Whole words only: "splitting the bill", "leftover", "manila folders" ask for nothing.
+        func has(_ cues: [String]) -> Bool {
+            cues.contains { p.range(of: "(?<![\\p{L}\\p{N}])" + $0 + "(?![\\p{L}\\p{N}])", options: .regularExpression) != nil }
+        }
+        let split = has(["split", "side by side", "affianc\\p{L}*"]) || (has(["left"]) && has(["right"]))
+            || (has(["sinistra"]) && has(["destra"]))
         let folder = has(["folder", "cartella"])
         var format: Format = model == .split && split ? .split : model == .folder && folder ? .folder : .tab
         if format == .tab {
             if has(["folder of", "in a folder", "cartella con", "cartella di", "in una cartella"]) {
                 format = .folder
-            } else if has(["split view", "in a split", "split with", "split of", "in split"]) {
+            } else if has(["split view", "in a split", "split of", "in split"]) {
                 format = .split
             }
         }
@@ -317,7 +344,7 @@ public enum InstantLinks {
     /// The words that ask for a folder or a split, taken out of a search ("folder of pizza" → "pizza").
     static func withoutFormatWords(_ s: String) -> String {
         let pattern = "\\b(?:give me a folder of|a folder of|folder of|in a folder|in a split view|split view of|split view with|"
-            + "in a split|split with|split of|in split|in una cartella|una cartella di|cartella con|cartella di)\\b"
+            + "in a split|split of|in split|in una cartella|una cartella di|cartella con|cartella di)\\b"
         let stripped = s.replacingOccurrences(of: pattern, with: " ", options: [.regularExpression, .caseInsensitive])
         return stripped.split(separator: " ").joined(separator: " ")
     }
@@ -342,5 +369,27 @@ public enum InstantLinks {
         "pinterest": "pinterest.com", "tiktok": "tiktok.com", "linkedin": "linkedin.com", "netflix": "netflix.com",
         "goodreads": "goodreads.com", "threads": "threads.net", "twitter": "x.com", "resy": "resy.com",
         "yelp": "yelp.com", "imdb": "imdb.com", "infatuation": "theinfatuation.com",
+    ]
+
+    /// Whether `t[i]` names a website rather than being a word of the search. Pointing at it always
+    /// does ("on amazon", "from amazon", "search reddit for"). Otherwise a brand at either end of the
+    /// search does ("youtube mkbhd", "oatmeal cookie recipes reddit"), but a name that is also an
+    /// everyday word only where it reads as the site: "1812 wiki" yes, "a wiki for my team", "amazon
+    /// rainforest facts" and "m3 screw threads" no.
+    static func namesSite(at i: Int, in t: [String]) -> Bool {
+        guard t.indices.contains(i), siteNames[t[i]] != nil else { return false }
+        if i > 0, sitePointers.contains(t[i - 1]) { return true }
+        let places = everydaySiteNames[t[i]] ?? [.first, .last]
+        let first = t.firstIndex { !leadWords.contains($0) && !beforeTheThing.contains($0) && numbers[$0] == nil }
+        return (places.contains(.first) && first == i) || (places.contains(.last) && i == t.count - 1)
+    }
+
+    private enum SitePlace { case first, last }
+    private static let sitePointers: Set<String> = ["on", "from", "via", "search", "su", "da"]
+    private static let beforeTheThing: Set<String> = ["search", "top", "best", "the", "a", "first"]
+    private static let everydaySiteNames: [String: Set<SitePlace>] = [
+        "amazon": [], "threads": [], "wiki": [.last], "infatuation": [.first],
+        // "netflix stock price" is about the company; "stranger things netflix" is on the site.
+        "netflix": [.last],
     ]
 }

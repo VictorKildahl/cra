@@ -61,10 +61,30 @@ struct InstantLinksTests {
         #expect(plan("youtube linus tech tips", .tab, [s("youtube linus tech tips")]).searches == [s("linus tech tips site:youtube.com")])
         #expect(plan("iphone chargers on amazon", .tab, [s("iphone chargers amazon")]).searches == [s("iphone chargers site:amazon.com")])
         #expect(plan("twitter elon", .tab, [s("twitter elon")]).searches == [s("elon site:x.com")])
-        #expect(plan("threads news", .tab, [s("threads news")]).searches == [s("news site:threads.net")])
+        #expect(plan("news on threads", .tab, [s("threads news")]).searches == [s("news site:threads.net")])
+        #expect(plan("the war of 1812 wiki", .tab, [s("war of 1812 wiki")]).searches == [s("war of 1812 site:wikipedia.org")])
         // Left alone: already filtered, or the name is the whole search.
         #expect(plan("youtube mkbhd", .tab, [s("mkbhd site:youtube.com")]).searches == [s("mkbhd site:youtube.com")])
         #expect(plan("youtube", .tab, [s("youtube")]).searches == [s("youtube")])
+    }
+
+    @Test func anEverydayWordIsASiteOnlyWhenThePhrasePointsAtIt() {
+        // amazon, threads and wiki are words before they are sites: the rainforest isn't on amazon.com.
+        for phrase in ["amazon rainforest facts", "m3 screw threads size chart", "how to set up a wiki for my team",
+                       "best books about the amazon", "embroidery threads"] {
+            #expect(plan(phrase, .tab, [s(phrase)]).searches == [s(phrase)], "\(phrase)")
+        }
+        #expect(plan("kindle cases from amazon", .tab, [s("kindle cases")]).searches == [s("kindle cases site:amazon.com")])
+        #expect(plan("netflix stock price", .tab, [s("netflix stock price")]).searches == [s("netflix stock price")])
+        #expect(plan("stranger things netflix", .tab, [s("stranger things netflix")]).searches == [s("stranger things site:netflix.com")])
+        // Measured on the Mac's model, 13 Nov 2026: the word pointing at the site stayed in the search.
+        #expect(plan("give me 5 french jazz playlists on spotify", .tab, [s("French jazz playlists on spotify", 5)]).searches
+                == [s("french jazz playlists site:spotify.com", 5)])
+        #expect(plan("kindle cases from amazon", .tab, [s("Kindle Cases from Amazon")]).searches == [s("kindle cases site:amazon.com")])
+        // A brand's name at either end still names its site.
+        #expect(plan("oatmeal cookie recipes reddit", .tab, [s("oatmeal cookie recipes reddit")]).searches
+                == [s("oatmeal cookie recipes site:reddit.com")])
+        #expect(plan("youtube mkbhd", .tab, [s("youtube mkbhd")]).searches == [s("mkbhd site:youtube.com")])
     }
 
     @Test func theFormatsWordsAreNotSearchedFor() {
@@ -157,6 +177,13 @@ struct InstantLinksTests {
             ("top 11 movies", nil),
             ("pizza", nil),
             ("", nil),
+            // A leading number counts things only when plural things follow it, not units.
+            ("5 minute abs workout", nil),
+            ("3 body problem netflix", nil),
+            ("7 wonders board game", nil),
+            ("5 star hotels in rome", nil),
+            ("4 seasons hotel", nil),
+            ("2 ingredient pancakes", nil),
         ]
         for (phrase, expected) in table {
             #expect(InstantLinks.statedCount(in: phrase) == expected, "\(phrase)")
@@ -185,10 +212,19 @@ struct InstantLinksTests {
         for phrase in ["folder of iphone chargers", "iphone chargers in a folder", "cartella con caricabatterie", "cartella di caricabatterie", "caricabatterie in una cartella"] {
             #expect(plan(phrase, .tab, one).format == .folder, "\(phrase)")
         }
-        for phrase in ["iphone chargers in split view", "iphone chargers in a split", "iphone chargers split with cases", "split of iphone chargers", "iphone chargers in split"] {
+        for phrase in ["iphone chargers in split view", "iphone chargers in a split", "split of iphone chargers", "iphone chargers in split"] {
             #expect(plan(phrase, .tab, one).format == .split, "\(phrase)")
         }
         #expect(plan("iphone chargers", .tab, one).format == .tab)
+    }
+
+    @Test func formatWordsInsideOtherWordsAreNoCue() {
+        let one = [s("banana split ice cream recipe")]
+        #expect(plan("banana split with ice cream recipe", .tab, one).format == .tab)
+        #expect(plan("banana split with ice cream recipe", .tab, one).searches == one)
+        #expect(plan("leftover pasta bake and a bright idea", .split, [s("leftover pasta bake")]).format == .tab)
+        #expect(plan("splitting the bill app", .split, [s("splitting the bill app")]).format == .tab)
+        #expect(plan("manila folders", .folder, [s("manila folders")]).format == .tab)
     }
 
     // MARK: What to open
