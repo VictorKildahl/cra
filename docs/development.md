@@ -39,6 +39,8 @@ Custom `CEF_URL` downloads never fall back to a different Cra build.
 - `Sources/CraHelper` — Chromium subprocess executable
 - `Sources/Cra/Services/WebKit` — the WebKit page that DRM services open in
   ([protected-media.md](protected-media.md))
+- `iOS/` — the iPhone app (UIKit on WebKit, matching Arc Search), its widgets, share
+  extension and UI tests; [ios.md](ios.md) has its layout and `scripts/ios.sh`
 - `Packages/CraCore` — models and decisions with no AppKit or Chromium (the sidebar model,
   settings and the other data-folder files, Air Traffic Control, live folder data, key chords,
   space themes, Arc theme import, the favorites grid), visible in every `Sources/Cra` file.

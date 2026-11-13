@@ -1,0 +1,28 @@
+name: Label issues by app
+
+# The issue forms ask "Which app"; this puts the answer on the issue as a `mac` or `iphone`
+# label, so contributors can filter for the app they work on.
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Label from the form's answer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number }}
+          BODY: ${{ github.event.issue.body }}
+        run: |
+          # An issue form writes "### Which app", a blank line, then the answer.
+          app=$(printf '%s\n' "$BODY" | tr -d '\r' | awk '/^### Which app$/ {found=1; next} found && NF {print; exit}')
+          case "$app" in
+            Mac) gh issue edit "$NUMBER" --add-label mac ;;
+            iPhone) gh issue edit "$NUMBER" --add-label iphone ;;
+          esac
