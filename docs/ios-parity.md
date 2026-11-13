@@ -13,11 +13,12 @@ ended). "Measured" means the numbers come from Arc Search footage, not from a de
 Work was paused mid-way. The branch is `ios-app`, in the worktree `../cra-ios`; nothing is
 pushed. Pick up here.
 
-**State of the tests.** 12 November, evening: the whole UI suite passed, run in two halves
-(16 + 10 tests, then the new site-match test; 27 in all), and the CraCore tests
-(`--filter Mobile`, 66). Run the suite in two halves (it takes more than ten minutes whole),
-and do not edit sources while it runs: twice a run hung with the simulator shut down when files
-changed under it.
+**State of the tests.** 13 November, morning: every UI test passed (50, run in two halves);
+under the Mac's load at the time (security agents at a load average of several hundred) some were
+killed by the system ("signal term/kill") and passed on a second or third run, never failing an
+assertion. The CraCore tests (`--filter Mobile`) pass. Run the suite in two halves; do not edit
+sources while it runs; when the simulator keeps shutting down, `killall -9
+com.apple.CoreSimulator.CoreSimulatorService` and boot it again.
 
 **Checked in the running app since the pause:** the empty home screen with its logo, the page
 pushed back behind the search sheet. **Still built but not verified:** the widget extension
@@ -101,7 +102,7 @@ the real app on an iPhone has to be recorded before then.
 | Copy Link without trackers, Share | done | `CleanURL`, from the tile and from the capsule's link glyph. |
 | Page Zoom, Request Desktop Site | done | Tenths from 50% to 300%, the percentage shown and reset by a tap. |
 | Translate | partial | The page menu's Translate turns the page into the phone's language on the phone itself (Apple's Translation framework, iOS 18), where Arc Search sends it to Google Translate: the visible text is collected node by node, translated in batches and written back (`MobileTranslate`); the row then reads "Show Original". The system's download prompt stands in for Arc Search's allow once/always. The framework does not run in the simulator, so the real translation is unchecked until it runs on an iPhone; UI test `testTranslateAndShowOriginal` covers the page side with a stand-in. No automatic offer on foreign pages, no per-site "always". |
-| Pinch to Summarize / Summarize | partial | The tile and the pinch summarize with the device's own model (`MobileSummary`, `Summarizer`): the page shrinks into its folded card, then the overview and titled sections, "Summarized for you by Cra" and the close button. Follows the site's Pinch to Summarize switch. Copy and Share in the footer once it is written (the page's title, the summary, the credit and the page's address without trackers; `MobileSummary.Answer.plainText`). The fold, from the App Store preview (14.3–15.0 s): the page tips flat into a strip at mid-height, the card unfolds there and rises into place with a slight tilt; Reduce Motion keeps a plain shrink. Looked at frame by frame in the simulator; `testSummarizeShowsTheSummaryAndClosesBackToThePage` not re-run since (the simulator kept shutting down under a Chrome build). The wiggle while loading is not built. |
+| Pinch to Summarize / Summarize | partial | The tile and the pinch summarize with the device's own model (`MobileSummary`, `Summarizer`): the page shrinks into its folded card, then the overview and titled sections, "Summarized for you by Cra" and the close button. Follows the site's Pinch to Summarize switch. Copy and Share in the footer once it is written (the page's title, the summary, the credit and the page's address without trackers; `MobileSummary.Answer.plainText`). The fold, from the App Store preview (14.3–15.0 s): the page tips flat into a strip at mid-height, the card unfolds there and rises into place with a slight tilt; Reduce Motion keeps a plain shrink. Looked at frame by frame in the simulator; `testSummarizeShowsTheSummaryAndClosesBackToThePage` passes. The wiggle while loading is not built. |
 | Block ads, trackers, cookie banners, per site | done | The Mac app's domain list compiled into WebKit content rules (`MobileBlocklist`), cookie banners hidden by their containers; each page gets the lists its site's switches ask for. The list does not say which domain is an ad and which a tracker, so the split is by name. Cookie prompts are hidden, not answered (Arc Search 1.38 denies them). |
 | "Reload without ad blockers", blocked count | done | The tab shows the site unblocked until it leaves it. The footer counts requests to listed domains that failed while their blocker was on. UI test in `BlockingTests`. |
 | Link long-press preview and menu | partial | Open, Open in New Tab, Copy Link (without trackers), Share. Arc Search's own items and its website preview were not seen. |
