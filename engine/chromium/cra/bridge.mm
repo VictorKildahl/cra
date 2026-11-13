@@ -95,6 +95,11 @@
 #include "components/zoom/zoom_controller.h"
 #include "components/download/public/common/download_item.h"
 #include "content/public/browser/download_item_utils.h"
+#include "content/public/browser/download_manager.h"
+#include "content/public/browser/download_request_utils.h"
+#include "components/download/public/common/download_url_parameters.h"
+#include "base/functional/callback_helpers.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "content/public/browser/ssl_status.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util.h"
@@ -131,6 +136,8 @@ extern "C" int CraEngineMain(int argc, const char** argv);
 - (void)pagePictureInPicture:(BOOL)active;
 - (void)pageProcessEvent:(NSString*)kind detail:(NSString*)detail url:(const GURL&)url;
 - (void)pageCaptureChanged;
+- (void)agentDownloadItem:(download::DownloadItem*)item;
+- (bool)agentDownloadTakes:(download::DownloadItem*)item;
 - (void)pageMediaPlaying:(BOOL)playing;
 @property(nonatomic) BOOL inPageFullscreen;
 - (void)devToolsOpened:(BrowserWindowInterface*)devtools;
@@ -566,6 +573,10 @@ void ReportDownload(download::DownloadItem* item) {
   if (!browser) {
     return;
   }
+  if (browser.isAgent) {
+    [browser agentDownloadItem:item];
+    return;
+  }
   CraDownloadInfo* info = [[CraDownloadInfo alloc] init];
   info.identifier = item->GetId();
   info.paused = item->IsPaused();
@@ -601,6 +612,11 @@ void DownloadPath(download::DownloadItem* item,
     return;
   }
   CraBrowser* browser = BrowserFor(content::DownloadItemUtils::GetWebContents(item));
+  // An agent page saves only what its agent asked for, where it asked.
+  if (browser.isAgent) {
+    std::move(done).Run([browser agentDownloadTakes:item] ? std::optional<base::FilePath>(suggested) : std::nullopt);
+    return;
+  }
   NSString* profile = browser && !browser.isIncognito ? browser.profilePath : nil;
   NSString* name = NS(suggested.BaseName().value());
   __block base::OnceCallback<void(std::optional<base::FilePath>)> answer = std::move(done);
@@ -1257,6 +1273,16 @@ void RunReadyBlocks() {
   // frontend's view.
   base::WeakPtr<BrowserWindowInterface> _devToolsBrowser;
   NSWindow* _devToolsHost;
+  // An agent page (MCP) renders while never on screen, as the CEF bridge's windowless page did.
+  base::ScopedClosureRunner _agentCapture;
+  // The download the agent asked for (startAgentDownload:…); anything else the site starts is cancelled.
+  BOOL _agentDownloadActive;
+  BOOL _agentDownloadCancelled;
+  GURL _agentDownloadURL;
+  base::FilePath _agentDownloadPath;
+  uint32_t _agentDownloadID;
+  std::set<uint32_t> _agentFinishedDownloads;
+  void (^_agentDownloadUpdate)(CraDownloadInfo*);
 }
 
 - (instancetype)initWithFrame:(NSRect)frame url:(NSString*)url delegate:(id<CraBrowserDelegate>)delegate {
@@ -1441,8 +1467,12 @@ void RunReadyBlocks() {
   _observer = std::make_unique<PageObserver>(contents, self);
   PagesByContents()[contents] = self;
   _isCreated = YES;
-  if (_audioMuted) {
+  if (_audioMuted || _isAgent) {
     contents->SetAudioMuted(true);
+  }
+  if (_isAgent) {
+    _agentCapture = contents->IncrementCapturerCount(gfx::Size(1280, 800), /*stay_hidden=*/false,
+                                                     /*stay_awake=*/true, /*is_activity=*/false);
   }
   // What the page did before Cra watched it (its first load starts inside AddAndReturnTabAt).
   [self pageAddressChanged];
@@ -1738,6 +1768,9 @@ void RunReadyBlocks() {
 }
 
 - (void)close {
+  if (_isAgent) {
+    [self cancelAgentDownload];
+  }
   if (_isClosed) {
     return;
   }
@@ -1772,10 +1805,91 @@ void RunReadyBlocks() {
   }
   // Taken before its profile loaded: createPageInProfile: makes it as a tab's page.
 }
+#pragma mark Agent downloads
+
 - (BOOL)startAgentDownload:(NSString*)url path:(NSString*)path update:(void (^)(CraDownloadInfo*))update {
-  return NO;
+  GURL target(UTF8(url));
+  if (!_isAgent || !_contents || _isClosed || _agentDownloadActive || !target.is_valid()) {
+    return NO;
+  }
+  _agentDownloadActive = YES;
+  _agentDownloadCancelled = NO;
+  _agentDownloadURL = target;
+  _agentDownloadPath = base::FilePath(UTF8(path));
+  if (_agentDownloadID) {
+    _agentFinishedDownloads.insert(_agentDownloadID);
+  }
+  _agentDownloadID = 0;
+  _agentDownloadUpdate = [update copy];
+  std::unique_ptr<download::DownloadUrlParameters> params = content::DownloadRequestUtils::CreateDownloadForWebContentsMainFrame(
+      _contents, target, MISSING_TRAFFIC_ANNOTATION);
+  params->set_file_path(_agentDownloadPath);
+  params->set_prompt(false);
+  _contents->GetBrowserContext()->GetDownloadManager()->DownloadUrl(std::move(params));
+  return YES;
 }
+
+- (BOOL)agentDownloadReady {
+  return !_agentDownloadActive;
+}
+
 - (void)cancelAgentDownload {
+  if (_isClosed) {
+    return;
+  }
+  _agentDownloadCancelled = YES;
+  if (_agentDownloadID) {
+    cra::ControlDownload(_agentDownloadID, cra::DownloadControl::kCancel);
+  }
+}
+
+// Whether a download in this agent page is the one its agent asked for (the rest are cancelled).
+- (bool)agentDownloadTakes:(download::DownloadItem*)item {
+  return !_agentFinishedDownloads.count(item->GetId()) && !_agentDownloadCancelled && _agentDownloadActive &&
+         item->GetOriginalUrl() == _agentDownloadURL && (!_agentDownloadID || _agentDownloadID == item->GetId());
+}
+
+- (void)agentDownloadItem:(download::DownloadItem*)item {
+  if (_agentFinishedDownloads.count(item->GetId())) {
+    return;
+  }
+  if (![self agentDownloadTakes:item] && !(_agentDownloadID && _agentDownloadID == item->GetId())) {
+    if (item->GetState() == download::DownloadItem::IN_PROGRESS) {
+      item->Cancel(/*user_cancel=*/false);
+    }
+    return;
+  }
+  _agentDownloadID = item->GetId();
+  constexpr int64_t kMax = 64 * 1024 * 1024;
+  if (item->GetState() == download::DownloadItem::IN_PROGRESS &&
+      (_agentDownloadCancelled || item->GetReceivedBytes() > kMax || item->GetTotalBytes() > kMax)) {
+    _agentDownloadCancelled = YES;
+    item->Cancel(/*user_cancel=*/false);
+  }
+  CraDownloadInfo* info = [[CraDownloadInfo alloc] init];
+  info.identifier = item->GetId();
+  info.url = NS(item->GetURL().spec());
+  info.fullPath = NS(item->GetFullPath().value());
+  info.suggestedName = NS(item->GetSuggestedFilename());
+  info.receivedBytes = item->GetReceivedBytes();
+  info.totalBytes = item->GetTotalBytes();
+  info.percent = item->PercentComplete();
+  if (item->GetState() == download::DownloadItem::COMPLETE && !_agentDownloadCancelled) {
+    info.state = CraDownloadStateComplete;
+  } else if (item->GetState() == download::DownloadItem::CANCELLED || _agentDownloadCancelled) {
+    info.state = CraDownloadStateCancelled;
+  } else if (item->GetState() == download::DownloadItem::INTERRUPTED) {
+    info.state = CraDownloadStateInterrupted;
+  } else {
+    info.state = CraDownloadStateInProgress;
+  }
+  if (_agentDownloadUpdate) {
+    _agentDownloadUpdate(info);
+  }
+  if (info.state != CraDownloadStateInProgress) {
+    _agentDownloadActive = NO;
+    _agentDownloadUpdate = nil;
+  }
 }
 // Chrome keys the setting by the page that opens the pop-up.
 - (BOOL)popupsAllowed {
