@@ -742,6 +742,7 @@
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::theModelsEchoOfTheDialogueIsLeftOut  c7e6334433dd
 #393   Tests/Scenarios/ask-on-page.scenario  f8c87a909b54
 #399   Tests/EmojiLabelTests.swift::wholeEmojiWhenClipped  bec18dc87181
+#400   Tests/ChromiumWindowCornersTests.swift::squareWhenAppKitRoundsTheWindow  a137d1f29319
 #401   Packages/CraCore/Tests/CraCoreTests/SwitcherWindowsTests.swift::switchersListWindowsWithButtonsOrAStandardSubrole  9f9f67f53678
 #401   Tests/Scenarios/switcher-windows.scenario  a600d5a96203
 #402   Tests/Scenarios/peek-toggle-sidebar.scenario  28b99af4794f
