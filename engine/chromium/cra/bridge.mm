@@ -1407,6 +1407,7 @@ void RunReadyBlocks() {
   page.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   [_container addSubview:page];
   [self installDocumentStartScripts];
+  cra::WatchMediaSession(contents);
   if (_pendingFocus) {
     _pendingFocus = NO;
     [self setFocused:YES];

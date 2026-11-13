@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <set>
 #include <optional>
 #include <vector>
 
@@ -35,6 +36,10 @@
 #include "components/translate/core/browser/translate_prefs.h"
 #include "content/public/browser/cra_live_connection.h"
 #include "content/public/browser/devtools_agent_host.h"
+#include "content/public/browser/media_session.h"
+#include "content/public/browser/web_contents_user_data.h"
+#include "mojo/public/cpp/bindings/receiver.h"
+#include "services/media_session/public/mojom/media_session.mojom.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_frame_host.h"
@@ -244,6 +249,94 @@ void AutoPictureInPicture(content::WebContents* contents,
   result->Set("asked", helper->CraOnTabHidden());
 }
 
+// The page's media session as Chrome routes it: the actions its navigator.mediaSession handlers take, however
+// early the page set them (what CEF's MediaSessionImpl::ShouldRouteAction answered).
+class MediaSessionWatch : public content::WebContentsUserData<MediaSessionWatch>,
+                          public media_session::mojom::MediaSessionObserver {
+ public:
+  bool Routes(media_session::mojom::MediaSessionAction action) const { return actions_.count(action) > 0; }
+
+  // media_session::mojom::MediaSessionObserver:
+  void MediaSessionInfoChanged(media_session::mojom::MediaSessionInfoPtr info) override {}
+  void MediaSessionMetadataChanged(const std::optional<media_session::MediaMetadata>& metadata) override {}
+  void MediaSessionActionsChanged(const std::vector<media_session::mojom::MediaSessionAction>& actions) override {
+    actions_ = std::set<media_session::mojom::MediaSessionAction>(actions.begin(), actions.end());
+  }
+  void MediaSessionImagesChanged(
+      const base::flat_map<media_session::mojom::MediaSessionImageType, std::vector<media_session::MediaImage>>&
+          images) override {}
+  void MediaSessionPositionChanged(const std::optional<media_session::MediaPosition>& position) override {}
+
+ private:
+  friend class content::WebContentsUserData<MediaSessionWatch>;
+  explicit MediaSessionWatch(content::WebContents* contents)
+      : content::WebContentsUserData<MediaSessionWatch>(*contents) {
+    content::MediaSession::Get(contents)->AddObserver(receiver_.BindNewPipeAndPassRemote());
+  }
+
+  std::set<media_session::mojom::MediaSessionAction> actions_;
+  mojo::Receiver<media_session::mojom::MediaSessionObserver> receiver_{this};
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
+};
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(MediaSessionWatch);
+
+struct MediaActionName {
+  media_session::mojom::MediaSessionAction action;
+  const char* name;
+};
+constexpr MediaActionName kMediaActions[] = {
+    {media_session::mojom::MediaSessionAction::kPlay, "play"},
+    {media_session::mojom::MediaSessionAction::kPause, "pause"},
+    {media_session::mojom::MediaSessionAction::kPreviousTrack, "previoustrack"},
+    {media_session::mojom::MediaSessionAction::kNextTrack, "nexttrack"},
+    {media_session::mojom::MediaSessionAction::kSeekBackward, "seekbackward"},
+    {media_session::mojom::MediaSessionAction::kSeekForward, "seekforward"},
+    {media_session::mojom::MediaSessionAction::kSkipAd, "skipad"},
+    {media_session::mojom::MediaSessionAction::kStop, "stop"},
+    {media_session::mojom::MediaSessionAction::kToggleMicrophone, "togglemicrophone"},
+    {media_session::mojom::MediaSessionAction::kToggleCamera, "togglecamera"},
+    {media_session::mojom::MediaSessionAction::kHangUp, "hangup"},
+    {media_session::mojom::MediaSessionAction::kPreviousSlide, "previousslide"},
+    {media_session::mojom::MediaSessionAction::kNextSlide, "nextslide"},
+};
+
+// Cra.mediaSession: {"actions":[names],"pictureInPicture":bool}; with params.action, runs the page's handler for
+// it, as media keys do ({"handled":false} when the page has none).
+void MediaSessionMethod(content::WebContents* contents,
+                        const base::DictValue* params,
+                        base::DictValue* result,
+                        std::string* error) {
+  MediaSessionWatch* watch = MediaSessionWatch::FromWebContents(contents);
+  result->Set("pictureInPicture", PictureInPictureWindowManager::GetInstance()->GetWebContents() == contents);
+  const std::string* name = params ? params->FindString("action") : nullptr;
+  if (!name) {
+    base::ListValue actions;
+    for (const auto& entry : kMediaActions) {
+      if (watch && watch->Routes(entry.action)) {
+        actions.Append(entry.name);
+      }
+    }
+    result->Set("actions", std::move(actions));
+    return;
+  }
+  const MediaActionName* found = nullptr;
+  for (const auto& entry : kMediaActions) {
+    if (*name == entry.name) {
+      found = &entry;
+    }
+  }
+  if (!found) {
+    *error = "unknown media session action";
+    return;
+  }
+  bool routed = watch && watch->Routes(found->action);
+  if (routed) {
+    content::MediaSession::Get(contents)->DidReceiveAction(found->action);
+  }
+  result->Set("handled", routed);
+}
+
 // Cra.* methods. Fills `result` or `error`.
 void HandleCraMethod(content::WebContents* contents,
                      const std::string& method,
@@ -304,6 +397,8 @@ void HandleCraMethod(content::WebContents* contents,
   } else if (method == "Cra.getTranslateState" || method == "Cra.translatePage" ||
              method == "Cra.revertTranslation" || method == "Cra.neverTranslateSite") {
     Translate(contents, method, params, result, error);
+  } else if (method == "Cra.mediaSession") {
+    MediaSessionMethod(contents, params, result, error);
   } else if (method == "Cra.autoPictureInPicture") {
     AutoPictureInPicture(contents, params, result, error);
   } else if (method == "Cra.setSpare") {
@@ -318,13 +413,17 @@ void HandleCraMethod(content::WebContents* contents,
     // An extension's side panel page: like Chrome's, it has no tab (GitHub #265).
     extensions::SetViewType(contents, extensions::mojom::ViewType::kExtensionSidePanel);
   } else {
-    // Not yet: Cra.mediaSession (Chrome's routing of media actions is content-internal), Cra.installFromWebStore
+    // Not yet: Cra.installFromWebStore
     // need Cra's Chromium patches (scripts/cef-patches).
     *error = "not yet on Chrome's framework: " + method;
   }
 }
 
 }  // namespace
+
+void WatchMediaSession(content::WebContents* contents) {
+  MediaSessionWatch::CreateForWebContents(contents);
+}
 
 int RestorePageHistory(content::WebContents* contents, const std::string& history, int index, std::string* error) {
   base::DictValue params;

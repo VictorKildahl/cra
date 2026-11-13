@@ -24,6 +24,10 @@ using ProtocolReply = void (^)(NSString* result, NSString* error);
 // An event: its method and its params JSON.
 using ProtocolEvent = void (^)(NSString* method, NSString* params);
 
+// Starts following the page's media session (the actions its handlers take), for Cra.mediaSession. Once per
+// page, as it is made.
+void WatchMediaSession(content::WebContents* contents);
+
 // Puts a saved back and forward list (Cra.getHistory's "history", base64) into a page that hasn't navigated yet
 // and loads entry `index`, as Cra.restoreHistory does. The number of entries, or 0 with `error` set.
 int RestorePageHistory(content::WebContents* contents, const std::string& history, int index, std::string* error);
