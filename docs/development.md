@@ -126,14 +126,17 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-store.sh`: the real `SidebarStore`, `AppComposition` and importers on a
   `ManualScheduler`, against the made-up Arc and Chromium profiles in `Tests/Fixtures`.
 - `scripts/test-ask-on-page-content.sh`: the production bounded Ask on Page script in a real
-  WebKit isolated world, using synthetic local HTML, including hidden/large DOM and Unicode bounds.
+  WebKit isolated world, using a loopback HTTP fixture, including hidden/large DOM and Unicode bounds.
+- `scripts/test-ask-on-page-lifecycle.sh`: actual SidebarStore individual/replacement/master settings
+  writes and real model-status refresh, two window services, same-turn off/on, late provider delivery,
+  completed history/source and teardown. Notifications run inline at the real mutation boundaries.
 - `scripts/test-ask-on-page-service.sh`: production native card/controller/overlay ownership,
   correlated Return decisions, literal quote actions, request cancellation, streaming and failures with a
   controlled provider/manual clock. `--real-model` explicitly probes the production on-device
   adapter with synthetic page questions; it requires available Apple Intelligence and is not a CI gate.
-  Ask's owner must call `clear()` synchronously on disable/unavailability, since boolean Observation
-  coalesces same-turn off/on writes. Before UI completion, settings/model integration must prove
-  this callback with a same-turn real-store regression; the service harness tests the owner contract.
+  Each window service registers weak, synchronous notifications for its store's disable edge and
+  model unavailability; Observation remains a sustained-state backstop. The lifecycle harness
+  covers actual mutations; the controlled service harness covers request and delivery ownership.
 - `scripts/test-policies.sh`: the decisions pulled out of the window controllers
   (`ExtensionLaunch`, `DevToolsToggle`, `FeatureFlags`).
 - `scripts/test-folder-glyph.sh`: the standalone folder component's real AppKit layers and image

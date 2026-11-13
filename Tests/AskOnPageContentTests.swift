@@ -1,7 +1,7 @@
 import AppKit
 import WebKit
 
-/// The production extraction script in a real DOM/isolated world, with synthetic local files only.
+/// The production extraction script in a real DOM/isolated world, with synthetic loopback HTTP only.
 @main
 @MainActor
 enum AskOnPageContentTests {
@@ -30,7 +30,10 @@ enum AskOnPageContentTests {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 800, height: 600), configuration: configuration)
-        let fixture = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("Tests/Fixtures/AskOnPage/article.html")
+        guard CommandLine.arguments.count == 2, let fixture = URL(string: CommandLine.arguments[1]), fixture.scheme == "http" else {
+            fatalError("the harness must supply its loopback HTTP fixture URL")
+        }
+        expect(!AskOnPageContent.supportsURL("file:///tmp/article.html"), "local files remain ineligible for Ask")
         let navigation = Navigation()
         try await navigation.load(fixture, in: web)
         let (page, _) = try await snapshot(web)
@@ -77,7 +80,7 @@ private final class Navigation: NSObject, WKNavigationDelegate {
         web.navigationDelegate = self
         try await withCheckedThrowingContinuation { done in
             waiting = done
-            web.loadFileURL(file, allowingReadAccessTo: file.deletingLastPathComponent())
+            web.load(URLRequest(url: file))
         }
     }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { waiting?.resume(); waiting = nil }

@@ -2,6 +2,9 @@ import Foundation
 
 /// Ask on Page's transient dialogue and citations. Browser ownership and model tasks live in the app.
 public enum AskOnPage {
+    public static let disabledNotification = Notification.Name("CraAskOnPageDisabled")
+    public static let profileChangedNotification = Notification.Name("CraAskOnPageProfileChanged")
+    public static let unavailableNotification = Notification.Name("CraAskOnPageUnavailable")
     public enum FindPurpose: Equatable, Sendable { case ordinary, quote }
 
     /// One exact query session. Native identifiers are evidence, not caller-supplied IDs.
@@ -182,14 +185,20 @@ public enum AskOnPage {
 }
 
 
-/// Presentation decisions for the existing Find or Ask card. Document eligibility is refined
-/// separately; generation still requires BrowserManager's guarded current-page snapshot.
+/// Arc 1.109's page gate and the existing combined Find or Ask presentation.
+/// An eligible URL/type still requires a genuine current HTML snapshot before generation.
 public enum AskOnPagePolicy {
     public enum ReturnKey: Equatable, Sendable { case nextMatch, ask }
 
-    public static func canAsk(page: URL?) -> Bool {
-        guard let scheme = page?.scheme?.lowercased() else { return false }
-        return ["http", "https", "file"].contains(scheme)
+    public enum DocumentKind: Equatable, Sendable { case unknown, html, pdf, image, movie, other }
+
+    public static func supportsURL(_ page: URL?) -> Bool {
+        guard let page, let scheme = page.scheme?.lowercased(), ["http", "https"].contains(scheme) else { return false }
+        return page.host?.lowercased() != "search.arc.net"
+    }
+
+    public static func canAsk(page: URL?, incognito: Bool, documentKind: DocumentKind) -> Bool {
+        supportsURL(page) && !incognito && ![.pdf, .image, .movie].contains(documentKind)
     }
 
     public static func placeholder(canAsk: Bool, inConversation: Bool) -> String {

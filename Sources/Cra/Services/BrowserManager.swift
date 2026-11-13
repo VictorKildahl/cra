@@ -131,6 +131,9 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     private(set) var askOnPageFocusRevision: UInt = 0
     private(set) var findState = AskOnPage.FindState()
     private var findOwner: AskOnPageContext?
+    /// One current document's type probe, never page text or a URL-wide cache.
+    var askOnPageDocument: AskOnPageDocumentSnapshot?
+    var askOnPageDocumentRead: (id: UUID, context: AskOnPageContext)?
     /// Every tab on screen, in pane order (one entry outside split view).
     private(set) var visibleTabIDs: [UUID] = []
     /// Tabs whose page tab sleeping closed and that haven't been shown since.
@@ -257,6 +260,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// Gives up a tab's live page so another window can show it. Its DevTools close:
     /// their window belongs to this one.
     func release(_ tabID: UUID) -> TabRuntime? {
+        invalidateAskOnPageDocument(for: tabID)
         if findOwner?.tabID == tabID { stopFinding(false) }
         guard let rt = runtimes.removeValue(forKey: tabID) else { return nil }
         nowPlaying?.remove(tabID)
@@ -348,7 +352,11 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         visibleTabIDs = shown
         if let np = nowPlaying, np.onScreen != Set(shown) { np.onScreen = Set(shown) }
         visibleTabID = focused.flatMap { newSet.contains($0) ? $0 : nil } ?? shown.first
-        if visibleTabID != previousFocus { askOnPageFocusRevision &+= 1; stopFinding(false) }
+        if visibleTabID != previousFocus {
+            askOnPageFocusRevision &+= 1
+            invalidateAskOnPageDocument()
+            stopFinding(false)
+        }
         if wasVisible != Set(shown) {
             HitchMonitor.mark("page-shown")
             if let rt = visibleRuntime {
@@ -1296,6 +1304,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         guard let id = tabID(of: browser) else { return }
         if findOwner?.tabID == id { stopFinding(false) }
         runtimes[id]?.navigationRevision &+= 1
+        invalidateAskOnPageDocument(for: id)
         // A quiet page that navigates leaves the player; a playlist moving on keeps its card.
         if !browser.isAudible { nowPlaying?.remove(id) }
         // Our own error page is a data: URL; keep the real address in the model.
@@ -1312,7 +1321,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     func browser(_ browser: CraBrowser, didChangeLoading loading: Bool, canGoBack: Bool, canGoForward: Bool) {
         guard let id = tabID(of: browser) else { return }
         if loading, findOwner?.tabID == id { stopFinding(false) }
-        if loading { runtimes[id]?.navigationRevision &+= 1 }
+        if loading {
+            runtimes[id]?.navigationRevision &+= 1
+            invalidateAskOnPageDocument(for: id)
+        }
         HitchMonitor.mark(loading ? "load-start" : "load-end")
         if loading { Perf.begin(.pageLoad, id.uuidString) } else {
             Perf.end(.pageLoad, id.uuidString)

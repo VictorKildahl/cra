@@ -17,10 +17,13 @@ struct AskOnPageContentTests {
         let page = try #require(AskOnPageContent.page(evaluation: result, expectedURL: url))
         #expect(page.text == text && page.title == "Article" && !page.wasTruncated)
         #expect(AskOnPageContent.page(evaluation: result, expectedURL: url + "#later") == nil)
-        #expect(AskOnPageContent.page(evaluation: try evaluation(contentType: "application/pdf"), expectedURL: url) == nil)
+        for mime in ["application/pdf", "image/png", "image/svg+xml", "video/mp4", "text/plain"] {
+            #expect(AskOnPageContent.page(evaluation: try evaluation(contentType: mime), expectedURL: url) == nil)
+        }
+        #expect(AskOnPageContent.page(evaluation: try evaluation(contentType: "application/xhtml+xml"), expectedURL: url)?.text == text)
         #expect(AskOnPageContent.page(evaluation: try evaluation(text: "Just a short heading"), expectedURL: url) == nil)
         #expect(AskOnPageContent.page(evaluation: try evaluation(url: "cra://settings"), expectedURL: "cra://settings") == nil)
-        #expect(AskOnPageContent.page(evaluation: try evaluation(url: "file:///tmp/article.html"), expectedURL: "file:///tmp/article.html")?.text == text)
+        #expect(AskOnPageContent.page(evaluation: try evaluation(url: "file:///tmp/article.html"), expectedURL: "file:///tmp/article.html") == nil)
     }
 
     @Test func extractionBoundsAndTruncationAreNotSilentlyDiscarded() throws {

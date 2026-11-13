@@ -51,15 +51,40 @@ final class AskOnPageService {
     @ObservationIgnored private var context: AskOnPageContext?
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var deadline: ScheduledWork?
+    @ObservationIgnored private var invalidationObservers: [NSObjectProtocol] = []
 
-    init(browsers: BrowserManager, enabled: @escaping @MainActor () -> Bool,
-         available: @escaping @MainActor () -> Bool = { TidyTabsService.shared.modelAvailable && AskOnPageLocalModel.isAvailable },
+    init(browsers: BrowserManager, settingsStore: SidebarStore? = nil, enabled: @escaping @MainActor () -> Bool,
+         available: @escaping @MainActor () -> Bool = { TidyTabsService.shared.currentModelAvailable && AskOnPageLocalModel.isAvailable },
          clock: Scheduler? = nil, countTokens: AskOnPagePrompt.TokenCount? = nil, generate: Generate? = nil) {
         self.browsers = browsers; self.enabled = enabled; self.available = available
         self.clock = clock ?? LiveScheduler.shared
         self.countTokens = countTokens ?? AskOnPageLocalModel.tokenCount
         self.estimatedTokenCount = countTokens == nil && AskOnPageLocalModel.estimatesTokens
         self.generate = generate ?? AskOnPageLocalModel.stream
+        if let settingsStore {
+            invalidationObservers.append(NotificationCenter.default.addObserver(
+                forName: AskOnPage.disabledNotification, object: nil, queue: nil) { [weak self, weak settingsStore] notification in
+                MainActor.assumeIsolated {
+                    guard let settingsStore, notification.object as AnyObject? === settingsStore else { return }
+                    self?.clear()
+                }
+            })
+            invalidationObservers.append(NotificationCenter.default.addObserver(
+                forName: AskOnPage.profileChangedNotification, object: nil, queue: nil) { [weak self, weak settingsStore] notification in
+                MainActor.assumeIsolated {
+                    guard let self, let settingsStore, notification.object as AnyObject? === settingsStore,
+                          let context = self.context else { return }
+                    let space = notification.userInfo?["spaceID"] as? UUID
+                    let spaces = notification.userInfo?["spaceIDs"] as? Set<UUID> ?? []
+                    let tabs = notification.userInfo?["tabIDs"] as? Set<UUID> ?? []
+                    if space == context.spaceID || spaces.contains(context.spaceID) || tabs.contains(context.tabID) { self.clear() }
+                }
+            })
+        }
+        invalidationObservers.append(NotificationCenter.default.addObserver(
+            forName: AskOnPage.unavailableNotification, object: nil, queue: nil) { [weak self] _ in
+            MainActor.assumeIsolated { self?.clear() }
+        })
         // Backstop for sustained unusability; synchronous owner invalidation handles transient changes.
         observeChanges(of: { [weak self] in self.map { $0.enabled() && $0.available() } ?? false }) { [weak self] usable in
             if !usable { self?.clear() }
@@ -67,15 +92,18 @@ final class AskOnPageService {
     }
 
     deinit {
+        invalidationObservers.forEach(NotificationCenter.default.removeObserver)
         task?.cancel()
         Task { @MainActor [deadline] in deadline?.cancel() }
     }
 
     /// Closing the panel/window clears page text and history and invalidates even a cancellation-ignoring provider.
     func clear() {
-        task?.cancel(); task = nil
-        deadline?.cancel(); deadline = nil
+        let pending = task, timer = deadline
+        task = nil; deadline = nil
         context = nil; current = nil; messages = []; olderMessagesHidden = false; phase = .idle
+        browsers.clearAskOnPageQuote()
+        pending?.cancel(); timer?.cancel()
     }
 
     func refresh() {
@@ -129,7 +157,8 @@ final class AskOnPageService {
                     self?.current?.olderMessagesHidden = fitted.olderMessagesHidden
                     do {
                         let final = try await generate(fitted) { [weak self] snapshot in
-                            guard let self, self.accepts(id) else { return }
+                            guard let self else { return }
+                            guard self.accepts(id) else { self.refresh(); return }
                             // A snapshot is the whole answer so far, never a delta.
                             self.current?.answer = AskOnPage.partialAnswer(snapshot)
                         }

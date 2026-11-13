@@ -79,7 +79,7 @@ public enum AskOnPageContent {
 
     public static func supportsURL(_ url: String) -> Bool {
         guard url.utf8.count <= 8192 else { return false }
-        return AskOnPagePolicy.canAsk(page: URL(string: url))
+        return AskOnPagePolicy.supportsURL(URL(string: url))
     }
 
     private struct Evaluation: Decodable {

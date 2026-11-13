@@ -44,8 +44,16 @@ final class TidyTabsService {
 
     /// Read again when Cra comes to the front and while Settings shows it, so turning Apple
     /// Intelligence on in System Settings shows the button without a relaunch.
-    private(set) var status: Status = .needsNewerMacOS
+    private(set) var status: Status = .needsNewerMacOS {
+        didSet {
+            if status != .available {
+                NotificationCenter.default.post(name: AskOnPage.unavailableNotification, object: self)
+            }
+        }
+    }
     var modelAvailable: Bool { status == .available }
+    /// Ask rechecks the real resolver at request/delivery boundaries rather than trusting UI cache.
+    var currentModelAvailable: Bool { Self.currentStatus() == .available }
 
     @ObservationIgnored private var activation: NSObjectProtocol?
 
@@ -59,6 +67,10 @@ final class TidyTabsService {
     func refresh() {
         let now = Self.currentStatus()
         if now != status { status = now }
+        else if now != .available {
+            // A repeated unavailable refresh must invalidate work even when the UI cache did not change.
+            NotificationCenter.default.post(name: AskOnPage.unavailableNotification, object: self)
+        }
     }
 
     private static func currentStatus() -> Status {

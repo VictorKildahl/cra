@@ -166,16 +166,22 @@ struct AskOnPageNativePresentationTests {
 }
 
 struct AskOnPagePolicyTests {
-    @Test func asksOnlyAboutWebPagesAndFiles() {
-        #expect(AskOnPagePolicy.canAsk(page: URL(string: "https://example.com/a")))
-        #expect(AskOnPagePolicy.canAsk(page: URL(string: "http://example.com")))
-        #expect(AskOnPagePolicy.canAsk(page: URL(string: "file:///Users/a/b.html")))
-        #expect(!AskOnPagePolicy.canAsk(page: URL(string: "cra://settings")))
-        #expect(!AskOnPagePolicy.canAsk(page: URL(string: "chrome://version")))
-        #expect(!AskOnPagePolicy.canAsk(page: URL(string: "about:blank")))
-        #expect(!AskOnPagePolicy.canAsk(page: nil))
+    @Test func eligibilityMatchesLegacyWebAndPrivateTypeRules() {
+        for scheme in ["http", "https", "HTTP", "HTTPS"] {
+            #expect(AskOnPagePolicy.canAsk(page: URL(string: "\(scheme)://example.test/article"), incognito: false, documentKind: .html))
+        }
+        for url in [nil, "file:///tmp/article.html", "cra://settings", "chrome://version", "about:blank", "https://search.arc.net/path", "https://SEARCH.ARC.NET/path", "https://SeArCh.ArC.NeT/path"] as [String?] {
+            #expect(!AskOnPagePolicy.canAsk(page: url.flatMap(URL.init(string:)), incognito: false, documentKind: .unknown))
+        }
+        for kind in [AskOnPagePolicy.DocumentKind.pdf, .image, .movie] {
+            #expect(!AskOnPagePolicy.canAsk(page: URL(string: "https://example.test/extensionless"), incognito: false, documentKind: kind))
+        }
+        for kind in [AskOnPagePolicy.DocumentKind.unknown, .html, .other] {
+            #expect(AskOnPagePolicy.canAsk(page: URL(string: "https://example.test/article"), incognito: false, documentKind: kind))
+            #expect(!AskOnPagePolicy.canAsk(page: URL(string: "https://example.test/article"), incognito: true, documentKind: kind))
+        }
+        #expect(AskOnPagePolicy.canAsk(page: URL(string: "https://sub.search.arc.net/article"), incognito: false, documentKind: .html))
     }
-
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/393")) func placeholdersAreArcs() {
         #expect(AskOnPagePolicy.placeholder(canAsk: false, inConversation: false) == "Find in page…")
         #expect(AskOnPagePolicy.placeholder(canAsk: true, inConversation: false) == "Find or ask…")

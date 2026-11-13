@@ -20,6 +20,7 @@ if [ "${1:-}" != core ]; then
   suite "Browser manager" Tests/test-browser-manager.sh
   suite "Ask on Page DOM" scripts/test-ask-on-page-content.sh
   suite "Ask on Page service" scripts/test-ask-on-page-service.sh
+  suite "Ask on Page lifecycle" scripts/test-ask-on-page-lifecycle.sh
   suite "Floating sidebar" scripts/test-floating-sidebar.sh
   suite "Extension popup candidate" scripts/test-extension-popup-candidate.sh
   suite "Extension popup window" scripts/test-extension-popup-window.sh

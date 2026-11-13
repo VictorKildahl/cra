@@ -276,6 +276,17 @@ enum BrowserManagerLifecycleTests {
     }
 
     @MainActor
+    private static func resolveAskDocument(_ manager: BrowserManager, mime: String = "text/html") async {
+        manager.refreshAskOnPageDocument()
+        guard manager.askOnPageDocumentRead != nil, let browser = manager.visibleRuntime?.browser else { return }
+        let reply = String(data: try! JSONSerialization.data(withJSONObject: ["result": ["value": [
+            "url": browser.currentURL, "contentType": mime]]]), encoding: .utf8)!
+        browser.replies.removeLast().completion(reply, nil)
+        // The production native callback enqueues its complete mutation before this FIFO marker.
+        await withCheckedContinuation { done in DispatchQueue.main.async { done.resume() } }
+    }
+
+    @MainActor
     private static func askOnPageSnapshotCase() async {
         let store = SidebarStore()
         let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
@@ -287,6 +298,8 @@ enum BrowserManagerLifecycleTests {
             "url": "https://example.test/article", "title": "Article", "text": text,
             "contentType": "text/html", "truncated": false]]]), encoding: .utf8)!
         let browser = manager.visibleRuntime!.browser
+        expect(manager.askOnPageContext() == nil, "Ask remains disabled before actual current document type resolves")
+        await resolveAskDocument(manager)
         let context = manager.askOnPageContext()!
         var received: [AskOnPagePrompt.Page?] = []
         manager.askOnPageSnapshot(context) { received.append($0) }
@@ -295,6 +308,7 @@ enum BrowserManagerLifecycleTests {
         expect(received.count == 1 && received[0]?.text == text, "Ask context is returned from the captured current browser")
 
         for change in 0..<5 {
+            await resolveAskDocument(manager)
             let current = manager.askOnPageContext()!
             let active = manager.visibleRuntime!.browser
             received.removeAll()
@@ -320,6 +334,59 @@ enum BrowserManagerLifecycleTests {
         let internalPage = store.createTab(url: "cra://settings").id
         manager.show(internalPage, focus: false)
         expect(manager.askOnPageContext() == nil, "internal browser pages are ineligible before extraction")
+        for (url, mime, privatePage) in [
+            ("https://example.test/extensionless-pdf", "application/pdf", false),
+            ("https://example.test/extensionless-image", "image/svg+xml", false),
+            ("https://example.test/extensionless-movie", "video/mp4", false),
+            ("https://search.arc.net/article", "text/html", false),
+            ("file:///tmp/article.html", "text/html", false),
+            ("https://example.test/private", "text/html", true)] {
+            let id = store.createTab(url: url).id
+            if privatePage { store.incognitoItems.insert(id) }
+            manager.show(id, focus: false)
+            await resolveAskDocument(manager, mime: mime)
+            expect(manager.askOnPageContext() == nil && manager.findPageContext() != nil,
+                   "resolved PDF/image/movie, Arc Search, file and private eligibility never disables ordinary Find: \(url)")
+        }
+        let disguisedHTML = store.createTab(url: "https://example.test/page.pdf").id
+        manager.show(disguisedHTML, focus: false)
+        await resolveAskDocument(manager, mime: "text/html")
+        expect(manager.askOnPageContext() != nil,
+               "actual HTML MIME takes precedence over a misleading .pdf suffix")
+        expect(AskOnPageDocument.kind(url: URL(string: "https://example.test/document")!, mimeType: "application/pdf") == .pdf
+            && AskOnPageDocument.kind(url: URL(string: "https://example.test/document")!, mimeType: "image/svg+xml") == .image
+            && AskOnPageDocument.kind(url: URL(string: "https://example.test/document")!, mimeType: "video/mp4") == .movie,
+            "resolved UTType conformance rejects MIME subtypes without relying on filename suffixes")
+        manager.invalidateAskOnPageDocument()
+        manager.refreshAskOnPageDocument()
+        let oldTypeReply = manager.visibleRuntime!.browser.replies.removeLast().completion
+        manager.visibleRuntime!.browser.setLoading(true)
+        manager.visibleRuntime!.browser.setLoading(false)
+        manager.refreshAskOnPageDocument()
+        let newTypeReply = manager.visibleRuntime!.browser.replies.removeLast().completion
+        let oldType = String(data: try! JSONSerialization.data(withJSONObject: ["result": ["value": [
+            "url": "https://example.test/page.pdf", "contentType": "text/html"]]]), encoding: .utf8)!
+        oldTypeReply(oldType, nil)
+        await withCheckedContinuation { done in DispatchQueue.main.async { done.resume() } }
+        expect(manager.askOnPageContext() == nil && manager.askOnPageDocumentRead != nil,
+               "a late same-URL old type probe cannot enable Ask or consume the current type request")
+        let newType = String(data: try! JSONSerialization.data(withJSONObject: ["result": ["value": [
+            "url": "https://example.test/page.pdf", "contentType": "application/pdf"]]]), encoding: .utf8)!
+        newTypeReply(newType, nil)
+        await withCheckedContinuation { done in DispatchQueue.main.async { done.resume() } }
+        expect(manager.askOnPageContext() == nil && manager.askOnPageDocumentRead == nil,
+               "current extensionless/resolved PDF evidence stays ineligible after a stale HTML probe")
+        for malformed in ["{}", "not JSON", String(repeating: "x", count: 20_001),
+            #"{"result":{"value":{"url":"https://example.test/other","contentType":"text/html"}}}"#,
+            #"{"result":{"value":{"url":"https://example.test/page.pdf","contentType":""}}}"#,
+            #"{"result":{"value":{}},"exceptionDetails":{}}"#] {
+            manager.invalidateAskOnPageDocument()
+            manager.refreshAskOnPageDocument()
+            manager.visibleRuntime!.browser.replies.removeLast().completion(malformed, nil)
+            await withCheckedContinuation { done in DispatchQueue.main.async { done.resume() } }
+            expect(manager.askOnPageContext() == nil && manager.askOnPageDocument == nil,
+                   "malformed, oversized, exception and wrong-document type metadata cannot enable Ask")
+        }
         manager.closeAll()
     }
 

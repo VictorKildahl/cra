@@ -62,6 +62,8 @@ enum TestRoot { case today }
     var settings = Settings()
     var items: [UUID: TestItem] = [:]
     func item(_ id: UUID) -> TestItem? { items[id] }
+    private let focusedAskSpace = UUID()
+    func focusedSpaceID(window: UUID?) -> UUID { focusedAskSpace }
     var incognitoItems: Set<UUID> = []
     func isIncognito(item: UUID) -> Bool { incognitoItems.contains(item) }
     var profilePaths: [UUID: String] = [:]

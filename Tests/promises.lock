@@ -743,6 +743,13 @@
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::returnRequiresAnOwnedFinalZeroAndNeverAsksBackward  0f6a20126e6d
 #393   Tests/AskOnPageControllerTests.swift::hostedCardReleasesItsOwner  919f26c7bce2
 #393   Tests/AskOnPageControllerTests.swift::nativeCardOwnsOneService  e476b858fbfe
+#393   Tests/AskOnPageLifecycleTests.swift::actualAvailabilityEdges  1bf426d5cd47
+#393   Tests/AskOnPageLifecycleTests.swift::completedAndMasterReplacement  7d3827842cdb
+#393   Tests/AskOnPageLifecycleTests.swift::freshAvailabilityAtDelivery  a7cbc9ae567c
+#393   Tests/AskOnPageLifecycleTests.swift::profileMutationPaths  ad60d54a022a
+#393   Tests/AskOnPageLifecycleTests.swift::realProfileOffOn  edba6ea4462f
+#393   Tests/AskOnPageLifecycleTests.swift::realStoreOffOn  496dfe901444
+#393   Tests/AskOnPageLifecycleTests.swift::streamsAndStoreIdentity  6bd781ccd451
 #393   Tests/AskOnPageSelectionTests.swift::selectionFindsOnceThroughEveryPanelPath  1cab26ba4550
 #393   Tests/AskOnPageSelectionTests.swift::staleSelectionCannotChangeTheNewOwner  2b4dbec3c27c
 #393   Tests/Scenarios/ask-on-page.scenario  f8c87a909b54

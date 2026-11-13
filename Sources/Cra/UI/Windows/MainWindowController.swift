@@ -1143,7 +1143,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var lastFindPage: NSRect?
     /// Arc Max's Ask on Page: with the setting on, the find bar's panel shows this card instead (#393).
     private(set) lazy var askOnPage: AskOnPageController = {
-        let service = AskOnPageService(browsers: browsers, enabled: { [weak self] in self?.store.settings.askOnPage == true },
+        let service = AskOnPageService(browsers: browsers, settingsStore: store, enabled: { [weak self] in self?.store.settings.askOnPage == true },
                                        clock: app.composition.clock)
         let c = AskOnPageController(overlay: overlay, service: service)
         c.onFind = { [weak self] q, forward in self?.find(q, forward: forward) }
@@ -1277,6 +1277,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// Attaches the visible tabs' Chrome windows over their pane areas, hides the others.
     func browserManagerPageWindowsChanged(focus: Bool) {
+        askOnPage.service.refresh()
         guard let window else { return }
         frameReleaseAfterChange?.cancel()
         frameReleaseAfterChange = app.composition.clock.after(HiddenFrameRelease.afterPageChange) { [weak self] in
@@ -4120,7 +4121,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Ask on Page or the plain find bar, by the setting and the model; the card follows the page in
     /// front and the space's colour.
     func syncAskOnPage() {
-        let enabled = store.settings.askOnPage && AskOnPageLocalModel.isAvailable && TidyTabsService.shared.modelAvailable
+        let enabled = store.settings.askOnPage && AskOnPageLocalModel.isAvailable && TidyTabsService.shared.currentModelAvailable
         let state = askOnPage.state
         if state.enabled != enabled {
             state.enabled = enabled
@@ -4131,6 +4132,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let theme = focusedSpace.theme.shown
         // Not theme.isDark: the card follows macOS, so it makes a question for each appearance (#408).
         askOnPage.setTone(themeHex: theme.accent ?? theme.colors.first ?? "#DDDDDD")
+        if enabled { browsers.refreshAskOnPageDocument() }
         askOnPage.pageChanged(canAsk: browsers.askOnPageContext() != nil)
         refitFindPanel()
     }
