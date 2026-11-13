@@ -211,8 +211,8 @@ public enum LinkSummaryContent {
         }
     }
 
-    /// Body text handed to the model. The on-device model has a 4,096-token context, shared with
-    /// the instructions and the answer; 2,400 characters is about 600 tokens of English.
+    /// Extracted body cap before the complete request is fitted by LinkSummaryPrompt.
+    /// Character counts alone do not establish a local model token fit.
     public static let maxContentLength = 2_400
     /// How much of the HTML is read. Pages put megabytes of script before their text; past this the
     /// card would wait on regexes for text the model has no room for.
@@ -323,6 +323,10 @@ public enum LinkSummaryPrompt {
     /// The page as Arc hands it over, between `<webpage>` tags, with the search the user made when
     /// the link was a Google result.
     public static func prompt(url: String, content: LinkSummaryContent.Extracted, searchQuery: String?, language: String) -> String {
+        fitted(url: url, content: content, searchQuery: searchQuery, language: language).prompt
+    }
+
+    private static func render(url: String, content: LinkSummaryContent.Extracted, searchQuery: String?, language: String) -> String {
         var page: [String] = ["URL: \(url)"]
         if let title = content.title { page.append("Title: \(title)") }
         if let description = content.description { page.append("Description: \(description)") }
@@ -333,6 +337,61 @@ public enum LinkSummaryPrompt {
         }
         lines.append("Write responses (but not JSON keys) in \(language) using markdown formatting.")
         return lines.joined(separator: "\n")
+    }
+
+    /// A bounded model payload only. Original navigation/cache identity remains in LinkSummaryRequest.
+    public struct Input: Equatable, Sendable {
+        public let url: String
+        public let content: LinkSummaryContent.Extracted
+        public let searchQuery: String?
+        public let language: String
+        public var prompt: String { LinkSummaryPrompt.render(url: url, content: content, searchQuery: searchQuery, language: language) }
+    }
+
+    /// Cra's conservative earlier-OS allowance; exact SDK counts replace the estimate on 26.4+.
+    public static let maximumPromptBytes = 1_536
+    public static let responseTokenLimit = 1_024
+    public static let contextSafetyMargin = 256
+    public static let fallbackFixedTokens = 1_280
+
+    public static func fitted(url: String, content: LinkSummaryContent.Extracted, searchQuery: String?, language: String,
+                              compact: Bool = false) -> Input {
+        let scale = compact ? 2 : 1
+        func field(_ value: String, _ limit: Int) -> String { clip(value, characters: limit / scale, bytes: limit / scale) }
+        let url = field(url, 256)
+        let title = content.title.map { field($0, 160) }
+        let description = content.description.map { field($0, 160) }
+        let query = searchQuery.map { field($0, 128) }.flatMap { $0.isEmpty ? nil : $0 }
+        let chosenLanguage = field(language, 48)
+        let language = chosenLanguage.isEmpty ? "English" : chosenLanguage
+        let metadata = LinkSummaryContent.Extracted(title: title, description: description)
+        let overhead = render(url: url, content: metadata, searchQuery: query, language: language).utf8.count
+        // Adding the body inserts one newline in the page's field list.
+        let room = max(0, maximumPromptBytes / scale - overhead - 1)
+        let body = clip(content.bodyText, characters: room, bytes: room)
+        return Input(url: url, content: .init(title: title, description: description, bodyText: body), searchQuery: query, language: language)
+    }
+
+    /// Never splits a Character, including a combining sequence or joined emoji.
+    private static func clip(_ value: String, characters: Int, bytes: Int) -> String {
+        var output = "", used = 0
+        for character in value.prefix(max(0, characters)) {
+            let size = String(character).utf8.count
+            guard size <= bytes - used else { break }
+            output.append(character)
+            used += size
+        }
+        return output
+    }
+
+    public static func fitsContext(inputTokens: Int, contextSize: Int) -> Bool {
+        let reserve = responseTokenLimit + contextSafetyMargin
+        return inputTokens >= 0 && contextSize >= reserve && inputTokens <= contextSize - reserve
+    }
+
+    /// Treat UTF-8 bytes as a conservative variable-token estimate, not an exact tokenizer.
+    public static func fitsFallback(_ input: Input, contextSize: Int) -> Bool {
+        fitsContext(inputTokens: input.prompt.utf8.count + fallbackFixedTokens, contextSize: contextSize)
     }
 
     /// Capture once in the request; only generated values are localized, never schema keys.

@@ -45,7 +45,16 @@ import FoundationModels
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
         #if canImport(FoundationModels)
-        if #available(macOS 26.0, *) { guidedSchemaAndOptionalPartials() }
+        if #available(macOS 26.0, *) {
+            guidedSchemaAndOptionalPartials()
+            await callerCancellationRejectsImmediateLatePartial()
+            await modelRetryErrorsAndDeadline()
+            await retryResetIsVisibleAndOffOnCancels()
+        }
+        if #available(macOS 26.4, *) {
+            await modelPreflightAndFreshRetry()
+            await deadlineAndCancellationDuringPreflight()
+        }
         #endif
         await optionalAndEmptyModelOutput()
         await LinkSummaryFetchTests.run(expect)
@@ -117,6 +126,236 @@ import FoundationModels
         expect(last?.finished == true && last?.result == nil && incomplete.cached(request()) == nil,
                "incomplete final details clear earlier partial content and remain retryable")
     }
+
+    #if canImport(FoundationModels)
+    @available(macOS 26.0, *)
+    private static func overflow() -> LanguageModelSession.GenerationError {
+        .exceededContextWindowSize(.init(debugDescription: "controlled context overflow"))
+    }
+
+    @available(macOS 26.4, *)
+    private static func modelPreflightAndFreshRetry() async {
+        let clock = ManualScheduler(), second = Gate<Void>(), release = Gate<Void>()
+        var measured: [String] = [], streamed: [String] = [], sessions: [LanguageModelSession] = []
+        var events: [LinkSummaryPrompt.Answer?] = []
+        var oldPartial: ((LinkSummaryPrompt.Answer?) -> Void)?
+        let source = LinkSummaryContent.Extracted(title: String(repeating: "Title ", count: 1_000),
+                                                   description: String(repeating: "Description ", count: 1_000),
+                                                   bodyText: String(repeating: "Useful content. ", count: 1_000))
+        let task = Task {
+            await LinkSummaryService.ask(url: link, content: source, searchQuery: "price", language: "Danish", partial: { events.append($0) }, respond: { input, partial in
+                try await LinkSummaryModel.respond(input, partial: partial, count: { component in
+                    switch component {
+                    case .instructions(let instructions):
+                        expect(instructions == LinkSummaryPrompt.instructions, "preflight counts actual full trusted instructions once")
+                        return 100
+                    case .prompt(let prompt):
+                        expect(prompt == input.prompt, "counted prompt is exactly the fitted string sent to the stream")
+                        measured.append(prompt)
+                        return 1_000
+                    case .schema(let schema):
+                        let encoded = try! JSONSerialization.jsonObject(with: JSONEncoder().encode(schema)) as! [String: Any]
+                        expect(encoded["x-order"] as? [String] == ["blocked", "userQuestion", "quickSummary", "details"], "preflight counts the actual single guided schema")
+                        return 1_716 // Controlled total 2816, exactly context minus output/safety reserves.
+                    case .transcript(let history):
+                        expect(history.isEmpty, "fresh sessions contain no invented prior-hover transcript after instructions are counted once")
+                        return 0
+                    }
+                }, contextSize: 4_096, stream: { session, prompt, limit, update in
+                    sessions.append(session)
+                    streamed.append(prompt)
+                    expect(limit == 1_024, "the stream enforces the same output reserve used by preflight")
+                    if streamed.count == 1 {
+                        oldPartial = update
+                        update(answer)
+                        clock.advance(by: 10)
+                        throw overflow()
+                    }
+                    second.resolve(())
+                    await release.wait()
+                    update(.init(blocked: false, quickSummary: "Fresh attempt", details: answer.details))
+                    return .init(blocked: false, quickSummary: "Fresh attempt", details: answer.details)
+                })
+            }, clock: clock)
+        }
+        await second.wait()
+        expect(events.count == 2 && events[0]?.quickSummary == answer.quickSummary && events[1] == nil,
+               "overflow clears the first attempt's already emitted rows before the new provider starts")
+        expect(measured == streamed && streamed[1].utf8.count < streamed[0].utf8.count, "the second actual transmitted/counted prompt is substantially smaller")
+        expect(sessions.count == 2 && sessions[0] !== sessions[1], "retry uses a distinct fresh SDK session")
+        expect(clock.pendingCount == 1, "both attempts share one model deadline")
+        oldPartial?(answer)
+        expect(events.count == 2, "an abandoned attempt cannot publish into the fresh stream")
+        release.resolve(())
+        let result = await task.value
+        expect(result?.quickSummary == "Fresh attempt" && events.last.flatMap { $0 }?.quickSummary == "Fresh attempt", "only fresh output becomes the returned answer")
+        oldPartial?(answer)
+        expect(events.count == 3 && clock.pendingCount == 0, "completion rejects late partials and releases its sole deadline")
+
+        let input = LinkSummaryPrompt.fitted(url: link.absoluteString, content: source, searchQuery: "price", language: "Danish")
+        for schemaOnly in [true, false] {
+            var countCalls = 0, streamCalls = 0
+            let refused = await LinkSummaryService.ask(url: link, content: source, searchQuery: "price", language: "Danish", partial: { _ in }, respond: { input, partial in
+                try await LinkSummaryModel.respond(input, partial: partial, count: { component in
+                    switch component {
+                    case .instructions: return schemaOnly ? 0 : 500
+                    case .prompt: return schemaOnly ? 0 : 1_200
+                    case .schema:
+                        countCalls += 1
+                        return schemaOnly ? 2_817 : 1_117
+                    case .transcript: return 0
+                    }
+                }, contextSize: 4_096, stream: { _, _, _, _ in streamCalls += 1; return answer })
+            }, clock: ManualScheduler())
+            expect(refused == nil && countCalls == 2 && streamCalls == 0,
+                   "schema and combined instruction/prompt/schema costs cannot bypass output/safety reserves; preflight retries once without generation")
+        }
+        expect(input.prompt.utf8.count <= 1_536, "an oversized fixed/schema budget cannot be bypassed by already bounded metadata")
+    }
+
+    @available(macOS 26.4, *)
+    private static func deadlineAndCancellationDuringPreflight() async {
+        for cancel in [false, true] {
+            let clock = ManualScheduler(), entered = Gate<Void>(), release = Gate<Void>(), adapterReturned = Gate<Void>()
+            var streams = 0
+            let task = Task {
+                await LinkSummaryService.ask(url: link, content: .init(bodyText: "Useful text"), searchQuery: nil, language: "English", partial: { _ in preconditionFailure("preflight cannot stream or reset after cancellation/deadline") }, respond: { input, partial in
+                    defer { adapterReturned.resolve(()) }
+                    return try await LinkSummaryModel.respond(input, partial: partial, count: { component in
+                        if case .schema = component {
+                            entered.resolve(())
+                            await release.wait() // Deliberately ignores token-counter cancellation.
+                        }
+                        return 0
+                    }, stream: { _, _, _, _ in streams += 1; return answer })
+                }, clock: clock)
+            }
+            await entered.wait()
+            if cancel { task.cancel() } else { clock.advance(by: LinkSummaryService.modelTimeout) }
+            let result = await task.value
+            expect(result == nil && streams == 0 && clock.pendingCount == 0, "preflight cancellation/deadline ends promptly before generation and releases the timer")
+            release.resolve(())
+            await adapterReturned.wait()
+            expect(streams == 0, "late token-count completion cannot start a model stream after termination")
+        }
+    }
+
+    @available(macOS 26.0, *)
+    private static func callerCancellationRejectsImmediateLatePartial() async {
+        let clock = ManualScheduler(), entered = Gate<Void>(), release = Gate<Void>(), providerReturned = Gate<Void>()
+        var late: ((LinkSummaryPrompt.Answer?) -> Void)?, events = 0
+        let task = Task {
+            await LinkSummaryService.ask(url: link, content: .init(bodyText: "Useful text"), searchQuery: nil, language: "English", partial: { _ in events += 1 }, respond: { _, partial in
+                late = partial
+                entered.resolve(())
+                await release.wait()
+                providerReturned.resolve(())
+                return answer
+            }, clock: clock)
+        }
+        await entered.wait()
+        task.cancel()
+        late?(answer) // Same actor turn, before an asynchronously scheduled cancellation cleanup.
+        expect(events == 0, "caller cancellation immediately rejects provider partials delivered from another task")
+        let result = await task.value
+        expect(result == nil && clock.pendingCount == 0, "caller cancellation terminates without waiting for an ignoring provider")
+        release.resolve(())
+        await providerReturned.wait()
+    }
+
+    @available(macOS 26.0, *)
+    private static func modelRetryErrorsAndDeadline() async {
+        let errors: [Error] = [CancellationError(), CocoaError(.coderReadCorrupt),
+                              NSError(domain: "exceededContextWindowSize", code: 1),
+                              LanguageModelSession.GenerationError.guardrailViolation(.init(debugDescription: "guardrail")),
+                              LanguageModelSession.GenerationError.decodingFailure(.init(debugDescription: "schema")),
+                              LanguageModelSession.GenerationError.unsupportedLanguageOrLocale(.init(debugDescription: "language")),
+                              LanguageModelSession.GenerationError.assetsUnavailable(.init(debugDescription: "unavailable")),
+                              LanguageModelSession.GenerationError.refusal(.init(transcriptEntries: []), .init(debugDescription: "refusal"))]
+        for error in errors {
+            var calls = 0, resets = 0
+            let clock = ManualScheduler()
+            let result = await LinkSummaryService.ask(url: link, content: .init(bodyText: "Useful text"), searchQuery: nil, language: "English", partial: { if $0 == nil { resets += 1 } }, respond: { _, _ in calls += 1; throw error }, clock: clock)
+            expect(result == nil && calls == 1 && resets == 0 && clock.pendingCount == 0, "non-overflow errors neither retry nor retain model work: \(type(of: error))")
+        }
+        var calls = 0, resets = 0
+        let twice = await LinkSummaryService.ask(url: link, content: .init(bodyText: "Useful text"), searchQuery: nil, language: "English", partial: { if $0 == nil { resets += 1 } }, respond: { _, _ in calls += 1; throw overflow() }, clock: ManualScheduler())
+        expect(twice == nil && calls == 2 && resets == 1, "a second typed overflow is terminal, with no third attempt")
+        calls = 0
+        let cancelled = await LinkSummaryService.ask(url: link, content: .init(), searchQuery: nil, language: "English", partial: { _ in preconditionFailure("cancelled overflow cannot reset") }, respond: { _, _ in
+            calls += 1
+            withUnsafeCurrentTask { $0?.cancel() }
+            throw overflow()
+        }, clock: ManualScheduler())
+        expect(cancelled == nil && calls == 1, "task cancellation during overflow delivery prevents retry")
+
+        let clock = ManualScheduler(), entered = Gate<Void>(), release = Gate<Void>(), providerReturned = Gate<Void>()
+        var late: ((LinkSummaryPrompt.Answer?) -> Void)?, events = 0, attempts = 0
+        let timeout = Task {
+            await LinkSummaryService.ask(url: link, content: .init(bodyText: "Useful text"), searchQuery: nil, language: "English", partial: { _ in events += 1 }, respond: { _, partial in
+                attempts += 1
+                if attempts == 1 { clock.advance(by: 10); throw overflow() }
+                late = partial
+                entered.resolve(())
+                await release.wait() // Deliberately ignores cancellation.
+                providerReturned.resolve(())
+                return answer
+            }, clock: clock)
+        }
+        await entered.wait()
+        clock.advance(by: 8)
+        let result = await timeout.value
+        expect(result == nil && attempts == 2 && clock.pendingCount == 0, "one 18-second phase deadline includes preflight/retry and does not wait for an ignoring provider")
+        let before = events
+        late?(answer)
+        expect(events == before, "terminal deadline invalidates provider partials delivered on another task")
+        release.resolve(())
+        await providerReturned.wait()
+    }
+
+    @available(macOS 26.0, *)
+    private static func retryResetIsVisibleAndOffOnCancels() async {
+        let clock = ManualScheduler(), entered = Gate<Void>(), release = Gate<Void>(), returned = Gate<Void>()
+        var enabled = true, calls = 0
+        var late: ((LinkSummaryPrompt.Answer?) -> Void)?
+        let service = LinkSummaryService(fetch: { .init(html: html, url: $0.fetchURL) }, image: { _ in nil }, answer: { url, content, query, language, partial in
+            let result = await LinkSummaryService.ask(url: url, content: content, searchQuery: query, language: language, partial: partial, respond: { _, update in
+                calls += 1
+                if calls == 1 { update(answer); throw overflow() }
+                late = update
+                entered.resolve(())
+                await release.wait()
+                return answer
+            }, clock: clock)
+            returned.resolve(())
+            return result
+        })
+        let controller = LinkSummaryPreviewController(clock: clock, service: service)
+        let parent = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 900, height: 600), styleMask: [.borderless], backing: .buffered, defer: false)
+        parent.isReleasedWhenClosed = false
+        parent.orderBack(nil)
+        defer { controller.stop(); parent.orderOut(nil) }
+        let window = UUID(), runtime = NSObject()
+        let origin = LinkSummaryContext(request: request(), page: URL(string: "https://news.ycombinator.com/"),
+                                        windowID: window, tabID: UUID(), runtimeID: ObjectIdentifier(runtime), navigationRevision: 1)
+        controller.linkHoverChanged(.init(context: origin, window: parent, theme: theme, shiftHeld: false, isCurrent: { enabled }, inspect: {
+            $0(.init(rect: NSRect(x: -9800, y: -9500, width: 100, height: 16), arcLink: true, link: link))
+        }))
+        clock.advance(by: 1)
+        await entered.wait()
+        let card = panel(parent)!
+        expect(!visibleText(card).contains("A current answer") && !visibleText(card).contains("No preview available"), "the fresh attempt visibly resets old rows to the existing loading card")
+        let sharing = Mirror(reflecting: card.cardView).children.first { $0.label == "shown" }!
+        expect(Mirror(reflecting: sharing.value).children.isEmpty, "a retry cannot share an abandoned partial result")
+        enabled = false
+        controller.validate(windowID: window)
+        enabled = true // Same-turn off/on must not revive the accepted retry/provider.
+        await returned.wait()
+        late?(answer)
+        expect(service.cached(request()) == nil && calls == 2, "off/on during retry cancels model work without caching or another automatic attempt")
+        release.resolve(())
+    }
+    #endif
 
     private static func failedAndBlockedLoadsFinish() async {
         let failure = LinkSummaryService(fetch: { _ in nil })
@@ -250,7 +489,7 @@ import FoundationModels
     private static func generationsRejectOldInspectionsAndResults() async {
         let clock = ManualScheduler()
         let started = Gate<Void>(), final = Gate<LinkSummaryPrompt.Answer?>()
-        var oldPartial: ((LinkSummaryPrompt.Answer) -> Void)?
+        var oldPartial: ((LinkSummaryPrompt.Answer?) -> Void)?
         let service = LinkSummaryService(fetch: { request in .init(html: html, url: request.fetchURL) }, image: { _ in nil }, answer: { _, _, _, _, partial in
             oldPartial = partial
             started.resolve(())
@@ -327,7 +566,7 @@ import FoundationModels
 
     private static func deadlineRejectsLateModelPartials() async {
         let clock = ManualScheduler(), started = Gate<Void>(), final = Gate<LinkSummaryPrompt.Answer?>(), returned = Gate<Void>()
-        var partial: ((LinkSummaryPrompt.Answer) -> Void)?
+        var partial: ((LinkSummaryPrompt.Answer?) -> Void)?
         let service = LinkSummaryService(fetch: { request in .init(html: html, url: request.fetchURL) }, image: { _ in nil }, answer: { _, _, _, _, update in
             partial = update
             started.resolve(())

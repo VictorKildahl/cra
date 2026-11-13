@@ -224,6 +224,55 @@ struct LinkSummaryTests {
         #expect(LinkSummaryPrompt.instructions == "As a concise and helpful summarizer, create a glanceable \"answer card\" containing the most important information from the webpage. Capture the tone, perspective and POV of the writer.")
     }
 
+    @Test func combinedPromptBoundsMetadataQueryAndUnicode() {
+        let huge = String(repeating: "界👩🏽‍💻e\u{301}", count: 2_000)
+        let prompt = LinkSummaryPrompt.prompt(url: "https://example.com/" + huge,
+                                             content: .init(title: huge, description: huge, bodyText: huge),
+                                             searchQuery: huge, language: huge)
+        #expect(prompt.utf8.count <= 1_536, "all actual transmitted fields and wrappers share one UTF-8 budget")
+        #expect(prompt.count <= 1_536)
+        #expect(prompt.contains("</webpage>"))
+        #expect(prompt.hasSuffix("using markdown formatting."))
+    }
+
+    @Test func fittedPayloadPreservesCharactersAndUsefulFieldShares() {
+        let text = String(repeating: "界👩🏽‍💻e\u{301}", count: 1_000)
+        let content = LinkSummaryContent.Extracted(title: text, description: text, bodyText: text)
+        let normal = LinkSummaryPrompt.fitted(url: "https://example.com/" + text, content: content,
+                                             searchQuery: "rare needle query", language: "Japanese")
+        let compact = LinkSummaryPrompt.fitted(url: "https://example.com/" + text, content: content,
+                                              searchQuery: "rare needle query", language: "Japanese", compact: true)
+        for (input, limit) in [(normal, 1_536), (compact, 768)] {
+            #expect(input.prompt.utf8.count <= limit && input.prompt.count <= limit)
+            #expect(!input.content.bodyText.isEmpty && !input.content.title!.isEmpty && !input.content.description!.isEmpty)
+            #expect(Array(text).starts(with: Array(input.content.bodyText)), "body clipping preserves whole graphemes")
+            #expect(Array(text).starts(with: Array(input.content.title!)))
+            #expect(input.prompt.components(separatedBy: "rare needle query").count == 2, "the current query is transmitted once")
+            #expect(input.language == "Japanese")
+        }
+        #expect(compact.prompt.utf8.count < normal.prompt.utf8.count)
+        let giantCharacter = "e" + String(repeating: "\u{301}", count: 2_000)
+        let giant = LinkSummaryPrompt.fitted(url: giantCharacter, content: .init(title: giantCharacter, bodyText: giantCharacter),
+                                            searchQuery: giantCharacter, language: giantCharacter)
+        #expect(giant.url.isEmpty && giant.content.title == "" && giant.content.bodyText.isEmpty && giant.searchQuery == nil)
+        #expect(giant.language == "English", "an unrepresentable bounded language uses the existing fallback")
+    }
+
+    @Test func combinedContextBudgetReservesOutputAndSafety() {
+        #expect(LinkSummaryPrompt.fitsContext(inputTokens: 2_816, contextSize: 4_096))
+        #expect(!LinkSummaryPrompt.fitsContext(inputTokens: 2_817, contextSize: 4_096))
+        #expect(!LinkSummaryPrompt.fitsContext(inputTokens: 1, contextSize: 1_279))
+        #expect(!LinkSummaryPrompt.fitsContext(inputTokens: -1, contextSize: 4_096))
+        let payload = LinkSummaryPrompt.fitted(url: String(repeating: "u", count: 10_000),
+                                              content: .init(title: String(repeating: "t", count: 10_000),
+                                                             description: String(repeating: "d", count: 10_000),
+                                                             bodyText: String(repeating: "b", count: 10_000)),
+                                              searchQuery: String(repeating: "q", count: 10_000), language: "English")
+        #expect(LinkSummaryPrompt.fitsFallback(payload, contextSize: 4_096))
+        #expect(!LinkSummaryPrompt.fitsFallback(payload, contextSize: 2_000), "earlier-OS fixed/schema allowance is included with the actual rendered payload")
+        #expect(LinkSummaryPrompt.responseTokenLimit == 1_024 && LinkSummaryPrompt.contextSafetyMargin == 256)
+    }
+
     @Test func answerBecomesACard() {
         let url = u("https://www.blender.org/download/releases/5-3/")
         let answer = LinkSummaryPrompt.Answer(blocked: false, quickSummary: " **Gaussian splats** arrive ", details: [

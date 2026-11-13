@@ -127,9 +127,8 @@ final class LinkSummaryPreviewController {
             case .summary:
                 await service.load(request) { [weak self, weak p] card in
                     guard !Task.isCancelled, let self, let p, self.accepts(token) else { return }
-                    guard card.result != nil || card.finished else { return }
                     if card.finished { self.deadline?.cancel(); self.deadline = nil }
-                    p.cardView.show(.summary(card), theme: theme)
+                    p.cardView.show(card.result == nil && !card.finished ? .loading : .summary(card), theme: theme)
                     p.fit()
                 }
             case .link:

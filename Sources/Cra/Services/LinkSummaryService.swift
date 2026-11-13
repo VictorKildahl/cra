@@ -29,16 +29,16 @@ final class LinkSummaryService {
 
     private let fetchPage: (LinkSummaryRequest) async -> LinkSummaryFetch.Page?
     private let fetchImage: (URL, Bool) async -> NSImage?
-    private let summarize: (URL, LinkSummaryContent.Extracted, String?, String, @escaping (LinkSummaryPrompt.Answer) -> Void) async -> LinkSummaryPrompt.Answer?
+    private let summarize: (URL, LinkSummaryContent.Extracted, String?, String, @escaping (LinkSummaryPrompt.Answer?) -> Void) async -> LinkSummaryPrompt.Answer?
 
     /// Concrete fetch/model boundaries also let the production lifecycle run on controlled input.
     init(fetch: ((LinkSummaryRequest) async -> LinkSummaryFetch.Page?)? = nil,
          image: ((URL) async -> NSImage?)? = nil,
-         answer: ((URL, LinkSummaryContent.Extracted, String?, String, @escaping (LinkSummaryPrompt.Answer) -> Void) async -> LinkSummaryPrompt.Answer?)? = nil) {
+         answer: ((URL, LinkSummaryContent.Extracted, String?, String, @escaping (LinkSummaryPrompt.Answer?) -> Void) async -> LinkSummaryPrompt.Answer?)? = nil) {
         let transport = LinkSummaryFetch()
         self.fetchPage = fetch ?? { request in await transport.load(request) }
         if let image { self.fetchImage = { url, _ in await image(url) } } else { self.fetchImage = Self.image }
-        self.summarize = answer ?? Self.ask
+        self.summarize = answer ?? { await Self.ask(url: $0, content: $1, searchQuery: $2, language: $3, partial: $4) }
     }
 
     var isAvailable: Bool { TidyTabsService.fakeModel || TidyTabsService.shared.modelAvailable }
@@ -86,8 +86,14 @@ final class LinkSummaryService {
         await withTaskCancellationHandler {
             defer { imageTask?.cancel() }
             let final = await summarize(page.url, content, request.searchQuery, request.language) { answer in
-                guard !Task.isCancelled, !box.card.finished, let partial = LinkSummaryPrompt.result(url: link, title: content.title, answer: answer) else { return }
-                box.card.result = partial
+                guard !Task.isCancelled, !box.card.finished else { return }
+                if let answer {
+                    guard let result = LinkSummaryPrompt.result(url: link, title: content.title, answer: answer) else { return }
+                    box.card.result = result
+                } else {
+                    // A fresh overflow attempt cannot retain the preceding attempt's rows.
+                    box.card.result = nil
+                }
                 update(box.card)
             }
             guard !Task.isCancelled else { return }
@@ -139,44 +145,187 @@ final class LinkSummaryService {
         LinkSummaryPrompt.responseLanguage(preferredLanguages: Locale.preferredLanguages)
     }
 
-    /// The model's answer; `partial` gets it as it streams. Nil when the model failed.
-    private static func ask(url: URL, content: LinkSummaryContent.Extracted, searchQuery: String?, language: String,
-                            partial: @escaping (LinkSummaryPrompt.Answer) -> Void) async -> LinkSummaryPrompt.Answer? {
+    /// One phase deadline covers fitting, preflight and both possible attempts (Cra, not Arc timing).
+    static let modelTimeout: TimeInterval = 18
+    typealias ModelResponse = (LinkSummaryPrompt.Input, @escaping (LinkSummaryPrompt.Answer?) -> Void) async throws -> LinkSummaryPrompt.Answer?
+
+    /// A concrete generation owns only its deadline, task and single terminal continuation.
+    @MainActor private final class ModelWork {
+        var ended = false
+        // onCancel may run outside MainActor; block callback admission before queued cleanup.
+        nonisolated private let cancellationLock = NSLock()
+        nonisolated(unsafe) private var cancelled = false
+        nonisolated var isCancelled: Bool {
+            cancellationLock.lock()
+            defer { cancellationLock.unlock() }
+            return cancelled
+        }
+        nonisolated func cancel() {
+            cancellationLock.lock()
+            cancelled = true
+            cancellationLock.unlock()
+            Task { @MainActor in self.finish(nil) }
+        }
+        var task: Task<Void, Never>?
+        var deadline: ScheduledWork?
+        var continuation: CheckedContinuation<LinkSummaryPrompt.Answer?, Never>?
+
+        func finish(_ result: LinkSummaryPrompt.Answer?) {
+            guard !ended else { return }
+            ended = true
+            deadline?.cancel()
+            deadline = nil
+            task?.cancel()
+            task = nil
+            let continuation = continuation
+            self.continuation = nil
+            continuation?.resume(returning: isCancelled ? nil : result)
+        }
+    }
+
+    /// Only the SDK's typed context overflow earns a fresh, smaller second attempt.
+    static func ask(url: URL, content: LinkSummaryContent.Extracted, searchQuery: String?, language: String,
+                    partial: @escaping (LinkSummaryPrompt.Answer?) -> Void,
+                    respond: @escaping ModelResponse = { try await LinkSummaryService.respond($0, partial: $1) },
+                    clock: Scheduler? = nil) async -> LinkSummaryPrompt.Answer? {
+        guard !Task.isCancelled else { return nil }
+        let work = ModelWork()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                work.continuation = continuation
+                guard !Task.isCancelled else { work.finish(nil); return }
+                work.deadline = (clock ?? LiveScheduler.shared).after(modelTimeout) { work.finish(nil) }
+                let inputs = [false, true].map {
+                    LinkSummaryPrompt.fitted(url: url.absoluteString, content: content, searchQuery: searchQuery, language: language, compact: $0)
+                }
+                work.task = Task { @MainActor in
+                    for attempt in inputs.indices {
+                        var accepting = true
+                        defer { accepting = false }
+                        do {
+                            try Task.checkCancellation()
+                            guard !work.ended, !work.isCancelled else { return }
+                            let answer = try await respond(inputs[attempt]) { answer in
+                                guard accepting, !work.ended, !work.isCancelled, !Task.isCancelled else { return }
+                                partial(answer)
+                            }
+                            try Task.checkCancellation()
+                            work.finish(answer)
+                            return
+                        } catch {
+                            guard !work.ended, !work.isCancelled, !Task.isCancelled else { work.finish(nil); return }
+                            if attempt == 0, isContextOverflow(error) {
+                                partial(nil)
+                                continue
+                            }
+                            CraLog.note("5-Second Previews: model generation failed")
+                            work.finish(nil)
+                            return
+                        }
+                    }
+                }
+            }
+        } onCancel: {
+            work.cancel()
+        }
+    }
+
+    private static func isContextOverflow(_ error: Error) -> Bool {
+        #if canImport(FoundationModels)
+        if #available(macOS 26.0, *), let error = error as? LanguageModelSession.GenerationError,
+           case .exceededContextWindowSize = error { return true }
+        #endif
+        return false
+    }
+
+    private static func respond(_ input: LinkSummaryPrompt.Input, partial: @escaping (LinkSummaryPrompt.Answer?) -> Void) async throws -> LinkSummaryPrompt.Answer? {
         if TidyTabsService.fakeModel {
-            let answer = LinkSummaryPrompt.fakeAnswer(content: content)
-            try? await Task.sleep(for: .seconds(0.6))
-            guard !Task.isCancelled else { return nil }
+            let answer = LinkSummaryPrompt.fakeAnswer(content: input.content)
+            try await Task.sleep(for: .seconds(0.6))
+            try Task.checkCancellation()
             partial(LinkSummaryPrompt.Answer(blocked: answer.blocked, userQuestion: answer.userQuestion, quickSummary: answer.quickSummary, details: Array(answer.details.prefix(1))))
-            try? await Task.sleep(for: .seconds(0.6))
-            guard !Task.isCancelled else { return nil }
+            try await Task.sleep(for: .seconds(0.6))
+            try Task.checkCancellation()
             return answer
         }
         #if canImport(FoundationModels)
-        if #available(macOS 26.0, *) {
-            let prompt = LinkSummaryPrompt.prompt(url: url.absoluteString, content: content, searchQuery: searchQuery, language: language)
-            do {
-                let session = LanguageModelSession(instructions: LinkSummaryPrompt.instructions)
-                let stream = session.streamResponse(to: prompt, generating: HoverCardAnswer.self, options: GenerationOptions(sampling: .greedy))
-                var last: LinkSummaryPrompt.Answer?
-                for try await snapshot in stream {
-                    if Task.isCancelled { return nil }
-                    let answer = LinkSummaryPrompt.Answer(snapshot.content)
-                    last = answer
-                    partial(answer)
-                }
-                return last
-            } catch {
-                // A refusal, or a page too long for the context: the card says there's no preview.
-                CraLog.note("5-Second Previews: the model failed: \(error)")
-                return nil
-            }
-        }
+        if #available(macOS 26.0, *) { return try await LinkSummaryModel.respond(input, partial: partial) }
         #endif
-        return nil
+        throw CocoaError(.featureUnsupported)
     }
+
 }
 
 #if canImport(FoundationModels)
+/// A fresh SDK session per attempt. The injectable count/stream boundaries use this same adapter.
+@MainActor @available(macOS 26.0, *)
+enum LinkSummaryModel {
+    enum TokenInput {
+        case instructions(String)
+        case prompt(String)
+        case schema(GenerationSchema)
+        case transcript([Transcript.Entry])
+    }
+    typealias Counter = (TokenInput) async throws -> Int
+    typealias Stream = (LanguageModelSession, String, Int, @escaping (LinkSummaryPrompt.Answer?) -> Void) async throws -> LinkSummaryPrompt.Answer?
+
+    static func respond(_ input: LinkSummaryPrompt.Input, partial: @escaping (LinkSummaryPrompt.Answer?) -> Void,
+                        count: Counter? = nil, contextSize: Int? = nil, stream: Stream? = nil) async throws -> LinkSummaryPrompt.Answer? {
+        try Task.checkCancellation()
+        let model = SystemLanguageModel.default
+        let session = LanguageModelSession(model: model, instructions: LinkSummaryPrompt.instructions)
+        let prompt = input.prompt
+        let size = contextSize ?? model.contextSize
+        if #available(macOS 26.4, *) {
+            // The fresh transcript already contains instructions. Count those through Instructions
+            // once, then any actual non-instruction entries; never invent previous hover history.
+            let history = session.transcript.filter { if case .instructions = $0 { return false }; return true }
+            let count = count ?? tokenCount
+            var tokens = 0
+            for component in [TokenInput.instructions(LinkSummaryPrompt.instructions), .prompt(prompt),
+                              .schema(HoverCardAnswer.generationSchema), .transcript(history)] {
+                tokens += try await count(component)
+                try Task.checkCancellation()
+            }
+            guard LinkSummaryPrompt.fitsContext(inputTokens: tokens, contextSize: size) else { throw overflow() }
+        } else {
+            // Earlier systems have no token API. This is an explicitly conservative byte estimate.
+            guard LinkSummaryPrompt.fitsFallback(input, contextSize: size) else { throw overflow() }
+        }
+        try Task.checkCancellation()
+        return try await (stream ?? generate)(session, prompt, LinkSummaryPrompt.responseTokenLimit, partial)
+    }
+
+    @available(macOS 26.4, *)
+    private static func tokenCount(_ input: TokenInput) async throws -> Int {
+        let model = SystemLanguageModel.default
+        switch input {
+        case .instructions(let instructions): return try await model.tokenCount(for: Instructions(instructions))
+        case .prompt(let prompt): return try await model.tokenCount(for: prompt)
+        case .schema(let schema): return try await model.tokenCount(for: schema)
+        case .transcript(let entries): return try await model.tokenCount(for: entries)
+        }
+    }
+
+    private static func overflow() -> LanguageModelSession.GenerationError {
+        .exceededContextWindowSize(.init(debugDescription: "Preview input exceeds local context budget"))
+    }
+
+    private static func generate(session: LanguageModelSession, prompt: String, limit: Int,
+                                 partial: @escaping (LinkSummaryPrompt.Answer?) -> Void) async throws -> LinkSummaryPrompt.Answer? {
+        let stream = session.streamResponse(to: prompt, generating: HoverCardAnswer.self,
+                                            options: GenerationOptions(sampling: .greedy, maximumResponseTokens: limit))
+        var last: LinkSummaryPrompt.Answer?
+        for try await snapshot in stream {
+            try Task.checkCancellation()
+            let answer = LinkSummaryPrompt.Answer(snapshot.content)
+            last = answer
+            partial(answer)
+        }
+        return last
+    }
+}
+
 /// Arc's ordered fields, with one static optional focus instead of a query-specific schema.
 /// Queryless requests ask for nil focus; it guides later fields and is never displayed.
 @available(macOS 26.0, *)
