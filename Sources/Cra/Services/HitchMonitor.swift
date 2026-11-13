@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import QuartzCore
 
 /// Testing aids. With CRA_HITCH_LOG=<path> set, every main-thread stall of 8 ms or
@@ -18,6 +18,7 @@ enum HitchMonitor {
         if background {
             activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical, .idleSystemSleepDisabled],
                                                              reason: "Background test instance")
+            reportWindowsVisible()
         }
         guard let path = ProcessInfo.processInfo.environment["CRA_HITCH_LOG"], !path.isEmpty else { return }
         FileManager.default.createFile(atPath: path, contents: nil)
@@ -37,6 +38,24 @@ enum HitchMonitor {
         thread.name = "HitchMonitor"
         thread.qualityOfService = .userInteractive
         thread.start()
+    }
+
+    private typealias OcclusionIMP = @convention(c) (AnyObject, Selector) -> UInt
+
+    /// A test instance sits behind the user's windows, or on a display showing another Space, where
+    /// macOS reports it occluded and Chromium stops drawing its pages: a switched-to tab never got a
+    /// frame, and measurements saw a hidden browser. Every window on screen reports itself visible instead.
+    private static func reportWindowsVisible() {
+        let sel = #selector(getter: NSWindow.occlusionState)
+        guard let method = class_getInstanceMethod(NSWindow.self, sel) else { return }
+        let original = unsafeBitCast(method_getImplementation(method), to: OcclusionIMP.self)
+        let block: @convention(block) (AnyObject) -> UInt = { obj in
+            let state = original(obj, sel)
+            // Only windows that are ordered in: a background tab's page window stays hidden.
+            guard let w = obj as? NSWindow, w.isVisible else { return state }
+            return state | NSWindow.OcclusionState.visible.rawValue
+        }
+        method_setImplementation(method, imp_implementationWithBlock(block))
     }
 
     /// Also a breadcrumb for the performance recorder: what Cra did before a stall.

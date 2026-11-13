@@ -29,7 +29,7 @@ final class TidyTabsService {
         /// What Settings ▸ Max says under its features.
         var explanation: String {
             switch self {
-            case .available: return "Max features run on Apple Intelligence on this Mac. Nothing is sent anywhere."
+            case .available: return "Max features run on Apple Intelligence on this Mac, so the model sends nothing anywhere."
             case .off: return "Max features run on Apple Intelligence, which is off on this Mac."
             case .preparing: return "Apple Intelligence is still downloading. Max features turn on once it’s ready."
             case .ineligible: return "Max features run on Apple Intelligence, which needs a Mac with Apple silicon."

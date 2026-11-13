@@ -1,4 +1,4 @@
-# Arc's Previews beside a Gmail or Google Calendar favorite (docs/arc-parity.md "Previews, measured"):
+# Arc's Previews beside a Gmail, Google Calendar or recent-pages favorite (docs/arc-parity.md "Previews, measured"):
 # Gmail's card lists the unread mail, 84 pt rows to at most 270 pt with a ＋; with none it is Arc's
 # "exhale" card. Calendar's card is today's 255 pt timeline with the gear and ＋.
 budget rss=700 stalls50=10
@@ -12,5 +12,33 @@ cra://debug?gmailPreview=0
 expect-log preview card shown: 240x6[0-9]$
 cra://debug?previewDismiss=1
 cra://debug?calendarPreview=1
+expect-log preview card shown: 238x255$
+cra://debug?previewDismiss=1
+# Recent pages (#376): 36 pt rows to at most 270 pt with room for the ＋; none is Arc's line.
+cra://debug?recentPages=linear&pages=2
+expect-log preview card shown: 238x115$
+cra://debug?previewDismiss=1
+cra://debug?recentPages=figma&pages=12
+expect-log preview card shown: 238x270$
+cra://debug?previewDismiss=1
+cra://debug?recentPages=notion&pages=0
+expect-log preview card shown: 240x[0-9]+$
+cra://debug?previewDismiss=1
+# Outlook (#376), read with the page's own sign-in: the mail card is Gmail's (exhale card with
+# nothing unread), the calendar card Google's, and a signed-out account asks to sign in.
+cra://debug?outlookPreview=mail&unread=3
+expect-log preview card shown: 238x254$
+cra://debug?previewDismiss=1
+cra://debug?outlookPreview=mail&unread=0
+expect-log preview card shown: 240x6[0-9]$
+cra://debug?previewDismiss=1
+cra://debug?outlookPreview=calendar
+expect-log preview card shown: 238x255$
+cra://debug?previewDismiss=1
+cra://debug?outlookPreview=signedOut
+expect-log preview card shown: 238x[0-9]+$
+cra://debug?previewDismiss=1
+# Notion Calendar shows the profile's Google calendar, as in Arc.
+cra://debug?notionCalendarPreview=1
 expect-log preview card shown: 238x255$
 cra://debug?previewDismiss=1

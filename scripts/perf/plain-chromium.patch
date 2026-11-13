@@ -1,0 +1,127 @@
+diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
+--- a/chrome/browser/ui/browser_command_controller.cc
++++ b/chrome/browser/ui/browser_command_controller.cc
+@@ -1730,14 +1730,20 @@
+ 
+ bool BrowserCommandController::IsShowingMainUI() {
+   return WindowFeatureController::From(browser_)->SupportsWindowFeature(
+-             WindowFeatureController::WindowFeature::kFeatureTabStrip) ||
+-         cef::BrowserForBWI(browser_)->toolbar_overridden();
++             WindowFeatureController::WindowFeature::kFeatureTabStrip)
++#if BUILDFLAG(ENABLE_CEF)
++         || cef::BrowserForBWI(browser_)->toolbar_overridden()
++#endif
++      ;
+ }
+ 
+ bool BrowserCommandController::IsShowingLocationBar() {
+   return WindowFeatureController::From(browser_)->SupportsWindowFeature(
+-             WindowFeatureController::WindowFeature::kFeatureLocationBar) ||
+-         cef::BrowserForBWI(browser_)->toolbar_overridden();
++             WindowFeatureController::WindowFeature::kFeatureLocationBar)
++#if BUILDFLAG(ENABLE_CEF)
++         || cef::BrowserForBWI(browser_)->toolbar_overridden()
++#endif
++      ;
+ }
+ 
+ void BrowserCommandController::InitCommandState() {
+diff --git a/chrome/browser/ui/browser_window/internal/browser_window_features.cc b/chrome/browser/ui/browser_window/internal/browser_window_features.cc
+--- a/chrome/browser/ui/browser_window/internal/browser_window_features.cc
++++ b/chrome/browser/ui/browser_window/internal/browser_window_features.cc
+@@ -250,11 +250,13 @@
+ // static
+ bool BrowserWindowFeatures::IsNormalBrowser(
+     const BrowserWindowInterface* browser) {
++#if BUILDFLAG(ENABLE_CEF)
+   // CEF normal browsers have TYPE_POPUP.
+   if (browser->GetType() == BrowserWindowInterface::Type::TYPE_POPUP &&
+       browser->cef_delegate()) {
+     return true;
+   }
++#endif
+   return browser->GetType() == BrowserWindowInterface::Type::TYPE_NORMAL;
+ }
+ 
+diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -965,7 +965,9 @@
+   if (!toolbar_) {
+     toolbar_ = new ToolbarView(browser_.get(), this, std::nullopt);
+   } else {
++#if BUILDFLAG(ENABLE_CEF)
+     cef::BrowserForBWI(browser_.get())->set_toolbar_overridden(true);
++#endif
+     // Update state that depends on the above flag.
+     chrome::BrowserCommandController::From(browser_.get())
+         ->FullscreenStateChanged();
+@@ -4995,8 +4997,11 @@
+ 
+   // TODO(jamescook): Why was this in the middle of layout code?
+   toolbar_->location_bar()->UpdateFocusBehavior(
+-      IsToolbarVisible() ||
+-      cef::BrowserForBWI(browser_.get())->toolbar_overridden());
++      IsToolbarVisible()
++#if BUILDFLAG(ENABLE_CEF)
++      || cef::BrowserForBWI(browser_.get())->toolbar_overridden()
++#endif
++  );
+   GetFrameView()->UpdateMinimumSize();
+ 
+   if (omnibox::IsWebUIOmniboxInBrowserViewEnabled()) {
+@@ -5284,6 +5289,7 @@
+   fallback_popup_anchor_ = std::make_unique<views::ViewSubregionAnchor>(
+       kFallbackPopupAnchorElementId, *this);
+ 
++#if BUILDFLAG(ENABLE_CEF)
+   if (browser_->GetWindow()) {
+     // Initialize the browser features that rely on the browser window now that
+     // it is initialized. This will instead be called from the Browser
+@@ -5293,6 +5299,7 @@
+     browser_->GetFeatures().InitPostWindowConstruction(
+         cef::BrowserForBWI(browser_.get()));
+   }
++#endif
+ 
+   initialized_ = true;
+ }
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -369,8 +369,11 @@
+     location_bar_view = std::make_unique<LocationBarView>(
+         browser_, browser_->GetProfile(),
+         chrome::BrowserCommandController::From(browser_), this,
+-        display_mode_ != DisplayMode::kNormal &&
+-            !cef::BrowserForBWI(browser_)->toolbar_overridden());
++        display_mode_ != DisplayMode::kNormal
++#if BUILDFLAG(ENABLE_CEF)
++            && !cef::BrowserForBWI(browser_)->toolbar_overridden()
++#endif
++    );
+   }
+ 
+   // Make sure the toolbar shows by default.
+diff --git a/chrome/browser/devtools/devtools_window.cc b/chrome/browser/devtools/devtools_window.cc
+--- a/chrome/browser/devtools/devtools_window.cc
++++ b/chrome/browser/devtools/devtools_window.cc
+@@ -2111,7 +2111,7 @@
+     return;
+   }
+   auto* inspected_web_contents = GetInspectedWebContents();
+-  BrowserWindowInterface* opener = nullptr;
++  [[maybe_unused]] BrowserWindowInterface* opener = nullptr;
+   if (inspected_web_contents) {
+     opener = GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(
+         inspected_web_contents);
+@@ -2127,7 +2127,9 @@
+ 
+   if (!browser_) {
+     auto create_params = BrowserWindowCreateParams::CreateForDevTools(profile_);
++#if BUILDFLAG(ENABLE_CEF)
+     create_params.opener = opener;
++#endif
+ 
+     browser_ = CreateBrowserWindow(std::move(create_params));
+     browser_->GetTabStripModel()->AddWebContents(

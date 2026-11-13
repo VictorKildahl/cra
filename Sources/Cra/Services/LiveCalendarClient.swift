@@ -110,13 +110,18 @@ final class LiveCalendarClient {
 }
 
 /// A page no one sees: loads `url` in the profile, runs `script` (a promise of a string) once the
-/// page committed, answers once, and is closed by its owner.
+/// page committed, answers once, and is closed by its owner. Outlook's reader watches instead:
+/// the page's own requests go to `watch` until it returns the script to run (it needs the
+/// sign-in they carry), and a landing on a sign-in page answers `{"status":401}`.
 @MainActor
-private final class HiddenPage: NSObject, @preconcurrency CraBrowserDelegate {
+final class HiddenPage: NSObject, @preconcurrency CraBrowserDelegate {
     private var browser: CraBrowser?
-    private let script: String
+    private var script: String?
     private var answer: ((String?) -> Void)?
     private var poll: Timer?
+    private var watch: ((String, [String: String]) -> String?)?
+    private var isSignIn: (String) -> Bool = { _ in false }
+    private var requestURLs: [String: String] = [:]
 
     init(url: String, profilePath: String?, script: String, answer: @escaping (String?) -> Void) {
         self.script = script
@@ -139,7 +144,63 @@ private final class HiddenPage: NSObject, @preconcurrency CraBrowserDelegate {
         poll = t
     }
 
+    init(url: String, profilePath: String?, watch: @escaping (String, [String: String]) -> String?, isSignIn: @escaping (String) -> Bool,
+         timeout: TimeInterval = 30, answer: @escaping (String?) -> Void) {
+        self.watch = watch
+        self.isSignIn = isSignIn
+        self.answer = answer
+        super.init()
+        browser = CraBrowser(frame: NSRect(x: 0, y: 0, width: 800, height: 600), url: "about:blank", delegate: self, incognito: false, profilePath: profilePath)
+        if let w = browser?.hostWindow { hide(w) }
+        let started = Date()
+        var loading = false
+        let t = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, let b = self.browser else { return }
+                if Date().timeIntervalSince(started) > timeout { self.reply(nil); return }
+                guard !loading, b.isCreated else { return }
+                loading = true
+                b.devToolsEventHandler = { [weak self] method, params in
+                    MainActor.assumeIsolated { self?.networkEvent(method, params) }
+                }
+                b.sendDevToolsMethod("Network.enable", params: "{}") { [weak b] _, _ in
+                    DispatchQueue.main.async { b?.loadURL(url) }
+                }
+            }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        poll = t
+    }
+
+    /// A request the page made: its address (from requestWillBeSent) and its headers (from
+    /// either event; the extra-info one has the ones Chromium adds).
+    private func networkEvent(_ method: String, _ params: String) {
+        guard let watch, script == nil, let b = browser,
+              let p = (try? JSONSerialization.jsonObject(with: Data(params.utf8))) as? [String: Any], let id = p["requestId"] as? String else { return }
+        var url: String?
+        var headers: [String: String] = [:]
+        switch method {
+        case "Network.requestWillBeSent":
+            let request = p["request"] as? [String: Any]
+            url = request?["url"] as? String
+            headers = request?["headers"] as? [String: String] ?? [:]
+            if let url { requestURLs[id] = url }
+        case "Network.requestWillBeSentExtraInfo":
+            url = requestURLs[id]
+            headers = p["headers"] as? [String: String] ?? [:]
+        default: return
+        }
+        guard let url, let s = watch(url, headers) else { return }
+        script = s
+        poll?.invalidate()
+        poll = nil
+        b.devToolsEventHandler = nil
+        b.sendDevToolsMethod("Network.disable", params: "{}") { _, _ in }
+        run(in: b)
+    }
+
     private func run(in b: CraBrowser) {
+        guard let script else { return }
         let body = try? JSONSerialization.data(withJSONObject: ["expression": script, "awaitPromise": true, "returnByValue": true])
         b.sendDevToolsMethod("Runtime.evaluate", params: body.flatMap { String(data: $0, encoding: .utf8) } ?? "{}") { [weak self] result, _ in
             let value = result.flatMap { r -> String? in
@@ -162,6 +223,7 @@ private final class HiddenPage: NSObject, @preconcurrency CraBrowserDelegate {
         poll?.invalidate()
         poll = nil
         answer = nil
+        browser?.devToolsEventHandler = nil
         if let w = browser?.hostWindow { w.orderOut(nil) }
         browser?.close()
         browser = nil
@@ -174,7 +236,9 @@ private final class HiddenPage: NSObject, @preconcurrency CraBrowserDelegate {
     }
 
     func browser(_ browser: CraBrowser, didChangeTitle title: String) {}
-    func browser(_ browser: CraBrowser, didChangeURL url: String) {}
+    func browser(_ browser: CraBrowser, didChangeURL url: String) {
+        if watch != nil, script == nil, isSignIn(url) { reply(#"{"status":401}"#) }
+    }
     func browser(_ browser: CraBrowser, didChangeLoading loading: Bool, canGoBack: Bool, canGoForward: Bool) {}
     func browser(_ browser: CraBrowser, didChangeProgress progress: Double) {}
     func browser(_ browser: CraBrowser, didFinishLoadingURL url: String, title: String, statusCode: Int) {}

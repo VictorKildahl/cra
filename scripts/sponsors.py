@@ -10,8 +10,8 @@ this report. A tier includes the perks of the cheaper tiers of its kind (monthly
 one-time), and a custom amount gets the highest tier at or below it, as GitHub does.
 
   - "release notes": one-time sponsors are named in the next release notes; monthly
-    sponsors once a year (due when no release in the past 365 days thanks them as a
-    sponsor in cra-website's releases.ts, CRA_WEBSITE to point elsewhere).
+    sponsors once a year (due when no release in the past 365 days lists them in its
+    `sponsors` field in cra-website's releases.ts, CRA_WEBSITE to point elsewhere).
   - "ask Backers first": active monthly sponsors to ask about the next big feature.
   - "logo": companies whose logo belongs on crabrowser.app/support.
 
@@ -84,9 +84,9 @@ def thanked_in_past_year(names):
         date = re.search(r'date: "([\d-]+)"', entry)
         if not date or date.group(1) < cutoff:
             continue
-        for sentence in re.split(r"(?<=[.!])\s", entry):
-            if "sponsor" in sentence.lower() and any(n and n in sentence for n in names):
-                return True
+        field = re.search(r"sponsors: \[(.*?)\]", entry, re.S)
+        if field and any(n and f'login: "{n}"' in field.group(1) for n in names):
+            return True
     return False
 
 

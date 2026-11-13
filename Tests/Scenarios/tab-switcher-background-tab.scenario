@@ -1,0 +1,20 @@
+# ⌃Tab after a ⌘-click, as in Arc (PR #394): the tab a link opened in the background is next,
+# and a second tap comes back. tab-a and tab-b open in front, tab-c behind tab-b. Before the fix
+# tab-c had no last-active time and ⌃Tab skipped it, going back to tab-a. recentTab from the
+# command file is a tap (no held ⌃), so each one switches at once.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://open?url=${PAGE}?n=tab-a
+wait 1
+cra://open?url=${PAGE}?n=tab-b
+wait 1
+cra://open?url=${PAGE}?n=tab-c&background=1
+wait 2
+cra://action/recentTab
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'after-first:'+location.search"}
+expect-log Cra cdp Runtime.evaluate .*"value":"after-first:\?n=tab-c"
+cra://action/recentTab
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'after-second:'+location.search"}
+expect-log Cra cdp Runtime.evaluate .*"value":"after-second:\?n=tab-b"

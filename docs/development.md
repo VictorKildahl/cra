@@ -130,6 +130,8 @@ to Markdown or `docs/` alone runs nothing.
   the footer colour.
 - `scripts/test-link-summary-panel.sh`: 5-Second Previews' card window (`LinkSummaryPanel`) off screen with
   a stub service: the loading card, the answer growing in under the link, the small card above its link, closing.
+- `scripts/test-emoji-label.sh`: a space's emoji label in the dock and the space header, drawn
+  clipped to its frame as macOS 27 draws it: the emoji's whole picture shows, in the same place (#399).
 - `scripts/test-music-notes.sh`: the production note sprites over fixed white and black backgrounds
   at 1x and 2x, checking light-theme contrast and the dark-theme tint without CEF or a visible window.
 - `scripts/test-live-folder-plugins.sh`: the real `CraPluginHost` (sandboxed JavaScriptCore) and
@@ -156,6 +158,9 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-perf.sh`: the performance recorder on a real main run loop: injected stalls,
   hang files with a `sample` stack, the session marker, ownership, the recording switch
   ([performance.md](performance.md)).
+- `scripts/perf/rounds.sh` + `scripts/perf/report.py`: memory, idle CPU and wakeups, new tab and
+  tab switch timings of builds side by side, interleaved, in background copies; not part of
+  `scripts/test.sh` (about 7 minutes a build a round). How to read them: [speed.md](speed.md).
 - `python3 Tests/test_cef_download.py`: offline checks for direct downloads, API fallback,
   checksum and metadata failures, and custom URLs; included in `scripts/test.sh`.
 - `scripts/lint.py`: Cra's own rules (testing.md), checked by `scripts/test.sh`.
@@ -178,7 +183,7 @@ sleep does: notes Chromium's audio service), `wake=1` (what waking the Mac does:
 re-read their tabs' sound, a tab-sleeping pass runs and cra.log says whether the audio service lived), `stall=<ms>` (blocks the main
 thread), `perfReport=<path>` (the recorder's perf.json now), `systemAppearance=light|dark|system`
 (the appearance Auto space themes follow, without changing the Mac's), `themeEditor=1` (Edit
-Theme Color… for the focused space), `sidebarShown=<label>` (whether the window shows its sidebar,
+Theme Color… for the focused space), `toolbar=out|in|sample|at:<x>,<y>|<label>` (the floating toolbar of Settings ▸ Tabs ▸ "Hide the toolbar until you need it": put it out or in, look at the pointer once, or say what a pointer at that point from the window's top left is to it, then log `toolbar <command>: floats=… out=… inset=… page=…`), `sidebarShown=<label>` (whether the window shows its sidebar,
 and the View menu's Hide/Show Sidebar row: its title and the key it answers to, an App Shortcut's
 when one names it), `relaunch=1`, `quit=1`, and `nowPlaying=state|toggle|next|previous|pip|dismiss` (the sidebar player's
 newest card, then a `Cra nowPlaying[<label>] <host> playing=… prev=… next=… video=… pip=…` line per card
@@ -238,6 +243,18 @@ download's file name by hand; `CRA_TIDY_FAKE_MODEL=off` (or `preparing`, `inelig
 without Apple Intelligence would. `cra://debug?tidy=1` runs Tidy on the window's space without
 hovering the divider, `cra://debug?undoTidy=1` is ⌘Z's undo and `cra://debug?settingsPane=max`
 opens Settings on a pane.
+
+Opening ⌘T with Instant Links on prewarms a model session, kept until the next Instant Links run. Instant Links (#407) uses the same test model: its plan is `InstantLinks.plainPlan`, the phrase as
+one search, after the 1.6 s pause. `CRA_INSTANT_LINKS_SEARCH=<url with {searchTerms}>` loads that page in the hidden
+search page and reads it with Google's script, as if it were Google (`Tests/Fixtures/Pages/instant-links.html` is
+shaped like Google's results). `CRA_INSTANT_LINKS_FAIL=1` makes the model and the fallback both give no plan,
+so the row shows its error, and `CRA_INSTANT_LINKS_MODEL_FAIL=1` makes the test model throw, so the fallback runs.
+While a scenario runs, `cra://debug?instantLinksFail=none|plan|model` changes both,
+`cra://debug?instantLinksSetting=on|off` is Settings ▸ Max ▸ Instant Links and `cra://debug?instantLinksDismiss=1` is
+the error row's ✕. `cra://debug?instantLinks=<label>` logs the row and the last run: rows, status, current (the
+selected-row fill), plan (format/searches/counts), opened, fellback, and Today's and Pinned's items in order (a page's
+`result=` number, `+` between a split's panes, `"title"{…}` for a folder, `*` on the selected tab).
+`cra://debug?key=` now sends the key to the ⌘T bar's panel while it is open, so a scenario can press Shift-Return.
 
 `cra://debug?dragEnd=<text>` ends a drag of the window's tab whose URL holds the text, let go
 with nothing taking it, the way a drag out of the sidebar ends: outside every Cra window it opens

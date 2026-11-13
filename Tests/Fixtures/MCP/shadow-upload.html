@@ -1,0 +1,16 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Cra · Uploads in components</title>
+<style>body{font:14px -apple-system,sans-serif;max-width:900px;margin:32px auto;padding:0 24px;color:#202321;background:#f5f5ef}section{border:1px solid #d9ddd0;border-radius:14px;background:#fff;padding:16px;margin:12px 0}output{display:block;font:12px ui-monospace,monospace;margin-top:8px}iframe{border:1px solid #d9ddd0;border-radius:10px;width:100%;height:150px}</style>
+<!-- Uploaders shaped like reddit.com's (12 Nov 2026): the file input is hidden inside open shadow
+     roots, and the page shows a button, label or drop zone instead. Each reports the files and
+     whether its change event was trusted into a light-DOM output. -->
+<h1>Uploads inside components</h1>
+<section><h2>Avatar</h2><avatar-upload id="avatar"></avatar-upload><output id="avatar-result">No file</output></section>
+<section><h2>Frame</h2><iframe id="frame" src="/upload-frame" title="Upload frame"></iframe></section>
+<section><h2>Banner</h2><banner-upload id="banner"></banner-upload><output id="banner-result">No file</output></section>
+<section><h2>Slotted</h2><drop-zone id="slotted" data-result="slotted-result"><button id="slotted-button" type="button">Browse slotted files</button></drop-zone><output id="slotted-result">No file</output></section>
+<section><h2>Two inputs</h2><pair-upload id="pair"></pair-upload></section>
+<section><h2>Light label</h2><label id="light-label" for="light-file">Pick a light file</label><input id="light-file" type="file" hidden><output id="light-result">No file</output></section>
+<section><h2>Note</h2><label for="note">A note</label><input id="note" type="text"><p id="plain-text">Plain text that is not an uploader</p></section>
+<script src="/upload-components.js"></script>
+<script>report('light-result', document.querySelector('#light-file'));</script>
+</html>
