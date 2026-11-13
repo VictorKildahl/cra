@@ -13,7 +13,7 @@ ended). "Measured" means the numbers come from Arc Search footage, not from a de
 Work was paused mid-way. The branch is `ios-app`, in the worktree `../cra-ios`; nothing is
 pushed. Pick up here.
 
-**State of the tests.** 13 November, morning: every UI test passed (50, run in two halves);
+**State of the tests.** 13 November, morning: every UI test passed (41, run in two halves);
 under the Mac's load at the time (security agents at a load average of several hundred) some were
 killed by the system ("signal term/kill") and passed on a second or third run, never failing an
 assertion. The CraCore tests (`--filter Mobile`) pass. Run the suite in two halves; do not edit
