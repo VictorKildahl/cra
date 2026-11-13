@@ -58,7 +58,10 @@ class Downloads : public ProfileManagerObserver,
 
   // ProfileManagerObserver:
   void OnProfileAdded(Profile* profile) override { Watch(profile); }
-  void OnProfileManagerDestroying() override { profiles_.RemoveAllObservations(); }
+  void OnProfileManagerDestroying() override {
+    profiles_.RemoveAllObservations();
+    g_browser_process->profile_manager()->RemoveObserver(this);
+  }
 
   // ProfileObserver:
   void OnOffTheRecordProfileCreated(Profile* off_the_record) override { WatchManager(off_the_record); }

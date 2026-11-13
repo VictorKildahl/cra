@@ -23,6 +23,7 @@ class CraParts : public ChromeBrowserMainExtraParts {
     cra::RunReadyBlocks();
     spike_->PostBrowserStart();
   }
+  void PostMainMessageLoopRun() override { cra::StopBridge(); }
 
  private:
   std::unique_ptr<ChromeBrowserMainExtraParts> spike_ = cra::MakeSpikeParts();

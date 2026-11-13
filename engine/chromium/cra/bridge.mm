@@ -201,6 +201,13 @@ NSString* ProfileFolder(Profile* profile) {
   return profile->IsOffTheRecord() ? nil : base::SysUTF8ToNSString(profile->GetBaseName().AsUTF8Unsafe());
 }
 
+// The address each new page was opened for (DidOpenRequestedURL on its opener), until Cra adopts it: a page's
+// own pop-up has no visible address before its navigation starts, and Cra matches it to a blocked one (#357).
+std::map<content::WebContents*, GURL>& OpenedURLs() {
+  static auto* urls = new std::map<content::WebContents*, GURL>();
+  return *urls;
+}
+
 // Every CraBrowser that has a page, by its page.
 std::map<content::WebContents*, CraBrowser* __weak>& PagesByContents() {
   static auto* pages = new std::map<content::WebContents*, CraBrowser* __weak>();
@@ -305,6 +312,18 @@ class PageObserver : public content::WebContentsObserver,
   void OnFindTabHelperDestroyed(find_in_page::FindTabHelper* helper) override { find_ = nullptr; }
 
   void DidChangeThemeColor() override { [owner_ pageThemeColor]; }
+  void DidOpenRequestedURL(content::WebContents* new_contents,
+                           content::RenderFrameHost* source,
+                           const GURL& url,
+                           const content::Referrer& referrer,
+                           WindowOpenDisposition disposition,
+                           ui::PageTransition transition,
+                           bool started_from_context_menu,
+                           bool renderer_initiated) override {
+    if (new_contents != web_contents()) {
+      OpenedURLs()[new_contents] = url;
+    }
+  }
   void MediaPictureInPictureChanged(bool active) override { [owner_ pagePictureInPicture:active]; }
 
   // "Aw, Snap!" and "Page Unresponsive", for Cra's performance recorder (GitHub #91).
@@ -491,9 +510,14 @@ class PageHost : public TabStripModelObserver {
       return;
     }
     KeepPlaceholderActive();
-    // A page's own pop-up has no visible address yet (renderer-initiated): the one it is navigating to.
-    content::NavigationEntry* pending = page->GetController().GetPendingEntry();
-    GURL target = pending ? pending->GetURL() : page->GetVisibleURL();
+    // A page's own pop-up has no visible address yet (renderer-initiated): the one it was opened for.
+    GURL target = page->GetVisibleURL();
+    if (auto opened = OpenedURLs().find(page.get()); opened != OpenedURLs().end()) {
+      target = opened->second;
+      OpenedURLs().erase(opened);
+    } else if (content::NavigationEntry* pending = page->GetController().GetPendingEntry()) {
+      target = pending->GetURL();
+    }
     NSString* url = NS(target.spec());
     CraBrowser* from = opener ? BrowserFor(opener.get()) : nil;
     CraBrowser* host = nil;
@@ -1215,6 +1239,11 @@ bool CDPPipeSetUp() {
 }  // namespace
 
 namespace cra {
+
+void StopBridge() {
+  g_quitting = true;
+  MediaCaptureDevicesDispatcher::GetInstance()->GetMediaStreamCaptureIndicator()->RemoveObserver(&Captures());
+}
 
 void RunReadyBlocks() {
   g_page_activation = &PageActivation;

@@ -135,6 +135,7 @@ class Profiles : public ProfileManagerObserver, public ProfileObserver {
   void OnProfileAdded(Profile* profile) override { Added(profile, /*notify=*/true); }
   void OnProfileManagerDestroying() override {
     observations_.RemoveAllObservations();
+    g_browser_process->profile_manager()->RemoveObserver(this);
     Stop();
   }
 
