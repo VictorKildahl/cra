@@ -16,6 +16,8 @@ final class SettingsModel: ObservableObject {
     var showOnboarding: () -> Void = {}
     var showWidgetGuide: () -> Void = {}
     var showIconDock: () -> Void = {}
+    var showSpaces: () -> Void = {}
+    var shareCra: () -> Void = {}
     var done: () -> Void = {}
 
     init(store: MobileSettingsStore, host: String?, canSummarize: Bool) {
@@ -70,12 +72,37 @@ private struct SettingLabel: View {
     let title: String
     let symbol: String
     let color: Color
+    var subtitle: String?
 
     var body: some View {
         HStack(spacing: 14) {
             SettingIcon(symbol: symbol, color: color)
-            Text(title).font(.subheadline)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.body)
+                if let subtitle { Text(subtitle).font(.caption).foregroundStyle(.secondary) }
+            }
         }
+    }
+}
+
+/// A row that does something when tapped, with Arc Search's grey chevron when it leads somewhere.
+private struct ActionRow: View {
+    let label: SettingLabel
+    var chevron = true
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                label
+                Spacer()
+                if chevron {
+                    Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(.tertiary)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .foregroundStyle(.primary)
     }
 }
 
@@ -92,7 +119,7 @@ private struct SiteOptionRows {
         Group {
             Toggle(isOn: bind(\.blockAds)) { SettingLabel(title: "Block Ads", symbol: "hand.raised.fill", color: Color(red: 1, green: 0.22, blue: 0.33)) }
                 .accessibilityIdentifier("setting-block-ads")
-            Toggle(isOn: bind(\.blockCookieBanners)) { SettingLabel(title: "Block Cookie Banners", symbol: "circle.hexagongrid.fill", color: .orange) }
+            Toggle(isOn: bind(\.blockCookieBanners)) { SettingLabel(title: "Block Cookie Banners", symbol: "birthday.cake.fill", color: .orange) }
                 .accessibilityIdentifier("setting-block-cookie-banners")
             Toggle(isOn: bind(\.blockTrackers)) { SettingLabel(title: "Block Trackers", symbol: "sunglasses.fill", color: Color(red: 1, green: 0.78, blue: 0.1)) }
                 .accessibilityIdentifier("setting-block-trackers")
@@ -102,12 +129,12 @@ private struct SiteOptionRows {
     @ViewBuilder var behaviour: some View {
         Group {
             if model.canSummarize {
-                Toggle(isOn: bind(\.pinchToSummarize)) { SettingLabel(title: "Pinch to Summarize", symbol: "doc.text.fill", color: .blue) }
+                Toggle(isOn: bind(\.pinchToSummarize)) { SettingLabel(title: "Pinch to Summarize", symbol: "doc.richtext.fill", color: .blue) }
                     .accessibilityIdentifier("setting-pinch-to-summarize")
             }
-            Toggle(isOn: bind(\.collapseBottomBar)) { SettingLabel(title: "Collapse Bottom Bar", symbol: "platter.filled.bottom.iphone", color: .purple) }
+            Toggle(isOn: bind(\.collapseBottomBar)) { SettingLabel(title: "Collapse Bottom Bar", symbol: "iphone.gen3", color: .purple) }
                 .accessibilityIdentifier("setting-collapse-bottom-bar")
-            ValueRow(label: SettingLabel(title: "Swipe to Navigate", symbol: "hand.draw.fill", color: .green),
+            ValueRow(label: SettingLabel(title: "Swipe to Navigate", symbol: "hand.point.up.left.fill", color: .green),
                      selection: bind(\.swipeToNavigate), options: MobileSwipeToNavigate.allCases, title: \.label)
                 .accessibilityIdentifier("setting-swipe-to-navigate")
         }
@@ -137,7 +164,7 @@ private struct ValueRow<Label: View, Value: Hashable>: View {
                     ForEach(options, id: \.self) { Text(title($0)).tag($0) }
                 }
             } label: {
-                Text(title(selection)).font(.subheadline).lineLimit(1)
+                Text(title(selection)).font(.body).lineLimit(1)
             }
             .tint(.secondary)
         }
@@ -145,16 +172,19 @@ private struct ValueRow<Label: View, Value: Hashable>: View {
 }
 
 extension View {
-    /// Arc Search's settings lists: the sheet's translucent backdrop showing through, with the
-    /// groups a shade darker.
+    /// Arc Search 1.49's settings lists (Victor's recording): dark in light mode too, the sheet's
+    /// material showing through (grey ~49) with the groups lighter (~75), rows 52 pt.
     func settingsListStyle() -> some View {
         scrollContentBackground(.hidden)
             .background(.regularMaterial)
-            .environment(\.defaultMinListRowHeight, 45)
+            .environment(\.defaultMinListRowHeight, 52)
+            .environment(\.colorScheme, .dark)
+            // Switches stay green while the bar's Done and back are white, as in Arc Search.
+            .tint(Color(.systemGreen))
     }
 
     func settingsRow() -> some View {
-        listRowBackground(Color.primary.opacity(0.07))
+        listRowBackground(Color.white.opacity(0.12))
     }
 }
 
@@ -169,7 +199,7 @@ struct SiteSettingsView: View {
                 Section((model.host ?? "all sites").uppercased() + " SETTINGS") { rows.blockers }.settingsRow()
                 Section { rows.behaviour }.settingsRow()
                 Section {
-                    NavigationLink { AppSettingsList(model: model) } label: {
+                    NavigationLink { AppSettingsList(model: model).toolbarRole(.editor) } label: {
                         SettingLabel(title: "App Settings", symbol: "gearshape.fill", color: .gray)
                     }
                     .accessibilityIdentifier("setting-app-settings")
@@ -181,6 +211,7 @@ struct SiteSettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { model.done() }.fontWeight(.semibold) } }
         }
+        .tint(.white)
     }
 }
 
@@ -189,7 +220,7 @@ struct AppSettingsView: View {
     @ObservedObject var model: SettingsModel
 
     var body: some View {
-        NavigationStack { AppSettingsList(model: model) }
+        NavigationStack { AppSettingsList(model: model) }.tint(.white)
     }
 }
 
@@ -216,45 +247,22 @@ struct AppSettingsList: View {
             }
             .settingsRow()
             Section {
-                NavigationLink { GlobalSiteSettingsView(model: model) } label: {
+                NavigationLink { GlobalSiteSettingsView(model: model).toolbarRole(.editor) } label: {
                     SettingLabel(title: "Global Site Settings", symbol: "globe", color: .black)
                 }
                 .accessibilityIdentifier("setting-global-site-settings")
             }
             .settingsRow()
+            // Arc Search keeps these three in one group.
             Section {
-                Button {
+                ActionRow(label: SettingLabel(title: "Set Cra as Default Browser", symbol: "safari.fill", color: .indigo)) {
                     if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
-                } label: {
-                    HStack {
-                        SettingLabel(title: "Set Cra as Default Browser", symbol: "safari.fill", color: .indigo)
-                        Spacer()
-                        Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(.tertiary)
-                    }
                 }
-                .foregroundStyle(.primary)
                 .accessibilityIdentifier("setting-default-browser")
-            }
-            .settingsRow()
-            Section {
-                Button { model.showIconDock() } label: {
-                    HStack {
-                        SettingLabel(title: "Change App Icon", symbol: "app.fill", color: .indigo)
-                        Spacer()
-                        Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(.tertiary)
-                    }
-                }
-                .foregroundStyle(.primary)
-                .accessibilityIdentifier("setting-app-icon")
-                Button { model.showWidgetGuide() } label: {
-                    HStack {
-                        SettingLabel(title: "Add to Home Screen", symbol: "square.grid.2x2.fill", color: .purple)
-                        Spacer()
-                        Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(.tertiary)
-                    }
-                }
-                .foregroundStyle(.primary)
-                .accessibilityIdentifier("setting-add-widget")
+                ActionRow(label: SettingLabel(title: "Change App Icon", symbol: "app.badge.fill", color: .blue)) { model.showIconDock() }
+                    .accessibilityIdentifier("setting-app-icon")
+                ActionRow(label: SettingLabel(title: "Add to Home Screen", symbol: "iphone.gen3", color: .purple), chevron: false) { model.showWidgetGuide() }
+                    .accessibilityIdentifier("setting-add-widget")
             }
             .settingsRow()
             Section {
@@ -280,38 +288,71 @@ struct AppSettingsList: View {
             .settingsRow()
             Section {
                 Toggle(isOn: model.binding(\.opensKeyboardOnLaunch)) {
-                    SettingLabel(title: "Auto-Open Keyboard", symbol: "keyboard.fill", color: .teal)
+                    SettingLabel(title: "Auto-Open Keyboard", symbol: "keyboard.fill", color: .yellow)
                 }
                 .accessibilityIdentifier("setting-keyboard-on-launch")
                 ValueRow(label: SettingLabel(title: "Archive Inactive Tabs", symbol: "archivebox.fill", color: .purple),
                          selection: model.binding(\.archiveAfter), options: MobileArchiveAfter.allCases, title: \.settingValue)
                     .accessibilityIdentifier("setting-archive-after")
-                ValueRow(label: SettingLabel(title: "Open App Links in...", symbol: "arrow.up.forward.app.fill", color: .orange),
+                ValueRow(label: SettingLabel(title: "Open App Links in...", symbol: "arrow.up.forward.square", color: .blue),
                          selection: model.binding(\.openAppLinksIn), options: MobileAppLinks.allCases, title: \.label)
                     .accessibilityIdentifier("setting-app-links")
-                Button("Clear Browsing Data...") { clearing = true }
-                    .foregroundStyle(.primary)
+                ActionRow(label: SettingLabel(title: "Clear Browsing Data...", symbol: "eraser.fill", color: .red), chevron: false) { clearing = true }
                     .accessibilityIdentifier("setting-clear-data")
-                Button("Export Data") { model.exportData() }
-                    .foregroundStyle(.primary)
+                ActionRow(label: SettingLabel(title: "Export Data", symbol: "square.and.arrow.up", color: .blue,
+                                              subtitle: "Share your open tab URLs"), chevron: false) { model.exportData() }
                     .accessibilityIdentifier("setting-export-data")
             }
             .settingsRow()
+            // Arc Search's "Sync with Arc Desktop / Sign in": Cra's Mac shares its Spaces through iCloud.
             Section {
-                Link("Report a Problem", destination: URL(string: "https://github.com/VictorKildahl/cra/issues")!)
-                    .foregroundStyle(.primary)
-                Link("Privacy Policy", destination: URL(string: "https://crabrowser.app/privacy")!)
-                    .foregroundStyle(.primary)
-                Button("Show Onboarding") { model.showOnboarding() }
-                    .foregroundStyle(.primary)
+                ActionRow(label: SettingLabel(title: "Sync with Cra for Mac", symbol: "arrow.triangle.2.circlepath", color: Color(red: 0.55, green: 0.1, blue: 0.5),
+                                              subtitle: FileManager.default.ubiquityIdentityToken == nil ? "Sign in to iCloud" : "Through iCloud")) { model.showSpaces() }
+                    .accessibilityIdentifier("setting-sync")
+            }
+            .settingsRow()
+            // Arc Search's "Gift Arc to a friend" capsule; Cra has nothing to gift, so it shares the app.
+            Section {
+                Button { model.shareCra() } label: {
+                    HStack(spacing: 14) {
+                        Image(systemName: "gift.fill").font(.system(size: 19, weight: .semibold))
+                        Text("Share Cra with a friend").font(.body.weight(.semibold))
+                        Spacer()
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .frame(height: 52)
+                    .background(LinearGradient(colors: [Color(red: 0.32, green: 0.12, blue: 0.75), Color(red: 0.86, green: 0.3, blue: 0.55),
+                                                        Color(red: 0.2, green: 0.15, blue: 0.85), Color(red: 0.12, green: 0.2, blue: 0.95)],
+                                               startPoint: .leading, endPoint: .trailing), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .accessibilityIdentifier("setting-share-cra")
+            }
+            Section {
+                ActionRow(label: SettingLabel(title: "Contact the Team", symbol: "envelope.fill", color: .gray), chevron: false) {
+                    UIApplication.shared.open(URL(string: "https://github.com/VictorKildahl/cra/issues")!)
+                }
+                .accessibilityIdentifier("setting-contact")
+                ActionRow(label: SettingLabel(title: "Show Onboarding", symbol: "hand.wave.fill", color: .gray), chevron: false) { model.showOnboarding() }
                     .accessibilityIdentifier("setting-show-onboarding")
+                ActionRow(label: SettingLabel(title: "Privacy Policy", symbol: "doc.text.fill", color: .gray), chevron: false) {
+                    UIApplication.shared.open(URL(string: "https://crabrowser.app/privacy")!)
+                }
+                .accessibilityIdentifier("setting-privacy")
+                NavigationLink { LicensesView().toolbarRole(.editor) } label: {
+                    SettingLabel(title: "Open Source Licenses", symbol: "doc.fill", color: .gray)
+                }
+                .accessibilityIdentifier("setting-licenses")
             } footer: {
                 Text(version).frame(maxWidth: .infinity).padding(.top, 12)
+                    .accessibilityIdentifier("setting-version")
             }
             .settingsRow()
         }
         .settingsListStyle()
-        .font(.subheadline)
         .alert("Custom Search Engine", isPresented: $editingCustom) {
             TextField("https://example.com/search?q=%s", text: $customAddress)
                 .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
@@ -355,11 +396,42 @@ struct GlobalSiteSettingsView: View {
     var body: some View {
         List {
             let rows = SiteOptionRows(model: model, global: true)
-            Section { rows.blockers }.settingsRow()
+            Section {
+                rows.blockers
+            } header: {
+                Text("Settings will apply to all websites unless overridden.")
+                    .font(.subheadline).textCase(nil)
+                    .accessibilityIdentifier("default-site-settings-caption")
+            }
+            .settingsRow()
             Section { rows.behaviour }.settingsRow()
         }
         .settingsListStyle()
-        .navigationTitle("Global Site Settings")
+        .navigationTitle("Default Site Settings")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { model.done() }.fontWeight(.semibold) } }
+    }
+}
+
+/// Open Source Licenses: Cra's own licence and the notices of the block list it ships.
+struct LicensesView: View {
+    private static func text(_ name: String, _ ext: String) -> String {
+        Bundle.main.url(forResource: name, withExtension: ext).flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? ""
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                Text("Cra is open source under the MIT License, © 2026 Victor Kildahl. Its code is at github.com/VictorKildahl/cra.")
+                Text(Self.text("NOTICE", "txt")).font(.system(.footnote, design: .monospaced)).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("licenses-notice")
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(.regularMaterial)
+        .environment(\.colorScheme, .dark)
+        .navigationTitle("Open Source Licenses")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -437,11 +509,21 @@ struct ArchiveView: View {
                 }
             }
             .overlay {
-                if sections.isEmpty {
-                    Text(query.isEmpty ? "No Archived Tabs" : "No Results").foregroundStyle(.secondary)
+                if model.tabs.isEmpty {
+                    // Arc Search 1.49's empty Archive (Victor's recording, 3:15).
+                    VStack(spacing: 14) {
+                        Text("Nothing here yet!").font(.title2.weight(.bold))
+                        Text("Manually closed and auto-archived tabs will appear here. You can adjust the auto-archive frequency in Settings.")
+                            .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    }
+                    .padding(.horizontal, 28)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("archive-empty")
+                } else if sections.isEmpty {
+                    Text("No Results").foregroundStyle(.secondary)
                 }
             }
-            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search")
+            .modifier(ArchiveSearch(query: $query, shown: !model.tabs.isEmpty))
             .navigationTitle("Archive")
             .navigationBarTitleDisplayMode(.inline)
             .environment(\.editMode, $editing)
@@ -453,13 +535,36 @@ struct ArchiveView: View {
                             picked = []
                             editing = .inactive
                         }
-                    } else {
+                    } else if !model.tabs.isEmpty {
                         Button(editing == .active ? "Cancel" : "Edit") { editing = editing == .active ? .inactive : .active }
-                            .disabled(model.tabs.isEmpty)
                     }
                 }
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { model.done() }.fontWeight(.semibold) }
+                ToolbarItem(placement: .confirmationAction) {
+                    // Arc Search's Archive closes with a blue round check.
+                    Button { model.done() } label: {
+                        Image(systemName: "checkmark").font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
+                            .frame(width: 34, height: 34)
+                            .background(Color(red: 0.30, green: 0.37, blue: 0.99), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Done")
+                    .accessibilityIdentifier("archive-done")
+                }
             }
+        }
+    }
+}
+
+/// The Archive's search field, left out while there is nothing to search (Arc Search shows none then).
+private struct ArchiveSearch: ViewModifier {
+    @Binding var query: String
+    let shown: Bool
+
+    func body(content: Content) -> some View {
+        if shown {
+            content.searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search")
+        } else {
+            content
         }
     }
 }

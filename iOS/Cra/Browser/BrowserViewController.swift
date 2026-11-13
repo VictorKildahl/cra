@@ -655,6 +655,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         }
         let sheet = UIHostingController(rootView: ArchiveView(model: model))
         sheet.sheetPresentationController?.prefersGrabberVisible = true
+        // Arc Search 1.49's settings and Archive sheets are dark in light mode too.
+        sheet.overrideUserInterfaceStyle = .dark
         topPresenter.present(sheet, animated: true)
     }
 
@@ -687,6 +689,13 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             self.topPresenter.present(sheet, animated: true)
         }
         model.showDownloads = { [weak self] in self?.showDownloads() }
+        model.showSpaces = { [weak self] in self?.showSpaces() }
+        model.shareCra = { [weak self] in
+            guard let self, let link = URL(string: "https://crabrowser.app") else { return }
+            let share = UIActivityViewController(activityItems: [link], applicationActivities: nil)
+            share.popoverPresentationController?.sourceView = self.bar
+            self.topPresenter.present(share, animated: true)
+        }
         model.exportData = { [weak self] in
             guard let self else { return }
             let share = UIActivityViewController(activityItems: [self.store.document.exportText], applicationActivities: nil)
@@ -710,6 +719,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             sheet.sheetPresentationController?.detents = [.medium(), .large()]
         }
         sheet.sheetPresentationController?.prefersGrabberVisible = true
+        sheet.overrideUserInterfaceStyle = .dark
         sheet.view.backgroundColor = .clear
         topPresenter.present(sheet, animated: true)
     }

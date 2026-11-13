@@ -189,7 +189,34 @@ final class SettingsTests: BrowserTestCase {
         keep("app-settings")
         app.buttons["setting-global-site-settings"].tap()
         XCTAssertTrue(app.switches["setting-block-ads"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Default Site Settings"].exists)
+        XCTAssertTrue(app.staticTexts["default-site-settings-caption"].exists)
+        sleep(1)
+        keep("default-site-settings")
         XCTAssertEqual(app.switches["setting-block-ads"].value as? String, "1", "the site's choice leaves the global one alone")
+    }
+
+    /// The bottom of App Settings as in Arc Search 1.49: Sync, the share capsule, Contact the
+    /// Team, Show Onboarding, Privacy Policy, Open Source Licenses (the block list's notices) and
+    /// the version.
+    func testOpenSourceLicensesShowTheBlockListsNotices() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        app.buttons["bar-settings"].tap()
+        let licenses = app.buttons["setting-licenses"]
+        XCTAssertTrue(app.buttons["setting-global-site-settings"].waitForExistence(timeout: 5))
+        for _ in 0..<4 where !licenses.isHittable { app.swipeUp() }
+        XCTAssertTrue(app.buttons["setting-sync"].exists)
+        XCTAssertTrue(app.buttons["setting-share-cra"].exists)
+        XCTAssertTrue(app.buttons["setting-contact"].exists)
+        sleep(1)
+        keep("app-settings-bottom")
+        licenses.tap()
+        let notice = app.staticTexts["licenses-notice"]
+        XCTAssertTrue(notice.waitForExistence(timeout: 5))
+        XCTAssertTrue(notice.label.contains("AdAway"), "the CC BY list is credited")
+        XCTAssertTrue(notice.label.contains("Anudeep"), "the MIT list is credited")
     }
 
     /// A tab thrown out of the row is in the Archive, and a tap there brings it back.
@@ -562,8 +589,9 @@ final class IncognitoTests: BrowserTestCase {
         XCTAssertFalse(app.buttons["tab-card-1"].exists)
         app.buttons["bar-settings"].tap()
         app.buttons["settings-archive"].tap()
-        XCTAssertTrue(app.staticTexts["No Archived Tabs"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["archive-empty"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["archive-row-Secret"].exists)
+        keep("archive-empty")
     }
 }
 
