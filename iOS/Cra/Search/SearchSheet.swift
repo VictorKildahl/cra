@@ -37,6 +37,10 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     private var typedText = ""
     /// How many rows have gone under the field; the field shows the last of them.
     private var passedRows = 0
+    /// Rows in view: four, fewer in landscape (`MobileSearchSheet.rowsInView`).
+    var rowsInView = MobileSearchSheet.visibleRows {
+        didSet { if rowsInView != oldValue { setNeedsLayout() } }
+    }
 
     /// The pill's frame in this view's coordinates, for the closed end of the morph.
     var collapsedFieldFrame: CGRect = .zero
@@ -159,12 +163,12 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     private var showsFavorites: Bool { text.isEmpty && !isIncognito }
 
     private func showRows() {
-        let count = showsFavorites ? min(favorites.count, MobileSearchSheet.visibleRows) : rows.count
+        let count = showsFavorites ? min(favorites.count, rowsInView) : rows.count
         list.isScrollEnabled = !showsFavorites && count > 1
         list.contentSize = CGSize(width: list.bounds.width, height: showsFavorites ? CGFloat(count) * MobileSearchSheet.rowHeight
             : MobileSuggestions.Scroll.contentHeight(count: count, rowHeight: MobileSearchSheet.rowHeight, visibleHeight: list.bounds.height))
         for (index, view) in rowViews.enumerated() {
-            if showsFavorites, index < min(favorites.count, MobileSearchSheet.visibleRows) {
+            if showsFavorites, index < min(favorites.count, rowsInView) {
                 view.configure(favorite: favorites[index].0, icon: favorites[index].1)
                 view.isHidden = false
             } else if !showsFavorites, index < rows.count {
@@ -314,7 +318,7 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         incognitoNote.alpha = t
 
         let top = open.maxY + MobileSearchSheet.rowsTopGap
-        let listFrame = CGRect(x: 0, y: top, width: bounds.width, height: CGFloat(MobileSearchSheet.visibleRows) * MobileSearchSheet.rowHeight)
+        let listFrame = CGRect(x: 0, y: top, width: bounds.width, height: CGFloat(rowsInView) * MobileSearchSheet.rowHeight)
         if list.frame != listFrame {
             list.frame = listFrame
             showRows()

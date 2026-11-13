@@ -31,6 +31,24 @@ public enum MobileSearchSheet {
     public static func top(screenHeight: CGFloat, keyboardHeight: CGFloat) -> CGFloat {
         screenHeight - keyboardHeight - height
     }
+
+    /// The sheet with `rows` suggestion rows in view.
+    public static func height(rows: Int) -> CGFloat {
+        topInset + fieldHeight + rowsTopGap + CGFloat(rows) * rowHeight + bottomInset
+    }
+
+    /// How many suggestion rows fit between the keyboard and the top of the screen: four in
+    /// portrait, fewer in landscape, where the keyboard leaves little room; the field always stays.
+    public static func rowsInView(screenHeight: CGFloat, keyboardHeight: CGFloat, safeTop: CGFloat) -> Int {
+        let room = screenHeight - keyboardHeight - safeTop - height(rows: 0)
+        guard room > 0 else { return 0 }
+        return min(visibleRows, Int(room / rowHeight))
+    }
+
+    /// The sheet's top edge with as many rows as fit.
+    public static func top(screenHeight: CGFloat, keyboardHeight: CGFloat, safeTop: CGFloat) -> CGFloat {
+        screenHeight - keyboardHeight - height(rows: rowsInView(screenHeight: screenHeight, keyboardHeight: keyboardHeight, safeTop: safeTop))
+    }
 }
 
 /// The bar at the bottom of a page: tabs, the pill that opens search, and the menu.

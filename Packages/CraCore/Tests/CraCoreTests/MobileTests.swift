@@ -13,6 +13,16 @@ struct MobileChromeTests {
         #expect(MobileSearchSheet.top(screenHeight: 852, keyboardHeight: 291) == 259)
     }
 
+    /// In landscape the keyboard leaves little room: fewer rows, the field still on screen.
+    @Test func theSheetKeepsItsFieldOnScreenInLandscape() {
+        #expect(MobileSearchSheet.rowsInView(screenHeight: 852, keyboardHeight: 291, safeTop: 59) == 4)
+        #expect(MobileSearchSheet.top(screenHeight: 852, keyboardHeight: 291, safeTop: 59) == 259)
+        let rows = MobileSearchSheet.rowsInView(screenHeight: 402, keyboardHeight: 199, safeTop: 0)
+        #expect(rows == 2)
+        #expect(MobileSearchSheet.top(screenHeight: 402, keyboardHeight: 199, safeTop: 0) >= 0)
+        #expect(MobileSearchSheet.rowsInView(screenHeight: 300, keyboardHeight: 290, safeTop: 0) == 0)
+    }
+
     /// The same phone's bar: 76 pt tall, pill 76 × 39 centred 44.5 pt above the bottom edge,
     /// round buttons 35 pt wide centred 41 pt from each side.
     @Test func bottomBarOnAnIPhone15Pro() {

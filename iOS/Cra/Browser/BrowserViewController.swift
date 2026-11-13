@@ -214,8 +214,10 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         bar.controlsVisibility = isSearching ? 0 : 1
 
         let keyboard = max(keyboardHeight, safeBottom)
-        let top = isSearching ? MobileSearchSheet.top(screenHeight: bounds.height, keyboardHeight: keyboard) : barFrame.minY
-        sheet.frame = CGRect(x: 0, y: top, width: bounds.width, height: max(MobileSearchSheet.height + keyboard, bounds.height - top))
+        let safeTop = view.safeAreaInsets.top
+        sheet.rowsInView = MobileSearchSheet.rowsInView(screenHeight: bounds.height, keyboardHeight: keyboard, safeTop: safeTop)
+        let top = isSearching ? MobileSearchSheet.top(screenHeight: bounds.height, keyboardHeight: keyboard, safeTop: safeTop) : barFrame.minY
+        sheet.frame = CGRect(x: 0, y: top, width: bounds.width, height: max(MobileSearchSheet.height(rows: sheet.rowsInView) + keyboard, bounds.height - top))
         sheet.collapsedFieldFrame = bar.pillFrame
         sheet.openness = isSearching ? 1 : 0
         dismissArea.frame = CGRect(x: 0, y: 0, width: bounds.width, height: max(0, top))

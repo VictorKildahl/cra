@@ -8,6 +8,8 @@ final class SheetHost: UIView, UIGestureRecognizerDelegate {
     private let dim = UIControl()
     private let material = UIVisualEffectView(effect: UIBlurEffect(style: .systemThickMaterial))
     private let content: UIView
+    /// Holds the content: it scrolls only when the panel is taller than the screen (landscape).
+    private let scroller = UIScrollView()
     private let panelHeight: (CGFloat) -> CGFloat
     private var shown = false
     private var dragOffset: CGFloat = 0
@@ -34,7 +36,11 @@ final class SheetHost: UIView, UIGestureRecognizerDelegate {
         wash.backgroundColor = Palette.dynamic(light: UIColor(white: 1, alpha: 0.45), dark: UIColor(white: 0, alpha: 0.2))
         wash.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         material.contentView.addSubview(wash)
-        panel.addSubview(content)
+        scroller.showsVerticalScrollIndicator = false
+        scroller.alwaysBounceVertical = false
+        scroller.contentInsetAdjustmentBehavior = .never
+        panel.addSubview(scroller)
+        scroller.addSubview(content)
         let pan = UIPanGestureRecognizer(target: self, action: #selector(panned(_:)))
         pan.delegate = self
         panel.addGestureRecognizer(pan)
@@ -45,11 +51,16 @@ final class SheetHost: UIView, UIGestureRecognizerDelegate {
     override func layoutSubviews() {
         super.layoutSubviews()
         dim.frame = bounds
-        let height = panelHeight(safeAreaInsets.bottom)
+        // The panel's own height, but never past the top of the screen: what doesn't fit scrolls.
+        let full = panelHeight(safeAreaInsets.bottom)
+        let height = min(full, bounds.height - safeAreaInsets.top - 8)
         let top = shown ? bounds.height - height + dragOffset : bounds.height
         panel.frame = CGRect(x: 0, y: top, width: bounds.width, height: height)
         material.frame = panel.bounds
-        content.frame = panel.bounds
+        scroller.frame = panel.bounds
+        content.frame = CGRect(x: 0, y: 0, width: bounds.width, height: full)
+        scroller.contentSize = content.frame.size
+        scroller.isScrollEnabled = full > height
         dim.alpha = shown ? max(0, 1 - dragOffset / max(1, height)) : 0
     }
 
@@ -85,6 +96,8 @@ final class SheetHost: UIView, UIGestureRecognizerDelegate {
 
     override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
         guard let pan = gesture as? UIPanGestureRecognizer else { return true }
+        // While the content scrolls, a drag down first scrolls it back to the top.
+        if scroller.isScrollEnabled, scroller.contentOffset.y > 0 { return false }
         let velocity = pan.velocity(in: self)
         return velocity.y > abs(velocity.x)
     }

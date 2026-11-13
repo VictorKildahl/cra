@@ -989,3 +989,34 @@ final class CustomSearchEngineTests: BrowserTestCase {
         XCTAssertEqual(app.buttons["tab-card-1"].label, "custom.invalid", "the search went to the custom engine")
     }
 }
+
+final class LandscapeTests: BrowserTestCase {
+    override func tearDown() {
+        XCUIDevice.shared.orientation = .portrait
+        super.tearDown()
+    }
+
+    /// In landscape the search field stays on screen above the keyboard (fewer rows), and the
+    /// page menu's address capsule stays below the top edge (the rest scrolls).
+    func testSearchAndTheMenuFitInLandscape() {
+        launch(["-CraOpenURL", "https://example.com/", "-CraSearch", "NO", "-CraFakeSuggestions", "YES"])
+        XCTAssertTrue(app.buttons["bar-search"].waitForExistence(timeout: 10))
+        XCUIDevice.shared.orientation = .landscapeLeft
+        sleep(2)
+        app.buttons["bar-search"].tap()
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.typeText("ovens")
+        sleep(1)
+        XCTAssertGreaterThanOrEqual(field.frame.minY, 0, "the field is on screen")
+        XCTAssertTrue(field.isHittable)
+        app.otherElements["search-dismiss"].firstMatch.tap()
+        sleep(1)
+        app.buttons["bar-menu"].tap()
+        let host = app.staticTexts["menu-host"]
+        XCTAssertTrue(host.waitForExistence(timeout: 5))
+        sleep(1)
+        XCTAssertGreaterThanOrEqual(host.frame.minY, 0, "the address capsule is on screen")
+        XCTAssertTrue(host.isHittable)
+    }
+}
