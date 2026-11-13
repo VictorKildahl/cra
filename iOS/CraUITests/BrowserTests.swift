@@ -1020,3 +1020,31 @@ final class LandscapeTests: BrowserTestCase {
         XCTAssertTrue(host.isHittable)
     }
 }
+
+final class FavoriteOrderTests: BrowserTestCase {
+    /// A favorite under the empty search field can be held and dragged to another place, and
+    /// keeps it.
+    func testAFavoriteCanBeDraggedToAnotherPlace() {
+        launch(["-CraOpenURL", "data:text/html,<meta/name=viewport/content=width=device-width><title>Starred</title><h1>Heading</h1>",
+                "-CraSearch", "NO", "-CraFakeShare", "https://saved.invalid/page", "-CraFakeShareTo", "favorites"])
+        waitForPage("Heading")
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(app.buttons["menu-pin"].waitForExistence(timeout: 5))
+        app.buttons["menu-pin"].tap()
+        XCTAssertTrue(app.buttons["Favorite in App"].waitForExistence(timeout: 5))
+        app.buttons["Favorite in App"].tap()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
+        app.buttons["bar-search"].tap()
+        let shared = app.staticTexts["Shared page"], starred = app.staticTexts["Starred"]
+        XCTAssertTrue(starred.waitForExistence(timeout: 5) && shared.exists)
+        XCTAssertLessThan(shared.frame.minY, starred.frame.minY, "the shared link came first")
+        starred.press(forDuration: 0.8, thenDragTo: shared, withVelocity: .slow, thenHoldForDuration: 0.3)
+        sleep(1)
+        XCTAssertLessThan(starred.frame.minY, shared.frame.minY, "dragged above")
+        app.otherElements["search-dismiss"].firstMatch.tap()
+        sleep(1)
+        app.buttons["bar-search"].tap()
+        XCTAssertTrue(starred.waitForExistence(timeout: 5))
+        XCTAssertLessThan(starred.frame.minY, shared.frame.minY, "the new order is kept")
+    }
+}

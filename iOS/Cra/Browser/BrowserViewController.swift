@@ -367,6 +367,10 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         open(MobileBrowseForMe.tabAddress(query: row.text))
     }
 
+    func searchSheet(_ sheet: SearchSheet, didMoveFavoriteFrom source: Int, to destination: Int) {
+        favorites.move(from: source, to: destination)
+    }
+
     func searchSheetDidAskForVoice(_ sheet: SearchSheet) {
         let incognito = incognitoSearch
         setSearching(false)

@@ -11,6 +11,8 @@ protocol SearchSheetDelegate: AnyObject {
     func searchSheetDidToggleIncognito(_ sheet: SearchSheet)
     /// The mic in the empty field: voice search.
     func searchSheetDidAskForVoice(_ sheet: SearchSheet)
+    /// A favorite dragged to another place under the empty field.
+    func searchSheet(_ sheet: SearchSheet, didMoveFavoriteFrom source: Int, to destination: Int)
 }
 
 /// The sheet that rises with the keyboard: the search field and four suggestions under it.
@@ -55,6 +57,9 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     var siteIcon: (String) -> UIImage? = { _ in nil }
     /// The favorites shown under the field while it is empty, with their icons.
     private var favorites: [(MobileFavorites.Site, UIImage?)] = []
+    /// A favorite being dragged to a new place (TapSmart: favorites can be dragged to reorder):
+    /// its picture follows the finger while the rows make room.
+    private var dragged: (picture: UIView, from: Int, at: Int, grab: CGFloat)?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -112,6 +117,9 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         list.delaysContentTouches = false
         list.accessibilityIdentifier = "suggestion-list"
         addSubview(list)
+        let hold = UILongPressGestureRecognizer(target: self, action: #selector(favoriteHeld(_:)))
+        hold.minimumPressDuration = 0.4
+        list.addGestureRecognizer(hold)
         for index in 0..<MobileSearchSheet.listedRows {
             let row = SuggestionRowView()
             row.isHidden = true
@@ -204,6 +212,54 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         list.setContentOffset(.zero, animated: false)
         updateAccessories()
         delegate?.searchSheet(self, didChangeText: text)
+    }
+
+    // MARK: Reordering favorites
+
+    @objc private func favoriteHeld(_ hold: UILongPressGestureRecognizer) {
+        let count = min(favorites.count, rowsInView)
+        let y = hold.location(in: list).y
+        let slot = min(max(0, Int(y / MobileSearchSheet.rowHeight)), max(0, count - 1))
+        switch hold.state {
+        case .began:
+            guard showsFavorites, count > 1, y < CGFloat(count) * MobileSearchSheet.rowHeight else { return }
+            let row = rowViews[slot]
+            guard let picture = row.snapshotView(afterScreenUpdates: false) else { return }
+            picture.frame = row.frame
+            picture.layer.shadowColor = UIColor.black.cgColor
+            picture.layer.shadowOpacity = 0.18
+            picture.layer.shadowRadius = 10
+            picture.backgroundColor = Palette.sheet
+            list.addSubview(picture)
+            row.alpha = 0
+            dragged = (picture, slot, slot, y - row.frame.minY)
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            UIView.animate(withDuration: 0.15) { picture.transform = CGAffineTransform(scaleX: 1.03, y: 1.03) }
+        case .changed:
+            guard var drag = dragged else { return }
+            drag.picture.frame.origin.y = min(max(0, y - drag.grab), CGFloat(count - 1) * MobileSearchSheet.rowHeight)
+            if slot != drag.at {
+                favorites.insert(favorites.remove(at: drag.at), at: slot)
+                drag.at = slot
+                dragged = drag
+                showRows()
+                for (index, row) in rowViews.enumerated() { row.alpha = index == slot ? 0 : 1 }
+                UISelectionFeedbackGenerator().selectionChanged()
+            }
+        case .ended, .cancelled, .failed:
+            guard let drag = dragged else { return }
+            dragged = nil
+            let target = rowViews[drag.at]
+            UIView.animate(withDuration: 0.2) {
+                drag.picture.transform = .identity
+                drag.picture.frame = target.frame
+            } completion: { _ in
+                drag.picture.removeFromSuperview()
+                target.alpha = 1
+            }
+            if drag.at != drag.from { delegate?.searchSheet(self, didMoveFavoriteFrom: drag.from, to: drag.at) }
+        default: break
+        }
     }
 
     // MARK: Scrolling through the suggestions

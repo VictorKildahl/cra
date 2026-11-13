@@ -15,6 +15,12 @@ final class FavoritesStore {
         }
     }
 
+    /// Puts the favorite at `source` at `destination` (dragged under the search field).
+    func move(from source: Int, to destination: Int) {
+        value.move(from: source, to: destination)
+        if let data = try? JSONEncoder().encode(value) { try? data.write(to: fileURL, options: .atomic) }
+    }
+
     /// Makes the page a favorite unless it is one already.
     func add(url: String, title: String) {
         guard !value.contains(url) else { return }
