@@ -16,7 +16,9 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
 
 ## Sidebar data model (StorableSidebar.json)
 - [O] `sidebar.containers` = [ {global}, {spaces, topAppsContainerIDs, items} ]. Lists are flat [id, object, id, object...].
-- [O] SpaceModel: id, title, profile, containerIDs = ["pinned", <id>, "unpinned", <id>], customInfo.iconType {emoji_v2, emoji},
+- [O] SpaceModel: id, title, profile, containerIDs = ["pinned", <id>, "unpinned", <id>], customInfo.iconType {emoji_v2, emoji}
+  or {icon: <SymbolIconType>} (the Icon tab: star, bookmark … train in picker order, plus rss, github, linear, figma, search)
+  or {symbol}; Cra maps them in CraCore `ArcSpaceIcon`,
   customInfo.windowTheme = blendedGradient { baseColors[2], overlayColors, modifiers{noiseFactor,intensityFactor,overlay:"grain"},
   wheel: analogous|complimentary, translucencyStyle light|dark } with appearanceBased light/dark variants, plus a
   semanticColorPalette (foregroundPrimary/Secondary/Tertiary, backgroundExtra, maxContrastColor...).

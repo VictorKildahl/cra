@@ -60,6 +60,7 @@ enum StoreTests {
         try arcItemListedTwice()
         try arcLiveFolderImportsLive()
         try arcSpaceWithoutAnIconImportsAsADot()
+        try arcSpaceIconTabGlyphImports()
         littleWindowProfile()
         tidyTabs()
         pinHook()
@@ -942,6 +943,35 @@ enum StoreTests {
         let store = AppComposition(clock: ManualScheduler()).store
         let ids = store.apply(plan, includeArchive: false, includeSettings: false).spaceIDs
         expect(ids.first.flatMap { store.space($0) }?.icon == SpaceIcon.none, "the imported space has no icon, a dot in the dock (#252)")
+        for id in ids { store.deleteSpace(id) }
+    }
+
+    /// An Arc space with a glyph from the Icon tab of Arc's picker (`iconType.icon`, e.g. "star")
+    /// imports with the SF Symbol in the same slot of Cra's Icon tab, not 🗂️, so nobody picks it
+    /// again. A name Cra has no symbol for (Arc's "github") still gets 🗂️.
+    @MainActor
+    private static func arcSpaceIconTabGlyphImports() throws {
+        let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Arc/StorableSidebar.json")
+        var root = try JSONSerialization.jsonObject(with: Data(contentsOf: fixture)) as! [String: Any]
+        var sidebar = root["sidebar"] as! [String: Any]
+        var containers = sidebar["containers"] as! [[String: Any]]
+        let main = containers.firstIndex { $0["spaces"] != nil }!
+        var spaces = containers[main]["spaces"] as! [Any]
+        for (title, icon) in [("Home", "star"), ("Work", "github")] {
+            let i = spaces.firstIndex { ($0 as? [String: Any])?["title"] as? String == title }!
+            var space = spaces[i] as! [String: Any]
+            space["customInfo"] = ["iconType": ["icon": icon]]
+            spaces[i] = space
+        }
+        containers[main]["spaces"] = spaces
+        sidebar["containers"] = containers
+        root["sidebar"] = sidebar
+        let plan = try ArcImporter.plan(sidebar: JSONSerialization.data(withJSONObject: root))
+
+        let store = AppComposition(clock: ManualScheduler()).store
+        let ids = store.apply(plan, includeArchive: false, includeSettings: false).spaceIDs
+        let icons = ids.map { store.space($0)?.icon }
+        expect(icons == [.symbol("star.fill"), .emoji("🗂️")], "Arc's Icon-tab star imports as Cra's star, an unknown glyph as 🗂️ (\(icons))")
         for id in ids { store.deleteSpace(id) }
     }
 
