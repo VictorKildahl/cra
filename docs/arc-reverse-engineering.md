@@ -4686,3 +4686,59 @@ link, toolbar hidden with ⇧⌘D), a Little Arc's link icon and the developer b
   layout and colours. A tab switch takes it down unanswered and it asks again when the tab is back
   (`PermissionAsk.stepsAside`). Cra keeps its own question ("<origin> wants to …", locked by #137 and #286).
   `cra://debug?permissionCard[=<button>]`, scenario permission-card.
+
+## Instant Links (Arc 1.172.2, 12 Nov 2026, live with Max on + binary)
+
+Arc Max's Instant Links, measured on a live Arc 1.172.2 (build 90755) with Max on: 33 runs driven through System
+Events, tabs timed by polling the window's tab ids every 0.1 s, requests read from Arc's `URLSession` cache and
+`nettop`, the new items diffed out of `StorableSidebar.json`. Captures are of the bar and the sidebar row only.
+Every phrase and every number is in GitHub #407. Tags as above: [O] observed, [B] binary (strings, Swift metadata),
+[I] inferred.
+- [O] Trigger: Shift-Return in ⌘T, only while the selected row is a search; on an "Open <space> / <tab>" row it
+  opens that tab instead. ⌥⇧↩ opens a Perplexity session (another feature) and ⌘⇧↩ does nothing.
+- [B] Since 1.47.1 ("Phasing Out Instant Links Edu") the bar shows no hint. An "Instant Open" row with the key is
+  still in the code behind the remote flag `instant-links-suggestion-enabled`, which is off.
+- [B] Settings ▸ Max row subtitle (obfuscated in the binary): "Press Shift + Enter for any web search to instantly
+  open the top result. You can also search multiple queries!"
+- [O] While it works the bar closes and a row appears at the top of Today: "Searching the web for you…" with the Max
+  flower (`AnimatedFlowerView`) spinning about once a second. A 30 fps capture of the flower: one line of four teardrop
+  petals that cross at the centre, about 16 pt, a 1.5 pt stroke in the row's text colour. [B] In the model the row is
+  `SidebarItemData.instantLinks(status: loading | error)`; on error it reads "Oops, something went wrong." The row
+  has the selected-row background (`InstantLinksCellState.isCurrentItem`): it stands for the new tab ⌘T was opening.
+- [B] Model: gpt-4o-mini at temperature 0 through The Browser Company's proxy; one call took 661 ms. The live prompt
+  is the obfuscated "V1" one (4,623 characters, 17 examples, XOR key `ObfuscatorString`); it answers
+  `{title, queries: [String], format: tab | folder | split}` and every query is a web search: maps, images, flights,
+  news and "search reddit for…" come back as Google queries ("Montauk map", "… site:reddit.com"). [B] The V2 prompt
+  (typed actions: image, map, directions, flights, news, siteSearch, history) and a navigate/search intent prompt
+  are in the binary behind `instant-links-v2-enabled` and `instant-links-intent-prototype-enabled`, both off.
+- [O] Search, one query after another: a `URLSession` GET of `google.com/search?q=…` with a Chrome 114 user agent
+  gets Google's "turn on JavaScript" page; Arc then loads the search in a hidden `WKWebView` and scrapes `#main` with
+  `.//a[.//h3[not(@role='header') and not(@aria-hidden='true')]]`, minus `div#botstuff, div#bottomads`. Nothing found
+  within about 7 s: Brave through `webresultproxy.diabrowser.engineering/api/web-results/web/search?…&count=1`. A
+  Datadog post follows each run. Google often blocks the hidden page (a fresh one with Arc's user agent lands on
+  `/sorry`), which is where the Brave waits come from.
+- [O] Opening: tabs at the top of Today in result order with the first selected; a split at the top of Today with equal
+  widths; a folder at the end of Pinned named with the response's `title`. The code asks for 1 result per query and 5
+  for a folder with a single query.
+- [O] Timing: the first tab 2.7 to 7 s after Return when Google answered, about 10 s per query when Arc fell back to
+  Brave, 18 to 30 s for three queries. Arc's cloud call is faster than the Mac's model (0.7 s against about 2.1 s;
+  the first call after launch took up to 7.7 s).
+- [O] What goes wrong in 1.172.2: when the scrape works Arc often opens every result on the page (6 to 16 tabs, for 16
+  of 27 phrases that wanted one page); counts are ignored ("give me 5 french jazz playlists on spotify" opened 1);
+  "split view of 5 lasagna recipes" asked for "lasagna recipe 1" to "lasagna recipe 5" and made one split of 12 panes.
+  Arc opened the right number of pages for 11 of 27 phrases.
+- Cra (#407; InstantLinks in CraCore, InstantLinksService, InstantLinksRowView): Shift-Return on a search row, the
+  Max row and the picture, the row with the selected-row background when the run started in new-tab mode, the
+  flower, the error row with its ✕, and Arc's placement, folder name and 5-for-a-folder rule. Where Cra differs: the
+  plan comes from the Mac's Apple Intelligence model (guided generation of `{title, format, searches: [{query,
+  count}]}`, with a session prewarmed when ⌘T opens and kept until the next run), CraCore's rules apply after it (a count only when the
+  phrase states one, a split of at most `PickedTabsMenu.maxPanes` panes, split and folder only when asked for), only
+  the top result of each search opens unless a count says otherwise, there is no Brave fallback (when Google's
+  page can't be read, a captcha or `/sorry` or nothing in time, Google's own results page opens for that search,
+  one tab whatever the count; an incognito space or an engine that isn't Google opens that engine's results page,
+  one per search whatever the count), and a model that throws (a guardrail's false positive, the context window, an unsupported language)
+  falls back to searching the phrase as typed, with its stated count and cue words, where Arc shows the error
+  row. The search runs in a windowless page in the space's profile that waits for the load to finish and asks again
+  when Google reloads its page under the script. The only data that leaves the Mac is the queries, to the search
+  engine. Not measured: the row's exact spacing, the flower's size in Arc's row, what Arc does when a second run
+  starts while the first works.

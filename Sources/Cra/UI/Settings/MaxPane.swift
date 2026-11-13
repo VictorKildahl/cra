@@ -4,7 +4,8 @@ import SwiftUI
 /// Arc's Max pane (Arc 1.171, Settings ▸ Max): one card, a row per feature with a picture in a
 /// white frame, its name, what it does and a switch, and a line under the card about where the
 /// data goes. Cra's features run on the Mac's own Apple Intelligence model, so that line says
-/// nothing leaves the Mac, or, while Apple Intelligence can't run, why and how to turn it on.
+/// the model sends nothing (and, with Instant Links on, that its searches go to the search engine),
+/// or, while Apple Intelligence can't run, why and how to turn it on.
 struct MaxPane: View {
     @Environment(SidebarStore.self) private var store
     private var service: TidyTabsService { TidyTabsService.shared }
@@ -14,7 +15,7 @@ struct MaxPane: View {
     var body: some View {
         @Bindable var store = store
         let available = service.status == .available
-        let features = [store.settings.tidyTabs, store.settings.tidyTabTitles, store.settings.tidyDownloads, store.settings.fiveSecondPreviews, store.settings.askOnPage]
+        let features = [store.settings.tidyTabs, store.settings.tidyTabTitles, store.settings.tidyDownloads, store.settings.fiveSecondPreviews, store.settings.askOnPage, store.settings.instantLinks]
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 0) {
                 MaxBanner()
@@ -38,6 +39,7 @@ struct MaxPane: View {
                                 store.settings.tidyDownloads = on
                                 store.settings.fiveSecondPreviews = on
                                 store.settings.askOnPage = on
+                                store.settings.instantLinks = on
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(MaxMasterSwitch.isEmphasised(features) ? Color(.sRGB, red: 0.2, green: 0.22, blue: 0.98) : .gray)
@@ -59,6 +61,12 @@ struct MaxPane: View {
                     TidyTabsPicture()
                 }
                 SettingsCardDivider()
+                // Arc 1.172's order: Instant Links comes right after Tidy Tabs.
+                SettingsSwitchRow(InstantLinks.settingsTitle, detail: InstantLinks.settingsDetail,
+                                  isOn: $store.settings.instantLinks, enabled: available) {
+                    InstantLinksPicture()
+                }
+                SettingsCardDivider()
                 SettingsSwitchRow("Tidy Tab Titles",
                                   detail: "Have your tabs automatically renamed with tidier, shorter titles when you Pin them.",
                                   isOn: $store.settings.tidyTabTitles, enabled: available) {
@@ -78,7 +86,7 @@ struct MaxPane: View {
                 }
                     }
                     .padding(.top, 9)
-            MaxFooter(status: service.status) { service.openSystemSettings() }
+            MaxFooter(status: service.status, instantLinks: store.settings.instantLinks) { service.openSystemSettings() }
                 .padding(.top, 14)
                 }
                 .padding(.horizontal, SettingsMetrics.paneInset)
@@ -101,6 +109,7 @@ struct MaxPane: View {
 /// can't and the way to System Settings ▸ Apple Intelligence & Siri.
 private struct MaxFooter: View {
     let status: TidyTabsService.Status
+    let instantLinks: Bool
     let openSettings: () -> Void
 
     var body: some View {
@@ -109,6 +118,13 @@ private struct MaxFooter: View {
                 .font(.system(size: 12)).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+            // The searches Instant Links makes are the one thing that leaves the Mac.
+            if status == .available, instantLinks {
+                Text("Instant Links sends what it searches for to your search engine, as a search would.")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if status.canOpenSettings {
                 Button(action: openSettings) {
                     Text("Turn on Apple Intelligence in System Settings").font(.system(size: 12)).underline()
@@ -211,6 +227,28 @@ private struct TidyTabsPicture: View {
                 Image(systemName: "xmark").font(.system(size: 9, weight: .semibold)).foregroundStyle(ink)
             }
             .offset(x: -2)
+        }
+    }
+}
+
+/// Instant Links' picture: the command bar with a search and the ⇧ and ↩ keycaps, on pink.
+private struct InstantLinksPicture: View {
+    var body: some View {
+        ZStack {
+            Color(red: 0.96, green: 0.62, blue: 0.62)
+            HStack(spacing: 3) {
+                Image(systemName: "magnifyingglass").font(.system(size: 5, weight: .medium)).foregroundStyle(Color(white: 0.55))
+                RoundedRectangle(cornerRadius: 1).fill(Color(white: 0.8)).frame(width: 20, height: 2)
+                Spacer(minLength: 0)
+                ForEach(["⇧", "↩"], id: \.self) { key in
+                    Text(key).font(.system(size: 5.5, weight: .semibold)).foregroundStyle(Color(white: 0.35))
+                        .frame(width: 8, height: 8)
+                        .background(RoundedRectangle(cornerRadius: 2, style: .continuous).fill(Color(white: 0.92)))
+                }
+            }
+            .padding(.horizontal, 5)
+            .frame(width: 70, height: 16)
+            .background(Capsule().fill(Color.white))
         }
     }
 }

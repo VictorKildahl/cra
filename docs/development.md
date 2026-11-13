@@ -244,6 +244,18 @@ without Apple Intelligence would. `cra://debug?tidy=1` runs Tidy on the window's
 hovering the divider, `cra://debug?undoTidy=1` is ⌘Z's undo and `cra://debug?settingsPane=max`
 opens Settings on a pane.
 
+Opening ⌘T with Instant Links on prewarms a model session, kept until the next Instant Links run. Instant Links (#407) uses the same test model: its plan is `InstantLinks.plainPlan`, the phrase as
+one search, after the 1.6 s pause. `CRA_INSTANT_LINKS_SEARCH=<url with {searchTerms}>` loads that page in the hidden
+search page and reads it with Google's script, as if it were Google (`Tests/Fixtures/Pages/instant-links.html` is
+shaped like Google's results). `CRA_INSTANT_LINKS_FAIL=1` makes the model and the fallback both give no plan,
+so the row shows its error, and `CRA_INSTANT_LINKS_MODEL_FAIL=1` makes the test model throw, so the fallback runs.
+While a scenario runs, `cra://debug?instantLinksFail=none|plan|model` changes both,
+`cra://debug?instantLinksSetting=on|off` is Settings ▸ Max ▸ Instant Links and `cra://debug?instantLinksDismiss=1` is
+the error row's ✕. `cra://debug?instantLinks=<label>` logs the row and the last run: rows, status, current (the
+selected-row fill), plan (format/searches/counts), opened, fellback, and Today's and Pinned's items in order (a page's
+`result=` number, `+` between a split's panes, `"title"{…}` for a folder, `*` on the selected tab).
+`cra://debug?key=` now sends the key to the ⌘T bar's panel while it is open, so a scenario can press Shift-Return.
+
 `cra://debug?dragEnd=<text>` ends a drag of the window's tab whose URL holds the text, let go
 with nothing taking it, the way a drag out of the sidebar ends: outside every Cra window it opens
 in a new Blank Window (`&at=x,y` picks the point, from the screen's top left).

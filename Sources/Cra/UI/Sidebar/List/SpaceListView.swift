@@ -17,6 +17,7 @@ final class SpaceListView: NSView, NSDraggingSource {
     enum RowKey: Hashable {
         case item(UUID)
         case liveStatus(UUID)
+        case instantLinks(UUID)
         case placeholder
         case divider
         case newTab
@@ -27,6 +28,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         case folder(FolderRowModel)
         case split(SplitRowModel)
         case liveStatus(LiveStatusModel)
+        case instantLinks(InstantLinksRowModel)
         case placeholder(active: Bool)
         case divider(hasToday: Bool, tidy: DividerTidy)
         case groupHeader(GroupHeaderRowModel)
@@ -352,6 +354,10 @@ final class SpaceListView: NSView, NSDraggingSource {
         out.append(Row(key: .divider, content: .divider(hasToday: !todayKids.isEmpty && !blank, tidy: tidy)))
         let atTop = store.settings.newTabButtonAtTop
         if atTop && showsNewTab { out.append(Row(key: .newTab, content: .newTab(active: placeholder))) }
+        // Instant Links' "Searching the web for you…" (#407): transient, at the top of Today.
+        for r in InstantLinksService.shared.pending(in: spaceID) {
+            out.append(Row(key: .instantLinks(r.id), content: .instantLinks(InstantLinksRowModel(id: r.id, failed: r.failed, current: r.current))))
+        }
         for item in store.children(of: space.todayContainerID) {
             add(item, depth: 0, pinned: false, parent: space.todayContainerID, index: todayKids.firstIndex(of: item.id) ?? 0)
         }
@@ -452,6 +458,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         case .folder: return v is FolderRowView
         case .split: return v is SplitRowView
         case .liveStatus: return v is LiveStatusRowView
+        case .instantLinks: return v is InstantLinksRowView
         case .placeholder: return v is PinPlaceholderRowView
         case .divider: return v is DividerRowView
         case .groupHeader: return v is GroupHeaderRowView
@@ -465,6 +472,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         case .folder: return FolderRowView(key: row.key, list: self, colors: colors)
         case .split: return SplitRowView(key: row.key, list: self, colors: colors)
         case .liveStatus: return LiveStatusRowView(key: row.key, list: self, colors: colors)
+        case .instantLinks: return InstantLinksRowView(key: row.key, list: self, colors: colors)
         case .placeholder: return PinPlaceholderRowView(key: row.key, list: self, colors: colors)
         case .divider: return DividerRowView(key: row.key, list: self, colors: colors)
         case .groupHeader: return GroupHeaderRowView(key: row.key, list: self, colors: colors)
@@ -478,6 +486,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         case .folder(let m): (v as? FolderRowView)?.apply(m)
         case .split(let m): (v as? SplitRowView)?.apply(m)
         case .liveStatus(let m): (v as? LiveStatusRowView)?.apply(m)
+        case .instantLinks(let m): (v as? InstantLinksRowView)?.apply(m)
         case .placeholder(let active): (v as? PinPlaceholderRowView)?.apply(active: active)
         case .divider(let hasToday, let tidy): (v as? DividerRowView)?.apply(hasToday: hasToday, tidy: tidy)
         case .groupHeader(let m): (v as? GroupHeaderRowView)?.apply(m)
