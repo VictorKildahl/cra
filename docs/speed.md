@@ -46,7 +46,7 @@ against ~930 MB at 20 tabs and ~370 against ~320 MB back at one tab. Where the d
 
 | | Cra | The other browser | Why |
 |---|---|---|---|
-| Page processes | ~33 MB each | ~26.5 MB each | The engine version: 157 there, 156 here. Cra's own page scripts are 0.6 MB of it (measured). |
+| Page processes | ~33 MB each | ~26.5 MB each | Not the engine: a dirty copy of the framework's `__DATA_CONST` (12.4 MB) in every Cra helper, fixed 13 Nov (below: ~20 MB each now). |
 | Browser process | ~210 MB | ~155 MB | CEF makes every tab a Chrome browser with its own (hidden) window and toolbar. |
 | GPU | ~160 MB | (with network, storage, its blocker: ~250 MB) | Even now that five hidden tabs keep their frame. |
 
@@ -130,7 +130,7 @@ page making from 34 to 21 ms on average, the switch to a restored tab's page sho
 and opening a site from 36 to 16 ms; and **tabs switch on the press**, as Arc does (checked on live Arc
 1.173.1), which takes the click's own length (typically ~90 ms) off every sidebar switch.
 
-### 2. A newer Chromium (page processes, ~7 MB a page)
+### 2. A newer Chromium
 
 13 Nov 2026: CEF has a 158 branch (8127, Chromium 158.0.8127.18, 10 Nov), still a beta engine; Cra takes
 stable CEF only (check-cef-update.sh, the release gate), so it waits for Chrome 158 stable unless Victor
@@ -166,9 +166,37 @@ measured with `scripts/perf/rounds.sh`.
 
 Started 13 Nov 2026: OptimizationHints, PreloadingHeuristicsMLModel, HistoryEmbeddings, Glic and LensOverlay
 off (Google services Cra never offers): 11–12 MB less in the browser process at 20 tabs, two rounds of
-`MODES=procs` with `BENCH_ARGS`. A page process's own 33 MB is 12.4 MB of the framework's `__DATA_CONST`
-dirtied at load (the same in plain Chrome, a link-level cost) and ~10 MB of page content; feature
-switches don't move it.
+`MODES=procs` with `BENCH_ARGS`. Feature switches don't move a page process's own size; how the
+framework is loaded does (next section).
+
+### Done 13 Nov 2026: the framework is linked at launch (~14 MB less in every helper process)
+
+A page process's 33 MB held 12.4 MB of the framework's `__DATA_CONST` as a private, dirty copy, and so
+did the GPU process, every utility process and the browser process. Google Chrome's helpers have the
+same 12 MB region clean (shared with the file). The difference was how the framework gets loaded, not
+the engine: Chrome's helpers name their framework as a launch-time dependency, so dyld maps it before
+libSystem is up and the kernel binds its pointers page by page as they are read (page-in linking). Cra's
+helper (and our own plain Chromium 156, which loads its framework with dlopen too) mapped it later
+with `CefScopedLibraryLoader`, after launch, where dyld binds every pointer itself and writes the whole
+region. Ruled out on the way: signing (Developer ID with Chrome's flags), the sandbox, the SDK, the
+pointer format.
+
+Now `CraHelper` links `Sources/CraHelper/ChromiumEmbeddedFramework.tbd` (the framework's path as a
+helper sees it) and `Cra` links the framework itself; the dlopen that follows gets the same image.
+The seatbelt still goes on before any CEF code runs: mapping runs only the framework's 10 static
+initializers (C++ globals, no I/O), and every helper reports sandboxed. `scripts/build.sh` fails when
+the helper stops linking the framework or the path doesn't resolve.
+
+Measured on a 0.1.42 copy with only the helper changed, two interleaved rounds, 20 bench tabs:
+
+| | Before | After |
+|---|---|---|
+| Page process | 34–35 MB | 20–21 MB |
+| Page processes, 20 tabs | ~700 MB | ~410 MB |
+| Total, 20 tabs settled | 1,072–1,103 MB | 817–848 MB |
+| Total, 1 tab | 248–293 MB | 220–223 MB |
+
+That puts Cra's page processes below Chrome 157's and below the other browser's (~26.5 MB).
 
 ### 3. Leave CEF (browser process, ~50 MB at 20 tabs; any Chromium version)
 
