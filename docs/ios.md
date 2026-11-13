@@ -97,7 +97,7 @@ to App Store Connect; the build number is the commit count. It signs with the Ap
 Xcode ▸ Settings ▸ Accounts, or with an App Store Connect API key given as `ASC_KEY_PATH`,
 `ASC_KEY_ID` and `ASC_ISSUER_ID` (the .p8 stays in `~/.appstoreconnect/private_keys`, never in
 the repo). The app record for `dk.kildahl.cra` has to exist in App Store Connect before the
-first upload. Builds are iPhone only (`TARGETED_DEVICE_FAMILY = 1`) until iPad has been checked.
+first upload. Builds are for iPhone and iPad (`TARGETED_DEVICE_FAMILY = 1,2`); `CRA_IOS_SIM="Cra iPad" scripts/ios.sh test …` runs the UI tests on an iPad simulator.
 
 ## Share extension
 

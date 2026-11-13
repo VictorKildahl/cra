@@ -55,10 +55,12 @@ final class SheetHost: UIView, UIGestureRecognizerDelegate {
         let full = panelHeight(safeAreaInsets.bottom)
         let height = min(full, bounds.height - safeAreaInsets.top - 8)
         let top = shown ? bounds.height - height + dragOffset : bounds.height
-        panel.frame = CGRect(x: 0, y: top, width: bounds.width, height: height)
+        // On iPad the panel keeps a phone-like width, centred (Arc Search's iPad menu was not seen).
+        let width = min(bounds.width, 540)
+        panel.frame = CGRect(x: (bounds.width - width) / 2, y: top, width: width, height: height)
         material.frame = panel.bounds
         scroller.frame = panel.bounds
-        content.frame = CGRect(x: 0, y: 0, width: bounds.width, height: full)
+        content.frame = CGRect(x: 0, y: 0, width: width, height: full)
         scroller.contentSize = content.frame.size
         scroller.isScrollEnabled = full > height
         dim.alpha = shown ? max(0, 1 - dragOffset / max(1, height)) : 0
