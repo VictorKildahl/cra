@@ -54,13 +54,11 @@ enum TidyTitlesServiceTests {
             f.store.pinTab(f.id)
             await f.generator.waitFor(1)
             if completed {
-                f.generator.resolve(1, with: "Unavailable Name")
-                await turn()
+                await f.resolveForReveal(1, with: "Unavailable Name")
             }
             f.available = false // The cached status need not have refreshed yet.
             if !completed {
-                f.generator.resolve(1, with: "Unavailable Name")
-                await turn()
+                await f.resolveForReveal(1, with: "Unavailable Name")
             }
             f.clock.advance(by: 1)
             expect(f.store.item(f.id)?.title == nil && f.service!.effects.isEmpty,
@@ -90,8 +88,7 @@ enum TidyTitlesServiceTests {
             f.store.pinTab(f.id)
             await f.generator.waitFor(1)
             if completed {
-                f.generator.resolve(1, with: "Stale Name")
-                await turn()
+                await f.resolveForReveal(1, with: "Stale Name")
             }
             // The real refresh must invalidate synchronously, without an actor yield between states.
             setenv("CRA_TIDY_FAKE_MODEL", "off", 1)
@@ -110,8 +107,7 @@ enum TidyTitlesServiceTests {
             f.store.unpinTab(f.id)
             f.store.pinTab(f.id)
             await f.generator.waitFor(2)
-            f.generator.resolve(2, with: "Current Name")
-            await turn()
+            await f.resolveForReveal(2, with: "Current Name")
             f.clock.advance(by: 1)
             expect(f.store.item(f.id)?.title == "Current Name" && service.effects[f.id] != nil,
                    "new available work remains independent of the invalidated token")
@@ -142,8 +138,7 @@ enum TidyTitlesServiceTests {
         }
         f.store.pinTab(f.id)
         await generator.waitFor(1)
-        generator.resolve(1, with: "Unavailable Name")
-        await turn()
+        await f.resolveForReveal(1, with: "Unavailable Name")
         setenv("CRA_TIDY_FAKE_MODEL", "off", 1) // No refresh: cached status still says available.
         expect(availability.modelAvailable && !availability.currentModelAvailable,
                "fresh eligibility detects model loss before cached availability refresh")
@@ -193,8 +188,7 @@ enum TidyTitlesServiceTests {
         f.generator.resolve(1, with: "Old Name")
         await turn()
         f.service!.tabPinned(f.id, store: f.store)
-        f.generator.resolve(2, with: "New Name")
-        await turn()
+        await f.resolveForReveal(2, with: "New Name")
         f.clock.advance(by: 1)
         await turn()
         expect(f.store.item(f.id)?.title == "New Name" && f.service!.effects[f.id] != nil,
@@ -209,8 +203,7 @@ enum TidyTitlesServiceTests {
         let f = Fixture()
         f.store.pinTab(f.id)
         await f.generator.waitFor(1)
-        f.generator.resolve(1, with: "First Name")
-        await turn()
+        await f.resolveForReveal(1, with: "First Name")
         f.clock.advance(by: 0.99)
         expect(f.store.item(f.id)?.title == nil && f.service!.effects.isEmpty,
                "a quick answer waits for the measured minimum reveal delay")
@@ -223,8 +216,7 @@ enum TidyTitlesServiceTests {
         f.store.unpinTab(f.id)
         f.store.pinTab(f.id)
         await f.generator.waitFor(2)
-        f.generator.resolve(2, with: "Second Name")
-        await turn()
+        await f.resolveForReveal(2, with: "Second Name")
         f.clock.advance(by: 1)
         let firstEffect = f.service!.effects[f.id]
         expect(f.store.item(f.id)?.title == "Second Name" && firstEffect?.start == f.clock.now,
@@ -239,8 +231,7 @@ enum TidyTitlesServiceTests {
         f.store.unpinTab(f.id)
         f.store.pinTab(f.id)
         await f.generator.waitFor(3)
-        f.generator.resolve(3, with: "Third Name")
-        await turn()
+        await f.resolveForReveal(3, with: "Third Name")
         f.clock.advance(by: 1)
         f.store.settings.tidyTabTitles = false
         expect(f.service!.effects.isEmpty && f.store.item(f.id)?.title == "Third Name",
@@ -252,8 +243,7 @@ enum TidyTitlesServiceTests {
         let f = Fixture()
         f.store.pinTab(f.id)
         await f.generator.waitFor(1)
-        f.generator.resolve(1, with: "First Name")
-        await turn()
+        await f.resolveForReveal(1, with: "First Name")
         f.clock.advance(by: 1)
         f.store.settings.tidyTabTitles = false
         f.store.settings.tidyTabTitles = true
@@ -261,8 +251,7 @@ enum TidyTitlesServiceTests {
         f.store.unpinTab(f.id)
         f.store.pinTab(f.id)
         await f.generator.waitFor(2)
-        f.generator.resolve(2, with: "Second Name")
-        await turn()
+        await f.resolveForReveal(2, with: "Second Name")
         f.clock.advance(by: 1)
         let effect = f.service!.effects[f.id]
         f.clock.advance(by: TidyTitlesService.subtitleShown - 1)
@@ -290,8 +279,12 @@ enum TidyTitlesServiceTests {
             case "other-setting": f.store.settings.tidyDownloads.toggle()
             default: break
             }
-            f.generator.resolve(1, with: mutation == "failure" ? nil : "Generated Name")
-            await turn()
+            if mutation == "failure" {
+                f.generator.resolve(1, with: nil)
+                await turn()
+            } else {
+                await f.resolveForReveal(1, with: "Generated Name")
+            }
             f.clock.advance(by: 1)
             await turn()
             let applies = mutation == "navigate" || mutation == "other-setting"
@@ -312,8 +305,7 @@ enum TidyTitlesServiceTests {
         await f.generator.waitFor(1)
         f.store.activeWindowID = UUID()
         f.label.frame.size.width = 500
-        f.generator.resolve(1, answer: .init(filtered: "Specific informative title", rewritten: "Short"))
-        await turn()
+        await f.resolveForReveal(1, answer: .init(filtered: "Specific informative title", rewritten: "Short"))
         f.clock.advance(by: 1)
         await turn()
         expect(f.store.item(f.id)?.title == "Specific informative title",
@@ -338,8 +330,7 @@ enum TidyTitlesServiceTests {
         let scheduled = Fixture()
         scheduled.store.pinTab(scheduled.id)
         await scheduled.generator.waitFor(1)
-        scheduled.generator.resolve(1, with: "Pending Reveal")
-        await turn()
+        await scheduled.resolveForReveal(1, with: "Pending Reveal")
         scheduled.service = nil
         await turn()
         scheduled.clock.advance(by: 10)
@@ -415,13 +406,25 @@ enum TidyTitlesServiceTests {
 
     @MainActor
     private final class Fixture {
-        let clock = ManualScheduler(now: Date(timeIntervalSince1970: 1_700_000_000))
+        let clock = RevealClock()
         let store: SidebarStore
         let generator = Generator()
         let label = NSTextField(labelWithString: "")
         var service: TidyTitlesService?
         var available = true
         let id: UUID
+
+        /// Resuming the fake model alone does not run the service's async continuation.
+        /// Wait until that continuation has installed real reveal work on the injected clock.
+        func resolveForReveal(_ index: Int, with title: String) async {
+            await resolveForReveal(index, answer: .init(filtered: title, rewritten: title))
+        }
+
+        func resolveForReveal(_ index: Int, answer: TidyTitles.Answer) async {
+            let scheduled = clock.scheduledCount
+            generator.resolve(index, answer: answer)
+            await clock.waitForSchedule(after: scheduled)
+        }
 
         init() {
             store = SidebarStore(clock: clock)
@@ -440,6 +443,37 @@ enum TidyTitlesServiceTests {
                 if let store { service?.tabPinned(id, store: store) }
             }
             store.tidyTabTitlesChanged = { [weak service] enabled in if !enabled { service?.cancelAll() } }
+        }
+    }
+
+    /// Observes the existing Scheduler boundary and delegates time/work to the real manual clock.
+    /// Only title reveal/expiry work is scheduled here; store persistence uses its own queue.
+    @MainActor
+    private final class RevealClock: Scheduler {
+        private let clock = ManualScheduler(now: Date(timeIntervalSince1970: 1_700_000_000))
+        private(set) var scheduledCount = 0
+        private var scheduled: CheckedContinuation<Void, Never>?
+        var now: Date { clock.now }
+
+        func after(_ delay: TimeInterval, _ work: @escaping @MainActor () -> Void) -> ScheduledWork {
+            let handle = clock.after(delay, work)
+            scheduledCount += 1
+            let waiter = scheduled
+            scheduled = nil
+            waiter?.resume()
+            return handle
+        }
+
+        func every(_ interval: TimeInterval, _ work: @escaping @MainActor () -> Void) -> ScheduledWork {
+            clock.every(interval, work)
+        }
+
+        func advance(by seconds: TimeInterval) { clock.advance(by: seconds) }
+
+        func waitForSchedule(after count: Int) async {
+            if scheduledCount > count { return }
+            precondition(scheduled == nil, "only one model completion is awaited per fixture")
+            await withCheckedContinuation { scheduled = $0 }
         }
     }
 
