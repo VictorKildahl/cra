@@ -134,7 +134,7 @@ scripts/release.sh
 ```
 
 `scripts/release.sh` does this once per CPU (`CRA_ARCHS`, default `arm64 x86_64`): it runs
-`build.sh` (sign, innermost first, with the CEF entitlements), notarizes and staples the
+`build.sh` (sign, innermost first, with the helper entitlements), notarizes and staples the
 app, runs `package.sh` (zip, DMG with an Applications link, checksums), then notarizes and
 staples the DMG, checks it with `spctl` and writes that CPU's appcast. Both CPUs share one
 build number. Without `CRA_SIGN_IDENTITY` it produces an ad-hoc build and skips notarization.
@@ -297,63 +297,33 @@ are the controls. Details and Arc's original are in `docs/arc-reverse-engineerin
   the automatic restart) against a local appcast made with `CRA_UPDATE_URL=… scripts/appcast.sh`.
 - Copies from before the updater (0.1.0, 0.1.1) update once by hand: rerun the install line.
 
-## The Chromium engine (CEF)
+## The Chromium engine
 
-Cra ships its own CEF build, not Spotify's prebuilt one: Spotify builds leave out
-H.264/AAC, so MP4 and HLS video (X, Instagram, Reddit, news sites) never plays. Codecs
-are a compile-time switch and FFmpeg is linked into the framework, so there is no way
-around building it.
+Cra runs on Chrome's own framework with Cra's layer, patches and branding built in: the engine
+([chromium-engine.md](chromium-engine.md)). `scripts/build-chromium.sh` builds it from a Chrome stable tag
+(`CHROMIUM_TAG`, `CRA_ARCH=arm64|x64`; ~45 GB for the checkout, 2–4 h a CPU on the M2 Max, official build with
+ThinLTO and PGO, H.264/AAC), after `engine/chromium/apply.sh` puts the layer, the hooks, Cra's patches,
+ungoogled-chromium's and the branding in the tree. Publish both CPUs into one pre-release:
 
-    scripts/build-cef.sh      # ~80 GB free, several hours; resumes where it stopped
-    scripts/publish-cef.sh    # uploads the archive as pre-release cef-<version>-codecsN
+    scripts/publish-engine.sh                      # Apple silicon asset (engine-<version>-<n>)
+    ENGINE_CPU=x64 scripts/publish-engine.sh       # Intel asset, same release
 
-`build-cef.sh` checks out the same CEF commit `fetch-cef.sh` pins, applies
-`scripts/cef-patches/*.patch` on top of CEF's own patches, and builds an official
-release with `proprietary_codecs=true ffmpeg_branding=Chrome`. `fetch-cef.sh` (and CI,
-keyed on its hash) downloads the published archive into `vendor/cef`, replacing a copy
-from a different source. To change the build without a CEF version bump, bump the
-`codecsN` suffix of `CEF_RELEASE` and publish again. Needs Xcode's Metal toolchain
-(`xcodebuild -downloadComponent MetalToolchain`).
+`scripts/fetch-engine.sh` pins `ENGINE_VERSION` and `ENGINE_RELEASE`; bump the `-<n>` suffix to publish a changed
+build of the same Chrome version.
 
-**Patch rounds and Intel.** Once `build-cef.sh` has built a version, a new or changed
-patch goes through `rebuild-cef.sh`, which builds from that checkout for both CPUs
-(minutes each) and never reruns CEF's patcher (rerunning it compiles Web Push out). The
-Intel (`macosx64`) build is cross-compiled on the same Mac from the same sources, in its
-own `out/Release_GN_x64` (~12 GB; the first one compiles everything):
+**A release ships the newest engine.** Pushing a `vX.Y.Z` tag from Claude Code runs
+`scripts/check-cef-release-hook.sh` (the CEF-era name), which stops the push when Chrome's newest stable for macOS
+(Google's version history) is newer than `ENGINE_VERSION`, or when the pinned release lacks the arm64 or the
+Intel archive; `release.sh` checks again (`scripts/check-engine-update.sh --check`). `CRA_ALLOW_OLD_ENGINE=1`
+ships the pinned engine anyway, for an urgent fix while the new one builds; in CI that's the repository variable
+`CRA_ALLOW_OLD_ENGINE` = `1`, deleted after the release.
 
-    scripts/rebuild-cef.sh [arm64] [x64]           # both when no CPU is given
-    scripts/publish-cef.sh                         # arm64 asset
-    CEF_ARCH=macosx64 scripts/publish-cef.sh       # Intel asset, same release
+To move to a new Chrome stable: `CHROMIUM_TAG=<version> scripts/build-chromium.sh sync`, then `apply`; a patch
+that no longer applies is rebased in `engine/chromium/patches` (`apply.sh` names it), then `gen` and `build` for
+each CPU, the scenarios on the new build, `publish-engine.sh` and the new pin.
 
-**Staying current.** Chromium only ships security fixes for its newest version. The
-"CEF updates" workflow (`.github/workflows/cef-updates.yml`, daily, free Linux runner)
-runs `scripts/check-cef-update.sh`: when Spotify's index lists a newer stable CEF for
-macOS arm64, it opens one "Chromium engine update available" issue, assigned to the repo
-owner, with the exact command. The build itself runs on the Mac, because GitHub's free
-macOS runners are too small (3 cores, 14 GB disk, 6 hour jobs) and larger ones are billed:
-
-    scripts/update-cef.sh <cef_version>   # build + publish arm64 and x64, pin, rebuild Cra
-
-A same-major update reuses the checkout: `build-cef.sh` moves it to the new Chromium tag
-itself, and ninja recompiles nearly everything (about 2½ hours on the M2 Max). A new Chromium
-major needs a fresh checkout as well. Then test `build/Cra.app`, commit `scripts/fetch-cef.sh`, close the
-issue and tag a release.
-
-**A release ships the newest CEF.** Pushing a `vX.Y.Z` tag from Claude Code runs
-`scripts/check-cef-release-hook.sh` (in `.claude/settings.json`), and `scripts/release.sh` (so the
-Release workflow too) runs `scripts/check-cef-update.sh --check` before it builds. Both stop the
-release when Spotify's index lists a newer stable CEF than `fetch-cef.sh` pins; the hook also
-stops it when the pinned `CEF_RELEASE` lacks the arm64 or the Intel archive. The Chromium version
-decides first: a CEF on a newer Chromium is an update whatever its own number, and a later CEF on
-the same Chromium is one too. A later CEF on an *older* Chromium is not, since building it would take
-Chromium back. That happens when Cra pins CEF's branch head on a newer Chromium patch than Spotify
-built (156.0.27 on .96, while Spotify's 156.0.28 is on .88, #355). For such a CEF, look at its
-CEF-only commits with `gh api repos/chromiumembedded/cef/compare/<ours>...<theirs>`.
-`CRA_ALLOW_OLD_CEF=1` ships the pinned CEF anyway, for an urgent fix while the new one builds.
-In CI that's the repository variable `CRA_ALLOW_OLD_CEF` = `1` (Settings → Secrets and variables →
-Actions → Variables, or `gh variable set CRA_ALLOW_OLD_CEF --body 1`), which the Release workflow
-passes to `release.sh`. Delete it once the release is out, so the next one is checked again. It also
-fits a newer CEF on the same Chromium that changes nothing on macOS (check the compare above).
+`CRA_ENGINE=cef` still builds and releases on CEF (Cra's own CEF build: `scripts/build-cef.sh`,
+`scripts/cef-patches`, `scripts/publish-cef.sh`, `scripts/fetch-cef.sh`, and CEF's own release checks).
 
 ## Homebrew
 
