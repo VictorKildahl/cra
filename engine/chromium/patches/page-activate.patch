@@ -9,8 +9,8 @@ diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_content
 +#include "chrome/browser/cra_engine_hooks.h"
  
  #include "base/check_deref.h"
- #include "base/metrics/histogram_macros.h"
-@@ -744,6 +746,12 @@
+ #include "base/feature_list.h"
+@@ -799,6 +801,12 @@
      return;
    }
    browser_->GetTabStripModel()->ActivateTabAt(index);

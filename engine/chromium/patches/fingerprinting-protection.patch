@@ -262,8 +262,8 @@ diff --git a/third_party/blink/renderer/modules/webaudio/offline_audio_context.c
  #include "third_party/blink/renderer/bindings/modules/v8/v8_offline_audio_context_options.h"
  #include "third_party/blink/renderer/bindings/modules/v8/v8_union_audiocontextrendersizecategory_unsignedlong.h"
  #include "third_party/blink/renderer/core/dom/dom_exception.h"
-@@ -583,6 +584,13 @@
-   Member<AudioBuffer> rendered_buffer = pending_render_targets_.TakeFirst();
+@@ -578,6 +579,13 @@
+   Member<AudioBuffer> rendered_buffer = pending_render_targets_.front();
  
    CHECK(rendered_buffer);
 +  // Cra: Fingerprinting protection's noise, before the page sees the buffer.
@@ -273,9 +273,9 @@ diff --git a/third_party/blink/renderer/modules/webaudio/offline_audio_context.c
 +      CraNoiseAudio(GetExecutionContext(), channel->AsSpan(), i);
 +    }
 +  }
+   // Keep the target queued across `Resolve()` so synchronous thenable getters
+   // can enqueue more chunks without starting a duplicate render.
    resolver->Resolve(rendered_buffer.Get());
- 
-   if (IsRenderComplete()) {
 diff --git a/third_party/blink/renderer/core/execution_context/navigator_base.cc b/third_party/blink/renderer/core/execution_context/navigator_base.cc
 --- a/third_party/blink/renderer/core/execution_context/navigator_base.cc
 +++ b/third_party/blink/renderer/core/execution_context/navigator_base.cc

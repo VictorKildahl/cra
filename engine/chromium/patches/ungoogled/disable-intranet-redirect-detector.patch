@@ -1,9 +1,10 @@
 # Disables the intranet redirect detector. It generates extra DNS requests and the functionality using this is disabled
 # See this page for more information: https://mikewest.org/2012/02/chrome-connects-to-three-random-domains-at-startup
 
+diff --git a/chrome/browser/intranet_redirect_detector.cc b/chrome/browser/intranet_redirect_detector.cc
 --- a/chrome/browser/intranet_redirect_detector.cc
 +++ b/chrome/browser/intranet_redirect_detector.cc
-@@ -117,9 +117,7 @@ void IntranetRedirectDetector::FinishSle
+@@ -117,9 +117,7 @@
    simple_loaders_.clear();
    resulting_origins_.clear();
  
@@ -12,5 +13,5 @@
 -    return;
 +  return;
  
-   DCHECK(simple_loaders_.empty() && resulting_origins_.empty());
- 
+   CHECK(simple_loaders_.empty() && resulting_origins_.empty(),
+         base::NotFatalUntil::M162);
