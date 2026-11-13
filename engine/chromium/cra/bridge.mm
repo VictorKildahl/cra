@@ -46,6 +46,7 @@
 #include "base/version_info/version_info.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/renderer_context_menu/render_view_context_menu_base.h"
 #include "content/public/browser/context_menu_params.h"
@@ -2109,8 +2110,19 @@ void RunReadyBlocks() {
     printing::StartPrint(_contents, /*print_preview_disabled=*/true, /*has_selection=*/false);
   }
 }
+// One of Chrome's commands by its IDC name, run for this page by its Browser (Chrome's active tab follows it).
 - (BOOL)runChromeCommand:(NSString*)name {
-  return NO;
+  static NSDictionary<NSString*, NSNumber*>* const commands = @{
+    @"IDC_TASK_MANAGER" : @(IDC_TASK_MANAGER),
+    @"IDC_ROUTE_MEDIA" : @(IDC_ROUTE_MEDIA),
+  };
+  NSNumber* command = commands[name];
+  PageHost* host = _contents ? HostOf(_contents) : nullptr;
+  if (!command || !host || !chrome::IsCommandEnabled(host->browser(), command.intValue)) {
+    return NO;
+  }
+  [self makeChromeActiveTab];
+  return chrome::ExecuteCommand(host->browser(), command.intValue);
 }
 - (void)probeBackgroundColor {
   if (_contents) {
