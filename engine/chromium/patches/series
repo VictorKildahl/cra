@@ -22,3 +22,4 @@ extension-tab-activate.patch
 extension-popup-no-popout-wait.patch
 translate-ui.patch
 cra-prefs.patch
+cra-keys.patch

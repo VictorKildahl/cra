@@ -11,6 +11,9 @@ class ChromeBrowserMainExtraParts;
 namespace content {
 class WebContents;
 }
+namespace input {
+struct NativeWebKeyboardEvent;
+}
 
 namespace cra {
 
@@ -33,6 +36,14 @@ inline PageActivationHook g_page_activation = nullptr;
 // (patches/translate-ui.patch).
 using TranslateStateHook = bool (*)(content::WebContents* contents, const std::string& state_json);
 inline TranslateStateHook g_translate_state = nullptr;
+
+// A key in a page: before the page sees it (`unhandled` false: Cra's reserved shortcuts) or after the page left
+// it (true). -1 for a page that isn't Cra's, which keeps Chrome's handling; else 1 handled, 0 not. Chrome's own
+// shortcuts never run for Cra's pages: its window never shows (patches/cra-keys.patch).
+using KeyEventHook = int (*)(content::WebContents* contents,
+                             const input::NativeWebKeyboardEvent& event,
+                             bool unhandled);
+inline KeyEventHook g_key_event = nullptr;
 
 }  // namespace cra
 

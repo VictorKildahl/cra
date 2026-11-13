@@ -63,6 +63,8 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "components/input/native_web_keyboard_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "net/base/net_errors.h"
 #include "ui/base/base_window.h"
 #include "ui/views/controls/webview/cra_hosted_page.h"
@@ -297,6 +299,28 @@ void PageActivation(content::WebContents* contents, bool by_page) {
   }
 }
 
+// Keys in Cra's pages (patches/cra-keys.patch), as CEF's OnPreKeyEvent and OnKeyEvent gave them: Cra's
+// reserved shortcuts before the page, the rest after it; what both leave goes to the menu bar (⌘C, ⌘V, ⌘Z are
+// Edit menu items sent to the page).
+int KeyEvent(content::WebContents* contents, const input::NativeWebKeyboardEvent& event, bool unhandled) {
+  CraBrowser* browser = BrowserFor(contents);
+  if (!browser) {
+    return -1;
+  }
+  NSEvent* key = event.os_event.Get();
+  // Modifier-only presses arrive as flagsChanged.
+  if (!key || key.type != NSEventTypeKeyDown || event.GetType() != blink::WebInputEvent::Type::kRawKeyDown) {
+    return 0;
+  }
+  if (!unhandled) {
+    return [browser.delegate browser:browser handleKeyEvent:key] ? 1 : 0;
+  }
+  if ([browser.delegate browser:browser handleUnhandledKeyEvent:key]) {
+    return 1;
+  }
+  return [NSApp.mainMenu performKeyEquivalent:key] ? 1 : 0;
+}
+
 // Cra's translate UI (patches/translate-ui.patch): false for a page that isn't Cra's.
 bool TranslateState(content::WebContents* contents, const std::string& state) {
   CraBrowser* browser = BrowserFor(contents);
@@ -525,6 +549,7 @@ namespace cra {
 void RunReadyBlocks() {
   g_page_activation = &PageActivation;
   g_translate_state = &TranslateState;
+  g_key_event = &KeyEvent;
   Strays().Start();
   StartProfilePrefs();
   g_keep_alive = new ScopedKeepAlive(KeepAliveOrigin::APP_CONTROLLER, KeepAliveRestartOption::DISABLED);
@@ -1410,7 +1435,69 @@ void RunReadyBlocks() {
 
 #pragma mark - CraApplication
 
-@implementation CraApplication
+namespace {
+
+// A background test copy (CRA_TEST_BACKGROUND, HitchMonitor.swift) never takes the front: Chrome activates the
+// app whenever it shows one of its windows.
+BOOL CraTestBackground() {
+  static BOOL background = [NSProcessInfo.processInfo.environment[@"CRA_TEST_BACKGROUND"] isEqualToString:@"1"];
+  return background;
+}
+// Requests to come to the front made while Cra was in the background that went through, counted before a
+// background test copy refuses them all (cra://debug?activations=).
+NSInteger g_background_activations = 0;
+
+// A page's view, wherever Cra shows it.
+BOOL CraIsInPageView(NSView* view) {
+  for (NSView* v = view; v; v = v.superview) {
+    if ([NSStringFromClass([v class]) isEqualToString:@"WebContentsViewCocoa"]) {
+      return YES;
+    }
+  }
+  return NO;
+}
+
+// Whether a key is a shortcut that Chromium keeps from pages because it is enabled in System
+// Settings ▸ Keyboard ▸ Shortcuts (EventIsReservedBySystem, content/browser/cocoa/
+// system_hotkey_map.mm): ⌘Space set to switch input sources (#174), ⌘` for the next window.
+// macOS acts on these inside -[NSApplication sendEvent:]. Same set as Chromium's map: the
+// enabled "standard" entries of com.apple.symbolichotkeys, without 80 and 82, plus ⌘` and ⇧⌘`
+// for 27 when the user hasn't changed it. Read live (a few µs) so a changed setting applies.
+BOOL CraIsSystemHotKey(NSEvent* event) {
+    const NSEventModifierFlags relevant =
+        NSEventModifierFlagCommand | NSEventModifierFlagShift | NSEventModifierFlagOption | NSEventModifierFlagControl;
+    NSEventModifierFlags mods = event.modifierFlags & relevant;
+    NSDictionary* stored = CFBridgingRelease(
+        CFPreferencesCopyAppValue(CFSTR("AppleSymbolicHotKeys"), CFSTR("com.apple.symbolichotkeys")));
+    NSMutableDictionary* hotKeys = [@{@"27": @{@"enabled": @YES,
+                                              @"value": @{@"type": @"standard", @"parameters": @[@96, @50, @(NSEventModifierFlagCommand)]}}}
+                                       mutableCopy];
+    if ([stored isKindOfClass:[NSDictionary class]]) [hotKeys addEntriesFromDictionary:stored];
+    [hotKeys removeObjectsForKeys:@[@"80", @"82"]];
+    for (NSString* identifier in hotKeys) {
+        NSDictionary* hotKey = hotKeys[identifier];
+        if (![hotKey isKindOfClass:[NSDictionary class]] || ![hotKey[@"enabled"] respondsToSelector:@selector(boolValue)] ||
+            ![hotKey[@"enabled"] boolValue])
+            continue;
+        NSDictionary* value = hotKey[@"value"];
+        if (![value isKindOfClass:[NSDictionary class]] || ![value[@"type"] isEqual:@"standard"]) continue;
+        NSArray* parameters = value[@"parameters"];
+        if (![parameters isKindOfClass:[NSArray class]] || parameters.count != 3 ||
+            ![parameters[1] isKindOfClass:[NSNumber class]] || ![parameters[2] isKindOfClass:[NSNumber class]])
+            continue;
+        if ([parameters[1] unsignedShortValue] != event.keyCode) continue;
+        NSEventModifierFlags hotKeyMods = [parameters[2] unsignedIntegerValue] & relevant;
+        if (hotKeyMods == mods) return YES;
+        if ([identifier isEqualToString:@"27"] && hotKeyMods == (mods & ~NSEventModifierFlagShift)) return YES;
+    }
+    return NO;
+}
+
+}  // namespace
+
+@implementation CraApplication {
+  NSHashTable<NSEvent*>* _forwardedKeyEvents;
+}
 
 // Cra's app makes NSApp (this class) before ChromeMain, and +[BrowserCrApplication initialize] reads the
 // process's command line (cocoa_l10n_util::ApplyForcedRTL): an empty one until CraEngineMain hands Chrome
@@ -1427,7 +1514,52 @@ void RunReadyBlocks() {
 }
 
 + (NSInteger)backgroundActivations {
-  return 0;
+  return g_background_activations;
+}
+
+- (BOOL)allowsActivation {
+  if (!self.isActive) {
+    g_background_activations++;
+  }
+  return !CraTestBackground();
+}
+
+- (void)activateIgnoringOtherApps:(BOOL)flag {
+  if ([self allowsActivation]) {
+    [super activateIgnoringOtherApps:flag];
+  }
+}
+
+- (void)activate {
+  if ([self allowsActivation]) {
+    [super activate];
+  }
+}
+
+// Chrome's rule: when a page has focus, ⌘-shortcuts go to the page first and reach the menu bar only if the page
+// leaves them alone (⌘F in Google Docs, ⌘← in a text field). Cra's window isn't Chrome's, whose command
+// dispatcher does this, so the key goes to the page's view here; the page's keys come back through Cra's key
+// hook (KeyEvent). Enabled macOS shortcuts (CraIsSystemHotKey) take the normal path, as in Chrome and Arc.
+- (void)sendEvent:(NSEvent*)event {
+  if ([_forwardedKeyEvents containsObject:event]) {
+    [_forwardedKeyEvents removeObject:event];
+    [super sendEvent:event];
+    return;
+  }
+  if (event.type == NSEventTypeKeyDown && (event.modifierFlags & NSEventModifierFlagCommand) &&
+      !CraIsSystemHotKey(event)) {
+    NSWindow* key = self.keyWindow;
+    NSResponder* responder = key.firstResponder;
+    if ([responder isKindOfClass:[NSView class]] && CraIsInPageView(static_cast<NSView*>(responder))) {
+      if (!_forwardedKeyEvents) {
+        _forwardedKeyEvents = [NSHashTable weakObjectsHashTable];
+      }
+      [_forwardedKeyEvents addObject:event];
+      [key sendEvent:event];
+      return;
+    }
+  }
+  [super sendEvent:event];
 }
 
 // Cmd-Q, the Dock, logout: give Cra's delegate a say, then Chrome's own exit closes every page and
