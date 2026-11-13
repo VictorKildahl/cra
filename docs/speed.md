@@ -159,6 +159,12 @@ Chrome's background services (its Helium-style base) and runs a newer engine. Be
 lever is the same as theirs: turn off Chrome background features Cra doesn't use, one at a time,
 measured with `scripts/perf/rounds.sh`.
 
+Started 13 Nov 2026: OptimizationHints, PreloadingHeuristicsMLModel, HistoryEmbeddings, Glic and LensOverlay
+off (Google services Cra never offers): 11–12 MB less in the browser process at 20 tabs, two rounds of
+`MODES=procs` with `BENCH_ARGS`. A page process's own 33 MB is 12.4 MB of the framework's `__DATA_CONST`
+dirtied at load (the same in plain Chrome, a link-level cost) and ~10 MB of page content; feature
+switches don't move it.
+
 ### 3. Leave CEF (browser process, ~50 MB at 20 tabs; any Chromium version)
 
 Build Chrome's own framework with a thin Cra layer instead of CEF: one Chrome browser per profile

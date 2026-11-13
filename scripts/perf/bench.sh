@@ -10,6 +10,7 @@
 #
 #   scripts/perf/bench.sh build/Cra.app build/perf/<label>
 #   MODES="idle latency" (default)  IDLE=<seconds> (default 30)  BENCH_ENV="K=V ..." (passed to Cra)
+#   BENCH_ARGS="--disable-features=X,Y" (Chromium switches on Cra's command line; Cra appends its own)
 #
 # Compare builds with scripts/perf/rounds.sh (interleaved), read with scripts/perf/report.py.
 # Traps: test copies open on CRA_TEST_SCREEN; a display asleep or showing another Space gives their
@@ -35,7 +36,7 @@ run() {
   : > "$CMD"
   [ "$MODE" = latency ] && HITCH="$OUT/hitch.log"
   env CRA_DATA_DIR="$DATA" CRA_COMMAND_FILE="$CMD" CRA_HITCH_LOG="$HITCH" CRA_TEST_BACKGROUND=1 ${BENCH_ENV:-} \
-    "$APP/Contents/MacOS/Cra" -ApplePersistenceIgnoreState YES --disable-backgrounding-occluded-windows --mute-audio \
+    "$APP/Contents/MacOS/Cra" -ApplePersistenceIgnoreState YES --disable-backgrounding-occluded-windows --mute-audio ${BENCH_ARGS:-} \
     > "$OUT/stdout.log" 2>&1 &
   local PID=$!
   for _ in $(seq 150); do grep -q "pid $PID reads commands" "$DATA"/cra*.log 2>/dev/null && break; sleep 0.2; done
@@ -53,6 +54,7 @@ run() {
   elif [ "$MODE" = procs ]; then
     for i in $(seq 1 20); do send "cra://open?url=$PAGE?n=$i"; sleep 1.5; done; sleep 20
     "$B/procs.sh" "$FP" $PID > "$OUT/procs.txt"
+    R=$(awk '/--type=renderer/ {print $4; exit}' "$OUT/procs.txt"); [ -n "$R" ] && vmmap --summary "$R" > "$OUT/renderer-vmmap.txt" 2>/dev/null
     send "cra://debug?freezingState=1"; sleep 2
   else
     send "cra://open?url=$PAGE?n=1"; sleep 5
