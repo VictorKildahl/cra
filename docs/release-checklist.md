@@ -135,6 +135,11 @@ built release app with a test profile. Note anything that fails in the release's
 - **#92:** in a Little Window, ⌃⌘2 sends the page to the window already on space 2.
 - **#174:** with a page text field focused, ⌘Space switches input source and ⌘` switches
   windows.
+- **#419:** drag a link from a page onto the empty space under the tabs: an insertion line shows under
+  the last Today tab, and letting go adds the tab there while the page you're on stays open. Drag one
+  between two tabs and into Pinned: the line shows there and the tab lands there. Drag a link from
+  Mail or Notes the same way, and a file from Finder: the file is refused. `drop-link-sidebar` drives
+  the drop itself; a posted drag can't reach the list, so this checks AppKit's drag on a real screen.
 - **#194:** in Google Docs, ⇧⌘C copies the URL instead of opening Word count; DevTools still
   gets ⇧⌘C.
 - **#192:** in a page's rich text field, ⇧⌘V pastes plain text and Edit ▸ Paste and Match Style

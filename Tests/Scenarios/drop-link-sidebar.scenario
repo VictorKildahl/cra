@@ -1,0 +1,22 @@
+# promise: #419
+# A link dragged into the sidebar opens as a new tab where it is let go, behind the open tab, as in
+# Arc 1.172.1: on the empty space under the tabs it goes last in Today, on a row's top edge just
+# above that row, and its page loads behind the open one, read (no unread dot). A file isn't a web page, so nothing opens.
+# Today lists the newest tab first: two, one.
+budget rss=700 stalls50=10
+cra://open?url=${PAGE}?n=one
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://open?url=${PAGE}?n=two
+wait 2
+cra://debug?dropLink=${PAGE}?n=bottom&label=empty
+expect-log drop link empty: took=1 today=\S+n=two \| \S+n=one \| \S+n=bottom selected=\S+n=two unread=0$
+wait 2
+cra://debug?browserWindows=bottom
+expect-log browser windows bottom: .* open=\S+n=two .* pages=3$
+cra://debug?dropLink=${PAGE}?n=between&before=n=one&label=between
+expect-log drop link between: took=1 today=\S+n=two \| \S+n=between \| \S+n=one \| \S+n=bottom selected=\S+n=two unread=0$
+wait 2
+cra://debug?browserWindows=between
+expect-log browser windows between: .* open=\S+n=two .* pages=4$
+cra://debug?dropLink=file:///etc/hosts&label=file
+expect-log drop link file: took=0 today=\S+n=two \| \S+n=between \| \S+n=one \| \S+n=bottom selected=\S+n=two unread=0$

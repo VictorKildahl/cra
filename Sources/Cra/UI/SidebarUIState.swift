@@ -201,6 +201,8 @@ final class SidebarActions {
     /// A tab dragged out of every Cra window and let go there (screen point): Arc opens it in a
     /// Blank Window where it was dropped (GitHub #219).
     var tearOffTab: (UUID, NSPoint) -> Void = { _, _ in }
+    /// A tab opened behind the open one starts loading, so its title and favicon fill in (#419).
+    var loadInBackground: (UUID) -> Void = { _ in }
     /// A Blank Window's "Move to…" picked a space (Arc: its tabs go there, the window closes).
     var moveBlankWindow: (UUID) -> Void = { _ in }
     var goBack: () -> Void = {}

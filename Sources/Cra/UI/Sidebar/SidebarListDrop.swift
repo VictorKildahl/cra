@@ -20,7 +20,8 @@ struct SidebarListDrop: Equatable {
         var maxX: CGFloat
     }
 
-    var draggedID: UUID
+    /// nil for a link dragged in from a page or another app, which opens as a new tab (#419).
+    var draggedID: UUID?
     /// nil while the drop would leave the item where it is.
     var target: Target?
     /// Insertion line in the list's coordinate space.

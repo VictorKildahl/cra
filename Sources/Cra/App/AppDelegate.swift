@@ -1880,6 +1880,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 main.testPickedCopy(clicks: clicks, label: dict["label"] ?? clicks)
                 return
             }
+            // dropLink=<url>[&before=<text>][&label=]: a link dragged in and let go over the list; see
+            // testDropLink (#419).
+            if let url = dict["dropLink"] {
+                main.testDropLink(url, before: dict["before"], label: dict["label"] ?? "drop")
+                return
+            }
             // dragEnd=<text>&at=x,y: the window's tab whose URL holds the text dragged and let go there
             // (from the screen's top left) with nothing taking it, as a drag out of the sidebar ends
             // (#219). Without at: a point of the screen no Cra window covers, a corner if one is free,

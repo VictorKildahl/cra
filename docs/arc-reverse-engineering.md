@@ -4756,3 +4756,14 @@ Every phrase and every number is in GitHub #407. Tags as above: [O] observed, [B
   when Google reloads its page under the script. The only data that leaves the Mac is the queries, to the search
   engine. Not measured: the row's exact spacing, the flower's size in Arc's row, what Arc does when a second run
   starts while the first works.
+
+### Sidebar insertion line and dropped links (13 Nov 2026, Arc 1.172.1, #419)
+- [O live] A link dragged from a page onto the empty space under the tabs becomes a tab at the end of Today,
+  behind the open tab, and loads there: its row shows the page's title, with no unread dot. In the binary the
+  sidebar's drag item is `SidebarDragItem { item(Identifier), external(String) }`, and the outline's
+  `ProposedDrop.DraggedItem` is `outlineViewItem` or `externalItem(NSPasteboardItem)` with the reorder's
+  `on / before / after` types (`SidebarDropType`).
+- [O live] The insertion line is AppKit's between-rows drop indicator, tinted. From a 2x capture on a dark space
+  (#383830 fill): a hollow ring 8 pt across with a 2 pt stroke (4 pt hole), its outer edge 8 pt inside the row
+  (2 pt before the favicon), centred on a 2 pt line that runs from the ring to 3 pt inside the row's right edge;
+  ink #EFEFEC, 92 % of the way from the fill to white. Cra: `SidebarListMetrics.dropRing` and friends.

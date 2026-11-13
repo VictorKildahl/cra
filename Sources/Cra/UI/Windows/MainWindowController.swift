@@ -332,6 +332,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             guard let self else { return }
             self.app.tearOffTab(id, at: point, from: self)
         }
+        sidebarActions.loadInBackground = { [weak self] id in self?.browsers.ensureRuntime(for: id) }
         sidebarActions.goBack = { [weak self] in self?.goBack() }
         sidebarActions.goForward = { [weak self] in self?.currentBrowser?.goForward() }
         sidebarActions.reload = { [weak self] in
@@ -610,6 +611,35 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         guard let l = window?.contentView.flatMap(list(in:)) else { CraLog.note("dragEnd: no list"); return }
         l.dragEnded(id, at: screenPoint, operation: [])
+    }
+
+    /// `cra://debug?dropLink`: `url` on a pasteboard, as a drag from a page carries it, let go over
+    /// this window's list (#419): on the top edge of the row whose tab's URL holds `before`, or
+    /// without it on the empty space under the last row. Logs whether the list took it, the Today
+    /// tabs in order, the open tab and how many Today tabs are unread.
+    func testDropLink(_ url: String, before: String?, label: String) {
+        func list(in v: NSView) -> SpaceListView? {
+            if let l = v as? SpaceListView, l.spaceID == focusedSpaceID { return l }
+            return v.subviews.lazy.compactMap { list(in: $0) }.first
+        }
+        guard let l = window?.contentView.flatMap(list(in:)) else { CraLog.note("drop link \(label): no list"); return }
+        let items = l.rows.filter { $0.itemID != nil }
+        let point: CGPoint
+        if let before {
+            guard let r = items.first(where: { $0.itemID.flatMap { store.item($0)?.tab?.url.contains(before) } == true }) else {
+                CraLog.note("drop link \(label): no row with \(before)"); return
+            }
+            point = CGPoint(x: r.frame.midX, y: r.frame.minY + 2)
+        } else {
+            point = CGPoint(x: items.last?.frame.midX ?? 100, y: (items.last?.frame.maxY ?? 0) + 60)
+        }
+        let pb = NSPasteboard.withUniqueName()
+        pb.writeObjects([URL(string: url).map { $0 as NSURL } ?? url as NSString])
+        let took = SpaceListView.droppedLink(pb).map { l.dropLink($0, at: point) } ?? false
+        pb.releaseGlobally()
+        let tabs = store.tabs(under: focusedSpace.todayContainerID)
+        let today = tabs.map { $0.tab?.url ?? "-" }.joined(separator: " | ")
+        CraLog.note("drop link \(label): took=\(took ? 1 : 0) today=\(today) selected=\(selectedTab?.tab?.url ?? "-") unread=\(tabs.filter(\.isUnread).count)")
     }
 
     /// `cra://debug?pickedMenu=<n>`: picks the focused space's first n listed tabs, as ⌘-click does,

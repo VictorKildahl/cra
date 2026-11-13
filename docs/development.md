@@ -259,6 +259,10 @@ selected-row fill), plan (format/searches/counts), opened, fellback, and Today's
 `cra://debug?dragEnd=<text>` ends a drag of the window's tab whose URL holds the text, let go
 with nothing taking it, the way a drag out of the sidebar ends: outside every Cra window it opens
 in a new Blank Window (`&at=x,y` picks the point, from the screen's top left).
+`cra://debug?dropLink=<url>` puts the URL on a pasteboard and lets it go over the window's list, as
+a link dragged in from a page: on the empty space under the last row, or with `&before=<text>` on the
+top edge of the row whose tab's URL holds the text. It logs `took=`, Today's tabs in order, the
+open tab and `unread=`, Today's unread count.
 `cra://debug?blankMoveTo=<n>` picks the nth space in the Blank Window's "Move to…".
 `cra://debug?browserWindows=<label>` logs each browser window's kind (normal, blank, incognito),
 space, tabs, open tab and frame; cra.log gets the kinds and counts only.

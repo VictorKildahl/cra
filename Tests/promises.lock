@@ -756,3 +756,5 @@
 #408   Tests/Scenarios/ask-on-page-dark-card.scenario  b4f7984975ed
 #411   Tests/BrowserManagerLifecycleTests.swift::nowPlayingSkipsUncontrollableSoundCase  834fe4ecbf39
 #411   Tests/Scenarios/player-skips-dings.scenario  1cc76ac02572
+#419   Packages/CraCore/Tests/CraCoreTests/DroppedLinkTests.swift::theFirstWebAddressOnThePasteboardOpens  52f864d3508b
+#419   Tests/Scenarios/drop-link-sidebar.scenario  427c13120f95

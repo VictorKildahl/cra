@@ -184,6 +184,12 @@ in this sweep (Essential Shortcuts window, Library pages).
 - Window dragging from the top of webpages (Victor's choice, 7 Nov: on, as in Arc).
 - AppleScript, Arc's dictionary (Victor's choice, 7 Nov: like Arc, JavaScript off by default).
 - Settings ▸ Privacy ▸ Block cookie banners (Arc's "Block Cookie Banners", off by default).
+- A link dragged into the sidebar's list from a page or another app opens as a tab where it's let go,
+  behind the open one (#419): on the empty space under the tabs it goes last in Today, as Arc 1.172.1 does
+  by hand; between rows and in Pinned on the same insertion line as a dragged tab (Arc's
+  `SidebarDragItem.external`, placed `before` / `after`). Favorites and the space dock still take only rows.
+  The new tab loads behind the open one, so its row shows the page's title, as in Arc. The list's insertion line,
+  for tab drags too, is Arc's: AppKit's ring and line, measured below in arc-reverse-engineering.md.
 - Easels, first version: File ▸ New Easel (⌃⇧E) opens a canvas in the tab (EaselBrowser, a page
   engine of its own like WebKitBrowser, so sidebar.json is unchanged: the tab's address is
   easel://<id>, the drawing Easels/<id>.json); Library ▸ Easels and Window ▸ View Easels….
