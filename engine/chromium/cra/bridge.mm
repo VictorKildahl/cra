@@ -19,6 +19,7 @@
 #include "cra/bridge.h"
 #include "cra/CraContentBlocker.h"
 #include "cra/downloads.h"
+#include "cra/fetch.h"
 #include "cra/page_protocol.h"
 #include "cra/permission_prompt.h"
 #include "cra/profile_prefs.h"
@@ -2139,13 +2140,42 @@ void RunReadyBlocks() {
          headers:(NSDictionary<NSString*, NSString*>*)headers
      profilePath:(NSString*)profilePath
       completion:(void (^)(NSInteger, NSString*, NSString*, NSString*))completion {
-  completion(0, url, @"", @"");
+  [self fetchURL:url headers:headers profilePath:profilePath restricted:NO completion:completion];
 }
 + (void)fetchPluginURL:(NSString*)url
                headers:(NSDictionary<NSString*, NSString*>*)headers
            profilePath:(NSString*)profilePath
             completion:(void (^)(NSInteger, NSString*, NSString*, NSString*))completion {
-  completion(0, url, @"", @"");
+  [self fetchURL:url headers:headers profilePath:profilePath restricted:YES completion:completion];
+}
+// The profile loads first if it hasn't, as a page's does.
++ (void)fetchURL:(NSString*)url
+         headers:(NSDictionary<NSString*, NSString*>*)headers
+     profilePath:(NSString*)profilePath
+      restricted:(BOOL)restricted
+      completion:(void (^)(NSInteger, NSString*, NSString*, NSString*))completion {
+  GURL target(UTF8(url));
+  if (!g_ready || g_quitting || !target.is_valid()) {
+    completion(0, url, @"", @"");
+    return;
+  }
+  void (^done)(NSInteger, NSString*, NSString*, NSString*) = [completion copy];
+  NSDictionary* sent = [headers copy];
+  base::FilePath dir = ProfileDir(profilePath);
+  ProfileManager* profiles = g_browser_process->profile_manager();
+  if (Profile* profile = profiles->GetProfileByPath(dir)) {
+    cra::Fetch(profile, target, sent, restricted, done);
+    return;
+  }
+  LoadingProfiles().insert(dir);
+  profiles->CreateProfileAsync(dir, base::BindOnce(^(Profile* loaded) {
+                                 LoadingProfiles().erase(dir);
+                                 if (!loaded || g_quitting) {
+                                   done(0, url, @"", @"");
+                                   return;
+                                 }
+                                 cra::Fetch(loaded, target, sent, restricted, done);
+                               }));
 }
 + (NSInteger)loadStateOfProfile:(NSString*)profilePath {
   if (!g_ready || g_quitting) {

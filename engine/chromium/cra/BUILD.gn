@@ -9,6 +9,8 @@ source_set("core") {
     "bridge.mm",
     "downloads.h",
     "downloads.mm",
+    "fetch.h",
+    "fetch.mm",
     "engine_main.mm",
     "page_protocol.h",
     "page_protocol.mm",
